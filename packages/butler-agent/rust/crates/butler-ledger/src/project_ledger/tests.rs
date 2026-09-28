@@ -2,6 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use butler_platform::secure_fs::symlink;
 use serde_json::Value;
 
 use super::{PlanRecordRead, ProjectLedger, ProjectLedgerReadError};
@@ -136,21 +137,17 @@ async fn duplicate_and_unrelated_malformed_record_block_show() {
         native.show_plan_record(fixture.input("plan-4")).await,
         Err(ProjectLedgerReadError::record_show("record_not_found"))
     );
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::symlink;
-        symlink(
-            fixture.root.join("plans/plan-1.md"),
-            fixture.root.join("references/alias.md"),
-        )
-        .unwrap();
-        assert_eq!(
-            native.show_plan_record(fixture.input("PLAN-1")).await,
-            Err(ProjectLedgerReadError::record_show(
-                "publication_record_is_symlink"
-            ))
-        );
-    }
+    symlink(
+        &fixture.root.join("plans/plan-1.md"),
+        &fixture.root.join("references/alias.md"),
+    )
+    .unwrap();
+    assert_eq!(
+        native.show_plan_record(fixture.input("PLAN-1")).await,
+        Err(ProjectLedgerReadError::record_show(
+            "publication_record_is_symlink"
+        ))
+    );
     native.close().await;
 }
 
@@ -171,23 +168,19 @@ async fn initialized_candidate_preference_and_path_escape() {
             .id,
         "PLAN-1"
     );
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::symlink;
-        fs::create_dir_all(fixture.data.join("outside")).unwrap();
-        symlink(
-            fixture.data.join("outside"),
-            fixture.data.join("project-ledger/projects/escape"),
-        )
-        .unwrap();
-        fs::write(fixture.workspace.join("project.json"), r#"{"id":"escape"}"#).unwrap();
-        assert_eq!(
-            native.show_plan_record(fixture.input("PLAN-1")).await,
-            Err(ProjectLedgerReadError::resolution(
-                "active_project_ledger_path_escape"
-            ))
-        );
-    }
+    fs::create_dir_all(fixture.data.join("outside")).unwrap();
+    symlink(
+        &fixture.data.join("outside"),
+        &fixture.data.join("project-ledger/projects/escape"),
+    )
+    .unwrap();
+    fs::write(fixture.workspace.join("project.json"), r#"{"id":"escape"}"#).unwrap();
+    assert_eq!(
+        native.show_plan_record(fixture.input("PLAN-1")).await,
+        Err(ProjectLedgerReadError::resolution(
+            "active_project_ledger_path_escape"
+        ))
+    );
     native.close().await;
 }
 

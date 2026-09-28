@@ -8,7 +8,6 @@ mod prompt;
 mod provider;
 mod request_admission;
 mod request_guard;
-#[cfg(unix)]
 mod status;
 mod tokenizer;
 mod transport;
@@ -76,7 +75,6 @@ pub use configuration::{
     ProviderKeyCheckError, ProviderKeySaveError, SavedProviderKey, SettingsError,
     generate_pkce_verifier, pkce_challenge,
 };
-#[cfg(unix)]
 pub use status::{StatusModels, auth_status_with_environment, open_status_models};
 
 pub const DEFAULT_MODEL_REF: &str = "openai/gpt-5.5";

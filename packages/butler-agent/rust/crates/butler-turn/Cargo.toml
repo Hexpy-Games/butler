@@ -8,6 +8,7 @@ publish.workspace = true
 
 [dependencies]
 butler-core = { path = "../butler-core" }
+butler-platform = { path = "../butler-platform" }
 base64.workspace = true
 chrono.workspace = true
 uuid.workspace = true
@@ -24,12 +25,6 @@ tokio-util.workspace = true
 thiserror.workspace = true
 unicode-normalization.workspace = true
 regress.workspace = true
-
-[target.'cfg(unix)'.dependencies]
-nix.workspace = true
-
-[target.'cfg(target_os = "macos")'.dependencies]
-libproc.workspace = true
 
 [features]
 # Exposes BTCC fixtures to scenario tests in dependent crates.

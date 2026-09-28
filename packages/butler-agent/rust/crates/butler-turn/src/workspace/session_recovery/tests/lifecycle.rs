@@ -1,5 +1,3 @@
-#![cfg(unix)]
-
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -10,8 +8,6 @@ use crate::workspace::SessionWorkspaceRecovery;
 
 #[tokio::test]
 async fn admitted_git_child_is_drained_by_same_command_owner() {
-    use std::os::unix::fs::PermissionsExt;
-
     let fixture = Fixture::new().await;
     let fake_bin = fixture.root.join("fake-bin");
     std::fs::create_dir(&fake_bin).unwrap();
@@ -25,7 +21,9 @@ async fn admitted_git_child_is_drained_by_same_command_owner() {
         ),
     )
     .unwrap();
-    std::fs::set_permissions(&fake_git, std::fs::Permissions::from_mode(0o755)).unwrap();
+    butler_platform::launcher::mark_executable(&fake_git)
+        .transpose()
+        .unwrap();
     let recovery = SessionWorkspaceRecovery::new(
         fixture.store.clone(),
         fixture.commands.clone(),

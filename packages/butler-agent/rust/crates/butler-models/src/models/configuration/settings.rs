@@ -3,9 +3,7 @@
 use std::path::Path;
 use std::{fs, io::Write};
 
-#[cfg(unix)]
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
-
+use butler_platform::secure_fs;
 use serde_json::Value;
 
 use super::ModelConfiguration;
@@ -235,28 +233,11 @@ fn write_private_environment(path: &Path, key: &str, value: &str) -> Result<(), 
     let parent = path.parent().ok_or(SettingsError::Rejected(
         "Private environment path is invalid.",
     ))?;
-    #[cfg(unix)]
-    {
-        let mut builder = fs::DirBuilder::new();
-        builder.recursive(true).mode(0o700);
-        builder
-            .create(parent)
-            .or_else(|error| {
-                if error.kind() == std::io::ErrorKind::AlreadyExists && parent.is_dir() {
-                    Ok(())
-                } else {
-                    Err(error)
-                }
-            })
-            .map_err(io("Private environment directory could not be created."))?;
-    }
-    #[cfg(not(unix))]
-    fs::create_dir_all(parent)
+    secure_fs::create_private_dir_all(parent)
         .map_err(io("Private environment directory could not be created."))?;
     let mut options = fs::OpenOptions::new();
     options.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    options.mode(0o600);
+    secure_fs::owner_only(&mut options);
     let mut file = options
         .open(path)
         .map_err(io("Private environment file could not be written."))?;
@@ -264,8 +245,8 @@ fn write_private_environment(path: &Path, key: &str, value: &str) -> Result<(), 
         .map_err(io("Private environment file could not be written."))?;
     file.sync_all()
         .map_err(io("Private environment file could not be written."))?;
-    #[cfg(unix)]
-    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+    secure_fs::restrict_file(path)
+        .transpose()
         .map_err(io("Private environment file permissions could not be set."))?;
     Ok(())
 }

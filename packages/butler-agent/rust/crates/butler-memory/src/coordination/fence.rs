@@ -11,8 +11,6 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-#[cfg(unix)]
-use std::os::unix::fs::OpenOptionsExt;
 
 use super::error::{CoordinationError, CoordinationResult, invalid, sqlite_error};
 use super::types::{CognitionCoordinationHost, CognitionProcessStatus, LockInfo};
@@ -330,8 +328,7 @@ fn install_fence(
     .map_err(CoordinationError::gate_io)?;
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
-    #[cfg(unix)]
-    options.mode(0o600);
+    butler_platform::secure_fs::owner_only(&mut options);
     match options.open(path) {
         Ok(mut file) => {
             file.write_all(bytes.as_bytes())

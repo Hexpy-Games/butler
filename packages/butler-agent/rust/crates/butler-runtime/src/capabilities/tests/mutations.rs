@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use butler_platform::secure_fs::{self, FileMode};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -55,15 +56,11 @@ async fn registry_creates_overwrites_and_edits_workspace_files() {
         std::fs::read(fixture.root.join("sample.txt")).unwrap(),
         "\u{feff}one\r\nsecond\r\n".as_bytes()
     );
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(
-            fixture.root.join("sample.txt"),
-            std::fs::Permissions::from_mode(0o640),
-        )
+    // A non-default mode (0640) must survive the atomic replacement.
+    let sample = fixture.root.join("sample.txt");
+    let mode_set = secure_fs::set_file_mode(&sample, FileMode::GROUP_READABLE)
+        .transpose()
         .unwrap();
-    }
     let overwrite = json!({"arguments":{"path":"sample.txt","content":"complete\n",
         "overwrite":true,"expected_sha256":edited["after_sha256"]}});
     let overwritten = rust(&fixture, "write_file", &overwrite, None, None).await;
@@ -72,16 +69,11 @@ async fn registry_creates_overwrites_and_edits_workspace_files() {
         std::fs::read(fixture.root.join("sample.txt")).unwrap(),
         b"complete\n"
     );
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mode = std::fs::metadata(fixture.root.join("sample.txt"))
-            .unwrap()
-            .permissions()
-            .mode()
-            & 0o777;
-        assert_eq!(mode, 0o640);
-    }
+    // Hosts without permission modes neither set nor report one.
+    assert_eq!(
+        secure_fs::file_mode(&std::fs::metadata(&sample).unwrap()),
+        mode_set.map(|()| FileMode::GROUP_READABLE)
+    );
     fixture.capabilities.mutations.close().await;
 }
 
