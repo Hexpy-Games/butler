@@ -113,6 +113,11 @@ impl ContextBudgetOwner {
         }
     }
 
+    /// The process model catalog the budget measures with.
+    pub fn catalog(&self) -> &Arc<ModelCatalog> {
+        &self.catalog
+    }
+
     pub async fn snapshot(&self) -> ContextResult<ContextBudgetSnapshot<'_>> {
         let metadata = self.configuration.read_metadata().await.map_err(|error| {
             ContextError::new(ContextCode::ContextModelMetadataError, error.to_string())

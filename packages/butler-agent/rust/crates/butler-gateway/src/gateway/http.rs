@@ -57,7 +57,7 @@ pub(super) use error::HttpError;
 use error::{error_response, json};
 use params::{cursor_param, limit_param, query};
 use read_routes::{
-    get_artifacts, get_events, get_live_events, get_messages, get_session_queue, get_turns,
+    get_artifacts, get_events, get_live_events, get_messages, get_session_queue, get_turns, health,
 };
 
 const DEFAULT_PAGE_LIMIT: usize = 200;
@@ -349,17 +349,8 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
         );
     }
     match (method.clone(), uri.path()) {
-        (Method::GET, "/health") => json(
-            StatusCode::OK,
-            ApiEnvelope {
-                protocol_version: APP_PROTOCOL_VERSION,
-                data: HealthView {
-                    ok: true,
-                    service: "butler-app-server".to_owned(),
-                    protocol_version: APP_PROTOCOL_VERSION.to_owned(),
-                },
-            },
-        ),
+        (Method::GET, "/health") => health(),
+        (Method::GET, "/provider-quota") => monitors::provider_quota(state, &uri).await,
         (Method::GET, "/runtime-readiness") => {
             let mut readiness = state.application.runtime_readiness()?;
             readiness.authenticated_gateway_ready = true;

@@ -140,3 +140,18 @@ pub(super) async fn get_live_events(
     headers.insert("x-accel-buffering", HeaderValue::from_static("no"));
     Ok(response)
 }
+
+/// `GET /health`.
+pub(super) fn health() -> Result<Response, HttpError> {
+    json(
+        StatusCode::OK,
+        ApiEnvelope {
+            protocol_version: APP_PROTOCOL_VERSION,
+            data: HealthView {
+                ok: true,
+                service: "butler-app-server".to_owned(),
+                protocol_version: APP_PROTOCOL_VERSION.to_owned(),
+            },
+        },
+    )
+}

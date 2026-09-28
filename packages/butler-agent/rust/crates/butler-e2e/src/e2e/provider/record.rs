@@ -12,7 +12,7 @@ use tokio::sync::mpsc;
 
 use super::super::cassette::{self, Chunk, Exchange, RequestRecord, ResponseRecord};
 use super::super::faults::{ArgsMutation, Transform, mutate_chunk};
-use super::super::sanitize::{HEADER_ALLOWLIST, sanitize_body};
+use super::super::sanitize::{keep_header, sanitize_body};
 use super::replay::{consume_fault, plain, take_fault};
 use super::{State, lock};
 
@@ -63,8 +63,8 @@ pub(super) async fn record(
             continue;
         }
         builder = builder.header(name.as_str(), value.as_bytes());
-        if HEADER_ALLOWLIST.contains(&name.as_str())
-            && let Ok(value) = value.to_str()
+        if let Ok(value) = value.to_str()
+            && keep_header(name.as_str(), value)
         {
             kept_headers.push((name.as_str().to_owned(), value.to_owned()));
         }

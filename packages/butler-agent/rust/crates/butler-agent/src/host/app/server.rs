@@ -155,10 +155,7 @@ impl AppServer {
                 data_root.to_path_buf(),
                 identity_clock.clone(),
             )),
-            monitoring: Arc::new(AppMonitoring::new(
-                data_root.to_path_buf(),
-                runtime.session_work.clone(),
-            )),
+            monitoring: Arc::new(AppMonitoring::for_runtime(runtime, data_root)),
             context_read: Arc::new(AppContextRead::new(
                 data_root.to_path_buf(),
                 runtime.context_budget.clone(),

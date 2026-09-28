@@ -3,13 +3,14 @@
 use serde_json::{Value, json};
 
 use super::{
-    AppApplication, AppContextReadQuery, AppSessionViewPage, GatewayApplicationError, app_error,
-    settings,
+    AppApplication, AppContextBudgetFacts, AppContextReadQuery, AppSessionViewPage,
+    GatewayApplicationError, app_error, settings,
 };
 use crate::gateway::MessageRole;
 use butler_runtime::context::{
     WORKING_CONTEXT_AUTO_COMPACT_RATIO, WORKING_CONTEXT_HARD_PRESSURE_RATIO,
 };
+use butler_runtime::operations::SessionUsageView;
 
 const MESSAGE_LIMIT: usize = 16;
 const RECENT_CHAR_LIMIT: usize = 32_000;
@@ -18,7 +19,7 @@ impl AppApplication {
     pub(super) async fn context_details_owned(
         &self,
         session_id: String,
-    ) -> Result<Value, GatewayApplicationError> {
+    ) -> Result<ContextDetails, GatewayApplicationError> {
         self.refresh_message_projection_owned(session_id.clone())
             .await?;
         let session = self.get_session(session_id.clone()).await?;
@@ -143,91 +144,19 @@ impl AppApplication {
         } else {
             used_working as f64 / available as f64
         };
-        let mut categories = vec![
-            category(
-                "static",
-                "Static Context",
-                static_tokens,
-                "static_context",
-                budget.context_window_tokens,
-                "Stable runtime and role contract.",
-            ),
-            category(
-                "live-config",
-                "Live Configuration",
-                live_tokens,
-                "live_configuration",
-                budget.context_window_tokens,
-                "Latest EOL, persona, settings, rules, and profile projection.",
-            ),
-            category(
-                "runtime-state",
-                "Runtime State",
-                runtime_tokens,
-                "runtime_state",
-                budget.context_window_tokens,
-                "Protected session, project, transport, BTCC, worker, and task state.",
-            ),
-            category(
-                "working",
-                "Working Context",
-                working_tokens,
-                "working_context",
-                budget.context_window_tokens,
-                "Recent conversation suffix and current turn working material.",
-            ),
-            category(
-                "retrieved",
-                "Retrieved Context",
-                retrieved_tokens,
-                "retrieved_context",
-                budget.context_window_tokens,
-                "Hot cache, project memory, and latest compaction summary when present.",
-            ),
-            category(
-                "current-input",
-                "Current User Input",
-                latest_input,
-                "current_input",
-                budget.context_window_tokens,
-                "Latest inbound message and current attachment references.",
-            ),
-            category(
-                "references",
-                "References",
-                reference_tokens,
-                "references",
-                budget.context_window_tokens,
-                &format!(
-                    "{} stable local reference(s).",
-                    artifacts.len() as u64 + file_count
-                ),
-            ),
-            category(
-                "output-reserve",
-                "Output Reserve",
-                budget.reserved_output_tokens,
-                "output_reserve",
-                budget.context_window_tokens,
-                "Reserved for the assistant response.",
-            ),
-            category(
-                "tool-reserve",
-                "Tool Reserve",
-                budget.reserved_tool_tokens,
-                "tool_reserve",
-                budget.context_window_tokens,
-                "Reserved for tool-call and tool-result growth.",
-            ),
-            category(
-                "compaction-reserve",
-                "Compaction Reserve",
-                budget.compaction_prompt_reserve_tokens,
-                "compaction_reserve",
-                budget.context_window_tokens,
-                "Reserved so auto-compaction can run before hard pressure.",
-            ),
-        ];
+        let mut categories = categories(
+            budget,
+            &CategoryTokens {
+                static_context: static_tokens,
+                live_configuration: live_tokens,
+                runtime_state: runtime_tokens,
+                working: working_tokens,
+                retrieved: retrieved_tokens,
+                current_input: latest_input,
+                references: reference_tokens,
+                reference_count: artifacts.len() as u64 + file_count,
+            },
+        );
         if let Some(usage) = &host.usage {
             reconcile(&mut categories, usage.prompt_tokens);
         }
@@ -235,8 +164,8 @@ impl AppApplication {
             .usage
             .as_ref()
             .map_or_else(|| occupied_total(&categories), |usage| usage.prompt_tokens);
-        Ok(json!({
-            "session_id":session_id,"model_ref":controls.model,
+        let view = json!({
+            "session_id":session_id,"model_ref":controls.model,"auth_mode":host.auth_mode,
             "provider_id":controls.model.split_once('/').map(|v|v.0),
             "model_id":controls.model.split_once('/').map(|v|v.1),
             "token_count_source":host.usage.as_ref().map_or("character_estimate",|v|v.source.as_str()),
@@ -249,8 +178,125 @@ impl AppApplication {
             "ratio":if budget.context_window_tokens == 0 {0.0} else {used as f64 / budget.context_window_tokens as f64},
             "status":if working_ratio >= WORKING_CONTEXT_AUTO_COMPACT_RATIO {"high"} else if working_ratio >= 0.7 {"medium"} else {"low"},
             "categories":categories,"updated_at":self.dependencies.identity_clock.now_iso(),
-        }))
+        });
+        Ok(ContextDetails {
+            view,
+            usage: host.session_usage,
+        })
     }
+}
+
+/// `ContextDetailsView` plus the session's usage for `SessionView.usage`.
+pub(super) struct ContextDetails {
+    pub(super) view: Value,
+    pub(super) usage: Option<SessionUsageView>,
+}
+
+/// Token counts per context category, before reconciliation.
+struct CategoryTokens {
+    static_context: u64,
+    live_configuration: u64,
+    runtime_state: u64,
+    working: u64,
+    retrieved: u64,
+    current_input: u64,
+    references: u64,
+    reference_count: u64,
+}
+
+/// Context categories in display order: id, label, source kind, description.
+/// The references description is rendered with the reference count.
+const CATEGORIES: [(&str, &str, &str, &str); 10] = [
+    (
+        "static",
+        "Static Context",
+        "static_context",
+        "Stable runtime and role contract.",
+    ),
+    (
+        "live-config",
+        "Live Configuration",
+        "live_configuration",
+        "Latest EOL, persona, settings, rules, and profile projection.",
+    ),
+    (
+        "runtime-state",
+        "Runtime State",
+        "runtime_state",
+        "Protected session, project, transport, BTCC, worker, and task state.",
+    ),
+    (
+        "working",
+        "Working Context",
+        "working_context",
+        "Recent conversation suffix and current turn working material.",
+    ),
+    (
+        "retrieved",
+        "Retrieved Context",
+        "retrieved_context",
+        "Hot cache, project memory, and latest compaction summary when present.",
+    ),
+    (
+        "current-input",
+        "Current User Input",
+        "current_input",
+        "Latest inbound message and current attachment references.",
+    ),
+    ("references", "References", "references", ""),
+    (
+        "output-reserve",
+        "Output Reserve",
+        "output_reserve",
+        "Reserved for the assistant response.",
+    ),
+    (
+        "tool-reserve",
+        "Tool Reserve",
+        "tool_reserve",
+        "Reserved for tool-call and tool-result growth.",
+    ),
+    (
+        "compaction-reserve",
+        "Compaction Reserve",
+        "compaction_reserve",
+        "Reserved so auto-compaction can run before hard pressure.",
+    ),
+];
+
+fn categories(budget: &AppContextBudgetFacts, tokens: &CategoryTokens) -> Vec<Value> {
+    let used = [
+        tokens.static_context,
+        tokens.live_configuration,
+        tokens.runtime_state,
+        tokens.working,
+        tokens.retrieved,
+        tokens.current_input,
+        tokens.references,
+        budget.reserved_output_tokens,
+        budget.reserved_tool_tokens,
+        budget.compaction_prompt_reserve_tokens,
+    ];
+    let references = format!("{} stable local reference(s).", tokens.reference_count);
+    CATEGORIES
+        .iter()
+        .zip(used)
+        .map(|(&(id, label, kind, description), used)| {
+            let description = if id == "references" {
+                references.as_str()
+            } else {
+                description
+            };
+            category(
+                id,
+                label,
+                used,
+                kind,
+                budget.context_window_tokens,
+                description,
+            )
+        })
+        .collect()
 }
 
 fn tokens(text: &str) -> u64 {
