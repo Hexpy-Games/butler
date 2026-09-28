@@ -3,7 +3,7 @@ import { lineDash } from "./LineOverlay";
 import type { SpecimenMetrics } from "./specimenMetrics";
 import { cameras } from "./typeCamera";
 import { BEATS, FINALE, FLIGHTS, LOOP, PANELS, select, specimenTracks, type TypeGeometry } from "./typeChoreography";
-import { BADGE_ROW, STRUCTURE, type LineInfo } from "./typeLines";
+import { STRUCTURE, type LineInfo } from "./typeLines";
 
 /** The list scene ends and the first build starts here; each build takes BUILD beats. */
 const FIRST = 31.4;
@@ -13,33 +13,28 @@ const OUT = LOOP + 1.3;
 
 const buildAt = (k: number) => FIRST + k * BUILD;
 
-
-
-/** While a component builds, a piece sits `drop` px lower (a badge row per text line above it), then settles into place. */
-function settle(drop: number, leave: number): Key[] {
-  return [{ at: 0, y: drop }, { at: leave, y: drop }, { at: leave + 1, y: 0, ease: "emphasized" }, { at: BEATS - 0.1, y: drop }];
-}
-
-/** A structural piece that pops in at `at`, makes room like the lines above it, and leaves with the product. */
-function part(name: string, at: number, drop: number, leave: number): Track {
+/** A structural piece that pops in at `at` and leaves with the product. */
+function part(name: string, at: number): Track {
   return {
     select: select(name),
-    keys: [{ at: 0, s: 0.8, o: 0 }, { at, o: 0 }, { at: at + 0.8, s: 1, o: 1, ease: "spring" }, { at: OUT, o: 1 }, { at: OUT + 0.2, o: 0 }, ...settle(drop, leave)],
+    keys: [{ at: 0, s: 0.8, o: 0 }, { at, o: 0 }, { at: at + 0.8, s: 1, o: 1, ease: "spring" }, { at: OUT, o: 1 }, { at: OUT + 0.2, o: 0 }],
   };
 }
 
-/** One text line: token badge, baseline rule drawn left to right, outline drawn along its contours, then the real text fills in. */
-function line(info: LineInfo, at: number, leave: number, drop: number): Track[] {
-  const badge: Track = { select: select(`lb-${info.id}`), keys: [{ at: 0, y: 6, o: 0 }, { at, o: 0 }, { at: at + 0.6, y: 0, o: 1, ease: "decelerate" }, { at: leave, o: 1 }, { at: leave + 0.6, o: 0, ease: "accelerate" }] };
-  // While it builds, the line sits `drop` px lower (room for its badge above it), then settles into place.
-  const fill = (from: number, to: number): Track => ({ select: info.select, keys: [{ at: 0, o: 0 }, { at: from, o: 0 }, { at: to, o: 1, ease: "decelerate" }, { at: OUT, o: 1 }, { at: OUT + 0.2, o: 0 }, ...settle(drop, leave)] });
-  const layer: Track = { select: select(`lx-${info.id}`), keys: settle(drop, leave) };
-  if (!info.draw) return [badge, layer, fill(at + 0.6, at + 1.6)];
+/**
+ * One text line: its token badge in the gutter left of the component, a rule
+ * drawn from the badge along the baseline, the outline drawn along its
+ * contours, then the real text fills in. Nothing inside the component moves.
+ */
+function line(info: LineInfo, at: number, leave: number): Track[] {
+  const badge: Track = { select: select(`lb-${info.id}`), keys: [{ at: 0, x: 8, o: 0 }, { at, o: 0 }, { at: at + 0.6, x: 0, o: 1, ease: "decelerate" }, { at: leave, o: 1 }, { at: leave + 0.6, o: 0, ease: "accelerate" }] };
+  const fill = (from: number, to: number): Track => ({ select: info.select, keys: [{ at: 0, o: 0 }, { at: from, o: 0 }, { at: to, o: 1, ease: "decelerate" }, { at: OUT, o: 1 }, { at: OUT + 0.2, o: 0 }] });
+  const rule: Track = { select: select(`lr-${info.id}`), keys: [{ at: 0, sx: 0, o: 0 }, { at: at + 0.2, sx: 0, o: 1 }, { at: at + 1.4, sx: 1, ease: "decelerate" }, { at: leave, o: 1 }, { at: leave + 0.6, o: 0, ease: "accelerate" }] };
+  if (!info.draw) return [badge, rule, fill(at + 0.6, at + 1.6)];
   const dash = lineDash(info);
   return [
     badge,
-    layer,
-    { select: select(`lr-${info.id}`), keys: [{ at: 0, sx: 0, o: 0 }, { at: at + 0.2, sx: 0, o: 1 }, { at: at + 1.4, sx: 1, ease: "decelerate" }, { at: at + 2.4, o: 1 }, { at: at + 3, o: 0, ease: "accelerate" }] },
+    rule,
     { select: select(`lo-${info.id}`), keys: [{ at: 0, dash, o: 0 }, { at: at + 0.3, o: 1 }, { at: at + 2.1, dash: 0 }, { at: at + 2.2, o: 1 }, { at: at + 2.8, o: 0, ease: "accelerate" }, { at: BEATS - 0.1, dash }] },
     fill(at + 1.8, at + 2.4),
   ];
@@ -99,8 +94,8 @@ function assembly(g: TypeGeometry): Track[] {
           { at: LOOP - 0.4 + 0.3 * k, z: 0, o: 1 }, { at: LOOP + 0.8 + 0.3 * k, z: -200, o: 0, ease: "accelerate" }, { at: BEATS, ...hidden, z: 0 },
         ],
       },
-      ...STRUCTURE[panel].map((name, j) => part(name, at + 0.8 + j * 0.2, BADGE_ROW * lines.filter((info) => info.box.y < (g.parts[name] ?? 0)).length, at + BUILD - 2.2)),
-      ...lines.flatMap((info, j) => line(info, at + 1.2 + j * 0.4, at + BUILD - 2.2, j * BADGE_ROW)),
+      ...STRUCTURE[panel].map((name, j) => part(name, at + 0.8 + j * 0.2)),
+      ...lines.flatMap((info, j) => line(info, at + 1.2 + j * 0.4, at + BUILD - 1.6)),
     ];
   });
   const tnumAt: Pose = { x: g.fly.metric.x - g.tnum.x, y: g.fly.metric.y + g.fly.metric.h + 4 - g.tnum.y };

@@ -389,17 +389,22 @@
   opacity: 0;
 }
 
+/* Badges stand in the gutter left of the component, right-aligned one grid
+   gutter off its edge and centred on their line; the rule runs from the
+   badge along the baseline to the end of the line. Nothing in the component
+   moves to make room. */
 .lineBadge {
   position: absolute;
-  bottom: calc(100% + var(--space-xs));
-  left: 0;
+  top: 50%;
+  right: calc(100% + var(--reach) + var(--grid-gutter));
+  translate: 0 -50%;
   white-space: nowrap;
 }
 
 .lineRule {
   position: absolute;
-  left: 0;
-  inline-size: 100%;
+  left: calc(-1 * (var(--reach) + var(--grid-gutter)));
+  inline-size: calc(100% + var(--reach) + var(--grid-gutter));
   block-size: 1px;
   background: var(--accent);
   transform-origin: 0 50%;
@@ -496,6 +501,6 @@
 }
 
 /* Tall poster: the conversation scrolls under the composer like the app. */
-.board[data-layout="tall"] .panel[data-panel="chat"] {
+.board[data-layout="tall"] .panel[data-panel="chat"] > :first-child {
   overflow: hidden;
 }

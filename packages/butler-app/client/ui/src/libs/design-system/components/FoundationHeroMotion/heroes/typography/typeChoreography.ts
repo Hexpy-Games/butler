@@ -48,9 +48,8 @@ export interface TypeGeometry {
   ladder: Box;
   rungs: Record<Flight, Box>;
   fly: Record<Flight, Box>;
-  /** Text lines each component builds, and the top of each structure part, measured in their panels. */
+  /** Text lines each component builds, measured in their panels. */
   lines: LineInfo[];
-  parts: Record<string, number>;
   panels: Record<Panel, Box>;
   control: Box;
   tnum: Box;

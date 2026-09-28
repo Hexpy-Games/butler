@@ -16,16 +16,18 @@ export function lineDash(line: LineInfo): number {
  * real text underneath, stroked and drawn along its contours) before the real
  * text fills in. Positions come from measuring the poster.
  */
-export function LineOverlay({ lines, copy }: { lines: LineInfo[]; copy: TypeCopy }) {
+export function LineOverlay({ lines, copy, compact }: { lines: LineInfo[]; copy: TypeCopy; /** Token name only (tall canvas). */ compact: boolean }) {
   return (
     <span className={t.lines} aria-hidden="true">
       {lines.map((line) => (
         <span className={t.lineFx} data-t={`lx-${line.id}`} key={line.id}
           style={{ left: `${line.box.x}px`, top: `${line.box.y}px`, inlineSize: `${line.box.w}px`, blockSize: `${line.box.h}px` } as CSSProperties}>
-          <span className={t.lineBadge} data-t={`lb-${line.id}`}><Tag>{`${copy.roles[line.role]} · ${line.token}`}</Tag></span>
+          <span className={t.lineBadge} data-t={`lb-${line.id}`} style={{ "--reach": `${line.box.x}px` } as CSSProperties}>
+            <Tag>{compact ? line.token : `${copy.roles[line.role]} · ${line.token}`}</Tag>
+          </span>
+          <span className={t.lineRule} data-t={`lr-${line.id}`} style={{ top: `${line.draw ? line.baseline : line.box.h / 2}px`, "--reach": `${line.box.x}px` } as CSSProperties} />
           {line.draw ? (
             <>
-              <span className={t.lineRule} data-t={`lr-${line.id}`} style={{ top: `${line.baseline}px` } as CSSProperties} />
               <svg className={t.lineSvg} height={line.box.h} width={line.box.w}>
                 <text className={t.lineOutline} data-t={`lo-${line.id}`} x={0} y={line.baseline} style={{ "--dash": `${lineDash(line)}px` } as CSSProperties}
                   fontFamily={line.font.family} fontSize={line.font.size} fontWeight={line.font.weight} stroke={line.font.color}>

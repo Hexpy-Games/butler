@@ -1,5 +1,5 @@
 import type { Box } from "../../heroTimeline";
-import { measureLines, measureParts } from "./typeLines";
+import { measureLines } from "./typeLines";
 import { FLIGHTS, METRIC_ROLL, PANELS, select, type Flight, type TypeGeometry } from "./typeChoreography";
 import { CANVAS, type TypeLayout } from "./typeGrid";
 
@@ -52,7 +52,6 @@ export function measureType(root: HTMLElement, layout: TypeLayout): TypeMeasure 
     rungs: per(FLIGHTS, (flight) => select(`rung-${flight}`)),
     fly: per(FLIGHTS, (flight) => select(`fly-${flight}`)),
     lines: measureLines(root, ratio) ?? [],
-    parts: measureParts(root, ratio),
     panels: per(PANELS, (panel) => select(`panel-${panel}`)),
     control: box(select("control")),
     tnum: box(select("cap-tnum")),

@@ -38,7 +38,7 @@ function Part({ name, block = false, children }: { name: string; block?: boolean
  * layer of its own text lines once they are measured.
  */
 export function ProductBoard({ copy, layout, lines }: { copy: TypeCopy; layout: TypeLayout; lines: LineInfo[] }) {
-  const build = (panel: Panel) => <LineOverlay copy={copy} lines={lines.filter((line) => line.panel === panel)} />;
+  const build = (panel: Panel) => <LineOverlay compact={layout === "tall"} copy={copy} lines={lines.filter((line) => line.panel === panel)} />;
   const settings = (
     <div className={t.panel} data-panel="settings" data-t="panel-settings" key="settings">
       <SettingsHeader title={<Line id="title">{copy.title}</Line>} description={<Line id="lead">{copy.titleLead}</Line>} />

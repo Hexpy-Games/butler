@@ -36,22 +36,11 @@ export const LINES: LineSpec[] = [
   { id: "placeholder", panel: "composer", token: "--typo-body", role: "body", select: own("placeholder"), draw: true },
 ];
 
-/** Height of a badge row (Tag plus --space-xs): the room each text line opens above itself while it builds. */
-export const BADGE_ROW = 24;
+/** Width of the badge gutter left of a component while it builds (badge column plus a grid gutter), in canvas px. */
+export const BADGE_GUTTER = { wide: 236, tall: 140 } as const;
 
 /** Non-text structure each component builds before its text. */
 export const STRUCTURE: Record<Panel, string[]> = { settings: ["switch", "field-2"], chat: [], metric: ["metric-2"], composer: ["send"] };
-
-/** Top of each structure part inside its panel (canvas px), so it can make room like the lines above it. */
-export function measureParts(root: HTMLElement, ratio: number): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const name of Object.values(STRUCTURE).flat()) {
-    const node = root.querySelector<HTMLElement>(`[data-t="${name}"]`);
-    const panel = node?.closest<HTMLElement>("[data-panel]");
-    if (node && panel) out[name] = (node.getBoundingClientRect().top - panel.getBoundingClientRect().top) / ratio;
-  }
-  return out;
-}
 
 /** A line as measured on the poster: box relative to its panel, font and baseline. */
 export interface LineInfo extends LineSpec {

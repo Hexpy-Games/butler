@@ -1,6 +1,6 @@
 import { fit, focus, type Box, type Pose } from "../../heroTimeline";
 import { PANELS, type Panel, type TypeGeometry } from "./typeChoreography";
-import { BADGE_ROW } from "./typeLines";
+import { BADGE_GUTTER } from "./typeLines";
 
 /** Where each component is built: an empty area off the poster, reached by moving down or sideways. */
 function stageCenters(g: TypeGeometry): Array<{ x: number; y: number }> {
@@ -12,8 +12,9 @@ function stageCenters(g: TypeGeometry): Array<{ x: number; y: number }> {
 /** The part of a panel the camera frames while building it (the conversation card stretches, so its lines). */
 function frameBox(g: TypeGeometry, panel: Panel): Box {
   const own = g.lines.filter((line) => line.panel === panel);
-  // Room for the first badge above and for the badge rows the lines open while building.
-  const grow = (box: Box): Box => ({ ...box, y: box.y - BADGE_ROW, h: box.h + BADGE_ROW * own.length });
+  // The badge gutter left of the component is part of the frame.
+  const gutter = BADGE_GUTTER[g.layout];
+  const grow = (box: Box): Box => ({ ...box, x: box.x - gutter, w: box.w + gutter });
   const box = g.panels[panel];
   if (panel !== "chat") return grow(box);
   const lines = own.map((line) => ({ y: box.y + line.box.y, h: line.box.h }));
@@ -38,7 +39,7 @@ export function cameras(g: TypeGeometry) {
   const stage = PANELS.map((panel) => {
     const box = frameBox(g, panel);
     const moved = { ...box, x: box.x + shift[panel].x, y: box.y + shift[panel].y };
-    return focus(canvas, moved, fit(canvas, moved, 0.8, cap));
+    return focus(canvas, moved, fit(canvas, moved, tall ? 0.96 : 0.8, cap));
   });
   const rung = g.rungs.title;
   const close = Math.min(cap * 1.1, (canvas.w * 0.86) / g.ladder.w);
