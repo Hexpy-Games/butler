@@ -1,0 +1,369 @@
+/* 09 Layers hero: the z sheets field, the layered screen (with its slider)
+   and the product grid. Flat throughout: depth is stacking, dimming and
+   shadow. Canvas px (see ../shared/grid.ts). */
+
+/* ---- The field: numbered sheets stepped along a flat diagonal ---- */
+
+.field {
+  display: grid;
+  place-items: center;
+}
+
+.sheets {
+  --step-x: calc(var(--space-xl) + var(--space-sm));
+  --step-y: var(--space-3xl);
+  --sheet-w: calc(var(--space-4xl) * 5);
+  --sheet-h: calc(var(--space-4xl) * 3);
+
+  position: relative;
+  inline-size: calc(var(--sheet-w) + var(--step-x) * 6);
+  block-size: calc(var(--sheet-h) + var(--step-y) * 6);
+}
+
+.sheet {
+  position: absolute;
+  top: calc(var(--k) * var(--step-y));
+  left: calc(var(--k) * var(--step-x));
+  display: flex;
+  align-items: baseline;
+  align-content: start;
+  gap: var(--space-md);
+  box-sizing: border-box;
+  inline-size: var(--sheet-w);
+  block-size: var(--sheet-h);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+}
+
+.sheetNum {
+  color: var(--text-primary);
+  font-size: var(--typo-h4-size);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-strong);
+}
+
+.sheetName {
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+}
+
+/* ---- The layered screen ---- */
+
+.screenRegion {
+  display: grid;
+  place-items: center;
+}
+
+.screenStage {
+  display: grid;
+  row-gap: var(--space-lg);
+}
+
+.screen {
+  position: relative;
+  inline-size: calc(var(--col) * 7);
+  block-size: calc(var(--col) * 4);
+}
+
+.page,
+.plane {
+  position: absolute;
+  box-sizing: border-box;
+  border-radius: var(--radius-panel);
+}
+
+.page {
+  inset: 0;
+  display: grid;
+  align-content: start;
+  row-gap: var(--space-md);
+  padding: var(--space-xl);
+  border: 1px solid var(--line);
+  background: var(--color-surface-base);
+}
+
+.pageLabel,
+.planeNote,
+.sliderLabel,
+.sliderRead {
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
+}
+
+.pageLine {
+  display: block;
+  inline-size: 70%;
+  block-size: var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--selection-strong);
+}
+
+.plane {
+  display: grid;
+  align-content: start;
+  padding: var(--space-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+}
+
+.planeNote {
+  color: var(--accent);
+}
+
+.plane[data-layer="sticky"] .planeNote {
+  justify-self: center;
+}
+
+.plane[data-layer="drawer"],
+.plane[data-layer="overlay"] {
+  align-content: end;
+}
+
+.plane[data-layer="overlay"] .planeNote {
+  justify-self: end;
+}
+
+.plane[data-layer="sticky"] {
+  top: 0;
+  right: 0;
+  left: 0;
+  block-size: var(--titlebar-height);
+  border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+}
+
+.plane[data-layer="drawer"] {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  inline-size: 30%;
+}
+
+.plane[data-layer="overlay"] {
+  inset: 0;
+  border-color: transparent;
+  background: var(--dialog-overlay-bg);
+  box-shadow: none;
+}
+
+.plane[data-layer="dialog"] {
+  top: 22%;
+  left: 34%;
+  inline-size: 44%;
+  block-size: 52%;
+  border-radius: var(--radius-popover);
+  background: var(--popover);
+  box-shadow: var(--shadow-window);
+}
+
+.plane[data-layer="popover"] {
+  top: 48%;
+  left: 44%;
+  inline-size: 30%;
+  block-size: 30%;
+  border-radius: var(--radius-popover);
+  background: var(--popover);
+}
+
+.plane[data-layer="tooltip"] {
+  top: 12%;
+  left: 62%;
+  inline-size: 30%;
+  block-size: auto;
+  border-radius: var(--radius-control);
+  background: var(--popover);
+}
+
+.slider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.track {
+  position: relative;
+  display: block;
+  inline-size: calc(var(--space-lg) * 6);
+  block-size: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+}
+
+.thumb {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  inline-size: var(--space-md);
+  block-size: var(--space-md);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  translate: -50% -50%;
+}
+
+.sliderRead {
+  display: inline-flex;
+  line-height: 1.2;
+}
+
+/* ---- Components ---- */
+
+.stickyHead {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--line);
+  border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-control);
+}
+
+.listBody {
+  display: grid;
+  padding: var(--space-xs) var(--space-md) var(--space-md);
+}
+
+.listRow {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--control-height-md);
+}
+
+.window {
+  position: relative;
+  overflow: hidden;
+  block-size: calc(var(--control-height-md) * 6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface-base);
+}
+
+.windowPage {
+  display: grid;
+  row-gap: var(--space-md);
+  padding: var(--space-xl) var(--space-xl) var(--space-xl) 45%;
+}
+
+.dim {
+  position: absolute;
+  inset: 0;
+  background: var(--dialog-overlay-bg);
+}
+
+.window > [data-a="dim"],
+.window > [data-a="drawer"] {
+  position: absolute;
+  inset: 0 auto 0 0;
+}
+
+.window > [data-a="dim"] {
+  inset: 0;
+}
+
+.window > [data-a="drawer"] {
+  inline-size: 55%;
+}
+
+.drawer {
+  box-sizing: border-box;
+  inline-size: 100%;
+  block-size: 100%;
+  padding: var(--space-sm);
+  border-right: 1px solid var(--line);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-window);
+}
+
+.dialogStage {
+  position: relative;
+  padding-block-end: calc(var(--control-height-md) * 2.5);
+}
+
+.listbox {
+  position: absolute;
+  bottom: 0;
+  left: var(--space-lg);
+  inline-size: 60%;
+}
+
+.dialogStage > [data-a="list"] {
+  position: absolute;
+  inset: auto 0 0;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--control-height-md);
+  padding-inline: var(--space-sm);
+  border-radius: var(--radius-control);
+}
+
+.option[data-on] {
+  background: var(--selection);
+}
+
+.tipStage {
+  display: grid;
+  justify-items: start;
+  row-gap: var(--space-xs);
+}
+
+.tipAnchor {
+  display: inline-grid;
+}
+
+/* The real tooltip surface, held in flow above its button (it is fixed and
+   centred on a trigger in the product). */
+.tipAnchor > span {
+  position: relative;
+  transform: none;
+  animation: none;
+}
+
+.product {
+  grid-template-areas:
+    "sticky dialog"
+    "drawer dialog"
+    "drawer tooltip";
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: space-between;
+  gap: var(--space-xl) var(--grid-gutter);
+}
+
+[data-layout="tall"] .sheets {
+  --step-x: var(--space-md);
+  --step-y: var(--space-4xl);
+  --sheet-w: calc(var(--space-4xl) * 4.5);
+  --sheet-h: calc(var(--space-4xl) * 1.6);
+}
+
+[data-layout="tall"] .screenStage {
+  row-gap: calc(var(--space-4xl) * 3.5);
+}
+
+[data-layout="tall"] .screen {
+  inline-size: calc(
+    var(--canvas-w) - var(--grid-margin) * 2 - var(--space-4xl)
+  );
+  block-size: calc(var(--canvas-h) * 0.55);
+}
+
+[data-layout="tall"] .product {
+  grid-template-areas:
+    "sticky"
+    "drawer"
+    "dialog"
+    "tooltip";
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  row-gap: var(--space-lg);
+}

@@ -93,8 +93,11 @@ export function chapterTracks(spec: ChapterSpec, g0: Geometry): { beats: number;
     // The loop cuts back to the opening once the poster has faded (the camera never turns back).
     { at: t.loop + TRANSITION - 0.01, ...REST }, { ...start, at: t.loop + TRANSITION },
   ];
-  // Scene regions stand in their cells while the hero plays.
-  const regionTracks: Track[] = names.filter((name) => name !== "field").map((name) => ({ select: `[data-cell="${name}"]`, keys: [{ at: 0, ...offset(name), o: 1 }] }));
+  // Scene regions stand in their cells for the prelude and step aside once the camera has left them.
+  const regionTracks: Track[] = names.filter((name) => name !== "field").map((name) => ({
+    select: `[data-cell="${name}"]`,
+    keys: [{ at: 0, ...offset(name), o: 1 }, { at: t.first + 0.5 }, { at: t.first + 0.51, o: 0 }, { at: t.loop + TRANSITION }, { at: t.loop + TRANSITION + 0.01, o: 1 }, { at: close }],
+  }));
   // The field shows in its scene cell, waits away while the components build, and gathers onto the poster for the finale.
   const scene = { x: offset("field").x / pz, y: offset("field").y / pz };
   const awayFrom = fieldAway(canvas);
