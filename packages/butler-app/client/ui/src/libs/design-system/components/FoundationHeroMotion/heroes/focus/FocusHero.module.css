@@ -222,6 +222,53 @@
   font-size: var(--font-size-1);
 }
 
+.stopped {
+  position: relative;
+  display: inline-grid;
+}
+
+.stopped[data-block] {
+  display: grid;
+}
+
+.stop[data-inset] {
+  top: var(--space-sm);
+  right: var(--space-sm);
+}
+
+.closeTile {
+  display: inline-grid;
+  justify-items: center;
+  row-gap: var(--space-md);
+}
+
+.tileNote {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--font-size-1);
+  white-space: nowrap;
+}
+
+/* The finale's route: drawn solid under the stops, over the shell's surfaces. */
+.shell[data-route] {
+  position: relative;
+}
+
+.shell[data-route] .route {
+  z-index: 1;
+}
+
+.shell[data-route] .route path {
+  stroke-dasharray: none;
+}
+
+.shell[data-route] .stop {
+  z-index: 2;
+}
+
 .tabsTile {
   display: grid;
   justify-items: center;

@@ -25,7 +25,7 @@ function spec(copy: FocusCopy): SceneSpec {
       close: <CloseTile copy={copy} />,
     },
     poster: {
-      wide: { columns: "1.45fr 1fr", rows: "1fr 1fr 1fr", areas: ["shell tabs", "shell row", "shell close"] },
+      wide: { columns: "1fr 1fr 1fr", rows: "1.35fr 1fr", areas: ["shell shell shell", "tabs row close"] },
       tall: { columns: "1fr", rows: "auto", areas: ["shell", "tabs", "row", "close"] },
     },
     posterZoom: { wide: 0.8, tall: 0.9 },
