@@ -1,3 +1,5 @@
+//! The profile extractor model settings in `butler.config.json`.
+
 use std::fs;
 use std::path::Path;
 
@@ -73,6 +75,8 @@ pub(super) fn set_reasoning(
     Ok(read(data_root))
 }
 
+/// Passthrough: `butler.config.json` is edited in place, so keys owned by
+/// other components survive.
 fn mutate(
     data_root: &Path,
     pid: u32,

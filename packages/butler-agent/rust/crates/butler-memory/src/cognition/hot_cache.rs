@@ -3,6 +3,8 @@
 mod import;
 mod legacy_graph;
 mod receipts;
+#[cfg(test)]
+mod receipts_pin;
 mod rules;
 mod transcript_index;
 
@@ -38,6 +40,7 @@ pub struct HotCacheBackfillOutcome {
     pub(crate) raw_text_included: bool,
 }
 
+/// Indexes legacy hot-cache blocks and transcripts into the legacy vector store.
 pub struct LegacyIndexService {
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
@@ -47,6 +50,7 @@ pub struct LegacyIndexService {
 }
 
 impl LegacyIndexService {
+    /// An index service over `data_root`.
     pub fn new(
         data_root: PathBuf,
         paths: CognitionPathEnvironment,
@@ -63,6 +67,7 @@ impl LegacyIndexService {
         }
     }
 
+    /// Indexes every hot-cache markdown block.
     pub async fn backfill(
         &self,
         cancellation: &CancellationToken,
@@ -118,6 +123,8 @@ impl LegacyIndexService {
         Ok(outcome)
     }
 
+    /// Embeds one hot-cache block and writes it as a legacy vector session
+    /// with its receipt, under the consolidation lock.
     async fn index_block(
         &self,
         block: &str,
@@ -133,61 +140,15 @@ impl LegacyIndexService {
         if chunks.is_empty() {
             return Err(error(CognitionCode::HotCacheEmptyBlock));
         }
-        let mut vectors = Vec::with_capacity(chunks.len());
-        for batch in chunks.chunks(4) {
-            if cancellation.is_cancelled() {
-                return Err(error(CognitionCode::MemoryWriteAborted));
-            }
-            let request = EmbeddingRequest {
-                texts: batch.to_vec(),
-                mode: EmbeddingMode::LegacyMean,
-                resplit: false,
-                max_embeddings: None,
-                request_class: EmbeddingRequestClass::Background,
-                deadline_at_epoch_ms: None,
-            };
-            let embedded = self.embedding.embed(request, cancellation.clone()).await?;
-            if embedded.embeddings.len() != batch.len() {
-                return Err(error(CognitionCode::HotCacheEmbeddingIncomplete));
-            }
-            vectors.extend(embedded.embeddings);
-        }
+        let vectors = self.embed(&chunks, cancellation).await?;
         if cancellation.is_cancelled() {
             return Err(error(CognitionCode::MemoryWriteAborted));
         }
-        let memory_root = self.paths.memory_root(&self.data_root);
-        let db_root = memory_root.join("db");
-        let lock = self.paths.consolidation_lock(&self.data_root);
-        let provenance = db_root.join("session-provenance.jsonl");
-        let stats = db_root.join("vector-stats.json");
-        let stats_temporary =
-            db_root.join(format!("vector-stats.json.tmp-{}", uuid::Uuid::new_v4()));
-        let graph = db_root.join("graph.sqlite");
-        let graph_wal = db_root.join("graph.sqlite-wal");
-        let graph_shm = db_root.join("graph.sqlite-shm");
-        let lance = db_root.join("butler.lance");
-        let log = self.data_root.join("logs/memory.log");
-        ensure_data_authority(
-            &self.data_root,
-            &[
-                &self.paths.cognition_root(&self.data_root),
-                &memory_root,
-                &db_root,
-                &lock,
-                &provenance,
-                &stats,
-                &stats_temporary,
-                &graph,
-                &graph_wal,
-                &graph_shm,
-                &lance,
-                &log,
-            ],
-        )?;
+        let paths = self.index_paths()?;
         let lease = self
             .coordinator
             .acquire(
-                CognitionWriteAcquire::immediate(lock, "hot-cache-backfill"),
+                CognitionWriteAcquire::immediate(paths.lock.clone(), "hot-cache-backfill"),
                 CognitionWaitClass::Background,
             )
             .await
@@ -219,21 +180,18 @@ impl LegacyIndexService {
                 return Err(failure);
             }
         };
-        let data_root = self.data_root.clone();
-        let text = text.to_owned();
-        let session_id = session_id.to_owned();
-        let chunk_count = rows.len();
+        let receipt = Receipt {
+            data_root: self.data_root.clone(),
+            memory_root: paths.memory_root,
+            text: text.to_owned(),
+            session_id: session_id.to_owned(),
+            chunk_count: rows.len(),
+            row_count,
+            stats_temporary: paths.stats_temporary,
+        };
         drop(rows);
         tokio::task::spawn_blocking(move || {
-            let result = receipts::record(
-                &data_root,
-                &memory_root,
-                &text,
-                &session_id,
-                chunk_count,
-                row_count,
-                &stats_temporary,
-            );
+            let result = receipt.record();
             let release = lease.release(result.is_ok()).map_err(CognitionError::from);
             match (result, release) {
                 (Err(failure), _) | (Ok(()), Err(failure)) => Err(failure),
@@ -242,6 +200,98 @@ impl LegacyIndexService {
         })
         .await
         .map_err(|source| error(CognitionCode::HotCacheReceiptFailed).with_source(source))?
+    }
+
+    /// Embeds the chunks four at a time.
+    async fn embed(
+        &self,
+        chunks: &[String],
+        cancellation: &CancellationToken,
+    ) -> CognitionResult<Vec<Vec<f32>>> {
+        let mut vectors = Vec::with_capacity(chunks.len());
+        for batch in chunks.chunks(4) {
+            if cancellation.is_cancelled() {
+                return Err(error(CognitionCode::MemoryWriteAborted));
+            }
+            let request = EmbeddingRequest {
+                texts: batch.to_vec(),
+                mode: EmbeddingMode::LegacyMean,
+                resplit: false,
+                max_embeddings: None,
+                request_class: EmbeddingRequestClass::Background,
+                deadline_at_epoch_ms: None,
+            };
+            let embedded = self.embedding.embed(request, cancellation.clone()).await?;
+            if embedded.embeddings.len() != batch.len() {
+                return Err(error(CognitionCode::HotCacheEmbeddingIncomplete));
+            }
+            vectors.extend(embedded.embeddings);
+        }
+        Ok(vectors)
+    }
+
+    /// The paths an index write touches, checked to stay inside the data
+    /// root.
+    fn index_paths(&self) -> CognitionResult<IndexPaths> {
+        let memory_root = self.paths.memory_root(&self.data_root);
+        let db_root = memory_root.join("db");
+        let lock = self.paths.consolidation_lock(&self.data_root);
+        let stats_temporary =
+            db_root.join(format!("vector-stats.json.tmp-{}", uuid::Uuid::new_v4()));
+        ensure_data_authority(
+            &self.data_root,
+            &[
+                &self.paths.cognition_root(&self.data_root),
+                &memory_root,
+                &db_root,
+                &lock,
+                &db_root.join("session-provenance.jsonl"),
+                &db_root.join("vector-stats.json"),
+                &stats_temporary,
+                &db_root.join("graph.sqlite"),
+                &db_root.join("graph.sqlite-wal"),
+                &db_root.join("graph.sqlite-shm"),
+                &db_root.join("butler.lance"),
+                &self.data_root.join("logs/memory.log"),
+            ],
+        )?;
+        Ok(IndexPaths {
+            memory_root,
+            lock,
+            stats_temporary,
+        })
+    }
+}
+
+/// Paths of one index write.
+struct IndexPaths {
+    memory_root: PathBuf,
+    lock: PathBuf,
+    stats_temporary: PathBuf,
+}
+
+/// The receipt of one indexed block.
+struct Receipt {
+    data_root: PathBuf,
+    memory_root: PathBuf,
+    text: String,
+    session_id: String,
+    chunk_count: usize,
+    row_count: usize,
+    stats_temporary: PathBuf,
+}
+
+impl Receipt {
+    fn record(&self) -> CognitionResult<()> {
+        receipts::record(
+            &self.data_root,
+            &self.memory_root,
+            &self.text,
+            &self.session_id,
+            self.chunk_count,
+            self.row_count,
+            &self.stats_temporary,
+        )
     }
 }
 
@@ -313,8 +363,9 @@ fn chunk_text(text: &str) -> Vec<String> {
     let mut chunks = Vec::new();
     let mut at = 0;
     while at < units.len() {
+        let end = units.len().min(at + 2000);
         chunks.push(String::from_utf16_lossy(
-            &units[at..units.len().min(at + 2000)],
+            units.get(at..end).unwrap_or_default(),
         ));
         at += 1950;
     }

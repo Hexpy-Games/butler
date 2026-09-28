@@ -51,6 +51,7 @@ pub struct Setup {
     stub_credential: bool,
     record_into: Option<std::path::PathBuf>,
     app_supervisor: bool,
+    data_folder_token: bool,
     replay_only: bool,
     extends: Option<String>,
 }
@@ -83,6 +84,7 @@ impl Setup {
             stub_credential: true,
             record_into: None,
             app_supervisor: false,
+            data_folder_token: false,
             replay_only: false,
             extends: None,
         })
@@ -119,6 +121,13 @@ impl Setup {
     /// `BUTLER_E2E_RECORD` says.
     pub fn record_into(mut self, dir: std::path::PathBuf) -> Self {
         self.record_into = Some(dir);
+        self
+    }
+
+    /// Starts the agent without token variables, as `butler start` does:
+    /// the agent owns the token in its data folder.
+    pub fn data_folder_token(mut self) -> Self {
+        self.data_folder_token = true;
         self
     }
 
@@ -170,12 +179,16 @@ impl Setup {
             stub_credential,
             record_into,
             app_supervisor,
+            data_folder_token,
             replay_only,
             extends,
         } = self;
         let mut launch = Launch::new(&sandbox)?;
         if app_supervisor {
             launch.use_app_supervisor()?;
+        }
+        if data_folder_token {
+            launch.use_data_folder_token();
         }
         let default_model = ModelChoice {
             model: "openai/gpt-6-sol".into(),

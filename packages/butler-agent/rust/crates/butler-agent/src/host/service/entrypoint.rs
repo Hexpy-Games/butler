@@ -81,9 +81,13 @@ impl ServiceLogMode {
     }
 
     fn write(self, message: &str) {
-        if self.quiet {
-            return;
+        if !self.quiet {
+            self.problem(message);
         }
+    }
+
+    /// Writes even in quiet mode: a problem the operator must see.
+    fn problem(self, message: &str) {
         if self.stderr {
             eprintln!("{message}");
         } else {
@@ -103,6 +107,7 @@ async fn run(
         .map(PathBuf::from)
         .ok_or_else(|| failure("native_home_unavailable", "User home is unavailable"))?;
     let config = ServiceConfiguration::capture(explicit_data, &user_home, &installation)?;
+    report_credential_errors(&config, logs);
     let executable = std::env::current_exe().map_err(io)?;
     let mut instance = crate::host::service::instance::InstanceGuard::acquire(
         &config.data_root,
@@ -169,6 +174,18 @@ async fn run(
     match result {
         Err(error) => Err(error),
         Ok(session) => runtime_close.and(transcript_close).map(|()| session),
+    }
+}
+
+/// Without its token the App gateway refuses every client
+/// (`local_auth_unconfigured`, fail closed); the log says which file failed
+/// and why.
+fn report_credential_errors(config: &ServiceConfiguration, logs: ServiceLogMode) {
+    for error in config.app.credential_errors() {
+        logs.problem(&format!(
+            "[native-app] local auth unavailable {}",
+            error.diagnostic()
+        ));
     }
 }
 

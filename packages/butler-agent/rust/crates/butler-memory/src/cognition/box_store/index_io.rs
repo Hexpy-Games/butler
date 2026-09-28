@@ -1,3 +1,5 @@
+//! Private files and directories of the box index, and its rebuild report.
+
 use std::{
     fs::{self, OpenOptions},
     io::Write,

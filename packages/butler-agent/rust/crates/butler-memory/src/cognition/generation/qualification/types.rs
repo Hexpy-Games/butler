@@ -1,3 +1,5 @@
+//! Qualification evidence records and references.
+
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]

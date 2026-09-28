@@ -1,3 +1,5 @@
+//! The base graph tables, claim tables and source indexes.
+
 use rusqlite::Connection;
 
 use super::super::db_error;

@@ -6,11 +6,16 @@ use std::{
     time::Duration,
 };
 
+use serde::Deserialize;
 use serde_json::Value;
 
 use butler_core::json::number_from_string;
 use butler_core::public_text::trim_js_whitespace;
 use butler_gateway::gateway::{GatewayConfig, LocalAuthConfig};
+
+use super::local_credentials::{CredentialFiles, LocalCredentialError, LocalCredentials};
+
+const MAX_SIGNED_URL_TTL_SECONDS: u64 = 600;
 
 pub(crate) struct AppServiceConfiguration {
     pub(crate) host: String,
@@ -20,6 +25,19 @@ pub(crate) struct AppServiceConfiguration {
     pub(crate) enabled: bool,
     pub(crate) folder_selection_secret: Option<String>,
     gateway: GatewayConfig,
+    /// Why the token or the folder secret is unavailable; the gateway then
+    /// refuses every client (`local_auth_unconfigured`).
+    credential_errors: Vec<LocalCredentialError>,
+}
+
+/// The typed part of `gateways/app.json` `config`.
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TypedGatewaySettings {
+    /// Extra Host names (`name` or `name:port`) the gateway answers besides
+    /// loopback. A list that is not all strings is ignored as a whole.
+    #[serde(default)]
+    allowed_hosts: Vec<String>,
 }
 
 /// Facts captured by the process that cannot safely change with an App-only
@@ -52,7 +70,13 @@ impl AppCapturedDependencies {
 }
 
 impl AppServiceConfiguration {
+    /// The App gateway facts of `data_root`; credential files are only read.
     pub(crate) fn capture(data_root: &Path) -> Self {
+        Self::capture_with(data_root, CredentialFiles::ReadOnly)
+    }
+
+    /// The same, creating missing credential files when `files` allows.
+    pub(crate) fn capture_with(data_root: &Path, files: CredentialFiles) -> Self {
         let settings = fs::read(data_root.join("gateways/app.json"))
             .ok()
             .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
@@ -88,42 +112,41 @@ impl AppServiceConfiguration {
         let db_path = configured_db
             .map(PathBuf::from)
             .unwrap_or_else(|| data_root.join("app-server/butler-client.sqlite"));
-        let max = env::var("BUTLER_APP_SERVER_MESSAGE_RATE_LIMIT_MAX")
-            .map(|value| number_from_string(&value))
-            .unwrap_or(60.0);
-        let window_ms = env::var("BUTLER_APP_SERVER_MESSAGE_RATE_LIMIT_WINDOW_MS")
-            .map(|value| number_from_string(&value))
-            .unwrap_or(60_000.0);
-        let gateway = GatewayConfig {
-            local_auth: local_auth(),
-            dev_cors_origin: env::var("BUTLER_APP_DEV_ORIGIN").ok(),
-            message_rate_limit_max: if max.is_finite() && max > 0.0 {
-                butler_core::json::saturating_u64(max.ceil())
-            } else {
-                60
-            },
-            message_rate_limit_window: if window_ms.is_finite() && window_ms > 0.0 {
-                Duration::try_from_secs_f64(window_ms / 1000.0).unwrap_or(Duration::MAX)
-            } else {
-                Duration::from_secs(60)
-            },
-            static_ui_root: None,
-        };
+        // Local auth is enforced whoever started the agent: the token (and
+        // the folder secret) belong to the data folder.
+        let LocalCredentials {
+            token,
+            folder_secret,
+        } = LocalCredentials::load(data_root, files);
+        let mut credential_errors = Vec::new();
+        let token = token.map_err(|error| credential_errors.push(error)).ok();
+        let folder_secret = folder_secret
+            .map_err(|error| credential_errors.push(error))
+            .ok();
         Self {
             host,
             port,
             db_path,
             db_configured,
             enabled,
-            folder_selection_secret: env::var("BUTLER_PROJECT_FOLDER_TOKEN_SECRET").ok(),
-            gateway,
+            folder_selection_secret: folder_secret,
+            gateway: gateway_config(LocalAuthConfig::required(token), allowed_hosts(config)),
+            credential_errors,
         }
+    }
+
+    /// Why the data folder's gateway token or folder secret could not be
+    /// read or created (empty when both are available).
+    pub(crate) fn credential_errors(&self) -> &[LocalCredentialError] {
+        &self.credential_errors
     }
 
     pub(crate) fn gateway_config(&self) -> GatewayConfig {
         GatewayConfig {
             local_auth: self.gateway.local_auth.clone(),
             dev_cors_origin: self.gateway.dev_cors_origin.clone(),
+            allowed_hosts: self.gateway.allowed_hosts.clone(),
+            signed_url_ttl: self.gateway.signed_url_ttl,
             message_rate_limit_max: self.gateway.message_rate_limit_max,
             message_rate_limit_window: self.gateway.message_rate_limit_window,
             static_ui_root: self.gateway.static_ui_root.clone(),
@@ -173,18 +196,55 @@ fn argv_port() -> Option<f64> {
         .filter(|value| value.is_finite())
 }
 
-fn local_auth() -> LocalAuthConfig {
-    if env::var("BUTLER_APP_LOCAL_AUTH_REQUIRED").as_deref() != Ok("1") {
-        return LocalAuthConfig::default();
+fn gateway_config(local_auth: LocalAuthConfig, allowed_hosts: Vec<String>) -> GatewayConfig {
+    let max = env::var("BUTLER_APP_SERVER_MESSAGE_RATE_LIMIT_MAX")
+        .map(|value| number_from_string(&value))
+        .unwrap_or(60.0);
+    let window_ms = env::var("BUTLER_APP_SERVER_MESSAGE_RATE_LIMIT_WINDOW_MS")
+        .map(|value| number_from_string(&value))
+        .unwrap_or(60_000.0);
+    GatewayConfig {
+        local_auth,
+        dev_cors_origin: env::var("BUTLER_APP_DEV_ORIGIN").ok(),
+        allowed_hosts,
+        signed_url_ttl: signed_url_ttl(),
+        message_rate_limit_max: if max.is_finite() && max > 0.0 {
+            butler_core::json::saturating_u64(max.ceil())
+        } else {
+            60
+        },
+        message_rate_limit_window: if window_ms.is_finite() && window_ms > 0.0 {
+            Duration::try_from_secs_f64(window_ms / 1000.0).unwrap_or(Duration::MAX)
+        } else {
+            Duration::from_secs(60)
+        },
+        static_ui_root: None,
     }
-    let token = env_trimmed("BUTLER_APP_LOCAL_AUTH_FILE")
-        .and_then(|path| fs::read(path).ok())
-        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
-        .and_then(|value| {
-            value
-                .get("token")
-                .and_then(Value::as_str)
-                .map(str::to_owned)
+}
+
+/// `BUTLER_APP_SIGNED_URL_TTL_SECONDS` may only shorten the 10-minute
+/// lifetime of signed message-file URLs.
+fn signed_url_ttl() -> Duration {
+    let seconds = env::var("BUTLER_APP_SIGNED_URL_TTL_SECONDS")
+        .map(|value| number_from_string(&value))
+        .ok()
+        .filter(|seconds| seconds.is_finite() && *seconds >= 1.0)
+        .map_or(MAX_SIGNED_URL_TTL_SECONDS, |seconds| {
+            butler_core::json::saturating_u64(seconds.floor()).min(MAX_SIGNED_URL_TTL_SECONDS)
         });
-    LocalAuthConfig::required(token)
+    Duration::from_secs(seconds)
+}
+
+/// `gateways/app.json` `config.allowedHosts`, trimmed, blank names dropped.
+fn allowed_hosts(config: Option<&Value>) -> Vec<String> {
+    let settings = config
+        .and_then(|value| TypedGatewaySettings::deserialize(value).ok())
+        .unwrap_or_default();
+    settings
+        .allowed_hosts
+        .iter()
+        .map(|name| trim_js_whitespace(name))
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
+        .collect()
 }

@@ -1,3 +1,5 @@
+//! The score gate that selects legacy recall items.
+
 use super::{LegacyRecallScoreBreakdown, LegacyRecallSource, evidence::ActivePolicy};
 
 pub(super) const LOW_CONFIDENCE_RECALL_FLOOR: f64 = 0.0001;
@@ -31,16 +33,23 @@ pub(super) fn select_scored_candidates(
         .collect::<Vec<_>>();
     if !standard.is_empty() {
         if has_ambiguous_vector_neighborhood(scored, &standard)
-            && vector_corroboration(&scored[standard[0]].breakdown)
-                < VECTOR_AMBIGUOUS_NEIGHBORHOOD_MIN_CORROBORATION
+            && standard
+                .first()
+                .and_then(|index| scored.get(*index))
+                .is_some_and(|item| {
+                    vector_corroboration(&item.breakdown)
+                        < VECTOR_AMBIGUOUS_NEIGHBORHOOD_MIN_CORROBORATION
+                })
         {
             let corroborated = standard
                 .iter()
                 .copied()
                 .filter(|index| {
-                    !is_vector_semantic(&scored[*index])
-                        || vector_corroboration(&scored[*index].breakdown)
-                            >= VECTOR_AMBIGUOUS_NEIGHBORHOOD_MIN_CORROBORATION
+                    scored.get(*index).is_some_and(|item| {
+                        !is_vector_semantic(item)
+                            || vector_corroboration(&item.breakdown)
+                                >= VECTOR_AMBIGUOUS_NEIGHBORHOOD_MIN_CORROBORATION
+                    })
                 })
                 .collect::<Vec<_>>();
             if !corroborated.is_empty() {
@@ -97,7 +106,7 @@ fn has_ambiguous_vector_neighborhood(scored: &[ScoredCandidate<'_>], selected: &
     let Some(second) = selected
         .iter()
         .skip(1)
-        .map(|index| &scored[*index])
+        .filter_map(|index| scored.get(*index))
         .find(|item| is_vector_semantic(item))
     else {
         return false;

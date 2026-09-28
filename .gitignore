@@ -48,5 +48,9 @@ tests/capture_*
 *.bak
 data/personas/active.md
 
-# ── E2E fixtures are synthetic data dirs; the patterns above must not drop them
-!packages/butler-agent/rust/crates/butler-e2e/fixtures/**
+# ── E2E fixtures are synthetic data dirs; the unanchored `data/` above must not
+#    drop them. Re-include only the directories: everything inside them is still
+#    subject to the rules above, so .DS_Store, .env, *.bak, node_modules/ etc.
+#    under fixtures stay ignored. (`memory/hot/*.md` and the other slash-containing
+#    patterns are anchored to the repo root and never match fixture paths.)
+!packages/butler-agent/rust/crates/butler-e2e/fixtures/**/data/

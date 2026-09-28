@@ -42,6 +42,13 @@ impl fmt::Display for FreshStorageError {
 
 impl std::error::Error for FreshStorageError {}
 
+/// Whether `butler_data` is a pre-BTCC data folder the agent refuses to
+/// start on (and so must not write into).
+pub(crate) fn is_unsupported_legacy_data(butler_data: &Path) -> bool {
+    !butler_data.join("agent-runtime/btcc.sqlite").exists()
+        && butler_data.join("app-server/butler-client.sqlite").exists()
+}
+
 /// Source fresh-install ordering: reject existing data, establish a process
 /// readiness fence, prepare the receipt, publish, activate, then validate.
 pub(crate) fn prepare_fresh_btcc_storage(

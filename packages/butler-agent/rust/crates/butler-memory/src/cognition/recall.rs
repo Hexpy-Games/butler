@@ -26,5 +26,6 @@ pub(in crate::cognition) use ranking::{
 };
 
 pub(in crate::cognition) use semantic::{
-    Channel, RankedCandidate, SemanticSelection, rank_aliases, rank_lexical, select_semantic_seeds,
+    Channel, RankedCandidate, SeedOptions, SemanticSelection, rank_aliases, rank_lexical,
+    select_semantic_seeds,
 };

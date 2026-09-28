@@ -428,4 +428,6 @@ fn service_with_clock(
 }
 
 mod cases;
+mod exact_query_pin;
+mod identity_history_pin;
 mod semantic;

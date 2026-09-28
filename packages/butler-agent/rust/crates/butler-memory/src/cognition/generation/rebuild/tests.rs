@@ -274,11 +274,11 @@ async fn readiness_rejects_candidate_change_while_waiting_for_commit_gate() {
     )
     .await
     .unwrap();
-    assert_eq!(current["unaccounted"], 0);
+    assert_eq!(current.unaccounted, 0);
     assert_eq!(
         serde_json::from_slice::<serde_json::Value>(&fs::read(manifest).unwrap()).unwrap()["readiness"]
             ["sha256"],
-        current["sha256"]
+        serde_json::json!(current.sha256)
     );
 }
 

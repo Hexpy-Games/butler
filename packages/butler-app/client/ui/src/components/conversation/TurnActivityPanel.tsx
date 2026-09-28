@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { useAppLocale } from "@/app/copy.ts";
 import { projectTurnActivity } from "@/app/conversation-progress";
 import type { ProgressRow } from "@/app/types.ts";
@@ -21,6 +22,9 @@ export function TurnActivityPanel({
   startedAt?: string;
 }) {
   useAppLocale();
+  // Pending and current status are different trees, so the status mark remounts when work
+  // arrives; one key per panel lets it continue the morph instead of restarting from the logo.
+  const markKey = useId();
   const {
     decisions,
     modelRoundWait,
@@ -43,7 +47,7 @@ export function TurnActivityPanel({
     !modelRoundWait &&
     !operation
   ) {
-    return <TurnActivityPending readModels={readModels} state={state} />;
+    return <TurnActivityPending markKey={markKey} readModels={readModels} state={state} />;
   }
 
   return (
@@ -66,6 +70,7 @@ export function TurnActivityPanel({
         <TurnDecisionRow decision={decisions.at(-1)!} />
       ) : null}
       <CurrentTurnStatus
+        markKey={markKey}
         state={state}
         modelRoundWait={modelRoundWait}
         operation={operation}

@@ -1,3 +1,5 @@
+//! Lexical seeds and scores of legacy recall.
+
 use butler_core::public_text::fixed_regex;
 use std::{
     collections::{HashMap, HashSet},
@@ -71,9 +73,11 @@ fn non_ascii_lexical_shingles(token: &str) -> Vec<String> {
         if characters.len() < size {
             continue;
         }
-        for index in 0..=characters.len() - size {
-            shingles.push(characters[index..index + size].iter().collect());
-        }
+        shingles.extend(
+            characters
+                .windows(size)
+                .map(|window| window.iter().collect::<String>()),
+        );
     }
     shingles
 }

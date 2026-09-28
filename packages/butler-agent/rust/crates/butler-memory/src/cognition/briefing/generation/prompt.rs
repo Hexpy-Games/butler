@@ -1,3 +1,6 @@
+//! The briefing model request: the prompt JSON, the instructions and the time-of-day moment.
+
+use crate::lenient::set_field;
 use chrono::{DateTime, Utc};
 use serde_json::json;
 
@@ -41,40 +44,11 @@ pub(super) fn prompt(
         "completed_work_titles": project.completed_work_titles.iter().take(30).collect::<Vec<_>>(),
         "excluded_topics": project.excluded_topics.iter().take(20).collect::<Vec<_>>(),
     }));
-    let mut output_shape = json!({
-        "moment":"short time label",
-        "title":"one short fallback greeting or question for the surface",
-        "description":"one short sentence about why these cards are here",
-        "suggestions":[{"id":"stable-kebab-id","title":"topic name","description":"why this is useful to open","text":"message to send if selected","source_kind":"one allowed source kind"}],
-    });
-    if project.is_none() {
-        output_shape["title_variants"] = json!({
-            "morning":"surface headline for local morning",
-            "afternoon":"surface headline for local afternoon",
-            "evening":"surface headline for local evening",
-            "night":"surface headline for local night",
-        });
-    }
+    let output_shape = output_shape(project);
     let rules = if project.is_some() {
-        vec![
-            "Every suggestion must be directly about the selected project.",
-            "Treat recent session titles as topics already discussed, not as unfinished tasks or requests to repeat.",
-            "Completed Work titles are explicitly finished; never repackage one as a new design, implementation, review, or verification card.",
-            "Open Work titles are the only explicit unfinished-work signals; do not infer open status from a chat title.",
-            "Use the project summary and past topics to propose distinct, optional future capabilities, experiments, or decisions.",
-            "Each card must create a new outcome beyond the cited past topic; name that outcome in the title and the message to send.",
-            "Do not propose a status check, recap, review, re-audit, re-verification, or finishing an earlier conversation solely because its title appears here.",
-            "Do not claim a feature is missing or work is unfinished without an explicit status signal.",
-            "Avoid restating or lightly rephrasing any recent session title as a card.",
-            "Never mention or propose a topic listed in excluded_topics.",
-            "Do not introduce general interests, meals, entertainment, news, or unrelated personal topics unless the project summaries explicitly mention them.",
-            "If project signal is thin, make fewer sharper project cards instead of filling with generic topics.",
-        ]
+        PROJECT_RULES
     } else {
-        vec![
-            "Use general user-level signals, unfinished topics, repeated questions, current interests, adjacent directions, and timely context.",
-            "Do not turn unfinished work into pressure or obligation.",
-        ]
+        GENERAL_RULES
     };
     // Pretty-printing a `Value` cannot fail; fall back to compact text regardless.
     let prompt = json!({
@@ -86,6 +60,52 @@ pub(super) fn prompt(
     });
     serde_json::to_string_pretty(&prompt).unwrap_or_else(|_| prompt.to_string())
 }
+
+/// The reply shape shown to the model; only the general briefing has
+/// greetings per time of day.
+fn output_shape(project: Option<&BriefingProjectSignal>) -> serde_json::Value {
+    let mut shape = json!({
+        "moment":"short time label",
+        "title":"one short fallback greeting or question for the surface",
+        "description":"one short sentence about why these cards are here",
+        "suggestions":[{"id":"stable-kebab-id","title":"topic name","description":"why this is useful to open","text":"message to send if selected","source_kind":"one allowed source kind"}],
+    });
+    if project.is_none() {
+        set_field(
+            &mut shape,
+            "title_variants",
+            json!({
+                "morning":"surface headline for local morning",
+                "afternoon":"surface headline for local afternoon",
+                "evening":"surface headline for local evening",
+                "night":"surface headline for local night",
+            }),
+        );
+    }
+    shape
+}
+
+/// Scope rules of a project briefing.
+const PROJECT_RULES: &[&str] = &[
+    "Every suggestion must be directly about the selected project.",
+    "Treat recent session titles as topics already discussed, not as unfinished tasks or requests to repeat.",
+    "Completed Work titles are explicitly finished; never repackage one as a new design, implementation, review, or verification card.",
+    "Open Work titles are the only explicit unfinished-work signals; do not infer open status from a chat title.",
+    "Use the project summary and past topics to propose distinct, optional future capabilities, experiments, or decisions.",
+    "Each card must create a new outcome beyond the cited past topic; name that outcome in the title and the message to send.",
+    "Do not propose a status check, recap, review, re-audit, re-verification, or finishing an earlier conversation solely because its title appears here.",
+    "Do not claim a feature is missing or work is unfinished without an explicit status signal.",
+    "Avoid restating or lightly rephrasing any recent session title as a card.",
+    "Never mention or propose a topic listed in excluded_topics.",
+    "Do not introduce general interests, meals, entertainment, news, or unrelated personal topics unless the project summaries explicitly mention them.",
+    "If project signal is thin, make fewer sharper project cards instead of filling with generic topics.",
+];
+
+/// Scope rules of the general briefing.
+const GENERAL_RULES: &[&str] = &[
+    "Use general user-level signals, unfinished topics, repeated questions, current interests, adjacent directions, and timely context.",
+    "Do not turn unfinished work into pressure or obligation.",
+];
 
 pub(super) fn instructions(locale: &str, has_persona: bool) -> String {
     let mut lines = vec![
@@ -154,5 +174,5 @@ pub(super) fn moment(local_minute: u16, locale: &str) -> String {
 }
 
 fn head(values: &[String], count: usize) -> &[String] {
-    &values[..values.len().min(count)]
+    values.get(..count).unwrap_or(values)
 }

@@ -24,11 +24,22 @@ pub struct Launch {
     pub tmp: PathBuf,
     pub logs: PathBuf,
     pub port: u16,
+    /// The gateway token; empty until read from the data folder when the
+    /// agent owns it (see [`Launch::use_data_folder_token`]).
     pub token: String,
     pub env: Vec<(String, String)>,
     /// The harness starts and supervises the agent as the Butler App does
     /// (see [`Launch::use_app_supervisor`]).
     pub app_supervisor: bool,
+}
+
+/// Where the agent keeps its gateway token when no override names a file.
+pub const DATA_FOLDER_TOKEN_FILE: &str = "app/runtime/auth/local-agent-auth.json";
+
+/// The field of the token file the harness reads.
+#[derive(serde::Deserialize)]
+struct TokenFile {
+    token: String,
 }
 
 impl Launch {
@@ -75,7 +86,7 @@ impl Launch {
     /// dir's App local-auth file, which the agent is pointed at. A CLI run
     /// without the local-auth variables then has only that file to go by.
     pub fn use_app_local_auth_file(&mut self) -> Result<PathBuf, HarnessError> {
-        let path = self.data.join("app/runtime/auth/local-agent-auth.json");
+        let path = self.data.join(DATA_FOLDER_TOKEN_FILE);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -100,6 +111,23 @@ impl Launch {
             .env_remove("BUTLER_APP_LOCAL_AUTH_REQUIRED")
             .env_remove("BUTLER_APP_LOCAL_AUTH_FILE");
         command
+    }
+
+    /// Starts the agent as the CLI does: no token variables, so the agent
+    /// reads (or creates) the token in its data folder, and the harness
+    /// reads it from there.
+    pub fn use_data_folder_token(&mut self) {
+        self.remove_env("BUTLER_APP_LOCAL_AUTH_REQUIRED");
+        self.remove_env("BUTLER_APP_LOCAL_AUTH_FILE");
+        self.token.clear();
+    }
+
+    /// The token the agent keeps in its data folder, once it exists.
+    pub fn data_folder_token(&self) -> Option<String> {
+        let bytes = fs::read(self.data.join(DATA_FOLDER_TOKEN_FILE)).ok()?;
+        serde_json::from_slice::<TokenFile>(&bytes)
+            .ok()
+            .map(|file| file.token)
     }
 
     /// A command for the agent binary with the scenario's isolated environment.
@@ -163,13 +191,18 @@ impl Agent {
             .stderr(stderr)
             .spawn()?;
         self.child = Some(child);
-        let gateway = Gateway::new(
-            format!("http://127.0.0.1:{}", self.launch.port),
-            self.launch.token.clone(),
-        );
         let deadline = Instant::now() + Duration::from_secs(90);
         loop {
-            if gateway.healthy().await {
+            if self.launch.token.is_empty()
+                && let Some(token) = self.launch.data_folder_token()
+            {
+                self.launch.token = token;
+            }
+            let gateway = Gateway::new(
+                format!("http://127.0.0.1:{}", self.launch.port),
+                self.launch.token.clone(),
+            );
+            if !self.launch.token.is_empty() && gateway.healthy().await {
                 self.remember_instance();
                 return Ok(gateway);
             }

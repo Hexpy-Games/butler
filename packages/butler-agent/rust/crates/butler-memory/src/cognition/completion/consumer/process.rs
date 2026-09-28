@@ -4,7 +4,8 @@ use crate::cognition::CognitionCode;
 use parking_lot::Mutex;
 use std::{path::PathBuf, sync::Arc, time::Instant};
 
-use serde_json::Value;
+use serde::{Deserialize, Serialize};
+use serde_json::Number;
 use tokio_util::sync::CancellationToken;
 
 use super::{MemorySyncPoll, catchup, paused};
@@ -20,6 +21,7 @@ use crate::cognition::{
     ConversationRegistrationOutcome, MemoryGenerationTarget, RegisterConversationSourceInput,
 };
 use crate::coordination::{CognitionWaitClass, CognitionWriteCoordinator};
+use crate::lenient::{Arg, Obj};
 use butler_turn::conversation::{ConversationSourceReader, conversation_store_path};
 
 pub(super) struct Input {
@@ -32,6 +34,67 @@ pub(super) struct Input {
     pub clock: Arc<dyn Fn() -> String + Send + Sync>,
     pub catchup_at: Arc<Mutex<Option<Instant>>>,
     pub shutdown: CancellationToken,
+}
+
+/// The head of `queue/sync.jsonl`, read leniently: every field keeps what
+/// was sent so mismatches and dead letters behave as on the raw request.
+#[derive(Debug, Default, Deserialize)]
+pub(super) struct SyncRequest {
+    #[serde(default)]
+    schema_version: Arg<String>,
+    #[serde(default)]
+    job_id: Arg<String>,
+    #[serde(default)]
+    source: Arg<Obj<SyncSource>>,
+}
+
+/// The source a sync request asks to register.
+#[derive(Debug, Default, Deserialize)]
+pub(super) struct SyncSource {
+    #[serde(default)]
+    pub kind: Arg<String>,
+    #[serde(default)]
+    pub record_kind: Arg<String>,
+    #[serde(default)]
+    pub record_id: Arg<String>,
+    #[serde(default)]
+    pub revision: Arg<String>,
+    #[serde(default)]
+    pub operation_id: Arg<String>,
+    #[serde(default)]
+    pub session_id: Arg<String>,
+    #[serde(default)]
+    pub turn_id: Arg<String>,
+    #[serde(default)]
+    pub outcome_generation: Arg<Number>,
+}
+
+impl SyncRequest {
+    /// The request's source; a source that is not an object reads as empty.
+    pub(super) fn source(&self) -> &SyncSource {
+        static EMPTY: SyncSource = SyncSource {
+            kind: Arg::Missing,
+            record_kind: Arg::Missing,
+            record_id: Arg::Missing,
+            revision: Arg::Missing,
+            operation_id: Arg::Missing,
+            session_id: Arg::Missing,
+            turn_id: Arg::Missing,
+            outcome_generation: Arg::Missing,
+        };
+        self.source.valid().map_or(&EMPTY, |Obj(source)| source)
+    }
+}
+
+/// A `queue/dead-letter.jsonl` line.
+#[derive(Serialize)]
+struct DeadLetter<'a> {
+    timestamp: &'a str,
+    session_id: &'a Arg<String>,
+    project: &'static str,
+    reason: &'a str,
+    exit_code: Option<u8>,
+    stderr_tail: &'a str,
 }
 
 pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
@@ -61,7 +124,8 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
     match super::super::queue::peek(&root) {
         Ok(Some(entry)) => {
             queued = true;
-            match process_entry(&input, &root, &entry).await {
+            let request: SyncRequest = crate::lenient::view(&entry);
+            match process_entry(&input, &root, &request).await {
                 Ok(did_process) => processed = did_process,
                 Err(error) => queue_error = Some(error),
             }
@@ -97,46 +161,63 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
     })
 }
 
+/// Registers the conversation turn a v3 request names once its completion
+/// observation matches; typed-record requests go to `typed`. A request
+/// whose observation is missing or different is dead-lettered and acked.
 async fn process_entry(
     input: &Input,
     root: &std::path::Path,
-    entry: &Value,
+    request: &SyncRequest,
 ) -> CognitionResult<bool> {
-    if entry["schema_version"] != "butler.memory-sync-request.v3" {
+    if request.schema_version.valid().map(String::as_str) != Some("butler.memory-sync-request.v3") {
         return Err(error(CognitionCode::MemorySyncLegacyEntryUnsupported));
     }
-    let job_id = entry["job_id"]
-        .as_str()
+    let job_id = request
+        .job_id
+        .valid()
         .filter(|id| !id.is_empty())
         .ok_or_else(|| error(CognitionCode::MemorySyncEntryInvalid))?;
-    let source = &entry["source"];
-    if matches!(
-        source["kind"].as_str(),
-        Some("task_report" | "explicit_record")
-    ) {
-        return typed::process(input, root, entry, job_id).await;
+    let source = request.source();
+    let kind = source.kind.valid().map(String::as_str);
+    if matches!(kind, Some("task_report" | "explicit_record")) {
+        return typed::process(input, root, request, job_id).await;
     }
-    if source["kind"] != "conversation_turn" {
+    if kind != Some("conversation_turn") {
         return Err(error(CognitionCode::MemorySyncSourceUnavailable));
     }
-    let Some(observation) = super::super::observation::read_verified(root, job_id)? else {
-        return reject_invalid(root, entry, job_id, &(input.clock)());
+    let Some(observation) = super::super::observation::read_verified(root, job_id) else {
+        return reject_invalid(root, request, job_id, &(input.clock)());
     };
-    if source["session_id"] != observation["conversation_session_id"]
-        || source["turn_id"] != observation["conversation_turn_id"]
-        || source["outcome_generation"] != observation["outcome_generation"]
+    if !source
+        .session_id
+        .same_json(&observation.conversation_session_id)
+        || !source.turn_id.same_json(&observation.conversation_turn_id)
+        || !source
+            .outcome_generation
+            .same_json(&observation.outcome_generation)
     {
-        return reject_invalid(root, entry, job_id, &(input.clock)());
+        return reject_invalid(root, request, job_id, &(input.clock)());
     }
-    let session = source["session_id"]
-        .as_str()
-        .ok_or_else(|| error(CognitionCode::MemorySyncEntryInvalid))?;
-    let turn = source["turn_id"]
-        .as_str()
-        .ok_or_else(|| error(CognitionCode::MemorySyncEntryInvalid))?;
-    let generation = source["outcome_generation"]
-        .as_f64()
-        .ok_or_else(|| error(CognitionCode::MemorySyncEntryInvalid))?;
+    let invalid = || error(CognitionCode::MemorySyncEntryInvalid);
+    let session = source.session_id.valid().ok_or_else(invalid)?;
+    let turn = source.turn_id.valid().ok_or_else(invalid)?;
+    let generation = source
+        .outcome_generation
+        .valid()
+        .and_then(Number::as_f64)
+        .ok_or_else(invalid)?;
+    register_turn(input, root, request, job_id, (session, turn, generation)).await
+}
+
+/// Registers the turn on the active generation and acks the request once
+/// its source is complete (or ineligible / superseded).
+async fn register_turn(
+    input: &Input,
+    root: &std::path::Path,
+    request: &SyncRequest,
+    job_id: &str,
+    (session, turn, generation): (&str, &str, f64),
+) -> CognitionResult<bool> {
     let handle = resolve_active_generation(&input.data_root, &input.environment)?;
     let registered = input
         .registration
@@ -166,7 +247,7 @@ async fn process_entry(
             if input.shutdown.is_cancelled() {
                 return Ok(false);
             }
-            let _ = dead_letter(root, entry, error.code(), &(input.clock)());
+            let _ = dead_letter(root, request, error.code(), &(input.clock)());
             return Ok(false);
         }
     };
@@ -177,7 +258,7 @@ async fn process_entry(
             return super::super::queue::ack(root, job_id);
         }
     };
-    if progress.source["state"] != "complete" {
+    if !progress.source.is_complete() {
         return Ok(false);
     }
     super::super::queue::ack(root, job_id)
@@ -185,17 +266,18 @@ async fn process_entry(
 
 fn reject_invalid(
     root: &std::path::Path,
-    entry: &Value,
+    request: &SyncRequest,
     job_id: &str,
     now: &str,
 ) -> CognitionResult<bool> {
-    let _ = dead_letter(root, entry, "completion_observation_invalid", now);
+    let _ = dead_letter(root, request, "completion_observation_invalid", now);
     super::super::queue::ack(root, job_id)
 }
 
+/// Appends the request to `queue/dead-letter.jsonl` with `reason`.
 fn dead_letter(
     root: &std::path::Path,
-    entry: &Value,
+    request: &SyncRequest,
     reason: &str,
     now: &str,
 ) -> CognitionResult<()> {
@@ -203,32 +285,34 @@ fn dead_letter(
         fs::{self, OpenOptions},
         io::Write,
     };
-    let path = root.join("queue/dead-letter.jsonl");
-    fs::create_dir_all(root.join("queue")).map_err(|e| {
+    let dlq = |e: std::io::Error| {
         CognitionError::new(CognitionCode::MemorySyncDlqError, e.to_string()).with_source(e)
-    })?;
+    };
+    let path = root.join("queue/dead-letter.jsonl");
+    fs::create_dir_all(root.join("queue")).map_err(dlq)?;
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
         .open(path)
-        .map_err(|e| {
-            CognitionError::new(CognitionCode::MemorySyncDlqError, e.to_string()).with_source(e)
-        })?;
-    let record = serde_json::json!({
-        "timestamp":now,
-        "session_id":entry["source"]["session_id"],
-        "project":"canonical",
-        "reason":reason,
-        "exit_code":null,
-        "stderr_tail":if reason == "completion_observation_invalid" {
+        .map_err(dlq)?;
+    let record = DeadLetter {
+        timestamp: now,
+        session_id: &request.source().session_id,
+        project: "canonical",
+        reason,
+        exit_code: None,
+        stderr_tail: if reason == "completion_observation_invalid" {
             "canonical completion observation is missing, corrupt, or does not match its queue request"
-        } else { reason },
-    });
-    file.write_all(record.to_string().as_bytes())
+        } else {
+            reason
+        },
+    };
+    let line = serde_json::to_string(&record).map_err(|e| {
+        CognitionError::new(CognitionCode::MemorySyncDlqError, e.to_string()).with_source(e)
+    })?;
+    file.write_all(line.as_bytes())
         .and_then(|()| file.write_all(b"\n"))
-        .map_err(|e| {
-            CognitionError::new(CognitionCode::MemorySyncDlqError, e.to_string()).with_source(e)
-        })
+        .map_err(dlq)
 }
 
 pub(super) async fn project_next(input: &Input) -> CognitionResult<bool> {
@@ -260,8 +344,37 @@ pub(super) async fn project_next(input: &Input) -> CognitionResult<bool> {
     let Some(pending) = pending else {
         return Ok(false);
     };
+    let job_id = pending.job_id.clone();
+    let notice = pending_notice(input, &handle, pending)?;
+    let projected = input
+        .registration
+        .project_semantic_window(ProjectSemanticWindowInput {
+            data_root: input.data_root.clone(),
+            target: input
+                .target
+                .clone()
+                .unwrap_or(MemoryGenerationTarget::Active {
+                    expected_generation: handle.generation_id,
+                }),
+            job_id,
+            notice,
+            cancellation: Some(input.shutdown.child_token()),
+            deadline_at_epoch_ms: None,
+            wait_class: CognitionWaitClass::Background,
+        })
+        .await?;
+    Ok(projected.is_some())
+}
+
+/// The source notice of a pending semantic job, checked against the
+/// current canonical conversation or typed record.
+fn pending_notice(
+    input: &Input,
+    handle: &crate::cognition::MemoryGenerationHandle,
+    pending: crate::cognition::graph::PendingSemanticJob,
+) -> CognitionResult<ProjectionSourceNotice> {
     let notice = if let Some(turn_id) = pending.source_key.strip_prefix("conversation_turn:") {
-        let canonical = ConversationSourceReader::open(&canonical_path(&handle, &input.data_root))
+        let canonical = ConversationSourceReader::open(&canonical_path(handle, &input.data_root))
             .map_err(CognitionError::from)?;
         let outcome = canonical
             .read_turn_outcome(turn_id)
@@ -308,24 +421,7 @@ pub(super) async fn project_next(input: &Input) -> CognitionResult<bool> {
     } else {
         return Err(error(CognitionCode::MemoryProjectionSourceInvalid));
     };
-    let projected = input
-        .registration
-        .project_semantic_window(ProjectSemanticWindowInput {
-            data_root: input.data_root.clone(),
-            target: input
-                .target
-                .clone()
-                .unwrap_or(MemoryGenerationTarget::Active {
-                    expected_generation: handle.generation_id,
-                }),
-            job_id: pending.job_id,
-            notice,
-            cancellation: Some(input.shutdown.child_token()),
-            deadline_at_epoch_ms: None,
-            wait_class: CognitionWaitClass::Background,
-        })
-        .await?;
-    Ok(projected.is_some())
+    Ok(notice)
 }
 
 pub(super) fn resolve_input_generation(

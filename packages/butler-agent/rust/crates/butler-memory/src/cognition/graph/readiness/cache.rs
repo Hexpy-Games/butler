@@ -5,8 +5,8 @@ use std::{
     path::Path,
 };
 
+use crate::cognition::generation::HotCacheEntryView;
 use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::Value;
 
 use super::{GraphRepository, db_error, hydrate, source};
 use crate::cognition::feedback::{FeedbackSourceRow, excluded_source_ids};
@@ -51,7 +51,7 @@ impl GraphRepository {
         let mut changed = 0;
         for job in jobs {
             changed += tx.execute("UPDATE memory_projection_jobs SET hot_cache_state=?1,hot_cache_next_attempt_at=NULL,hot_cache_attempt_count=0 WHERE job_id=?2 AND generation=?3 AND json_extract(hot_cache_state,'$.state')='complete'",
-                params![serde_json::json!({"state":"pending","blocked_by":"hot_cache_evidence_missing"}).to_string(),job,generation]).map_err(db_error)?;
+                params![crate::cognition::graph::StageWrite::blocked("hot_cache_evidence_missing").json()?,job,generation]).map_err(db_error)?;
         }
         tx.commit().map_err(db_error)?;
         Ok(changed)
@@ -74,10 +74,11 @@ impl GraphRepository {
             .map_err(db_error)
     }
 
+    /// The ids of `entries` whose evidence is still current as of `as_of`.
     pub(in crate::cognition) fn valid_rebuild_cache_entries(
         &self,
         generation: &str,
-        entries: &[Value],
+        entries: &[HotCacheEntryView],
         source_root: &Path,
         canonical: &ConversationSourceReader,
         as_of: &str,
@@ -93,20 +94,20 @@ impl GraphRepository {
             .map_err(db_error)?
             .and_then(|raw| raw.parse::<i64>().ok())
             .unwrap_or(-1);
+        let check = EntryCheck {
+            db,
+            generation,
+            source_root,
+            canonical,
+            as_of,
+            graph_revision,
+        };
         let mut valid = HashSet::new();
         for entry in entries {
-            let Some(id) = entry.get("entry_id").and_then(Value::as_str) else {
+            let Some(id) = entry.entry_id.as_deref() else {
                 continue;
             };
-            if entry_current(
-                db,
-                entry,
-                generation,
-                source_root,
-                canonical,
-                as_of,
-                graph_revision,
-            )? {
+            if check.current(entry)? {
                 valid.insert(id.to_owned());
             } else {
                 valid.remove(id);
@@ -116,105 +117,178 @@ impl GraphRepository {
     }
 }
 
-fn entry_current(
-    db: &Connection,
-    entry: &Value,
-    generation: &str,
-    source_root: &Path,
-    canonical: &ConversationSourceReader,
-    as_of: &str,
+/// The graph, sources, and time a cache entry is validated against.
+struct EntryCheck<'a> {
+    db: &'a Connection,
+    generation: &'a str,
+    source_root: &'a Path,
+    canonical: &'a ConversationSourceReader,
+    as_of: &'a str,
     graph_revision: i64,
-) -> CognitionResult<bool> {
-    let Some(episode) = entry["episode_id"].as_str() else {
-        return Ok(false);
-    };
-    let Some(revision) = entry["source_revision"].as_str() else {
-        return Ok(false);
-    };
-    let Some(refs) = strings(&entry["source_refs"]) else {
-        return Ok(false);
-    };
-    if refs.is_empty() || refs.iter().collect::<HashSet<_>>().len() != refs.len() {
-        return Ok(false);
-    }
-    let Some(stored_revision) = entry["graph_revision"].as_i64() else {
-        return Ok(false);
-    };
-    if stored_revision < 0 || stored_revision > graph_revision {
-        return Ok(false);
-    }
-    if entry["authority"]
-        .as_str()
-        .is_some_and(|value| value != "model_interpretation")
-    {
-        return Ok(false);
-    }
-    if let Some(until) = entry["valid_until"].as_str()
-        && let (Some(expiry), Some(now)) = (
-            butler_core::js_date::parse_date_millis(until, &|value| Some(value)),
-            butler_core::js_date::parse_date_millis(as_of, &|value| Some(value)),
-        )
-        && expiry <= now
-    {
-        return Ok(false);
-    }
-    let chunk = db.query_row(
-        "SELECT c.current_revision,c.project_id,c.conversation_session_id,c.status,\
-                c.source_key,c.source_hash \
-         FROM memory_chunks c \
-         JOIN memory_projection_jobs j ON j.episode_id=c.memory_chunk_id AND j.revision=c.current_revision \
-         WHERE c.memory_chunk_id=?1 AND j.generation=?2",
-        params![episode, generation],
-        |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, Option<String>>(1)?,
-                row.get::<_, Option<String>>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, String>(4)?,
-                row.get::<_, String>(5)?,
-            ))
-        },
-    )
-        .optional().map_err(db_error)?;
-    let Some((current, project, session, status, source_key, source_hash)) = chunk else {
-        return Ok(false);
-    };
-    if current != revision
-        || status != "active"
-        || entry["project_id"].as_str() != project.as_deref()
-        || entry["session_id"].as_str() != session.as_deref()
-    {
-        return Ok(false);
-    }
-    let mut rows = Vec::with_capacity(refs.len());
-    for id in &refs {
-        let Some(row) = source(db, id)? else {
+}
+
+/// The current chunk of an entry's episode in this generation.
+struct EntryChunk {
+    revision: String,
+    project: Option<String>,
+    session: Option<String>,
+    status: String,
+    source_key: String,
+    source_hash: String,
+}
+
+impl EntryCheck<'_> {
+    /// An entry is current when its metadata is well formed, its episode and
+    /// sources are current and eligible, no quality operation excludes a
+    /// source, and no later correction supersedes it.
+    fn current(&self, entry: &HotCacheEntryView) -> CognitionResult<bool> {
+        let (Some(episode), Some(revision), Some(refs)) = (
+            entry.episode_id.as_deref(),
+            entry.source_revision.as_deref(),
+            entry.source_refs.as_deref(),
+        ) else {
             return Ok(false);
         };
-        if row.episode_id != episode
-            || row.revision != revision
-            || !hydrate(canonical, source_root, &row)
+        if !self.metadata_valid(entry, refs) {
+            return Ok(false);
+        }
+        let Some(chunk) = self.chunk(episode)? else {
+            return Ok(false);
+        };
+        if chunk.revision != revision
+            || chunk.status != "active"
+            || entry.project_id.as_deref() != chunk.project.as_deref()
+            || entry.session_id.as_deref() != chunk.session.as_deref()
         {
             return Ok(false);
         }
-        let active = db.query_row("SELECT 1 FROM memory_chunks c JOIN memory_chunk_sources s ON s.episode_id=c.memory_chunk_id AND s.revision=c.current_revision WHERE s.source_id=?1 AND c.memory_chunk_id=?2 AND c.current_revision=?3 AND c.status='active' AND c.project_id IS ?4 AND julianday(s.observed_at)<=julianday(?5)",
-            params![row.source_id,row.episode_id,row.revision,project,as_of], |_| Ok(())).optional().map_err(db_error)?.is_some();
-        if !active || !source_class_allowed(&row) {
-            return Ok(false);
-        }
-        rows.push(row);
-    }
-    if rows.iter().any(|row| row.source_kind == "conversation") {
-        let Some(window_ref) = entry["window_ref"].as_str() else {
+        let Some(rows) = self.source_rows(refs, (episode, revision), chunk.project.as_deref())?
+        else {
             return Ok(false);
         };
-        let extraction_version = db
+        if rows.iter().any(|row| row.source_kind == "conversation")
+            && !self.conversation_current(entry, (episode, revision), &chunk)?
+        {
+            return Ok(false);
+        }
+        if entry
+            .source_class
+            .as_deref()
+            .is_some_and(|value| value != source_class(&rows))
+        {
+            return Ok(false);
+        }
+        let excluded = excluded(self.db, self.source_root, &rows)?;
+        if refs.iter().any(|id| excluded.contains(id)) {
+            return Ok(false);
+        }
+        Ok(!superseded(
+            self.db,
+            entry,
+            &rows,
+            self.as_of,
+            self.source_root,
+            self.canonical,
+        )?)
+    }
+
+    /// Distinct refs, a graph revision the graph has reached, model
+    /// authority, and no expiry by `as_of`.
+    fn metadata_valid(&self, entry: &HotCacheEntryView, refs: &[String]) -> bool {
+        if refs.is_empty() || refs.iter().collect::<HashSet<_>>().len() != refs.len() {
+            return false;
+        }
+        if !entry
+            .graph_revision
+            .is_some_and(|stored| stored >= 0 && stored <= self.graph_revision)
+        {
+            return false;
+        }
+        if entry
+            .authority
+            .as_deref()
+            .is_some_and(|value| value != "model_interpretation")
+        {
+            return false;
+        }
+        let expired = entry.valid_until.as_deref().is_some_and(|until| {
+            let millis = |value| butler_core::js_date::parse_date_millis(value, &|local| Some(local));
+            matches!((millis(until), millis(self.as_of)), (Some(expiry), Some(now)) if expiry <= now)
+        });
+        !expired
+    }
+
+    fn chunk(&self, episode: &str) -> CognitionResult<Option<EntryChunk>> {
+        self.db
+            .query_row(
+                "SELECT c.current_revision,c.project_id,c.conversation_session_id,c.status,\
+                        c.source_key,c.source_hash \
+                 FROM memory_chunks c \
+                 JOIN memory_projection_jobs j ON j.episode_id=c.memory_chunk_id AND j.revision=c.current_revision \
+                 WHERE c.memory_chunk_id=?1 AND j.generation=?2",
+                params![episode, self.generation],
+                |row| {
+                    Ok(EntryChunk {
+                        revision: row.get(0)?,
+                        project: row.get(1)?,
+                        session: row.get(2)?,
+                        status: row.get(3)?,
+                        source_key: row.get(4)?,
+                        source_hash: row.get(5)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(db_error)
+    }
+
+    /// Every ref's source row, when each belongs to the entry's revision, is
+    /// readable, active by `as_of`, and of an eligible class.
+    fn source_rows(
+        &self,
+        refs: &[String],
+        (episode, revision): (&str, &str),
+        project: Option<&str>,
+    ) -> CognitionResult<Option<Vec<CognitionSourceRow>>> {
+        let mut rows = Vec::with_capacity(refs.len());
+        for id in refs {
+            let Some(row) = source(self.db, id)? else {
+                return Ok(None);
+            };
+            if row.episode_id != episode
+                || row.revision != revision
+                || !hydrate(self.canonical, self.source_root, &row)
+            {
+                return Ok(None);
+            }
+            let active = self.db.query_row("SELECT 1 FROM memory_chunks c JOIN memory_chunk_sources s ON s.episode_id=c.memory_chunk_id AND s.revision=c.current_revision WHERE s.source_id=?1 AND c.memory_chunk_id=?2 AND c.current_revision=?3 AND c.status='active' AND c.project_id IS ?4 AND julianday(s.observed_at)<=julianday(?5)",
+                params![row.source_id,row.episode_id,row.revision,project,self.as_of], |_| Ok(())).optional().map_err(db_error)?.is_some();
+            if !active || !source_class_allowed(&row) {
+                return Ok(None);
+            }
+            rows.push(row);
+        }
+        Ok(Some(rows))
+    }
+
+    /// A conversation entry's window must exist in this generation and its
+    /// canonical source must still be current.
+    fn conversation_current(
+        &self,
+        entry: &HotCacheEntryView,
+        (episode, revision): (&str, &str),
+        chunk: &EntryChunk,
+    ) -> CognitionResult<bool> {
+        let Some(window_ref) = entry.window_ref.as_deref() else {
+            return Ok(false);
+        };
+        let extraction_version = self
+            .db
             .query_row(
                 "SELECT j.extraction_version FROM memory_projection_jobs j \
                  JOIN memory_projection_windows w ON w.job_id=j.job_id \
                  WHERE j.episode_id=?1 AND j.revision=?2 AND j.generation=?3 AND w.window_ref=?4",
-                params![episode, revision, generation, window_ref],
+                params![episode, revision, self.generation, window_ref],
                 |row| row.get::<_, String>(0),
             )
             .optional()
@@ -222,24 +296,24 @@ fn entry_current(
         let Some(extraction_version) = extraction_version else {
             return Ok(false);
         };
-        if !canonical_conversation_source_current(
-            canonical,
-            &source_key,
-            &source_hash,
-            session.as_deref(),
+        Ok(canonical_conversation_source_current(
+            self.canonical,
+            &chunk.source_key,
+            &chunk.source_hash,
+            chunk.session.as_deref(),
             &extraction_version,
             revision,
-            as_of,
-        ) {
-            return Ok(false);
-        }
+            self.as_of,
+        ))
     }
-    if entry["source_class"]
-        .as_str()
-        .is_some_and(|value| value != source_class(&rows))
-    {
-        return Ok(false);
-    }
+}
+
+/// Source ids of `rows` a recorded quality operation excludes.
+fn excluded(
+    db: &Connection,
+    source_root: &Path,
+    rows: &[CognitionSourceRow],
+) -> CognitionResult<HashSet<String>> {
     let feedback_rows = rows
         .iter()
         .map(|row| FeedbackSourceRow {
@@ -249,7 +323,7 @@ fn entry_current(
             content_hash: &row.content_hash,
         })
         .collect::<Vec<_>>();
-    let excluded = excluded_source_ids(
+    excluded_source_ids(
         &source_root.join("cognition/feedback"),
         &feedback_rows,
         |operation| {
@@ -261,14 +335,7 @@ fn entry_current(
             .optional()
             .map_err(db_error)
         },
-    )?;
-    if refs.iter().any(|id| excluded.contains(id)) {
-        return Ok(false);
-    }
-    if superseded(db, entry, &rows, as_of, source_root, canonical)? {
-        return Ok(false);
-    }
-    Ok(true)
+    )
 }
 
 fn source_class_allowed(row: &CognitionSourceRow) -> bool {
@@ -335,16 +402,16 @@ fn canonical_conversation_source_current(
 
 fn superseded(
     db: &Connection,
-    entry: &Value,
+    entry: &HotCacheEntryView,
     rows: &[CognitionSourceRow],
     as_of: &str,
     source_root: &Path,
     canonical: &ConversationSourceReader,
 ) -> CognitionResult<bool> {
-    let Some(nodes) = strings(&entry["node_refs"]) else {
+    let Some(nodes) = &entry.node_refs else {
         return Ok(false);
     };
-    let episode = entry["episode_id"].as_str().unwrap_or("");
+    let episode = entry.episode_id.as_deref().unwrap_or("");
     let mut corrections = Vec::new();
     for node in nodes {
         for row in rows {
@@ -356,7 +423,7 @@ fn superseded(
                         node,
                         row.source_id,
                         as_of,
-                        entry["project_id"].as_str()
+                        entry.project_id.as_deref()
                     ],
                     |row| row.get::<_, String>(0),
                 )
@@ -376,37 +443,8 @@ fn superseded(
     if corrections.is_empty() {
         return Ok(false);
     }
-    let feedback_rows = corrections
-        .iter()
-        .map(|row| FeedbackSourceRow {
-            source_id: &row.source_id,
-            episode_id: &row.episode_id,
-            revision: &row.revision,
-            content_hash: &row.content_hash,
-        })
-        .collect::<Vec<_>>();
-    let excluded = excluded_source_ids(
-        &source_root.join("cognition/feedback"),
-        &feedback_rows,
-        |operation| {
-            db.query_row(
-                "SELECT value FROM memory_state WHERE key=?1",
-                [format!("quality_operation:{operation}")],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()
-            .map_err(db_error)
-        },
-    )?;
+    let excluded = excluded(db, source_root, &corrections)?;
     Ok(corrections
         .iter()
         .any(|row| !excluded.contains(&row.source_id)))
-}
-
-fn strings(value: &Value) -> Option<Vec<String>> {
-    value
-        .as_array()?
-        .iter()
-        .map(|item| item.as_str().map(str::to_owned))
-        .collect()
 }

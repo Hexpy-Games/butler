@@ -134,35 +134,7 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
     };
 
     let outcome = match command {
-        Command::MemoryStatus => {
-            let health =
-                MemoryHealthService::new(data_root.clone(), paths.clone(), coordinator.clone());
-            match health.read().await {
-                Ok(report) => {
-                    CycleMetrics::new(Arc::new(MetricFiles::new(data_root.clone()))).record(
-                        "health",
-                        report.metric_status,
-                        &report.metric_dimensions.clone(),
-                    );
-                    let data = report.summary;
-                    let human = format!(
-                        "hotCacheFiles={} transcriptFiles={}\nprojectCapsules={} missing={} refreshFailures={}\nmemoryChunks={} vectorRows={} graphEntities={} graphEdges={}\nmaintenance={}",
-                        display(&data["hotCacheFiles"]),
-                        display(&data["transcriptFiles"]),
-                        display(&data["projectCapsules"]),
-                        display(&data["missingProjectCapsules"]),
-                        display(&data["projectRefreshFailureCount"]),
-                        display(&data["memoryChunkCount"]),
-                        display(&data["vectorRowCount"]),
-                        display(&data["graphEntityCount"]),
-                        display(&data["graphEdgeCount"]),
-                        display(&data["maintenanceStatus"]),
-                    );
-                    Ok((data, human))
-                }
-                Err(error) => Err(CliError::failed(error.code(), error.message())),
-            }
-        }
+        Command::MemoryStatus => memory_status(&data_root, &paths, coordinator.clone()).await,
         Command::MemoryRecall => recall::run(&data_root, &paths, &options.operator_args),
         Command::MemoryIngest => {
             ingest::run(
@@ -299,6 +271,46 @@ fn env_value(name: &str) -> Option<String> {
     std::env::var(name)
         .ok()
         .filter(|value| !value.trim().is_empty())
+}
+
+/// `butler memory status`: records the health metric and reports the
+/// summary.
+async fn memory_status(
+    data_root: &std::path::Path,
+    paths: &CognitionPathEnvironment,
+    coordinator: Arc<CognitionWriteCoordinator>,
+) -> Result<(Value, String), CliError> {
+    let health = MemoryHealthService::new(data_root.to_path_buf(), paths.clone(), coordinator);
+    let (metric_status, dimensions, data) = health
+        .read()
+        .await
+        .and_then(|report| {
+            Ok((
+                report.metric_status,
+                report.metric_dimensions()?,
+                report.summary()?,
+            ))
+        })
+        .map_err(|error| CliError::failed(error.code(), error.message()))?;
+    CycleMetrics::new(Arc::new(MetricFiles::new(data_root.to_path_buf()))).record(
+        "health",
+        metric_status,
+        &dimensions,
+    );
+    let human = format!(
+        "hotCacheFiles={} transcriptFiles={}\nprojectCapsules={} missing={} refreshFailures={}\nmemoryChunks={} vectorRows={} graphEntities={} graphEdges={}\nmaintenance={}",
+        display(&data["hotCacheFiles"]),
+        display(&data["transcriptFiles"]),
+        display(&data["projectCapsules"]),
+        display(&data["missingProjectCapsules"]),
+        display(&data["projectRefreshFailureCount"]),
+        display(&data["memoryChunkCount"]),
+        display(&data["vectorRowCount"]),
+        display(&data["graphEntityCount"]),
+        display(&data["graphEdgeCount"]),
+        display(&data["maintenanceStatus"]),
+    );
+    Ok((data, human))
 }
 
 fn display(value: &Value) -> String {

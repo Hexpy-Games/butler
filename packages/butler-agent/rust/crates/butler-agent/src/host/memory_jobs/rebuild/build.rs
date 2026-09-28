@@ -42,10 +42,10 @@ pub(super) async fn run(
     )
     .await?;
     let metadata = inspect_memory_rebuild(data_root, paths, generation_id)?;
-    let snapshot_id = metadata["manifest"]["canonical_snapshot_id"]
-        .as_str()
-        .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?
-        .to_owned();
+    let snapshot_id = metadata
+        .manifest
+        .canonical_snapshot_id
+        .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
     let target = MemoryGenerationTarget::Rebuild {
         generation_id: generation_id.to_owned(),
         canonical_snapshot_id: snapshot_id.clone(),
@@ -245,7 +245,7 @@ async fn work(input: RebuildWork<'_>) -> CognitionResult<Value> {
         "inventorySourceCount":inventory.expected_source_count,
         "catchupQuanta":catchup_quanta,"conversationRegistered":conversation_registered,
         "typedRegistered":typed_registered,"projectionQuanta":projection_quanta,"cacheQuanta":cache_quanta,
-        "ready":readiness["ready"],"readiness":readiness,"inspect":inspected,
+        "ready":readiness.ready,"readiness":readiness,"inspect":inspected,
         "vector_reconciliation":vector_reconciliation,
     }))
 }

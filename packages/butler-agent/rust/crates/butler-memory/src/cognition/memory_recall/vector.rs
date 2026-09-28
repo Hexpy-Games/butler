@@ -7,9 +7,11 @@ use crate::cognition::{
     recall::{RecallRequest, RecallVectorMatches},
 };
 
+/// The pending result of a vector search.
 pub type RecallVectorFuture<'a> =
     Pin<Box<dyn Future<Output = CognitionResult<RecallVectorMatches>> + Send + 'a>>;
 
+/// Finds episodes near a recall query in the vector store.
 pub trait RecallVectorPort: Send + Sync {
     /// Search current unit metadata only. The pinned graph repeats currentness.
     fn search<'a>(

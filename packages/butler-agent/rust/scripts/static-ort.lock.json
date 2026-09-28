@@ -1,0 +1,158 @@
+{
+  "schema": "butler.static-ort.v2",
+  "ort_api": 21,
+  "ort_sys": "2.0.0-rc.13",
+  "sources": {
+    "onnxruntime": {
+      "commit": "e0b66cad282043d4377cea5269083f17771b6dfc",
+      "url": "https://api.github.com/repos/microsoft/onnxruntime/tarball/e0b66cad282043d4377cea5269083f17771b6dfc",
+      "sha256": "01838eee7f2d3c9f245cbef2275935722004d41ce0aa2cab2f31a74d44e4d97a",
+      "digest_origin": "locally measured official GitHub commit tarball"
+    },
+    "onnx": {
+      "commit": "b8baa8446686496da4cc8fda09f2b6fe65c2a02c",
+      "url": "https://api.github.com/repos/onnx/onnx/tarball/b8baa8446686496da4cc8fda09f2b6fe65c2a02c",
+      "sha256": "deb38bdd0f4f3cc22a9aa53fe55680ff24f74dc8bdf008dc8697d8497a762002",
+      "digest_origin": "locally measured official GitHub commit tarball"
+    },
+    "eigen": {
+      "commit": "1d8b82b0740839c0de7f1242a3585e3390ff5f33",
+      "url": "https://gitlab.com/libeigen/eigen/-/archive/1d8b82b0740839c0de7f1242a3585e3390ff5f33/eigen-1d8b82b0740839c0de7f1242a3585e3390ff5f33.zip",
+      "sha256": "0a11e4f71593a1335cae38c4847bb9f36e1b700148c0d257abfca9df802115c2",
+      "digest_origin": "locally measured current official GitLab commit archive",
+      "ort_pinned_zip_sha1": "5ea4d05e62d7f954a46b3213f9b2535bdd866803",
+      "observed_zip_sha1": "51982be81bbe52572b54180454df11a3ece9a934",
+      "exception": "ORT's pinned archive-byte SHA-1 differs from the official archive served for the same GitLab commit; the verified commit source is supplied through FETCHCONTENT_SOURCE_DIR_EIGEN"
+    }
+  },
+  "targets": {
+    "macos-arm64": {
+      "rust_target": "aarch64-apple-darwin",
+      "tools": {
+        "cmake": {
+          "version": "3.31.10",
+          "url": "https://github.com/Kitware/CMake/releases/download/v3.31.10/cmake-3.31.10-macos-universal.tar.gz",
+          "sha256": "be9f3faeeaf7921cc2d77cea711dd5e6f72c63af2810cacd9205b3ce8d1593c9",
+          "digest_origin": "matches official Kitware release API digest"
+        },
+        "ninja": {
+          "version": "1.12.1",
+          "url": "https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-mac.zip",
+          "sha256": "89a287444b5b3e98f88a945afa50ce937b8ffd1dcc59c555ad9b1baf855298c9",
+          "digest_origin": "locally measured official Ninja release asset; no upstream digest was published in release API"
+        },
+        "protoc": {
+          "version": "33.1",
+          "url": "https://github.com/protocolbuffers/protobuf/releases/download/v33.1/protoc-33.1-osx-aarch_64.zip",
+          "sha256": "db7e66ff7f9080614d0f5505a6b0ac488cf89a15621b6a361672d1332ec2e14e",
+          "digest_origin": "locally measured official protobuf release asset on 2026-09-23; not an independently published upstream checksum"
+        }
+      },
+      "build": {
+        "configuration": "Release",
+        "generator": "Ninja",
+        "architecture": "arm64",
+        "parallel_jobs": 2,
+        "unit_tests": false,
+        "shared_library": false,
+        "minimal_build": false
+      }
+    },
+    "linux-x64": {
+      "rust_target": "x86_64-unknown-linux-gnu",
+      "tools": {
+        "cmake": {
+          "version": "3.31.10",
+          "url": "https://github.com/Kitware/CMake/releases/download/v3.31.10/cmake-3.31.10-linux-x86_64.tar.gz",
+          "sha256": "3cb3dd247b6a1de2d0f4b20c6fd4326c9024e894cebc9dc8699758887e566ca7",
+          "digest_origin": "matches official Kitware cmake-3.31.10-SHA-256.txt and release API digest"
+        },
+        "ninja": {
+          "version": "1.12.1",
+          "url": "https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-linux.zip",
+          "sha256": "6f98805688d19672bd699fbbfa2c2cf0fc054ac3df1f0e6a47664d963d530255",
+          "digest_origin": "locally measured official Ninja release asset on 2026-09-28; no upstream digest was published in release API"
+        },
+        "protoc": {
+          "version": "33.1",
+          "url": "https://github.com/protocolbuffers/protobuf/releases/download/v33.1/protoc-33.1-linux-x86_64.zip",
+          "sha256": "f3340e28a83d1c637d8bafdeed92b9f7db6a384c26bca880a6e5217b40a4328b",
+          "digest_origin": "matches official protobuf release API digest; locally measured on 2026-09-28"
+        }
+      },
+      "build": {
+        "configuration": "Release",
+        "generator": "Ninja",
+        "architecture": "x86_64",
+        "parallel_jobs": 4,
+        "unit_tests": false,
+        "shared_library": false,
+        "minimal_build": false
+      }
+    },
+    "linux-arm64": {
+      "rust_target": "aarch64-unknown-linux-gnu",
+      "tools": {
+        "cmake": {
+          "version": "3.31.10",
+          "url": "https://github.com/Kitware/CMake/releases/download/v3.31.10/cmake-3.31.10-linux-aarch64.tar.gz",
+          "sha256": "a343c6294f770742904e6a6792e0956b5ff8212abfb63cac99237de2e210fa0f",
+          "digest_origin": "matches official Kitware cmake-3.31.10-SHA-256.txt and release API digest"
+        },
+        "ninja": {
+          "version": "1.12.1",
+          "url": "https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-linux-aarch64.zip",
+          "sha256": "5c25c6570b0155e95fce5918cb95f1ad9870df5768653afe128db822301a05a1",
+          "digest_origin": "locally measured official Ninja release asset on 2026-09-28; no upstream digest was published in release API"
+        },
+        "protoc": {
+          "version": "33.1",
+          "url": "https://github.com/protocolbuffers/protobuf/releases/download/v33.1/protoc-33.1-linux-aarch_64.zip",
+          "sha256": "6018147740548e0e0f764408c87f4cd040e6e1c1203e13aeacaf811892b604f3",
+          "digest_origin": "matches official protobuf release API digest; locally measured on 2026-09-28"
+        }
+      },
+      "build": {
+        "configuration": "Release",
+        "generator": "Ninja",
+        "architecture": "aarch64",
+        "parallel_jobs": 4,
+        "unit_tests": false,
+        "shared_library": false,
+        "minimal_build": false
+      }
+    },
+    "windows-x64": {
+      "rust_target": "x86_64-pc-windows-msvc",
+      "tools": {
+        "cmake": {
+          "version": "3.31.10",
+          "url": "https://github.com/Kitware/CMake/releases/download/v3.31.10/cmake-3.31.10-windows-x86_64.zip",
+          "sha256": "13d1a463d7130df5339baedd63d8ae990aaf385062b2f42f372796143ae94086",
+          "digest_origin": "matches official Kitware cmake-3.31.10-SHA-256.txt and release API digest"
+        },
+        "ninja": {
+          "version": "1.12.1",
+          "url": "https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-win.zip",
+          "sha256": "f550fec705b6d6ff58f2db3c374c2277a37691678d6aba463adcbb129108467a",
+          "digest_origin": "locally measured official Ninja release asset on 2026-09-28; no upstream digest was published in release API"
+        },
+        "protoc": {
+          "version": "33.1",
+          "url": "https://github.com/protocolbuffers/protobuf/releases/download/v33.1/protoc-33.1-win64.zip",
+          "sha256": "d7a207fb6eec0e4b1b6613be3b7d11905375b6fd1147a071116eb8e9f24ac53b",
+          "digest_origin": "matches official protobuf release API digest; locally measured on 2026-09-28"
+        }
+      },
+      "build": {
+        "configuration": "Release",
+        "generator": "Ninja",
+        "architecture": "x64",
+        "parallel_jobs": 4,
+        "unit_tests": false,
+        "shared_library": false,
+        "minimal_build": false
+      }
+    }
+  }
+}

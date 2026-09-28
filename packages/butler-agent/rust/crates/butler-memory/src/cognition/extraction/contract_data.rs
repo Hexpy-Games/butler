@@ -1,3 +1,6 @@
+//! The bundled extraction contract (`contracts-v4.json`): instructions and
+//! structured-output schemas of the meaning and binding stages.
+
 use serde::Deserialize;
 use serde_json::{Map, Value};
 use std::sync::OnceLock;
@@ -5,8 +8,10 @@ use std::sync::OnceLock;
 #[derive(Deserialize)]
 pub(super) struct ExtractionContractData {
     pub meaning_instructions: String,
+    /// Passthrough: JSON Schema sent to the provider for the meaning stage.
     pub meaning_schema: Map<String, Value>,
     pub binding_instructions: String,
+    /// Passthrough: JSON Schema sent to the provider for binding stages.
     pub binding_schema: Map<String, Value>,
 }
 impl ExtractionContractData {

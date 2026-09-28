@@ -1,3 +1,5 @@
+//! Planning and applying a cognition namespace migration.
+
 use std::{
     collections::HashSet,
     fs::{self, OpenOptions},

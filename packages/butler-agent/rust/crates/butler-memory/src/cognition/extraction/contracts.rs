@@ -1,7 +1,14 @@
+//! Wire contracts of semantic projection: the extractor's input window
+//! ([`ExtractInput`]), the graph facts it proposes ([`ExtractOutput`]), and the
+//! candidate/vector search ports it binds names against.
+//!
+//! `ExtractInput` and `ExtractOutput` are persisted as
+//! `memory_projection_windows.input_json` / `output_json`, so their field
+//! order and names are a storage format.
+
 use std::{future::Future, path::Path, pin::Pin};
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use crate::cognition::{CognitionResult, GenerationEmbedding};
 
@@ -11,21 +18,30 @@ pub(crate) type CandidateSearchFuture<'a> =
 pub(crate) trait CognitionCandidateSearch: Send + Sync {
     fn search<'a>(&'a self, input: CandidateSearchInput<'a>) -> CandidateSearchFuture<'a>;
 }
+/// Future returned by [`CognitionVectorSearch::search`].
 pub type VectorSearchFuture<'a> = Pin<
     Box<dyn Future<Output = CognitionResult<Vec<crate::cognition::graph::VectorHit>>> + Send + 'a>,
 >;
 /// Native adapter obligation: each hit must already be filtered to the selected
 /// current generation's unit and digest before the graph's source-scope filter.
 pub trait CognitionVectorSearch: Send + Sync {
+    /// Nearest memory units for `input.cue` in the selected generation.
     fn search<'a>(&'a self, input: CandidateSearchInput<'a>) -> VectorSearchFuture<'a>;
 }
 
+/// One candidate or vector search: which generation to search and for what.
 pub struct CandidateSearchInput<'a> {
+    /// Butler data root holding the memory generations.
     pub source_root: &'a Path,
+    /// Generation whose graph and vectors are searched.
     pub generation_id: &'a str,
+    /// Embedding identity of that generation; `None` disables vector search.
     pub embedding: Option<&'a GenerationEmbedding>,
+    /// Search text (an entity name or a change's words).
     pub cue: &'a str,
+    /// Project the window is bound to, which scopes project candidates.
     pub bound_project_id: Option<&'a str>,
+    /// Absolute deadline for the search in epoch milliseconds.
     pub deadline_epoch_millis: i64,
 }
 
@@ -85,8 +101,26 @@ pub(crate) struct ExtractCandidate {
     pub scope: String,
     pub project_id: Option<String>,
     #[serde(default)]
-    pub claim: Option<Value>,
+    pub claim: Option<CandidateClaim>,
     pub evidence: Vec<CandidateEvidence>,
+}
+
+impl ExtractCandidate {
+    /// Entities and projects are identity nodes; everything else is a claim.
+    pub(in crate::cognition) fn is_identity_node(&self) -> bool {
+        self.node_type == "entity" || self.node_type == "project"
+    }
+}
+
+/// The claim a candidate node states, with its subject and object nodes.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+pub(crate) struct CandidateClaim {
+    pub statement: String,
+    pub subject_ref: Option<String>,
+    pub object_ref: Option<String>,
+    pub relation: Option<String>,
+    pub polarity: Option<String>,
+    pub condition: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -169,12 +203,42 @@ pub(crate) struct ExtractClaim {
     pub polarity: String,
     pub condition: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub requirement: Option<Value>,
+    pub requirement: Option<ClaimRequirement>,
     pub valid_from: Option<String>,
     pub valid_to: Option<String>,
     pub salience: String,
     pub evidence: Vec<QuoteRef>,
 }
+
+/// What a constraint claim requires: an action and the condition under which
+/// it is necessary. Also stored as `memory_claims.requirement` JSON.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ClaimRequirement {
+    pub action: String,
+    pub condition: ClaimCondition,
+}
+
+/// A requirement's condition tree. An atom's subject is a planned node ref,
+/// or `None` for a literal time or situation.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(untagged, deny_unknown_fields)]
+pub(crate) enum ClaimCondition {
+    Atom {
+        subject: Option<String>,
+        state: String,
+    },
+    Not {
+        not: Box<ClaimCondition>,
+    },
+    All {
+        all: Vec<ClaimCondition>,
+    },
+    Any {
+        any: Vec<ClaimCondition>,
+    },
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub(crate) struct ExtractRelation {
     pub from_ref: String,

@@ -1,3 +1,6 @@
+//! The KnowHow SQLite index (`index.sqlite`), rebuilt atomically from the
+//! valid entries and the source-quality summaries.
+
 use std::{
     fs::{self, OpenOptions},
     path::Path,
@@ -7,12 +10,13 @@ use std::{
 use std::fs::File;
 
 use rusqlite::{Connection, Transaction, params};
-use serde_json::Value;
 
 use crate::cognition::CognitionResult;
 
+use super::document::{IntentMatch, KnowHowDocument};
 use super::{entries, error, quality::SourceQualitySummary};
 use crate::cognition::CognitionCode;
+use crate::lenient::{Arg, Obj};
 
 pub(super) fn rebuild(root: &Path, quality: &[SourceQualitySummary]) -> CognitionResult<usize> {
     ensure_private_dir(root)?;
@@ -98,25 +102,18 @@ fn create_schema(database: &Connection) -> CognitionResult<()> {
         .map_err(|source| error(CognitionCode::MemoryKnowhowIndexWriteFailed).with_source(source))
 }
 
-fn insert_entry(database: &Transaction<'_>, entry: &Value) -> CognitionResult<()> {
-    let id = string(entry, "knowhow_id")?;
-    let name = string(entry, "name")?;
-    let status = string(entry, "status")?;
-    let scope = string(entry, "scope")?;
-    let summary = entry.get("summary").and_then(Value::as_str);
-    let updated_at = string(entry, "updated_at")?;
-    let quality = entry
-        .get("quality")
-        .and_then(Value::as_object)
-        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
-    let score = quality
-        .get("score")
-        .and_then(Value::as_f64)
-        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
-    let confidence = quality
-        .get("confidence")
-        .and_then(Value::as_f64)
-        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
+/// One entry row and its name, alias, topic, example and source terms.
+fn insert_entry(database: &Transaction<'_>, entry: &KnowHowDocument) -> CognitionResult<()> {
+    let required = KnowHowDocument::required;
+    let id = required(&entry.knowhow_id)?;
+    let name = required(&entry.name)?;
+    let status = entry.required_status()?.as_str();
+    let scope = required(&entry.scope)?;
+    let summary = entry.summary.valid();
+    let updated_at = required(&entry.updated_at)?;
+    let quality = entry.quality()?;
+    let score = number(&quality.score)?;
+    let confidence = number(&quality.confidence)?;
     database
         .execute(
             "INSERT INTO knowhow_entries VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -129,30 +126,41 @@ fn insert_entry(database: &Transaction<'_>, entry: &Value) -> CognitionResult<()
         })?;
 
     insert_term(database, id, "name", name)?;
-    let aliases = string_array(entry, "aliases")?;
-    insert_terms(database, id, "alias", &aliases)?;
-    let intent = entry
-        .get("intent_match")
-        .and_then(Value::as_object)
-        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
-    let topics = object_string_array(intent, "topics")?;
-    insert_terms(database, id, "topic", &topics)?;
-    let examples = object_string_array(intent, "examples")?;
-    insert_terms(database, id, "example", &examples)?;
-    let strategy = entry
-        .get("strategy")
-        .and_then(Value::as_object)
-        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
-    let sources = object_string_array(strategy, "preferred_sources")?;
-    insert_terms(database, id, "source", &sources)?;
+    insert_terms(
+        database,
+        id,
+        "alias",
+        &KnowHowDocument::strings(&entry.aliases)?,
+    )?;
+    let Arg::Valid(Obj(IntentMatch {
+        topics, examples, ..
+    })) = &entry.intent_match
+    else {
+        return Err(error(CognitionCode::MemoryKnowhowEntryInvalid));
+    };
+    insert_terms(database, id, "topic", &KnowHowDocument::strings(topics)?)?;
+    insert_terms(
+        database,
+        id,
+        "example",
+        &KnowHowDocument::strings(examples)?,
+    )?;
+    insert_terms(database, id, "source", &entry.preferred_sources()?)?;
     Ok(())
+}
+
+fn number(value: &Arg<serde_json::Number>) -> CognitionResult<f64> {
+    value
+        .valid()
+        .and_then(serde_json::Number::as_f64)
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))
 }
 
 fn insert_terms(
     database: &Transaction<'_>,
     id: &str,
     kind: &str,
-    terms: &[String],
+    terms: &[&str],
 ) -> CognitionResult<()> {
     for term in terms {
         insert_term(database, id, kind, term)?;
@@ -175,46 +183,6 @@ fn insert_term(
             error(CognitionCode::MemoryKnowhowIndexWriteFailed).with_source(source)
         })?;
     Ok(())
-}
-
-fn string<'a>(value: &'a Value, field: &str) -> CognitionResult<&'a str> {
-    value
-        .get(field)
-        .and_then(Value::as_str)
-        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))
-}
-
-fn string_array(value: &Value, field: &str) -> CognitionResult<Vec<String>> {
-    value
-        .get(field)
-        .and_then(Value::as_array)
-        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?
-        .iter()
-        .map(|value| {
-            value
-                .as_str()
-                .map(str::to_owned)
-                .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))
-        })
-        .collect()
-}
-
-fn object_string_array(
-    value: &serde_json::Map<String, Value>,
-    field: &str,
-) -> CognitionResult<Vec<String>> {
-    value
-        .get(field)
-        .and_then(Value::as_array)
-        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?
-        .iter()
-        .map(|value| {
-            value
-                .as_str()
-                .map(str::to_owned)
-                .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))
-        })
-        .collect()
 }
 
 fn ensure_private_dir(path: &Path) -> CognitionResult<()> {

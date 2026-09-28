@@ -1,3 +1,5 @@
+//! Compacting a hot cache to its byte budget: structured entries first, then legacy text.
+
 use butler_core::public_text::fixed_regex;
 use std::collections::HashSet;
 
@@ -6,11 +8,6 @@ use serde_json::Value;
 const MAX_BYTES: usize = 20 * 1024;
 const SEMANTIC_PREFIX: &str = "<!-- butler-semantic:";
 const ENTRY_PREFIX: &str = "<!-- butler-hot-cache-entry:v2\n";
-
-struct Block {
-    raw: String,
-    entry: Option<Entry>,
-}
 
 struct Entry {
     id: String,
@@ -24,43 +21,60 @@ pub(in crate::cognition) struct CompactedCache {
     pub(in crate::cognition) audit: String,
 }
 
+/// Compacts a hot cache to `MAX_BYTES`: unexpired structured entries by
+/// salience and recency first, then unstructured blocks and legacy text
+/// that still fit. Everything unstructured also goes to the audit text.
 pub(in crate::cognition) fn compact_hot_cache(body: &str) -> CompactedCache {
     let blocks = semantic_blocks(body);
-    let mut legacy = String::new();
-    let mut cursor = 0;
-    for block in &blocks {
-        legacy.push_str(&body[cursor..block.0]);
-        cursor = block.1;
-    }
-    legacy.push_str(&body[cursor..]);
-    let legacy = butler_core::public_text::trim_js_whitespace(&legacy).to_owned();
+    let legacy = outside_blocks(body, &blocks);
     let mut audit = Vec::new();
     if !legacy.is_empty() {
         audit.push(legacy.clone());
     }
-    let parsed = blocks
-        .into_iter()
-        .map(|(start, end)| {
-            let raw = body[start..end].to_owned();
-            let entry = parse_entry(&raw);
-            Block { raw, entry }
-        })
-        .collect::<Vec<_>>();
     let mut structured = Vec::new();
     let mut legacy_blocks = Vec::new();
-    for block in parsed {
-        match block.entry {
+    for (start, end) in blocks {
+        let raw = body.get(start..end).unwrap_or_default().to_owned();
+        match parse_entry(&raw) {
             Some(entry) if !expired(entry.valid_until.as_deref()) => {
-                structured.push((block.raw.trim_end().to_owned(), entry));
+                structured.push((raw.trim_end().to_owned(), entry));
             }
             Some(_) => {}
             None => {
-                audit.push(butler_core::public_text::trim_js_whitespace_end(&block.raw).to_owned());
-                legacy_blocks
-                    .push(butler_core::public_text::trim_js_whitespace_end(&block.raw).to_owned());
+                let trimmed = butler_core::public_text::trim_js_whitespace_end(&raw).to_owned();
+                audit.push(trimmed.clone());
+                legacy_blocks.push(trimmed);
             }
         }
     }
+    let mut admitted = admit(structured);
+    let retained = retain_legacy(&admitted, legacy_blocks, legacy);
+    admitted.extend(retained);
+    CompactedCache {
+        body: serialize_blocks(&admitted),
+        audit: if audit.is_empty() {
+            String::new()
+        } else {
+            format!("{}\n", audit.join("\n\n"))
+        },
+    }
+}
+
+/// The trimmed text outside the semantic blocks.
+fn outside_blocks(body: &str, blocks: &[(usize, usize)]) -> String {
+    let mut legacy = String::new();
+    let mut cursor = 0;
+    for (start, end) in blocks {
+        legacy.push_str(body.get(cursor..*start).unwrap_or_default());
+        cursor = *end;
+    }
+    legacy.push_str(body.get(cursor..).unwrap_or_default());
+    butler_core::public_text::trim_js_whitespace(&legacy).to_owned()
+}
+
+/// The structured entries that fit, most salient and newest first, one per
+/// id.
+fn admit(mut structured: Vec<(String, Entry)>) -> Vec<String> {
     structured.sort_by(|left, right| {
         salience_rank(&left.1.salience)
             .cmp(&salience_rank(&right.1.salience))
@@ -76,48 +90,44 @@ pub(in crate::cognition) fn compact_hot_cache(body: &str) -> CompactedCache {
     let mut seen = HashSet::new();
     structured.retain(|(_, entry)| seen.insert(entry.id.clone()));
     let mut admitted = Vec::new();
-    for (raw, entry) in structured {
+    for (raw, _) in structured {
         let single_bytes = serialize_blocks(std::slice::from_ref(&raw)).len();
         let mut candidate = admitted.clone();
         candidate.push(raw.clone());
         if single_bytes <= MAX_BYTES && serialize_blocks(&candidate).len() <= MAX_BYTES {
             admitted.push(raw);
-        } else {
-            let _ = entry;
         }
     }
-    let mut bytes = serialize_blocks(&admitted).len();
-    let mut retained_legacy = Vec::new();
+    admitted
+}
+
+/// The newest unstructured blocks, then the legacy text, that still fit
+/// after the admitted entries.
+fn retain_legacy(admitted: &[String], legacy_blocks: Vec<String>, legacy: String) -> Vec<String> {
+    let mut bytes = serialize_blocks(admitted).len();
+    let mut retained = Vec::new();
     for block in legacy_blocks.into_iter().rev() {
-        let separator = if !admitted.is_empty() || !retained_legacy.is_empty() {
+        let separator = if !admitted.is_empty() || !retained.is_empty() {
             "\n\n"
         } else {
             ""
         };
         if bytes + separator.len() + block.len() < MAX_BYTES {
-            retained_legacy.insert(0, block.clone());
             bytes += separator.len() + block.len() + 1;
+            retained.insert(0, block);
         }
     }
     if !legacy.is_empty() {
-        let separator = if !admitted.is_empty() || !retained_legacy.is_empty() {
+        let separator = if !admitted.is_empty() || !retained.is_empty() {
             "\n\n"
         } else {
             ""
         };
         if bytes + separator.len() + legacy.len() < MAX_BYTES {
-            retained_legacy.insert(0, legacy);
+            retained.insert(0, legacy);
         }
     }
-    admitted.extend(retained_legacy);
-    CompactedCache {
-        body: serialize_blocks(&admitted),
-        audit: if audit.is_empty() {
-            String::new()
-        } else {
-            format!("{}\n", audit.join("\n\n"))
-        },
-    }
+    retained
 }
 
 pub(in crate::cognition) fn contains_secret(value: &str) -> bool {

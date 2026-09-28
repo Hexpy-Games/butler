@@ -6,7 +6,6 @@ use std::collections::{HashMap, HashSet};
 use indexmap::IndexMap;
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
 
 use super::db_error;
 use crate::cognition::{
@@ -51,6 +50,9 @@ pub(in crate::cognition) struct CandidateSource {
     pub content_hash: String,
 }
 
+/// Validates model output against its pinned input and derives the plan:
+/// stable node ids per local ref, validated quotes, and the candidates the
+/// output reuses.
 pub(super) fn normalize(
     connection: &Connection,
     input: &ExtractInput,
@@ -68,64 +70,105 @@ pub(super) fn normalize(
         .iter()
         .map(|candidate| (candidate.ref_id.as_str(), candidate))
         .collect::<HashMap<_, _>>();
-    let mut refs = IndexMap::new();
-    let mut selected = IndexMap::<String, &ExtractCandidate>::new();
-    for node in &output.nodes {
-        if butler_core::segmentation::grapheme_segments(&node.label).count() > 256 {
-            return Err(invalid_output());
-        }
-        validate_resolution(
-            input,
-            &candidates,
-            &node.node_type,
-            &node.resolution,
-            &mut selected,
-            &node.local_ref,
-        )?;
-        refs.insert(
-            node.local_ref.clone(),
-            hash(vec![
-                json!("memory-node"),
-                json!(input.window_ref),
-                json!(node.local_ref),
-                json!(node.label),
-            ])?,
-        );
-    }
-    for claim in &output.claims {
-        if butler_core::segmentation::grapheme_segments(&claim.statement).count() > 1024 {
-            return Err(invalid_output());
-        }
-        validate_resolution(
-            input,
-            &candidates,
-            &claim.claim_type,
-            &claim.resolution,
-            &mut selected,
-            &claim.local_ref,
-        )?;
-        let mut content = serde_json::to_value(claim).map_err(json_error)?;
-        if let Some(object) = content.as_object_mut() {
-            object.shift_remove("resolution");
-        }
-        refs.insert(
-            claim.local_ref.clone(),
-            hash(vec![
-                json!("memory-claim"),
-                json!(input.window_ref),
-                content,
-            ])?,
-        );
-    }
-    if refs.len() != output.nodes.len() + output.claims.len() {
-        return Err(invalid_output());
-    }
+    let mut planner = Planner {
+        input,
+        output,
+        candidates: &candidates,
+        refs: IndexMap::new(),
+        selected: IndexMap::new(),
+    };
+    planner.assign_refs()?;
     let mut evidence = IndexMap::new();
     for node in &output.nodes {
-        evidence.insert(
-            node.local_ref.clone(),
-            validate_quotes(input, &node.evidence, true)?,
-        );
+        evidence.insert(node.local_ref.clone(), planner.node_evidence(node)?);
+    }
+    for claim in &output.claims {
+        evidence.insert(claim.local_ref.clone(), planner.claim_evidence(claim)?);
+    }
+    planner.validate_relations_and_corrections()?;
+    if let Some(summary) = &output.summary {
+        if butler_core::segmentation::grapheme_segments(&summary.text).count() > 480 {
+            return Err(invalid_output());
+        }
+        validate_quotes(input, &summary.evidence, true)?;
+    }
+    let mut candidate_bindings = IndexMap::new();
+    for (key, candidate) in planner.selected {
+        candidate_bindings.insert(key, candidate_binding(connection, candidate)?);
+    }
+    Ok(NormalizedPlan {
+        refs: planner.refs,
+        evidence,
+        candidate_bindings,
+    })
+}
+
+/// State accumulated while planning one output.
+struct Planner<'a> {
+    input: &'a ExtractInput,
+    output: &'a ExtractOutput,
+    candidates: &'a HashMap<&'a str, &'a ExtractCandidate>,
+    /// Stable node id per local ref.
+    refs: IndexMap<String, String>,
+    /// Candidates the output reuses, by binding key.
+    selected: IndexMap<String, &'a ExtractCandidate>,
+}
+
+impl Planner<'_> {
+    /// Validates each node and claim resolution and assigns its stable id:
+    /// nodes hash their label, claims their content without resolution.
+    fn assign_refs(&mut self) -> CognitionResult<()> {
+        let (input, output) = (self.input, self.output);
+        for node in &output.nodes {
+            if butler_core::segmentation::grapheme_segments(&node.label).count() > 256 {
+                return Err(invalid_output());
+            }
+            validate_resolution(
+                input,
+                self.candidates,
+                &node.node_type,
+                &node.resolution,
+                &mut self.selected,
+                &node.local_ref,
+            )?;
+            let id = hash(&(
+                "memory-node",
+                &input.window_ref,
+                &node.local_ref,
+                &node.label,
+            ))?;
+            self.refs.insert(node.local_ref.clone(), id);
+        }
+        for claim in &output.claims {
+            if butler_core::segmentation::grapheme_segments(&claim.statement).count() > 1024 {
+                return Err(invalid_output());
+            }
+            validate_resolution(
+                input,
+                self.candidates,
+                &claim.claim_type,
+                &claim.resolution,
+                &mut self.selected,
+                &claim.local_ref,
+            )?;
+            let mut content = serde_json::to_value(claim).map_err(json_error)?;
+            if let Some(object) = content.as_object_mut() {
+                object.shift_remove("resolution");
+            }
+            let id = hash(&("memory-claim", &input.window_ref, content))?;
+            self.refs.insert(claim.local_ref.clone(), id);
+        }
+        if self.refs.len() != output.nodes.len() + output.claims.len() {
+            return Err(invalid_output());
+        }
+        Ok(())
+    }
+
+    fn node_evidence(
+        &self,
+        node: &crate::cognition::extraction::ExtractNode,
+    ) -> CognitionResult<Vec<ValidatedQuote>> {
+        let quotes = validate_quotes(self.input, &node.evidence, true)?;
         if node.aliases.len() > 8 {
             return Err(invalid_output());
         }
@@ -133,23 +176,24 @@ pub(super) fn normalize(
             if butler_core::segmentation::grapheme_segments(&alias.text).count() > 256 {
                 return Err(invalid_output());
             }
-            validate_quotes(input, &alias.evidence, true)?;
+            validate_quotes(self.input, &alias.evidence, true)?;
         }
+        Ok(quotes)
     }
-    for claim in &output.claims {
-        evidence.insert(
-            claim.local_ref.clone(),
-            validate_quotes(input, &claim.evidence, true)?,
-        );
-        if claim
-            .subject_ref
-            .as_ref()
-            .is_some_and(|reference| !refs.contains_key(reference))
-            || claim
-                .object_ref
+
+    /// A claim's endpoints must be planned refs; a requirement is allowed only
+    /// on a v3 constraint with a subject.
+    fn claim_evidence(
+        &self,
+        claim: &crate::cognition::extraction::ExtractClaim,
+    ) -> CognitionResult<Vec<ValidatedQuote>> {
+        let quotes = validate_quotes(self.input, &claim.evidence, true)?;
+        let unplanned = |reference: &Option<String>| {
+            reference
                 .as_ref()
-                .is_some_and(|reference| !refs.contains_key(reference))
-        {
+                .is_some_and(|id| !self.refs.contains_key(id))
+        };
+        if unplanned(&claim.subject_ref) || unplanned(&claim.object_ref) {
             return Err(error(CognitionCode::MemoryExtractInvalidRef));
         }
         if claim
@@ -160,61 +204,55 @@ pub(super) fn normalize(
             return Err(invalid_output());
         }
         if let Some(requirement) = &claim.requirement {
-            if output.schema != "butler.memory-extract-output.v3"
+            if self.output.schema != "butler.memory-extract-output.v3"
                 || claim.claim_type != "constraint"
                 || claim.subject_ref.is_none()
             {
                 return Err(error(CognitionCode::MemoryExtractInvalidCondition));
             }
-            condition::validate(requirement, &refs)?;
+            condition::validate(requirement, &self.refs)?;
         }
-        validate_basis(input, &claim.basis, &claim.evidence)?;
+        validate_basis(self.input, &claim.basis, &claim.evidence)?;
+        Ok(quotes)
     }
-    let claims = output
-        .claims
-        .iter()
-        .map(|claim| (claim.local_ref.as_str(), claim))
-        .collect::<HashMap<_, _>>();
-    for relation in &output.relations {
-        let claim = claims
-            .get(relation.claim_ref.as_str())
-            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRelation))?;
-        if claim.speech_act != "assertion"
-            || claim.subject_ref.as_deref() != Some(&relation.from_ref)
-            || claim.object_ref.as_deref() != Some(&relation.to_ref)
-        {
-            return Err(error(CognitionCode::MemoryExtractInvalidRelation));
+
+    /// Relations must restate an asserted claim's endpoints; corrections must
+    /// replace a candidate claim with a planned one.
+    fn validate_relations_and_corrections(&mut self) -> CognitionResult<()> {
+        let (input, output) = (self.input, self.output);
+        let claims = output
+            .claims
+            .iter()
+            .map(|claim| (claim.local_ref.as_str(), claim))
+            .collect::<HashMap<_, _>>();
+        for relation in &output.relations {
+            let claim = claims
+                .get(relation.claim_ref.as_str())
+                .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRelation))?;
+            if claim.speech_act != "assertion"
+                || claim.subject_ref.as_deref() != Some(&relation.from_ref)
+                || claim.object_ref.as_deref() != Some(&relation.to_ref)
+            {
+                return Err(error(CognitionCode::MemoryExtractInvalidRelation));
+            }
+            validate_quotes(input, &relation.evidence, true)?;
         }
-        validate_quotes(input, &relation.evidence, true)?;
-    }
-    for correction in &output.corrections {
-        if !claims.contains_key(correction.replacement_claim_ref.as_str()) {
-            return Err(error(CognitionCode::MemoryExtractInvalidRef));
+        for correction in &output.corrections {
+            if !claims.contains_key(correction.replacement_claim_ref.as_str()) {
+                return Err(error(CognitionCode::MemoryExtractInvalidRef));
+            }
+            let candidate = self
+                .candidates
+                .get(correction.previous_claim_ref.as_str())
+                .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?;
+            self.selected.insert(
+                format!("correction:{}", correction.previous_claim_ref),
+                candidate,
+            );
+            validate_quotes(input, &correction.evidence, true)?;
         }
-        let candidate = candidates
-            .get(correction.previous_claim_ref.as_str())
-            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?;
-        selected.insert(
-            format!("correction:{}", correction.previous_claim_ref),
-            candidate,
-        );
-        validate_quotes(input, &correction.evidence, true)?;
+        Ok(())
     }
-    if let Some(summary) = &output.summary {
-        if butler_core::segmentation::grapheme_segments(&summary.text).count() > 480 {
-            return Err(invalid_output());
-        }
-        validate_quotes(input, &summary.evidence, true)?;
-    }
-    let mut candidate_bindings = IndexMap::new();
-    for (key, candidate) in selected {
-        candidate_bindings.insert(key, candidate_binding(connection, candidate)?);
-    }
-    Ok(NormalizedPlan {
-        refs,
-        evidence,
-        candidate_bindings,
-    })
 }
 
 fn validate_resolution<'a>(
@@ -373,8 +411,8 @@ fn validate_basis(input: &ExtractInput, basis: &str, quotes: &[QuoteRef]) -> Cog
     Ok(())
 }
 
-fn hash(value: Vec<Value>) -> CognitionResult<String> {
-    crate::cognition::sources::projection_hash_for_graph(value)
+fn hash(parts: &(impl serde::Serialize + ?Sized)) -> CognitionResult<String> {
+    crate::cognition::sources::projection_hash_for_graph(parts)
 }
 fn error(code: CognitionCode) -> CognitionError {
     CognitionError::new(code, code.as_str())

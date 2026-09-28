@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 
 use super::AppApplication;
 use crate::gateway::GatewayApplicationError;
+use butler_memory::cognition::{BriefingScope, NewChatBriefing};
 use butler_memory::{cognition, profile};
 
 impl AppApplication {
@@ -56,9 +57,9 @@ impl AppApplication {
                 _ => "night",
             };
             let scope = if project.is_some() {
-                "project"
+                BriefingScope::Project
             } else {
-                "general"
+                BriefingScope::General
             };
             if project.is_none() && !profile::first_chat_onboarding_complete(&data_root, &now) {
                 return Ok(fallback(
@@ -83,7 +84,7 @@ impl AppApplication {
             }
             let run_id = cognition::latest_completed_briefing_run_id(&data_root, date.as_deref());
             Ok(fallback(
-                scope,
+                scope.as_str(),
                 &locale,
                 &now,
                 &moment,
@@ -129,35 +130,34 @@ fn local_minute(epoch_ms: i64) -> Result<u16, GatewayApplicationError> {
     Ok(u16::try_from(wall.rem_euclid(86_400_000) / 60_000).unwrap_or_default())
 }
 
-fn generated_view(artifact: &Value, moment: &str, bucket: &str) -> Value {
-    let general = artifact["scope"] == "general";
-    let variants = artifact.get("title_variants");
+fn generated_view(artifact: &NewChatBriefing, moment: &str, bucket: &str) -> Value {
+    let general = artifact.scope == BriefingScope::General;
+    let variants = artifact.title_variants.as_ref();
     let title = if general {
-        variants.and_then(|value| value[bucket].as_str())
+        variants.and_then(|value| value.for_bucket(bucket))
     } else {
         None
     }
-    .or_else(|| artifact["title"].as_str())
-    .unwrap_or_default();
-    let suggestions = artifact["suggestions"].as_array().into_iter().flatten()
-        .map(|item| json!({"id":item["id"], "title":item["title"], "description":item["description"], "text":item["text"]}))
+    .unwrap_or(artifact.title.as_str());
+    let suggestions = artifact.suggestions.iter()
+        .map(|item| json!({"id":item.id, "title":item.title, "description":item.description, "text":item.text}))
         .collect::<Vec<_>>();
     let mut source = json!({
-        "scope":artifact["scope"], "content_origin":"generated",
-        "consolidation_run_id":artifact["source"]["consolidation_run_id"],
-        "generated_at":artifact["source"]["generated_at"], "locale":artifact["locale"],
-        "persona_applied":artifact["source"]["persona_applied"],
-        "profile_projection_applied":artifact["source"]["profile_projection_id"].as_str().is_some_and(|id| !id.is_empty())
+        "scope":artifact.scope.as_str(), "content_origin":"generated",
+        "consolidation_run_id":artifact.source.consolidation_run_id,
+        "generated_at":artifact.source.generated_at, "locale":artifact.locale,
+        "persona_applied":artifact.source.persona_applied,
+        "profile_projection_applied":artifact.source.profile_projection_id.as_deref().is_some_and(|id| !id.is_empty())
     });
-    if let Some(id) = artifact["project_id"].as_str() {
+    if let Some(id) = artifact.project_id.as_deref() {
         source["project_id"] = id.into();
     }
-    if let Some(name) = artifact["project_name"].as_str() {
+    if let Some(name) = artifact.project_name.as_deref() {
         source["project_name"] = name.into();
     }
     json!({
-        "moment":if general && variants.is_some() { moment } else { artifact["moment"].as_str().unwrap_or_default() },
-        "title":title, "description":artifact["description"], "suggestions":suggestions,
+        "moment":if general && variants.is_some() { moment } else { artifact.moment.as_deref().unwrap_or_default() },
+        "title":title, "description":artifact.description, "suggestions":suggestions,
         "source":source, "raw_text_included":false
     })
 }
@@ -327,3 +327,6 @@ fn project_cards_ko(name: &str) -> Vec<Value> {
         ),
     ]
 }
+
+#[cfg(test)]
+mod tests;

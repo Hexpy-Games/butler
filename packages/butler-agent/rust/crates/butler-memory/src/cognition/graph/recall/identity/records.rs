@@ -3,6 +3,7 @@
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Deserialize;
 
+use crate::cognition::graph::identity_decision::DecisionOperation;
 use crate::cognition::{
     CognitionResult,
     recall::{IdentityReadScope, IdentitySourceBinding, RecallProjectFilter, RecallScope},
@@ -20,7 +21,7 @@ pub(super) struct HistoryRef {
 #[derive(Clone, Debug, Deserialize)]
 pub(super) struct Decision {
     pub decision_ref: String,
-    pub operation: String,
+    pub operation: DecisionOperation,
     pub literal_loser: String,
     pub literal_canonical: Option<String>,
     pub resolved_target: Option<String>,
