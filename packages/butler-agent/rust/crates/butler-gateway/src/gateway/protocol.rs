@@ -67,6 +67,12 @@ pub enum MessageFileKind {
     Generic,
 }
 
+/// A message send addressed to one chat.
+pub struct SendMessageCommand {
+    pub request: MessageSendRequest,
+    pub chat_id: String,
+}
+
 #[derive(Clone, Debug)]
 pub struct MessageSendRequest {
     pub expected_project_id: Option<String>,

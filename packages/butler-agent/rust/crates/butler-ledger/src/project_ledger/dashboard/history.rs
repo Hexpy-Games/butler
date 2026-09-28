@@ -48,7 +48,8 @@ pub(super) fn read_reference(
 }
 
 /// The public history of managed Work: every review, disposition and result
-/// reference child of a ready managed Work (or only `work_id`'s).
+/// reference child of a ready managed Work (or only `work_id`'s), in the
+/// UTF-16 order of the reference file names (directory listings are unordered).
 pub(super) fn list(
     root: &Path,
     binding: &ProjectLedgerBinding,
@@ -70,9 +71,17 @@ pub(super) fn list(
         work_id,
         collation,
     };
+    let mut entries = entries
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|source| unavailable().with_source(source))?;
+    entries.sort_by(|left, right| {
+        left.file_name()
+            .to_string_lossy()
+            .encode_utf16()
+            .cmp(right.file_name().to_string_lossy().encode_utf16())
+    });
     let mut projected = Vec::new();
     for entry in entries {
-        let entry = entry.map_err(|source| unavailable().with_source(source))?;
         let Some(raw) = reference_file(&entry)? else {
             continue;
         };

@@ -50,7 +50,12 @@ fn normalize(value: &Value) -> Option<ImageProbeEvidence> {
     let carrier_protocol = value.get("carrier_protocol")?.as_str()?;
     if !matches!(
         carrier_protocol,
-        "openai_responses" | "openai_chat_completions" | "zai_mcp_vision" | "fake_vision"
+        "openai_responses"
+            | "openai_chat_completions"
+            | "anthropic_messages"
+            | "gemini_generate_content"
+            | "zai_mcp_vision"
+            | "fake_vision"
     ) {
         return None;
     }

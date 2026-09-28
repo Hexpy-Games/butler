@@ -237,11 +237,7 @@ fn error(code: CognitionCode) -> CognitionError {
 fn append_private(path: &Path) -> CognitionResult<std::fs::File> {
     let mut options = OpenOptions::new();
     options.create(true).append(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
+    butler_platform::secure_fs::owner_only(&mut options);
     options
         .open(path)
         .map_err(|source| error(CognitionCode::HotCacheReceiptFailed).with_source(source))
@@ -250,11 +246,7 @@ fn append_private(path: &Path) -> CognitionResult<std::fs::File> {
 fn create_private(path: &Path) -> CognitionResult<std::fs::File> {
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
+    butler_platform::secure_fs::owner_only(&mut options);
     options
         .open(path)
         .map_err(|source| error(CognitionCode::HotCacheReceiptFailed).with_source(source))

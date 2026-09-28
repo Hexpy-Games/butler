@@ -59,11 +59,7 @@ pub(super) fn append(
         let existed = path.exists();
         let mut options = OpenOptions::new();
         options.create(true).append(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        butler_platform::secure_fs::owner_only(&mut options);
         let mut file = options.open(&path).map_err(io_error)?;
         file.write_all(request.to_string().as_bytes())
             .map_err(io_error)?;
@@ -167,11 +163,7 @@ fn append_idempotent(
         let existed = path.exists();
         let mut options = OpenOptions::new();
         options.create(true).append(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        butler_platform::secure_fs::owner_only(&mut options);
         let mut file = options.open(&path).map_err(io_error)?;
         file.write_all(entry.as_bytes()).map_err(io_error)?;
         file.write_all(b"\n").map_err(io_error)?;
@@ -271,11 +263,7 @@ fn rewrite_without(path: &Path, expected: &str) -> CognitionResult<bool> {
     let result = (|| {
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        butler_platform::secure_fs::owner_only(&mut options);
         let mut output = options.open(&temporary).map_err(io_error)?;
         let mut removed = false;
         for line in BufReader::new(original).lines() {

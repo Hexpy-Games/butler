@@ -51,22 +51,8 @@ fn valid_file_id(value: &str) -> bool {
     })
 }
 
-#[cfg(unix)]
 fn open_snapshot(path: &Path) -> std::io::Result<File> {
-    use rustix::fs::{Mode, OFlags, open};
-
-    open(path, OFlags::RDONLY | OFlags::NOFOLLOW, Mode::empty())
-        .map(File::from)
-        .map_err(std::io::Error::from)
-}
-
-#[cfg(not(unix))]
-fn open_snapshot(path: &Path) -> std::io::Result<File> {
-    let metadata = std::fs::symlink_metadata(path)?;
-    if metadata.file_type().is_symlink() {
-        return Err(std::io::Error::other("snapshot link is unavailable"));
-    }
-    File::open(path)
+    butler_platform::secure_fs::open_read_no_follow(path)
 }
 
 fn unavailable() -> ContextError {
@@ -96,16 +82,13 @@ mod tests {
             read(&root, id, 8, &digest).unwrap_err().code(),
             "source_snapshot_changed"
         );
-        #[cfg(unix)]
-        {
-            std::fs::remove_file(&path).unwrap();
-            std::fs::write(root.join("outside"), "accepted").unwrap();
-            std::os::unix::fs::symlink(root.join("outside"), &path).unwrap();
-            assert_eq!(
-                read(&root, id, 8, &digest).unwrap_err().code(),
-                "source_unavailable"
-            );
-        }
+        std::fs::remove_file(&path).unwrap();
+        std::fs::write(root.join("outside"), "accepted").unwrap();
+        butler_platform::secure_fs::symlink(&root.join("outside"), &path).unwrap();
+        assert_eq!(
+            read(&root, id, 8, &digest).unwrap_err().code(),
+            "source_unavailable"
+        );
         std::fs::remove_dir_all(root).unwrap();
     }
 }
