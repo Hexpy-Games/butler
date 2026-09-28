@@ -1,6 +1,7 @@
 use std::{fs, path::PathBuf, sync::Arc};
 
 use base64::Engine as _;
+use butler_platform::secure_fs;
 use serde_json::{Value, json};
 use tokio::{io::AsyncReadExt, io::AsyncWriteExt, net::TcpListener};
 
@@ -94,11 +95,7 @@ async fn expiring_profile_refreshes_retains_unknown_fields_and_writes_private_fi
         .unwrap(),
     )
     .unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
-    }
+    secure_fs::restrict_file(&path).transpose().unwrap();
     let access = jwt(&json!({"https://api.openai.com/auth":{"chatgpt_account_id":"account"}}));
     let body = json!({"access_token":access,"expires_in":3600,"scope":"openid"}).to_string();
     let (url, server) = token_server("200 OK", &body).await;
@@ -113,14 +110,11 @@ async fn expiring_profile_refreshes_retains_unknown_fields_and_writes_private_fi
         saved.get("accessToken").and_then(Value::as_str),
         Some(access.as_str())
     );
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        assert_eq!(
-            fs::metadata(path).unwrap().permissions().mode() & 0o777,
-            0o600
-        );
-    }
+    // Hosts without owner-only permissions report `None`.
+    assert_ne!(
+        secure_fs::is_owner_only(&fs::metadata(path).unwrap()),
+        Some(false)
+    );
 }
 
 #[tokio::test]

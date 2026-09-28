@@ -438,11 +438,7 @@ fn copy_checked(source: &Path, target: &Path, expected_sha: &str) -> CognitionRe
     })?;
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
+    butler_platform::secure_fs::owner_only(&mut options);
     let mut target = options
         .open(target)
         .map_err(|source| error(CognitionCode::MemoryQualificationIoError).with_source(source))?;

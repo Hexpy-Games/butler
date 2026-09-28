@@ -127,7 +127,7 @@ pub(super) fn safe_workspace_basename(path: Option<&str>) -> String {
     let basename = path
         .filter(|path| !path.is_empty())
         .map(|path| {
-            let separator = |character| character == '/' || (cfg!(windows) && character == '\\');
+            let separator = std::path::is_separator;
             path.trim_end_matches(separator)
                 .rsplit(separator)
                 .next()

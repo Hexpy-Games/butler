@@ -325,11 +325,7 @@ fn lock_destination(cache: &Path) -> CognitionResult<DestinationLock> {
 fn create_lock(path: &Path) -> std::io::Result<()> {
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
+    butler_platform::secure_fs::owner_only(&mut options);
     let mut lock = options.open(path)?;
     writeln!(lock, "{}", std::process::id())
 }
@@ -349,11 +345,7 @@ fn write_atomic(path: &Path, body: &str) -> CognitionResult<()> {
     let result = (|| {
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        butler_platform::secure_fs::owner_only(&mut options);
         let mut file = options
             .open(&temp)
             .map_err(|source| error(CognitionCode::HotCacheIoFailed).with_source(source))?;
@@ -384,11 +376,7 @@ fn ensure_project_gitignore(cache: &Path) -> CognitionResult<()> {
     }
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
+    butler_platform::secure_fs::owner_only(&mut options);
     options
         .open(path)
         .and_then(|mut file| file.write_all(b"*\n"))

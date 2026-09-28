@@ -38,7 +38,7 @@ src/operations/status_summary/health.rs	read_health	94
 src/operations/status_summary/usage.rs	read_usage	135
 src/operations/update/agent.rs	AgentArchiveUpdateService::apply	89
 src/operations/update/agent.rs	AgentArchiveUpdateService::status	86
-src/operations/update/manifest.rs	load_artifact	146
+src/operations/update/manifest.rs	load_artifact	136
 src/operations/update/manifest/agent.rs	load_agent_artifact	110
 src/operations/update/stage.rs	download_to_label	89
 src/web_access/html/extraction.rs	markdown_from_html	89
