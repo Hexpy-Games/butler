@@ -20,14 +20,30 @@ function FirstRunStep() {
 }
 // #endregion
 
+// #region recipe: Focus screen
+function FocusScreen() {
+  return (
+    <SetupWizardShell embedded title="Butler" variant="focus">
+      <SetupWizardContent width="wide">
+        <Typo.H3 as="h1">Which AI should Butler use?</Typo.H3>
+        <Button variant="outline" text="ChatGPT" />
+      </SetupWizardContent>
+    </SetupWizardShell>
+  );
+}
+// #endregion
+
 export const guidance: ShowcaseGuidance = {
-  purpose: "The first-run setup frame: step progress, a large title and centered content.",
-  whenToUse: ["A multi-step setup or onboarding flow outside the app shell"],
+  purpose: "The first-run setup frame: step progress, a large title and centered content, or one focused column (variant focus).",
+  whenToUse: ["A multi-step setup or onboarding flow outside the app shell", "A short onboarding of one or two screens with no stepper"],
   whenNotToUse: [
     { when: "A settings page", use: "SettingsShell" },
     { when: "A short task in the app", use: "DialogForm" },
   ],
-  recipes: [{ name: "First-run step", description: "embedded renders it inside a page; the app shows it full-window.", render: () => <FirstRunStep /> }],
+  recipes: [
+    { name: "First-run step", description: "embedded renders it inside a page; the app shows it full-window.", render: () => <FirstRunStep /> },
+    { name: "Focus screen", description: "variant=\"focus\": no title or stepper, one centered column (420px, wide 520px).", render: () => <FocusScreen /> },
+  ],
   doDont: [
     {
       do: { caption: "One decision per step with the progress visible.", render: () => <FirstRunStep /> },
