@@ -11,8 +11,6 @@ export interface Flight {
   from: { x: number; y: number };
   start: number;
   end: number;
-  /** Whether it fades in as it flies (it starts inside the frame, so nothing is ever cut by the frame's edge). */
-  fade?: boolean;
 }
 
 const union = (boxes: Box[]): Box => {
@@ -29,22 +27,20 @@ const union = (boxes: Box[]): Box => {
  * and flights from one edge run parallel: no two paths cross. The last
  * component, built in place, is already home.
  */
-export function gatherFlights(slots: Record<string, Box>, last: string | null, finale: number, visible?: Box): Record<string, Flight> {
-  // With the visible frame known, an item starts flush inside it (never across its edge) and fades in.
-  const frame = visible ?? union(Object.values(slots));
-  const out = (size: number) => (visible ? 0 : size + BEYOND);
+export function gatherFlights(slots: Record<string, Box>, last: string | null, finale: number): Record<string, Flight> {
+  const frame = union(Object.values(slots));
   const edges = Object.keys(slots).filter((id) => id !== last).map((id) => {
     const s = slots[id]!;
     const reach = { l: s.x - frame.x, r: frame.x + frame.w - (s.x + s.w), t: s.y - frame.y, b: frame.y + frame.h - (s.y + s.h) };
     const side = (Object.keys(reach) as Array<keyof typeof reach>).reduce((best, key) => (reach[key] < reach[best] ? key : best), "l");
-    const from = side === "l" ? { x: -(reach.l + out(s.w)), y: 0 } : side === "r" ? { x: reach.r + out(s.w), y: 0 }
-      : side === "t" ? { x: 0, y: -(reach.t + out(s.h)) } : { x: 0, y: reach.b + out(s.h) };
+    const from = side === "l" ? { x: -(reach.l + s.w + BEYOND), y: 0 } : side === "r" ? { x: reach.r + s.w + BEYOND, y: 0 }
+      : side === "t" ? { x: 0, y: -(reach.t + s.h + BEYOND) } : { x: 0, y: reach.b + s.h + BEYOND };
     return { id, depth: reach[side], from };
   }).sort((a, b) => b.depth - a.depth);
   const flights: Record<string, Flight> = last ? { [last]: { from: { x: 0, y: 0 }, start: finale, end: finale + 0.4 } } : {};
   edges.forEach(({ id, from }, n) => {
-    const start = finale + (visible ? TRANSITION : 0) + 0.2 + n * STAGGER;
-    flights[id] = { from, start, end: start + TRANSITION * 0.8, fade: !!visible };
+    const start = finale + 0.2 + n * STAGGER;
+    flights[id] = { from, start, end: start + TRANSITION * 0.8 };
   });
   return flights;
 }
@@ -52,15 +48,8 @@ export function gatherFlights(slots: Record<string, Box>, last: string | null, f
 /** An item's keys around the gather: held where it was until the finale, then (off-camera) set beyond its edge and flown home. */
 export function gatherKeys(flight: Flight, before: { x: number; y: number }, finale: number, pz: number): Key[] {
   const from = { x: flight.from.x / pz, y: flight.from.y / pz };
-  if (!flight.fade) return [{ at: finale - 0.01, ...before }, { at: finale, ...from }, { at: flight.start, ...from }, { at: flight.end, x: 0, y: 0, ease: "decelerate" }];
   return [
-    { at: finale - 0.01, ...before }, { at: finale, ...from, o: 0 }, { at: flight.start, ...from, o: 0 },
-    { at: flight.start + 0.5, o: 1 }, { at: flight.end, x: 0, y: 0, ease: "decelerate" },
+    { at: finale - 0.01, ...before }, { at: finale, ...from }, { at: flight.start, ...from },
+    { at: flight.end, x: 0, y: 0, ease: "decelerate" },
   ];
-}
-
-/** What the camera shows at the finale's rest pose, in canvas px. */
-export function visibleBox(canvas: { w: number; h: number }, rest: { x?: number; y?: number; s?: number }): Box {
-  const s = rest.s ?? 1;
-  return { x: canvas.w / 2 - (rest.x ?? 0) / s - canvas.w / s / 2, y: canvas.h / 2 - (rest.y ?? 0) / s - canvas.h / s / 2, w: canvas.w / s, h: canvas.h / s };
 }
