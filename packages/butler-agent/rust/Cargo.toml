@@ -57,7 +57,7 @@ regress = { version = "=0.12.0", features = ["utf16", "prohibit-unsafe"] }
 rmcp = { version = "=3.4.0", default-features = false, features = ["client", "server", "macros", "transport-io", "transport-async-rw", "transport-streamable-http-client-reqwest"] }
 zip = { version = "4", default-features = false, features = ["deflate"] }
 rustix = { version = "=1.1.5", features = ["fs"] }
-nix = { version = "=0.31.3", default-features = false, features = ["feature", "fs", "hostname", "signal"] }
+nix = { version = "=0.31.3", default-features = false, features = ["feature", "fs", "hostname", "net", "signal"] }
 libproc = "=0.14.11"
 # The OS credential store (#217, butler-platform `secrets`): the keyring-core
 # API and one store per OS (macOS Keychain; Secret Service over D-Bus in pure

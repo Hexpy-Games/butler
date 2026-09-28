@@ -35,7 +35,7 @@ export function UsageProviderRow({ provider }: { provider: UsageProvider }) {
           <Typo.Caption>{appCopy.interfaceStatus.staleQuota}</Typo.Caption>
         ) : null}
         {!quota.available ? (
-          <MetaList items={[{ label: appCopy.interfaceDetails.quotaLabel, value: quotaReasonLabel(quota.reason?.code) }]} />
+          <MetaList items={[{ label: appCopy.interfaceDetails.quotaLabel, value: quotaReasonLabel(quota.reason?.code, quota.planKind) }]} />
         ) : null}
         {renderQuotaDetails(quota)}
         <MetaList items={[{
@@ -63,7 +63,7 @@ function renderQuotaDetails(quota: ProviderQuotaResultView) {
           label: appCopy.interfaceDetails.fetchedLabel,
           value: quota.fetchedAt ? formatQuotaTimestamp(quota.fetchedAt) : appCopy.interfaceStatus.unknown,
         },
-        ...(quota.stale ? [{ value: quotaReasonLabel(quota.reason?.code) }] : []),
+        ...(quota.stale && quota.reason ? [{ value: quotaReasonLabel(quota.reason.code) }] : []),
       ]} />
       {quota.windows.map((window) => (
         <ProviderQuotaGauge key={window.id} window={window} />

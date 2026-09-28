@@ -48,7 +48,7 @@ pub(super) fn decision_project(
         .ok_or_else(|| {
             AppStorageError::new(
                 AppStorageCode::ProjectLedgerIdentityMissing,
-                "This project has no canonical Project Ledger identity.",
+                "This project has no plan records yet.",
             )
         })?;
     if read_model::latest_plan_document_status(db, session_id, plan_id)?.as_deref() != Some("draft")
@@ -136,15 +136,13 @@ pub(super) fn map_read_error(
     use crate::gateway::GatewayApplicationError;
 
     match error {
-        AppPlanDecisionLedgerError::Changed => public(
-            409,
-            "plan_decision_conflict",
-            "This Project Ledger Plan has changed.",
-        ),
+        AppPlanDecisionLedgerError::Changed => {
+            public(409, "plan_decision_conflict", "This plan has changed.")
+        }
         AppPlanDecisionLedgerError::Unavailable { .. } => public(
             409,
             "project_ledger_resolution_failed",
-            "The canonical Project Ledger for this project could not be resolved.",
+            "This project's plan records could not be found.",
         )
         .with_source(error),
         AppPlanDecisionLedgerError::Internal { .. } => {

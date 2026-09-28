@@ -18,7 +18,7 @@ pub(super) fn probe_tokens(config: &ServiceConfiguration) -> Vec<String> {
     if configured.required
         && let Some(token) = configured.token()
     {
-        tokens.push(token.to_owned());
+        tokens.push(token.to_string());
     }
     if let Some(token) = data_folder_token(&config.data_root)
         && !tokens.contains(&token)

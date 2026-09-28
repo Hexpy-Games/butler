@@ -43,6 +43,17 @@ struct TokenFile {
     token: String,
 }
 
+/// Where the agent keeps the local admin credential (Settings → Security).
+pub const DATA_FOLDER_ADMIN_FILE: &str = "app/runtime/auth/local-admin.json";
+/// The header that carries it.
+pub const ADMIN_HEADER: &str = "x-butler-admin";
+
+/// The field of the admin credential file the harness reads.
+#[derive(serde::Deserialize)]
+struct AdminFile {
+    secret: String,
+}
+
 impl Launch {
     pub fn new(sandbox: &Sandbox) -> Result<Self, HarnessError> {
         let token = format!("e2e-gateway-{}", uuid::Uuid::new_v4().simple());
@@ -69,6 +80,10 @@ impl Launch {
                     "BUTLER_APP_LOCAL_AUTH_FILE".into(),
                     auth_file.display().to_string(),
                 ),
+                // Quota polling off: recordings hold only the requests their
+                // scenario makes. Quota scenarios turn it on
+                // (`Setup::quota_polling`).
+                ("BUTLER_PROVIDER_QUOTA_POLLING".into(), "0".into()),
             ],
             app_supervisor: false,
         })
@@ -129,6 +144,15 @@ impl Launch {
         serde_json::from_slice::<TokenFile>(&bytes)
             .ok()
             .map(|file| file.token)
+    }
+
+    /// The local admin credential the agent keeps in its data folder (what
+    /// the App and the CLI send in `X-Butler-Admin`), once it exists.
+    pub fn admin_credential(&self) -> Option<String> {
+        let bytes = fs::read(self.data.join(DATA_FOLDER_ADMIN_FILE)).ok()?;
+        serde_json::from_slice::<AdminFile>(&bytes)
+            .ok()
+            .map(|file| file.secret)
     }
 
     /// A command for the agent binary with the scenario's isolated environment.

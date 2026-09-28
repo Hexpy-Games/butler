@@ -155,7 +155,8 @@ pub(super) async fn route(
     )
 }
 
-/// `GET /provider-quota?provider_id=`: the provider's latest subscription quota.
+/// `GET /provider-quota?provider_id=[&refresh=1]`: the provider's latest
+/// subscription quota; `refresh` polls its usage endpoint first.
 pub(super) async fn provider_quota(
     state: Arc<HttpState>,
     uri: &Uri,
@@ -166,9 +167,12 @@ pub(super) async fn provider_quota(
         .map(|value| value.trim())
         .filter(|value| !value.is_empty() && value.len() <= 64)
         .ok_or_else(|| HttpError::public(400, "invalid_request", "provider_id is required."))?;
+    let refresh = parameters
+        .get("refresh")
+        .is_some_and(|value| matches!(value.trim(), "1" | "true"));
     let data = state
         .application
-        .get_provider_quota(provider_id.to_owned())
+        .get_provider_quota(provider_id.to_owned(), refresh)
         .await?;
     json(
         StatusCode::OK,

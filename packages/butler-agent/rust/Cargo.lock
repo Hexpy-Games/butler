@@ -809,6 +809,7 @@ dependencies = [
  "butler-ledger",
  "butler-memory",
  "butler-models",
+ "butler-platform",
  "butler-runtime",
  "butler-test-support",
  "butler-turn",
@@ -4841,6 +4842,7 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
+ "memoffset",
 ]
 
 [[package]]

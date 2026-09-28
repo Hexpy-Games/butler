@@ -1,12 +1,11 @@
-//! The App HTTP listener: its configuration and the served gateway's
-//! lifetime.
+//! Starting and stopping the gateway listener.
 
 use std::{net::SocketAddr, sync::Arc};
 
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
-use super::{GatewayApplication, LocalAuthConfig, http};
+use super::{GatewayApplication, GatewaySecurityStore, LocalAuthConfig, http};
 
 /// Listener configuration for [`serve_gateway`].
 pub struct GatewayConfig {
@@ -18,6 +17,18 @@ pub struct GatewayConfig {
     /// Extra Host names the gateway answers besides loopback (`name` or
     /// `name:port`); their `http`/`https` origins are allowed too.
     pub allowed_hosts: Vec<String>,
+    /// Settings → Security: also listen on the machine's LAN addresses (same
+    /// port) and answer their Host names.
+    pub remote_access_enabled: bool,
+    /// The local admin credential: Settings → Security answers only a
+    /// loopback client that also sends it in [`ADMIN_CREDENTIAL_HEADER`].
+    /// Without one, Settings → Security refuses everyone.
+    ///
+    /// [`ADMIN_CREDENTIAL_HEADER`]: super::ADMIN_CREDENTIAL_HEADER
+    pub admin_credential: Option<String>,
+    /// The host side of Settings → Security. Without one, exposure changes
+    /// live in memory only and the connection code cannot rotate.
+    pub security_store: Option<Arc<dyn GatewaySecurityStore>>,
     /// Lifetime of the signed message-file URLs in JSON responses.
     pub signed_url_ttl: std::time::Duration,
     pub message_rate_limit_max: u64,
@@ -31,6 +42,9 @@ impl Default for GatewayConfig {
             local_auth: LocalAuthConfig::default(),
             dev_cors_origin: None,
             allowed_hosts: Vec::new(),
+            remote_access_enabled: false,
+            admin_credential: None,
+            security_store: None,
             signed_url_ttl: std::time::Duration::from_secs(600),
             message_rate_limit_max: 60,
             message_rate_limit_window: std::time::Duration::from_secs(60),
@@ -46,11 +60,13 @@ pub struct GatewayServer {
 }
 
 impl GatewayServer {
+    /// The loopback (primary) listener's address.
     pub fn local_addr(&self) -> SocketAddr {
         self.local_addr
     }
 
     /// Stop admission, terminate live streams, and wait for the listener task.
+    /// LAN listeners stop with it.
     pub async fn close(mut self) -> std::io::Result<()> {
         self.shutdown.cancel();
         let Some(task) = self.task.take() else {
@@ -68,6 +84,8 @@ impl Drop for GatewayServer {
     }
 }
 
+/// Serves `listener` (the loopback listener), and the LAN listeners when
+/// remote access is enabled.
 pub fn serve_gateway(
     listener: TcpListener,
     application: Arc<dyn GatewayApplication>,
@@ -75,13 +93,7 @@ pub fn serve_gateway(
 ) -> std::io::Result<GatewayServer> {
     let local_addr = listener.local_addr()?;
     let shutdown = CancellationToken::new();
-    let router = http::router(application, config, shutdown.clone(), local_addr);
-    let graceful = shutdown.clone();
-    let task = tokio::spawn(async move {
-        axum::serve(listener, router)
-            .with_graceful_shutdown(graceful.cancelled_owned())
-            .await
-    });
+    let task = http::serve(listener, application, config, shutdown.clone(), local_addr);
     Ok(GatewayServer {
         local_addr,
         shutdown,

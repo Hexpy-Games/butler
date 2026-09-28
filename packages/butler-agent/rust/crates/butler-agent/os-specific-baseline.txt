@@ -109,9 +109,6 @@ src/host/service.rs	6	cfg(unix)
 src/host/service/cli_launcher.rs	2	0o111
 src/host/service/cli_launcher.rs	1	0o755
 src/host/service/cli_launcher.rs	1	os::unix::fs::PermissionsExt
-src/host/service/configuration/local_credentials.rs	1	0o600
-src/host/service/configuration/local_credentials.rs	1	0o700
-src/host/service/configuration/local_credentials.rs	1	os::unix::fs::{DirBuilderExt,OpenOptionsExt}
 src/host/service/entrypoint.rs	1	nix::sys::utsname::uname
 src/host/service/entrypoint.rs	1	var_os("HOME")
 src/host/service/foreground_lease.rs	1	nix::fcntl::{FcntlArg,OFlag,fcntl}
