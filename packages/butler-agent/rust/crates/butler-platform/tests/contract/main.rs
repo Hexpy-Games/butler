@@ -11,6 +11,7 @@
 mod command_sandbox;
 mod instance;
 mod process_control;
+mod secrets;
 mod secure_fs;
 
 use std::fs;

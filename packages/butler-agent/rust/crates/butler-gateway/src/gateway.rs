@@ -75,9 +75,10 @@ pub use application::{
     ResolvedNativeAssets, TranscriptExport, VisualAdmissionRequest,
 };
 pub use application::{
-    AppOauthStartInput, AppProviderKeyInput, AppSetupPort, LocalModelServersView, OauthFlowStatus,
-    OauthFlowView, ProviderKeyVerificationView, SETUP_READINESS_EVENT, SavedCredentialView,
-    SetupReadinessStatus, SetupReadinessStep, SetupReadinessView, SetupStepError, SetupStepStatus,
+    AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
+    LocalModelServersView, OauthFlowStatus, OauthFlowView, ProviderKeyVerificationView,
+    ReplacedCredentialView, SETUP_READINESS_EVENT, SavedCredentialView, SetupReadinessStatus,
+    SetupReadinessStep, SetupReadinessView, SetupStepError, SetupStepStatus,
 };
 pub(crate) use application::{
     AutomationDetailView, AutomationListView, AutomationMutationResult, AutomationRunListView,

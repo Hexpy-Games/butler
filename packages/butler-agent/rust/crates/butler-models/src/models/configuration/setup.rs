@@ -6,8 +6,11 @@ use std::path::Path;
 use serde_json::Value;
 
 use super::super::{CredentialView, ModelCatalogError};
+use super::credential_admin::CredentialDraft;
+use super::credentials::{CREDENTIALS_FILE, CredentialRecord, CredentialsFile};
 use super::key_check::{ProviderKeyCheckError, provider_key};
-use super::{ModelConfiguration, auth, credentials, read_object_sync};
+use super::mutations::catalog_error;
+use super::{ModelConfiguration, auth};
 
 /// A key saved by first-run setup.
 pub struct SavedProviderKey {
@@ -43,36 +46,31 @@ impl ModelConfiguration {
     ) -> Result<SavedProviderKey, ProviderKeySaveError> {
         let (provider, key) = provider_key(provider_id, api_key)?;
         let _write = self.configuration_writes.acquire().await;
-        let path = root.join("auth/model-provider-credentials.json");
-        let saved = credentials::read(
-            &read_object_sync(&path),
-            &self.registration_catalog,
-            self.clock.as_ref(),
-        );
-        if let Some(existing) = saved
-            .iter()
-            .find(|record| record.provider_id == provider && record.secret == key)
-        {
-            return Ok(SavedProviderKey {
-                credential: existing.view(),
-                created: false,
-            });
+        let mut file = CredentialsFile::load(&root.join(CREDENTIALS_FILE)).map_err(save_error)?;
+        let saved = file.records(&self.registration_catalog, self.clock.as_ref());
+        for record in saved.iter().filter(|record| record.provider_id == provider) {
+            let same = self
+                .credential_secret(root, record)
+                .await
+                .is_ok_and(|secret| secret.expose() == key);
+            if same {
+                return Ok(SavedProviderKey {
+                    credential: record.view(),
+                    created: false,
+                });
+            }
         }
-        let views = saved.iter().map(credentials::CredentialRecord::view);
-        let label = generated_label(&provider, &views.collect::<Vec<_>>());
-        let credential = credentials::upsert(
-            &path,
-            &provider,
-            key,
-            Some(&label),
-            None,
-            &self.registration_catalog,
-            self.clock.as_ref(),
-        )
-        .map_err(|error| match error {
-            ModelCatalogError::Storage { .. } => ProviderKeySaveError::Storage(error),
-            other => ProviderKeySaveError::Rejected(other),
-        })?;
+        let views: Vec<CredentialView> = saved.iter().map(CredentialRecord::view).collect();
+        let draft = CredentialDraft {
+            id: format!("cred_{}", uuid::Uuid::new_v4()),
+            label: generated_label(&provider, &views),
+            provider_id: provider,
+            created_at: self.clock.now_iso(),
+        };
+        let credential = self
+            .write_credential(root, &mut file, draft, key, None)
+            .await
+            .map_err(|error| save_error(catalog_error(error)))?;
         Ok(SavedProviderKey {
             credential,
             created: true,
@@ -103,6 +101,14 @@ impl ModelConfiguration {
     }
 }
 
+/// A storage failure is `Storage`; a refusal says why.
+fn save_error(error: ModelCatalogError) -> ProviderKeySaveError {
+    match error {
+        ModelCatalogError::Storage { .. } => ProviderKeySaveError::Storage(error),
+        other => ProviderKeySaveError::Rejected(other),
+    }
+}
+
 /// `provider_id`, then `provider_id-2`, `-3`, ...: the first name no saved
 /// credential uses.
 fn generated_label(provider_id: &str, saved: &[CredentialView]) -> String {
@@ -129,6 +135,7 @@ mod tests {
             auth_type: ProviderAuthMethod::ApiKey,
             label: label.into(),
             masked_value: "sk-...x".into(),
+            storage: crate::models::CredentialStorage::FallbackFile,
             created_at: String::new(),
             updated_at: String::new(),
         }

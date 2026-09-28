@@ -59,6 +59,15 @@ zip = { version = "4", default-features = false, features = ["deflate"] }
 rustix = { version = "=1.1.5", features = ["fs"] }
 nix = { version = "=0.31.3", default-features = false, features = ["feature", "fs", "hostname", "signal"] }
 libproc = "=0.14.11"
+# The OS credential store (#217, butler-platform `secrets`): the keyring-core
+# API and one store per OS (macOS Keychain; Secret Service over D-Bus in pure
+# Rust; Windows Credential Manager). The `keyring` crate's own docs point
+# applications at these crates rather than at its all-in-one wrapper.
+keyring-core = "=1.0.0"
+apple-native-keyring-store = { version = "=1.0.2", default-features = false, features = ["keychain"] }
+zbus-secret-service-keyring-store = { version = "=1.0.1", default-features = false, features = ["crypto-rust"] }
+windows-native-keyring-store = { version = "=1.1.0", default-features = false }
+zeroize = "1.8"
 
 # Debug info is limited to line tables because full DWARF made macOS target
 # directories exceed 50 GB: macOS defaults to split-debuginfo = "unpacked",

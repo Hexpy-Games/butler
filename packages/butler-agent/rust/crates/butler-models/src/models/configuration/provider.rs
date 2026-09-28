@@ -207,10 +207,10 @@ impl ModelConfiguration {
     ) -> Result<ProviderAuth, ProviderRequestError> {
         if let Some(config) = registered {
             if config.auth_type == ProviderAuthMethod::ApiKey {
-                let secret = config
+                let record = config
                     .credential_id
                     .as_deref()
-                    .and_then(|id| read.credential_secret(id, &config.provider_id))
+                    .and_then(|id| read.credential(id, &config.provider_id))
                     .ok_or_else(|| {
                         provider_error_for(
                             &config.provider_id,
@@ -219,7 +219,19 @@ impl ModelConfiguration {
                             "Provider API key credential is not registered.",
                         )
                     })?;
-                return Ok(ProviderAuth::ApiKey(secret.to_owned()));
+                // Read from its store for this request only; never cached.
+                let secret = self
+                    .credential_secret(root, record)
+                    .await
+                    .map_err(|error| {
+                        provider_error_for(
+                            &config.provider_id,
+                            error.code(),
+                            "configuration",
+                            "The saved API key could not be read from the credential store.",
+                        )
+                    })?;
+                return Ok(ProviderAuth::ApiKey(secret.expose().to_owned()));
             }
             if config.provider_id != "openai" {
                 return Err(provider_error_for(

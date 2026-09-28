@@ -216,6 +216,7 @@ fn status_environment() -> ModelConfigurationEnvironment {
         butler_openai_auth_profile: std::env::var_os("BUTLER_OPENAI_AUTH_PROFILE")
             .map(PathBuf::from),
         codex_auth_json: std::env::var_os("CODEX_AUTH_JSON").map(PathBuf::from),
+        secret_store: super::SecretStoreMode::from_environment(),
         ..ModelConfigurationEnvironment::default()
     }
 }

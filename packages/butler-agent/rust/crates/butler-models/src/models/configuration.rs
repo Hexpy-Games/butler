@@ -2,6 +2,8 @@
 
 mod admission;
 mod auth;
+mod credential_admin;
+mod credential_migration;
 mod credentials;
 mod discovery;
 mod environment;
@@ -12,17 +14,27 @@ mod mutations;
 mod probes;
 mod provider;
 mod read;
+mod secret_store;
 mod settings;
 mod setup;
 
 pub(crate) use auth::AuthError as ModelAuthError;
 pub use auth::OpenAiAuthProfile;
 pub use auth::{generate_pkce_verifier, pkce_challenge};
+pub use butler_platform::secrets::{SecretBackend, SecretStoreMode};
+pub use credential_admin::{
+    CredentialError, CredentialList, CredentialListItem, CredentialStoreView, DeletedCredential,
+};
+pub use credential_migration::{
+    CredentialFileSummary, CredentialMigrationFailure, CredentialMigrationReport,
+    credential_file_summary,
+};
 pub use discovery::DiscoveredLocalModel;
 pub(crate) use discovery::LocalModelDiscoveryResult;
 pub use key_check::{ProviderKeyCheck, ProviderKeyCheckError};
 pub use mcp::McpModelTarget;
 pub use mutations::{HostedModelMutation, LocalModelMutation, ProviderCredentialMutation};
+pub use secret_store::CredentialStoreError;
 pub use settings::SettingsError;
 pub use setup::{ProviderKeySaveError, SavedProviderKey};
 
@@ -44,11 +56,12 @@ use super::{
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
 
-use credentials::CredentialRecord;
+use credentials::{CREDENTIALS_FILE, CredentialRecord};
 use environment::merge_private_auth_environment;
 use read::{
     app_default, array, configured_default, first_by_key, read_object, read_object_sync, text,
 };
+use secret_store::ProviderSecrets;
 
 pub trait ModelConfigurationClock: Send + Sync {
     fn now_iso(&self) -> String;
@@ -83,6 +96,11 @@ pub struct ModelConfigurationEnvironment {
     pub os_release: Option<String>,
     pub os_arch: Option<String>,
     pub hosted_provider_base_urls: HashMap<String, String>,
+    /// Where API keys are kept (`BUTLER_SECRET_STORE`). The host resolves it
+    /// from the environment (the system store unless `file`); the `Default`
+    /// here is the owner-only file, so a test never touches the user's
+    /// credential store.
+    pub secret_store: SecretStoreMode,
 }
 
 pub struct ModelConfiguration {
@@ -94,6 +112,7 @@ pub struct ModelConfiguration {
     registration_catalog: ModelCatalogSnapshot,
     client: Client,
     configuration_writes: Arc<ConfigurationWrites>,
+    secrets: ProviderSecrets,
 }
 
 /// Raw config and credentials never implement Debug or Serialize. Request
@@ -113,11 +132,12 @@ pub struct ModelMetadataRead {
 }
 
 impl ModelConfigurationRead {
-    pub(crate) fn credential_secret(&self, id: &str, provider: &str) -> Option<&str> {
+    /// The saved key `id` of `provider` (its metadata; the key itself is
+    /// read from its store only when a request needs it).
+    fn credential(&self, id: &str, provider: &str) -> Option<&CredentialRecord> {
         self.credentials
             .iter()
             .find(|record| record.id == id && record.provider_id == provider)
-            .map(|record| record.secret.as_str())
     }
 
     pub(crate) fn local_credential_secret(&self, model_ref: &str) -> Option<&str> {
@@ -169,6 +189,7 @@ impl ModelConfiguration {
             },
             &collation,
         )?;
+        let secrets = ProviderSecrets::new(environment.secret_store);
         Ok(Self {
             data_root,
             environment,
@@ -178,6 +199,7 @@ impl ModelConfiguration {
             registration_catalog,
             client,
             configuration_writes,
+            secrets,
         })
     }
 
@@ -187,7 +209,7 @@ impl ModelConfiguration {
 
     async fn read_from(&self, root: &Path) -> Result<ModelConfigurationRead, ModelCatalogError> {
         let config_path = root.join("butler.config.json");
-        let credential_path = root.join("auth/model-provider-credentials.json");
+        let credential_path = root.join(CREDENTIALS_FILE);
         let local_credential_path = root.join("auth/custom-model-credentials.json");
         let (config, credential_file, local_credentials) = tokio::join!(
             read_object(&config_path),

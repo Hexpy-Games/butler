@@ -125,9 +125,10 @@ pub use sessions::{
 #[cfg(test)]
 pub(crate) use setup::test_setup_port;
 pub use setup::{
-    AppOauthStartInput, AppProviderKeyInput, AppSetupPort, LocalModelServersView, OauthFlowStatus,
-    OauthFlowView, ProviderKeyVerificationView, SETUP_READINESS_EVENT, SavedCredentialView,
-    SetupReadinessStatus, SetupReadinessStep, SetupReadinessView, SetupStepError, SetupStepStatus,
+    AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
+    LocalModelServersView, OauthFlowStatus, OauthFlowView, ProviderKeyVerificationView,
+    ReplacedCredentialView, SETUP_READINESS_EVENT, SavedCredentialView, SetupReadinessStatus,
+    SetupReadinessStep, SetupReadinessView, SetupStepError, SetupStepStatus,
 };
 pub use space::{AppSpaceCommand, AppSpaceMutationResult, AppSpaceOrigin};
 use storage::{AppStorage, AppStorageError};

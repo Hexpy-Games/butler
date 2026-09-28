@@ -12,6 +12,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // keeps its per-OS implementations as private children.
         "command_sandbox" | "instance" | "launcher" | "process_control" | "secure_fs"
         | "user_dirs" => &[],
+        // The credential store's owner-only fallback file is a secure_fs file.
+        "secrets" => &["secure_fs"],
         // butler-core: leaf codecs and mirrors; JSON sanitizes public text.
         "configuration" | "js_date" | "json_lines" | "locale" | "public_text" | "segmentation"
         | "tool_protocol" => &[],

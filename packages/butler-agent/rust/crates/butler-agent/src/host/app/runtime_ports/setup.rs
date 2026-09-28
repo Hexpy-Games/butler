@@ -13,12 +13,13 @@ use std::time::Duration;
 use tokio::sync::watch;
 
 use butler_gateway::gateway::{
-    AppOauthStartInput, AppProviderKeyInput, AppSetupPort, ApplicationFuture,
-    GatewayApplicationError, LocalModelServersView, OauthFlowView, ProviderKeyVerificationView,
-    SavedCredentialView, SetupReadinessView,
+    AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
+    ApplicationFuture, GatewayApplicationError, LocalModelServersView, OauthFlowView,
+    ProviderKeyVerificationView, ReplacedCredentialView, SavedCredentialView, SetupReadinessView,
 };
 use butler_models::models::{
-    LocalServerKind, LocalServerProbe, ModelConfiguration, detect_local_servers,
+    CredentialList, DeletedCredential, LocalServerKind, LocalServerProbe, ModelConfiguration,
+    detect_local_servers,
 };
 use butler_runtime::operations::ServiceReadiness;
 
@@ -130,13 +131,42 @@ impl AppSetupPort for AppSetup {
     ) -> ApplicationFuture<SavedCredentialView> {
         let this = self.0.clone();
         Box::pin(async move {
-            let root = this
-                .installation
-                .validate_data_root(&this.data_root)
-                .map_err(|source| unsafe_model_path().with_source(source))?;
+            let root = this.validated_root()?;
             let saved = credentials::save(&this.configuration, &input, &root).await?;
             this.settings.refresh().await?;
             Ok(saved)
+        })
+    }
+
+    fn list_credentials(&self) -> ApplicationFuture<CredentialList> {
+        let this = self.0.clone();
+        Box::pin(async move {
+            let root = this.validated_root()?;
+            credentials::list(&this.configuration, &root).await
+        })
+    }
+
+    fn replace_credential(
+        &self,
+        name: String,
+        input: AppCredentialReplaceInput,
+    ) -> ApplicationFuture<ReplacedCredentialView> {
+        let this = self.0.clone();
+        Box::pin(async move {
+            let root = this.validated_root()?;
+            let replaced = credentials::replace(&this.configuration, &name, &input, &root).await?;
+            this.settings.refresh().await?;
+            Ok(replaced)
+        })
+    }
+
+    fn delete_credential(&self, name: String, force: bool) -> ApplicationFuture<DeletedCredential> {
+        let this = self.0.clone();
+        Box::pin(async move {
+            let root = this.validated_root()?;
+            let deleted = credentials::delete(&this.configuration, &name, force, &root).await?;
+            this.settings.refresh().await?;
+            Ok(deleted)
         })
     }
 
@@ -153,6 +183,32 @@ impl AppSetupPort for AppSetup {
     fn cancel_oauth(&self, flow_id: String) -> ApplicationFuture<OauthFlowView> {
         let this = self.0.clone();
         Box::pin(async move { this.oauth.cancel(&flow_id).await })
+    }
+}
+
+impl SetupInner {
+    /// The data root, checked to be the selected DATA directory, with the
+    /// files a key change writes inside it.
+    fn validated_root(&self) -> Result<PathBuf, GatewayApplicationError> {
+        let root = self
+            .installation
+            .validate_data_root(&self.data_root)
+            .map_err(|source| unsafe_model_path().with_source(source))?;
+        for relative in [
+            "butler.config.json",
+            "auth",
+            "auth/model-provider-credentials.json",
+            "auth/credential-store.json",
+        ] {
+            let target = self
+                .installation
+                .validate_data_root(&self.data_root.join(relative))
+                .map_err(|source| unsafe_model_path().with_source(source))?;
+            if !target.starts_with(&root) {
+                return Err(unsafe_model_path());
+            }
+        }
+        Ok(root)
     }
 }
 

@@ -192,8 +192,31 @@ pub struct CredentialView {
     pub auth_type: ProviderAuthMethod,
     pub label: String,
     pub masked_value: String,
+    /// Where the key itself is kept (#217).
+    #[serde(default)]
+    pub storage: CredentialStorage,
     pub created_at: String,
     pub updated_at: String,
+}
+
+/// Where a saved API key is kept (#217). The credentials file holds only
+/// its name, provider, masked value and dates.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CredentialStorage {
+    /// The macOS login Keychain.
+    Keychain,
+    /// The Linux Secret Service (GNOME Keyring, KWallet).
+    SecretService,
+    /// The Windows Credential Manager.
+    CredentialManager,
+    /// The owner-only file in the data folder: no system store is available,
+    /// or `BUTLER_SECRET_STORE=file` asked for it.
+    FallbackFile,
+    /// Still in the credentials file as plain text: saved before #217 and not
+    /// moved yet (the move is retried each time the agent starts).
+    #[default]
+    LegacyPlaintext,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
