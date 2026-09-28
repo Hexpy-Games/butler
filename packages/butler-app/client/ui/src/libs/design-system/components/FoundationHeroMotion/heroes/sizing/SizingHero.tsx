@@ -25,10 +25,10 @@ function spec(copy: SizingCopy): SceneSpec {
       form: <FormTile copy={copy} />,
     },
     poster: {
-      wide: { columns: "1.15fr 1fr", rows: "1.2fr 1fr 1fr", areas: ["staff staff", "frame halo", "frame form"] },
+      wide: { columns: "1.15fr 1fr", rows: "1.4fr 1fr 1fr", areas: ["staff staff", "frame halo", "frame form"] },
       tall: { columns: "1fr", rows: "auto", areas: ["staff", "halo", "frame"] },
     },
-    posterZoom: { wide: 0.9, tall: 0.9 },
+    posterZoom: { wide: 0.95, tall: 0.9 },
     end: () => SIZING_END,
     tracks: sizingTracks(copy),
   };

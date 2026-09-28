@@ -1,10 +1,11 @@
-import type { Key, Pose, Track } from "../../heroTimeline";
+import type { Key, Track } from "../../heroTimeline";
 import { TRANSITION } from "../shared/beats";
 import { introTracks } from "../shared/Intro";
 import { reveal, select } from "../shared/Reveal";
 import { rollerTracks } from "../shared/Roller";
 import type { SceneContext } from "../scene/types";
-import { HIT, ICON, RAILS, type SizingCopy } from "./sizingCopy";
+import { HIT, RAILS, type SizingCopy } from "./sizingCopy";
+import { GHOST_PX } from "./sizingTiles";
 
 /**
  * 04 Sizing, "rails and targets", beat marks (1 beat = --motion-deliberate):
@@ -13,23 +14,23 @@ import { HIT, ICON, RAILS, type SizingCopy } from "./sizingCopy";
  *   6.8–21    Staff    four lanes, each one control height tall; a real
  *                      control drops into each; an off-rail 32 flashes and
  *                      snaps onto md 30
- *   21–33     Touch    a titlebar's 24px icon buttons: the cursor's 30 target
+ *   21–33     Touch    the real titlebar's icon buttons: the cursor's 30 target
  *                      blooms; the cursor becomes a finger and every target
- *                      grows to 44 together (they touch, never overlap)
+ *                      grows to 44 together, the buttons moving apart as on
+ *                      a touch screen (never overlapping)
  *   33–42     Chrome   the frame's fixed measures on its outer left edge
  */
 const AT = { staff: 6.8, drop: 11.8, ghost: 16.6, flash: 17.2, snap: 18.6, touch: 21, enter: 25.2, bloom: 26.4, others: 27.2, finger: 29, grow: 29.8, chrome: 33, dims: 37.2, end: 42 } as const;
 /** Lane gap (--space-xl) and the ghost's width, canvas px. */
 const LANE_GAP = 20;
-const GHOST = { w: 96, h: 32 } as const;
+const GHOST = { w: 96, h: GHOST_PX } as const;
+/** The bar around touch's 44: the target and --space-md (the phone titlebar's 56). */
+const TOUCH_BAR = HIT.touch + 12;
 
 const looped = (keys: Key[], close: number): Key[] => {
   const { at: _at, ease: _ease, ...first } = keys[0]!;
   return [...keys, { at: close - 0.01 }, { at: close, ...first }];
 };
-
-/** A hit target of `size`, kept centred on its button (it is laid out at the pointer size). */
-const halo = (size: number): Pose => ({ w: size, h: size, x: (HIT.pointer - size) / 2, y: (HIT.pointer - size) / 2 });
 
 export function sizingTracks(copy: SizingCopy) {
   return ({ g, close, view }: SceneContext): { tracks: Track[]; camera: Key[] } => {
@@ -60,16 +61,20 @@ export function sizingTracks(copy: SizingCopy) {
     const ghost: Track[] = [
       { select: select("sf-ghost"), keys: looped([{ at: 0, o: 0, y: between, w: GHOST.w, h: GHOST.h }, { at: AT.ghost, o: 0 }, { at: AT.ghost + 0.4, o: 1 }, { at: AT.snap, y: between, h: GHOST.h }, { at: AT.snap + 0.9, y: 0, h: RAILS[2].px, ease: "standard" }], close) },
       { select: select("sf-gw"), keys: looped([{ at: 0, o: 1 }, { at: AT.flash, o: 1 }, { at: AT.flash + 0.3, o: 0.2 }, { at: AT.flash + 0.6, o: 1 }, { at: AT.flash + 0.9, o: 0.2 }, { at: AT.flash + 1.2, o: 1 }, { at: AT.snap + 0.4, o: 1 }, { at: AT.snap + 0.9, o: 0 }], close) },
-      { select: select("sf-gr"), keys: looped([{ at: 0, o: 0 }, { at: AT.snap + 0.5, o: 0 }, { at: AT.snap + 0.9, o: 1 }], close) },
+      { select: select("sf-gb"), keys: looped([{ at: 0, o: 0 }, { at: AT.snap + 0.5, o: 0 }, { at: AT.snap + 0.9, o: 1 }], close) },
       shown("sf-gn", AT.ghost + 0.4, AT.snap + 0.2),
     ];
-    // Pointer → touch: the cursor arrives; its target blooms to 30, the others show; it becomes a finger and all grow to 44.
-    const grow = { at: AT.grow + 1.2, ...halo(HIT.touch), ease: "emphasized" as const };
+    // Pointer → touch: the cursor arrives; its target blooms at 30, the other shows; it becomes a finger and every target grows to 44.
+    const size = (px: number) => ({ w: px, h: px });
+    const bar = g.boxes["tc-bar"]?.h ?? 48;
+    const target = (k: number): Track => ({ select: select(`tc-t${k}`), keys: looped([{ at: 0, ...size(HIT.pointer) }, { at: AT.grow, ...size(HIT.pointer) }, { at: AT.grow + 1.2, ...size(HIT.touch), ease: "emphasized" }], close) });
     const touch: Track[] = [
       { select: select("cur"), keys: looped([{ at: 0, x: 150, y: 70, o: 0 }, { at: AT.enter, x: 150, y: 70, o: 0 }, { at: AT.enter + 0.3, o: 1 }, { at: AT.bloom - 0.2, x: 0, y: 0, ease: "standard" }, { at: AT.finger, o: 1 }, { at: AT.finger + 0.5, o: 0 }], close) },
       { select: select("fin"), keys: looped([{ at: 0, s: 0.3, o: 0 }, { at: AT.finger, s: 0.3, o: 0 }, { at: AT.finger + 0.6, s: 1, o: 1, ease: "emphasized" }], close) },
-      { select: select("tc-h1"), keys: looped([{ at: 0, ...halo(ICON), o: 0 }, { at: AT.bloom, ...halo(ICON), o: 0 }, { at: AT.bloom + 0.8, ...halo(HIT.pointer), o: 1, ease: "decelerate" }, { at: AT.grow, ...halo(HIT.pointer) }, grow], close) },
-      ...[0, 2].map((k): Track => ({ select: select(`tc-h${k}`), keys: looped([{ at: 0, ...halo(HIT.pointer), o: 0 }, { at: AT.others, o: 0 }, { at: AT.others + 0.5, o: 1 }, { at: AT.grow, ...halo(HIT.pointer) }, grow], close) })),
+      target(0), target(1),
+      { select: select("tc-bar"), keys: looped([{ at: 0, w: 1, h: bar }, { at: AT.grow, h: bar }, { at: AT.grow + 1.2, h: Math.max(bar, TOUCH_BAR), ease: "emphasized" }], close) },
+      { select: select("tc-h1"), keys: looped([{ at: 0, s: 0.8, o: 0 }, { at: AT.bloom, s: 0.8, o: 0 }, { at: AT.bloom + 0.8, s: 1, o: 1, ease: "decelerate" }], close) },
+      { select: select("tc-h0"), keys: looped([{ at: 0, o: 0 }, { at: AT.others, o: 0 }, { at: AT.others + 0.5, o: 1 }], close) },
       shown("tc-read", AT.bloom), shown("tc-m0", AT.bloom, AT.grow + 0.2), shown("tc-m1", AT.grow + 0.8),
       ...rollerTracks("tcv", [String(HIT.pointer), String(HIT.touch)], 1, [[0, 0], [AT.grow + 1.2, 1]], g.lines.tcv ?? 0, close, 1),
     ];
@@ -78,7 +83,7 @@ export function sizingTracks(copy: SizingCopy) {
       const at = AT.dims + k * 0.6;
       return { select: select(`ch-d${k}`), keys: looped([{ at: 0, o: 0, sy: 0 }, { at, o: 0, sy: 0 }, { at: at + 0.2, o: 1 }, { at: at + 0.7, sy: 1, ease: "decelerate" }], close) };
     });
-    return { tracks: [...introTracks(copy.title, copy.lead, close), ...title, ...staff, ...ghost, ...touch, ...chrome], camera };
+    return { tracks: [...introTracks(copy.title, copy.lead, close), ...title, ...staff, ...ghost, ...touch, ...chrome, shown("ch-lg", AT.dims + 0.6)], camera };
   };
 }
 
