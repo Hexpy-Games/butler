@@ -190,8 +190,9 @@ fn script(path: &Path, lines: &[&str]) -> Result<(), HarnessError> {
 
 /// PRJ-05 — the dashboard never runs a program the repository's own config
 /// names: an fsmonitor hook in `.git/config` is not executed (the status
-/// is still read), and a repository with a content filter is not read at
-/// all (its status stays unknown; `is_repo` and `branch` come from HEAD).
+/// is still read), and a repository whose config has a content filter or
+/// includes other config files is not read at all (its status stays
+/// unknown; `is_repo` and `branch` come from HEAD).
 #[tokio::test]
 async fn prj_05_repository_config_never_runs_programs() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -230,6 +231,21 @@ async fn prj_05_repository_config_never_runs_programs() -> Result<(), HarnessErr
         state(true, Some("main"), None, None, None)
     );
     assert!(!filter_ran.exists(), "the content filter ran");
+
+    // Config that pulls in other config files is not read either.
+    let (included_id, included) = project(&s, "Included").await?;
+    init_repository(&included)?;
+    let extra = s.sandbox.root.join("extra.gitconfig");
+    std::fs::write(&extra, "[core]\n\tfsmonitor = false\n")?;
+    git(
+        &included,
+        &["config", "include.path", extra.to_str().unwrap()],
+    );
+    std::fs::write(included.join("draft.txt"), "untracked")?;
+    assert_eq!(
+        dashboard_git(&s, &included_id).await?,
+        state(true, Some("main"), None, None, None)
+    );
     s.finish().await
 }
 

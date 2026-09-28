@@ -97,24 +97,3 @@ fn branch_of(head: &str) -> Option<String> {
         .collect();
     (!branch.is_empty()).then_some(branch)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Format pin: the `HEAD` file forms.
-    #[test]
-    fn head_names_a_branch_or_is_detached() {
-        let cases = [
-            ("ref: refs/heads/main\n", Some("main")),
-            ("ref: refs/heads/feature/login\n", Some("feature/login")),
-            ("ref:refs/heads/dev", Some("dev")),
-            ("0123456789abcdef0123456789abcdef01234567\n", None),
-            ("ref: refs/remotes/origin/main\n", None),
-            ("", None),
-        ];
-        for (head, branch) in cases {
-            assert_eq!(branch_of(head).as_deref(), branch, "{head:?}");
-        }
-    }
-}

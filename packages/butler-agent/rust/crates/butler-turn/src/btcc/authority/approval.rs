@@ -319,8 +319,10 @@ fn saturating_count(count: usize) -> u32 {
     u32::try_from(count).unwrap_or(u32::MAX)
 }
 
+/// Pins one summary per action kind and the command-risk table (called by
+/// the authority projection test, `authority/tests/bun_oracle.rs`).
 #[cfg(test)]
-mod tests {
+pub(super) mod pinned {
     use serde_json::json;
 
     use super::*;
@@ -337,10 +339,9 @@ mod tests {
         .unwrap()
     }
 
-    /// Format pin: one summary per action kind, as the App reads them, with
-    /// no absolute path.
-    #[test]
-    fn every_action_kind_is_summarized_without_display_text() {
+    /// One summary per action kind, as the App reads them, with no absolute
+    /// path; then the command-risk table.
+    pub(in crate::btcc::authority) fn assert_approval_summaries() {
         let edits = json!({"edits": [
             {"path": "/Users/someone/work/garden/a.txt"}, {"path": "b.txt"}, {"path": "./a.txt"},
             {"path": "notes/../c.txt"}, {"path": "/etc/passwd"}]});
@@ -425,5 +426,6 @@ mod tests {
                 "{tool}"
             );
         }
+        super::command_risk::pinned::assert_command_risks();
     }
 }

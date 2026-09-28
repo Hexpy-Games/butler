@@ -210,13 +210,13 @@ fn flush(word: &mut String, words: &mut Vec<String>) {
     }
 }
 
+/// Pins which command lines ask with high risk (called by the authority
+/// projection test, `authority/tests/bun_oracle.rs`).
 #[cfg(test)]
-mod tests {
+pub(super) mod pinned {
     use super::*;
 
-    /// Pure-logic table: which command lines ask with high risk.
-    #[test]
-    fn commands_are_classified_by_program_and_flags() {
+    pub(in crate::btcc::authority) fn assert_command_risks() {
         let high = [
             "rm --recursive build",
             "rm -vrf build",
