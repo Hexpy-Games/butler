@@ -1,13 +1,10 @@
 import { motionEasing, type MotionEasingName } from "../../lib/motion";
 
 /**
- * A small declarative timeline for long hero sequences: tracks of poses at
- * beat marks, compiled into one CSS @keyframes rule per track on a shared
- * cycle. The result is plain CSS animation (compositor transform and opacity,
- * plus two paint-only fields for type specimens: an outline's dash offset and
- * a variable font's weight), so pausing, reduced motion and the motion trace
- * treat it like any other hero. Easing is per segment and read from the --motion-ease-* tokens, which
- * CSS cannot do itself (var() is not honored inside @keyframes).
+ * A small declarative timeline for long hero sequences: tracks of poses at beat marks, compiled into one CSS
+ * @keyframes rule per track on a shared cycle: plain CSS animation (transform and opacity, plus paint-only dash
+ * offset, font weight, corner radius and a small box's size), so pausing, reduced motion and the motion trace treat
+ * it like any other hero. Easing is per segment, from the --motion-ease-* tokens (var() is not honored in @keyframes).
  */
 
 /** A pose in canvas px and degrees; unset fields carry over from the previous key. */
@@ -29,6 +26,8 @@ export interface Pose {
   wght?: number;
   /** Translate along x in % of the element's own width (a reveal window needs no measuring). */
   xp?: number;
+  /** Border radius in px (a corner morphing through a scale); width and height in px (a rounded box resizing without a scale's distortion; set both in a track's first key). */
+  rad?: number; w?: number; h?: number;
 }
 
 export interface Key extends Pose {
@@ -45,7 +44,7 @@ export interface Track {
 }
 
 const TRANSFORM_FIELDS = ["x", "y", "z", "rx", "ry", "rz", "s", "sx", "sy"] as const;
-const REST: Required<Pose> = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, s: 1, sx: 1, sy: 1, o: 1, dash: 0, wght: 400, xp: 0 };
+const REST: Required<Pose> = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, s: 1, sx: 1, sy: 1, o: 1, dash: 0, wght: 400, xp: 0, rad: 0, w: 0, h: 0 };
 
 function num(value: number): string {
   return String(Math.round(value * 1000) / 1000);
@@ -101,6 +100,8 @@ export function compileTimeline(scope: string, beats: number, tracks: Track[]): 
     const fades = track.keys.some((key) => key.o !== undefined);
     const draws = track.keys.some((key) => key.dash !== undefined);
     const weighs = track.keys.some((key) => key.wght !== undefined);
+    const rounds = track.keys.some((key) => key.rad !== undefined);
+    const sizes = track.keys.some((key) => key.w !== undefined || key.h !== undefined);
     const frames = keys.map((key, k) => {
       const next = keys[k + 1];
       const body = [
@@ -108,6 +109,8 @@ export function compileTimeline(scope: string, beats: number, tracks: Track[]): 
         fades ? `opacity:${num(key.o)}` : "",
         draws ? `stroke-dashoffset:${num(key.dash)}px` : "",
         weighs ? `font-weight:${num(key.wght)}` : "",
+        rounds ? `border-radius:${num(key.rad)}px` : "",
+        sizes ? `inline-size:${num(key.w)}px;block-size:${num(key.h)}px` : "",
         next ? `animation-timing-function:${ease(next.ease)}` : "",
       ].filter(Boolean).join(";");
       return `${num((key.at / beats) * 100)}%{${body}}`;

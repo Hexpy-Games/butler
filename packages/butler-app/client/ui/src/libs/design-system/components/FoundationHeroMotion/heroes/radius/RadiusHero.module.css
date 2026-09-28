@@ -1,197 +1,329 @@
-/* 05 Radius and elevation hero: the lab left of the poster (morphing
-   square, nested surfaces), the ladder field and the product grid. Canvas
-   px (see ../shared/grid.ts). */
+/* 05 Radius and elevation hero (v3 scenes). Canvas px (../shared/grid.ts). */
 
-/* ---- The lab ---- */
+/* ---- Title: a control-radius outline behind the R's bowl ---- */
 
-.lab {
-  display: grid;
-  place-items: center;
-}
-
-/* The nest's notes stand in a column left of it: the gap leaves them room
-   clear of the morph. */
-.labStage {
-  display: grid;
-  grid-template-columns: auto auto;
-  column-gap: calc(var(--space-4xl) * 4.5);
-  align-items: center;
-}
-
-.morph {
-  display: grid;
-  justify-items: start;
-  row-gap: var(--space-lg);
-}
-
-.shapeStack {
-  display: grid;
-}
-
-/* The morphing square: one layer per radius, crossfaded; a circle rides the corner. */
-.shape {
-  position: relative;
-  grid-area: 1 / 1;
-  inline-size: calc(var(--space-4xl) * 4);
-  block-size: calc(var(--space-4xl) * 4);
-  border: 2px solid var(--accent);
-  border-radius: var(--r);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-}
-
-.shape + .shape {
-  opacity: 0;
-}
-
-.cornerGuide {
+.bowl {
   position: absolute;
-  top: -2px;
-  left: -2px;
-  inline-size: min(calc(var(--r) * 2), calc(var(--space-4xl) * 4));
-  block-size: min(calc(var(--r) * 2), calc(var(--space-4xl) * 4));
-  border: 1px dashed var(--accent);
+  top: 0.14em;
+  left: 0.04em;
+  inline-size: 0.56em;
+  block-size: 0.4em;
+  overflow: visible;
+}
+
+.bowl rect {
+  fill: none;
+  stroke: color-mix(in srgb, var(--accent) 70%, transparent);
+  stroke-width: 3;
+  stroke-dasharray: 100;
+}
+
+/* ---- The corner under the loupe ---- */
+
+.cornerStage {
+  position: relative;
+}
+
+/* One line per real pixel at ×16. */
+.pixelGrid {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(
+      to right,
+      color-mix(in srgb, var(--line) 60%, transparent) 0 1px,
+      transparent 1px var(--space-lg)
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--line) 60%, transparent) 0 1px,
+      transparent 1px var(--space-lg)
+    );
+}
+
+.cornerGroup {
+  position: absolute;
+}
+
+.surface,
+.circle,
+.rline {
+  position: absolute;
+  left: 0;
+}
+
+.surface {
+  top: 0;
+  box-sizing: border-box;
+  border: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.circle {
+  top: 0;
+  box-sizing: border-box;
+  border: 1.5px dashed color-mix(in srgb, var(--accent) 70%, transparent);
   border-radius: var(--radius-pill);
 }
 
-.morphRead {
-  display: grid;
-  row-gap: var(--space-xs);
+.rline {
+  block-size: 2px;
+  background: var(--accent);
 }
 
-.tokenStack {
-  display: inline-grid;
+.readout {
+  position: absolute;
+  top: calc(var(--space-4xl) * 3.5);
+  left: calc(var(--space-4xl) * 16);
+  display: grid;
+  justify-items: start;
+  row-gap: var(--space-sm);
+  color: var(--text-primary);
+}
+
+[data-layout="tall"] .readout {
+  top: calc(var(--space-4xl) * 11.5);
+  left: var(--space-xl);
+}
+
+.loupe {
   color: var(--text-tertiary);
   font: var(--font-code);
   font-size: var(--typo-caption-size);
 }
 
-.tokenLayer {
+.bigValue {
+  font-size: calc(var(--typo-h1-size) * 2.4);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-strong);
+  line-height: var(--line-height-none);
+}
+
+.stack {
+  display: inline-grid;
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-h5-size);
+}
+
+.layer {
   grid-area: 1 / 1;
 }
 
-.tokenLayer + .tokenLayer {
+.layer[data-tone="who"] {
+  color: var(--text-secondary);
+}
+
+.layer + .layer {
   opacity: 0;
 }
 
-.bigRead {
-  font-size: calc(var(--typo-metric-value-size) * 2);
-  font-variant-numeric: tabular-nums;
-  font-weight: var(--typo-metric-value-weight);
-  line-height: 1.2;
-}
+/* ---- Who wears which ---- */
 
-/* Nested surfaces: each pads the next, corners growing outward. */
-.nest {
+.wearStage {
   position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: center;
+  gap: var(--space-4xl) var(--space-3xl);
+  max-inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
+  padding-block-start: var(--space-3xl);
 }
 
-.nBox {
+.worn {
   position: relative;
-  display: grid;
-  padding: var(--space-2xl);
+  display: inline-grid;
 }
 
-.nBox[data-level="window"] {
-  border-radius: var(--radius-composer);
+.wornValue {
+  position: absolute;
+  bottom: calc(100% + var(--space-sm));
+  left: 0;
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-body-size);
 }
 
-.nBox[data-level="popover"] {
-  border-radius: var(--radius-popover);
+.ghost {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  inline-size: var(--space-lg);
+  block-size: var(--space-lg);
+  border-top: 2.5px solid var(--accent);
+  border-left: 2.5px solid var(--accent);
+  pointer-events: none;
 }
 
-.nBox[data-level="card"] {
-  border-radius: var(--radius-panel);
+/* ---- Nesting ---- */
+
+.nestStage {
+  position: relative;
+  inline-size: var(--canvas-w);
+  block-size: var(--canvas-h);
 }
 
-.nBox[data-level="button"] {
-  inline-size: calc(var(--control-height-md) * 3);
-  block-size: var(--control-height-md);
-  padding: 0;
-  border-radius: var(--radius-control);
+.nestCard {
+  position: absolute;
+  top: 50%;
+  left: 50%;
 }
 
-.nOutline {
+/* Tall: the corner sits left of the middle, so both notes fit the portrait frame. */
+[data-layout="tall"] .nestCard {
+  left: 25%;
+}
+
+.nestButton {
+  position: relative;
+  display: inline-grid;
+}
+
+.wrong {
   position: absolute;
   inset: 0;
-  border: 1.5px solid var(--accent);
-  border-radius: inherit;
+  border: 2px solid var(--color-danger);
 }
 
-/* ---- The field: corner tiles and lifting surfaces ---- */
-
-.field {
-  display: grid;
-  align-content: center;
-  row-gap: var(--space-3xl);
+.arc {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  border-top: 1.5px solid var(--accent);
+  border-left: 1.5px solid var(--accent);
 }
 
-.radii,
-.levels {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(var(--n, 5), minmax(0, 1fr));
-  gap: var(--space-md);
+.arc[data-size="inner"] {
+  inline-size: calc(var(--radius-control) * 2);
+  block-size: calc(var(--radius-control) * 2);
+  border-top-left-radius: var(--radius-control);
 }
 
-.levels {
-  --n: 3;
+.arc[data-size="outer"] {
+  inline-size: calc(var(--radius-panel) * 2);
+  block-size: calc(var(--radius-panel) * 2);
+  border-top-left-radius: var(--radius-panel);
 }
 
-.cell {
-  display: grid;
-  justify-items: center;
-  row-gap: var(--space-sm);
-  min-width: 0;
+.padMark {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  inline-size: var(--space-lg);
+  block-size: var(--space-lg);
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--accent) 40%, transparent) 0 1px,
+    transparent 1px 3px
+  );
 }
 
-.tile {
-  display: block;
-  inline-size: var(--space-4xl);
-  block-size: var(--space-4xl);
-  border: 1.5px solid var(--accent);
-  border-radius: var(--r);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-}
-
-.name {
-  max-inline-size: 100%;
-  color: var(--text-tertiary);
+.nestNote {
+  position: absolute;
+  color: var(--accent);
   font: var(--font-code);
   font-size: var(--font-size-1);
-  line-height: var(--line-height-tight);
-  text-align: center;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+}
+
+.nestNote[data-place="outer"] {
+  bottom: calc(100% + var(--space-xs));
+  left: 0;
+}
+
+.nestNote[data-place="inner"] {
+  top: calc(100% + var(--space-sm));
+  left: 0;
+}
+
+/* ---- The floor (quarter view) ---- */
+
+.floorStage {
+  position: relative;
+  inline-size: calc(var(--space-4xl) * 19);
+  block-size: calc(var(--space-4xl) * 9);
+  transform-style: preserve-3d;
+}
+
+[data-layout="tall"] .floorStage {
+  inline-size: calc(var(--space-4xl) * 8);
+  block-size: calc(var(--space-4xl) * 13);
+}
+
+.floor {
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-composer);
+  background: color-mix(in srgb, var(--surface-raised) 50%, transparent);
+}
+
+.spot {
+  position: absolute;
+  top: calc(var(--space-4xl) * 3);
+  left: calc(var(--space-4xl) * (1.5 + var(--k) * 5.8));
+  transform-style: preserve-3d;
+}
+
+[data-layout="tall"] .spot {
+  top: calc(var(--space-4xl) * (1 + var(--k) * 4));
+  left: calc(var(--space-4xl) * (0.8 + var(--k) * 0.9));
+}
+
+.floorShadow {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-panel);
+  background: var(--dialog-overlay-bg);
+}
+
+.floorShadow[data-level="low"] {
+  filter: blur(4px);
+}
+
+.floorShadow[data-level="medium"] {
+  filter: blur(12px);
+}
+
+.floorShadow[data-level="high"] {
+  filter: blur(26px);
+}
+
+.post {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--space-md) * -1);
+  transform: rotateX(-90deg);
+  transform-origin: 50% 0;
+  transform-style: preserve-3d;
+}
+
+.postIn {
+  display: block;
+  inline-size: 2px;
+  background: var(--accent);
+  transform-origin: 50% 0;
 }
 
 .lift {
-  display: grid;
-  inline-size: 100%;
+  position: relative;
+  transform-style: preserve-3d;
 }
 
-.lift > * {
-  grid-area: 1 / 1;
-}
-
-.flat,
-.lifted {
-  display: grid;
-}
-
-.levelLabel {
-  display: block;
-  padding-block: var(--space-md);
-  color: var(--text-secondary);
+.floorLabel {
+  position: absolute;
+  top: calc(100% + var(--space-md));
+  left: 0;
+  color: var(--text-tertiary);
+  font: var(--font-code);
   font-size: var(--typo-caption-size);
-  text-align: center;
+  white-space: nowrap;
 }
 
-/* ---- Components and poster ---- */
-
-.row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-}
+/* ---- Components and tiles ---- */
 
 .menuRow {
   display: flex;
@@ -200,99 +332,81 @@
   padding-inline: var(--space-sm);
 }
 
-.product {
-  grid-template-areas:
-    "controls overlay"
-    "surface overlay"
-    "composer composer";
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-content: space-between;
-  gap: var(--space-2xl) var(--grid-gutter);
+.composer {
+  display: grid;
+  inline-size: calc(var(--space-4xl) * 8);
 }
 
-[data-layout="tall"] .product {
-  grid-template-areas:
-    "controls"
-    "surface"
-    "overlay"
-    "composer";
-  grid-template-columns: minmax(0, 1fr);
-  align-content: start;
-  row-gap: var(--space-lg);
+/* In the poster the composer fills its tile. */
+[data-tile] .composer {
+  inline-size: 100%;
 }
 
-[data-layout="tall"] .labStage {
-  grid-template-columns: auto;
-  row-gap: var(--space-3xl);
+.cornerTile {
+  display: grid;
   justify-items: center;
+  row-gap: var(--space-2xl);
+  inline-size: 100%;
 }
 
-/* Tall: one radius or level per row, its token beside it (whole, never
-   broken), so the field fills the portrait frame. */
-[data-layout="tall"] [data-cell] .radii,
-[data-layout="tall"] [data-cell] .levels {
-  --n: 1;
-
-  row-gap: var(--space-md);
+.bigArc {
+  inline-size: var(--r);
+  block-size: var(--r);
+  border-top: 3px solid var(--accent);
+  border-left: 3px solid var(--accent);
+  border-top-left-radius: var(--r);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
-[data-layout="tall"] [data-cell] .cell {
-  grid-template-columns: 38% minmax(0, 1fr);
-  place-items: center start;
-  column-gap: var(--space-lg);
+.ladder {
+  display: flex;
+  gap: var(--space-md);
 }
 
-[data-layout="tall"] [data-cell] .radii .tile {
-  justify-self: center;
+.rung {
+  display: grid;
+  justify-items: center;
+  row-gap: var(--space-xs);
 }
 
-[data-layout="tall"] [data-cell] .name {
-  text-align: start;
-  white-space: nowrap;
-  overflow-wrap: normal;
+.rungTile {
+  inline-size: var(--space-3xl);
+  block-size: var(--space-3xl);
+  border: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
-/* Tall poster: a compact summary of chips (a small tile or panel, then its
-   token), so the field and the components fit the portrait
-   frame together. */
-[data-layout="tall"] [data-t="field-mover"] .field {
+.rungName,
+.liftToken {
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+}
+
+.rowTile {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-evenly;
+  gap: var(--space-xl);
+  inline-size: 100%;
+}
+
+.rowControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.liftTile {
+  display: grid;
   row-gap: var(--space-lg);
+  inline-size: 100%;
 }
 
-[data-layout="tall"] [data-t="field-mover"] .radii,
-[data-layout="tall"] [data-t="field-mover"] .levels {
-  --n: 1;
-
-  gap: var(--space-xs);
-}
-
-[data-layout="tall"] [data-t="field-mover"] .cell {
-  grid-template-columns: auto minmax(0, 1fr);
-  place-items: center start;
-  column-gap: var(--space-sm);
-}
-
-[data-layout="tall"] [data-t="field-mover"] .tile {
-  inline-size: var(--space-xl);
-  block-size: var(--space-xl);
-}
-
-[data-layout="tall"] [data-t="field-mover"] .lift {
-  inline-size: calc(var(--space-4xl) * 1.4);
-}
-
-[data-layout="tall"] [data-t="field-mover"] .levelLabel {
-  padding-block: var(--space-xs);
-}
-
-[data-layout="tall"] [data-t="field-mover"] .name {
-  text-align: start;
-  white-space: nowrap;
-  overflow-wrap: normal;
-}
-
-/* The tall field scene (a prelude region) takes the portrait column's width. */
-[data-layout="tall"] [data-cell] > .field {
-  box-sizing: border-box;
-  inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
+.liftName {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
 }

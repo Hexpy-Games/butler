@@ -1,7 +1,6 @@
 import type { Box, Key, Track } from "../../heroTimeline";
 import { TRANSITION } from "./beats";
 import { select } from "./Reveal";
-import type { Geometry } from "./types";
 
 /** Canvas px an item starts beyond the frame's edge. */
 const BEYOND = 60;
@@ -29,10 +28,9 @@ const union = (boxes: Box[]): Box => {
  * and flights from one edge run parallel: no two paths cross. The last
  * component, built in place, is already home.
  */
-export function gatherFlights(g: Geometry, ids: string[], last: string, finale: number): Record<string, Flight> {
-  const slots = Object.fromEntries(ids.map((id) => [id, id === "field" ? g.field : g.panels[id]!]));
+export function gatherFlights(slots: Record<string, Box>, last: string | null, finale: number): Record<string, Flight> {
   const frame = union(Object.values(slots));
-  const edges = ids.filter((id) => id !== last).map((id) => {
+  const edges = Object.keys(slots).filter((id) => id !== last).map((id) => {
     const s = slots[id]!;
     const reach = { l: s.x - frame.x, r: frame.x + frame.w - (s.x + s.w), t: s.y - frame.y, b: frame.y + frame.h - (s.y + s.h) };
     const side = (Object.keys(reach) as Array<keyof typeof reach>).reduce((best, key) => (reach[key] < reach[best] ? key : best), "l");
@@ -40,7 +38,7 @@ export function gatherFlights(g: Geometry, ids: string[], last: string, finale: 
       : side === "t" ? { x: 0, y: -(reach.t + s.h + BEYOND) } : { x: 0, y: reach.b + s.h + BEYOND };
     return { id, depth: reach[side], from };
   }).sort((a, b) => b.depth - a.depth);
-  const flights: Record<string, Flight> = { [last]: { from: { x: 0, y: 0 }, start: finale, end: finale + 0.4 } };
+  const flights: Record<string, Flight> = last ? { [last]: { from: { x: 0, y: 0 }, start: finale, end: finale + 0.4 } } : {};
   edges.forEach(({ id, from }, n) => {
     const start = finale + 0.2 + n * STAGGER;
     flights[id] = { from, start, end: start + TRANSITION * 0.8 };

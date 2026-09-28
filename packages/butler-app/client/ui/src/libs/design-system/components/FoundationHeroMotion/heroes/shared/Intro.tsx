@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 import type { Key, Track } from "../../heroTimeline";
 import { Reveal as R, reveal, select } from "./Reveal";
 import s from "./Intro.module.css";
@@ -13,7 +13,13 @@ export type IntroLead = Array<[key: string, text: string]>;
  * line on the right (below on the tall canvas), set above the poster
  * (`data-m="intro"` for the camera).
  */
-export function Intro({ title, lead }: { title: string; lead: IntroLead }) {
+export function Intro({ title, lead, decor, titleNode }: {
+  title: string; lead: IntroLead;
+  /** The chapter's own touch on its title (drawn behind it, in em of the title): the title performs the concept. */
+  decor?: ReactNode;
+  /** The title set by the chapter itself (letters it moves one by one), in place of the plain revealed title. */
+  titleNode?: ReactNode;
+}) {
   // The title fits its column: never over the intent beside it, however long the word.
   const titleRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -32,7 +38,10 @@ export function Intro({ title, lead }: { title: string; lead: IntroLead }) {
   }, [title]);
   return (
     <div className={s.intro} data-m="intro">
-      <div className={s.introTitle} data-t="i-title" ref={titleRef}><R name="i-t">{title}</R></div>
+      <div className={s.introTitle} data-t="i-title" ref={titleRef}>
+        {decor ? <span aria-hidden="true" className={s.decor}>{decor}</span> : null}
+        {titleNode ?? <R name="i-t">{title}</R>}
+      </div>
       <div className={s.introLead}>
         {lead.map(([key, text], n) => (
           <p className={s.leadLine} data-t={`i-p${n}`} key={key}>

@@ -1,279 +1,401 @@
-/* 08 Motion hero: the curves and durations field, the reduced-motion scene
-   and the product grid. Canvas px (see ../shared/grid.ts). */
+/* 08 Motion hero (v3 scenes). Canvas px (../shared/grid.ts). */
 
-/* ---- Plots ---- */
-
-.plotBox {
-  position: relative;
-  display: block;
-  inline-size: var(--plot);
-  block-size: var(--plot);
+.letters {
+  display: inline-flex;
 }
 
-.plotSvg {
+.letter {
+  display: inline-block;
+}
+
+/* ---- Onion-skin lanes ---- */
+
+.lanes {
+  --track: 460px;
+
+  display: grid;
+  row-gap: var(--space-3xl);
+}
+
+[data-layout="tall"] .lanes {
+  --track: 190px;
+}
+
+.lane {
+  display: grid;
+  grid-template-columns: calc(var(--space-4xl) * 5) var(--track) auto;
+  align-items: center;
+  column-gap: var(--space-2xl);
+}
+
+[data-layout="tall"] .lane {
+  grid-template-areas:
+    "name name"
+    "track plot";
+  grid-template-columns: var(--track) auto;
+  row-gap: var(--space-sm);
+}
+
+[data-layout="tall"] .laneName {
+  grid-area: name;
+}
+
+.laneName {
+  display: grid;
+  row-gap: var(--space-xs);
+}
+
+.token {
+  color: var(--text-primary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+}
+
+.job {
+  color: var(--text-tertiary);
+  font-size: var(--typo-caption-size);
+}
+
+.track {
+  position: relative;
+  block-size: var(--space-2xl);
+}
+
+.post {
   position: absolute;
-  inset: 0;
-  inline-size: 100%;
-  block-size: 100%;
+  top: 0;
+  bottom: 0;
+  inline-size: 1.5px;
+  background: var(--line-strong);
+}
+
+.post[data-end="start"] {
+  left: 0;
+}
+
+.post[data-end="finish"] {
+  left: var(--track);
+  background: var(--accent);
+}
+
+.ghost,
+.puck {
+  position: absolute;
+  top: 50%;
+  border-radius: var(--radius-pill);
+  translate: -50% -50%;
+}
+
+.ghost {
+  left: calc(var(--track) * var(--p));
+  inline-size: var(--space-md);
+  block-size: var(--space-md);
+  border: 1.5px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.puck {
+  left: 0;
+  inline-size: var(--space-lg);
+  block-size: var(--space-lg);
+  background: var(--accent);
+}
+
+.puck[data-home] {
+  left: var(--track);
+}
+
+.plot {
+  inline-size: var(--space-4xl);
+  block-size: var(--space-4xl);
   overflow: visible;
 }
 
-.axis {
+.plotAxis,
+.plotCurve {
   fill: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.plotAxis {
   stroke: var(--line-strong);
-  stroke-width: 1.5;
 }
 
-.curve {
-  fill: none;
+.plotCurve {
   stroke: var(--accent);
-  stroke-dasharray: 220px 220px;
-  stroke-width: 2.5;
+  stroke-width: 2;
 }
 
-/* The dot runs the curve: its box moves in time along x, the dot on the easing along y. */
-.dotX {
+/* ---- The metronome: a tick every beat along the bottom edge ---- */
+
+.metro {
   position: absolute;
-  bottom: 0;
+  right: var(--grid-margin);
+  bottom: var(--space-md);
+  left: var(--grid-margin);
+  block-size: var(--space-md);
+  opacity: 0.7;
+}
+
+.ticks {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+      to right,
+      var(--line-strong) 0 1px,
+      transparent 1px
+    )
+    0 0 / calc(100% / 24) 100%;
+}
+
+.beat {
+  position: absolute;
+  top: 0;
   left: 0;
-  inline-size: 0;
-  block-size: 0;
-  opacity: 0;
+  inline-size: calc(100% / 24);
+  block-size: 100%;
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--accent) 70%, transparent);
+  animation: metronome calc(var(--hero-beat) * 24) steps(24) infinite;
 }
 
-.dot {
-  position: absolute;
-  top: calc(var(--space-xs) * -1);
-  left: calc(var(--space-xs) * -1);
-  inline-size: var(--space-sm);
-  block-size: var(--space-sm);
-  border-radius: var(--radius-pill);
-  background: var(--accent);
-  box-shadow: 0 0 0 var(--space-xs)
-    color-mix(in srgb, var(--accent) 25%, transparent);
+@keyframes metronome {
+  to {
+    transform: translateX(2400%);
+  }
 }
 
-/* ---- The field ---- */
+/* ---- In fast, out faster ---- */
 
-.field {
+.menuRow {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--control-height-md);
+  padding-inline: var(--space-sm);
+}
+
+.exits {
   display: grid;
-  align-content: center;
-  row-gap: var(--space-2xl);
-  padding: var(--space-xl);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-popover);
-  background: var(--surface-raised);
+  row-gap: var(--space-3xl);
 }
 
-.caption,
-.plotName,
-.barName,
-.barValue {
+.exitLane {
+  display: grid;
+  grid-template-columns:
+    calc(var(--space-4xl) * 6) calc(var(--space-4xl) * 4.5)
+    auto;
+  align-items: center;
+  column-gap: var(--space-2xl);
+}
+
+[data-layout="tall"] .exitLane {
+  grid-template-columns: auto;
+  row-gap: var(--space-sm);
+}
+
+.exitLabel,
+.noteValue,
+.realTag,
+.twinTitle,
+.rollName {
   color: var(--text-tertiary);
   font: var(--font-code);
   font-size: var(--typo-caption-size);
   white-space: nowrap;
 }
 
-.plots {
+.exitStage,
+.menuWrap {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-lg) var(--space-md);
 }
 
-.plotCell {
-  display: grid;
-  justify-items: center;
-  row-gap: var(--space-sm);
-  min-width: 0;
-}
-
-.bars {
-  display: grid;
-  row-gap: var(--space-sm);
-}
-
-.barRow {
-  display: grid;
-  grid-template-columns: 9em minmax(0, 1fr) auto;
-  column-gap: var(--space-md);
+.noteRow {
+  display: flex;
   align-items: center;
+  gap: var(--space-md);
 }
 
-.barPair {
+.note {
+  block-size: var(--space-md);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+.realTag {
+  color: var(--accent);
+}
+
+/* ---- The score ---- */
+
+.score {
   display: grid;
-  row-gap: 2px;
+  grid-template-columns: calc(var(--space-4xl) * 11) calc(var(--space-4xl) * 11);
+  align-items: end;
+  column-gap: var(--space-4xl);
+}
+
+[data-layout="tall"] .score {
+  grid-template-columns: calc(var(--canvas-w) - var(--grid-margin) * 2);
+  row-gap: var(--space-2xl);
+}
+
+.turn {
+  display: grid;
+  row-gap: var(--space-md);
+}
+
+.thinkRow {
+  display: flex;
+}
+
+.think {
+  display: inline-grid;
+}
+
+.replyLine {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.check,
+.send {
+  display: inline-grid;
+}
+
+.noticeSlot {
+  display: grid;
+}
+
+.roll {
+  position: relative;
+  display: grid;
+  row-gap: var(--space-md);
+}
+
+.rollLane {
+  display: grid;
+  grid-template-columns: calc(var(--space-4xl) * 2.2) minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--space-md);
+}
+
+.rollTrack {
+  position: relative;
+  block-size: var(--space-md);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--line) 50%, transparent);
 }
 
 .bar {
-  display: block;
-  max-inline-size: 100%;
-  block-size: var(--space-sm);
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--l) * 100%);
+  inline-size: calc(var(--w) * 100%);
+  border-radius: var(--radius-pill);
   background: var(--accent);
-  transform-origin: 0 50%;
 }
 
-.bar[data-kind="exit"] {
-  background: color-mix(in srgb, var(--accent) 45%, transparent);
+.playhead {
+  position: absolute;
+  inset: calc(var(--space-sm) * -1) 0 calc(var(--space-sm) * -1)
+    calc(var(--space-4xl) * 2.2 + var(--space-md));
+  border-left: 2px solid var(--text-primary);
 }
 
-/* ---- Reduced motion scene ---- */
+/* ---- Twins ---- */
 
-.reduce {
+.twins {
   display: grid;
-  justify-items: center;
-  row-gap: var(--space-xl);
-  inline-size: calc(var(--col) * 5);
+  grid-template-columns: repeat(2, calc(var(--space-4xl) * 8.5));
+  column-gap: var(--space-4xl);
 }
 
-.modeStack {
-  display: inline-grid;
-  color: var(--text-tertiary);
-  font: var(--font-code);
-  font-size: var(--typo-caption-size);
+[data-layout="tall"] .twins {
+  grid-template-columns: calc(var(--canvas-w) - var(--grid-margin) * 2);
+  row-gap: var(--space-2xl);
 }
 
-.modeLayer {
-  grid-area: 1 / 1;
-}
-
-.modeLayer + .modeLayer {
-  opacity: 0;
-}
-
-.toastSlot {
+.twin {
   display: grid;
-  inline-size: 100%;
+  align-content: start;
+  row-gap: var(--space-md);
 }
 
-.toastMove {
+.twinBars {
   display: grid;
-}
-
-/* ---- Components and poster ---- */
-
-/* The component with its curve beside it (below it when the column is narrow). */
-.stageRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-md) var(--space-xl);
-}
-
-.stageRow > :first-child {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.mover {
-  display: grid;
-  min-inline-size: min(100%, calc(var(--control-height-md) * 8));
-}
-
-.menuRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  min-block-size: var(--control-height-md);
-  padding-inline: var(--space-sm);
-}
-
-.product {
-  grid-template-areas:
-    "menu dialog"
-    "toast dialog"
-    "press dialog";
-  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
-  align-content: space-between;
-  gap: var(--space-xl) var(--grid-gutter);
-}
-
-[data-layout="tall"] [data-cell] .plots {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-/* Tall: each duration's name over its bars and value. */
-[data-layout="tall"] .barRow {
-  grid-template-columns: minmax(0, 1fr) auto;
   row-gap: var(--space-xs);
 }
 
-[data-layout="tall"] .barName {
-  grid-column: 1 / -1;
-}
-
-.screenPage {
-  display: none;
-}
-
-/* Tall: the toast on a phone-sized page that fills the portrait frame. */
-[data-layout="tall"] .reduce {
-  box-sizing: border-box;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  justify-items: stretch;
-  inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
-  block-size: calc(var(--canvas-h) - var(--grid-margin) * 4);
-  padding: var(--space-xl);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-composer);
-  background: var(--color-surface-base);
-}
-
-[data-layout="tall"] .modeStack {
-  justify-self: center;
-  font-size: var(--typo-body-size);
-}
-
-[data-layout="tall"] .screenPage {
-  display: grid;
-  align-content: start;
-  row-gap: var(--space-lg);
-}
-
-.screenLine {
-  block-size: var(--space-4xl);
-  border-radius: var(--radius-panel);
-  background: var(--surface-raised);
-}
-
-.screenLine:nth-child(3n + 1) {
-  inline-size: 70%;
-  block-size: var(--space-lg);
+.twinBar {
+  block-size: var(--space-sm);
   border-radius: var(--radius-pill);
+  background: var(--accent);
 }
 
-[data-layout="tall"] .product {
-  grid-template-areas:
-    "menu"
-    "dialog"
-    "toast"
-    "press";
-  grid-template-columns: minmax(0, 1fr);
-  align-content: start;
-  row-gap: var(--space-lg);
+.twinBar[data-kind="travel"] {
+  inline-size: calc(var(--space-4xl) * 3);
 }
 
-/* The tall field scene (a prelude region) takes the portrait column's width;
-   the poster keeps three plots a row, a compact summary beside the components. */
-[data-layout="tall"] [data-cell] > .field {
-  box-sizing: border-box;
-  inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
+.twinBar[data-kind="rise"] {
+  inline-size: calc(var(--space-4xl) * 2);
 }
 
-[data-layout="tall"] [data-t="field-mover"] .field {
-  row-gap: var(--space-lg);
-  padding: var(--space-md) var(--space-sm);
-}
-
-[data-layout="tall"] [data-t="field-mover"] .plots {
-  gap: var(--space-sm);
-}
-
-[data-layout="tall"] [data-t="field-mover"] .plotBox {
+.twinBar[data-kind="pop"] {
   inline-size: var(--space-4xl);
-  block-size: var(--space-4xl);
 }
 
-[data-layout="tall"] [data-t="field-mover"] .plotName {
-  font-size: var(--font-size-1);
+/* Reduced: the travel and the pop are gone; only the fade remains, flat. */
+.twin[data-reduced] .twinBar {
+  block-size: 2px;
+  opacity: 0.6;
+}
+
+/* ---- Spring ---- */
+
+.spring {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space-4xl) * 2);
+}
+
+.switchStack {
+  display: inline-grid;
+  scale: 2;
+}
+
+[data-layout="tall"] .spring {
+  flex-direction: column;
+  gap: calc(var(--space-4xl) * 1.5);
+}
+
+.switchLayer {
+  display: inline-grid;
+  grid-area: 1 / 1;
+}
+
+.liftCard {
+  display: inline-grid;
+}
+
+.liftCard[data-lifted] {
+  scale: 1.02;
+  box-shadow: var(--shadow-drag-lift);
+}
+
+/* In the poster the twins and the score fill their tiles. */
+[data-tile] .twins {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  inline-size: 100%;
+}
+
+[data-tile] .score {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  inline-size: 100%;
+}
+
+[data-layout="tall"] [data-tile] .twins,
+[data-layout="tall"] [data-tile] .score {
+  grid-template-columns: minmax(0, 1fr);
 }
