@@ -925,7 +925,6 @@ dependencies = [
  "image",
  "indexmap 2.14.2",
  "lopdf",
- "nix",
  "parking_lot",
  "regex",
  "regress",

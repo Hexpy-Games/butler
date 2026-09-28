@@ -4,16 +4,14 @@ use std::{
     path::Path,
 };
 
-#[cfg(unix)]
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+use butler_platform::secure_fs;
 
 use super::{AutomationError, AutomationRecord, invalid, io_error};
 
 pub(super) fn read_record(path: &Path) -> Option<AutomationRecord> {
     let mut options = OpenOptions::new();
     options.read(true);
-    #[cfg(unix)]
-    options.custom_flags(nix::libc::O_NOFOLLOW | nix::libc::O_CLOEXEC);
+    secure_fs::no_follow(&mut options);
     let mut file = options.open(path).ok()?;
     if !file.metadata().ok()?.is_file() {
         return None;
@@ -40,10 +38,7 @@ pub(super) fn write_record(path: &Path, record: &AutomationRecord) -> Result<(),
     bytes.push(b'\n');
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
-    #[cfg(unix)]
-    options
-        .mode(0o600)
-        .custom_flags(nix::libc::O_NOFOLLOW | nix::libc::O_CLOEXEC);
+    secure_fs::no_follow(secure_fs::owner_only(&mut options));
     let mut file = options.open(&temporary).map_err(io_error)?;
     let result = (|| {
         use std::io::Write;
@@ -69,9 +64,7 @@ pub(super) fn ensure_store_directory(path: &Path) -> Result<(), AutomationError>
         Err(error) => return Err(io_error(error)),
     }
     let mut builder = fs::DirBuilder::new();
-    builder.recursive(true);
-    #[cfg(unix)]
-    builder.mode(0o700);
+    secure_fs::owner_only_dirs(builder.recursive(true));
     builder.create(path).map_err(io_error)?;
     let metadata = fs::symlink_metadata(path).map_err(io_error)?;
     if metadata.file_type().is_symlink() || !metadata.is_dir() {

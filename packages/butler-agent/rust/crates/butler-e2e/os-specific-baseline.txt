@@ -2,5 +2,6 @@
 # Move them behind butler-platform and regenerate: cargo run -p butler-source-check -- --bless .
 # Entries may only shrink or disappear; new entries need review.
 Cargo.toml	2
-src/e2e/agent.rs	3
+src/e2e/agent/process.rs	3
+tests/lifecycle_intent.rs	5
 tests/onboarding.rs	6

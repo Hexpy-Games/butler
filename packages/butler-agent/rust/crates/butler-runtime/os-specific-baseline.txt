@@ -1,6 +1,0 @@
-# Lines of OS-specific code outside crates/butler-platform, ratcheted by tools/source-check.
-# Move them behind butler-platform and regenerate: cargo run -p butler-source-check -- --bless .
-# Entries may only shrink or disappear; new entries need review.
-Cargo.toml	2
-src/operations/automation/store.rs	5
-src/operations/automation/store/persistence.rs	9
