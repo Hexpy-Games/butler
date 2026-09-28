@@ -8,7 +8,7 @@ use tokio_util::sync::CancellationToken;
 use super::{SystemIdentity, signals};
 use butler_memory::cognition::{
     CandidateInputRepairRequest, CognitionCode, CognitionError, CognitionPathEnvironment,
-    repair_memory_candidate_inputs,
+    RepairMode, repair_memory_candidate_inputs,
 };
 use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_models::models::ModelConfigurationClock;
@@ -35,7 +35,11 @@ pub(super) async fn run(
         coordinator,
         generation_id: generation,
         input_path: input,
-        dry_run,
+        mode: if dry_run {
+            RepairMode::Preview
+        } else {
+            RepairMode::Apply
+        },
         now: &now,
         cancellation: &cancellation,
     })
@@ -44,6 +48,6 @@ pub(super) async fn run(
     let _ = signal_task.await;
     result.map(|value| {
         json!({"operation":"repair-inputs","generationId":generation,
-        "repaired":value["repaired"],"receipts":value["receipts"]})
+        "repaired":value.repaired,"receipts":value.receipts})
     })
 }

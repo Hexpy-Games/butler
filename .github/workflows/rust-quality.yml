@@ -6,6 +6,11 @@ name: Rust quality
 #   protoc, no ONNX Runtime build.
 # - test (pushes to main, PRs into main, stacked PRs labelled `full-ci`):
 #   cargo-nextest over the workspace with the static ONNX Runtime.
+# - linux-clippy (every PR) and linux-test (as test): the same clippy passes
+#   and tests on Linux x64 and arm64, each with its own pinned ORT cache;
+#   non-blocking until the platform port lands.
+# - windows-check (every PR): `cargo check` for x86_64-pc-windows-msvc; it
+#   reports what does not compile yet and never fails the workflow.
 # Future tiers plug in the same way: an E2E stub tier is one more job here
 # (`uses: ./.github/actions/rust-agent-setup` with `native-deps: ort`, then
 # build the agent binary and run the stub scenarios), and the live tier (real
@@ -135,3 +140,156 @@ jobs:
           else
             echo "No documentation code blocks; no doctests to run."
           fi
+
+  # Portability tiers. The agent ships on macOS arm64 only; these jobs track
+  # how far the workspace is from building and passing on Linux and Windows.
+  # Format and source rules are platform-independent and stay in `source`.
+  # The Linux clippy and test steps are non-blocking (step continue-on-error:
+  # the job stays green, the step and its annotation show the failure) until
+  # the platform port (crates/butler-platform, stage 0 onward) fixes the known
+  # Linux failures; then drop continue-on-error and make the jobs required.
+  # Setup failures, including the ORT recipe, still fail the job.
+  linux-clippy:
+    name: Linux clippy (${{ matrix.target }}, ${{ matrix.pass }})
+    if: github.event.action != 'labeled' || github.event.label.name == 'full-ci'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [linux-x64, linux-arm64]
+        pass: [production, all-targets]
+        include:
+          - target: linux-x64
+            runner: ubuntu-latest
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+          - pass: production
+            targets: --lib --bins
+          - pass: all-targets
+            targets: --all-targets
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust and protoc
+        uses: ./.github/actions/rust-agent-setup
+        with:
+          components: clippy
+          native-deps: protoc
+          cache-key: clippy-${{ matrix.pass }}-${{ matrix.target }}
+
+      # --keep-going reports every crate that fails, not only the first.
+      - name: Run Clippy
+        continue-on-error: true
+        run: cargo clippy --workspace ${{ matrix.targets }} --locked --keep-going -- -D warnings
+
+  linux-test:
+    name: Linux tests (${{ matrix.target }})
+    if: >-
+      (github.event.action != 'labeled' || github.event.label.name == 'full-ci') &&
+      (github.event_name != 'pull_request' || github.base_ref == 'main' ||
+       contains(github.event.pull_request.labels.*.name, 'full-ci'))
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x64
+            runner: ubuntu-latest
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust and the static ONNX Runtime
+        uses: ./.github/actions/rust-agent-setup
+        with:
+          native-deps: ort
+          cache-key: test-${{ matrix.target }}
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: Build tests
+        id: build
+        continue-on-error: true
+        run: cargo nextest run --workspace --locked --no-run
+
+      - name: Run tests
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
+        run: cargo nextest run --workspace --locked --no-fail-fast
+
+  windows-check:
+    # Windows is not ported: the host and CLI are unix-only and main.rs prints
+    # "not yet available". This compile check only reports how far the
+    # workspace is from building; its failures never fail the workflow.
+    name: Windows compile check (x86_64-pc-windows-msvc)
+    if: github.event.action != 'labeled' || github.event.label.name == 'full-ci'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+        working-directory: packages/butler-agent/rust
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust and protoc
+        uses: ./.github/actions/rust-agent-setup
+        with:
+          native-deps: protoc
+          cache-key: windows-check
+
+      - name: Check the workspace
+        id: check
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          cargo check --workspace --locked --keep-going --target x86_64-pc-windows-msvc \
+            --message-format short 2>&1 | tee "$RUNNER_TEMP/windows-check.log"
+
+      # Groups the errors by crate, file and code so the port can be planned
+      # from the run summary.
+      - name: Summarize
+        if: always()
+        env:
+          OUTCOME: ${{ steps.check.outcome }}
+        run: |
+          python - "$RUNNER_TEMP/windows-check.log" >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          import collections, os, re, sys
+          pattern = re.compile(r"^(?P<file>[^:\s][^:]*):\d+:\d+: (?P<kind>error|warning)(?:\[(?P<code>\w+)\])?: (?P<text>.*)$")
+          errors, files, crates, codes = 0, collections.Counter(), collections.Counter(), collections.Counter()
+          failed = []
+          try:
+              lines = open(sys.argv[1], encoding="utf-8", errors="replace").read().splitlines()
+          except OSError:
+              lines = []
+          for line in lines:
+              if line.startswith("error: could not compile"):
+                  failed.append(line.removeprefix("error: could not compile ").strip())
+              match = pattern.match(line)
+              if not match or match["kind"] != "error":
+                  continue
+              path = match["file"].replace("\\", "/")
+              errors += 1
+              files[path] += 1
+              parts = path.split("/")
+              crates[parts[1] if parts[0] == "crates" and len(parts) > 1 else parts[0]] += 1
+              codes[match["code"] or match["text"][:60]] += 1
+          print("### Windows compile check (x86_64-pc-windows-msvc)")
+          print(f"Outcome: **{os.environ.get('OUTCOME', 'unknown')}**, {errors} errors.")
+          if failed:
+              print("\nCould not compile (crates that depend on these were not checked):\n")
+              print("\n".join(f"- {item}" for item in failed))
+          for title, counter, limit in (("crate", crates, 20), ("file", files, 40), ("error", codes, 20)):
+              if counter:
+                  print(f"\n| Errors | By {title} |\n| ---: | --- |")
+                  print("\n".join(f"| {count} | `{name}` |" for name, count in counter.most_common(limit)))
+          PY

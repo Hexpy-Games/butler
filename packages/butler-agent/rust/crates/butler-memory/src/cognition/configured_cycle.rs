@@ -1,5 +1,7 @@
 //! The four source-configured memory maintenance phases and their durable report.
 
+use crate::lenient::JsonField;
+use crate::lenient::set_field;
 use std::{
     future::Future,
     path::PathBuf,
@@ -17,10 +19,13 @@ use super::{
 };
 use crate::cognition::CognitionCode;
 
+/// The pending result of one configured phase.
 pub type ConfiguredPhaseFuture<'a> =
     Pin<Box<dyn Future<Output = CognitionResult<Value>> + Send + 'a>>;
 
+/// Runs the phases of the configured consolidation cycle.
 pub trait ConfiguredPhaseExecutor: Send + Sync {
+    /// Runs `phase`; its metrics, or the failure.
     fn run<'a>(
         &'a self,
         phase: ConfiguredPhase,
@@ -29,11 +34,16 @@ pub trait ConfiguredPhaseExecutor: Send + Sync {
     ) -> ConfiguredPhaseFuture<'a>;
 }
 
+/// Phases of the configured cycle, in run order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConfiguredPhase {
+    /// Catch up on unprojected conversation sources.
     Catchup,
+    /// Consolidate memory.
     Consolidate,
+    /// Optimize the vector store.
     Optimize,
+    /// Record memory health.
     Health,
 }
 
@@ -54,24 +64,30 @@ impl ConfiguredPhase {
     }
 }
 
+/// The configured cycle settings from `butler.config.json`.
 #[derive(Clone, Debug)]
 pub struct ConfiguredCycleOptions {
+    /// Whether the cycle runs.
     pub enabled: bool,
+    /// Time budget for the whole cycle, in milliseconds.
     pub total_budget_ms: u64,
     /// Parsed for parity with the source config, which records these soft
     /// subphase budgets but never enforces or emits them.
     pub subphase_budgets_ms: [u64; 4],
+    /// Activation decay applied by consolidation.
     pub activation_decay_d: f64,
+    /// Project capsules refreshed per cycle at most.
     pub project_capsule_refresh_limit: usize,
 }
 
 impl ConfiguredCycleOptions {
+    /// The settings in `data_root`, with defaults for anything missing.
     pub fn load(data_root: &std::path::Path) -> Self {
         let raw = std::fs::read(data_root.join("butler.config.json"))
             .ok()
             .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
             .unwrap_or(Value::Null);
-        let config = &raw["cognition"]["consolidationCycle"];
+        let config = &raw.field("cognition").field("consolidationCycle");
         let number = |key: &str, default| config[key].as_u64().unwrap_or(default);
         let sub = &config["subPhaseBudgetsMs"];
         Self {
@@ -92,16 +108,23 @@ impl ConfiguredCycleOptions {
     }
 }
 
+/// Outcome of a configured cycle.
 #[derive(Clone, Debug)]
 pub struct ConfiguredCycleResult {
+    /// Process exit code for the CLI.
     pub exit_code: u8,
+    /// The cycle did not run (disabled, or no active memory).
     pub skipped: bool,
+    /// Phases that ran.
     pub phases_run: usize,
+    /// Why the cycle stopped early, when it did.
     pub aborted: Option<&'static str>,
+    /// Phases that failed.
     pub failed_phases: Vec<&'static str>,
 }
 
 impl ConfiguredCycleResult {
+    /// The result of a cycle that did not run.
     pub fn skipped() -> Self {
         Self {
             exit_code: 0,
@@ -113,6 +136,7 @@ impl ConfiguredCycleResult {
     }
 }
 
+/// Runs the configured consolidation cycle within its time budget.
 pub struct ConfiguredCycleService {
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
@@ -120,6 +144,7 @@ pub struct ConfiguredCycleService {
 }
 
 impl ConfiguredCycleService {
+    /// A cycle service over `data_root`.
     pub fn new(
         data_root: PathBuf,
         paths: CognitionPathEnvironment,
@@ -132,6 +157,7 @@ impl ConfiguredCycleService {
         }
     }
 
+    /// Runs every phase in order unless the cycle is disabled, cancelled or out of budget.
     pub async fn run(
         &self,
         config: &ConfiguredCycleOptions,
@@ -220,7 +246,11 @@ fn now_ms() -> i64 {
 
 async fn append_event(data_root: PathBuf, root: PathBuf, mut event: Value) -> CognitionResult<()> {
     let now: chrono::DateTime<chrono::Utc> = SystemTime::now().into();
-    event["ts"] = json!(now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
+    set_field(
+        &mut event,
+        "ts",
+        json!(now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
+    );
     let path = root.join("logs").join(format!(
         "consolidation-cycle-{}.jsonl",
         now.format("%Y-%m-%d")
@@ -234,7 +264,11 @@ async fn append_summary(
     mut event: Value,
 ) -> CognitionResult<()> {
     let now: chrono::DateTime<chrono::Utc> = SystemTime::now().into();
-    event["ts"] = json!(now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
+    set_field(
+        &mut event,
+        "ts",
+        json!(now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
+    );
     append(data_root, root.join("run-summary.jsonl"), event).await
 }
 

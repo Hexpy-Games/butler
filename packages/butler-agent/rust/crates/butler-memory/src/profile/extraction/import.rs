@@ -1,19 +1,26 @@
+//! Third-party profile import: another assistant's export, read by the
+//! extractor into candidates that cite the import, with a manifest that
+//! later vouches for them.
+
 use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
 
-use serde_json::{Value, json};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
 use super::super::contracts::*;
 use super::super::{candidates, extractor_config, storage};
+use super::types::ExtractedCandidate;
 use super::{Dependencies, parser, prompt, runtime};
 use crate::profile::ProfileCode;
 use butler_core::json::Utf16Prefix;
 use butler_models::models::{ProviderPromptLifecycle, ProviderPromptRequest};
 
+/// Imports another assistant's profile export as candidates, then
+/// consolidates the profile.
 pub(super) async fn run(
     dependencies: Dependencies,
     options: ProfileThirdPartyImportOptions,
@@ -27,60 +34,116 @@ pub(super) async fn run(
     .await?;
     if consent.mode == ProfilingMode::Off {
         let stable = stable_count(&dependencies).await?;
-        return Ok(base(
-            false,
-            consent.mode,
-            source,
-            None,
-            model_config,
-            stable,
-        ));
+        return Ok(base(consent.mode, source, None, model_config, stable));
     }
-    let normalized = normalize_text(&options.text);
-    let hash = import_hash(&source, &normalized);
-    let import_id = format!("third_party_profile_import:{source}:{hash}");
-    if normalized.is_empty() {
+    let text = normalize_text(&options.text);
+    let hash = import_hash(&source, &text);
+    let id = format!("third_party_profile_import:{source}:{hash}");
+    if text.is_empty() {
         let stable = stable_count(&dependencies).await?;
-        return Ok(base(
-            true,
-            consent.mode,
-            source,
-            Some(import_id),
-            model_config,
-            stable,
-        ));
+        return Ok(base(consent.mode, source, Some(id), model_config, stable));
     }
-    let model = options
-        .model
-        .as_deref()
-        .map(butler_core::public_text::trim_js_whitespace)
-        .filter(|value| !value.is_empty())
-        .map(|value| butler_models::models::parse_model_ref(value).canonical_ref)
-        .unwrap_or_else(|| model_config.effective_model.clone());
-    model_config.effective_model = model.clone();
-    let imported_at = match options.now_epoch_millis {
-        Some(value) => butler_core::js_date::format_date_value(value).ok_or_else(|| {
-            ProfileError::new(
-                ProfileCode::ProfileDataInvalid,
-                "Profile import time is invalid.",
-            )
-        })?,
-        None => dependencies.host.now_iso(),
+    model_config.effective_model =
+        runtime::chosen_model(options.model.as_deref(), &model_config.effective_model);
+    let import = Import {
+        source,
+        id,
+        hash,
+        text,
+        imported_at: import_time(&dependencies, options.now_epoch_millis)?,
+        fixed_time: options.now_epoch_millis.is_some(),
     };
-    let mut instructions = prompt::instructions(consent.mode);
+    let response = request_candidates(
+        &dependencies,
+        &import,
+        &model_config,
+        consent.mode,
+        cancellation,
+    )
+    .await?;
+    let allowed = HashSet::from([import.id.clone()]);
+    let extracted = parser::forgiving(&response, &allowed, consent.mode);
+    let ids = store_candidates(&dependencies, &import, extracted).await?;
+    write_import_manifest(&dependencies, &import, &ids).await?;
+    let consolidation = runtime::with_gate(&dependencies, None, {
+        let root = dependencies.root.clone();
+        let sources = dependencies.sources.clone();
+        let now = dependencies.host.now_iso();
+        let now_ms = dependencies.host.now_epoch_millis();
+        move || candidates::consolidate(&root, sources.as_ref(), consent.mode, &now, now_ms)
+    })
+    .await?;
+    Ok(ProfileThirdPartyImportResult {
+        profiling_enabled: true,
+        mode: consent.mode,
+        source: import.source,
+        import_id: Some(import.id),
+        imported_candidate_count: ids.len(),
+        promoted_count: consolidation.promoted_count,
+        skipped_count: consolidation.skipped_count,
+        stable_entry_count: consolidation.stable_entry_count,
+        projection_written: consolidation.projection_written,
+        raw_text_included: false,
+        extractor_model: model_config,
+        model_called: true,
+        fallback_used: false,
+        model_error: None,
+    })
+}
+
+/// The caller's fixed import time, or now.
+fn import_time(dependencies: &Dependencies, fixed: Option<f64>) -> ProfileResult<String> {
+    let Some(value) = fixed else {
+        return Ok(dependencies.host.now_iso());
+    };
+    butler_core::js_date::format_date_value(value).ok_or_else(|| {
+        ProfileError::new(
+            ProfileCode::ProfileDataInvalid,
+            "Profile import time is invalid.",
+        )
+    })
+}
+
+/// One third-party export being imported.
+struct Import {
+    source: String,
+    /// The evidence ref every imported candidate cites.
+    id: String,
+    hash: String,
+    text: Utf16Prefix<'static>,
+    imported_at: String,
+    /// The caller fixed the import time, so candidates use it too.
+    fixed_time: bool,
+}
+
+/// Asks the extractor for candidates in the export; the raw response text.
+async fn request_candidates(
+    dependencies: &Dependencies,
+    import: &Import,
+    model_config: &ProfilingExtractorModelSnapshot,
+    mode: ProfilingMode,
+    cancellation: CancellationToken,
+) -> ProfileResult<String> {
+    let mut instructions = prompt::instructions(mode);
     instructions.push_str("\nThe input is a user-provided export from another AI assistant, not a Butler transcript.\nTreat claims as third-party imported profile candidates. Prefer source_type inference unless the export clearly says the user explicitly stated or confirmed the point.\nDo not copy raw import text into summaries.");
-    let prompt = import_prompt(&source, &import_id, &normalized, consent.mode, &imported_at)?;
+    let prompt = import_prompt(
+        &import.source,
+        &import.id,
+        &import.text,
+        mode,
+        &import.imported_at,
+    )?;
     let attachments = [];
     let root_text = dependencies.root.to_string_lossy().into_owned();
     let request = ProviderPromptRequest {
         prompt: &prompt,
-        model: Some(&model),
+        model: Some(&model_config.effective_model),
         reasoning_effort: Some(&runtime::reasoning(&model_config.reasoning_effort)),
         instructions: Some(&instructions),
         response_format: None,
         cache_scope: Some("profile-extractor"),
         cache_boundary: None,
-        cancellation: cancellation.clone(),
+        cancellation,
         attachments: &attachments,
         butler_data: Some(&root_text),
         usage_attribution: None,
@@ -98,22 +161,31 @@ pub(super) async fn run(
             )
             .with_source(source)
         })?;
-    let allowed = HashSet::from([import_id.clone()]);
-    let extracted = parser::forgiving(&response.text, &allowed, consent.mode);
+    Ok(response.text)
+}
+
+/// Merges each extracted candidate into the store, citing the import; the
+/// ids of the stored candidates.
+async fn store_candidates(
+    dependencies: &Dependencies,
+    import: &Import,
+    extracted: Vec<ExtractedCandidate>,
+) -> ProfileResult<HashSet<String>> {
     let mut ids = HashSet::new();
     for candidate in extracted {
         let root = dependencies.root.clone();
-        let now = options
-            .now_epoch_millis
-            .map(|_| imported_at.clone())
-            .unwrap_or_else(|| dependencies.host.now_iso());
-        let evidence = import_id.clone();
+        let now = if import.fixed_time {
+            import.imported_at.clone()
+        } else {
+            dependencies.host.now_iso()
+        };
+        let evidence = import.id.clone();
         let record = runtime::blocking(move || {
             candidates::upsert(
                 &root,
                 &ProfileCandidateInput {
                     category: candidate.category,
-                    payload: candidate.payload,
+                    draft: candidate.draft,
                     source_type: candidate.source_type,
                     confidence: candidate.confidence,
                     sensitive_domain: candidate.sensitive_domain,
@@ -129,39 +201,31 @@ pub(super) async fn run(
             ids.insert(record.id);
         }
     }
+    Ok(ids)
+}
+
+async fn write_import_manifest(
+    dependencies: &Dependencies,
+    import: &Import,
+    ids: &HashSet<String>,
+) -> ProfileResult<()> {
     let mut candidate_ids = ids.iter().cloned().collect::<Vec<_>>();
     candidate_ids.sort_by(|left, right| left.encode_utf16().cmp(right.encode_utf16()));
-    let manifest = json!({"import_id":import_id,"source":source,"imported_at":imported_at,"text_sha256":hash,"input_chars":normalized.len_utf16(),"candidate_ids":candidate_ids,"raw_text_included":false});
+    let manifest = write_manifest_text(&ImportManifest {
+        import_id: &import.id,
+        source: &import.source,
+        imported_at: &import.imported_at,
+        text_sha256: &import.hash,
+        input_chars: import.text.len_utf16(),
+        candidate_ids,
+        raw_text_included: false,
+    });
     runtime::blocking({
         let root = dependencies.root.clone();
-        let hash = hash.clone();
-        move || write_manifest(&root, &hash, &manifest)
+        let hash = import.hash.clone();
+        move || write_manifest(&root, &hash, &manifest?)
     })
-    .await?;
-    let consolidation = runtime::with_gate(&dependencies, None, {
-        let root = dependencies.root.clone();
-        let sources = dependencies.sources.clone();
-        let now = dependencies.host.now_iso();
-        let now_ms = dependencies.host.now_epoch_millis();
-        move || candidates::consolidate(&root, sources.as_ref(), consent.mode, &now, now_ms)
-    })
-    .await?;
-    Ok(ProfileThirdPartyImportResult {
-        profiling_enabled: true,
-        mode: consent.mode,
-        source,
-        import_id: Some(import_id),
-        imported_candidate_count: ids.len(),
-        promoted_count: consolidation.promoted_count,
-        skipped_count: consolidation.skipped_count,
-        stable_entry_count: consolidation.stable_entry_count,
-        projection_written: consolidation.projection_written,
-        raw_text_included: false,
-        extractor_model: model_config,
-        model_called: true,
-        fallback_used: false,
-        model_error: None,
-    })
+    .await
 }
 
 async fn stable_count(dependencies: &Dependencies) -> ProfileResult<usize> {
@@ -227,7 +291,29 @@ fn import_prompt(
         mode.as_str()
     ))
 }
-fn write_manifest(root: &Path, hash: &str, value: &Value) -> ProfileResult<()> {
+/// The manifest written for each third-party import; eligibility checks it
+/// before trusting an entry that cites the import.
+#[derive(Serialize)]
+struct ImportManifest<'a> {
+    import_id: &'a str,
+    source: &'a str,
+    imported_at: &'a str,
+    text_sha256: &'a str,
+    input_chars: usize,
+    candidate_ids: Vec<String>,
+    raw_text_included: bool,
+}
+
+fn write_manifest_text(manifest: &ImportManifest<'_>) -> ProfileResult<String> {
+    let mut bytes = serde_json::to_string_pretty(manifest).map_err(|source| {
+        ProfileError::new(ProfileCode::ProfileDataInvalid, "Profile data is invalid.")
+            .with_source(source)
+    })?;
+    bytes.push('\n');
+    Ok(bytes)
+}
+
+fn write_manifest(root: &Path, hash: &str, bytes: &str) -> ProfileResult<()> {
     let directory = root.join("personalization/profile-imports");
     create_private_directory(&directory).map_err(|source| {
         ProfileError::new(
@@ -236,11 +322,6 @@ fn write_manifest(root: &Path, hash: &str, value: &Value) -> ProfileResult<()> {
         )
         .with_source(source)
     })?;
-    let mut bytes = serde_json::to_string_pretty(value).map_err(|source| {
-        ProfileError::new(ProfileCode::ProfileDataInvalid, "Profile data is invalid.")
-            .with_source(source)
-    })?;
-    bytes.push('\n');
     let path = directory.join(format!("{hash}.json"));
     let mut file = private_manifest_file(&path).map_err(|source| {
         ProfileError::new(
@@ -288,7 +369,6 @@ fn private_manifest_file(path: &Path) -> std::io::Result<fs::File> {
     options.open(path)
 }
 fn base(
-    enabled: bool,
     mode: ProfilingMode,
     source: String,
     id: Option<String>,
@@ -296,7 +376,7 @@ fn base(
     stable: usize,
 ) -> ProfileThirdPartyImportResult {
     ProfileThirdPartyImportResult {
-        profiling_enabled: enabled,
+        profiling_enabled: mode != ProfilingMode::Off,
         mode,
         source,
         import_id: id,

@@ -1,4 +1,6 @@
-use serde_json::{Value, json};
+//! Model usage of a briefing run and its estimated cost.
+
+use serde::Serialize;
 
 use butler_models::models::PromptUsageReport;
 
@@ -42,20 +44,41 @@ impl Usage {
         }
     }
 
-    pub(super) fn value(&self) -> Value {
+    pub(super) fn summary(self) -> UsageSummary {
         let uncached = (self.prompt - self.cached).max(0.0);
         let credits =
             round((uncached * 125.0 + self.cached * 12.5 + self.output * 750.0) / 1_000_000.0);
         let usd = round((uncached * 5.0 + self.cached * 0.5 + self.output * 30.0) / 1_000_000.0);
-        json!({
-            "request_count":self.requests, "prompt_tokens":self.prompt,
-            "cached_input_tokens":self.cached, "uncached_input_tokens":uncached,
-            "output_tokens":self.output, "total_tokens":self.total,
-            "models":self.models,
-            "estimated_codex_5_5_credits":credits, "estimated_api_gpt_5_5_usd":usd,
-            "rate_source":"openai_codex_rate_card_2026_05", "raw_text_included":false,
-        })
+        UsageSummary {
+            request_count: self.requests,
+            prompt_tokens: self.prompt,
+            cached_input_tokens: self.cached,
+            uncached_input_tokens: uncached,
+            output_tokens: self.output,
+            total_tokens: self.total,
+            models: self.models,
+            estimated_codex_5_5_credits: credits,
+            estimated_api_gpt_5_5_usd: usd,
+            rate_source: "openai_codex_rate_card_2026_05",
+            raw_text_included: false,
+        }
     }
+}
+
+/// Model usage of a briefing run with its estimated cost.
+#[derive(Serialize)]
+pub(super) struct UsageSummary {
+    request_count: u64,
+    prompt_tokens: f64,
+    cached_input_tokens: f64,
+    uncached_input_tokens: f64,
+    output_tokens: f64,
+    total_tokens: f64,
+    models: Vec<String>,
+    estimated_codex_5_5_credits: f64,
+    estimated_api_gpt_5_5_usd: f64,
+    rate_source: &'static str,
+    raw_text_included: bool,
 }
 
 fn round(value: f64) -> f64 {

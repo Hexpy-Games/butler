@@ -1,5 +1,6 @@
 //! Read-only feedback quality exclusions for source-backed recall.
 
+use crate::lenient::JsonField;
 use std::{
     collections::{HashMap, HashSet},
     fs,
@@ -49,23 +50,23 @@ pub(in crate::cognition) fn excluded_source_ids(
         .collect::<HashMap<_, _>>();
     let mut excluded = HashSet::new();
     for operation in operations {
-        if operation["intent"] != "exclude" || operation["status"] == "stale" {
+        if operation.field("intent") != "exclude" || operation.field("status") == "stale" {
             continue;
         }
-        let Some(source_ref) = operation["source_ref"].as_str() else {
+        let Some(source_ref) = operation.field("source_ref").as_str() else {
             continue;
         };
         let Some(source) = source_by_id.get(source_ref) else {
             continue;
         };
-        if operation["episode_id"] != source.episode_id
-            || operation["target_revision"] != source.revision
-            || operation["source_revision"] != source.revision
-            || operation["source_hash"] != source.content_hash
+        if operation.field("episode_id") != source.episode_id
+            || operation.field("target_revision") != source.revision
+            || operation.field("source_revision") != source.revision
+            || operation.field("source_hash") != source.content_hash
         {
             continue;
         }
-        let Some(operation_id) = operation["operation_id"].as_str() else {
+        let Some(operation_id) = operation.field("operation_id").as_str() else {
             continue;
         };
         let receipt = read_receipt(operation_id)?;
@@ -76,17 +77,17 @@ pub(in crate::cognition) fn excluded_source_ids(
             excluded.insert(source_ref.to_owned());
             continue;
         }
-        if operation["status"] == "applied" {
+        if operation.field("status") == "applied" {
             excluded.insert(source_ref.to_owned());
             continue;
         }
-        let Some(feedback_id) = operation["feedback_id"].as_str() else {
+        let Some(feedback_id) = operation.field("feedback_id").as_str() else {
             continue;
         };
-        if operation["status"] == "pending"
+        if operation.field("status") == "pending"
             && owners
                 .get(feedback_id)
-                .is_some_and(|owner| operation["feedback_owner_revision"] == owner.revision)
+                .is_some_and(|owner| *operation.field("feedback_owner_revision") == owner.revision)
         {
             excluded.insert(source_ref.to_owned());
         }
@@ -104,7 +105,7 @@ fn read_operations(path: &Path) -> CognitionResult<Vec<Value>> {
         .lines()
         .filter_map(|line| {
             let value: Value = serde_json::from_str(line).ok()?;
-            (value["schema"] == "butler.memory-source-quality-operation.v1").then_some(value)
+            (value.field("schema") == "butler.memory-source-quality-operation.v1").then_some(value)
         })
         .collect())
 }
@@ -169,12 +170,12 @@ fn receipt_matches(operation: &Value, raw: &str) -> bool {
     let Ok(receipt) = serde_json::from_str::<Value>(raw) else {
         return false;
     };
-    receipt["status"] == "applied"
-        && receipt["source_ref"] == operation["source_ref"]
-        && receipt["source_hash"] == operation["source_hash"]
-        && receipt["episode_id"] == operation["episode_id"]
-        && receipt["revision"] == operation["target_revision"]
-        && receipt["feedback_owner_revision"] == operation["feedback_owner_revision"]
+    receipt.field("status") == "applied"
+        && receipt.field("source_ref") == operation.field("source_ref")
+        && receipt.field("source_hash") == operation.field("source_hash")
+        && receipt.field("episode_id") == operation.field("episode_id")
+        && receipt.field("revision") == operation.field("target_revision")
+        && receipt.field("feedback_owner_revision") == operation.field("feedback_owner_revision")
 }
 
 fn unavailable(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {

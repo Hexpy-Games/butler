@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use serde_json::{Value, json};
+use serde::Serialize;
 
 use crate::work_records::read::ReadAvailability;
 use crate::work_records::{WorkRecordReadError, read};
@@ -11,37 +11,82 @@ use butler_core::public_text::trim_js_whitespace as trim;
 
 use super::evidence;
 
+/// The newest 25 task summaries and the status counts of every task.
 pub(super) struct Tasks {
-    pub items: Vec<Value>,
+    pub items: Vec<TaskSummary>,
     pub health_running: usize,
     pub health_recoverable: usize,
     pub health_failed: usize,
+}
+
+/// One task as TaskStore.summaries reports it.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "mirrors the serialized task summary field for field"
+)]
+#[derive(Clone, Debug, Serialize)]
+pub(super) struct TaskSummary {
+    pub task_id: String,
+    pub status: &'static str,
+    pub task_type: &'static str,
+    pub planned_status: Option<&'static str>,
+    pub public_report_ready: bool,
+    pub work_mode: &'static str,
+    pub safe_to_report: bool,
+    pub completion_claim_allowed: bool,
+    pub guard_reason: Option<&'static str>,
+    pub user_summary: String,
+    pub next_step: &'static str,
+    pub has_result: bool,
+    pub has_observed_result: bool,
+    pub has_log: bool,
+    pub can_resume: bool,
+}
+
+/// The `butler task list/show` view of a task summary.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "mirrors the serialized CLI summary field for field"
+)]
+#[derive(Serialize)]
+pub(super) struct CliSummary {
+    task_id: String,
+    task_type: &'static str,
+    status: &'static str,
+    planned_status: Option<&'static str>,
+    work_mode: &'static str,
+    safe_to_report: bool,
+    completion_claim_allowed: bool,
+    can_resume: bool,
+    user_summary: String,
+    next_step: &'static str,
+    guard_reason: Option<&'static str>,
+    has_result: bool,
+    has_log: bool,
 }
 
 pub(super) fn summaries(
     root: &Path,
     collation: &LocaleCollation,
 ) -> Result<Tasks, WorkRecordReadError> {
+    let mut tasks = Tasks {
+        items: Vec::with_capacity(25),
+        health_running: 0,
+        health_recoverable: 0,
+        health_failed: 0,
+    };
     if !root.exists() {
-        return Ok(Tasks {
-            items: vec![],
-            health_running: 0,
-            health_recoverable: 0,
-            health_failed: 0,
-        });
+        return Ok(tasks);
     }
     let mut names = Vec::new();
-    let mut running = 0;
-    let mut recoverable = 0;
-    let mut failed = 0;
     for entry in std::fs::read_dir(root)? {
         let entry = entry?;
         let name = entry.file_name().to_string_lossy().into_owned();
         let directory = entry.path();
         match read_text(&directory.join("status")).as_str() {
-            "RUNNING" => running += 1,
-            "RECOVERABLE" => recoverable += 1,
-            "FAILED" => failed += 1,
+            "RUNNING" => tasks.health_running += 1,
+            "RECOVERABLE" => tasks.health_recoverable += 1,
+            "FAILED" => tasks.health_failed += 1,
             _ => {}
         }
         if directory.join("status").exists() {
@@ -49,48 +94,42 @@ pub(super) fn summaries(
         }
     }
     names.sort_by(|a, b| collation.compare(b, a));
-    let mut items = Vec::with_capacity(25);
     for name in names {
-        if items.len() == 25 {
+        if tasks.items.len() == 25 {
             break;
         }
         let directory = root.join(&name);
         if !directory.exists() {
             continue;
         }
-        items.push(summary(&name, &directory)?);
+        tasks.items.push(summary(&name, &directory)?);
     }
-    Ok(Tasks {
-        items,
-        health_running: running,
-        health_recoverable: recoverable,
-        health_failed: failed,
-    })
+    Ok(tasks)
 }
 
+/// Summaries whose status (case-insensitively) or work mode is `status`.
 pub(super) fn cli_summaries(
     root: &Path,
     status: Option<&str>,
     collation: &LocaleCollation,
-) -> Result<Vec<Value>, WorkRecordReadError> {
+) -> Result<Vec<CliSummary>, WorkRecordReadError> {
     let tasks = summaries(root, collation)?;
     Ok(tasks
         .items
-        .iter()
+        .into_iter()
         .filter(|task| {
             status.is_none_or(|filter| {
-                text(task, "status").eq_ignore_ascii_case(filter)
-                    || text(task, "work_mode") == filter
+                task.status.eq_ignore_ascii_case(filter) || task.work_mode == filter
             })
         })
-        .map(cli_summary)
+        .map(|task| cli_summary(&task))
         .collect())
 }
 
 pub(super) fn cli_summary_by_id(
     root: &Path,
     id: &str,
-) -> Result<Option<Value>, WorkRecordReadError> {
+) -> Result<Option<CliSummary>, WorkRecordReadError> {
     let directory = root.join(id);
     if !directory.join("status").exists() {
         return Ok(None);
@@ -99,13 +138,10 @@ pub(super) fn cli_summary_by_id(
     Ok(Some(cli_summary(&task)))
 }
 
-fn cli_summary(task: &Value) -> Value {
-    let status = text(task, "status");
-    let planned_status = task.get("planned_status").cloned().unwrap_or(Value::Null);
-    let summary_status = planned_status.as_str().unwrap_or(status);
-    let task_type = text(task, "task_type");
-    let work_mode = text(task, "work_mode");
-    let user_summary = match work_mode {
+fn cli_summary(task: &TaskSummary) -> CliSummary {
+    let summary_status = task.planned_status.unwrap_or(task.status);
+    let task_type = task.task_type;
+    let user_summary = match task.work_mode {
         "executing" => format!(
             "{task_type} work is recorded as executing ({summary_status}); current execution is unverified."
         ),
@@ -114,107 +150,129 @@ fn cli_summary(task: &Value) -> Value {
         "failed" => format!("{task_type} work needs failure review ({summary_status})."),
         _ => format!("{task_type} work state is {summary_status}."),
     };
-    json!({
-        "task_id": task.get("task_id"),
-        "task_type": task.get("task_type"),
-        "status": task.get("status"),
-        "planned_status": planned_status,
-        "work_mode": task.get("work_mode"),
-        "safe_to_report": task.get("safe_to_report"),
-        "completion_claim_allowed": task.get("completion_claim_allowed"),
-        "can_resume": task.get("can_resume"),
-        "user_summary": user_summary,
-        "next_step": task.get("next_step"),
-        "guard_reason": task.get("guard_reason"),
-        "has_result": task.get("has_result"),
-        "has_log": task.get("has_log"),
-    })
+    CliSummary {
+        task_id: task.task_id.clone(),
+        task_type,
+        status: task.status,
+        planned_status: task.planned_status,
+        work_mode: task.work_mode,
+        safe_to_report: task.safe_to_report,
+        completion_claim_allowed: task.completion_claim_allowed,
+        can_resume: task.can_resume,
+        user_summary,
+        next_step: task.next_step,
+        guard_reason: task.guard_reason,
+        has_result: task.has_result,
+        has_log: task.has_log,
+    }
 }
 
-fn summary(id: &str, directory: &Path) -> Result<Value, WorkRecordReadError> {
-    let raw_status = read_text(&directory.join("status"));
-    let status = normalize_status(&raw_status);
+fn summary(id: &str, directory: &Path) -> Result<TaskSummary, WorkRecordReadError> {
+    let status = normalize_status(&read_text(&directory.join("status")));
     let planned = read::snapshot(directory, ReadAvailability::BestEffort)?;
     let planned_status = planned
         .as_ref()
         .map(|record| normalize_planned(&record.status));
-    let plan = planned.as_ref().map(|record| &record.plan);
-    let review = planned.as_ref().and_then(|record| record.review.as_ref());
     let public_report = planned
         .as_ref()
         .is_some_and(|_| !read_text(&directory.join("public-report.md")).is_empty());
-    let origin = read_json(&directory.join("origin.json"));
-    let origin = origin.as_ref().filter(|origin| {
-        origin.get("version").and_then(Value::as_i64) == Some(1)
-            && origin
-                .get("origin_session_id")
-                .and_then(Value::as_str)
-                .is_some()
-            && origin.get("task_summary").and_then(Value::as_str).is_some()
-            && origin
-                .pointer("/transcript_ref/path")
-                .and_then(Value::as_str)
-                .is_some()
-    });
     let request = read_text(&directory.join("request.md"));
     let result = read_text(&directory.join("result.md"));
     let log = read_text(&directory.join("log.txt"));
-    let subject = origin
-        .and_then(|origin| origin.get("task_summary"))
-        .and_then(Value::as_str)
-        .filter(|s| !s.is_empty())
-        .or_else(|| {
-            plan.and_then(|plan| plan.get("goal"))
-                .and_then(Value::as_str)
-                .filter(|s| !s.is_empty())
-        })
-        .or_else(|| (!request.is_empty()).then_some(request.as_str()))
-        .map(str::to_owned)
-        .unwrap_or_else(|| format!("worker task {id}"));
-    let subject = compact(&subject, 160);
-    let user_summary = user_summary(&subject, status, planned_status);
-    let next_step = next_step(status, planned_status);
+    let subject = subject(id, directory, planned.as_ref(), &request);
     let safety = match planned_status {
-        Some(planned) => evidence::planned(planned, review),
+        Some(planned_status) => evidence::planned(
+            planned_status,
+            planned
+                .as_ref()
+                .and_then(|record| record.review.as_ref())
+                .and_then(read::ReviewFile::document)
+                .and_then(|review| review.verdict.valid())
+                .map(String::as_str),
+        ),
         None => evidence::direct(directory, status, &request),
     };
     let has_result = !result.is_empty();
-    let has_observed = has_result || has_shell_result(&log);
-    Ok(json!({
-        "task_id":id,"status":status,"task_type":if planned_status.is_some() {"planned"} else {"direct"},
-        "planned_status":planned_status,"public_report_ready":public_report,
-        "work_mode":safety.mode,"safe_to_report":safety.safe,
-        "completion_claim_allowed":safety.completion,"guard_reason":safety.guard,
-        "user_summary":user_summary,"next_step":next_step,
-        "has_result":has_result,"has_observed_result":has_observed,"has_log":!log.is_empty(),
-        "can_resume":status=="RECOVERABLE",
-    }))
+    Ok(TaskSummary {
+        task_id: id.to_owned(),
+        status,
+        task_type: if planned_status.is_some() {
+            "planned"
+        } else {
+            "direct"
+        },
+        planned_status,
+        public_report_ready: public_report,
+        work_mode: safety.mode,
+        safe_to_report: safety.safe,
+        completion_claim_allowed: safety.completion,
+        guard_reason: safety.guard,
+        user_summary: user_summary(&subject, status, planned_status),
+        next_step: next_step(status, planned_status),
+        has_result,
+        has_observed_result: has_result || has_shell_result(&log),
+        has_log: !log.is_empty(),
+        can_resume: status == "RECOVERABLE",
+    })
 }
 
-fn normalize_status(value: &str) -> &str {
+/// What the task is about: its origin summary, plan goal or request, at
+/// most 160 UTF-16 units.
+fn subject(id: &str, directory: &Path, planned: Option<&read::Snapshot>, request: &str) -> String {
+    let origin = std::fs::read(directory.join("origin.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+        .map(|value| crate::lenient::view::<read::Origin>(&value))
+        .filter(read::Origin::valid);
+    let subject = origin
+        .as_ref()
+        .and_then(|origin| origin.task_summary.as_deref())
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            planned
+                .and_then(|record| record.plan.goal.valid())
+                .map(String::as_str)
+                .filter(|s| !s.is_empty())
+        })
+        .or_else(|| (!request.is_empty()).then_some(request))
+        .map(str::to_owned)
+        .unwrap_or_else(|| format!("worker task {id}"));
+    compact(&subject, 160)
+}
+
+fn normalize_status(value: &str) -> &'static str {
     match value {
-        "APPROVED" | "RUNNING" | "DONE" | "FAILED" | "RECOVERABLE" | "REVIEWED" | "KILLED" => value,
+        "APPROVED" => "APPROVED",
+        "RUNNING" => "RUNNING",
+        "DONE" => "DONE",
+        "FAILED" => "FAILED",
+        "RECOVERABLE" => "RECOVERABLE",
+        "REVIEWED" => "REVIEWED",
+        "KILLED" => "KILLED",
         _ => "UNKNOWN",
     }
 }
-fn normalize_planned(value: &str) -> &str {
-    match value {
-        "PLANNED"
-        | "PLANNED_RUNNING"
-        | "WORKER_DONE"
-        | "WORKER_FAILED"
-        | "REVIEWING"
-        | "REVIEW_PASSED"
-        | "REVIEW_FAILED"
-        | "REVIEW_INCONCLUSIVE"
-        | "REPAIRING"
-        | "PUBLIC_REPORT_READY"
-        | "FAILED_PUBLIC_REPORT_READY"
-        | "BLOCKED_WAITING_PRINCIPAL"
-        | "REPORTED"
-        | "CANCELLED" => value,
-        _ => "PLANNED",
-    }
+fn normalize_planned(value: &str) -> &'static str {
+    const PLANNED: [&str; 14] = [
+        "PLANNED",
+        "PLANNED_RUNNING",
+        "WORKER_DONE",
+        "WORKER_FAILED",
+        "REVIEWING",
+        "REVIEW_PASSED",
+        "REVIEW_FAILED",
+        "REVIEW_INCONCLUSIVE",
+        "REPAIRING",
+        "PUBLIC_REPORT_READY",
+        "FAILED_PUBLIC_REPORT_READY",
+        "BLOCKED_WAITING_PRINCIPAL",
+        "REPORTED",
+        "CANCELLED",
+    ];
+    PLANNED
+        .into_iter()
+        .find(|candidate| *candidate == value)
+        .unwrap_or("PLANNED")
 }
 fn user_summary(subject: &str, status: &str, planned: Option<&str>) -> String {
     if let Some(planned) = planned {
@@ -268,20 +326,19 @@ fn next_step(status: &str, planned: Option<&str>) -> &'static str {
 fn compact(value: &str, limit: usize) -> String {
     let normalized = value.split_whitespace().collect::<Vec<_>>().join(" ");
     let normalized = trim(&normalized);
-    if normalized.encode_utf16().count() > limit {
-        let mut prefix = String::new();
-        let mut units = 0;
-        for character in normalized.chars() {
-            if units + character.len_utf16() > limit {
-                break;
-            }
-            prefix.push(character);
-            units += character.len_utf16();
-        }
-        format!("{prefix}...")
-    } else {
-        normalized.into()
+    if normalized.encode_utf16().count() <= limit {
+        return normalized.into();
     }
+    let mut prefix = String::new();
+    let mut units = 0;
+    for character in normalized.chars() {
+        if units + character.len_utf16() > limit {
+            break;
+        }
+        prefix.push(character);
+        units += character.len_utf16();
+    }
+    format!("{prefix}...")
 }
 fn has_shell_result(log: &str) -> bool {
     let mut command = false;
@@ -298,11 +355,4 @@ fn read_text(path: &Path) -> String {
     std::fs::read(path)
         .map(|bytes| trim(&String::from_utf8_lossy(&bytes)).to_owned())
         .unwrap_or_default()
-}
-fn read_json(path: &Path) -> Option<Value> {
-    serde_json::from_slice(&std::fs::read(path).ok()?).ok()
-}
-
-fn text<'a>(value: &'a Value, key: &str) -> &'a str {
-    value.get(key).and_then(Value::as_str).unwrap_or("")
 }

@@ -1,12 +1,15 @@
+//! Hot-cache, continuity and capsule text for prompts.
+
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use crate::cognition::{
     CognitionError, CognitionPathEnvironment, CognitionResult,
-    generation::physical_hot_cache_entries, graph::GraphRepository, resolve_active_generation,
+    generation::{HotCacheEntryView, physical_hot_cache_entries},
+    graph::GraphRepository,
+    resolve_active_generation,
 };
 use butler_turn::conversation::{ConversationSourceReader, conversation_store_path};
 
@@ -90,10 +93,10 @@ pub(super) fn generation_hot_cache(
     data_root: &Path,
     environment: &CognitionPathEnvironment,
     project: Option<&str>,
-) -> CognitionResult<Option<String>> {
+) -> Option<String> {
     // Source's optional prompt projection treats an unavailable or changing
     // generation as absent. Keep this read path separate from mutation authority.
-    Ok(read_generation_hot_cache(data_root, environment, project).unwrap_or(None))
+    read_generation_hot_cache(data_root, environment, project).unwrap_or(None)
 }
 
 fn read_generation_hot_cache(
@@ -142,7 +145,7 @@ fn project_entries(
     generation: &crate::cognition::MemoryGenerationHandle,
     graph: &GraphRepository,
     canonical: &ConversationSourceReader,
-    entries: &[Value],
+    entries: &[HotCacheEntryView],
 ) -> CognitionResult<Option<String>> {
     let Some(before_revision) = graph.hot_cache_graph_revision()? else {
         return Ok(None);
@@ -151,7 +154,9 @@ fn project_entries(
     let now = chrono::Utc::now().to_rfc3339();
     let selected = entries
         .iter()
-        .filter(|entry| entry["scope"] != "project" || entry["project_id"].as_str() == project)
+        .filter(|entry| {
+            entry.scope.as_deref() != Some("project") || entry.project_id.as_deref() == project
+        })
         .cloned()
         .collect::<Vec<_>>();
     let valid = graph.valid_rebuild_cache_entries(
@@ -163,22 +168,18 @@ fn project_entries(
     )?;
     let mut content = Vec::new();
     for entry in selected {
-        if !entry["entry_id"]
-            .as_str()
+        if !entry
+            .entry_id
+            .as_deref()
             .is_some_and(|id| valid.contains(id))
         {
             continue;
         }
-        let Some(refs) = entry["source_refs"].as_array() else {
+        let Some(refs) = &entry.source_refs else {
             continue;
         };
-        let refs = refs
-            .iter()
-            .filter_map(Value::as_str)
-            .map(str::to_owned)
-            .collect::<Vec<_>>();
-        let class = graph.hot_cache_source_class(&refs)?;
-        let Some(summary) = entry["summary"].as_str() else {
+        let class = graph.hot_cache_source_class(refs)?;
+        let Some(summary) = &entry.summary else {
             continue;
         };
         content.push(format!(

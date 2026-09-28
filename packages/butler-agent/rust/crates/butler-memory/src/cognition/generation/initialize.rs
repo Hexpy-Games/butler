@@ -6,9 +6,12 @@ mod empty;
 use crate::cognition::CognitionCode;
 use std::{path::PathBuf, sync::Arc};
 
-use serde_json::json;
 use sha2::{Digest, Sha256};
 
+use super::manifest::{
+    ActiveDescriptor, GenerationFormat, GenerationManifest, GenerationState, InitializationOrigin,
+    NewManifest, ProjectionMode, RuntimeVersions,
+};
 use super::{MemoryGenerationHandle, read::resolve_active_generation};
 use crate::{
     cognition::{
@@ -71,33 +74,23 @@ fn initialize_locked(
     durable::create_dir(&root)?;
     GraphRepository::create_fresh(&root.join("graph.sqlite"), now)?;
     let inventory_hash = format!("{:x}", Sha256::digest(b"[\"memory-source-inventory\"]"));
-    let manifest = json!({
-        "schema":"butler.memory-generation.v2",
-        "generation_id":generation_id,
-        "format":"v2",
-        "state":"active",
-        "initialization_origin":"empty",
-        "schema_version":3,
-        "extraction_version":"memory-extract-v3",
-        "ranking_version":2,
-        "embedding":null,
-        "unicode_version":unicode_version,
-        "icu_version":icu_version,
-        "canonical_snapshot_id":"empty",
-        "canonical_snapshot_path":null,
-        "source_inventory_hash":inventory_hash,
-        "registered_source_count":0,
-        "unaccounted_source_count":0,
-        "required_acceptance_passed":false,
-    });
+    let manifest = GenerationManifest::new(
+        NewManifest {
+            generation_id: &generation_id,
+            format: GenerationFormat::V2,
+            state: GenerationState::Active,
+            origin: InitializationOrigin::Empty,
+            canonical_snapshot_id: "empty".into(),
+            source_inventory_hash: inventory_hash,
+            unaccounted_source_count: 0,
+        },
+        Some(&RuntimeVersions {
+            unicode: unicode_version,
+            icu: icu_version,
+        }),
+    );
     durable::write_json(&root.join("manifest.json"), &manifest)?;
-    let active = json!({
-        "schema":"butler.memory-active-generation.v2",
-        "generation_id":generation_id,
-        "previous_generation_id":null,
-        "activated_at":now,
-        "projection_mode":"running",
-    });
+    let active = ActiveDescriptor::new(&generation_id, None, now, ProjectionMode::Running);
     durable::write_json(&memory_root.join("active-generation.json"), &active)
 }
 

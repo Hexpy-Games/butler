@@ -2,6 +2,7 @@
 
 use super::*;
 use axum::http::HeaderValue;
+use futures_util::StreamExt;
 
 pub(super) async fn get_messages(state: Arc<HttpState>, uri: &Uri) -> Result<Response, HttpError> {
     let query = query(uri);
@@ -115,7 +116,11 @@ pub(super) async fn get_live_events(
     let cursor = cursor_param(query(uri).get("cursor"));
     let stream =
         create_live_stream(state.application.clone(), cursor, state.shutdown.clone()).await?;
-    let mut response = Response::new(Body::from_stream(stream));
+    let body = match state.security.live_chunk_signer() {
+        Some(sign) => Body::from_stream(stream.map(move |chunk| chunk.map(&sign))),
+        None => Body::from_stream(stream),
+    };
+    let mut response = Response::new(body);
     *response.status_mut() = StatusCode::OK;
     let headers = response.headers_mut();
     headers.insert(

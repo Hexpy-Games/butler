@@ -1,5 +1,8 @@
+//! Memory generation targets, handles and embedding metadata.
+
 use std::path::PathBuf;
 
+use crate::lenient::set_field;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -7,16 +10,22 @@ use sha2::{Digest, Sha256};
 use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, embedding::EmbeddingIdentity};
 
-const NATIVE_EMBEDDING_SCHEMA: &str = "butler.native-embedding-identity.v1";
+pub(super) const NATIVE_EMBEDDING_SCHEMA: &str = "butler.native-embedding-identity.v1";
 const CHECKED_PREPROCESSING: &str = "tokenizer-json-special-tokens-checked-v1";
 
+/// Which memory generation an operation writes to.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MemoryGenerationTarget {
+    /// The active generation, when it is still the expected one.
     Active {
+        /// Generation the caller saw as active.
         expected_generation: String,
     },
+    /// A rebuild candidate.
     Rebuild {
+        /// Candidate generation.
         generation_id: String,
+        /// Canonical conversation snapshot the rebuild reads.
         canonical_snapshot_id: String,
     },
 }
@@ -40,7 +49,9 @@ pub struct JavaScriptGenerationEmbedding {
 /// explicitly identified native identity. The variants add no wrapper keys.
 #[derive(Clone)]
 pub enum GenerationEmbedding {
+    /// Metadata written by the JavaScript runtime.
     JavaScript(JavaScriptGenerationEmbedding),
+    /// A native embedding identity.
     Native(EmbeddingIdentity),
 }
 
@@ -85,9 +96,13 @@ impl Serialize for GenerationEmbedding {
                         && number.fract() == 0.0
                         && number <= 9_007_199_254_740_991.0
                     {
-                        wire[field] = Value::Number(serde_json::Number::from(
-                            butler_core::json::saturating_u64(number),
-                        ));
+                        set_field(
+                            &mut wire,
+                            field,
+                            Value::Number(serde_json::Number::from(
+                                butler_core::json::saturating_u64(number),
+                            )),
+                        );
                     }
                 }
                 wire.serialize(serializer)
@@ -139,29 +154,21 @@ impl PartialEq for GenerationEmbedding {
     }
 }
 
+/// A resolved memory generation.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MemoryGenerationHandle {
+    /// Generation id.
     pub generation_id: String,
+    /// Graph database.
     pub graph_path: PathBuf,
+    /// Generation directory.
     pub root: PathBuf,
+    /// Embedding identity bound to the generation, once vectors exist.
     pub embedding: Option<GenerationEmbedding>,
+    /// Data root the generation reads sources from.
     pub source_root: PathBuf,
+    /// Canonical conversation snapshot, for a rebuild.
     pub canonical_snapshot_path: Option<PathBuf>,
-}
-
-pub(super) struct ActiveDescriptor {
-    pub generation_id: String,
-    pub projection_mode: Option<String>,
-}
-
-pub(super) struct GenerationManifest {
-    pub schema: String,
-    pub generation_id: String,
-    pub format: String,
-    pub state: Option<String>,
-    pub embedding: Option<GenerationEmbedding>,
-    pub canonical_snapshot_id: Option<String>,
-    pub canonical_snapshot_path: Option<String>,
 }
 
 pub(super) fn validate_generation_embedding(

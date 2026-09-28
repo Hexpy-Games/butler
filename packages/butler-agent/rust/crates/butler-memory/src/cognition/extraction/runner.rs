@@ -1,8 +1,13 @@
+//! The extractor run: a meaning call over the window's passages, then one
+//! binding call per batch of targets, each with replayable repairs.
+
 mod call;
+mod evidence;
 mod validation;
 
 use call::{ExtractionStageCall, call};
-use validation::{aggregate_usage, bounded_evidence_schema, summarize, validate_output};
+pub(in crate::cognition) use evidence::{ProviderEvidence, RunEvidence};
+use validation::{bounded_evidence_schema, summarize, validate_output};
 
 use super::{
     CognitionCandidateSearch, ExtractInput, ExtractOutput, ExtractionContractData, binding,
@@ -10,7 +15,7 @@ use super::{
 };
 use crate::cognition::CognitionResult;
 use butler_models::models::ProviderPromptPort;
-use serde_json::{Value, json};
+use serde_json::{Map, Value};
 use std::{future::Future, pin::Pin, time::Instant};
 use tokio_util::sync::CancellationToken;
 
@@ -36,7 +41,7 @@ pub(in crate::cognition) trait ExtractionStagePort: Send + Sync {
 }
 pub(in crate::cognition) struct ExtractionRun {
     pub output: ExtractOutput,
-    pub evidence: Value,
+    pub evidence: RunEvidence,
     pub pinned_input: ExtractInput,
 }
 
@@ -54,83 +59,58 @@ pub(in crate::cognition) struct ExtractionRunInput<'a> {
     pub deadline: i64,
 }
 
+/// Runs meaning then binding for one window. The meaning result is committed
+/// before binding starts; the pinned input gains the loaded candidates.
 pub(in crate::cognition) async fn run_extractor(
     request: ExtractionRunInput<'_>,
 ) -> CognitionResult<ExtractionRun> {
-    let ExtractionRunInput {
-        provider,
-        candidates,
-        mut input,
-        model,
-        effort,
-        butler_data,
-        generation,
-        embedding,
-        stages,
-        cancellation,
-        deadline,
-    } = request;
     let started = Instant::now();
-    let mut warnings = Vec::new();
-    let passages = source_passages(&input)?;
-    let prompt = meaning_prompt(&input, &passages)?;
+    let passages = source_passages(&request.input)?;
+    let prompt = meaning_prompt(&request.input, &passages)?;
     let data = ExtractionContractData::get();
     let meaning_schema = bounded_evidence_schema(&data.meaning_schema, passages.len());
-    let (meaning, mut evidence_stages) = call(
-        ExtractionStageCall {
-            provider,
-            stages,
-            stage: "meaning",
-            prompt_value: prompt,
-            instructions: &data.meaning_instructions,
-            schema: &meaning_schema,
-            model,
-            effort,
-            butler_data,
-            input: &input,
-            cancellation: cancellation.clone(),
-            repair_schema: None,
-        },
+    let (meaning, mut stages) = call(
+        stage_call(&request, "meaning", &prompt, &meaning_schema, None),
         |value, _| validate_meaning(value, &passages),
     )
     .await?;
-    let mut output = meaning_to_output(&input, &meaning, &passages)?;
-    validate_output(&output, &input)?;
-    stages.commit_meaning(&input, &output).await?;
+    let mut output = meaning_to_output(&request.input, &meaning, &passages)?;
+    validate_output(&output, &request.input)?;
+    request
+        .stages
+        .commit_meaning(&request.input, &output)
+        .await?;
     let base = super::CandidateSearchInput {
-        source_root: std::path::Path::new(butler_data),
-        generation_id: generation,
-        embedding,
+        source_root: std::path::Path::new(request.butler_data),
+        generation_id: request.generation,
+        embedding: request.embedding,
         cue: "",
-        bound_project_id: input.bound_project_id.as_deref(),
-        deadline_epoch_millis: deadline,
+        bound_project_id: request.input.bound_project_id.as_deref(),
+        deadline_epoch_millis: request.deadline,
     };
-    let (batches, loaded) = binding::prepare(&meaning, &passages, candidates, &base).await?;
+    let (batches, loaded) =
+        binding::prepare(&meaning, &passages, request.candidates, &base).await?;
+    let mut input = request.input.clone();
     input.candidates = loaded;
+    let request = ExtractionRunInput { input, ..request };
+    let mut warnings = Vec::new();
     for (index, batch) in batches.iter().enumerate() {
         let stage = format!("binding{index}");
         let repair_schema = binding::repair_schema(batch);
         let (next, stage_evidence) = call(
-            ExtractionStageCall {
-                provider,
-                stages,
-                stage: &stage,
-                prompt_value: batch.prompt.clone(),
-                instructions: &data.binding_instructions,
-                schema: &data.binding_schema,
-                model,
-                effort,
-                butler_data,
-                input: &input,
-                cancellation: cancellation.clone(),
-                repair_schema: Some(&repair_schema),
-            },
+            stage_call(
+                &request,
+                &stage,
+                &batch.prompt,
+                &data.binding_schema,
+                Some(&repair_schema),
+            ),
             |value, repair| {
                 let mut next = output.clone();
                 let warnings = if repair == 0 {
-                    binding::apply(&value, batch, &mut next, &input)?
+                    binding::apply(&value, batch, &mut next, &request.input)?
                 } else {
-                    binding::apply_repair(value, batch, &mut next, &input)?
+                    binding::apply_repair(value, batch, &mut next, &request.input)?
                 };
                 Ok((next, warnings))
             },
@@ -138,19 +118,45 @@ pub(in crate::cognition) async fn run_extractor(
         .await?;
         output = next.0;
         warnings.extend(next.1);
-        evidence_stages.extend(stage_evidence);
+        stages.extend(stage_evidence);
     }
     summarize(&mut output);
-    validate_output(&output, &input)?;
+    validate_output(&output, &request.input)?;
+    let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     Ok(ExtractionRun {
         output,
-        evidence: json!({
-            "reported_model":evidence_stages.first().and_then(|stage|stage.pointer("/provider/reported_model")).cloned().unwrap_or(Value::Null),
-            "usage":aggregate_usage(&evidence_stages),
-            "duration_ms":started.elapsed().as_millis(),
-            "request_wire":evidence_stages.first().and_then(|stage|stage.pointer("/provider/request_wire")).cloned().unwrap_or(Value::Null),
-            "stages":evidence_stages,"warnings":warnings,
-        }),
-        pinned_input: input,
+        evidence: RunEvidence::new(stages, warnings, duration_ms),
+        pinned_input: request.input,
     })
+}
+
+/// The call of `stage` for this run. Passthrough: `schema` and
+/// `repair_schema` are JSON Schema documents for the provider.
+fn stage_call<'a, P>(
+    request: &'a ExtractionRunInput<'_>,
+    stage: &'a str,
+    prompt: &'a P,
+    // Passthrough: JSON Schema for the provider.
+    schema: &'a Map<String, Value>,
+    // Passthrough: JSON Schema for the provider's repair calls.
+    repair_schema: Option<&'a Map<String, Value>>,
+) -> ExtractionStageCall<'a, P> {
+    ExtractionStageCall {
+        provider: request.provider,
+        stages: request.stages,
+        stage,
+        prompt,
+        instructions: if stage == "meaning" {
+            &ExtractionContractData::get().meaning_instructions
+        } else {
+            &ExtractionContractData::get().binding_instructions
+        },
+        schema,
+        model: request.model,
+        effort: request.effort,
+        butler_data: request.butler_data,
+        input: &request.input,
+        cancellation: request.cancellation.clone(),
+        repair_schema,
+    }
 }

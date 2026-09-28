@@ -1,3 +1,7 @@
+//! Checks and finishing of a run's output: the size and coverage bounds of
+//! [`ExtractOutput`], its bounded summary, and the meaning schema narrowed
+//! to the window's passage ids.
+
 use super::call::{error, json_error};
 use crate::cognition::CognitionCode;
 use crate::cognition::{
@@ -45,35 +49,14 @@ pub(super) fn summarize(output: &mut ExtractOutput) {
     };
 }
 
-pub(super) fn aggregate_usage(stages: &[Value]) -> Value {
-    let called = stages
-        .iter()
-        .filter(|stage| stage.get("reused") == Some(&Value::Bool(false)))
-        .collect::<Vec<_>>();
-    if called
-        .iter()
-        .any(|stage| stage.pointer("/provider/usage").is_none_or(Value::is_null))
-    {
-        return Value::Null;
-    }
-    let sum = |key: &str| {
-        called
-            .iter()
-            .filter_map(|stage| {
-                stage
-                    .pointer(&format!("/provider/usage/{key}"))
-                    .and_then(Value::as_f64)
-            })
-            .sum::<f64>()
-    };
-    json!({"prompt_tokens":sum("prompt_tokens"),"cached_tokens":sum("cached_tokens"),
-        "output_tokens":sum("output_tokens"),"total_tokens":sum("total_tokens")})
-}
-
+/// The meaning schema with every `evidence` item bounded to `0..passages`.
+/// Passthrough: `schema` is a JSON Schema document for the provider.
 pub(super) fn bounded_evidence_schema(
+    // Passthrough: JSON Schema for the provider.
     schema: &Map<String, Value>,
     passages: usize,
 ) -> Map<String, Value> {
+    // Passthrough: walks the provider's JSON Schema document.
     fn visit_object(object: &mut Map<String, Value>, max: usize) {
         if let Some(evidence) = object
             .get_mut("properties")
@@ -90,6 +73,7 @@ pub(super) fn bounded_evidence_schema(
             visit(child, max);
         }
     }
+    // Passthrough: walks the provider's JSON Schema document.
     fn visit(value: &mut Value, max: usize) {
         match value {
             Value::Object(object) => visit_object(object, max),

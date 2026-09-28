@@ -1,12 +1,13 @@
 //! Source-authoritative SQL predicates for one normalized recall request.
 
-use rusqlite::types::Value;
+use rusqlite::types::Value as SqlValue;
 
 use crate::cognition::recall::{RecallProjectFilter, RecallRequest, RecallScope, RecallTimeBasis};
 
+/// A SQL condition and its bound parameters.
 pub(super) struct Predicate {
     pub sql: String,
-    pub args: Vec<Value>,
+    pub args: Vec<SqlValue>,
 }
 
 pub(super) fn source(input: &RecallRequest, source: &str, chunk: &str) -> Predicate {
@@ -30,7 +31,7 @@ pub(super) fn source(input: &RecallRequest, source: &str, chunk: &str) -> Predic
     let mut args = Vec::new();
     if input.scope == RecallScope::CurrentSession {
         clauses.push(format!("{chunk}.conversation_session_id=?"));
-        args.push(Value::Text(input.runtime.session_id.clone()));
+        args.push(SqlValue::Text(input.runtime.session_id.clone()));
     }
     if input.scope == RecallScope::CurrentProject {
         clauses.push(format!("{chunk}.project_id=?"));
@@ -39,7 +40,7 @@ pub(super) fn source(input: &RecallRequest, source: &str, chunk: &str) -> Predic
                 .runtime
                 .project_id
                 .clone()
-                .map_or(Value::Null, Value::Text),
+                .map_or(SqlValue::Null, SqlValue::Text),
         );
     }
     if !input.session_ids.is_empty() {
@@ -47,7 +48,7 @@ pub(super) fn source(input: &RecallRequest, source: &str, chunk: &str) -> Predic
             "{chunk}.conversation_session_id IN ({})",
             placeholders(input.session_ids.len())
         ));
-        args.extend(input.session_ids.iter().cloned().map(Value::Text));
+        args.extend(input.session_ids.iter().cloned().map(SqlValue::Text));
     }
     match input.project_filter {
         RecallProjectFilter::Any => {}
@@ -57,19 +58,19 @@ pub(super) fn source(input: &RecallRequest, source: &str, chunk: &str) -> Predic
                 "{chunk}.project_id IN ({})",
                 placeholders(input.project_ids.len())
             ));
-            args.extend(input.project_ids.iter().cloned().map(Value::Text));
+            args.extend(input.project_ids.iter().cloned().map(SqlValue::Text));
         }
     }
     clauses.push(format!("julianday({source}.observed_at)<=julianday(?)"));
-    args.push(Value::Text(input.as_of.clone()));
+    args.push(SqlValue::Text(input.as_of.clone()));
     if let Some(time) = input
         .time
         .as_ref()
         .filter(|time| time.basis == RecallTimeBasis::Conversation)
     {
         clauses.push(format!("julianday({source}.observed_at)>=julianday(?) AND julianday({source}.observed_at)<julianday(?)"));
-        args.push(Value::Text(time.from.clone()));
-        args.push(Value::Text(time.to.clone()));
+        args.push(SqlValue::Text(time.from.clone()));
+        args.push(SqlValue::Text(time.to.clone()));
     }
     Predicate {
         sql: clauses.join(" AND "),
@@ -90,9 +91,9 @@ pub(super) fn claim(input: &RecallRequest, entity: &str, id_column: &str) -> Pre
                 "({entity}.type NOT IN ({claim_types}) OR ((SELECT valid_from FROM memory_claims WHERE node_id={target}) IS NOT NULL AND julianday((SELECT valid_from FROM memory_claims WHERE node_id={target}))<julianday(?) AND julianday(COALESCE((SELECT valid_to FROM memory_claims WHERE node_id={target}),?))>julianday(?)))"
             ),
             args: vec![
-                Value::Text(time.to.clone()),
-                Value::Text(time.to.clone()),
-                Value::Text(time.from.clone()),
+                SqlValue::Text(time.to.clone()),
+                SqlValue::Text(time.to.clone()),
+                SqlValue::Text(time.from.clone()),
             ],
         };
     }
@@ -101,8 +102,8 @@ pub(super) fn claim(input: &RecallRequest, entity: &str, id_column: &str) -> Pre
             "({entity}.type NOT IN ({claim_types}) OR (((SELECT valid_from FROM memory_claims WHERE node_id={target}) IS NULL OR julianday((SELECT valid_from FROM memory_claims WHERE node_id={target}))<=julianday(?)) AND ((SELECT valid_to FROM memory_claims WHERE node_id={target}) IS NULL OR julianday((SELECT valid_to FROM memory_claims WHERE node_id={target}))>julianday(?))))"
         ),
         args: vec![
-            Value::Text(input.as_of.clone()),
-            Value::Text(input.as_of.clone()),
+            SqlValue::Text(input.as_of.clone()),
+            SqlValue::Text(input.as_of.clone()),
         ],
     }
 }
@@ -126,9 +127,9 @@ pub(super) fn event_episode(input: &RecallRequest, episode: &str) -> Predicate {
     };
     let source = source(input, "time_source", "time_chunk");
     let mut args = vec![
-        Value::Text(time.to.clone()),
-        Value::Text(time.to.clone()),
-        Value::Text(time.from.clone()),
+        SqlValue::Text(time.to.clone()),
+        SqlValue::Text(time.to.clone()),
+        SqlValue::Text(time.from.clone()),
     ];
     args.extend(source.args);
     Predicate{sql:format!(

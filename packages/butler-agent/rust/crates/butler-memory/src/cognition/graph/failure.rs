@@ -2,7 +2,7 @@
 
 use chrono::{DateTime, Duration};
 use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::{Value, json};
+use serde_json::json;
 
 use super::{db_error, jobs};
 use crate::cognition::CognitionCode;
@@ -20,13 +20,37 @@ pub(super) fn pinned_input(
     })
 }
 
+/// Whether the extractor model was called for a window before it failed.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(in crate::cognition) enum ProviderCall {
+    /// The model was called.
+    Made,
+    /// The window failed before any model call.
+    NotMade,
+}
+
+impl ProviderCall {
+    fn made(self) -> bool {
+        self == Self::Made
+    }
+}
+
+/// Whether a failed window used up its repair attempts.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(in crate::cognition) enum RepairBudget {
+    /// No repair is left; the failure is final.
+    Exhausted,
+    /// The window may be retried.
+    Remaining,
+}
+
 pub(super) fn disposition(
     connection: &mut Connection,
     owner: ProjectionWindowOwner<'_>,
     kind: &str,
     revised: Option<&crate::cognition::extraction::ExtractInput>,
     now: &str,
-    provider_invoked: bool,
+    provider: ProviderCall,
 ) -> CognitionResult<()> {
     let ProjectionWindowOwner {
         job_id: job,
@@ -44,7 +68,7 @@ pub(super) fn disposition(
     tx.execute("INSERT INTO memory_projection_attempts \
         (attempt_ref,window_ref,job_id,attempt_count,state,error_code,input_sha256,provider_evidence_json,recorded_at,attempt_kind,provider_invoked,outcome_known,invocation_ref,recovery_revision) \
         VALUES(?1,?2,?3,?4,'warning',NULL,?5,?6,?7,'validation',?8,1,?9,?10)",
-        params![format!("{window}:attempt:{}:disposition",row.0),window,job,row.0,row.1,evidence_json,now,i64::from(provider_invoked),nonce,row.2]).map_err(db_error)?;
+        params![format!("{window}:attempt:{}:disposition",row.0),window,job,row.0,row.1,evidence_json,now,i64::from(provider.made()),nonce,row.2]).map_err(db_error)?;
     if tx.execute("UPDATE memory_projection_windows SET state='unsupported',error_code=NULL,provider_evidence_json=?1, \
         owner_pid=NULL,owner_nonce=NULL,started_at=NULL,next_attempt_at=NULL WHERE window_ref=?2 AND owner_nonce=?3",
         params![evidence_json,window,nonce]).map_err(db_error)?!=1{return Err(changed())}
@@ -64,16 +88,14 @@ pub(super) fn disposition(
         let next_json =
             butler_core::json::stringify(&serde_json::to_value(next).map_err(json_error)?)
                 .map_err(json_error)?;
-        let next_sha = crate::cognition::sources::projection_hash_for_graph(vec![
-            Value::String("extract-input".into()),
-            Value::String(next_json.clone()),
-        ])?;
-        let recovery = crate::cognition::sources::projection_hash_for_graph(vec![
-            json!("memory-context-revision"),
-            json!(window),
-            json!(row.1),
-            json!(next_sha),
-        ])?;
+        let next_sha =
+            crate::cognition::sources::projection_hash_for_graph(&("extract-input", &next_json))?;
+        let recovery = crate::cognition::sources::projection_hash_for_graph(&(
+            "memory-context-revision",
+            &window,
+            &row.1,
+            &next_sha,
+        ))?;
         let request = json!({"reason":"adjacent_source_context","prior_recovery_revision":row.2,
             "previous_input_json":row.3,"previous_input_sha256":row.1,"next_input_json":next_json,"next_input_sha256":next_sha});
         tx.execute("INSERT INTO memory_projection_attempts(attempt_ref,window_ref,job_id,attempt_count,state,error_code,input_sha256,recorded_at,attempt_kind,provider_invoked,outcome_known,recovery_revision,recovery_request_json) \
@@ -92,8 +114,8 @@ pub(super) fn settle(
     owner: ProjectionWindowOwner<'_>,
     code: &str,
     now: &str,
-    provider_invoked: bool,
-    repair_exhausted: bool,
+    provider: ProviderCall,
+    repair: RepairBudget,
 ) -> CognitionResult<()> {
     let ProjectionWindowOwner {
         job_id: job,
@@ -110,7 +132,7 @@ pub(super) fn settle(
     let planned = row.0 == "planned";
     let kind = if planned {
         "apply"
-    } else if provider_invoked {
+    } else if provider.made() {
         "provider"
     } else {
         "pre_provider"
@@ -124,7 +146,7 @@ pub(super) fn settle(
         (attempt_ref,window_ref,job_id,attempt_count,state,error_code,input_sha256,output_json,provider_evidence_json,recorded_at,attempt_kind,provider_invoked,outcome_known,invocation_ref,recovery_revision) \
         VALUES(?1,?2,?3,?4,'failed',?5,?6,?7,?8,?9,?10,?11,1,?12,?13)",
         params![attempt_ref,window,job,row.1,code,row.3,if planned {None} else {row.4},
-            if planned {None} else {row.5},now,kind,i64::from(provider_invoked && !planned),nonce,row.2]).map_err(db_error)?;
+            if planned {None} else {row.5},now,kind,i64::from(provider.made() && !planned),nonce,row.2]).map_err(db_error)?;
     let attempts: i64 = if planned {
         tx.query_row("SELECT COUNT(*) FROM memory_projection_attempts WHERE window_ref=?1 AND attempt_kind='apply' AND recovery_revision IS ?2",
             params![window,row.2],|r|r.get(0)).map_err(db_error)?
@@ -140,7 +162,7 @@ pub(super) fn settle(
             params![if exhausted{"failed"}else{"pending"},if exhausted{"memory_projection_attempts_exhausted"}else{code},
                 if exhausted{None}else{Some(now)},window,job,nonce]).map_err(db_error)?!=1{return Err(changed())}
     } else {
-        let retry_at = if !repair_exhausted && retryable(code) && attempts < 3 {
+        let retry_at = if repair == RepairBudget::Remaining && retryable(code) && attempts < 3 {
             Some(retry_at(now, attempts)?)
         } else {
             None

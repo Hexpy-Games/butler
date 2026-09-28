@@ -1,3 +1,5 @@
+//! Inspecting a project capsule: headings, source counts and refresh failures.
+
 use std::{
     fs,
     path::Path,
@@ -5,7 +7,7 @@ use std::{
 };
 
 use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::cognition::{
     CognitionError, CognitionPathEnvironment, CognitionResult, mutable_paths::ensure_data_authority,
@@ -24,10 +26,23 @@ pub struct ProjectCapsuleInspectReport {
     pub bytes: u64,
     pub updated_at: Option<String>,
     pub section_headings: Vec<String>,
-    pub source_counts: Option<Value>,
+    pub source_counts: Option<CapsuleSourceCounts>,
     pub refresh_failures: RefreshFailures,
     pub diagnostics: Vec<String>,
     pub privacy: ProjectCapsuleInspectPrivacy,
+}
+
+/// The source counts a capsule records in its Freshness section.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CapsuleSourceCounts {
+    pub registry: u64,
+    pub tasks: u64,
+    pub explicit_feedback: u64,
+    pub project_hot_cache: u64,
+    pub memory_evidence: u64,
+    pub graph_evidence: u64,
+    pub promoted: u64,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -82,7 +97,7 @@ pub(super) fn read(
                 updated_at = metadata
                     .modified()
                     .ok()
-                    .and_then(epoch_millis)
+                    .map(epoch_millis)
                     .and_then(butler_core::js_date::format_iso_millis);
                 if updated_at.is_none() {
                     diagnostics.push("project capsule stat failed".to_owned());
@@ -132,18 +147,36 @@ pub(super) fn read(
     })
 }
 
-fn parse_source_counts(body: &str) -> Option<Value> {
+/// The `source_counts:` line of the Freshness section; `None` when the
+/// capsule has none.
+fn parse_source_counts(body: &str) -> Option<CapsuleSourceCounts> {
     let line = body.lines().find(|line| line.contains("source_counts:"))?;
-    let mut counts = serde_json::Map::new();
+    let counts = count_pairs(line);
+    let count = |key: &str| counts.get(key).copied().unwrap_or(0);
+    Some(CapsuleSourceCounts {
+        registry: count("registry"),
+        tasks: count("tasks"),
+        explicit_feedback: count("explicit_feedback"),
+        project_hot_cache: count("project_hot_cache"),
+        memory_evidence: count("memory_evidence"),
+        graph_evidence: count("graph_evidence"),
+        promoted: count("promoted"),
+    })
+}
+
+/// Every `name=digits` pair in the line (a later pair wins).
+fn count_pairs(line: &str) -> std::collections::HashMap<&str, u64> {
+    let mut counts = std::collections::HashMap::new();
     let bytes = line.as_bytes();
+    let is_name = |byte: &u8| byte.is_ascii_lowercase() || *byte == b'_';
     let mut index = 0;
-    while index < bytes.len() {
-        if !bytes[index].is_ascii_lowercase() && bytes[index] != b'_' {
+    while let Some(byte) = bytes.get(index) {
+        if !is_name(byte) {
             index += 1;
             continue;
         }
         let start = index;
-        while index < bytes.len() && (bytes[index].is_ascii_lowercase() || bytes[index] == b'_') {
+        while bytes.get(index).is_some_and(is_name) {
             index += 1;
         }
         let end = index;
@@ -152,26 +185,18 @@ fn parse_source_counts(body: &str) -> Option<Value> {
         }
         index += 1;
         let value_start = index;
-        while index < bytes.len() && bytes[index].is_ascii_digit() {
+        while bytes.get(index).is_some_and(u8::is_ascii_digit) {
             index += 1;
         }
-        if value_start == index {
-            continue;
-        }
-        if let Ok(value) = line[value_start..index].parse::<u64>() {
-            counts.insert(line[start..end].to_owned(), json!(value));
+        let value = line
+            .get(value_start..index)
+            .filter(|digits| !digits.is_empty())
+            .and_then(|digits| digits.parse::<u64>().ok());
+        if let (Some(value), Some(name)) = (value, line.get(start..end)) {
+            counts.insert(name, value);
         }
     }
-    let count = |key: &str| counts.get(key).cloned().unwrap_or_else(|| json!(0));
-    Some(json!({
-        "registry": count("registry"),
-        "tasks": count("tasks"),
-        "explicitFeedback": count("explicit_feedback"),
-        "projectHotCache": count("project_hot_cache"),
-        "memoryEvidence": count("memory_evidence"),
-        "graphEvidence": count("graph_evidence"),
-        "promoted": count("promoted"),
-    }))
+    counts
 }
 
 fn read_failures(path: &Path, project_id: &str) -> RefreshFailures {
@@ -206,16 +231,15 @@ fn read_failures(path: &Path, project_id: &str) -> RefreshFailures {
     }
 }
 
-fn epoch_millis(time: SystemTime) -> Option<i64> {
-    let millis = match time.duration_since(UNIX_EPOCH) {
+fn epoch_millis(time: SystemTime) -> i64 {
+    match time.duration_since(UNIX_EPOCH) {
         Ok(duration) => {
             i64::try_from(duration.as_millis().min(i64::MAX as u128)).unwrap_or(i64::MAX)
         }
         Err(error) => {
             -i64::try_from(error.duration().as_millis().min(i64::MAX as u128)).unwrap_or(i64::MAX)
         }
-    };
-    Some(millis)
+    }
 }
 
 fn inspect_error() -> CognitionError {

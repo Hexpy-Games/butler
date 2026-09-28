@@ -1,3 +1,5 @@
+//! Prior public conversation context for an extraction window.
+
 use butler_core::segmentation::grapheme_segments;
 use butler_turn::conversation::{
     ConversationOriginKind, ConversationPartKind, ConversationRole, ConversationSourceReader,
@@ -9,6 +11,7 @@ use crate::cognition::CognitionCode;
 
 const CONTEXT_BYTES: usize = 4 * 1_024;
 
+/// Public messages of the session before the source, bounded to the context budget.
 pub fn read_prior_public_context(
     reader: &ConversationSourceReader,
     session_id: &str,

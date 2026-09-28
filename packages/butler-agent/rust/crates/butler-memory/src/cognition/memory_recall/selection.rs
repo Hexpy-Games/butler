@@ -55,6 +55,7 @@ pub(super) struct RecallSelectionInput<'a> {
     pub(super) compare_locale: &'a dyn Fn(&str, &str) -> std::cmp::Ordering,
 }
 
+/// Selects and ranks recall candidates from every admitted channel.
 pub(super) fn run(request: RecallSelectionInput<'_>) -> CognitionResult<Selection> {
     let RecallSelectionInput {
         graph,
@@ -72,15 +73,7 @@ pub(super) fn run(request: RecallSelectionInput<'_>) -> CognitionResult<Selectio
         parse_date,
         compare_locale,
     } = request;
-    let admitted = input.admitted_channels.clone().unwrap_or_default();
-    let raw = if admitted.lexical {
-        graph.raw_source_candidates(input, candidate_deadline, now_millis)?
-    } else {
-        crate::cognition::graph::RawSourceSelection {
-            sources: vec![],
-            partial: false,
-        }
-    };
+    let raw = lexical_sources(&request)?;
     let inventory: CanonicalInventory = read_canonical_inventory(
         canonical,
         input,
@@ -93,17 +86,7 @@ pub(super) fn run(request: RecallSelectionInput<'_>) -> CognitionResult<Selectio
     let vector_current = vector_matches
         .map(|matches| graph.current_vector_matches(input, generation, matches, parse_date))
         .transpose()?;
-    let recent = canonical
-        .map(|reader| reader.read_recent_public_message_ids(&input.runtime.session_id))
-        .transpose()
-        .map_err(|error| {
-            crate::cognition::CognitionError::new(
-                CognitionCode::CanonicalSourceUnavailable,
-                error.to_string(),
-            )
-            .with_source(error)
-        })?
-        .unwrap_or_default();
+    let recent = recent_message_ids(canonical, input)?;
     let semantic = graph.semantic_seeds(
         input,
         &recent,
@@ -113,7 +96,7 @@ pub(super) fn run(request: RecallSelectionInput<'_>) -> CognitionResult<Selectio
         candidate_deadline,
         now_millis,
     )?;
-    let temporal = if admitted.context {
+    let temporal = if input.admitted_channels.clone().unwrap_or_default().context {
         graph.temporal_seeds(input, parse_date)?
     } else {
         Default::default()
@@ -145,4 +128,40 @@ pub(super) fn run(request: RecallSelectionInput<'_>) -> CognitionResult<Selectio
     )?;
     selected.vector_current = vector_current;
     Ok(selected)
+}
+
+/// Raw lexical source candidates; none when the lexical channel is not
+/// admitted.
+fn lexical_sources(
+    request: &RecallSelectionInput<'_>,
+) -> CognitionResult<crate::cognition::graph::RawSourceSelection> {
+    let input = request.input;
+    if !input.admitted_channels.clone().unwrap_or_default().lexical {
+        return Ok(crate::cognition::graph::RawSourceSelection {
+            sources: vec![],
+            partial: false,
+        });
+    }
+    request
+        .graph
+        .raw_source_candidates(input, request.candidate_deadline, request.now_millis)
+}
+
+/// The caller session's recent public message ids (none without a canonical
+/// snapshot).
+fn recent_message_ids(
+    canonical: Option<&ConversationSourceReader>,
+    input: &RecallRequest,
+) -> CognitionResult<Vec<String>> {
+    Ok(canonical
+        .map(|reader| reader.read_recent_public_message_ids(&input.runtime.session_id))
+        .transpose()
+        .map_err(|error| {
+            crate::cognition::CognitionError::new(
+                CognitionCode::CanonicalSourceUnavailable,
+                error.to_string(),
+            )
+            .with_source(error)
+        })?
+        .unwrap_or_default())
 }

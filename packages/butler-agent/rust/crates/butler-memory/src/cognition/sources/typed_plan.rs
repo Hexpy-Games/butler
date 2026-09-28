@@ -1,7 +1,5 @@
 //! Pure planning for typed records projected into the cognition graph.
 
-use serde_json::Value;
-
 use crate::cognition::{
     CognitionError, CognitionResult, CognitionSourceRow, MEMORY_SOURCE_WINDOW_BYTES,
     split_historical_source_spans,
@@ -37,17 +35,14 @@ pub(in crate::cognition) struct TypedSpan {
 }
 
 pub(in crate::cognition) fn prepare(record: &TypedMemoryRecord) -> CognitionResult<TypedPlan> {
-    let episode_id = projection_hash(vec![
-        Value::String("typed-memory-record".into()),
-        Value::String(record.source_kind.into()),
-        Value::String(record.record_id.clone()),
-    ])?;
-    let job_id = projection_hash(vec![
-        Value::String("memory-projection".into()),
-        Value::String(episode_id.clone()),
-        Value::String(record.revision.clone()),
-        Value::String(MEMORY_EXTRACTION_VERSION.into()),
-    ])?;
+    let episode_id =
+        projection_hash(&("typed-memory-record", record.source_kind, &record.record_id))?;
+    let job_id = projection_hash(&(
+        "memory-projection",
+        &episode_id,
+        &record.revision,
+        MEMORY_EXTRACTION_VERSION,
+    ))?;
 
     let mut spans = Vec::new();
     for span in split_historical_source_spans(&record.text, MEMORY_SOURCE_WINDOW_BYTES) {
@@ -57,16 +52,16 @@ pub(in crate::cognition) fn prepare(record: &TypedMemoryRecord) -> CognitionResu
                 "A grapheme exceeds the memory source window limit",
             ));
         }
-        let source_id = projection_hash(vec![
-            Value::String("memory-source".into()),
-            Value::String(episode_id.clone()),
-            Value::String(record.revision.clone()),
-            Value::String(record.source_kind.into()),
-            Value::String(record.record_id.clone()),
-            Value::Number((span.start as u64).into()),
-            Value::Number((span.end as u64).into()),
-            Value::String(record.content_hash.clone()),
-        ])?;
+        let source_id = projection_hash(&(
+            "memory-source",
+            &episode_id,
+            &record.revision,
+            record.source_kind,
+            &record.record_id,
+            span.start as u64,
+            span.end as u64,
+            &record.content_hash,
+        ))?;
         let text = record
             .text
             .get(span.start..span.end)
