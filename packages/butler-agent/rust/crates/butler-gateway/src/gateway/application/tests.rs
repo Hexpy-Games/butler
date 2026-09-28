@@ -81,6 +81,9 @@ async fn admission_persists_claimed_message_turn_and_signed_native_input() {
     assert_eq!(turn.session_id, "butler/app-general");
     assert_eq!(turn.raw_source, "app-server");
     assert_eq!(turn.app_turn_context["version"], 1);
+    // Wire pin (#237): the host keeps this conversation mode in the session
+    // binding, never a per-message override.
+    assert_eq!(turn.app_turn_context["session"]["accessMode"], "ask_first");
     assert_eq!(app.replay_events(0.0, 200).await.unwrap().len(), 6);
     app.close().await.unwrap();
     let _ = std::fs::remove_file(path);

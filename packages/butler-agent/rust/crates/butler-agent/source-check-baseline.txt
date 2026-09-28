@@ -13,7 +13,6 @@ src/host/app/runtime_ports/settings_mutation.rs	AppSettingsMutation::apply_inner
 src/host/app/runtime_ports/topic_branch.rs	<AppBranchConversations as AppBranchConversationReader>::context	88
 src/host/app/runtime_ports/topic_branch.rs	<AppBranchSummarizerAdapter as AppBranchSummarizer>::summarize	89
 src/host/app/server.rs	AppServer::open_with_artifacts	174
-src/host/cli/automation.rs	run	182
 src/host/cli/cognition.rs	run	177
 src/host/cli/cognition/box_cli.rs	run	112
 src/host/cli/cognition/feedback.rs	run	192
@@ -34,6 +33,7 @@ src/host/cli/oauth_login.rs	run_native_oauth_login_with_data	148
 src/host/cli/observability/process.rs	run	91
 src/host/cli/personalization.rs	run	101
 src/host/cli/personalization/commands.rs	set	104
+src/host/cli/schedule.rs	run	182
 src/host/cli/service.rs	run_native_service_cli	87
 src/host/cli/service/lifecycle/restart_handoff.rs	spawn_restart_handoff	86
 src/host/cli/update.rs	run	105
@@ -77,7 +77,7 @@ src/host/guided/tools/effect/ledger_input.rs	prepare	94
 src/host/guided/tools/effect/topic_conversation.rs	TopicConversationEffect::request	97
 src/host/guided/tools/execute.rs	execute	141
 src/host/guided/tools/image.rs	admitted_image	96
-src/host/guided/tools/image.rs	execute	105
+src/host/guided/tools/image.rs	execute	100
 src/host/guided/tools/message/preview.rs	fit	85
 src/host/guided/tools/message/preview/work.rs	project_raw	99
 src/host/guided/tools/occurrence.rs	occurrence	100
@@ -105,7 +105,7 @@ src/host/service/ingress.rs	IngressDispatcher::poll	86
 src/host/service/ingress/bind.rs	bind_and_request	141
 src/host/service/ingress/bind.rs	control_request	89
 src/host/service/ingress/bind/internal_subsession.rs	bind	92
-src/host/service/ingress/bind/policy.rs	upsert_app_binding	230
+src/host/service/ingress/bind/policy.rs	upsert_app_binding	213
 src/host/service/ingress/dispatch.rs	execute	128
 src/host/service/progress_publisher.rs	ProgressPublisher::publish	89
 src/host/service/restart_handoff.rs	record_helper_terminal	105

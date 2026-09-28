@@ -33,6 +33,7 @@ const COLUMNS: &[(&str, &str, &str)] = &[
         "dashboard_preferences_revision",
         "INTEGER NOT NULL DEFAULT 0",
     ),
+    ("app_automations", "access_mode", "TEXT"),
     ("turns", "execution_controls_json", "TEXT"),
     ("turns", "safe_status_label_key", "TEXT"),
     ("turns", "safe_status_label_parameters_json", "TEXT"),

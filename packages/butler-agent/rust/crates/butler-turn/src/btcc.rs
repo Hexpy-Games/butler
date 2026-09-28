@@ -3,6 +3,7 @@
 //! Gateway and host composition may run or stop a Turn. Durable state, model
 //! execution, delivery, and supervision remain private children of this module.
 
+mod access;
 pub mod agent_loop;
 mod authority;
 mod continuation_budget;
@@ -23,6 +24,7 @@ mod work;
 
 use std::sync::Arc;
 
+pub use access::{ApprovalExemptAction, stored_binding_access_mode};
 pub use contracts::{
     AcceptedWorkResult, AcceptedWorkStatus, AccessMode, AdmissionKind, AlreadyDeliveredOutcome,
     ArtifactKind, AttachmentKind, AttachmentRef, ChangedFileLine, ChangedFileSummary,
