@@ -162,7 +162,8 @@ const firstRun = {
     keySaved: "저장했습니다",
     keyFailedShort: "키를 확인하지 못했습니다",
     getKey: "키 발급받기",
-    keyStored: "키는 이 Mac의 키체인에 저장됩니다.",
+    // Keys are a local file today; only claim Keychain storage once #217 lands.
+    keyStored: "키는 이 컴퓨터에만 저장됩니다.",
     finishing: "Butler 준비가 끝나면 바로 시작합니다",
     finishFailed: "연결을 마치지 못했습니다. 다시 시도하세요.",
     localTitle: "이 컴퓨터의 모델",
