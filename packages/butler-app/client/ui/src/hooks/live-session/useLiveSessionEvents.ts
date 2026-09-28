@@ -6,7 +6,7 @@ import { createLiveEventConnection } from "./liveEventConnection.ts";
 import { subscribeAgentRuntimeState } from "@/app/agentRuntime.ts";
 import { showDesktopNotification } from "@/app/nativeNotifications.ts";
 import { useButlerStore } from "@/app/store.ts";
-import type { TimelineEvent } from "@/app/types.ts";
+import type { SettingsView, TimelineEvent } from "@/app/types.ts";
 import {
   createLiveSessionReconciliation,
   eventSessionId,
@@ -17,6 +17,10 @@ import {
   createLiveNavigationReconciliation,
   isProjectNavigationEvent,
 } from "./liveNavigationReconciliation.ts";
+import { settingsFromLiveEvent } from "./liveSettingsSync.ts";
+import { agentWallpaperChange, notifyAgentWallpaperChange, undoWallpaperChange } from "./liveWallpaperChange.ts";
+import { userWallpaperModules } from "@/app/userWallpaperModules.ts";
+import { wallpaperModulesChanged } from "@/app/wallpaperModules.ts";
 
 const DESKTOP_NOTIFICATION_RECENT_WINDOW_MS = 60_000;
 const TERMINAL_TURN_STATES = new Set(["delivered", "failed", "cancelled"]);
@@ -65,6 +69,14 @@ export function useLiveSessionEvents(): void {
         return;
       }
       const state = useButlerStore.getState();
+      const nextSettings = settingsFromLiveEvent(state.settings, event);
+      // The settings screen rebases its draft on this, keeping unsaved edits.
+      if (nextSettings) state.setSettings(nextSettings);
+      const wallpaperChange = agentWallpaperChange(event);
+      if (wallpaperChange) notifyAgentWallpaperChange(wallpaperChange, (change) => undoWallpaperChange(change, { onSettings: restoreSettings }));
+      // Module files changed: reload the named ones (none named: all); a shown one hot-reloads.
+      const changedModules = wallpaperModulesChanged(event);
+      if (changedModules) void userWallpaperModules.refresh(changedModules.length ? changedModules : undefined);
       if (isProjectNavigationEvent(event)) {
         navigationReconciliation.noteLiveNavigationEvent();
         const nextNavigation = applyLiveNavigationEvent(state.navigation, event);
@@ -138,6 +150,8 @@ export function useLiveSessionEvents(): void {
         if (useButlerStore.getState().liveConnectionLost !== liveConnectionLost) useButlerStore.setState({ liveConnectionLost });
       },
       onRecovered: () => {
+        // Module changes may have been missed while disconnected.
+        void userWallpaperModules.refresh();
         const view = useButlerStore.getState().view;
         if (view.kind === "project-dashboard") useProjectDashboardState.getState().invalidate(view.projectId);
         navigationReconciliation.requestRefresh();
@@ -154,6 +168,12 @@ export function useLiveSessionEvents(): void {
       navigationReconciliation.dispose();
     };
   }, []);
+}
+
+/** Settings saved by an undo: merged over the current ones (the live `settings.updated` follows). */
+function restoreSettings(settings: SettingsView): void {
+  const state = useButlerStore.getState();
+  state.setSettings({ ...state.settings, ...settings });
 }
 
 function directStewardChildSessionIds(

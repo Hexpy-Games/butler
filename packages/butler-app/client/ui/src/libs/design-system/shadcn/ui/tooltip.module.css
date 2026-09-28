@@ -21,6 +21,13 @@
   animation: tooltip-enter var(--motion-enter-menu) var(--motion-ease-enter);
 }
 
+/* Longer labels (an error line) wrap within the max width instead of running past it. */
+.tooltip[data-wrap="true"] {
+  text-align: start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .tooltip[data-state="closed"] {
   animation: tooltip-exit var(--motion-exit-fast) var(--motion-ease-accelerate)
     forwards;

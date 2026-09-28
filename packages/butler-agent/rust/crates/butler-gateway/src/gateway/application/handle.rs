@@ -21,6 +21,7 @@ impl AppApplication {
             project_dashboard_briefing: self.project_dashboard_briefing.clone(),
             queue_owner: self.queue_owner.clone(),
             butler_data: self.butler_data.clone(),
+            wallpapers: self.wallpapers.clone(),
             settings_update_lock: self.settings_update_lock.clone(),
             plan_decision_locks: self.plan_decision_locks.clone(),
             // Only the dispatching application relays readiness events.

@@ -8,10 +8,13 @@ mod mcp;
 mod restart;
 mod session_worktree;
 mod topic_conversation;
+mod wallpaper;
 
 pub(super) fn is_managed_project_ledger_effect(name: &str) -> bool {
     ledger_input::managed(name)
 }
+
+use std::sync::Arc;
 
 use butler_core::tool_protocol::ToolName;
 use serde_json::{Value, json};
@@ -19,8 +22,8 @@ use serde_json::{Value, json};
 use crate::host::guided::command::CommandScope;
 use butler_core::json::{JsonDocument, visit_raw_object};
 use butler_turn::btcc::{
-    AccessMode, BtccError, EffectAccess, EffectOutcome, ExecuteEffect, GuidedInvocation,
-    ModelRoundToolCall, ToolExecutionError,
+    AccessMode, BtccError, EffectAccess, EffectAdapter, EffectOutcome, ExecuteEffect,
+    GuidedInvocation, ModelRoundToolCall, ToolExecutionError, WorkView,
 };
 
 use super::GuidedTools;
@@ -93,37 +96,7 @@ pub(super) async fn execute(
             None,
         );
     };
-    let prepared = if session_worktree::supports(&call.name) {
-        session_worktree::prepare(owner, &call.arguments)
-    } else if mcp::supports(&call.name) {
-        mcp::prepare(owner, &call.arguments).map(|prepared| (prepared.0, prepared.1, prepared.2))
-    } else if automation::supports(&call.name) {
-        automation::prepare(owner, call, occurrence)
-    } else if topic_conversation::supports(&call.name) {
-        topic_conversation::prepare(owner, call, occurrence)
-    } else if call.name == ToolName::RequestServiceRestart {
-        restart::prepare(owner, &call.arguments)
-    } else if call.name == ToolName::RunCommand {
-        owner
-            .command
-            .prepare_effect(&call.arguments, scope)
-            .await
-            .map(|prepared| (prepared.target, prepared.input, prepared.adapter))
-    } else if ledger_input::managed(&call.name) {
-        ledger::prepare(owner, &call.name, &call.arguments).await
-    } else {
-        owner
-            .file_effects
-            .prepare(
-                &call.name,
-                &Value::Object(call.arguments.clone()),
-                &work,
-                occurrence,
-                owner.effect_journal.as_ref(),
-            )
-            .await
-            .map(|prepared| (prepared.target, prepared.input, prepared.adapter))
-    };
+    let prepared = prepare(owner, call, occurrence, scope, &work).await;
     let (target, input, adapter) = match prepared {
         Ok(prepared) => prepared,
         Err(error) => return ordinary(error.code(), error.message(), None),
@@ -192,6 +165,49 @@ pub(super) async fn execute(
         EffectOutcome::Uncertain { error, .. } => {
             ordinary(&error.code, &error.message, Some("uncertain"))
         }
+    }
+}
+
+/// The target, input and adapter of the persistent effect `call` asks for.
+async fn prepare(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+    occurrence: &str,
+    scope: CommandScope<'_>,
+    work: &WorkView,
+) -> Result<(String, Value, Arc<dyn EffectAdapter>), BtccError> {
+    if session_worktree::supports(&call.name) {
+        session_worktree::prepare(owner, &call.arguments)
+    } else if mcp::supports(&call.name) {
+        mcp::prepare(owner, &call.arguments).map(|prepared| (prepared.0, prepared.1, prepared.2))
+    } else if automation::supports(&call.name) {
+        automation::prepare(owner, call, occurrence)
+    } else if topic_conversation::supports(&call.name) {
+        topic_conversation::prepare(owner, call, occurrence)
+    } else if call.name == ToolName::RequestServiceRestart {
+        restart::prepare(owner, &call.arguments)
+    } else if wallpaper::supports(&call.name) {
+        wallpaper::prepare(owner, call)
+    } else if call.name == ToolName::RunCommand {
+        owner
+            .command
+            .prepare_effect(&call.arguments, scope)
+            .await
+            .map(|prepared| (prepared.target, prepared.input, prepared.adapter))
+    } else if ledger_input::managed(&call.name) {
+        ledger::prepare(owner, &call.name, &call.arguments).await
+    } else {
+        owner
+            .file_effects
+            .prepare(
+                &call.name,
+                &Value::Object(call.arguments.clone()),
+                work,
+                occurrence,
+                owner.effect_journal.as_ref(),
+            )
+            .await
+            .map(|prepared| (prepared.target, prepared.input, prepared.adapter))
     }
 }
 

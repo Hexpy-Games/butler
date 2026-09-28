@@ -58,10 +58,15 @@ pub(super) async fn get(
         git: Some(super::super::git::detail(application, &project.workspace_path).await),
         ..project_summary(&project, sessions)
     };
+    let wallpaper = summary.wallpaper.clone();
     let view = json!({
         "project": summary,
         "description": project.description,
-        "preferences": {"revision": project.preferences_revision, "pinnedSourceRefs": dashboard_pins},
+        "preferences": {
+            "revision": project.preferences_revision,
+            "pinnedSourceRefs": dashboard_pins,
+            "wallpaper": wallpaper,
+        },
         "overview": overview,
         "briefing": briefing,
         "stats": {

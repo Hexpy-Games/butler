@@ -28,6 +28,9 @@ pub struct AppProjectSummary {
     pub error_summary: Option<String>,
     pub workspace_label: String,
     pub safe_path_label: String,
+    /// `"inherit"` (follow the global `wallpaper` setting) or the project's
+    /// wallpaper source, from its dashboard preferences.
+    pub wallpaper: serde_json::Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sessions: Option<Vec<AppSessionSummary>>,
     /// The project folder's Git state: in the project list (`is_repo` and

@@ -160,37 +160,7 @@ pub(super) async fn route(
             (StatusCode::OK, data)
         }
         (Method::PATCH, "/preferences") => {
-            let value = body(request).await?;
-            let object = value
-                .as_object()
-                .ok_or_else(|| invalid("Invalid preferences patch."))?;
-            if object.keys().any(|key| {
-                !matches!(
-                    key.as_str(),
-                    "expectedRevision" | "description" | "pinnedSourceRefs"
-                )
-            }) || object
-                .get("expectedRevision")
-                .is_none_or(|v| safe_nonnegative_integer(v).is_none())
-                || (object.get("description").is_none() && object.get("pinnedSourceRefs").is_none())
-                || object
-                    .get("description")
-                    .is_some_and(|v| v.as_str().is_none_or(|s| utf16_len(s) > 2000))
-            {
-                return Err(invalid("Invalid preferences patch."));
-            }
-            let pins = object.get("pinnedSourceRefs").map(parse_pins).transpose()?;
-            let update = AppProjectDashboardPreferencesUpdate {
-                expected_revision: object
-                    .get("expectedRevision")
-                    .and_then(safe_nonnegative_integer)
-                    .ok_or_else(|| invalid("Invalid preferences patch."))?,
-                description: object
-                    .get("description")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned),
-                pinned_source_refs: pins,
-            };
+            let update = preferences_update(&body(request).await?)?;
             (
                 StatusCode::OK,
                 state
@@ -260,6 +230,37 @@ pub(super) async fn route(
         },
     )
     .map(Some)
+}
+
+/// Parses a preferences PATCH. `wallpaper` passes through as sent; the
+/// application validates it and names the offending field.
+fn preferences_update(value: &Value) -> Result<AppProjectDashboardPreferencesUpdate, HttpError> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| invalid("Invalid preferences patch."))?;
+    let fields = ["description", "pinnedSourceRefs", "wallpaper"];
+    if object
+        .keys()
+        .any(|key| key != "expectedRevision" && !fields.contains(&key.as_str()))
+        || !fields.iter().any(|field| object.contains_key(*field))
+        || object
+            .get("description")
+            .is_some_and(|v| v.as_str().is_none_or(|s| utf16_len(s) > 2000))
+    {
+        return Err(invalid("Invalid preferences patch."));
+    }
+    Ok(AppProjectDashboardPreferencesUpdate {
+        expected_revision: object
+            .get("expectedRevision")
+            .and_then(safe_nonnegative_integer)
+            .ok_or_else(|| invalid("Invalid preferences patch."))?,
+        description: object
+            .get("description")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        pinned_source_refs: object.get("pinnedSourceRefs").map(parse_pins).transpose()?,
+        wallpaper: object.get("wallpaper").cloned(),
+    })
 }
 
 fn checked_cursor(parameters: &HashMap<String, String>) -> Result<Option<String>, HttpError> {

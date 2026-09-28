@@ -22,6 +22,14 @@ use butler_core::public_text::trim_js_whitespace;
 // The rest of the multipart body is still parsed, but never retained as a file.
 const UPLOAD_RETAIN_BYTES: usize = 10 * 1024 * 1024 + 1;
 
+pub(super) fn handles(method: &Method, path: &str) -> bool {
+    (method == Method::POST && path == "/message-files")
+        || (method == Method::GET
+            && path
+                .strip_prefix("/message-files/")
+                .is_some_and(|id| !id.is_empty() && !id.contains('/')))
+}
+
 pub(super) async fn route(
     state: Arc<HttpState>,
     request: Request<Body>,
@@ -247,21 +255,21 @@ fn decode_file_id(encoded: &str) -> Result<String, HttpError> {
     clippy::needless_pass_by_value,
     reason = "map_err/iterator adapter taking owned values"
 )]
-fn multipart_error(error: MultipartError) -> HttpError {
+pub(super) fn multipart_error(error: MultipartError) -> HttpError {
     if error.status() == StatusCode::PAYLOAD_TOO_LARGE {
         HttpError::PayloadTooLarge
     } else {
         invalid_multipart()
     }
 }
-fn invalid_multipart() -> HttpError {
+pub(super) fn invalid_multipart() -> HttpError {
     HttpError::public(
         400,
         "invalid_multipart",
         "File upload must be multipart form data.",
     )
 }
-fn file_required() -> HttpError {
+pub(super) fn file_required() -> HttpError {
     HttpError::public(400, "file_required", "A file field is required.")
 }
 fn not_found() -> HttpError {
