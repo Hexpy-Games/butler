@@ -2,7 +2,7 @@ use super::contracts::{
     AuthorityAdmissionResult, AuthorityDecisionResult, AuthorityError, AuthorityRecord,
     AuthorityRequestProjection, AuthorityResult, AuthorityScopeProjection, RequestDecision,
 };
-use super::permission;
+use super::{approval, permission};
 
 const COMMAND_DENIAL: &str = "Reviewed command denied. No command was run.";
 const EFFECT_DENIAL: &str = "Reviewed operation denied. No change was applied.";
@@ -42,6 +42,16 @@ pub(super) fn request(
     collation: &butler_core::locale::LocaleCollation,
 ) -> AuthorityResult<AuthorityRequestProjection> {
     let scope = permission::for_record(record, collation)?;
+    let input: serde_json::Value =
+        serde_json::from_str(&record.normalized_input_json).map_err(|source| {
+            AuthorityError::policy("authority_request_corrupt").with_source(source)
+        })?;
+    let approval = approval::summarize(approval::ApprovalFacts {
+        capability: &record.capability,
+        target: &record.normalized_target,
+        input: &input,
+        workspace: &record.workspace_path,
+    });
     Ok(AuthorityRequestProjection {
         request_ref: record.request_ref.clone(),
         category: record.category.clone(),
@@ -58,6 +68,7 @@ pub(super) fn request(
             .source_call_id
             .clone()
             .filter(|value| !value.is_empty()),
+        approval: Some(approval),
     })
 }
 pub(super) fn decision(record: &AuthorityRecord) -> AuthorityResult<AuthorityDecisionResult> {

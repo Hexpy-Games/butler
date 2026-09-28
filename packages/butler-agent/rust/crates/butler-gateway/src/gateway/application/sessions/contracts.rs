@@ -76,6 +76,16 @@ pub trait AppSessionWorkspaceProvisioner: Send + Sync + 'static {
     ) -> ApplicationFuture<Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
+    /// The Git status of the repository `workspace_path` is in (branch,
+    /// dirty, ahead/behind); `None` when it is not in one or Git is
+    /// unavailable. The caller bounds the time with `cancellation`.
+    fn project_git(
+        &self,
+        _workspace_path: String,
+        _cancellation: CancellationToken,
+    ) -> ApplicationFuture<Option<crate::gateway::AppProjectGit>> {
+        Box::pin(async { Ok(None) })
+    }
 }
 
 pub trait AppSessionWorkProgress: Send + Sync + 'static {

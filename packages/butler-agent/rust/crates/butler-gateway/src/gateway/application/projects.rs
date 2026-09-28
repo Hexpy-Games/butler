@@ -3,6 +3,7 @@
 mod contracts;
 mod dashboard;
 mod folder;
+mod git;
 mod mutations;
 mod owner;
 mod rows;
@@ -11,7 +12,8 @@ mod token;
 use crate::gateway::application::storage::AppStorageCode;
 pub(crate) use contracts::AppProjectSummary;
 pub use contracts::{
-    AppCreateProjectRequest, AppCreateProjectResult, AppProjectList, AppProjectSource,
+    AppCreateProjectRequest, AppCreateProjectResult, AppProjectGit, AppProjectList,
+    AppProjectSource,
 };
 pub(super) use dashboard::ProjectDashboardBriefingOwner;
 pub use dashboard::{
@@ -229,15 +231,25 @@ impl AppApplication {
                 }
             }
         }
+        let heads = git::heads(
+            rows.iter()
+                .map(|row| PathBuf::from(&row.workspace_path))
+                .collect(),
+        )
+        .await;
         let projects = rows
             .into_iter()
-            .map(|row| {
+            .zip(heads)
+            .map(|(row, head)| {
                 let project_sessions = include_sessions.then(|| {
                     sessions_by_project
                         .remove(rows::id(&row))
                         .unwrap_or_default()
                 });
-                rows::summary(row, project_sessions)
+                AppProjectSummary {
+                    git: Some(head),
+                    ..rows::summary(row, project_sessions)
+                }
             })
             .collect();
         Ok(AppProjectList { projects })

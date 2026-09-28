@@ -12,5 +12,5 @@ crates/butler-memory	118	110
 crates/butler-models	66	54
 crates/butler-platform	19	19
 crates/butler-runtime	77	69
-crates/butler-turn	110	95
+crates/butler-turn	110	94
 tools/source-check	16	14

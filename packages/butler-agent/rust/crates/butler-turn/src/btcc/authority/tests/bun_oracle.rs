@@ -58,8 +58,13 @@ fn input(value: &Value) -> AuthorityAdmissionInput {
     }
 }
 
+/// Format pin: what each admission projects (identity, permission scope)
+/// matches the Bun oracle, and every approval summary and command risk is
+/// as the App reads it.
+// test-category: format-pin
 #[test]
 fn actual_bun_principal_admission_identity_and_permission_match() {
+    super::super::approval::pinned::assert_approval_summaries();
     let fixture: Fixture = serde_json::from_str(include_str!("../bun-golden.json")).unwrap();
     let collation = LocaleCollation::new(&fixture.locale).unwrap();
     assert_eq!(

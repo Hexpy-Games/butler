@@ -48,8 +48,8 @@ pub(super) async fn execute(
             &root,
             &requested,
             "tool_not_admitted",
-            "The write effect is not admitted for this Steward task.",
-            "Use only the exact mutation capability in the delegated packet.",
+            "The write is not allowed for this task.",
+            "Use only the changes this task allows.",
         ));
     }
     if !arguments::scope(&requested, input.mutation_scope) {
@@ -57,8 +57,8 @@ pub(super) async fn execute(
             &root,
             &requested,
             "invalid_arguments",
-            "The requested path is outside the delegated mutation scope.",
-            "Retry only within the immutable Steward mutation scope.",
+            "That file is outside the files this task may change.",
+            "Retry only within the files this task may change.",
         ));
     }
     let Ok(expected_sha256) = arguments::sha256(args.get("expected_sha256")) else {
