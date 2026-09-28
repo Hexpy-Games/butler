@@ -312,6 +312,7 @@ const appAgentNativeServiceBridge = shouldUseAppAgentNativeServiceBridge()
       systemdUnit: appAgentSystemdUnit(),
       getPort: () => port,
       getAppVersion: () => appInfoView().version,
+      getDevOrigin: () => (explicitUiUrl ? rendererOrigin : null),
       resourcesPath: process.resourcesPath,
       execPath: process.execPath,
       menuBarHelper: appManagedMenuBarHelperRegistration(),

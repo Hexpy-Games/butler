@@ -1,5 +1,7 @@
 import { useAppLocale } from "@/app/copy.ts";
+import { useCallback } from "react";
 import { EmptyPanelLine } from "@/components/common/Display.tsx";
+import { refreshSessionFileUrls } from "@/app/messageFileRefresh.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { DocumentTile, FileText, InspectorInset, Section, Stack } from "@/butler-ds";
@@ -26,6 +28,7 @@ export function ArtifactsPanel({
   const setSelectedArtifactId = useButlerStore(
     (state) => state.setSelectedArtifactId,
   );
+  const activeChatId = useButlerStore((state) => state.activeChatId);
   const messages = useButlerStore((state) => state.messages);
   const messageArtifacts = messages.flatMap(
     (message) => message.artifacts ?? [],
@@ -39,6 +42,11 @@ export function ArtifactsPanel({
         ? selectedArtifactFallback
         : undefined))
     : undefined;
+  const sessionId = selectedArtifact?.session_id || activeChatId;
+  const refreshFileUrls = useCallback(
+    () => refreshSessionFileUrls(sessionId),
+    [sessionId],
+  );
 
   return (
     <InspectorInset>
@@ -50,6 +58,7 @@ export function ArtifactsPanel({
           <ArtifactViewer
             artifact={selectedArtifact}
             onBack={() => setSelectedArtifactId(null)}
+            refreshFileUrls={refreshFileUrls}
           />
         ) : allArtifacts.length > 0 ? (
           <Stack gap="xs">

@@ -16,6 +16,7 @@ function fallbackArtifacts(
     kind: attachment.kind === "image" ? "image" : "file",
     safe_path_label: attachment.safe_name,
     url: attachment.url,
+    signed_url: attachment.signed_url,
     size_bytes: attachment.size_bytes,
     created_at: attachment.created_at,
     open_action: "route",

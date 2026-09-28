@@ -1,8 +1,9 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { memo } from "react";
+import { memo, useCallback } from "react";
 import type { MessageRecord } from "@/app/types.ts";
 import { appCopy } from "@/app/copy.ts";
 import { visibleSystemMessageText } from "@/app/system-event-message.ts";
+import { refreshSessionFileUrls } from "@/app/messageFileRefresh.ts";
 import { Stack, Tag } from "@/butler-ds";
 import {
   canRetryWithCurrentControls,
@@ -44,6 +45,8 @@ function MessageContentComponent({
 }: MessageContentProps) {
   useAppLocale();
   const artifacts = message.artifacts ?? [];
+  const sessionId = message.chat_id ?? "";
+  const refreshFileUrls = useCallback(() => refreshSessionFileUrls(sessionId), [sessionId]);
   const failureNotice = isAssistantFailureNoticeMessage(message);
   return (
     <>
@@ -64,7 +67,9 @@ function MessageContentComponent({
                 <AssistantFailureNotice message={message} />
               ) : (
                 <MessageMarkdown
+                  artifacts={message.artifacts}
                   attachments={message.attachments}
+                  refreshFileUrls={refreshFileUrls}
                   streaming={message.status === "streaming"}
                   text={message.text}
                 />
@@ -75,7 +80,9 @@ function MessageContentComponent({
             <AssistantFailureNotice message={message} />
           ) : (
             <MessageMarkdown
+              artifacts={message.artifacts}
               attachments={message.attachments}
+              refreshFileUrls={refreshFileUrls}
               streaming={message.status === "streaming"}
               text={message.text}
             />
