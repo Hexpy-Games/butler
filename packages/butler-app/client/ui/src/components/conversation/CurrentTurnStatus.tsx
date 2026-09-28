@@ -11,6 +11,7 @@ import { Typo } from "@/butler-ds";
 import { useElapsedTime } from "./hooks/useElapsedTime";
 
 export function CurrentTurnStatus({
+  markKey,
   operation,
   modelRoundWait,
   publicActivity,
@@ -18,6 +19,7 @@ export function CurrentTurnStatus({
   startedAt,
   state,
 }: {
+  markKey?: string;
   operation?: ProgressRow;
   modelRoundWait?: ProgressRow;
   publicActivity?: ProgressRow;
@@ -46,6 +48,7 @@ export function CurrentTurnStatus({
     >
       <AssistantStatusLabel
         label={fullLabel}
+        markKey={markKey}
         markTheme={markTheme}
         state="active"
       >

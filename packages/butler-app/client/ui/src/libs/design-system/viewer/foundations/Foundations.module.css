@@ -84,7 +84,7 @@
 }
 
 .guideNumber {
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: var(--typo-caption-size);
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-body);
@@ -208,6 +208,12 @@
   line-height: var(--line-height-tight);
 }
 
+.axis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-lg);
+}
+
 .voiceLines {
   display: grid;
   gap: var(--space-sm);
@@ -258,6 +264,12 @@
 .ladder {
   display: grid;
   gap: var(--space-2xl);
+}
+
+/* A faint hairline between roles; the spacing still carries the rhythm. */
+.rung + .rung {
+  padding-top: var(--space-2xl);
+  border-top: var(--border-hairline) solid var(--line);
 }
 
 .rung {

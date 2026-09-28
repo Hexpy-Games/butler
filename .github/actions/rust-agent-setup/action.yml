@@ -3,6 +3,8 @@ description: >-
   Pinned Rust toolchain, the native dependencies a job needs (only protoc to
   check, or the static ONNX Runtime to link), and a Cargo cache keyed per job.
   Every Rust agent job (and future E2E jobs that build the binary) starts here.
+  The recipe prepares the runner's own target (macOS arm64, Linux x64/arm64,
+  Windows x64 for protoc only).
 
 inputs:
   components:
@@ -42,18 +44,18 @@ runs:
         CARGO_TARGET_DIR: ${{ runner.temp }}/ort-cache
       run: |
         set -euo pipefail
-        prepared="$(python scripts/prepare-static-ort-macos-arm64.py --protoc-only)"
+        prepared="$(python scripts/prepare-static-ort.py --protoc-only)"
         echo "PROTOC=$(jq -r .protoc <<<"$prepared")" >> "$GITHUB_ENV"
 
-    # The recipe's own fingerprint (lock, script, toolchain, SDK, clang,
-    # Python) is the cache key, so a runner image update that changes none
-    # of them still hits the cache.
+    # The recipe's own fingerprint (target lock inputs, script, toolchain,
+    # compiler/SDK, Python) is the cache key, one per target, so a runner
+    # image update that changes none of them still hits the cache.
     - name: Fingerprint static ONNX Runtime
       if: inputs.native-deps == 'ort'
       id: ort
       shell: bash
       working-directory: packages/butler-agent/rust
-      run: echo "fingerprint=$(python scripts/prepare-static-ort-macos-arm64.py --fingerprint)" >> "$GITHUB_OUTPUT"
+      run: echo "fingerprint=$(python scripts/prepare-static-ort.py --fingerprint)" >> "$GITHUB_OUTPUT"
 
     - name: Restore static ONNX Runtime cache
       if: inputs.native-deps == 'ort'
@@ -72,7 +74,7 @@ runs:
         ORT_CACHE_TARGET: ${{ runner.temp }}/ort-cache
       run: |
         set -euo pipefail
-        prepared="$(CARGO_TARGET_DIR="$ORT_CACHE_TARGET" python scripts/prepare-static-ort-macos-arm64.py)"
+        prepared="$(CARGO_TARGET_DIR="$ORT_CACHE_TARGET" python scripts/prepare-static-ort.py)"
         echo "$prepared"
         {
           echo "ORT_LIB_PATH=$(jq -r .ort_lib_path <<<"$prepared")"

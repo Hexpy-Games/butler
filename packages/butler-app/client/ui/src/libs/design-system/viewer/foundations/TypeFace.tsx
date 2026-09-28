@@ -2,7 +2,7 @@ import type { CSSProperties } from "react";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { tokenCatalog } from "./catalog";
-import { fontFamilies, fontWeights } from "./typeScale";
+import { BUNDLED_FACES, fontFamilies, fontWeights, typefaceTitle, WEIGHT_AXIS } from "./typeScale";
 import type { SampleLocale } from "./typeRoles";
 import f from "./Foundations.module.css";
 
@@ -38,8 +38,9 @@ export function TypeFace({ locale }: { locale: SampleLocale }) {
         <Stack gap="lg" minWidth="0">
           <Stack gap="xs">
             <Typo.SectionTitle tone="tertiary">Typeface · --font-body</Typo.SectionTitle>
-            <Typo.H2>{`${families[0] ?? "System UI"} + ${families.find((family) => /Gothic|KR/u.test(family)) ?? "Hangul system font"}`}</Typo.H2>
-            <Typo.Caption tone="secondary" wrap="anywhere">{`Stack: ${families.join(" · ")}`}</Typo.Caption>
+            <Typo.H2>{typefaceTitle(families)}</Typo.H2>
+            {BUNDLED_FACES[families[0] ?? ""] ? <Typo.Caption tone="secondary">{BUNDLED_FACES[families[0]!]}</Typo.Caption> : null}
+            <Typo.Caption tone="tertiary" wrap="anywhere">{`Fallback: ${families.slice(1).join(" · ")}`}</Typo.Caption>
           </Stack>
           <div className={f.weights}>
             {fontWeights(tokenCatalog).map((token) => (
@@ -63,6 +64,17 @@ export function TypeFace({ locale }: { locale: SampleLocale }) {
           </div>
         ))}
         <div className={f.glyphRow}>
+          <Typo.SectionTitle tone="tertiary">Weight axis</Typo.SectionTitle>
+          <Stack gap="xs" minWidth="0">
+            <span className={f.axis}>
+              {WEIGHT_AXIS.map((weight) => (
+                <span className={f.weightSample} key={weight} style={{ "--sample-weight": weight } as CSSProperties}>Aa가</span>
+              ))}
+            </span>
+            <Typo.Caption tone="tertiary">{WEIGHT_AXIS.join(" · ")}</Typo.Caption>
+          </Stack>
+        </div>
+        <div className={f.glyphRow}>
           <Typo.SectionTitle tone="tertiary">Numerals</Typo.SectionTitle>
           <Stack gap="xs" minWidth="0">
             <span className={`${f.glyphs} ${f.proportional}`}>0123456789 <Typo.Caption tone="tertiary">proportional</Typo.Caption></span>
@@ -73,7 +85,7 @@ export function TypeFace({ locale }: { locale: SampleLocale }) {
           <Typo.SectionTitle tone="tertiary">Code · --font-family-code</Typo.SectionTitle>
           <Stack gap="xs" minWidth="0">
             <span className={f.glyphsCode}>{"const reply = await butler.ask(\"요약해 줘\"); // 0O 1lI"}</span>
-            <Typo.Caption tone="tertiary" wrap="anywhere">{fontFamilies(code).join(" · ")}</Typo.Caption>
+            <Typo.Caption tone="tertiary" wrap="anywhere">{[fontFamilies(code)[0], BUNDLED_FACES[fontFamilies(code)[0] ?? ""]].filter(Boolean).join(" · ")}</Typo.Caption>
           </Stack>
         </div>
       </div>

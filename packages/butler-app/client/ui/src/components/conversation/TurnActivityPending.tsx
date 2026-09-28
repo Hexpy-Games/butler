@@ -9,9 +9,11 @@ const SESSION_STARTING_STATE = "session_starting";
 const SKELETON_WIDTH = "min(420px, 100%)";
 
 export function TurnActivityPending({
+  markKey,
   readModels,
   state,
 }: {
+  markKey?: string;
   readModels: ActivityReadModel[];
   state?: string;
 }) {
@@ -32,6 +34,7 @@ export function TurnActivityPending({
       >
         <AssistantStatusLabel
           label={pendingLabel}
+          markKey={markKey}
           markTheme={markTheme}
           state="active"
         >
@@ -52,6 +55,7 @@ export function TurnActivityPending({
   return (
     <AssistantStatusLabel
       label={pendingLabel}
+      markKey={markKey}
       markTheme={markTheme}
       state="active"
     >

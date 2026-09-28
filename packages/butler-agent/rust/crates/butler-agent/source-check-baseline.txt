@@ -83,7 +83,6 @@ src/host/guided/tools/message/preview/work.rs	project_raw	99
 src/host/guided/tools/occurrence.rs	occurrence	100
 src/host/guided/work_streams/prompt.rs	render	92
 src/host/guided/work_streams/storage.rs	Store::update_todo	101
-src/host/installation.rs	ResolvedInstallation::payload_provenance	82
 src/host/mcp/registry_cli.rs	run	162
 src/host/memory_jobs/briefing.rs	<BriefingSource as BriefingInputSource>::snapshot	110
 src/host/memory_jobs/consolidation_phase.rs	<CyclePhases as PhaseExecutor>::execute	116

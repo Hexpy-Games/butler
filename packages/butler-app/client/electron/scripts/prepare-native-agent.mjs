@@ -32,8 +32,8 @@ const electronRoot = resolve(scriptDir, "..");
 const repositoryRoot = resolve(electronRoot, "../../../..");
 const rustRoot = join(repositoryRoot, "packages", "butler-agent", "rust");
 
-const prepareScript = join(rustRoot, "scripts", "prepare-static-ort-macos-arm64.py");
-const prepared = JSON.parse(run(process.env.PYTHON3 || "python3", [prepareScript], rustRoot));
+const prepareScript = join(rustRoot, "scripts", "prepare-static-ort.py");
+const prepared = JSON.parse(run(process.env.PYTHON3 || "python3", [prepareScript, "--target", "macos-arm64"], rustRoot));
 if (!prepared.ort_lib_path || !prepared.protoc) {
   throw new Error("Static ONNX Runtime preparation returned incomplete build paths.");
 }

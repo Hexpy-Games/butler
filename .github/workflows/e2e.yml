@@ -71,14 +71,14 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/ort-cache/native-deps
-          key: static-ort-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.version }}-${{ hashFiles('packages/butler-agent/rust/scripts/static-ort-macos-arm64.lock.json', 'packages/butler-agent/rust/scripts/prepare-static-ort-macos-arm64.py', 'packages/butler-agent/rust/rust-toolchain.toml') }}
+          key: static-ort-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.version }}-${{ hashFiles('packages/butler-agent/rust/scripts/static-ort.lock.json', 'packages/butler-agent/rust/scripts/prepare-static-ort.py', 'packages/butler-agent/rust/rust-toolchain.toml') }}
 
       - name: Prepare pinned static ONNX Runtime and protoc
         env:
           ORT_CACHE_TARGET: ${{ runner.temp }}/ort-cache
         run: |
           set -euo pipefail
-          prepared="$(CARGO_TARGET_DIR="$ORT_CACHE_TARGET" python scripts/prepare-static-ort-macos-arm64.py)"
+          prepared="$(CARGO_TARGET_DIR="$ORT_CACHE_TARGET" python scripts/prepare-static-ort.py)"
           {
             echo "ORT_LIB_PATH=$(jq -r .ort_lib_path <<<"$prepared")"
             echo "PROTOC=$(jq -r .protoc <<<"$prepared")"
@@ -202,7 +202,7 @@ jobs:
           ORT_CACHE_TARGET: ${{ runner.temp }}/ort-cache
         run: |
           set -euo pipefail
-          prepared="$(CARGO_TARGET_DIR="$ORT_CACHE_TARGET" python scripts/prepare-static-ort-macos-arm64.py)"
+          prepared="$(CARGO_TARGET_DIR="$ORT_CACHE_TARGET" python scripts/prepare-static-ort.py)"
           {
             echo "ORT_LIB_PATH=$(jq -r .ort_lib_path <<<"$prepared")"
             echo "PROTOC=$(jq -r .protoc <<<"$prepared")"

@@ -17,6 +17,8 @@ fn mime(path: &str) -> Option<&'static str> {
         Some("js") => Some("text/javascript; charset=utf-8"),
         Some("json") => Some("application/json; charset=utf-8"),
         Some("svg") => Some("image/svg+xml"),
+        // Bundled UI fonts: @font-face requests carry no Authorization header.
+        Some("woff2") => Some("font/woff2"),
         _ => None,
     }
 }
@@ -101,4 +103,17 @@ pub(super) async fn serve(
 
 fn not_found() -> HttpError {
     HttpError::public(404, "not_found", "Route not found.")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bundled_fonts_are_public_typed_static_assets() {
+        let path = "/assets/PretendardVariable.subset.0-Ab12.woff2";
+        assert_eq!(mime(path), Some("font/woff2"));
+        assert!(is_public_static_request(&Method::GET, path));
+        assert!(!is_public_static_request(&Method::POST, path));
+    }
 }
