@@ -8,19 +8,19 @@ import {
   CircleX,
   ICON_SIZE,
   InspectorInset,
-  InspectorPanel,
-  KeyValueRow,
   LoadingIndicator,
 } from "@/butler-ds";
-import { Artifact, EmptyPanelLine } from "@/components/common/Display.tsx";
-import { contextTooltip } from "@/app/utils.ts";
 import { summaryProgressRows } from "@/app/conversation-progress";
+import { DeveloperSummary } from "./DeveloperSummary.tsx";
 import type { SessionSummaryView, StatusPill } from "@/app/types.ts";
 
 export function SummaryPanel({
+  developerMode = false,
   status,
   summary,
 }: {
+  /** Shows gateway, Git, context and skills details. */
+  developerMode?: boolean;
   status: StatusPill;
   summary?: SessionSummaryView | null;
 }) {
@@ -28,7 +28,6 @@ export function SummaryPanel({
   const progressRows = summaryProgressRows(
     summary?.latest_progress?.safe_progress_rows ?? [],
   );
-  const skillsUsed = summary?.skills_used ?? [];
   return (
     <>
       <InspectorInset>
@@ -43,83 +42,9 @@ export function SummaryPanel({
           }))}
         />
       </InspectorInset>
-      <InspectorPanel title={appCopy.interfacePanels.branchDetails}>
-        <KeyValueRow label={appCopy.interfacePanels.gateway} value={status.label} />
-        <KeyValueRow
-          label={appCopy.interfacePanels.gitBranch}
-          value={branchValue(summary?.branch_info)}
-        />
-        <KeyValueRow
-          label={appCopy.interfacePanels.workspace}
-          value={workspaceValue(summary?.branch_info)}
-        />
-        <KeyValueRow
-          label={appCopy.interfacePanels.changes}
-          value={dirtyValue(summary?.branch_info)}
-        />
-        <KeyValueRow
-          label={appCopy.interfacePanels.context}
-          value={contextTooltip(summary?.context_details)}
-        />
-      </InspectorPanel>
-      <InspectorPanel title={appCopy.interfacePanels.skills}>
-        {skillsUsed.length > 0 ? (
-          skillsUsed.map((skill) => <Artifact key={skill} label={skill} />)
-        ) : (
-          <EmptyPanelLine label={appCopy.interfacePanels.noVisibleSkills} />
-        )}
-      </InspectorPanel>
+      {developerMode && <DeveloperSummary status={status} summary={summary} />}
     </>
   );
-}
-
-function branchValue(
-  branch: SessionSummaryView["branch_info"] | undefined,
-): string {
-  if (!branch) return appCopy.interfacePanels.unavailable;
-  if (branch.workspace_mode === "git") {
-    return branch.branch_name?.trim() || appCopy.interfacePanels.detachedHead;
-  }
-  if (branch.workspace_mode === "folder") return appCopy.interfacePanels.notGit;
-  if (branch.workspace_mode === "none") return appCopy.interfacePanels.noWorkspace;
-  if (branch.safe_error_code === "git_not_installed") {
-    return appCopy.interfacePanels.noGit;
-  }
-  return appCopy.interfacePanels.unavailable;
-}
-
-function workspaceValue(
-  branch: SessionSummaryView["branch_info"] | undefined,
-): string {
-  if (!branch) return appCopy.interfacePanels.unavailable;
-  if (
-    branch.workspace_binding === "session_worktree" &&
-    branch.workspace_status === "unavailable"
-  ) {
-    return appCopy.interfacePanels.unavailableWorktree;
-  }
-  if (branch.workspace_binding === "session_worktree") {
-    return appCopy.interfacePanels.worktree;
-  }
-  if (branch.workspace_binding === "project") {
-    return appCopy.composer.workspaceLocal;
-  }
-  if (branch.workspace_mode === "none") return appCopy.interfacePanels.noWorkspace;
-  if (branch.workspace_mode === "folder") return appCopy.interfacePanels.projectFolder;
-  if (branch.workspace_mode === "git") return appCopy.interfacePanels.projectWorkspace;
-  if (branch.safe_error_code === "git_not_installed") {
-    return appCopy.interfacePanels.projectWorkspaceNoGit;
-  }
-  return appCopy.interfacePanels.unavailable;
-}
-
-function dirtyValue(
-  branch: SessionSummaryView["branch_info"] | undefined,
-): string {
-  if (branch?.workspace_status === "unavailable") return appCopy.interfacePanels.unavailable;
-  if (branch?.dirty === true) return appCopy.interfacePanels.dirty;
-  if (branch?.dirty === false) return appCopy.interfacePanels.clean;
-  return appCopy.interfacePanels.unavailable;
 }
 
 function progressStateTone(state?: string): string {

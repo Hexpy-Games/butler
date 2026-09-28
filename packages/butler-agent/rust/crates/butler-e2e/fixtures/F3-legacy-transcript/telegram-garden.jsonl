@@ -1,0 +1,7 @@
+{"eventId":"legacy-ev-0001","sessionId":"telegram/dm-garden","kind":"inbound","timestamp":"2025-10-12T08:00:00.000Z","transport":"telegram","payload":{"message":{"text":"When should I prune the fig tree?"}}}
+{"eventId":"legacy-ev-0002","sessionId":"telegram/dm-garden","kind":"outbound","timestamp":"2025-10-12T08:00:09.000Z","transport":"telegram","payload":{"message":{"text":"Prune figs in late winter, before new growth starts."}}}
+{"eventId":"legacy-ev-0003","sessionId":"telegram/dm-garden","kind":"delivery","timestamp":"2025-10-12T08:00:09.500Z","transport":"telegram","payload":{"ok":true}}
+{"eventId":"legacy-ev-0004","sessionId":"telegram/dm-garden","kind":"inbound","timestamp":"2025-10-12T08:02:00.000Z","transport":"telegram","payload":{"message":{"text":"And the lemon tree?"}}}
+{"eventId":"legacy-ev-0005","sessionId":"telegram/dm-garden","kind":"outbound","timestamp":"2025-10-12T08:02:11.000Z","transport":"telegram","payload":{"message":{"text":"Lemons need only light pruning after harvest."}}}
+{"eventId":"legacy-ev-0006","sessionId":"telegram/dm-garden","kind":"inbound","timestamp":"2025-10-12T08:03:00.000Z","transport":"telegram","payload":{"message":{"text":"garbled
+{"eventId":"legacy-ev-0007","sessionId":"telegram/dm-garden","kind":"inbound","timestamp":"1970-01-01T00:00:00.000Z","transport":"mock","payload":{"message":{"text":"mock placeholder"}}}

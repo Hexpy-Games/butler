@@ -38,10 +38,12 @@ impl Sandbox {
         let resources = install.join("resources");
         let binary = install.join("bin/butler-agent");
         fs::create_dir_all(install.join("bin"))?;
-        let source = agent_binary()?;
-        if fs::hard_link(&source, &binary).is_err() {
-            fs::copy(&source, &binary)?;
-        }
+        // A copy (an APFS clone), never a hard link: macOS reports a process's
+        // executable (proc_pidpath) under the name its file was last looked
+        // up by, so sandboxes sharing one inode see each other's paths, and
+        // the product's instance identity check then refuses the CLI's
+        // gateway control requests (`gateway_control_identity_invalid`).
+        fs::copy(agent_binary()?, &binary)?;
         copy_tree(&resource_source(), &resources)?;
         fs::create_dir_all(resources.join("app-client/dist"))?;
         fs::write(

@@ -128,14 +128,14 @@ pub(crate) async fn run(
         }
         (Ok(value), Ok(())) => value,
     };
-    let after = match health.read().await {
+    let (after, before_view, after_view) = match read_after(&health, &before).await {
         Ok(value) => value,
         Err(error) => return fail(options.json, error.code(), &error.message(), 1),
     };
     let data = json!({
         "exitCode":outcome.exit_code,"skipped":outcome.skipped,"phasesRun":outcome.phases_run,
         "aborted":outcome.aborted,"failedPhases":&outcome.failed_phases,
-        "before":projection(&before),"after":projection(&after),
+        "before":before_view,"after":after_view,
         "hotCacheVectorBackfill":backfill,
         "rawTextIncluded":false,
     });
@@ -249,8 +249,23 @@ async fn run_active(
     result
 }
 
-fn projection(report: &MemoryHealthReport) -> Value {
-    json!({"maintenanceStatus":report.maintenance_status.as_str(),"queueBacklog":report.metric_dimensions["queue_backlog_count"],"graphEntityCount":report.metric_dimensions["graph_entities_count"],"graphEdgeCount":report.metric_dimensions["graph_edges_count"]})
+/// The health after maintenance, with the views before and after it.
+async fn read_after(
+    health: &MemoryHealthService,
+    before: &MemoryHealthReport,
+) -> Result<(MemoryHealthReport, Value, Value), butler_memory::cognition::CognitionError> {
+    let after = health.read().await?;
+    let views = (projection(before)?, projection(&after)?);
+    Ok((after, views.0, views.1))
+}
+
+fn projection(
+    report: &MemoryHealthReport,
+) -> Result<Value, butler_memory::cognition::CognitionError> {
+    let dimensions = report.metric_dimensions()?;
+    Ok(
+        json!({"maintenanceStatus":report.maintenance_status.as_str(),"queueBacklog":dimensions["queue_backlog_count"],"graphEntityCount":dimensions["graph_entities_count"],"graphEdgeCount":dimensions["graph_edges_count"]}),
+    )
 }
 
 fn parse(

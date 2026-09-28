@@ -51,6 +51,8 @@ describe("App foreground quit", () => {
       },
     });
     expect(confirmed).toBeFalse();
+    expect(APP_FOREGROUND_QUIT_COPY).toContain("예약 작업");
+    expect(APP_FOREGROUND_QUIT_COPY).not.toContain("자동화");
     expect(options).toMatchObject({
       message: APP_FOREGROUND_QUIT_COPY,
       buttons: ["취소", "Butler 종료"],

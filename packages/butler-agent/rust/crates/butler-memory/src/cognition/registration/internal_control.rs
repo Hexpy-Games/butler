@@ -2,7 +2,6 @@
 
 use std::sync::Arc;
 
-use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
 use super::{Clock, ConversationRegistrationOutcome, RegisterConversationSourceInput};
@@ -102,10 +101,7 @@ fn supersede(
             internal_ids.push(assistant_id.to_owned());
         }
     }
-    let episode_id = projection_hash_for_graph(vec![
-        Value::String("canonical-conversation-turn".into()),
-        Value::String(state.turn_id.clone()),
-    ])?;
+    let episode_id = projection_hash_for_graph(&("canonical-conversation-turn", &state.turn_id))?;
     let mut graph = GraphRepository::open(&state.handle.graph_path)?;
     let ids = internal_ids.iter().map(String::as_str).collect::<Vec<_>>();
     let result = graph.ensure_schema(&(state.clock)()).and_then(|()| {

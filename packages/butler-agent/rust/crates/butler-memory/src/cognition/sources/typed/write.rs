@@ -20,35 +20,56 @@ use crate::cognition::{
     TypedMemorySourceNotice, ensure_data_authority,
 };
 
+/// An explicit rule to remember.
 #[derive(Clone, Debug, Default)]
 pub struct ExplicitMemoryUpdateInput {
+    /// Rule text.
     pub text: String,
+    /// Idempotency key; a retry with the same id replays the first write.
     pub operation_id: Option<String>,
+    /// Rule record id; derived from the operation when absent.
     pub record_id: Option<String>,
+    /// Project the rule belongs to.
     pub project_id: Option<String>,
+    /// Conversation session the rule came from.
     pub conversation_session_id: Option<String>,
+    /// Message the rule came from.
     pub conversation_message_id: Option<String>,
 }
 
+/// What an explicit rule update wrote.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExplicitMemoryUpdateResult {
+    /// Path of the rule text.
     pub path: PathBuf,
+    /// Rule record id.
     pub record_id: String,
+    /// Rule revision.
     pub revision: String,
+    /// Operation id.
     pub operation_id: String,
+    /// The operation had already written this revision.
     pub replayed: bool,
+    /// Projection job published for the rule.
     pub job_id: String,
 }
 
+/// What ingesting a reviewed task outcome wrote.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TaskMemoryIngestionResult {
+    /// Task id.
     pub task_id: String,
+    /// Path of the task memory.
     pub memory_path: PathBuf,
+    /// Session the task came from.
     pub origin_session_id: Option<String>,
+    /// Event the task came from.
     pub origin_event_id: Option<String>,
+    /// Projection job published for the task report.
     pub job_id: String,
 }
 
+/// Writes (or replays) an explicit rule and publishes it for projection.
 pub fn update_explicit_memory(
     data_root: &Path,
     environment: &CognitionPathEnvironment,
@@ -59,39 +80,12 @@ pub fn update_explicit_memory(
         return Err(error(CognitionCode::ExplicitMemoryTextRequired));
     }
     let memory_root = environment.memory_root(data_root);
-    let rules_root = memory_root.join("rules");
-    let operation_id = input
-        .operation_id
-        .as_deref()
-        .map(butler_core::public_text::trim_js_whitespace)
-        .filter(|value| !value.is_empty())
-        .map(str::to_owned)
-        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-    let record_id = input
-        .record_id
-        .as_deref()
-        .map(butler_core::public_text::trim_js_whitespace)
-        .filter(|value| !value.is_empty())
-        .map(str::to_owned)
+    let operation_id =
+        trimmed(input.operation_id.as_deref()).unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let record_id = trimmed(input.record_id.as_deref())
         .unwrap_or_else(|| sha256(format!("explicit-rule:{operation_id}").as_bytes()));
     validate_record_id(&record_id)?;
-    let text_path = rules_root.join(format!("{record_id}.md"));
-    let binding_path = rules_root.join(format!("{record_id}.source.json"));
-    let index_path = rules_root.join("INDEX.md");
-    let queue_path = memory_root.join("queue/sync.jsonl");
-    let queue_coordination_path = queue_path.with_extension("jsonl.coord.sqlite");
-    ensure_data_authority(
-        data_root,
-        &[
-            &rules_root,
-            &text_path,
-            &binding_path,
-            &index_path,
-            &queue_path,
-            &queue_coordination_path,
-        ],
-    )?;
-
+    let paths = RulePaths::new(data_root, &memory_root, &record_id)?;
     let content_hash = sha256(input.text.as_bytes());
     let revision = explicit_rule_revision(
         &record_id,
@@ -101,39 +95,27 @@ pub fn update_explicit_memory(
         input.conversation_message_id.as_deref(),
     )?;
     let prior = read_binding(&memory_root, &record_id)?;
-    let replayed = if let Some(operation) = prior.as_ref().and_then(|binding| {
-        binding
-            .operations
-            .iter()
-            .find(|item| item.operation_id == operation_id)
-    }) {
-        if operation.revision != revision {
-            return Err(error(CognitionCode::MemorySourceOperationConflict));
-        }
-        if read_explicit_record(&memory_root, &record_id)?.is_none() {
-            return Err(error(CognitionCode::MemorySourceOperationRetracted));
-        }
-        true
-    } else {
-        false
-    };
-
+    let replayed = replayed(
+        &memory_root,
+        prior.as_ref(),
+        &record_id,
+        &operation_id,
+        &revision,
+    )?;
     if !replayed {
-        let observed_at = publisher.now_iso();
         let binding = ExplicitRuleBinding {
             schema: "butler.explicit-rule-binding.v1".into(),
             state: "active".into(),
             record_id: record_id.clone(),
             revision: revision.clone(),
             operation_id: operation_id.clone(),
-            content_hash: content_hash.clone(),
+            content_hash,
             project_id: input.project_id.clone(),
             conversation_session_id: input.conversation_session_id.clone(),
             conversation_message_id: input.conversation_message_id.clone(),
-            observed_at,
+            observed_at: publisher.now_iso(),
             operations: prior
-                .as_ref()
-                .map(|binding| binding.operations.clone())
+                .map(|binding| binding.operations)
                 .unwrap_or_default()
                 .into_iter()
                 .chain(std::iter::once(RuleOperation {
@@ -143,26 +125,9 @@ pub fn update_explicit_memory(
                 }))
                 .collect(),
         };
-        fs::create_dir_all(&rules_root).map_err(io_error)?;
-        write_atomic(&text_path, input.text.as_bytes())?;
-        let mut encoded = serde_json::to_vec_pretty(&binding).map_err(json_error)?;
-        encoded.push(b'\n');
-        write_atomic(&binding_path, &encoded)?;
+        paths.write(&input.text, &binding)?;
     }
-
-    let index_text = match fs::read_to_string(&index_path) {
-        Ok(text) => text,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(_) => String::new(),
-    };
-    let file_name = format!("{record_id}.md");
-    if !index_text.contains(&format!("]({file_name})")) {
-        fs::create_dir_all(&rules_root).map_err(io_error)?;
-        append_durable(
-            &index_path,
-            format!("- [{}]({file_name})\n", compact(&input.text, 80)).as_bytes(),
-        )?;
-    }
+    paths.index(&record_id, &input.text)?;
     let notice = TypedMemorySourceNotice::ExplicitRule {
         record_id: record_id.clone(),
         revision: revision.clone(),
@@ -170,13 +135,104 @@ pub fn update_explicit_memory(
     };
     let job_id = publisher.publish_typed_source(&notice)?;
     Ok(ExplicitMemoryUpdateResult {
-        path: text_path,
+        path: paths.text,
         record_id,
         revision,
         operation_id,
         replayed,
         job_id,
     })
+}
+
+/// The trimmed value, when not empty.
+fn trimmed(value: Option<&str>) -> Option<String> {
+    value
+        .map(butler_core::public_text::trim_js_whitespace)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+}
+
+/// Whether this operation already wrote this revision; an operation that
+/// wrote another revision, or whose record is gone, is refused.
+fn replayed(
+    memory_root: &Path,
+    prior: Option<&ExplicitRuleBinding>,
+    record_id: &str,
+    operation_id: &str,
+    revision: &str,
+) -> CognitionResult<bool> {
+    let Some(operation) = prior.and_then(|binding| {
+        binding
+            .operations
+            .iter()
+            .find(|item| item.operation_id == operation_id)
+    }) else {
+        return Ok(false);
+    };
+    if operation.revision != revision {
+        return Err(error(CognitionCode::MemorySourceOperationConflict));
+    }
+    if read_explicit_record(memory_root, record_id)?.is_none() {
+        return Err(error(CognitionCode::MemorySourceOperationRetracted));
+    }
+    Ok(true)
+}
+
+/// The files of one explicit rule, checked to stay inside the data root.
+struct RulePaths {
+    root: PathBuf,
+    text: PathBuf,
+    binding: PathBuf,
+    index: PathBuf,
+}
+
+impl RulePaths {
+    fn new(data_root: &Path, memory_root: &Path, record_id: &str) -> CognitionResult<Self> {
+        let root = memory_root.join("rules");
+        let paths = Self {
+            text: root.join(format!("{record_id}.md")),
+            binding: root.join(format!("{record_id}.source.json")),
+            index: root.join("INDEX.md"),
+            root,
+        };
+        let queue_path = memory_root.join("queue/sync.jsonl");
+        let queue_coordination_path = queue_path.with_extension("jsonl.coord.sqlite");
+        ensure_data_authority(
+            data_root,
+            &[
+                &paths.root,
+                &paths.text,
+                &paths.binding,
+                &paths.index,
+                &queue_path,
+                &queue_coordination_path,
+            ],
+        )?;
+        Ok(paths)
+    }
+
+    /// Writes the rule text and its source binding.
+    fn write(&self, text: &str, binding: &ExplicitRuleBinding) -> CognitionResult<()> {
+        fs::create_dir_all(&self.root).map_err(io_error)?;
+        write_atomic(&self.text, text.as_bytes())?;
+        let mut encoded = serde_json::to_vec_pretty(binding).map_err(json_error)?;
+        encoded.push(b'\n');
+        write_atomic(&self.binding, &encoded)
+    }
+
+    /// Lists the rule in `INDEX.md` unless it is already there.
+    fn index(&self, record_id: &str, text: &str) -> CognitionResult<()> {
+        let index_text = fs::read_to_string(&self.index).unwrap_or_default();
+        let file_name = format!("{record_id}.md");
+        if index_text.contains(&format!("]({file_name})")) {
+            return Ok(());
+        }
+        fs::create_dir_all(&self.root).map_err(io_error)?;
+        append_durable(
+            &self.index,
+            format!("- [{}]({file_name})\n", compact(text, 80)).as_bytes(),
+        )
+    }
 }
 
 fn explicit_rule_revision(

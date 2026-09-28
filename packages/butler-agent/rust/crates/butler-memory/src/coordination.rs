@@ -8,7 +8,6 @@ mod types;
 
 pub use coordinator::{CognitionWriteCoordinator, CognitionWriteLease};
 pub use error::{CoordinationError, CoordinationResult};
-#[cfg(test)]
 pub(crate) use types::LockInfo;
 pub use types::{
     CognitionCoordinationHost, CognitionProcessStatus, CognitionWaitClass, CognitionWriteAcquire,

@@ -1,3 +1,5 @@
+//! The lexical index of registered source text.
+
 use rusqlite::{Connection, OptionalExtension, params};
 use sha2::{Digest, Sha256};
 

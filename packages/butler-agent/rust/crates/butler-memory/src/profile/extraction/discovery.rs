@@ -1,3 +1,5 @@
+//! Discovering user text the profile extractor has not read yet.
+
 use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;
@@ -79,32 +81,7 @@ fn read_owned(
             }
             canonical_scanned += 1;
             sessions.insert(message.session_id.clone());
-            'parts: for part in &message.parts {
-                for scalar in &part.scalars {
-                    for (start, end) in source_spans(&scalar.text) {
-                        if windows.len() >= limit {
-                            stopped = true;
-                            break 'parts;
-                        }
-                        let window = make_window(SourceWindowInput {
-                            message_id: &message.id,
-                            timestamp: &message.created_at,
-                            part_id: &part.part_id,
-                            part_index: part.part_index,
-                            scalar_pointer: &scalar.pointer,
-                            source_hash: &scalar.source_hash,
-                            text: &scalar.text,
-                            byte_start: start,
-                            byte_end: end,
-                        });
-                        if seen.contains(&window.coverage_key) || span_registered(root, &window) {
-                            continue;
-                        }
-                        seen.insert(window.coverage_key.clone());
-                        windows.push(window);
-                    }
-                }
-            }
+            add_message_windows(root, message, &mut windows, &mut seen, limit);
             if windows.len() >= limit {
                 stopped = true;
                 break;
@@ -127,6 +104,41 @@ fn read_owned(
     })
 }
 
+/// Adds the message's windows not yet seen or registered, up to `limit`.
+fn add_message_windows(
+    root: &Path,
+    message: &super::super::contracts::CanonicalProfileMessage,
+    windows: &mut Vec<SourceWindow>,
+    seen: &mut HashSet<String>,
+    limit: usize,
+) {
+    for part in &message.parts {
+        for scalar in &part.scalars {
+            for (start, end) in source_spans(&scalar.text) {
+                if windows.len() >= limit {
+                    return;
+                }
+                let window = make_window(SourceWindowInput {
+                    message_id: &message.id,
+                    timestamp: &message.created_at,
+                    part_id: &part.part_id,
+                    part_index: part.part_index,
+                    scalar_pointer: &scalar.pointer,
+                    source_hash: &scalar.source_hash,
+                    text: &scalar.text,
+                    byte_start: start,
+                    byte_end: end,
+                });
+                if seen.contains(&window.coverage_key) || span_registered(root, &window) {
+                    continue;
+                }
+                seen.insert(window.coverage_key.clone());
+                windows.push(window);
+            }
+        }
+    }
+}
+
 struct Incomplete {
     windows: Vec<SourceWindow>,
     has_more: bool,
@@ -146,7 +158,7 @@ fn incomplete_windows(
             stale: Vec::new(),
         });
     }
-    let db = storage::open(root, false)?;
+    let db = storage::open(root, storage::Access::Read)?;
     let query_limit = MAX_SCAN_MESSAGES.min(limit.saturating_mul(4).saturating_add(1));
     let since = since_ms
         .and_then(chrono::DateTime::from_timestamp_millis)
@@ -292,7 +304,7 @@ fn normalized_since(value: Option<&str>) -> Option<String> {
 }
 
 fn scan_offset(root: &Path) -> usize {
-    let Ok(db) = storage::open(root, false) else {
+    let Ok(db) = storage::open(root, storage::Access::Read) else {
         return 0;
     };
     db.query_row(
@@ -308,7 +320,7 @@ fn scan_offset(root: &Path) -> usize {
 }
 
 fn span_registered(root: &Path, window: &SourceWindow) -> bool {
-    let Ok(db) = storage::open(root, false) else {
+    let Ok(db) = storage::open(root, storage::Access::Read) else {
         return false;
     };
     if db

@@ -1,14 +1,16 @@
+//! The runtime profile projection: the prompt hints built from eligible
+//! stable entries, and the reflective summary shown to the user.
+
 mod eligibility;
 use std::collections::HashSet;
 use std::path::Path;
-
-use serde_json::Value;
 
 use super::contracts::{
     CanonicalProfileSourceFactory, ProfileResult, ProfilingMode, ReflectiveProfileSummary,
     RuntimeProfileProjection,
 };
 use super::storage::{self, StoredEntry};
+use super::understanding::{Layer, Sensitivity};
 
 const MAX_HINTS: usize = 6;
 const MAX_HINT_UNITS: usize = 240;
@@ -148,12 +150,13 @@ fn build(
     let mut ask = Vec::new();
     let ids = entries.iter().map(|entry| entry.id.clone()).collect();
     for entry in entries {
-        let summary = text(&entry.payload, "summary").unwrap_or("").to_owned();
-        let should = strings(&entry.payload, "butler_should");
-        let should_not = strings(&entry.payload, "butler_should_not");
-        match (text(&entry.payload, "layer"), entry.category.as_str()) {
-            (Some("current_attention"), _) => attention.push(summary),
-            (Some("narrative_meaning"), _) => collaborate.push(summary),
+        let understanding = entry.understanding;
+        let summary = understanding.summary_text().to_owned();
+        let should = understanding.butler_should;
+        let should_not = understanding.butler_should_not;
+        match (understanding.layer, entry.category.as_str()) {
+            (Some(Layer::CurrentAttention), _) => attention.push(summary),
+            (Some(Layer::NarrativeMeaning), _) => collaborate.push(summary),
             (_, "communication") => answer.extend(if should.is_empty() {
                 vec![summary]
             } else {
@@ -170,11 +173,11 @@ fn build(
             (_, "boundaries") => {
                 boundaries.push(summary.clone());
                 boundaries.extend(should_not);
-                if text(&entry.payload, "sensitivity") != Some("normal") {
+                if understanding.sensitivity != Some(Sensitivity::Normal) {
                     ask.push(summary);
                 }
             }
-            (Some("contextual_adaptation"), _) => collaborate.extend(if should.is_empty() {
+            (Some(Layer::ContextualAdaptation), _) => collaborate.extend(if should.is_empty() {
                 vec![summary]
             } else {
                 should
@@ -228,6 +231,7 @@ pub(super) fn render(value: &RuntimeProfileProjection) -> String {
     lines.join("\n")
 }
 
+/// A reflective summary of the stable profile in the user's locale.
 pub(super) fn reflective(
     data_root: &Path,
     locale: &str,
@@ -261,42 +265,7 @@ pub(super) fn reflective(
         ));
     }
     let count = entries.len();
-    let order = [
-        "cares",
-        "values",
-        "epistemic_style",
-        "communication",
-        "aesthetics",
-        "boundaries",
-        "agency",
-        "identity",
-        "narrative",
-        "affective_landscape",
-        "relationships",
-    ];
-    let mut bullets = Vec::new();
-    for category in order {
-        for entry in entries.iter().filter(|entry| entry.category == category) {
-            let facet = text(&entry.payload, "facet");
-            let label = if locale == "ko" {
-                category_ko(category)
-            } else {
-                category
-            };
-            bullets.push(format!(
-                "{}{suffix}: {}",
-                label,
-                text(&entry.payload, "summary").unwrap_or(""),
-                suffix = facet.map(|facet| format!("/{facet}")).unwrap_or_default()
-            ));
-            if bullets.len() == 8 {
-                break;
-            }
-        }
-        if bullets.len() == 8 {
-            break;
-        }
-    }
+    let bullets = reflective_bullets(&entries, locale);
     Ok(summary(
         true,
         consent.mode,
@@ -309,6 +278,51 @@ pub(super) fn reflective(
         bullets,
     ))
 }
+
+/// The order categories are summarized in.
+const REFLECTIVE_ORDER: [&str; 11] = [
+    "cares",
+    "values",
+    "epistemic_style",
+    "communication",
+    "aesthetics",
+    "boundaries",
+    "agency",
+    "identity",
+    "narrative",
+    "affective_landscape",
+    "relationships",
+];
+
+/// Up to eight bullets of stable entries, in category order, labeled in
+/// the locale.
+fn reflective_bullets(entries: &[StoredEntry], locale: &str) -> Vec<String> {
+    let mut bullets = Vec::new();
+    for category in REFLECTIVE_ORDER {
+        for entry in entries.iter().filter(|entry| entry.category == category) {
+            let facet = entry.understanding.facet_text();
+            let label = if locale == "ko" {
+                category_ko(category)
+            } else {
+                category
+            };
+            bullets.push(format!(
+                "{}{suffix}: {}",
+                label,
+                entry.understanding.summary_text(),
+                suffix = facet.map(|facet| format!("/{facet}")).unwrap_or_default()
+            ));
+            if bullets.len() == 8 {
+                break;
+            }
+        }
+        if bullets.len() == 8 {
+            break;
+        }
+    }
+    bullets
+}
+
 fn summary(
     enabled: bool,
     mode: ProfilingMode,
@@ -325,19 +339,6 @@ fn summary(
         bullets,
         raw_profile_included: false,
     }
-}
-fn strings(value: &Value, key: &str) -> Vec<String> {
-    value
-        .get(key)
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .map(str::to_owned)
-        .collect()
-}
-fn text<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
-    value.get(key).and_then(Value::as_str)
 }
 fn unique(values: Vec<String>) -> Vec<String> {
     let mut seen = HashSet::new();

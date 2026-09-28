@@ -12,15 +12,17 @@ use std::time::Duration;
 use serde_json::{Value, json};
 
 use super::agent::{Agent, Launch};
-use super::cassette::{Cassette, Meta};
 use super::config::{Credential, LiveProvider, ModelChoice, flag};
 use super::fixtures;
 use super::gateway::{Gateway, Reply};
-use super::live;
 use super::provider::Provider;
 use super::sandbox::Sandbox;
 use super::sanitize::Placeholders;
 use super::{HarnessError, harness_error};
+
+mod sources;
+
+use sources::{apply_credential, live_source, record_source, replay_source};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Fixture {
@@ -30,6 +32,28 @@ pub enum Fixture {
     Ready,
     /// `F3-legacy` (synthetic previous-generation data dir).
     Legacy,
+    /// `F2-first-conversation`: like `F1-ready` with the first-conversation
+    /// onboarding not done yet.
+    FirstConversation,
+}
+
+/// The global access mode a scenario starts with (`PATCH /settings`).
+/// Every scenario recorded before ask-first became the default assumes full
+/// access, so that stays the harness default.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Access {
+    FullAccess,
+    AskFirst,
+}
+
+impl Access {
+    /// The settings value.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::FullAccess => "full_access",
+            Self::AskFirst => "ask_first",
+        }
+    }
 }
 
 enum Source {
@@ -38,16 +62,32 @@ enum Source {
     Live(LiveProvider),
 }
 
+/// How the harness starts the agent and where its gateway token lives.
+#[derive(Clone, Copy)]
+enum LaunchMode {
+    /// The harness's token file, named by the local-auth variables.
+    Harness,
+    /// As the Butler App starts and supervises it ([`Setup::app_supervisor`]).
+    AppSupervisor,
+    /// As `butler start` does: the token in the data folder
+    /// ([`Setup::data_folder_token`]).
+    DataFolderToken,
+}
+
 pub struct Setup {
     pub id: String,
     pub sandbox: Sandbox,
     pub placeholders: Placeholders,
     fixture: Fixture,
+    access: Access,
     source: Source,
     env: Vec<(String, String)>,
     model: Option<ModelChoice>,
     stub_credential: bool,
     record_into: Option<std::path::PathBuf>,
+    launch_mode: LaunchMode,
+    replay_only: bool,
+    extends: Option<String>,
 }
 
 /// A running scenario. Field order is drop order: agent before sandbox.
@@ -72,11 +112,15 @@ impl Setup {
             sandbox,
             placeholders,
             fixture: Fixture::Ready,
+            access: Access::FullAccess,
             source: Source::None,
             env: Vec::new(),
             model: None,
             stub_credential: true,
             record_into: None,
+            launch_mode: LaunchMode::Harness,
+            replay_only: false,
+            extends: None,
         })
     }
 
@@ -97,6 +141,12 @@ impl Setup {
         self
     }
 
+    /// The global access mode set with the model (not for `F0-empty`).
+    pub fn access(mut self, access: Access) -> Self {
+        self.access = access;
+        self
+    }
+
     pub fn env(mut self, key: &str, value: impl Into<String>) -> Self {
         self.env.push((key.to_owned(), value.into()));
         self
@@ -114,9 +164,41 @@ impl Setup {
         self
     }
 
+    /// Starts the agent without token variables, as `butler start` does:
+    /// the agent owns the token in its data folder.
+    pub fn data_folder_token(mut self) -> Self {
+        self.launch_mode = LaunchMode::DataFolderToken;
+        self
+    }
+
+    /// The cassette extends `base`: recording replays what `base` has a
+    /// recording for (the scenario repeats that scenario's steps) and keeps
+    /// only the new requests; replay serves both.
+    pub fn extends(mut self, base: &str) -> Self {
+        self.extends = Some(base.to_owned());
+        self
+    }
+
+    /// Always replays the cassette, also under `BUTLER_E2E_RECORD=1`: for
+    /// scenarios that reuse another scenario's recording or inject faults
+    /// into it, so a record run can never overwrite that cassette.
+    pub fn replay_only(mut self) -> Self {
+        self.replay_only = true;
+        self
+    }
+
     /// Replay without the placeholder Codex credential (no provider auth).
     pub fn without_credential(mut self) -> Self {
         self.stub_credential = false;
+        self
+    }
+
+    /// Starts and supervises the agent as the Butler App does: gateway token
+    /// in the data dir's App local-auth file, foreground lease, App gateway
+    /// forced on, and a restart the intent hands to the App carried out by
+    /// the harness ([`Launch::use_app_supervisor`]).
+    pub fn app_supervisor(mut self) -> Self {
+        self.launch_mode = LaunchMode::AppSupervisor;
         self
     }
 
@@ -131,13 +213,22 @@ impl Setup {
             sandbox,
             placeholders,
             fixture,
+            access,
             source,
             env,
             model,
             stub_credential,
             record_into,
+            launch_mode,
+            replay_only,
+            extends,
         } = self;
         let mut launch = Launch::new(&sandbox)?;
+        match launch_mode {
+            LaunchMode::Harness => {}
+            LaunchMode::AppSupervisor => launch.use_app_supervisor()?,
+            LaunchMode::DataFolderToken => launch.use_data_folder_token(),
+        }
         let default_model = ModelChoice {
             model: "openai/gpt-6-sol".into(),
             effort: Some("low".into()),
@@ -145,8 +236,18 @@ impl Setup {
         let (provider, choice, credential) = match source {
             Source::None => (None, model.unwrap_or(default_model), None),
             Source::Live(live_provider) => live_source(&live_provider, model, &mut launch),
-            Source::Cassette(name) if flag("BUTLER_E2E_RECORD") || record_into.is_some() => {
-                record_source(&name, model, &placeholders, record_into, &mut launch).await?
+            Source::Cassette(name)
+                if (flag("BUTLER_E2E_RECORD") && !replay_only) || record_into.is_some() =>
+            {
+                record_source(
+                    &name,
+                    model,
+                    &placeholders,
+                    record_into,
+                    extends,
+                    &mut launch,
+                )
+                .await?
             }
             Source::Cassette(name) => {
                 let stub_codex_home = stub_credential.then(|| sandbox.codex_home());
@@ -162,6 +263,9 @@ impl Setup {
         match fixture {
             Fixture::Ready => fixtures::ready(&sandbox.data, &choice.model)?,
             Fixture::Legacy => fixtures::legacy(&sandbox.data, &choice.model)?,
+            Fixture::FirstConversation => {
+                fixtures::first_conversation(&sandbox.data, &choice.model)?;
+            }
             Fixture::Empty => {}
         }
         let (agent, gw) = Agent::start(launch).await?;
@@ -179,118 +283,13 @@ impl Setup {
             scenario.register_api_key(provider_name, env_var).await?;
         }
         if fixture != Fixture::Empty {
-            scenario.select_model(&scenario.model.clone()).await?;
+            let mut settings = model_settings(&scenario.model);
+            settings["access_mode"] = access.as_str().into();
+            scenario
+                .patch_settings(settings, &scenario.model.label())
+                .await?;
         }
         Ok(scenario)
-    }
-}
-
-/// A provider source plus the credential the agent runs with.
-type SourceSetup = (Option<Provider>, ModelChoice, Option<(String, Credential)>);
-
-/// Live mode: the agent talks to the real provider directly.
-fn live_source(
-    live_provider: &LiveProvider,
-    model: Option<ModelChoice>,
-    launch: &mut Launch,
-) -> SourceSetup {
-    if let Some(base) = &live_provider.base_url
-        && let Some(key) = live_provider.base_url_env()
-    {
-        launch.set_env(key, base.clone());
-    }
-    let choice = model.unwrap_or_else(|| live_provider.choice.clone());
-    let credential = live_provider
-        .credential
-        .clone()
-        .map(|c| (live_provider.provider.clone(), c));
-    (None, choice, credential)
-}
-
-/// Replay mode: cassette `name` served by the local provider. With
-/// `stub_codex_home`, a subscription cassette gets the placeholder Codex
-/// credential there.
-async fn replay_source(
-    name: &str,
-    placeholders: &Placeholders,
-    stub_codex_home: Option<std::path::PathBuf>,
-    launch: &mut Launch,
-) -> Result<SourceSetup, HarnessError> {
-    let cassette = Cassette::load(name)?;
-    let choice = ModelChoice {
-        model: cassette.meta.model.clone(),
-        effort: cassette.meta.effort.clone(),
-    };
-    let provider_name = cassette.meta.provider.clone();
-    let provider = Provider::replay(cassette, placeholders.clone()).await?;
-    if let Some(key) = super::config::base_url_env(&provider_name) {
-        launch.set_env(key, provider.base_url.clone());
-    }
-    if provider_name == "openai-subscription"
-        && let Some(codex_home) = stub_codex_home
-    {
-        fixtures::stub_codex_auth(&codex_home)?;
-    }
-    Ok((Some(provider), choice, None))
-}
-
-/// Record mode: a proxy that forwards cassette `name` to the live provider
-/// and records it (`BUTLER_E2E_RECORD=1` or [`Setup::record_into`]).
-async fn record_source(
-    name: &str,
-    model: Option<ModelChoice>,
-    placeholders: &Placeholders,
-    record_into: Option<std::path::PathBuf>,
-    launch: &mut Launch,
-) -> Result<SourceSetup, HarnessError> {
-    let live_provider = live::gate(&format!("record {name}"))?.ok_or_else(|| {
-        harness_error("BUTLER_E2E_RECORD=1 needs BUTLER_E2E_TIER=live|all and credentials")
-    })?;
-    let choice = model.unwrap_or_else(|| live_provider.choice.clone());
-    let upstream = live_provider
-        .base_url
-        .clone()
-        .or_else(|| live_provider.upstream_default().map(str::to_owned))
-        .ok_or_else(|| harness_error("record mode: no upstream for provider"))?;
-    let meta = Meta {
-        scenario: name.to_owned(),
-        provider: live_provider.provider.clone(),
-        model: choice.model.clone(),
-        effort: choice.effort.clone(),
-        wire_shape: wire_shape(&live_provider.provider).into(),
-        butler_git_sha: git_sha(),
-        recorded_at: now_utc(),
-        recorder: "butler-e2e record proxy".into(),
-        sanitization: SANITIZATION.iter().map(|s| (*s).to_owned()).collect(),
-        ..Meta::default()
-    };
-    let provider = Provider::record(upstream, meta, placeholders.clone(), record_into).await?;
-    if let Some(key) = live_provider.base_url_env() {
-        launch.set_env(key, provider.base_url.clone());
-    }
-    let credential = live_provider
-        .credential
-        .clone()
-        .map(|c| (live_provider.provider.clone(), c));
-    Ok((Some(provider), choice, credential))
-}
-
-/// Points the agent at `credential` through the product's own variables.
-fn apply_credential(launch: &mut Launch, credential: &Credential, choice: &ModelChoice) {
-    match credential {
-        Credential::CodexProfile(path) => {
-            launch.set_env("BUTLER_CODEX_AUTH_PROFILE", path.display().to_string());
-        }
-        Credential::CodexAuthJson(path) => {
-            launch.set_env("CODEX_AUTH_JSON", path.display().to_string());
-        }
-        Credential::ApiKey { env_var } => {
-            if choice.provider() == "openai"
-                && let Some(value) = super::config::nonempty(env_var)
-            {
-                launch.set_env("OPENAI_API_KEY", value);
-            }
-        }
     }
 }
 
@@ -304,17 +303,17 @@ pub const SANITIZATION: &[&str] = &[
 
 impl Scenario {
     pub async fn select_model(&self, choice: &ModelChoice) -> Result<Reply, HarnessError> {
-        let mut body = json!({"model": choice.model});
-        if let Some(effort) = &choice.effort {
-            body["reasoning_effort"] = Value::String(effort.clone());
-        }
+        self.patch_settings(model_settings(choice), &choice.label())
+            .await
+    }
+
+    /// `PATCH /settings` with `body`; `what` names it in the error.
+    pub async fn patch_settings(&self, body: Value, what: &str) -> Result<Reply, HarnessError> {
         let reply = self.gw.patch("/settings", body).await?;
         if reply.status != 200 {
             return Err(harness_error(format!(
-                "fixture: PATCH /settings {} failed: {} {}",
-                choice.label(),
-                reply.status,
-                reply.text
+                "fixture: PATCH /settings {what} failed: {} {}",
+                reply.status, reply.text
             )));
         }
         Ok(reply)
@@ -373,11 +372,19 @@ impl Scenario {
     /// Acts as the App's process supervisor: when the agent has exited on its
     /// own (the service exits after an interrupted turn so the supervisor can
     /// replace the process), start it again. Returns true when it restarted.
+    /// That exit must be non-zero: launchd and systemd restart only an Agent
+    /// that exits non-zero.
     pub async fn supervise(&mut self) -> Result<bool, HarnessError> {
         if self.agent.is_running() {
             return Ok(false);
         }
-        self.agent.reap();
+        if let Some(status) = self.agent.reap()
+            && status.success()
+        {
+            return Err(harness_error(format!(
+                "the agent exited on its own with {status}; an exit that needs a replacement must be non-zero"
+            )));
+        }
         self.gw = self.agent.start_again().await?;
         Ok(true)
     }
@@ -428,6 +435,15 @@ impl Scenario {
     }
 }
 
+/// The settings that select `choice` (model and reasoning effort).
+fn model_settings(choice: &ModelChoice) -> Value {
+    let mut body = json!({"model": choice.model});
+    if let Some(effort) = &choice.effort {
+        body["reasoning_effort"] = Value::String(effort.clone());
+    }
+    body
+}
+
 pub fn accepted_turn_id(accepted: &Value) -> Result<String, HarnessError> {
     accepted["turn_id"]
         .as_str()
@@ -443,32 +459,4 @@ pub fn turn_timeout() -> u64 {
     } else {
         60
     }
-}
-
-fn wire_shape(provider: &str) -> &'static str {
-    match provider {
-        "openai-subscription" | "openai" => "openai_responses",
-        "anthropic" => "anthropic_messages",
-        "google" => "gemini_generate_content",
-        _ => "openai_chat_completions",
-    }
-}
-
-fn git_sha() -> String {
-    std::process::Command::new("git")
-        .args(["rev-parse", "--short=12", "HEAD"])
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .output()
-        .ok()
-        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
-        .unwrap_or_default()
-}
-
-fn now_utc() -> String {
-    std::process::Command::new("date")
-        .args(["-u", "+%Y-%m-%dT%H:%M:%SZ"])
-        .output()
-        .ok()
-        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
-        .unwrap_or_default()
 }

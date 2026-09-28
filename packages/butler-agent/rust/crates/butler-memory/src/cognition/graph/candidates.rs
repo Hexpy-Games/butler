@@ -19,7 +19,6 @@ pub(super) use pinned::{
 
 use rusqlite::{Connection, params};
 use serde::{Serialize, Serializer, ser::SerializeSeq};
-use serde_json::Value;
 
 use super::db_error;
 use crate::cognition::extraction::{ExtractCandidate, ExtractInput};
@@ -81,7 +80,13 @@ pub(super) fn load(
         for id in ids.into_iter().take(32) {
             let mut group = Vec::new();
             let mut visiting = HashSet::new();
-            if !append(&mut context, &id, &mut visiting, &mut group, false)? {
+            if !append(
+                &mut context,
+                &id,
+                &mut visiting,
+                &mut group,
+                AliasSources::AllOwners,
+            )? {
                 continue;
             }
             let next_bytes =
@@ -118,6 +123,15 @@ pub struct VectorHit {
     pub distance: f64,
 }
 
+/// Which sources a candidate's aliases may be quoted from.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum AliasSources {
+    /// Public conversation text only.
+    Conversation,
+    /// Conversation text, reviewed task reports and explicit rules.
+    AllOwners,
+}
+
 pub(super) struct CandidateAppendContext<'a> {
     db: &'a Connection,
     canonical: &'a ConversationSourceReader,
@@ -132,7 +146,7 @@ fn append(
     id: &str,
     visiting: &mut HashSet<String>,
     group: &mut Vec<Arc<ExtractCandidate>>,
-    source_only: bool,
+    sources: AliasSources,
 ) -> CognitionResult<bool> {
     if context.selected.contains(id) || group.iter().any(|c| c.ref_id == id) {
         return Ok(true);
@@ -152,7 +166,7 @@ fn append(
                 context.source_root,
                 context.input,
                 id,
-                source_only,
+                sources,
             )?
             .map(Arc::new),
         );
@@ -161,14 +175,13 @@ fn append(
         return Ok(false);
     };
     visiting.insert(id.to_owned());
-    for endpoint in ["subject_ref", "object_ref"] {
-        if let Some(id) = candidate
-            .claim
-            .as_ref()
-            .and_then(|c| c.get(endpoint))
-            .and_then(Value::as_str)
-            && !append(context, id, visiting, group, source_only)?
-        {
+    let endpoints = candidate
+        .claim
+        .as_ref()
+        .map(|claim| [claim.subject_ref.as_deref(), claim.object_ref.as_deref()])
+        .unwrap_or_default();
+    for id in endpoints.into_iter().flatten() {
+        if !append(context, id, visiting, group, sources)? {
             visiting.remove(&candidate.ref_id);
             return Ok(false);
         }

@@ -11,8 +11,8 @@ mod normalize;
 use crate::gateway::application::storage::AppStorageError;
 use crate::gateway::ui_language::UiLanguage;
 use normalize::{
-    access, enum_value, integer, language, main_colors, main_preset, main_theme, multiline,
-    native_value, notifications, object, timezone, ui_defaults, workspace_label,
+    enum_value, integer, language, main_colors, main_preset, main_theme, multiline, native_value,
+    notifications, object, timezone, ui_defaults, workspace_label,
 };
 
 /// The language the App shows (`language` of the settings view): Settings,
@@ -215,7 +215,7 @@ pub(super) fn read(
     );
     output.insert(
         "access_mode".into(),
-        json!(access(stored.get("access_mode"))),
+        json!(super::access_mode_name(&controls.access)),
     );
     output.insert(
         "plan_mode_default".into(),

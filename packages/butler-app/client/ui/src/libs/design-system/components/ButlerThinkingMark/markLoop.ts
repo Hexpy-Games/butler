@@ -18,6 +18,42 @@ export interface MarkLoop {
   dispose: () => void;
 }
 
+/** One mark's frame step; returns false once the mark has nothing left to animate. */
+type FrameStep = (time: number) => boolean;
+
+/**
+ * One requestAnimationFrame drives every moving mark on the page (the status
+ * label, capsules, DS Viewer rows): N marks cost one frame callback, never N
+ * loops, and the loop stops as soon as no mark is moving.
+ */
+const moving = new Set<FrameStep>();
+let sharedFrame = 0;
+
+function runFrame(time: number) {
+  sharedFrame = 0;
+  // Deleting the current entry while iterating a Set is safe and allocates nothing.
+  for (const step of moving) if (!step(time)) moving.delete(step);
+  if (moving.size > 0) sharedFrame = window.requestAnimationFrame(runFrame);
+}
+
+function wake(step: FrameStep) {
+  moving.add(step);
+  if (sharedFrame === 0) sharedFrame = window.requestAnimationFrame(runFrame);
+}
+
+function rest(step: FrameStep) {
+  moving.delete(step);
+  if (moving.size === 0 && sharedFrame !== 0) {
+    window.cancelAnimationFrame(sharedFrame);
+    sharedFrame = 0;
+  }
+}
+
+/** Frame callbacks requested for marks right now (0 or 1); for tests and traces. */
+export function pendingMarkFrames() {
+  return sharedFrame === 0 ? 0 : 1;
+}
+
 /** Nearest theme scope (DS Viewer frames, app body), then the OS color scheme. */
 function resolveTheme(element: Element): ButlerMarkTheme {
   const scope = element.closest(".theme-dark, .theme-light");
@@ -37,9 +73,7 @@ export function startMarkLoop(canvas: HTMLCanvasElement, inputs: MarkLoopInputs)
   const sim = (inputs.sim.current ??= new MorphSim());
   const theme = inputs.theme ?? resolveTheme(canvas);
   const surface = createSurface(ctx, inkForButlerMarkTheme(theme, inputs.themeColors), RISO_INKS[theme]);
-  let animationFrame = 0;
   let lastFrame = 0;
-  let lastRenderTime = 0;
   let stopped = false;
   let inView = true;
   const settled = () => inputs.isReduced() || (!inputs.isWorking() && sim.idle);
@@ -53,44 +87,43 @@ export function startMarkLoop(canvas: HTMLCanvasElement, inputs: MarkLoopInputs)
     resizeSurface(surface, pixelSide, pixelSide / DESIGN_SIZE, side);
   };
 
-  const render = (time = performance.now()) => {
-    const dt = lastRenderTime > 0 ? Math.min((time - lastRenderTime) / 1000, MAX_STEP_S) : 1 / 60;
-    lastRenderTime = time;
-    sim.update(dt, inputs.isWorking());
+  const render = (time: number) => {
+    // A simulation shared by several marks (see morphKey) advances once per frame.
+    if (sim.clock !== time) {
+      const dt = sim.clock > 0 ? Math.min((time - sim.clock) / 1000, MAX_STEP_S) : 1 / 60;
+      sim.clock = time;
+      sim.update(dt, inputs.isWorking());
+    }
     drawFrame(surface, sim, false);
   };
 
-  const tick = (time: number) => {
-    animationFrame = 0;
-    if (paused()) return;
+  const tick = (time: number): boolean => {
+    if (paused()) return false;
     if (inputs.isReduced()) {
       sim.park();
       drawFrame(surface, sim, true);
-      return;
+      return false;
     }
     if (time - lastFrame >= FRAME_INTERVAL_MS) {
       render(time);
       lastFrame = time;
     }
-    if (settled()) return;
-    animationFrame = window.requestAnimationFrame(tick);
+    return !settled();
   };
 
   const startLoop = () => {
-    if (animationFrame !== 0 || paused()) return;
+    if (moving.has(tick) || paused()) return;
     if (settled()) {
       if (inputs.isReduced()) sim.park();
       drawFrame(surface, sim, inputs.isReduced());
       return;
     }
-    lastRenderTime = 0;
-    animationFrame = window.requestAnimationFrame(tick);
+    // After a pause the first step is one frame long, not the time spent paused.
+    sim.clock = 0;
+    wake(tick);
   };
 
-  const stopLoop = () => {
-    window.cancelAnimationFrame(animationFrame);
-    animationFrame = 0;
-  };
+  const stopLoop = () => rest(tick);
 
   const resizeAndRender = () => {
     resize();

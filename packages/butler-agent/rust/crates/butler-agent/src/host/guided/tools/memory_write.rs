@@ -8,7 +8,9 @@ use butler_memory::cognition::{
     ExplicitMemoryUpdateInput, TaskMemoryIngestionResult, ingest_task_outcome_memory,
     update_explicit_memory,
 };
-use butler_turn::btcc::{AccessMode, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
+use butler_turn::btcc::{
+    ApprovalExemptAction, GuidedInvocation, ModelRoundToolCall, ToolExecutionError,
+};
 use butler_turn::conversation::{
     CanonicalMemoryReadBinding, PublicMemorySnapshot, conversation_store_path,
 };
@@ -28,11 +30,15 @@ pub(super) fn execute(
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    if owner.binding.access_mode != AccessMode::FullAccess {
+    if !owner
+        .binding
+        .access_mode
+        .allows_without_approval(ApprovalExemptAction::MemorySave)
+    {
         return encoded(&json!({
             "ok":false,
             "error":{"code":"memory_write_requires_full_access",
-                "message":"This Turn does not have full access; no memory change was applied."}
+                "message":"This Turn is read-only; no memory change was applied."}
         }));
     }
     let result = match call.name.as_str() {

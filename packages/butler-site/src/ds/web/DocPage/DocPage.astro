@@ -1,0 +1,43 @@
+---
+import type { MarkdownHeading } from "astro";
+import { pageContext, docsRoot, type NavSectionItem } from "../../../site/nav";
+import type { Locale } from "../../../site/sections";
+import { Breadcrumb } from "../../components/Breadcrumb";
+import { Typo } from "../../components/Typo";
+import DocContent from "../DocContent/DocContent.astro";
+import DocsLayout from "../DocsLayout/DocsLayout.astro";
+import PageToc from "../PageToc/PageToc.astro";
+import { PrevNextLinks } from "../PrevNext/PrevNextLinks";
+import styles from "./DocPage.module.css";
+
+interface Props {
+  title: string;
+  description: string;
+  slug: string;
+  locale: Locale;
+  nav: NavSectionItem[];
+  headings: MarkdownHeading[];
+  alternates: Partial<Record<Locale, string | null>>;
+}
+
+const { title, description, slug, locale, nav, headings, alternates } = Astro.props;
+const homeHref = docsRoot(import.meta.env.BASE_URL, locale);
+const context = pageContext(nav, slug);
+const trail = [{ label: "문서", href: homeHref }, ...(context.section && !context.section.flat ? [{ label: context.section.title }] : []), { label: title }];
+const tocTitle = "이 페이지";
+---
+<DocsLayout alternates={alternates} description={description} homeHref={homeHref} locale={locale} nav={nav} title={title}>
+  <article class={styles.article} data-pagefind-body>
+    <header class={styles.header}>
+      <div data-pagefind-ignore><Breadcrumb items={trail} /></div>
+      <Typo.H1>{title}</Typo.H1>
+      <p class={styles.lead}>{description}</p>
+      <div class={styles.inlineToc} data-pagefind-ignore><PageToc headings={headings} title={tocTitle} variant="disclosure" /></div>
+    </header>
+    <DocContent><slot /></DocContent>
+  </article>
+  <div data-pagefind-ignore>
+    <PrevNextLinks labels={{ prev: "이전", next: "다음", nav: "이전 및 다음 문서" }} next={context.next} prev={context.prev} />
+  </div>
+  <PageToc headings={headings} slot="toc" title={tocTitle} variant="rail" />
+</DocsLayout>

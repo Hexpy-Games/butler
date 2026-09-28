@@ -17,6 +17,7 @@ use crate::cognition::{
 };
 use butler_core::public_text::trim_js_whitespace;
 
+/// Recalls legacy memories for the request.
 pub fn recall_legacy(
     data_root: &Path,
     paths: &CognitionPathEnvironment,

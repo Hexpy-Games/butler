@@ -7,34 +7,59 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-use nix::sys::signal::Signal;
 use serde_json::{Value, json};
 
 use super::Action;
 use crate::host::service::instance::{
-    AdmissionLock, InstanceRecord, RestartIdentity, instance_is_locked, mark_stopping,
-    process_matches, read_record, refuse_live_legacy_process, send_signal,
+    AdmissionLock, InstanceRecord, StopReason, StopRequest, StopRequester, instance_is_locked,
+    process_matches, read_record, record_process_gone, refuse_live_legacy_process,
     validate_write_destinations,
 };
 use crate::host::{ResolvedInstallation, ServiceConfiguration};
 
+mod probe_auth;
 mod readiness;
 mod restart_handoff;
-use readiness::{cleanup_spawned, wait_for_stop, wait_until_ready, wait_until_registered};
+mod stop;
+use readiness::{cleanup_spawned, wait_for_app_respawn, wait_until_ready, wait_until_registered};
 pub(super) use restart_handoff::{execute_restart_handoff, spawn_restart_handoff};
+use stop::{StopReport, stop_service_admitted};
 
 const START_TIMEOUT: Duration = Duration::from_secs(90);
 const INSTANCE_PUBLISH_TIMEOUT: Duration = Duration::from_secs(10);
+/// How long a restart of an App-supervised instance waits for the App to
+/// start the replacement and for it to publish its record.
+const APP_RESPAWN_TIMEOUT: Duration = Duration::from_secs(30);
 const STOP_TIMEOUT: Duration = Duration::from_secs(8);
 const FORCE_STOP_TIMEOUT: Duration = Duration::from_secs(3);
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
+/// [`active_service`] while an instance holds the DATA lock but has not
+/// published its record yet: a starting instance, so waiters keep waiting.
+const LOCK_WITHOUT_RECORD: &str = "native_service_instance_ambiguous: DATA lock has no record";
+/// The line `butler stop` adds after a stop, worded like the App's quit dialog:
+/// schedules run inside the service.
+const SCHEDULES_STOPPED_NOTICE: &str =
+    "Running work and schedules stop too until Butler starts again (butler start).";
+
+/// How a lifecycle command runs.
+#[derive(Clone, Copy)]
+pub(super) struct ControlOptions {
+    /// Report what would happen without doing it.
+    pub(super) dry_run: bool,
+    /// The controller recorded in the stop intent of `stop` and `restart`.
+    pub(super) requested_by: StopRequester,
+}
 
 pub(super) async fn execute(
     action: Action,
     installation: ResolvedInstallation,
     requested_data: Option<&str>,
-    dry_run: bool,
+    control: ControlOptions,
 ) -> Result<Value, crate::host::HostError> {
+    let ControlOptions {
+        dry_run,
+        requested_by,
+    } = control;
     let data_root = resolve_data_root(requested_data, &installation)?;
     validate_write_destinations(&data_root, &installation)?;
     match action {
@@ -42,7 +67,13 @@ pub(super) async fn execute(
             let config = service_configuration(&installation, &data_root)?;
             start_service(&installation, &config, dry_run).await
         }
-        Action::Stop => stop_service(&data_root, &installation, dry_run).await,
+        Action::Stop => {
+            let request = StopRequest {
+                reason: StopReason::Stop,
+                requested_by,
+            };
+            stop_service(&data_root, &installation, dry_run, request).await
+        }
         Action::Restart => {
             let config = service_configuration(&installation, &data_root)?;
             if dry_run {
@@ -55,9 +86,13 @@ pub(super) async fn execute(
                 }));
             }
             let admission = acquire_admission(&data_root, &installation).await?;
-            let (_, admission) =
-                stop_service_admitted(&data_root, &installation, admission, None).await?;
-            start_service_admitted(&installation, &config, admission).await
+            let request = StopRequest {
+                reason: StopReason::Restart,
+                requested_by,
+            };
+            let (stopped, admission) =
+                stop_service_admitted(&data_root, &installation, admission, None, request).await?;
+            start_replacement(&installation, &config, admission, &stopped).await
         }
         Action::Run => Err("service run is dispatched by the native service entrypoint".into()),
         Action::RestartHandoff => Err("restart handoff has a private entrypoint".into()),
@@ -81,7 +116,7 @@ pub(super) fn summary(action: Action, value: &Value) -> String {
             "Butler native service is not running".into()
         }
         Action::Stop if value["wouldStop"] == true => "Butler native service stop planned".into(),
-        Action::Stop => "Butler native service stopped".into(),
+        Action::Stop => format!("Butler native service stopped\n{SCHEDULES_STOPPED_NOTICE}"),
         Action::Restart => "Butler native service restarted".into(),
         Action::Run => "Butler native service run".into(),
         Action::RestartHandoff => "Butler native service restart handoff".into(),
@@ -159,10 +194,37 @@ fn start_result(record: &InstanceRecord, started: bool) -> Value {
     })
 }
 
+/// Brings up the instance that replaces the one `stopped` describes. The App
+/// starts the replacement of an instance it supervised, with its own
+/// environment (gateway port, local auth, folder-selection secret, foreground
+/// lease), and this controller only waits for it: an instance started here
+/// would have this process's environment instead. Any other replacement is
+/// started here.
+async fn start_replacement(
+    installation: &ResolvedInstallation,
+    config: &ServiceConfiguration,
+    admission: AdmissionLock,
+    stopped: &StopReport,
+) -> Result<Value, crate::host::HostError> {
+    let StopReport::Stopped(instance) = stopped else {
+        return start_service_admitted(installation, config, admission).await;
+    };
+    if !instance.app_supervised {
+        return start_service_admitted(installation, config, admission).await;
+    }
+    // Admission stays held until the App's instance is registered, so no
+    // controller can start a CLI-environment instance in its place.
+    let registered = wait_for_app_respawn(&config.data_root, &instance.nonce).await?;
+    drop(admission);
+    let ready = wait_until_ready(config, None, Some(registered.nonce)).await?;
+    Ok(start_result(&ready, true))
+}
+
 async fn stop_service(
     data_root: &Path,
     installation: &ResolvedInstallation,
     dry_run: bool,
+    request: StopRequest,
 ) -> Result<Value, crate::host::HostError> {
     if dry_run {
         refuse_live_legacy_process(data_root)?;
@@ -179,74 +241,9 @@ async fn stop_service(
         }));
     }
     let admission = acquire_admission(data_root, installation).await?;
-    let (result, _admission) =
-        stop_service_admitted(data_root, installation, admission, None).await?;
-    Ok(result)
-}
-
-async fn stop_service_admitted(
-    data_root: &Path,
-    installation: &ResolvedInstallation,
-    admission: AdmissionLock,
-    expected: Option<&RestartIdentity>,
-) -> Result<(Value, AdmissionLock), crate::host::HostError> {
-    refuse_live_legacy_process(data_root)?;
-    let Some(record) = active_service(data_root)? else {
-        return Ok((
-            json!({"service":"butler-agent-native","stopped":true,"alreadyStopped":true}),
-            admission,
-        ));
-    };
-    if expected.is_some_and(|identity| !identity.matches(&record)) {
-        return Err("native_service_instance_changed".into());
-    }
-    mark_stopping(data_root, &record.nonce, installation)?;
-    let current =
-        active_service(data_root)?.ok_or_else(|| "native_service_instance_changed".to_owned())?;
-    if current.nonce != record.nonce
-        || current.pid != record.pid
-        || expected.is_some_and(|identity| !identity.matches(&current))
-    {
-        return Err("native_service_instance_changed".into());
-    }
-    if !instance_is_locked(data_root)? || !process_matches(&current)? {
-        return Err("native_service_instance_ambiguous: refusing signal".into());
-    }
-    if let Err(error) = send_signal(&current, Signal::SIGTERM)
-        && error.message() != "native_service_process_exited"
-    {
-        return Err(error);
-    }
-    if wait_for_stop(data_root, &record.nonce, STOP_TIMEOUT).await? {
-        return Ok((
-            json!({"service":"butler-agent-native","stopped":true,"pid":record.pid}),
-            admission,
-        ));
-    }
-    let current =
-        active_service(data_root)?.ok_or_else(|| "native_service_instance_changed".to_owned())?;
-    if current.nonce != record.nonce
-        || current.pid != record.pid
-        || expected.is_some_and(|identity| !identity.matches(&current))
-    {
-        return Ok((
-            json!({"service":"butler-agent-native","stopped":true,"pid":record.pid}),
-            admission,
-        ));
-    }
-    // Re-read the lock, nonce, PID, OS start identity, and executable directly
-    // before force-killing the recorded service process.
-    if !instance_is_locked(data_root)? || !process_matches(&current)? {
-        return Err("native_service_instance_ambiguous: refusing force kill".into());
-    }
-    send_signal(&current, Signal::SIGKILL)?;
-    if !wait_for_stop(data_root, &record.nonce, FORCE_STOP_TIMEOUT).await? {
-        return Err("native_service_stop_timeout".into());
-    }
-    Ok((
-        json!({"service":"butler-agent-native","stopped":true,"forced":true,"pid":record.pid}),
-        admission,
-    ))
+    let (report, _admission) =
+        stop_service_admitted(data_root, installation, admission, None, request).await?;
+    Ok(report.to_json())
 }
 
 async fn acquire_admission(
@@ -280,17 +277,20 @@ fn active_service(data_root: &Path) -> Result<Option<InstanceRecord>, crate::hos
             }
         }
         (true, Some(record)) => {
-            if !matches!(record.state.as_str(), "starting" | "ready" | "stopping")
-                || !process_matches(&record)?
+            if matches!(record.state.as_str(), "starting" | "ready" | "stopping")
+                && process_matches(&record)?
             {
-                return Err(
-                    "native_service_instance_ambiguous: lock owner does not match its record"
-                        .into(),
-                );
+                return Ok(Some(record));
             }
-            Ok(Some(record))
+            if record_process_gone(&record)? {
+                // Left by an instance that did not remove it (a crash, a
+                // forced stop): the lock owner is a new instance that has
+                // taken the lock and not yet replaced the record.
+                return Err(LOCK_WITHOUT_RECORD.into());
+            }
+            Err("native_service_instance_ambiguous: lock owner does not match its record".into())
         }
-        (true, None) => Err("native_service_instance_ambiguous: DATA lock has no record".into()),
+        (true, None) => Err(LOCK_WITHOUT_RECORD.into()),
     }
 }
 

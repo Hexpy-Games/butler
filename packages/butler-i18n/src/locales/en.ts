@@ -5,32 +5,38 @@ const generalFallback: BriefingFallbackCopy = {
     description: "A few simple starting points are ready.",
     suggestions: [
       {
-        id: "daily-briefing",
-        title: "Worth a short look today",
-        description:
-          "A compact pass over notable news and public sources can make the day easier to place.",
-        text: "Give me a short briefing on today's notable news and public sources.",
+        id: "summarize-document",
+        title: "Summarize a document",
+        description: "Attach a file or paste text to get the key points.",
+        text: "Summarize this in a few key points: ",
+        template: true,
       },
       {
-        id: "open-source-trends",
-        title: "Open source getting attention",
-        description:
-          "Looking at projects gaining attention can surface useful ideas and patterns.",
-        text: "Summarize recent open-source projects by why they are gaining attention and where they may be useful.",
+        id: "draft-reply",
+        title: "Draft a reply",
+        description: "Turn your notes into a clear email or message.",
+        text: "Draft a reply from these notes: ",
+        template: true,
       },
       {
-        id: "search-strategy",
-        title: "How to split the search",
-        description:
-          "Splitting a broad question helps separate quick scanning from deeper verification.",
-        text: "Lay out a way to split broad research into quick search and deeper verification.",
+        id: "morning-briefing",
+        title: "Morning news briefing",
+        description: "Set up a schedule that runs every morning.",
+        text: "Every morning at 8, give me a short briefing on today's news.",
+        template: true,
       },
       {
-        id: "web-standards-rendering",
-        title: "Why browsers render differently",
-        description:
-          "Comparing CSS specs with browser behavior can make rendering issues easier to narrow down.",
-        text: "Compare CSS specs with browser rendering differences.",
+        id: "plan-week",
+        title: "Plan my week",
+        description: "Sort what's on your plate into a simple plan.",
+        text: "Help me plan my week. Ask me what's on my plate first.",
+      },
+      {
+        id: "explain-simply",
+        title: "Explain it simply",
+        description: "Get a plain-language explanation of anything.",
+        text: "Explain this simply: ",
+        template: true,
       },
     ],
   };
@@ -61,7 +67,7 @@ const firstRun = {
     safetyItems: [
       "File changes, commands, and network requests stay within your instructions.",
       "Review requests that include sensitive paths or tokens before running them.",
-      "Automation results are visible in App history and diagnostics logs.",
+      "Schedule results are visible in App history and diagnostics logs.",
     ],
     accept: "Accept",
     installTitle: "Prepare Butler Agent",
@@ -93,41 +99,36 @@ function englishProjectFallbackSuggestions(
 ): NewChatBriefingSuggestion[] {
   return [
     {
-      id: "review-commits",
-      title: "Check the risky parts first",
-      description:
-        "Recent changes can show the verification points worth looking at before continuing.",
-      text: "Review recent changes for risks and missing validation.",
+      id: "folder-tour",
+      title: "What's in this folder",
+      description: `Get a quick tour of ${projectName}.`,
+      text: "Explain what's in this project folder and how it's organized.",
     },
     {
-      id: "today-plan",
-      title: "Set today's order",
-      description:
-        "Open work is easier to continue when it is arranged into a small sequence.",
-      text: "Turn today's remaining work into an execution order.",
+      id: "organize-files",
+      title: "Organize files",
+      description: "Sort or rename files by a rule you choose.",
+      text: "Organize the files in this folder: ",
+      template: true,
+    },
+    {
+      id: "recent-changes",
+      title: "What changed",
+      description: "See what changed here recently.",
+      text: `Tell me what changed in ${projectName} recently.`,
+    },
+    {
+      id: "remaining-work",
+      title: "What's left",
+      description: "List what still needs doing.",
+      text: `What's left to do in ${projectName}?`,
     },
     {
       id: "project-blockers",
-      title: "Mark what is stuck",
-      description: `Narrowing the stalled points in ${projectName} keeps the next step clearer.`,
-      text: `Find the blocked points in ${projectName}.`,
+      title: "What's stuck",
+      description: `Find where ${projectName} is stuck.`,
+      text: `Find what's stuck in ${projectName}.`,
     },
-    {
-      id: "briefing-seed",
-      title: "Bring back the loose notes",
-      description:
-        "Ideas and notes can become usable cards before they drift out of view.",
-      text: "Turn leftover ideas into work cards.",
-    },
-  ];
-}
-
-function englishSkillFallbackSuggestions(projectName: string): NewChatBriefingSuggestion[] {
-  return [
-    { id: "recent-skill", title: "Find repeated requests", description: "Identify procedures and preferences repeated in recent conversations.", text: "What would be useful to turn into a skill from our recent conversations?" },
-    { id: "useful-skill", title: "Choose a useful form", description: "Decide whether to create a small automation or a reusable skill.", text: "What skills would be useful?" },
-    { id: "skill-candidates", title: "Turn candidates into tasks", description: "Gather repeated work into a list ready for review.", text: "Find skill candidates from my recent repeated work." },
-    { id: "project-skill", title: projectName ? "Save project conventions" : "Save my workflow", description: projectName ? `Capture recurring practices in ${projectName}.` : "Make frequent tasks easy to reuse next time.", text: projectName ? "Turn recurring project tasks into a skill." : "Turn my frequent tasks into a skill." },
   ];
 }
 
@@ -146,9 +147,9 @@ export const enUsCopy: AppCopy = {
     duration: "Request elapsed time", durationHelp: "From request creation to the recorded terminal state, including waiting. Not human effort or model-only runtime.",
     usage: "Model usage", usageHelp: "Project-attributed token and cost data is not collected here yet. Missing usage is not zero, and subscription usage is not an API charge.",
     empty: "No records in this selection.", unavailable: "This data is unavailable.",
-    historyUnavailable: "Full Ledger history is unavailable. Work and document trends are not counted.",
+    historyUnavailable: "Full project record history is unavailable. Work and document trends are not counted.",
     sessionUnavailable: "Conversation history is unavailable. Conversation activity, published attachments, and request outcomes are not counted.",
-    taskCompletionUnavailable: "Existing Ledger history does not separately record Task completion times. Only registrations and current stages are shown.",
+    taskCompletionUnavailable: "Existing project records do not store task completion times. Only registrations and current stages are shown.",
     selected: "Selected records", all: "All", partialDay: "Today includes records so far.", excluded: (count) => `${count} records without sufficient evidence excluded`,
     age: (days) => `${days} days since update`, changes: (count) => `${count} changes`, sources: (count) => `${count} records`,
     labels: { types: "By type", changes: "Changes", spec: "Specifications", plan: "Plans", report: "Reports",
@@ -164,7 +165,7 @@ export const enUsCopy: AppCopy = {
     importantMaterialsHelp: "Pinned materials and plans, specifications, and latest reports explicitly linked to remaining work.",
     sessionUnconfirmed: "Conversation link unconfirmed",
     reviewed: "Review recorded", disposition: "Disposition recorded", result: "Tool result registered",
-    reported: "Published reply", historyLedgerUnavailable: "Ledger history is unavailable. Showing delivered conversation replies only.", linkedResults: (count) => `${count} published artifacts`,
+    reported: "Published reply", historyLedgerUnavailable: "Project record history is unavailable. Showing delivered conversation replies only.", linkedResults: (count) => `${count} published artifacts`,
     currentPlan: "Active plan", disconnected: "Disconnected. Showing the last observed state.",
     reportQuestion: "Ask about this report and its unverified points",
     parentWork: "Parent Work", allWork: "All Work",
@@ -184,9 +185,9 @@ export const enUsCopy: AppCopy = {
     overview: "Overview", work: "Work", materials: "Materials", history: "History", statistics: "Statistics",
     position: "Project status", remaining: "Remaining work", completed: "Execution completed", open: "Open work",
     blocked: "Blocked work", abandoned: "Abandoned work", unknown: "Unverified work", registered: "Registered work",
-    noWork: "No work has been registered yet.", unbound: "No Ledger is linked to this project.",
-    unavailable: "Ledger information is unavailable. Completion has not been inferred.",
-    noRemaining: "No remaining work is recorded.", tasks: "Child Tasks", recorded: "Based on registered Ledger work", loadMore: "Show more",
+    noWork: "No work has been registered yet.", unbound: "No project records are linked to this project.",
+    unavailable: "Project records are unavailable. Completion has not been inferred.",
+    noRemaining: "No remaining work is recorded.", tasks: "Child Tasks", recorded: "Based on registered work", loadMore: "Show more",
   },
   projectDocumentMetadata: {
     active: "Active", other: "Other", roadmap: "Roadmap",
@@ -219,8 +220,8 @@ export const enUsCopy: AppCopy = {
   },
   interfaceFeedback: {
     updateReady: "Butler update is ready.",
-    stewardStopFailed: "Steward stop failed",
-    stewardResumeFailed: "Steward resume failed",
+    stewardStopFailed: "Subtask stop failed",
+    stewardResumeFailed: "Subtask resume failed",
     planDecisionFailed: "Plan decision failed",
     queueFailed: "Message queue failed",
     queueUpdateFailed: "Queued message update failed",
@@ -269,8 +270,8 @@ export const enUsCopy: AppCopy = {
     messages7d: "7d messages",
     messages30d: "30d messages",
     noProjectChats: "No project chats yet",
-    noPlans: "No Project Ledger plans found",
-    noSpecs: "No Project Ledger specs found",
+    noPlans: "No plans in project records",
+    noSpecs: "No specs in project records",
     uiCrashed: "Butler UI crashed.",
     reload: "Reload the window or reopen Butler.",
     custom: "Custom",
@@ -278,8 +279,8 @@ export const enUsCopy: AppCopy = {
     generalChat: "General chat",
     projectDocumentsFailed: "Project documents failed",
     customProvider: "Custom OpenAI-compatible",
-    automationDetailFailed: "Automation detail failed",
-    automationLoadFailed: "Automation load failed",
+    automationDetailFailed: "Schedule detail failed",
+    automationLoadFailed: "Schedule load failed",
     contextDetails: "Context details",
     contextWindow: "Context window",
     workingContext: "Working context",
@@ -324,10 +325,10 @@ export const enUsCopy: AppCopy = {
     skills: "Skills",
   },
   progress: {
-    operations: { read_project_source: "Read: checking the attached project source", delegate_to_worker: "Call worker", edit_file: "Editing: applying planned file changes", grep_files: "Searching: locating relevant implementation", list_files: "Reading: checking relevant files", project_ledger_read: "Reading: checking the work ledger", promote_reviewed_candidate: "Applying: promoting reviewed changes", read_file: "Reading: checking relevant file contents", read_operation_result: "Checking: reviewing stored operation results", run_command: "Running command", update_onboarding_profile: "Settings: applying onboarding answers", web_read: "Reading: checking public sources", web_search: "Searching: finding public sources", write_file: "Writing: applying planned file changes" },
+    operations: { read_project_source: "Read: checking the attached project source", delegate_to_worker: "Call worker", edit_file: "Editing: applying planned file changes", grep_files: "Searching: locating relevant implementation", list_files: "Reading: checking relevant files", project_ledger_read: "Reading: checking project records", promote_reviewed_candidate: "Applying: promoting reviewed changes", read_file: "Reading: checking relevant file contents", read_operation_result: "Checking: reviewing stored operation results", run_command: "Running command", update_onboarding_profile: "Settings: applying onboarding answers", web_read: "Reading: checking public sources", web_search: "Searching: finding public sources", write_file: "Writing: applying planned file changes" },
     fallback: "Working: using the planned tool", storageRecovery: "Coordinating storage writes", reconnecting: "Reconnecting", stopping: "Stopping the request",
   },
-  briefing: { general: generalFallback, onboarding: onboardingFallback, projectSuggestions: englishProjectFallbackSuggestions, skillSuggestions: englishSkillFallbackSuggestions, onboardingMoment: "Onboarding", projectMoment: "Project", projectTitle: name => `Continue in ${name}`, projectDescription: name => `A few ${name} starting points are ready.` },
+  briefing: { general: generalFallback, onboarding: onboardingFallback, projectSuggestions: englishProjectFallbackSuggestions, onboardingMoment: "Onboarding", projectMoment: "Project", projectTitle: name => `Continue in ${name}`, projectDescription: name => `A few ${name} starting points are ready.` },
   interfaceTemplates: {
     relativeAge: seconds => seconds < 60 ? "now" : seconds < 3600 ? `${Math.floor(seconds / 60)}m` : seconds < 86400 ? `${Math.floor(seconds / 3600)}h` : `${Math.floor(seconds / 86400)}d`,
     workedFor: duration => `Worked for ${duration}`,
@@ -463,7 +464,7 @@ export const enUsCopy: AppCopy = {
     createGroup: "Create group",
     menu: "Space menu",
     newProject: "New project",
-    automations: "Automations",
+    automations: "Schedules",
     archives: "Archive",
     favoritesDescription: "Your pinned conversations and projects.",
     moveDestination: "Move to",
@@ -719,7 +720,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     newChat: "New chat",
     newSessionStarting: "Starting new session...",
     search: "Search",
-    automations: "Automations",
+    automations: "Schedules",
     projects: "Projects",
     chats: "Chats",
     settings: "Settings",
@@ -783,7 +784,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     modelErrorHint: "Butler couldn't load the model list. Check Models in Settings.",
     gitMissingTitle: "Git is not installed",
     gitMissingMessage:
-      "Butler remains usable, but branch, commit, and Ledger commit-evidence features are unavailable.",
+      "Butler still works, but branch and commit features are unavailable.",
     gitInstallAction: "Install Git",
     gitMissingDismiss: "Dismiss Git notice",
     reasoning: "Reasoning",
@@ -802,6 +803,19 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     deleteFailedMessage: "Delete failed message",
     queuedPosition: (position, total) => `Queued · ${position} of ${total}`,
     contextDetails: "Show context details",
+    usage: {
+      details: "Details",
+      input: "Input",
+      cached: "Cached",
+      output: "Output",
+      reasoning: "Reasoning",
+      cost: "Cost",
+      estimate: "est.",
+      left: percent => `${percent} left`,
+      unavailable: "Usage unavailable",
+      loading: "Loading usage",
+      updated: time => `Updated ${time}`,
+    },
     approval: {
       title: "Command awaiting approval",
       titleEffect: "Change awaiting approval",
@@ -832,12 +846,12 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     readOnlyDesc: "Can only read files",
   },
   automations: {
-    title: "Automations",
+    title: "Schedules",
     scheduledCount: (count) => `${count} scheduled prompts`,
-    empty: "No automations yet",
-    new: "New automation",
+    empty: "No schedules yet",
+    new: "New schedule",
     detailFallback: "Details",
-    backLabel: "Back to automations",
+    backLabel: "Back to schedules",
     runNow: "Run now",
     resume: "Resume",
     pause: "Pause",
@@ -852,7 +866,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       runs: "Runs",
     },
     placeholders: {
-      title: "Automation title",
+      title: "Schedule title",
       prompt: "Prompt body",
     },
     runs: {
@@ -866,7 +880,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       notRun: "Not run yet",
     },
     inspector: {
-      empty: "No automations target this session",
+      empty: "No schedules for this chat",
     },
   },
   artifacts: {
@@ -887,7 +901,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       activity: "Activity",
       context: "Context",
       artifacts: "Artifacts",
-      automations: "Automations",
+      automations: "Schedules",
       workers: "Workers",
     },
     workers: {
@@ -920,8 +934,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     searchEmpty: (query) => `No settings match: ${query}`,
     groups: {
       preferences: "Preferences",
-      modelsAndExtensions: "Models and extensions",
       appAndSystem: "App and system",
+      advanced: "Advanced",
     },
     sections: {
       general: "General",
@@ -941,7 +955,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     },
     sectionDescriptions: {
       general: "Configure language, time zone, conversation input, and search defaults.",
-      models: "Manage Butler, worker, and backup models.",
+      models: "Choose Butler's model, backup models, and permissions.",
       appearance: "Configure the app theme and display behavior.",
       server: "Configure the Butler server connection and new project folder.",
       updates: "Check and update Butler App.",
@@ -994,7 +1008,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       learning: "Learning",
       import: "Import",
       butlerModel: "Butler model",
-      fallbackConsolidation: "Fallback & consolidation",
+      backupModels: "Backup models",
+      memoryCleanup: "Memory cleanup",
       permissions: "Permissions",
       workerProfiles: "Worker profiles",
       connection: "Connection",
@@ -1011,7 +1026,6 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       sidebar: "How the sidebar organizes conversations.",
       homeScreen: "The background of the new chat screen.",
       learning: "What Butler learns about you from local conversations.",
-      fallbackConsolidation: "Models that take over when the current one fails, and the model that consolidates memory.",
     },
     panels: {
       butlerModel: "Model settings",
@@ -1049,6 +1063,15 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       empty: "No backup models are registered.",
       noCandidates: "No models are available to add.",
       limitReached: "You can register up to 5 backup models.",
+      summaryDescription: "Take over when the current model fails.",
+      off: "Off",
+      edit: "Edit",
+      editLabel: "Edit backup models",
+      done: "Done",
+    },
+    modelsAdvanced: {
+      title: "Advanced",
+      contents: "Memory cleanup model and worker profiles",
     },
     workerProfilesPanel: {
       add: "Add Worker profile",
@@ -1557,12 +1580,12 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
   },
   commandPalette: {
     label: "Command palette",
-    placeholder: "Search chats, projects, automations, and settings",
+    placeholder: "Search chats, projects, schedules, and settings",
     close: "Close command palette",
     loading: "Searching…",
     empty: "No matches. Try another name or title.",
     failed: "Could not search. Check your connection and try again.",
-    kindLabels: { chat: "Chat", project: "Project", project_session: "Project chat", group: "Space", automation: "Automation", settings: "Settings" },
+    kindLabels: { chat: "Chat", project: "Project", project_session: "Project chat", group: "Space", automation: "Schedule", settings: "Settings" },
     settingsSections: { general: "General", appearance: "Appearance", "server-bridge": "Server", "models-access": "Models and access", "privacy-data": "Privacy and data", diagnostics: "Diagnostics", "system-events": "System events", archived: "Archived" },
   },
   feedback: {

@@ -7,7 +7,7 @@ use crate::btcc::BtccCode;
 use crate::btcc::identity::digest;
 use crate::btcc::storage::{BtccRepositories, ContextDocumentInput};
 use crate::btcc::subsessions::SubsessionMetadata;
-use crate::btcc::{AccessMode, BtccError, TurnRequest, VerifiedExecutionControls};
+use crate::btcc::{BtccError, TurnRequest, VerifiedExecutionControls, stored_binding_access_mode};
 use crate::workspace::{SessionRole, StoredSessionBinding};
 use butler_core::json::stringify;
 use butler_core::public_text::trim_js_whitespace;
@@ -255,11 +255,10 @@ fn execution_policy(
     policy.insert("role".into(), role(binding).into());
     policy.insert(
         "accessMode".into(),
-        serde_json::to_value(
-            controls
-                .map(|v| &v.access_mode)
-                .unwrap_or_else(|| binding_access_mode(binding)),
-        )
+        serde_json::to_value(controls.map_or_else(
+            || stored_binding_access_mode(binding),
+            |v| v.access_mode.clone(),
+        ))
         .map_err(json_error)?,
     );
     policy.insert("trackingMode".into(), tracking_mode(binding).into());
@@ -378,23 +377,6 @@ fn role(binding: &StoredSessionBinding) -> &str {
         SessionRole::Steward => "steward",
         SessionRole::Worker => "worker",
         SessionRole::Unknown(v) => v,
-    }
-}
-fn binding_access_mode(binding: &StoredSessionBinding) -> &AccessMode {
-    static READ_ONLY: AccessMode = AccessMode::ReadOnly;
-    static FULL: AccessMode = AccessMode::FullAccess;
-    static ASK: AccessMode = AccessMode::AskFirst;
-    let metadata = metadata(binding);
-    let runtime = object(metadata.get("runtimePolicy"));
-    match runtime
-        .get("accessMode")
-        .filter(|value| !value.is_null())
-        .or_else(|| metadata.get("accessMode"))
-        .and_then(Value::as_str)
-    {
-        Some("full_access") => &FULL,
-        Some("ask_first") => &ASK,
-        _ => &READ_ONLY,
     }
 }
 fn tracking_mode(binding: &StoredSessionBinding) -> &'static str {

@@ -40,7 +40,9 @@ lints below enforce most of this; the rest is review.
    `Slider` instead of `<button>`, `<input>`, `<select>`, `<textarea>`; use
    `Typo` instead of `<p>`, `<span>` or `<h1-6>` with classes.
 5. **Tokens only.** Color, spacing, radius, z-index, typography and motion
-   come from `tokens.css` (`var(--…)`), inside the DS.
+   come from `tokens.css` (`var(--…)`), inside the DS. Text is Pretendard
+   Variable (`--font-body`) and code IBM Plex Mono (`--font-family-code`),
+   both bundled; never name another font family.
 6. **Motion only via the DS.** Product code never declares transitions,
    animations, keyframes or `element.animate()`; DS components own motion on
    `--motion-*` tokens and honor reduced motion.

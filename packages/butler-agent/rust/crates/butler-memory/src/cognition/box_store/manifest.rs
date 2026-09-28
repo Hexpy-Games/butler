@@ -1,3 +1,6 @@
+//! Box item manifests: the stored item record, its classes and files, read and written with unknown
+//! fields kept.
+
 use std::{
     fs::{self, OpenOptions},
     io::{BufReader, Write},
@@ -17,7 +20,7 @@ use crate::cognition::CognitionCode;
 
 pub(super) const ITEM_SCHEMA: &str = "butler.cognition.box.item.v1";
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(super) enum ItemKind {
     File,
@@ -30,7 +33,7 @@ pub(super) enum ItemKind {
     ExternalRef,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(super) enum ItemStatus {
     Pending,
@@ -42,7 +45,7 @@ pub(super) enum ItemStatus {
     Forgotten,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(super) enum PrivacyClass {
     Public,
@@ -51,7 +54,7 @@ pub(super) enum PrivacyClass {
     Secret,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(super) enum RetentionClass {
     Working,
@@ -59,7 +62,7 @@ pub(super) enum RetentionClass {
     Archive,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(super) enum FreshnessClass {
     Unknown,
@@ -120,6 +123,7 @@ pub(super) struct BoxManifest {
     pub quality: Quality,
     pub citations: Vec<String>,
     pub provenance: Vec<String>,
+    /// Passthrough: unknown manifest fields, kept so a rewrite preserves them.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
@@ -133,6 +137,7 @@ pub(super) struct Origin {
     pub tool_call_id: Option<String>,
     pub worker_run_id: Option<String>,
     pub consolidation_run_id: Option<String>,
+    /// Passthrough: unknown manifest fields, kept so a rewrite preserves them.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
@@ -144,6 +149,7 @@ pub(super) struct Source {
     pub provider: Option<String>,
     pub fetched_at: Option<String>,
     pub observed_at: Option<String>,
+    /// Passthrough: unknown manifest fields, kept so a rewrite preserves them.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
@@ -158,6 +164,7 @@ pub(super) struct FileRef {
     pub sha256: Option<String>,
     pub mime_type: Option<String>,
     pub mtime: Option<String>,
+    /// Passthrough: unknown manifest fields, kept so a rewrite preserves them.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
@@ -168,6 +175,7 @@ pub(super) struct Privacy {
     pub class_name: PrivacyClass,
     pub external_provider_allowed: bool,
     pub reason: String,
+    /// Passthrough: unknown manifest fields, kept so a rewrite preserves them.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
@@ -178,6 +186,7 @@ pub(super) struct Retention {
     pub class_name: RetentionClass,
     pub pinned: bool,
     pub expires_at: Option<String>,
+    /// Passthrough: unknown manifest fields, kept so a rewrite preserves them.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
@@ -189,6 +198,7 @@ pub(super) struct Freshness {
     pub source_timestamp: Option<String>,
     pub checked_at: Option<String>,
     pub expires_at: Option<String>,
+    /// Passthrough: unknown manifest fields, kept so a rewrite preserves them.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
@@ -200,6 +210,7 @@ pub(super) struct Refs {
     pub knowhow_ids: Vec<String>,
     pub graph_edge_ids: Vec<String>,
     pub parent_box_item_id: Option<String>,
+    /// Passthrough: unknown manifest fields, kept so a rewrite preserves them.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
@@ -208,6 +219,7 @@ pub(super) struct Refs {
 pub(super) struct Quality {
     pub score: Option<f64>,
     pub signals: Vec<String>,
+    /// Passthrough: unknown manifest fields, kept so a rewrite preserves them.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
@@ -292,7 +304,8 @@ pub(super) fn validate_manifest(manifest: &BoxManifest, expected_id: &str) -> Ve
     issues
 }
 
-pub(super) fn write_manifest_value(path: &Path, manifest: &Value) -> CognitionResult<()> {
+/// Atomically replaces `manifest.json` with pretty JSON and a newline.
+pub(super) fn write_manifest(path: &Path, manifest: &impl Serialize) -> CognitionResult<()> {
     let mut bytes = serde_json::to_vec_pretty(manifest)
         .map_err(|source| error(CognitionCode::MemoryBoxManifestWriteFailed).with_source(source))?;
     bytes.push(b'\n');

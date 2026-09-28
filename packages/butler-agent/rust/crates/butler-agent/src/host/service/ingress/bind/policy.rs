@@ -1,6 +1,8 @@
 //! App session binding mutation and runtime policy.
 
 use super::{Envelope, IngressError};
+use butler_core::tool_protocol::ToolName;
+use butler_turn::btcc::{AccessMode, ApprovalExemptAction};
 use butler_turn::workspace::{
     OwnOptional, SessionBindingStore, SessionLifecycleState, SessionRole, SessionTransportBinding,
     StoredSessionBinding, UpsertSessionBinding,
@@ -56,14 +58,9 @@ pub(super) async fn upsert_app_binding(
     .filter(|value| !value.is_empty())
     .map(str::to_owned)
     .unwrap_or_else(|| default_workspace.to_string_lossy().into_owned());
-    let access = envelope
-        .execution_controls
-        .as_ref()
-        .and_then(|value| value.as_json().get("access_mode"))
-        .and_then(Value::as_str)
-        .unwrap_or("read_only");
+    let access = BindingAccess::read(envelope, context);
     let has_project = project_id.is_some();
-    let profiles: &[&str] = if access == "full_access" {
+    let profiles: &[&str] = if access.turn == AccessMode::FullAccess {
         if has_project {
             &["workspace", "project", "project-lifecycle"]
         } else {
@@ -122,7 +119,7 @@ pub(super) async fn upsert_app_binding(
     }
     metadata.insert("source".into(), "native-butler-queued-app-context".into());
     metadata.insert("appSessionKind".into(), session_kind.into());
-    metadata.insert("accessMode".into(), access.into());
+    metadata.insert("accessMode".into(), json!(access.conversation));
     let Some(controls) = envelope.execution_controls.as_ref() else {
         return Err(IngressError::new(
             "session_binding_unavailable",
@@ -146,35 +143,23 @@ pub(super) async fn upsert_app_binding(
         metadata.insert("plan_id".into(), plan.clone());
     }
     let mut policy = json!({
-        "accessMode":access,
+        "accessMode":access.conversation,
         "trackingModeSource":source,"tracking_mode_source":source,
         "closeoutStrategy":if has_project{"ledger"}else{"session_ledger"},
         "closeout_strategy":if has_project{"ledger"}else{"session_ledger"},
         "thinFirstResponse":true,"thin_first_response":true,
         "requiredNativeTools":[],"required_tools":[],"requiredNativeToolProfiles":profiles,
     });
-    if access == "full_access" {
-        let onboarding_active = butler_role
-            && !butler_memory::profile::first_chat_onboarding_complete(
-                data_root,
-                &butler_models::models::ModelConfigurationClock::now_iso(
-                    &crate::host::SystemIdentity,
-                ),
-            );
-        let mut selected = Vec::new();
-        if onboarding_active || selected_memory_write {
-            selected.push("update_onboarding_profile");
-        }
-        if onboarding_active || selected_memory_write {
-            selected.push("summarize_user_profile");
-        }
-        if selected_memory_write {
-            selected.push("ingest_task_memory");
-            selected.push("update_explicit_memory");
-        }
-        if super::image_admission::admits_zai_image_tool(envelope) {
-            selected.push("analyze_attached_image");
-        }
+    let selected = approval_free_tools(
+        &access.turn,
+        &ApprovalFreeFacts {
+            envelope,
+            data_root,
+            butler_role,
+            selected_memory_write,
+        },
+    );
+    if !selected.is_empty() {
         policy["requiredNativeTools"] = json!(selected);
     }
     if has_project {
@@ -242,4 +227,86 @@ pub(super) async fn upsert_app_binding(
             IngressError::new("session_binding_unavailable", "Session binding unavailable")
                 .with_source(source)
         })
+}
+
+/// The access modes an App turn binds with.
+struct BindingAccess {
+    /// The access this turn runs with, from its execution controls; a
+    /// per-message override (a schedule's own access, #237) sets it. It picks
+    /// this turn's tool profiles and approval-free tools.
+    turn: AccessMode,
+    /// The conversation's own access mode, which the binding keeps for the
+    /// turns that carry no execution controls (a schedule the model created,
+    /// a control request). A per-message override never replaces it.
+    conversation: AccessMode,
+}
+
+impl BindingAccess {
+    /// The turn's controls mode (read-only when unreadable) and the
+    /// conversation mode the App context names; an envelope queued before the
+    /// App named it falls back to the turn's mode.
+    fn read(envelope: &Envelope, context: &Value) -> Self {
+        let parse = |value: &Value| serde_json::from_value::<AccessMode>(value.clone()).ok();
+        let turn = envelope
+            .execution_controls
+            .as_ref()
+            .and_then(|value| value.as_json().get("access_mode"))
+            .and_then(parse)
+            .unwrap_or(AccessMode::ReadOnly);
+        let conversation = context
+            .pointer("/session/accessMode")
+            .and_then(parse)
+            .unwrap_or_else(|| turn.clone());
+        Self { turn, conversation }
+    }
+}
+
+/// What decides which approval-free tools an App turn is offered.
+struct ApprovalFreeFacts<'a> {
+    envelope: &'a Envelope,
+    data_root: &'a Path,
+    /// The session is a Butler session (only it runs onboarding).
+    butler_role: bool,
+    /// The session selected the legacy memory-write profile.
+    selected_memory_write: bool,
+}
+
+/// The required tools of the approval-free actions this turn may take:
+/// first-conversation onboarding (or the selected memory-write profile, which
+/// includes it), memory save in a Butler session, and analysis of an admitted
+/// attached image. Full access and ask-first offer them; read-only does not.
+fn approval_free_tools(mode: &AccessMode, facts: &ApprovalFreeFacts<'_>) -> Vec<&'static str> {
+    let onboarding = mode
+        .allows_without_approval(ApprovalExemptAction::FirstConversationOnboarding)
+        && (facts.selected_memory_write
+            || facts.butler_role
+                && !butler_memory::profile::first_chat_onboarding_complete(
+                    facts.data_root,
+                    &butler_models::models::ModelConfigurationClock::now_iso(
+                        &crate::host::SystemIdentity,
+                    ),
+                ));
+    let mut selected = Vec::new();
+    if onboarding {
+        selected.extend([
+            ToolName::UpdateOnboardingProfile,
+            ToolName::SummarizeUserProfile,
+        ]);
+    }
+    // A Butler session saves what the principal asks it to remember (MEM-01);
+    // task-memory ingest stays with the legacy memory-write profile.
+    if facts.butler_role || facts.selected_memory_write {
+        selected.push(ToolName::UpdateExplicitMemory);
+    }
+    if facts.selected_memory_write {
+        selected.push(ToolName::IngestTaskMemory);
+    }
+    if super::image_admission::admits_zai_image_tool(facts.envelope) {
+        selected.push(ToolName::AnalyzeAttachedImage);
+    }
+    selected
+        .into_iter()
+        .map(ToolName::as_str)
+        .filter(|name| mode.exempts_tool(name))
+        .collect()
 }

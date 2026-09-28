@@ -20,7 +20,6 @@ interface UseComposerStoreBridgeProps {
   isSending: boolean;
   large: boolean;
   modelMenuOpen: boolean;
-  onOpenContext: () => void;
   onStop: () => void;
   setAccessMenuOpen: Dispatch<SetStateAction<boolean>>;
   setContextPopoverOpen: Dispatch<SetStateAction<boolean>>;
@@ -41,7 +40,6 @@ export function useComposerStoreBridge(props: UseComposerStoreBridgeProps) {
     isSending,
     large,
     modelMenuOpen,
-    onOpenContext,
     onStop,
     setAccessMenuOpen,
     setContextPopoverOpen,
@@ -79,8 +77,7 @@ export function useComposerStoreBridge(props: UseComposerStoreBridgeProps) {
       modelState: controls.modelState,
       modelMenuOpen,
       models: state.models,
-      onOpenContext,
-      onStop,
+        onStop,
       planMode: controls.planMode,
       popoverThemeClass: state.popoverThemeClass,
       reasoning: controls.reasoning,

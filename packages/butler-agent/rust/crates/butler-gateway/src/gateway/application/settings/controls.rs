@@ -84,11 +84,14 @@ pub(super) fn global_settings(
     Ok(GlobalSettings {
         model: metadata.model_ref.clone(),
         reasoning,
-        access: stored
+        access: match stored
             .get("access_mode")
             .and_then(Value::as_str)
             .and_then(parse_access)
-            .unwrap_or(AccessMode::FullAccess),
+        {
+            Some(access) => access,
+            None => super::default_access_mode(db)?,
+        },
         plan_mode: stored
             .get("plan_mode_default")
             .and_then(Value::as_bool)

@@ -102,6 +102,34 @@ pub fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
+/// `(content-type, body)` of a multipart upload: `file`, optional `session_id`.
+pub fn multipart_file(
+    name: &str,
+    mime: &str,
+    bytes: &[u8],
+    session_id: Option<&str>,
+) -> (String, Vec<u8>) {
+    let boundary = format!("e2e{}", uuid::Uuid::new_v4().simple());
+    let mut body = Vec::new();
+    if let Some(session) = session_id {
+        body.extend_from_slice(
+            format!(
+                "--{boundary}\r\nContent-Disposition: form-data; name=\"session_id\"\r\n\r\n{session}\r\n"
+            )
+            .as_bytes(),
+        );
+    }
+    body.extend_from_slice(
+        format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{name}\"\r\nContent-Type: {mime}\r\n\r\n"
+        )
+        .as_bytes(),
+    );
+    body.extend_from_slice(bytes);
+    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+    (format!("multipart/form-data; boundary={boundary}"), body)
+}
+
 impl Gateway {
     /// `POST /message-files` as multipart (`file`, optional `session_id`).
     pub async fn upload(
@@ -111,31 +139,11 @@ impl Gateway {
         bytes: &[u8],
         session_id: Option<&str>,
     ) -> Result<Reply, HarnessError> {
-        let boundary = format!("e2e{}", uuid::Uuid::new_v4().simple());
-        let mut body = Vec::new();
-        if let Some(session) = session_id {
-            body.extend_from_slice(
-                format!(
-                    "--{boundary}\r\nContent-Disposition: form-data; name=\"session_id\"\r\n\r\n{session}\r\n"
-                )
-                .as_bytes(),
-            );
-        }
-        body.extend_from_slice(
-            format!(
-                "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{name}\"\r\nContent-Type: {mime}\r\n\r\n"
-            )
-            .as_bytes(),
-        );
-        body.extend_from_slice(bytes);
-        body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+        let (content_type, body) = multipart_file(name, mime, bytes, session_id);
         let response = reqwest::Client::new()
             .post(format!("{}/message-files", self.base))
             .bearer_auth(&self.token)
-            .header(
-                "content-type",
-                format!("multipart/form-data; boundary={boundary}"),
-            )
+            .header("content-type", content_type)
             .body(body)
             .send()
             .await?;

@@ -7,15 +7,21 @@ use crate::cognition::CognitionResult;
 use super::{FeedbackBufferService, append_line, error, parse_entry, read_line};
 use crate::cognition::CognitionCode;
 
+/// Active feedback that targets something another owner revises.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FeedbackTarget {
+    /// Feedback id.
     pub feedback_id: String,
+    /// Feedback category.
     pub category: String,
+    /// Owner meant to apply it (`knowhow`, `profile_candidate`, …).
     pub promotion_target: String,
+    /// What the feedback is about.
     pub target_ref: String,
 }
 
 impl FeedbackBufferService {
+    /// Feedback active at `now_epoch_ms`, as revision targets.
     pub async fn active_targets(&self, now_epoch_ms: i64) -> CognitionResult<Vec<FeedbackTarget>> {
         let path = self
             .paths
@@ -48,7 +54,11 @@ fn active_targets_in_file(path: &Path, now_epoch_ms: i64) -> CognitionResult<Vec
                 record.clear();
             }
             started = true;
-            append_line(&mut record, &line.bytes[3..], line.terminated);
+            append_line(
+                &mut record,
+                line.bytes.get(3..).unwrap_or_default(),
+                line.terminated,
+            );
         } else {
             started = true;
             append_line(&mut record, &line.bytes, line.terminated);

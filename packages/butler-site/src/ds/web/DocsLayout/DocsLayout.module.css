@@ -1,0 +1,74 @@
+/*
+ * Docs shell, shaped like the Butler app window: a tinted sidebar beside a
+ * content column with a glass titlebar. Wide screens add the "on this page"
+ * rail; below 900px the sidebar becomes a drawer.
+ */
+.shell {
+  display: grid;
+  min-height: 100dvh;
+  grid-template-columns: var(--web-sidebar-width) minmax(0, 1fr);
+}
+
+.column {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  background: var(--web-content-bg);
+}
+
+.page {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, var(--web-content-max-width));
+  justify-content: center;
+  gap: var(--space-4xl);
+  padding: var(--space-2xl) var(--web-gutter) var(--space-3xl);
+}
+
+.main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-4xl);
+}
+
+.toc {
+  display: none;
+}
+
+.skip {
+  position: fixed;
+  top: var(--space-sm);
+  left: var(--space-sm);
+  z-index: var(--z-tooltip);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-control);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  text-decoration: none;
+  transform: translateY(calc(-100% - var(--space-lg)));
+}
+
+.skip:focus-visible {
+  transform: none;
+}
+
+@media (width >= 1180px) {
+  .page {
+    grid-template-columns: minmax(0, var(--web-content-max-width)) var(--web-toc-width);
+  }
+
+  .toc {
+    display: block;
+  }
+}
+
+@media (width < 900px) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .page {
+    padding-top: var(--space-xl);
+  }
+}

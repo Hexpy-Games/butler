@@ -1,10 +1,12 @@
+//! Writing briefing artifacts atomically with private permissions.
+
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
 };
 
-use serde_json::Value;
+use serde::Serialize;
 
 use super::contracts::{BriefingGenerationError, error};
 use crate::cognition::BriefingGenerationCode;
@@ -19,7 +21,7 @@ pub(super) fn artifact_path(root: &Path, date: &str, project_id: Option<&str>) -
     }
 }
 
-pub(super) fn write(path: &Path, artifact: &Value) -> Result<(), BriefingGenerationError> {
+pub(super) fn write(path: &Path, artifact: &impl Serialize) -> Result<(), BriefingGenerationError> {
     let parent = path.parent().ok_or_else(|| {
         error(
             BriefingGenerationCode::NewChatBriefingWriteFailed,

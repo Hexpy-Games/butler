@@ -1,0 +1,28 @@
+---
+import { LOCALES, type Locale } from "../../../site/sections";
+import styles from "./LanguageSwitch.module.css";
+
+interface Props {
+  locale: Locale;
+  /** This page in each locale; null when that translation is not published. */
+  alternates: Partial<Record<Locale, string | null>>;
+}
+
+const { locale, alternates } = Astro.props;
+const names: Record<Locale, { short: string; full: string }> = {
+  ko: { short: "KO", full: "한국어" },
+  en: { short: "EN", full: "English" },
+};
+---
+<nav class={styles.group} aria-label="언어">
+  {LOCALES.map((code) => {
+    const href = alternates[code];
+    if (code === locale) {
+      return <span aria-current="true" class:list={[styles.option, styles.current]} lang={code} title={names[code].full}>{names[code].short}</span>;
+    }
+    if (href) {
+      return <a class={styles.option} href={href} hreflang={code} lang={code} title={names[code].full}>{names[code].short}</a>;
+    }
+    return <span aria-disabled="true" class:list={[styles.option, styles.unavailable]} lang={code} title={`${names[code].full} · 준비 중`}>{names[code].short}</span>;
+  })}
+</nav>

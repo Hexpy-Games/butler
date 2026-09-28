@@ -6,9 +6,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use serde_json::json;
 
 use super::contracts::ProfileCandidateInput;
+use super::understanding::{CandidateDraft, Confidence, Expiry, SourceType};
 use super::*;
 
 mod extraction;
+mod format_pin;
 mod legacy_candidates;
 mod provider;
 mod support;
@@ -133,7 +135,7 @@ async fn off_reenable_and_clear_preserve_consent_but_remove_source_rows() {
         .set_profiling_mode(ProfilingMode::Deep)
         .await
         .unwrap();
-    let db = storage::open(&root.0, true).unwrap();
+    let db = storage::open(&root.0, storage::Access::Write).unwrap();
     db.execute("INSERT INTO profile_candidates(id,category,payload_json,source_type,confidence,sensitive_domain,created_at,updated_at,last_seen_at,status)VALUES('c','communication','{\"summary\":\"Concise\"}','explicit','high',0,'t','t','t','candidate')",[]).unwrap();
     db.execute("INSERT INTO profile_source_coverage(coverage_key,message_id,source_hash,part_id,part_index,scalar_pointer,byte_start,byte_end,extractor_version,observed_at,evidence_ref,disposition,updated_at)VALUES('k','m','h','p',0,'/text',0,1,'v','t','e','complete','t')",[]).unwrap();
     drop(db);
@@ -145,7 +147,7 @@ async fn off_reenable_and_clear_preserve_consent_but_remove_source_rows() {
         .set_profiling_mode(ProfilingMode::Basic)
         .await
         .unwrap();
-    let db = storage::open(&root.0, false).unwrap();
+    let db = storage::open(&root.0, storage::Access::Read).unwrap();
     let retained_candidates: i64 = db
         .query_row("SELECT COUNT(*) FROM profile_candidates", [], |row| {
             row.get(0)
@@ -185,20 +187,20 @@ async fn generated_projection_requires_current_canonical_evidence_and_closes_rea
         .set_profiling_mode(ProfilingMode::Basic)
         .await
         .unwrap();
-    let db = storage::open(&root.0, true).unwrap();
+    let db = storage::open(&root.0, storage::Access::Write).unwrap();
     db.execute("INSERT INTO profile_source_coverage(coverage_key,message_id,source_hash,part_id,part_index,scalar_pointer,byte_start,byte_end,extractor_version,observed_at,evidence_ref,disposition,updated_at)VALUES('k','m','h','p',0,'/text',0,5,'v','2023-11-14T22:13:20.000Z','e','complete','t')",[]).unwrap();
     drop(db);
     candidates::upsert(
         &root.0,
         &ProfileCandidateInput {
             category: "communication".into(),
-            payload: json!({"summary":"Use concise answers","butler_should":["Be concise"]}),
-            source_type: "explicit".into(),
-            confidence: "high".into(),
+            draft: draft(json!({"summary":"Use concise answers","butler_should":["Be concise"]})),
+            source_type: SourceType::Explicit,
+            confidence: Confidence::High,
             sensitive_domain: false,
             evidence_ref: Some("e".into()),
             evidence_observed_at: Some("2023-11-14T22:13:20.000Z".into()),
-            expires_or_decay: Some("decay".into()),
+            expires_or_decay: Some(Expiry::Decay),
         },
         "2023-11-14T22:13:20.000Z",
     )
@@ -231,18 +233,18 @@ async fn candidate_duplicate_and_promoted_stable_merge_preserve_source_history()
         .unwrap();
     let candidate = |evidence: &str, instruction: &str| ProfileCandidateInput {
         category: "cares".into(),
-        payload: json!({
+        draft: draft(json!({
             "facet":"current_interests",
             "summary":"Rust migration",
             "butler_should":[instruction],
             "sensitivity":"restricted"
-        }),
-        source_type: "explicit".into(),
-        confidence: "medium".into(),
+        })),
+        source_type: SourceType::Explicit,
+        confidence: Confidence::Medium,
         sensitive_domain: true,
         evidence_ref: Some(evidence.into()),
         evidence_observed_at: Some("2023-11-14T22:13:20.000Z".into()),
-        expires_or_decay: Some("decay".into()),
+        expires_or_decay: Some(Expiry::Decay),
     };
     let first = candidates::upsert(
         &root.0,
@@ -274,7 +276,7 @@ async fn candidate_duplicate_and_promoted_stable_merge_preserve_source_history()
         "2023-11-15T22:13:20.000Z",
     )
     .unwrap();
-    let db = storage::open(&root.0, false).unwrap();
+    let db = storage::open(&root.0, storage::Access::Read).unwrap();
     let (updated_at, sensitive_domain, payload_json): (String, i64, String) = db
         .query_row(
             "SELECT updated_at,sensitive_domain,payload_json FROM profile_candidates ORDER BY id LIMIT 1",
@@ -311,8 +313,8 @@ async fn candidate_duplicate_and_promoted_stable_merge_preserve_source_history()
     .unwrap();
     let stable = storage::stable_entries(&root.0).unwrap();
     assert_eq!(stable.len(), 1);
-    assert_eq!(stable[0].payload["evidence_refs"], json!(["e1", "e2"]));
-    let instructions = stable[0].payload["butler_should"].as_array().unwrap();
+    assert_eq!(stable[0].understanding.evidence_refs, ["e1", "e2"]);
+    let instructions = &stable[0].understanding.butler_should;
     assert!(
         instructions
             .iter()
@@ -367,4 +369,8 @@ async fn dropped_caller_keeps_registered_blocking_operation_owned_until_close_dr
             .code(),
         "profile_closed"
     );
+}
+
+fn draft(value: serde_json::Value) -> CandidateDraft {
+    serde_json::from_value(value).unwrap()
 }

@@ -392,7 +392,26 @@ async function measureThinkingMark(page: Page, serverUrl: string, ids: Map<strin
     } as typeof draw;
     (window as unknown as { __markDraws: () => number }).__markDraws = () =>
       [...document.querySelectorAll<HTMLCanvasElement>("[data-ds-thinking-mark-demo] canvas")].reduce((sum, canvas) => sum + (counts.get(canvas) ?? 0), 0);
+    (window as unknown as { __perMarkDraws: () => number[] }).__perMarkDraws = () =>
+      [...document.querySelectorAll<HTMLCanvasElement>("[data-ds-thinking-mark-demo] canvas")].map((canvas) => counts.get(canvas) ?? 0);
   });
+  // Page frame rate and the slowest mark's own frame rate while every mark works.
+  const markFps = async (ms: number) => {
+    const before = await page.evaluate(() => (window as unknown as { __perMarkDraws: () => number[] }).__perMarkDraws());
+    const pageFps = await page.evaluate((span) => new Promise<number>((done) => {
+      let frames = 0;
+      const start = performance.now();
+      const step = () => {
+        frames += 1;
+        if (performance.now() - start < span) requestAnimationFrame(step);
+        else done((frames * 1000) / (performance.now() - start));
+      };
+      requestAnimationFrame(step);
+    }), ms);
+    const after = await page.evaluate(() => (window as unknown as { __perMarkDraws: () => number[] }).__perMarkDraws());
+    const perMark = after.map((count, index) => ((count - (before[index] ?? 0)) * 1000) / ms);
+    return { pageFps: Math.round(pageFps), slowestMarkFps: Math.round(Math.min(...perMark)), marks: perMark.length };
+  };
   const draws = () => page.evaluate(() => (window as unknown as { __markDraws: () => number }).__markDraws());
   const drawsOver = async (ms: number) => {
     const before = await draws();
@@ -408,6 +427,7 @@ async function measureThinkingMark(page: Page, serverUrl: string, ids: Map<strin
     return {};
   });
   const working = windowStats(events, thread, markTs(events, "mark-start"), markTs(events, "mark-end"));
+  const fps = await markFps(1_000);
   const visibleDrawsPerSecond = await drawsOver(1_000);
   await page.evaluate(() => {
     const demo = document.querySelector("[data-ds-thinking-mark-demo]")!;
@@ -439,11 +459,14 @@ async function measureThinkingMark(page: Page, serverUrl: string, ids: Map<strin
   await page.evaluate(() => { delete document.body.dataset.motion; });
   assert(working.longTasks === 0, `thinking mark produced ${working.longTasks} task(s) over ${LONG_TASK_MS}ms (max ${working.maxTaskMs}ms)`);
   assert(visibleDrawsPerSecond > 60, `working marks did not animate: ${visibleDrawsPerSecond} draws/s`);
+  // Each working mark draws at (about) the 60fps cap and the page keeps its frame rate.
+  assert(fps.pageFps >= 50, `thinking marks dropped the page to ${fps.pageFps}fps`);
+  assert(fps.slowestMarkFps >= 45, `a working thinking mark drew at only ${fps.slowestMarkFps}fps`);
   assert(offscreen, "the thinking-mark demo did not scroll offscreen");
   assert(offscreenDrawsPerSecond === 0, `offscreen marks kept drawing: ${offscreenDrawsPerSecond} draws/s`);
   assert(reducedDrawsPerSecond === 0, `reduced-motion marks kept drawing: ${reducedDrawsPerSecond} draws/s`);
   assert(breathe === "on", `reduced-motion working marks should breathe in CSS, got ${breathe}`);
-  return { workingMarksOnPage: markCount, working, stillControl: still, visibleDrawsPerSecond, offscreenDrawsPerSecond, reducedDrawsPerSecond, reducedBreathe: breathe };
+  return { workingMarksOnPage: markCount, working, stillControl: still, fps, visibleDrawsPerSecond, offscreenDrawsPerSecond, reducedDrawsPerSecond, reducedBreathe: breathe };
 }
 
 async function newContext(browser: Browser, video: string | null): Promise<BrowserContext> {
@@ -453,6 +476,7 @@ async function newContext(browser: Browser, video: string | null): Promise<Brows
     ...(video ? { recordVideo: { dir: video, size: viewport } } : {}),
   });
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await server.signIn(context);
   return context;
 }
 
@@ -642,6 +666,7 @@ const server = await createNativeAppServer({ uiRoot });
 const browser = await chromium.launch({ headless: true });
 try {
   const lookup = await browser.newPage();
+  await server.signIn(lookup);
   const ids = await itemIds(lookup, server.url);
   await lookup.close();
   const results = await measure(browser, server.url, ids);

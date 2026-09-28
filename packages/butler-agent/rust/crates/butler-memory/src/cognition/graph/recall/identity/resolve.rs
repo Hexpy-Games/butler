@@ -14,6 +14,7 @@ use super::{
     records::{self, Decision, HistoryRef},
 };
 use crate::cognition::CognitionCode;
+use crate::cognition::graph::identity_decision::DecisionOperation;
 
 struct IdentityResolutionContext<'a, SourceCurrent, Now> {
     db: &'a Connection,
@@ -101,12 +102,12 @@ where
                 return Ok(result(node_id, true));
             }
             if authoritative {
-                if record.operation == "apply"
+                if record.operation == DecisionOperation::Apply
                     && let Some(canonical) = &record.literal_canonical
                 {
                     return internal(context, canonical);
                 }
-                if record.operation == "revoke" || record.operation == "invalidate" {
+                if record.operation.undoes() {
                     return authorized_preimage(context, node_id, &record);
                 }
             }
@@ -173,12 +174,12 @@ fn owning_apply(
         let Some(record) = records::find(db, &current)? else {
             return Ok(None);
         };
-        if record.operation == "apply"
+        if record.operation == DecisionOperation::Apply
             && record.resulting_direct_redirect.as_deref() == Some(redirect)
         {
             return Ok(Some(record));
         }
-        if (record.operation == "revoke" || record.operation == "invalidate")
+        if record.operation.undoes()
             && record.resulting_direct_redirect.as_deref() == Some(redirect)
             && let Some(target_head) = &record.target_decision
             && let Some(target) = records::find(db, target_head)?

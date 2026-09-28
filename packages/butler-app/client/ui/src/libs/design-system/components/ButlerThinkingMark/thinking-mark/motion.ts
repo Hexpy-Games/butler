@@ -1,4 +1,4 @@
-import { MORPH_SPRING, SPRING_SUBSTEP_S } from "./constants";
+import { MORPH_SPRING, MOTION_FULL_SPEED_AT, SPRING_SUBSTEP_S } from "./constants";
 
 export interface SpringState {
   x: number;
@@ -26,11 +26,14 @@ export function progressOf(M: number) {
 }
 
 /**
- * Motion clock speed: proportional to the morph, so the thinking motion runs
- * from the first frame and reaches full speed exactly as the morph lands (no hand-off).
+ * Motion clock speed: rises smoothly (C1, no jolt) from 0 with the morph, so the
+ * thinking motion runs from the first frame, and is exactly 1 from
+ * MOTION_FULL_SPEED_AT on: the steady loop is never slowed by the calm morph's
+ * long tail. On settle it decays to 0 as the logo returns.
  */
 export function speedOf(M: number) {
-  return progressOf(M);
+  const t = progressOf(M / MOTION_FULL_SPEED_AT);
+  return t * t * (3 - 2 * t);
 }
 
 /** Park-Miller LCG, deterministic per seed. */
@@ -52,6 +55,8 @@ export class MorphSim {
   th = 0;
   th0 = 0;
   idle = true;
+  /** Frame timestamp (ms) of the last update; 0 = none yet. Marks sharing this sim step it once per frame. */
+  clock = 0;
 
   get T() {
     return this.th - this.th0;

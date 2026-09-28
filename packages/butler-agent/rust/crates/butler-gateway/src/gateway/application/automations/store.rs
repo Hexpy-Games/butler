@@ -6,6 +6,7 @@ use super::{
     AutomationRunListView, AutomationSummary, CreateAutomationRequest, UpdateAutomationRequest,
     records,
 };
+use crate::gateway::application::settings;
 use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::{
     AppApplication, AppStorageError, GatewayApplicationError, app_error, events, public,
@@ -53,12 +54,12 @@ impl AppApplication {
         let title = required(
             &input.title,
             "automation_title_required",
-            "Automation title is required.",
+            "Schedule title is required.",
         )?;
         let prompt = required(
             &input.prompt_body,
             "automation_prompt_required",
-            "Automation prompt is required.",
+            "Schedule prompt is required.",
         )?;
         validate_interval(input.interval_seconds)?;
         let id = format!("automation-{}", self.dependencies.identity_clock.new_uuid());
@@ -69,10 +70,15 @@ impl AppApplication {
             .iso_after_millis(u64::try_from(input.interval_seconds).unwrap_or_default() * 1000);
         let subscribers = self.subscribers.clone();
         self.storage.execute(move |db| {
-            let (kind, _) = records::target(db, input.target_session_id.trim())?;
+            let target = input.target_session_id.trim();
+            let (kind, _) = records::target(db, target)?;
+            let access = match input.access_mode {
+                Some(mode) => mode,
+                None => settings::conversation_access_mode(db, target)?,
+            };
             db.execute(
-                "INSERT INTO app_automations(id,title,prompt_body,target_kind,target_session_id,interval_seconds,state,next_run_at,last_run_at,last_run_state,last_safe_error_code,run_count,consecutive_failure_count,created_at,updated_at) VALUES(?1,?2,?3,?4,?5,?6,'enabled',?7,NULL,'never_run',NULL,0,0,?8,?8)",
-                params![id,title,prompt,kind,input.target_session_id.trim(),input.interval_seconds,next,now],
+                "INSERT INTO app_automations(id,title,prompt_body,target_kind,target_session_id,interval_seconds,access_mode,state,next_run_at,last_run_at,last_run_state,last_safe_error_code,run_count,consecutive_failure_count,created_at,updated_at) VALUES(?1,?2,?3,?4,?5,?6,?7,'enabled',?8,NULL,'never_run',NULL,0,0,?9,?9)",
+                params![id,title,prompt,kind,target,input.interval_seconds,settings::access_mode_name(&access),next,now],
             ).map_err(AppStorageError::sqlite)?;
             let automation = detail(records::active(db, &id)?);
             publish(db, &subscribers, "automation.created", &json!({"automation":automation.summary}), &now)?;
@@ -96,14 +102,15 @@ impl AppApplication {
             let (kind, _) = records::target(db, &target_id)?;
             let seconds = input.interval_seconds.unwrap_or(old.interval);
             validate_interval_row(seconds)?;
+            let access = input.access_mode.unwrap_or(old.access);
             let state = input.state.unwrap_or(old.state);
             if state != "enabled" && state != "paused" {
-                return Err(AppStorageError::new(AppStorageCode::AutomationStateInvalid, "Automation state must be enabled or paused."));
+                return Err(AppStorageError::new(AppStorageCode::AutomationStateInvalid, "Schedule state must be enabled or paused."));
             }
             let next = if state == "enabled" { Some(clock.iso_after_millis(u64::try_from(seconds).unwrap_or_default() * 1000)) } else { old.next };
             db.execute(
-                "UPDATE app_automations SET title=?1,prompt_body=?2,target_kind=?3,target_session_id=?4,interval_seconds=?5,state=?6,next_run_at=?7,updated_at=?8 WHERE id=?9",
-                params![title,prompt,kind,target_id,seconds,state,next,now,id],
+                "UPDATE app_automations SET title=?1,prompt_body=?2,target_kind=?3,target_session_id=?4,interval_seconds=?5,state=?6,next_run_at=?7,updated_at=?8,access_mode=?9 WHERE id=?10",
+                params![title,prompt,kind,target_id,seconds,state,next,now,settings::access_mode_name(&access),id],
             ).map_err(AppStorageError::sqlite)?;
             let automation = detail(records::active(db, &id)?);
             publish(db, &subscribers, "automation.updated", &json!({"automation":automation.summary}), &now)?;
@@ -202,7 +209,7 @@ fn detail(row: records::AutomationRow) -> AutomationDetail {
     reason = "map_err/iterator adapter taking owned values"
 )]
 fn target_summary(value: AutomationSummary) -> Value {
-    json!({"automation_id":value.id,"title":value.title,"state":value.state,"interval_label":value.interval_label,"next_run_at":value.next_run_at,"last_run_state":value.last_run_state,"safe_error_code":value.last_safe_error_code})
+    json!({"automation_id":value.id,"title":value.title,"state":value.state,"interval_label":value.interval_label,"access_mode":value.access_mode,"next_run_at":value.next_run_at,"last_run_state":value.last_run_state,"safe_error_code":value.last_safe_error_code})
 }
 fn required(
     value: &str,
@@ -228,7 +235,7 @@ fn validate_interval(value: i64) -> Result<(), GatewayApplicationError> {
         Err(public(
             400,
             "automation_interval_invalid",
-            "Automation interval must be between 5 minutes and 24 hours.",
+            "Schedule interval must be between 5 minutes and 24 hours.",
         ))
     }
 }
@@ -238,7 +245,7 @@ fn validate_interval_row(value: i64) -> Result<(), AppStorageError> {
     } else {
         Err(AppStorageError::new(
             AppStorageCode::AutomationIntervalInvalid,
-            "Automation interval must be between 5 minutes and 24 hours.",
+            "Schedule interval must be between 5 minutes and 24 hours.",
         ))
     }
 }

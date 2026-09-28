@@ -1,5 +1,4 @@
 use rusqlite::Connection;
-use serde_json::json;
 
 use super::*;
 
@@ -76,21 +75,9 @@ fn registration_preserves_projection_digest_source_span_and_pending_states() {
         .unwrap();
     let projection = "type:\"preference\"\nlabel:\"Alpha\"\nstatement:\"statement\"\ncondition:\"when needed\"\nrequirement:{\"action\":\"remember\"}\npolarity:\"positive\"\nalias:\"Alpha\"";
     assert_eq!(node.0, projection);
-    let revision = super::digest(vec![
-        json!("node-vector"),
-        json!("node"),
-        json!("project"),
-        json!("user_input"),
-        json!(projection),
-    ])
-    .unwrap();
-    let chunk = super::digest(vec![
-        json!("node-vector-chunk"),
-        json!(revision),
-        json!(0),
-        json!(projection),
-    ])
-    .unwrap();
+    let revision =
+        super::digest(&("node-vector", "node", "project", "user_input", &projection)).unwrap();
+    let chunk = super::digest(&("node-vector-chunk", &revision, &0, &projection)).unwrap();
     assert_eq!(node.1, chunk);
     assert_eq!(node.2, r#"["source"]"#);
 

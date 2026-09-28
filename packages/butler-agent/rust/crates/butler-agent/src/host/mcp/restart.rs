@@ -24,7 +24,7 @@ pub(super) async fn restart(
         .arg(installation.resources())
         .args(["restart", "--data"])
         .arg(data_root)
-        .arg("--json")
+        .args(["--json", "--requested-by", "mcp"])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

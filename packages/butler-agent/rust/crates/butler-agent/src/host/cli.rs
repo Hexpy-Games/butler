@@ -2,8 +2,6 @@
 //! and dispatches to them.
 
 #[cfg(unix)]
-pub(super) mod automation;
-#[cfg(unix)]
 pub(super) mod cognition;
 #[cfg(unix)]
 pub(crate) mod command;
@@ -23,9 +21,13 @@ pub(super) mod oauth_login;
 #[cfg(unix)]
 pub(super) mod observability;
 #[cfg(unix)]
+pub(super) mod open;
+#[cfg(unix)]
 pub(super) mod personalization;
 #[cfg(unix)]
 pub(super) mod public;
+#[cfg(unix)]
+pub(super) mod schedule;
 #[cfg(unix)]
 pub(super) mod service;
 #[cfg(unix)]

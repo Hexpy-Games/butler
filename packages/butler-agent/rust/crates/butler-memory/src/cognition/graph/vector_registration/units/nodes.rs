@@ -1,12 +1,12 @@
 //! Node vector projection and unit registration.
 
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::collections::HashSet;
 
 use super::super::{
     CognitionError, CognitionResult, NODE_CHUNK_BYTES, OVERSIZED_GRAPHEME, db_error, digest,
-    json_array, json_error, json_string, option_value, source_changed, stringify,
+    json_array, json_error, json_string, source_changed, stringify,
 };
 use super::{chunks, vector_unit_id};
 use crate::cognition::CognitionCode;
@@ -73,6 +73,8 @@ pub(super) fn node_rows(
         .map_err(db_error)
 }
 
+/// Registers the vector units of `nodes` for this episode revision and
+/// returns every unit id they need.
 pub(super) fn register(
     tx: &Transaction<'_>,
     job_id: &str,
@@ -83,33 +85,20 @@ pub(super) fn register(
 ) -> CognitionResult<HashSet<String>> {
     let mut desired = HashSet::new();
     for node in nodes {
-        let aliases = aliases(tx, &node.id, episode_id, revision, &node.origin_kind)?;
-        let label = aliases.first().cloned().unwrap_or_else(|| {
-            if node.node_type == "entity" || node.node_type == "project" {
-                String::new()
-            } else {
-                node.label.clone()
-            }
-        });
-        let claim = claim(tx, &node.id)?;
-        let projection = node_projection(&node.node_type, &label, &claim, &aliases)?;
-        let node_revision = digest(vec![
-            json!("node-vector"),
-            json!(node.id),
-            option_value(project_id),
-            json!(node.origin_kind),
-            json!(projection),
-        ])?;
+        let projection = projection_text(tx, node, episode_id, revision)?;
+        let node_revision = digest(&(
+            "node-vector",
+            &node.id,
+            project_id,
+            &node.origin_kind,
+            &projection,
+        ))?;
         let source_ids = node_source_ids(tx, &node.id, episode_id, revision, &node.origin_kind)?;
         match chunks(&projection, NODE_CHUNK_BYTES) {
             Ok(chunks) => {
                 for (ordinal, text) in chunks.into_iter().enumerate() {
-                    let chunk_revision = digest(vec![
-                        json!("node-vector-chunk"),
-                        json!(node_revision),
-                        json!(ordinal),
-                        json!(text),
-                    ])?;
+                    let chunk_revision =
+                        digest(&("node-vector-chunk", &node_revision, &ordinal, &text))?;
                     let unit_id = vector_unit_id(job_id, "node", &node.id, &chunk_revision)?;
                     desired.insert(unit_id.clone());
                     tx.execute(
@@ -138,8 +127,7 @@ pub(super) fn register(
                 }
             }
             Err(()) => {
-                let chunk_revision =
-                    digest(vec![json!("node-vector-oversized"), json!(node_revision)])?;
+                let chunk_revision = digest(&("node-vector-oversized", &node_revision))?;
                 let unit_id = vector_unit_id(job_id, "node", &node.id, &chunk_revision)?;
                 desired.insert(unit_id.clone());
                 tx.execute(
@@ -162,10 +150,32 @@ pub(super) fn register(
     Ok(desired)
 }
 
+/// The text a node's vector is embedded from: its type, first alias (or
+/// label, except for entities and projects), claim and aliases.
+fn projection_text(
+    tx: &Transaction<'_>,
+    node: &NodeRow,
+    episode_id: &str,
+    revision: &str,
+) -> CognitionResult<String> {
+    let aliases = aliases(tx, &node.id, episode_id, revision, &node.origin_kind)?;
+    let label = aliases.first().cloned().unwrap_or_else(|| {
+        if node.node_type == "entity" || node.node_type == "project" {
+            String::new()
+        } else {
+            node.label.clone()
+        }
+    });
+    let claim = claim(tx, &node.id)?;
+    node_projection(&node.node_type, &label, &claim, &aliases)
+}
+
 #[derive(Default)]
 struct Claim {
     statement: Option<String>,
     condition: Option<String>,
+    /// Passthrough: the stored `memory_claims.requirement` JSON, re-encoded
+    /// verbatim into the projection text (older rows need not be complete).
     requirement: Option<Value>,
     polarity: Option<String>,
 }
@@ -224,6 +234,7 @@ fn node_projection(
     Ok(fields.join("\n"))
 }
 
+/// Passthrough: JavaScript truthiness of the stored requirement JSON.
 fn js_truthy(value: &Value) -> bool {
     match value {
         Value::Null => false,

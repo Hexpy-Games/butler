@@ -41,7 +41,7 @@ fn instance_guard_holds_kernel_lock_and_leaves_lock_inode_persistent() {
         .canonicalize()
         .expect("test executable is canonical");
     let installation = test_installation(&executable);
-    let guard = InstanceGuard::acquire(&data.0, &executable, &installation)
+    let guard = InstanceGuard::acquire(&data.0, &executable, &installation, false)
         .expect("first writer is admitted");
 
     assert!(instance_is_locked(&data.0).expect("lock state is readable"));
@@ -50,7 +50,7 @@ fn instance_guard_holds_kernel_lock_and_leaves_lock_inode_persistent() {
             .expect("record is readable")
             .is_some()
     );
-    let duplicate = InstanceGuard::acquire(&data.0, &executable, &installation);
+    let duplicate = InstanceGuard::acquire(&data.0, &executable, &installation, false);
     assert!(matches!(duplicate, Err(message) if message.message().contains("duplicate_writer")));
 
     drop(guard);
@@ -71,8 +71,8 @@ fn guard_cleanup_preserves_record_with_a_different_nonce() {
         .canonicalize()
         .expect("test executable is canonical");
     let installation = test_installation(&executable);
-    let guard =
-        InstanceGuard::acquire(&data.0, &executable, &installation).expect("writer is admitted");
+    let guard = InstanceGuard::acquire(&data.0, &executable, &installation, false)
+        .expect("writer is admitted");
     let path = instance_record_path(&data.0);
     let mut replacement = read_record_at(&path)
         .expect("record is readable")
@@ -115,8 +115,8 @@ fn late_readiness_cannot_overwrite_a_stop_transition() {
         .canonicalize()
         .expect("test executable is canonical");
     let installation = test_installation(&executable);
-    let mut guard =
-        InstanceGuard::acquire(&data.0, &executable, &installation).expect("writer is admitted");
+    let mut guard = InstanceGuard::acquire(&data.0, &executable, &installation, false)
+        .expect("writer is admitted");
     let record = read_record_at(&instance_record_path(&data.0))
         .expect("record is readable")
         .expect("record is present");

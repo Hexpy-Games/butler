@@ -96,18 +96,16 @@ impl PhaseExecutor for CyclePhases {
                     .health
                     .read()
                     .await
-                    .map(|report| {
-                        self.metrics.record(
-                            "health",
-                            report.metric_status,
-                            &report.metric_dimensions,
-                        );
-                        butler_core::json::json_object!({
+                    .and_then(|report| {
+                        let dimensions = report.metric_dimensions()?;
+                        self.metrics
+                            .record("health", report.metric_status, &dimensions);
+                        Ok(butler_core::json::json_object!({
                             "memory_chunks_count": report.memory_chunks_count,
                             "vector_rows_count": report.vector_rows_count,
                             "maintenance_status": report.maintenance_status.as_str(),
                             "diagnostics_count": report.diagnostics_count,
-                        })
+                        }))
                     })
                     .map_err(cognition_phase_error),
                 Phase::NewChatBriefing => self

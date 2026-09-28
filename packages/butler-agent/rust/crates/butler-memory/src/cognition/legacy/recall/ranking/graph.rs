@@ -1,3 +1,5 @@
+//! Graph activation, context and salience signals of legacy recall.
+
 use std::collections::{HashMap, HashSet};
 
 use super::{clamp01, js_max, js_min};

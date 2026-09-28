@@ -33,8 +33,8 @@ pub enum Command {
     Observability,
     /// `search ...`, `web ...`
     WebAccess,
-    /// `automation ...`
-    Automation,
+    /// `schedule ...` (and its deprecated spelling `automation ...`)
+    Schedule,
     /// `update ...`
     Update,
     /// `status`, `model status`, `metrics status`, ...
@@ -45,6 +45,8 @@ pub enum Command {
     Transport,
     /// `gateway ...`
     Gateway,
+    /// `open`: the running Butler in the local browser.
+    Open,
     /// `work ...`
     Work,
     /// `skills ...`
@@ -71,7 +73,7 @@ impl Command {
     /// Classifies command arguments (installation options already removed).
     pub fn classify(args: &[OsString]) -> Self {
         use crate::host::cli;
-        let families: [(Recognizer, Self); 16] = [
+        let families: [(Recognizer, Self); 17] = [
             (
                 cli::conversation_recovery::recognizes,
                 Self::ConversationRecovery,
@@ -84,12 +86,13 @@ impl Command {
             (cli::settings::recognizes, Self::Settings),
             (cli::observability::recognizes, Self::Observability),
             (cli::web_access::recognizes, Self::WebAccess),
-            (cli::automation::recognizes, Self::Automation),
+            (cli::schedule::recognizes, Self::Schedule),
             (cli::update::recognizes, Self::Update),
             (cli::status::recognizes, Self::Status),
             (cli::context::recognizes, Self::Context),
             (cli::transport::recognizes, Self::Transport),
             (cli::gateway::recognizes, Self::Gateway),
+            (cli::open::recognizes, Self::Open),
             (cli::work::recognizes, Self::Work),
         ];
         if let Some((_, command)) = families.iter().find(|(recognizes, _)| recognizes(args)) {
@@ -138,12 +141,13 @@ impl Command {
             Self::Settings => cli::settings::run(installation, args).await,
             Self::Observability => cli::observability::run(installation, args).await,
             Self::WebAccess => cli::web_access::run(installation, args).await,
-            Self::Automation => cli::automation::run(&installation, &args),
+            Self::Schedule => cli::schedule::run(&installation, &args),
             Self::Update => Box::pin(cli::update::run(installation, args)).await,
             Self::Status => cli::status::run_native_status_cli(installation, args).await,
             Self::Context => cli::context::run(installation, args).await,
             Self::Transport => cli::transport::run(&installation, &args),
             Self::Gateway => cli::gateway::run(installation, args).await,
+            Self::Open => cli::open::run(&installation, &args).await,
             Self::Work => {
                 let result = cli::work::run(installation, args).await;
                 printed(&result.stdout, &result.stderr, result.exit_code)
@@ -182,7 +186,9 @@ impl Command {
             Self::RunService => {
                 match crate::host::service::entrypoint::run_native_service(installation).await {
                     Ok(session) => {
-                        println!("{session}");
+                        if let Some(session) = session {
+                            println!("{session}");
+                        }
                         ExitCode::SUCCESS
                     }
                     Err(error) => {
@@ -379,20 +385,14 @@ mod tests {
     #[test]
     fn command_families_claim_their_commands_after_common_options() {
         for (args, expected) in [
-            (&["automation", "list"][..], Command::Automation),
+            (&["schedule", "list"][..], Command::Schedule),
             (
                 &[
-                    "--data",
-                    "/tmp/d",
-                    "automation",
-                    "list",
-                    "--status",
-                    "active",
-                    "--json",
+                    "--data", "/tmp/d", "schedule", "list", "--status", "active", "--json",
                 ],
-                Command::Automation,
+                Command::Schedule,
             ),
-            (&["automation", "future-command"], Command::Automation),
+            (&["automation", "future-command"], Command::Schedule),
             (&["metrics", "tail"], Command::Observability),
             (
                 &["--data", "/tmp/d", "metrics", "tail", "--lines"],

@@ -1501,7 +1501,7 @@ async function confirmStopButlerAgentFromTray() {
     checkboxChecked: false,
     message: "Stop Butler Agent?",
     detail:
-      "Stopping Butler Agent will stop automations and any background sessions currently running.",
+      "Stopping Butler Agent will stop schedules and any background sessions currently running.",
   });
   if (result.response !== 0) return false;
   if (result.checkboxChecked === true) {

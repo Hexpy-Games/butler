@@ -5,8 +5,16 @@
 // local release build. Each handle owns a temporary installation copy, BUTLER_DATA,
 // HOME and CODEX_HOME, a private loopback port, and a stub OpenAI-compatible
 // "Custom" model endpoint, so no real provider or live Butler state is touched.
+//
+// Local auth is always on in the gateway: it creates its bearer token at
+// `$BUTLER_DATA/app/runtime/auth/local-agent-auth.json`. `api()` sends it, and
+// `signIn()` gives a browser context the session cookie a one-time connection
+// code sets (the path `butler open` uses), so pages load the UI as a user would.
+// A UI served from another origin (a proxy, Vite) must be listed in
+// `devOrigins` (BUTLER_APP_DEV_ORIGIN), or the gateway answers 403
+// origin_not_allowed.
 import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -22,6 +30,13 @@ export type NativeAppServerOptions = {
   onboardingComplete?: boolean;
   stubReply?: (request: StubModelRequest) => string | Promise<string>;
   readyTimeoutMs?: number;
+  /** Exact renderer origins (`http://127.0.0.1:<port>`, no trailing slash) serving the UI from elsewhere. */
+  devOrigins?: string[];
+};
+
+/** A Playwright BrowserContext (or anything with its `addCookies`). */
+export type CookieJar = {
+  addCookies(cookies: Array<{ name: string; value: string; url: string; httpOnly?: boolean; sameSite?: "Strict" | "Lax" | "None" }>): Promise<void>;
 };
 
 export type NativeAppServerHandle = {
@@ -29,7 +44,15 @@ export type NativeAppServerHandle = {
   port: number;
   butlerData: string;
   stubModelCalls: StubModelRequest[];
+  /** The gateway's local bearer token (read from the temp BUTLER_DATA). */
+  token: string;
+  /** `{ authorization: "Bearer <token>" }` for raw fetches. */
+  authHeaders: Record<string, string>;
   api<T = unknown>(path: string, init?: RequestInit): Promise<T>;
+  /** A fresh one-time `/connect?code=..` link (valid 5 minutes). */
+  connectUrl(): Promise<string>;
+  /** Gives a browser context (or a page's context) a gateway browser session. */
+  signIn(target: CookieJar | { context(): CookieJar }): Promise<void>;
   stop(): Promise<void>;
 };
 
@@ -182,6 +205,18 @@ export async function freePort(): Promise<number> {
   });
 }
 
+export const LOCAL_AUTH_FILE = "app/runtime/auth/local-agent-auth.json";
+
+/** The bearer token the gateway keeps in its data folder, once it exists. */
+export function readLocalAuthToken(butlerData: string): string | null {
+  try {
+    const stored = JSON.parse(readFileSync(join(butlerData, LOCAL_AUTH_FILE), "utf8")) as { token?: unknown };
+    return typeof stored.token === "string" && stored.token.length >= 32 ? stored.token : null;
+  } catch {
+    return null;
+  }
+}
+
 export function writeOnboardingComplete(butlerData: string): void {
   const now = new Date().toISOString();
   mkdirSync(join(butlerData, "personalization"), { recursive: true, mode: 0o700 });
@@ -278,6 +313,7 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
         BUTLER_APP_SERVER_HOST: "127.0.0.1",
         BUTLER_APP_SERVER_PORT: String(port),
         BUTLER_METRICS_ENABLED: "0",
+        ...(options.devOrigins?.length ? { BUTLER_APP_DEV_ORIGIN: options.devOrigins.join(",") } : {}),
       },
     },
   );
@@ -291,14 +327,18 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
   child.stderr?.on("data", (chunk) => { output += String(chunk); });
   const url = `http://127.0.0.1:${port}/`;
   const deadline = Date.now() + (options.readyTimeoutMs ?? 60_000);
+  let token: string | null = null;
   for (;;) {
     if (child.exitCode !== null) {
       await stop();
       throw new Error(`Native gateway exited (${child.exitCode}):\n${output.slice(-4000)}`);
     }
+    token ??= readLocalAuthToken(butlerData);
     try {
-      const response = await fetch(`${url}health`);
-      if (response.ok) break;
+      if (token) {
+        const response = await fetch(`${url}health`, { headers: { authorization: `Bearer ${token}` } });
+        if (response.ok) break;
+      }
     } catch { /* not listening yet */ }
     if (Date.now() > deadline) {
       await stop();
@@ -307,15 +347,40 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
     await new Promise((done) => setTimeout(done, 200));
   }
 
+  const authHeaders = { authorization: `Bearer ${token}` };
+  const connectUrl = async (): Promise<string> => {
+    const response = await fetch(new URL("connection-codes", url), { method: "POST", headers: authHeaders });
+    const body = await response.json().catch(() => null) as { data?: { url?: unknown } } | null;
+    if (!response.ok || typeof body?.data?.url !== "string") {
+      throw new Error(`POST /connection-codes -> ${response.status}: ${JSON.stringify(body).slice(0, 300)}`);
+    }
+    return body.data.url;
+  };
+
   return {
     url,
     port,
     butlerData,
     stubModelCalls,
+    token: token!,
+    authHeaders,
+    connectUrl,
+    async signIn(target) {
+      const jar = "addCookies" in target ? target : target.context();
+      const response = await fetch(await connectUrl(), { redirect: "manual" });
+      const pair = response.headers.get("set-cookie")?.split(";")[0] ?? "";
+      const separator = pair.indexOf("=");
+      if (response.status !== 303 || separator <= 0) {
+        throw new Error(`connection code was not redeemed (${response.status})`);
+      }
+      await jar.addCookies([{
+        name: pair.slice(0, separator), value: pair.slice(separator + 1), url, httpOnly: true, sameSite: "Strict",
+      }]);
+    },
     async api<T>(path: string, init: RequestInit = {}): Promise<T> {
       const response = await fetch(new URL(path.replace(/^\//u, ""), url), {
         ...init,
-        headers: { "content-type": "application/json", ...(init.headers ?? {}) },
+        headers: { "content-type": "application/json", ...authHeaders, ...(init.headers ?? {}) },
       });
       const text = await response.text();
       if (!response.ok) throw new Error(`${init.method ?? "GET"} ${path} -> ${response.status}: ${text.slice(0, 500)}`);
