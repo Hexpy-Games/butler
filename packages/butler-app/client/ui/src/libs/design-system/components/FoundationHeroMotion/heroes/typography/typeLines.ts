@@ -37,7 +37,7 @@ export const LINES: LineSpec[] = [
 ];
 
 /** Width of the badge gutter left of a component while it builds (badge column plus a grid gutter), in canvas px. */
-export const BADGE_GUTTER = { wide: 236, tall: 140 } as const;
+export const BADGE_GUTTER = { wide: 320, tall: 190 } as const;
 
 /** Non-text structure each component builds before its text. */
 export const STRUCTURE: Record<Panel, string[]> = { settings: ["switch", "field-2"], chat: [], metric: ["metric-2"], composer: ["send"] };
@@ -46,7 +46,7 @@ export const STRUCTURE: Record<Panel, string[]> = { settings: ["switch", "field-
 export interface LineInfo extends LineSpec {
   box: Box;
   text: string;
-  font: { family: string; size: number; weight: string; color: string };
+  font: { family: string; size: number; weight: string; color: string; lineHeight: number; tracking: string };
   /** Baseline from the top of the line box. */
   baseline: number;
 }
@@ -67,7 +67,7 @@ export function measureLines(root: HTMLElement, ratio: number): LineInfo[] | nul
     const line = Number.parseFloat(style.lineHeight) || size * 1.4;
     out.push({
       ...spec, box, text: (node.textContent ?? "").trim(),
-      font: { family: style.fontFamily, size, weight: style.fontWeight, color: style.color },
+      font: { family: style.fontFamily, size, weight: style.fontWeight, color: style.color, lineHeight: line, tracking: style.letterSpacing === "normal" ? "0em" : style.letterSpacing },
       baseline: spec.draw ? (Math.min(line, box.h) - (ascent + descent)) / 2 + ascent : 0,
     });
   }

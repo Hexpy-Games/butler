@@ -1,4 +1,4 @@
-import type { Key, Pose, Track } from "../../heroTimeline";
+import { cut, type Key, type Pose, type Track } from "../../heroTimeline";
 import { lineDash } from "./LineOverlay";
 import type { SpecimenMetrics } from "./specimenMetrics";
 import { cameras } from "./typeCamera";
@@ -7,7 +7,7 @@ import { STRUCTURE, type LineInfo } from "./typeLines";
 
 /** The list scene ends and the first build starts here; each build takes BUILD beats. */
 const FIRST = 31.4;
-const BUILD = 7;
+const BUILD = 12.5;
 /** Built text leaves at the loop from here. */
 const OUT = LOOP + 1.3;
 
@@ -22,21 +22,31 @@ function part(name: string, at: number): Track {
 }
 
 /**
- * One text line: its token badge in the gutter left of the component, a rule
- * drawn from the badge along the baseline, the outline drawn along its
- * contours, then the real text fills in. Nothing inside the component moves.
+ * One text line, step by step: its tag appears far out in the gutter with a
+ * leader to the line; the outline is drawn along its contours at a neutral
+ * size; the role size is applied; the line box shows as a leading band with
+ * its measure; the tag counts size, line height and tracking in as each
+ * applies; the real text fills in and the guides recede. Pure overlay: the
+ * component never reflows.
  */
-function line(info: LineInfo, at: number, leave: number): Track[] {
-  const badge: Track = { select: select(`lb-${info.id}`), keys: [{ at: 0, x: 8, o: 0 }, { at, o: 0 }, { at: at + 0.6, x: 0, o: 1, ease: "decelerate" }, { at: leave, o: 1 }, { at: leave + 0.6, o: 0, ease: "accelerate" }] };
-  const fill = (from: number, to: number): Track => ({ select: info.select, keys: [{ at: 0, o: 0 }, { at: from, o: 0 }, { at: to, o: 1, ease: "decelerate" }, { at: OUT, o: 1 }, { at: OUT + 0.2, o: 0 }] });
-  const rule: Track = { select: select(`lr-${info.id}`), keys: [{ at: 0, sx: 0, o: 0 }, { at: at + 0.2, sx: 0, o: 1 }, { at: at + 1.4, sx: 1, ease: "decelerate" }, { at: leave, o: 1 }, { at: leave + 0.6, o: 0, ease: "accelerate" }] };
-  if (!info.draw) return [badge, rule, fill(at + 0.6, at + 1.6)];
+function line(info: LineInfo, a: number, leave: number): Track[] {
+  const id = info.id;
+  const recede = (from: number, keys: Key[]): Key[] => [...keys, { at: from, o: 1 }, { at: from + 0.6, o: 0, ease: "accelerate" }];
+  const steps = [0, a + 2.8, a + 3.8, a + 4.6, BEATS];
+  const tracks: Track[] = [
+    { select: select(`lb-${id}`), keys: recede(leave, [{ at: 0, x: 8, o: 0 }, { at: a, o: 0 }, { at: a + 0.6, x: 0, o: 1, ease: "decelerate" }]) },
+    ...[0, 1, 2, 3].map((k): Track => ({ select: select(`lb-${id}-${k}`), keys: cut(steps[k]!, steps[k + 1]!, BEATS) })),
+    { select: select(`ll-${id}`), keys: recede(leave, [{ at: 0, sx: 0, o: 0 }, { at: a + 0.3, sx: 0, o: 1 }, { at: a + 1.1, sx: 1, ease: "decelerate" }]) },
+    { select: select(`lband-${id}`), keys: recede(a + 5.4, [{ at: 0, sx: 0, o: 0 }, { at: a + 3.6, sx: 0, o: 0 }, { at: a + 4.4, sx: 1, o: 1, ease: "emphasized" }]) },
+    { select: select(`lm-${id}`), keys: recede(a + 5.4, [{ at: 0, sy: 0, o: 0 }, { at: a + 3.8, sy: 0, o: 0 }, { at: a + 4.4, sy: 1, o: 1, ease: "decelerate" }]) },
+    { select: info.select, keys: [{ at: 0, o: 0 }, { at: a + (info.draw ? 4.8 : 2.4), o: 0 }, { at: a + (info.draw ? 5.4 : 3.2), o: 1, ease: "decelerate" }, { at: OUT, o: 1 }, { at: OUT + 0.2, o: 0 }] },
+  ];
+  if (!info.draw) return tracks;
   const dash = lineDash(info);
   return [
-    badge,
-    rule,
-    { select: select(`lo-${info.id}`), keys: [{ at: 0, dash, o: 0 }, { at: at + 0.3, o: 1 }, { at: at + 2.1, dash: 0 }, { at: at + 2.2, o: 1 }, { at: at + 2.8, o: 0, ease: "accelerate" }, { at: BEATS - 0.1, dash }] },
-    fill(at + 1.8, at + 2.4),
+    ...tracks,
+    { select: select(`ls-${id}`), keys: [{ at: 0, s: 0.72 }, { at: a + 2.6, s: 0.72 }, { at: a + 3.4, s: 1, ease: "emphasized" }, { at: BEATS - 0.1, s: 0.72 }] },
+    { select: select(`lo-${id}`), keys: [{ at: 0, dash, o: 0 }, { at: a + 0.6, o: 1 }, { at: a + 2.4, dash: 0 }, { at: a + 5, o: 1 }, { at: a + 5.6, o: 0, ease: "accelerate" }, { at: BEATS - 0.1, dash }] },
   ];
 }
 
@@ -47,7 +57,7 @@ function assembly(g: TypeGeometry): Track[] {
     { at: 0, ...cam.rest }, { at: 18.2, ...cam.rest }, { at: 20.2, ...cam.rest }, { at: 22.2, ...cam.ladder, ease: "emphasized" },
     { at: 23.4, ...cam.top, ease: "emphasized" }, { at: 28.6, ...cam.bottom, ease: "linear" }, { at: FIRST, ...cam.stage[0]!, ease: "decelerate" },
     ...PANELS.slice(1).flatMap((_, j): Key[] => [{ at: buildAt(j + 1) - 1.4, ...cam.stage[j]! }, { at: buildAt(j + 1), ...cam.stage[j + 1]!, ease: "emphasized" }]),
-    { at: FINALE, ...cam.stage[3]! }, { at: FINALE + 3, ...cam.rest, ease: "emphasized" }, { at: FINALE + 6, ...cam.rest }, { at: 70, rx: -0.6, ry: 1.2 }, { at: LOOP - 1, ...cam.rest },
+    { at: FINALE, ...cam.stage[3]! }, { at: FINALE + 3, ...cam.rest, ease: "emphasized" }, { at: FINALE + 6, ...cam.rest }, { at: FINALE + 9, rx: -0.6, ry: 1.2 }, { at: LOOP - 1, ...cam.rest },
   ];
   // Rungs only move (an opacity animation would flatten their 3D); their
   // parts fade on their own. For the finale they gather in from below-left.
@@ -55,8 +65,8 @@ function assembly(g: TypeGeometry): Track[] {
     const rise = 20.6 + i * 0.4;
     const leave = LOOP + i * 0.18;
     const gather = FINALE + 0.3 + i * 0.2;
-    const hidden: Pose = { x: 0, y: 0, z: -180, rx: -24 };
-    const away: Pose = { x: -80, y: 200, z: 0, rx: 0 };
+    const hidden: Pose = { x: 0, y: 40, z: -180 };
+    const away: Pose = { x: -80, y: 200, z: 0 };
     const fade = (from: number, to: number, start: Pose = {}, end: Pose = {}): Key[] => [
       { at: 0, o: 0, ...start }, { at: from, o: 0 }, { at: to, o: 1, ease: end.sx ? "emphasized" : "decelerate", ...end }, { at: leave, o: 1 }, { at: leave + 1, o: 0, ease: "accelerate" },
     ];
@@ -65,7 +75,7 @@ function assembly(g: TypeGeometry): Track[] {
       {
         select: select(`rung-${name}`),
         keys: [
-          { at: 0, ...hidden }, { at: rise - 1.4, ...hidden }, { at: rise, x: 0, y: 0, z: 0, rx: 0, ease: "spring" },
+          { at: 0, ...hidden }, { at: rise - 1.4, ...hidden }, { at: rise, x: 0, y: 0, z: 0, ease: "spring" },
           { at: 40, x: 0, y: 0 }, { at: 40.1, ...away }, { at: gather, ...away }, { at: gather + 2.3, x: 0, y: 0, ease: "emphasized" },
           { at: leave, z: 0 }, { at: leave + 1, z: -60, ease: "accelerate" }, { at: BEATS, ...hidden },
         ],
@@ -95,7 +105,7 @@ function assembly(g: TypeGeometry): Track[] {
         ],
       },
       ...STRUCTURE[panel].map((name, j) => part(name, at + 0.8 + j * 0.2)),
-      ...lines.flatMap((info, j) => line(info, at + 1.2 + j * 0.4, at + BUILD - 1.6)),
+      ...lines.flatMap((info, j) => line(info, at + 1.4 + j * 1.3, at + BUILD - 1.6)),
     ];
   });
   const tnumAt: Pose = { x: g.fly.metric.x - g.tnum.x, y: g.fly.metric.y + g.fly.metric.h + 4 - g.tnum.y };

@@ -42,12 +42,13 @@ export function cameras(g: TypeGeometry) {
     return focus(canvas, moved, fit(canvas, moved, tall ? 0.96 : 0.8, cap));
   });
   const rung = g.rungs.title;
-  const close = Math.min(cap * 1.1, (canvas.w * 0.86) / g.ladder.w);
+  // Close enough that the list's type fills the frame; cropping at the edges is fine.
+  const close = Math.min(2.4, (canvas.w * 1.1) / g.ladder.w);
   return {
     shift,
     stage,
     rest: { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, s: 1 } as Pose,
-    ladder: focus(canvas, g.ladder, fit(canvas, g.ladder, 0.9, 1.4), { rx: 12, rz: -2 }),
+    ladder: focus(canvas, g.ladder, fit(canvas, g.ladder, 0.98, 2.2)),
     top: focus(canvas, { x: g.ladder.x, y: rung.y, w: g.ladder.w, h: rung.h }, close),
     bottom: focus(canvas, { x: g.ladder.x, y: g.rungs.metric.y, w: g.ladder.w, h: g.rungs.metric.h }, close),
   };
