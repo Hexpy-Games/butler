@@ -1463,6 +1463,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       rotateConfirm: "Connected devices will be disconnected.",
       rotated: "Connection code regenerated",
       hostOnly: "Available only on the host computer.",
+      adminRequired: "Couldn't verify the Butler app.",
       revealFailed: "Could not load the connection code",
       rotateFailed: "Could not regenerate the connection code",
       advanced: "Advanced",

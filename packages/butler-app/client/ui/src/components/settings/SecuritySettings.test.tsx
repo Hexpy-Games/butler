@@ -222,6 +222,30 @@ test("a 403 from the loopback-only rule shows a host-only line instead of the co
   expect(document.querySelector('[data-settings-section-id="security-advanced"]')).toBeNull();
 });
 
+test("a missing admin credential shows its own error, and Retry asks main again", async () => {
+  const server = { view: view(), fail: new Set(["getSecurity"]), failWith: failure("admin_credential_required", 403) };
+  const { calls, bridge } = securityBridge(server);
+  const { document, button, click } = await mount(bridge);
+  expect(document.querySelector('[data-slot="settings-section-error"]')?.textContent).toContain(copy.security.adminRequired);
+  expect(document.querySelector('[data-slot="settings-section-empty"]')).toBeNull();
+  expect(document.querySelector('[role="switch"]')).toBeNull();
+
+  server.fail.clear();
+  await click(button(copy.sectionState.retry));
+  expect(calls).toEqual([["getSecurity"], ["getSecurity"]]);
+  expect(document.querySelector('[role="switch"]')).not.toBeNull();
+});
+
+test("an action refused for the admin credential switches the page to that error", async () => {
+  const server = { view: view(), fail: new Set<string>(), failWith: failure("admin_credential_required", 403) };
+  const { bridge } = securityBridge(server);
+  const { document, button, click } = await mount(bridge);
+  server.fail.add("revealConnectionCode");
+  await click(button(copy.security.reveal));
+  expect(document.querySelector('[data-slot="settings-section-error"]')?.textContent).toContain(copy.security.adminRequired);
+  expect(document.querySelector('[data-settings-section-id="connection-code"]')).toBeNull();
+});
+
 test("a 403 without the loopback_required code is a load error, not the host-only line", async () => {
   const server = { view: view(), fail: new Set(["getSecurity"]), failWith: failure("host_not_allowed", 403) };
   const { bridge } = securityBridge(server);

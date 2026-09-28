@@ -1229,6 +1229,8 @@ export interface AppCopy {
       rotateConfirm: string;
       rotated: string;
       hostOnly: string;
+      /** 403 admin_credential_required: this computer, but the app's admin credential is missing. */
+      adminRequired: string;
       revealFailed: string;
       rotateFailed: string;
       /** The Advanced section header and the disclosure row that reveals allowed hosts. */

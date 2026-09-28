@@ -17,6 +17,7 @@ import {
 
 const electronDir = resolve(import.meta.dir, "../../packages/butler-app/client/electron");
 const ADMIN = "admin-credential-".padEnd(43, "x");
+const ADMIN_FILE = { schema: "butler.app-local-admin.v1", purpose: "butler-local-admin", secret: ADMIN };
 const envelope = (data: unknown) => ({ protocol_version: "butler.app.v1", data });
 
 async function withData(run: (butlerData: string) => unknown): Promise<void> {
@@ -71,9 +72,16 @@ test("the admin credential file is read from the data folder; a missing or inval
     expect(readAppLocalAdmin({ butlerData })).toBeNull();
     writeAdmin(butlerData, "not json");
     expect(readAppLocalAdmin({ butlerData })).toBeNull();
-    writeAdmin(butlerData, { token: "has a space" });
+    // Valid only with the exact schema and a secret of at least 32 characters.
+    writeAdmin(butlerData, { ...ADMIN_FILE, schema: "butler.app-local-admin.v2" });
     expect(readAppLocalAdmin({ butlerData })).toBeNull();
-    writeAdmin(butlerData, { token: ADMIN });
+    writeAdmin(butlerData, { secret: ADMIN });
+    expect(readAppLocalAdmin({ butlerData })).toBeNull();
+    writeAdmin(butlerData, { ...ADMIN_FILE, secret: "x".repeat(31) });
+    expect(readAppLocalAdmin({ butlerData })).toBeNull();
+    writeAdmin(butlerData, { ...ADMIN_FILE, secret: 42 });
+    expect(readAppLocalAdmin({ butlerData })).toBeNull();
+    writeAdmin(butlerData, ADMIN_FILE);
     expect(readAppLocalAdmin({ butlerData })).toBe(ADMIN);
   });
 });
@@ -139,7 +147,7 @@ test("the admin value never comes back to the renderer, even when the gateway ec
 test("rotation re-reads the token and keeps the admin credential", async () => {
   await withData(async (butlerData) => {
     prepareAppLocalAuth({ butlerData, generateToken: () => "a".repeat(43) });
-    writeAdmin(butlerData, { token: ADMIN });
+    writeAdmin(butlerData, ADMIN_FILE);
     const adminBefore = readFileSync(appLocalAdminPath(butlerData), "utf8");
     const supervisor = createBundledAgentSupervisor({
       butlerData,

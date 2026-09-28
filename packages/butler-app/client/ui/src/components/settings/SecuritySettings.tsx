@@ -19,15 +19,16 @@ export function SecuritySettings() {
   const sections = settingsCopy.pageSections;
   const { view, load, busy } = security;
 
-  if (load === "host-only" || load === "error") {
+  if (load === "host-only" || load === "admin-required" || load === "error") {
     return (
       <SettingsPage>
         <SettingsSection
           id="remote-access"
           kind="form"
           title={sections.remoteAccess}
-          state={load === "error" ? "error" : "empty"}
+          state={load === "host-only" ? "empty" : "error"}
           emptyMessage={settingsCopy.security.hostOnly}
+          errorMessage={load === "admin-required" ? settingsCopy.security.adminRequired : undefined}
           onRetry={security.retry}
         />
       </SettingsPage>

@@ -4,12 +4,16 @@ import { join } from "node:path";
 // Settings → Security (#229) calls carry an admin credential next to the
 // bearer token: header-less forwarders (ssh -L, socat, tailscale serve) make
 // remote requests look local, so the gateway no longer trusts loopback alone.
-// The names below are not final in #275; rename them here only.
+// The names below follow #275 (`local_admin.rs`, `ADMIN_CREDENTIAL_HEADER`).
 
-/** The admin credential file, relative to the data folder (0600, never shown). */
+/** The admin credential file, relative to the data folder (0600, created by the Agent, never shown). */
 export const APP_LOCAL_ADMIN_FILE = ["app", "runtime", "auth", "local-admin.json"];
+/** The file is valid only with exactly this schema. */
+export const APP_LOCAL_ADMIN_SCHEMA = "butler.app-local-admin.v1";
 /** The field of that file holding the credential. */
-export const APP_LOCAL_ADMIN_FIELD = "token";
+export const APP_LOCAL_ADMIN_FIELD = "secret";
+/** Shorter secrets count as missing, as in the Agent. */
+export const APP_LOCAL_ADMIN_MIN_LENGTH = 32;
 /** The request header that carries it (lower case, as fetch sends it). */
 export const APP_ADMIN_HEADER = "x-butler-admin";
 
@@ -34,13 +38,20 @@ export function appLocalAdminPath(butlerData) {
 
 /**
  * The admin credential, or null when the file is missing or invalid (an
- * Agent older than #275). It does not change when the connection code
- * rotates. Main only: never log it or pass it to the renderer.
+ * Agent older than #275). Read on every security call, so Retry picks up a
+ * file the Agent created later. It does not change when the connection
+ * code rotates. Main only: never log it or pass it to the renderer.
  */
 export function readAppLocalAdmin({ butlerData }) {
   try {
-    const value = JSON.parse(readFileSync(appLocalAdminPath(butlerData), "utf8"))?.[APP_LOCAL_ADMIN_FIELD];
-    return typeof value === "string" && HEADER_VALUE.test(value) ? value : null;
+    const stored = JSON.parse(readFileSync(appLocalAdminPath(butlerData), "utf8"));
+    const value = stored?.[APP_LOCAL_ADMIN_FIELD];
+    return stored?.schema === APP_LOCAL_ADMIN_SCHEMA &&
+      typeof value === "string" &&
+      value.length >= APP_LOCAL_ADMIN_MIN_LENGTH &&
+      HEADER_VALUE.test(value)
+      ? value
+      : null;
   } catch {
     return null;
   }

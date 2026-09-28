@@ -5,6 +5,7 @@ import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import type { SecurityView } from "@/app/types.ts";
 import {
   getSecurity,
+  isAdminRequiredError,
   isHostOnlyError,
   revealConnectionCode,
   rotateConnectionCode,
@@ -12,8 +13,18 @@ import {
   setRemoteAccess,
 } from "./securityApi";
 
-/** `host-only`: the gateway refused a client on another computer (403 `loopback_required`). */
-export type SecurityLoadState = "loading" | "error" | "host-only" | "ready";
+/**
+ * `host-only`: the gateway refused a client on another computer (403
+ * `loopback_required`). `admin-required`: this computer, but no valid admin
+ * credential (403 `admin_credential_required`); Retry reads the file again.
+ */
+export type SecurityLoadState = "loading" | "error" | "host-only" | "admin-required" | "ready";
+
+function refusedState(error: unknown): SecurityLoadState | null {
+  if (isHostOnlyError(error)) return "host-only";
+  if (isAdminRequiredError(error)) return "admin-required";
+  return null;
+}
 export type SecurityAction = "toggle" | "hosts" | "reveal" | "copy" | "rotate";
 
 const TOAST_ID = "settings-security";
@@ -29,7 +40,7 @@ export function useSecuritySettings() {
       setView(await getSecurity());
       setLoad("ready");
     } catch (error) {
-      setLoad(isHostOnlyError(error) ? "host-only" : "error");
+      setLoad(refusedState(error) ?? "error");
     }
   }, []);
 
@@ -44,7 +55,8 @@ export function useSecuritySettings() {
       await task();
       return true;
     } catch (error) {
-      if (isHostOnlyError(error)) setLoad("host-only");
+      const refused = refusedState(error);
+      if (refused) setLoad(refused);
       else notifyError(error, failure, { id: TOAST_ID });
       return false;
     } finally {

@@ -33,3 +33,8 @@ export async function rotateConnectionCode(): Promise<void> {
 export function isHostOnlyError(error: unknown): boolean {
   return apiErrorCode(error) === "loopback_required";
 }
+
+/** On this computer, but main sent no valid admin credential (missing or unreadable file). */
+export function isAdminRequiredError(error: unknown): boolean {
+  return apiErrorCode(error) === "admin_credential_required";
+}

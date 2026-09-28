@@ -1,5 +1,7 @@
 export const APP_LOCAL_ADMIN_FILE: string[];
+export const APP_LOCAL_ADMIN_SCHEMA: string;
 export const APP_LOCAL_ADMIN_FIELD: string;
+export const APP_LOCAL_ADMIN_MIN_LENGTH: number;
 export const APP_ADMIN_HEADER: string;
 
 export type SecurityBridgeRoute =

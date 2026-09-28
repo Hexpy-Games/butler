@@ -1471,6 +1471,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       rotateConfirm: "연결된 기기의 연결이 끊깁니다.",
       rotated: "연결 코드를 재발급했습니다",
       hostOnly: "호스트 컴퓨터에서만 사용할 수 있습니다.",
+      adminRequired: "Butler 앱을 확인하지 못했습니다.",
       revealFailed: "연결 코드를 불러오지 못했습니다",
       rotateFailed: "연결 코드를 재발급하지 못했습니다",
       advanced: "고급",
