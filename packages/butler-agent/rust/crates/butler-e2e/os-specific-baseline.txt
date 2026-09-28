@@ -3,10 +3,4 @@
 # Entries may only shrink or disappear; new entries need review.
 Cargo.toml	2
 src/e2e/agent.rs	3
-src/e2e/config.rs	1
-src/e2e/sanitize.rs	3
-tests/cli_launcher.rs	2
 tests/onboarding.rs	6
-tests/streaming.rs	1
-tests/tools.rs	2
-tests/tools_effects.rs	1

@@ -14,7 +14,6 @@
 )]
 
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::{Command, Output, Stdio};
 
@@ -43,7 +42,7 @@ fn mark_installed(install: &Path) -> Result<(), HarnessError> {
 
 fn write_launcher(path: &Path, contents: &str) -> Result<(), HarnessError> {
     fs::write(path, contents)?;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o755))?;
+    butler_platform::launcher::mark_executable(path)?;
     Ok(())
 }
 
