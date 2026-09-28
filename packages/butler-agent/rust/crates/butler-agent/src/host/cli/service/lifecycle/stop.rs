@@ -2,7 +2,6 @@
 
 use std::path::Path;
 
-use nix::sys::signal::Signal;
 use serde_json::{Value, json};
 
 use super::readiness::wait_for_stop;
@@ -10,8 +9,8 @@ use super::{FORCE_STOP_TIMEOUT, STOP_TIMEOUT, active_service};
 use crate::host::ResolvedInstallation;
 use crate::host::service::instance::{
     AdmissionLock, InstanceRecord, RestartIdentity, StopIntent, StopRequest, StoppingFrom,
-    instance_is_locked, mark_stopping, process_matches, refuse_live_legacy_process,
-    revert_stopping, send_signal, withdraw_stop_intent, write_stop_intent,
+    force_stop, instance_is_locked, mark_stopping, process_matches, refuse_live_legacy_process,
+    request_stop, revert_stopping, withdraw_stop_intent, write_stop_intent,
 };
 
 /// What a controlled stop found and did.
@@ -131,9 +130,10 @@ fn deliver_stop(
     signal_intended_stop(data_root, &current, request)
 }
 
-/// Announces the stop to supervisors, then sends SIGTERM. The intent is
-/// written before the signal so it is on disk when the process exits; a
-/// signal that could not be delivered withdraws it again.
+/// Announces the stop to supervisors, then asks the instance to stop
+/// (SIGTERM). The intent is written before the request so it is on disk when
+/// the process exits; a request that could not be delivered withdraws it
+/// again.
 fn signal_intended_stop(
     data_root: &Path,
     current: &InstanceRecord,
@@ -142,7 +142,7 @@ fn signal_intended_stop(
     write_stop_intent(data_root, &StopIntent::new(request, current)).map_err(|source| {
         crate::host::HostError::new("native_service_stop_intent_unavailable").with_source(source)
     })?;
-    match send_signal(current, Signal::SIGTERM) {
+    match request_stop(current) {
         Ok(()) => Ok(()),
         Err(error) if error.message() == "native_service_process_exited" => Ok(()),
         Err(error) => match withdraw_stop_intent(data_root, &current.nonce) {
@@ -190,7 +190,7 @@ async fn wait_or_force_stop(
     if !instance_is_locked(data_root)? || !process_matches(&current)? {
         return Err("native_service_instance_ambiguous: refusing force kill".into());
     }
-    send_signal(&current, Signal::SIGKILL)?;
+    force_stop(&current)?;
     if !wait_for_stop(data_root, &record.nonce, FORCE_STOP_TIMEOUT).await? {
         return Err("native_service_stop_timeout".into());
     }

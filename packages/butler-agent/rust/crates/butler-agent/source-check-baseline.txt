@@ -35,7 +35,7 @@ src/host/cli/personalization.rs	run	101
 src/host/cli/personalization/commands.rs	set	104
 src/host/cli/schedule.rs	run	182
 src/host/cli/service.rs	run_native_service_cli	87
-src/host/cli/service/lifecycle/restart_handoff.rs	spawn_restart_handoff	86
+src/host/cli/service/lifecycle/restart_handoff.rs	spawn_restart_handoff	82
 src/host/cli/update.rs	run	105
 src/host/cli/update/agent.rs	run	83
 src/host/cli/web_access.rs	run	124

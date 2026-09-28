@@ -1,8 +1,12 @@
 //! Stop requests and the exit status they produce.
 //!
-//! SIGTERM and SIGINT are listened for from the start of the service, so a
-//! stop that arrives while the service is still starting ends it cleanly
-//! instead of killing it with the signal. A requested stop exits 0; an exit
+//! The host's stop requests (SIGTERM and SIGINT; console control events on
+//! Windows, see `butler_platform::process_control::shutdown_requests`) are
+//! listened for from the start of the service, so a stop that arrives while
+//! the service is still starting ends it cleanly instead of killing it with
+//! the signal. Every other source of a stop (the shutdown flag, the App
+//! releasing its lease, and on Windows the control endpoint's `service_stop`
+//! command) requests the same [`StopSignal`]. A requested stop exits 0; an exit
 //! nobody asked for (a crash, a failure, a turn that needs a new process)
 //! exits non-zero. Supervisors depend on it: the App reads the stop intent,
 //! and launchd (`KeepAlive: {SuccessfulExit: false}`) and systemd
@@ -12,7 +16,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use tokio::signal::unix::{SignalKind, signal};
+use butler_platform::process_control::shutdown_requests;
 use tokio::sync::watch;
 
 use butler_turn::btcc::BtccError;
@@ -42,10 +46,9 @@ struct Inner {
 }
 
 impl StopSignal {
-    /// Starts listening for SIGTERM and SIGINT.
+    /// Starts listening for the host's stop requests (SIGTERM and SIGINT).
     pub(super) fn listen() -> std::io::Result<Self> {
-        let mut interrupt = signal(SignalKind::interrupt())?;
-        let mut terminate = signal(SignalKind::terminate())?;
+        let mut requests = shutdown_requests()?;
         let stop = Self {
             inner: Arc::new(Inner {
                 requested: watch::Sender::new(false),
@@ -54,10 +57,7 @@ impl StopSignal {
         };
         let listener = stop.clone();
         tokio::spawn(async move {
-            tokio::select! {
-                _ = interrupt.recv() => {}
-                _ = terminate.recv() => {}
-            }
+            requests.recv().await;
             listener.request();
             if listener.announced() {
                 exit_after_grace();

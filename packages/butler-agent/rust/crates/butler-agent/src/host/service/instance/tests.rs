@@ -144,7 +144,7 @@ fn state_and_log_symlinks_into_installation_are_rejected_before_writes() {
 
     for destination in ["state", "logs"] {
         let data = TemporaryData::new();
-        std::os::unix::fs::symlink(installation.root(), data.0.join(destination))
+        butler_platform::secure_fs::symlink(installation.root(), &data.0.join(destination))
             .expect("write destination symlink is created");
         assert_eq!(
             validate_write_destinations(&data.0, &installation).unwrap_err(),

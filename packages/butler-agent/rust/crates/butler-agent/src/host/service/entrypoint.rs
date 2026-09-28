@@ -1,6 +1,5 @@
 //! Native App HTTP and durable file-queue entrypoint with one shutdown sequence.
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde_json::json;
@@ -120,9 +119,8 @@ async fn run_until_stopped(
     logs: ServiceLogMode,
     stop: &StopSignal,
 ) -> Result<String, BtccError> {
-    let user_home = std::env::var_os("HOME")
-        .filter(|home| !home.is_empty())
-        .map(PathBuf::from)
+    let user_home = butler_platform::user_dirs::home_dir()
+        .filter(|home| !home.as_os_str().is_empty())
         .ok_or_else(|| failure("native_home_unavailable", "User home is unavailable"))?;
     let config = ServiceConfiguration::capture(explicit_data, &user_home, &installation)?;
     report_credential_errors(&config, logs);
@@ -138,12 +136,8 @@ async fn run_until_stopped(
     })?;
     stop.attach(config.data_root.clone(), instance.nonce());
     repair_cli_launcher(&config, logs);
-    let os = nix::sys::utsname::uname().map_err(io)?;
-    let environment = ProcessEnvironment::capture(
-        &config.data_root,
-        &user_home,
-        &os.release().to_string_lossy(),
-    );
+    let os_release = butler_platform::instance::os_release().map_err(io)?;
+    let environment = ProcessEnvironment::capture(&config.data_root, &user_home, &os_release);
     let worker_profiles = Arc::new(crate::host::AppWorkerProfileReader::new(
         &config.app,
         config.app.gateway_config().local_auth,

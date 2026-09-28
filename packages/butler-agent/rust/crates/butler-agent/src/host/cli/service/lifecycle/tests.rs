@@ -35,7 +35,7 @@ fn service_log_file_rejects_a_symlink_into_installation() {
     let logs = data_root.join("logs");
     std::fs::create_dir_all(&logs).expect("DATA logs directory is created");
     let target = logs.join("butler-agent-service.stdout.log");
-    std::os::unix::fs::symlink(&installed_log, &target).expect("log symlink is created");
+    butler_platform::secure_fs::symlink(&installed_log, &target).expect("log symlink is created");
     let installation = ResolvedInstallation::desktop(&executable, &installation_root, &resources)
         .expect("installation paths are valid");
 

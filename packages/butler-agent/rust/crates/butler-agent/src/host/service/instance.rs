@@ -2,13 +2,10 @@
 
 use std::fs::{self, File, OpenOptions};
 use std::io;
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
-use nix::errno::Errno;
-use nix::fcntl::{Flock, FlockArg};
-use nix::sys::signal::{Signal, kill};
-use nix::unistd::Pid;
+use butler_platform::instance::{InstanceLock, LockError};
+use butler_platform::secure_fs;
 use serde::{Deserialize, Serialize};
 
 use crate::host::installation::ResolvedInstallation;
@@ -18,12 +15,14 @@ use crate::host::service::instance_identity::{
 
 const INSTANCE_SCHEMA: &str = "butler.native-agent-service-instance.v1";
 
+mod delivery;
 mod gateway_state;
 mod probe;
 mod record;
 mod restart;
 mod stop_intent;
 mod stopping;
+pub(crate) use delivery::{force_stop, request_stop};
 pub(crate) use gateway_state::mark_gateway_state;
 pub(crate) use probe::instance_lock_is_held_read_only;
 use record::{
@@ -61,16 +60,21 @@ pub(crate) struct InstanceRecord {
     pub(crate) app_supervised: bool,
 }
 
+/// This process's ownership of DATA: the exclusive instance lock, held until
+/// the guard is dropped (the lock is unlocked explicitly then, and released
+/// by the host if the process dies first), and the record it published.
 pub(crate) struct InstanceGuard {
-    _lock: Flock<File>,
+    _lock: InstanceLock,
     record_path: PathBuf,
     record_update_lock_path: PathBuf,
     installation: ResolvedInstallation,
     record: InstanceRecord,
 }
 
+/// The start admission lock: one controller at a time starts, stops or
+/// restarts the instance of a DATA folder.
 pub(crate) struct AdmissionLock {
-    _lock: Flock<File>,
+    _lock: InstanceLock,
 }
 
 impl AdmissionLock {
@@ -81,10 +85,12 @@ impl AdmissionLock {
         validate_write_destinations(data_root, installation)?;
         let path = admission_lock_path(data_root);
         let file = open_lock(&path, true)?;
-        match Flock::lock(file, FlockArg::LockExclusiveNonblock) {
+        match InstanceLock::try_exclusive(file) {
             Ok(lock) => Ok(Self { _lock: lock }),
-            Err((_, Errno::EAGAIN)) => Err("service_start_admission_busy".into()),
-            Err((_, error)) => Err(format!("service_start_admission_failed: {error}").into()),
+            Err(LockError::Busy) => Err("service_start_admission_busy".into()),
+            Err(LockError::Failed(error)) => {
+                Err(format!("service_start_admission_failed: {error}").into())
+            }
         }
     }
 }
@@ -101,12 +107,11 @@ impl InstanceGuard {
         validate_write_destinations(data_root, installation)?;
         let lock_path = instance_lock_path(data_root);
         let file = open_lock(&lock_path, true)?;
-        let lock = Flock::lock(file, FlockArg::LockExclusiveNonblock).map_err(|(_, error)| {
-            if error == Errno::EAGAIN {
+        let lock = InstanceLock::try_exclusive(file).map_err(|error| match error {
+            LockError::Busy => {
                 "native_service_duplicate_writer: a service instance already owns this DATA".into()
-            } else {
-                format!("native_service_lock_failed: {error}")
             }
+            LockError::Failed(error) => format!("native_service_lock_failed: {error}"),
         })?;
 
         refuse_live_legacy_process(data_root)?;
@@ -277,10 +282,10 @@ pub(crate) fn instance_is_locked(data_root: &Path) -> Result<bool, crate::host::
         Err(error) if error.message() == "service_lock_missing" => return Ok(false),
         Err(error) => return Err(error),
     };
-    match Flock::lock(file, FlockArg::LockExclusiveNonblock) {
+    match InstanceLock::try_exclusive(file) {
         Ok(_) => Ok(false),
-        Err((_, Errno::EAGAIN)) => Ok(true),
-        Err((_, error)) => Err(format!("service_lock_probe_failed: {error}").into()),
+        Err(LockError::Busy) => Ok(true),
+        Err(LockError::Failed(error)) => Err(format!("service_lock_probe_failed: {error}").into()),
     }
 }
 
@@ -318,25 +323,6 @@ pub(crate) fn validate_write_destinations(
     Ok(())
 }
 
-pub(crate) fn send_signal(
-    record: &InstanceRecord,
-    signal: Signal,
-) -> Result<(), crate::host::HostError> {
-    let pid = i32::try_from(record.pid)
-        .ok()
-        .filter(|pid| *pid > 0)
-        .ok_or_else(|| "native_service_instance_ambiguous: invalid process id".to_owned())?;
-    kill(Pid::from_raw(pid), signal)
-        .map_err(|error| {
-            if error == Errno::ESRCH {
-                "native_service_process_exited".into()
-            } else {
-                format!("native_service_signal_failed: {error}")
-            }
-        })
-        .map_err(crate::host::HostError::from)
-}
-
 pub(crate) fn refuse_live_legacy_process(data_root: &Path) -> Result<(), crate::host::HostError> {
     for path in [
         data_root.join("state/services/butler-main.json"),
@@ -350,11 +336,12 @@ pub(crate) fn refuse_live_legacy_process(data_root: &Path) -> Result<(), crate::
         let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|source| {
             crate::host::HostError::new("native_service_legacy_state_ambiguous").with_source(source)
         })?;
+        // Positive and within the host's signed process ids.
         let pid = value
             .get("pid")
             .and_then(serde_json::Value::as_u64)
-            .filter(|pid| *pid > 0)
-            .and_then(|pid| i32::try_from(pid).ok())
+            .filter(|pid| *pid > 0 && i32::try_from(*pid).is_ok())
+            .and_then(|pid| u32::try_from(pid).ok())
             .ok_or_else(|| "native_service_legacy_state_ambiguous".to_owned())?;
         if process_is_alive(pid)? {
             return Err(format!(
@@ -373,17 +360,13 @@ fn open_lock(path: &Path, create: bool) -> Result<File, crate::host::HostError> 
         .parent()
         .ok_or_else(|| "service_lock_path_invalid".to_owned())?;
     if create {
-        fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(parent)
-            .map_err(|source| {
-                crate::host::HostError::new("service_lock_directory_unavailable")
-                    .with_source(source)
-            })?;
+        secure_fs::create_private_dir_all(parent).map_err(|source| {
+            crate::host::HostError::new("service_lock_directory_unavailable").with_source(source)
+        })?;
     }
     let mut options = OpenOptions::new();
-    options.read(true).write(true).mode(0o600);
+    options.read(true).write(true);
+    let _ = secure_fs::owner_only(&mut options);
     if create {
         options.create(true);
     }

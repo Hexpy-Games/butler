@@ -6,6 +6,8 @@
 use std::process::ExitStatus;
 use std::time::{Duration, Instant};
 
+use butler_platform::instance::{StopError, request_stop};
+
 use super::Agent;
 use crate::e2e::{HarnessError, harness_error};
 
@@ -31,17 +33,19 @@ impl Agent {
         Ok(())
     }
 
-    /// SIGTERM and wait for exit (bounded). A SIGTERM is a stop request, so
-    /// the process must exit 0: launchd (`SuccessfulExit: false`) and systemd
-    /// (`Restart=on-failure`) restart an Agent that exits otherwise.
+    /// A stop request (SIGTERM) and wait for exit (bounded). It is a
+    /// requested stop, so the process must exit 0: launchd (`SuccessfulExit:
+    /// false`) and systemd (`Restart=on-failure`) restart an Agent that exits
+    /// otherwise. A host without stop requests (Windows) is refused: its
+    /// harness stops the agent through the CLI in the Windows stage.
     pub async fn terminate(&mut self) -> Result<(), HarnessError> {
         let Some(mut child) = self.child.take() else {
             return Ok(());
         };
-        #[cfg(unix)]
-        {
-            let pid = nix::unistd::Pid::from_raw(i32::try_from(child.id()).unwrap_or(i32::MAX));
-            let _ = nix::sys::signal::kill(pid, nix::sys::signal::Signal::SIGTERM);
+        if let Err(StopError::Unsupported) = request_stop(child.id()) {
+            child.kill()?;
+            child.wait()?;
+            return Err(harness_error("stop requests are unsupported on this host"));
         }
         let deadline = Instant::now() + Duration::from_secs(30);
         loop {
