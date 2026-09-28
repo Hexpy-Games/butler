@@ -1,0 +1,47 @@
+//! One agent-loop round's provider usage, appended to the prompt metrics.
+
+use butler_turn::btcc::{ModelRoundError, ModelRoundRequest};
+use serde_json::Value;
+
+use crate::models::{
+    PromptUsageAttribution, PromptUsageMetricInput, PromptUsageMetricSink, UsageAuthMode,
+};
+
+/// Appends one round's provider-reported usage to `metrics`.
+pub(super) fn record(
+    metrics: &dyn PromptUsageMetricSink,
+    request: &ModelRoundRequest<'_>,
+    usage: &Value,
+    auth_mode: UsageAuthMode,
+) -> Result<(), ModelRoundError> {
+    let number = |key: &str| usage.get(key).and_then(Value::as_f64);
+    let attribution = request
+        .usage_attribution
+        .map(|value| PromptUsageAttribution {
+            turn_id: Some(&value.turn_id),
+            phase: Some(&value.phase),
+            round_index: value.round_index.map(f64::from),
+            reasoning_effort: None,
+            requested_output_tokens: request.max_output_tokens,
+            budget_state: None,
+            budget_state_source: None,
+            prompt_sections: None,
+        });
+    metrics.append(PromptUsageMetricInput {
+        model: usage
+            .get("model")
+            .and_then(Value::as_str)
+            .unwrap_or(request.model),
+        scope: request.cache_scope.unwrap_or("btcc-agent-loop"),
+        prompt_tokens: number("promptTokens"),
+        cached_tokens: number("cachedTokens").unwrap_or(0.0),
+        total_tokens: number("totalTokens"),
+        cache_write_tokens: None,
+        prompt_cache_key: None,
+        prompt_cache_retention: None,
+        butler_data: request.butler_data,
+        usage_attribution: attribution.as_ref(),
+        reasoning_tokens: number("reasoningTokens"),
+        auth_mode: Some(auth_mode),
+    })
+}

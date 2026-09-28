@@ -1,6 +1,7 @@
 //! Bounded host reads for App context diagnostics.
 
 use std::{
+    collections::BTreeMap,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -11,9 +12,13 @@ use butler_gateway::gateway::{
     AppContextBudgetFacts, AppContextReadFacts, AppContextReadPort, AppContextReadQuery,
     AppContextUsage, ApplicationFuture, GatewayApplicationError,
 };
+use butler_models::models::{
+    ModelCatalogSnapshot, ModelPricing, ProviderAuthMethod, UsageAuthMode, parse_model_ref,
+};
 use butler_runtime::context::{
     ContextBudgetOverrides, ContextBudgetOwner, WorkingContextBudgetInput,
 };
+use butler_runtime::operations::{SessionUsageView, read_session_usage};
 use butler_turn::btcc::ContextCompactionRepository;
 
 const MAX_COMPACTION_SUMMARY_CHARS: usize = 32_000;
@@ -70,10 +75,14 @@ impl AppContextReadPort for AppContextRead {
                 .filter(|value| value.is_finite() && *value > 0.0)
                 .map(|value| butler_core::json::saturating_u64(value.trunc()));
             let telemetry_query = query.clone();
-            let telemetry =
-                tokio::task::spawn_blocking(move || read_usage(&root, &telemetry_query))
-                    .await
-                    .map_err(GatewayApplicationError::internal_from)?;
+            let prices = catalog_prices(&snapshot.models);
+            let configured = configured_auth_mode(&query.model_ref, &snapshot.models);
+            let (telemetry, session) = tokio::task::spawn_blocking(move || {
+                let session = session_usage(&root, &telemetry_query, &prices, configured);
+                (read_usage(&root, &telemetry_query), session)
+            })
+            .await
+            .map_err(GatewayApplicationError::internal_from)?;
             let native_summary = match query.turn_id.as_deref() {
                 Some(turn_id) => compactions
                     .load(turn_id)
@@ -87,6 +96,8 @@ impl AppContextReadPort for AppContextRead {
             Ok(AppContextReadFacts {
                 usage: telemetry.usage,
                 compaction_summary: summary,
+                session_usage: Some(session.0),
+                auth_mode: session.1,
                 budget: AppContextBudgetFacts {
                     context_window_tokens: butler_core::json::saturating_u64(
                         config.context_window_tokens.max(0.0).trunc(),
@@ -104,6 +115,52 @@ impl AppContextReadPort for AppContextRead {
                 },
             })
         })
+    }
+}
+
+/// List prices of every cataloged and registered model, by model ref.
+fn catalog_prices(models: &ModelCatalogSnapshot) -> BTreeMap<String, ModelPricing> {
+    let view = models.view();
+    view.models
+        .iter()
+        .chain(&view.registered_models)
+        .filter_map(|model| Some((model.model_ref.clone(), model.pricing.clone()?)))
+        .collect()
+}
+
+/// The session's usage view and how its current model is billed: as its
+/// latest request of that model reported, else as configured.
+fn session_usage(
+    root: &Path,
+    query: &AppContextReadQuery,
+    prices: &BTreeMap<String, ModelPricing>,
+    configured: UsageAuthMode,
+) -> (SessionUsageView, UsageAuthMode) {
+    let pricing = |model_ref: &str| prices.get(model_ref).cloned();
+    let usage = read_session_usage(root, &query.runtime_session_id, &pricing);
+    let mode = usage
+        .auth_modes
+        .get(&query.model_ref)
+        .copied()
+        .unwrap_or(configured);
+    (usage.view, mode)
+}
+
+/// Billing mode from configuration when no request has reported one yet.
+fn configured_auth_mode(model_ref: &str, models: &ModelCatalogSnapshot) -> UsageAuthMode {
+    if parse_model_ref(model_ref).provider_id == "local" {
+        return UsageAuthMode::Local;
+    }
+    let registered = models
+        .view()
+        .registered_models
+        .iter()
+        .find(|model| model.model_ref == model_ref)
+        .and_then(|model| model.auth_type);
+    match registered {
+        Some(ProviderAuthMethod::ApiKey) => UsageAuthMode::ApiKey,
+        Some(ProviderAuthMethod::CodexOauth) => UsageAuthMode::Subscription,
+        None => UsageAuthMode::Unknown,
     }
 }
 

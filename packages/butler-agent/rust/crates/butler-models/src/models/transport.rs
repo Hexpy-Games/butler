@@ -50,6 +50,8 @@ pub(super) struct RequestExecution<'a> {
     pub guard_start: GuardStart,
     pub request_observer: &'a (dyn Fn() + Sync),
     pub clock: &'a dyn ProviderClock,
+    /// Receives subscription quota parsed from a successful response.
+    pub quota: Option<&'a dyn super::ProviderQuotaSink>,
 }
 
 pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelRoundError> {
@@ -68,6 +70,7 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
         guard_start,
         request_observer,
         clock,
+        quota,
     } = input;
     let guarded = run_guarded(
         external,
@@ -113,21 +116,13 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
                     })?;
                     progress.record_progress();
                     let response = checked(response, provider, api).await?;
+                    observe_quota(&response, provider, quota, clock);
                     match mode {
                         ResponseMode::Json { tolerate_invalid } => {
                             json(response, provider, api, tolerate_invalid).await
                         }
                         ResponseMode::HostedChatSse => {
-                            let is_sse = response
-                                .headers()
-                                .get("content-type")
-                                .and_then(|value| value.to_str().ok())
-                                .is_some_and(|value| value.to_ascii_lowercase().contains("text/event-stream"));
-                            if is_sse {
-                                sse::hosted_chat(response, provider, api, progress.clone()).await
-                            } else {
-                                json(response, provider, api, true).await
-                            }
+                            hosted_chat(response, provider, api, progress.clone()).await
                         }
                         ResponseMode::CodexSse => {
                             sse::codex(
@@ -200,6 +195,40 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
                 },
             ))))
         }
+    }
+}
+
+/// Reports the quota headers of a successful response, if it carried any.
+fn observe_quota(
+    response: &Response,
+    provider: &str,
+    quota: Option<&dyn super::ProviderQuotaSink>,
+    clock: &dyn ProviderClock,
+) {
+    if let Some(sink) = quota
+        && let Some(reading) =
+            super::parse_quota_headers(provider, response.headers(), clock.now_epoch_millis())
+    {
+        sink.observe(reading);
+    }
+}
+
+/// A hosted chat reply: an SSE stream when the provider streamed, else JSON.
+async fn hosted_chat(
+    response: Response,
+    provider: &str,
+    api: &str,
+    progress: super::request_guard::RequestProgress,
+) -> Result<Value, Box<ProviderRequestError>> {
+    let is_sse = response
+        .headers()
+        .get("content-type")
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.to_ascii_lowercase().contains("text/event-stream"));
+    if is_sse {
+        sse::hosted_chat(response, provider, api, progress).await
+    } else {
+        json(response, provider, api, true).await
     }
 }
 

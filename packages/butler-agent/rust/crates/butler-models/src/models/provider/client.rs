@@ -23,6 +23,7 @@ pub struct ModelProvider {
     pub(super) clock: Arc<dyn ProviderClock>,
     pub(super) prompt_metrics: Arc<dyn super::super::PromptUsageMetricSink>,
     visual_capability: Option<Arc<dyn ProviderVisualCapabilityPort>>,
+    pub(super) quota: Option<Arc<dyn crate::models::ProviderQuotaSink>>,
 }
 
 impl ModelProvider {
@@ -42,7 +43,14 @@ impl ModelProvider {
             clock,
             prompt_metrics,
             visual_capability: None,
+            quota: None,
         }
+    }
+
+    /// Reports subscription quota parsed from successful responses to `sink`.
+    pub fn with_quota_sink(mut self, sink: Arc<dyn crate::models::ProviderQuotaSink>) -> Self {
+        self.quota = Some(sink);
+        self
     }
 
     pub fn with_visual_capability(
@@ -167,6 +175,7 @@ impl ModelProvider {
             },
             request_observer: &observe_request,
             clock: self.clock.as_ref(),
+            quota: self.quota.as_deref(),
         })
         .await;
         let response = match response {
@@ -214,40 +223,8 @@ impl ModelProvider {
             observer.identity(identity);
         }
         if let Some(usage) = &result.usage {
-            let attribution =
-                request
-                    .usage_attribution
-                    .map(|value| crate::models::PromptUsageAttribution {
-                        turn_id: Some(&value.turn_id),
-                        phase: Some(&value.phase),
-                        round_index: value.round_index.map(f64::from),
-                        reasoning_effort: None,
-                        requested_output_tokens: request.max_output_tokens,
-                        budget_state: None,
-                        budget_state_source: None,
-                        prompt_sections: None,
-                    });
-            self.prompt_metrics
-                .append(crate::models::PromptUsageMetricInput {
-                    model: usage
-                        .get("model")
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or(request.model),
-                    scope: request.cache_scope.unwrap_or("btcc-agent-loop"),
-                    prompt_tokens: usage
-                        .get("promptTokens")
-                        .and_then(serde_json::Value::as_f64),
-                    cached_tokens: usage
-                        .get("cachedTokens")
-                        .and_then(serde_json::Value::as_f64)
-                        .unwrap_or(0.0),
-                    total_tokens: usage.get("totalTokens").and_then(serde_json::Value::as_f64),
-                    cache_write_tokens: None,
-                    prompt_cache_key: None,
-                    prompt_cache_retention: None,
-                    butler_data: request.butler_data,
-                    usage_attribution: attribution.as_ref(),
-                })?;
+            let mode = config.auth.usage_mode(&config.metadata.provider_id);
+            super::round_usage::record(self.prompt_metrics.as_ref(), &request, usage, mode)?;
         }
         self.observations
             .response(&config.metadata.provider_id, &config.metadata.model_ref);

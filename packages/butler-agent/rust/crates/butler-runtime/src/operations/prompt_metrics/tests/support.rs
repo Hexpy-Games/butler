@@ -55,6 +55,8 @@ pub(super) fn input<'a>() -> PromptUsageMetricInput<'a> {
         prompt_cache_retention: None,
         butler_data: None,
         usage_attribution: None,
+        reasoning_tokens: None,
+        auth_mode: None,
     }
 }
 

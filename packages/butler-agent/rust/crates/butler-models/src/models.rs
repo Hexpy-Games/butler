@@ -5,6 +5,7 @@ mod configuration;
 mod diagnostics;
 mod prompt;
 mod provider;
+mod quota;
 mod request_admission;
 mod request_guard;
 #[cfg(unix)]
@@ -33,7 +34,10 @@ pub use prompt::{
     PromptUsageReport, PromptUsageSectionAttribution, ProviderPromptFuture,
     ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest, ProviderPromptResult,
 };
-pub use prompt::{PromptBudgetStateSource, PromptCacheBoundary};
+pub use prompt::{PromptBudgetStateSource, PromptCacheBoundary, UsageAuthMode};
+pub use quota::{
+    ProviderQuotaReading, ProviderQuotaSink, ProviderQuotaWindow, parse_quota_headers,
+};
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use visual_admission::ImageAdmissionError;
 
@@ -47,13 +51,14 @@ pub use provider::{
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use catalog::model_identity_key;
 pub use catalog::{
-    CredentialView, HostedApiShape, ImageProbeEvidence, LocalModelConfig, LocalModelPlatform,
-    LocalModelSource, ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelProviderMetadata,
-    ParsedModelRef, ParsedModelRefSource, ProviderAuthMethod, ReasoningEffort,
-    RegisteredHostedModelConfig, TokenEstimate, TokenEstimateInput, TokenEstimatorKind,
-    default_hosted_provider_api_base_url, normalize_hosted_api_base_url,
-    normalize_local_model_config, normalize_registered_hosted_model, parse_model_ref,
-    registered_hosted_model_metadata,
+    CredentialView, HostedApiShape, ImageLimitField, ImageLimitSources, ImageProbeEvidence,
+    LocalModelConfig, LocalModelPlatform, LocalModelSource, ModelCatalogSnapshot,
+    ModelCatalogSnapshotInput, ModelPreset, ModelPricing, ModelProviderMetadata, ModelTier,
+    ParsedModelRef, ParsedModelRefSource, PromptPriceTier, ProviderAuthMethod, ProviderPresets,
+    ReasoningEffort, RegisteredHostedModelConfig, TokenEstimate, TokenEstimateInput,
+    TokenEstimatorKind, TokenPrices, default_hosted_provider_api_base_url,
+    normalize_hosted_api_base_url, normalize_local_model_config, normalize_registered_hosted_model,
+    parse_model_ref, registered_hosted_model_metadata, upgrade_routine_preset,
 };
 
 use std::borrow::Cow;
@@ -100,6 +105,18 @@ impl ModelCatalog {
             static_catalog: Arc::new(StaticCatalog::load()?),
             tokenizer: TokenizerOwner::default(),
         })
+    }
+
+    /// The provider's static routine preset (`presets.routine`): the model
+    /// and effort a new user of that provider starts with.
+    pub fn routine_preset(&self, provider_id: &str) -> Option<ModelPreset> {
+        self.static_catalog.routine_preset(provider_id).cloned()
+    }
+
+    /// The official list price of a static catalog model, `None` when the
+    /// model is not in the static catalog.
+    pub fn pricing(&self, model_ref: &str) -> Option<ModelPricing> {
+        self.static_catalog.pricing(model_ref)
     }
 
     pub fn snapshot(

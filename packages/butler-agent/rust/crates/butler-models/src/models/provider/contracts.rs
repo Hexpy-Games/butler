@@ -36,6 +36,21 @@ impl ProviderAuth {
             Self::Codex { mode, .. } => *mode,
         }
     }
+
+    /// How a request with this credential to `provider_id` is billed.
+    pub(crate) fn usage_mode(&self, provider_id: &str) -> crate::models::UsageAuthMode {
+        use crate::models::UsageAuthMode;
+        if provider_id == "local" {
+            return UsageAuthMode::Local;
+        }
+        match self.mode() {
+            ProviderAuthMode::ApiKey => UsageAuthMode::ApiKey,
+            ProviderAuthMode::CodexSubscription | ProviderAuthMode::CodexOauth => {
+                UsageAuthMode::Subscription
+            }
+            ProviderAuthMode::None => UsageAuthMode::Unknown,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]

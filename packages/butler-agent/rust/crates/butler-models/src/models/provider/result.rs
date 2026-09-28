@@ -23,6 +23,7 @@ pub(super) fn decode(
         Carrier::Gemini => gemini(&response, configured_model, round_index),
         Carrier::Chat { .. } => chat(&response, configured_model),
     };
+    let usage = usage.map(|usage| with_reasoning_tokens(usage, &response));
     let mut text_tool_call_names = Vec::new();
     if provider == "local" {
         (text, calls, text_tool_call_names) = local::decode(&response, request);
@@ -333,6 +334,22 @@ pub(super) fn nonempty(value: String) -> Option<String> {
         }
     }
     Some(value.to_owned())
+}
+
+/// Reasoning (thinking) tokens a response reported, a subset of its output
+/// tokens: Responses `output_tokens_details`, Chat `completion_tokens_details`,
+/// Gemini `thoughtsTokenCount`. Anthropic reports none separately.
+pub(super) fn reasoning_tokens(response: &Value) -> Option<f64> {
+    number(response.pointer("/usage/output_tokens_details/reasoning_tokens"))
+        .or_else(|| number(response.pointer("/usage/completion_tokens_details/reasoning_tokens")))
+        .or_else(|| number(response.pointer("/usageMetadata/thoughtsTokenCount")))
+}
+
+fn with_reasoning_tokens(mut usage: Value, response: &Value) -> Value {
+    if let (Some(tokens), Some(fields)) = (reasoning_tokens(response), usage.as_object_mut()) {
+        fields.insert("reasoningTokens".into(), tokens.into());
+    }
+    usage
 }
 
 fn number(value: Option<&Value>) -> Option<f64> {

@@ -8,6 +8,7 @@ pub(super) struct PromptDecoded {
     pub text: Option<String>,
     pub usage: Option<PromptUsageReport>,
     pub cache_write_tokens: Option<Option<f64>>,
+    pub reasoning_tokens: Option<f64>,
 }
 
 pub(super) fn decode(response: &Value, model: &str, carrier: Carrier) -> PromptDecoded {
@@ -64,6 +65,7 @@ pub(super) fn decode(response: &Value, model: &str, carrier: Carrier) -> PromptD
             output_tokens: stats.output,
         }),
         cache_write_tokens: cache_write.map(number_value),
+        reasoning_tokens: super::super::result::reasoning_tokens(response),
     }
 }
 
