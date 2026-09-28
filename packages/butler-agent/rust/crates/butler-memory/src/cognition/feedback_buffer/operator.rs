@@ -2,7 +2,7 @@
 
 use crate::cognition::CognitionCode;
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::{self, File},
     io::Write,
     path::{Path, PathBuf},
 };
@@ -238,59 +238,30 @@ fn write_entries(path: &Path, entries: &[FeedbackEntry]) -> CognitionResult<()> 
         .parent()
         .ok_or_else(|| operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed))?;
     create_private_dir(parent)?;
-    let temporary = parent.join(format!("feedback.md.tmp-{}", uuid::Uuid::new_v4()));
-    let result = (|| {
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut output = options.open(&temporary).map_err(|source| {
-            operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
-        })?;
-        for (index, entry) in entries.iter().enumerate() {
-            if index > 0 {
-                output.write_all(b"\n").map_err(|source| {
-                    operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed)
-                        .with_source(source)
-                })?;
+    butler_platform::secure_fs::replace_private(
+        path,
+        |output| {
+            for (index, entry) in entries.iter().enumerate() {
+                if index > 0 {
+                    output.write_all(b"\n")?;
+                }
+                let formatted = format_entry(entry);
+                let formatted = formatted.strip_suffix('\n').unwrap_or(&formatted);
+                output.write_all(formatted.as_bytes())?;
             }
-            let formatted = format_entry(entry);
-            let formatted = formatted.strip_suffix('\n').unwrap_or(&formatted);
-            output.write_all(formatted.as_bytes()).map_err(|source| {
-                operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
-            })?;
-        }
-        output.sync_all().map_err(|source| {
-            operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
-        })?;
-        fs::rename(&temporary, path).map_err(|source| {
-            operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
-        })?;
-        #[cfg(unix)]
-        File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|source| {
-                operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
-            })?;
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(temporary);
-    }
-    result
+            Ok(())
+        },
+        std::convert::identity,
+    )
+    .map_err(|source| {
+        operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
+    })
 }
 
 fn create_private_dir(path: &Path) -> CognitionResult<()> {
     let mut builder = fs::DirBuilder::new();
     builder.recursive(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        builder.mode(0o700);
-    }
+    butler_platform::secure_fs::owner_only_dirs(&mut builder);
     builder
         .create(path)
         .or_else(|error| {

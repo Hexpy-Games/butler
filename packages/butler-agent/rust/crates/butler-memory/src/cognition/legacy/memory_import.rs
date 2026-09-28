@@ -166,11 +166,7 @@ impl LegacyMemoryImportService {
         })?;
         let mut options = fs::OpenOptions::new();
         options.append(true).create(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        butler_platform::secure_fs::owner_only(&mut options);
         let mut file = options.open(path).map_err(|source| {
             error(CognitionCode::MemoryImportMarkerWriteFailed).with_source(source)
         })?;
@@ -266,9 +262,7 @@ fn resolve_project_key(data_root: &std::path::Path, raw: &str) -> CognitionResul
 
 fn expand_home_path(path: &str) -> PathBuf {
     if let Some(rest) = path.strip_prefix('~') {
-        let home = std::env::var_os("HOME")
-            .map(PathBuf::from)
-            .unwrap_or_default();
+        let home = butler_platform::user_dirs::home_dir().unwrap_or_default();
         home.join(rest.trim_start_matches(['/', '\\']))
     } else {
         PathBuf::from(path)

@@ -111,10 +111,11 @@ async fn tool_06_command_timeout_kills_the_process_tree() -> Result<(), HarnessE
     let deadline = Instant::now() + Duration::from_secs(10);
     for pid in pids
         .lines()
-        .filter_map(|line| line.trim().parse::<i32>().ok())
+        .filter_map(|line| line.trim().parse::<u32>().ok())
     {
         loop {
-            let alive = nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid), None).is_ok();
+            use butler_platform::process_control::{Liveness, liveness};
+            let alive = liveness(pid) == Liveness::Running;
             if !alive {
                 break;
             }

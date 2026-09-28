@@ -13,7 +13,6 @@ mod pdf;
 mod prompt;
 mod recent;
 mod round_projection;
-#[cfg(unix)]
 mod status;
 mod status_conversation;
 mod status_transcript_activity;
@@ -42,7 +41,6 @@ pub use pdf::{PdfTextError, extract_pdf_text, pdf_sidecar_text};
 pub use prompt::*;
 pub(crate) use recent::{RecentConversationInput, include_recent_context};
 pub use round_projection::ContextPortAdapter;
-#[cfg(unix)]
 pub(crate) use status::evaluate_status_budget;
 pub use status_conversation::{
     StatusConversationSummary, StatusFact, StatusTranscriptSummary, read_status_conversation_facts,

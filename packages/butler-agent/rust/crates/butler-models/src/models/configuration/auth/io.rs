@@ -1,7 +1,9 @@
 //! Bounded OAuth response and profile filesystem I/O.
 
+use std::io::Write;
 use std::path::Path;
 
+use butler_platform::secure_fs;
 use serde_json::{Map, Value};
 
 use super::{AuthError, error};
@@ -15,29 +17,20 @@ pub(super) async fn read_json_object(path: &Path) -> Option<Map<String, Value>> 
         .cloned()
 }
 
+/// Writes `bytes` to `path`, creating it as an owner-only file.
 pub(super) async fn write_mode_600(path: &Path, bytes: &[u8]) -> Result<(), AuthError> {
-    #[cfg(unix)]
-    {
-        use std::{io::Write, os::unix::fs::OpenOptionsExt};
-        let path = path.to_owned();
-        let bytes = bytes.to_owned();
-        tokio::task::spawn_blocking(move || {
-            let mut file = std::fs::OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .mode(0o600)
-                .open(path)?;
-            file.write_all(&bytes)
-        })
-        .await
-        .map_err(|source| write_error().with_source(source))?
-        .map_err(|source| write_error().with_source(source))
-    }
-    #[cfg(not(unix))]
-    tokio::fs::write(path, bytes)
-        .await
-        .map_err(|source| write_error().with_source(source))
+    let path = path.to_owned();
+    let bytes = bytes.to_owned();
+    tokio::task::spawn_blocking(move || {
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create(true).truncate(true);
+        let _ = secure_fs::owner_only(&mut options);
+        let mut file = options.open(path)?;
+        file.write_all(&bytes)
+    })
+    .await
+    .map_err(|source| write_error().with_source(source))?
+    .map_err(|source| write_error().with_source(source))
 }
 
 /// The response body as JSON; the error is the transport or decoding failure.

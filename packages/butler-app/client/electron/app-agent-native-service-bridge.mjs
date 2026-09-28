@@ -13,6 +13,7 @@ import {
   prepareAppManagedEmbedSocket,
 } from "./app-managed-embed-endpoint.mjs";
 import { prepareAppLocalAuth } from "./app-agent-supervisor.mjs";
+import { AGENT_RECOVERY_BUDGET } from "./app-foreground-lifecycle.mjs";
 import { resolveBundledNativeAgentInstallation } from "./bundled-native-agent.mjs";
 
 export {
@@ -194,6 +195,10 @@ function createRegistrationPlan({
   menuBarHelper,
   isPidRunning,
 }) {
+  // No Windows service definition yet. One must also restart only on failure
+  // (SCM failure actions fire on a crash, not on a clean SERVICE_STOPPED with
+  // exit code 0) and stop the Agent through `butler-agent service stop
+  // --requested-by app` rather than killing it (#223).
   if (platform !== "darwin" && platform !== "linux") {
     throw new Error(`unsupported App Agent service platform: ${platform}`);
   }
@@ -378,6 +383,12 @@ function launchdMenuBarHelperPlan({ homeDir, runtime, serviceLabel, domain, menu
 
 function systemdPlan({ action, homeDir, runtime, systemdUnit }) {
   const serviceFile = join(homeDir, ".config", "systemd", "user", systemdUnit);
+  // An explicit start clears a spent crash budget (StartLimitBurst), as an
+  // explicit start does in the App. It fails harmlessly on an unloaded unit.
+  const resetFailedStep = serviceStep(
+    ["systemctl", "--user", "reset-failed", systemdUnit],
+    { optional: true },
+  );
   if (action === "install") {
     return {
       action,
@@ -385,6 +396,7 @@ function systemdPlan({ action, homeDir, runtime, systemdUnit }) {
       body: systemdUnitBody(runtime),
       steps: [
         serviceStep(["systemctl", "--user", "daemon-reload"]),
+        resetFailedStep,
         serviceStep(["systemctl", "--user", "enable", "--now", systemdUnit]),
       ],
     };
@@ -396,6 +408,7 @@ function systemdPlan({ action, homeDir, runtime, systemdUnit }) {
       body: systemdUnitBody(runtime),
       steps: [
         serviceStep(["systemctl", "--user", "daemon-reload"]),
+        resetFailedStep,
         serviceStep(["systemctl", "--user", action, systemdUnit]),
       ],
     };
@@ -407,6 +420,12 @@ function systemdPlan({ action, homeDir, runtime, systemdUnit }) {
   };
 }
 
+// KeepAlive restarts the Agent only after a non-zero exit or a death by signal
+// (a crash). It assumes an intentional stop (`butler stop`, or SIGTERM from
+// the CLI or App) makes the Agent exit with code 0, which the Rust side
+// guarantees (#223); otherwise launchd would bring a stopped Agent back.
+// launchd has no start limit like systemd's; it throttles respawns to its
+// ThrottleInterval (10 s by default).
 function launchdPlist(runtime, serviceLabel) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -429,7 +448,10 @@ ${Object.entries(runtime.env).map(([key, value]) =>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
-  <true/>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
 </dict>
 </plist>
 `;
@@ -478,10 +500,18 @@ ${Object.entries(env).map(([key, value]) =>
 `;
 }
 
+// Restart=on-failure restarts the Agent only after a non-zero exit or a crash.
+// It assumes an intentional stop (`butler stop`, or SIGTERM from the CLI or
+// App) makes the Agent exit with code 0, which the Rust side guarantees
+// (#223). `systemctl stop` never triggers a restart. The start limit mirrors
+// the App's crash budget (AGENT_RECOVERY_BUDGET); systemd counts every start
+// in the window, so a crash loop gets that many starts before the unit fails.
 function systemdUnitBody(runtime) {
   return `[Unit]
 Description=Butler Agent service
 After=network-online.target
+StartLimitIntervalSec=${AGENT_RECOVERY_BUDGET.windowMs / 1000}
+StartLimitBurst=${AGENT_RECOVERY_BUDGET.maxAttempts}
 
 [Service]
 Type=simple
@@ -490,7 +520,7 @@ ${Object.entries(runtime.env).map(([key, value]) =>
     `Environment=${key}=${systemdValue(value)}`,
   ).join("\n")}
 ExecStart=${[runtime.command, ...runtime.args].map(systemdValue).join(" ")}
-Restart=always
+Restart=on-failure
 RestartSec=5
 KillMode=control-group
 

@@ -8,6 +8,7 @@ publish.workspace = true
 
 [dependencies]
 butler-core = { path = "../butler-core" }
+butler-platform = { path = "../butler-platform" }
 butler-turn = { path = "../butler-turn" }
 butler-models = { path = "../butler-models" }
 base64.workspace = true
@@ -38,10 +39,6 @@ tz-rs.workspace = true
 url.workspace = true
 regress.workspace = true
 zip.workspace = true
-
-[target.'cfg(unix)'.dependencies]
-rustix.workspace = true
-nix.workspace = true
 
 [features]
 # Exposes test fixtures to tests in dependent crates.

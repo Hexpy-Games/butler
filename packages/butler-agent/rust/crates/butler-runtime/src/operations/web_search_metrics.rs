@@ -1,5 +1,6 @@
 //! DATA-scoped web-search counters and usage events.
 
+use butler_platform::secure_fs;
 use parking_lot::Mutex;
 use std::{
     fs::{self, OpenOptions},
@@ -99,11 +100,7 @@ impl WebSearchMetrics {
         ensure_regular_file(&self.data_root, &metrics, &events)?;
         let mut options = OpenOptions::new();
         options.create(true).append(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.custom_flags(nix::libc::O_NOFOLLOW | nix::libc::O_CLOEXEC);
-        }
+        secure_fs::no_follow(&mut options);
         let mut output = options.open(events)?;
         serde_json::to_writer(&mut output, &event).map_err(json_io_error)?;
         output.write_all(b"\n")
@@ -123,18 +120,7 @@ fn create_private_dir(data_root: &std::path::Path, path: &std::path::Path) -> io
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(error) => return Err(error),
     }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        let mut builder = fs::DirBuilder::new();
-        match builder.mode(0o700).create(path) {
-            Ok(()) => {}
-            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
-            Err(error) => return Err(error),
-        }
-    }
-    #[cfg(not(unix))]
-    match fs::create_dir(path) {
+    match secure_fs::create_private_dir(path) {
         Ok(()) => {}
         Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
         Err(error) => return Err(error),
@@ -186,11 +172,7 @@ fn ensure_regular_file(
 fn read_json_if_present(path: &std::path::Path) -> io::Result<Value> {
     let mut options = OpenOptions::new();
     options.read(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(nix::libc::O_NOFOLLOW | nix::libc::O_CLOEXEC);
-    }
+    secure_fs::no_follow(&mut options);
     match options.open(path) {
         Ok(file) => Ok(serde_json::from_reader(file).unwrap_or_else(|_| json!({}))),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(json!({})),
@@ -205,26 +187,14 @@ fn replace_json(
 ) -> io::Result<()> {
     let parent = path.parent().ok_or_else(unsafe_metrics_path)?;
     ensure_regular_file(data_root, parent, path)?;
-    let temporary = path.with_file_name(format!(".web-search-{}.tmp", uuid::Uuid::new_v4()));
-    let result = (|| {
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut file = options.open(&temporary)?;
-        serde_json::to_writer_pretty(&mut file, value).map_err(json_io_error)?;
-        file.write_all(b"\n")?;
-        file.sync_all()?;
-        drop(file);
-        fs::rename(&temporary, path)
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(temporary);
-    }
-    result
+    secure_fs::replace_private(
+        path,
+        |file| {
+            serde_json::to_writer_pretty(&mut *file, value).map_err(json_io_error)?;
+            file.write_all(b"\n")
+        },
+        std::convert::identity,
+    )
 }
 
 fn unsafe_metrics_path() -> io::Error {
@@ -249,7 +219,6 @@ mod tests {
     use super::WebSearchMetrics;
     use std::fs;
 
-    #[cfg(unix)]
     #[test]
     fn metrics_writer_refuses_data_subdirectory_symlink_aliases() {
         let root =
@@ -258,7 +227,7 @@ mod tests {
         let data = root.join("data");
         fs::create_dir_all(&outside).unwrap();
         fs::create_dir_all(&data).unwrap();
-        std::os::unix::fs::symlink(&outside, data.join("metrics")).unwrap();
+        butler_platform::secure_fs::symlink(&outside, &data.join("metrics")).unwrap();
 
         WebSearchMetrics::new(data).record("fixture", "private query", None);
 

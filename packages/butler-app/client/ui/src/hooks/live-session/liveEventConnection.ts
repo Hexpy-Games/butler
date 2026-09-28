@@ -11,6 +11,8 @@ export function createLiveEventConnection(options: {
   onEvent: (event: TimelineEvent) => void;
   onLostChange: (lost: boolean) => void;
   onRecovered: () => void;
+  /** Reconnects a lost stream right away (for example when the Agent is started again). */
+  subscribeResume?: (resume: () => void) => () => void;
 }): () => void {
   let disposed = false;
   let generation = 0;
@@ -84,9 +86,15 @@ export function createLiveEventConnection(options: {
   window.addEventListener("online", online);
   window.addEventListener("offline", offline);
   document.addEventListener("visibilitychange", visible);
+  const unsubscribeResume = options.subscribeResume?.(() => {
+    if (!lost) return;
+    failures = 0;
+    connect();
+  });
   connect();
   return () => {
     disposed = true;
+    unsubscribeResume?.();
     close();
     window.removeEventListener("online", online);
     window.removeEventListener("offline", offline);

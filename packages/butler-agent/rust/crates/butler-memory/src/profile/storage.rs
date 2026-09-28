@@ -44,11 +44,7 @@ pub(super) fn open(data_root: &Path, access: Access) -> ProfileResult<Connection
         db.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
             .map_err(db_error)?;
         migrate(&db)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
-        }
+        let _ = butler_platform::secure_fs::restrict_file(&path);
     } else {
         db.execute_batch("PRAGMA foreign_keys=ON;")
             .map_err(db_error)?;
