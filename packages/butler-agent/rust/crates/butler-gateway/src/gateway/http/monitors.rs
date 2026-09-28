@@ -155,6 +155,30 @@ pub(super) async fn route(
     )
 }
 
+/// `GET /provider-quota?provider_id=`: the provider's latest subscription quota.
+pub(super) async fn provider_quota(
+    state: Arc<HttpState>,
+    uri: &Uri,
+) -> Result<Response, HttpError> {
+    let parameters = query(uri);
+    let provider_id = parameters
+        .get("provider_id")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty() && value.len() <= 64)
+        .ok_or_else(|| HttpError::public(400, "invalid_request", "provider_id is required."))?;
+    let data = state
+        .application
+        .get_provider_quota(provider_id.to_owned())
+        .await?;
+    json(
+        StatusCode::OK,
+        ApiEnvelope {
+            protocol_version: APP_PROTOCOL_VERSION,
+            data,
+        },
+    )
+}
+
 async fn worker_detail(state: &HttpState, worker_id: &str) -> Result<Value, HttpError> {
     let mut cursor = None;
     loop {

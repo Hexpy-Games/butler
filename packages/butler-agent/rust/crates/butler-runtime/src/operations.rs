@@ -11,9 +11,11 @@ mod mcp_tasks;
 mod metric_files;
 mod observability;
 mod prompt_metrics;
+mod provider_quota;
 mod service_readiness;
 mod status_summary;
 mod update;
+mod usage_cost;
 mod web_search_metrics;
 
 pub use automation::{
@@ -32,13 +34,22 @@ pub use mcp_tasks::{
 pub use metric_files::MetricFiles;
 pub use observability::{LogEntry, LogFile, LogFollower, redact_log_line, tail_log_entries};
 pub use prompt_metrics::PromptUsageMetrics;
+pub use provider_quota::{
+    ProviderQuotaStore, ProviderQuotaUpdate, ProviderQuotaView, QuotaPlanKind,
+    QuotaUnavailableReason, QuotaWindowView, unavailable_view as unavailable_quota_view,
+};
 pub use service_readiness::ServiceReadiness;
 pub use status_summary::{
-    read_context_tool, read_metrics_status, read_prompt_cache_telemetry, read_usage_monitor,
-    read_usage_tool, render_metrics_status, render_status_context, tail_operational_metric_events,
+    UsageMonitorSources, read_context_tool, read_metrics_status, read_prompt_cache_telemetry,
+    read_usage_monitor, read_usage_tool, render_metrics_status, render_status_context,
+    tail_operational_metric_events,
 };
 pub use update::{
     AgentArchiveUpdateService, AgentUpdateRequest, AppUpdateService, UpdateError, UpdateRequest,
+};
+pub use usage_cost::{
+    CostReason, SessionUsage, SessionUsageIndex, SessionUsageView, UsageCostView, UsageEvent,
+    UsageTotals,
 };
 pub use web_search_metrics::WebSearchMetrics;
 

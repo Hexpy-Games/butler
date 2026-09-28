@@ -90,7 +90,8 @@ pub(super) async fn apply(
     let expected = match carrier {
         Carrier::Responses => "openai_responses",
         Carrier::Chat { .. } => "openai_chat_completions",
-        _ => "",
+        Carrier::Anthropic => "anthropic_messages",
+        Carrier::Gemini => "gemini_generate_content",
     };
     if protocol != expected {
         return Err(image_error(
@@ -107,13 +108,7 @@ pub(super) async fn apply(
     let mut manifests = request.image_manifests.iter().collect::<Vec<_>>();
     manifests.sort_by(|left, right| number(left, "position").total_cmp(&number(right, "position")));
     let text = first_user_text(request);
-    let mut content = Vec::new();
-    if !text.trim().is_empty() {
-        content.push(match carrier {
-            Carrier::Responses => serde_json::json!({"type":"input_text","text":text}),
-            _ => serde_json::json!({"type":"text","text":text}),
-        });
-    }
+    let mut images = Vec::new();
     for manifest in manifests {
         let bytes = payload
             .read(manifest)
@@ -137,21 +132,43 @@ pub(super) async fn apply(
                 "payload_manifest_mismatch",
             ));
         }
-        let url = format!("data:{mime};base64,{}", STANDARD.encode(&bytes));
-        content.push(match carrier {
-            Carrier::Responses => serde_json::json!({"type":"input_image","image_url":url}),
-            _ => serde_json::json!({"type":"image_url","image_url":{"url":url}}),
-        });
+        images.push(image_part(carrier, mime, &STANDARD.encode(&bytes)));
     }
-    replace_first_user(
-        body,
-        carrier,
-        match carrier {
-            Carrier::Responses => serde_json::json!([{"role":"user","content":content}]),
-            _ => Value::Array(content),
-        },
-    );
+    replace_first_user(body, carrier, user_content(carrier, text, images));
     Ok(())
+}
+
+/// One inline image in the carrier's wire shape.
+fn image_part(carrier: Carrier, mime: &str, base64: &str) -> Value {
+    let data_url = || format!("data:{mime};base64,{base64}");
+    match carrier {
+        Carrier::Responses => serde_json::json!({"type":"input_image","image_url":data_url()}),
+        Carrier::Chat { .. } => {
+            serde_json::json!({"type":"image_url","image_url":{"url":data_url()}})
+        }
+        Carrier::Anthropic => serde_json::json!({
+            "type":"image","source":{"type":"base64","media_type":mime,"data":base64}
+        }),
+        Carrier::Gemini => serde_json::json!({"inline_data":{"mime_type":mime,"data":base64}}),
+    }
+}
+
+/// The first user message's content: text before images for the OpenAI
+/// shapes; images before text for Anthropic and Gemini, as their guides advise.
+fn user_content(carrier: Carrier, text: &str, images: Vec<Value>) -> Value {
+    let text_part = (!text.trim().is_empty()).then(|| match carrier {
+        Carrier::Responses => serde_json::json!({"type":"input_text","text":text}),
+        Carrier::Gemini => serde_json::json!({"text":text}),
+        Carrier::Chat { .. } | Carrier::Anthropic => serde_json::json!({"type":"text","text":text}),
+    });
+    let content = match carrier {
+        Carrier::Anthropic | Carrier::Gemini => images.into_iter().chain(text_part).collect(),
+        Carrier::Responses | Carrier::Chat { .. } => text_part.into_iter().chain(images).collect(),
+    };
+    match carrier {
+        Carrier::Responses => serde_json::json!([{"role":"user","content":content}]),
+        _ => Value::Array(content),
+    }
 }
 
 fn replace_first_user(body: &mut Value, carrier: Carrier, content: Value) {
@@ -177,21 +194,24 @@ fn replace_first_user(body: &mut Value, carrier: Carrier, content: Value) {
                 }
             }
         }
-        Carrier::Chat { .. } => {
-            if let Some(message) = body
-                .get_mut("messages")
-                .and_then(Value::as_array_mut)
-                .and_then(|messages| {
-                    messages
-                        .iter_mut()
-                        .find(|row| row.get("role").and_then(Value::as_str) == Some("user"))
-                })
-            {
+        Carrier::Chat { .. } | Carrier::Anthropic => {
+            if let Some(message) = first_user_row(body, "messages") {
                 message["content"] = content;
             }
         }
-        _ => {}
+        Carrier::Gemini => {
+            if let Some(message) = first_user_row(body, "contents") {
+                message["parts"] = content;
+            }
+        }
     }
+}
+
+fn first_user_row<'a>(body: &'a mut Value, key: &str) -> Option<&'a mut Value> {
+    body.get_mut(key)
+        .and_then(Value::as_array_mut)?
+        .iter_mut()
+        .find(|row| row.get("role").and_then(Value::as_str) == Some("user"))
 }
 
 fn first_user_text<'a>(request: &'a ModelRoundRequest<'_>) -> &'a str {
@@ -234,3 +254,6 @@ fn image_error(code: &str, reason: &str) -> ModelRoundError {
         reason: reason.into(),
     }
 }
+
+#[cfg(test)]
+mod tests;

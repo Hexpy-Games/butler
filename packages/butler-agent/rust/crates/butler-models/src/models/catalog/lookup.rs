@@ -121,14 +121,10 @@ fn unavailable(parsed: ParsedModelRef, reason: &str) -> ModelProviderMetadata {
     ModelProviderMetadata {
         provider_id: parsed.provider_id,
         provider_label: "Unavailable model".into(),
-        provider_family_id: None,
         model_id: parsed.model_id,
         model_ref: parsed.canonical_ref.clone(),
-        aliases: None,
         display_name: format!("{} ({reason})", parsed.canonical_ref),
         status: "deprecated".into(),
-        context_window_tokens: None,
-        max_output_tokens: None,
         default_reasoning_effort: ReasoningEffort::Medium,
         reasoning_efforts: vec![
             ReasoningEffort::None,
@@ -138,9 +134,30 @@ fn unavailable(parsed: ParsedModelRef, reason: &str) -> ModelProviderMetadata {
             ReasoningEffort::Xhigh,
             ReasoningEffort::Max,
         ],
+        source_url: "about:blank".into(),
+        runtime_supported: false,
+        ..blank_metadata()
+    }
+}
+
+/// Metadata with every optional fact unset, for struct-update construction.
+pub(super) fn blank_metadata() -> ModelProviderMetadata {
+    ModelProviderMetadata {
+        provider_id: String::new(),
+        provider_label: String::new(),
+        provider_family_id: None,
+        model_id: String::new(),
+        model_ref: String::new(),
+        aliases: None,
+        display_name: String::new(),
+        status: String::new(),
+        context_window_tokens: None,
+        max_output_tokens: None,
+        default_reasoning_effort: ReasoningEffort::None,
+        reasoning_efforts: Vec::new(),
         reasoning_budget_tokens: None,
         token_estimator: super::TokenEstimatorKind::CharacterEstimate,
-        source_url: "about:blank".into(),
+        source_url: String::new(),
         runtime_supported: false,
         hosted_api_shape: None,
         api_base_url: None,
@@ -173,6 +190,10 @@ fn unavailable(parsed: ParsedModelRef, reason: &str) -> ModelProviderMetadata {
         image_tool_server_id: None,
         image_tool_name: None,
         image_tool_capability_digest: None,
+        image_max_patches: None,
+        image_limit_sources: None,
+        tier: None,
+        pricing: None,
         extensions: Map::new(),
     }
 }
@@ -215,7 +236,7 @@ pub(super) fn build_view(
         generated_at: input.generated_at.clone(),
         default_model_ref: default.model_ref,
         default_reasoning_effort: default.default_reasoning_effort,
-        providers: provider_views(&models),
+        providers: provider_views(&models, static_data),
         models,
         registered_models: registered,
         provider_credentials: input.credential_views.clone(),
@@ -223,7 +244,10 @@ pub(super) fn build_view(
     })
 }
 
-fn provider_views(models: &[ModelProviderMetadata]) -> Vec<ProviderView> {
+fn provider_views(
+    models: &[ModelProviderMetadata],
+    static_data: &StaticCatalog,
+) -> Vec<ProviderView> {
     let mut ids = Vec::<String>::new();
     for model in models {
         if !ids.contains(&model.provider_id) {
@@ -248,6 +272,7 @@ fn provider_views(models: &[ModelProviderMetadata]) -> Vec<ProviderView> {
                 auth_methods: provider_auth_methods(&provider_id),
                 default_api_base_url: default_hosted_provider_api_base_url(&provider_id)
                     .map(str::to_owned),
+                presets: static_data.provider_presets(&provider_id),
                 models: provider_models,
             })
         })

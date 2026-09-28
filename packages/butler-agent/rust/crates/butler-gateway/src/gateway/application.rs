@@ -29,6 +29,7 @@ mod projects;
 mod queue;
 mod queue_dispatcher;
 mod queue_view;
+mod quota_events;
 mod read_model;
 mod recovery;
 mod relocation_port;
@@ -163,6 +164,7 @@ pub struct AppApplication {
     butler_data: PathBuf,
     settings_update_lock: Arc<tokio::sync::Mutex<()>>,
     plan_decision_locks: PlanDecisionLocks,
+    quota_events: Arc<quota_events::QuotaEventForwarder>,
 }
 
 impl AppApplication {
@@ -178,12 +180,7 @@ impl AppApplication {
         )
         .await
         .map_err(app_error)?;
-        let queue_owner = format!(
-            "app-session-queue:{}:{}:{}",
-            std::process::id(),
-            dependencies.identity_clock.new_uuid(),
-            dependencies.identity_clock.new_uuid()
-        );
+        let queue_owner = queue_owner_id(dependencies.identity_clock.as_ref());
         let fallback_project_root = config.project_workspace_root.clone();
         let project_root = match storage
             .execute(move |db| projects::initial_root(db, &fallback_project_root))
@@ -258,6 +255,7 @@ impl AppApplication {
             butler_data: config.butler_data,
             settings_update_lock: Arc::new(tokio::sync::Mutex::new(())),
             plan_decision_locks: PlanDecisionLocks::default(),
+            quota_events: Arc::default(),
         };
         if let Err(error) = application.recover_session_relocation_owned().await {
             let _ = application.close().await;
@@ -284,6 +282,7 @@ impl AppApplication {
         self.recover_turn_cancellations().await?;
         // Failed authority retries remain durable for the next startup.
         let _ = self.dependencies.authority_handoff.retry_decided().await;
+        self.quota_events.start(self.clone_handle());
         Ok(())
     }
 
@@ -293,6 +292,7 @@ impl AppApplication {
             None => Ok(()),
         };
         let automation_runs = self.automation_runs.close().await;
+        self.quota_events.close().await;
         let queue = match &self.queue_dispatcher {
             Some(dispatcher) => dispatcher.close().await,
             None => Ok(()),
@@ -362,6 +362,16 @@ impl AppApplication {
             .await
             .map_err(app_error)
     }
+}
+
+/// A process-unique owner id for the session queue claim.
+fn queue_owner_id(clock: &dyn AppIdentityClock) -> String {
+    format!(
+        "app-session-queue:{}:{}:{}",
+        std::process::id(),
+        clock.new_uuid(),
+        clock.new_uuid()
+    )
 }
 
 fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
