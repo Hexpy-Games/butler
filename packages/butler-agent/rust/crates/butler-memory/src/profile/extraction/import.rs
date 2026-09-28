@@ -342,11 +342,7 @@ fn write_manifest(root: &Path, hash: &str, bytes: &str) -> ProfileResult<()> {
 fn create_private_directory(path: &Path) -> std::io::Result<()> {
     let mut builder = fs::DirBuilder::new();
     builder.recursive(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        builder.mode(0o700);
-    }
+    butler_platform::secure_fs::owner_only_dirs(&mut builder);
     builder.create(path)
 }
 
@@ -361,11 +357,8 @@ fn private_manifest_file(path: &Path) -> std::io::Result<fs::File> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(error) => return Err(error),
     }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600).custom_flags(nix::libc::O_NOFOLLOW);
-    }
+    let _ = butler_platform::secure_fs::owner_only(&mut options);
+    let _ = butler_platform::secure_fs::no_follow(&mut options);
     options.open(path)
 }
 fn base(
@@ -415,10 +408,10 @@ mod tests {
         assert_eq!(id, golden["importId"]);
     }
 
-    #[cfg(unix)]
     #[test]
     fn manifest_writer_rejects_final_symlink_and_truncates_regular_reimports() {
-        use std::{fs, os::unix::fs::symlink};
+        use butler_platform::secure_fs::symlink;
+        use std::fs;
 
         let root = std::env::temp_dir().join(format!(
             "butler-profile-import-manifest-{}",

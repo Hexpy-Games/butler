@@ -4,7 +4,7 @@
 use crate::lenient::JsonField;
 use crate::lenient::set_field;
 use std::{
-    fs::{self, OpenOptions},
+    fs,
     io::Write,
     path::Path,
     time::{SystemTime, UNIX_EPOCH},
@@ -189,50 +189,25 @@ fn append_operation(
         .parent()
         .ok_or_else(|| error(CognitionCode::MemoryQualityOperationWriteFailed))?;
     create_private_dir(parent)?;
-    let temporary = parent.join(format!(
-        "quality-operations.jsonl.tmp-{}",
-        uuid::Uuid::new_v4()
-    ));
-    let result = (|| {
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut file = options.open(&temporary).map_err(|source| {
-            error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
-        })?;
-        let operation = serde_json::to_value(operation).map_err(|source| {
-            error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
-        })?;
-        for value in previous.iter().chain(std::iter::once(&operation)) {
-            serde_json::to_writer(&mut file, value).map_err(|source| {
-                error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
-            })?;
-            file.write_all(b"\n").map_err(|source| {
-                error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
-            })?;
-        }
-        file.sync_all().map_err(|source| {
-            error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
-        })?;
-        fs::rename(&temporary, path).map_err(|source| {
-            error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
-        })?;
-        #[cfg(unix)]
-        fs::File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|source| {
-                error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
-            })?;
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(temporary);
-    }
-    result
+    let operation = serde_json::to_value(operation).map_err(|source| {
+        error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
+    })?;
+    let failed = |source: std::io::Error| {
+        error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
+    };
+    butler_platform::secure_fs::replace_private(
+        path,
+        |file| {
+            for value in previous.iter().chain(std::iter::once(&operation)) {
+                serde_json::to_writer(&mut *file, value).map_err(|source| {
+                    error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
+                })?;
+                file.write_all(b"\n").map_err(failed)?;
+            }
+            Ok(())
+        },
+        failed,
+    )
 }
 
 /// Whether a stored operation describes the same exclusion.
@@ -270,26 +245,17 @@ fn owner_revision(entry: &super::FeedbackEntry) -> String {
 }
 
 fn create_private_dir(path: &Path) -> CognitionResult<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        match fs::symlink_metadata(path) {
-            Ok(metadata) if metadata.file_type().is_dir() => return Ok(()),
-            Ok(_) => return Err(error(CognitionCode::MemoryQualityOperationPathUnsafe)),
-            Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(_) => return Err(error(CognitionCode::MemoryQualityOperationWriteFailed)),
-        }
-        let mut builder = fs::DirBuilder::new();
-        builder.recursive(true).mode(0o700);
-        builder.create(path).map_err(|source| {
-            error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
-        })
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_dir() => return Ok(()),
+        Ok(_) => return Err(error(CognitionCode::MemoryQualityOperationPathUnsafe)),
+        Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => return Err(error(CognitionCode::MemoryQualityOperationWriteFailed)),
     }
-    #[cfg(not(unix))]
-    {
-        fs::create_dir_all(path)
-            .map_err(|source| error("memory_quality_operation_write_failed").with_source(source))
-    }
+    let mut builder = fs::DirBuilder::new();
+    butler_platform::secure_fs::owner_only_dirs(builder.recursive(true));
+    builder.create(path).map_err(|source| {
+        error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
+    })
 }
 
 fn now_iso() -> String {

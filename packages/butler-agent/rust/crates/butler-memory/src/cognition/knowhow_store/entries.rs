@@ -2,7 +2,7 @@
 //! atomic private writes.
 
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::{self, File},
     io::Write,
     path::{Component, Path, PathBuf},
 };
@@ -143,39 +143,12 @@ pub(super) fn write(root: &Path, document: &KnowHowDocument) -> CognitionResult<
         error(CognitionCode::MemoryKnowhowEntryWriteFailed).with_source(source)
     })?;
     bytes.push(b'\n');
-    let temporary = directory.join(format!("{id}.json.tmp-{}", uuid::Uuid::new_v4()));
-    let result = (|| {
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut file = options.open(&temporary).map_err(|source| {
-            error(CognitionCode::MemoryKnowhowEntryWriteFailed).with_source(source)
-        })?;
-        file.write_all(&bytes).map_err(|source| {
-            error(CognitionCode::MemoryKnowhowEntryWriteFailed).with_source(source)
-        })?;
-        file.sync_all().map_err(|source| {
-            error(CognitionCode::MemoryKnowhowEntryWriteFailed).with_source(source)
-        })?;
-        fs::rename(&temporary, &path).map_err(|source| {
-            error(CognitionCode::MemoryKnowhowEntryWriteFailed).with_source(source)
-        })?;
-        #[cfg(unix)]
-        File::open(&directory)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|source| {
-                error(CognitionCode::MemoryKnowhowEntryWriteFailed).with_source(source)
-            })?;
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(temporary);
-    }
-    result
+    butler_platform::secure_fs::replace_private(
+        &path,
+        |file| file.write_all(&bytes),
+        std::convert::identity,
+    )
+    .map_err(|source| error(CognitionCode::MemoryKnowhowEntryWriteFailed).with_source(source))
 }
 
 /// The fields that make an entry unusable: schema, a safe `kh_` id, a
@@ -256,40 +229,24 @@ fn entries_directory(root: &Path, presence: Presence) -> CognitionResult<Option<
 }
 
 fn ensure_private_dir(path: &Path) -> CognitionResult<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        match fs::symlink_metadata(path) {
-            Ok(metadata) if metadata.file_type().is_dir() => return Ok(()),
-            Ok(_) => return Err(error(CognitionCode::MemoryKnowhowRootPathUnsafe)),
-            Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(_) => return Err(error(CognitionCode::MemoryKnowhowRootWriteFailed)),
-        }
-        let mut builder = fs::DirBuilder::new();
-        builder.recursive(true).mode(0o700);
-        match builder.create(path) {
-            Ok(()) => Ok(()),
-            Err(io_error) if io_error.kind() == std::io::ErrorKind::AlreadyExists => {
-                fs::symlink_metadata(path)
-                    .ok()
-                    .filter(|metadata| metadata.file_type().is_dir())
-                    .map(|_| ())
-                    .ok_or_else(|| error(CognitionCode::MemoryKnowhowRootPathUnsafe))
-            }
-            Err(_) => Err(error(CognitionCode::MemoryKnowhowRootWriteFailed)),
-        }
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_dir() => return Ok(()),
+        Ok(_) => return Err(error(CognitionCode::MemoryKnowhowRootPathUnsafe)),
+        Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => return Err(error(CognitionCode::MemoryKnowhowRootWriteFailed)),
     }
-    #[cfg(not(unix))]
-    {
-        match fs::symlink_metadata(path) {
-            Ok(metadata) if metadata.file_type().is_dir() => Ok(()),
-            Ok(_) => Err(error("memory_knowhow_root_path_unsafe")),
-            Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {
-                fs::create_dir_all(path)
-                    .map_err(|source| error("memory_knowhow_root_write_failed").with_source(source))
-            }
-            Err(_) => Err(error("memory_knowhow_root_write_failed")),
+    let mut builder = fs::DirBuilder::new();
+    butler_platform::secure_fs::owner_only_dirs(builder.recursive(true));
+    match builder.create(path) {
+        Ok(()) => Ok(()),
+        Err(io_error) if io_error.kind() == std::io::ErrorKind::AlreadyExists => {
+            fs::symlink_metadata(path)
+                .ok()
+                .filter(|metadata| metadata.file_type().is_dir())
+                .map(|_| ())
+                .ok_or_else(|| error(CognitionCode::MemoryKnowhowRootPathUnsafe))
         }
+        Err(_) => Err(error(CognitionCode::MemoryKnowhowRootWriteFailed)),
     }
 }
 

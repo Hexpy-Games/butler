@@ -254,7 +254,7 @@ pub fn auth_status_with_environment(
     let codex = auth_value("CODEX_AUTH_JSON", private_environment)
         .map(PathBuf::from)
         .or_else(|| {
-            std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".codex/auth.json"))
+            butler_platform::user_dirs::home_dir().map(|home| home.join(".codex/auth.json"))
         });
     if codex.is_some_and(|path| std::fs::metadata(path).is_ok_and(|metadata| metadata.len() > 0)) {
         return json!({ "configured": true, "mode": "codex_oauth", "source": "CODEX_AUTH_JSON" });

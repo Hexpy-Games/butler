@@ -1,3 +1,4 @@
+use butler_platform::secure_fs;
 use parking_lot::Mutex;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
@@ -172,22 +173,15 @@ fn reject_symlink(path: &Path) -> io::Result<()> {
 fn append_file(path: &Path) -> io::Result<fs::File> {
     let mut options = OpenOptions::new();
     options.create(true).append(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600).custom_flags(nix::libc::O_NOFOLLOW);
-    }
+    let _ = secure_fs::owner_only(&mut options);
+    let _ = secure_fs::no_follow(&mut options);
     options.open(path)
 }
 
 fn open_read_no_follow(path: &Path) -> io::Result<File> {
     let mut options = OpenOptions::new();
     options.read(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(nix::libc::O_NOFOLLOW);
-    }
+    secure_fs::no_follow(&mut options);
     options.open(path)
 }
 
@@ -215,11 +209,8 @@ fn temporary_path(path: &Path) -> PathBuf {
 fn open_private_temporary(path: &Path) -> io::Result<File> {
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600).custom_flags(nix::libc::O_NOFOLLOW);
-    }
+    let _ = secure_fs::owner_only(&mut options);
+    let _ = secure_fs::no_follow(&mut options);
     options.open(path)
 }
 
@@ -249,24 +240,12 @@ impl Drop for TemporaryPath {
     }
 }
 
-#[cfg(unix)]
+/// Hosts without owner-only permissions keep the directory as it is.
 fn secure_directory_mode(path: &Path) -> io::Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o700))
+    secure_fs::restrict_directory(path).unwrap_or(Ok(()))
 }
 
-#[cfg(not(unix))]
-fn secure_directory_mode(_: &Path) -> io::Result<()> {
-    Ok(())
-}
-
-#[cfg(unix)]
+/// Hosts without owner-only permissions keep the file as it is.
 fn secure_mode(path: &Path) -> io::Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
-}
-
-#[cfg(not(unix))]
-fn secure_mode(_: &Path) -> io::Result<()> {
-    Ok(())
+    secure_fs::restrict_file(path).unwrap_or(Ok(()))
 }

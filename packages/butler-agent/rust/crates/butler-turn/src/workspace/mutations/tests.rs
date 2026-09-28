@@ -127,10 +127,8 @@ fn exclusive_create_race_keeps_external_bytes_and_cleans_temp() {
     std::fs::remove_dir_all(root).unwrap();
 }
 
-#[cfg(unix)]
 #[test]
 fn committed_hardlink_cleanup_failure_remains_applied_success() {
-    use std::os::unix::fs::PermissionsExt;
     let root = std::env::temp_dir().join(format!("butler-k1b-cleanup-{}", Uuid::new_v4()));
     std::fs::create_dir(&root).unwrap();
     let absolute = root.join("target.txt");
@@ -150,12 +148,13 @@ fn committed_hardlink_cleanup_failure_remains_applied_success() {
         io::Replacement::RequiresExpectedDigest,
     )
     .unwrap();
-    let locked = root.clone();
-    let lock_directory = At((Point::AfterLink, move |_: &Path| {
-        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o500)).unwrap();
+    // A directory now occupies the linked temporary file's name, so removing
+    // the temporary file fails after the target was committed.
+    let obstruct_temporary = At((Point::AfterLink, |temporary: &Path| {
+        std::fs::remove_file(temporary).unwrap();
+        std::fs::create_dir(temporary).unwrap();
     }));
-    let result = io::commit(prepared, &lock_directory).unwrap();
-    std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let result = io::commit(prepared, &obstruct_temporary).unwrap();
     assert!(result.cleanup_failed);
     assert_eq!(std::fs::read(&absolute).unwrap(), b"committed");
     assert_eq!(std::fs::read_dir(&root).unwrap().count(), 2);
