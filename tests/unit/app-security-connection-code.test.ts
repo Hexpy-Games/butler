@@ -164,7 +164,6 @@ function runPreload(
 }
 
 const envelope = (data: unknown) => ({ protocol_version: "butler.app.v1", data });
-const forbidden = { status: 403, body: { error: { code: "loopback_required", message: "Security settings are only available on this computer." } } };
 
 test("preload re-reads the token in main when the live stream reports a rotated code", () => {
   const run = runPreload({
