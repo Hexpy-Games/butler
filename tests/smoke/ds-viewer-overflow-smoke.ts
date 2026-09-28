@@ -182,6 +182,7 @@ try {
   for (const run of runs) {
     const runLabel = `${run.width} ${run.colorScheme} chrome`;
     const page = await browser.newPage({ viewport: { width: run.width, height: 1000 }, colorScheme: run.colorScheme, deviceScaleFactor: 1 });
+    await server.signIn(page);
     const items = await itemIds(page, server.url);
     for (const [name, id] of items) {
       if (only.size && !only.has(name)) continue;

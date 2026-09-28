@@ -183,6 +183,7 @@ async function renderViewport(
     viewport: viewportPresets[viewportName],
     deviceScaleFactor: 1,
   });
+  await server.signIn(page);
   const outputDir = useViewportSubdir
     ? join(outputRoot, viewportName)
     : outputRoot;

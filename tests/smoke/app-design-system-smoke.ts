@@ -467,6 +467,7 @@ try {
       viewport: { width: viewport.width, height: viewport.height },
       deviceScaleFactor: 1,
     });
+    await server.signIn(page);
     await assertWorkbench(page, server.url, viewport.label);
     await page.close();
   }
