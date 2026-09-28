@@ -1,5 +1,4 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -18,11 +17,17 @@ import {
 import { appCopy } from "@/app/copy.ts";
 import type { SessionArtifactSummary } from "@/app/types.ts";
 import {
+  useFreshFrameSource,
+  useMessageFileSource,
+  type MessageFileSourceState,
+  type RefreshFileUrls,
+} from "@/hooks/useMessageFileSource.ts";
+import {
   artifactDescription,
   artifactMeta,
   artifactPreviewMode,
-  artifactUrl,
 } from "./artifactDisplay";
+import { useArtifactText, type ArtifactTextState } from "./useArtifactText";
 
 const MARKDOWN_COMPONENTS: Components = {
   a({ href, children, node: _node, ...props }) {
@@ -39,35 +44,24 @@ export function ArtifactViewer({
   artifact,
   onBack,
   embedded = false,
+  refreshFileUrls,
 }: {
   artifact: SessionArtifactSummary;
   onBack: () => void;
   embedded?: boolean;
+  /** Re-reads the list that owns the artifact when its signed URL is refused. */
+  refreshFileUrls?: RefreshFileUrls;
 }) {
   useAppLocale();
-  const url = artifactUrl(artifact);
   const mode = artifactPreviewMode(artifact);
-  const [text, setText] = useState("");
-  const [state, setState] = useState<"idle" | "loading" | "failed">("idle");
-
-  useEffect(() => {
-    if (!url || (mode !== "markdown" && mode !== "text")) return;
-    const controller = new AbortController();
-    setState("loading");
-    fetch(url, { signal: controller.signal })
-      .then((response) => {
-        if (!response.ok) throw new Error("Artifact fetch failed.");
-        return response.text();
-      })
-      .then((body) => {
-        setText(body);
-        setState("idle");
-      })
-      .catch((error: unknown) => {
-        if ((error as Error).name !== "AbortError") setState("failed");
-      });
-    return () => controller.abort();
-  }, [mode, url]);
+  const file = useMessageFileSource(artifact, refreshFileUrls);
+  const { state, text } = useArtifactText({
+    url: file.src,
+    enabled: mode === "markdown" || mode === "text",
+    path: file.path,
+    refreshFileUrls,
+  });
+  useFreshFrameSource(file, mode === "pdf", refreshFileUrls);
 
   const meta = [artifactDescription(artifact), artifactMeta(artifact)]
     .filter(Boolean)
@@ -89,7 +83,7 @@ export function ArtifactViewer({
         title={artifact.title}
       />}
       <ArtifactPreview data-test-class="artifact-viewer">
-        {renderPreview({ mode, state, text, title: artifact.title, url })}
+        {renderPreview({ mode, state, text, title: artifact.title, file })}
       </ArtifactPreview>
     </Stack>
   );
@@ -97,19 +91,27 @@ export function ArtifactViewer({
 
 function renderPreview(input: {
   mode: ReturnType<typeof artifactPreviewMode>;
-  state: "idle" | "loading" | "failed";
+  state: ArtifactTextState;
   text: string;
   title: string;
-  url?: string;
+  file: MessageFileSourceState;
 }) {
-  if (!input.url || input.mode === "unsupported") {
+  const { file } = input;
+  if (!file.src || input.mode === "unsupported") {
     return <Typo.Caption>{appCopy.artifacts.unsupported}</Typo.Caption>;
   }
   if (input.mode === "image") {
-    return <ArtifactPreviewImage alt={input.title} src={input.url} />;
+    return (
+      <ArtifactPreviewImage
+        alt={input.title}
+        src={file.src}
+        onError={file.onError}
+        onLoad={file.onLoad}
+      />
+    );
   }
   if (input.mode === "pdf") {
-    return <ArtifactPreviewFrame src={input.url} title={input.title} />;
+    return <ArtifactPreviewFrame src={file.src} title={input.title} />;
   }
   if (input.state === "loading") {
     return <Typo.Caption>{appCopy.artifacts.loading}</Typo.Caption>;

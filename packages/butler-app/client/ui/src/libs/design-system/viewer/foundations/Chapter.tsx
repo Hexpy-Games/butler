@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { NavRow } from "../../blocks/NavRow";
 import { Button } from "../../components/Button";
 import { Collapsible } from "../../components/Collapsible";
+import { FoundationHeroMotion } from "../../components/FoundationHeroMotion";
 import { Stack } from "../../components/Stack";
 import { Tag } from "../../components/Tag";
 import { Typo } from "../../components/Typo";
@@ -9,6 +10,7 @@ import { tokenCatalog } from "./catalog";
 import { chapterPage, chapterTokens, FOUNDATION_CHAPTERS, type FoundationChapter } from "./chapters";
 import { tokensByCategory } from "./tokenCatalog";
 import { TokenRow } from "./TokenRow";
+import type { SampleLocale } from "./typeRoles";
 import styles from "../DesignSystemViewer.module.css";
 import f from "./Foundations.module.css";
 
@@ -21,26 +23,35 @@ export function chapterSections(chapter: FoundationChapter, sections: Array<[str
   return { list, at: (id: string): SectionSpec => list.find((spec) => spec.id === id) ?? list[0]! };
 }
 
-export function ChapterHeader({ chapter, lead, onOpen, children }: {
+export function ChapterHeader({ chapter, lead, onOpen, locale, children }: {
   chapter: FoundationChapter;
   lead: ReactNode;
   onOpen: (page: string) => void;
+  /** Sample-copy language of the hero (its type specimen sets real lines). */
+  locale?: SampleLocale;
   children?: ReactNode;
 }) {
   const count = chapterTokens(tokenCatalog, chapter).length;
   return (
     <header className={f.chapterHead} data-ds-chapter-head={chapter.id}>
-      <div className={f.chapterKicker}>
-        <span className={f.chapterNumber} aria-hidden="true">{chapter.number}</span>
-        <Button size="xs" variant="borderless" text="Foundations" onClick={() => onOpen("foundations")} />
+      <div className={f.chapterHeadGrid}>
+        <div className={f.chapterHeadText}>
+          <div className={f.chapterKicker}>
+            <span className={f.chapterNumber} aria-hidden="true">{chapter.number}</span>
+            <Button size="xs" variant="borderless" text="Foundations" onClick={() => onOpen("foundations")} />
+          </div>
+          <h1 className={f.chapterTitle}>{chapter.title}</h1>
+          <p className={styles.lead}>{lead}</p>
+          <Stack align="row" cross="center" gap="sm" wrap>
+            <Tag>{`${count} tokens`}</Tag>
+            <Typo.Caption tone="tertiary">Generated from tokens.css · light and dark</Typo.Caption>
+            {children}
+          </Stack>
+        </div>
+        <div className={f.chapterHero} data-ds-chapter-hero={chapter.id}>
+          <FoundationHeroMotion variant={chapter.id} lang={locale} />
+        </div>
       </div>
-      <h1 className={f.chapterTitle}>{chapter.title}</h1>
-      <p className={styles.lead}>{lead}</p>
-      <Stack align="row" cross="center" gap="sm" wrap>
-        <Tag>{`${count} tokens`}</Tag>
-        <Typo.Caption tone="tertiary">Generated from tokens.css · light and dark</Typo.Caption>
-        {children}
-      </Stack>
     </header>
   );
 }
@@ -124,11 +135,12 @@ export function AllTokens({ chapter, spec, anchor }: { chapter: FoundationChapte
 }
 
 /** Chapter shell: header, numbered sections, sticky mini-TOC, token table and pager. */
-export function ChapterLayout({ chapter, sections, lead, anchor, onOpen, headerExtra, children }: {
+export function ChapterLayout({ chapter, sections, lead, anchor, onOpen, locale, headerExtra, children }: {
   chapter: FoundationChapter;
   sections: SectionSpec[];
   lead: ReactNode;
   anchor?: string;
+  locale?: SampleLocale;
   onOpen: (page: string) => void;
   headerExtra?: ReactNode;
   children: ReactNode;
@@ -136,7 +148,7 @@ export function ChapterLayout({ chapter, sections, lead, anchor, onOpen, headerE
   const pageId = chapterPage(chapter);
   return (
     <div className={f.chapter} data-ds-foundations={chapter.id}>
-      <ChapterHeader chapter={chapter} lead={lead} onOpen={onOpen}>{headerExtra}</ChapterHeader>
+      <ChapterHeader chapter={chapter} lead={lead} locale={locale} onOpen={onOpen}>{headerExtra}</ChapterHeader>
       <div className={f.jump} aria-label="Jump to section" role="navigation">
         {sections.map((spec) => <Button key={spec.id} size="xs" variant="outline" text={`${spec.number} ${spec.title}`} onClick={() => onOpen(`${pageId}#${spec.id}`)} />)}
       </div>

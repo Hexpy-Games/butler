@@ -9,7 +9,8 @@ import {
 import { appCopy } from "@/app/copy.ts";
 import { useComposerStore } from "./composerStore";
 import type { ComposerAttachment } from "./hooks/useFileAttachments";
-import { formatFileSize, messageFileUrl } from "./conversationUtils";
+import { formatFileSize } from "./conversationUtils";
+import { messageFileUrl } from "./messageMedia";
 import { imageRefusalLabel } from "./composerImagePolicy";
 
 export function ComposerAttachments() {

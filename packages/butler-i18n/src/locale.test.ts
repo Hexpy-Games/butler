@@ -112,6 +112,14 @@ test("scheduled-run feature uses one term: 예약 작업 (never 자동화) and S
   }
 });
 
+test("the schedule access hint names the Ask first mode with the composer's label", () => {
+  for (const locale of ["en-US", "ko-KR"] as const) {
+    const copy = getAppCopy(locale);
+    expect(copy.automations.accessHint).toContain(copy.permissions.askFirst);
+    expect(copy.automations.accessHint).not.toContain("\n");
+  }
+});
+
 test("settings titles never use the A / B style in either locale", () => {
   for (const locale of ["en-US", "ko-KR"] as const) {
     const copy = getAppCopy(locale);

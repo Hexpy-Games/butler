@@ -4,11 +4,20 @@ import { create } from "zustand";
 import { api } from "@/app/api.ts";
 import { notifyError } from "@/app/notifications.ts";
 import type {
+  AccessMode,
   AutomationRunSummary,
   AutomationSummary,
   SessionOption,
   StatusPill,
 } from "@/app/types.ts";
+import { isAccessMode } from "@/components/conversation/accessModeUtils";
+import {
+  DEFAULT_SCHEDULE_ACCESS_MODE,
+  automationSaveError,
+  conversationAccessMode,
+  withoutFieldError,
+  type AutomationSaveError,
+} from "./automationForm.ts";
 
 interface AutomationStore {
   // State
@@ -18,16 +27,23 @@ interface AutomationStore {
   promptBody: string;
   targetSessionId: string;
   intervalSeconds: number;
+  /** The access the schedule's runs get, independent of the target conversation. */
+  accessMode: AccessMode;
+  /** True once the user picked a mode, so a new target no longer replaces it. */
+  accessModeChosen: boolean;
   state: string;
   runs: AutomationRunSummary[];
   saving: boolean;
+  /** The last save the gateway refused as invalid, shown on its field. */
+  saveError: AutomationSaveError | null;
   sessionOptions: SessionOption[];
 
   // Setters
   setTitle: (title: string) => void;
   setPromptBody: (body: string) => void;
-  setTargetSessionId: (id: string) => void;
+  setTargetSessionId: (id: string) => Promise<void>;
   setIntervalSeconds: (seconds: number) => void;
+  setAccessMode: (mode: AccessMode) => void;
 
   // Actions
   initialize: (
@@ -52,6 +68,20 @@ interface AutomationStore {
   ) => Promise<void>;
 }
 
+let accessModeRequest = 0;
+
+/**
+ * A new schedule starts from its target conversation's current mode, or Ask
+ * first when the UI cannot read it, until the user picks a mode.
+ */
+async function followTargetAccessMode(targetSessionId: string): Promise<void> {
+  const request = ++accessModeRequest;
+  const mode = await conversationAccessMode(targetSessionId);
+  const current = useAutomationStore.getState();
+  if (request !== accessModeRequest || !current.isNew || current.accessModeChosen) return;
+  useAutomationStore.setState({ accessMode: mode ?? DEFAULT_SCHEDULE_ACCESS_MODE });
+}
+
 export const useAutomationStore = create<AutomationStore>((set, get) => ({
   // Initial state
   automationId: "",
@@ -60,31 +90,55 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
   promptBody: "",
   targetSessionId: "",
   intervalSeconds: 1800,
+  accessMode: DEFAULT_SCHEDULE_ACCESS_MODE,
+  accessModeChosen: false,
   state: "enabled",
   runs: [],
   saving: false,
+  saveError: null,
   sessionOptions: [],
 
   // Setters
-  setTitle: (title) => set({ title }),
-  setPromptBody: (promptBody) => set({ promptBody }),
-  setTargetSessionId: (targetSessionId) => set({ targetSessionId }),
-  setIntervalSeconds: (intervalSeconds) => set({ intervalSeconds }),
+  setTitle: (title) =>
+    set((current) => ({ title, saveError: withoutFieldError(current.saveError, "title") })),
+  setPromptBody: (promptBody) =>
+    set((current) => ({ promptBody, saveError: withoutFieldError(current.saveError, "prompt") })),
+  setTargetSessionId: async (targetSessionId) => {
+    // A schedule always has a target. Inside a <form>, Radix Select's hidden
+    // native select reports "" when the value arrives in the same render as
+    // its options; ignoring it keeps the target (and the mode that follows it).
+    if (!targetSessionId) return;
+    set((current) => ({ targetSessionId, saveError: withoutFieldError(current.saveError, "form") }));
+    const { isNew, accessModeChosen } = get();
+    if (isNew && !accessModeChosen) await followTargetAccessMode(targetSessionId);
+  },
+  setIntervalSeconds: (intervalSeconds) =>
+    set((current) => ({ intervalSeconds, saveError: withoutFieldError(current.saveError, "interval") })),
+  setAccessMode: (accessMode) =>
+    set((current) => ({
+      accessMode,
+      accessModeChosen: true,
+      saveError: withoutFieldError(current.saveError, "accessMode"),
+    })),
 
   // Initialize - loads automation data
   initialize: async (automationId, sessionOptions, onStatus) => {
     const isNew = !automationId || automationId === "new";
-    set({ automationId, isNew, sessionOptions });
+    accessModeRequest += 1;
+    set({ automationId, isNew, sessionOptions, saveError: null, accessModeChosen: false });
 
     if (isNew) {
+      const targetSessionId = sessionOptions[0]?.id ?? "general";
       set({
         title: "",
         promptBody: "",
-        targetSessionId: sessionOptions[0]?.id ?? "general",
+        targetSessionId,
         intervalSeconds: 1800,
+        accessMode: DEFAULT_SCHEDULE_ACCESS_MODE,
         state: "enabled",
         runs: [],
       });
+      await followTargetAccessMode(targetSessionId);
       return;
     }
 
@@ -105,6 +159,9 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
         promptBody: detail.automation.prompt_body,
         targetSessionId: detail.automation.target_session_id,
         intervalSeconds: detail.automation.interval_seconds,
+        accessMode: isAccessMode(detail.automation.access_mode)
+          ? detail.automation.access_mode
+          : DEFAULT_SCHEDULE_ACCESS_MODE,
         state: detail.automation.state,
         runs: runList.runs ?? [],
       });
@@ -119,8 +176,8 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
   // Save automation
   save: async (event, onSaved, onStatus) => {
     event.preventDefault();
-    const { automationId, isNew, title, promptBody, targetSessionId, intervalSeconds } = get();
-    set({ saving: true });
+    const { automationId, isNew, title, promptBody, targetSessionId, intervalSeconds, accessMode } = get();
+    set({ saving: true, saveError: null });
 
     try {
       const body = JSON.stringify({
@@ -128,6 +185,7 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
         prompt_body: promptBody,
         target_session_id: targetSessionId,
         interval_seconds: Number(intervalSeconds),
+        access_mode: accessMode,
       });
 
       if (isNew) {
@@ -141,9 +199,14 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
       await onSaved();
       onStatus({ label: "automation saved", tone: "ok" });
     } catch (error) {
-      notifyError(error, "Automation save failed", {
-        id: `automation-save-${automationId}`,
-      });
+      // A 400 is shown on its field; anything else stays a toast.
+      const saveError = automationSaveError(error);
+      if (saveError) set({ saveError });
+      else {
+        notifyError(error, appCopy.automations.saveFailed, {
+          id: `automation-save-${automationId}`,
+        });
+      }
       onStatus({ label: "ready", tone: "ok" });
     } finally {
       set({ saving: false });
