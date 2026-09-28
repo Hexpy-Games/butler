@@ -551,7 +551,7 @@ async function recoverUnexpectedForegroundExit() {
 
 // `butler stop` / `butler restart` (CLI or MCP) leave an intent that the
 // supervisor reads when the Agent exits; these keep App state in step with it.
-function handleIntentionalAgentExit({ reason }) {
+function handleIntentionalAgentExit({ reason, respawnBy }) {
   if (usesAppForegroundLifecycle && !isQuitting && foregroundInstance) {
     advanceForegroundInstance(
       reason === "stop" ? ["stopping", "stopped"] : ["degraded", "recovering"],
@@ -565,6 +565,20 @@ function handleIntentionalAgentExit({ reason }) {
     }
   }
   publishAgentState();
+  // `respawn_by: app`: the supervisor is starting the replacement now; join
+  // it so the foreground record reaches ready (no crash budget is spent).
+  if (reason === "restart" && respawnBy === "app") void finishAgentRespawn();
+}
+
+async function finishAgentRespawn() {
+  try {
+    await ensureServer();
+  } catch (error) {
+    console.error(error);
+    if (usesAppForegroundLifecycle && !isQuitting) advanceForegroundInstance(["failed"]);
+  } finally {
+    publishAgentState();
+  }
 }
 
 function handleExternalAgentAttach({ pid, port: attachedPort }) {
