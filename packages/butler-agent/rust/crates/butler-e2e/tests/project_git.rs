@@ -160,9 +160,9 @@ fn init_repository(folder: &Path) -> Result<(), HarnessError> {
 
 /// Writes an executable shell script: `lines`, one per line.
 fn script(path: &Path, lines: &[&str]) -> Result<(), HarnessError> {
-    use std::os::unix::fs::PermissionsExt;
     std::fs::write(path, format!("#!/bin/sh\n{}\n", lines.join("\n")))?;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))?;
+    butler_platform::launcher::mark_executable(path)
+        .expect("shell scripts run by name on this host")?;
     Ok(())
 }
 
