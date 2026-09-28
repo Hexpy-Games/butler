@@ -1,24 +1,86 @@
-/* 06 Iconography hero: the keyline lab left of the poster, the size ladder
-   field and the product grid. Canvas px (see ../shared/grid.ts). */
+/* 06 Iconography hero (v3 scenes). Canvas px (../shared/grid.ts). */
 
-/* ---- The keyline lab ---- */
+/* ---- Title: the o is a glyph's circle on its keyline ---- */
 
-.lab {
-  display: grid;
-  place-items: center;
+.titleWord {
+  display: inline-flex;
+  align-items: baseline;
 }
 
-.labStage {
+.titleO {
+  display: inline-block;
+  inline-size: 0.6em;
+  block-size: 0.6em;
+  margin-inline: 0.02em;
+}
+
+.titleO svg {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: visible;
+}
+
+.titleCircle {
+  fill: none;
+  stroke: currentcolor;
+  stroke-dasharray: 100;
+  stroke-width: 4.2;
+}
+
+.titleKey {
+  fill: none;
+  stroke: color-mix(in srgb, var(--accent) 70%, transparent);
+  stroke-width: 0.6;
+  opacity: 0;
+}
+
+/* ---- The keyline: grid, padding box, circle; notes on three sides ---- */
+
+.keyline {
   display: grid;
-  grid-template-columns: auto auto;
-  column-gap: var(--space-3xl);
-  align-items: center;
+  grid-template-areas:
+    ". top ."
+    ". box right"
+    ". bottom .";
+  grid-template-columns: 1fr auto 1fr;
+  place-items: center center;
+  gap: var(--space-lg) var(--space-xl);
+}
+
+.keyNote {
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
+}
+
+.keyNote[data-side="top"] {
+  grid-area: top;
+}
+
+.keyNote[data-side="right"] {
+  grid-area: right;
+  justify-self: start;
+}
+
+.keyNote[data-side="bottom"] {
+  grid-area: bottom;
 }
 
 .keyBox {
   position: relative;
+  grid-area: box;
   inline-size: calc(var(--icon-size-xl) * 8);
   block-size: calc(var(--icon-size-xl) * 8);
+}
+
+[data-layout="tall"] .keyline {
+  grid-template-areas:
+    "top ."
+    "box right"
+    "bottom .";
+  grid-template-columns: auto auto;
 }
 
 .keySvg,
@@ -52,99 +114,156 @@
   color: var(--text-primary);
 }
 
+.keyGlyph svg {
+  inline-size: 100%;
+  block-size: 100%;
+}
+
 /* Each stroke of the glyph draws along its length. */
-.keyGlyph path,
-.tone[data-tone="muted"] path {
+.keyGlyph path {
   stroke-dasharray: 80px 80px;
 }
 
-.keyNotes {
+/* ---- Grows with text ---- */
+
+.growStage {
   display: grid;
-  row-gap: var(--space-md);
-  color: var(--accent);
-  font: var(--font-code);
-  font-size: var(--typo-caption-size);
+  justify-items: center;
+  row-gap: var(--space-3xl);
 }
 
-/* ---- The field: the size ladder paired with type ---- */
-
-.field {
-  display: grid;
-  align-content: center;
-  row-gap: var(--space-md);
-  padding: var(--space-xl);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-popover);
-  background: var(--surface-raised);
-}
-
-.mode {
-  display: inline-grid;
-  margin-block-end: var(--space-sm);
-  color: var(--text-tertiary);
-  font: var(--font-code);
-  font-size: var(--typo-caption-size);
-}
-
-.modeLayer {
-  grid-area: 1 / 1;
-}
-
-/* The poster names the primary tone. */
-.modeLayer:not(:nth-child(2)) {
-  opacity: 0;
-}
-
-.row {
-  display: grid;
-  grid-template-columns: 7.5em minmax(0, 1fr) 2em;
-  column-gap: var(--space-md);
+.growRow {
+  position: relative;
+  display: flex;
   align-items: center;
-  min-block-size: var(--control-height-md);
+  gap: var(--space-sm);
+  min-inline-size: calc(var(--space-4xl) * 7);
+  block-size: calc(var(--space-4xl) * 1.5);
 }
 
-.token,
-.value {
+/* The centre line both share; it never moves. */
+.growLine,
+.centreLine {
+  position: absolute;
+  top: 50%;
+  right: calc(-1 * var(--space-xl));
+  left: calc(-1 * var(--space-xl));
+  block-size: 1px;
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.layers {
+  display: inline-grid;
+  place-items: center start;
+}
+
+.layer {
+  display: inline-flex;
+  grid-area: 1 / 1;
+  color: var(--text-primary);
+}
+
+.growRead {
+  display: grid;
+  justify-items: center;
+  row-gap: var(--space-xs);
+}
+
+.readRole {
   color: var(--text-secondary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+}
+
+.readToken {
+  color: var(--accent);
   font: var(--font-code);
   font-size: var(--typo-caption-size);
   white-space: nowrap;
 }
 
-.value {
-  color: var(--text-tertiary);
-  text-align: end;
+.bigValue {
+  color: var(--text-primary);
+  font-size: calc(var(--typo-h1-size) * 1.6);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-strong);
+  line-height: var(--line-height-none);
 }
 
-.pair {
+/* ---- The ladder ---- */
+
+.ladder {
+  display: grid;
+  row-gap: var(--space-lg);
+}
+
+.ladderRow {
   position: relative;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xl);
+}
+
+.pair {
+  display: inline-flex;
+  align-items: center;
   gap: var(--space-sm);
-  min-width: 0;
+  color: var(--text-primary);
 }
 
-.center {
-  position: absolute;
-  top: 50%;
-  right: 0;
-  left: calc(var(--space-xs) * -1);
-  block-size: 1px;
-  background: color-mix(in srgb, var(--accent) 50%, transparent);
-  transform-origin: 0 50%;
+.ladderName {
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
 }
 
-.iconBox {
+/* ---- In place: a sidebar block and a toolbar ---- */
+
+.sideBlock {
   position: relative;
   display: grid;
-  flex: none;
-  inline-size: var(--s);
-  block-size: var(--s);
-  outline: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+  row-gap: var(--space-md);
+  inline-size: calc(var(--space-4xl) * 6);
+}
+
+.toolbar {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.rows {
+  display: grid;
+  row-gap: var(--sidebar-row-spacing, var(--space-xs));
+}
+
+.rowWrap {
+  position: relative;
+  display: grid;
+}
+
+.hover {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-control);
+  background: var(
+    --hover-bg,
+    color-mix(in srgb, var(--text-primary) 7%, transparent)
+  );
+  opacity: 0;
+}
+
+.pop {
+  display: inline-grid;
+}
+
+.toned {
+  display: inline-grid;
 }
 
 .tone {
-  display: grid;
+  display: inline-grid;
   grid-area: 1 / 1;
   place-items: center;
 }
@@ -155,6 +274,7 @@
 
 .tone[data-tone="primary"] {
   color: var(--text-primary);
+  opacity: 0;
 }
 
 .tone[data-tone="accent"] {
@@ -162,100 +282,51 @@
   opacity: 0;
 }
 
-.text {
-  display: block;
-  min-width: 0;
+.sideTag {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + var(--space-xl));
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
   white-space: nowrap;
 }
 
-/* ---- Components and poster ---- */
-
-.buildRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
+[data-layout="tall"] .sideTag {
+  position: static;
 }
 
-.muted {
-  display: inline-grid;
-  color: var(--icon-muted);
+.cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  inline-size: var(--space-lg);
+  block-size: var(--space-xl);
+  overflow: visible;
+  fill: var(--text-primary);
+  stroke: var(--color-surface-base);
+  stroke-width: 1;
+  opacity: 0;
 }
 
-.menuRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  min-block-size: var(--control-height-md);
-  padding-inline: var(--space-sm);
+.placeStage {
+  padding-inline-end: calc(var(--space-4xl) * 5);
 }
 
-.product {
-  grid-template-areas:
-    "actions empty"
-    "labels empty"
-    "menu empty";
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-content: space-between;
-  gap: var(--space-xl) var(--grid-gutter);
+[data-layout="tall"] .placeStage {
+  padding-inline-end: 0;
 }
 
-[data-layout="tall"] .product {
-  grid-template-areas:
-    "actions"
-    "labels"
-    "empty"
-    "menu";
-  grid-template-columns: minmax(0, 1fr);
-  align-content: start;
-  row-gap: var(--space-lg);
+/* ---- Finale tiles ---- */
+
+.keyTile,
+.ladderTile,
+.sideTile,
+.emptyTile {
+  display: grid;
+  place-items: center;
 }
 
-[data-layout="tall"] .labStage {
-  grid-template-columns: auto;
-  row-gap: var(--space-3xl);
-  justify-items: center;
-}
-
-[data-layout="tall"] .keyNotes {
-  justify-items: center;
-  row-gap: var(--space-lg);
-  font-size: var(--typo-h5-size);
-}
-
-/* Tall: each size's token and value over its icon and word, so the ladder
-   fills the portrait frame and the words keep their full width. */
-[data-layout="tall"] [data-cell] .field {
-  row-gap: var(--space-lg);
-}
-
-[data-layout="tall"] [data-cell] .row {
-  grid-template-areas:
-    "token value"
-    "pair pair";
-  grid-template-columns: minmax(0, 1fr) auto;
-  row-gap: var(--space-xs);
-}
-
-[data-layout="tall"] [data-cell] .token {
-  grid-area: token;
-}
-
-[data-layout="tall"] [data-cell] .value {
-  grid-area: value;
-}
-
-[data-layout="tall"] [data-cell] .pair {
-  grid-area: pair;
-}
-
-/* Tall poster: a compact summary (each size's token, icon and value), so
-   the field and the components fit the portrait frame together. */
-[data-layout="tall"] [data-t="field-mover"] .text {
+.sideTile .sideTag {
   display: none;
-}
-
-/* The tall field scene (a prelude region) takes the portrait column's width. */
-[data-layout="tall"] [data-cell] > .field {
-  box-sizing: border-box;
-  inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
 }
