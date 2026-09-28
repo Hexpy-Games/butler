@@ -297,7 +297,7 @@ pub const SANITIZATION: &[&str] = &[
     "per-run values -> {{W}}, {{D}}, {{SANDBOX}}, scenario nonces",
     "JWT/sk-key/bearer/email/home path/host name -> fixed placeholders",
     "response.instructions -> {{REDACTED_ECHO}}, response.tools -> []",
-    "response headers reduced to content-type, retry-after",
+    "response headers reduced to content-type, retry-after and numeric quota headers",
     "chunks re-cut at SSE event boundaries (event bytes unchanged)",
 ];
 

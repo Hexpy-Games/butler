@@ -184,6 +184,7 @@ async fn guard_start_matches_openai_and_shared_carrier_admission_order() {
             guard_start: crate::models::transport::GuardStart::BeforeAdmission,
             request_observer: &ignore_request,
             clock: &clock,
+            quota: None,
         })
         .await
     });
@@ -216,6 +217,7 @@ async fn guard_start_matches_openai_and_shared_carrier_admission_order() {
             guard_start: crate::models::transport::GuardStart::AfterAdmission,
             request_observer: &ignore_request,
             clock: &clock,
+            quota: None,
         })
         .await
     });

@@ -50,6 +50,8 @@ pub(super) struct RequestExecution<'a> {
     pub guard_start: GuardStart,
     pub request_observer: &'a (dyn Fn() + Sync),
     pub clock: &'a dyn ProviderClock,
+    /// Receives subscription quota parsed from a successful response.
+    pub quota: Option<&'a dyn super::ProviderQuotaSink>,
 }
 
 pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelRoundError> {
@@ -68,6 +70,7 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
         guard_start,
         request_observer,
         clock,
+        quota,
     } = input;
     let guarded = run_guarded(
         external,
@@ -112,22 +115,13 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
                         diagnostics::network(provider, api, &error.to_string())
                     })?;
                     progress.record_progress();
-                    let response = checked(response, provider, api).await?;
+                    let response = checked(response, provider, api, (quota, clock)).await?;
                     match mode {
                         ResponseMode::Json { tolerate_invalid } => {
                             json(response, provider, api, tolerate_invalid).await
                         }
                         ResponseMode::HostedChatSse => {
-                            let is_sse = response
-                                .headers()
-                                .get("content-type")
-                                .and_then(|value| value.to_str().ok())
-                                .is_some_and(|value| value.to_ascii_lowercase().contains("text/event-stream"));
-                            if is_sse {
-                                sse::hosted_chat(response, provider, api, progress.clone()).await
-                            } else {
-                                json(response, provider, api, true).await
-                            }
+                            hosted_chat(response, provider, api, progress.clone()).await
                         }
                         ResponseMode::CodexSse => {
                             sse::codex(
@@ -203,6 +197,41 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
     }
 }
 
+/// Where a response's quota headers go, and the clock that dates them.
+type QuotaObserver<'a> = (
+    Option<&'a dyn super::ProviderQuotaSink>,
+    &'a dyn ProviderClock,
+);
+
+/// Reports a response's quota headers, if it carried any.
+fn observe_quota(response: &Response, provider: &str, (quota, clock): QuotaObserver<'_>) {
+    if let Some(sink) = quota
+        && let Some(reading) =
+            super::parse_quota_headers(provider, response.headers(), clock.now_epoch_millis())
+    {
+        sink.observe(reading);
+    }
+}
+
+/// A hosted chat reply: an SSE stream when the provider streamed, else JSON.
+async fn hosted_chat(
+    response: Response,
+    provider: &str,
+    api: &str,
+    progress: super::request_guard::RequestProgress,
+) -> Result<Value, Box<ProviderRequestError>> {
+    let is_sse = response
+        .headers()
+        .get("content-type")
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.to_ascii_lowercase().contains("text/event-stream"));
+    if is_sse {
+        sse::hosted_chat(response, provider, api, progress).await
+    } else {
+        json(response, provider, api, true).await
+    }
+}
+
 fn retry_delay_ms(base: f64, attempt: u32) -> f64 {
     let raw = base * 2_f64.powf(f64::from(attempt));
     let delay = if raw.is_nan() { 0.0 } else { raw.min(5_000.0) };
@@ -236,11 +265,18 @@ async fn json(
     }
 }
 
+/// The response when successful, else its provider error. Quota headers are
+/// read from successful and rate-limited (429) replies, so an exhausted plan
+/// shows at once.
 async fn checked(
     response: Response,
     provider: &str,
     api: &str,
+    quota: QuotaObserver<'_>,
 ) -> Result<Response, Box<ProviderRequestError>> {
+    if response.status().is_success() || response.status().as_u16() == 429 {
+        observe_quota(&response, provider, quota);
+    }
     if response.status().is_success() {
         return Ok(response);
     }

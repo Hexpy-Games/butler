@@ -5,6 +5,7 @@ mod contracts;
 mod prompt;
 mod redact;
 mod result;
+mod round_usage;
 mod serialize;
 mod visual;
 mod visual_capability;
