@@ -40,8 +40,17 @@ export function sourceLabel(
 
 export function quotaReasonLabel(
   code: ProviderQuotaReasonCode | undefined,
+  planKind?: ProviderQuotaResultView["planKind"],
 ): string {
   switch (code) {
+    case "provider_quota_pending":
+      return appCopy.interfaceStatus.quotaPending;
+    case "provider_quota_fetch_failed":
+      return appCopy.interfaceStatus.quotaFetchFailed;
+    case "provider_quota_not_offered":
+      return planKind === "api"
+        ? appCopy.interfaceStatus.quotaApiPlan
+        : appCopy.interfaceStatus.quotaUnsupported;
     case "provider_auth_not_applicable":
       return appCopy.interfaceStatus.authNotApplicable;
     case "provider_auth_required":
@@ -60,8 +69,6 @@ export function quotaReasonLabel(
       return appCopy.interfaceStatus.quotaFailure;
     case "provider_temporary_failure":
       return appCopy.interfaceStatus.quotaTemporary;
-    case "provider_quota_surface_unavailable":
-      return appCopy.interfaceStatus.quotaUnsupported;
     default:
       return appCopy.interfaceStatus.quotaUnknown;
   }

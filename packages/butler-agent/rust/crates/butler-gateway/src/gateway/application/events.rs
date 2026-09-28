@@ -45,6 +45,11 @@ impl EventSubscribers {
         })
     }
 
+    /// Live-stream listeners (connected App clients).
+    pub(super) fn listener_count(&self) -> usize {
+        self.inner.lock().listeners.len()
+    }
+
     pub(super) fn publish(&self, event: &AppEventEnvelope) {
         let (listeners, cursor_observer) = {
             let state = self.inner.lock();

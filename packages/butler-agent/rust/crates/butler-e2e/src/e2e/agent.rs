@@ -69,6 +69,10 @@ impl Launch {
                     "BUTLER_APP_LOCAL_AUTH_FILE".into(),
                     auth_file.display().to_string(),
                 ),
+                // Quota polling off: recordings hold only the requests their
+                // scenario makes. Quota scenarios turn it on
+                // (`Setup::quota_polling`).
+                ("BUTLER_PROVIDER_QUOTA_POLLING".into(), "0".into()),
             ],
             app_supervisor: false,
         })

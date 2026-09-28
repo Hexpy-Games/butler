@@ -126,6 +126,7 @@ impl GatewayApplication for TestApplication {
     fn get_provider_quota(
         &self,
         provider_id: String,
+        _refresh: bool,
     ) -> ApplicationFuture<butler_runtime::operations::ProviderQuotaView> {
         Box::pin(async move {
             Ok(butler_runtime::operations::unavailable_quota_view(
