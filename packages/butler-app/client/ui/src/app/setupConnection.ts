@@ -72,7 +72,8 @@ export function isMissingRoute(error: unknown): boolean {
     (error instanceof Error && /bridge is missing|Unsupported Butler app API route/u.test(error.message));
 }
 
-export type KeyCheckFailure = "invalid" | "noaccess" | "network" | "ratelimited" | "unavailable" | "unsupported" | "badrequest";
+export type KeyCheckFailure =
+  | "invalid" | "noaccess" | "network" | "ratelimited" | "unavailable" | "unsupported" | "badrequest" | "savefailed";
 
 const KEY_CHECK_FAILURES: Record<string, KeyCheckFailure> = {
   invalid_key: "invalid",
@@ -89,6 +90,11 @@ export function keyCheckFailure(code: string | undefined): KeyCheckFailure {
   return (code && KEY_CHECK_FAILURES[code]) || "unavailable";
 }
 
+/** A failed `POST /credentials`: a key check code (unknown provider), or "couldn't save" (500, rejected). */
+export function keySaveFailure(code: string | undefined): KeyCheckFailure {
+  return (code && KEY_CHECK_FAILURES[code]) || "savefailed";
+}
+
 export interface RoutinePreset {
   model: AppModelSummary;
   modelId: string;
@@ -100,10 +106,9 @@ const EVERYDAY_EFFORTS: readonly ReasoningEffort[] = ["medium", "low", "high", "
 
 /**
  * The provider's everyday default model. In order: the catalog's
- * `presets.routine` (catalog #278), the worker `routine_work` preset (the
- * catalog before #278), then the provider's recommended or latest model at
- * medium effort (the lowest step above none when medium is missing), never
- * xhigh or max.
+ * `presets.routine` (catalog #278), the worker `routine_work` preset, then the
+ * provider's balanced-tier, recommended or latest model at medium effort (the
+ * lowest step above none when medium is missing), never xhigh or max.
  */
 export function routinePreset(catalog: ModelCatalogView, providerId: string): RoutinePreset | null {
   const provider = catalog.providers.find((entry) => entry.provider_id === providerId);
@@ -114,7 +119,10 @@ export function routinePreset(catalog: ModelCatalogView, providerId: string): Ro
     const model = preset ? findModel(preset.model) : undefined;
     if (preset && model) return { model, modelId: model.model_id, modelRef: model.model_ref, effort: preset.effort };
   }
-  const model = provider.models.find((entry) => entry.status === "recommended") ?? findModel(provider.latest_model_ref) ?? provider.models[0];
+  const model = provider.models.find((entry) => entry.tier === "balanced")
+    ?? provider.models.find((entry) => entry.status === "recommended")
+    ?? findModel(provider.latest_model_ref)
+    ?? provider.models[0];
   if (!model) return null;
   const effort = EVERYDAY_EFFORTS.find((candidate) => model.reasoning_efforts.includes(candidate)) ?? "medium";
   return { model, modelId: model.model_id, modelRef: model.model_ref, effort };
@@ -137,12 +145,19 @@ export function defaultModelSettingsPatch(settings: SettingsView, model: AppMode
 }
 
 export type PendingConnection =
-  | { kind: "hosted"; cardId: FirstRunProviderCardId; providerId: string; authType: "api_key" | "codex_oauth"; credentialId?: string }
+  | {
+    kind: "hosted"; cardId: FirstRunProviderCardId; providerId: string; authType: "api_key" | "codex_oauth"; credentialId?: string;
+    /** Run setup again with the AI already in use: keep the chat model, effort and Workers. */
+    keepDefaults?: boolean;
+  }
   | { kind: "local"; cardId: FirstRunProviderCardId; option: LocalModelOption; apiKey?: string };
 
 const DEFAULT_LOCAL_CONTEXT_TOKENS = 16_384;
 
-async function registerConnectionModel(connection: PendingConnection): Promise<{ model: AppModelSummary; effort: ReasoningEffort; catalog: ModelCatalogView }> {
+async function registerConnectionModel(
+  connection: PendingConnection,
+  settings: SettingsView,
+): Promise<{ model: AppModelSummary; effort: ReasoningEffort; catalog: ModelCatalogView }> {
   if (connection.kind === "local") {
     const { option } = connection;
     const result = await api<LocalModelRegistrationResult>("/model-catalog/local-models", {
@@ -157,7 +172,12 @@ async function registerConnectionModel(connection: PendingConnection): Promise<{
     });
     return { model: result.model, effort: result.model.default_reasoning_effort, catalog: result.catalog };
   }
-  const preset = routinePreset(await api<ModelCatalogView>("/model-catalog"), connection.providerId);
+  const catalog = await api<ModelCatalogView>("/model-catalog");
+  const provider = catalog.providers.find((entry) => entry.provider_id === connection.providerId);
+  const inUse = connection.keepDefaults ? provider?.models.find((entry) => entry.model_ref === settings.model) : undefined;
+  const preset = inUse
+    ? { model: inUse, modelId: inUse.model_id, modelRef: inUse.model_ref, effort: settings.reasoning_effort }
+    : routinePreset(catalog, connection.providerId);
   if (!preset) throw Object.assign(new Error("no_usable_model"), { code: "no_usable_model" });
   const result = await api<HostedModelRegistrationResult>("/model-catalog/registered-models", {
     method: "POST",
@@ -180,11 +200,12 @@ export async function commitConnection({ connection, language, onboarding }: {
   onboarding: (current: OnboardingSettingsView | undefined) => OnboardingSettingsView;
 }): Promise<{ settings: SettingsView; catalog: ModelCatalogView; model: AppModelSummary }> {
   const settings = await api<SettingsView>("/settings");
-  const { model, effort, catalog } = await registerConnectionModel(connection);
+  const { model, effort, catalog } = await registerConnectionModel(connection, settings);
+  const keepDefaults = connection.kind === "hosted" && connection.keepDefaults === true;
   // An agent before #230 has no `onboarding` setting and rejects unknown fields.
   const patch = {
     language,
-    ...defaultModelSettingsPatch(settings, model, effort),
+    ...(keepDefaults ? {} : defaultModelSettingsPatch(settings, model, effort)),
     ...(settings.onboarding ? { onboarding: onboarding(settings.onboarding) } : {}),
   };
   const saved = await api<Partial<SettingsView>>("/settings", { method: "PATCH", body: JSON.stringify(patch) });

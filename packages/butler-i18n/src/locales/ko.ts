@@ -79,6 +79,9 @@ const firstRun = {
       model_config_unreadable: "모델 설정을 읽을 수 없습니다.",
       agent_runtime_not_ready: "Butler가 시작을 마치지 못했습니다.",
       agent_runtime_unreadable: "Butler가 시작을 마치지 못했습니다.",
+      data_folder_timed_out: "데이터 폴더를 확인하는 데 너무 오래 걸렸습니다.",
+      model_config_timed_out: "모델 설정을 읽는 데 너무 오래 걸렸습니다.",
+      agent_runtime_timed_out: "Butler를 시작하는 데 너무 오래 걸렸습니다.",
     },
     prepSteps: {
       agent_service: "Butler Agent 서비스",
@@ -154,6 +157,7 @@ const firstRun = {
       unavailable: "서비스가 응답하지 않습니다. 잠시 후 다시 시도하세요.",
       unsupported: "이 서비스의 키는 아직 확인할 수 없습니다.",
       badrequest: "키를 확인하지 못했습니다. 다시 붙여 넣으세요.",
+      savefailed: "키를 저장하지 못했습니다. 다시 시도하세요.",
     },
     keySaved: "저장했습니다",
     keyFailedShort: "키를 확인하지 못했습니다",

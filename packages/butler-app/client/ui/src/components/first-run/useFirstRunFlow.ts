@@ -62,7 +62,9 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
     onDone: (connection) => onComplete({ cardId: connection.cardId }),
   });
   const signIn = useSignIn({
-    onSignedIn: () => commit.submit({ kind: "hosted", cardId: "chatgpt", providerId: "openai", authType: "codex_oauth" }),
+    onSignedIn: () => commit.submit({
+      kind: "hosted", cardId: "chatgpt", providerId: "openai", authType: "codex_oauth", keepDefaults: current === "chatgpt",
+    }),
   });
 
   useEffect(() => {
@@ -124,7 +126,11 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
     backToWelcome: () => setScreen("welcome"),
     showCustomModels: (options: LocalModelOption[], apiKey?: string) => setView({ kind: "customModels", options, apiKey }),
     connectKey: (cardId: FirstRunProviderCardId, credentialId: string) =>
-      commit.submit({ kind: "hosted", cardId, providerId: PROVIDER_CARDS[cardId].providerId ?? cardId, authType: "api_key", credentialId }),
+      commit.submit({
+        kind: "hosted", cardId, providerId: PROVIDER_CARDS[cardId].providerId ?? cardId, authType: "api_key", credentialId,
+        // Routine presets are for a new AI; the AI already in use keeps its model and effort.
+        keepDefaults: current === cardId,
+      }),
     connectLocal: (cardId: FirstRunProviderCardId, option: LocalModelOption, apiKey?: string) =>
       commit.submit({ kind: "local", cardId, option, apiKey }),
   };

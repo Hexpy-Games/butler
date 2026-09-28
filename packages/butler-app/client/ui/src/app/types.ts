@@ -82,6 +82,8 @@ export interface AppModelSummary {
   model_ref: string;
   display_name: string;
   status: "latest" | "recommended" | "available" | "deprecated";
+  /** #278: the model's place in its provider's lineup. */
+  tier?: "flagship" | "balanced" | "efficient";
   context_window_tokens?: number;
   max_output_tokens?: number;
   default_reasoning_effort: ReasoningEffort;

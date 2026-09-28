@@ -41,6 +41,12 @@ interface HarnessOptions {
   verified?: boolean;
   /** `created` of `POST /credentials` (false: the same key was already saved). */
   created?: boolean;
+  /** Failure envelope of `POST /credentials` (after a passed check). */
+  saveError?: { code: string; status: number };
+  /** No desktop preparation (the app served by the agent in a browser). */
+  noDesktopSetup?: boolean;
+  /** Status `POST /setup/oauth/{flow_id}/cancel` answers (`completed` once the code exchange finished). */
+  cancelStatus?: string;
   /** ChatGPT sign-in: the agent's #279 routes, or the desktop helper for an older agent. */
   oauth?: { backend?: "agent" | "desktop"; start: Record<string, unknown>; statuses?: Array<Record<string, unknown>> };
   settings?: Partial<SettingsView>;
@@ -148,6 +154,7 @@ async function renderFirstRun(options: HarnessOptions = {}): Promise<Harness> {
     },
     saveCredential: async (input: { provider_id: string }) => {
       record("saveCredential", input);
+      if (options.saveError) return { ok: false, error: { schema: "butler.app.bridge-error.v1", ...options.saveError } };
       const credential = { id: "cred-new", label: input.provider_id, provider_id: input.provider_id, auth_type: "api_key", masked_value: "sk-...al" };
       return { ok: true, data: { credential, created: options.created ?? true } };
     },
@@ -210,9 +217,10 @@ async function renderFirstRun(options: HarnessOptions = {}): Promise<Harness> {
     };
     bridge.cancelSetupOAuth = async (input: { flowId: string }) => {
       record("cancelSetupOAuth", input);
-      return { ok: true, data: { flow_id: input.flowId, status: "cancelled" } };
+      return { ok: true, data: { flow_id: input.flowId, status: options.cancelStatus ?? "cancelled" } };
     };
   }
+  if (options.noDesktopSetup) delete bridge.startSetup;
   Object.assign(dom.window, { butlerApp: bridge });
 
   const container = dom.window.document.getElementById("root")!;
@@ -686,5 +694,79 @@ test("a first run marks no card as current", async () => {
   await agree(harness);
   await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="claude"]')), "claude card");
   expect(harness.container.querySelector('[aria-current="true"]')).toBeNull();
+  await unmount(harness);
+});
+
+test("a cancel that lands after the code exchange answers completed and continues as signed in", async () => {
+  const pending = { flow_id: "oauth_3", status: "pending", auth_url: "https://auth.openai.com/z" };
+  const harness = await renderFirstRun({ oauth: { start: pending, statuses: [pending] }, cancelStatus: "completed" });
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="chatgpt"]')), "chatgpt card");
+  await click(harness, card(harness, "chatgpt"));
+  await waitFor(() => text(harness).includes("브라우저에서 로그인하세요"), "waiting");
+  await click(harness, "취소");
+  await waitFor(() => harness.results.length === 1, "completion after late cancel");
+  expect(methods(harness, "registerHostedModel")[0]!.input).toMatchObject({ provider_id: "openai", auth_type: "codex_oauth" });
+  expect(text(harness)).not.toContain("로그인이 취소되었습니다");
+  await unmount(harness);
+});
+
+test("a key that passed the check but could not be saved says so and keeps the key", async () => {
+  const harness = await renderFirstRun({ saveError: { code: "internal_error", status: 500 } });
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="claude"]')), "claude card");
+  await click(harness, card(harness, "claude"));
+  const input = harness.container.querySelector<HTMLInputElement>("#first-run-api-key")!;
+  await type(harness, input, "sk-ant-api03-savefail");
+  await waitFor(() => text(harness).includes("키를 저장하지 못했습니다."), "save failure");
+  expect(input.value).toBe("sk-ant-api03-savefail");
+  expect(Boolean(buttonByText(harness.container, "다시 시도"))).toBe(true);
+  expect(harness.results).toEqual([]);
+  await unmount(harness);
+});
+
+test("Run setup again with the same AI keeps the existing model defaults", async () => {
+  const connected: AppModelSummary = { ...opus, registered: true, auth_type: "api_key" };
+  const harness = await renderFirstRun({
+    mode: "rerun",
+    settings: { language: "ko", model: connected.model_ref, reasoning_effort: "high", onboarding: { consent_version: FIRST_RUN_CONSENT_VERSION, completed_at: "c" } },
+    storeCatalog: catalog([connected]),
+  });
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="claude"]')), "claude card");
+  await click(harness, card(harness, "claude"));
+  await type(harness, harness.container.querySelector<HTMLInputElement>("#first-run-api-key")!, "sk-ant-api03-rotated");
+  await waitFor(() => harness.results.length === 1, "completion");
+  // The new key goes to the model already in use; the chat default, effort and Workers stay.
+  expect(methods(harness, "registerHostedModel")[0]!.input).toMatchObject({ model_id: "claude-opus-5-5", credential_id: "cred-new" });
+  const patch = methods(harness, "updateSettings").at(-1)!.input as Record<string, unknown>;
+  expect(patch).not.toHaveProperty("model");
+  expect(patch).not.toHaveProperty("reasoning_effort");
+  expect(patch).not.toHaveProperty("worker_profiles");
+  expect(patch.onboarding).toMatchObject({ consent_version: FIRST_RUN_CONSENT_VERSION });
+  await unmount(harness);
+});
+
+test("Run setup again with a new AI applies that service's routine preset", async () => {
+  const connected: AppModelSummary = { ...opus, registered: true, auth_type: "api_key" };
+  const harness = await renderFirstRun({
+    mode: "rerun",
+    settings: { language: "ko", model: connected.model_ref, onboarding: { consent_version: FIRST_RUN_CONSENT_VERSION, completed_at: "c" } },
+    storeCatalog: catalog([connected]),
+    oauth: { start: { flow_id: "oauth_4", status: "profile_exists" } },
+  });
+  await agree(harness);
+  await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="chatgpt"]')), "chatgpt card");
+  await click(harness, card(harness, "chatgpt"));
+  await waitFor(() => harness.results.length === 1, "completion");
+  expect(methods(harness, "updateSettings").at(-1)!.input).toMatchObject({ model: "openai/gpt-6-sol", reasoning_effort: "medium" });
+  await unmount(harness);
+});
+
+test("without a desktop preparation route (the app in a browser), the agent's readiness alone decides", async () => {
+  const harness = await renderFirstRun({ noDesktopSetup: true, readiness: [{ status: "ready", steps: [] }] });
+  await waitFor(() => text(harness).includes("준비됨"), "ready");
+  expect(harness.container.querySelector('[data-test-class="first-run-prep-failed"]')).toBeNull();
+  expect(methods(harness, "getSetupReadiness").length).toBeGreaterThan(0);
   await unmount(harness);
 });

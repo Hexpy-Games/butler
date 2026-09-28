@@ -64,7 +64,7 @@ interface FirstRunCopy {
   keyHint: string;
   keyValid: string;
   /** Key check failures by #279 error code group. */
-  keyErrors: Record<"invalid" | "noaccess" | "network" | "ratelimited" | "unavailable" | "unsupported" | "badrequest", string>;
+  keyErrors: Record<"invalid" | "noaccess" | "network" | "ratelimited" | "unavailable" | "unsupported" | "badrequest" | "savefailed", string>;
   /** Saved, but the service has no model list to check it against. */
   keySaved: string;
   keyFailedShort: string;

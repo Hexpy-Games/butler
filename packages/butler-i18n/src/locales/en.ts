@@ -79,6 +79,9 @@ const firstRun = {
       model_config_unreadable: "Butler can't read its model settings.",
       agent_runtime_not_ready: "Butler didn't finish starting.",
       agent_runtime_unreadable: "Butler didn't finish starting.",
+      data_folder_timed_out: "Checking the data folder took too long.",
+      model_config_timed_out: "Reading the model settings took too long.",
+      agent_runtime_timed_out: "Butler took too long to start.",
     },
     prepSteps: {
       agent_service: "Butler Agent service",
@@ -154,6 +157,7 @@ const firstRun = {
       unavailable: "The service isn't responding. Try again later.",
       unsupported: "Butler can't check keys for this service yet.",
       badrequest: "Couldn't check this key. Paste it again.",
+      savefailed: "Couldn't save the key. Try again.",
     },
     keySaved: "Saved",
     keyFailedShort: "Key didn't work",

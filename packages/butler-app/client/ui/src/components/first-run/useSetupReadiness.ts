@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiErrorCode, subscribeLiveEvents } from "@/app/api.ts";
 import { startFirstRunSetup } from "@/app/firstRunSetup.ts";
-import { fetchSetupReadiness, retrySetupReadiness } from "@/app/setupConnection.ts";
+import { fetchSetupReadiness, isMissingRoute, retrySetupReadiness } from "@/app/setupConnection.ts";
 import {
   combineReadiness,
   readinessFromEvent,
@@ -38,7 +38,9 @@ export function useSetupReadiness(): SetupReadinessController {
       if (cancelled || status.phase === "cancelled") return;
       setLocal(status.phase === "ready" ? { phase: "ready" } : { phase: "failed", error_code: status.error_code });
     }).catch((error: unknown) => {
-      if (!cancelled) setLocal({ phase: "failed", error_code: apiErrorCode(error) });
+      if (cancelled) return;
+      // In a browser the agent serves the app itself: there is no desktop preparation to run.
+      setLocal(isMissingRoute(error) ? { phase: "ready" } : { phase: "failed", error_code: apiErrorCode(error) });
     });
     return () => {
       cancelled = true;

@@ -85,7 +85,13 @@ export function useSignIn({ onSignedIn }: { onSignedIn: () => void }) {
   async function cancel(): Promise<void> {
     run.current += 1;
     setPhase("cancelled");
-    if (session) await cancelSignIn(session).catch(() => undefined);
+    if (!session) return;
+    const result = await cancelSignIn(session).catch(() => undefined);
+    // A cancel that lands after the code exchange answers `completed`: the sign-in went through.
+    if (result && SIGNED_IN.has(result.status)) {
+      setPhase("idle");
+      signedIn.current();
+    }
   }
 
   async function copyLink(): Promise<void> {

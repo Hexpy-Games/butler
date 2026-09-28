@@ -36,14 +36,15 @@ export async function signInStatus(session: SignInSession): Promise<OpenAIOAuthL
   return await api<OpenAIOAuthLoginResult>(`/setup/oauth/${encodeURIComponent(session.view.flow_id)}`);
 }
 
-/** Closes the flow's callback listener and drops its state. */
-export async function cancelSignIn(session: SignInSession): Promise<void> {
+/**
+ * Closes the flow's callback listener and drops its state. Answers the flow:
+ * `cancelled`, or `completed` when the code exchange had already finished.
+ */
+export async function cancelSignIn(session: SignInSession): Promise<OpenAIOAuthLoginResult | undefined> {
   const flowId = session.view.flow_id;
-  if (session.backend === "desktop") {
-    await cancelOpenAIOAuthLogin(flowId);
-    return;
-  }
-  if (flowId) await api(`/setup/oauth/${encodeURIComponent(flowId)}/cancel`, { method: "POST", body: JSON.stringify({}) });
+  if (session.backend === "desktop") return await cancelOpenAIOAuthLogin(flowId);
+  if (!flowId) return undefined;
+  return await api<OpenAIOAuthLoginResult>(`/setup/oauth/${encodeURIComponent(flowId)}/cancel`, { method: "POST", body: JSON.stringify({}) });
 }
 
 /** Opens the sign-in page in the system browser (Electron routes window.open there). */

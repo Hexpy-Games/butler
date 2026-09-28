@@ -33,6 +33,8 @@ export type NativeAppServerOptions = {
   readyTimeoutMs?: number;
   /** Exact renderer origins (`http://127.0.0.1:<port>`, no trailing slash) serving the UI from elsewhere. */
   devOrigins?: string[];
+  /** Extra agent environment (e.g. local sign-in and local-server probe addresses). */
+  env?: Record<string, string>;
 };
 
 /** A Playwright BrowserContext (or anything with its `addCookies`). */
@@ -334,6 +336,7 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
         BUTLER_APP_SERVER_PORT: String(port),
         BUTLER_METRICS_ENABLED: "0",
         ...(options.devOrigins?.length ? { BUTLER_APP_DEV_ORIGIN: options.devOrigins.join(",") } : {}),
+        ...options.env,
       },
     },
   );

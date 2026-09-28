@@ -67,7 +67,11 @@ test("readiness payloads are validated, and failures resolve to a plain reason c
   });
   expect(readinessFailureCode(normalizeReadiness(agentFailed)!)).toBe("data_folder_unwritable");
   const en = getAppCopy("en-US").firstRun;
-  for (const code of ["data_folder_unwritable", "model_config_unreadable", "agent_runtime_not_ready", "agent_runtime_unreadable"]) {
+  // Each step also has its own timeout, `<step>_timed_out`.
+  for (const code of [
+    "data_folder_unwritable", "model_config_unreadable", "agent_runtime_not_ready", "agent_runtime_unreadable",
+    "data_folder_timed_out", "model_config_timed_out", "agent_runtime_timed_out",
+  ]) {
     expect(en.prepReasons[code]).toBeTruthy();
   }
   for (const id of ["data_folder", "model_config", "agent_runtime"]) expect(en.prepSteps[id]).toBeTruthy();
@@ -150,6 +154,11 @@ test("the default model is the provider's routine preset from the backend, never
   const recommended = catalogWith({});
   recommended.providers[0]!.models[1] = { ...recommended.providers[0]!.models[1]!, status: "recommended" };
   expect(routinePreset(recommended, "openai")).toMatchObject({ modelId: "gpt-6-sol", effort: "medium" });
+  // #278 tiers: a balanced-tier model is the everyday fallback before "recommended".
+  const tiered = catalogWith({});
+  tiered.providers[0]!.models[0] = { ...tiered.providers[0]!.models[0]!, status: "recommended", tier: "flagship" };
+  tiered.providers[0]!.models[1] = { ...tiered.providers[0]!.models[1]!, tier: "balanced" };
+  expect(routinePreset(tiered, "openai")).toMatchObject({ modelId: "gpt-6-sol", effort: "medium" });
   const noMedium = catalogWith({});
   noMedium.providers[0]!.models[0] = { ...noMedium.providers[0]!.models[0]!, reasoning_efforts: ["low", "high", "xhigh"] };
   expect(routinePreset(noMedium, "openai")).toMatchObject({ modelId: "gpt-6-astra", effort: "low" });
@@ -172,7 +181,7 @@ test("key check failures map every #279 error code to its own plain message", ()
   expect(keyCheckFailure("request_failed")).toBe("unavailable");
   const en = getAppCopy("en-US").firstRun;
   const ko = getAppCopy("ko-KR").firstRun;
-  for (const failure of ["invalid", "noaccess", "network", "ratelimited", "unavailable", "unsupported", "badrequest"] as const) {
+  for (const failure of ["invalid", "noaccess", "network", "ratelimited", "unavailable", "unsupported", "badrequest", "savefailed"] as const) {
     expect(en.keyErrors[failure]).toBeTruthy();
     expect(ko.keyErrors[failure]).toBeTruthy();
   }
