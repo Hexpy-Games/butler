@@ -4,9 +4,8 @@ mod policy;
 mod repair;
 mod request;
 
-pub(in crate::cognition) use policy::ProjectionModelPolicy;
-pub use policy::ProjectionModelPolicyInput;
-pub(in crate::cognition) use repair::CandidateInputRepairResult;
+pub use policy::{ProjectionModelPolicy, ProjectionModelPolicyInput, ProjectionModelSlot};
+pub use repair::{CandidateInputRepairResult, RepairMode, RepairReceipt};
 pub(in crate::cognition) use request::CandidateInputRepairRequest;
 
 use crate::cognition::CognitionCode;
@@ -30,17 +29,19 @@ impl super::GraphRepository {
         canonical: &ConversationSourceReader,
         source_root: &Path,
         request: &CandidateInputRepairRequest,
-        dry_run: bool,
+        mode: RepairMode,
         now: &str,
     ) -> CognitionResult<CandidateInputRepairResult> {
         repair::repair_candidate_inputs(
             self.connection_mut()?,
-            current_generation,
-            canonical,
-            source_root,
+            &repair::RepairScope {
+                current_generation,
+                canonical,
+                source_root,
+                mode,
+                now,
+            },
             request,
-            dry_run,
-            now,
         )
     }
 }

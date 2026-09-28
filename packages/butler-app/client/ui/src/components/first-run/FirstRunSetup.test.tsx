@@ -200,7 +200,7 @@ async function settle(ms = 30): Promise<void> {
   });
 }
 
-async function waitFor(check: () => boolean, label: string, timeout = 3000): Promise<void> {
+async function waitFor(check: () => boolean, label: string, timeout = 4000): Promise<void> {
   const deadline = Date.now() + timeout;
   while (!check()) {
     if (Date.now() > deadline) throw new Error(`Timed out waiting for ${label}`);

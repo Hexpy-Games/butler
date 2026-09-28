@@ -1,0 +1,275 @@
+[
+  {
+    "ok": true,
+    "status": "partial",
+    "results": [
+      {
+        "conversation_session_id": "session",
+        "conversation_message_id": "request",
+        "source_ref": "conversation-source:v2:cmVxdWVzdA:Y3BfMw:L3RleHQ:9253693062b47f53bfce52f41401532a4654f7789f432fd3b991e7b4b2a1c48f",
+        "read_args": {
+          "scope": "current_project",
+          "source_ref": "conversation-source:v2:cmVxdWVzdA:Y3BfMw:L3RleHQ:9253693062b47f53bfce52f41401532a4654f7789f432fd3b991e7b4b2a1c48f",
+          "max_chars": 4000
+        },
+        "created_at": "2026-09-14T00:00:01.000Z",
+        "speaker": "user",
+        "excerpt": "Straße remembers the Deploy key",
+        "source": "conversation-store"
+      }
+    ],
+    "returned": 1,
+    "total_matches": null,
+    "count_status": "partial",
+    "next_cursor": "eyJzY2hlbWEiOiJidXRsZXIucXVlcnktbWVtb3J5LWN1cnNvci52MiIsImZpbHRlcl9oYXNoIjoiNTJmOTNjNjg2MzE1ZGQ1ODNiZDJmMjM0OWVlMTYzNWVhZDUyYTAzYWI3NTE4MWQ4MjcxOTVhNGRhNDM1YzViYiIsInJldmlzaW9uIjozLCJjcmVhdGVkX2F0IjoiMjAyNi0wOS0xNFQwMDowMDowMS4wMDBaIiwibWVzc2FnZV9pZCI6InJlcXVlc3QiLCJtYXRjaF9jb3VudCI6MX0",
+    "diagnostics": [
+      "scan_continues"
+    ]
+  },
+  {
+    "ok": true,
+    "status": "complete",
+    "results": [
+      {
+        "conversation_session_id": "session",
+        "conversation_message_id": "assistant",
+        "source_ref": "conversation-source:v2:YXNzaXN0YW50:Y3BfNQ:L3RleHQ:948d1f3c677f54f7cf5310d692032440f357a18c0d4928a0d2427e3b5e350f11",
+        "read_args": {
+          "scope": "current_project",
+          "source_ref": "conversation-source:v2:YXNzaXN0YW50:Y3BfNQ:L3RleHQ:948d1f3c677f54f7cf5310d692032440f357a18c0d4928a0d2427e3b5e350f11",
+          "max_chars": 4000
+        },
+        "created_at": "2026-09-14T00:00:02.000Z",
+        "speaker": "butler",
+        "excerpt": "Public answer about deploy",
+        "source": "conversation-store"
+      }
+    ],
+    "returned": 1,
+    "total_matches": 2,
+    "count_status": "complete",
+    "next_cursor": null,
+    "diagnostics": []
+  },
+  {
+    "ok": true,
+    "status": "complete",
+    "results": [
+      {
+        "conversation_session_id": "session",
+        "conversation_message_id": "request",
+        "source_ref": "conversation-source:v2:cmVxdWVzdA:Y3BfMw:L3RleHQ:9253693062b47f53bfce52f41401532a4654f7789f432fd3b991e7b4b2a1c48f",
+        "read_args": {
+          "scope": "current_project",
+          "source_ref": "conversation-source:v2:cmVxdWVzdA:Y3BfMw:L3RleHQ:9253693062b47f53bfce52f41401532a4654f7789f432fd3b991e7b4b2a1c48f",
+          "max_chars": 4000
+        },
+        "created_at": "2026-09-14T00:00:01.000Z",
+        "speaker": "user",
+        "excerpt": "Straße remembers the Deploy key",
+        "source": "conversation-store"
+      }
+    ],
+    "returned": 1,
+    "total_matches": 1,
+    "count_status": "complete",
+    "next_cursor": null,
+    "diagnostics": []
+  },
+  {
+    "ok": true,
+    "status": "complete",
+    "results": [
+      {
+        "conversation_session_id": "session",
+        "conversation_message_id": "request",
+        "source_ref": "conversation-source:v2:cmVxdWVzdA:Y3BfMw:L3RleHQ:9253693062b47f53bfce52f41401532a4654f7789f432fd3b991e7b4b2a1c48f",
+        "read_args": {
+          "scope": "current_project",
+          "source_ref": "conversation-source:v2:cmVxdWVzdA:Y3BfMw:L3RleHQ:9253693062b47f53bfce52f41401532a4654f7789f432fd3b991e7b4b2a1c48f",
+          "max_chars": 4000
+        },
+        "created_at": "2026-09-14T00:00:01.000Z",
+        "speaker": "user",
+        "excerpt": "Straße remembers the Deploy key",
+        "source": "conversation-store"
+      }
+    ],
+    "returned": 1,
+    "total_matches": 1,
+    "count_status": "complete",
+    "next_cursor": null,
+    "diagnostics": []
+  },
+  {
+    "ok": true,
+    "status": "complete",
+    "results": [
+      {
+        "conversation_session_id": "session",
+        "conversation_message_id": "request",
+        "source_ref": "conversation-source:v2:cmVxdWVzdA:Y3BfMw:L3RleHQ:9253693062b47f53bfce52f41401532a4654f7789f432fd3b991e7b4b2a1c48f",
+        "read_args": {
+          "scope": "current_session",
+          "source_ref": "conversation-source:v2:cmVxdWVzdA:Y3BfMw:L3RleHQ:9253693062b47f53bfce52f41401532a4654f7789f432fd3b991e7b4b2a1c48f",
+          "max_chars": 4000,
+          "session_ids": [
+            "session"
+          ]
+        },
+        "created_at": "2026-09-14T00:00:01.000Z",
+        "speaker": "user",
+        "excerpt": "Straße remembers the Deploy key",
+        "source": "conversation-store"
+      }
+    ],
+    "returned": 1,
+    "total_matches": 1,
+    "count_status": "complete",
+    "next_cursor": null,
+    "diagnostics": []
+  },
+  {
+    "ok": true,
+    "status": "complete",
+    "results": [
+      {
+        "conversation_session_id": "session",
+        "conversation_message_id": "assistant",
+        "source_ref": "conversation-source:v2:YXNzaXN0YW50:Y3BfNQ:L3RleHQ:948d1f3c677f54f7cf5310d692032440f357a18c0d4928a0d2427e3b5e350f11",
+        "read_args": {
+          "scope": "current_project",
+          "source_ref": "conversation-source:v2:YXNzaXN0YW50:Y3BfNQ:L3RleHQ:948d1f3c677f54f7cf5310d692032440f357a18c0d4928a0d2427e3b5e350f11",
+          "max_chars": 4000,
+          "project_filter": "selected",
+          "project_ids": [
+            "project"
+          ],
+          "include_internal": true
+        },
+        "created_at": "2026-09-14T00:00:02.000Z",
+        "speaker": "butler",
+        "excerpt": "Public answer about deploy",
+        "source": "conversation-store"
+      }
+    ],
+    "returned": 1,
+    "total_matches": 1,
+    "count_status": "complete",
+    "next_cursor": null,
+    "diagnostics": []
+  },
+  {
+    "ok": true,
+    "status": "complete",
+    "results": [
+      {
+        "conversation_session_id": "session",
+        "conversation_message_id": "assistant",
+        "source_ref": "conversation-source:v2:YXNzaXN0YW50:Y3BfNQ:L3RleHQ:948d1f3c677f54f7cf5310d692032440f357a18c0d4928a0d2427e3b5e350f11",
+        "read_args": {
+          "scope": "current_project",
+          "source_ref": "conversation-source:v2:YXNzaXN0YW50:Y3BfNQ:L3RleHQ:948d1f3c677f54f7cf5310d692032440f357a18c0d4928a0d2427e3b5e350f11",
+          "max_chars": 4000
+        },
+        "created_at": "2026-09-14T00:00:02.000Z",
+        "speaker": "butler",
+        "excerpt": "Public answer about deploy",
+        "source": "conversation-store"
+      }
+    ],
+    "returned": 1,
+    "total_matches": 1,
+    "count_status": "complete",
+    "next_cursor": null,
+    "diagnostics": []
+  },
+  {
+    "ok": false,
+    "code": "invalid_arguments",
+    "diagnostics": [
+      "invalid_limit"
+    ]
+  },
+  {
+    "ok": false,
+    "code": "invalid_arguments",
+    "diagnostics": [
+      "query_terms_conflict"
+    ]
+  },
+  {
+    "ok": false,
+    "code": "invalid_arguments",
+    "diagnostics": [
+      "terms_required"
+    ]
+  },
+  {
+    "ok": false,
+    "code": "invalid_arguments",
+    "diagnostics": [
+      "contradictory_role_filter"
+    ]
+  },
+  {
+    "ok": false,
+    "code": "invalid_arguments",
+    "diagnostics": [
+      "invalid_time"
+    ]
+  },
+  {
+    "ok": false,
+    "code": "invalid_arguments",
+    "diagnostics": [
+      "invalid_string"
+    ]
+  },
+  {
+    "ok": false,
+    "code": "invalid_arguments",
+    "diagnostics": [
+      "invalid_cursor"
+    ]
+  },
+  {
+    "ok": true,
+    "status": "complete",
+    "results": [
+      {
+        "conversation_session_id": "session",
+        "conversation_message_id": "request",
+        "source_ref": "conversation-source:v2:cmVxdWVzdA:Y3BfMw:L3RleHQ:9253693062b47f53bfce52f41401532a4654f7789f432fd3b991e7b4b2a1c48f",
+        "read_args": {
+          "scope": "current_project",
+          "source_ref": "conversation-source:v2:cmVxdWVzdA:Y3BfMw:L3RleHQ:9253693062b47f53bfce52f41401532a4654f7789f432fd3b991e7b4b2a1c48f",
+          "max_chars": 4000
+        },
+        "created_at": "2026-09-14T00:00:01.000Z",
+        "speaker": "user",
+        "excerpt": "Straße remembers the Deploy key",
+        "source": "conversation-store"
+      },
+      {
+        "conversation_session_id": "session",
+        "conversation_message_id": "assistant",
+        "source_ref": "conversation-source:v2:YXNzaXN0YW50:Y3BfNQ:L3RleHQ:948d1f3c677f54f7cf5310d692032440f357a18c0d4928a0d2427e3b5e350f11",
+        "read_args": {
+          "scope": "current_project",
+          "source_ref": "conversation-source:v2:YXNzaXN0YW50:Y3BfNQ:L3RleHQ:948d1f3c677f54f7cf5310d692032440f357a18c0d4928a0d2427e3b5e350f11",
+          "max_chars": 4000
+        },
+        "created_at": "2026-09-14T00:00:02.000Z",
+        "speaker": "butler",
+        "excerpt": "Public answer about deploy",
+        "source": "conversation-store"
+      }
+    ],
+    "returned": 2,
+    "total_matches": 2,
+    "count_status": "complete",
+    "next_cursor": null,
+    "diagnostics": []
+  }
+]

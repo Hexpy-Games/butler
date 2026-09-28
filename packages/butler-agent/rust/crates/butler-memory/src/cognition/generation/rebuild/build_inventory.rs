@@ -1,10 +1,8 @@
 //! Verify and enumerate the immutable prepare snapshot before any build work.
 
 use crate::cognition::CognitionCode;
-use std::{fs, path::Path};
+use std::path::Path;
 
-use serde::Deserialize;
-use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
 use crate::cognition::{
@@ -13,7 +11,8 @@ use crate::cognition::{
 
 use super::inventory;
 
-#[derive(Clone, Deserialize)]
+/// A typed source the build registers, in UTF-16 key order.
+#[derive(Clone)]
 pub struct BuildTypedRecord {
     pub source_kind: String,
     pub record_id: String,
@@ -22,9 +21,9 @@ pub struct BuildTypedRecord {
     pub content_hash: String,
 }
 
-#[derive(Clone, Deserialize)]
+/// A conversation episode the build registers.
+#[derive(Clone)]
 pub struct BuildConversationRecord {
-    #[serde(rename = "episodeId")]
     pub episode_id: String,
     pub revision: String,
 }
@@ -34,12 +33,17 @@ impl BuildTypedRecord {
     }
 }
 
+/// The sources a rebuild must register, from its stored inventory.
 pub struct BuildInventory {
+    /// Typed records.
     pub typed: Vec<BuildTypedRecord>,
+    /// Conversation sources.
     pub conversations: Vec<BuildConversationRecord>,
+    /// Sources the rebuild must end with.
     pub expected_source_count: usize,
 }
 
+/// Reads the stored inventory of the rebuild candidate and checks it against the snapshot.
 pub fn read(
     data_root: &Path,
     handle: &crate::cognition::MemoryGenerationHandle,
@@ -58,40 +62,46 @@ pub fn read(
         data_root,
         &[&handle.source_root, canonical, &stored_path, &manifest_path],
     )?;
-    let stored: Value = serde_json::from_slice(
-        &fs::read(&stored_path)
-            .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?,
-    )
-    .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
-    if stored["schema"] != "butler.memory-source-inventory.v1" {
-        return Err(error(CognitionCode::MemorySnapshotChanged));
-    }
-    let as_of = stored["as_of"]
-        .as_str()
-        .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
-    let actual = inventory::read(&handle.source_root, canonical, as_of, cancellation)?;
-    let manifest: Value = serde_json::from_slice(
-        &fs::read(&manifest_path)
-            .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?,
-    )
-    .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
-    if actual.value != stored || manifest["source_inventory_hash"] != actual.hash {
+    let stored = inventory::MemorySourceInventory::read(&stored_path)?;
+    let actual = inventory::read(&handle.source_root, canonical, &stored.as_of, cancellation)?;
+    let manifest = crate::cognition::generation::manifest::GenerationManifest::read(
+        &manifest_path,
+        CognitionCode::MemorySnapshotChanged,
+    )?;
+    if actual.inventory != stored
+        || manifest.source_inventory_hash.as_deref() != Some(actual.hash.as_str())
+    {
         return Err(error(CognitionCode::MemorySourceChanged));
     }
-    let mut typed = serde_json::from_value::<Vec<BuildTypedRecord>>(stored["typed"].clone())
-        .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
-    let conversations =
-        serde_json::from_value::<Vec<BuildConversationRecord>>(stored["entries"].clone())
-            .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
+    let mut typed = stored
+        .typed
+        .into_iter()
+        .map(|entry| BuildTypedRecord {
+            source_kind: entry.source_kind,
+            record_id: entry.record_id,
+            revision: entry.revision,
+            operation_id: entry.operation_id,
+            content_hash: entry.content_hash,
+        })
+        .collect::<Vec<_>>();
+    let conversations = stored
+        .entries
+        .into_iter()
+        .map(|entry| BuildConversationRecord {
+            episode_id: entry.episode_id,
+            revision: entry.revision,
+        })
+        .collect();
     typed.sort_by(|left, right| {
         let left_key = left.source_key();
         let right_key = right.source_key();
         left_key.encode_utf16().cmp(right_key.encode_utf16())
     });
-    for pair in typed.windows(2) {
-        if pair[0].source_key() == pair[1].source_key() {
-            return Err(error(CognitionCode::MemorySnapshotChanged));
-        }
+    if typed
+        .windows(2)
+        .any(|pair| matches!(pair, [left, right] if left.source_key() == right.source_key()))
+    {
+        return Err(error(CognitionCode::MemorySnapshotChanged));
     }
     Ok(BuildInventory {
         typed,
@@ -100,6 +110,7 @@ pub fn read(
     })
 }
 
+/// Checks every inventoried source is registered in the candidate graph.
 pub fn assert_registered(
     handle: &crate::cognition::MemoryGenerationHandle,
     inventory: &BuildInventory,
@@ -136,6 +147,7 @@ pub fn assert_registered(
     })
 }
 
+/// The candidate's typed registration cursor for the snapshot.
 pub fn typed_cursor(
     handle: &crate::cognition::MemoryGenerationHandle,
     snapshot_id: &str,

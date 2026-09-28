@@ -138,7 +138,8 @@ test("scroll-fade stylesheet drives per-edge masks from the edge attributes", ()
     "packages/butler-app/client/ui/src/libs/design-system/tokens.css",
     "utf8",
   );
-  expect(tokens.trimStart().startsWith('@import url("./scroll-fade.css");')).toBe(true);
+  // scroll-fade.css is among the leading @imports (fonts.css precedes it).
+  expect(tokens.trimStart()).toMatch(/^(?:@import url\("[^"]+"\);\s*)*@import url\("\.\/scroll-fade\.css"\);/u);
   expect(css).toContain('[data-scroll-fade="x"]');
   expect(css).toContain('[data-scroll-fade="y"]');
   expect(css).toContain('[data-overflowing="true"]:not([data-at-start="true"])');

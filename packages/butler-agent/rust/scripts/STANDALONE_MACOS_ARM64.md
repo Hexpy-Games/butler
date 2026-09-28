@@ -50,7 +50,9 @@ installation step; Butler does not replace the running package or claim
 managed rollback.
 
 Linux standalone native releases have not been validated and are not a current
-release target.
+release target. The Agent already accepts a `linux` `x64`/`arm64` installation
+manifest on a matching host (see `native-agent-install-manifest.schema.json`),
+but no packager produces one yet; Windows installations are rejected.
 
 The release smoke rejects unsafe or duplicate tar entries, checks the archive
 and both manifest digests and identities, then installs into a temporary

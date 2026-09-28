@@ -51,7 +51,7 @@ async fn canonical_discovery_claim_provider_and_commit_share_durable_coverage() 
     assert_eq!(result.coverage_complete_count, Some(1));
     assert_eq!(result.coverage_pending_count, Some(0));
     assert_eq!(result.coverage_failed_count, Some(0));
-    let db = storage::open(&root.0, false).unwrap();
+    let db = storage::open(&root.0, storage::Access::Read).unwrap();
     let candidate_count: i64 = db
         .query_row("SELECT COUNT(*) FROM profile_candidates", [], |row| {
             row.get(0)

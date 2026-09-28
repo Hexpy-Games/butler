@@ -22,6 +22,7 @@ for (let index = 0; index < 45; index++) {
 const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage({ viewport: { width: 1200, height: 550 } });
+  await server.signIn(page);
   await page.addInitScript(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), {
     key: FIRST_RUN_STORAGE_KEY, value: legacyFirstRunCompleteRecord(),
   });

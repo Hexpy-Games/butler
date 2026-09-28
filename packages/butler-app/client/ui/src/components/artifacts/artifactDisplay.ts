@@ -1,7 +1,7 @@
 import { relativeAge } from "@/app/utils.ts";
 import type { SessionArtifactSummary } from "@/app/types.ts";
+import { absoluteGatewayUrl, messageFileSource } from "@/app/messageFileUrls.ts";
 
-const MESSAGE_FILE_URL_PATTERN = /^\/message-files\/file-[0-9a-f-]{36}$/iu;
 const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"];
 const TEXT_EXTENSIONS = [
   ".csv",
@@ -35,14 +35,12 @@ export type ArtifactPreviewMode =
   | "text"
   | "unsupported";
 
+/** Absolute URL for the artifact's file (signed when known), if it has one. */
 export function artifactUrl(
   artifact: SessionArtifactSummary,
 ): string | undefined {
-  if (!artifact.url || !MESSAGE_FILE_URL_PATTERN.test(artifact.url))
-    return undefined;
-  const serverUrl =
-    typeof window !== "undefined" ? window.butlerApp?.serverUrl : undefined;
-  return serverUrl ? new URL(artifact.url, serverUrl).toString() : artifact.url;
+  const source = messageFileSource(artifact);
+  return source ? absoluteGatewayUrl(source) : undefined;
 }
 
 export function artifactDescription(artifact: SessionArtifactSummary): string {

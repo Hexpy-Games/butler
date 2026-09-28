@@ -1,6 +1,10 @@
 use rusqlite::{Connection, OptionalExtension};
 
 use super::migrate;
+use crate::gateway::application::settings::{
+    access_mode_name, conversation_access_mode, default_access_mode,
+};
+use butler_turn::btcc::AccessMode;
 
 #[test]
 fn fresh_schema_has_full_support_and_functional_message_fts() {
@@ -145,6 +149,111 @@ fn deployed_schema_adds_columns_without_removing_unknown_data() {
         "session_queued_messages",
         "project_source_refs_json"
     ));
+}
+
+/// Persisted-format pin (#236, #237): an App database from before ask-first
+/// resolves an unsaved access mode to full access, the default it ran with,
+/// in its conversations and in the schedules the migration fills alike. A
+/// saved mode is kept, and the recorded default is never rewritten.
+#[test]
+fn an_existing_install_keeps_full_access_until_it_saves_a_mode() {
+    let mut connection = Connection::open_in_memory().unwrap();
+    migrate(&mut connection, None).unwrap();
+    // A database from before this release has no recorded default.
+    connection
+        .execute(
+            "DELETE FROM app_settings WHERE key='default-access-mode'",
+            [],
+        )
+        .unwrap();
+    schedule(&connection, "explicit");
+    schedule(&connection, "unset");
+    connection
+        .execute_batch(
+            "INSERT INTO app_settings VALUES('session-controls-explicit:explicit','true','now');\
+             INSERT INTO app_settings VALUES('session-controls:explicit','{\"access_mode\":\"read_only\"}','now');\
+             INSERT INTO app_settings VALUES('settings','{\"language\":\"en\"}','now');",
+        )
+        .unwrap();
+    migrate(&mut connection, None).unwrap();
+    assert_eq!(
+        default_access_mode(&connection).unwrap(),
+        AccessMode::FullAccess
+    );
+    assert_eq!(schedule_access(&connection, "explicit"), "read_only");
+    assert_eq!(schedule_access(&connection, "unset"), "full_access");
+    for chat in ["explicit", "unset"] {
+        let conversation = conversation_access_mode(&connection, chat).unwrap();
+        assert_eq!(
+            schedule_access(&connection, chat),
+            access_mode_name(&conversation)
+        );
+    }
+
+    schedule(&connection, "global");
+    connection
+        .execute(
+            "UPDATE app_settings SET value_json='{\"access_mode\":\"ask_first\"}' WHERE key='settings'",
+            [],
+        )
+        .unwrap();
+    migrate(&mut connection, None).unwrap();
+    assert_eq!(schedule_access(&connection, "global"), "ask_first");
+    assert_eq!(
+        schedule_access(&connection, "unset"),
+        "full_access",
+        "rewritten"
+    );
+    assert_eq!(
+        default_access_mode(&connection).unwrap(),
+        AccessMode::FullAccess
+    );
+}
+
+/// Persisted-format pin (#236): a new App database resolves an unsaved access
+/// mode to ask first, and a later start keeps that.
+#[test]
+fn a_new_install_asks_first_until_it_saves_a_mode() {
+    let mut connection = Connection::open_in_memory().unwrap();
+    migrate(&mut connection, None).unwrap();
+    assert_eq!(
+        default_access_mode(&connection).unwrap(),
+        AccessMode::AskFirst
+    );
+    schedule(&connection, "unset");
+    migrate(&mut connection, None).unwrap();
+    assert_eq!(
+        default_access_mode(&connection).unwrap(),
+        AccessMode::AskFirst
+    );
+    assert_eq!(schedule_access(&connection, "unset"), "ask_first");
+    assert_eq!(
+        conversation_access_mode(&connection, "unset").unwrap(),
+        AccessMode::AskFirst
+    );
+}
+
+/// Stores chat `id` and an hourly schedule into it without an access mode,
+/// as a schedule from before #237.
+fn schedule(connection: &Connection, id: &str) {
+    connection
+        .execute_batch(&format!(
+            "INSERT INTO chats(id,title,kind,created_at,updated_at) VALUES('{id}','t','chat','now','now');\
+             INSERT INTO app_automations(id,title,prompt_body,target_kind,target_session_id,\
+               interval_seconds,access_mode,state,last_run_state,created_at,updated_at) \
+             VALUES('schedule-{id}','t','p','chat','{id}',3600,NULL,'enabled','never_run','now','now');"
+        ))
+        .unwrap();
+}
+
+fn schedule_access(connection: &Connection, id: &str) -> String {
+    connection
+        .query_row(
+            "SELECT access_mode FROM app_automations WHERE id=?1",
+            [format!("schedule-{id}")],
+            |row| row.get::<_, String>(0),
+        )
+        .unwrap()
 }
 
 fn table_exists(connection: &Connection, table: &str) -> bool {

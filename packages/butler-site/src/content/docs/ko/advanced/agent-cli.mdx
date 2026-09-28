@@ -195,13 +195,15 @@ butler config validate
 
 | 분류 | 명령 |
 | --- | --- |
-| [예약 작업](/help/scheduled-tasks/) | `butler automation list`, `butler automation show ID`, `butler automation run ID`, `butler automation delete ID` |
+| [예약 작업](/help/scheduled-tasks/) | `butler schedule list`, `butler schedule show ID`, `butler schedule run ID`, `butler schedule delete ID --yes` |
 | 스킬 | `butler skills list`, `butler skills inspect NAME`, `butler skills import PATH`, `butler skills validate PATH` |
 | [외부 MCP 서버](/help/extensions/mcp-servers/) 등록 | `butler mcp list`, `butler mcp add`, `butler mcp enable ID`, `butler mcp disable ID`, `butler mcp delete ID --yes`, `butler mcp test ID` |
 | [Butler를 MCP 서버로 실행](/help/advanced/mcp-server/) | `butler mcp serve` |
 | 웹 검색과 읽기 | `butler search status`, `butler search test QUERY`, `butler web read URL` |
 | [개인화](/help/personalization/) | `butler personalization show`, `butler personalization get KEY`, `butler personalization set KEY VALUE` |
 | 기억 관리 | `butler cognition ...` 아래의 고급 명령입니다. `butler help cognition`으로 목록을 확인합니다. |
+
+`butler schedule list`는 `--status STATUS`로 상태별로 거르고, `--include-deleted`를 붙이면 삭제한 예약 작업도 보여 줍니다. 이전 명령 `butler automation`도 같은 동작을 하지만 도움말에는 나오지 않으며, 실행할 때마다 `butler schedule`을 쓰라는 안내를 한 줄 출력합니다.
 
 외부 MCP 서버는 옵션으로 등록합니다. 연결 방식(`--transport`)은 `stdio`, `http`, `sse` 중 하나이며 기본값은 `stdio`입니다.
 

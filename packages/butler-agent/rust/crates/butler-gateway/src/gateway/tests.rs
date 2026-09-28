@@ -9,7 +9,6 @@ use tokio::{
 use super::*;
 
 mod artifact_session;
-mod dev_cors;
 mod http_limits;
 mod session_queue;
 mod support;
@@ -63,7 +62,7 @@ async fn authenticated_message_route_preserves_validation_and_deferred_admission
 
     let malformed = request(
         server.local_addr(),
-        "POST /messages HTTP/1.1\r\nhost: localhost\r\nauthorization: Bearer secret\r\ncontent-length: 1\r\nconnection: close\r\n\r\n{",
+        "POST /messages HTTP/1.1\r\nhost: localhost\r\nauthorization: Bearer secret\r\ncontent-type: application/json\r\ncontent-length: 1\r\nconnection: close\r\n\r\n{",
     )
     .await;
     assert!(malformed.starts_with("HTTP/1.1 400 Bad Request"));
@@ -150,8 +149,12 @@ async fn live_events_reconcile_overflow_and_unregister_on_disconnect() {
         .store(true, std::sync::atomic::Ordering::SeqCst);
     let server = start(application.clone(), LocalAuthConfig::default()).await;
     let mut stream = TcpStream::connect(server.local_addr()).await.unwrap();
+    let port = server.local_addr().port();
     stream
-        .write_all(b"GET /events/live?cursor=0 HTTP/1.1\r\nhost: localhost\r\n\r\n")
+        .write_all(
+            format!("GET /events/live?cursor=0 HTTP/1.1\r\nhost: localhost:{port}\r\n\r\n")
+                .as_bytes(),
+        )
         .await
         .unwrap();
 

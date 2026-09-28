@@ -1,3 +1,5 @@
+//! Paths inside the Cognition Box, checked to stay under the box root.
+
 use std::{
     fs::{self, File},
     path::{Component, Path, PathBuf},

@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use serde_json::Value;
+use serde::Deserialize;
 
 use super::error;
 use crate::cognition::{CognitionCode, CognitionResult};
@@ -24,91 +24,70 @@ pub(in crate::cognition) struct CandidateInputRepairRequest {
     pub(in crate::cognition) windows: Vec<CandidateInputRepairExpected>,
 }
 
+/// The request file as written by the operator; every field is required
+/// except `candidate_source_sha256`, and no other field is allowed.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WireRequest {
+    schema: String,
+    windows: Vec<WireWindow>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WireWindow {
+    window_ref: String,
+    expected_input_sha256: String,
+    expected_attempt_count: f64,
+    #[serde(default, deserialize_with = "crate::lenient::present")]
+    candidate_source_sha256: Option<String>,
+}
+
 impl CandidateInputRepairRequest {
     pub(in crate::cognition) fn parse(bytes: &[u8]) -> CognitionResult<Self> {
         if bytes.len() > MAX_REPAIR_REQUEST_BYTES {
-            return Err(error(CognitionCode::MemoryInputRepairInvalidRequest));
+            return Err(invalid());
         }
-        let value: Value = serde_json::from_slice(bytes).map_err(|source| {
-            error(CognitionCode::MemoryInputRepairInvalidRequest).with_source(source)
-        })?;
-        let object = value
-            .as_object()
-            .filter(|object| {
-                object.len() == 2 && object.contains_key("schema") && object.contains_key("windows")
-            })
-            .ok_or_else(|| error(CognitionCode::MemoryInputRepairInvalidRequest))?;
-        if object.get("schema").and_then(Value::as_str) != Some(INPUT_REPAIR_SCHEMA) {
-            return Err(error(CognitionCode::MemoryInputRepairInvalidRequest));
+        let wire: WireRequest =
+            serde_json::from_slice(bytes).map_err(|source| invalid().with_source(source))?;
+        if wire.schema != INPUT_REPAIR_SCHEMA
+            || wire.windows.is_empty()
+            || wire.windows.len() > MAX_REPAIR_WINDOWS
+        {
+            return Err(invalid());
         }
-        let rows = object
-            .get("windows")
-            .and_then(Value::as_array)
-            .filter(|rows| !rows.is_empty() && rows.len() <= MAX_REPAIR_WINDOWS)
-            .ok_or_else(|| error(CognitionCode::MemoryInputRepairInvalidRequest))?;
-        let mut windows = Vec::with_capacity(rows.len());
-        let mut seen = HashSet::with_capacity(rows.len());
-        for row in rows {
-            let fields = row
-                .as_object()
-                .filter(|fields| {
-                    fields.keys().all(|key| {
-                        matches!(
-                            key.as_str(),
-                            "window_ref"
-                                | "expected_input_sha256"
-                                | "expected_attempt_count"
-                                | "candidate_source_sha256"
-                        )
-                    }) && [
-                        "window_ref",
-                        "expected_input_sha256",
-                        "expected_attempt_count",
-                    ]
-                    .iter()
-                    .all(|key| fields.contains_key(*key))
-                })
-                .ok_or_else(|| error(CognitionCode::MemoryInputRepairInvalidRequest))?;
-            let window_ref = required_sha(fields.get("window_ref"))?;
-            let expected_input_sha256 = required_sha(fields.get("expected_input_sha256"))?;
-            let expected_attempt_count = safe_attempt_count(fields.get("expected_attempt_count"))?;
-            let candidate_source_sha256 = match fields.get("candidate_source_sha256") {
-                None => None,
-                Some(value) => Some(required_sha(Some(value))?),
+        let mut windows = Vec::with_capacity(wire.windows.len());
+        let mut seen = HashSet::with_capacity(wire.windows.len());
+        for row in wire.windows {
+            let window = CandidateInputRepairExpected {
+                window_ref: sha(row.window_ref)?,
+                expected_input_sha256: sha(row.expected_input_sha256)?,
+                expected_attempt_count: attempt_count(row.expected_attempt_count)?,
+                candidate_source_sha256: row.candidate_source_sha256.map(sha).transpose()?,
             };
-            if !seen.insert(window_ref.clone()) {
-                return Err(error(CognitionCode::MemoryInputRepairInvalidRequest));
+            if !seen.insert(window.window_ref.clone()) {
+                return Err(invalid());
             }
-            windows.push(CandidateInputRepairExpected {
-                window_ref,
-                expected_input_sha256,
-                expected_attempt_count,
-                candidate_source_sha256,
-            });
+            windows.push(window);
         }
         Ok(Self { windows })
     }
 }
 
-fn required_sha(value: Option<&Value>) -> CognitionResult<String> {
-    let value = value
-        .and_then(Value::as_str)
-        .ok_or_else(|| error(CognitionCode::MemoryInputRepairInvalidRequest))?;
-    if !valid_sha(value) {
-        return Err(error(CognitionCode::MemoryInputRepairInvalidRequest));
+fn sha(value: String) -> CognitionResult<String> {
+    if valid_sha(&value) {
+        Ok(value)
+    } else {
+        Err(invalid())
     }
-    Ok(value.to_owned())
 }
 
-fn safe_attempt_count(value: Option<&Value>) -> CognitionResult<i64> {
-    let Some(number) = value.and_then(Value::as_f64) else {
-        return Err(error(CognitionCode::MemoryInputRepairInvalidRequest));
-    };
+fn attempt_count(number: f64) -> CognitionResult<i64> {
     if !number.is_finite()
         || number.fract() != 0.0
         || !(0.0..=9_007_199_254_740_991.0).contains(&number)
     {
-        return Err(error(CognitionCode::MemoryInputRepairInvalidRequest));
+        return Err(invalid());
     }
     Ok(butler_core::json::saturating_i64(number))
 }
@@ -118,4 +97,8 @@ fn valid_sha(value: &str) -> bool {
         && value
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+fn invalid() -> crate::cognition::CognitionError {
+    error(CognitionCode::MemoryInputRepairInvalidRequest)
 }

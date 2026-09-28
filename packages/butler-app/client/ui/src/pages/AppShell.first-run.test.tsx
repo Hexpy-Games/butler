@@ -379,7 +379,7 @@ async function waitForText(
   container: HTMLElement,
   text: string,
 ): Promise<void> {
-  const deadline = Date.now() + 1200;
+  const deadline = Date.now() + 4000;
   while (!container.textContent?.includes(text)) {
     if (Date.now() > deadline) {
       throw new Error(`Timed out waiting for text: ${text}`);

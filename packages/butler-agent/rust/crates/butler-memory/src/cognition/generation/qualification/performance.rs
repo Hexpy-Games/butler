@@ -1,3 +1,5 @@
+//! Validating the recall performance evidence of a qualification.
+
 use std::collections::{HashMap, HashSet};
 
 use crate::cognition::CognitionResult;
@@ -15,6 +17,8 @@ use super::{
 };
 use crate::cognition::CognitionCode;
 
+/// Validates the performance report: 12 queries x 5 repetitions per mode,
+/// the declared p95 latencies, per-sample artifacts, and contention.
 pub(super) fn validate_performance(
     acceptance: &Acceptance,
     capture: &mut CaptureStore,
@@ -29,31 +33,13 @@ pub(super) fn validate_performance(
         || !io::safe_ref(&performance.report_ref)
         || !valid_sha(&performance.report_sha256)
     {
-        return Err(invalid(CognitionCode::MemoryAcceptancePerformanceInvalid));
+        return Err(performance_invalid());
     }
-
     let report: PerformanceReport =
         capture.read_json(&performance.report_ref, &performance.report_sha256)?;
-    let graph = report
-        .samples
-        .iter()
-        .filter(|sample| sample.mode == "graph")
-        .collect::<Vec<_>>();
-    let hybrid = report
-        .samples
-        .iter()
-        .filter(|sample| sample.mode == "hybrid")
-        .collect::<Vec<_>>();
-    let Some(first_case) = acceptance.cases.first() else {
-        return Err(invalid(CognitionCode::MemoryAcceptancePerformanceInvalid));
-    };
-    let first_trace: super::types::CaseTrace =
-        capture.read_json(&first_case.trace_ref, &first_case.trace_sha256)?;
-    let inventory: serde_json::Value = capture.read_json(
-        &first_trace.qualification_source_inventory_ref,
-        &first_trace.qualification_source_inventory_sha256,
-    )?;
-
+    let graph = samples_in_mode(&report, "graph");
+    let hybrid = samples_in_mode(&report, "hybrid");
+    let inventory = qualification_inventory(acceptance, capture)?;
     if report.schema != "butler.memory-recovery-performance.v1"
         || report.execution.generation_id != acceptance.verification_generation_id
         || report.execution.implementation_commit != acceptance.implementation_commit
@@ -62,30 +48,19 @@ pub(super) fn validate_performance(
             != acceptance.verification_source_inventory_hash
         || graph.len() != 60
         || hybrid.len() != 60
-        || source::memory_inventory_hash(&inventory)?
-            != acceptance.verification_source_inventory_hash
+        || inventory.hash()? != acceptance.verification_source_inventory_hash
     {
-        return Err(invalid(CognitionCode::MemoryAcceptancePerformanceInvalid));
+        return Err(performance_invalid());
     }
-
-    for sample in &report.samples {
-        if !valid_performance_sample(sample) {
-            return Err(invalid(CognitionCode::MemoryAcceptancePerformanceInvalid));
-        }
-        let artifacts_valid = valid_performance_artifacts(
-            sample,
-            &report.execution.generation_id,
-            &acceptance.verification_source_inventory_hash,
-            &inventory,
-            capture,
+    validate_samples(acceptance, &report, &inventory, capture)?;
+    let p95 = |samples: &[&PerformanceSample]| {
+        percentile95(
+            &samples
+                .iter()
+                .map(|sample| sample.elapsed_ms)
+                .collect::<Vec<_>>(),
         )
-        .map_err(|source| {
-            invalid(CognitionCode::MemoryAcceptancePerformanceInvalid).with_source(source)
-        })?;
-        if !artifacts_valid {
-            return Err(invalid(CognitionCode::MemoryAcceptancePerformanceInvalid));
-        }
-    }
+    };
     if !valid_twelve_by_five(&graph)
         || !valid_twelve_by_five(&hybrid)
         || report
@@ -96,23 +71,66 @@ pub(super) fn validate_performance(
             .len()
             != 120
         || !same_performance_queries(&graph, &hybrid)
-        || percentile95(
-            &graph
-                .iter()
-                .map(|sample| sample.elapsed_ms)
-                .collect::<Vec<_>>(),
-        ) != performance.prepared_graph_p95_ms
-        || percentile95(
-            &hybrid
-                .iter()
-                .map(|sample| sample.elapsed_ms)
-                .collect::<Vec<_>>(),
-        ) != performance.prepared_hybrid_p95_ms
+        || p95(&graph) != performance.prepared_graph_p95_ms
+        || p95(&hybrid) != performance.prepared_hybrid_p95_ms
         || !valid_contention_evidence(&report.contention, capture, &report.samples)?
     {
-        return Err(invalid(CognitionCode::MemoryAcceptancePerformanceInvalid));
+        return Err(performance_invalid());
     }
     Ok(())
+}
+
+fn samples_in_mode<'a>(report: &'a PerformanceReport, mode: &str) -> Vec<&'a PerformanceSample> {
+    report
+        .samples
+        .iter()
+        .filter(|sample| sample.mode == mode)
+        .collect()
+}
+
+/// The final inventory named by the first case's trace.
+fn qualification_inventory(
+    acceptance: &Acceptance,
+    capture: &mut CaptureStore,
+) -> CognitionResult<source::EvidenceInventory> {
+    let Some(first_case) = acceptance.cases.first() else {
+        return Err(performance_invalid());
+    };
+    let first_trace: super::types::CaseTrace =
+        capture.read_json(&first_case.trace_ref, &first_case.trace_sha256)?;
+    capture.read_json(
+        &first_trace.qualification_source_inventory_ref,
+        &first_trace.qualification_source_inventory_sha256,
+    )
+}
+
+fn validate_samples(
+    acceptance: &Acceptance,
+    report: &PerformanceReport,
+    inventory: &source::EvidenceInventory,
+    capture: &mut CaptureStore,
+) -> CognitionResult<()> {
+    for sample in &report.samples {
+        if !valid_performance_sample(sample) {
+            return Err(performance_invalid());
+        }
+        let artifacts_valid = valid_performance_artifacts(
+            sample,
+            &report.execution.generation_id,
+            &acceptance.verification_source_inventory_hash,
+            inventory,
+            capture,
+        )
+        .map_err(|source| performance_invalid().with_source(source))?;
+        if !artifacts_valid {
+            return Err(performance_invalid());
+        }
+    }
+    Ok(())
+}
+
+fn performance_invalid() -> crate::cognition::CognitionError {
+    invalid(CognitionCode::MemoryAcceptancePerformanceInvalid)
 }
 
 fn valid_performance_sample(sample: &PerformanceSample) -> bool {
@@ -159,7 +177,7 @@ fn valid_performance_artifacts(
     sample: &PerformanceSample,
     generation_id: &str,
     inventory_hash: &str,
-    inventory: &serde_json::Value,
+    inventory: &source::EvidenceInventory,
     capture: &mut CaptureStore,
 ) -> CognitionResult<bool> {
     let result: QueryResult = capture.read_json(&sample.result_ref, &sample.result_sha256)?;
@@ -250,8 +268,11 @@ fn percentile95(values: &[f64]) -> f64 {
     }
     let mut sorted = values.to_vec();
     sorted.sort_by(f64::total_cmp);
-    let index = butler_core::json::saturating_usize((sorted.len() as f64 * 0.95).ceil()) - 1;
-    sorted[index]
+    let rank = butler_core::json::saturating_usize((sorted.len() as f64 * 0.95).ceil());
+    sorted
+        .get(rank.saturating_sub(1))
+        .copied()
+        .unwrap_or(f64::NAN)
 }
 
 fn valid_contention_evidence(

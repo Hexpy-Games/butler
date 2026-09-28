@@ -61,11 +61,11 @@ pub(super) fn raw_excerpt(text: &str, phrases: &[String], limit: usize) -> Strin
         .saturating_sub(limit / 4)
         .min(segments.len() - limit);
     let end = start + limit;
-    text[segments[start].start
-        ..segments
-            .get(end)
-            .map_or(text.len(), |segment| segment.start)]
-        .into()
+    let begin = segments.get(start).map_or(0, |segment| segment.start);
+    let finish = segments
+        .get(end)
+        .map_or(text.len(), |segment| segment.start);
+    text.get(begin..finish).unwrap_or_default().into()
 }
 
 fn source_query_terms(phrases: &[String]) -> Vec<String> {

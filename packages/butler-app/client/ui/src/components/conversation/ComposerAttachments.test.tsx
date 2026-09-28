@@ -53,6 +53,24 @@ test("maps image attachments to safe thumbnails and ordinary files to icons", as
   await act(async () => root.unmount());
 });
 
+test("image thumbnails and links use the upload's signed URL", async () => {
+  const dom = installDom();
+  Object.assign(dom.window, { butlerApp: { serverUrl: "http://127.0.0.1:18765" } });
+  const container = dom.window.document.querySelector("#root")!;
+  const signedUrl = `${IMAGE_URL}?expires=1900000000&signature=${"s".repeat(43)}`;
+  const attachment = composerAttachment("image", "screenshot.png", IMAGE_URL, "image");
+  useComposerStore.getState().setSnapshot({
+    attachments: [{ ...attachment, file: { ...attachment.file, signed_url: signedUrl } }],
+  });
+  const root = createRoot(container);
+  await act(async () => root.render(<ComposerAttachments />));
+
+  const absolute = `http://127.0.0.1:18765${signedUrl}`;
+  expect(container.querySelector("img")?.getAttribute("src")).toBe(absolute);
+  expect(container.querySelector("a")?.getAttribute("href")).toBe(absolute);
+  await act(async () => root.unmount());
+});
+
 function composerAttachment(
   id: string,
   safeName: string,

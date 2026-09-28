@@ -4,6 +4,8 @@
  * intentionally absent: this page scrolls normally on an explicit background.
  */
 @import url("./tokens.css");
+/* The app's bundled Pretendard Variable and IBM Plex Mono (official files, OFL 1.1). */
+@import url("../../../butler-app/client/ui/src/libs/design-system/fonts/fonts.css");
 @import url("./scroll-fade.css");
 
 *,

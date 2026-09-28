@@ -261,6 +261,28 @@ async fn status_value(
     Ok(view)
 }
 
+/// The App gateway URL of the ready service that owns `data_root`, if any.
+/// A service that is still starting is waited for, up to `patience`.
+pub(crate) async fn running_app_endpoint(
+    data_root: &std::path::Path,
+    installation: &ResolvedInstallation,
+    patience: std::time::Duration,
+) -> Result<Option<String>, crate::host::HostError> {
+    let deadline = std::time::Instant::now() + patience;
+    loop {
+        let Some(record) = control::verified_instance(data_root, installation)? else {
+            return Ok(None);
+        };
+        if record.state == "ready" || std::time::Instant::now() >= deadline {
+            return Ok((record.state == "ready" && record.app_enabled)
+                .then_some(record.app_endpoint)
+                .flatten()
+                .filter(|endpoint| !endpoint.is_empty()));
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+}
+
 async fn start_service(
     installation: &ResolvedInstallation,
     data_root: &std::path::Path,
@@ -282,7 +304,9 @@ async fn start_service(
     }
 }
 
-fn resolve_data(
+/// The data folder `--data`, `BUTLER_DATA` or `~/.butler` names, validated
+/// against the installation.
+pub(crate) fn resolve_data(
     explicit: Option<&str>,
     installation: &ResolvedInstallation,
 ) -> Result<PathBuf, crate::host::HostError> {

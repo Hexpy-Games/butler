@@ -1,3 +1,5 @@
+//! The coordinator database and its binding to the legacy lock fence.
+
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::io::Write;

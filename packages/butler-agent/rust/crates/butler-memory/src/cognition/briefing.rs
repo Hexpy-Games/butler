@@ -7,7 +7,13 @@ pub use generation::{
     BriefingProjectSignal, BriefingSettings,
 };
 
-use serde_json::Value;
+mod stored;
+pub use stored::{
+    BriefingScope, BriefingSource, BriefingSuggestion, BriefingTitleVariants, NewChatBriefing,
+};
+
+use crate::lenient::{self, Obj};
+use serde::Deserialize;
 use std::{
     collections::BTreeSet,
     fs,
@@ -15,13 +21,15 @@ use std::{
     time::SystemTime,
 };
 
+/// The newest stored briefing for `scope` (and project) in `locale`, on
+/// `date` or the latest day that has one.
 pub fn read_new_chat_briefing(
     data_root: &Path,
     date: Option<&str>,
-    scope: &str,
+    scope: BriefingScope,
     project_id: Option<&str>,
     locale: &str,
-) -> Option<Value> {
+) -> Option<NewChatBriefing> {
     let root = data_root.join("cognition/consolidation/briefings");
     let dates = if let Some(date) = date.map(str::trim).filter(|date| !date.is_empty()) {
         if !valid_date(date) {
@@ -47,11 +55,12 @@ pub fn read_new_chat_briefing(
             let Ok(bytes) = fs::read(&path) else {
                 continue;
             };
-            let Ok(value) = serde_json::from_slice::<Value>(&bytes) else {
+            let Ok(Obj(stored)) = serde_json::from_slice::<Obj<stored::StoredBriefing>>(&bytes)
+            else {
                 continue;
             };
-            if valid_artifact(&value, scope, project_id, locale) {
-                return Some(value);
+            if let Some(briefing) = stored.checked(scope, project_id, locale) {
+                return Some(briefing);
             }
         }
         if !dates.is_empty() {
@@ -85,12 +94,12 @@ fn latest_date_batch(root: &Path, before: Option<&str>) -> Option<Vec<String>> {
 fn artifact_path(
     root: &Path,
     date: &str,
-    scope: &str,
+    scope: BriefingScope,
     project_id: Option<&str>,
 ) -> Option<PathBuf> {
     match scope {
-        "general" => Some(root.join(date).join("general.json")),
-        "project" => {
+        BriefingScope::General => Some(root.join(date).join("general.json")),
+        BriefingScope::Project => {
             let id = project_id?;
             let mut segment = id
                 .trim()
@@ -115,7 +124,6 @@ fn artifact_path(
                     .join(format!("{segment}.json")),
             )
         }
-        _ => None,
     }
 }
 
@@ -130,25 +138,7 @@ fn valid_date(date: &str) -> bool {
         })
 }
 
-fn valid_artifact(value: &Value, scope: &str, project_id: Option<&str>, locale: &str) -> bool {
-    value["schema"] == "butler.cognition.new-chat-briefing.v1"
-        && value["scope"] == scope
-        && value["locale"] == locale
-        && (scope != "project" || value["project_id"] == project_id.unwrap_or_default())
-        && value["title"].as_str().is_some_and(|text| !text.is_empty())
-        && value["description"].is_string()
-        && value["source"]["raw_text_included"] == false
-        && value["raw_text_included"] == false
-        && value["suggestions"]
-            .as_array()
-            .is_some_and(|items| items.len() >= 4)
-        && value.get("title_variants").is_none_or(|variants| {
-            ["morning", "afternoon", "evening", "night"]
-                .iter()
-                .all(|key| variants[*key].as_str().is_some_and(|text| !text.is_empty()))
-        })
-}
-
+/// The id of the latest completed consolidation run (on `date`, when given).
 pub fn latest_completed_briefing_run_id(data_root: &Path, date: Option<&str>) -> Option<String> {
     let mut best: Option<(SystemTime, String)> = None;
     for entry in fs::read_dir(data_root.join("cognition/consolidation/runs"))
@@ -171,28 +161,44 @@ pub fn latest_completed_briefing_run_id(data_root: &Path, date: Option<&str>) ->
         let Ok(bytes) = fs::read(entry.path()) else {
             continue;
         };
-        let Ok(value) = serde_json::from_slice::<Value>(&bytes) else {
+        let Ok(Obj(run)) = serde_json::from_slice::<Obj<RunRecord>>(&bytes) else {
             continue;
         };
-        if value["status"] != "completed" {
+        if run.status.as_deref() != Some("completed") {
             continue;
         }
         if date.filter(|date| !date.is_empty()).is_some_and(|date| {
-            !["completed_at", "started_at"].iter().any(|key| {
-                value[*key]
-                    .as_str()
-                    .and_then(|timestamp| timestamp.get(..10))
-                    .filter(|part| valid_date(part))
-                    == Some(date)
-            })
+            ![&run.completed_at, &run.started_at]
+                .iter()
+                .any(|timestamp| {
+                    timestamp
+                        .as_deref()
+                        .and_then(|timestamp| timestamp.get(..10))
+                        .filter(|part| valid_date(part))
+                        == Some(date)
+                })
         }) {
             continue;
         }
-        if let Some(id) = value["run_id"].as_str() {
-            best = Some((modified, id.to_owned()));
+        if let Some(id) = run.run_id {
+            best = Some((modified, id));
         }
     }
     best.map(|(_, id)| id)
+}
+
+/// The fields of a consolidation run record the briefing fallback reads; a
+/// field of another type reads as absent.
+#[derive(Deserialize)]
+struct RunRecord {
+    #[serde(default, deserialize_with = "lenient::option")]
+    status: Option<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    run_id: Option<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    completed_at: Option<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    started_at: Option<String>,
 }
 
 #[cfg(test)]

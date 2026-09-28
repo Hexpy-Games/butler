@@ -1,13 +1,35 @@
-use std::path::Path;
+//! Resolves which generation a caller may read: the serving generation named
+//! by the descriptor, or a building rebuild candidate bound to its snapshot.
 
+use std::path::{Path, PathBuf};
+
+use super::manifest::{
+    ACTIVE_DESCRIPTOR_SCHEMA, DescriptorView, EmbeddingSlot, GenerationFormat, GenerationManifest,
+    GenerationState, ProjectionMode,
+};
 use super::types::{
-    ActiveDescriptor, GenerationEmbedding, GenerationManifest, MemoryGenerationHandle,
-    MemoryGenerationTarget, validate_generation_embedding,
+    GenerationEmbedding, MemoryGenerationHandle, MemoryGenerationTarget,
+    validate_generation_embedding,
 };
 use crate::cognition::paths::node_join;
 use crate::cognition::{CognitionCode, CognitionError, CognitionPathEnvironment};
-use serde_json::Value;
 
+/// The serving generation as named by the descriptor.
+pub(super) struct ServingGeneration {
+    pub generation_id: String,
+    pub projection_mode: Option<ProjectionMode>,
+}
+
+/// Whether a manifest read validates the bound embedding for runtime use.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum EmbeddingCheck {
+    /// Resolve and validate the embedding the runtime will embed with.
+    Runtime,
+    /// Ignore the embedding; the caller only needs lifecycle facts.
+    Skip,
+}
+
+/// The generation `target` names, checked to still be the one it names.
 pub fn resolve_generation(
     data_root: &Path,
     environment: &CognitionPathEnvironment,
@@ -29,16 +51,14 @@ pub fn resolve_generation(
     };
     safe_generation_id(&generation_id)?;
     let manifest_root = memory_root.join("generations").join(&generation_id);
-    let manifest = read_manifest_file(&manifest_root.join("manifest.json"), &generation_id, true)?;
-    if manifest.schema != "butler.memory-generation.v2"
-        || !matches!(manifest.format.as_str(), "v2" | "legacy")
-        || manifest.generation_id != generation_id
-    {
+    let (manifest, embedding) = read_manifest_file(
+        &manifest_root.join("manifest.json"),
+        &generation_id,
+        EmbeddingCheck::Runtime,
+    )?;
+    let Some(format) = manifest.format else {
         return Err(error(CognitionCode::MemoryGenerationVersionUnsupported));
-    }
-    if let Some(embedding) = &manifest.embedding {
-        validate_generation_embedding(embedding)?;
-    }
+    };
     let snapshot = manifest
         .canonical_snapshot_path
         .as_deref()
@@ -47,37 +67,42 @@ pub fn resolve_generation(
         canonical_snapshot_id,
         ..
     } = target
-        && (manifest.format != "v2"
+        && (format != GenerationFormat::V2
             || manifest.canonical_snapshot_id.as_deref() != Some(canonical_snapshot_id)
             || snapshot.is_none())
     {
         return Err(error(CognitionCode::MemorySnapshotChanged));
     }
-    let root = if manifest.format == "legacy" {
-        memory_root.join("db")
-    } else {
-        manifest_root
+    let root = match format {
+        GenerationFormat::Legacy => memory_root.join("db"),
+        GenerationFormat::V2 => manifest_root,
     };
     let source_root = if active {
         data_root.to_owned()
     } else {
-        snapshot
-            .as_deref()
-            .and_then(Path::parent)
-            .and_then(Path::parent)
-            .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?
-            .to_owned()
+        snapshot_source_root(snapshot.as_deref())?
     };
     Ok(MemoryGenerationHandle {
         generation_id,
         graph_path: root.join("graph.sqlite"),
         root,
-        embedding: manifest.embedding,
+        embedding,
         source_root,
         canonical_snapshot_path: if active { None } else { snapshot },
     })
 }
 
+/// A rebuild reads sources from the snapshot root two levels above the
+/// canonical store (`source-snapshot/runtime/conversation-store.sqlite`).
+fn snapshot_source_root(snapshot: Option<&Path>) -> Result<PathBuf, CognitionError> {
+    snapshot
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .map(Path::to_owned)
+        .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))
+}
+
+/// The active memory generation.
 pub fn resolve_active_generation(
     data_root: &Path,
     environment: &CognitionPathEnvironment,
@@ -111,7 +136,7 @@ pub(crate) fn resolve_projection_generation(
         );
     }
     let manifest = read_manifest(&memory_root, generation_id)?;
-    if manifest.state.as_deref() != Some("building") {
+    if manifest.state != Some(GenerationState::Building) {
         return Err(error(CognitionCode::MemoryGenerationChanged));
     }
     let snapshot_id = manifest
@@ -127,6 +152,39 @@ pub(crate) fn resolve_projection_generation(
     )
 }
 
+/// The target an operator command mutates: the serving generation itself, or
+/// a building candidate bound to its snapshot.
+pub(super) fn operator_target(
+    memory_root: &Path,
+    generation_id: &str,
+) -> Result<MemoryGenerationTarget, CognitionError> {
+    let descriptor = read_descriptor(memory_root)?;
+    let manifest = read_manifest(memory_root, generation_id)?;
+    if descriptor.generation_id == generation_id {
+        return Ok(MemoryGenerationTarget::Active {
+            expected_generation: generation_id.to_owned(),
+        });
+    }
+    candidate_target(generation_id, manifest)
+}
+
+/// The rebuild target of a building candidate.
+pub(super) fn candidate_target(
+    generation_id: &str,
+    manifest: GenerationManifest,
+) -> Result<MemoryGenerationTarget, CognitionError> {
+    if manifest.state != Some(GenerationState::Building) {
+        return Err(error(CognitionCode::MemoryGenerationChanged));
+    }
+    Ok(MemoryGenerationTarget::Rebuild {
+        generation_id: generation_id.to_owned(),
+        canonical_snapshot_id: manifest
+            .canonical_snapshot_id
+            .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?,
+    })
+}
+
+/// Whether an active generation descriptor exists.
 pub fn active_memory_descriptor_exists(
     data_root: &Path,
     environment: &CognitionPathEnvironment,
@@ -144,19 +202,20 @@ pub fn active_memory_descriptor_exists(
         })
 }
 
-pub(super) fn read_descriptor(memory_root: &Path) -> Result<ActiveDescriptor, CognitionError> {
-    let value = read_json(&memory_root.join("active-generation.json"))?;
-    let schema = string(&value, "schema");
-    let generation_id = string(&value, "generation_id");
-    let Some(generation_id) = generation_id.filter(|id| !id.is_empty()) else {
+pub(super) fn read_descriptor(memory_root: &Path) -> Result<ServingGeneration, CognitionError> {
+    let bytes = std::fs::read(memory_root.join("active-generation.json"))
+        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
+    let view: DescriptorView = serde_json::from_slice(&bytes)
+        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
+    let Some(generation_id) = view.generation_id.filter(|id| !id.is_empty()) else {
         return Err(error(CognitionCode::MemoryGenerationUnavailable));
     };
-    if schema != Some("butler.memory-active-generation.v2") {
+    if view.schema.as_deref() != Some(ACTIVE_DESCRIPTOR_SCHEMA) {
         return Err(error(CognitionCode::MemoryGenerationUnavailable));
     }
-    Ok(ActiveDescriptor {
-        generation_id: generation_id.to_owned(),
-        projection_mode: string(&value, "projection_mode").map(str::to_owned),
+    Ok(ServingGeneration {
+        generation_id,
+        projection_mode: view.projection_mode,
     })
 }
 
@@ -171,65 +230,31 @@ pub(super) fn read_manifest(
             .join(generation_id)
             .join("manifest.json"),
         generation_id,
-        false,
+        EmbeddingCheck::Skip,
     )
-}
-
-fn read_json(path: &Path) -> Result<Value, CognitionError> {
-    let bytes = std::fs::read(path)
-        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
-    serde_json::from_slice(&bytes)
-        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))
+    .map(|(manifest, _)| manifest)
 }
 
 fn read_manifest_file(
     path: &Path,
     generation_id: &str,
-    validate_runtime_embedding: bool,
-) -> Result<GenerationManifest, CognitionError> {
-    let value = read_json(path)?;
-    let schema = string(&value, "schema").unwrap_or_default().to_owned();
-    let stored_generation = string(&value, "generation_id")
-        .unwrap_or_default()
-        .to_owned();
-    let format = string(&value, "format").unwrap_or_default().to_owned();
-    if schema != "butler.memory-generation.v2" || stored_generation != generation_id {
+    check: EmbeddingCheck,
+) -> Result<(GenerationManifest, Option<GenerationEmbedding>), CognitionError> {
+    let manifest = GenerationManifest::read(path, CognitionCode::MemoryGenerationUnavailable)?;
+    if !manifest.is_for(generation_id) {
         return Err(error(CognitionCode::MemoryGenerationVersionUnsupported));
     }
-    let embedding_value = value.get("embedding");
-    let embedding = if !validate_runtime_embedding || embedding_value.is_some_and(Value::is_null) {
-        None
-    } else {
-        let embedding_value =
-            embedding_value.ok_or_else(|| error(CognitionCode::MemoryEmbeddingMetadataInvalid))?;
-        let object = embedding_value
-            .as_object()
-            .ok_or_else(|| error(CognitionCode::MemoryEmbeddingMetadataInvalid))?;
-        if !object.contains_key("bun_runtime_version")
-            && string(embedding_value, "schema") != Some("butler.native-embedding-identity.v1")
-        {
+    let embedding = match (check, &manifest.embedding) {
+        (EmbeddingCheck::Skip, _) | (EmbeddingCheck::Runtime, Some(EmbeddingSlot::Unbound)) => None,
+        (EmbeddingCheck::Runtime, Some(EmbeddingSlot::Bound(embedding))) => {
+            validate_generation_embedding(embedding)?;
+            Some(GenerationEmbedding::clone(embedding))
+        }
+        (EmbeddingCheck::Runtime, Some(EmbeddingSlot::Unreadable(_)) | None) => {
             return Err(error(CognitionCode::MemoryEmbeddingMetadataInvalid));
         }
-        let embedding: GenerationEmbedding = serde_json::from_value(embedding_value.clone())
-            .map_err(|source| {
-                error(CognitionCode::MemoryEmbeddingMetadataInvalid).with_source(source)
-            })?;
-        validate_generation_embedding(&embedding)?;
-        Some(embedding)
     };
-    Ok(GenerationManifest {
-        schema,
-        generation_id: stored_generation,
-        format,
-        state: string(&value, "state").map(str::to_owned),
-        embedding,
-        canonical_snapshot_id: string(&value, "canonical_snapshot_id").map(str::to_owned),
-        canonical_snapshot_path: string(&value, "canonical_snapshot_path").map(str::to_owned),
-    })
-}
-
-fn string<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
-    value.get(key).and_then(Value::as_str)
+    Ok((manifest, embedding))
 }
 
 pub(in crate::cognition::generation) fn safe_generation_id(

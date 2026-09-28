@@ -98,7 +98,7 @@ async function expectInputValue(
 async function patchSettings(settings: Record<string, unknown>): Promise<void> {
   const response = await fetch(`${server.url}settings`, {
     method: "PATCH",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...server.authHeaders },
     body: JSON.stringify(settings),
   });
   const body = await response.json().catch(() => null);
@@ -362,6 +362,7 @@ const page = await browser.newPage({
   viewport: { width: 1440, height: 900 },
   deviceScaleFactor: 1,
 });
+await server.signIn(page);
 const firstRunStateJson = JSON.stringify(legacyFirstRunCompleteRecord());
 await page.addInitScript(
   ({ key, value }) => {

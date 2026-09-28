@@ -181,6 +181,10 @@ bun run app:ui:build
 bun run app:client
 ```
 
+`app:client:dev` serves the UI from Vite on another origin than the gateway,
+so the gateway must be started with `BUTLER_APP_DEV_ORIGIN=http://127.0.0.1:5173`
+(see `packages/butler-app/README.md`).
+
 App UI is assembled only from the Butler design system. Before changing UI,
 read the design-system skill
 (`packages/butler-app/client/ui/src/libs/design-system/skills/butler-design-system/SKILL.md`)

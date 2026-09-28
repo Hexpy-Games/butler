@@ -21,7 +21,9 @@ pub enum CognitionError {
     /// busy or aborted writer, closed owner. Nothing lower-level failed.
     #[error("{code}: {message}")]
     Detected {
+        /// What failed.
         code: CognitionCode,
+        /// Details.
         message: String,
     },
     /// A port or domain Cognition depends on failed (Conversation, the write
@@ -29,8 +31,11 @@ pub enum CognitionError {
     /// are that implementation's own.
     #[error("{code}: {message}")]
     Port {
+        /// The port's code.
         code: &'static str,
+        /// The port's message.
         message: String,
+        /// The port's error, when it has one.
         #[source]
         source: Option<CognitionSource>,
     },
@@ -39,14 +44,18 @@ pub enum CognitionError {
     /// the cause.
     #[error("{code}: {message}")]
     Failed {
+        /// What Cognition was doing.
         code: CognitionCode,
+        /// Details.
         message: String,
+        /// The cause.
         #[source]
         source: CognitionSource,
     },
 }
 
 impl CognitionError {
+    /// A detected failure.
     pub fn new(code: CognitionCode, message: impl Into<String>) -> Self {
         Self::Detected {
             code,
@@ -109,6 +118,7 @@ impl CognitionError {
         }
     }
 
+    /// The stable code of the failure.
     pub fn code(&self) -> &'static str {
         match self {
             Self::Detected { code, .. } | Self::Failed { code, .. } => code.as_str(),
@@ -135,6 +145,7 @@ impl PartialEq for CognitionError {
 
 impl Eq for CognitionError {}
 
+/// Result of a Cognition operation.
 pub type CognitionResult<T> = Result<T, CognitionError>;
 
 impl From<crate::coordination::CoordinationError> for CognitionError {

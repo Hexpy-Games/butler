@@ -162,16 +162,8 @@ impl ResolvedInstallation {
             return Err("installation_manifest_layout_invalid".into());
         }
         let version = string_field(&value, "version");
-        if schema == "butler.native-agent-install.v1"
-            && (version.is_none()
-                || value["platform"].as_str() != Some("darwin")
-                || value["architecture"].as_str() != Some("arm64")
-                || value["launcher"].as_str() != Some("butler")
-                || string_field(&value, "binarySha256").is_none()
-                || string_field(&value, "resourcesSha256").is_none()
-                || !launcher_is_expected(&self.installation_root))
-        {
-            return Err("installation_manifest_invalid".into());
+        if schema == "butler.native-agent-install.v1" {
+            check_install_manifest(&value, &self.installation_root)?;
         }
         let binary_sha256 = string_field(&value, "binarySha256");
         let resources_sha256 = string_field(&value, "resourcesSha256");
@@ -228,6 +220,66 @@ impl ResolvedInstallation {
         }
         Ok(())
     }
+}
+
+/// Platforms a standalone installation (`butler.native-agent-install.v1`) may
+/// target, named as Node names them (`process.platform`, `process.arch`).
+/// Windows installations are not supported yet.
+const INSTALL_PLATFORMS: [(&str, &str); 3] =
+    [("darwin", "arm64"), ("linux", "x64"), ("linux", "arm64")];
+
+/// The standalone installation's own fields: platform, version, launcher and digests.
+fn check_install_manifest(
+    value: &serde_json::Value,
+    root: &Path,
+) -> Result<(), crate::host::HostError> {
+    check_install_platform(
+        (value["platform"].as_str(), value["architecture"].as_str()),
+        host_install_platform(),
+    )?;
+    if string_field(value, "version").is_none()
+        || value["launcher"].as_str() != Some("butler")
+        || string_field(value, "binarySha256").is_none()
+        || string_field(value, "resourcesSha256").is_none()
+        || !launcher_is_expected(root)
+    {
+        return Err("installation_manifest_invalid".into());
+    }
+    Ok(())
+}
+
+/// This host in install-manifest names.
+fn host_install_platform() -> (&'static str, &'static str) {
+    let platform = match std::env::consts::OS {
+        "macos" => "darwin",
+        "windows" => "win32",
+        other => other,
+    };
+    let architecture = match std::env::consts::ARCH {
+        "aarch64" => "arm64",
+        "x86_64" => "x64",
+        other => other,
+    };
+    (platform, architecture)
+}
+
+/// An installation manifest must name a supported platform, and the host's own.
+fn check_install_platform(
+    manifest: (Option<&str>, Option<&str>),
+    host: (&str, &str),
+) -> Result<(), crate::host::HostError> {
+    if host.0 == "win32" {
+        return Err(
+            "installation_platform_unsupported: Windows installations are not supported yet".into(),
+        );
+    }
+    let (Some(platform), Some(architecture)) = manifest else {
+        return Err("installation_manifest_invalid".into());
+    };
+    if (platform, architecture) != host || !INSTALL_PLATFORMS.contains(&(platform, architecture)) {
+        return Err("installation_manifest_invalid".into());
+    }
+    Ok(())
 }
 
 fn string_field(value: &serde_json::Value, field: &str) -> Option<String> {
@@ -317,7 +369,48 @@ pub(crate) fn realpath_or_nearest(path: &Path) -> std::io::Result<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::ResolvedInstallation;
+    use super::{ResolvedInstallation, check_install_platform, host_install_platform};
+
+    #[test]
+    fn install_manifest_names_a_supported_platform_that_is_the_host() {
+        let mac = ("darwin", "arm64");
+        assert!(check_install_platform((Some("darwin"), Some("arm64")), mac).is_ok());
+        for manifest in [
+            (Some("linux"), Some("x64")),
+            (Some("linux"), Some("arm64")),
+            (Some("darwin"), Some("x64")),
+            (Some("win32"), Some("x64")),
+            (None, Some("arm64")),
+            (Some("darwin"), None),
+        ] {
+            assert_eq!(
+                check_install_platform(manifest, mac).unwrap_err(),
+                "installation_manifest_invalid"
+            );
+        }
+        for host in [("linux", "x64"), ("linux", "arm64")] {
+            assert!(check_install_platform((Some(host.0), Some(host.1)), host).is_ok());
+            assert_eq!(
+                check_install_platform((Some("darwin"), Some("arm64")), host).unwrap_err(),
+                "installation_manifest_invalid"
+            );
+        }
+        assert_eq!(
+            check_install_platform((Some("darwin"), Some("x64")), ("darwin", "x64")).unwrap_err(),
+            "installation_manifest_invalid"
+        );
+        assert_eq!(
+            check_install_platform((Some("win32"), Some("x64")), ("win32", "x64")).unwrap_err(),
+            "installation_platform_unsupported: Windows installations are not supported yet"
+        );
+    }
+
+    #[test]
+    fn host_install_platform_uses_node_names() {
+        let (platform, architecture) = host_install_platform();
+        assert!(!matches!(platform, "macos" | "windows"));
+        assert!(!matches!(architecture, "aarch64" | "x86_64"));
+    }
 
     #[test]
     fn data_and_workspace_cannot_overlap_the_installation() {

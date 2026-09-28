@@ -1,14 +1,87 @@
+//! The `query_memory` tool arguments: read as sent, then checked in the
+//! order the public tool reports errors (text match, roles, order, limit,
+//! scope, time, flags).
+
 use crate::cognition::CognitionCode;
-use serde_json::{Map, Value, json};
+use serde::{Deserialize, Serialize};
 use unicode_segmentation::UnicodeSegmentation;
 
+use crate::lenient::{Arg, Obj};
 use butler_turn::conversation::PublicMemoryScope;
 
+/// The tool arguments, each kept as sent.
+#[derive(Debug, Default, Deserialize)]
+pub(super) struct QueryToolArgs {
+    #[serde(default)]
+    query: Arg<String>,
+    #[serde(default)]
+    terms: Arg<Vec<Arg<String>>>,
+    #[serde(default)]
+    match_mode: Arg<String>,
+    #[serde(default)]
+    speaker: Arg<String>,
+    #[serde(default)]
+    event_kind: Arg<String>,
+    #[serde(default)]
+    order: Arg<String>,
+    #[serde(default)]
+    limit: Arg<f64>,
+    #[serde(default)]
+    scope: Arg<String>,
+    #[serde(default)]
+    session_ids: Arg<Vec<Arg<String>>>,
+    #[serde(default)]
+    project_filter: Arg<String>,
+    #[serde(default)]
+    project_ids: Arg<Vec<Arg<String>>>,
+    #[serde(default)]
+    time: Arg<Obj<TimeArg>>,
+    #[serde(default)]
+    case_sensitive: Arg<bool>,
+    #[serde(default)]
+    include_internal: Arg<bool>,
+    #[serde(default)]
+    cursor: Arg<String>,
+}
+
+/// The `time` argument.
+#[derive(Debug, Default, Deserialize)]
+struct TimeArg {
+    #[serde(default)]
+    basis: Arg<String>,
+    #[serde(default)]
+    from: Arg<String>,
+    #[serde(default)]
+    to: Arg<String>,
+}
+
+/// How query terms must match a message.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum MatchMode {
+    /// The query (if any) appears as a phrase.
+    Phrase,
+    /// Any term appears.
+    Any,
+    /// Every term appears.
+    All,
+}
+
+impl MatchMode {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Phrase => "phrase",
+            Self::Any => "any",
+            Self::All => "all",
+        }
+    }
+}
+
+/// Checked arguments of one query.
 #[derive(Clone)]
 pub(super) struct QueryArgs {
     pub(super) query: Option<String>,
     pub(super) terms: Vec<String>,
-    pub(super) mode: String,
+    pub(super) mode: MatchMode,
     pub(super) case_sensitive: bool,
     pub(super) role: Option<&'static str>,
     pub(super) latest: bool,
@@ -16,42 +89,157 @@ pub(super) struct QueryArgs {
     pub(super) limit: usize,
     pub(super) cursor: Option<String>,
     pub(super) scope: PublicMemoryScope,
-    pub(super) filter_identity: Value,
+    pub(super) filter_identity: FilterIdentity,
+}
+
+/// Everything that selects results; a cursor is valid only for the same
+/// identity (hashed).
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct FilterIdentity {
+    query: Option<String>,
+    terms: Vec<String>,
+    match_mode: &'static str,
+    case_sensitive: bool,
+    speaker: &'static str,
+    event_kind: &'static str,
+    order: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    time: Option<TimeIdentity>,
+    limit: usize,
+    scope: &'static str,
+    current_session_id: String,
+    current_project_id: Option<String>,
+    session_ids: Vec<String>,
+    project_filter: &'static str,
+    project_ids: Vec<String>,
+    include_internal: bool,
+}
+
+#[derive(Clone, Serialize)]
+struct TimeIdentity {
+    from: String,
+    to: String,
+    basis: &'static str,
+}
+
+/// The text-match arguments.
+struct TextMatch {
+    query: Option<String>,
+    terms: Vec<String>,
+    mode: MatchMode,
+}
+
+/// The speaker/event filter and the role it selects.
+struct RoleFilter {
+    speaker: &'static str,
+    event: &'static str,
+    role: Option<&'static str>,
 }
 
 pub(super) fn parse(
-    args: &Value,
+    args: &QueryToolArgs,
     current_session_id: &str,
     project_id: Option<&str>,
 ) -> Result<QueryArgs, CognitionCode> {
-    let query = match args.get("query").filter(|value| value.is_string()) {
-        None => None,
-        Some(value) => Some(string(value, 2048, true)?.to_owned()),
+    let text = text_match(args)?;
+    let roles = role_filter(args)?;
+    let order = enum_value(
+        &args.order,
+        "earliest",
+        &["earliest", "latest"],
+        CognitionCode::InvalidOrder,
+    )?;
+    let limit = match &args.limit {
+        Arg::Valid(n) => {
+            if !(n.is_finite() && n.fract() == 0.0 && (1.0..=50.0).contains(n)) {
+                return Err(CognitionCode::InvalidLimit);
+            }
+            butler_core::json::saturating_usize(*n)
+        }
+        Arg::Missing | Arg::Null | Arg::Invalid(_) => 10,
     };
-    let terms = strings(args.get("terms").filter(|value| value.is_array()), 16, 256)?;
-    let mode = enum_value(
-        args.get("match_mode"),
+    let project_id = project_id.map(str::trim).filter(|value| !value.is_empty());
+    let (scope, scope_kind, project_filter) = scope(args, current_session_id, project_id)?;
+    let time = time(&args.time)?;
+    let case_sensitive = args.case_sensitive.valid().copied().unwrap_or(true);
+    let filter_identity = FilterIdentity {
+        query: text.query.clone(),
+        terms: text.terms.clone(),
+        match_mode: text.mode.as_str(),
+        case_sensitive,
+        speaker: roles.speaker,
+        event_kind: roles.event,
+        order,
+        time: time.as_ref().map(|(from, to)| TimeIdentity {
+            from: from.clone(),
+            to: to.clone(),
+            basis: "conversation",
+        }),
+        limit,
+        scope: scope_kind,
+        current_session_id: current_session_id.to_owned(),
+        current_project_id: project_id.map(str::to_owned),
+        session_ids: scope.session_ids.clone(),
+        project_filter,
+        project_ids: scope.project_ids.clone(),
+        include_internal: scope.include_internal,
+    };
+    Ok(QueryArgs {
+        query: text.query,
+        terms: text.terms,
+        mode: text.mode,
+        case_sensitive,
+        role: roles.role,
+        latest: order == "latest",
+        time,
+        limit,
+        cursor: args.cursor.valid().cloned(),
+        scope,
+        filter_identity,
+    })
+}
+
+/// A phrase query, or terms matched any/all; not both.
+fn text_match(args: &QueryToolArgs) -> Result<TextMatch, CognitionCode> {
+    let query = args
+        .query
+        .valid()
+        .map(|value| string(value, 2048, true).map(str::to_owned))
+        .transpose()?;
+    let terms = strings(&args.terms, 16, 256)?;
+    let mode = match enum_value(
+        &args.match_mode,
         "phrase",
         &["phrase", "any", "all"],
         CognitionCode::InvalidMatchMode,
-    )?;
-    if query.is_some() && (!terms.is_empty() || mode != "phrase") {
+    )? {
+        "any" => MatchMode::Any,
+        "all" => MatchMode::All,
+        _ => MatchMode::Phrase,
+    };
+    if query.is_some() && (!terms.is_empty() || mode != MatchMode::Phrase) {
         return Err(CognitionCode::QueryTermsConflict);
     }
-    if mode != "phrase" && terms.is_empty() {
+    if mode != MatchMode::Phrase && terms.is_empty() {
         return Err(CognitionCode::TermsRequired);
     }
-    if mode == "phrase" && !terms.is_empty() {
+    if mode == MatchMode::Phrase && !terms.is_empty() {
         return Err(CognitionCode::TermsNotAllowed);
     }
+    Ok(TextMatch { query, terms, mode })
+}
+
+/// Speaker and event kind must agree; either selects user or assistant.
+fn role_filter(args: &QueryToolArgs) -> Result<RoleFilter, CognitionCode> {
     let speaker = enum_value(
-        args.get("speaker"),
+        &args.speaker,
         "any",
         &["any", "user", "butler"],
         CognitionCode::InvalidRoleFilter,
     )?;
     let event = enum_value(
-        args.get("event_kind"),
+        &args.event_kind,
         "any",
         &["any", "inbound", "outbound"],
         CognitionCode::InvalidRoleFilter,
@@ -66,25 +254,22 @@ pub(super) fn parse(
     } else {
         None
     };
-    let order = enum_value(
-        args.get("order"),
-        "earliest",
-        &["earliest", "latest"],
-        CognitionCode::InvalidOrder,
-    )?;
-    let limit = match args.get("limit").filter(|value| value.is_number()) {
-        None => 10,
-        Some(v) => {
-            let n = v
-                .as_f64()
-                .filter(|n| n.is_finite() && n.fract() == 0.0 && (1.0..=50.0).contains(n))
-                .ok_or(CognitionCode::InvalidLimit)?;
-            butler_core::json::saturating_usize(n)
-        }
-    };
-    let project_id = project_id.map(str::trim).filter(|value| !value.is_empty());
+    Ok(RoleFilter {
+        speaker,
+        event,
+        role,
+    })
+}
+
+/// The conversation scope (current project by default when there is one);
+/// `selected` project filtering needs project ids and only then allows them.
+fn scope(
+    args: &QueryToolArgs,
+    current_session_id: &str,
+    project_id: Option<&str>,
+) -> Result<(PublicMemoryScope, &'static str, &'static str), CognitionCode> {
     let scope_kind = enum_value(
-        args.get("scope"),
+        &args.scope,
         if project_id.is_some() {
             "current_project"
         } else {
@@ -93,54 +278,17 @@ pub(super) fn parse(
         &["current_session", "current_project", "all_user_sessions"],
         CognitionCode::InvalidScopeValue,
     )?;
-    let session_ids = strings(
-        args.get("session_ids").filter(|value| value.is_array()),
-        32,
-        512,
-    )?;
+    let session_ids = strings(&args.session_ids, 32, 512)?;
     let project_filter = enum_value(
-        args.get("project_filter"),
+        &args.project_filter,
         "any",
         &["any", "unassigned", "selected"],
         CognitionCode::InvalidProjectFilter,
     )?;
-    let project_ids = strings(
-        args.get("project_ids").filter(|value| value.is_array()),
-        16,
-        512,
-    )?;
+    let project_ids = strings(&args.project_ids, 16, 512)?;
     if (project_filter == "selected") == project_ids.is_empty() {
         return Err(CognitionCode::InvalidProjectFilter);
     }
-    let time = match args.get("time").filter(|value| !value.is_null()) {
-        None => None,
-        Some(value) => {
-            if value.get("basis").and_then(Value::as_str) != Some("conversation") {
-                return Err(CognitionCode::InvalidTime);
-            }
-            let (from_ms, from) = timestamp(
-                value
-                    .get("from")
-                    .and_then(Value::as_str)
-                    .ok_or(CognitionCode::InvalidTime)?,
-            )?;
-            let (to_ms, to) = timestamp(
-                value
-                    .get("to")
-                    .and_then(Value::as_str)
-                    .ok_or(CognitionCode::InvalidTime)?,
-            )?;
-            if from_ms >= to_ms {
-                return Err(CognitionCode::InvalidTime);
-            }
-            Some((from, to))
-        }
-    };
-    let case_sensitive = args
-        .get("case_sensitive")
-        .and_then(Value::as_bool)
-        .unwrap_or(true);
-    let include_internal = args.get("include_internal") == Some(&Value::Bool(true));
     let scope = PublicMemoryScope {
         current_session_id: current_session_id.to_owned(),
         current_project_id: project_id.map(str::to_owned),
@@ -148,72 +296,49 @@ pub(super) fn parse(
         session_ids,
         project_filter: project_filter.to_owned(),
         project_ids,
-        include_internal,
+        include_internal: args.include_internal == Arg::Valid(true),
     };
-    let cursor = args
-        .get("cursor")
-        .filter(|value| value.is_string())
-        .map(|v| {
-            v.as_str()
-                .ok_or(CognitionCode::InvalidCursor)
-                .map(str::to_owned)
-        })
-        .transpose()?;
-    let mut identity = Map::new();
-    identity.insert(
-        "query".into(),
-        query.as_ref().map_or(Value::Null, |v| json!(v)),
-    );
-    identity.insert("terms".into(), json!(terms));
-    identity.insert("matchMode".into(), json!(mode));
-    identity.insert("caseSensitive".into(), json!(case_sensitive));
-    identity.insert("speaker".into(), json!(speaker));
-    identity.insert("eventKind".into(), json!(event));
-    identity.insert("order".into(), json!(order));
-    if let Some((from, to)) = &time {
-        identity.insert(
-            "time".into(),
-            json!({"from":from,"to":to,"basis":"conversation"}),
-        );
+    Ok((scope, scope_kind, project_filter))
+}
+
+/// A conversation-time range `[from, to)` of ISO timestamps with a zone.
+fn time(value: &Arg<Obj<TimeArg>>) -> Result<Option<(String, String)>, CognitionCode> {
+    let time = match value {
+        Arg::Missing | Arg::Null => return Ok(None),
+        Arg::Valid(Obj(time)) => time,
+        Arg::Invalid(_) => return Err(CognitionCode::InvalidTime),
+    };
+    if time.basis.valid().map(String::as_str) != Some("conversation") {
+        return Err(CognitionCode::InvalidTime);
     }
-    identity.insert("limit".into(), json!(limit));
-    identity.insert("scope".into(), json!(scope_kind));
-    identity.insert("currentSessionId".into(), json!(current_session_id));
-    identity.insert("currentProjectId".into(), json!(project_id));
-    identity.insert("sessionIds".into(), json!(scope.session_ids));
-    identity.insert("projectFilter".into(), json!(project_filter));
-    identity.insert("projectIds".into(), json!(scope.project_ids));
-    identity.insert("includeInternal".into(), json!(include_internal));
-    Ok(QueryArgs {
-        query,
-        terms,
-        mode: mode.into(),
-        case_sensitive,
-        role,
-        latest: order == "latest",
-        time,
-        limit,
-        cursor,
-        scope,
-        filter_identity: Value::Object(identity),
-    })
+    let (from_ms, from) = timestamp(time.from.valid().ok_or(CognitionCode::InvalidTime)?)?;
+    let (to_ms, to) = timestamp(time.to.valid().ok_or(CognitionCode::InvalidTime)?)?;
+    if from_ms >= to_ms {
+        return Err(CognitionCode::InvalidTime);
+    }
+    Ok(Some((from, to)))
 }
 
-fn enum_value<'a>(
-    value: Option<&'a Value>,
-    fallback: &'a str,
-    allowed: &[&str],
+/// One of `allowed`, `fallback` when missing or `null`.
+fn enum_value(
+    value: &Arg<String>,
+    fallback: &'static str,
+    allowed: &[&'static str],
     error: CognitionCode,
-) -> Result<&'a str, CognitionCode> {
-    let value = value
-        .filter(|v| !v.is_null())
-        .map(|v| v.as_str().unwrap_or(""))
-        .unwrap_or(fallback);
-    allowed.contains(&value).then_some(value).ok_or(error)
+) -> Result<&'static str, CognitionCode> {
+    let value = match value {
+        Arg::Missing | Arg::Null => fallback,
+        Arg::Valid(value) => value.as_str(),
+        Arg::Invalid(_) => "",
+    };
+    allowed
+        .iter()
+        .find(|allowed| **allowed == value)
+        .copied()
+        .ok_or(error)
 }
 
-fn string(value: &Value, max: usize, allow_empty: bool) -> Result<&str, CognitionCode> {
-    let value = value.as_str().ok_or(CognitionCode::InvalidString)?;
+fn string(value: &str, max: usize, allow_empty: bool) -> Result<&str, CognitionCode> {
     if (!allow_empty && value.trim().is_empty())
         || UnicodeSegmentation::graphemes(value, true).count() > max
     {
@@ -222,38 +347,48 @@ fn string(value: &Value, max: usize, allow_empty: bool) -> Result<&str, Cognitio
     Ok(value)
 }
 
-fn strings(value: Option<&Value>, max: usize, chars: usize) -> Result<Vec<String>, CognitionCode> {
-    let Some(value) = value else {
+/// At most `max` non-blank strings of at most `chars` graphemes; a value
+/// that is not an array reads as none.
+fn strings(
+    value: &Arg<Vec<Arg<String>>>,
+    max: usize,
+    chars: usize,
+) -> Result<Vec<String>, CognitionCode> {
+    let Arg::Valid(array) = value else {
         return Ok(Vec::new());
     };
-    let array = value
-        .as_array()
-        .filter(|v| v.len() <= max)
-        .ok_or(CognitionCode::InvalidArray)?;
+    if array.len() > max {
+        return Err(CognitionCode::InvalidArray);
+    }
     array
         .iter()
-        .map(|v| string(v, chars, false).map(str::to_owned))
+        .map(|item| {
+            let item = item.valid().ok_or(CognitionCode::InvalidString)?;
+            string(item, chars, false).map(str::to_owned)
+        })
         .collect()
 }
 
+/// A `YYYY-MM-DDT...` timestamp ending in `Z` or `±hh:mm`, and its
+/// normalized ISO form.
 fn timestamp(value: &str) -> Result<(i64, String), CognitionCode> {
     let bytes = value.as_bytes();
+    let digit = |index: usize| bytes.get(index).is_some_and(u8::is_ascii_digit);
+    let byte = |index: usize, expected: u8| bytes.get(index) == Some(&expected);
     let prefix = bytes.len() >= 12
-        && [0, 1, 2, 3, 5, 6, 8, 9]
-            .into_iter()
-            .all(|index| bytes[index].is_ascii_digit())
-        && bytes[4] == b'-'
-        && bytes[7] == b'-'
-        && bytes[10] == b'T';
+        && [0, 1, 2, 3, 5, 6, 8, 9].into_iter().all(digit)
+        && byte(4, b'-')
+        && byte(7, b'-')
+        && byte(10, b'T');
     let zone = value.ends_with('Z')
         || bytes.len() >= 6 && {
-            let tail = &bytes[bytes.len() - 6..];
-            (tail[0] == b'+' || tail[0] == b'-')
-                && tail[1].is_ascii_digit()
-                && tail[2].is_ascii_digit()
-                && tail[3] == b':'
-                && tail[4].is_ascii_digit()
-                && tail[5].is_ascii_digit()
+            let tail = bytes.len() - 6;
+            (byte(tail, b'+') || byte(tail, b'-'))
+                && digit(tail + 1)
+                && digit(tail + 2)
+                && byte(tail + 3, b':')
+                && digit(tail + 4)
+                && digit(tail + 5)
         };
     if !prefix || !zone {
         return Err(CognitionCode::InvalidTime);

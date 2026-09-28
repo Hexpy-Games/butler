@@ -804,6 +804,17 @@ export interface AppCopy {
       title: string;
       prompt: string;
     };
+    /** One line under the access selector while Ask first is selected. */
+    accessHint: string;
+    saveFailed: string;
+    /** Inline messages for a save the gateway refused (400). */
+    errors: {
+      title: string;
+      prompt: string;
+      interval: string;
+      accessMode: string;
+      invalid: string;
+    };
     runs: {
       empty: string;
       queued: string;
@@ -1413,6 +1424,11 @@ export interface AppCopy {
     attachmentSizeLimit: (names: string, limit: string) => string;
     reconnecting: string;
     reconnectingShort: string;
+    agentStopped: string;
+    agentRestarting: string;
+    agentRestartFailed: string;
+    agentStart: string;
+    agentStartFailed: string;
     dashboardLoading: string;
     dashboardFailed: string;
     dashboardRetry: string;

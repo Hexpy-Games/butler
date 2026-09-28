@@ -1,22 +1,63 @@
-//! Short-lived candidate witness retained across qualification preparation.
+//! Short-lived witnesses retained across qualification preparation.
+//!
+//! [`LiveWitness`] records the live canonical store and typed source files;
+//! [`CandidateWitness`] records a candidate's manifest, graph, Lance table,
+//! snapshot, and hot cache. Each `assert_current` fails when anything it
+//! recorded has changed since `open`.
 
 use crate::cognition::CognitionCode;
 use std::{fs, os::unix::fs::MetadataExt, path::Path};
 
 use lancedb::{Error as LanceError, Table};
 use rusqlite::{Connection, OpenFlags};
-use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
+use super::manifest::{
+    AcceptanceBinding, CanonicalSnapshot, EmbeddingSlot, GenerationManifest, GenerationState,
+};
 use crate::cognition::{
     CognitionError, CognitionResult, MemoryGenerationHandle, ensure_data_authority, lance_store,
 };
 
+/// Largest hot cache a candidate may retain.
+const MAX_CACHE_BYTES: u64 = 20 * 1024;
+
+/// Inode-level identity of a file: any rewrite changes it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct FileIdentity {
+    dev: u64,
+    ino: u64,
+    bytes: u64,
+    mtime_sec: i64,
+    mtime_nsec: i64,
+    ctime_sec: i64,
+    ctime_nsec: i64,
+}
+
+/// Identities of one task's memory-relevant files.
+#[derive(Debug, PartialEq, Eq)]
+struct TaskFacts {
+    task_id: String,
+    files: Vec<(&'static str, Option<FileIdentity>)>,
+    attempts: Vec<String>,
+    latest_result: Option<FileIdentity>,
+}
+
+/// Identities of every typed source outside the canonical store.
+#[derive(Debug, PartialEq, Eq)]
+struct TypedFacts {
+    tasks: Vec<TaskFacts>,
+    rules: Vec<(String, Option<FileIdentity>)>,
+    project_registry: Option<FileIdentity>,
+    feedback: Option<FileIdentity>,
+    feedback_quality: Option<FileIdentity>,
+}
+
 pub(super) struct LiveWitness {
     canonical: Connection,
-    canonical_identity: Value,
+    canonical_identity: FileIdentity,
     canonical_data_version: i64,
-    typed: Value,
+    typed: TypedFacts,
     data_root: std::path::PathBuf,
 }
 
@@ -33,16 +74,15 @@ impl LiveWitness {
                 &data_root.join("butler.config.json"),
             ],
         )?;
-        let canonical_identity = metadata(&canonical_path)?
+        let canonical_identity = identity(&canonical_path)?
             .ok_or_else(|| error(CognitionCode::MemoryInventoryChanged))?;
         let canonical =
             Connection::open_with_flags(&canonical_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
                 .map_err(|source| {
                     error(CognitionCode::MemoryInventoryChanged).with_source(source)
                 })?;
-        let canonical_data_version = canonical
-            .query_row("PRAGMA main.data_version", [], |row| row.get(0))
-            .map_err(|source| error(CognitionCode::MemoryInventoryChanged).with_source(source))?;
+        let canonical_data_version =
+            data_version(&canonical, CognitionCode::MemoryInventoryChanged)?;
         Ok(Self {
             canonical,
             canonical_identity,
@@ -54,11 +94,8 @@ impl LiveWitness {
 
     pub(super) fn assert_current(&self) -> CognitionResult<()> {
         let canonical_path = self.data_root.join("runtime/conversation-store.sqlite");
-        let data_version: i64 = self
-            .canonical
-            .query_row("PRAGMA main.data_version", [], |row| row.get(0))
-            .map_err(|source| error(CognitionCode::MemoryInventoryChanged).with_source(source))?;
-        if metadata(&canonical_path)?.as_ref() != Some(&self.canonical_identity)
+        let data_version = data_version(&self.canonical, CognitionCode::MemoryInventoryChanged)?;
+        if identity(&canonical_path)?.as_ref() != Some(&self.canonical_identity)
             || data_version != self.canonical_data_version
             || typed_facts(&self.data_root)? != self.typed
         {
@@ -83,36 +120,31 @@ impl LiveWitness {
     }
 }
 
-fn typed_facts(data_root: &Path) -> CognitionResult<Value> {
-    let tasks = data_root.join("tasks");
-    let mut task_facts = Vec::new();
-    for task in entries(&tasks)? {
-        let root = tasks.join(&task);
-        if !root.is_dir() {
-            continue;
+fn data_version(connection: &Connection, code: CognitionCode) -> CognitionResult<i64> {
+    connection
+        .query_row("PRAGMA main.data_version", [], |row| row.get(0))
+        .map_err(|source| error(code).with_source(source))
+}
+
+/// Task files whose change can change a task's memory report.
+const TASK_FILES: [&str; 7] = [
+    "status",
+    "request.md",
+    "result.md",
+    "plan.json",
+    "review.json",
+    "public-report.md",
+    "memory-report-binding.json",
+];
+
+fn typed_facts(data_root: &Path) -> CognitionResult<TypedFacts> {
+    let tasks_root = data_root.join("tasks");
+    let mut tasks = Vec::new();
+    for task in entries(&tasks_root)? {
+        let root = tasks_root.join(&task);
+        if root.is_dir() {
+            tasks.push(task_facts(&root, task)?);
         }
-        let attempts_root = root.join("attempts");
-        let attempts = entries(&attempts_root)?;
-        let latest = attempts
-            .last()
-            .map(|attempt| attempts_root.join(attempt).join("result.md"));
-        let files = [
-            "status",
-            "request.md",
-            "result.md",
-            "plan.json",
-            "review.json",
-            "public-report.md",
-            "memory-report-binding.json",
-        ];
-        let mut identities = Vec::new();
-        for file in files {
-            identities.push((file, metadata(&root.join(file))?));
-        }
-        task_facts.push(
-            json!({"task_id":task,"files":identities,"attempts":attempts,
-            "latest_result":match latest {Some(path)=>metadata(&path)?,None=>None}}),
-        );
     }
     let rules_root = data_root.join("cognition/memory/rules");
     let mut rules = Vec::new();
@@ -120,12 +152,35 @@ fn typed_facts(data_root: &Path) -> CognitionResult<Value> {
         .into_iter()
         .filter(|name| name.ends_with(".md") || name.ends_with(".source.json"))
     {
-        rules.push(json!([name, metadata(&rules_root.join(&name))?]));
+        let file = identity(&rules_root.join(&name))?;
+        rules.push((name, file));
     }
-    Ok(json!({"tasks":task_facts,"rules":rules,
-        "project_registry":metadata(&data_root.join("butler.config.json"))?,
-        "feedback":metadata(&data_root.join("cognition/feedback/feedback.md"))?,
-        "feedback_quality":metadata(&data_root.join("cognition/feedback/quality-operations.jsonl"))?}))
+    Ok(TypedFacts {
+        tasks,
+        rules,
+        project_registry: identity(&data_root.join("butler.config.json"))?,
+        feedback: identity(&data_root.join("cognition/feedback/feedback.md"))?,
+        feedback_quality: identity(&data_root.join("cognition/feedback/quality-operations.jsonl"))?,
+    })
+}
+
+fn task_facts(root: &Path, task_id: String) -> CognitionResult<TaskFacts> {
+    let attempts_root = root.join("attempts");
+    let attempts = entries(&attempts_root)?;
+    let latest_result = match attempts.last() {
+        Some(attempt) => identity(&attempts_root.join(attempt).join("result.md"))?,
+        None => None,
+    };
+    let mut files = Vec::with_capacity(TASK_FILES.len());
+    for file in TASK_FILES {
+        files.push((file, identity(&root.join(file))?));
+    }
+    Ok(TaskFacts {
+        task_id,
+        files,
+        attempts,
+        latest_result,
+    })
 }
 
 fn entries(root: &Path) -> CognitionResult<Vec<String>> {
@@ -145,10 +200,57 @@ fn entries(root: &Path) -> CognitionResult<Vec<String>> {
     Ok(names)
 }
 
+/// The manifest facts a candidate's qualification depends on.
+#[derive(Debug, PartialEq)]
+struct ManifestFacts {
+    generation_id: Option<String>,
+    state: Option<GenerationState>,
+    canonical_snapshot_id: Option<String>,
+    canonical_snapshot_path: Option<String>,
+    canonical_snapshot: Option<CanonicalSnapshot>,
+    source_inventory_hash: Option<String>,
+    extraction_version: Option<String>,
+    embedding: Option<EmbeddingSlot>,
+    readiness_sha256: Option<String>,
+    required_acceptance_passed: Option<bool>,
+    acceptance_binding: Option<AcceptanceBinding>,
+}
+
+impl From<GenerationManifest> for ManifestFacts {
+    fn from(manifest: GenerationManifest) -> Self {
+        Self {
+            generation_id: manifest.generation_id,
+            state: manifest.state,
+            canonical_snapshot_id: manifest.canonical_snapshot_id,
+            canonical_snapshot_path: manifest.canonical_snapshot_path,
+            canonical_snapshot: manifest.canonical_snapshot,
+            source_inventory_hash: manifest.source_inventory_hash,
+            extraction_version: manifest.extraction_version,
+            embedding: manifest.embedding,
+            readiness_sha256: manifest.readiness.and_then(|readiness| readiness.sha256),
+            required_acceptance_passed: manifest.required_acceptance_passed,
+            acceptance_binding: manifest.acceptance_binding,
+        }
+    }
+}
+
+/// Everything a candidate witness compares.
+#[derive(Debug, PartialEq)]
+struct CandidateFacts {
+    manifest: ManifestFacts,
+    graph: Option<FileIdentity>,
+    graph_data_version: i64,
+    lance_root: Option<FileIdentity>,
+    lance_version: Option<u64>,
+    snapshot: Option<FileIdentity>,
+    cache: Option<FileIdentity>,
+    cache_sha256: Option<String>,
+}
+
 pub(super) struct CandidateWitness {
     graph: Connection,
     table: Option<Table>,
-    initial: Value,
+    initial: CandidateFacts,
 }
 
 impl CandidateWitness {
@@ -159,10 +261,15 @@ impl CandidateWitness {
         let manifest = handle.root.join("manifest.json");
         let cache = handle.root.join("hot/cache.md");
         let lance = handle.root.join("butler.lance");
-        let mut paths: Vec<&Path> =
-            vec![&handle.root, &manifest, &handle.graph_path, &cache, &lance];
         let table_root = lance.join("butler_memory.lance");
-        paths.push(&table_root);
+        let mut paths: Vec<&Path> = vec![
+            &handle.root,
+            &manifest,
+            &handle.graph_path,
+            &cache,
+            &lance,
+            &table_root,
+        ];
         if let Some(snapshot) = handle.canonical_snapshot_path.as_deref() {
             paths.push(snapshot);
         }
@@ -172,101 +279,102 @@ impl CandidateWitness {
                 .map_err(|source| {
                     error(CognitionCode::MemoryGenerationChanged).with_source(source)
                 })?;
-        let table = if lance.exists() {
-            let connection = lance_store::connect(&lance).await.map_err(|source| {
-                error(CognitionCode::MemoryGenerationChanged).with_source(source)
-            })?;
-            match lance_store::open(&connection, "butler_memory").await {
-                Ok(table) => Some(table),
-                Err(LanceError::TableNotFound { .. }) => None,
-                Err(_) => return Err(error(CognitionCode::MemoryGenerationChanged)),
-            }
-        } else {
-            None
-        };
-        let mut witness = Self {
+        let table = open_table(&lance).await?;
+        let initial = facts(&graph, table.as_ref(), handle).await?;
+        Ok(Self {
             graph,
             table,
-            initial: Value::Null,
-        };
-        witness.initial = witness.facts(handle).await?;
-        Ok(witness)
+            initial,
+        })
     }
 
     pub(super) async fn assert_current(
         &self,
         handle: &MemoryGenerationHandle,
     ) -> CognitionResult<()> {
-        if self.facts(handle).await? != self.initial {
+        if facts(&self.graph, self.table.as_ref(), handle).await? != self.initial {
             return Err(error(CognitionCode::MemoryGenerationChanged));
         }
         Ok(())
     }
+}
 
-    async fn facts(&self, handle: &MemoryGenerationHandle) -> CognitionResult<Value> {
-        if let Some(table) = &self.table {
-            table.checkout_latest().await.map_err(|source| {
-                error(CognitionCode::MemoryGenerationChanged).with_source(source)
-            })?;
+async fn open_table(lance: &Path) -> CognitionResult<Option<Table>> {
+    if !lance.exists() {
+        return Ok(None);
+    }
+    let connection = lance_store::connect(lance)
+        .await
+        .map_err(|source| error(CognitionCode::MemoryGenerationChanged).with_source(source))?;
+    match lance_store::open(&connection, "butler_memory").await {
+        Ok(table) => Ok(Some(table)),
+        Err(LanceError::TableNotFound { .. }) => Ok(None),
+        Err(_) => Err(error(CognitionCode::MemoryGenerationChanged)),
+    }
+}
+
+async fn facts(
+    graph: &Connection,
+    table: Option<&Table>,
+    handle: &MemoryGenerationHandle,
+) -> CognitionResult<CandidateFacts> {
+    if let Some(table) = table {
+        table
+            .checkout_latest()
+            .await
+            .map_err(|source| error(CognitionCode::MemoryGenerationChanged).with_source(source))?;
+    }
+    let manifest = GenerationManifest::read(
+        &handle.root.join("manifest.json"),
+        CognitionCode::MemoryGenerationChanged,
+    )?;
+    let cache = handle.root.join("hot/cache.md");
+    let cache_identity = identity(&cache)?;
+    let cache_sha256 = match &cache_identity {
+        Some(file) if file.bytes > MAX_CACHE_BYTES => {
+            return Err(error(CognitionCode::MemoryGenerationNotReady));
         }
-        let manifest: Value =
-            serde_json::from_slice(&fs::read(handle.root.join("manifest.json")).map_err(
-                |source| error(CognitionCode::MemoryGenerationChanged).with_source(source),
-            )?)
-            .map_err(|source| error(CognitionCode::MemoryGenerationChanged).with_source(source))?;
-        let cache = handle.root.join("hot/cache.md");
-        let cache_sha = if let Some(metadata) = metadata(&cache)? {
-            if metadata["bytes"].as_u64().unwrap_or(u64::MAX) > 20 * 1024 {
-                return Err(error(CognitionCode::MemoryGenerationNotReady));
-            }
-            Some(format!(
-                "{:x}",
-                Sha256::digest(fs::read(&cache).map_err(|source| {
-                    error(CognitionCode::MemoryGenerationChanged).with_source(source)
-                })?)
-            ))
-        } else {
-            None
-        };
-        let graph_data_version: i64 = self
-            .graph
-            .query_row("PRAGMA main.data_version", [], |row| row.get(0))
-            .map_err(|source| error(CognitionCode::MemoryGenerationChanged).with_source(source))?;
-        let version = match &self.table {
+        Some(_) => Some(format!(
+            "{:x}",
+            Sha256::digest(fs::read(&cache).map_err(|source| {
+                error(CognitionCode::MemoryGenerationChanged).with_source(source)
+            })?)
+        )),
+        None => None,
+    };
+    let lance_version =
+        match table {
             Some(table) => Some(table.version().await.map_err(|source| {
                 error(CognitionCode::MemoryGenerationChanged).with_source(source)
             })?),
             None => None,
         };
-        Ok(json!({
-            "manifest": {
-                "generation_id": manifest["generation_id"], "state": manifest["state"],
-                "canonical_snapshot_id": manifest["canonical_snapshot_id"],
-                "canonical_snapshot_path": manifest["canonical_snapshot_path"],
-                "canonical_snapshot": manifest["canonical_snapshot"],
-                "source_inventory_hash": manifest["source_inventory_hash"],
-                "extraction_version": manifest["extraction_version"], "embedding": manifest["embedding"],
-                "readiness_sha256": manifest["readiness"]["sha256"],
-                "required_acceptance_passed": manifest["required_acceptance_passed"],
-                "acceptance_binding": manifest["acceptance_binding"],
-            },
-            "graph": metadata(&handle.graph_path)?, "graph_data_version": graph_data_version,
-            "lance_root": metadata(&handle.root.join("butler.lance"))?, "lance_version": version,
-            "snapshot": match handle.canonical_snapshot_path.as_deref() {
-                Some(path) => metadata(path)?, None => None,
-            },
-            "cache": { "identity": metadata(&cache)?, "sha256": cache_sha },
-        }))
-    }
+    Ok(CandidateFacts {
+        manifest: manifest.into(),
+        graph: identity(&handle.graph_path)?,
+        graph_data_version: data_version(graph, CognitionCode::MemoryGenerationChanged)?,
+        lance_root: identity(&handle.root.join("butler.lance"))?,
+        lance_version,
+        snapshot: match handle.canonical_snapshot_path.as_deref() {
+            Some(path) => identity(path)?,
+            None => None,
+        },
+        cache: cache_identity,
+        cache_sha256,
+    })
 }
 
-fn metadata(path: &Path) -> CognitionResult<Option<Value>> {
+fn identity(path: &Path) -> CognitionResult<Option<FileIdentity>> {
     match fs::metadata(path) {
-        Ok(item) => Ok(Some(
-            json!({"dev":item.dev(),"ino":item.ino(),"bytes":item.len(),
-            "mtime_sec":item.mtime(),"mtime_nsec":item.mtime_nsec(),
-            "ctime_sec":item.ctime(),"ctime_nsec":item.ctime_nsec()}),
-        )),
+        Ok(item) => Ok(Some(FileIdentity {
+            dev: item.dev(),
+            ino: item.ino(),
+            bytes: item.len(),
+            mtime_sec: item.mtime(),
+            mtime_nsec: item.mtime_nsec(),
+            ctime_sec: item.ctime(),
+            ctime_nsec: item.ctime_nsec(),
+        })),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(_) => Err(error(CognitionCode::MemoryGenerationChanged)),
     }

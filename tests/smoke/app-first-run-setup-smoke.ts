@@ -170,6 +170,7 @@ async function connectToElectronPage(
         item.type === "page" &&
         (
           item.url?.startsWith(origin) ||
+          item.url?.startsWith("app://butler/") ||
           item.url?.endsWith("/app-client/index.html") ||
           item.url?.endsWith("/dist/index.html")
         ) &&

@@ -38,6 +38,7 @@ import {
   useButlerStore,
 } from "@/app/store.ts";
 import { useAppBootstrap } from "@/hooks/useAppBootstrap.ts";
+import { useAgentRuntimeState } from "@/hooks/useAgentRuntimeState.ts";
 import { useNativeAppearanceTheme } from "@/hooks/useNativeAppearanceTheme.ts";
 import { useNativeShellPreferences } from "@/hooks/useNativeShellPreferences.ts";
 import { usePortalThemeClasses } from "@/hooks/usePortalThemeClasses.ts";
@@ -107,6 +108,7 @@ function FirstRunTheme() {
 function AppWorkspaceShell() {
   useAppBootstrap();
   useFirstRunLanding();
+  useAgentRuntimeState();
   useOrganizationNotice();
   const leftOpen = useButlerStore((state) => state.leftOpen);
   const setLeftOpen = useButlerStore((state) => state.setLeftOpen);

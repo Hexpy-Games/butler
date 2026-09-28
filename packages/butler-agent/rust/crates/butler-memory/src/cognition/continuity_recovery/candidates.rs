@@ -1,3 +1,5 @@
+//! Finding recoverable turns: completed turns missing from the hot cache, and the ones quarantined.
+
 use crate::cognition::CognitionCode;
 use butler_core::public_text::fixed_regex;
 use std::{
@@ -308,7 +310,7 @@ fn compact(value: &str, max: usize) -> String {
     if units.len() <= max {
         return normalized;
     }
-    let prefix = String::from_utf16_lossy(&units[..max.saturating_sub(3)]);
+    let prefix = String::from_utf16_lossy(units.get(..max.saturating_sub(3)).unwrap_or_default());
     format!("{prefix}...")
 }
 

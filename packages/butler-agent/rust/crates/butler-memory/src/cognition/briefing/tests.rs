@@ -25,20 +25,30 @@ fn reads_existing_valid_artifact_and_rejects_wrong_scope() {
         serde_json::to_vec(&artifact).unwrap(),
     )
     .unwrap();
+    let general = BriefingScope::General;
+    let read = read_new_chat_briefing(&root, None, general, None, "en").unwrap();
+    assert_eq!(read.title, "Welcome");
+    assert_eq!(read.description, "Today");
+    assert_eq!(read.moment.as_deref(), Some("Morning"));
     assert_eq!(
-        read_new_chat_briefing(&root, None, "general", None, "en"),
-        Some(artifact)
+        read.title_variants
+            .as_ref()
+            .and_then(|v| v.for_bucket("night")),
+        Some("Good night")
     );
-    assert!(read_new_chat_briefing(&root, None, "project", Some("p"), "en").is_none());
-    assert!(read_new_chat_briefing(&root, Some("../escape"), "general", None, "en").is_none());
-    assert!(read_new_chat_briefing(&root, Some(" 2026-09-23 "), "general", None, "en").is_some());
+    assert_eq!(read.suggestions.len(), 4);
+    assert_eq!(read.suggestions[3].text.as_deref(), Some("Four"));
+    assert_eq!(read.source.consolidation_run_id.as_deref(), Some("cr_test"));
+    assert!(read_new_chat_briefing(&root, None, BriefingScope::Project, Some("p"), "en").is_none());
+    assert!(read_new_chat_briefing(&root, Some("../escape"), general, None, "en").is_none());
+    assert!(read_new_chat_briefing(&root, Some(" 2026-09-23 "), general, None, "en").is_some());
     for index in 1..=65 {
         fs::create_dir_all(root.join(format!(
             "cognition/consolidation/briefings/2026-10-{index:02}"
         )))
         .unwrap();
     }
-    assert!(read_new_chat_briefing(&root, None, "general", None, "en").is_some());
+    assert!(read_new_chat_briefing(&root, None, general, None, "en").is_some());
     let runs = root.join("cognition/consolidation/runs");
     fs::create_dir_all(&runs).unwrap();
     fs::write(
