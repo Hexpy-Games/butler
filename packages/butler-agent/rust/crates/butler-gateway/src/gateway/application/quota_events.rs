@@ -1,8 +1,13 @@
-//! Forwards changed provider quota as durable `provider_quota_updated` events.
+//! Forwards changed provider quota as durable `provider_quota_updated`
+//! events, and runs the periodic quota poll while an App client is
+//! connected (a live event stream is open).
+
+use std::time::Duration;
 
 use parking_lot::Mutex;
 use tokio::sync::broadcast::{self, error::RecvError};
 use tokio::task::JoinHandle;
+use tokio::time::MissedTickBehavior;
 use tokio_util::sync::CancellationToken;
 
 use butler_runtime::operations::ProviderQuotaUpdate;
@@ -12,35 +17,66 @@ use super::{AppApplication, events};
 /// The live event type carrying `{provider_id, remaining}`.
 pub(super) const PROVIDER_QUOTA_UPDATED: &str = "provider_quota_updated";
 
-/// Owns the background task that turns quota updates into App events.
+/// How often the poll loop asks the monitoring port to poll; the port
+/// decides which providers are due (every 5 minutes after a success).
+const POLL_TICK: Duration = Duration::from_secs(30);
+
+/// Owns the background tasks that turn quota updates into App events and
+/// poll quota while an App client is connected.
 #[derive(Default)]
 pub(super) struct QuotaEventForwarder {
     cancel: CancellationToken,
-    task: Mutex<Option<JoinHandle<()>>>,
+    tasks: Mutex<Vec<JoinHandle<()>>>,
 }
 
 impl QuotaEventForwarder {
-    /// Starts forwarding when the monitoring port reports quota updates.
+    /// Starts forwarding (when the monitoring port reports quota updates)
+    /// and the poll loop, once.
     pub(super) fn start(&self, application: AppApplication) {
-        let Some(updates) = application.dependencies.monitoring.provider_quota_updates() else {
+        let mut tasks = self.tasks.lock();
+        if !tasks.is_empty() {
             return;
-        };
-        let mut task = self.task.lock();
-        if task.is_none() {
-            *task = Some(tokio::spawn(forward(
-                application,
+        }
+        if let Some(updates) = application.dependencies.monitoring.provider_quota_updates() {
+            tasks.push(tokio::spawn(forward(
+                application.clone_handle(),
                 updates,
                 self.cancel.clone(),
             )));
         }
+        tasks.push(tokio::spawn(poll_while_connected(
+            application,
+            self.cancel.clone(),
+        )));
     }
 
-    /// Stops forwarding and waits for the task to end.
+    /// Stops both tasks and waits for them to end.
     pub(super) async fn close(&self) {
         self.cancel.cancel();
-        let task = self.task.lock().take();
-        if let Some(task) = task {
+        let tasks = std::mem::take(&mut *self.tasks.lock());
+        for task in tasks {
             let _ = task.await;
+        }
+    }
+}
+
+/// Polls quota every tick while a live event stream is open.
+async fn poll_while_connected(application: AppApplication, cancel: CancellationToken) {
+    let mut ticks = tokio::time::interval(POLL_TICK);
+    ticks.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    loop {
+        tokio::select! {
+            () = cancel.cancelled() => return,
+            _ = ticks.tick() => {}
+        }
+        if application.subscribers.listener_count() == 0 {
+            continue;
+        }
+        let poll = application.dependencies.monitoring.poll_provider_quota();
+        tokio::select! {
+            () = cancel.cancelled() => return,
+            // A failed poll is recorded by the port; the loop keeps going.
+            _ = poll => {}
         }
     }
 }

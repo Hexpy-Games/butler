@@ -50,7 +50,8 @@ pub(super) async fn replay_source(
     let provider_name = cassette.meta.provider.clone();
     let provider = Provider::replay(cassette, placeholders.clone()).await?;
     if let Some(key) = super::super::config::base_url_env(&provider_name) {
-        launch.set_env(key, provider.base_url.clone());
+        let path = super::super::config::base_path(&provider_name);
+        launch.set_env(key, format!("{}{path}", provider.base_url));
     }
     if provider_name == "openai-subscription"
         && let Some(codex_home) = stub_codex_home
@@ -98,7 +99,8 @@ pub(super) async fn record_source(
     let provider =
         Provider::record(upstream, meta, placeholders.clone(), record_into, base).await?;
     if let Some(key) = live_provider.base_url_env() {
-        launch.set_env(key, provider.base_url.clone());
+        let path = super::super::config::base_path(&live_provider.provider);
+        launch.set_env(key, format!("{}{path}", provider.base_url));
     }
     let credential = live_provider
         .credential
@@ -108,7 +110,14 @@ pub(super) async fn record_source(
 }
 
 /// Points the agent at `credential` through the product's own variables.
-pub(super) fn apply_credential(launch: &mut Launch, credential: &Credential, choice: &ModelChoice) {
+/// Another provider's API key never becomes `OPENAI_API_KEY`, whatever
+/// model the scenario selects.
+pub(super) fn apply_credential(
+    launch: &mut Launch,
+    provider: &str,
+    credential: &Credential,
+    choice: &ModelChoice,
+) {
     match credential {
         Credential::CodexProfile(path) => {
             launch.set_env("BUTLER_CODEX_AUTH_PROFILE", path.display().to_string());
@@ -117,7 +126,8 @@ pub(super) fn apply_credential(launch: &mut Launch, credential: &Credential, cho
             launch.set_env("CODEX_AUTH_JSON", path.display().to_string());
         }
         Credential::ApiKey { env_var } => {
-            if choice.provider() == "openai"
+            if provider == "openai"
+                && choice.provider() == "openai"
                 && let Some(value) = super::super::config::nonempty(env_var)
             {
                 launch.set_env("OPENAI_API_KEY", value);
@@ -152,4 +162,42 @@ fn now_utc() -> String {
         .ok()
         .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
         .unwrap_or_default()
+}
+
+/// The refresh token of the placeholder login [`route_login_refresh`] gives
+/// a replayed scenario.
+pub const STUB_REFRESH_TOKEN: &str = "e2e-replay-refresh";
+
+/// The agent refreshes its Codex login through the provider:
+/// `BUTLER_CODEX_OAUTH_TOKEN_URL` names `<provider>/oauth/token`, which the
+/// recorder forwards to `auth.openai.com`. A replayed scenario runs with a
+/// refreshable placeholder Butler login (`<sandbox>/codex-profile.json`, not
+/// expiring) instead of the read-only Codex CLI file; a recording uses the
+/// live credential, refreshed in place.
+pub(super) fn route_login_refresh(
+    launch: &mut Launch,
+    provider: &Provider,
+    sandbox: &super::super::sandbox::Sandbox,
+) -> Result<(), HarnessError> {
+    launch.set_env(
+        "BUTLER_CODEX_OAUTH_TOKEN_URL",
+        format!("{}/oauth/token", provider.base_url),
+    );
+    if provider.is_recording() {
+        return Ok(());
+    }
+    let profile = sandbox.root.join("codex-profile.json");
+    std::fs::write(
+        &profile,
+        serde_json::json!({
+            "provider": "openai-codex",
+            "type": "oauth",
+            "accessToken": "e2e-replay-placeholder",
+            "refreshToken": STUB_REFRESH_TOKEN,
+            "expiresAt": 0,
+        })
+        .to_string(),
+    )?;
+    launch.set_env("BUTLER_CODEX_AUTH_PROFILE", profile.display().to_string());
+    Ok(())
 }

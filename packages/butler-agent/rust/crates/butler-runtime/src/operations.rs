@@ -35,7 +35,8 @@ pub use metric_files::MetricFiles;
 pub use observability::{LogEntry, LogFile, LogFollower, redact_log_line, tail_log_entries};
 pub use prompt_metrics::PromptUsageMetrics;
 pub use provider_quota::{
-    ProviderQuotaStore, ProviderQuotaUpdate, ProviderQuotaView, QuotaPlanKind,
+    ProviderQuotaFetcher, ProviderQuotaPoller, ProviderQuotaStore, ProviderQuotaUpdate,
+    ProviderQuotaView, QuotaFetchFuture, QuotaPlanKind, QuotaPollStatus, QuotaPollTrigger,
     QuotaUnavailableReason, QuotaWindowView, unavailable_view as unavailable_quota_view,
 };
 pub use service_readiness::ServiceReadiness;

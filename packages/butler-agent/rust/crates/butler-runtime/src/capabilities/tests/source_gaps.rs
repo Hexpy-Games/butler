@@ -4,8 +4,9 @@ use serde_json::json;
 
 use super::Fixture;
 
-#[tokio::test]
-async fn cursor_decoder_accepts_runtime_tolerated_base64url_spellings() {
+/// Called by `cursor_decoder_accepts_integral_json_number_spellings`: one
+/// test covers the cursor decoder's tolerated spellings.
+pub(super) async fn cursor_decoder_accepts_runtime_tolerated_base64url_spellings() {
     let fixture = Fixture::new();
     fixture.write("long.txt", b"one two three four");
     let first = json!({ "arguments": { "requests": [{ "path": "long.txt", "max_bytes": 4 }] } });

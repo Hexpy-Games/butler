@@ -36,12 +36,13 @@ enum Outcome {
     Conflict,
 }
 
-/// Pure logic (REC-04): a second send of a staged action is accepted when
-/// only its transcript envelope differs (event id, timestamp, record
-/// metadata) and keeps the first record, while a different payload
-/// (including a claim added to a claimless row) or another chat is still an
-/// identity conflict. A send under a new claim replaces the row.
-// test-category: pure-logic
+/// Format pin (REC-04): the identity of a staged outbound row in the App
+/// database. A second send of a staged action is accepted when only its
+/// transcript envelope differs (event id, timestamp, record metadata) and
+/// keeps the first record, while a different payload (including a claim
+/// added to a claimless row) or another chat is still an identity conflict.
+/// A send under a new claim replaces the row.
+// test-category: format-pin
 #[tokio::test]
 async fn a_resent_action_stages_as_itself_and_a_different_one_conflicts() {
     let cases: [(&str, Record, Record, Outcome); 5] = [

@@ -12,7 +12,9 @@ use butler_turn::btcc::BtccError;
 use super::ActiveAppEndpoint;
 use crate::host::service::configuration::{AppCapturedDependencies, AppServiceConfiguration};
 use crate::host::service::instance::mark_gateway_state;
-use crate::host::{AgentRuntime, AppServer, ResolvedInstallation, ServiceConfiguration};
+use crate::host::{
+    AgentRuntime, AppServer, AppServerOwners, ResolvedInstallation, ServiceConfiguration,
+};
 
 #[derive(Clone, Copy, Debug, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -143,22 +145,21 @@ impl AppGatewayLifecycle {
         if current.is_some() {
             return Ok(false);
         }
+        let local_auth = self.captured_dependencies.local_auth();
         let mut server = AppServer::open(
             &self.runtime,
             &self.data_root,
             &self.installation,
             app_config,
-            self.queue.clone(),
-            self.readiness.clone(),
+            AppServerOwners {
+                queue: self.queue.clone(),
+                receipt: self.readiness.clone(),
+                local_auth: local_auth.clone(),
+            },
         )
         .await?;
         let address = server.local_addr();
-        if !health_check(
-            &format!("http://{address}"),
-            app_config.gateway_config().local_auth,
-        )
-        .await
-        {
+        if !health_check(&format!("http://{address}"), local_auth.clone()).await {
             if let Err(error) = server.close_application().await {
                 *current = Some(server);
                 return Err(BtccError::relayed(
@@ -171,7 +172,7 @@ impl AppGatewayLifecycle {
                 "App gateway did not become healthy after initialization",
             ));
         }
-        self.endpoint.publish(address, app_config);
+        self.endpoint.publish(address, app_config, local_auth);
         if let Err(error) = self.persist(true, Some(format!("http://{address}")), app_config) {
             self.endpoint.clear();
             if let Err(close_error) = server.close_application().await {
@@ -284,6 +285,8 @@ impl AppGatewayLifecycle {
                 "port":desired.port,
                 "serverUrl":format!("http://{}:{}", desired.host, desired.port),
                 "dbConfigured":desired.db_configured,
+                "remoteAccessEnabled":desired.remote_access_enabled(),
+                "allowedHosts":desired.allowed_hosts(),
             },
             "nextActions":next_actions,
         }))

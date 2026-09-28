@@ -91,8 +91,8 @@ impl GuidedCommand {
         {
             return JsonDocument::from_value(&serde_json::json!({
                 "ok": false, "error": "tool_not_admitted",
-                "message": "Command execution is not admitted for this Steward task.",
-                "recovery_hint": "Use only the exact mutation capability in the delegated packet."
+                "message": "Running commands is not allowed for this task.",
+                "recovery_hint": "Use only the changes this task allows."
             }))
             .map_err(|source| error("command_result_encoding_failed").with_source(source));
         }
