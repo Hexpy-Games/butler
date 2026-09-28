@@ -100,7 +100,7 @@ src/host/memory_jobs/transcript_sync/hot.rs	LegacyHot::save	125
 src/host/memory_jobs/transcript_sync/hot.rs	commit	99
 src/host/runtime.rs	AgentRuntime::open	432
 src/host/runtime/environment.rs	ProcessEnvironment::capture	100
-src/host/service/entrypoint.rs	serve	164
+src/host/service/entrypoint.rs	serve	160
 src/host/service/ingress.rs	IngressDispatcher::poll	86
 src/host/service/ingress/bind.rs	bind_and_request	141
 src/host/service/ingress/bind.rs	control_request	89

@@ -263,13 +263,11 @@ impl AppGatewayLifecycle {
                     || active.local_auth.required != desired.gateway_config().local_auth.required
                     || active.local_auth.token() != desired.gateway_config().local_auth.token()
             });
-        let (status, next_actions) = if !enabled {
-            ("disabled", vec!["butler gateway enable app"])
-        } else if running {
-            ("online", vec!["butler gateway status app"])
-        } else {
-            ("offline", vec!["butler gateway start app"])
-        };
+        let refusing = current.is_some()
+            && active
+                .as_ref()
+                .is_some_and(|active| local_auth_unconfigured(&active.local_auth));
+        let (status, next_actions) = view_status(enabled, running, refusing);
         Ok(json!({
             "id":"app",
             "title":"Butler App Gateway",
@@ -306,10 +304,35 @@ impl AppGatewayLifecycle {
 /// configured behaviour, so the gateway stays up and tells clients why
 /// instead of leaving nothing listening (SEC-08).
 async fn health_check(base_url: &str, auth: butler_gateway::gateway::LocalAuthConfig) -> bool {
-    if auth.required && auth.token().is_none() {
+    if local_auth_unconfigured(&auth) {
         refuses_unconfigured(base_url).await
     } else {
         serves_clients(base_url, auth).await
+    }
+}
+
+/// Whether local auth is required but has no token (its file was
+/// unreadable when the service started): the gateway refuses every client.
+pub(crate) fn local_auth_unconfigured(auth: &butler_gateway::gateway::LocalAuthConfig) -> bool {
+    auth.required && auth.token().is_none()
+}
+
+/// The view's `status` and the commands that move the gateway on from it.
+/// A gateway that is up but refuses every client is `unconfigured`, not
+/// `offline`: starting it again changes nothing, the log names the
+/// credential file, and a service restart reads that file again.
+fn view_status(enabled: bool, running: bool, refusing: bool) -> (&'static str, Vec<&'static str>) {
+    if !enabled {
+        ("disabled", vec!["butler gateway enable app"])
+    } else if running {
+        ("online", vec!["butler gateway status app"])
+    } else if refusing {
+        (
+            "unconfigured",
+            vec!["butler gateway logs app", "butler restart"],
+        )
+    } else {
+        ("offline", vec!["butler gateway start app"])
     }
 }
 

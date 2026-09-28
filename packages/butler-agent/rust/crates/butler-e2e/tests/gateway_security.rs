@@ -15,7 +15,7 @@ use std::process::{Child, Stdio};
 use std::time::{Duration, Instant};
 
 use butler_e2e::e2e::HarnessError;
-use butler_e2e::e2e::agent::DATA_FOLDER_TOKEN_FILE;
+use butler_e2e::e2e::agent::{DATA_FOLDER_TOKEN_FILE, Launch};
 use butler_e2e::e2e::gateway::{Gateway, Reply};
 use butler_e2e::e2e::media;
 use butler_e2e::e2e::scenario::{Scenario, Setup};
@@ -335,8 +335,11 @@ impl Drop for KillOnDrop {
 }
 
 /// SEC-08 — a token file the agent cannot read fails closed and says why:
-/// the gateway answers every client 503 `local_auth_unconfigured`, and the
-/// service log names the error code and the file.
+/// the gateway answers every client 503 `local_auth_unconfigured`, the
+/// service log names the error code and the file (and never calls the
+/// gateway ready), and `butler gateway status` reports it `unconfigured`
+/// with the log and a service restart as next steps, not `offline` with a
+/// start that would change nothing.
 #[tokio::test]
 async fn sec_08_unreadable_token_fails_closed_with_a_diagnostic() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -363,8 +366,53 @@ async fn sec_08_unreadable_token_fails_closed_with_a_diagnostic() -> Result<(), 
         missing.display()
     );
     assert!(logged.contains(&diagnostic), "{logged}");
+    let view = service_gateway_status(&launch, &mut agent).await?;
+    assert_eq!(view["status"], "unconfigured", "{view}");
+    assert_eq!(view["running"], false, "{view}");
+    assert_eq!(
+        view["nextActions"],
+        json!(["butler gateway logs app", "butler restart"]),
+        "{view}"
+    );
+    let logged = std::fs::read_to_string(&log)?;
+    assert!(
+        logged.contains("[native-app] refusing clients address=")
+            && logged.contains("code=local_auth_unconfigured"),
+        "{logged}"
+    );
+    assert!(!logged.contains("[native-app] ready"), "{logged}");
     drop(agent);
     s.finish().await
+}
+
+/// `butler gateway status app --json` as the running service answers it;
+/// until the service is ready the CLI reports its own `offline` view.
+async fn service_gateway_status(
+    launch: &Launch,
+    agent: &mut KillOnDrop,
+) -> Result<Value, HarnessError> {
+    let deadline = Instant::now() + Duration::from_secs(60);
+    loop {
+        let output = tokio::process::Command::from(launch.command())
+            .args(["gateway", "status", "app", "--json"])
+            .stdin(Stdio::null())
+            .output()
+            .await?;
+        let view = serde_json::from_slice::<Value>(&output.stdout)
+            .ok()
+            .map(|reply| reply["data"].clone());
+        if let Some(view) = view.filter(|view| view["status"] != "offline") {
+            return Ok(view);
+        }
+        if let Some(status) = agent.0.try_wait()? {
+            panic!("agent exited ({status}) before its service answered");
+        }
+        assert!(
+            Instant::now() < deadline,
+            "no service answer to `gateway status` within 60s: {output:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
 }
 
 /// The gateway's first answer to `GET /health`, whatever its status.
