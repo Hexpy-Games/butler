@@ -71,9 +71,9 @@ interface Entry {
 }
 
 /** Verdicts that are not the module's content (a taken id, an unreadable file): listed, never reported. */
-const LOCAL_REVISIONS = new Set(["taken", "unreadable", "pending-check"]);
 /** Revision of a module held back while another client's `checking` mark is younger than the timeout. */
 const PENDING_CHECK = "pending-check";
+const LOCAL_REVISIONS = new Set(["taken", "unreadable", PENDING_CHECK]);
 
 /** Failures when drawn that are the module's own (anything else is the image, the device or the setting). */
 const RUNTIME_FAILURES = new Set<WallpaperError["reason"]>(["compile", "link", "degraded", "context-lost"]);
@@ -108,11 +108,15 @@ function holds(status: WallpaperModuleStatus, verdict: WallpaperModuleReport): b
 export function createWallpaperModuleStore(deps: WallpaperModuleStoreDeps): WallpaperModuleStore {
   /** When this client first saw each `checking` mark (`id` + its `checkedAt`), on this client's clock only. */
   const seenMarks = new Map<string, number>();
+  /** How long this client has seen the mark; the first sight also schedules one look after the timeout. */
   const markAge = (id: string, checkedAt: string | undefined) => {
     const key = `${id}\n${checkedAt ?? ""}`;
-    const first = seenMarks.get(key) ?? Date.now();
-    seenMarks.set(key, first);
-    return Date.now() - first;
+    const first = seenMarks.get(key);
+    if (first !== undefined) return Date.now() - first;
+    for (const seen of seenMarks.keys()) if (seen.startsWith(`${id}\n`)) seenMarks.delete(seen);
+    seenMarks.set(key, Date.now());
+    setTimeout(() => recheck(id), CHECK_TIMEOUT_MS + 1_000);
+    return 0;
   };
   /** Set once the store exists: looks at a held-back module again after the timeout. */
   let recheck: (id: string) => void = () => undefined;
@@ -196,9 +200,9 @@ export function createWallpaperModuleStore(deps: WallpaperModuleStoreDeps): Wall
     const firstSight = !previous || previous.revision === PENDING_CHECK;
     if (firstSight && status.state === "checking") {
       if (markAge(id, status.checkedAt) >= CHECK_TIMEOUT_MS) return { ...base, files, revision, module, verdict: failed(HUNG_DURING_CHECK) };
-      setTimeout(() => recheck(id), CHECK_TIMEOUT_MS + 1_000);
       return { ...base, files, revision: PENDING_CHECK };
     }
+    for (const key of [...seenMarks.keys()]) if (key.startsWith(`${id}\n`)) seenMarks.delete(key);
     if (firstSight && status.state !== "unknown") {
       return { ...base, files, revision, module, verdict: status.state === "ok" ? { state: "ok" } : failed(status.message ?? "error") };
     }

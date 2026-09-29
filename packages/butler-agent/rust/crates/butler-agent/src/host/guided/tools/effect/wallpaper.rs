@@ -3,10 +3,11 @@
 //! journaled and sent once to the App.
 //!
 //! A dispatch whose outcome was lost is reconciled without overwriting a
-//! change made in between. A module save is sent again: its
-//! `replace_revision` (or, for a new module, the absence of one) is the
-//! expected revision the gateway checks, and the same files again are a
-//! no-op. A wallpaper write is never sent again: the current wallpaper is
+//! change made in between. Reconciling a module save always answers "not
+//! applied", so the effect service dispatches it again through its usual
+//! checks: its `replace_revision` (or, for a new module, the absence of one)
+//! is the expected revision the gateway checks, and the same files again are
+//! a no-op. A wallpaper write is never sent again: the current wallpaper is
 //! read, and the write counts as applied only when it already shows the
 //! requested source; otherwise the outcome stays uncertain for the model to
 //! re-check with `list_wallpapers`.
@@ -93,15 +94,13 @@ impl WallpaperEffect {
         signal: &CancellationToken,
         attempts: i64,
     ) -> Result<AdapterOutcome, EffectFailure> {
-        // Nothing was dispatched yet: the effect service dispatches it now.
-        if attempts == 0 {
+        // Nothing was dispatched yet, or a module save (safe to dispatch
+        // again, see the module docs): the effect service dispatches it.
+        if attempts == 0 || self.capability == "save_wallpaper_module" {
             return Ok(AdapterOutcome::NotApplied(EffectAdapterError::new(
                 "wallpaper_not_dispatched",
-                "The wallpaper write was not sent yet.",
+                "The wallpaper write is to be sent.",
             )));
-        }
-        if self.capability == "save_wallpaper_module" {
-            return self.send(signal).await;
         }
         let project = self.request.body["project_id"].as_str();
         let query: Vec<_> = project.iter().map(|id| ("project_id", *id)).collect();

@@ -1,7 +1,7 @@
 /// <reference types="bun" />
-import { expect, test } from "bun:test";
+import { expect, setSystemTime, test } from "bun:test";
 import { BUILTIN_WALLPAPERS, type WallpaperModule, type WallpaperModuleCheck } from "@/butler-ds";
-import { createWallpaperModuleStore } from "./wallpaperModuleStore";
+import { HUNG_DURING_CHECK, createWallpaperModuleStore } from "./wallpaperModuleStore";
 import type { WallpaperModuleListing, WallpaperModuleReport, WallpaperModuleStatus } from "./wallpaperModules";
 
 const BUILTIN_IDS = BUILTIN_WALLPAPERS.list().map((module) => module.manifest.id);
@@ -277,4 +277,9 @@ test("a checking mark found at start holds the module back: not drawn, checked o
   expect(gateway.checks).toEqual([]);
   expect(user()).toEqual([{ id: "me.hang", name: { en: "hang", ko: "hang" } }]);
   expect(gateway.reports).toEqual([]);
+  setSystemTime(new Date(Date.now() + 61_000));
+  await store.refresh(["me.hang"]);
+  setSystemTime();
+  expect(user()[0]?.error).toBe(HUNG_DURING_CHECK);
+  expect(gateway.checks).toEqual([]);
 });

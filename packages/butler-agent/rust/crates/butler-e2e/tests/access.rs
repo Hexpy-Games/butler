@@ -378,13 +378,13 @@ async fn acc_07_wallpaper_change_asks_in_ask_first() -> Result<(), HarnessError>
     let turn = settled(&s, "general", &turn_id).await?;
     assert_eq!(turn_state(&turn), "waiting_for_form", "{turn}");
     let requests = s.gw.approval_requests("general").await?;
-    let _request = requests
-        .iter()
-        .find(|request| {
+    assert!(
+        requests.iter().any(|request| {
             request["source_turn_id"] == turn_id.as_str()
                 && request["executable"] == "set_wallpaper"
-        })
-        .unwrap_or_else(|| panic!("no approval request for the wallpaper change: {requests:?}"));
+        }),
+        "no approval request for the wallpaper change: {requests:?}"
+    );
     assert_eq!(
         s.gw.settings().await?["wallpaper"],
         before,
