@@ -32,46 +32,7 @@ impl AppApplication {
                 "대화 생성 요청을 확인해 주세요.",
             ));
         }
-        let destination = match input.destination.as_str() {
-            "chat" => AppSessionBranchDestination::Chat,
-            "project" => {
-                let Some(project_id) = input
-                    .project_id
-                    .as_deref()
-                    .filter(|value| !value.is_empty())
-                else {
-                    return Err(public(
-                        400,
-                        "branch_request_invalid",
-                        "대화 생성 요청을 확인해 주세요.",
-                    ));
-                };
-                AppSessionBranchDestination::Project {
-                    project_id: project_id.to_owned(),
-                }
-            }
-            "new_project" => AppSessionBranchDestination::NewProject {
-                name: input.title.clone(),
-            },
-            _ => {
-                return Err(public(
-                    400,
-                    "branch_request_invalid",
-                    "대화 생성 요청을 확인해 주세요.",
-                ));
-            }
-        };
-        let follow_up = match input.follow_up {
-            None => None,
-            Some(serde_json::Value::String(value)) => Some(value),
-            Some(_) => {
-                return Err(public(
-                    400,
-                    "branch_request_invalid",
-                    "대화 생성 요청을 확인해 주세요.",
-                ));
-            }
-        };
+        let (destination, follow_up) = resolve_destination(&input)?;
 
         let request_id = input.request_id;
         let existing = self
@@ -96,26 +57,7 @@ impl AppApplication {
             })
             .or(input.current_session_id)
             .ok_or_else(|| public(400, "branch_source_required", "출처 대화가 필요합니다."))?;
-        let canonical = self
-            .dependencies
-            .branch_conversations
-            .resolve_app_session(requested_source.clone())
-            .await?;
-        let source_session_id = self
-            .storage
-            .execute({
-                let requested_source = requested_source.clone();
-                move |db| store::resolve_source_session(db, &requested_source, canonical.as_ref())
-            })
-            .await
-            .map_err(super::super::app_error)?
-            .ok_or_else(|| {
-                public(
-                    404,
-                    "branch_source_unavailable",
-                    "출처 대화를 확인해 주세요.",
-                )
-            })?;
+        let source_session_id = self.resolve_source_session_id(requested_source).await?;
         let source_message_was_omitted = input.source_message_id.is_none();
         let requested_message = input.source_message_id.or_else(|| {
             prior
@@ -149,6 +91,30 @@ impl AppApplication {
             .await
             .map_err(super::super::app_error)?;
         Ok((request, digest, existing))
+    }
+
+    async fn resolve_source_session_id(
+        &self,
+        requested_source: String,
+    ) -> Result<String, GatewayApplicationError> {
+        let canonical = self
+            .dependencies
+            .branch_conversations
+            .resolve_app_session(requested_source.clone())
+            .await?;
+        self.storage
+            .execute(move |db| {
+                store::resolve_source_session(db, &requested_source, canonical.as_ref())
+            })
+            .await
+            .map_err(super::super::app_error)?
+            .ok_or_else(|| {
+                public(
+                    404,
+                    "branch_source_unavailable",
+                    "출처 대화를 확인해 주세요.",
+                )
+            })
     }
 
     async fn resolve_answer(
@@ -284,6 +250,48 @@ impl AppApplication {
             excerpt_truncated: result.excerpt_truncated,
         })
     }
+}
+
+fn resolve_destination(
+    input: &StartRequest,
+) -> Result<(AppSessionBranchDestination, Option<String>), GatewayApplicationError> {
+    let destination = match input.destination.as_str() {
+        "chat" => AppSessionBranchDestination::Chat,
+        "project" => {
+            let Some(project_id) = input
+                .project_id
+                .as_deref()
+                .filter(|value| !value.is_empty())
+            else {
+                return Err(invalid_branch_request());
+            };
+            AppSessionBranchDestination::Project {
+                project_id: project_id.to_owned(),
+            }
+        }
+        "new_project" => AppSessionBranchDestination::NewProject {
+            name: input
+                .project_name
+                .clone()
+                .filter(|name| !name.trim().is_empty())
+                .unwrap_or_else(|| input.title.clone()),
+        },
+        _ => return Err(invalid_branch_request()),
+    };
+    let follow_up = match input.follow_up.as_ref() {
+        None => None,
+        Some(serde_json::Value::String(value)) => Some(value.clone()),
+        Some(_) => return Err(invalid_branch_request()),
+    };
+    Ok((destination, follow_up))
+}
+
+fn invalid_branch_request() -> GatewayApplicationError {
+    public(
+        400,
+        "branch_request_invalid",
+        "대화 생성 요청을 확인해 주세요.",
+    )
 }
 
 fn source_answer_unavailable() -> GatewayApplicationError {

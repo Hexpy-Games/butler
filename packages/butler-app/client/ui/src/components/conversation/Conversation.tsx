@@ -5,6 +5,7 @@ import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useAppearanceTheme } from "@/stores/appearanceStore.ts";
 import { EmptyState } from "./EmptyState";
+import { BranchProjectContext } from "./AssistantBranchActions";
 import { MessageList } from "./MessageList";
 import { Composer } from "./Composer";
 import {
@@ -22,6 +23,12 @@ void appCopy;
 export function Conversation() {
   const locale = useAppLocale();
   const activeChatId = useButlerStore((state) => state.activeChatId);
+  const branchProjectId = useButlerStore((state) => {
+    if (activeChatId === "general") return null;
+    const view = state.sessionViews[activeChatId] ??
+      (state.sessionView?.session_id === activeChatId ? state.sessionView : null);
+    return view?.project_id ?? null;
+  });
   const navigation = useButlerStore((state) => state.navigation);
   const messages = useButlerStore((state) => state.messages);
   const summary = useButlerStore((state) => state.summary);
@@ -85,12 +92,14 @@ export function Conversation() {
       titleIconSize={newChatTitleIconSize}
     >
       {showMessageList ? (
-        <MessageList
-          messages={messages}
-          turnProgress={turnProgress}
-          bottomReserve={composerReserve}
-          isSending={isActiveChatSending}
-        />
+        <BranchProjectContext.Provider value={branchProjectId}>
+          <MessageList
+            messages={messages}
+            turnProgress={turnProgress}
+            bottomReserve={composerReserve}
+            isSending={isActiveChatSending}
+          />
+        </BranchProjectContext.Provider>
       ) : showEmptyState ? (
         <ConversationScroll masked={false} scrollable={false}>
           <EmptyState

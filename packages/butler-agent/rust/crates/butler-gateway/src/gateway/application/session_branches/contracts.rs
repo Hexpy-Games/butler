@@ -11,6 +11,9 @@ pub struct AppStartTopicConversationRequest {
     pub title: String,
     pub destination: String,
     pub project_id: Option<String>,
+    /// The new project's name (`new_project`); the title when absent.
+    #[serde(default)]
+    pub project_name: Option<String>,
     pub follow_up: Option<serde_json::Value>,
 }
 

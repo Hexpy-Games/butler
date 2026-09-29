@@ -4,8 +4,11 @@ import { useEffect, useState } from "react";
 import { Button, ButtonContainer, DialogForm, Field, FieldLabel, Input, Typo } from "@/butler-ds";
 import { useSessionBranch } from "./hooks/useSessionBranch";
 
-export function SessionBranchForm({ sourceSessionId, sourceMessageId, project, onClose, onPendingChange }: {
-  sourceSessionId: string; sourceMessageId: string; project: boolean; onClose(): void; onPendingChange(pending: boolean): void;
+export function SessionBranchForm({ sourceSessionId, sourceMessageId, project, topicProjectId = null, onClose, onPendingChange }: {
+  sourceSessionId: string; sourceMessageId: string; project: boolean;
+  /** A new conversation (not project) is created in this project when set. */
+  topicProjectId?: string | null;
+  onClose(): void; onPendingChange(pending: boolean): void;
 }) {
   useAppLocale();
   const [title, setTitle] = useState("");
@@ -13,7 +16,8 @@ export function SessionBranchForm({ sourceSessionId, sourceMessageId, project, o
   useEffect(() => { onPendingChange(branch.pending); return () => onPendingChange(false); }, [branch.pending, onPendingChange]);
   const submit = () => {
     void branch.create({ sourceSessionId, sourceMessageId, title: title.trim(),
-      destination: project ? { kind: "new_project", name: title.trim() } : { kind: "chat" },
+      destination: project ? { kind: "new_project", name: title.trim() }
+        : topicProjectId ? { kind: "project", projectId: topicProjectId } : { kind: "chat" },
     }).then(created => { if (created) onClose(); });
   };
   return <DialogForm dialog

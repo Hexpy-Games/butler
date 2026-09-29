@@ -157,7 +157,7 @@ fn seed_legacy_delegations(s: &Scenario, hint: &str) {
         ("d", "steward-legacy-d", json!({"unexpected": true}), None),
         // The same, still waiting to be dispatched.
         ("e", "steward-legacy-e", json!({"unexpected": true}), None),
-        // Steward whose turn was delivered but whose result was never committed.
+        // Steward whose turn stayed finalizing past its grace without a result.
         (
             "f",
             "steward-legacy-f",
@@ -167,7 +167,7 @@ fn seed_legacy_delegations(s: &Scenario, hint: &str) {
     ];
     seed_child_turn(&db, "a", "steward-legacy-a", "delivered");
     seed_child_turn(&db, "b", "steward-legacy-b", "admitted");
-    seed_child_turn(&db, "f", "steward-legacy-f", "delivered");
+    seed_child_turn(&db, "f", "steward-legacy-f", "delivery_committed");
     for (ordinal, (key, child, packet, intent)) in (1_i64..).zip(rows) {
         db.execute(
             "INSERT INTO btcc_session_relations (relation_id,parent_session_id,parent_turn_id,child_session_id,anchor_message_id,ordinal,safe_title,created_at) VALUES (?1,?2,'turn-legacy',?3,'message-legacy',?4,'Legacy task','2026-01-01T00:00:00.000Z')",
@@ -317,12 +317,12 @@ fn assert_steward_turn_shape(stewards: &Value) {
     assert_eq!(live["latest_turn"]["state"], "thinking", "{live}");
     assert_eq!(live["latest_turn"]["cancellable"], true, "{live}");
     assert_eq!(live["active_turn"], live["latest_turn"], "{live}");
-    // A delivered turn whose result never arrived is an orphan, not work in
-    // progress.
+    // A finalizing turn older than its grace is an orphan, not active work.
     let orphan = &list[2];
     assert_eq!(orphan["status"], "failed", "{orphan}");
     assert_eq!(orphan["terminal"], true, "{orphan}");
     assert_eq!(orphan["result_missing"], true, "{orphan}");
+    assert_eq!(orphan["latest_turn"]["state"], "streaming", "{orphan}");
     assert!(orphan["active_turn"].is_null(), "{orphan}");
 }
 
