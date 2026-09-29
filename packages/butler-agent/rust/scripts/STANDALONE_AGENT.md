@@ -63,8 +63,8 @@ release workflow builds each platform on its own native runner, then
 `release-standalone-agent.py merge --output DIR DIR...` combines the
 per-platform manifest directories into the pair a release publishes, one
 artifact per platform, each with its URL and sha256. `butler update` selects
-its own platform's entry (`darwin-arm64`), else `all`, else an unlabelled one;
-an entry for another platform is never selected.
+the entry whose `platform` equals its own (`darwin-arm64`, ...); an entry for
+another platform, or one without a platform, is never selected.
 
 The release smoke rejects unsafe or duplicate tar entries, checks the archive
 and manifest digests and identities, then installs into a temporary directory
