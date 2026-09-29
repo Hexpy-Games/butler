@@ -22,16 +22,16 @@ pub(super) const MAX_INPUT_BYTES: usize = 25 * 1024 * 1024;
 const MAX_EDGE: u32 = 3840;
 const THUMBNAIL_EDGE: u32 = 480;
 /// Longest side of a source image, read from its header before decoding.
-pub(crate) const MAX_SOURCE_SIDE: u32 = 16_384;
+const MAX_SOURCE_SIDE: u32 = 16_384;
 /// Most pixels of a source image, read from its header before decoding.
-pub(crate) const MAX_SOURCE_PIXELS: u64 = 40_000_000;
+const MAX_SOURCE_PIXELS: u64 = 40_000_000;
 /// Most memory the decoder may allocate for one image (a 40 MP 8-bit RGBA
 /// image is 160 MB; 16-bit sources that large are refused).
 const MAX_DECODE_ALLOC: u64 = 256 * 1024 * 1024;
 const JPEG_QUALITY: u8 = 88;
 
 /// Whether `width` x `height` is within the source caps.
-pub(crate) fn within_source_limits(width: u32, height: u32) -> bool {
+fn within_source_limits(width: u32, height: u32) -> bool {
     width > 0
         && height > 0
         && width <= MAX_SOURCE_SIDE
