@@ -1,10 +1,14 @@
+// test-category: pure-logic
 import { describe, it } from "bun:test";
 import { RuleTester } from "eslint";
 import tseslint from "typescript-eslint";
 import { butlerDsEslintPlugin } from "../../packages/butler-app/scripts/lint/butler-ds/eslint-plugin.ts";
 
 type RuleTesterHooks = { describe: unknown; it: unknown; itOnly: unknown };
-Object.assign(RuleTester as unknown as RuleTesterHooks, { describe, it, itOnly: it.only });
+const rejectOnly = () => {
+  throw new Error("RuleTester cases marked only are not allowed in the full suite.");
+};
+Object.assign(RuleTester as unknown as RuleTesterHooks, { describe, it, itOnly: rejectOnly });
 
 const tester = new RuleTester({
   languageOptions: {
