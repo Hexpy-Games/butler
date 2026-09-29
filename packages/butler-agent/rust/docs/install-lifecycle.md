@@ -99,10 +99,14 @@ successful restart.
 
 ### Manifest policies
 
-Update manifests carry `activation_policy: "butler-managed"` and
-`rollback_policy: "supported"`. Manifests published before this change
-(`user-installs-standalone-archive`, `not-managed-by-butler`) describe the same
-archive and are still accepted. `butler update` selects the artifact whose
+The published update manifests keep their policy strings
+(`activation_policy: "user-installs-standalone-archive"`,
+`rollback_policy: "not-managed-by-butler"`): the archive is the same whoever
+extracts it, and `install.sh` still leaves activation to the user. The CLI
+accepts those strings and the newer ones (`butler-managed`, `supported`); its
+own `update` output reports `butler-managed` / `supported`, because `butler
+update --apply` does activate and can roll back. No manifest needs to change for
+the CLI to work. `butler update` selects the artifact whose
 `platform` equals this host's (`darwin-arm64`, `linux-x64`, `linux-arm64`); an
 artifact for another platform, or one with no platform, is never selected
 (`update_manifest_agent_platform_missing`).
