@@ -91,7 +91,10 @@ function publicEntry({ id, name, verdict }: Entry): WallpaperUserModule {
 
 const failed = (message: string): WallpaperModuleReport => ({ state: "error", message });
 
-/** A `checking` mark the gateway still holds when this app first sees the module: that check never finished. */
+/** A `checking` mark older than this is a check that never finished, whoever made it. */
+const CHECK_TIMEOUT_MS = 60_000;
+
+/** A `checking` mark the gateway still holds from before this client started (or long ago): that check never finished. */
 export const HUNG_DURING_CHECK = "hung during check (the app stopped while compiling or drawing it)";
 
 /** The gateway already holds this verdict. */
@@ -101,6 +104,12 @@ function holds(status: WallpaperModuleStatus, verdict: WallpaperModuleReport): b
 
 /** Built-ins plus user modules; the registry is rebuilt only when what it offers changes. */
 export function createWallpaperModuleStore(deps: WallpaperModuleStoreDeps): WallpaperModuleStore {
+  const startedAt = Date.now();
+  /** A mark with no time, from before this client started, or older than the timeout. */
+  const staleMark = (checkedAt: string | undefined) => {
+    const at = checkedAt ? Date.parse(checkedAt) : Number.NaN;
+    return Number.isNaN(at) || at < startedAt || Date.now() - at > CHECK_TIMEOUT_MS;
+  };
   let entries = new Map<string, Entry>();
   let snapshot: WallpaperModuleSnapshot = { registry: BUILTIN_WALLPAPERS, userModules: [] };
   let signature = "";
@@ -175,9 +184,12 @@ export function createWallpaperModuleStore(deps: WallpaperModuleStoreDeps): Wall
     // Unchanged content keeps its verdict, including a failure when drawn.
     if (previous?.revision === revision) return { ...previous, ...base, files: files ?? previous.files, module: previous.module };
     // First sight of a checked module: the gateway's verdict stands. A `checking` mark left from before
-    // this app started is a check that never finished (a GPU hang): the module is retired, never drawn.
-    if (!previous && status.state === "checking") return { ...base, files, revision, module, verdict: failed(HUNG_DURING_CHECK) };
-    if (!previous && status.state !== "unknown") {
+    // this client started, or older than the timeout, is a check that never finished (a GPU hang): the
+    // module is retired, never drawn. A fresh mark is another client checking now: check it here too.
+    if (!previous && status.state === "checking" && staleMark(status.checkedAt)) {
+      return { ...base, files, revision, module, verdict: failed(HUNG_DURING_CHECK) };
+    }
+    if (!previous && status.state !== "unknown" && status.state !== "checking") {
       return { ...base, files, revision, module, verdict: status.state === "ok" ? { state: "ok" } : failed(status.message ?? "error") };
     }
     if (files && deps.markChecking && deps.canCheck?.() !== false) await deps.markChecking(id, files).catch(() => undefined);
