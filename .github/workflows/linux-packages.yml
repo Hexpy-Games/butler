@@ -1,9 +1,10 @@
 name: Linux packages
 
 # Linux App packages (#260 Linux track): the Electron App with the bundled
-# native Butler Agent (portable static ORT recipe, #261) as a DEB for x64 and
-# arm64 and an Arch package for x64. Every package is installed in a clean
-# distribution container and its agent is run headless (start, /health, stop).
+# native Butler Agent (prebuilt ORT in CI, portable static ORT on tagged
+# releases, #261) as a DEB for x64 and arm64 and an Arch package for x64. Every
+# package is installed in a clean distribution container and its agent is run
+# headless (start, /health, stop).
 # Artifacts only: nothing is published to a GitHub Release.
 
 on:
@@ -15,6 +16,10 @@ on:
     paths:
       - ".github/workflows/linux-packages.yml"
       - ".github/actions/rust-agent-setup/**"
+      - "packages/butler-agent/rust/Cargo.lock"
+      - "packages/butler-agent/rust/crates/butler-agent/Cargo.toml"
+      - "packages/butler-agent/rust/crates/butler-gateway/Cargo.toml"
+      - "packages/butler-agent/rust/crates/butler-memory/Cargo.toml"
       - "packages/butler-agent/rust/scripts/prepare-static-ort.py"
       - "packages/butler-app/scripts/release/package-linux-app.ts"
       - "packages/butler-app/scripts/release/linux-package-smoke.sh"
@@ -50,10 +55,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Rust and the static ONNX Runtime
+      - name: Set up Rust and the selected ONNX Runtime
         uses: ./.github/actions/rust-agent-setup
         with:
-          native-deps: ort
+          native-deps: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && 'static-ort' || 'prebuilt-ort' }}
           cache-key: package-${{ matrix.target }}
 
       - name: Set up Bun
@@ -85,13 +90,16 @@ jobs:
           npm --prefix packages/butler-app/client/ui ci
           npm --prefix packages/butler-app/client/ui run build
 
-      # Built here with the ORT paths rust-agent-setup exported, then handed to
-      # the payload producer so it does not prepare ORT a second time.
+      # The payload producer accepts this binary and does not rebuild the agent.
       - name: Build the native agent
         working-directory: packages/butler-agent/rust
         run: |
           set -euo pipefail
-          cargo build --release --locked -p butler-agent --bin butler-agent
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == refs/tags/v* ]]; then
+            cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
+          else
+            cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features prebuilt-ort
+          fi
           echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$PWD/target/release/butler-agent" >> "$GITHUB_ENV"
 
       - name: Package the App
