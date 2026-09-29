@@ -11,6 +11,7 @@ use std::time::{Duration, SystemTime};
 
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::scenario::Setup;
+use butler_e2e::e2e::stop_intent::{instance_record, read_intent};
 use rusqlite::{Connection, OpenFlags, params};
 
 const COMPLETED_WINDOWS: usize = 30_000;
@@ -60,10 +61,9 @@ fn signature(path: &Path) -> Option<(u64, SystemTime)> {
         .map(|meta| (meta.len(), meta.modified().unwrap()))
 }
 
-#[tokio::test]
-async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let s = Setup::new("MEM-IDLE")?.start().await?;
+async fn initialize_empty(
+    s: &butler_e2e::e2e::scenario::Scenario,
+) -> Result<PathBuf, HarnessError> {
     let init = s
         .agent
         .cli_async(&[
@@ -76,7 +76,113 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
         .await?
         .json()?;
     assert_eq!(init["ok"], true, "{init}");
-    let graph = graph_path(&s.sandbox.data)?;
+    graph_path(&s.sandbox.data)
+}
+
+fn seed_imported_message(data: &Path) {
+    let canonical = Connection::open(data.join("runtime/conversation-store.sqlite")).unwrap();
+    let now = "2026-09-29T00:00:00.000Z";
+    canonical.execute("INSERT INTO conversation_sessions(id,gateway_origin,created_at,updated_at,status,schema_version) VALUES('idle-recovery-session','app',?1,?1,'active',4)", [now]).unwrap();
+    canonical.execute("INSERT INTO conversation_messages(id,session_id,seq,role,status,visibility,provenance,created_at,origin_kind) VALUES('idle-recovery-message','idle-recovery-session',1,'user','complete','user','imported',?1,'user_input')", [now]).unwrap();
+    canonical.execute("INSERT INTO conversation_parts(id,message_id,part_index,kind,content_json,status) VALUES('idle-recovery-part','idle-recovery-message',0,'text','{\"text\":\"Remember this recovery fact\"}','complete')", []).unwrap();
+    canonical
+        .execute(
+            "UPDATE conversation_public_source_state SET revision=revision+1 WHERE singleton=1",
+            [],
+        )
+        .unwrap();
+}
+
+fn hide_registered_message(graph: &Path) {
+    let graph = Connection::open(graph).unwrap();
+    let cursor: String = graph
+        .query_row(
+            "SELECT value FROM memory_state WHERE key='canonical_catchup_message_cursor'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(cursor, "idle-recovery-message");
+    graph.execute("UPDATE memory_projection_windows SET state='complete' WHERE job_id IN (SELECT j.job_id FROM memory_projection_jobs j, json_each(j.observed_completion_job_ids) observed WHERE observed.value LIKE 'catchup:message:idle-recovery-message:%')", []).unwrap();
+    graph.execute("UPDATE memory_projection_jobs SET observed_completion_job_ids='[]' WHERE job_id IN (SELECT j.job_id FROM memory_projection_jobs j, json_each(j.observed_completion_job_ids) observed WHERE observed.value LIKE 'catchup:message:idle-recovery-message:%')", []).unwrap();
+}
+
+fn recovery_observations(graph: &Path) -> i64 {
+    readonly(graph).query_row(
+        "SELECT COUNT(*) FROM memory_projection_jobs j, json_each(j.observed_completion_job_ids) observed WHERE observed.value LIKE 'catchup:message:idle-recovery-message:%'",
+        [], |row| row.get(0),
+    ).unwrap()
+}
+
+#[tokio::test]
+async fn mem_idle_daily_cycle_and_crash_recovery() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut s = Setup::new("MEM-IDLE-RECOVERY")?.start().await?;
+    let graph = initialize_empty(&s).await?;
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    let graph_db = readonly(&graph);
+    let before = data_version(&graph_db);
+    let cycle = s
+        .agent
+        .cli_async(&["cognition", "memory", "maintain", "--json"])
+        .await?
+        .json()?;
+    assert_eq!(cycle["ok"], true, "{cycle}");
+    let daily_writes = data_version(&graph_db) - before;
+    assert_eq!(daily_writes, 0, "daily graph writes: {cycle}");
+
+    seed_imported_message(&s.sandbox.data);
+    s.restart().await?;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+    while recovery_observations(&graph) == 0 && tokio::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+    assert_eq!(
+        recovery_observations(&graph),
+        1,
+        "initial registration missing"
+    );
+    hide_registered_message(&graph);
+    assert_eq!(
+        recovery_observations(&graph),
+        0,
+        "observation was not removed"
+    );
+    s.agent.kill9()?;
+    assert!(
+        instance_record(&s.sandbox.data).is_some(),
+        "crash marker missing"
+    );
+    assert!(
+        read_intent(&s.sandbox.data).is_none(),
+        "crash had stop intent"
+    );
+    s.gw = s.agent.start_again().await?;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+    while recovery_observations(&graph) == 0 && tokio::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+    assert_eq!(
+        recovery_observations(&graph),
+        1,
+        "unclean startup missed the source"
+    );
+    tokio::time::sleep(Duration::from_secs(15)).await;
+    let settled = data_version(&graph_db);
+    tokio::time::sleep(Duration::from_secs(5)).await;
+    let further_writes = data_version(&graph_db) - settled;
+    eprintln!(
+        "MEM-IDLE-RECOVERY daily_writes={daily_writes} recovery_observations=1 further_writes={further_writes}"
+    );
+    assert_eq!(further_writes, 0, "graph wrote after recovery settled");
+    s.finish().await
+}
+
+#[tokio::test]
+async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("MEM-IDLE")?.start().await?;
+    let graph = initialize_empty(&s).await?;
     seed_graph(&graph);
 
     // Give the service time to discover the generation and finish its first sweep.

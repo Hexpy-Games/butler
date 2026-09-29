@@ -65,14 +65,14 @@ pub(in crate::cognition) struct PendingSemanticJob {
     pub extraction_version: String,
 }
 
-/// Where the canonical catch-up stands: its two cursors and the sweep
-/// bookkeeping that decides when they may wrap back to the start.
+/// Where canonical catch-up stands, including the source binding for cursors.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(in crate::cognition) struct CatchupState {
     pub outcome: Option<String>,
     pub message: Option<String>,
     /// Canonical public revision at which the current sweep began.
     pub sweep_revision: Option<u64>,
+    pub source_identity: Option<String>,
     /// The current sweep has reached the end of both inventories.
     pub sweep_done: bool,
     /// Epoch milliseconds at which the last sweep completed.
@@ -82,6 +82,7 @@ pub(in crate::cognition) struct CatchupState {
 const OUTCOME_CURSOR: &str = "canonical_catchup_outcome_cursor";
 const MESSAGE_CURSOR: &str = "canonical_catchup_message_cursor";
 const SWEEP_REVISION: &str = "canonical_catchup_sweep_revision";
+const SOURCE_IDENTITY: &str = "canonical_catchup_source_identity";
 const SWEEP_DONE: &str = "canonical_catchup_sweep_done";
 const SWEPT_AT: &str = "canonical_catchup_swept_at_ms";
 
@@ -101,6 +102,7 @@ pub(super) fn catchup_state(connection: &Connection) -> CognitionResult<CatchupS
         outcome: read(OUTCOME_CURSOR)?,
         message: read(MESSAGE_CURSOR)?,
         sweep_revision: read(SWEEP_REVISION)?.and_then(|value| value.parse().ok()),
+        source_identity: read(SOURCE_IDENTITY)?,
         sweep_done: read(SWEEP_DONE)?.as_deref() == Some("1"),
         swept_at_ms: read(SWEPT_AT)?.and_then(|value| value.parse().ok()),
     })
@@ -122,6 +124,10 @@ pub(super) fn save_catchup_state(
                 .unwrap_or_default(),
         ),
         (SWEEP_DONE, u8::from(state.sweep_done).to_string()),
+        (
+            SOURCE_IDENTITY,
+            state.source_identity.clone().unwrap_or_default(),
+        ),
         (
             SWEPT_AT,
             state
@@ -146,7 +152,7 @@ pub(super) fn registered_observations(
     ids: &[String],
 ) -> CognitionResult<HashSet<String>> {
     let mut found = HashSet::new();
-    for batch in ids.chunks(200) {
+    for batch in ids.chunks(256) {
         let marks = vec!["?"; batch.len()].join(",");
         let mut statement = connection
             .prepare(&format!(

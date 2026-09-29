@@ -21,12 +21,14 @@ pub(super) struct CatchupReport {
     pub scanned: usize,
     pub ingested: usize,
     pub wrapped: bool,
+    pub sweeping: bool,
     pub outcome_cursor: Option<String>,
     pub recovered_message_cursor: Option<String>,
 }
 
 pub(super) async fn run_if_due(input: &Input) -> CognitionResult<bool> {
-    Ok(run(input, Schedule::IfDue).await?.ingested > 0)
+    let report = run(input, Schedule::IfDue).await?;
+    Ok(report.ingested > 0 || (report.scanned > 0 && report.sweeping))
 }
 
 pub(super) async fn run_once(input: &Input) -> CognitionResult<CatchupReport> {
@@ -43,7 +45,13 @@ enum Schedule {
 /// Claims the catch-up slot; `false` when a pass ran within the last
 /// minute and this one is only due-based.
 fn claim_slot(input: &Input, schedule: Schedule) -> bool {
-    if schedule == Schedule::Now {
+    if schedule == Schedule::Now
+        || input
+            .catchup_progress
+            .lock()
+            .as_ref()
+            .is_some_and(|(_, state)| !state.sweep_done)
+    {
         return true;
     }
     let mut last = input.catchup_at.lock();
@@ -65,7 +73,13 @@ async fn run(input: &Input, schedule: Schedule) -> CognitionResult<CatchupReport
         }
         Err(error) => return Err(error),
     };
-    let stored = input.probe.catchup_state(&handle.graph_path)?;
+    let persisted = input.probe.catchup_state(&handle.graph_path)?;
+    let stored = input
+        .catchup_progress
+        .lock()
+        .as_ref()
+        .filter(|(path, _)| path == &handle.graph_path)
+        .map_or_else(|| persisted.clone(), |(_, state)| state.clone());
     let canonical = match ConversationSourceReader::open(&canonical_path(&handle, &input.data_root))
     {
         Ok(reader) => reader,
@@ -74,47 +88,48 @@ async fn run(input: &Input, schedule: Schedule) -> CognitionResult<CatchupReport
         }
         Err(error) => return Err(CognitionError::from(error)),
     };
-    let now_ms = epoch_ms(&(input.clock)());
     let revision = canonical.public_revision().map_err(CognitionError::from)?;
-    if schedule == Schedule::IfDue
-        && stored.sweep_done
-        && stored.sweep_revision == Some(revision)
-        && stored
-            .swept_at_ms
-            .is_some_and(|done| now_ms.saturating_sub(done) < DAILY_SWEEP_MS)
-    {
-        canonical.close().map_err(CognitionError::from)?;
-        return Ok(CatchupReport::default());
-    }
-    let mut pass = Pass::begin(stored.clone(), revision, now_ms);
+    let identity = canonical.source_identity().map_err(CognitionError::from)?;
+    let cursors_valid = canonical
+        .catchup_cursors_exist(stored.outcome.as_deref(), stored.message.as_deref())
+        .map_err(CognitionError::from)?;
+    let unclean = input
+        .unclean_start
+        .swap(false, std::sync::atomic::Ordering::AcqRel);
+    let mut pass = Pass::begin(
+        stored.clone(),
+        revision,
+        identity,
+        unclean || !cursors_valid,
+    );
     pass.read_outcomes(&canonical)?;
     pass.read_recovered_sources(&canonical)?;
     canonical.close().map_err(CognitionError::from)?;
     let work = unregistered(input, &handle, std::mem::take(&mut pass.work))?;
     let scanned = pass.scanned;
+    let missing = work.len();
     let registration = register(input, &handle, work).await?;
     if !registration.interrupted {
-        pass.finish(now_ms);
-        if pass.state != stored {
+        pass.finish(epoch_ms(&(input.clock)()));
+        if missing > 0 && pass.cursor_advanced(&persisted) {
             save_state(input, &handle, &pass.state).await?;
         }
+        *input.catchup_progress.lock() = Some((handle.graph_path.clone(), pass.state.clone()));
     }
     Ok(CatchupReport {
         available: true,
         scanned,
         ingested: registration.ingested,
         wrapped: pass.wrapped,
+        sweeping: !pass.state.sweep_done,
         outcome_cursor: pass.state.outcome,
         recovered_message_cursor: pass.state.message,
     })
 }
 
-/// A full sweep from the start of both inventories runs when the canonical
-/// store changed since the last one began, or once a day as a safety net.
 const OUTCOME_PAGE: usize = 255;
 /// Notices one pass may read from both inventories.
 const NOTICE_BUDGET: usize = 256;
-const DAILY_SWEEP_MS: i64 = 24 * 60 * 60 * 1000;
 
 /// Milliseconds since the epoch of an ISO-8601 clock reading; 0 when the
 /// clock text does not parse.
@@ -157,15 +172,11 @@ struct Pass {
 }
 
 impl Pass {
-    /// A pass over the stored state at canonical revision `revision`. A
-    /// finished sweep restarts only when the canonical store changed since it
-    /// began or a day has passed since it finished.
-    fn begin(state: CatchupState, revision: u64, now_ms: i64) -> Self {
-        let changed = state.sweep_revision != Some(revision);
-        let stale = state
-            .swept_at_ms
-            .is_none_or(|done| now_ms.saturating_sub(done) >= DAILY_SWEEP_MS);
-        let sweep_due = !state.sweep_done || changed || stale;
+    /// A new source or a crash can invalidate previously advanced cursors.
+    /// An append-only revision increase never does.
+    fn begin(state: CatchupState, revision: u64, identity: Option<String>, unclean: bool) -> Self {
+        let replaced = state.sweep_revision.is_some_and(|old| revision < old)
+            || (state.source_identity.is_some() && state.source_identity != identity);
         let mut pass = Self {
             state,
             wrapped: false,
@@ -175,12 +186,17 @@ impl Pass {
             scanned: 0,
             work: Vec::with_capacity(256),
         };
-        if pass.state.sweep_done && sweep_due {
+        if unclean || replaced {
             pass.start_sweep();
-        } else if pass.state.sweep_revision.is_none() {
-            pass.state.sweep_revision = Some(revision);
         }
+        pass.state.sweep_revision = Some(revision);
+        pass.state.source_identity = identity;
         pass
+    }
+
+    fn cursor_advanced(&self, stored: &CatchupState) -> bool {
+        self.scanned > 0
+            && (self.state.outcome != stored.outcome || self.state.message != stored.message)
     }
 
     /// Restarts both cursors from the start of their inventories.

@@ -151,6 +151,7 @@ async fn run_until_stopped(
                 executable_path: config.installation.executable().to_path_buf(),
                 resource_root: config.installation.resources().to_path_buf(),
                 workspace_root: config.data_root.clone(),
+                unclean_previous_exit: instance.unclean_previous_exit(),
             },
             config.app.db_path.clone(),
             config.installation.clone(),

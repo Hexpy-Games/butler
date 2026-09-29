@@ -49,6 +49,7 @@ impl MemorySync {
         paths: &CognitionPathEnvironment,
         coordinator: Arc<CognitionWriteCoordinator>,
         provider: Arc<ModelProvider>,
+        unclean_previous_exit: bool,
         #[cfg(unix)] embedding: Arc<EmbeddingOwner>,
         #[cfg(unix)] vector: Arc<GenerationVectorAdapter>,
     ) -> Result<Self, BtccError> {
@@ -79,7 +80,8 @@ impl MemorySync {
             registration.clone(),
             coordinator,
             clock,
-        );
+        )
+        .with_unclean_start(unclean_previous_exit);
         #[cfg(unix)]
         let consumer = consumer.with_embedding(embedding);
         let consumer = Arc::new(consumer);

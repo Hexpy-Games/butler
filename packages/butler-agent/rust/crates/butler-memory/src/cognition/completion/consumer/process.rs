@@ -2,6 +2,7 @@
 
 use crate::cognition::CognitionCode;
 use parking_lot::Mutex;
+use std::sync::atomic::AtomicBool;
 use std::{path::PathBuf, sync::Arc, time::Instant};
 
 use serde::{Deserialize, Serialize};
@@ -32,6 +33,8 @@ pub(super) struct Input {
     pub coordinator: Arc<CognitionWriteCoordinator>,
     pub clock: Arc<dyn Fn() -> String + Send + Sync>,
     pub catchup_at: Arc<Mutex<Option<Instant>>>,
+    pub unclean_start: Arc<AtomicBool>,
+    pub catchup_progress: Arc<Mutex<Option<(PathBuf, crate::cognition::graph::CatchupState)>>>,
     pub probe: Arc<super::probe::ProbeReader>,
     pub shutdown: CancellationToken,
 }

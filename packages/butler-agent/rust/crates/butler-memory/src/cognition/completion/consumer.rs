@@ -9,6 +9,7 @@ use parking_lot::Mutex;
 use std::{
     path::PathBuf,
     sync::Arc,
+    sync::atomic::AtomicBool,
     time::{Duration, Instant},
 };
 
@@ -63,6 +64,8 @@ pub struct MemorySyncConsumer {
     shutdown: CancellationToken,
     closing: Mutex<bool>,
     catchup_at: Arc<Mutex<Option<Instant>>>,
+    unclean_start: Arc<AtomicBool>,
+    catchup_progress: Arc<Mutex<Option<(PathBuf, crate::cognition::graph::CatchupState)>>>,
     probe: Arc<probe::ProbeReader>,
 }
 
@@ -88,6 +91,8 @@ impl MemorySyncConsumer {
             shutdown: CancellationToken::new(),
             closing: Mutex::new(false),
             catchup_at: Arc::new(Mutex::new(None)),
+            unclean_start: Arc::new(AtomicBool::new(false)),
+            catchup_progress: Arc::new(Mutex::new(None)),
             probe: Arc::new(probe::ProbeReader::default()),
         }
     }
@@ -95,6 +100,12 @@ impl MemorySyncConsumer {
     /// Also embeds projected vector units with `embedding`.
     pub fn with_embedding(mut self, embedding: Arc<dyn CognitionEmbeddingPort>) -> Self {
         self.embedding = Some(embedding);
+        self
+    }
+
+    /// Reconcile the entire canonical inventory once after an unclean service exit.
+    pub fn with_unclean_start(mut self, unclean: bool) -> Self {
+        self.unclean_start = Arc::new(AtomicBool::new(unclean));
         self
     }
 
@@ -135,6 +146,8 @@ impl MemorySyncConsumer {
             coordinator: self.coordinator.clone(),
             clock: self.clock.clone(),
             catchup_at: self.catchup_at.clone(),
+            unclean_start: self.unclean_start.clone(),
+            catchup_progress: self.catchup_progress.clone(),
             probe: self.probe.clone(),
             shutdown: self.shutdown.clone(),
         };
@@ -185,6 +198,8 @@ impl MemorySyncConsumer {
             coordinator: self.coordinator.clone(),
             clock: self.clock.clone(),
             catchup_at: self.catchup_at.clone(),
+            unclean_start: self.unclean_start.clone(),
+            catchup_progress: self.catchup_progress.clone(),
             probe: self.probe.clone(),
             shutdown: operation.clone(),
         };
