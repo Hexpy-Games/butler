@@ -3,7 +3,7 @@
 use serde_json::{Value, json};
 
 use super::SubsessionService;
-use crate::btcc::BtccCode;
+use crate::btcc::{BtccCode, StorageCode};
 use crate::btcc::{BtccError, StoredSubsessionDelegation};
 
 impl SubsessionService {
@@ -59,11 +59,14 @@ impl SubsessionService {
             .relations_for_parent(session_id.into())
             .await
             .map_err(BtccError::from)?;
-        let relation = self
-            .repository
-            .by_child(session_id.into())
-            .await
-            .map_err(BtccError::from)?;
+        // An undecodable child row projects as no relation instead of failing.
+        let relation = match self.repository.by_child(session_id.into()).await {
+            Err(error) if error.code() == StorageCode::SubsessionPacketInvalid.as_str() => {
+                eprintln!("[native-btcc] undecodable subsession child row ignored");
+                None
+            }
+            other => other.map_err(BtccError::from)?,
+        };
         let mut summaries = Vec::new();
         for child in children {
             summaries.push(self.project_child(&child).await?);
