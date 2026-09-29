@@ -88,7 +88,18 @@ impl WallpaperEffect {
 
 impl WallpaperEffect {
     /// Reconciles a lost dispatch (see the module docs).
-    async fn recover(&self, signal: &CancellationToken) -> Result<AdapterOutcome, EffectFailure> {
+    async fn recover(
+        &self,
+        signal: &CancellationToken,
+        attempts: i64,
+    ) -> Result<AdapterOutcome, EffectFailure> {
+        // Nothing was dispatched yet: the effect service dispatches it now.
+        if attempts == 0 {
+            return Ok(AdapterOutcome::NotApplied(EffectAdapterError::new(
+                "wallpaper_not_dispatched",
+                "The wallpaper write was not sent yet.",
+            )));
+        }
         if self.capability == "save_wallpaper_module" {
             return self.send(signal).await;
         }
@@ -191,9 +202,9 @@ impl EffectAdapter for WallpaperEffect {
         _: &'a Value,
         _: &'a str,
         signal: &'a CancellationToken,
-        _: i64,
+        attempts: i64,
         _: Option<&'a butler_turn::btcc::EffectError>,
     ) -> EffectFuture<'a, AdapterOutcome> {
-        Box::pin(self.recover(signal))
+        Box::pin(self.recover(signal, attempts))
     }
 }

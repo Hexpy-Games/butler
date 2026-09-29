@@ -167,7 +167,8 @@ pub(crate) fn limited(path: &Path, limit: usize) -> io::Result<FileRead> {
 }
 
 /// Longest side of a default image: the renderer uploads it in full as one
-/// GPU texture, and 4096 is the size every WebGL2 device supports.
+/// GPU texture. WebGL2 guarantees only 2048; 4096 is what practically every
+/// device supports.
 const MAX_IMAGE_SIDE: u32 = 4096;
 /// Most pixels of a default image.
 const MAX_IMAGE_PIXELS: u64 = 16_000_000;
@@ -190,7 +191,8 @@ pub(crate) fn image_dimensions_rule(bytes: &[u8]) -> Option<String> {
             None
         }
         Some((width, height)) => Some(format!(
-            "is {width}x{height}; at most {MAX_IMAGE_SIDE} px per side and 16 MP"
+            "is {width}x{height}; at most {MAX_IMAGE_SIDE} px per side and {} MP",
+            MAX_IMAGE_PIXELS / 1_000_000
         )),
         None => Some("has an unreadable image header".to_owned()),
     }
