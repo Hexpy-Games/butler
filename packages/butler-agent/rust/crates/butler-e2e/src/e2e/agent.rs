@@ -157,12 +157,20 @@ impl Launch {
 
     /// A command for the agent binary with the scenario's isolated environment.
     pub fn command(&self) -> Command {
-        let mut command = Command::new(&self.binary);
+        let mut command = self.env_command(&self.binary);
         command
             .arg("--installation-root")
             .arg(&self.install)
             .arg("--resource-root")
-            .arg(&self.resources)
+            .arg(&self.resources);
+        command
+    }
+
+    /// A command for `program` (an installed Agent, or its launcher) with the
+    /// scenario's isolated environment and no installation options.
+    pub fn env_command(&self, program: &Path) -> Command {
+        let mut command = Command::new(program);
+        command
             .current_dir(&self.data)
             .env_clear()
             .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
@@ -175,6 +183,10 @@ impl Launch {
             .env("BUTLER_APP_SERVER_HOST", "127.0.0.1")
             .env("BUTLER_APP_SERVER_PORT", self.port.to_string())
             .env("BUTLER_METRICS_ENABLED", "0")
+            // launchd and the systemd user manager belong to the user, not to
+            // this sandbox: no scenario reaches them unless it turns them on
+            // (`set_env("BUTLER_SERVICE_MANAGER", "on")`).
+            .env("BUTLER_SERVICE_MANAGER", "off")
             // API keys go to the owner-only file in the data dir: a scenario
             // never touches the machine's credential store (#217).
             .env("BUTLER_SECRET_STORE", "file");

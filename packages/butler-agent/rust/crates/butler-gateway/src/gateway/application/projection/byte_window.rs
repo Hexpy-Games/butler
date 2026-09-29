@@ -38,11 +38,12 @@ pub(super) fn read_record(
     if let Some(newline) = combined.iter().position(|byte| *byte == b'\n') {
         let event = parse_record(&combined[..newline])?;
         checkpoint.projected_bytes += newline as u64 + 1;
-        checkpoint.trailing = combined[newline + 1..].to_vec();
+        // The rest of the window is read again from the file. Keeping it made
+        // every record store, and grow, the whole unread part of the file.
+        checkpoint.trailing.clear();
         checkpoint.boundary_anchor = anchor(&checkpoint.path, checkpoint.projected_bytes)?;
         checkpoint.modified_at_ms = modified_at_ms;
-        let pending = checkpoint.trailing.contains(&b'\n')
-            || checkpoint.projected_bytes + (checkpoint.trailing.len() as u64) < size;
+        let pending = checkpoint.projected_bytes < size;
         return Ok(ReadRecord {
             checkpoint,
             event,
@@ -106,13 +107,11 @@ fn extend_spool(
     let completed = PathBuf::from(&checkpoint.spool_path);
     let event = parse_spool(&completed)?;
     checkpoint.projected_bytes = start + newline as u64 + 1;
-    checkpoint.trailing = chunk[newline + 1..].to_vec();
     checkpoint.boundary_anchor = anchor(&checkpoint.path, checkpoint.projected_bytes)?;
     checkpoint.spool_path.clear();
     checkpoint.spool_bytes = 0;
     checkpoint.spool_end_offset = 0;
-    let pending = checkpoint.trailing.contains(&b'\n')
-        || checkpoint.projected_bytes + (checkpoint.trailing.len() as u64) < size;
+    let pending = checkpoint.projected_bytes < size;
     Ok(ReadRecord {
         checkpoint,
         event,
@@ -121,18 +120,15 @@ fn extend_spool(
     })
 }
 
-pub(super) fn reusable(
-    checkpoint: &Checkpoint,
-    path: &Path,
-    identity: (u64, u64),
-    size: u64,
-) -> bool {
+/// Whether `checkpoint` still describes the start of `path`. The file is
+/// recognised by its path, its size and the bytes just before the recorded
+/// offset. Device and inode numbers are not compared: they change across
+/// reboots and volumes for a file that is untouched, and a checkpoint judged
+/// foreign for that reason projects a finished transcript from byte zero.
+pub(super) fn reusable(checkpoint: &Checkpoint, path: &Path, size: u64) -> bool {
     let read_end =
         checkpoint.projected_bytes + checkpoint.spool_bytes + checkpoint.trailing.len() as u64;
-    if checkpoint.path != path.to_string_lossy()
-        || (checkpoint.device, checkpoint.inode) != identity
-        || read_end > size
-    {
+    if checkpoint.path != path.to_string_lossy() || read_end > size {
         return false;
     }
     anchor(path, checkpoint.projected_bytes).is_ok_and(|value| value == checkpoint.boundary_anchor)

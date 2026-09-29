@@ -143,3 +143,20 @@ scenario's doc comment cites its decision.
 | Q-02 | Stopping the running turn pauses the session queue; the next user input resumes it in order. | Owner, #211 |
 | ONB-01, ACC-01..05 | A fresh install asks first (`ask_first`). Saved settings are not migrated: an install from before ask-first that never saved an access mode keeps full access (ACC-05). In ask-first, first-conversation onboarding, memory save and analysis of an attached image proceed without approval; nothing else new does, and an MCP tool still asks. Scenarios recorded before assume full access, which the harness sets (`Setup::access`). | Owner, #236 |
 | SCHED-01..03 | A schedule runs with its own access mode, whatever its conversation's; English says "schedule" (`butler schedule`, `butler automation` a hidden deprecated alias). | Owner, #237 |
+
+## Install scenarios (INS-02..15)
+
+`install_lifecycle`, `install_safety`, `install_versions`, `install_hardening`,
+`install_app` and `install_systemd` drive the CLI install (`butler install`,
+`update --apply`, `rollback`, `versions`, `service install`, `uninstall`) in a
+sandbox with its own `HOME`, `BUTLER_AGENT_HOME` and `BUTLER_DATA`; see
+`docs/install-lifecycle.md`. INS-02 and INS-08 build two archives around the
+binary under test (a few hundred megabytes in a debug build) and take several
+minutes; the others use small stand-in archives.
+
+launchd and systemd belong to the user, not to the sandbox `HOME`, so the
+harness sets `BUTLER_SERVICE_MANAGER=off` for every command: nothing reaches
+the real manager, and login-start is registered with `--files-only`. Only INS-14
+turns the manager on, and only when `BUTLER_E2E_SYSTEMD=1` (the Linux CI job
+sets it after probing for a user manager). INS-15 needs Node and reports
+SKIPPED without it.

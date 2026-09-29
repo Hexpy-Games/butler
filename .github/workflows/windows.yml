@@ -2,6 +2,11 @@ name: Butler Windows Desktop Source
 
 on:
   pull_request:
+    paths:
+      - "packages/butler-app/client/electron/**"
+      - "packages/butler-app/client/ui/**"
+      - "packages/butler-app/scripts/windows/**"
+      - ".github/workflows/windows.yml"
 
 permissions:
   contents: read

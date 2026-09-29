@@ -6,6 +6,11 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+default = ["prebuilt-ort"]
+prebuilt-ort = ["dep:ort", "ort/download-binaries", "ort/tls-rustls"]
+static-ort = ["dep:ort"]
+
 [dependencies]
 butler-core = { path = "../butler-core" }
 butler-platform = { path = "../butler-platform" }
@@ -22,7 +27,7 @@ futures-util.workspace = true
 indexmap.workspace = true
 lance.workspace = true
 lancedb.workspace = true
-ort.workspace = true
+ort = { workspace = true, optional = true }
 tokenizers.workspace = true
 parking_lot.workspace = true
 serde.workspace = true
