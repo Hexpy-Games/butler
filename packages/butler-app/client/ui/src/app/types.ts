@@ -1718,9 +1718,9 @@ export interface ApprovalSummary {
 /** One thing a request touches. Never an absolute path. */
 export interface ApprovalTarget {
   kind: string;
-  /** Relative to the workspace (empty for the workspace itself), `server/tool` or a target name. */
+  /** Relative to the workspace (empty for a folder), `server/tool` or a target name. */
   path: string;
-  /** The workspace's display label, where the target has one. */
+  /** A folder's label as #277 sends it in `path`: `garden`, or `garden/app` inside it. */
   label?: string;
 }
 

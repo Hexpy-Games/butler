@@ -14,20 +14,26 @@ function card(approval?: ApprovalSummary, overrides: Partial<AuthorityApprovalCa
   };
 }
 
-function summary(actionKind: string, fields: Partial<ApprovalSummary> = {}): ApprovalSummary {
-  return { actionKind, targets: [], count: 1, examples: [], risk: "medium", ...fields };
+type TransportTarget = { kind: string; path: string };
+
+/** A request's `approval` as #277 sends it, narrowed the way the store does. */
+function summary(actionKind: string, fields: { targets?: TransportTarget[]; count?: number; examples?: string[];
+  risk?: string } = {}): ApprovalSummary {
+  const { targets = [], count = 1, examples = [], ...rest } = fields;
+  return normalizeApprovalSummary({ action_kind: actionKind, targets, count, examples,
+    risk: "risk" in fields ? rest.risk : "medium" })!;
 }
 
-/** A normalized workspace target: its label and a path relative to it. */
-const folder = (label: string, path = "") => ({ kind: "folder", label, path });
+/** #277's folder target: its path is the folder label (`garden`, `garden/app`). */
+const folder = (label: string) => ({ kind: "folder", path: label });
 
 test("each action kind reads as one question in English and Korean", () => {
   const cases: Array<[ApprovalSummary, string, string]> = [
     [summary("edit_files", { targets: [folder("garden"), { kind: "file", path: "a.md" }, { kind: "file", path: "b.md" }], count: 2 }),
       "Edit 2 files in 'garden'?", "'garden'의 파일 2개를 수정할까요?"],
     [summary("edit_files", { targets: [folder("garden")], count: 1 }), "Edit 1 file in 'garden'?", "'garden'의 파일 1개를 수정할까요?"],
-    [summary("run_command", { targets: [folder("garden", "app")], examples: ["npm test"] }),
-      "Run a command in 'garden'?", "'garden'에서 명령을 실행할까요?"],
+    [summary("run_command", { targets: [folder("garden/app")], examples: ["npm test"] }),
+      "Run a command in 'garden/app'?", "'garden/app'에서 명령을 실행할까요?"],
     [summary("network_command", { targets: [folder("garden")], examples: ["curl https://example.com"] }),
       "Run a command that uses the internet in 'garden'?", "'garden'에서 인터넷을 쓰는 명령을 실행할까요?"],
     [summary("use_connector", { targets: [{ kind: "connector", path: "github/create_issue" }], risk: "high" }),
@@ -60,7 +66,7 @@ test("the sentence quotes the workspace label, spaces and all, and drops what is
 });
 
 test("without a workspace label the sentence says this workspace", () => {
-  for (const targets of [[], [{ kind: "folder", path: "" }], [{ kind: "folder", label: "  ", path: "app" }]]) {
+  for (const targets of [[], [{ kind: "folder", path: "" }], [{ kind: "folder", path: "  " }]]) {
     const edits = summary("edit_files", { targets, count: 24 });
     expect(approvalRequestView(card(edits), en)).toMatchObject({ title: "Edit 24 files in this workspace?",
       conversationScope: "File edits in this workspace" });
@@ -70,7 +76,7 @@ test("without a workspace label the sentence says this workspace", () => {
     expect(approvalRequestView(card(command), en).title).toBe("Run a command in this workspace?");
     expect(approvalRequestView(card(command), ko).title).toBe("이 작업 공간에서 명령을 실행할까요?");
   }
-  const offline = normalizeApprovalSummary({ action_kind: "network_command", targets: [{ kind: "folder", workspace_label: "", path: "." }] });
+  const offline = normalizeApprovalSummary({ action_kind: "network_command", targets: [{ kind: "folder", path: "." }] });
   expect(approvalRequestView(card(offline), en).title).toBe("Run a command that uses the internet in this workspace?");
 });
 
@@ -113,16 +119,15 @@ test("the badge shows the risk the agent sent: the App never classifies commands
     .toBeUndefined();
 });
 
-test("both target shapes read the same, and no absolute path reaches the card", () => {
+test("#277 folder labels and relative paths read as sent; a stray absolute path never reaches the card", () => {
   const examples = ["shots/a.png", "/Users/mina/Desktop/shots/b.png", "/private/tmp/elsewhere/c.png"];
-  const legacy = normalizeApprovalSummary({ action_kind: "edit_files", count: 24, risk: "medium", examples,
+  const absolute = normalizeApprovalSummary({ action_kind: "edit_files", count: 24, risk: "medium", examples,
     targets: [{ kind: "folder", path: "/Users/mina/Desktop/" }, { kind: "file", path: "/Users/mina/Desktop/shots/a.png" },
       { kind: "file", path: "/private/tmp/elsewhere/c.png" }] });
   const labelled = normalizeApprovalSummary({ action_kind: "edit_files", count: 24, risk: "medium",
     examples: ["shots/a.png", "shots/b.png", "c.png"],
-    targets: [{ kind: "folder", workspace_label: "Desktop", path: "" }, { kind: "file", workspace_label: "Desktop", path: "shots/a.png" },
-      { kind: "file", workspace_label: "Desktop", path: "c.png" }] });
-  for (const approval of [legacy, labelled]) {
+    targets: [{ kind: "folder", path: "Desktop" }, { kind: "file", path: "shots/a.png" }, { kind: "file", path: "c.png" }] });
+  for (const approval of [labelled, absolute]) {
     expect(approval!.targets.map(({ kind, path }) => ({ kind, path }))).toEqual([
       { kind: "folder", path: "" }, { kind: "file", path: "shots/a.png" }, { kind: "file", path: "c.png" }]);
     for (const copy of [en, ko]) {
@@ -137,8 +142,8 @@ test("both target shapes read the same, and no absolute path reaches the card", 
     targets: [{ kind: "folder", path: "C:\\Users\\mina\\Downloads" }] });
   const windowsView = approvalRequestView(card(windows), en);
   expect(windowsView).toMatchObject({ title: "Edit 1 file in 'Downloads'?", details: ["a.txt"] });
-  // A label that is itself a path shows only its last part.
-  const pathLabel = normalizeApprovalSummary({ action_kind: "run_command", targets: [{ kind: "folder", workspace_label: "/Users/mina/My Notes", path: "." }] });
+  // An absolute folder shows only its last part.
+  const pathLabel = normalizeApprovalSummary({ action_kind: "run_command", targets: [{ kind: "folder", path: "/Users/mina/My Notes/" }] });
   expect(approvalRequestView(card(pathLabel), en).title).toBe("Run a command in 'My Notes'?");
 });
 
@@ -166,8 +171,8 @@ test("\"Always allow in this conversation\" says what it covers in the same term
 test("the transport approval is narrowed fail-soft: bad fields drop, a bad shape drops the whole summary", () => {
   expect(normalizeApprovalSummary({
     action_kind: "edit_files",
-    targets: [{ kind: "folder", workspace_label: "garden", path: "." }, { kind: "file" }, "notes.md",
-      { kind: "file", workspace_label: 7, path: "notes.md" }],
+    targets: [{ kind: "folder", path: "garden" }, { kind: "file" }, "notes.md", { kind: "file", path: 7 },
+      { kind: "file", path: "./notes.md" }],
     count: 4, examples: ["notes.md", 7], risk: "medium", extra: true,
   })).toEqual({
     actionKind: "edit_files",
@@ -189,7 +194,7 @@ test("pending approvals from the agent keep their structured approval next to th
   const request = { request_ref: "request-one", category: "reviewed_effect", reason: "Reviewed operation",
     executable: "write_file", command_count: 1, scope: legacyScope };
   globalThis.fetch = (async () => new Response(JSON.stringify({ data: { session_id: "session-a", requests: [
-    { ...request, approval: { action_kind: "edit_files", targets: [{ kind: "folder", workspace_label: "garden", path: "" }],
+    { ...request, approval: { action_kind: "edit_files", targets: [folder("garden")],
       count: 2, examples: ["a.md"], risk: "medium" } },
     { ...request, request_ref: "request-old" },
   ] } }), { headers: { "content-type": "application/json" } })) as unknown as typeof fetch;
@@ -198,7 +203,7 @@ test("pending approvals from the agent keep their structured approval next to th
     expect(await useButlerStore.getState().refreshAuthorityApprovals("session-a")).toBe(true);
     const [structured, legacy] = useButlerStore.getState().authorityApprovals!.cards;
     expect(structured).toMatchObject({ scope: legacyScope, approval: {
-      actionKind: "edit_files", targets: [folder("garden")], count: 2, examples: ["a.md"], risk: "medium" } });
+      actionKind: "edit_files", targets: [{ kind: "folder", label: "garden", path: "" }], count: 2, examples: ["a.md"], risk: "medium" } });
     expect(legacy!.approval).toBeUndefined();
   } finally {
     globalThis.fetch = previousFetch;
