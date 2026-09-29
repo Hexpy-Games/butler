@@ -104,6 +104,12 @@
   block-size: 100%;
 }
 
+/* The three sheets that hold one centred component draw only the middle of the window (the layer is what the
+   compositor pays for, and every sheet is a layer); the component stays centred on it. */
+[data-layout="wide"] .sheet:is([data-sheet="dialog"], [data-sheet="popover"], [data-sheet="tooltip"]) > .plane {
+  inset: 0 24%;
+}
+
 /* Glass draws without its backdrop: a backdrop filter can not sample through a 3D stack, and each sheet
    holds only its own part, so there is nothing behind it to blur. The tinted surface itself is unchanged. */
 .plane [data-glass] {

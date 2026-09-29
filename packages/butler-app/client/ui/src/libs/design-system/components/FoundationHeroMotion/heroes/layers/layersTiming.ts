@@ -42,7 +42,7 @@ export const AT = {
 export const END = AT.rows + 7 * AT.rowStep + AT.rowFor + 0.4;
 
 /** Beats the intro's frames are pre-painted while the window waits off stage (see layersTracks). */
-export const WARM = { from: 0.3, to: 2.4 } as const;
+export const WARM = { from: 0.3, to: 1.0 } as const;
 
 /** The first cycle's keys, then a cut back to their first pose for the next one. */
 export const looped = (keys: Key[], close: number): Key[] => {

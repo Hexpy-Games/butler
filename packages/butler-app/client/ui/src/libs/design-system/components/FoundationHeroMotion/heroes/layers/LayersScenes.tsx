@@ -104,7 +104,7 @@ function useExtrusions(ref: RefObject<HTMLElement | null>, live: boolean) {
       const next = [...root.querySelectorAll<HTMLElement>(":scope > [data-sheet]")].map((sheet, k) => {
         const plane = sheet.querySelector<HTMLElement>("[data-plane]");
         if (k === 0) return [{ x: 0, y: 0, w: root.offsetWidth, h: root.offsetHeight, r: Number.parseFloat(getComputedStyle(root).getPropertyValue("--app-window-radius")) || 0 }];
-        return plane ? [...plane.querySelectorAll<HTMLElement>("[data-ext]")].map((el) => boxIn(el, plane)) : [];
+        return plane ? [...plane.querySelectorAll<HTMLElement>("[data-ext]")].map((el) => { const b = boxIn(el, plane); return { ...b, x: b.x + plane.offsetLeft, y: b.y + plane.offsetTop }; }) : [];
       });
       setBoxes((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
     };
