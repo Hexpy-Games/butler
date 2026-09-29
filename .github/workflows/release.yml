@@ -12,6 +12,8 @@ jobs:
   native-release:
     name: Build and publish native macOS arm64 artifacts
     runs-on: macos-15
+    # Holds the Apple signing secrets; restricted to v* tags (docs: packages/butler-app/scripts/README.md).
+    environment: deploy
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -59,6 +61,24 @@ jobs:
       - name: Prepare the native Agent payload
         run: node packages/butler-app/client/electron/scripts/prepare-native-agent.mjs darwin arm64 "$BUTLER_NATIVE_AGENT_PAYLOAD"
 
+      # After every third-party install step: keychain and notary key exist only from here on.
+      - name: Set up macOS code signing
+        env:
+          BUTLER_SIGN_REQUIRED: "1"
+          APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+          APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: deploy/macos/sign-and-notarize.sh setup
+
+      - name: Sign and notarize the native Agent binary
+        timeout-minutes: 60
+        run: |
+          deploy/macos/sign-and-notarize.sh agent "$BUTLER_NATIVE_AGENT_PAYLOAD/bin/butler-agent"
+          echo "BUTLER_AGENT_NOTARIZED=1" >> "$GITHUB_ENV"
+
       - name: Select the versioned Agent archive path
         run: |
           set -euo pipefail
@@ -100,10 +120,10 @@ jobs:
             exit 1
           fi
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release edit "$tag" --title "$tag" "${notes_args[@]}"
+            gh release edit "$tag" --draft --title "$tag" "${notes_args[@]}"
             gh release upload "$tag" "${files[@]}" --clobber
           else
-            gh release create "$tag" "${files[@]}" --title "$tag" "${notes_args[@]}"
+            gh release create "$tag" "${files[@]}" --draft --title "$tag" "${notes_args[@]}"
           fi
 
       - name: Fetch the previous App release manifest
@@ -137,6 +157,7 @@ jobs:
         run: bun run release:app:gate -- --platform=darwin-arm64
 
       - name: Package the native App release
+        timeout-minutes: 90
         run: |
           bun run release:app:package -- \
             --platform=darwin-arm64 \
@@ -144,8 +165,6 @@ jobs:
             --artifact-base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
 
       - name: Verify the native App release artifacts
-        env:
-          BUTLER_APP_RELEASE_SMOKE_MODE: ad-hoc
         run: bun run release:app:smoke -- --platform=darwin-arm64 --out dist/release/app
 
       - name: Publish native App GitHub Release files
@@ -169,6 +188,16 @@ jobs:
             exit 1
           fi
           gh release upload "$tag" "${files[@]}" --clobber
+
+      # The release stays a draft until the App is notarized and smoked.
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false
+
+      - name: Remove the signing keychain and keys
+        if: always()
+        run: deploy/macos/sign-and-notarize.sh cleanup
 
   release-checksums:
     name: Publish consolidated release checksums
