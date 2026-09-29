@@ -1,56 +1,75 @@
 import type { FoundationHeroLang } from "../../FoundationHeroMotion";
 import type { IntroLead } from "../shared/Intro";
 
-/** Sample copy of the Layout hero. Token names, numbers and mode names never translate. */
+/**
+ * Copy of the Layout hero. The screen strings are the app's own (butler-i18n
+ * locales), so the shell reads exactly as Butler does. Token names, numbers
+ * and mode names never translate.
+ */
 export const LAYOUT_COPY = {
   en: {
     title: "Layout",
     lead: [
-      ["Frame", "One page frame: columns, a gutter, a max width, the titlebar and safe areas."],
-      ["Modes", "One shell in three modes, expanded to compact; the sidebar becomes a drawer."],
-      ["Platform", "Breakpoints are constants in responsive.ts; insets come from the device."],
+      ["Shell", "One app shell: a titlebar, a sidebar, the conversation and its composer."],
+      ["Modes", "The window's width picks the mode: expanded, medium or compact."],
+      ["Platform", "Breakpoints are constants in responsive.ts; below them the sidebar is a drawer."],
     ] as IntroLead,
-    source: "responsive.ts",
-    menu: "Menu", device: "device insets",
-    app: "Butler", chats: "Chats", projects: "Projects", files: "Files",
-    cards: ["Weekly report", "Launch plan", "Meeting notes"],
-    notes: ["Updated today", "3 tasks left", "Shared with 4"],
+    app: "Butler", newChat: "New conversation", search: "Search", favorites: "Favorites", favoritesHint: "Pin conversations you visit often.",
+    all: "All", recent: "Recent", running: "Running", general: "General", space: "Space", settings: "Settings",
+    project: "Design system", sessions: ["Token audit", "Launch plan"], local: "Local",
+    ask: "Draft the launch week plan for the design system.",
+    answer: "Here is the plan for the launch week:",
+    steps: ["Freeze the design tokens on Monday.", "Ship the preview build on Wednesday.", "Collect feedback and fix on Friday."],
+    worked: "Worked for 9s", time: "9:41 AM", done: "Response completed", placeholder: "Ask Butler anything",
+    copy: "Copy message", more: "More options", sidebar: "Show sidebar", hide: "Hide sidebar", panel: "Show right panel",
   },
   ko: {
     title: "Layout",
     lead: [
-      ["프레임", "하나의 페이지 프레임: 열, 거터, 최대 너비, 타이틀바와 안전 영역."],
-      ["모드", "하나의 셸, 세 가지 모드. 좁아지면 사이드바는 서랍이 됩니다."],
-      ["플랫폼", "중단점은 responsive.ts의 상수이고, 여백은 기기가 정합니다."],
+      ["셸", "하나의 앱 셸: 타이틀바, 사이드바, 대화와 컴포저."],
+      ["모드", "창의 너비가 모드를 정합니다: expanded, medium, compact."],
+      ["플랫폼", "중단점은 responsive.ts의 상수이고, 그보다 좁으면 사이드바는 서랍이 됩니다."],
     ] as IntroLead,
-    source: "responsive.ts",
-    menu: "메뉴", device: "기기 여백",
-    app: "Butler", chats: "대화", projects: "프로젝트", files: "파일",
-    cards: ["주간 리포트", "출시 계획", "회의록"],
-    notes: ["오늘 업데이트", "남은 작업 3개", "4명과 공유"],
+    app: "Butler", newChat: "새 대화", search: "검색", favorites: "즐겨찾기", favoritesHint: "자주 찾는 대화를 고정해 보세요.",
+    all: "전체보기", recent: "최신", running: "진행중", general: "일반", space: "스페이스", settings: "설정",
+    project: "디자인 시스템", sessions: ["토큰 점검", "출시 계획"], local: "로컬",
+    ask: "디자인 시스템 출시 주간 계획을 짜 줘.",
+    answer: "출시 주간 계획입니다:",
+    steps: ["월요일에 디자인 토큰을 확정합니다.", "수요일에 미리보기 빌드를 배포합니다.", "금요일에 피드백을 모아 고칩니다."],
+    worked: "9초 동안 작업", time: "오전 9:41", done: "답변 완료", placeholder: "Butler에게 무엇이든 물어보세요",
+    copy: "메시지 복사", more: "추가 기능", sidebar: "사이드바 보기", hide: "사이드바 숨기기", panel: "오른쪽 패널 보기",
   },
 } satisfies Record<FoundationHeroLang, unknown>;
 
 export type LayoutCopy = (typeof LAYOUT_COPY)["en"];
 
-/** The widths the handle drags the frame through, and each one's mode (responsive.ts: compactMax 640, mediumMax 1023). */
-export const WIDTHS = [
-  { px: 1280, mode: "expanded", columns: 3 },
-  { px: 1023, mode: "medium", columns: 2 },
-  { px: 640, mode: "compact", columns: 1 },
-  { px: 375, mode: "compact", columns: 1 },
-] as const;
+export type Mode = "expanded" | "medium" | "compact";
 
-export const MODES = ["expanded", "medium", "compact"] as const;
+/**
+ * The widths the handle drags the window through (device px), and the mode
+ * responsive.ts gives each (compactMax 640, mediumMax 1023, browser chrome).
+ */
+export const DETENTS = [
+  { px: 1280, mode: "expanded" },
+  { px: 1023, mode: "medium" },
+  { px: 640, mode: "compact" },
+  { px: 375, mode: "compact" },
+] as const satisfies ReadonlyArray<{ px: number; mode: Mode }>;
+
+export const MODES: Mode[] = ["expanded", "medium", "compact"];
+
+/** Each mode's width range, as responsive.ts classifies it. */
+export const RANGES: Record<Mode, string> = { expanded: "≥ 1024", medium: "641 – 1023", compact: "≤ 640" };
+
+/** The window's size at the start of the drag (device px), and the screens' in the poster. */
+export const WINDOW = { w: 1280, h: 560 } as const;
+export const SCREEN = { expanded: { w: 1024, h: 640 }, medium: { w: 768, h: 640 }, compact: { w: 375, h: 640 } } as const;
+
+/** Canvas px per device px of the window in the drag, per canvas (LayoutHero.module.css --s). */
+export const ZOOM = { wide: 0.72, tall: 0.3 } as const;
 
 /** A token's live value from tokens.css, read at render. */
 export function tokenValue(token: string): string {
   if (typeof document === "undefined") return "";
   return getComputedStyle(document.documentElement).getPropertyValue(token).trim();
 }
-
-/** The device height every width is shown at (px). */
-export const DEVICE_H = 720;
-
-/** Canvas px per device px of the resizing window, per canvas. */
-export const ZOOM = { wide: 0.6, tall: 0.26 } as const;
