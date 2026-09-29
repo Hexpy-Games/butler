@@ -1,0 +1,351 @@
+/* 10 Layout hero: Butler's real app shell in a window a handle resizes, its
+   measures on the window's rim, and the poster's screens. Canvas px (see
+   ../shared/grid.ts). The window's content is laid out in device px and
+   drawn at --s canvas px per device px (layoutCopy.ts ZOOM; keep in sync). */
+
+.stage {
+  --s: 0.72;
+  --win-w: calc(1280px * var(--s));
+  --win-h: calc(560px * var(--s));
+  --rim: calc(var(--space-4xl) + var(--space-2xl));
+
+  position: relative;
+  inline-size: var(--win-w);
+  block-size: calc(var(--win-h) + var(--rim) + var(--space-xl));
+}
+
+[data-layout="tall"] .stage {
+  --s: 0.3;
+  --rim: var(--space-xl);
+}
+
+/* The window and its rim share one box: centred, its width animated (the
+   handle's drag) while its content reflows live at that width. */
+.win,
+.rim {
+  position: absolute;
+  top: var(--rim);
+  left: 50%;
+  inline-size: var(--win-w);
+  block-size: var(--win-h);
+  translate: -50% 0;
+}
+
+.win {
+  overflow: hidden;
+  border-radius: calc(var(--radius-composer) * var(--s));
+  box-shadow: var(--shadow-window);
+}
+
+.rim {
+  container-type: inline-size;
+  pointer-events: none;
+}
+
+/* The app, laid out at the window's size in device px and drawn at --s. */
+.device {
+  position: absolute;
+  top: 0;
+  left: 0;
+  inline-size: calc(100% / var(--s));
+  block-size: calc(100% / var(--s));
+  transform: scale(var(--s));
+  transform-origin: 0 0;
+}
+
+/* One layer per mode, stacked; the timeline shows the window's current one. */
+.layer {
+  position: absolute;
+  inset: 0;
+}
+
+/* A device viewport (DeviceFrame.tsx): the app's own document, the frame's size. */
+.frame {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  border: 0;
+}
+
+/* The window's canvas, as a top-level window has (the app's body is transparent over it). */
+.deviceRoot {
+  background: Canvas;
+}
+
+.deviceBody {
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+/* ---- The rim: the window's measures, each on its nearest edge ---- */
+
+.dim {
+  position: absolute;
+  color: var(--accent);
+}
+
+/* A measure: a hairline with an end tick at each end. */
+.dim::before,
+.dim::after {
+  position: absolute;
+  background: currentcolor;
+  content: "";
+}
+
+.dim[data-axis="v"] {
+  inline-size: var(--space-sm);
+  border-inline-start: 1px solid currentcolor;
+  transform-origin: 50% 0;
+}
+
+.dim[data-axis="v"]::before,
+.dim[data-axis="v"]::after {
+  left: calc(var(--space-xs) * -1);
+  inline-size: var(--space-sm);
+  block-size: 1px;
+}
+
+.dim[data-axis="v"]::before {
+  top: 0;
+}
+
+.dim[data-axis="v"]::after {
+  bottom: 0;
+}
+
+.dim[data-axis="h"] {
+  /* Widths sit just above the top edge, where the push-in camera sees them. */
+  bottom: calc(100% + var(--space-md));
+  block-size: var(--space-sm);
+  border-block-start: 1px solid currentcolor;
+  transform-origin: 0 50%;
+}
+
+.dim[data-axis="h"]::before,
+.dim[data-axis="h"]::after {
+  top: calc(var(--space-xs) * -1);
+  inline-size: 1px;
+  block-size: var(--space-sm);
+}
+
+.dim[data-axis="h"]::before {
+  left: 0;
+}
+
+.dim[data-axis="h"]::after {
+  right: 0;
+}
+
+/* The titlebar's height, just outside the left edge. */
+.dim[data-part^="bar"] {
+  top: 0;
+  right: calc(100% + var(--space-sm));
+  block-size: calc(48px * var(--s));
+}
+
+.dim[data-part="bar-compact"] {
+  block-size: calc(56px * var(--s));
+}
+
+.dim[data-part="side"] {
+  left: 0;
+  inline-size: calc(304px * var(--s));
+}
+
+/* The conversation column: min(760px, 86% of the workspace), centred in it. */
+.dim[data-part^="read"] {
+  --side: calc(304px * var(--s));
+  --ws: calc(100cqw - var(--side));
+  --col: min(calc(760px * var(--s)), calc(var(--ws) * 0.86));
+
+  left: calc(var(--side) + (var(--ws) - var(--col)) / 2);
+  inline-size: var(--col);
+}
+
+.dim[data-part="read-medium"] {
+  --side: 0px;
+}
+
+.dim[data-part="drawer"] {
+  left: 0;
+  inline-size: 100%;
+}
+
+/* A measure's token, set on the rim beside it (a short straight leader). */
+.tag {
+  position: absolute;
+  white-space: nowrap;
+}
+
+/* Titlebar: above the top-left corner, over its measure. */
+.tag[data-part^="bar"] {
+  bottom: calc(100% + var(--space-lg));
+  left: calc(var(--space-sm) * -1);
+}
+
+/* Widths: centred over their measure. */
+.tag[data-part="side"],
+.tag[data-part^="read"],
+.tag[data-part="drawer"] {
+  bottom: calc(100% + var(--space-3xl));
+  translate: -50% 0;
+}
+
+.tag[data-part="side"] {
+  left: calc(152px * var(--s));
+}
+
+.tag[data-part^="read"] {
+  --side: calc(304px * var(--s));
+
+  left: calc(var(--side) + (100cqw - var(--side)) / 2);
+}
+
+.tag[data-part="read-medium"] {
+  --side: 0px;
+}
+
+.tag[data-part="drawer"] {
+  left: 50%;
+}
+
+/* The titlebar tag's leader: from under the tag down to the measure's top. */
+.leader {
+  position: absolute;
+  bottom: 100%;
+  left: calc(var(--space-sm) * -1);
+  block-size: var(--space-md);
+  border-inline-start: 1px solid var(--accent);
+  transform-origin: 50% 100%;
+}
+
+/* The handle on the right edge, and the width and mode above the top-right corner. */
+.handle {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + var(--space-sm));
+  inline-size: var(--space-xs);
+  block-size: var(--space-4xl);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  translate: 0 -50%;
+}
+
+.readout {
+  position: absolute;
+  opacity: 0; /* the timeline shows it; the still poster has none */
+  right: 0;
+  bottom: calc(100% + var(--space-3xl));
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.liveWidth {
+  font-variant-numeric: tabular-nums;
+}
+
+.modes {
+  display: inline-grid;
+}
+
+.modes > * {
+  grid-area: 1 / 1;
+  justify-self: end;
+}
+
+/* Tall: the window starts far away, so its measures stay off; the width and
+   mode read in the frame's corner (the HUD) instead. */
+[data-layout="tall"] .rim .tag,
+[data-layout="tall"] .rim .dim,
+[data-layout="tall"] .rim .leader,
+[data-layout="tall"] .rim .readout {
+  display: none;
+}
+
+.hud {
+  position: absolute;
+  opacity: 0; /* the timeline shows it; the still poster has none */
+  top: var(--space-xl);
+  right: var(--space-xl);
+  display: none;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+[data-layout="tall"] .hud {
+  display: flex;
+}
+
+/* ---- Poster ---- */
+
+/* The poster's screens sit on the page itself: no tile around them. */
+[data-tile]:has(> .fit),
+[data-tile]:has(> .ruler) {
+  overflow: visible;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+/* A screen drawn at the scale that fits its tile (set in LayoutScenes.tsx). */
+.fit {
+  display: grid;
+  place-items: center;
+  inline-size: 100%;
+  block-size: 100%;
+  min-block-size: 0;
+}
+
+.fitBox {
+  display: grid;
+  justify-items: center;
+  row-gap: var(--space-md);
+}
+
+.still {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-composer);
+  box-shadow: var(--shadow-window);
+}
+
+.still[data-mode="compact"] {
+  border-radius: var(--radius-composer);
+}
+
+/* The modes on a width ruler: compact up to 640, medium to 1023, expanded on;
+   a tick where each begins. */
+.ruler {
+  display: grid;
+  grid-template-columns: 640fr 383fr 257fr;
+  inline-size: 100%;
+  align-self: end;
+  border-block-start: 1px solid var(--line-strong);
+}
+
+.span {
+  position: relative;
+  display: grid;
+  row-gap: var(--space-xs);
+  padding: var(--space-md) var(--space-sm) 0;
+}
+
+.span::before {
+  position: absolute;
+  top: calc(var(--space-xs) * -1);
+  left: 0;
+  inline-size: 1px;
+  block-size: var(--space-sm);
+  background: var(--line-strong);
+  content: "";
+}
+
+.spanRange {
+  white-space: nowrap;
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}

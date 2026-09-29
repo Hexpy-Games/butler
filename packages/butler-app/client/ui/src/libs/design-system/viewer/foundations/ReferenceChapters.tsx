@@ -68,10 +68,10 @@ function IconWithType() {
   );
 }
 
-export function IconographyChapter({ chapter, anchor, onOpen }: ChapterProps) {
+export function IconographyChapter({ chapter, anchor, locale, onOpen }: ChapterProps) {
   const s = chapterSections(chapter, [["sizes", "Sizes"], ["pairing", "Icons with text"]]);
   return (
-    <ChapterLayout anchor={anchor} chapter={chapter} onOpen={onOpen} sections={s.list}
+    <ChapterLayout anchor={anchor} chapter={chapter} locale={locale} onOpen={onOpen} sections={s.list}
       lead="Hugeicons stroke glyphs at six named sizes. Icons label; they rarely stand alone, and an icon-only control always carries an accessible name."
       headerExtra={<Button size="xs" variant="borderless" text="Browse the icon set" onClick={() => onOpen("icons")} />}>
       <GuideSection spec={s.at("sizes")} lead="Pass the size name, never pixels. The frame is the token; the glyph is the component.">
@@ -111,10 +111,10 @@ function FocusedControls() {
   );
 }
 
-export function FocusChapter({ chapter, anchor, onOpen }: ChapterProps) {
+export function FocusChapter({ chapter, anchor, locale, onOpen }: ChapterProps) {
   const s = chapterSections(chapter, [["ring", "The ring"], ["controls", "On every control"], ["rules", "Rules"]]);
   return (
-    <ChapterLayout anchor={anchor} chapter={chapter} onOpen={onOpen} sections={s.list}
+    <ChapterLayout anchor={anchor} chapter={chapter} locale={locale} onOpen={onOpen} sections={s.list}
       lead="A 2px accent ring, drawn as a box-shadow so it follows the control's radius. It appears for the keyboard (:focus-visible), not for the mouse.">
       <GuideSection spec={s.at("ring")} lead="--focus-ring = 0 0 0 --focus-ring-width --focus-ring-color.">
         <div className={f.ringSpec}>
@@ -159,10 +159,10 @@ function LayerStack() {
   );
 }
 
-export function LayersChapter({ chapter, anchor, onOpen }: ChapterProps) {
+export function LayersChapter({ chapter, anchor, locale, onOpen }: ChapterProps) {
   const s = chapterSections(chapter, [["order", "Stacking order"]]);
   return (
-    <ChapterLayout anchor={anchor} chapter={chapter} onOpen={onOpen} sections={s.list}
+    <ChapterLayout anchor={anchor} chapter={chapter} locale={locale} onOpen={onOpen} sections={s.list}
       lead="Nine named layers, lowest first. Overlays opened inside a dialog portal above it; nothing else sets a z-index.">
       <GuideSection spec={s.at("order")} lead="Sorted by value from tokens.css.">
         <LayerStack />
@@ -184,10 +184,10 @@ function SafeAreas() {
   );
 }
 
-export function LayoutChapter({ chapter, anchor, onOpen }: ChapterProps) {
+export function LayoutChapter({ chapter, anchor, locale, onOpen }: ChapterProps) {
   const s = chapterSections(chapter, [["safe-areas", "Safe areas"], ["dialogs", "Dialog widths"], ["geometry", "Component geometry"]]);
   return (
-    <ChapterLayout anchor={anchor} chapter={chapter} onOpen={onOpen} sections={s.list}
+    <ChapterLayout anchor={anchor} chapter={chapter} locale={locale} onOpen={onOpen} sections={s.list}
       lead="Values the shell and a few components read: platform insets, dialog widths and fixed heights for charts, lanes and scroll areas.">
       <GuideSection spec={s.at("safe-areas")} lead="Notches, home indicators and the on-screen keyboard.">
         <SafeAreas />

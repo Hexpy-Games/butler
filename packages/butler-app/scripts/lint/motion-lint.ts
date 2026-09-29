@@ -280,6 +280,11 @@ export const CANVAS_MOTION_ENGINES: readonly CanvasMotionEngine[] = [
       WALLPAPER_SCENE_TONE_CHECK_MS: "How often a real-time wallpaper's scene tone (light/dark by time of day) re-reads the clock; a polling budget for a sunrise/sunset flip, not UI timing.",
     },
   },
+  {
+    prefix: "libs/design-system/components/FoundationHeroMotion/heroes/typography/specimenMetrics.ts",
+    justification: "Typography hero: a 2D context used only for measureText (glyph ink bounds and advances of the live font); it never draws.",
+    constants: {},
+  },
 ];
 
 const CANVAS_CONTEXT = /\.getContext\(/u;

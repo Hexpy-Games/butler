@@ -1,0 +1,308 @@
+/* 09 Layers hero. Canvas px (../shared/grid.ts). The window is laid out at
+   the product's own size (a 1100x688 window, a 390x800 phone) and the
+   camera fits it; its layers are full-size sheets stacked in 3D. */
+
+/* ---- Title: three offset copies merging ---- */
+
+.titleStack {
+  position: relative;
+  display: inline-grid;
+}
+
+.titleStack > * {
+  grid-area: 1 / 1;
+}
+
+.titleCopy[data-k="1"] {
+  opacity: 0.5;
+  translate: 0 -0.06em;
+}
+
+.titleCopy[data-k="2"] {
+  opacity: 0.25;
+  translate: 0 -0.12em;
+}
+
+/* ---- The window, as a stack of sheets ---- */
+
+.region {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  transform-style: preserve-3d;
+}
+
+/* The window and its ladder: the ladder waits right of the window, and the finale's camera frames both. */
+.ending {
+  --fz: 0.6;
+  --inner-w: 960px;
+  --inner-h: 505px;
+  --gap: 24px;
+  --screen-w: calc(var(--space-4xl) * 27.5);
+
+  position: relative;
+  transform-style: preserve-3d;
+}
+
+[data-layout="tall"] .ending {
+  --fz: 0.42;
+  --inner-w: 340px;
+  --inner-h: 600px;
+  --gap: 12px;
+  --screen-w: calc(var(--space-4xl) * 9.75);
+}
+
+/* Drawn at the size it has on the finale (the frame's inner box less the window, at the finale's zoom), then
+   zoomed by the inverse of that zoom, so its type is the size it reads at. */
+.ladderBox {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + var(--gap));
+  inline-size: calc(var(--inner-w) - var(--screen-w) * var(--fz) - var(--gap));
+  block-size: var(--inner-h);
+  translate: 0 -50%;
+  zoom: calc(1 / var(--fz));
+}
+
+.screen {
+  --adaptive-viewport-block-size: 100%;
+  --app-window-radius: 18px;
+
+  position: relative;
+  inline-size: calc(var(--space-4xl) * 27.5);
+  block-size: calc(var(--space-4xl) * 17.2);
+  transform-style: preserve-3d;
+}
+
+[data-layout="tall"] .screen {
+  inline-size: calc(var(--space-4xl) * 9.75);
+  block-size: calc(var(--space-4xl) * 20);
+}
+
+.sheet {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+}
+
+/* What lives on the sheet, flat on it; fixed-position parts (the chrome
+   toggle, the shell's drawers) stay inside it. */
+.plane {
+  position: absolute;
+  inset: 0;
+  contain: layout paint;
+}
+
+.plane > * {
+  block-size: 100%;
+}
+
+/* Surfaces on the sheets lift on the lightest shadow of the system: the extrusion carries the depth. */
+.plane [data-glass] {
+  box-shadow: var(--shadow-switch);
+}
+
+/* The three sheets that hold one centred component draw only the middle of the window (the layer is what the
+   compositor pays for, and every sheet is a layer); the component stays centred on it. */
+[data-layout="wide"] .sheet:is([data-sheet="dialog"], [data-sheet="popover"], [data-sheet="tooltip"]) > .plane {
+  inset: 0 24%;
+}
+
+/* Glass draws without its backdrop: a backdrop filter can not sample through a 3D stack, and each sheet
+   holds only its own part, so there is nothing behind it to blur. The tinted surface itself is unchanged. */
+.plane [data-glass] {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* The label's pin: the sheet's top right corner, turned and scaled back to
+   face the frame at canvas size (the inverse of the quarter camera). */
+.pin {
+  position: absolute;
+  top: 0;
+  left: 100%;
+  inline-size: 0;
+  block-size: 0;
+  opacity: 0;
+  /* Brought toward the viewer, clear of every sheet (--q-clear, set by the scene). */
+  transform: scale(calc(1 / var(--q-s, 1)))
+    rotateZ(calc(-1 * var(--q-rz, 0deg))) rotateX(calc(-1 * var(--q-rx, 0deg)))
+    translateZ(var(--q-clear, 0));
+  transform-origin: 0 0;
+}
+
+.tag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  row-gap: 0;
+  padding-left: var(--space-2xl);
+  translate: 0 -50%;
+  white-space: nowrap;
+}
+
+/* The leader from the corner and the dot on it, level with the token line
+   (what lives there hangs below it). */
+.tag::before,
+.tag::after {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  content: "";
+}
+
+.tag::before {
+  inline-size: calc(var(--space-2xl) - var(--space-xs));
+  border-top: 1px solid var(--line-strong);
+}
+
+.tag::after {
+  inline-size: var(--space-xs);
+  block-size: var(--space-xs);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  translate: -50% -50%;
+}
+
+.tagHead {
+  display: flex;
+  column-gap: var(--space-sm);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+}
+
+.tagToken {
+  color: var(--text-primary);
+}
+
+.tagValue {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.tagLives {
+  position: absolute;
+  top: 100%;
+  left: var(--space-2xl);
+  color: var(--text-secondary);
+  font-size: var(--typo-caption-size);
+}
+
+/* The phone's labels wrap what lives there under the token. */
+[data-layout="tall"] .tagLives {
+  inline-size: calc(var(--space-4xl) * 3.6);
+  white-space: normal;
+}
+
+/* ---- Parts of the sheets ---- */
+
+/* The titlebar where the workspace draws it: inside the workspace's border,
+   its corner rounded with the workspace's. */
+.titlebar {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  left: calc(var(--sidebar-width) + 1px);
+  overflow: hidden;
+  border-top-left-radius: calc(var(--app-window-radius) - 1px);
+}
+
+[data-layout="tall"] .titlebar {
+  top: 0;
+  right: 0;
+  left: 0;
+  border-radius: 0;
+}
+
+.plane > .titlebar {
+  block-size: var(--titlebar-safe-area-top);
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--app-window-radius);
+}
+
+/* The dialog where DialogContent centres it in the window. */
+.dialogBox {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  inline-size: min(var(--dialog-width-sm), calc(100% - var(--space-4) * 2));
+  translate: -50% -50%;
+}
+
+.plane > .dialogBox {
+  block-size: auto;
+}
+
+.dialogBox > [data-slot="dialog-content"] {
+  position: relative;
+  top: auto;
+  left: auto;
+  inline-size: 100%;
+  max-block-size: none;
+  overflow: visible;
+  transform: none;
+}
+
+/* The popover and tooltip sheets draw the dialog for placement only. */
+.dialogBox[data-part="popover"],
+.dialogBox[data-part="tooltip"] {
+  visibility: hidden;
+}
+
+.anchor {
+  position: relative;
+  display: block;
+}
+
+/* Radix's item-aligned select: the picked item's text over the trigger's value. */
+.dialogBox .menu {
+  position: absolute;
+  /* 6px: the list's own padding (Select.module.css). */
+  --list-inset: 6px;
+
+  top: calc(
+    (var(--control-height-lg) - var(--menu-item-height)) / 2 -
+      var(--list-inset) - var(--picked) * var(--menu-item-height)
+  );
+  right: calc(var(--list-inset) * -1);
+  left: calc(var(--list-inset) * -1);
+  visibility: visible;
+}
+
+.hovered {
+  background: var(--selection);
+}
+
+.dialogBox .tip {
+  position: absolute;
+  top: calc(100% + var(--space-sm));
+  left: 50%;
+  visibility: visible;
+  transform: translateX(-50%);
+  animation: none;
+}
+
+/* ---- Poster ---- */
+
+.posterScreen {
+  zoom: 0.62;
+}
+
+[data-layout="tall"] .posterScreen {
+  zoom: 0.86;
+}
+
+/* The rows fill the ladder's height, the first on its top edge and the last on its bottom edge. */
+.ladder {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  inline-size: 100%;
+  block-size: 100%;
+}

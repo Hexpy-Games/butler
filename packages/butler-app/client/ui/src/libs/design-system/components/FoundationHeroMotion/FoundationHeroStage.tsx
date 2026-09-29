@@ -1,16 +1,16 @@
 import { useRef, type ComponentType } from "react";
 import { cn } from "../../lib/utils";
-import type { FoundationHeroLang, FoundationHeroMotionProps, FoundationHeroVariant } from "./FoundationHeroMotion";
+import { FOUNDATION_FEATURE_HEROES, type FoundationHeroLang, type FoundationHeroMotionProps, type FoundationHeroVariant } from "./FoundationHeroMotion";
 import { useHeroPlayback } from "./heroPlayback";
-import { ColorHero } from "./heroes/ColorHero";
-import { FocusHero } from "./heroes/FocusHero";
-import { IconographyHero } from "./heroes/IconographyHero";
-import { LayersHero } from "./heroes/LayersHero";
-import { LayoutHero } from "./heroes/LayoutHero";
-import { MotionHero } from "./heroes/MotionHero";
-import { RadiusHero } from "./heroes/RadiusHero";
-import { SizingHero } from "./heroes/SizingHero";
-import { SpacingHero } from "./heroes/SpacingHero";
+import { ColorHero } from "./heroes/color/ColorHero";
+import { FocusHero } from "./heroes/focus/FocusHero";
+import { IconHero as IconographyHero } from "./heroes/iconography/IconHero";
+import { LayersHero } from "./heroes/layers/LayersHero";
+import { LayoutHero } from "./heroes/layout/LayoutHero";
+import { MotionHero } from "./heroes/motion/MotionHero";
+import { RadiusHero } from "./heroes/radius/RadiusHero";
+import { SizingHero } from "./heroes/sizing/SizingHero";
+import { SpacingHero } from "./heroes/spacing/SpacingHero";
 import { TypographyHero } from "./heroes/TypographyHero";
 import styles from "./FoundationHeroMotion.module.css";
 
@@ -42,6 +42,7 @@ export default function FoundationHeroStage({ variant, still = false, lang = "en
       className={cn(styles.stage, className)}
       data-slot="foundation-hero"
       data-hero-variant={variant}
+      data-feature={FOUNDATION_FEATURE_HEROES.has(variant) ? "" : undefined}
       data-hero-state={playback}
       aria-hidden="true"
     >
