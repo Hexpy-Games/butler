@@ -20,6 +20,7 @@ import { ComposerNotices } from "./ComposerNotices";
 import { StewardComposerCapsules } from "./StewardComposerCapsules";
 import { useComposerStore } from "./composerStore";
 import { anchoredStewardProgressByMessageId } from "./stewardParentProgressProjection";
+import { stewardProgressStatus } from "./stewardProgressPresentation";
 import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
 
 // These expectations are the default (English) copy; pin the locale instead of inheriting it.
@@ -473,6 +474,24 @@ test("Steward child turn without progress renders as an empty card instead of cr
   expect(renderToStaticMarkup(
     <StewardComposerCapsules children={[child]} />,
   )).not.toContain("steward-progress-capsule");
+});
+
+// test-category: pure-logic
+test("a terminal child reads as done even when its status is a raw result status", () => {
+  const child = structuredClone(HARNESS_SS03_SUMMARY.steward_children![0]!);
+  child.terminal = true;
+  child.result = { ...(child.result ?? {}), status: "success" } as typeof child.result;
+  for (const [status, expected] of [
+    ["completed", "Completed"],
+    ["blocked", "Failed"],
+    ["active", "Completed"],
+  ] as const) {
+    (child as { status: string }).status = status;
+    expect(stewardProgressStatus(child)).toContain(expected);
+  }
+  child.result = { ...child.result!, status: "blocked" };
+  (child as { status: string }).status = "active";
+  expect(stewardProgressStatus(child)).toContain("Failed");
 });
 
 test("recoverable Steward card shows replay without appearing active", () => {
