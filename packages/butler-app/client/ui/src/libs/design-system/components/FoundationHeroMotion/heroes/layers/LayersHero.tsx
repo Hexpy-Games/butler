@@ -4,7 +4,7 @@ import { SceneHero } from "../scene/SceneHero";
 import type { SceneSpec } from "../scene/types";
 import { Intro } from "../shared/Intro";
 import { LAYERS_COPY, type LayersCopy } from "./layersCopy";
-import { Ladder, PosterScreen, Screen, TitleCopies } from "./LayersScenes";
+import { Ending, Ladder, PosterScreen, TitleCopies } from "./LayersScenes";
 import { LAYERS_END, layersTracks } from "./layersTracks";
 import s from "./LayersHero.module.css";
 
@@ -15,8 +15,8 @@ function spec(copy: LayersCopy): SceneSpec {
     regions: {
       intro: <Intro lead={copy.lead} title={copy.title} titleNode={<TitleCopies title={copy.title} />} />,
       screen: (g) => (
-        <div className={s.region}>
-          <Screen copy={copy} g={g} live />
+        <div className={s.region} data-t="warm">
+          <Ending copy={copy} g={g} />
         </div>
       ),
     },
@@ -30,6 +30,7 @@ function spec(copy: LayersCopy): SceneSpec {
     },
     posterZoom: { wide: 0.8, tall: 0.9 },
     deep: ["screen"],
+    stay: true,
     tallByTiles: true,
     end: () => LAYERS_END,
     tracks: layersTracks(copy),
