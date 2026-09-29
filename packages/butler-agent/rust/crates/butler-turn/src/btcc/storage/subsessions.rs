@@ -303,15 +303,7 @@ impl SqliteSubsessionRepository {
     pub(crate) async fn pending_dispatches(
         &self,
     ) -> Result<Vec<StoredSubsessionDelegation>, StorageError> {
-        self.storage
-            .execute(move |db| {
-                list(
-                    db,
-                    "WHERE d.dispatch_state='pending' ORDER BY r.created_at",
-                    [],
-                )
-            })
-            .await
+        self.storage.execute(decode::pending).await
     }
 
     /// Whether the parent has a child without a result.

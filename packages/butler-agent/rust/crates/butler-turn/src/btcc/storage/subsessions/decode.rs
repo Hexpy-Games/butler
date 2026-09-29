@@ -1,7 +1,7 @@
 //! Reads delegation rows, including rows written before packets and dispatch
 //! intents were typed records.
 
-use rusqlite::{OptionalExtension, Params};
+use rusqlite::{OptionalExtension, Params, params};
 use serde_json::Value;
 
 use super::{SELECT, StoredSubsessionDelegation, SubsessionPacket};
@@ -44,35 +44,34 @@ fn raw_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RawDelegation> {
     })
 }
 
-fn decode(raw: RawDelegation) -> Result<StoredSubsessionDelegation, serde_json::Error> {
+fn decode(raw: &RawDelegation) -> Result<StoredSubsessionDelegation, serde_json::Error> {
     let mut packet: Value = serde_json::from_str(&raw.packet_json)?;
     upgrade_legacy_packet(&mut packet, &raw.child_session_id);
-    let packet: SubsessionPacket = serde_json::from_value(packet)?;
     let dispatch_intent = raw
         .dispatch_intent_json
-        .map(|json| serde_json::from_str(&json))
+        .as_deref()
+        .map(serde_json::from_str)
         .transpose()?;
     Ok(StoredSubsessionDelegation {
-        relation_id: raw.relation_id,
-        delegation_id: raw.delegation_id,
-        task_id: raw.task_id,
-        parent_session_id: raw.parent_session_id,
-        parent_turn_id: raw.parent_turn_id,
-        child_session_id: raw.child_session_id,
-        child_turn_id: raw.child_turn_id,
-        root_work_id: raw.root_work_id,
-        packet,
+        relation_id: raw.relation_id.clone(),
+        delegation_id: raw.delegation_id.clone(),
+        task_id: raw.task_id.clone(),
+        parent_session_id: raw.parent_session_id.clone(),
+        parent_turn_id: raw.parent_turn_id.clone(),
+        child_session_id: raw.child_session_id.clone(),
+        child_turn_id: raw.child_turn_id.clone(),
+        root_work_id: raw.root_work_id.clone(),
+        packet: serde_json::from_value::<SubsessionPacket>(packet)?,
         dispatch_intent,
-        anchor_message_id: raw.anchor_message_id,
+        anchor_message_id: raw.anchor_message_id.clone(),
         ordinal: raw.ordinal,
-        safe_title: raw.safe_title,
-        created_at: raw.created_at,
+        safe_title: raw.safe_title.clone(),
+        created_at: raw.created_at.clone(),
     })
 }
 
 /// Fills the packet fields that only later packets recorded: the child role
-/// (named by its session id prefix) and the access mode (the legacy
-/// `access_and_budget_policy`, else implied by the execution mode).
+/// (named by its session id prefix) and the access mode.
 fn upgrade_legacy_packet(packet: &mut Value, child_session_id: &str) {
     let Some(object) = packet.as_object_mut() else {
         return;
@@ -86,18 +85,24 @@ fn upgrade_legacy_packet(packet: &mut Value, child_session_id: &str) {
         object.insert("child_role".into(), role.into());
     }
     if !object.contains_key("access_mode") {
-        let policy_access = object
-            .get("access_and_budget_policy")
-            .and_then(|policy| policy.get("access_mode"))
-            .filter(|access| access.is_string());
-        let access = match policy_access {
-            Some(access) => access.clone(),
-            None if object.get("execution_mode").and_then(Value::as_str) == Some("read_only") => {
-                "read_only".into()
-            }
-            None => "full_access".into(),
-        };
+        let access = legacy_access_mode(object);
         object.insert("access_mode".into(), access);
+    }
+}
+
+/// The access mode of a packet that predates the field: the legacy
+/// `access_and_budget_policy` unless the packet only ever read (the stricter
+/// of the two); with no policy, the strictest mode a mutation can run under.
+fn legacy_access_mode(packet: &serde_json::Map<String, Value>) -> Value {
+    let read_only = packet.get("execution_mode").and_then(Value::as_str) == Some("read_only");
+    let policy = packet
+        .get("access_and_budget_policy")
+        .and_then(|policy| policy.get("access_mode"))
+        .filter(|access| access.is_string());
+    match policy {
+        _ if read_only => "read_only".into(),
+        Some(access) => access.clone(),
+        None => "ask_first".into(),
     }
 }
 
@@ -111,7 +116,7 @@ pub(super) fn read(
         .optional()
         .map_err(StorageError::sqlite)?
         .map(|raw| {
-            decode(raw).map_err(|error| {
+            decode(&raw).map_err(|error| {
                 StorageError::new(
                     StorageCode::SubsessionPacketInvalid,
                     "Subsession delegation is undecodable",
@@ -122,6 +127,21 @@ pub(super) fn read(
         .transpose()
 }
 
+fn query_raw(
+    db: &rusqlite::Connection,
+    filter: &str,
+    params: impl Params,
+) -> Result<Vec<RawDelegation>, StorageError> {
+    let mut statement = db
+        .prepare(&format!("{SELECT} {filter}"))
+        .map_err(StorageError::sqlite)?;
+    statement
+        .query_map(params, raw_row)
+        .map_err(StorageError::sqlite)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(StorageError::sqlite)
+}
+
 /// The delegations matching `filter` (a `WHERE ... ORDER BY ...` tail). A row
 /// that cannot be decoded is skipped, so one bad row never hides the rest.
 pub(super) fn list(
@@ -129,24 +149,58 @@ pub(super) fn list(
     filter: &str,
     params: impl Params,
 ) -> Result<Vec<StoredSubsessionDelegation>, StorageError> {
-    let mut statement = db
-        .prepare(&format!("{SELECT} {filter}"))
-        .map_err(StorageError::sqlite)?;
-    let raws = statement
-        .query_map(params, raw_row)
-        .map_err(StorageError::sqlite)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(StorageError::sqlite)?;
-    Ok(raws.into_iter().filter_map(decode_or_skip).collect())
+    Ok(query_raw(db, filter, params)?
+        .into_iter()
+        .filter_map(|raw| decode_or_report(&raw))
+        .collect())
 }
 
-fn decode_or_skip(raw: RawDelegation) -> Option<StoredSubsessionDelegation> {
-    let relation_id = raw.relation_id.clone();
+/// The delegations waiting to be dispatched. A pending row that cannot be
+/// decoded could never be dispatched, so it is closed as a failed result:
+/// the parent stops waiting for it and it is not retried.
+pub(super) fn pending(
+    db: &mut rusqlite::Connection,
+) -> Result<Vec<StoredSubsessionDelegation>, StorageError> {
+    let mut pending = Vec::new();
+    for raw in query_raw(
+        db,
+        "WHERE d.dispatch_state='pending' ORDER BY r.created_at",
+        [],
+    )? {
+        match decode_or_report(&raw) {
+            Some(stored) => pending.push(stored),
+            None => close_undecodable(db, &raw)?,
+        }
+    }
+    Ok(pending)
+}
+
+fn close_undecodable(
+    db: &mut rusqlite::Connection,
+    raw: &RawDelegation,
+) -> Result<(), StorageError> {
+    let tx = db.transaction().map_err(StorageError::sqlite)?;
+    tx.execute(
+        "INSERT OR IGNORE INTO btcc_steward_results (result_id,relation_id,task_id,child_session_id,child_turn_id,status,code,summary,acceptance_evidence_json,changed_artifacts_json,created_at) VALUES (?1,?2,?3,?4,?5,'failed','delegation_context_incomplete','The delegation record is unreadable.','[]','[]',strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
+        params![format!("result-unreadable-{}", raw.relation_id), raw.relation_id, raw.task_id, raw.child_session_id, raw.child_turn_id],
+    )
+    .map_err(StorageError::sqlite)?;
+    tx.execute(
+        "UPDATE btcc_subsession_delegations SET dispatch_state=NULL WHERE delegation_id=?1",
+        [&raw.delegation_id],
+    )
+    .map_err(StorageError::sqlite)?;
+    tx.commit().map_err(StorageError::sqlite)
+}
+
+/// The decoded row, or `None` after a diagnostic.
+fn decode_or_report(raw: &RawDelegation) -> Option<StoredSubsessionDelegation> {
     decode(raw)
         .inspect_err(|error| {
             // Only the relation id and the error class: never row content.
             eprintln!(
-                "[native-btcc] skipped undecodable subsession delegation relation={relation_id} class={:?}",
+                "[native-btcc] undecodable subsession delegation relation={} class={:?}",
+                raw.relation_id,
                 error.classify()
             );
         })

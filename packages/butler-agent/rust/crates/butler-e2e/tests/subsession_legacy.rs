@@ -14,8 +14,9 @@ use serde_json::{Value, json};
 /// (no `child_role`/`access_mode`, `routingHints.stewardId`, no envelope
 /// `role`, a NULL dispatch intent, no reviewed parent Work) and one row that
 /// cannot be decoded at all: the agent starts, `/session-view`,
-/// `/session-summary` and `/context-details` answer 200, the legacy children
-/// appear with their roles and the context details are present.
+/// `/session-summary`, `/context-details` and `/worker-activity` answer 200,
+/// the legacy children appear with their roles and the context details are
+/// real. An undecodable row that was still pending is closed as failed.
 #[tokio::test]
 async fn sub_legacy_01_pre_typed_delegations_are_read() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -49,29 +50,83 @@ async fn sub_legacy_01_pre_typed_delegations_are_read() -> Result<(), HarnessErr
             &summary.data()["worker_activity"],
         ),
     ] {
-        assert_eq!(children(stewards), ["steward-legacy-a", "steward-legacy-b"]);
-        assert_eq!(children(workers), ["worker-legacy-c"]);
+        assert_eq!(
+            children(stewards, "session_id"),
+            ["steward-legacy-a", "steward-legacy-b"]
+        );
+        assert_eq!(children(workers, "session_id"), ["worker-legacy-c"]);
     }
-    assert!(view.data()["context"].is_object(), "{}", view.text);
-    assert!(
-        summary.data()["context_details"].is_object(),
+    for details in [
+        &view.data()["context"],
+        &summary.data()["context_details"],
+        context.data(),
+    ] {
+        assert_context_details(details, &chat);
+    }
+
+    let activity = s.gw.get("/worker-activity?include_history=true").await?;
+    assert_eq!(activity.status, 200, "{}", activity.text);
+    let mut ids = children(&activity.data()["workers"], "worker_id");
+    ids.sort_unstable();
+    assert_eq!(
+        ids,
+        [
+            "steward-relation-a",
+            "steward-relation-b",
+            "worker-relation-c"
+        ],
         "{}",
-        summary.text
+        activity.text
     );
-    assert_eq!(context.data()["session_id"], chat.as_str());
+
+    s.agent.terminate().await?;
+    assert_unreadable_pending_row_closed(&s);
     s.finish().await
 }
 
-/// The `session_id`s of a projected child list, in order.
-fn children(list: &Value) -> Vec<&str> {
+/// The `key` strings of a projected list, in order.
+fn children<'a>(list: &'a Value, key: &str) -> Vec<&'a str> {
     list.as_array()
         .unwrap()
         .iter()
-        .map(|child| child["session_id"].as_str().unwrap())
+        .map(|child| child[key].as_str().unwrap())
         .collect()
 }
 
-/// Four delegations of the parent session `hint` in the shapes the runtime
+/// Context details of the session: its own id, a model budget and categories.
+fn assert_context_details(details: &Value, chat: &str) {
+    assert_eq!(details["session_id"], chat, "{details}");
+    assert!(details["budget_tokens"].as_u64().unwrap() > 0, "{details}");
+    assert!(details["used_tokens"].is_u64(), "{details}");
+    assert!(
+        matches!(details["status"].as_str(), Some("low" | "medium" | "high")),
+        "{details}"
+    );
+    assert!(
+        !details["categories"].as_array().unwrap().is_empty(),
+        "{details}"
+    );
+}
+
+/// The unreadable pending delegation `e` is failed and no longer pending, so
+/// its parent does not wait for it.
+fn assert_unreadable_pending_row_closed(s: &Scenario) {
+    let db = rusqlite::Connection::open_with_flags(
+        s.sandbox.data.join("agent-runtime/btcc.sqlite"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap();
+    let closed: (String, Option<String>) = db
+        .query_row(
+            "SELECT x.status, d.dispatch_state FROM btcc_steward_results x JOIN btcc_subsession_delegations d ON d.relation_id = x.relation_id WHERE x.relation_id = 'relation-e'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("the unreadable pending delegation is closed");
+    assert_eq!(closed, ("failed".to_owned(), None));
+}
+
+/// Five delegations of the parent session `hint` in the shapes the runtime
 /// store held before the packet was typed. All values are made up.
 fn seed_legacy_delegations(s: &Scenario, hint: &str) {
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap();
@@ -94,6 +149,8 @@ fn seed_legacy_delegations(s: &Scenario, hint: &str) {
         ("c", "worker-legacy-c", legacy_packet("c", hint, true), None),
         // A packet no version could decode: skipped, not fatal.
         ("d", "steward-legacy-d", json!({"unexpected": true}), None),
+        // The same, still waiting to be dispatched.
+        ("e", "steward-legacy-e", json!({"unexpected": true}), None),
     ];
     for (ordinal, (key, child, packet, intent)) in (1_i64..).zip(rows) {
         db.execute(
@@ -111,7 +168,11 @@ fn seed_legacy_delegations(s: &Scenario, hint: &str) {
                 format!("work-{key}"),
                 packet.to_string(),
                 intent.as_ref().map(Value::to_string),
-                intent.as_ref().map(|_| "enqueued"),
+                match (key, &intent) {
+                    ("e", _) => Some("pending"),
+                    (_, Some(_)) => Some("enqueued"),
+                    _ => None,
+                },
             ],
         )
         .unwrap();
