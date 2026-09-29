@@ -279,6 +279,23 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (method === "POST" && url.pathname === "/credentials") {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "saveCredential", parseBody(options.body)));
   }
+  // #217 saved keys: list (masked), replace (`verify`), delete (`?force=true`).
+  if (method === "GET" && url.pathname === "/credentials") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "listCredentials"));
+  }
+  const credentialMatch = url.pathname.match(/^\/credentials\/([^/]+)$/u);
+  if (method === "PATCH" && credentialMatch) {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "replaceCredential", {
+      name: decodeURIComponent(credentialMatch[1]!),
+      request: parseBody(options.body),
+    }));
+  }
+  if (method === "DELETE" && credentialMatch) {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "deleteCredential", {
+      name: decodeURIComponent(credentialMatch[1]!),
+      force: url.searchParams.get("force") === "true",
+    }));
+  }
   const setupOAuthCancel = method === "POST" ? url.pathname.match(/^\/setup\/oauth\/([^/]+)\/cancel$/u) : null;
   if (setupOAuthCancel) {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "cancelSetupOAuth", {

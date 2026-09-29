@@ -8,7 +8,9 @@ use serde_json::{Value, json};
 
 use super::{ResolvedInstallation, service_instance};
 
+mod credentials;
 mod integrity;
+pub(super) use credentials::credentials_check;
 pub(super) use integrity::digest_check;
 
 pub(super) struct Check {

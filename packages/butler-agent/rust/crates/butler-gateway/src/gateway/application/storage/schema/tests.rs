@@ -8,14 +8,16 @@ use butler_turn::btcc::AccessMode;
 
 /// Format pin: the App database schema. A fresh database has full support and
 /// a working message FTS, deployed events gain their actual turn index
-/// without rewriting payloads, and deployed schemas gain columns without
-/// losing unknown data.
+/// without rewriting payloads, deployed schemas gain columns without losing
+/// unknown data, and an unsaved access mode resolves by install age.
 // test-category: format-pin
 #[test]
 fn app_schema_migrations_keep_existing_data() {
     fresh_schema_has_full_support_and_functional_message_fts();
     deployed_events_gain_actual_turn_index_without_rewriting_payloads();
     deployed_schema_adds_columns_without_removing_unknown_data();
+    an_existing_install_keeps_full_access_until_it_saves_a_mode();
+    a_new_install_asks_first_until_it_saves_a_mode();
 }
 
 fn fresh_schema_has_full_support_and_functional_message_fts() {
@@ -164,7 +166,6 @@ fn deployed_schema_adds_columns_without_removing_unknown_data() {
 /// resolves an unsaved access mode to full access, the default it ran with,
 /// in its conversations and in the schedules the migration fills alike. A
 /// saved mode is kept, and the recorded default is never rewritten.
-#[test]
 fn an_existing_install_keeps_full_access_until_it_saves_a_mode() {
     let mut connection = Connection::open_in_memory().unwrap();
     migrate(&mut connection, None).unwrap();
@@ -187,15 +188,35 @@ fn an_existing_install_keeps_full_access_until_it_saves_a_mode() {
     migrate(&mut connection, None).unwrap();
     assert_eq!(
         default_access_mode(&connection).unwrap(),
-        AccessMode::FullAccess
+        AccessMode::FullAccess,
+        "existing install: an unrecorded default resolves to full access"
     );
-    assert_eq!(schedule_access(&connection, "explicit"), "read_only");
-    assert_eq!(schedule_access(&connection, "unset"), "full_access");
+    assert_eq!(
+        conversation_access_mode(&connection, "unset").unwrap(),
+        AccessMode::FullAccess,
+        "existing install: an unsaved conversation keeps full access"
+    );
+    assert_eq!(
+        conversation_access_mode(&connection, "explicit").unwrap(),
+        AccessMode::ReadOnly,
+        "existing install: a saved conversation mode is kept"
+    );
+    assert_eq!(
+        schedule_access(&connection, "explicit"),
+        "read_only",
+        "existing install: a schedule fills its conversation's saved mode"
+    );
+    assert_eq!(
+        schedule_access(&connection, "unset"),
+        "full_access",
+        "existing install: a schedule of an unsaved conversation fills full access"
+    );
     for chat in ["explicit", "unset"] {
         let conversation = conversation_access_mode(&connection, chat).unwrap();
         assert_eq!(
             schedule_access(&connection, chat),
-            access_mode_name(&conversation)
+            access_mode_name(&conversation),
+            "existing install: schedule and conversation agree for {chat}"
         );
     }
 
@@ -207,38 +228,49 @@ fn an_existing_install_keeps_full_access_until_it_saves_a_mode() {
         )
         .unwrap();
     migrate(&mut connection, None).unwrap();
-    assert_eq!(schedule_access(&connection, "global"), "ask_first");
+    assert_eq!(
+        schedule_access(&connection, "global"),
+        "ask_first",
+        "existing install: a saved global mode fills later schedules"
+    );
     assert_eq!(
         schedule_access(&connection, "unset"),
         "full_access",
-        "rewritten"
+        "existing install: a filled schedule is never rewritten"
     );
     assert_eq!(
         default_access_mode(&connection).unwrap(),
-        AccessMode::FullAccess
+        AccessMode::FullAccess,
+        "existing install: the recorded default is never rewritten"
     );
 }
 
 /// Persisted-format pin (#236): a new App database resolves an unsaved access
 /// mode to ask first, and a later start keeps that.
-#[test]
 fn a_new_install_asks_first_until_it_saves_a_mode() {
     let mut connection = Connection::open_in_memory().unwrap();
     migrate(&mut connection, None).unwrap();
     assert_eq!(
         default_access_mode(&connection).unwrap(),
-        AccessMode::AskFirst
+        AccessMode::AskFirst,
+        "new install: the default is ask first"
     );
     schedule(&connection, "unset");
     migrate(&mut connection, None).unwrap();
     assert_eq!(
         default_access_mode(&connection).unwrap(),
-        AccessMode::AskFirst
+        AccessMode::AskFirst,
+        "new install: a later start keeps ask first"
     );
-    assert_eq!(schedule_access(&connection, "unset"), "ask_first");
+    assert_eq!(
+        schedule_access(&connection, "unset"),
+        "ask_first",
+        "new install: a schedule of an unsaved conversation fills ask first"
+    );
     assert_eq!(
         conversation_access_mode(&connection, "unset").unwrap(),
-        AccessMode::AskFirst
+        AccessMode::AskFirst,
+        "new install: an unsaved conversation asks first"
     );
 }
 

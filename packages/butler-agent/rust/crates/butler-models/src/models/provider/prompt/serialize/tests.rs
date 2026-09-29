@@ -32,7 +32,7 @@ fn config(model_ref: &str) -> ProviderRequestConfig {
         api_shape: metadata.hosted_api_shape,
         metadata,
         endpoint: Url::parse("http://fixture.test/v1").unwrap(),
-        auth: ProviderAuth::ApiKey("fixture".into()),
+        auth: ProviderAuth::ApiKey(String::from("fixture").into()),
         policy: ProviderRoundPolicy {
             total: Duration::from_secs(1),
             idle: None,

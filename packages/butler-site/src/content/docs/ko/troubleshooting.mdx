@@ -208,7 +208,11 @@ butler doctor --check installation
 
 ### 데이터는 어디에 저장되나요?
 
-데이터 폴더인 `~/.butler`에 저장됩니다. 설정은 `butler.config.json`, 클라우드 모델 API 키는 `auth/model-provider-credentials.json`, 웹 검색 API 키 같은 그 밖의 비밀값은 `.env`에 있습니다. 자세한 위치는 [클라우드 모델](/help/models/cloud/#인증-정보-저장-위치)을 참고합니다.
+데이터 폴더인 `~/.butler`에 저장됩니다. 설정은 `butler.config.json`, 웹 검색 API 키 같은 그 밖의 비밀값은 `.env`에 있습니다. 클라우드 모델 API 키는 `auth/credential-store.json`에 저장되고, 키 목록은 `auth/model-provider-credentials.json`에 있습니다. Developer ID로 서명한 배포판은 API 키를 macOS 키체인에 저장합니다. 자세한 위치는 [클라우드 모델](/help/models/cloud/#인증-정보-저장-위치)을 참고합니다.
+
+### API 키를 바꾸거나 지우려면 어떻게 하나요?
+
+**설정 → 모델**의 **API 키** 섹션에서 키의 **교체** 또는 **삭제**를 누릅니다. 기본 모델이 쓰는 키는 기본 모델을 다른 모델로 바꾼 뒤 삭제할 수 있습니다. 자세한 내용은 [클라우드 모델](/help/models/cloud/#api-키-관리)을 참고합니다.
 
 ### 대화 내용이 외부로 전송되나요?
 

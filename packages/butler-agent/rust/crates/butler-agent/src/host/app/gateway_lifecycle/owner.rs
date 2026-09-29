@@ -257,7 +257,7 @@ impl AppGatewayLifecycle {
         let enabled = desired.enabled;
         let running = match (current, active.as_ref()) {
             (Some(_), Some(active)) => {
-                health_check(&active.base_url, active.local_auth.clone()).await
+                serves_clients(&active.base_url, active.local_auth.clone()).await
             }
             _ => false,
         };
@@ -269,13 +269,11 @@ impl AppGatewayLifecycle {
                     || active.local_auth.required != desired.gateway_config().local_auth.required
                     || active.local_auth.token() != desired.gateway_config().local_auth.token()
             });
-        let (status, next_actions) = if !enabled {
-            ("disabled", vec!["butler gateway enable app"])
-        } else if running {
-            ("online", vec!["butler gateway status app"])
-        } else {
-            ("offline", vec!["butler gateway start app"])
-        };
+        let refusing = current.is_some()
+            && active
+                .as_ref()
+                .is_some_and(|active| local_auth_unconfigured(&active.local_auth));
+        let (status, next_actions) = view_status(enabled, running, refusing);
         Ok(json!({
             "id":"app",
             "title":"Butler App Gateway",
@@ -307,14 +305,81 @@ impl AppGatewayLifecycle {
     }
 }
 
+/// Whether a newly opened listener answers as it is configured to: healthy
+/// with its token or, when local auth is required and the token is
+/// unavailable (its file unreadable), refusing every client with the
+/// fail-closed `local_auth_unconfigured` answer. That refusal is the
+/// configured behaviour, so the gateway stays up and tells clients why
+/// instead of leaving nothing listening (SEC-08).
 async fn health_check(base_url: &str, auth: butler_gateway::gateway::LocalAuthConfig) -> bool {
-    let Ok(client) = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_millis(500))
-        .build()
-    else {
+    if local_auth_unconfigured(&auth) {
+        refuses_unconfigured(base_url).await
+    } else {
+        serves_clients(base_url, auth).await
+    }
+}
+
+/// Whether local auth is required but has no token (its file was
+/// unreadable when the service started): the gateway refuses every client.
+pub(crate) fn local_auth_unconfigured(auth: &butler_gateway::gateway::LocalAuthConfig) -> bool {
+    auth.required && auth.token().is_none()
+}
+
+/// The view's `status` and the commands that move the gateway on from it.
+/// A gateway that is up but refuses every client is `unconfigured`, not
+/// `offline`: starting it again changes nothing, the log names the
+/// credential file, and a service restart reads that file again.
+fn view_status(enabled: bool, running: bool, refusing: bool) -> (&'static str, Vec<&'static str>) {
+    if !enabled {
+        ("disabled", vec!["butler gateway enable app"])
+    } else if running {
+        ("online", vec!["butler gateway status app"])
+    } else if refusing {
+        (
+            "unconfigured",
+            vec!["butler gateway logs app", "butler restart"],
+        )
+    } else {
+        ("offline", vec!["butler gateway start app"])
+    }
+}
+
+/// Whether `GET /health` without a credential gets the gateway's fail-closed
+/// `503 local_auth_unconfigured` answer.
+async fn refuses_unconfigured(base_url: &str) -> bool {
+    let Some(client) = probe_client() else {
         return false;
     };
-    let mut request = client.get(format!("{}/health", base_url.trim_end_matches('/')));
+    let Ok(response) = client.get(health_url(base_url)).send().await else {
+        return false;
+    };
+    if response.status() != reqwest::StatusCode::SERVICE_UNAVAILABLE {
+        return false;
+    }
+    response.json::<Value>().await.ok().is_some_and(|body| {
+        body["protocol_version"] == "butler.app.v1"
+            && body["error"]["code"] == "local_auth_unconfigured"
+    })
+}
+
+fn probe_client() -> Option<reqwest::Client> {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_millis(500))
+        .build()
+        .ok()
+}
+
+fn health_url(base_url: &str) -> String {
+    format!("{}/health", base_url.trim_end_matches('/'))
+}
+
+/// Whether a client holding the token gets a healthy answer: the view's
+/// `running`, false while the gateway refuses every client.
+async fn serves_clients(base_url: &str, auth: butler_gateway::gateway::LocalAuthConfig) -> bool {
+    let Some(client) = probe_client() else {
+        return false;
+    };
+    let mut request = client.get(health_url(base_url));
     if auth.required {
         let Some(token) = auth.token() else {
             return false;
