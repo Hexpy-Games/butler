@@ -29,7 +29,7 @@ pub(crate) type CaptureSink = Box<dyn AsyncWrite + Send + Unpin>;
 /// within the settlement grace.
 pub(crate) trait ProcessHost: Send + Sync + 'static {
     fn spawn<'a>(&'a self, command: &'a mut Command) -> ProcessFuture<'a, io::Result<Child>> {
-        Box::pin(async move { command.spawn() })
+        Box::pin(spawn_contained(command))
     }
 
     /// Signals the process group led by `pid`. A group that no longer exists
@@ -54,6 +54,19 @@ pub(crate) trait ProcessHost: Send + Sync + 'static {
 pub(crate) struct SystemProcesses;
 
 impl ProcessHost for SystemProcesses {}
+
+/// Starts `command` and contains its process tree (see
+/// `process_control::contain`). A command that cannot be contained is
+/// stopped and reaped instead of running uncontained.
+pub(super) async fn spawn_contained(command: &mut Command) -> io::Result<Child> {
+    let mut child = command.spawn()?;
+    if let Err(error) = process_control::contain(&child) {
+        let _ = child.start_kill();
+        let _ = child.wait().await;
+        return Err(error);
+    }
+    Ok(child)
+}
 
 /// Signals the process group led by `pid`. A host that does not contain
 /// process trees has no group to signal.

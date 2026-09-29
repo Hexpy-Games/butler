@@ -77,4 +77,3 @@ export function twinTracks(g: SceneGeometry, close: number): Track[] {
     ...side("f", AT.full), ...side("r", AT.reduced),
   ];
 }
-

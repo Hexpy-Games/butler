@@ -19,7 +19,9 @@ impl AllowedPaths {
         let roots: Vec<_> = roots.iter().map(|root| absolute(root, &cwd)).collect();
         let canonical = roots
             .iter()
-            .map(|root| std::fs::canonicalize(root).unwrap_or_else(|_| root.clone()))
+            .map(|root| {
+                butler_platform::secure_fs::canonicalize(root).unwrap_or_else(|_| root.clone())
+            })
             .collect();
         Ok(Self {
             cwd: cwd.clone(),
@@ -46,7 +48,7 @@ impl AllowedPaths {
             if !metadata.is_file() || metadata.file_type().is_symlink() {
                 continue;
             }
-            let Ok(real) = std::fs::canonicalize(&selected) else {
+            let Ok(real) = butler_platform::secure_fs::canonicalize(&selected) else {
                 continue;
             };
             if self.canonical.iter().any(|root| real.starts_with(root)) {

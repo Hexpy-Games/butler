@@ -205,7 +205,7 @@ async fn mig_02_killed_apply_can_be_rerun() -> Result<(), HarnessError> {
 
 /// Runs `conversation historical-recovery` on the legacy transcript fixture.
 async fn recover(s: &Scenario, write: bool) -> Result<Value, HarnessError> {
-    let transcript = fixture("F3-legacy-transcript/telegram-garden.jsonl")
+    let transcript = fixture("F3-legacy-transcript/legacy-garden.jsonl")
         .display()
         .to_string();
     let mut args = vec![
@@ -356,5 +356,69 @@ async fn mig_03_personalization_migration_import() -> Result<(), HarnessError> {
         "unknown option accepted: {}",
         unknown.stdout
     );
+    s.finish().await
+}
+
+/// Files a previous generation left for a chat-app gateway that no longer
+/// exists, as (path in the data folder, contents). The token is a dummy.
+const RETIRED_GATEWAY_FILES: [(&str, &str); 3] = [
+    (
+        "gateways/telegram.json",
+        r#"{"enabled":true,"config":{"botToken":"0000000000:legacy-e2e-dummy","allowedChatIds":[1]}}"#,
+    ),
+    (
+        "auth/telegram-credentials.json",
+        r#"{"credentials":[{"kind":"telegram","botToken":"0000000000:legacy-e2e-dummy"}]}"#,
+    ),
+    (
+        "automations/legacy-delivery.json",
+        r#"{"id":"legacy","delivery":{"target":"telegram","chatId":1}}"#,
+    ),
+];
+
+/// MIG-04 — A data folder that still holds a retired chat-app gateway (its
+/// settings, credential, a delivery target and a section in
+/// `butler.config.json`) starts, passes `doctor`, lists only the `app`
+/// gateway, and is left untouched.
+#[tokio::test]
+async fn mig_04_retired_gateway_files_are_ignored() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = Setup::new("MIG-04")?;
+    let data = setup.sandbox.data.clone();
+    for (path, body) in RETIRED_GATEWAY_FILES {
+        let file = data.join(path);
+        std::fs::create_dir_all(file.parent().unwrap())?;
+        std::fs::write(file, body)?;
+    }
+    let mut s = setup.start().await?;
+    let config_path = data.join("butler.config.json");
+    let mut config: Value = serde_json::from_slice(&std::fs::read(&config_path)?)?;
+    config["telegram"] =
+        serde_json::json!({"enabled": true, "botToken": "0000000000:legacy-e2e-dummy"});
+    config["gateways"] = serde_json::json!({"telegram": {"enabled": true}});
+    std::fs::write(&config_path, serde_json::to_vec_pretty(&config)?)?;
+    let configured = std::fs::read(&config_path)?;
+    s.restart().await?;
+
+    let health = s.gw.get("/health").await?;
+    assert_eq!(health.status, 200, "{}", health.text);
+    for check in ["data", "credentials"] {
+        let doctor = s.agent.cli(&["doctor", "--check", check, "--json"])?;
+        assert_eq!(
+            doctor.code,
+            Some(0),
+            "{check}: {} {}",
+            doctor.stdout,
+            doctor.stderr
+        );
+    }
+    let listed = cli(&s, &["gateway", "list", "--json"]).await?;
+    let gateways = listed["data"]["gateways"].as_array().unwrap();
+    assert_eq!(gateways.len(), 1, "{listed}");
+    assert_eq!(gateways[0]["id"], "app", "{listed}");
+    for (path, body) in RETIRED_GATEWAY_FILES {
+        assert_eq!(std::fs::read_to_string(data.join(path))?, body, "{path}");
+    }
+    assert_eq!(std::fs::read(&config_path)?, configured, "config rewritten");
     s.finish().await
 }

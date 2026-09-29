@@ -21,5 +21,4 @@ pub(super) mod vision;
 pub(super) mod work;
 pub(super) mod work_streams;
 pub(super) mod work_tools;
-#[cfg(unix)]
 pub(super) mod worker_profiles;

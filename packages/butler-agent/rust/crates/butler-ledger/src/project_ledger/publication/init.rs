@@ -36,7 +36,7 @@ struct MutationClaim {
     claim_id: String,
     host_id: String,
     process_id: u32,
-    process_started_at_ms: i64,
+    process_started_at_ms: Option<i64>,
 }
 
 pub(super) fn ensure(
@@ -117,14 +117,15 @@ fn canonical_target(
     record::safe_id(&scope.ledger_project_id)?;
     let projects = data_root.join("project-ledger/projects");
     fs::create_dir_all(&projects).map_err(|source| io().with_source(source))?;
-    let canonical_projects =
-        fs::canonicalize(&projects).map_err(|source| io().with_source(source))?;
+    let canonical_projects = butler_platform::secure_fs::canonicalize(&projects)
+        .map_err(|source| io().with_source(source))?;
     let expected = projects.join(&scope.ledger_project_id);
     if scope.ledger_root != expected {
         return Err(mismatch());
     }
     if expected.exists() {
-        let actual = fs::canonicalize(&expected).map_err(|source| io().with_source(source))?;
+        let actual = butler_platform::secure_fs::canonicalize(&expected)
+            .map_err(|source| io().with_source(source))?;
         if actual != canonical_projects.join(&scope.ledger_project_id) {
             return Err(mismatch());
         }
@@ -194,10 +195,12 @@ fn acquire(path: &Path, owner: &MutationClaim) -> Result<(), ProjectWorkPublicat
                     return Err(ProjectWorkPublicationError::Uncertain { source: None });
                 }
                 let observed = instance::process_started_at_ms(previous.process_id);
-                if observed.is_some_and(|started| started == previous.process_started_at_ms) {
+                if observed.is_some_and(|started| Some(started) == previous.process_started_at_ms) {
                     return Err(ProjectWorkPublicationError::Uncertain { source: None });
                 }
-                if observed.is_none() && process_alive(previous.process_id) {
+                if (observed.is_none() || previous.process_started_at_ms.is_none())
+                    && process_alive(previous.process_id)
+                {
                     return Err(ProjectWorkPublicationError::Uncertain { source: None });
                 }
                 let quarantine = path.with_extension(format!("dead-{}", previous.claim_id));
@@ -238,8 +241,7 @@ fn current_claim() -> Result<MutationClaim, ProjectWorkPublicationError> {
     let host_id = instance::host_name().map_err(|source| {
         ProjectWorkPublicationError::Uncertain { source: None }.with_source(source)
     })?;
-    let started = instance::process_started_at_ms(process_id)
-        .ok_or(ProjectWorkPublicationError::Uncertain { source: None })?;
+    let started = instance::process_started_at_ms(process_id);
     Ok(MutationClaim {
         schema: "project-ledger.mutation-claim.v1".into(),
         claim_id: uuid::Uuid::new_v4().to_string(),
@@ -249,10 +251,17 @@ fn current_claim() -> Result<MutationClaim, ProjectWorkPublicationError> {
     })
 }
 
-/// Whether the claim's process may still be running: a process this user can
-/// signal, or one on a host that cannot tell.
+/// Whether the claim's process may still be running, including a process this
+/// user cannot signal or a host that cannot tell.
 fn process_alive(pid: u32) -> bool {
-    matches!(liveness(pid), Liveness::Running | Liveness::Unknown)
+    process_may_be_alive(liveness(pid))
+}
+
+pub(in crate::project_ledger) fn process_may_be_alive(state: Liveness) -> bool {
+    matches!(
+        state,
+        Liveness::Running | Liveness::OtherOwner | Liveness::Unknown
+    )
 }
 
 fn now_iso() -> Result<String, ProjectWorkPublicationError> {

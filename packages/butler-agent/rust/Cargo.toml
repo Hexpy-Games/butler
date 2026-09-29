@@ -62,6 +62,11 @@ tar = { version = "0.4.46", default-features = false }
 rustix = { version = "=1.1.5", features = ["fs"] }
 nix = { version = "=0.31.3", default-features = false, features = ["feature", "fs", "hostname", "net", "signal"] }
 libproc = "=0.14.11"
+# Windows process table, Job Objects and path normalization (butler-platform).
+sysinfo = { version = "=0.37.2", default-features = false, features = ["system"] }
+win32job = "=2.0.3"
+dunce = "=1.0.5"
+iana-time-zone = "=0.1.65"
 # The OS credential store (#217, butler-platform `secrets`): the keyring-core
 # API and one store per OS (macOS Keychain; Secret Service over D-Bus in pure
 # Rust; Windows Credential Manager). The `keyring` crate's own docs point

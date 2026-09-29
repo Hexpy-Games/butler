@@ -45,7 +45,9 @@ fn locate() -> Result<PathBuf, String> {
     let target = nonempty("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| workspace_root().join("target"));
-    let binary = target.join(profile).join("butler-agent");
+    let binary = target
+        .join(profile)
+        .join(format!("butler-agent{}", std::env::consts::EXE_SUFFIX));
     if !flag("BUTLER_E2E_SKIP_BUILD") {
         let cargo = nonempty("CARGO").unwrap_or_else(|| "cargo".into());
         let mut command = Command::new(cargo);

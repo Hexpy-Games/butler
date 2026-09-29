@@ -104,7 +104,7 @@ fn read_path(directory: &Path, path: &Path) -> CognitionResult<KnowHowDocument> 
     if !metadata.file_type().is_file() {
         return Err(error(CognitionCode::MemoryKnowhowEntryPathUnsafe));
     }
-    let canonical = fs::canonicalize(path)
+    let canonical = butler_platform::secure_fs::canonicalize(path)
         .map_err(|source| error(CognitionCode::MemoryKnowhowEntryReadFailed).with_source(source))?;
     if !canonical.starts_with(directory) {
         return Err(error(CognitionCode::MemoryKnowhowEntryPathUnsafe));
@@ -127,7 +127,7 @@ pub(super) fn write(root: &Path, document: &KnowHowDocument) -> CognitionResult<
     let path = directory.join(format!("{id}.json"));
     match fs::symlink_metadata(&path) {
         Ok(metadata) if metadata.file_type().is_file() => {
-            let canonical = fs::canonicalize(&path).map_err(|source| {
+            let canonical = butler_platform::secure_fs::canonicalize(&path).map_err(|source| {
                 error(CognitionCode::MemoryKnowhowEntryPathUnsafe).with_source(source)
             })?;
             if !canonical.starts_with(&directory) {
@@ -206,7 +206,7 @@ fn entries_directory(root: &Path, presence: Presence) -> CognitionResult<Option<
             Err(_) => return Err(error(CognitionCode::MemoryKnowhowRootReadFailed)),
         }
     }
-    let canonical_root = fs::canonicalize(root)
+    let canonical_root = butler_platform::secure_fs::canonicalize(root)
         .map_err(|source| error(CognitionCode::MemoryKnowhowRootReadFailed).with_source(source))?;
     let path = root.join("entries");
     if create {
@@ -219,7 +219,7 @@ fn entries_directory(root: &Path, presence: Presence) -> CognitionResult<Option<
             Err(_) => return Err(error(CognitionCode::MemoryKnowhowEntriesReadFailed)),
         }
     }
-    let canonical = fs::canonicalize(&path).map_err(|source| {
+    let canonical = butler_platform::secure_fs::canonicalize(&path).map_err(|source| {
         error(CognitionCode::MemoryKnowhowEntriesReadFailed).with_source(source)
     })?;
     if !canonical.starts_with(&canonical_root) || canonical == canonical_root {

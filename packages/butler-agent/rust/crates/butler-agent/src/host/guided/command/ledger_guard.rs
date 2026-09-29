@@ -239,7 +239,7 @@ fn real_or_nearest(path: &Path) -> PathBuf {
     let mut current = lexical(path);
     let mut suffix = Vec::new();
     loop {
-        if let Ok(real) = std::fs::canonicalize(&current) {
+        if let Ok(real) = butler_platform::secure_fs::canonicalize(&current) {
             return suffix
                 .into_iter()
                 .rev()

@@ -175,13 +175,10 @@ async fn run_active(
     cancellation: &CancellationToken,
 ) -> butler_memory::cognition::CognitionResult<butler_memory::cognition::ConfiguredCycleResult> {
     let generation = resolve_active_generation(&options.data, paths)?;
-    let os = nix::sys::utsname::uname()
+    let os = butler_platform::instance::os_release()
         .map_err(|source| error(CognitionCode::EnvironmentUnavailable).with_source(source))?;
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_default();
-    let environment =
-        ProcessEnvironment::capture(&options.data, &home, &os.release().to_string_lossy());
+    let home = butler_platform::user_dirs::home_dir().unwrap_or_default();
+    let environment = ProcessEnvironment::capture(&options.data, &home, &os);
     let collation = Arc::new(
         LocaleCollation::new("en-US")
             .map_err(|source| error(CognitionCode::LocaleUnavailable).with_source(source))?,
@@ -338,9 +335,7 @@ fn parse(
 }
 
 fn user_home() -> PathBuf {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_default()
+    butler_platform::user_dirs::home_dir().unwrap_or_default()
 }
 fn expand_home(value: &str) -> PathBuf {
     if value == "~" {
@@ -376,13 +371,10 @@ fn fail(json_mode: bool, code: &str, message: &str, exit_code: u8) -> Consolidat
 pub(in crate::host) fn signals(
     token: CancellationToken,
 ) -> Result<tokio::task::JoinHandle<()>, crate::host::HostError> {
-    use tokio::signal::unix::{SignalKind, signal};
-    let mut interrupt =
-        signal(SignalKind::interrupt()).map_err(crate::host::HostError::from_error)?;
-    let mut terminate =
-        signal(SignalKind::terminate()).map_err(crate::host::HostError::from_error)?;
+    let mut requests = butler_platform::process_control::shutdown_requests()
+        .map_err(crate::host::HostError::from_error)?;
     Ok(tokio::spawn(async move {
-        tokio::select! { _=interrupt.recv()=>{},_=terminate.recv()=>{} }
+        requests.recv().await;
         token.cancel();
     }))
 }

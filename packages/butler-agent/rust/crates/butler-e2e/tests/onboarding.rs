@@ -72,31 +72,35 @@ async fn onb_01_fresh_install_boots_empty() -> Result<(), HarnessError> {
 async fn onb_01_unusable_data_dirs_are_refused() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let setup = Setup::new("ONB-01-INJECT")?.fixture(Fixture::Empty);
-    // (a) data dir not writable.
-    let locked = setup.sandbox.root.join("locked-data");
-    std::fs::create_dir_all(&locked)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o500))?;
+    // (a) data dir not writable (only where a host can make one).
+    if butler_platform::secure_fs::PERMISSION_MODES {
+        let locked = setup.sandbox.root.join("locked-data");
+        std::fs::create_dir_all(&locked)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o500))?;
+        }
+        let mut launch = Launch::new(&setup.sandbox)?;
+        launch.data = locked.clone();
+        let output = launch
+            .command()
+            .stdin(std::process::Stdio::null())
+            .output()?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o700))?;
+        }
+        assert!(!output.status.success(), "started on a read-only data dir");
+        assert_eq!(
+            std::fs::read_dir(&locked)?.count(),
+            0,
+            "partial files in the read-only data dir"
+        );
+    } else {
+        eprintln!("butler-e2e: SKIPPED (part (a): this host has no read-only directories)");
     }
-    let mut launch = Launch::new(&setup.sandbox)?;
-    launch.data = locked.clone();
-    let output = launch
-        .command()
-        .stdin(std::process::Stdio::null())
-        .output()?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o700))?;
-    }
-    assert!(!output.status.success(), "started on a read-only data dir");
-    assert_eq!(
-        std::fs::read_dir(&locked)?.count(),
-        0,
-        "partial files in the read-only data dir"
-    );
     // (b) data dir inside the installation dir.
     let inside = setup.sandbox.install.join("data");
     std::fs::create_dir_all(&inside)?;

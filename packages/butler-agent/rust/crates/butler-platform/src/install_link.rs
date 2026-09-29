@@ -8,7 +8,7 @@
 //! version directory (a plain file name) and read the name back.
 
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[cfg(unix)]
 mod unix;
@@ -43,6 +43,13 @@ pub fn point(home: &Path, link: &str, target: &str) -> io::Result<()> {
 pub fn read(home: &Path, link: &str) -> io::Result<Option<String>> {
     require_plain_name(link)?;
     sys::read(home, link)
+}
+
+/// The directory a launcher should run from. Unix can follow its directory
+/// link; Windows resolves the pointer file to a version directory.
+pub fn launcher_root(home: &Path, link: &str) -> io::Result<PathBuf> {
+    require_plain_name(link)?;
+    sys::launcher_root(home, link)
 }
 
 /// Removes the pointer `link` of `home` (never what it names). A missing

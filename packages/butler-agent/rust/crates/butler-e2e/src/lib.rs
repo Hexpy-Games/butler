@@ -22,3 +22,16 @@ macro_rules! gate {
         }
     };
 }
+
+/// Ends a scenario that needs a capability this host lacks, and says so: the
+/// run prints `butler-e2e: SKIPPED (<reason>)` (visible with `--nocapture`),
+/// so a skipped scenario is never mistaken for a passed one.
+#[macro_export]
+macro_rules! skip_unless {
+    ($capability:expr, $reason:expr) => {
+        if !$capability {
+            eprintln!("butler-e2e: SKIPPED ({})", $reason);
+            return Ok(());
+        }
+    };
+}

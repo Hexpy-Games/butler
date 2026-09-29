@@ -1,3 +1,4 @@
+use butler_platform::secure_fs::Canonical as _;
 use std::path::Path;
 
 use butler_turn::btcc::BtccError;
@@ -10,8 +11,8 @@ pub(super) fn validate_data_installation_boundary(
     data_root: &Path,
     installation_root: &Path,
 ) -> Result<(), BtccError> {
-    let data_root = data_root.canonicalize().map_err(setup)?;
-    let installation_root = installation_root.canonicalize().map_err(setup)?;
+    let data_root = data_root.canonical().map_err(setup)?;
+    let installation_root = installation_root.canonical().map_err(setup)?;
     if data_root.starts_with(&installation_root) || installation_root.starts_with(&data_root) {
         return Err(BtccError::relayed(
             "native_path_configuration_invalid",

@@ -1,8 +1,9 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
 use butler_platform::command_sandbox;
-use butler_platform::process_control::{Liveness, liveness};
+use butler_platform::process_control::{self, Liveness, liveness};
 
 use super::{CommandStep, Commands, Fixture, GuidedAccess, ScriptedProcesses};
 
@@ -60,18 +61,51 @@ async fn close_cancels_running_command_and_rejects_admission() {
 async fn command_environment_excludes_host_values() {
     guided_environment_excludes_non_allowlisted_host_values().await;
     structured_undefined_environment_entry_removes_inherited_value().await;
+    guided_quotes_reach_the_shell_intact().await;
+}
+
+/// What a POSIX shell or `cmd.exe` prints for an unset variable: the empty
+/// default, or the literal `%NAME%`.
+fn unset_marker(name: &str) -> String {
+    if command_sandbox::POSIX_SHELL {
+        "unset".into()
+    } else {
+        format!("%{name}%")
+    }
+}
+
+/// The command that prints `name`'s value in the host's shell.
+fn print_variable(name: &str) -> String {
+    if command_sandbox::POSIX_SHELL {
+        format!("printf %s \"${{{name}-unset}}\"")
+    } else {
+        format!("echo %{name}%")
+    }
+}
+
+/// Program files `cmd.exe` needs to start, which the allowlist keeps.
+fn system_environment(input: &mut HashMap<String, String>) {
+    for name in process_control::SYSTEM_ENVIRONMENT {
+        if let Some(value) = std::env::var_os(name) {
+            input.insert((*name).into(), value.to_string_lossy().into_owned());
+        }
+    }
 }
 
 async fn guided_environment_excludes_non_allowlisted_host_values() {
     let fixture = Fixture::new();
     let owner = Commands::new();
-    let mut input = fixture.guided("printf %s \"${PRIVATE_TOKEN-unset}\"");
+    let mut input = fixture.guided(&print_variable("PRIVATE_TOKEN"));
+    system_environment(&mut input.host_environment);
     input
         .host_environment
         .insert("PRIVATE_TOKEN".into(), "secret".into());
     let output = owner.submit_guided(input).unwrap().await.unwrap().unwrap();
-    let payload = std::fs::read_to_string(output.payload_source.path).unwrap();
-    assert!(payload.contains("\n--- stdout ---\nunset\n--- stderr ---\n"));
+    let payload = std::fs::read_to_string(output.payload_source.path)
+        .unwrap()
+        .replace("\r\n", "\n");
+    let expected = format!("\n--- stdout ---\n{}\n", unset_marker("PRIVATE_TOKEN"));
+    assert!(payload.contains(&expected), "{payload}");
     assert!(!payload.contains("secret"));
     owner.close().await;
 }
@@ -79,20 +113,55 @@ async fn guided_environment_excludes_non_allowlisted_host_values() {
 async fn structured_undefined_environment_entry_removes_inherited_value() {
     let fixture = Fixture::new();
     let owner = Commands::new();
+    let (executable, arguments) = if command_sandbox::POSIX_SHELL {
+        (
+            "/bin/sh".to_owned(),
+            vec![
+                "-c".to_owned(),
+                "printf %s \"${BUTLER_ORACLE_ENV-unset}\"".to_owned(),
+            ],
+        )
+    } else {
+        (
+            "cmd.exe".to_owned(),
+            ["/d", "/c", "echo", "%BUTLER_ORACLE_ENV%"]
+                .map(str::to_owned)
+                .to_vec(),
+        )
+    };
     let mut input = fixture.structured(vec![CommandStep {
-        executable: "/bin/sh".into(),
-        arguments: vec![
-            "-c".into(),
-            "printf %s \"${BUTLER_ORACLE_ENV-unset}\"".into(),
-        ],
+        executable,
+        arguments,
     }]);
     input.inherit_environment = true;
+    system_environment(&mut input.host_environment);
     input
         .host_environment
         .insert("BUTLER_ORACLE_ENV".into(), "present".into());
     input.environment.insert("BUTLER_ORACLE_ENV".into(), None);
     let output = owner.submit_structured(input).unwrap().await.unwrap();
-    assert_eq!(output.stdout, "unset");
+    assert_eq!(output.stdout.trim_end(), unset_marker("BUTLER_ORACLE_ENV"));
+    owner.close().await;
+}
+
+/// A command containing quotes reaches the shell as written: `cmd.exe` does
+/// not undo the `\"` escaping of `Command::arg`.
+async fn guided_quotes_reach_the_shell_intact() {
+    let fixture = Fixture::new();
+    let owner = Commands::new();
+    let (command, printed) = if command_sandbox::POSIX_SHELL {
+        ("printf %s \"a b\" 'c d'", "a bc d")
+    } else {
+        ("echo \"a b\" \"c d\"", "\"a b\" \"c d\"")
+    };
+    let mut input = fixture.guided(command);
+    system_environment(&mut input.host_environment);
+    let output = owner.submit_guided(input).unwrap().await.unwrap().unwrap();
+    let payload = std::fs::read_to_string(output.payload_source.path)
+        .unwrap()
+        .replace("\r\n", "\n");
+    let expected = format!("\n--- stdout ---\n{printed}\n");
+    assert!(payload.contains(&expected), "{payload}");
     owner.close().await;
 }
 
