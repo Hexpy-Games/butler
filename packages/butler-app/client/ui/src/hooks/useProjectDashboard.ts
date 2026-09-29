@@ -56,6 +56,12 @@ export function useProjectDashboard({
     data: initialDashboard ?? null });
   const status = !projectId ? "missing" : request.projectId !== projectId ? "loading" : request.status;
   const dashboard = status === "ready" ? request.data : null;
+  const dashboardProjectId = dashboard?.project.id;
+  const dashboardGit = dashboard?.project.git;
+  // The dashboard's Git state decides whether new chats here offer a worktree.
+  useEffect(() => {
+    if (dashboardProjectId) useButlerStore.getState().setProjectDashboardGit(dashboardProjectId, dashboardGit);
+  }, [dashboardProjectId, dashboardGit]);
   const sessions = useMemo(() => {
     // Navigation receives live title/status changes while the dashboard request is in flight.
     // Keep the full dashboard catalog, but do not overwrite newer live rows with a stale response.

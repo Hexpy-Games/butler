@@ -785,6 +785,18 @@ export interface CreateSessionResult {
   session: SessionSummary;
 }
 
+/**
+ * A project folder's Git state; what the agent could not read is null. The
+ * project list fills only `is_repo` and `branch`; the dashboard fills all.
+ */
+export interface ProjectGitState {
+  is_repo: boolean;
+  branch: string | null;
+  dirty?: boolean | null;
+  ahead?: number | null;
+  behind?: number | null;
+}
+
 /** A project's wallpaper: follow the global `wallpaper` setting, or its own source. */
 export type ProjectWallpaper = "inherit" | WallpaperSource;
 
@@ -797,6 +809,8 @@ export interface ProjectSummary {
   /** From the dashboard preferences; absent (older gateways, optimistic rows) means `inherit`. */
   wallpaper?: ProjectWallpaper;
   sessions?: SessionSummary[];
+  /** Absent from agents that predate project Git state. */
+  git?: ProjectGitState | null;
 }
 
 export type { SpaceCommand, SpaceNode, SpaceGroup, SpaceView, SpaceMutationResult } from "../../../shared/app-contracts.ts";
