@@ -10,10 +10,11 @@
 //! [`write_request`]. With full access they run at once, without Work or a
 //! plan review: the user sees a wallpaper change at once and undoes it from
 //! the App's toast (`wallpaper.changed`, origin "agent"), and a replaced
-//! module stays recoverable. A read-only Turn writes nothing. Both writes are
-//! idempotent (an attachment is promoted once; saving a module's current
-//! files again changes nothing), so a write that was interrupted is simply
-//! sent again. `current_project` resolves to this Turn's App project here.
+//! module stays recoverable. A read-only Turn writes nothing. Recovering a
+//! journaled write whose outcome was lost never overwrites a change made in
+//! between (see `effect::wallpaper`): a module save is sent again under its
+//! `replace_revision` check, a wallpaper write is not sent again.
+//! `current_project` resolves to this Turn's App project here.
 //!
 //! `save_wallpaper_module` writes a module's files (manifest, shader and
 //! optional overlay) at once after the gateway checks them; replacing an

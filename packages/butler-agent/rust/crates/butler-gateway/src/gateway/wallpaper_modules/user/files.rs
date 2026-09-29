@@ -17,10 +17,7 @@ use super::{
     MANIFEST, MAX_IMAGE_BYTES, MAX_MANIFEST_BYTES, MAX_OVERLAY_BYTES, MAX_SHADER_BYTES, OVERLAY,
     SHADER,
 };
-use crate::gateway::{
-    wallpaper_modules::is_image_file,
-    wallpaper_store::{MAX_SOURCE_PIXELS, MAX_SOURCE_SIDE, within_source_limits},
-};
+use crate::gateway::wallpaper_modules::is_image_file;
 
 pub(crate) const PNG_SIGNATURE: &[u8] = b"\x89PNG\r\n\x1a\n";
 
@@ -169,20 +166,33 @@ pub(crate) fn limited(path: &Path, limit: usize) -> io::Result<FileRead> {
     Ok(FileRead::within(bytes, limit))
 }
 
-/// Why an image's header dimensions are refused, if they are: the renderer
-/// decodes a default image in full, so it gets the caps of an uploaded
-/// wallpaper, read from the header before anything is decoded.
+/// Longest side of a default image: the renderer uploads it in full as one
+/// GPU texture. WebGL2 guarantees only 2048; 4096 is what practically every
+/// device supports.
+const MAX_IMAGE_SIDE: u32 = 4096;
+/// Most pixels of a default image.
+const MAX_IMAGE_PIXELS: u64 = 16_000_000;
+
+/// Why an image's header dimensions are refused, if they are, read from the
+/// header before anything is decoded.
 pub(crate) fn image_dimensions_rule(bytes: &[u8]) -> Option<String> {
     let dimensions = ImageReader::new(Cursor::new(bytes))
         .with_guessed_format()
         .ok()
         .and_then(|reader| reader.into_dimensions().ok());
     match dimensions {
-        Some((width, height)) if within_source_limits(width, height) => None,
+        Some((width, height))
+            if width > 0
+                && height > 0
+                && width <= MAX_IMAGE_SIDE
+                && height <= MAX_IMAGE_SIDE
+                && u64::from(width) * u64::from(height) <= MAX_IMAGE_PIXELS =>
+        {
+            None
+        }
         Some((width, height)) => Some(format!(
-            "is {width}x{height} pixels, over the limit of {MAX_SOURCE_SIDE} per side and \
-             {} megapixels",
-            MAX_SOURCE_PIXELS / 1_000_000
+            "is {width}x{height}; at most {MAX_IMAGE_SIDE} px per side and {} MP",
+            MAX_IMAGE_PIXELS / 1_000_000
         )),
         None => Some("has an unreadable image header".to_owned()),
     }
