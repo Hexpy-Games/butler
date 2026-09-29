@@ -459,16 +459,18 @@ async fn svc_07_stop_during_startup_exits_zero() -> Result<(), HarnessError> {
     assert!(!s.gw.healthy().await, "the stopped startup still serves");
 
     // SIGTERM while the instance is starting, without an announcement.
-    let pid = s.agent.start_process()?;
-    starting_record(&data, pid).await;
-    request_stop(pid).map_err(|error| harness_error(error.to_string()))?;
-    wait_exited(&mut s).await;
-    assert_exited_cleanly(&s, pid);
-    assert!(
-        instance_record(&data).is_none(),
-        "{:?}",
-        instance_record(&data)
-    );
+    if SIGNALS {
+        let pid = s.agent.start_process()?;
+        starting_record(&data, pid).await;
+        request_stop(pid).map_err(|error| harness_error(error.to_string()))?;
+        wait_exited(&mut s).await;
+        assert_exited_cleanly(&s, pid);
+        assert!(
+            instance_record(&data).is_none(),
+            "{:?}",
+            instance_record(&data)
+        );
+    }
 
     s.gw = s.agent.start_again().await?;
     ready_record(&data, Duration::from_secs(30)).await;

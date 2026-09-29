@@ -40,6 +40,10 @@ after the grace period; the service has no SIGTERM there. Not yet on Windows: re
 commands (refused with `command_observation_isolation_unavailable`), write protection of
 program files, Task Scheduler registration, an owner-only access list on a DATA folder outside
 `%USERPROFILE%`, and the `butler.exe` command launcher (see `butler_platform::launcher`).
+Commands the agent runs go through `cmd.exe`. A `butler restart` whose output is a pipe holds
+that pipe open until the new service exits, because Windows children inherit every inheritable
+handle and safe Rust cannot clear that; a terminal or file output is unaffected. Time zones
+come from the rules embedded in the executable (`butler_platform::time_zone`).
 
 The executable has passed an isolated source-queue smoke through a local mock provider,
 physical file read, canonical persistence, reply transcript, close, and restart. A further

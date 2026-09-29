@@ -4,6 +4,8 @@ use std::collections::HashMap;
 
 use super::Invocation;
 
+pub(super) const POSIX: bool = false;
+
 pub(super) fn login_shell(command: &str, environment: &HashMap<String, String>) -> Invocation {
     let program = environment
         .iter()

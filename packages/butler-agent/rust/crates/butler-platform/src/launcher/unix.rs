@@ -8,6 +8,8 @@ use std::path::{Path, PathBuf};
 use super::LauncherTarget;
 
 /// Release artifacts name macOS `darwin`; other Unix hosts by Rust's name.
+pub(super) const HAS_CLI_LAUNCHER: bool = true;
+
 pub(super) const RELEASE_OS: &str = if cfg!(target_os = "macos") {
     "darwin"
 } else {

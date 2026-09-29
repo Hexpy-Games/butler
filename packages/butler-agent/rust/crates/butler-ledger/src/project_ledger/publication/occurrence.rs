@@ -166,7 +166,7 @@ fn validate(
     if stored.schema != "butler.btcc-project-ledger-effect-occurrence.v2"
         || stored.status != "pending"
         || stored.ledger_project_id != scope.ledger_project_id
-        || stored.ledger_root != scope.ledger_root.to_string_lossy()
+        || Path::new(&stored.ledger_root) != scope.ledger_root
         || stored.operation_identity != logical(identity)
         || stored.occurrence_id != occurrence_id(scope, identity)?
         || stored.attempts.is_empty()

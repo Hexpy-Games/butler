@@ -323,14 +323,14 @@ impl Agent {
         mut command: Command,
         observe: impl FnMut(),
     ) -> Result<CliOutput, HarnessError> {
-        command.stdin(Stdio::null());
-        let output = self
-            .while_reaping(move || command.output(), observe)
+        let (out, err) = process::capture_to_files(&mut command, &self.launch.tmp)?;
+        let status = self
+            .while_reaping(move || command.status(), observe)
             .await??;
         Ok(CliOutput {
-            code: output.status.code(),
-            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            code: status.code(),
+            stdout: fs::read_to_string(&out).unwrap_or_default(),
+            stderr: fs::read_to_string(&err).unwrap_or_default(),
         })
     }
 

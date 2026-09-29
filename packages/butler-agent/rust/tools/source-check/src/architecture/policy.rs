@@ -12,7 +12,7 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // keeps its per-OS implementations as private children. The private
         // Windows process table serves instance identity and liveness.
         "command_sandbox" | "desktop" | "launcher" | "network" | "process_table" | "secure_fs"
-        | "stdio" | "user_dirs" => &[],
+        | "stdio" | "time_zone" | "user_dirs" => &[],
         "instance" | "process_control" => &["process_table"],
         // The credential store's owner-only fallback file is a secure_fs file.
         "secrets" => &["secure_fs"],

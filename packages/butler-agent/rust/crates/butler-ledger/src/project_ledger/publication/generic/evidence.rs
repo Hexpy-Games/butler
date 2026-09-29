@@ -122,9 +122,9 @@ pub(super) fn read_journal(
     if journal.schema != "project-ledger.publication-transaction.v1"
         || journal.publication_id != attempt.publication_id
         || journal.canonical_root != occurrence.ledger_root
-        || journal.candidate_root != paths.candidate.to_string_lossy()
-        || journal.journal_path != paths.journal.to_string_lossy()
-        || journal.claim_path != claim::path(Path::new(&occurrence.ledger_root)).to_string_lossy()
+        || Path::new(&journal.candidate_root) != paths.candidate
+        || Path::new(&journal.journal_path) != paths.journal
+        || Path::new(&journal.claim_path) != claim::path(Path::new(&occurrence.ledger_root))
         || !journal.base.same_storage(&attempt.expected_base)
     {
         return Err(LedgerEffectError::Uncertain { source: None });

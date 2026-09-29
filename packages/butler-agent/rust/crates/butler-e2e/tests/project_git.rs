@@ -196,6 +196,9 @@ fn script(path: &Path, lines: &[&str]) -> Result<(), HarnessError> {
 #[tokio::test]
 async fn prj_05_repository_config_never_runs_programs() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    if !butler_platform::command_sandbox::POSIX_SHELL {
+        return Ok(());
+    }
     let s = Setup::new("PRJ-05")?.start().await?;
     let (monitored_id, monitored) = project(&s, "Monitored").await?;
     init_repository(&monitored)?;
@@ -254,6 +257,9 @@ async fn prj_05_repository_config_never_runs_programs() -> Result<(), HarnessErr
 #[tokio::test]
 async fn prj_06_missing_or_hanging_git_leaves_status_unknown() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    if !butler_platform::command_sandbox::POSIX_SHELL {
+        return Ok(());
+    }
     let expected = state(true, Some("main"), None, None, None);
 
     let setup = Setup::new("PRJ-06-MISSING")?;

@@ -6,6 +6,8 @@ use std::path::{Path, PathBuf};
 
 use super::LauncherTarget;
 
+pub(super) const HAS_CLI_LAUNCHER: bool = false;
+
 pub(super) const RELEASE_OS: &str = "windows";
 
 const RUNNABLE_EXTENSIONS: [&str; 4] = ["exe", "com", "bat", "cmd"];

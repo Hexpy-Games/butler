@@ -19,6 +19,7 @@
 //!   enforces read-only and write-protected access.
 //! - [`secure_fs`]: owner-only files and directories, atomic replacement,
 //!   no-follow opens, directory exchange and file identity.
+//! - [`time_zone`]: IANA time zone rules by name.
 //! - [`user_dirs`]: the user's home and the system's own folders.
 //! - [`launcher`]: runnable programs and the release platform tag.
 //! - [`network`]: the machine's own interface addresses.
@@ -45,6 +46,7 @@ pub mod process_control;
 pub mod secrets;
 pub mod secure_fs;
 pub mod stdio;
+pub mod time_zone;
 pub mod user_dirs;
 
 #[cfg(windows)]

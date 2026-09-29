@@ -25,7 +25,7 @@ use butler_e2e::e2e::fake_servers::{ChatBehavior, FakeServer, GOOD_KEY};
 use butler_e2e::e2e::fixtures;
 use butler_e2e::e2e::gateway::turn_state;
 use butler_e2e::e2e::scenario::{Fixture, Scenario, Setup};
-use butler_platform::secure_fs::is_owner_only;
+use butler_platform::secure_fs::{OWNER_ONLY, is_owner_only};
 use serde_json::{Value, json};
 
 const CREDENTIALS: &str = "auth/model-provider-credentials.json";
@@ -125,7 +125,7 @@ async fn cred_01_plaintext_keys_move_to_the_store_at_start() -> Result<(), Harne
     let kept = read_json(&data, CREDENTIALS);
     assert_eq!(kept["credentials"][0]["secret"], KIMI_KEY, "{kept}");
     assert_eq!(kept["credentials"][1]["secret"], OPENAI_KEY, "{kept}");
-    assert_eq!(owner_only(&data, CREDENTIALS), Some(true));
+    assert_eq!(owner_only(&data, CREDENTIALS), OWNER_ONLY.then_some(true));
     assert_eq!(kept["credentials"].as_array().unwrap().len(), 3, "{kept}");
     assert!(
         !read_all(&data).contains(SHADOWED_KEY),
@@ -190,8 +190,8 @@ async fn cred_01_plaintext_keys_move_to_the_store_at_start() -> Result<(), Harne
         stored(&data, "openai/cred_openai").as_deref(),
         Some(OPENAI_KEY)
     );
-    assert_eq!(owner_only(&data, STORE), Some(true));
-    assert_eq!(owner_only(&data, CREDENTIALS), Some(true));
+    assert_eq!(owner_only(&data, STORE), OWNER_ONLY.then_some(true));
+    assert_eq!(owner_only(&data, CREDENTIALS), OWNER_ONLY.then_some(true));
     let list = listed(&s).await?;
     assert_eq!(list["store"]["backend"], "fallback_file", "{list}");
     assert_eq!(list["store"]["reason"], "test_override", "{list}");

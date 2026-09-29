@@ -3,7 +3,10 @@
 //! launchd (`KeepAlive: {SuccessfulExit: false}`) and systemd
 //! (`Restart=on-failure`) restart only an Agent that exits non-zero.
 
-use std::process::ExitStatus;
+use std::fs::File;
+use std::path::{Path, PathBuf};
+use std::process::{Command, ExitStatus, Stdio};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
 use butler_platform::instance::{StopError, request_stop};
@@ -36,16 +39,23 @@ impl Agent {
     /// A stop request (SIGTERM) and wait for exit (bounded). It is a
     /// requested stop, so the process must exit 0: launchd (`SuccessfulExit:
     /// false`) and systemd (`Restart=on-failure`) restart an Agent that exits
-    /// otherwise. A host without stop requests (Windows) is refused: its
-    /// harness stops the agent through the CLI in the Windows stage.
+    /// otherwise. A host without stop signals (Windows) stops the agent
+    /// through `butler stop`, which announces the stop and delivers it to the
+    /// instance's control endpoint.
     pub async fn terminate(&mut self) -> Result<(), HarnessError> {
         let Some(mut child) = self.child.take() else {
             return Ok(());
         };
         if let Err(StopError::Unsupported) = request_stop(child.id()) {
-            child.kill()?;
-            child.wait()?;
-            return Err(harness_error("stop requests are unsupported on this host"));
+            let stop = self.cli(&["stop", "--json"])?;
+            if stop.code != Some(0) {
+                child.kill()?;
+                child.wait()?;
+                return Err(harness_error(format!(
+                    "butler stop failed: {} {}",
+                    stop.stdout, stop.stderr
+                )));
+            }
         }
         let deadline = Instant::now() + Duration::from_secs(30);
         loop {
@@ -84,4 +94,24 @@ impl Agent {
             .find(|(exited, _)| *exited == pid)
             .map(|(_, status)| *status)
     }
+}
+
+/// Points the command's output at fresh files in `dir`, not pipes: a
+/// replacement service the command starts may keep a pipe's write end open
+/// (Windows children inherit every inheritable handle), which would hold a
+/// pipe reader until that service exits. Returns the stdout and stderr paths.
+pub(super) fn capture_to_files(
+    command: &mut Command,
+    dir: &Path,
+) -> Result<(PathBuf, PathBuf), HarnessError> {
+    static NEXT: AtomicU32 = AtomicU32::new(0);
+    let id = NEXT.fetch_add(1, Ordering::Relaxed);
+    std::fs::create_dir_all(dir)?;
+    let stdout = dir.join(format!("cli-{id}.stdout"));
+    let stderr = dir.join(format!("cli-{id}.stderr"));
+    command
+        .stdin(Stdio::null())
+        .stdout(File::create(&stdout)?)
+        .stderr(File::create(&stderr)?);
+    Ok((stdout, stderr))
 }

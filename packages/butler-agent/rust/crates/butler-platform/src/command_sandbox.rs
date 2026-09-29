@@ -34,6 +34,10 @@ pub const READ_ONLY_SANDBOX: bool = sandbox::ENFORCED;
 /// Whether [`protect_writes`] enforces its root on this host.
 pub const WRITE_PROTECTION: bool = sandbox::ENFORCED;
 
+/// Whether [`login_shell`] runs commands in a POSIX shell (`sh -c`); Windows
+/// runs them in `cmd.exe`, whose syntax differs.
+pub const POSIX_SHELL: bool = shell::POSIX;
+
 /// A program and its arguments.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Invocation {

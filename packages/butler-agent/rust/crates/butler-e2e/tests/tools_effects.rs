@@ -88,6 +88,9 @@ async fn tool_02_write_edit_and_read_only() -> Result<(), HarnessError> {
 #[tokio::test]
 async fn tool_06_command_timeout_kills_the_process_tree() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    if !butler_platform::command_sandbox::POSIX_SHELL {
+        return Ok(());
+    }
     let s = Setup::new("TOOL-06")?.cassette("TOOL-06").start().await?;
     let prompt = "Use run_command with timeout_ms 3000 to run exactly: sh -c 'sleep 300 & echo $! > pids.txt; echo $$ >> pids.txt; sleep 300'. Then tell me what happened.";
     let (turn_id, turn) = s.turn("general", prompt).await?;

@@ -77,6 +77,10 @@ pub fn cli_launcher_script(target: &LauncherTarget<'_>, marker: &str) -> Option<
     sys::cli_launcher_script(target, marker)
 }
 
+/// Whether this host has a `butler` command launcher for
+/// [`cli_launcher_script`] to write: `true` on Unix, `false` on Windows.
+pub const HAS_CLI_LAUNCHER: bool = sys::HAS_CLI_LAUNCHER;
+
 /// This host as Node's `process.platform` names it: `darwin`, `linux`,
 /// `win32` (other hosts keep Rust's name).
 pub fn node_platform() -> &'static str {

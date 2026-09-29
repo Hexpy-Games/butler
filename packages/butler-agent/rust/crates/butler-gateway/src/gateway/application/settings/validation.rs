@@ -93,14 +93,8 @@ pub(super) fn is_iana_timezone(value: &Value) -> bool {
     {
         return false;
     }
-    ["/usr/share/zoneinfo", "/var/db/timezone/zoneinfo"]
-        .iter()
-        .any(|root| {
-            let Ok(bytes) = std::fs::read(std::path::Path::new(root).join(zone)) else {
-                return false;
-            };
-            tz::TimeZone::from_tz_data(&bytes).is_ok()
-        })
+    butler_platform::time_zone::zone_rules(zone)
+        .is_ok_and(|bytes| tz::TimeZone::from_tz_data(&bytes).is_ok())
 }
 
 fn is_reasoning(value: &Value) -> bool {

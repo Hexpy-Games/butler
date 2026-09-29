@@ -293,6 +293,9 @@ async fn rec_03_crash_after_tool_effect_never_duplicates_it() -> Result<(), Harn
 #[tokio::test]
 async fn rec_03_crash_after_tool_effect_ends_failed_retryable() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    if !butler_platform::command_sandbox::POSIX_SHELL {
+        return Ok(());
+    }
     let (mut s, turn_id, marker) =
         crash_after_effect("REC-03-OWNER", "REC-03-OWNER", CrashPoint::ResultJournaled).await?;
     let turn = settled(&mut s, &turn_id).await?;

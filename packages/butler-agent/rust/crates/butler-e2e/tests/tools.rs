@@ -152,6 +152,9 @@ async fn tool_03_unknown_tool_name() -> Result<(), HarnessError> {
 #[tokio::test]
 async fn tool_04_shell_environment_is_scrubbed() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    if !butler_platform::command_sandbox::POSIX_SHELL {
+        return Ok(());
+    }
     // OPENAI_API_KEY is not used as a canary: it switches OpenAI to API-key
     // mode and away from the recorded subscription endpoint.
     let canaries: Vec<(String, String)> = [
