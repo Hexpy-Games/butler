@@ -225,6 +225,7 @@ jobs:
         uses: ./.github/actions/build-agent-archive
         with:
           cache-key: package-${{ matrix.platform }}
+          ort-mode: static-ort
           artifact-base-url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
 
       - name: Keep the archive and its manifests for the release

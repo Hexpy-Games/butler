@@ -82,6 +82,7 @@ jobs:
         uses: ./.github/actions/build-agent-archive
         with:
           cache-key: package-${{ matrix.platform }}
+          ort-mode: prebuilt-ort
           artifact-base-url: https://github.com/${{ github.repository }}/releases/download/v0.0.0-ci
 
       - name: Download the npm tarball

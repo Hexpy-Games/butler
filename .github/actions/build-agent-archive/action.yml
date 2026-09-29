@@ -2,13 +2,17 @@ name: Build the standalone Agent archive
 description: >-
   Builds the native Agent for the runner's own platform (darwin-arm64,
   linux-x64 or linux-arm64), then gates, packages and smokes its standalone
-  archive with the release scripts. The archive and its per-platform manifests
-  land in `out`. Shared by the release workflow and the install smoke.
+  archive with the release scripts into `out`. Select prebuilt ORT for CI or
+  custom static ORT for release builds. Shared by release and install smoke.
 
 inputs:
   cache-key:
     description: The rust-cache shared key for this platform.
     required: true
+  ort-mode:
+    description: "prebuilt-ort for CI or static-ort for release builds."
+    required: false
+    default: prebuilt-ort
   artifact-base-url:
     description: URL prefix the archive will be published under; recorded in the manifests.
     required: true
@@ -28,10 +32,10 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Set up Rust and the static ONNX Runtime
+    - name: Set up Rust and ONNX Runtime
       uses: ./.github/actions/rust-agent-setup
       with:
-        native-deps: ort
+        native-deps: ${{ inputs.ort-mode }}
         cache-key: ${{ inputs.cache-key }}
 
     - name: Set up Bun
@@ -58,9 +62,22 @@ runs:
     - name: Build the native Agent
       shell: bash
       working-directory: packages/butler-agent/rust
+      env:
+        ORT_MODE: ${{ inputs.ort-mode }}
       run: |
         set -euo pipefail
-        cargo build --release --locked -p butler-agent --bin butler-agent
+        case "$ORT_MODE" in
+          static-ort)
+            cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
+            ;;
+          prebuilt-ort)
+            cargo build --release --locked -p butler-agent --bin butler-agent
+            ;;
+          *)
+            printf 'Unsupported ONNX Runtime mode: %s\n' "$ORT_MODE" >&2
+            exit 1
+            ;;
+        esac
         echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$PWD/target/release/butler-agent" >> "$GITHUB_ENV"
 
     - name: Package and smoke the archive

@@ -97,11 +97,11 @@ jobs:
           - { platform: macOS arm64, runner: macos-15 }
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Rust and static ONNX Runtime
+      - name: Set up Rust and prebuilt ONNX Runtime
         uses: ./.github/actions/rust-agent-setup
         with:
           components: clippy
-          native-deps: ort
+          native-deps: prebuilt-ort
           cache-key: pr-${{ runner.os }}-${{ runner.arch }}
       - uses: taiki-e/install-action@v2
         with:
@@ -137,7 +137,7 @@ jobs:
       - uses: ./.github/actions/rust-agent-setup
         with:
           components: clippy
-          native-deps: ort
+          native-deps: prebuilt-ort
           cache-key: full-linux-arm64
       - uses: taiki-e/install-action@v2
         with:
@@ -174,7 +174,7 @@ jobs:
       - name: Set up Rust and protoc
         uses: ./.github/actions/rust-agent-setup
         with:
-          native-deps: protoc
+          native-deps: prebuilt-ort
           cache-key: windows-check
 
       - name: Check the workspace

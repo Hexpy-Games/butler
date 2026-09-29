@@ -67,35 +67,12 @@ jobs:
       - uses: actions/checkout@v4
         if: steps.credential.outputs.available == 'true'
 
-      - uses: dtolnay/rust-toolchain@master
+      - name: Set up Rust and prebuilt ONNX Runtime
         if: steps.credential.outputs.available == 'true'
+        uses: ./.github/actions/rust-agent-setup
         with:
-          toolchain: 1.91.0
-
-      - uses: actions/setup-python@v5
-        if: steps.credential.outputs.available == 'true'
-        with:
-          python-version: "3.12"
-
-      - name: Prepare pinned static ONNX Runtime and protoc
-        if: steps.credential.outputs.available == 'true'
-        env:
-          ORT_CACHE_TARGET: ${{ runner.temp }}/ort-cache
-        run: |
-          set -euo pipefail
-          prepared="$(CARGO_TARGET_DIR="$ORT_CACHE_TARGET" python scripts/prepare-static-ort.py)"
-          {
-            echo "ORT_LIB_PATH=$(jq -r .ort_lib_path <<<"$prepared")"
-            echo "PROTOC=$(jq -r .protoc <<<"$prepared")"
-            echo "ORT_PREFER_DYNAMIC_LINK=0"
-            echo "ORT_SKIP_DOWNLOAD=1"
-          } >> "$GITHUB_ENV"
-
-      - uses: Swatinem/rust-cache@v2
-        if: steps.credential.outputs.available == 'true'
-        with:
-          workspaces: packages/butler-agent/rust
-          key: e2e
+          native-deps: prebuilt-ort
+          cache-key: e2e
 
       - name: Install the credential
         if: steps.credential.outputs.available == 'true'
