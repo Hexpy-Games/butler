@@ -186,6 +186,46 @@ pub(super) fn stop(
     Ok(())
 }
 
+/// Read-path repair: a provisional assistant message still `streaming` while
+/// its turn is terminal is final. Rows written before a suspended turn settled
+/// its message read as the turn's outcome; the table is left as it is.
+pub(crate) const RECONCILED_STATUS_SQL: &str = "CASE WHEN m.role='assistant' AND m.status='streaming' THEN COALESCE((SELECT CASE t.state WHEN 'delivered' THEN 'delivered' WHEN 'cancelled' THEN 'cancelled' WHEN 'failed' THEN 'failed' WHEN 'runtime_fault' THEN 'failed' END FROM turns t WHERE t.id=m.turn_id),m.status) ELSE m.status END";
+
+/// Finalizes the turn's provisional message when the turn is suspended
+/// (delivered, e.g. while a Steward or Worker runs): its text is what the
+/// turn delivered until the resumed turn stores the final answer, which
+/// reuses this message. Later deltas are ignored because the turn is no
+/// longer open.
+pub(super) fn settle_suspended(
+    db: &Connection,
+    subscribers: &EventSubscribers,
+    chat: &str,
+    turn: &str,
+    now: &str,
+) -> Result<(), AppStorageError> {
+    let target = StreamTarget {
+        db,
+        subscribers,
+        chat,
+        turn,
+        now,
+    };
+    let Some((id, status)) = latest(db, chat, turn)? else {
+        return Ok(());
+    };
+    if status != "streaming" {
+        return Ok(());
+    }
+    db.execute("DELETE FROM turn_stream_drafts WHERE turn_id=?1", [turn])
+        .map_err(AppStorageError::sqlite)?;
+    db.execute(
+        "UPDATE messages SET status='delivered',updated_at=?1 WHERE id=?2",
+        params![now, id],
+    )
+    .map_err(AppStorageError::sqlite)?;
+    updated(&target, &id)
+}
+
 fn open(db: &Connection, turn: &str) -> Result<bool, AppStorageError> {
     Ok(db
         .query_row(

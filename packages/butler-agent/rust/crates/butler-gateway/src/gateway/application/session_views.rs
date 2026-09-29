@@ -1,6 +1,7 @@
 //! Canonical App session reads composed with BTCC child projections.
 
 mod helpers;
+mod steward_children;
 mod turn_projection;
 
 use serde_json::{Map, Value, json};
@@ -275,6 +276,7 @@ impl AppApplication {
         ] {
             copy(&mut view, key, &projection);
         }
+        steward_children::complete_view_turns(&mut view);
         view.insert(
             "message_window".into(),
             json!({"next_cursor":next_cursor,"previous_cursor":previous_cursor,"complete":!has_more,"has_more":has_more}),
@@ -363,13 +365,41 @@ impl AppApplication {
             .subsessions
             .projection(app_session_hint(session_id), None)
             .await;
-        projection.unwrap_or_else(|error| {
+        let mut projection = projection.unwrap_or_else(|error| {
             eprintln!(
                 "[gateway] session view without subsessions: {error} cause={:?}",
                 std::error::Error::source(&error).map(ToString::to_string)
             );
             json!({"workers": [], "steward_children": []})
-        })
+        });
+        let rows = self
+            .steward_progress_rows(steward_children::turn_ids(&projection))
+            .await;
+        steward_children::complete(&mut projection, &rows);
+        projection
+    }
+
+    /// Public progress rows of the Steward child turns the App store knows;
+    /// a turn it does not know (or cannot read) has no rows.
+    async fn steward_progress_rows(
+        &self,
+        turn_ids: Vec<String>,
+    ) -> std::collections::HashMap<String, Vec<Value>> {
+        if turn_ids.is_empty() {
+            return Default::default();
+        }
+        self.storage
+            .execute(move |db| {
+                let mut rows = std::collections::HashMap::new();
+                for id in turn_ids {
+                    if let Some(progress) = super::progress_view::read(db, &id)? {
+                        rows.insert(id, progress.safe_progress_rows);
+                    }
+                }
+                Ok(rows)
+            })
+            .await
+            .unwrap_or_default()
     }
 
     pub(super) async fn refresh_message_projection_owned(

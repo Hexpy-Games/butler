@@ -61,12 +61,13 @@ pub(super) fn list_message_page(
     };
     let query = format!(
         "SELECT rowid,id,chat_id,turn_id,conversation_session_id,conversation_turn_id,\
-         conversation_message_id,role,text,content_parts_json,status,created_at,updated_at,\
+         conversation_message_id,role,text,content_parts_json,{status},created_at,updated_at,\
          safe_error_code,retryable,plan_json FROM messages m WHERE chat_id=?1 AND rowid{operator}?2 \
          AND NOT (role='assistant' AND safe_error_code IS NOT NULL AND \
          safe_error_code IN ('app_turn_queue_failed','goal_completion_incomplete')) \
          AND {visible} ORDER BY rowid {order} LIMIT ?3",
-        visible = owner_visible!()
+        visible = owner_visible!(),
+        status = super::projection::RECONCILED_STATUS_SQL
     );
     let mut statement = connection
         .prepare(&query)

@@ -5,6 +5,7 @@ mod progress;
 mod runtime_progress;
 mod runtime_values;
 mod stream_message;
+pub(in crate::gateway::application) use stream_message::RECONCILED_STATUS_SQL;
 mod values;
 
 use operations::*;
