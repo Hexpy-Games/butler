@@ -287,6 +287,7 @@ pub(super) fn message(content: &str) -> ModelRoundMessage {
         operation_result_reference: None,
         operation_result_call_id: None,
         continuation_item_id: None,
+        facts: Default::default(),
     }
 }
 pub(super) fn provider(code: &str, status: Option<u16>) -> ModelRoundError {

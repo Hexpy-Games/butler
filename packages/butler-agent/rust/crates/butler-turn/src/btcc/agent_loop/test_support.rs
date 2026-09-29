@@ -406,6 +406,7 @@ impl GuidedPolicyPort for Fixture {
                 operation_result_reference: references.reference.clone(),
                 operation_result_call_id: references.operation_result_call_id.clone(),
                 continuation_item_id: None,
+                facts: Default::default(),
             })
         })
     }

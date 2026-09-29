@@ -197,6 +197,9 @@ pub struct ModelRoundMessage {
     pub operation_result_call_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub continuation_item_id: Option<String>,
+    /// Derived from the fields above on first use; never persisted.
+    #[serde(skip)]
+    pub facts: super::message_facts::MessageFacts,
 }
 
 impl ModelRoundMessage {
@@ -214,6 +217,7 @@ impl ModelRoundMessage {
             operation_result_reference: None,
             operation_result_call_id: None,
             continuation_item_id: None,
+            facts: Default::default(),
         }
     }
 }

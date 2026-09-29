@@ -325,6 +325,7 @@ fn summary_message(content: String) -> ModelRoundMessage {
         operation_result_reference: None,
         operation_result_call_id: None,
         continuation_item_id: None,
+        facts: Default::default(),
     }
 }
 
