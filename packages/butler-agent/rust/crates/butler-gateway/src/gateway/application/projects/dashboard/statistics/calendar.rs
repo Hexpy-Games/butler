@@ -80,8 +80,8 @@ fn read_timezone(value: &str) -> Result<tz::TimeZone, GatewayApplicationError> {
     {
         return Err(invalid_timezone());
     }
-    let path = Path::new("/usr/share/zoneinfo").join(path);
-    let bytes = std::fs::read(path).map_err(|source| invalid_timezone().with_source(source))?;
+    let bytes = butler_platform::time_zone::zone_rules(value)
+        .map_err(|source| invalid_timezone().with_source(source))?;
     let mut zone = tz::TimeZone::from_tz_data(&bytes)
         .map_err(|source| invalid_timezone().with_source(source))?;
     let view = zone.as_ref();

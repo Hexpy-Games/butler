@@ -1,7 +1,7 @@
 //! The coordinator database and its binding to the legacy lock fence.
 
 use std::ffi::OsString;
-use std::fs::{File, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -226,9 +226,7 @@ pub(super) fn initialize_coordinator(
         connection
             .close()
             .map_err(|(_, error)| CoordinationError::gate_io(error))?;
-        File::open(&temp)
-            .and_then(|file| file.sync_all())
-            .map_err(CoordinationError::gate_io)?;
+        butler_platform::secure_fs::sync_path(&temp).map_err(CoordinationError::gate_io)?;
         match std::fs::hard_link(&temp, &path) {
             Ok(()) => {
                 sync_parent(&path)?;
@@ -286,9 +284,7 @@ pub(super) fn bind_coordinator_fence(
         if !fence.available || fence.bytes.is_none() {
             return Err(invalid("coordinator fence unavailable"));
         }
-        File::open(lock_path)
-            .and_then(|file| file.sync_all())
-            .map_err(CoordinationError::gate_io)?;
+        butler_platform::secure_fs::sync_path(lock_path).map_err(CoordinationError::gate_io)?;
         sync_parent(lock_path)?;
         sync_parent(&coordinator_path(lock_path))?;
         let durable =
@@ -361,9 +357,7 @@ fn sync_parent(path: &Path) -> CoordinationResult<()> {
     let parent = path
         .parent()
         .ok_or_else(|| invalid("coordinator parent missing"))?;
-    File::open(parent)
-        .and_then(|file| file.sync_all())
-        .map_err(CoordinationError::gate_io)
+    butler_platform::secure_fs::sync_path(parent).map_err(CoordinationError::gate_io)
 }
 
 fn valid_fence(value: &Value) -> bool {

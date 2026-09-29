@@ -175,7 +175,7 @@ pub(super) fn canonical_containment(
 
 fn realpath_when_present(path: &Path) -> Result<PathBuf, ProjectLedgerReadError> {
     if path.exists() {
-        return fs::canonicalize(path).map_err(|source| {
+        return butler_platform::secure_fs::canonicalize(path).map_err(|source| {
             ProjectLedgerReadError::resolution("active_project_ledger_path_escape")
                 .with_source(source)
         });

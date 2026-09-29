@@ -28,7 +28,8 @@ pub(super) fn resolve_ledger_root(
     }
     let requested = data_root.join("project-ledger/projects").join(id);
     reject_symlink(&requested)?;
-    let root = fs::canonicalize(&requested).map_err(|source| unavailable().with_source(source))?;
+    let root = butler_platform::secure_fs::canonicalize(&requested)
+        .map_err(|source| unavailable().with_source(source))?;
     for relative in ["project.json", "index", "index/project.json"] {
         reject_symlink(&root.join(relative))?;
     }

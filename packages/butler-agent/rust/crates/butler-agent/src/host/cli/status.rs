@@ -1,16 +1,12 @@
 //! Read-only native status commands; no service runtime or DATA initialization.
 
+use butler_platform::secure_fs::Canonical as _;
 use std::{
     ffi::OsString,
-    fs,
     path::{Path, PathBuf},
     process::ExitCode,
 };
 
-use nix::{
-    errno::Errno,
-    fcntl::{Flock, FlockArg},
-};
 use serde_json::{Value, json};
 
 use crate::host::ResolvedInstallation;
@@ -222,7 +218,7 @@ fn resolve_data_root(
                 .filter(|value| !value.is_empty())
                 .map(PathBuf::from)
         })
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".butler")))
+        .or_else(|| butler_platform::user_dirs::home_dir().map(|home| home.join(".butler")))
         .ok_or_else(|| "native_home_unavailable".to_owned())?;
     let requested = expand_tilde(requested)?;
     installation.validate_data_root(&requested)
@@ -235,9 +231,7 @@ fn expand_tilde(path: PathBuf) -> Result<PathBuf, crate::host::HostError> {
     if value != "~" && !value.starts_with("~/") {
         return Ok(path);
     }
-    let home = std::env::var_os("HOME")
-        .filter(|home| !home.is_empty())
-        .map(PathBuf::from)
+    let home = butler_platform::user_dirs::non_empty_home_dir()
         .ok_or_else(|| "native_home_unavailable".to_owned())?;
     Ok(if value == "~" {
         home
@@ -248,7 +242,7 @@ fn expand_tilde(path: PathBuf) -> Result<PathBuf, crate::host::HostError> {
 
 fn service_health(data_root: &Path) -> Value {
     let record = service_instance::read_record(data_root);
-    let locked = instance_lock_is_held(data_root);
+    let locked = service_instance::instance_lock_is_held_read_only(data_root);
     let (status, evidence, pid, started_at, app) = match (record, locked) {
         (Err(_), _) | (_, Err(_)) => (
             "stale",
@@ -275,9 +269,9 @@ fn service_health(data_root: &Path) -> Value {
             let matches = service_instance::process_matches(&record).unwrap_or(false);
             let current_executable = std::env::current_exe()
                 .ok()
-                .and_then(|path| path.canonicalize().ok());
+                .and_then(|path| path.canonical().ok());
             let executable_matches = current_executable.as_ref().is_some_and(|path| {
-                Path::new(&record.executable).canonicalize().ok().as_ref() == Some(path)
+                Path::new(&record.executable).canonical().ok().as_ref() == Some(path)
             });
             let online = locked
                 && matches
@@ -325,29 +319,6 @@ fn service_health(data_root: &Path) -> Value {
         },
         "items": [item]
     })
-}
-
-fn instance_lock_is_held(data_root: &Path) -> Result<bool, crate::host::HostError> {
-    let path = data_root.join("state/butler-agent-native-service.lock");
-    match fs::symlink_metadata(&path) {
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-        Err(_) => return Err("service_lock_unavailable".into()),
-        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
-            return Err("service_lock_path_ambiguous".into());
-        }
-        Ok(_) => {}
-    }
-    let file = fs::OpenOptions::new()
-        .read(true)
-        .open(&path)
-        .map_err(|source| {
-            crate::host::HostError::new("service_lock_unavailable").with_source(source)
-        })?;
-    match Flock::lock(file, FlockArg::LockSharedNonblock) {
-        Ok(_) => Ok(false),
-        Err((_, Errno::EAGAIN)) => Ok(true),
-        Err((_, error)) => Err(format!("service_lock_probe_failed: {error}").into()),
-    }
 }
 
 fn report_error(command: &str, json_output: bool, message: &str) -> ExitCode {

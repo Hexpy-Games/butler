@@ -4,7 +4,7 @@
 //! opens its `/connect?code=..` link, which sets an HttpOnly session cookie.
 
 use std::ffi::OsString;
-use std::process::{Command as Process, ExitCode, Stdio};
+use std::process::{ExitCode, Stdio};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -185,18 +185,14 @@ async fn request_link(
 
 /// Hands the link to the desktop's default browser; false when that fails.
 fn open_in_browser(url: &str) -> bool {
-    let opener = if cfg!(target_os = "macos") {
-        "open"
-    } else {
-        "xdg-open"
-    };
-    Process::new(opener)
-        .arg(url)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success())
+    butler_platform::desktop::open_url(url).is_some_and(|mut command| {
+        command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|status| status.success())
+    })
 }
 
 fn parse(args: &[OsString]) -> Result<Options, CliError> {

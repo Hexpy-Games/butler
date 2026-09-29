@@ -42,14 +42,7 @@ pub(super) async fn follow(data_root: &Path, installation: &ResolvedInstallation
     let Ok(mut follower) = LogFollower::from_end(&files) else {
         return report_error("App gateway logs could not be followed.");
     };
-    let Ok(mut interrupt) =
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
-    else {
-        return report_error("Log follow signal handling is unavailable.");
-    };
-    let Ok(mut terminate) =
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-    else {
+    let Ok(mut requests) = butler_platform::process_control::shutdown_requests() else {
         return report_error("Log follow signal handling is unavailable.");
     };
     let mut interval = tokio::time::interval(follow_poll_interval());
@@ -57,8 +50,7 @@ pub(super) async fn follow(data_root: &Path, installation: &ResolvedInstallation
     interval.tick().await;
     loop {
         tokio::select! {
-            _ = interrupt.recv() => return stop_follow(&mut follower),
-            _ = terminate.recv() => return stop_follow(&mut follower),
+            _ = requests.recv() => return stop_follow(&mut follower),
             _ = interval.tick() => {
                 for path in follower.paths() {
                     if let Err(message) = safe_log_file(installation, data_root, path) {

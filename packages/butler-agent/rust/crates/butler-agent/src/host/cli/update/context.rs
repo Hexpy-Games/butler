@@ -1,6 +1,7 @@
 //! What the Agent package commands share: the data folder, the Agent home,
 //! the launchers, and restarting the service on the version just activated.
 
+use butler_platform::secure_fs::Canonical;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
@@ -82,7 +83,7 @@ impl Context {
             .flatten()
             .map(|record| {
                 let executable = PathBuf::from(record.executable);
-                executable.canonicalize().unwrap_or(executable)
+                executable.canonical().unwrap_or(executable)
             })
             .into_iter()
             .collect()
@@ -142,7 +143,7 @@ impl Context {
                 let on_new_version = executable.as_deref().is_some_and(|executable| {
                     let version = self.home.version_path(dir);
                     let resolved =
-                        |path: &Path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+                        |path: &Path| path.canonical().unwrap_or_else(|_| path.to_path_buf());
                     resolved(Path::new(executable)).starts_with(resolved(&version))
                 });
                 Ok(json!({

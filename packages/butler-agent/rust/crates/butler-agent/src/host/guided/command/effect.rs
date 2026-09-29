@@ -237,7 +237,7 @@ impl EffectAdapter for CommandEffectAdapter {
 }
 
 fn canonical_root(path: &Path) -> PathBuf {
-    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+    butler_platform::secure_fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 fn target(cwd: &str, effect: &str) -> String {
     if effect == "remote_observation" {

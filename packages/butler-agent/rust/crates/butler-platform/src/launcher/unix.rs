@@ -5,6 +5,9 @@ use std::io;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
+/// The executable name in release archives.
+pub(super) const AGENT_BINARY: &str = "butler-agent";
+
 /// Release artifacts name macOS `darwin`; other Unix hosts by Rust's name.
 pub(super) const RELEASE_OS: &str = if cfg!(target_os = "macos") {
     "darwin"
@@ -24,6 +27,10 @@ pub(super) fn mark_executable(path: &Path) -> Option<io::Result<()>> {
 
 pub(super) fn is_executable(_path: &Path, metadata: &Metadata) -> bool {
     metadata.is_file() && metadata.permissions().mode() & EXECUTE_BITS != 0
+}
+
+pub(super) fn is_runnable_by_all(metadata: &Metadata) -> bool {
+    metadata.permissions().mode() & EXECUTE_BITS == EXECUTE_BITS
 }
 
 pub(super) fn system_program_dirs() -> Vec<PathBuf> {

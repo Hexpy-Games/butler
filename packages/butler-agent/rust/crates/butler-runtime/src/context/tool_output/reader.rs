@@ -1,3 +1,4 @@
+use butler_platform::secure_fs::Canonical as _;
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
@@ -260,12 +261,12 @@ fn under_root(path: &Path, root: &Path) -> ContextResult<bool> {
         return Ok(false);
     }
     let real_root = if root.exists() {
-        root.canonicalize().map_err(io_error)?
+        root.canonical().map_err(io_error)?
     } else {
         root
     };
     let real_path = if path.exists() {
-        path.canonicalize().map_err(io_error)?
+        path.canonical().map_err(io_error)?
     } else {
         path
     };

@@ -28,7 +28,7 @@ pub(super) fn is_trusted(command: &str, cwd: &Path, installation_root: Option<&P
     } else {
         cwd.join(path)
     };
-    let Some(real) = std::fs::canonicalize(path).ok() else {
+    let Some(real) = butler_platform::secure_fs::canonicalize(path).ok() else {
         return false;
     };
     trusted_roots(installation_root)
@@ -39,7 +39,7 @@ pub(super) fn is_trusted(command: &str, cwd: &Path, installation_root: Option<&P
                 root.join("packages/project-ledger/bin/pl"),
             ]
         })
-        .filter_map(|path| std::fs::canonicalize(path).ok())
+        .filter_map(|path| butler_platform::secure_fs::canonicalize(path).ok())
         .any(|allowed| allowed == real)
 }
 

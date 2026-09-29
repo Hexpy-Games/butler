@@ -117,14 +117,15 @@ fn canonical_target(
     record::safe_id(&scope.ledger_project_id)?;
     let projects = data_root.join("project-ledger/projects");
     fs::create_dir_all(&projects).map_err(|source| io().with_source(source))?;
-    let canonical_projects =
-        fs::canonicalize(&projects).map_err(|source| io().with_source(source))?;
+    let canonical_projects = butler_platform::secure_fs::canonicalize(&projects)
+        .map_err(|source| io().with_source(source))?;
     let expected = projects.join(&scope.ledger_project_id);
     if scope.ledger_root != expected {
         return Err(mismatch());
     }
     if expected.exists() {
-        let actual = fs::canonicalize(&expected).map_err(|source| io().with_source(source))?;
+        let actual = butler_platform::secure_fs::canonicalize(&expected)
+            .map_err(|source| io().with_source(source))?;
         if actual != canonical_projects.join(&scope.ledger_project_id) {
             return Err(mismatch());
         }

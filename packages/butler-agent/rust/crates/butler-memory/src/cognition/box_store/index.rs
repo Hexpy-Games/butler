@@ -152,9 +152,9 @@ fn open_index(root: &Path) -> CognitionResult<Connection> {
     {
         rebuild_index(root)?;
     }
-    let canonical_root = fs::canonicalize(root)
+    let canonical_root = butler_platform::secure_fs::canonicalize(root)
         .map_err(|source| error(CognitionCode::MemoryBoxIndexReadFailed).with_source(source))?;
-    let canonical_index = fs::canonicalize(&path)
+    let canonical_index = butler_platform::secure_fs::canonicalize(&path)
         .map_err(|source| error(CognitionCode::MemoryBoxIndexReadFailed).with_source(source))?;
     if !canonical_index.starts_with(&canonical_root) {
         return Err(error(CognitionCode::MemoryBoxIndexPathUnsafe));
