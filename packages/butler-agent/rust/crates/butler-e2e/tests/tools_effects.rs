@@ -222,6 +222,13 @@ async fn all_turns_terminal(s: &Scenario, context: &str) -> Result<(), HarnessEr
     }
 }
 
+/// The resumed turn is answered ("delivered"), not rejected or failed.
+async fn assert_delivered(s: &Scenario, turn_id: &str) -> Result<(), HarnessError> {
+    let turn = s.gw.turn("general", turn_id).await?.unwrap_or_default();
+    assert_eq!(turn_state(&turn), "delivered", "{turn}");
+    Ok(())
+}
+
 /// How many `write_file` rows of `turn_id` are in `state`.
 async fn write_rows(s: &Scenario, turn_id: &str, state: &str) -> Result<usize, HarnessError> {
     Ok(tool_rows(&s.gw.messages("general").await?, turn_id)
@@ -340,6 +347,7 @@ async fn tool_07_authority_allow_restart_and_revoke() -> Result<(), HarnessError
         1,
         "the approved effect must run exactly once"
     );
+    assert_delivered(&s, &turn_id).await?;
     revoke_conversation_grant(&s).await?;
     s.finish().await
 }
@@ -372,6 +380,7 @@ async fn tool_07_authority_deny() -> Result<(), HarnessError> {
     eprintln!("TOOL-07 deny: restarts {restarts}; {}", interrupts(&s));
     assert_eq!(restarts, 0, "the service exited after Deny");
     all_turns_terminal(&s, "turn stuck after Deny").await?;
+    assert_delivered(&s, &turn_id).await?;
     assert_eq!(
         write_rows(&s, &turn_id, "delivered").await?,
         0,

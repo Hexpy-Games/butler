@@ -93,6 +93,75 @@ pub(super) fn request() -> TurnRequest {
     }
 }
 
+/// The steward subsession turn built from `request`, with attachments and App context.
+pub(super) fn subsession_request(request: &TurnRequest) -> TurnRequest {
+    let mut subsession_request = request.clone();
+    subsession_request.turn_id = "turn-subsession".into();
+    subsession_request.event_id = "event-subsession".into();
+    subsession_request.session_id = "session-subsession".into();
+    subsession_request.route.role = BtccRole::Steward;
+    subsession_request.execution_controls = Some(
+        ExecutionControls::create(
+            "turn-subsession",
+            "session-subsession",
+            ControlResolution {
+                model: "provider/model".into(),
+                reasoning_effort: ReasoningEffort::High,
+                access_mode: AccessMode::FullAccess,
+                plan_mode: true,
+                source: ControlSource::MessageOverride,
+                session_control_revision: 3,
+                catalog_generation: " catalog-1 ".into(),
+                model_fallback: Some(ModelFallback {
+                    enabled: true,
+                    models: vec![" backup/model ".into()],
+                }),
+                subsession_result: None,
+            },
+            "2026-09-14T00:00:00.000Z",
+        )
+        .unwrap(),
+    );
+    subsession_request.message.attachments = vec![
+        AttachmentRef {
+            id: "image".into(),
+            kind: AttachmentKind::Image,
+            mime_type: Some("image/png".into()),
+            file_name: None,
+            size_bytes: Some(-4.5),
+            url: None,
+            local_path: Some("/private/image.png".into()),
+            visual_manifest: None,
+        },
+        AttachmentRef {
+            id: "text".into(),
+            kind: AttachmentKind::Document,
+            mime_type: Some("text/plain".into()),
+            file_name: Some("note.txt".into()),
+            size_bytes: Some(8.25),
+            url: None,
+            local_path: Some("/workspace/note.txt".into()),
+            visual_manifest: None,
+        },
+        AttachmentRef {
+            id: "non-finite".into(),
+            kind: AttachmentKind::Binary,
+            mime_type: None,
+            file_name: None,
+            size_bytes: Some(f64::NAN),
+            url: None,
+            local_path: None,
+            visual_manifest: None,
+        },
+    ];
+    subsession_request.app_turn_context = Some(json!({
+        "session":{"id":"app-subsession"},
+        "projectSources":[{"id":"source"}],
+        "sessionReferences":[{"id":"prior"}]
+    }));
+    subsession_request
+}
+
 pub(super) fn temp(name: &str) -> PathBuf {
     static NEXT: AtomicU64 = AtomicU64::new(1);
     std::env::temp_dir().join(format!(

@@ -134,12 +134,13 @@ impl DefaultTurnPreparation {
     /// is authorized, its context assembled and snapshotted and its model
     /// admitted.
     async fn prepare_owned(&self, request: TurnRequest) -> Result<PreparedExecution, BtccError> {
-        if let Some(turn) = self
-            .repositories
-            .find_turn(&request.turn_id)
-            .await
-            .unwrap_or(None)
-        {
+        let stored = match self.repositories.find_turn(&request.turn_id).await {
+            Ok(turn) => turn,
+            // A failed lookup of a resume must not read as "not admitted".
+            Err(error) if request.resume => return Err(error),
+            Err(_) => None,
+        };
+        if let Some(turn) = stored {
             request::assert_replay_identity(&turn, &request)?;
             let binding = request::replay_binding(&turn, &request)?;
             let command = request::resume_command(&request);

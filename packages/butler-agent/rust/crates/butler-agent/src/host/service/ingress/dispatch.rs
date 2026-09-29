@@ -129,19 +129,31 @@ pub(super) async fn one(item: ClaimedInboundEvent, deps: DispatchDependencies) -
     .await;
     match result {
         Ok(executed) => handled(&item, executed, &queue, &restart_handoff).await,
-        Err(error) => failed(&item, &error, &queue, &bindings, delivery.as_ref()).await,
+        Err(error) => {
+            let subsessions = subsessions.as_ref();
+            failed(
+                &item,
+                &error,
+                &queue,
+                &bindings,
+                delivery.as_ref(),
+                subsessions,
+            )
+            .await
+        }
     }
 }
 
-/// Settles an item whose execution failed: a rejected turn fails, a turn
-/// interrupted again after a replacement ends failed, any other interrupted
-/// turn is parked for the process replacement.
+/// Settles an item whose execution failed: an item no replacement can run
+/// fails, an item already replaced once ends failed with retry available,
+/// any other interrupted item is parked for the process replacement.
 async fn failed(
     item: &ClaimedInboundEvent,
     error: &super::IngressError,
     queue: &InboundQueue,
     bindings: &SessionBindingStore,
     delivery: &dyn IngressDelivery,
+    subsessions: &butler_turn::btcc::SubsessionService,
 ) -> IngressPoll {
     // BTCC supplies a stable code here, never the provider body or prompt.
     // Keep that cause observable when the outer queue error is generic.
@@ -154,17 +166,19 @@ async fn failed(
     {
         eprintln!("[native-btcc] interrupted code={}", error.message);
     }
-    if error.code == rejected::REJECTED {
-        return rejected::settle(item, queue, bindings, delivery, &error.message).await;
+    let replaced = interrupted::replaced_once(&item.record);
+    if let Some(code) = rejected::safe_code(error) {
+        return rejected::reject(item, queue, bindings, delivery, subsessions, code).await;
     }
-    // A turn that is interrupted again in the replacement process
-    // ends failed with retry available instead of replacing the
-    // process forever.
-    if interrupted::replaced_once(&item.record)
+    if replaced
         && let Some(poll) =
             interrupted::settle(item, queue, bindings, delivery, "replacement-interrupted").await
     {
         return poll;
+    }
+    if replaced {
+        // The turn never started, so its report is unavailable: no second replacement.
+        return rejected::reject(item, queue, bindings, delivery, subsessions, error.code).await;
     }
     let _ = queue.park_for_process_replacement(item, error.code);
     IngressPoll {

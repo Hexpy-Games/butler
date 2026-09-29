@@ -25,10 +25,10 @@ pub(super) fn by_crash(record: &QueuedInboundEvent) -> bool {
         && plain_turn(record)
 }
 
-/// A turn already parked once for process replacement after an interruption.
+/// An item already parked once for process replacement after an
+/// interruption: whatever its kind, it is replaced at most once.
 pub(super) fn replaced_once(record: &QueuedInboundEvent) -> bool {
     metadata_flag(record, "recoveredFromRuntimeInterruption")
-        && (plain_turn(record) || resume_turn(record))
 }
 
 fn metadata_flag(record: &QueuedInboundEvent, key: &str) -> bool {
@@ -41,18 +41,6 @@ fn metadata_flag(record: &QueuedInboundEvent, key: &str) -> bool {
 
 fn plain_turn(record: &QueuedInboundEvent) -> bool {
     bind::Envelope::from_record(record).is_ok_and(|envelope| envelope.control.is_none())
-}
-
-/// A control record resuming an admitted turn (after an authority decision).
-fn resume_turn(record: &QueuedInboundEvent) -> bool {
-    bind::Envelope::from_record(record).is_ok_and(|envelope| {
-        envelope
-            .control
-            .as_ref()
-            .and_then(|control| control.get("kind"))
-            .and_then(serde_json::Value::as_str)
-            == Some("resume_turn")
-    })
 }
 
 /// What a failed interruption report means for the queue record.

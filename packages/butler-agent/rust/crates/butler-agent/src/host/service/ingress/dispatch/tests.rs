@@ -128,6 +128,7 @@ async fn unreported_turns_are_deferred_and_rejected_turns_fail() {
         &bindings,
         &recording,
         "turn_replay_conflict",
+        false,
     )
     .await;
     assert_eq!((poll.failed, poll.interrupted), (1, 0));
