@@ -55,6 +55,11 @@ impl FileMode {
     /// its files. Test fixtures only.
     #[cfg(feature = "test-support")]
     pub const READ_ONLY: Self = Self(0o444);
+    /// A directory that can be searched and listed but not changed (0555),
+    /// as an unpacked release archive leaves its directories. Test fixtures
+    /// only.
+    #[cfg(feature = "test-support")]
+    pub const READ_ONLY_DIRECTORY: Self = Self(0o555);
     /// An executable file: an ordinary file everyone may run (0755). Test
     /// fixtures only.
     #[cfg(feature = "test-support")]

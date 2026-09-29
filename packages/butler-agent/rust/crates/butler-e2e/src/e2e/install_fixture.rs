@@ -121,14 +121,10 @@ pub fn make_read_only(root: &Path) -> Result<(), HarnessError> {
         if fs::symlink_metadata(&path)?.is_dir() {
             make_read_only(&path)?;
         } else {
-            set_read_only(&path)?;
+            secure_fs::set_file_mode(&path, FileMode::READ_ONLY).transpose()?;
         }
     }
-    set_read_only(root)
-}
-
-fn set_read_only(path: &Path) -> Result<(), HarnessError> {
-    secure_fs::set_file_mode(path, FileMode::READ_ONLY).transpose()?;
+    secure_fs::set_file_mode(root, FileMode::READ_ONLY_DIRECTORY).transpose()?;
     Ok(())
 }
 
