@@ -1,337 +1,396 @@
-/* 09 Layers hero. Canvas px (../shared/grid.ts). The window is laid out at
-   the product's own size (a 1100x688 window, a 390x800 phone) and the
-   camera fits it; its layers are full-size sheets stacked in 3D. */
+/* 09 Layers hero: the z sheets field, the layered screen (with its slider)
+   and the product grid. Flat throughout: depth is stacking, dimming and
+   shadow. Canvas px (see ../shared/grid.ts). */
 
-/* ---- Title: three offset copies merging ---- */
+/* ---- The field: numbered sheets stepped along a flat diagonal ---- */
 
-.titleStack {
-  position: relative;
-  display: inline-grid;
+.field {
+  display: grid;
+  place-items: center;
 }
 
-.titleStack > * {
-  grid-area: 1 / 1;
-}
-
-.titleCopy[data-k="1"] {
-  opacity: 0.5;
-  translate: 0 -0.06em;
-}
-
-.titleCopy[data-k="2"] {
-  opacity: 0.25;
-  translate: 0 -0.12em;
-}
-
-/* ---- The window, as a stack of sheets ---- */
-
-.region {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  translate: -50% -50%;
-  transform-style: preserve-3d;
-}
-
-/* The window and its ladder: the ladder waits right of the window, and the finale's camera frames both. */
-.ending {
-  --fz: 0.6;
-  --inner-w: 960px;
-  --inner-h: 505px;
-  --gap: 24px;
-  --screen-w: calc(var(--space-4xl) * 27.5);
+.sheets {
+  --step-x: calc(var(--space-xl) + var(--space-sm));
+  --step-y: var(--space-3xl);
+  --sheet-w: calc(var(--space-4xl) * 5);
+  --sheet-h: calc(var(--space-4xl) * 3);
 
   position: relative;
-  transform-style: preserve-3d;
-}
-
-[data-layout="tall"] .ending {
-  --fz: 0.42;
-  --inner-w: 340px;
-  --inner-h: 600px;
-  --gap: 12px;
-  --screen-w: calc(var(--space-4xl) * 9.75);
-}
-
-/* Drawn at the size it has on the finale (the frame's inner box less the window, at the finale's zoom), then
-   zoomed by the inverse of that zoom, so its type is the size it reads at. */
-.ladderBox {
-  position: absolute;
-  top: 50%;
-  left: calc(100% + var(--gap));
-  inline-size: calc(var(--inner-w) - var(--screen-w) * var(--fz) - var(--gap));
-  block-size: var(--inner-h);
-  translate: 0 -50%;
-  zoom: calc(1 / var(--fz));
-}
-
-.screen {
-  --adaptive-viewport-block-size: 100%;
-  --app-window-radius: 18px;
-  /* The components' thickness and the tone of their edge, in sheet px. */
-  --slab: 9px;
-  --slab-tone: color-mix(in srgb, var(--line-strong) 55%, var(--surface-raised));
-
-  position: relative;
-  inline-size: calc(var(--space-4xl) * 27.5);
-  block-size: calc(var(--space-4xl) * 17.2);
-  transform-style: preserve-3d;
-}
-
-[data-layout="tall"] .screen {
-  --slab: 14px;
-
-  inline-size: calc(var(--space-4xl) * 9.75);
-  block-size: calc(var(--space-4xl) * 20);
+  inline-size: calc(var(--sheet-w) + var(--step-x) * 6);
+  block-size: calc(var(--sheet-h) + var(--step-y) * 6);
 }
 
 .sheet {
   position: absolute;
-  inset: 0;
-  transform-style: preserve-3d;
+  top: calc(var(--k) * var(--step-y));
+  left: calc(var(--k) * var(--step-x));
+  display: flex;
+  align-items: baseline;
+  align-content: start;
+  gap: var(--space-md);
+  box-sizing: border-box;
+  inline-size: var(--sheet-w);
+  block-size: var(--sheet-h);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
 }
 
-/* What lives on the sheet, flat on it; fixed-position parts (the chrome
-   toggle, the shell's drawers) stay inside it. */
+.sheetNum {
+  color: var(--text-primary);
+  font-size: var(--typo-h4-size);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-strong);
+}
+
+.sheetName {
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+}
+
+/* ---- The layered screen ---- */
+
+.screenRegion {
+  display: grid;
+  place-items: center;
+}
+
+.screenStage {
+  display: grid;
+  row-gap: var(--space-lg);
+}
+
+.screen {
+  position: relative;
+  inline-size: calc(var(--col) * 7);
+  block-size: calc(var(--col) * 4);
+}
+
+.page,
 .plane {
   position: absolute;
+  box-sizing: border-box;
+  border-radius: var(--radius-panel);
+}
+
+.page {
   inset: 0;
-  contain: layout paint;
-}
-
-.plane > * {
-  block-size: 100%;
-}
-
-/* Surfaces on the sheets lift on the lightest shadow of the system: the extrusion carries the depth. */
-.plane [data-glass] {
-  box-shadow: var(--shadow-switch);
-}
-
-/* The three sheets that hold one centred component draw only the middle of the window (the layer is what the
-   compositor pays for, and every sheet is a layer); the component stays centred on it. */
-[data-layout="wide"] .sheet:is([data-sheet="dialog"], [data-sheet="popover"], [data-sheet="tooltip"]) > .plane {
-  inset: 0 24%;
-}
-
-/* Glass draws without its backdrop: a backdrop filter can not sample through a 3D stack, and each sheet
-   holds only its own part, so there is nothing behind it to blur. The tinted surface itself is unchanged. */
-.plane [data-glass] {
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-
-/* A risen sheet's rim, so an almost empty sheet still reads as a plane. */
-.rim {
-  position: absolute;
-  inset: 0;
-  border: 2px solid var(--line-strong);
-  border-radius: var(--app-window-radius);
-  opacity: 0;
-  pointer-events: none;
-}
-
-/* A component's thickness: empty silhouettes of it (its size and corner radius, no content), stacked a step
-   apart behind it down its own z, in a tone a little darker than a surface. Each fades with the sheet's edge. */
-.copy {
-  position: absolute;
-  top: var(--y);
-  left: var(--x);
-  inline-size: var(--w);
-  block-size: var(--h);
-  border-radius: var(--r);
-  background: var(--slab-tone);
-  opacity: 0;
-  pointer-events: none;
-}
-
-/* The label's pin: the sheet's top right corner, turned and scaled back to
-   face the frame at canvas size (the inverse of the quarter camera). */
-.pin {
-  position: absolute;
-  top: 0;
-  left: 100%;
-  inline-size: 0;
-  block-size: 0;
-  opacity: 0;
-  /* Brought toward the viewer, clear of every sheet (--q-clear, set by the scene). */
-  transform: scale(calc(1 / var(--q-s, 1)))
-    rotateZ(calc(-1 * var(--q-rz, 0deg))) rotateX(calc(-1 * var(--q-rx, 0deg)))
-    translateZ(var(--q-clear, 0));
-  transform-origin: 0 0;
-}
-
-.tag {
-  position: absolute;
-  top: 0;
-  left: 0;
   display: grid;
-  row-gap: 0;
-  padding-left: var(--space-2xl);
-  translate: 0 -50%;
+  align-content: start;
+  row-gap: var(--space-md);
+  padding: var(--space-xl);
+  border: 1px solid var(--line);
+  background: var(--color-surface-base);
+}
+
+.pageLabel,
+.planeNote,
+.sliderLabel,
+.sliderRead {
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
   white-space: nowrap;
 }
 
-/* The leader from the corner and the dot on it, level with the token line
-   (what lives there hangs below it). */
-.tag::before,
-.tag::after {
+.pageLine {
+  display: block;
+  inline-size: 70%;
+  block-size: var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--selection-strong);
+}
+
+.plane {
+  display: grid;
+  align-content: start;
+  padding: var(--space-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+}
+
+.planeNote {
+  color: var(--accent);
+}
+
+.plane[data-layer="sticky"] .planeNote {
+  justify-self: center;
+}
+
+.plane[data-layer="drawer"],
+.plane[data-layer="overlay"] {
+  align-content: end;
+}
+
+.plane[data-layer="overlay"] .planeNote {
+  justify-self: end;
+}
+
+.plane[data-layer="sticky"] {
+  top: 0;
+  right: 0;
+  left: 0;
+  block-size: var(--titlebar-height);
+  border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+}
+
+.plane[data-layer="drawer"] {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  inline-size: 30%;
+}
+
+.plane[data-layer="overlay"] {
+  inset: 0;
+  border-color: transparent;
+  background: var(--dialog-overlay-bg);
+  box-shadow: none;
+}
+
+.plane[data-layer="dialog"] {
+  top: 22%;
+  left: 34%;
+  inline-size: 44%;
+  block-size: 52%;
+  border-radius: var(--radius-popover);
+  background: var(--popover);
+  box-shadow: var(--shadow-window);
+}
+
+.plane[data-layer="popover"] {
+  top: 48%;
+  left: 44%;
+  inline-size: 30%;
+  block-size: 30%;
+  border-radius: var(--radius-popover);
+  background: var(--popover);
+}
+
+.plane[data-layer="tooltip"] {
+  top: 12%;
+  left: 52%;
+  inline-size: 30%;
+  block-size: auto;
+  border-radius: var(--radius-control);
+  background: var(--popover);
+}
+
+.slider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.track {
+  position: relative;
+  display: block;
+  inline-size: calc(var(--space-lg) * 6);
+  block-size: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+}
+
+.thumb {
   position: absolute;
   top: 50%;
   left: 0;
-  content: "";
-}
-
-.tag::before {
-  inline-size: calc(var(--space-2xl) - var(--space-xs));
-  border-top: 1px solid var(--line-strong);
-}
-
-.tag::after {
-  inline-size: var(--space-xs);
-  block-size: var(--space-xs);
+  inline-size: var(--space-md);
+  block-size: var(--space-md);
   border-radius: var(--radius-pill);
   background: var(--accent);
   translate: -50% -50%;
 }
 
-.tagHead {
-  display: flex;
-  column-gap: var(--space-sm);
-  font: var(--font-code);
-  font-size: var(--typo-caption-size);
+.sliderRead {
+  display: inline-flex;
+  line-height: 1.2;
 }
 
-.tagToken {
-  color: var(--text-primary);
-}
+/* ---- Components ---- */
 
-.tagValue {
-  color: var(--accent);
-  font-variant-numeric: tabular-nums;
-}
-
-.tagLives {
-  position: absolute;
-  top: 100%;
-  left: var(--space-2xl);
-  color: var(--text-secondary);
-  font-size: var(--typo-caption-size);
-}
-
-/* The phone's labels wrap what lives there under the token. */
-[data-layout="tall"] .tagLives {
-  inline-size: calc(var(--space-4xl) * 3.6);
-  white-space: normal;
-}
-
-/* ---- Parts of the sheets ---- */
-
-/* The titlebar where the workspace draws it: inside the workspace's border,
-   its corner rounded with the workspace's. */
-.titlebar {
-  position: absolute;
-  top: 1px;
-  right: 1px;
-  left: calc(var(--sidebar-width) + 1px);
-  overflow: hidden;
-  border-top-left-radius: calc(var(--app-window-radius) - 1px);
-}
-
-[data-layout="tall"] .titlebar {
+.stickyHead {
+  position: sticky;
   top: 0;
-  right: 0;
-  left: 0;
-  border-radius: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--line);
+  border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-control);
 }
 
-.plane > .titlebar {
-  block-size: var(--titlebar-safe-area-top);
+.listBody {
+  display: grid;
+  padding: var(--space-xs) var(--space-md) var(--space-md);
 }
 
-.scrim {
+.listRow {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--control-height-md);
+}
+
+.window {
+  position: relative;
+  overflow: hidden;
+  block-size: calc(var(--control-height-md) * 6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface-base);
+}
+
+.windowPage {
+  display: grid;
+  row-gap: var(--space-md);
+  padding: var(--space-xl) var(--space-xl) var(--space-xl) 45%;
+}
+
+.dim {
   position: absolute;
   inset: 0;
-  border-radius: var(--app-window-radius);
+  background: var(--dialog-overlay-bg);
 }
 
-/* The dialog where DialogContent centres it in the window. */
-.dialogBox {
+.window > [data-a="dim"],
+.window > [data-a="drawer"] {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  inline-size: min(var(--dialog-width-sm), calc(100% - var(--space-4) * 2));
-  translate: -50% -50%;
+  inset: 0 auto 0 0;
 }
 
-.plane > .dialogBox {
-  block-size: auto;
+.window > [data-a="dim"] {
+  inset: 0;
 }
 
-.dialogBox > [data-slot="dialog-content"] {
-  position: relative;
-  top: auto;
-  left: auto;
+.window > [data-a="drawer"] {
+  inline-size: 55%;
+}
+
+.drawer {
+  box-sizing: border-box;
   inline-size: 100%;
-  max-block-size: none;
-  overflow: visible;
-  transform: none;
+  block-size: 100%;
+  padding: var(--space-sm);
+  border-right: 1px solid var(--line);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-window);
 }
 
-/* The popover and tooltip sheets draw the dialog for placement only. */
-.dialogBox[data-part="popover"],
-.dialogBox[data-part="tooltip"] {
-  visibility: hidden;
-}
-
-.anchor {
+.dialogStage {
   position: relative;
-  display: block;
+  padding-block-end: calc(var(--control-height-md) * 2.5);
 }
 
-/* Radix's item-aligned select: the picked item's text over the trigger's value. */
-.dialogBox .menu {
+.listbox {
   position: absolute;
-  /* 6px: the list's own padding (Select.module.css). */
-  --list-inset: 6px;
-
-  top: calc(
-    (var(--control-height-lg) - var(--menu-item-height)) / 2 -
-      var(--list-inset) - var(--picked) * var(--menu-item-height)
-  );
-  right: calc(var(--list-inset) * -1);
-  left: calc(var(--list-inset) * -1);
-  visibility: visible;
+  bottom: 0;
+  left: var(--space-lg);
+  inline-size: 60%;
 }
 
-.hovered {
+.dialogStage > [data-a="list"] {
+  position: absolute;
+  inset: auto 0 0;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--control-height-md);
+  padding-inline: var(--space-sm);
+  border-radius: var(--radius-control);
+}
+
+.option[data-on] {
   background: var(--selection);
 }
 
-.dialogBox .tip {
-  position: absolute;
-  top: calc(100% + var(--space-sm));
-  left: 50%;
-  visibility: visible;
-  transform: translateX(-50%);
+.tipStage {
+  display: grid;
+  justify-items: start;
+  row-gap: var(--space-xs);
+}
+
+.tipAnchor {
+  display: inline-grid;
+}
+
+/* The real tooltip surface, held in flow above its button (it is fixed and
+   centred on a trigger in the product). */
+.tipAnchor > span {
+  position: relative;
+  transform: none;
   animation: none;
 }
 
-/* ---- Poster ---- */
-
-.posterScreen {
-  zoom: 0.62;
+.product {
+  grid-template-areas:
+    "sticky dialog"
+    "drawer dialog"
+    "drawer tooltip";
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: space-between;
+  gap: var(--space-xl) var(--grid-gutter);
 }
 
-[data-layout="tall"] .posterScreen {
-  zoom: 0.86;
+[data-layout="tall"] [data-cell] .sheets {
+  --step-x: var(--space-md);
+  --step-y: calc(var(--space-4xl) * 1.5);
+  --sheet-w: calc(var(--space-4xl) * 4.5);
+  --sheet-h: calc(var(--space-4xl) * 1.6);
 }
 
-/* The rows fill the ladder's height, the first on its top edge and the last on its bottom edge. */
-.ladder {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  inline-size: 100%;
-  block-size: 100%;
+[data-layout="tall"] .screenStage {
+  row-gap: calc(var(--space-4xl) * 3.5);
+}
+
+[data-layout="tall"] .screen {
+  inline-size: calc(
+    var(--canvas-w) - var(--grid-margin) * 2 - var(--space-4xl)
+  );
+  block-size: calc(var(--canvas-h) * 0.55);
+}
+
+[data-layout="tall"] .product {
+  grid-template-areas:
+    "sticky"
+    "drawer"
+    "dialog"
+    "tooltip";
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  row-gap: var(--space-lg);
+}
+
+/* Tall poster: the z tokens as a compact grid of chips (value and name),
+   so the field and the components fit the portrait frame together. */
+[data-layout="tall"] [data-t="field-mover"] .sheets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
+  inline-size: auto;
+  block-size: auto;
+}
+
+[data-layout="tall"] [data-t="field-mover"] .sheet {
+  position: static;
+  inline-size: auto;
+  block-size: auto;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  box-shadow: none;
+}
+
+[data-layout="tall"] [data-t="field-mover"] .sheetNum {
+  font-size: var(--typo-h5-size);
+}
+
+[data-layout="tall"] [data-t="field-mover"] .sheetName {
+  white-space: nowrap;
 }
