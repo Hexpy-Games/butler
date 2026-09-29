@@ -4,8 +4,8 @@
   "model": "openai/gpt-6-luna",
   "effort": "max",
   "wire_shape": "openai_responses",
-  "butler_git_sha": "e15788dac6cd",
-  "recorded_at": "2026-09-28T21:00:45Z",
+  "butler_git_sha": "d6a7770a3163",
+  "recorded_at": "2026-09-29T00:28:15Z",
   "recorder": "butler-e2e record proxy",
   "sanitization": [
     "per-run values -> {{W}}, {{D}}, {{SANDBOX}}, scenario nonces",
@@ -20,35 +20,35 @@
   "files": [
     {
       "file": "000.json",
-      "sha256": "4b726ef4d12fcf28de1623fb66eb79fdce39ee29316bcee95c592e6268e76a98"
+      "sha256": "cd3bbf832ed64abc7252b2a8dfaa8d06542404872861f5b493bdcad5cfc99071"
     },
     {
       "file": "001.json",
-      "sha256": "c1ea55a599d4194b7cb21b34ea42f8cd3d99cbe6709f014e77f77c35a9e90084"
+      "sha256": "2e2fe04ba4a0cc5a05019146398e0e3ebf6f223bd7f6fb9a6b904528db1c2dd7"
     },
     {
       "file": "002.json",
-      "sha256": "7a29b613c3fc879ee640f476df76d2060ae7e0592e4bb5f6312f5feffdbf9ac4"
+      "sha256": "633fcd1ebfd389f93904a0f459514b76f17b6bbd5aaf11dfe947da090116006f"
     },
     {
       "file": "003.json",
-      "sha256": "8e061587d6f205097b1f5f7c8d177f58c6ea7c07a0dde35fd95f6e934f158d03"
+      "sha256": "10be2a0522e3d82bf89e964d120a8e1fca63705acb786b44b211464f3e6794ea"
     },
     {
       "file": "004.json",
-      "sha256": "66da5a3bf6023778a0643e5ffd2033e14ce89efeb0ab9640a04d32180c7cc3c5"
+      "sha256": "841b2cc0fe7342546c6f80b0f6e05d682d72a8155da5d2f57296ada85d33a56e"
     },
     {
       "file": "005.json",
-      "sha256": "a10282998158530db5a6a2d584d8e6e5887faa5e459622e42b40a686b23c25d0"
+      "sha256": "b81492f40225180b3159878de0e1fb0c5a966a04c7eb1dffb8c9b9f637646e95"
     },
     {
       "file": "006.json",
-      "sha256": "04b0600f41ad7dfd22c6faa8316eb6becee022941866c864e3c6d0f786a15005"
+      "sha256": "ba1791aba31ccd3361f02c80ee12d19547771d167bc3c5f54555691e031415c8"
     },
     {
       "file": "007.json",
-      "sha256": "99fb937995fe56d980c2c997f1ee61a0d47e68623d53f004bf9953cc0c1cb510"
+      "sha256": "193e004fd99348e7f454e2534439fd91d4c966d66c73c1def2ff10ae0aa5e94d"
     }
   ],
   "fingerprint": [
@@ -99,8 +99,6 @@
       "response.created{response,sequence_number,type}",
       "response.in_progress{response,sequence_number,type}",
       "response.output_item.added{item,output_index,sequence_number,type}",
-      "response.output_item.done{item,output_index,sequence_number,type}",
-      "response.output_item.added{item,output_index,sequence_number,type}",
       "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
       "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
       "response.output_item.done{item,output_index,sequence_number,type}",
@@ -123,8 +121,6 @@
       "response.created{response,sequence_number,type}",
       "response.in_progress{response,sequence_number,type}",
       "response.output_item.added{item,output_index,sequence_number,type}",
-      "response.output_item.done{item,output_index,sequence_number,type}",
-      "response.output_item.added{item,output_index,sequence_number,type}",
       "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
       "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
       "response.output_item.done{item,output_index,sequence_number,type}",
@@ -134,8 +130,6 @@
       "status:200",
       "response.created{response,sequence_number,type}",
       "response.in_progress{response,sequence_number,type}",
-      "response.output_item.added{item,output_index,sequence_number,type}",
-      "response.output_item.done{item,output_index,sequence_number,type}",
       "response.output_item.added{item,output_index,sequence_number,type}",
       "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
       "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",

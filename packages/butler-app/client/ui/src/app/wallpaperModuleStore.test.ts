@@ -1,5 +1,5 @@
 /// <reference types="bun" />
-import { expect, test } from "bun:test";
+import { expect, setSystemTime, test } from "bun:test";
 import { BUILTIN_WALLPAPERS, type WallpaperModule, type WallpaperModuleCheck } from "@/butler-ds";
 import { HUNG_DURING_CHECK, createWallpaperModuleStore } from "./wallpaperModuleStore";
 import type { WallpaperModuleListing, WallpaperModuleReport, WallpaperModuleStatus } from "./wallpaperModules";
@@ -268,13 +268,18 @@ test("a failure when drawn during a refresh is not undone by that refresh", asyn
   expect(gateway.reports).toEqual([["me.flow", { state: "error", message: "Frames too slow; holding a still frame" }]]);
 });
 
-test("a checking mark found at start is a hung check: retired, reported, never drawn or checked again", async () => {
+test("a checking mark found at start holds the module back: not drawn, checked or reported yet", async () => {
   const { gateway, store, ids, user } = fixture();
   gateway.listings = [listing("me.hang", { state: "checking" })];
   gateway.shaders = { "me.hang": OK };
   await store.refresh();
   expect(ids()).toEqual([]);
   expect(gateway.checks).toEqual([]);
+  expect(user()).toEqual([{ id: "me.hang", name: { en: "hang", ko: "hang" } }]);
+  expect(gateway.reports).toEqual([]);
+  setSystemTime(new Date(Date.now() + 61_000));
+  await store.refresh(["me.hang"]);
+  setSystemTime();
   expect(user()[0]?.error).toBe(HUNG_DURING_CHECK);
-  expect(gateway.reports).toEqual([["me.hang", { state: "error", message: HUNG_DURING_CHECK }]]);
+  expect(gateway.checks).toEqual([]);
 });

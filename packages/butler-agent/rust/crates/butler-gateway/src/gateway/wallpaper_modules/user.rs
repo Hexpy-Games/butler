@@ -1,7 +1,7 @@
 //! User modules: `<BUTLER_HOME>/wallpapers/<id>/` holding `wallpaper.json`,
 //! `shader.frag`, and optionally `overlay.frag` (with `"overlay": true`), the
 //! image the manifest's `defaultImage` names (JPEG, PNG or WebP, at most
-//! 1 MB, with header dimensions the image pipeline would accept) and
+//! 1 MB, at most 4096 px per side and 16 MP) and
 //! `thumbnail.png`. Folders are read fresh on every use, so a
 //! listing always shows the files as they are now.
 //!
