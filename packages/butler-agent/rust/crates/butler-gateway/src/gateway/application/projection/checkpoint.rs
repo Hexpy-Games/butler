@@ -4,7 +4,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use super::super::storage::AppStorageError;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub(super) struct Checkpoint {
     pub chat_id: String,
     pub session_id: String,
@@ -21,7 +21,30 @@ pub(super) struct Checkpoint {
     pub spool_end_offset: u64,
 }
 
+/// `trailing` holds at most one partial record. Checkpoints written by the
+/// native cutover kept the whole unread rest of the transcript here (tens of
+/// MB). Loading drops a longer value and the file is read again from
+/// `projected_bytes`: the next read starts at `projected_bytes +
+/// trailing.len()`, where the file still holds those bytes.
+const MAX_TRAILING_BYTES: usize = 128 * 1024;
+
 pub(super) fn load(db: &Connection, chat_id: &str) -> Result<Option<Checkpoint>, AppStorageError> {
+    let oversized = db
+        .query_row(
+            "SELECT length(trailing_text)>?2 FROM app_transcript_projection_checkpoints \
+             WHERE chat_id=?1",
+            params![chat_id, MAX_TRAILING_BYTES.div_ceil(3) * 4],
+            |row| row.get::<_, bool>(0),
+        )
+        .optional()
+        .map_err(AppStorageError::sqlite)?;
+    if oversized == Some(true) {
+        db.execute(
+            "UPDATE app_transcript_projection_checkpoints SET trailing_text='' WHERE chat_id=?1",
+            [chat_id],
+        )
+        .map_err(AppStorageError::sqlite)?;
+    }
     db.query_row(
         "SELECT chat_id,session_id,transcript_path,file_device,file_inode,projected_bytes,\
          modified_at_ms,trailing_text,boundary_anchor_text,spool_path,spool_bytes,spool_end_offset \
