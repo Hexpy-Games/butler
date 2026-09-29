@@ -292,3 +292,23 @@ fn file_identity(connection: &Connection, file_id: &str) -> Result<Option<Value>
 fn sha256_hex(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
+
+/// Assistant messages left `streaming` by a turn that already ended (a
+/// suspended hand-off turn, or one that failed without an answer) take the
+/// turn's outcome, so every surface agrees. Idempotent: it matches nothing
+/// once settled.
+pub(super) fn settle_ended_turn_messages(connection: &Connection) -> Result<(), AppStorageError> {
+    connection
+        .execute(
+            "UPDATE messages SET \
+               status=CASE (SELECT t.state FROM turns t WHERE t.id=messages.turn_id) \
+                 WHEN 'delivered' THEN 'delivered' WHEN 'cancelled' THEN 'cancelled' ELSE 'failed' END, \
+               safe_error_code=COALESCE(safe_error_code,(SELECT t.safe_error_code FROM turns t WHERE t.id=messages.turn_id)) \
+             WHERE role='assistant' AND status='streaming' AND EXISTS \
+               (SELECT 1 FROM turns t WHERE t.id=messages.turn_id \
+                AND t.state IN ('delivered','cancelled','failed','runtime_fault'))",
+            [],
+        )
+        .map_err(AppStorageError::sqlite)?;
+    Ok(())
+}

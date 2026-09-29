@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Validate a prepared native payload or smoke an immutable standalone archive."""
+"""Validate a prepared native payload, smoke an immutable standalone archive, or merge
+per-platform release manifests."""
 
 from __future__ import annotations
 
@@ -13,7 +14,7 @@ import tarfile
 import tempfile
 
 
-PACKAGER_PATH = Path(__file__).with_name("package-standalone-macos-arm64.py")
+PACKAGER_PATH = Path(__file__).with_name("package-standalone-agent.py")
 SIGN_SCRIPT = Path(__file__).resolve().parents[4] / "deploy" / "macos" / "sign-and-notarize.sh"
 SPEC = importlib.util.spec_from_file_location("native_standalone_packager", PACKAGER_PATH)
 assert SPEC and SPEC.loader
@@ -29,39 +30,47 @@ def payload_gate(payload: Path) -> dict:
     if not binary.is_file() or not resources.is_dir():
         raise SystemExit("native payload binary or resources missing")
     packager.validate_resource_symlinks(resources)
-    packager.verify_macos_arm64(binary)
+    packager.verify_binary(binary, manifest["platform"], manifest["architecture"])
     return {
         "schema": "butler.native-agent-release-gate.v1",
         "version": packager.nonempty(manifest.get("version"), "Agent version"),
         "binarySha256": packager.sha256_file(binary),
         "resourcesSha256": packager.sha256_tree(resources),
-        "architecture": "darwin-arm64",
+        "architecture": f"{manifest['platform']}-{manifest['architecture']}",
         "status": "passed",
     }
+
+
+MANIFEST_FILES = (
+    ("agent-release-manifest.json", "butler.agent-release-manifest.v1"),
+    ("agent-update-manifest.json", "butler.update-manifest.v1"),
+)
+
+
+def _read_envelope(path: Path, schema: str) -> dict:
+    if path.is_symlink() or not path.is_file():
+        raise SystemExit(f"{path.name} missing or aliased")
+    try:
+        envelope = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise SystemExit(f"{path.name} is invalid") from error
+    if not isinstance(envelope, dict) or envelope.get("schema") != schema:
+        raise SystemExit(f"{path.name} envelope invalid")
+    return envelope
 
 
 def _release_manifests(
     archive: Path,
     version: str,
     app_version: str | None,
+    platform: str,
     expected_artifact_url: str | None,
     signing: dict | None = None,
 ) -> None:
     digest = packager.sha256_file(archive)
     artifact_urls: list[str | None] = []
-    for filename, schema in (
-        ("agent-release-manifest.json", "butler.agent-release-manifest.v1"),
-        ("agent-update-manifest.json", "butler.update-manifest.v1"),
-    ):
-        path = archive.parent / filename
-        if path.is_symlink() or not path.is_file():
-            raise SystemExit(f"{filename} missing or aliased")
-        try:
-            envelope = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as error:
-            raise SystemExit(f"{filename} is invalid") from error
-        if not isinstance(envelope, dict) or envelope.get("schema") != schema:
-            raise SystemExit(f"{filename} envelope invalid")
+    for filename, schema in MANIFEST_FILES:
+        envelope = _read_envelope(archive.parent / filename, schema)
         release_identity = (
             envelope.get("name") == "butler-agent"
             and envelope.get("product") == "butler-agent"
@@ -76,9 +85,13 @@ def _release_manifests(
         ):
             raise SystemExit(f"{filename} release identity mismatch")
         artifacts = envelope.get("artifacts")
-        if not isinstance(artifacts, list) or len(artifacts) != 1 or not isinstance(artifacts[0], dict):
+        if not isinstance(artifacts, list):
             raise SystemExit(f"{filename} artifact list invalid")
-        artifact = artifacts[0]
+        # A merged manifest lists every platform; this archive is the one named for it.
+        own = [item for item in artifacts if isinstance(item, dict) and item.get("artifact_name") == archive.name]
+        if len(own) != 1:
+            raise SystemExit(f"{filename} must list {archive.name} exactly once")
+        artifact = own[0]
         integrity = artifact.get("integrity")
         artifact_url = artifact.get("artifact_url")
         if artifact_url is not None and not isinstance(artifact_url, str):
@@ -97,7 +110,7 @@ def _release_manifests(
                 or artifact.get("signing") != signing
                 or artifact.get("artifact_name") != archive.name
                 or (expected_artifact_url is not None and artifact_url != expected_artifact_url)
-                or artifact.get("platform") != "darwin-arm64"
+                or artifact.get("platform") != platform
                 or artifact.get("payload_format") != "agent-archive"
                 or artifact.get("update_policy") != "explicit"
                 or artifact.get("restart_policy") != "restart-service"
@@ -193,9 +206,9 @@ def archive_smoke(archive: Path, expected_artifact_url: str | None = None) -> di
         binary = installation / "butler-agent"
         resources = installation / "resources"
         launcher = installation / "butler"
+        target = (manifest.get("platform"), manifest.get("architecture"))
         if (manifest.get("schema") != packager.SCHEMA or
-                manifest.get("platform") != "darwin" or
-                manifest.get("architecture") != "arm64" or
+                target not in packager.TARGETS or
                 manifest.get("binary") != "butler-agent" or
                 manifest.get("resources") != "resources" or
                 manifest.get("launcher") != "butler" or
@@ -203,7 +216,7 @@ def archive_smoke(archive: Path, expected_artifact_url: str | None = None) -> di
                 not launcher.is_symlink() or os.readlink(launcher) != "butler-agent"):
             raise SystemExit("standalone installation layout invalid")
         packager.validate_resource_symlinks(resources)
-        packager.verify_macos_arm64(binary)
+        packager.verify_binary(binary, *target)
         if (packager.sha256_file(binary) != manifest.get("binarySha256") or
                 packager.sha256_tree(resources) != manifest.get("resourcesSha256")):
             raise SystemExit("standalone installation checksum mismatch")
@@ -212,7 +225,7 @@ def archive_smoke(archive: Path, expected_artifact_url: str | None = None) -> di
         signing = packager.binary_signing(binary)
         if os.environ.get("BUTLER_SIGN_IDENTITY") and signing is None:
             raise SystemExit("native binary is not Developer ID signed")
-        _release_manifests(archive, version, app_version, expected_artifact_url, signing)
+        _release_manifests(archive, version, app_version, "-".join(target), expected_artifact_url, signing)
         if signing is not None and os.environ.get("BUTLER_SIGN_IDENTITY"):
             verify = subprocess.run(
                 [str(SIGN_SCRIPT), "verify-agent", str(binary)], capture_output=True, text=True
@@ -250,8 +263,7 @@ def archive_smoke(archive: Path, expected_artifact_url: str | None = None) -> di
                         or runtime_data.get("kind") != "native"
                         or runtime_data.get("source") != "installed_executable"
                         or installation_data.get("schema") != packager.SCHEMA
-                        or installation_data.get("platform") != "darwin"
-                        or installation_data.get("architecture") != "arm64"
+                        or (installation_data.get("platform"), installation_data.get("architecture")) != target
                         or installation_data.get("binary") != "butler-agent"
                         or installation_data.get("resources") != "resources"
                         or installation_data.get("launcher") != "butler"
@@ -289,16 +301,49 @@ def archive_smoke(archive: Path, expected_artifact_url: str | None = None) -> di
                 "installationSha256": before}
 
 
+def merge(inputs: list[Path], output: Path) -> dict:
+    """Combine per-platform manifest directories into one release manifest pair."""
+    merged: dict[str, dict] = {}
+    for filename, schema in MANIFEST_FILES:
+        artifacts: dict[str, dict] = {}
+        versions = set()
+        base: dict = {}
+        for directory in inputs:
+            envelope = _read_envelope(directory / filename, schema)
+            base = envelope
+            versions.add(envelope.get("version", envelope.get("agent_version")))
+            for artifact in envelope.get("artifacts", []):
+                platform = artifact.get("platform")
+                if platform in artifacts:
+                    raise SystemExit(f"{filename} has two artifacts for {platform}")
+                if not artifact.get("artifact_url") or not artifact.get("sha256"):
+                    raise SystemExit(f"{filename} {platform} artifact lacks a URL or digest")
+                artifacts[platform] = artifact
+        if len(versions) != 1:
+            raise SystemExit(f"{filename} inputs disagree on the Agent version: {sorted(map(str, versions))}")
+        merged[filename] = {**base, "artifacts": [artifacts[key] for key in sorted(artifacts)]}
+    output.mkdir(parents=True, exist_ok=True)
+    for filename, envelope in merged.items():
+        (output / filename).write_text(json.dumps(envelope, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    platforms = [item["platform"] for item in merged[MANIFEST_FILES[0][0]]["artifacts"]]
+    return {"schema": "butler.native-agent-release-merge.v1", "status": "passed", "platforms": platforms}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("gate").add_argument("--payload", type=Path, required=True)
+    combine = commands.add_parser("merge")
+    combine.add_argument("--output", type=Path, required=True)
+    combine.add_argument("inputs", type=Path, nargs="+", help="directories holding per-platform manifests")
     smoke = commands.add_parser("smoke")
     smoke.add_argument("--archive", type=Path, required=True)
     smoke.add_argument("--artifact-url", help="expected published URL recorded in both release manifests")
     args = parser.parse_args()
     if args.command == "gate":
         result = payload_gate(args.payload)
+    elif args.command == "merge":
+        result = merge(args.inputs, args.output)
     else:
         if args.artifact_url is not None and not args.artifact_url.strip():
             parser.error("--artifact-url cannot be empty")

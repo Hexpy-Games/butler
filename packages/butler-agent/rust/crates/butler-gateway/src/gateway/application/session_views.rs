@@ -1,6 +1,7 @@
 //! Canonical App session reads composed with BTCC child projections.
 
 mod helpers;
+mod steward_children;
 mod turn_projection;
 
 use serde_json::{Map, Value, json};
@@ -275,6 +276,7 @@ impl AppApplication {
         ] {
             copy(&mut view, key, &projection);
         }
+        steward_children::complete_view_turns(&mut view);
         view.insert(
             "message_window".into(),
             json!({"next_cursor":next_cursor,"previous_cursor":previous_cursor,"complete":!has_more,"has_more":has_more}),
@@ -314,10 +316,11 @@ impl AppApplication {
             )
             .await?;
         require_relation(&projection)?;
-        let latest = projection
+        let mut latest = projection
             .get("latest_turn")
             .cloned()
             .unwrap_or(Value::Null);
+        steward_children::complete_turn_value(&mut latest);
         let updated = child_updated_at(&projection).ok_or(GatewayApplicationError::internal())?;
         let mut view = Map::new();
         view.insert("session_id".into(), json!(session_id));
@@ -363,13 +366,18 @@ impl AppApplication {
             .subsessions
             .projection(app_session_hint(session_id), None)
             .await;
-        projection.unwrap_or_else(|error| {
+        let mut projection = projection.unwrap_or_else(|error| {
             eprintln!(
                 "[gateway] session view without subsessions: {error} cause={:?}",
                 std::error::Error::source(&error).map(ToString::to_string)
             );
             json!({"workers": [], "steward_children": []})
-        })
+        });
+        let now =
+            butler_core::js_date::parse_iso_millis(&self.dependencies.identity_clock.now_iso())
+                .unwrap_or_default();
+        steward_children::complete(&mut projection, now);
+        projection
     }
 
     pub(super) async fn refresh_message_projection_owned(

@@ -1,0 +1,29 @@
+{
+  "name": "@hexpygames/butler",
+  "version": "0.0.21",
+  "description": "Installs the Butler agent: npx @hexpygames/butler install",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "butler-install": "bin/butler-install.js"
+  },
+  "files": [
+    "bin",
+    "install.sh"
+  ],
+  "scripts": {
+    "prepack": "node scripts/copy-install-script.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Hexpy-Games/butler.git",
+    "directory": "packages/butler-npm"
+  },
+  "homepage": "https://github.com/Hexpy-Games/butler",
+  "publishConfig": {
+    "access": "public"
+  }
+}

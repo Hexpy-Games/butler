@@ -50,22 +50,53 @@ Agent runs only while Butler is open. Electron UI code and packaging tooling
 for Windows and Linux remain in the repository, but native Agent bundles for
 those platforms are not yet supported or verified.
 
-Use the standalone Agent only when you want the headless runtime without the
-desktop app.
+To run only the headless Agent without the desktop app, see
+[Advanced: Butler Agent](#advanced-butler-agent).
 
 ## Advanced: Butler Agent
 
-Standalone Agent archives currently target Apple Silicon macOS (`darwin-arm64`)
-only. Use a release version that publishes the native archive; it does not run
-on Linux or Intel Macs. Each archive is an immutable installation package.
-Extract each version to a new directory and keep runtime data separate under
-`BUTLER_DATA` (default `~/.butler`). Butler does not replace an installed
-version or move user data when updating.
+For servers and remote machines, install only the headless Agent and its
+`butler` command. macOS Apple Silicon (`darwin-arm64`) and Linux x64/arm64
+(glibc) are supported; Windows is planned.
+
+```bash
+curl -fsSL https://github.com/Hexpy-Games/butler/releases/latest/download/install.sh | sh
+# or, with Node.js:
+npx @hexpygames/butler install
+```
+
+The installer downloads the release archive, verifies it against
+`butler-<version>-SHA256SUMS`, installs it under
+`~/Applications/ButlerAgent` (macOS) or `~/.local/share/butler/agent` (Linux),
+puts `butler` in `~/.local/bin`, checks the installation, and starts Butler.
+Runtime data stays in `BUTLER_DATA` (default `~/.butler`) and is never touched.
+Running it again is safe. The desktop App and the CLI share this layout
+(`packages/butler-agent/rust/docs/install-layout.md`).
+
+Options go after `sh -s --`, for example
+`... | sh -s -- --version X.Y.Z --no-start`: `--version X.Y.Z` picks a release,
+`--no-start` skips starting Butler, and `--modify-path` adds `~/.local/bin` to
+your shell profile (otherwise you get a hint). It refuses to run as root
+unless `BUTLER_ALLOW_ROOT=1`. An existing file at `~/.local/bin/butler` that is
+not Butler's launcher stops the install; the old pre-native launcher is kept as
+`butler.previous`.
+
+To update, run `butler update --check`, then `butler update --apply --yes`,
+which installs the new version beside the old one and restarts a running
+Butler. `butler rollback` returns to the previous version, and the installer
+can be re-run at any time.
+
+### Manual install
+
+If you cannot run the installer, extract a release archive yourself. Each
+archive is an immutable installation package: extract each version to a new
+directory and keep runtime data separate under `BUTLER_DATA`.
 
 ```bash
 set -euo pipefail
-VERSION=0.0.21 # Replace with a release version that has the native Agent archive.
-ARCHIVE="butler-agent-${VERSION}-darwin-arm64.tar.gz"
+VERSION=X.Y.Z # A release version that publishes the native Agent archive.
+PLATFORM=darwin-arm64 # darwin-arm64, linux-x64, or linux-arm64
+ARCHIVE="butler-agent-${VERSION}-${PLATFORM}.tar.gz"
 RELEASE_URL="https://github.com/Hexpy-Games/butler/releases/download/v${VERSION}"
 DOWNLOAD_DIR="$HOME/Downloads/butler-agent-${VERSION}"
 INSTALL_ROOT="$HOME/.local/opt/butler-agent"
@@ -90,10 +121,6 @@ tar -xzf "$ARCHIVE" -C "$INSTALL_DIR"
 "$INSTALL_DIR/butler" --data "$BUTLER_DATA" version --json
 "$INSTALL_DIR/butler" --data "$BUTLER_DATA" doctor --check installation --json
 ```
-
-For an update, repeat with the new release version. It will install beside the
-previous version; select the new directory when launching Butler. Keep both
-installation folders unchanged and continue using the same `BUTLER_DATA`.
 
 ## How Butler Works
 

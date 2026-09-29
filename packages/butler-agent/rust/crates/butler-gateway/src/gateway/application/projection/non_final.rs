@@ -5,6 +5,7 @@ mod progress;
 mod runtime_progress;
 mod runtime_values;
 mod stream_message;
+pub(in crate::gateway::application::projection) use stream_message::fail_unanswered;
 mod values;
 
 use operations::*;
