@@ -27,8 +27,10 @@ const AT = { win: 6.8, bar: 12.8, side: 14.8, pan: 16.2, read: 17.6, handle: 17.
 const DRAGS: Array<[number, number]> = [[20.6, 23.6], [27, 30], [33.4, 36.2]];
 /** The wide push-in: the camera's zoom on the window's top edge. */
 const PUSH = 1.6;
-/** How long a mode handover crossfades. */
+/** How long the measures and mode tags crossfade. */
 const HANDOVER = 0.4;
+/** The window changes mode with a cut, as at a real breakpoint (a crossfade would double the reflowing text). */
+const CUT = 0.02;
 
 const looped = (keys: Key[], close: number): Key[] => {
   const { at: _at, ease: _ease, ...first } = keys[0]!;
@@ -60,9 +62,6 @@ export function layoutTracks(copy: LayoutCopy) {
     const crop = { w: canvas.w / PUSH, h: canvas.h / PUSH };
     const top = (x: number): Pose => focus(canvas, { x, y: stage.y - 36, ...crop }, PUSH);
     const left = tall ? onStage : top(win.x - 24);
-    const middle = (zoom = PUSH): Pose => focus(canvas, { x: win.x + win.w / 2 - canvas.w / zoom / 2, y: stage.y - 36, w: canvas.w / zoom, h: canvas.h / zoom }, zoom);
-    const medium = tall ? onStage : top(win.x + ((WINDOW.w - DETENTS[1].px) / 2) * z - 24);
-    const compact = tall ? onStage : middle();
     const right = tall ? onStage : top(win.x + win.w - crop.w + 24);
     // Tall: the camera stays close through the drag, on the window's moving right edge and what reflows beside it,
     // centring on the window once it is narrower than the frame.
@@ -81,17 +80,14 @@ export function layoutTracks(copy: LayoutCopy) {
         at(d2[1], follow(DETENTS[2].px), true), at(d3[0], follow(DETENTS[2].px)),
         at(d3[1], follow(DETENTS[3].px), true), at(AT.end, follow(DETENTS[3].px)),
       ]
-      // Wide: the measures on the window's top edge; then the camera rides the moving right edge (the handle, the readout, the column
-      // reflowing), pushes in on the left when the sidebar goes, and holds the narrowing window close, whole, through the last drags.
+      // Wide: the measures on the window's top edge; then the whole window stays in frame (composer and all) while it narrows:
+      // as it is at 1280 and 1023, then close, whole, through the last drags.
       : [
         ...head,
         at(AT.bar - 1.4, onStage), at(AT.bar - 0.4, left, true),
         at(AT.pan, left), at(AT.pan + 1.2, right, true),
-        at(d1[0], right), at(d1[1], top(win.x + win.w - crop.w + 24 - ((WINDOW.w - DETENTS[1].px) / 2) * z), true),
-        at(d1[1] + 0.2, top(win.x + win.w - crop.w + 24 - ((WINDOW.w - DETENTS[1].px) / 2) * z)), at(d1[1] + 1.4, medium, true),
-        at(d2[0] - 1.4, medium), at(d2[0] - 0.2, near, true),
-        at(d2[1] + 0.2, near), at(d2[1] + 1.4, compact, true),
-        at(d3[0] - 1.4, compact), at(d3[0] - 0.2, near, true),
+        at(AT.whole - 0.4, right), at(AT.whole + 0.8, onStage, true),
+        at(d2[0] - 1.4, onStage), at(d2[0] - 0.2, near, true),
         at(AT.end, near),
       ];
     /** Opacity steps: [beat, value] pairs, each eased over `beats`. */
@@ -118,9 +114,9 @@ export function layoutTracks(copy: LayoutCopy) {
       ...MODES.map((mode, k) => {
         const [into, out] = modeSpan(k);
         const pairs: Array<[number, number]> = [];
-        if (into > 0) pairs.push([into - HANDOVER / 2, 1]);
-        if (Number.isFinite(out)) pairs.push([out - HANDOVER / 2, 0]);
-        return fades(`ly-${mode}`, pairs, k === 0 ? 1 : 0, HANDOVER);
+        if (into > 0) pairs.push([into - CUT / 2, 1]);
+        if (Number.isFinite(out)) pairs.push([out - CUT / 2, 0]);
+        return fades(`ly-${mode}`, pairs, k === 0 ? 1 : 0, CUT);
       }),
       // The measures, each on the edge it belongs to; each leaves before the drag makes it untrue.
       ...measure("bar", AT.bar, AT.side - 0.4, value("--titlebar-height"), "sy"),

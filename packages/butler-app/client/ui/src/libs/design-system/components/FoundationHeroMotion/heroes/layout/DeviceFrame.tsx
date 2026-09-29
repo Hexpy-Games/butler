@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import s from "./LayoutHero.module.css";
 
@@ -23,6 +23,7 @@ function copySheet(node: HTMLStyleElement | HTMLLinkElement): Node {
  */
 export function DeviceFrame({ children, label }: { children: ReactNode; label: string }) {
   const ref = useRef<HTMLIFrameElement>(null);
+  const box = useRef<HTMLDivElement>(null);
   const [body, setBody] = useState<HTMLElement | null>(null);
   useEffect(() => {
     const frame = ref.current;
@@ -61,10 +62,27 @@ export function DeviceFrame({ children, label }: { children: ReactNode; label: s
       for (const observer of observers) observer.disconnect();
     };
   }, []);
+  // The frame's size is set in px from its box, on every layout of it (a ResizeObserver fires
+  // before paint, so a drag's every frame reflows the app). A percentage-sized frame is left to
+  // the engine, and some (iOS Safari) size a frame to its content instead: the app then lays
+  // out wider than the window and is cropped.
+  useLayoutEffect(() => {
+    const holder = box.current;
+    const frame = ref.current;
+    if (!holder || !frame) return undefined;
+    const size = () => {
+      frame.style.inlineSize = `${holder.clientWidth}px`;
+      frame.style.blockSize = `${holder.clientHeight}px`;
+    };
+    size();
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(size) : null;
+    observer?.observe(holder);
+    return () => observer?.disconnect();
+  }, []);
   return (
-    <>
-      <iframe aria-hidden="true" className={s.frame} ref={ref} srcDoc={DOC} tabIndex={-1} title={label} />
+    <div className={s.frameBox} ref={box}>
+      <iframe aria-hidden="true" className={s.frame} ref={ref} scrolling="no" srcDoc={DOC} tabIndex={-1} title={label} />
       {body ? createPortal(children, body) : null}
-    </>
+    </div>
   );
 }
