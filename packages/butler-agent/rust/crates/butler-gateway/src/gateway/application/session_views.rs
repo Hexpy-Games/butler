@@ -48,11 +48,7 @@ impl AppApplication {
         let context = self.context_details_owned(session_id.clone()).await?;
         let usage = serde_json::to_value(&context.usage).map_err(json_error)?;
         let event_cursor = self.latest_event_cursor_owned().await?;
-        let subsessions = self
-            .dependencies
-            .subsessions
-            .projection(app_session_hint(&session_id), None)
-            .await?;
+        let subsessions = self.parent_subsessions(&session_id).await;
         let latest = latest_with_progress.as_ref().map(|(turn, _)| turn);
         let active = latest.filter(|turn| active_state(&turn.state));
         let work_streams = self
@@ -169,11 +165,7 @@ impl AppApplication {
         let latest = self.latest_session_turn(session_id.clone()).await?;
         let artifacts = self.artifact_page(session_id.clone()).await?;
         let context_details = self.context_details_owned(session_id.clone()).await?.view;
-        let subsessions = self
-            .dependencies
-            .subsessions
-            .projection(app_session_hint(&session_id), None)
-            .await?;
+        let subsessions = self.parent_subsessions(&session_id).await;
         let latest = latest.as_ref();
         let work_streams = self
             .dependencies
@@ -361,6 +353,23 @@ impl AppApplication {
             json!({"state":"fresh","updated_at":updated,"source":"btcc-native"}),
         );
         Ok(Value::Object(view))
+    }
+
+    /// The session's steward and worker children; empty (with a diagnostic)
+    /// when they cannot be read, so the rest of the view still renders.
+    async fn parent_subsessions(&self, session_id: &str) -> Value {
+        let projection = self
+            .dependencies
+            .subsessions
+            .projection(app_session_hint(session_id), None)
+            .await;
+        projection.unwrap_or_else(|error| {
+            eprintln!(
+                "[gateway] session view without subsessions: {error} cause={:?}",
+                std::error::Error::source(&error).map(ToString::to_string)
+            );
+            json!({"workers": [], "steward_children": []})
+        })
     }
 
     pub(super) async fn refresh_message_projection_owned(

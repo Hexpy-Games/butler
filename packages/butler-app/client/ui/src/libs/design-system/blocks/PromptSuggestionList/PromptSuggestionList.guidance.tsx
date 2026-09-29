@@ -1,9 +1,8 @@
-import { useState } from "react";
 import type { ShowcaseGuidance } from "../../showcase";
 import { Card } from "../../components/Card";
-import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
-import { PROMPT_FLUID_PALETTES, PromptFluidBackground, PromptFluidPaletteControl, PromptSuggestionList } from "./index";
+import type { WallpaperSource } from "../Wallpaper";
+import { PromptSuggestionList } from "./index";
 
 // #region recipe: New chat suggestions
 function NewChatSuggestions() {
@@ -16,23 +15,23 @@ function NewChatSuggestions() {
 }
 // #endregion
 
-// #region recipe: Fluid background with a palette picker
-function FluidPicker() {
-  const options = Object.entries(PROMPT_FLUID_PALETTES).slice(0, 3).map(([id, colors]) => ({ id, colors, label: id }));
-  const [selected, setSelected] = useState(options[0]?.id);
+// #region recipe: New chat over a wallpaper
+// A stable source (module constant or memoized settings), never a new literal per render.
+const NEW_CHAT_WALLPAPER: WallpaperSource = { kind: "live", module: "butler.bloom", params: { colors: "aurora" } };
+
+function NewChatOverWallpaper() {
   return (
-    <Stack gap="sm">
-      <div style={{ position: "relative", height: 120, contain: "layout paint" }}>
-        <PromptFluidBackground palette={options.find((option) => option.id === selected)?.colors} />
-      </div>
-      <PromptFluidPaletteControl options={options} selectedId={selected} onSelect={setSelected} />
-    </Stack>
+    <div style={{ position: "relative", height: 240, contain: "layout paint" }}>
+      <PromptSuggestionList title="Where should we start today?" wallpaper={NEW_CHAT_WALLPAPER} suggestions={[
+        { id: "plan", title: "Plan today", description: "Order open work into steps.", text: "Plan today's work in order" },
+      ]} />
+    </div>
   );
 }
 // #endregion
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "The new-chat starter: a headline, prompt suggestions that fill the composer, and the optional fluid background.",
+  purpose: "The new-chat starter: a headline, prompt suggestions that fill the composer, and the optional wallpaper behind them.",
   whenToUse: ["An empty conversation that should offer next steps"],
   whenNotToUse: [
     { when: "Nothing to suggest", use: "EmptyLine" },
@@ -40,7 +39,7 @@ export const guidance: ShowcaseGuidance = {
   ],
   recipes: [
     { name: "New chat suggestions", description: "Each suggestion carries the prompt text that goes into the composer.", render: () => <NewChatSuggestions /> },
-    { name: "Fluid background with a palette picker", description: "PromptFluidBackground is a contained canvas; the palette control swaps its colors.", render: () => <FluidPicker /> },
+    { name: "New chat over a wallpaper", description: "Pass a WallpaperSource; the block draws it full-screen behind the prompt in the current theme.", render: () => <NewChatOverWallpaper /> },
   ],
   doDont: [
     {
@@ -49,6 +48,6 @@ export const guidance: ShowcaseGuidance = {
     },
   ],
   content: ["Titles are actions (Plan today); the prompt text is what the user would type, in their language."],
-  accessibility: ["Suggestions are buttons; the fluid background is decorative and stops under reduced motion."],
+  accessibility: ["Suggestions are buttons; the wallpaper is decorative (aria-hidden) and holds a still frame under reduced motion."],
   tokens: ["--typo-new-chat-title-size", "--typo-new-chat-title-size-md", "--radius-panel", "--motion-base"],
 };

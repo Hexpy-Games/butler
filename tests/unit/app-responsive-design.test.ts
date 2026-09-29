@@ -267,7 +267,8 @@ describe("responsive adaptive design contracts", () => {
     const sidebar = read(
       "packages/butler-app/client/ui/src/libs/design-system/blocks/SidebarShell/SidebarShell.module.css",
     );
-    expect(prompt).toContain(".fluidBackground {\n    border-radius: 0;");
+    // The wallpaper's leading corners follow --workspace-left-radius.
+    expect(prompt).toContain(".root {\n    --workspace-left-radius: 0;");
     // Phones: the shell starts at the safe area and keeps its titlebar row
     // (the brand row) instead of a product override.
     expect(sidebar).toContain("padding: var(--safe-area-top)");

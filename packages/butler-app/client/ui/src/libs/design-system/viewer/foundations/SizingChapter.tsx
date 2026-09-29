@@ -63,10 +63,10 @@ function HitTargets() {
   );
 }
 
-export function SizingChapter({ chapter, anchor, onOpen }: ChapterProps) {
+export function SizingChapter({ chapter, anchor, locale, onOpen }: ChapterProps) {
   const s = chapterSections(chapter, [["controls", "Control heights"], ["hit-targets", "Hit targets"], ["chrome", "Chrome"]]);
   return (
-    <ChapterLayout anchor={anchor} chapter={chapter} onOpen={onOpen} sections={s.list}
+    <ChapterLayout anchor={anchor} chapter={chapter} locale={locale} onOpen={onOpen} sections={s.list}
       lead="Controls share four heights so rows line up across buttons, fields and segmented controls. Hit targets grow to 44px on touch, even when the glyph does not.">
       <GuideSection spec={s.at("controls")} lead="Button sizes map one to one onto --control-height-*. The badge checks the rendered height against the token.">
         <Stack gap="md">{tokens(/^--control-height-/u).map((token) => <ControlRung key={token.name} name={token.name} />)}</Stack>

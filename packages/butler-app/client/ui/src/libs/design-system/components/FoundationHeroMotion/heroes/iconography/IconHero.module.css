@@ -1,0 +1,376 @@
+/* 06 Iconography hero. Canvas px (../shared/grid.ts). */
+
+/* ---- Title: the o is the Butler mark, on its keyline ---- */
+
+.titleWord {
+  display: inline-flex;
+  align-items: baseline;
+}
+
+/* Sized to the title face's "o" (Pretendard 620): ink 0.54em tall, from 0.0105em below the baseline
+   to the x-height overshoot, on a 0.5615em advance. The negative end margin drops the box onto that ink. */
+.titleO {
+  display: inline-block;
+  inline-size: 0.54em;
+  block-size: 0.54em;
+  margin-inline: 0.011em;
+  margin-block-end: -0.0105em;
+}
+
+.titleO svg {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: visible;
+}
+
+/* Ring weight 24/100 of 0.54em = 0.13em, the face's stem weight (its "I" is 0.132em). */
+.titleRing,
+.titleCollar {
+  fill: none;
+  stroke: currentcolor;
+  stroke-dasharray: 100;
+}
+
+.titleRing {
+  stroke-width: 24;
+}
+
+.titleCollar {
+  stroke-width: 7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.titleKey {
+  fill: none;
+  stroke: color-mix(in srgb, var(--accent) 70%, transparent);
+  stroke-width: 2.8;
+  opacity: 0;
+}
+
+/* ---- The keyline: grid, padding box, circle; notes on three sides ---- */
+
+.keyline {
+  display: grid;
+  grid-template-areas:
+    ". top ."
+    ". box right"
+    ". bottom .";
+  grid-template-columns: 1fr auto 1fr;
+  place-items: center center;
+  gap: var(--space-lg) var(--space-xl);
+}
+
+.keyNote {
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
+}
+
+.keyNote[data-side="top"] {
+  grid-area: top;
+}
+
+.keyNote[data-side="right"] {
+  grid-area: right;
+  justify-self: start;
+}
+
+.keyNote[data-side="bottom"] {
+  grid-area: bottom;
+}
+
+.keyBox {
+  position: relative;
+  grid-area: box;
+  inline-size: calc(var(--icon-size-xl) * 8);
+  block-size: calc(var(--icon-size-xl) * 8);
+}
+
+/* Phone: the box takes the portrait width; its notes above and below it, each at its own edge. */
+[data-layout="tall"] .keyline {
+  grid-template-areas:
+    "top top"
+    "box box"
+    "right bottom";
+  grid-template-columns: auto auto;
+}
+
+[data-layout="tall"] .keyNote[data-side="right"] {
+  justify-self: start;
+}
+
+[data-layout="tall"] .keyNote[data-side="bottom"] {
+  justify-self: end;
+}
+
+.keySvg,
+.keyGlyph {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: visible;
+}
+
+.keyGrid,
+.keyLine {
+  fill: none;
+  stroke-dasharray: var(--dash) var(--dash);
+}
+
+.keyGrid {
+  stroke: color-mix(in srgb, var(--accent) 30%, transparent);
+  stroke-width: 0.04;
+}
+
+.keyLine {
+  stroke: var(--accent);
+  stroke-width: 0.08;
+}
+
+.keyGlyph {
+  display: grid;
+  place-items: center;
+  color: var(--text-primary);
+}
+
+.keyGlyph svg {
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+/* Each stroke of the glyph draws along its length. */
+.keyGlyph path {
+  stroke-dasharray: 80px 80px;
+}
+
+/* Scene regions (centred in their cells). */
+.glyphStage,
+.placeStage {
+  display: grid;
+}
+
+/* ---- Grows with text: the row beside its readouts (below them on the phone) ---- */
+
+.growStage {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  column-gap: calc(var(--space-4xl) * 2);
+}
+
+[data-layout="tall"] .growStage {
+  grid-template-columns: auto;
+  justify-items: center;
+  row-gap: var(--space-3xl);
+}
+
+.growRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  block-size: calc(var(--space-4xl) * 1.5);
+}
+
+/* The centre line icon and word share; it never moves and ends short of the readouts. */
+.growLine {
+  position: absolute;
+  top: 50%;
+  right: calc(-1 * var(--space-xl));
+  left: calc(-1 * var(--space-xl));
+  block-size: 1px;
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.layers {
+  display: inline-grid;
+  place-items: center start;
+}
+
+.layer {
+  display: inline-flex;
+  grid-area: 1 / 1;
+  color: var(--text-primary);
+}
+
+.growRead {
+  display: grid;
+  justify-items: start;
+  row-gap: var(--space-xs);
+}
+
+[data-layout="tall"] .growRead {
+  justify-items: center;
+}
+
+.cuts {
+  display: inline-grid;
+  justify-items: start;
+}
+
+[data-layout="tall"] .cuts {
+  justify-items: center;
+}
+
+.cutLayer {
+  grid-area: 1 / 1;
+  white-space: nowrap;
+}
+
+.readRole {
+  color: var(--text-secondary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+}
+
+.readToken {
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
+}
+
+.bigValue {
+  color: var(--text-primary);
+  font-size: calc(var(--typo-h1-size) * 1.6);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-strong);
+  line-height: var(--line-height-none);
+}
+
+/* ---- In place: the app's sidebar, its size tag with a leader to the icon column ---- */
+
+.sideScene {
+  --side-top: var(--space-md);
+
+  position: relative;
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: start;
+}
+
+[data-layout="tall"] .sideScene {
+  grid-template-columns: auto;
+}
+
+/* The window's sidebar surface (AdaptiveShell), its corner on the radius scale. */
+.sideFrame {
+  display: flex;
+  box-sizing: border-box;
+  inline-size: var(--sidebar-width);
+  block-size: calc(var(--space-4xl) * 9.5);
+}
+
+/* Phone rows follow the touch density (taller): the frame keeps every row clear of the footer. */
+[data-layout="tall"] .sideFrame {
+  block-size: calc(var(--space-4xl) * 13.5);
+  padding-block-start: var(--side-top);
+  border-radius: var(--radius-composer);
+  background: var(--sidebar-bg);
+}
+
+/* The tag sits level with the first icon; its leader runs into the sidebar's inset, short of the icon. */
+.sideTag {
+  display: flex;
+  align-items: center;
+  margin-block-start: calc(var(--side-top) + var(--control-height-md) / 2);
+  translate: 0 -50%;
+}
+
+.sideTagText {
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
+}
+
+.sideLeader {
+  inline-size: calc(
+    var(--space-xl) + var(--sidebar-padding-inline) + var(--space-sm) -
+      var(--space-xs)
+  );
+  block-size: 1px;
+  margin-inline: var(--space-sm)
+    calc(
+      -1 * (var(--sidebar-padding-inline) + var(--space-sm) - var(--space-xs))
+    );
+  background: color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+/* Phone: the tag above the sidebar, over the icon column; its leader drops to the first icon. */
+[data-layout="tall"] .sideTag {
+  flex-direction: column;
+  align-items: start;
+  margin-block: 0 calc(-1 * (var(--side-top) - var(--space-xs)));
+  padding-inline-start: calc(var(--sidebar-padding-inline) + var(--space-sm));
+  translate: none;
+}
+
+[data-layout="tall"] .sideLeader {
+  inline-size: 1px;
+  block-size: calc(var(--space-md) + var(--side-top) - var(--space-xs));
+  margin: var(--space-xs) 0 0 calc(var(--icon-size-md) / 2);
+}
+
+.swap {
+  display: grid;
+}
+
+.swapLayer {
+  display: grid;
+  grid-area: 1 / 1;
+}
+
+.pop {
+  display: inline-grid;
+}
+
+.cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  inline-size: var(--space-lg);
+  block-size: var(--space-xl);
+  overflow: visible;
+  fill: var(--text-primary);
+  stroke: var(--color-surface-base);
+  stroke-width: 1;
+  opacity: 0;
+}
+
+/* ---- The finale and poster: the icon set filling the frame ---- */
+
+/* The grid is the poster: shown at rest (the other scenes only while the hero plays). */
+.posterCell[data-cell] {
+  opacity: 1;
+}
+
+.iconGrid {
+  display: grid;
+  box-sizing: border-box;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--rows), minmax(0, 1fr));
+  place-items: center;
+  inline-size: var(--canvas-w);
+  block-size: var(--canvas-h);
+  padding: var(--grid-margin);
+  color: var(--text-secondary);
+}
+
+.gridCell {
+  display: inline-grid;
+}
+
+/* The gear carried in from the sidebar, open there: the primary tone. */
+.gridCell[data-centre] {
+  color: var(--text-primary);
+}
+
+/* Once each stroke has a unit length (iconParts.tsx), its dash spans it exactly. */
+.iconGrid[data-drawn] [data-d] :is(path, circle, ellipse) {
+  stroke-dasharray: 100 100;
+}

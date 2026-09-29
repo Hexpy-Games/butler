@@ -1,59 +1,53 @@
-import type { SettingsView } from "@/app/types.ts";
-import {
-  DEFAULT_PROMPT_FLUID_PALETTE,
-  PROMPT_FLUID_PALETTES,
-  fluidPaletteFromHexColors,
-  type FluidPalette,
-  type FluidTone,
-  type FluidVariant,
-} from "@/butler-ds";
+import type { AppView, NavigationView, SettingsView } from "@/app/types.ts";
+import { resolveWallpaper } from "@/app/projectWallpaper.ts";
+import { legacyWallpaperSetting, parseWallpaperSetting, type LegacyMainScreenTheme } from "@/app/wallpaperSetting.ts";
+import { wallpaperSourceKey, type WallpaperSetting } from "@/butler-ds";
+import { activeProjectId } from "./composerProjectContext";
 
-const SYSTEM_BACKGROUND_PALETTES = {
-  light: [
-    [255, 255, 255],
-    [255, 255, 255],
-    [255, 255, 255],
-    [255, 255, 255],
-    [255, 255, 255],
-    [255, 255, 255],
-  ],
-  dark: [
-    [26, 27, 30],
-    [26, 27, 30],
-    [26, 27, 30],
-    [26, 27, 30],
-    [26, 27, 30],
-    [26, 27, 30],
-  ],
-} as const satisfies Record<FluidTone, FluidPalette>;
+/** Settings from an old cache or gateway may lack `wallpaper`. */
+export type MainScreenWallpaperSettings = LegacyMainScreenTheme & Partial<Pick<SettingsView, "wallpaper">>;
 
-export function mainScreenFluidEnabled(settings: SettingsView): boolean {
-  return settings.main_screen_theme !== "none";
+let last: { key: string; setting: WallpaperSetting } | null = null;
+
+/**
+ * The new-chat wallpaper: the `wallpaper` setting (source, motion, battery),
+ * or the legacy `main_screen_theme*` keys when it is missing or malformed.
+ * Equal settings return the same object, so re-renders keep one identity.
+ */
+export function mainScreenWallpaper(settings: MainScreenWallpaperSettings): WallpaperSetting {
+  const setting = parseWallpaperSetting(settings.wallpaper) ?? legacyWallpaperSetting(settings);
+  const key = `${wallpaperSourceKey(setting.source)}|${setting.motion}|${setting.pauseOnBattery}`;
+  if (last?.key !== key) last = { key, setting };
+  return last.setting;
 }
 
-export function mainScreenFluidVariant(settings: SettingsView): FluidVariant {
-  return settings.main_screen_theme === "silk" ? "silk" : "bloom";
+/**
+ * The new-chat wallpaper for the active chat: inside a project, that
+ * project's wallpaper (`resolveWallpaper`); elsewhere the global one.
+ */
+export function activeChatWallpaper(
+  settings: MainScreenWallpaperSettings,
+  navigation: NavigationView,
+  activeChatId: string,
+): WallpaperSetting {
+  const projectId = activeProjectId(navigation, activeChatId);
+  const project = projectId ? navigation.projects?.find((item) => item.id === projectId) : undefined;
+  return resolveWallpaper(mainScreenWallpaper(settings), project);
 }
 
-export function mainScreenFluidPalette(
-  settings: SettingsView,
-  tone: FluidTone = "light",
-): FluidPalette {
-  if (settings.main_screen_theme === "silk") {
-    return SYSTEM_BACKGROUND_PALETTES[tone];
-  }
-  if (settings.main_screen_theme_preset === "custom") {
-    return fluidPaletteFromHexColors(settings.main_screen_theme_custom_colors);
-  }
-  const preset = settings.main_screen_theme_preset;
-  if (
-    preset === "monochrome" ||
-    preset === "aurora" ||
-    preset === "bloom" ||
-    preset === "lavender"
-  ) {
-    return PROMPT_FLUID_PALETTES[preset];
-  }
-  if (preset === "morning") return PROMPT_FLUID_PALETTES.morning;
-  return DEFAULT_PROMPT_FLUID_PALETTE;
+/**
+ * The wallpaper of the place on screen: a project dashboard's, the active
+ * chat's (its project's, else the global one), and the global one elsewhere
+ * (settings, automations).
+ */
+export function placeWallpaper(
+  settings: MainScreenWallpaperSettings,
+  navigation: NavigationView,
+  view: AppView,
+  activeChatId: string,
+): WallpaperSetting {
+  if (view.kind === "session") return activeChatWallpaper(settings, navigation, activeChatId);
+  if (view.kind !== "project-dashboard") return mainScreenWallpaper(settings);
+  const project = navigation.projects?.find((item) => item.id === view.projectId);
+  return resolveWallpaper(mainScreenWallpaper(settings), project);
 }

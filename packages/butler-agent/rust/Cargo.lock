@@ -877,6 +877,7 @@ dependencies = [
  "sha2 0.10.9",
  "tokio",
  "uuid",
+ "zip",
 ]
 
 [[package]]
@@ -898,6 +899,7 @@ dependencies = [
  "futures-util",
  "http",
  "http-body-util",
+ "image",
  "indexmap 2.14.2",
  "notify",
  "parking_lot",
@@ -914,6 +916,7 @@ dependencies = [
  "unicode-normalization",
  "url",
  "uuid",
+ "zip",
 ]
 
 [[package]]

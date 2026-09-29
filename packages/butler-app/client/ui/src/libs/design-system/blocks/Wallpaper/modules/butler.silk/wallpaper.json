@@ -1,0 +1,17 @@
+{
+  "id": "butler.silk",
+  "name": { "en": "Silk", "ko": "Silk" },
+  "version": "1.0.0",
+  "engine": 1,
+  "motion": "animated",
+  "image": "none",
+  "params": [
+    {
+      "key": "base",
+      "label": { "en": "Base color", "ko": "바탕 색" },
+      "type": "color",
+      "default": "#ffffff",
+      "defaultDark": "#1a1b1e"
+    }
+  ]
+}

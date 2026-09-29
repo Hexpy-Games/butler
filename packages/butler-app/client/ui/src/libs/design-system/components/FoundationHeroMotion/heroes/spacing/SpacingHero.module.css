@@ -1,0 +1,513 @@
+/* 03 Spacing hero (v4 scenes). Canvas px (../shared/grid.ts). A space is
+   drawn as its blue highlight, with one column of 4px units (--space-xs)
+   beside it, exactly as tall as the space. */
+
+.letters,
+.stairStage,
+.countStage,
+.rhythmStage,
+.densityStage,
+.stairsTile,
+.sectionTile,
+.inlineTile {
+  --block-fill: color-mix(in srgb, var(--accent) 60%, transparent);
+  --gap-fill: color-mix(in srgb, var(--accent) 16%, transparent);
+  --unit-fill: var(--accent);
+  --label-room: calc(var(--space-4xl) * 2.5 + var(--space-md));
+}
+
+/* ---- Title: letters drift apart, a block in each gap ---- */
+
+/* Room for the drift (six gaps of --space-md), so the fitted title never clips. */
+.letters {
+  display: inline-flex;
+  padding-inline-end: calc(var(--space-md) * 6);
+}
+
+.letter {
+  position: relative;
+  display: inline-block;
+}
+
+.letterBlock {
+  position: absolute;
+  bottom: 0.16em;
+  left: 100%;
+  inline-size: var(--space-md);
+  block-size: var(--space-md);
+  border-radius: var(--radius-xs, 2px);
+  background: var(--block-fill);
+  opacity: 0;
+}
+
+/* ---- The unit and the staircase ---- */
+
+.stairStage {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: end;
+  column-gap: calc(var(--space-4xl) * 2);
+}
+
+[data-layout="tall"] .stairStage {
+  grid-template-columns: auto;
+  justify-items: start;
+  row-gap: var(--space-3xl);
+}
+
+.stairs {
+  --b: calc(var(--space-xs) * 6);
+
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2xl);
+}
+
+[data-layout="tall"] .stairs {
+  --b: calc(var(--space-xs) * 5);
+
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-sm);
+}
+
+.step {
+  display: grid;
+  justify-items: center;
+  row-gap: var(--space-sm);
+}
+
+[data-layout="tall"] .step {
+  grid-template-columns: calc(var(--space-4xl) + var(--space-xl)) auto;
+  place-items: center start;
+  column-gap: var(--space-md);
+}
+
+.stepTrack {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+}
+
+/* One block wide, `--n` blocks tall (a row on the tall canvas); each block a square with a hairline gap. */
+.column {
+  inline-size: var(--b);
+  block-size: calc(var(--b) * var(--n));
+  background: conic-gradient(
+      from 90deg at 2px 2px,
+      var(--block-fill) 90deg,
+      transparent 0
+    )
+    0 0 / var(--b) var(--b);
+  transform-origin: 50% 100%;
+}
+
+[data-layout="tall"] .column {
+  inline-size: calc(var(--b) * var(--n));
+  block-size: var(--b);
+  transform-origin: 0 50%;
+}
+
+.stepName {
+  display: grid;
+  justify-items: center;
+  color: var(--text-secondary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  line-height: var(--line-height-snug);
+}
+
+[data-layout="tall"] .stepName {
+  order: -1;
+  grid-auto-flow: column;
+  column-gap: var(--space-xs);
+}
+
+.stepPx {
+  color: var(--text-tertiary);
+}
+
+/* The unit: exactly the xs slot's block (its square, inside the hairline); drawn large by the timeline. */
+.unit {
+  position: absolute;
+  bottom: 0;
+  left: 2px;
+  inline-size: calc(var(--b) - 2px);
+  block-size: calc(var(--b) - 2px);
+  background: var(--block-fill);
+}
+
+/* Its name, under the unit drawn large (7 blocks wide, 8 tall; lifted by LIFT in spacingTracks.ts). */
+.unitLabel {
+  --big: calc((var(--space-xs) * 6 - 2px) * 7);
+
+  position: absolute;
+  top: calc(
+    50% - var(--space-2xl) - var(--space-xs) + var(--big) / 2 + var(--space-xl)
+  );
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  row-gap: var(--space-xs);
+  transform: translateX(-50%);
+}
+
+[data-layout="tall"] .unitLabel {
+  --big: calc((var(--space-xs) * 5 - 2px) * 8);
+}
+
+.unitName {
+  color: var(--text-primary);
+  font-size: var(--typo-h3-size);
+  font-weight: var(--font-weight-strong);
+  white-space: nowrap;
+}
+
+/* ---- Readouts ---- */
+
+.readout {
+  display: grid;
+  justify-items: end;
+  row-gap: var(--space-xs);
+  color: var(--text-primary);
+}
+
+[data-layout="tall"] .readout {
+  justify-items: start;
+}
+
+.readLine {
+  display: inline-flex;
+  align-items: baseline;
+  column-gap: var(--space-xs);
+}
+
+.bigValue {
+  font-size: calc(var(--typo-h1-size) * 1.8);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-strong);
+  line-height: var(--line-height-none);
+}
+
+.midValue {
+  font-size: var(--typo-h3-size);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-strong);
+}
+
+.readToken {
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
+}
+
+.readUnit {
+  color: var(--text-tertiary);
+  font-size: var(--typo-h4-size);
+}
+
+/* A token name that cuts from value to value, left aligned; the poster rests on the last. */
+.cut {
+  display: inline-grid;
+}
+
+.cut > * {
+  grid-area: 1 / 1;
+  opacity: 0;
+}
+
+.cut > [data-last] {
+  opacity: 1;
+}
+
+/* ---- A settings section with its spaces measured ---- */
+
+.section {
+  inline-size: calc(var(--space-4xl) * 11);
+}
+
+[data-layout="tall"] .section,
+[data-layout="tall"] .countStage .section,
+[data-layout="tall"] .page {
+  inline-size: calc(
+    var(--canvas-w) - var(--grid-margin) * 2 - var(--label-room)
+  );
+}
+
+/* The inset is pinned per copy (the page's own breakpoints never change what a copy shows). */
+.section[data-density="comfortable"],
+.page {
+  --settings-section-padding: var(--space-2xl);
+}
+
+.section[data-density="compact"] {
+  --settings-section-padding: var(--space-lg);
+}
+
+.field {
+  position: relative;
+}
+
+/* A space: anchored to what it sits against and sized by its token, as wide as the card. */
+.gap {
+  position: absolute;
+  right: calc(-1 * var(--settings-section-padding));
+  left: calc(-1 * var(--settings-section-padding));
+  pointer-events: none;
+}
+
+.gap[data-gap="hg"] {
+  bottom: calc(100% + var(--settings-section-padding));
+  block-size: var(--settings-section-header-gap);
+}
+
+.gap[data-gap="pt"] {
+  bottom: 100%;
+  block-size: var(--settings-section-padding);
+}
+
+.gap[data-gap="fg"] {
+  bottom: 100%;
+  block-size: var(--settings-field-gap);
+}
+
+.gap[data-gap="pb"] {
+  top: 100%;
+  block-size: var(--settings-section-padding);
+}
+
+.gap[data-gap="sg"] {
+  right: 0;
+  bottom: 100%;
+  left: 0;
+  block-size: var(--settings-section-gap);
+}
+
+.fill {
+  position: absolute;
+  inset: 0;
+  background: var(--gap-fill);
+}
+
+/* The insets meet the card's rounded inner corners (inside its hairline). */
+.gap[data-gap="pt"] > .fill {
+  border-start-start-radius: calc(var(--radius-panel) - var(--border-hairline));
+  border-start-end-radius: calc(var(--radius-panel) - var(--border-hairline));
+}
+
+.gap[data-gap="pb"] > .fill {
+  border-end-start-radius: calc(var(--radius-panel) - var(--border-hairline));
+  border-end-end-radius: calc(var(--radius-panel) - var(--border-hairline));
+}
+
+/* Right of the card: the column of units, then the label. */
+.col {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(100% + var(--space-xl));
+  display: flex;
+  align-items: center;
+  column-gap: var(--space-sm);
+}
+
+/* One unit per 4px, bottom first; each a square with a hairline under it. */
+.units {
+  display: flex;
+  flex: none;
+  flex-direction: column-reverse;
+  align-self: stretch;
+}
+
+.u {
+  flex: none;
+  inline-size: calc(var(--space-xs) - 1px);
+  block-size: var(--space-xs);
+  background: linear-gradient(var(--unit-fill) 0 0) 0 0 / 100% calc(100% - 1px)
+    no-repeat;
+}
+
+.units[data-row] {
+  flex-direction: row;
+}
+
+.units[data-row] .u {
+  inline-size: var(--space-xs);
+  block-size: calc(var(--space-xs) - 1px);
+  background-size: calc(100% - 1px) 100%;
+}
+
+.gapLabel {
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  line-height: var(--line-height-snug);
+  white-space: nowrap;
+}
+
+.sum {
+  color: var(--text-primary);
+}
+
+.note {
+  color: var(--accent);
+}
+
+[data-layout="tall"] .note {
+  display: none;
+}
+
+/* ---- Scenes ---- */
+
+/* Room on the right for the columns and labels, so the camera frames them. */
+.countStage {
+  padding-inline-end: calc(var(--space-4xl) * 7.5);
+}
+
+.countStage .section {
+  inline-size: calc(var(--space-4xl) * 9);
+}
+
+.rhythmStage {
+  padding-inline-end: calc(var(--space-4xl) * 5 + var(--space-2xl));
+}
+
+[data-layout="tall"] .countStage,
+[data-layout="tall"] .rhythmStage,
+[data-layout="tall"] .densityStage {
+  padding-inline-end: var(--label-room);
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--settings-section-gap);
+  inline-size: calc(var(--space-4xl) * 11);
+}
+
+.pageSection {
+  position: relative;
+}
+
+.densityStage {
+  display: grid;
+  grid-template-columns: auto auto;
+  column-gap: var(--label-room);
+  padding-inline-end: var(--label-room);
+}
+
+[data-layout="tall"] .densityStage {
+  grid-template-columns: auto;
+  row-gap: var(--space-2xl);
+}
+
+.densityStage .section {
+  inline-size: calc(var(--space-4xl) * 10);
+}
+
+[data-layout="tall"] .densityStage .section {
+  inline-size: calc(
+    var(--canvas-w) - var(--grid-margin) * 2 - var(--label-room)
+  );
+}
+
+.densityCol {
+  display: grid;
+  row-gap: var(--space-lg);
+}
+
+.densityHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  column-gap: var(--space-md);
+  color: var(--text-primary);
+  font-size: var(--typo-h4-size);
+  font-weight: var(--font-weight-strong);
+}
+
+/* ---- Inline gap and card inset ---- */
+
+.after {
+  position: relative;
+  display: inline-flex;
+}
+
+/* The gap before the second button, its two units under it. */
+.inlineGap {
+  position: absolute;
+  top: 0;
+  right: 100%;
+  bottom: 0;
+  inline-size: var(--space-sm);
+}
+
+.inlineGap .units {
+  position: absolute;
+  top: calc(100% + var(--space-sm));
+  left: 0;
+}
+
+.insetCard {
+  position: relative;
+  display: inline-grid;
+}
+
+.inset {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  padding: var(--space-md);
+  border-radius: var(--radius-control);
+  background: var(--gap-fill);
+  pointer-events: none;
+  mask:
+    linear-gradient(var(--accent) 0 0) content-box exclude,
+    linear-gradient(var(--accent) 0 0);
+}
+
+/* The top inset's units, right of the card. */
+.insetUnits {
+  position: absolute;
+  top: 0;
+  left: calc(100% + var(--space-sm));
+  display: flex;
+  block-size: var(--space-md);
+}
+
+/* ---- Finale tiles ---- */
+
+.stairsTile .stairs {
+  --b: calc(var(--space-xs) * 5);
+
+  gap: var(--space-sm);
+}
+
+[data-layout="tall"] .stairsTile .stairs {
+  --b: calc(var(--space-xs) * 4);
+}
+
+.stairsTile,
+.inlineTile {
+  display: grid;
+  justify-items: center;
+  row-gap: var(--space-xl);
+}
+
+/* Room on the right for the section's columns of units. */
+.sectionTile {
+  box-sizing: border-box;
+  inline-size: 100%;
+  padding-inline-end: calc(var(--space-xl) + var(--space-xs));
+}
+
+.sectionTile .section {
+  inline-size: 100%;
+}
+
+.caption {
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
+}

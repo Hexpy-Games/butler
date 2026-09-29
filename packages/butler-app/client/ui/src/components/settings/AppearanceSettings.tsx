@@ -1,6 +1,7 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
+import { useAppearanceOverrideStore } from "@/stores/appearanceStore.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import {
   SettingsPage,
@@ -16,6 +17,8 @@ export function AppearanceSettings() {
   const draft = useSettingsUIStore((state) => state.draft);
   const update = useSettingsUIStore((state) => state.update);
   const setSettings = useButlerStore((state) => state.setSettings);
+  // A real-time wallpaper sets light/dark itself while it is on.
+  const wallpaperSetsTheme = useAppearanceOverrideStore((state) => state.sceneTone !== null);
 
   const settingsCopy = appCopy.settings;
   const fields = settingsCopy.fields;
@@ -31,6 +34,7 @@ export function AppearanceSettings() {
           settingId="theme"
           label={fields.theme}
           value={draft.appearance_theme}
+          disabledReason={wallpaperSetsTheme ? settingsCopy.descriptions.themeFollowsWallpaper : undefined}
           onChange={(value) =>
             update({ appearance_theme: value as SettingsData["appearance_theme"] }, setSettings)}
           options={[

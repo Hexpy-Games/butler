@@ -22,7 +22,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Several heroes in one view compete; show the still poster instead.", render: () => <FoundationHeroMotion variant="spacing" still /> },
     },
   ],
-  content: ["No text inside the graphic except the type specimen (Aa가); the chapter title and lead carry the meaning."],
+  content: ["No text inside the graphic except the Typography hero's specimen and sample copy (localized through `lang`); the chapter title and lead carry the meaning."],
   accessibility: [
     "Decorative: aria-hidden, no focus stop.",
     "Reduced motion (OS setting or the DS data-motion=\"reduced\" scope) shows a still poster with no animation.",

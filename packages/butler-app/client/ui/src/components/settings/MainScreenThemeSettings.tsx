@@ -1,108 +1,84 @@
-import { useAppLocale } from "@/app/copy.ts";
-import { appCopy } from "@/app/copy.ts";
+import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { SettingsView as SettingsData } from "@/app/types.ts";
-import { ColorSwatchInput, SettingsField, Stack } from "@/butler-ds";
-import { PROMPT_FLUID_PALETTES, fluidPaletteToHexColors } from "@/butler-ds";
+import { uploadedWallpaperSource } from "@/app/wallpaperAssets.ts";
+import { SettingsField, WallpaperPicker } from "@/butler-ds";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
-import { SettingsSelect } from "./SettingsFormComponents";
+import { useWallpaperAssets } from "./hooks/useWallpaperAssets";
+import { useWallpaperModules } from "./hooks/useWallpaperModules";
+import { useWallpaperSourceSave } from "./hooks/useWallpaperSourceSave";
+import { SettingsSwitch } from "./SettingsFormComponents";
+import { wallpaperPickerLabels } from "./wallpaperPickerLabels";
 
-const DEFAULT_CUSTOM_COLORS = fluidPaletteToHexColors(
-  PROMPT_FLUID_PALETTES.monochrome,
-) as SettingsData["main_screen_theme_custom_colors"];
+type Wallpaper = SettingsData["wallpaper"];
 
-function customColorsFrom(
-  draft: SettingsData,
-): SettingsData["main_screen_theme_custom_colors"] {
-  return draft.main_screen_theme_custom_colors ?? DEFAULT_CUSTOM_COLORS;
-}
-
+/** Settings > Appearance > Home screen: the wallpaper picker, then motion and battery. */
 export function MainScreenThemeSettings() {
-  useAppLocale();
+  const locale = useAppLocale();
   const draft = useSettingsUIStore((state) => state.draft);
   const update = useSettingsUIStore((state) => state.update);
   const setSettings = useButlerStore((state) => state.setSettings);
+  const saveSource = useWallpaperSourceSave();
+  const images = useWallpaperAssets();
+  const modules = useWallpaperModules();
   const copy = appCopy.settings;
 
   if (!draft) return null;
 
-  const colors = customColorsFrom(draft);
-  const updateColor = (index: number, value: string) => {
-    const next = [...colors] as SettingsData["main_screen_theme_custom_colors"];
-    next[index] = value.toLocaleLowerCase("en-US");
-    void update({ main_screen_theme_custom_colors: next }, setSettings);
+  const { source, motion, pauseOnBattery } = draft.wallpaper;
+  const save = (wallpaper: Partial<Wallpaper>) => void update({ wallpaper }, setSettings);
+  const upload = async (file: File) => {
+    const asset = await images.upload(file);
+    if (asset) saveSource(uploadedWallpaperSource(asset));
+  };
+  const importModule = async (file: File) => {
+    const installed = await modules.importModule(file);
+    if (installed) saveSource({ kind: "live", module: installed.id });
   };
 
   return (
     <>
-      <SettingsSelect
-        settingId="main-screen-theme"
-        label={copy.fields.mainScreenTheme}
-        description={copy.descriptions.mainScreenTheme}
-        triggerTestClass="settings-main-screen-theme-select"
-        value={draft.main_screen_theme}
-        onChange={(value) =>
-          update(
-            { main_screen_theme: value as SettingsData["main_screen_theme"] },
-            setSettings,
-          )
-        }
-        options={[
-          { value: "none", label: copy.options.mainScreenThemeNone },
-          { value: "bloom", label: copy.options.mainScreenThemeBloom },
-          { value: "silk", label: copy.options.mainScreenThemeSilk },
-        ]}
-      />
-      {draft.main_screen_theme === "bloom" ? (
-        <>
-          <SettingsSelect
-            settingId="main-screen-preset"
-            label={copy.fields.mainScreenThemePreset}
-            description={copy.descriptions.mainScreenThemePreset}
-            triggerTestClass="settings-main-screen-theme-preset-select"
-            value={draft.main_screen_theme_preset}
-            onChange={(value) =>
-              update(
-                {
-                  main_screen_theme_preset:
-                    value as SettingsData["main_screen_theme_preset"],
-                },
-                setSettings,
-              )
-            }
-            options={[
-              { value: "monochrome", label: copy.options.paletteMonochrome },
-              { value: "aurora", label: copy.options.paletteAurora },
-              { value: "bloom", label: copy.options.paletteBloom },
-              { value: "lavender", label: copy.options.paletteLavender },
-              { value: "morning", label: copy.options.paletteMorning },
-              { value: "custom", label: copy.options.paletteCustom },
-            ]}
+      <SettingsField
+        settingId="main-screen-wallpaper"
+        data-test-class="settings-field settings-main-screen-wallpaper"
+        label={copy.fields.wallpaper}
+        description={copy.descriptions.wallpaper}
+        control={
+          <WallpaperPicker
+            dataTestClass="settings-main-screen-wallpaper-picker"
+            images={images.assets}
+            importingModule={modules.importing}
+            labels={wallpaperPickerLabels()}
+            locale={locale}
+            uploading={images.uploading}
+            value={source}
+            onChange={(next) => {
+              if (next !== "inherit") saveSource(next);
+            }}
+            onDeleteImage={(id) => void images.remove(id)}
+            onDeleteModule={(id) => void modules.deleteModule(id)}
+            onImportModule={(file) => void importModule(file)}
+            onUpload={(file) => void upload(file)}
           />
-          {draft.main_screen_theme_preset === "custom" ? (
-            <SettingsField
-              settingId="main-screen-colors"
-              data-test-class="settings-field settings-main-screen-theme-colors"
-              label={copy.fields.mainScreenThemeColors}
-              description={copy.descriptions.mainScreenThemeColors}
-              control={
-                <Stack align="row" gap="sm" wrap>
-                  {colors.map((color, index) => (
-                    <ColorSwatchInput
-                      key={index}
-                      aria-label={copy.fields.mainScreenThemeColor(index + 1)}
-                      dataTestClass="settings-main-screen-theme-color"
-                      value={color}
-                      onChange={(event) =>
-                        updateColor(index, event.currentTarget.value)
-                      }
-                    />
-                  ))}
-                </Stack>
-              }
-            />
-          ) : null}
-        </>
+        }
+      />
+      {source.kind === "none" ? null : (
+        <SettingsSwitch
+          settingId="main-screen-motion"
+          label={copy.fields.wallpaperMotion}
+          description={copy.descriptions.wallpaperMotion}
+          checked={motion === "auto"}
+          onChange={(on) => save({ motion: on ? "auto" : "paused" })}
+        />
+      )}
+      {source.kind !== "none" && motion === "auto" ? (
+        <SettingsSwitch
+          settingId="main-screen-battery"
+          label={copy.fields.wallpaperPauseOnBattery}
+          description={copy.descriptions.wallpaperPauseOnBattery}
+          checked={pauseOnBattery}
+          onChange={(on) => save({ pauseOnBattery: on })}
+        />
       ) : null}
     </>
   );

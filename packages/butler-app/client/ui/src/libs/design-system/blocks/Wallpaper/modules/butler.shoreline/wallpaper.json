@@ -1,0 +1,104 @@
+{
+  "id": "butler.shoreline",
+  "name": {
+    "en": "Shoreline",
+    "ko": "해안선"
+  },
+  "version": "0.3.0",
+  "engine": 1,
+  "motion": "animated",
+  "image": "none",
+  "timePeriod": 240,
+  "params": [
+    {
+      "key": "water",
+      "type": "enum",
+      "label": {
+        "en": "Water",
+        "ko": "바다 빛깔"
+      },
+      "default": "tropical",
+      "options": [
+        {
+          "value": "tropical",
+          "label": {
+            "en": "Tropical",
+            "ko": "열대"
+          }
+        },
+        {
+          "value": "temperate",
+          "label": {
+            "en": "Temperate",
+            "ko": "온대"
+          }
+        },
+        {
+          "value": "nordic",
+          "label": {
+            "en": "Nordic",
+            "ko": "북해"
+          }
+        }
+      ]
+    },
+    {
+      "key": "waveFrequency",
+      "type": "number",
+      "label": {
+        "en": "Wave frequency",
+        "ko": "파도 빈도"
+      },
+      "default": 1,
+      "min": 0.6,
+      "max": 1.5,
+      "step": 0.05
+    },
+    {
+      "key": "shorePosition",
+      "type": "number",
+      "label": {
+        "en": "Shoreline height",
+        "ko": "해안선 높이"
+      },
+      "default": 0.5,
+      "min": 0,
+      "max": 1,
+      "step": 0.01
+    },
+    {
+      "key": "foamAmount",
+      "type": "number",
+      "label": {
+        "en": "Foam",
+        "ko": "물거품"
+      },
+      "default": 0.6,
+      "min": 0,
+      "max": 1,
+      "step": 0.01
+    },
+    {
+      "key": "realtime",
+      "type": "boolean",
+      "label": {
+        "en": "Real time",
+        "ko": "실시간"
+      },
+      "default": false
+    }
+  ],
+  "sceneTone": {
+    "param": "realtime",
+    "darkPhases": [
+      [
+        0.0,
+        0.2436
+      ],
+      [
+        0.7564,
+        1.0
+      ]
+    ]
+  }
+}

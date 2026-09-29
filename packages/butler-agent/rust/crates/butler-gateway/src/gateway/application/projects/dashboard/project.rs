@@ -92,6 +92,7 @@ pub(super) fn project_summary(
         error_summary: project.error_summary.clone(),
         workspace_label: project.workspace_label.clone(),
         safe_path_label: project.safe_path_label.clone(),
+        wallpaper: super::super::rows::wallpaper(project.preferences_json.as_deref()),
         sessions: Some(sessions),
         git: None,
     }

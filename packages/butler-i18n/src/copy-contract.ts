@@ -214,6 +214,8 @@ export interface AppCopy {
     abandoned: string; unknown: string; registered: string; noWork: string; unbound: string;
     unavailable: string; noRemaining: string; tasks: string; recorded: string; loadMore: string;
     description: string; editDescription: string; pin: string; unpin: string;
+    /** Header menu item and dialog title for the project's wallpaper. */
+    wallpaper: string;
     created: string; updated: string; recordedCompletion: string; noHistory: string;
   };
   projectStatistics: {
@@ -1012,6 +1014,52 @@ export interface AppCopy {
       addLimitReached: string;
       maxSimultaneousWorkers: string;
     };
+    /** Wallpaper picker copy and its brief toasts. */
+    wallpaper: {
+      options: string;
+      none: string;
+      image: (index: number) => string;
+      addImage: string;
+      deleteImage: string;
+      fit: string;
+      fill: string;
+      fitWhole: string;
+      dim: string;
+      blur: string;
+      filter: string;
+      noFilter: string;
+      unsupportedType: string;
+      tooLarge: string;
+      unreadable: string;
+      inUse: string;
+      uploadFailed: string;
+      deleteFailed: string;
+      /** The project picker's first tile: follow the global wallpaper. */
+      inherit: string;
+      saveFailed: string;
+      /** Toast after the agent changes a wallpaper; `undo` restores the previous one. */
+      changed: string;
+      undo: string;
+      undoFailed: string;
+      /** Picker marker on the user's own wallpaper modules. */
+      mine: string;
+      /** Toast when a shown user module stops working and the default wallpaper shows instead. */
+      moduleFailed: (name: string) => string;
+      /** The import-module tile's caption and accessible name. */
+      importModule: string;
+      /** Accessible name of a user module's delete button. */
+      deleteModule: string;
+      /** Fallback toast when the gateway's own import error has no message. */
+      moduleImportFailed: string;
+      moduleTooLarge: string;
+      /** Toast deleting a module a setting or project still draws with (409 `wallpaper_module_in_use`). */
+      moduleInUse: string;
+      moduleDeleteFailed: string;
+      /** Toast importing a module whose id is installed (409 `wallpaper_module_exists`); offers `replaceModule`. */
+      moduleExists: string;
+      /** That toast's action: import again, replacing the installed module. */
+      replaceModule: string;
+    };
     fields: {
       language: string;
       timezone: string;
@@ -1040,10 +1088,9 @@ export interface AppCopy {
       model: string;
       reasoning: string;
       theme: string;
-      mainScreenTheme: string;
-      mainScreenThemePreset: string;
-      mainScreenThemeColors: string;
-      mainScreenThemeColor: (index: number) => string;
+      wallpaper: string;
+      wallpaperMotion: string;
+      wallpaperPauseOnBattery: string;
       translucentSidebar: string;
       desktopNotifications: string;
       desktopNotificationAssistantMessages: string;
@@ -1090,15 +1137,6 @@ export interface AppCopy {
       system: string;
       light: string;
       dark: string;
-      mainScreenThemeNone: string;
-      mainScreenThemeBloom: string;
-      mainScreenThemeSilk: string;
-      paletteMonochrome: string;
-      paletteAurora: string;
-      paletteBloom: string;
-      paletteLavender: string;
-      paletteMorning: string;
-      paletteCustom: string;
       local: string;
       external: string;
       customPersona: string;
@@ -1137,9 +1175,11 @@ export interface AppCopy {
       consolidationModel: string;
       consolidationModelDefault: string;
       localReasoningBudget: string;
-      mainScreenTheme: string;
-      mainScreenThemePreset: string;
-      mainScreenThemeColors: string;
+      wallpaper: string;
+      wallpaperMotion: string;
+      wallpaperPauseOnBattery: string;
+      /** Tooltip on the theme control while a real-time wallpaper sets light/dark. */
+      themeFollowsWallpaper: string;
       contextLimit: (maxLabel: string) => string;
       contextLimitClamped: (value: string) => string;
       responseLanguage: string;
