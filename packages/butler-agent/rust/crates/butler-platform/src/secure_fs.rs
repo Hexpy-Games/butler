@@ -51,6 +51,15 @@ impl FileMode {
     /// (0644). Test fixtures only.
     #[cfg(feature = "test-support")]
     pub const ORDINARY: Self = Self(0o644);
+    /// Read-only for everyone (0444), as an unpacked release archive leaves
+    /// its files. Test fixtures only.
+    #[cfg(feature = "test-support")]
+    pub const READ_ONLY: Self = Self(0o444);
+    /// A directory that can be searched and listed but not changed (0555),
+    /// as an unpacked release archive leaves its directories. Test fixtures
+    /// only.
+    #[cfg(feature = "test-support")]
+    pub const READ_ONLY_DIRECTORY: Self = Self(0o555);
     /// An executable file: an ordinary file everyone may run (0755). Test
     /// fixtures only.
     #[cfg(feature = "test-support")]
@@ -114,6 +123,22 @@ pub fn file_mode(metadata: &Metadata) -> Option<FileMode> {
 /// [`PERMISSION_MODES`].
 pub fn set_file_mode(path: &Path, mode: FileMode) -> Option<io::Result<()>> {
     sys::set_file_mode(path, mode)
+}
+
+/// Removes the directory tree at `path`, symbolic links included as links
+/// (never followed), after giving the owner write access to every directory
+/// and file under it: archives unpack read-only, and a read-only directory
+/// cannot have its entries removed. A missing `path` is not an error.
+pub fn remove_tree(path: &Path) -> io::Result<()> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_dir() => {
+            sys::make_tree_writable(path)?;
+            fs::remove_dir_all(path)
+        }
+        Ok(_) => fs::remove_file(path),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
 }
 
 /// Restricts an existing file to its owner; `None` without [`OWNER_ONLY`].
