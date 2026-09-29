@@ -250,10 +250,17 @@ fn current_claim() -> Result<MutationClaim, ProjectWorkPublicationError> {
     })
 }
 
-/// Whether the claim's process may still be running: a process this user can
-/// signal, or one on a host that cannot tell.
+/// Whether the claim's process may still be running, including a process this
+/// user cannot signal or a host that cannot tell.
 fn process_alive(pid: u32) -> bool {
-    matches!(liveness(pid), Liveness::Running | Liveness::Unknown)
+    process_may_be_alive(liveness(pid))
+}
+
+pub(in crate::project_ledger) fn process_may_be_alive(state: Liveness) -> bool {
+    matches!(
+        state,
+        Liveness::Running | Liveness::OtherOwner | Liveness::Unknown
+    )
 }
 
 fn now_iso() -> Result<String, ProjectWorkPublicationError> {
