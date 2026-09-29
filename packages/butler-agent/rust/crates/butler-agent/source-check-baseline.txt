@@ -92,10 +92,10 @@ src/host/memory_jobs/rebuild/options.rs	parse	180
 src/host/memory_jobs/recall_metrics.rs	<RecallMetrics as RecallMetricSink>::record	118
 src/host/memory_jobs/transcript_sync.rs	LegacySessionSync::run	194
 src/host/memory_jobs/transcript_sync/hot.rs	LegacyHot::save	125
-src/host/memory_jobs/transcript_sync/hot.rs	commit	99
-src/host/runtime.rs	AgentRuntime::open	431
-src/host/runtime/environment.rs	ProcessEnvironment::capture	86
-src/host/service/entrypoint.rs	serve	160
+src/host/memory_jobs/transcript_sync/hot.rs	commit	91
+src/host/runtime.rs	AgentRuntime::open	423
+src/host/runtime/environment.rs	ProcessEnvironment::capture	82
+src/host/service/entrypoint.rs	serve	159
 src/host/service/ingress.rs	IngressDispatcher::poll	86
 src/host/service/ingress/bind.rs	bind_and_request	136
 src/host/service/ingress/bind.rs	control_request	81
