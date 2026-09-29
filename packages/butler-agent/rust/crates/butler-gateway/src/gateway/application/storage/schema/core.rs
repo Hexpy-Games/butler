@@ -288,6 +288,9 @@ const CORE_SCHEMA: &str = r"
     CREATE INDEX IF NOT EXISTS turns_chat_state_idx
     ON turns(chat_id, state);
 
+    CREATE INDEX IF NOT EXISTS turns_user_message_idx
+    ON turns(user_message_id);
+
     CREATE INDEX IF NOT EXISTS app_turn_cancel_outbox_pending_idx
     ON app_turn_cancel_outbox(state, turn_id);
 

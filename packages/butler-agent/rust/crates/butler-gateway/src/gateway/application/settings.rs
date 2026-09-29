@@ -120,13 +120,18 @@ pub(super) fn resolve_for_message_send(
         ControlSource::GlobalDefault
     };
     let fallback = normalized_fallback(facts, &settings.model);
-    let persisted = json!({
+    let mut persisted = json!({
         "controls": controls_json(&controls),
         "model_fallback": {"enabled":fallback.enabled,"models":fallback.models},
         "source": source,
         "sessionControlRevision": revision,
         "catalogGeneration": facts.catalog_generation,
     });
+    // A queued or replayed delegated result must keep its marker (the only
+    // thing that hides it from the chat) when the turn is rebuilt from here.
+    if let Some(result) = &request.subsession_result {
+        persisted["subsession_result"] = json!(result);
+    }
     Ok(ResolvedControls {
         resolution: ControlResolution {
             model: controls.model,

@@ -16,6 +16,7 @@ mod internal_continuation;
 mod mcp_servers;
 mod message_files;
 mod message_projection;
+mod message_visibility;
 mod model_catalog;
 mod monitoring;
 mod new_chat_briefing;

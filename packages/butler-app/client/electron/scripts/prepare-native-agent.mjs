@@ -22,8 +22,26 @@ import { fileURLToPath } from "node:url";
 const requestedPlatform = process.argv[2] ?? process.platform;
 const requestedArch = process.argv[3] ?? process.arch;
 const explicitPayloadRoot = process.argv[4] ? resolve(process.argv[4]) : null;
-if (requestedPlatform !== "darwin" || requestedArch !== "arm64") {
-  throw new Error(`Native Butler Agent static packaging currently supports only darwin/arm64; requested ${requestedPlatform}/${requestedArch}.`);
+// Each supported payload maps to the static ONNX Runtime recipe target that
+// builds it (prepare-static-ort.py). Builds are native only.
+const ORT_TARGETS = {
+  "darwin/arm64": "macos-arm64",
+  "linux/x64": "linux-x64",
+  "linux/arm64": "linux-arm64",
+};
+// The glibc-family libraries every supported distribution ships. Anything
+// else (an ORT shared library above all) would be missing from the package.
+const LINUX_SYSTEM_LIBRARIES = new Set([
+  "libc.so.6", "libm.so.6", "libdl.so.2", "libpthread.so.0", "librt.so.1",
+  "libgcc_s.so.1", "libstdc++.so.6", "ld-linux-x86-64.so.2", "ld-linux-aarch64.so.1",
+]);
+const LINUX_ELF_MACHINES = { x64: "Advanced Micro Devices X86-64", arm64: "AArch64" };
+
+const ortTarget = ORT_TARGETS[`${requestedPlatform}/${requestedArch}`];
+if (!ortTarget) {
+  throw new Error(
+    `Native Butler Agent static packaging supports ${Object.keys(ORT_TARGETS).join(", ")}; requested ${requestedPlatform}/${requestedArch}.`,
+  );
 }
 if (requestedPlatform !== process.platform || requestedArch !== process.arch) {
   throw new Error(
@@ -41,6 +59,7 @@ const payloadRoot = explicitPayloadRoot ??
 const prebuiltBinary = resolvePrebuiltBinary(process.env.BUTLER_NATIVE_AGENT_EXECUTABLE, payloadRoot);
 const sourceBinary = prebuiltBinary ?? buildNativeAgent();
 if (requestedPlatform === "darwin") verifyMacDependencyClosure(sourceBinary);
+if (requestedPlatform === "linux") verifyLinuxDependencyClosure(sourceBinary, requestedArch);
 const sourceSha256 = createHash("sha256").update(readFileSync(sourceBinary)).digest("hex");
 process.stdout.write(
   `Native Butler Agent binary (${prebuiltBinary ? "prebuilt, cargo build skipped" : "built from source"}): ${sourceBinary}\n` +
@@ -109,7 +128,7 @@ function resolvePrebuiltBinary(configured, payload) {
 
 function buildNativeAgent() {
   const prepareScript = join(rustRoot, "scripts", "prepare-static-ort.py");
-  const prepared = JSON.parse(run(process.env.PYTHON3 || "python3", [prepareScript, "--target", "macos-arm64"], rustRoot));
+  const prepared = JSON.parse(run(process.env.PYTHON3 || "python3", [prepareScript, "--target", ortTarget], rustRoot));
   if (!prepared.ort_lib_path || !prepared.protoc) {
     throw new Error("Static ONNX Runtime preparation returned incomplete build paths.");
   }
@@ -155,6 +174,28 @@ function verifyMacDependencyClosure(binary) {
     .map((line) => line.trim().split(" ")[0])
     .filter(Boolean)
     .filter((path) => !path.startsWith("/usr/lib/") && !path.startsWith("/System/Library/"));
+  if (unsupported.length > 0) {
+    throw new Error(`Native Butler Agent has unpackaged runtime dependencies: ${unsupported.join(", ")}`);
+  }
+}
+
+/**
+ * Refuses a Linux agent built for another architecture or needing a shared
+ * library outside the glibc runtime, so the payload stays self-contained.
+ */
+function verifyLinuxDependencyClosure(binary, arch) {
+  const header = spawnSync("readelf", ["-h", binary], { encoding: "utf8", stdio: "pipe" });
+  const machine = header.stdout?.match(/^\s*Machine:\s*(.+)$/mu)?.[1]?.trim();
+  if (header.status !== 0 || machine !== LINUX_ELF_MACHINES[arch]) {
+    throw new Error(`Native Butler Agent is not a Linux ${arch} executable (machine: ${machine ?? "unknown"}).`);
+  }
+  const dynamic = spawnSync("readelf", ["-d", binary], { encoding: "utf8", stdio: "pipe" });
+  if (dynamic.status !== 0) {
+    throw new Error("Native Butler Agent dependency inspection failed.");
+  }
+  const unsupported = [...dynamic.stdout.matchAll(/\(NEEDED\)\s+Shared library: \[([^\]]+)\]/gu)]
+    .map((match) => match[1])
+    .filter((name) => !LINUX_SYSTEM_LIBRARIES.has(name));
   if (unsupported.length > 0) {
     throw new Error(`Native Butler Agent has unpackaged runtime dependencies: ${unsupported.join(", ")}`);
   }
