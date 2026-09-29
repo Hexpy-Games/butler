@@ -8,24 +8,48 @@ import { Stack } from "../../../Stack";
 import { Switch } from "../../../Switch";
 import { Typo } from "../../../Typo";
 import { Reveal as R } from "../shared/Reveal";
-import { BANDS, STEPS, UNIT, type BandId, type SpacingCopy } from "./spacingCopy";
+import { COMPACT_PAD, GAPS, STEPS, UNIT, type GapId, type SpacingCopy } from "./spacingCopy";
 import s from "./SpacingHero.module.css";
 
-/** Blocks a space holds. */
+/** 4px units a space holds. */
 export const count = (px: number) => px / UNIT;
 
-/**
- * A space filled with 4px blocks, one row per block (named `${name}-${j}` for
- * the timeline). It is anchored by CSS to the field it sits against and sized
- * by the live token, so the rows fit it exactly. `rows` may exceed the space
- * (the compact copy): the extra rows overflow away from the field.
- */
-export function Band({ band, name, rows, tag }: { band: BandId; name?: string; rows: number; tag?: ReactNode }) {
+/** A space's count: `20 = 5×4`. */
+export const sum = (px: number) => `${px} = ${count(px)}×${UNIT}`;
+
+/** Units of a column, bottom first (named `${name}-u${j}` for the timeline). */
+function Units({ n, name, row = false }: { n: number; name?: string; row?: boolean }) {
   return (
-    <span className={s.band} data-band={band} data-t={name}>
-      {Array.from({ length: rows }, (_, j) => <span className={s.row} data-t={name ? `${name}-${j}` : undefined} key={j} />)}
-      {tag ? <span className={s.tag}>{tag}</span> : null}
+    <span className={s.units} data-row={row ? "" : undefined}>
+      {Array.from({ length: n }, (_, j) => <span className={s.u} data-t={name ? `${name}-u${j}` : undefined} key={j} />)}
     </span>
+  );
+}
+
+/**
+ * A measured space: its blue highlight (`${name}-f`), sized by the live token
+ * and anchored by CSS to what it sits against, and right of it one column of
+ * 4px units exactly as tall as the space, with its label beside it.
+ */
+export function Gap({ id, n, name, label }: { id: GapId; n: number; name?: string; label?: ReactNode }) {
+  return (
+    <span className={s.gap} data-gap={id}>
+      <span className={s.fill} data-t={name ? `${name}-f` : undefined} />
+      <span className={s.col}>
+        <Units n={n} name={name} />
+        {label ? <span className={s.gapLabel}>{label}</span> : null}
+      </span>
+    </span>
+  );
+}
+
+/** A gap's label: its count, then (wide canvas only) its token or a note; revealed as `reveal`. */
+export function GapLabel({ px, note, reveal }: { px: number; note?: string; reveal: string }) {
+  return (
+    <R name={reveal}>
+      <span className={s.sum}>{sum(px)}</span>
+      {note ? <span className={s.note}>{` · ${note}`}</span> : null}
+    </R>
   );
 }
 
@@ -33,56 +57,50 @@ function field(label: string, hint: string, on: boolean) {
   return <SettingsField control={<Switch aria-label={label} checked={on} onCheckedChange={() => undefined} />} description={hint} label={label} />;
 }
 
-/** The tag of a band: token, px, and its count of blocks. */
-export function bandTag(id: BandId, reveal?: string) {
-  const band = BANDS.find((item) => item.id === id)!;
-  const text = `${band.token} · ${band.px} = ${count(band.px)}×${UNIT}`;
-  return reveal ? <R name={reveal}>{text}</R> : text;
-}
-
 /**
- * A real settings section (two fields) with its spaces counted in blocks:
- * the header gap and top inset above the first field, the field gap and the
- * bottom inset around the second. `name` prefixes the timeline's parts;
- * `density` pins the card inset (compact tightens only the inset);
- * `rest` shows the blocks faint (the poster).
+ * A real settings section (two fields) with its spaces measured: the header
+ * gap and top inset above the first field, the field gap and the bottom inset
+ * around the second. `name` prefixes the timeline's parts; `density` pins the
+ * card inset (compact tightens only the inset); `labels` names each space
+ * (`short`: the count only); `only` limits the columns to some spaces.
  */
-export function Section({ copy, name, density = "comfortable", rows, tags = false, rest = false }: {
-  copy: SpacingCopy; name?: string; density?: "comfortable" | "compact"; rows?: Partial<Record<BandId, number>>; tags?: boolean; rest?: boolean;
+export function Section({ copy, name, density = "comfortable", labels, only }: {
+  copy: SpacingCopy; name?: string; density?: "comfortable" | "compact"; labels?: "full" | "short"; only?: GapId[];
 }) {
-  const n = (band: BandId) => rows?.[band] ?? count(BANDS.find((item) => item.id === band)!.px);
-  const part = (band: BandId) => (name ? `${name}-${band}` : undefined);
-  const tag = (band: BandId) => (tags ? bandTag(band, name ? `${name}-${band}-tag` : undefined) : undefined);
+  const px = (id: GapId) => (density === "compact" && (id === "pt" || id === "pb") ? COMPACT_PAD : GAPS[id].px);
+  const gap = (id: GapId) => {
+    const part = name ? `${name}-${id}` : undefined;
+    const counted = !only || only.includes(id);
+    const label = labels && part && counted ? <GapLabel note={labels === "full" ? GAPS[id].token : undefined} px={px(id)} reveal={`${part}-l`} /> : undefined;
+    return <Gap id={id} label={label} n={counted ? count(px(id)) : 0} name={part} />;
+  };
   return (
-    <div className={s.section} data-density={density} data-rest={rest ? "" : undefined} data-t={name}>
+    <div className={s.section} data-density={density}>
       <SettingsSection id={`space-hero-${name ?? "tile"}`} kind="form" title={copy.general}>
-        <div className={s.field} data-t={name ? `${name}-f1` : undefined}>
-          <Band band="hg" name={part("hg")} rows={n("hg")} tag={tag("hg")} />
-          <Band band="pt" name={part("pt")} rows={n("pt")} tag={tag("pt")} />
-          {field(copy.sync, copy.syncHint, true)}
-        </div>
-        <div className={s.field} data-t={name ? `${name}-f2` : undefined}>
-          <Band band="fg" name={part("fg")} rows={n("fg")} tag={tag("fg")} />
-          {field(copy.sounds, copy.soundsHint, false)}
-          <Band band="pb" name={part("pb")} rows={n("pb")} tag={tag("pb")} />
-        </div>
+        <div className={s.field}>{gap("hg")}{gap("pt")}{field(copy.sync, copy.syncHint, true)}</div>
+        <div className={s.field}>{gap("fg")}{field(copy.sounds, copy.soundsHint, false)}{gap("pb")}</div>
       </SettingsSection>
     </div>
   );
 }
 
-/** The named scale as columns of blocks (rows on the tall canvas), each named under it; `name` prefixes the timeline's parts. */
-export function Staircase({ name, marks = false }: { name?: string; marks?: boolean }) {
+/**
+ * The named scale as columns of units (rows on the tall canvas), each named
+ * with its size under it; `name` prefixes the timeline's parts; `unit` sits
+ * on the xs slot (the block the scale grows from).
+ */
+export function Staircase({ name, unit }: { name?: string; unit?: ReactNode }) {
   return (
     <div className={s.stairs}>
       {STEPS.map(([step, px], k) => (
         <span className={s.step} key={step}>
           <span className={s.stepTrack}>
-            <span className={s.column} data-m={marks && k === 0 ? "st-0" : undefined} data-t={name ? `${name}-${k}` : undefined} style={{ "--n": count(px) } as CSSProperties} />
+            <span className={s.column} data-t={name ? `${name}-${k}` : undefined} style={{ "--n": count(px) } as CSSProperties} />
+            {k === 0 ? unit : null}
           </span>
           <span className={s.stepName} data-t={name ? `${name}-n${k}` : undefined}>
             <span>{step}</span>
-            <span className={s.stepPx}>{px}</span>
+            <span className={s.stepPx}>{`${px}px`}</span>
           </span>
         </span>
       ))}
@@ -90,20 +108,23 @@ export function Staircase({ name, marks = false }: { name?: string; marks?: bool
   );
 }
 
-/** Two buttons, the 2-block gap between them visible. */
-export function Inline({ copy, name }: { copy: SpacingCopy; name?: string }) {
+/** Two buttons; the gap between them highlighted, its two units under it. */
+export function Inline({ copy }: { copy: SpacingCopy }) {
   return (
     <ButtonContainer size="default">
       <Button text={copy.cancel} variant="outline" />
       <span className={s.after}>
-        <span className={s.gapBlocks} data-t={name} />
+        <span className={s.inlineGap}>
+          <span className={s.fill} />
+          <Units n={count(8)} row />
+        </span>
         <Button text={copy.save} />
       </span>
     </ButtonContainer>
   );
 }
 
-/** A card, its inset shown as a frame of blocks. */
+/** A card, its inset highlighted, the top inset's units beside it. */
 export function InsetCard({ copy }: { copy: SpacingCopy }) {
   return (
     <span className={s.insetCard}>
@@ -114,22 +135,23 @@ export function InsetCard({ copy }: { copy: SpacingCopy }) {
         </Stack>
       </Card>
       <span className={s.inset} />
+      <span className={s.insetUnits}><Units n={count(12)} /></span>
     </span>
   );
 }
 
 /** Finale tiles. */
 export const StairsTile = () => <div className={s.stairsTile}><Staircase /></div>;
-export const SectionTile = ({ copy }: { copy: SpacingCopy }) => <div className={s.sectionTile}><Section copy={copy} rest /></div>;
+export const SectionTile = ({ copy }: { copy: SpacingCopy }) => <div className={s.sectionTile}><Section copy={copy} /></div>;
 export const InlineTile = ({ copy }: { copy: SpacingCopy }) => (
   <div className={s.inlineTile}>
     <Inline copy={copy} />
-    <span className={s.caption}>--space-sm · 8 = 2×4</span>
+    <span className={s.caption}>{`--space-sm · ${sum(8)}`}</span>
   </div>
 );
 export const CardTile = ({ copy }: { copy: SpacingCopy }) => (
   <div className={s.inlineTile}>
     <InsetCard copy={copy} />
-    <span className={s.caption}>--space-md · 12 = 3×4</span>
+    <span className={s.caption}>{`--space-md · ${sum(12)}`}</span>
   </div>
 );

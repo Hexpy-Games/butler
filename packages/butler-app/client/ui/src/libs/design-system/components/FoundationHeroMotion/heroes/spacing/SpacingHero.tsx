@@ -4,7 +4,7 @@ import { SceneHero } from "../scene/SceneHero";
 import type { SceneSpec } from "../scene/types";
 import { Intro } from "../shared/Intro";
 import { SPACING_COPY, type SpacingCopy } from "./spacingCopy";
-import { DensityScene, ExplodeScene, RhythmScene, StairScene, TitleLetters } from "./SpacingScenes";
+import { CountScene, DensityScene, RhythmScene, StairScene, TitleLetters } from "./SpacingScenes";
 import { CardTile, InlineTile, SectionTile, StairsTile } from "./spacingTiles";
 import { SPACING_END, spacingTracks } from "./spacingTracks";
 
@@ -15,7 +15,7 @@ function spec(copy: SpacingCopy): SceneSpec {
     regions: {
       intro: <Intro lead={copy.lead} title={copy.title} titleNode={<TitleLetters title={copy.title} />} />,
       stairs: <StairScene copy={copy} />,
-      ex: <ExplodeScene copy={copy} />,
+      ex: <CountScene copy={copy} />,
       rh: <RhythmScene copy={copy} />,
       dn: <DensityScene copy={copy} />,
     },
@@ -26,7 +26,7 @@ function spec(copy: SpacingCopy): SceneSpec {
       card: <CardTile copy={copy} />,
     },
     poster: {
-      wide: { columns: "1fr 1.15fr 0.95fr", rows: "1fr 1fr", areas: ["stairs section inline", "stairs section card"] },
+      wide: { columns: "1.25fr 1fr 1fr", rows: "1.4fr 1fr", areas: ["stairs section section", "stairs inline card"] },
       tall: { columns: "1fr", rows: "auto", areas: ["stairs", "section", "inline"] },
     },
     posterZoom: { wide: 0.9, tall: 0.9 },
@@ -37,9 +37,10 @@ function spec(copy: SpacingCopy): SceneSpec {
 
 /**
  * 03 Spacing, "counted space": the title's letters drift apart on 4px
- * blocks; one block becomes the named scale; a real settings section is
- * pulled apart and every space in it counted in blocks, then snaps shut; the
- * page's rhythm in blocks; comfortable beside compact.
+ * blocks; one 4px unit, named, shrinks into the xs slot and the named scale
+ * builds from it; each space of a real settings section is highlighted and
+ * counted in a column of units beside it; the page's rhythm in units;
+ * comfortable beside compact.
  */
 export function SpacingHero({ lang }: { lang: FoundationHeroLang }) {
   const chapter = useMemo(() => spec(SPACING_COPY[lang]), [lang]);
