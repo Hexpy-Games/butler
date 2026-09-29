@@ -114,12 +114,26 @@ impl MemorySync {
     }
 }
 
+/// The longest an idle loop sleeps between polls. In-process work and queue
+/// appends end the sleep early; the cap bounds everything else.
+const IDLE_CAP: Duration = Duration::from_secs(30);
+/// The longest a loop with waiting-but-blocked work sleeps.
+const DEFERRED_CAP: Duration = Duration::from_secs(5);
+
+/// The sleep after `idle_polls` consecutive polls that found nothing to do:
+/// 1 s, 2 s, 4 s, ... up to `cap`.
+fn backoff(idle_polls: u32, cap: Duration) -> Duration {
+    let steps = idle_polls.saturating_sub(1).min(16);
+    Duration::from_secs(1u64 << steps).min(cap)
+}
+
 async fn poll(
     consumer: Arc<MemorySyncConsumer>,
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
     shutdown: CancellationToken,
 ) {
+    let mut idle_polls = 0_u32;
     loop {
         if shutdown.is_cancelled() {
             return;
@@ -130,19 +144,34 @@ async fn poll(
             Err(error) => Err(error),
         };
         let delay = match result {
-            Ok(MemorySyncPoll::Processed) => Duration::from_millis(1500),
-            Ok(MemorySyncPoll::Idle | MemorySyncPoll::Deferred) => Duration::from_millis(1000),
+            Ok(MemorySyncPoll::Processed) => {
+                idle_polls = 0;
+                Duration::from_millis(1500)
+            }
+            Ok(MemorySyncPoll::Idle) => {
+                idle_polls = idle_polls.saturating_add(1);
+                backoff(idle_polls, IDLE_CAP)
+            }
+            Ok(MemorySyncPoll::Deferred) => {
+                idle_polls = idle_polls.saturating_add(1);
+                backoff(idle_polls, DEFERRED_CAP)
+            }
             Err(_) if shutdown.is_cancelled() => return,
             Err(error) => {
                 // Diagnostic codes only. The durable queue retains failed work;
                 // paths, prompts, credentials and raw provider errors stay private.
                 eprintln!("[native-memory-sync] {}", error.code());
-                Duration::from_millis(1000)
+                idle_polls = idle_polls.saturating_add(1);
+                backoff(idle_polls, DEFERRED_CAP)
             }
         };
         tokio::select! {
             () = shutdown.cancelled() => return,
-            () = tokio::time::sleep(delay) => {},
+            woken = consumer.wait_for_work(delay) => {
+                if woken {
+                    idle_polls = 0;
+                }
+            }
         }
     }
 }

@@ -253,6 +253,7 @@ async fn malformed_queue_head_keeps_its_error_after_canonical_catchup() {
         coordinator,
         clock: Arc::new(|| NOW.into()),
         catchup_at: Arc::new(parking_lot::Mutex::new(None::<Instant>)),
+        probe: Arc::default(),
         shutdown: CancellationToken::new(),
     })
     .await;

@@ -110,6 +110,24 @@ impl ConversationSourceReader {
             .map_err(ConversationError::sqlite)
     }
 
+    /// The store's public source revision. It moves on every message, turn,
+    /// outcome or session change, so an unchanged value means an unchanged
+    /// inventory. A store without the counter reads as revision 0.
+    pub fn public_revision(&self) -> ConversationResult<u64> {
+        let connection = self.connection()?;
+        let counted: bool = connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='conversation_public_source_state')",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(ConversationError::sqlite)?;
+        if !counted {
+            return Ok(0);
+        }
+        super::super::codec::public_revision(connection)
+    }
+
     /// A page of turn outcomes for recall.
     pub fn read_recall_outcome_page(
         &self,

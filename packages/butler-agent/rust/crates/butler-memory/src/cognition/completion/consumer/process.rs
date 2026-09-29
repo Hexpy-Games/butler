@@ -12,7 +12,6 @@ use super::{MemorySyncPoll, catchup, paused};
 mod typed;
 mod vector;
 use crate::cognition::generation::{resolve_active_generation, resolve_generation};
-use crate::cognition::graph::GraphRepository;
 use crate::cognition::registration::{ProjectSemanticWindowInput, ProjectionSourceNotice};
 use crate::cognition::sources::read_typed_record;
 use crate::cognition::{
@@ -33,6 +32,7 @@ pub(super) struct Input {
     pub coordinator: Arc<CognitionWriteCoordinator>,
     pub clock: Arc<dyn Fn() -> String + Send + Sync>,
     pub catchup_at: Arc<Mutex<Option<Instant>>>,
+    pub probe: Arc<super::probe::ProbeReader>,
     pub shutdown: CancellationToken,
 }
 
@@ -324,23 +324,27 @@ pub(super) async fn project_next(input: &Input) -> CognitionResult<bool> {
         Err(error) if error.code() == "memory_generation_unavailable" => return Ok(false),
         Err(error) => return Err(error),
     };
-    input
-        .registration
-        .recover_semantic_windows(
-            input.data_root.clone(),
-            handle.clone(),
-            input
-                .target
-                .clone()
-                .unwrap_or(MemoryGenerationTarget::Active {
-                    expected_generation: handle.generation_id.clone(),
-                }),
-            input.shutdown.child_token(),
-        )
-        .await?;
-    let graph = GraphRepository::open(&handle.graph_path)?;
-    let pending = graph.pending_semantic_job(&(input.clock)())?;
-    graph.close()?;
+    // Recovery takes the write lease, so it runs only when a window is held
+    // by an owner that may have died.
+    if input.probe.recoverable_windows(&handle.graph_path)? {
+        input
+            .registration
+            .recover_semantic_windows(
+                input.data_root.clone(),
+                handle.clone(),
+                input
+                    .target
+                    .clone()
+                    .unwrap_or(MemoryGenerationTarget::Active {
+                        expected_generation: handle.generation_id.clone(),
+                    }),
+                input.shutdown.child_token(),
+            )
+            .await?;
+    }
+    let pending = input
+        .probe
+        .pending_job(&handle.graph_path, &(input.clock)())?;
     let Some(pending) = pending else {
         return Ok(false);
     };

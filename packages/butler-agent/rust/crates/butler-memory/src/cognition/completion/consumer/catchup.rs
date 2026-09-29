@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use sha2::{Digest, Sha256};
 
 use super::process::{Input, canonical_path, resolve_input_generation};
-use crate::cognition::graph::{CatchupCursors, GraphRepository};
+use crate::cognition::graph::{CatchupState, GraphRepository};
 use crate::cognition::{
     CognitionConversationSourceNotice, CognitionError, CognitionResult,
     ConversationRegistrationOutcome, MemoryGenerationTarget, RegisterConversationSourceInput,
@@ -65,8 +65,8 @@ async fn run(input: &Input, schedule: Schedule) -> CognitionResult<CatchupReport
         }
         Err(error) => return Err(error),
     };
-    let graph = GraphRepository::open(&handle.graph_path)?;
-    let cursors = graph.catchup_cursors()?;
+    let graph = GraphRepository::open_readonly(&handle.graph_path)?;
+    let stored = graph.catchup_state()?;
     graph.close()?;
     let canonical = match ConversationSourceReader::open(&canonical_path(&handle, &input.data_root))
     {
@@ -76,55 +76,130 @@ async fn run(input: &Input, schedule: Schedule) -> CognitionResult<CatchupReport
         }
         Err(error) => return Err(CognitionError::from(error)),
     };
-    let mut pass = Pass {
-        cursors,
-        wrapped: false,
-        work: Vec::with_capacity(256),
-    };
+    let now_ms = epoch_ms(&(input.clock)());
+    let revision = canonical.public_revision().map_err(CognitionError::from)?;
+    let mut pass = Pass::begin(stored.clone(), revision, now_ms);
     pass.read_outcomes(&canonical)?;
     pass.read_recovered_sources(&canonical)?;
     canonical.close().map_err(CognitionError::from)?;
-    let scanned = pass.work.len();
-    let work = std::mem::take(&mut pass.work);
+    let work = unregistered(&handle, std::mem::take(&mut pass.work))?;
+    let scanned = pass.scanned;
     let registration = register(input, &handle, work).await?;
     if !registration.interrupted {
-        save_cursors(input, &handle, &pass.cursors).await?;
+        pass.finish(now_ms);
+        if pass.state != stored {
+            save_state(input, &handle, &pass.state).await?;
+        }
     }
     Ok(CatchupReport {
         available: true,
         scanned,
         ingested: registration.ingested,
         wrapped: pass.wrapped,
-        outcome_cursor: pass.cursors.outcome,
-        recovered_message_cursor: pass.cursors.message,
+        outcome_cursor: pass.state.outcome,
+        recovered_message_cursor: pass.state.message,
     })
 }
 
+/// A full sweep from the start of both inventories runs when the canonical
+/// store changed since the last one began, or once a day as a safety net.
+const OUTCOME_PAGE: usize = 255;
+/// Notices one pass may read from both inventories.
+const NOTICE_BUDGET: usize = 256;
+const DAILY_SWEEP_MS: i64 = 24 * 60 * 60 * 1000;
+
+/// Milliseconds since the epoch of an ISO-8601 clock reading; 0 when the
+/// clock text does not parse.
+fn epoch_ms(iso: &str) -> i64 {
+    chrono::DateTime::parse_from_rfc3339(iso).map_or(0, |time| time.timestamp_millis())
+}
+
+/// Drops the notices whose observation a registered job already recorded.
+/// Registering them again would only replay that job.
+fn unregistered(
+    handle: &crate::cognition::MemoryGenerationHandle,
+    work: Vec<(CognitionConversationSourceNotice, String)>,
+) -> CognitionResult<Vec<(CognitionConversationSourceNotice, String)>> {
+    if work.is_empty() {
+        return Ok(work);
+    }
+    let ids: Vec<String> = work.iter().map(|(_, id)| id.clone()).collect();
+    let graph = GraphRepository::open_readonly(&handle.graph_path)?;
+    let known = graph.registered_observations(&ids);
+    graph.close()?;
+    let known = known?;
+    Ok(work
+        .into_iter()
+        .filter(|(_, id)| !known.contains(id))
+        .collect())
+}
+
 /// One catch-up pass: the source notices to register, each with its
-/// observation id, and the cursors after them.
+/// observation id, and the catch-up state after them.
 struct Pass {
-    cursors: CatchupCursors,
-    /// A cursor wrapped around to the start this pass.
+    state: CatchupState,
+    /// A sweep from the start of both inventories began this pass.
     wrapped: bool,
+    revision: u64,
+    outcomes_at_end: bool,
+    messages_at_end: bool,
+    /// Notices read from the canonical store, registered or not.
+    scanned: usize,
     work: Vec<(CognitionConversationSourceNotice, String)>,
 }
 
 impl Pass {
-    /// Reads up to 255 recall outcomes after the outcome cursor, wrapping
-    /// once when the cursor is at the end.
-    fn read_outcomes(&mut self, canonical: &ConversationSourceReader) -> CognitionResult<()> {
-        let mut outcomes = canonical
-            .read_recall_outcome_page(self.cursors.outcome.as_deref(), Some(255))
-            .map_err(CognitionError::from)?;
-        if outcomes.is_empty() && self.cursors.outcome.is_some() {
-            self.cursors.outcome = None;
-            self.wrapped = true;
-            outcomes = canonical
-                .read_recall_outcome_page(None, Some(255))
-                .map_err(CognitionError::from)?;
+    /// A pass over the stored state at canonical revision `revision`. A
+    /// finished sweep restarts only when the canonical store changed since it
+    /// began or a day has passed since it finished.
+    fn begin(state: CatchupState, revision: u64, now_ms: i64) -> Self {
+        let changed = state.sweep_revision != Some(revision);
+        let stale = state
+            .swept_at_ms
+            .is_none_or(|done| now_ms.saturating_sub(done) >= DAILY_SWEEP_MS);
+        let sweep_due = !state.sweep_done || changed || stale;
+        let mut pass = Self {
+            state,
+            wrapped: false,
+            revision,
+            outcomes_at_end: false,
+            messages_at_end: false,
+            scanned: 0,
+            work: Vec::with_capacity(256),
+        };
+        if pass.state.sweep_done && sweep_due {
+            pass.start_sweep();
+        } else if pass.state.sweep_revision.is_none() {
+            pass.state.sweep_revision = Some(revision);
         }
+        pass
+    }
+
+    /// Restarts both cursors from the start of their inventories.
+    fn start_sweep(&mut self) {
+        self.state.outcome = None;
+        self.state.message = None;
+        self.state.sweep_done = false;
+        self.state.sweep_revision = Some(self.revision);
+        self.wrapped = true;
+    }
+
+    /// Marks the sweep done once both cursors have reached their ends.
+    fn finish(&mut self, now_ms: i64) {
+        if self.outcomes_at_end && self.messages_at_end && !self.state.sweep_done {
+            self.state.sweep_done = true;
+            self.state.swept_at_ms = Some(now_ms);
+        }
+    }
+
+    /// Reads up to 255 recall outcomes after the outcome cursor.
+    fn read_outcomes(&mut self, canonical: &ConversationSourceReader) -> CognitionResult<()> {
+        let outcomes = canonical
+            .read_recall_outcome_page(self.state.outcome.as_deref(), Some(OUTCOME_PAGE))
+            .map_err(CognitionError::from)?;
+        self.outcomes_at_end = outcomes.len() < OUTCOME_PAGE;
         for outcome in outcomes {
-            self.cursors.outcome = Some(outcome.id.clone());
+            self.state.outcome = Some(outcome.id.clone());
             self.work.push((
                 CognitionConversationSourceNotice::Turn {
                     session_id: outcome.session_id,
@@ -139,32 +214,24 @@ impl Pass {
     }
 
     /// Fills the rest of the 256-notice budget with recovered standalone
-    /// messages, wrapping the message cursor once when it is at the end.
+    /// messages after the message cursor.
     fn read_recovered_sources(
         &mut self,
         canonical: &ConversationSourceReader,
     ) -> CognitionResult<()> {
-        let remaining = 256 - self.work.len();
+        let remaining = NOTICE_BUDGET - self.work.len();
         let mut scanned = 0;
         while scanned < remaining {
             // Limit simultaneous hydrated bodies; the source's total scan budget
             // remains 256 and only compact notices survive to the awaits below.
             let batch_size = (remaining - scanned).min(16);
             let messages = canonical
-                .read_recovered_source_page(self.cursors.message.as_deref(), Some(batch_size))
+                .read_recovered_source_page(self.state.message.as_deref(), Some(batch_size))
                 .map_err(CognitionError::from)?;
-            if messages.is_empty() {
-                if scanned == 0 && self.cursors.message.is_some() && !self.wrapped {
-                    self.cursors.message = None;
-                    self.wrapped = true;
-                    continue;
-                }
-                break;
-            }
             let count = messages.len();
             for message in messages {
                 let hash = recovered_source_hash(&message.parts)?;
-                self.cursors.message = Some(message.message.id.clone());
+                self.state.message = Some(message.message.id.clone());
                 self.work.push((
                     CognitionConversationSourceNotice::Standalone {
                         session_id: message.message.session_id,
@@ -177,9 +244,11 @@ impl Pass {
             }
             scanned += count;
             if count < batch_size {
+                self.messages_at_end = true;
                 break;
             }
         }
+        self.scanned = self.work.len();
         Ok(())
     }
 }
@@ -265,10 +334,10 @@ fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> Cognitio
     CognitionError::new(CognitionCode::MemoryCatchupJsonError, error.to_string()).with_source(error)
 }
 
-async fn save_cursors(
+async fn save_state(
     input: &Input,
     handle: &crate::cognition::MemoryGenerationHandle,
-    cursors: &CatchupCursors,
+    state: &CatchupState,
 ) -> CognitionResult<()> {
     let lock = input.environment.consolidation_lock(&input.data_root);
     let lease = input
@@ -290,7 +359,7 @@ async fn save_cursors(
     let result = (|| {
         assert_mutation_authority(&input.data_root, &input.environment, &target, handle)?;
         let mut graph = GraphRepository::open(&handle.graph_path)?;
-        let saved = graph.save_catchup_cursors(cursors);
+        let saved = graph.save_catchup_state(state);
         graph.close()?;
         saved
     })();

@@ -1,6 +1,8 @@
 //! Projection job records: registration replay, catch-up cursors, the next
 //! pending semantic job, and a job's progress across its stages.
 
+use std::collections::HashSet;
+
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::de::IgnoredAny;
 
@@ -63,13 +65,27 @@ pub(in crate::cognition) struct PendingSemanticJob {
     pub extraction_version: String,
 }
 
-#[derive(Clone, Debug, Default)]
-pub(in crate::cognition) struct CatchupCursors {
+/// Where the canonical catch-up stands: its two cursors and the sweep
+/// bookkeeping that decides when they may wrap back to the start.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(in crate::cognition) struct CatchupState {
     pub outcome: Option<String>,
     pub message: Option<String>,
+    /// Canonical public revision at which the current sweep began.
+    pub sweep_revision: Option<u64>,
+    /// The current sweep has reached the end of both inventories.
+    pub sweep_done: bool,
+    /// Epoch milliseconds at which the last sweep completed.
+    pub swept_at_ms: Option<i64>,
 }
 
-pub(super) fn catchup_cursors(connection: &Connection) -> CognitionResult<CatchupCursors> {
+const OUTCOME_CURSOR: &str = "canonical_catchup_outcome_cursor";
+const MESSAGE_CURSOR: &str = "canonical_catchup_message_cursor";
+const SWEEP_REVISION: &str = "canonical_catchup_sweep_revision";
+const SWEEP_DONE: &str = "canonical_catchup_sweep_done";
+const SWEPT_AT: &str = "canonical_catchup_swept_at_ms";
+
+pub(super) fn catchup_state(connection: &Connection) -> CognitionResult<CatchupState> {
     let read = |key| -> CognitionResult<Option<String>> {
         connection
             .query_row(
@@ -81,25 +97,37 @@ pub(super) fn catchup_cursors(connection: &Connection) -> CognitionResult<Catchu
             .map(|value| value.filter(|item| !item.is_empty()))
             .map_err(db_error)
     };
-    Ok(CatchupCursors {
-        outcome: read("canonical_catchup_outcome_cursor")?,
-        message: read("canonical_catchup_message_cursor")?,
+    Ok(CatchupState {
+        outcome: read(OUTCOME_CURSOR)?,
+        message: read(MESSAGE_CURSOR)?,
+        sweep_revision: read(SWEEP_REVISION)?.and_then(|value| value.parse().ok()),
+        sweep_done: read(SWEEP_DONE)?.as_deref() == Some("1"),
+        swept_at_ms: read(SWEPT_AT)?.and_then(|value| value.parse().ok()),
     })
 }
 
-pub(super) fn save_catchup_cursors(
+pub(super) fn save_catchup_state(
     connection: &mut Connection,
-    cursors: &CatchupCursors,
+    state: &CatchupState,
 ) -> CognitionResult<()> {
     let transaction = connection.transaction().map_err(db_error)?;
     for (key, value) in [
+        (OUTCOME_CURSOR, state.outcome.clone().unwrap_or_default()),
+        (MESSAGE_CURSOR, state.message.clone().unwrap_or_default()),
         (
-            "canonical_catchup_outcome_cursor",
-            cursors.outcome.as_deref().unwrap_or(""),
+            SWEEP_REVISION,
+            state
+                .sweep_revision
+                .map(|value| value.to_string())
+                .unwrap_or_default(),
         ),
+        (SWEEP_DONE, u8::from(state.sweep_done).to_string()),
         (
-            "canonical_catchup_message_cursor",
-            cursors.message.as_deref().unwrap_or(""),
+            SWEPT_AT,
+            state
+                .swept_at_ms
+                .map(|value| value.to_string())
+                .unwrap_or_default(),
         ),
     ] {
         transaction.execute(
@@ -110,22 +138,54 @@ pub(super) fn save_catchup_cursors(
     transaction.commit().map_err(db_error)
 }
 
+/// The observation ids among `ids` that a registered job already recorded.
+/// The jobs table is small next to the memory graph, so one pass over its
+/// observation lists answers the whole batch.
+pub(super) fn registered_observations(
+    connection: &Connection,
+    ids: &[String],
+) -> CognitionResult<HashSet<String>> {
+    let mut found = HashSet::new();
+    for batch in ids.chunks(200) {
+        let marks = vec!["?"; batch.len()].join(",");
+        let mut statement = connection
+            .prepare(&format!(
+                "SELECT DISTINCT observed.value FROM memory_projection_jobs j, \
+                 json_each(j.observed_completion_job_ids) observed \
+                 WHERE observed.value IN ({marks})"
+            ))
+            .map_err(db_error)?;
+        let rows = statement
+            .query_map(rusqlite::params_from_iter(batch), |row| {
+                row.get::<_, String>(0)
+            })
+            .map_err(db_error)?;
+        for row in rows {
+            found.insert(row.map_err(db_error)?);
+        }
+    }
+    Ok(found)
+}
+
+/// The next job with a due semantic window. The scan starts from the windows
+/// still waiting (`idx_windows_due`), so an idle graph costs a few index
+/// probes however many finished jobs it holds.
 pub(super) fn pending_semantic(
     connection: &Connection,
     now: &str,
 ) -> CognitionResult<Option<PendingSemanticJob>> {
     connection.query_row(
         "SELECT j.job_id,c.conversation_session_id,c.source_key,c.source_hash,j.extraction_version
-         FROM memory_projection_jobs j
+         FROM memory_projection_windows w
+         JOIN memory_projection_jobs j ON j.job_id=w.job_id
          JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision
-         WHERE EXISTS (
-           SELECT 1 FROM memory_projection_windows w
-           WHERE w.job_id=j.job_id AND w.state IN ('pending','planned') AND w.owner_nonce IS NULL
-             AND (w.state='planned' OR w.output_json IS NOT NULL OR (
-               SELECT COUNT(DISTINCT a.invocation_ref) FROM memory_projection_attempts a
-               WHERE a.window_ref=w.window_ref AND a.provider_invoked=1
-                 AND a.recovery_revision IS w.recovery_revision) < 3)
-             AND (w.next_attempt_at IS NULL OR w.next_attempt_at<=?1))
+         WHERE w.state IN ('pending','planned') AND w.owner_nonce IS NULL
+           AND (w.state='planned' OR w.output_json IS NOT NULL OR (
+             SELECT COUNT(DISTINCT a.invocation_ref) FROM memory_projection_attempts a
+             WHERE a.window_ref=w.window_ref AND a.provider_invoked=1
+               AND a.recovery_revision IS w.recovery_revision) < 3)
+           AND (w.next_attempt_at IS NULL OR w.next_attempt_at<=?1)
+         GROUP BY j.job_id
          ORDER BY j.last_served_at IS NOT NULL,j.last_served_at,j.created_at,j.job_id LIMIT 1",
         [now],
         |row| Ok(PendingSemanticJob {

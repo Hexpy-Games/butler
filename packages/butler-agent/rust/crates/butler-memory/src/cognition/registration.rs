@@ -68,6 +68,8 @@ pub struct CognitionRegistrationService {
     lifecycle: Mutex<Lifecycle>,
     projection: Option<Arc<projection::ProjectionDependencies>>,
     active_windows: Arc<Mutex<HashSet<(String, String, String)>>>,
+    /// Graph databases whose schema this process already ensured.
+    schema_ready: Arc<Mutex<HashSet<PathBuf>>>,
 }
 
 struct Lifecycle {
@@ -100,6 +102,7 @@ impl CognitionRegistrationService {
             lifecycle: Mutex::new(Lifecycle { closing: false }),
             projection: None,
             active_windows: Arc::new(Mutex::new(HashSet::new())),
+            schema_ready: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
@@ -142,6 +145,7 @@ impl CognitionRegistrationService {
         let coordinator = self.coordinator.clone();
         let clock = self.clock.clone();
         let shutdown = self.shutdown.clone();
+        let schema_ready = self.schema_ready.clone();
         let (sender, receiver) = oneshot::channel();
         // Detached on purpose: the operation token/guard moved into the task keeps the
         // owner's close waiting for it, and the result returns through the oneshot,
@@ -149,7 +153,15 @@ impl CognitionRegistrationService {
         tokio::spawn(async move {
             let _token = token;
             let _permit = permit;
-            let result = operation(environment, coordinator, clock, shutdown, input).await;
+            let result = operation(
+                environment,
+                coordinator,
+                clock,
+                shutdown,
+                schema_ready,
+                input,
+            )
+            .await;
             let _ = sender.send(result);
         });
         receiver.await.map_err(|source| {
@@ -181,6 +193,7 @@ async fn operation(
     coordinator: Arc<CognitionWriteCoordinator>,
     clock: Clock,
     shutdown: CancellationToken,
+    schema_ready: Arc<Mutex<HashSet<PathBuf>>>,
     input: RegisterConversationSourceInput,
 ) -> CognitionResult<ConversationRegistrationOutcome> {
     check_cancelled(&shutdown, input.cancellation.as_ref())?;
@@ -215,7 +228,15 @@ async fn operation(
         clock,
         shutdown,
     };
-    let state = stages.ensure_schema(state).await?;
+    // The schema check writes under the lease; once per graph database is enough.
+    let graph_path = state.handle.graph_path.clone();
+    let state = if schema_ready.lock().contains(&graph_path) {
+        state
+    } else {
+        let state = stages.ensure_schema(state).await?;
+        schema_ready.lock().insert(graph_path);
+        state
+    };
     match stages.replay(state).await? {
         ReplayStage::Complete(progress) => Ok(ConversationRegistrationOutcome::Replayed(*progress)),
         ReplayStage::Continue(state) => stages.register(state).await,

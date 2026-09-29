@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use rusqlite::Connection;
+use tokio::sync::Notify;
 
 use super::error::{CoordinationError, CoordinationResult, invalid, sqlite_error};
 use super::fence::{
@@ -29,6 +30,9 @@ pub(super) struct CoordinatorInner {
     pub(super) pid: u32,
     pub(super) hostname: String,
     pub(super) local: Mutex<HashMap<PathBuf, LocalRegistration>>,
+    /// Signalled whenever a lease of this process ends, so an in-process
+    /// waiter retries at once instead of on a timer.
+    pub(super) released: Notify,
 }
 
 #[derive(Clone)]
@@ -57,6 +61,7 @@ impl CognitionWriteCoordinator {
                 pid,
                 hostname,
                 local: Mutex::new(HashMap::new()),
+                released: Notify::new(),
             }),
         })
     }
@@ -89,11 +94,19 @@ impl CognitionWriteCoordinator {
                 }
             },
         ));
+        let mut retry = MIN_RETRY;
         loop {
             if cancelled(&request) {
                 return Err(CoordinationError::Aborted);
             }
-            if let Some(lease) = self.inner.try_acquire(&request)? {
+            // Interest is registered before the attempt, so a lease released
+            // between the attempt and the wait still wakes this waiter.
+            let released = self.inner.released.notified();
+            tokio::pin!(released);
+            released.as_mut().enable();
+            if !self.inner.held_locally(&request.lock_path)
+                && let Some(lease) = self.inner.try_acquire(&request)?
+            {
                 return Ok(Some(lease));
             }
             let remaining = request.deadline_at_epoch_ms.unwrap_or(f64::INFINITY)
@@ -107,22 +120,29 @@ impl CognitionWriteCoordinator {
                 #[expect(
                     clippy::cast_possible_truncation,
                     clippy::cast_sign_loss,
-                    reason = "clamped to (0, 20] milliseconds above"
+                    reason = "clamped to (0, MAX_RETRY] milliseconds above"
                 )]
-                let millis = remaining.min(20.0) as u64;
+                let millis = remaining.min(retry.as_millis() as f64) as u64;
                 Duration::from_millis(millis)
             };
+            // Another process cannot signal this one, so the wait is bounded;
+            // the bound grows while the lock stays busy.
+            retry = (retry * 2).min(MAX_RETRY);
             if let Some(cancellation) = &request.cancellation {
                 tokio::select! {
                     () = cancellation.cancelled() => {
                         return Err(CoordinationError::Aborted);
                     }
+                    () = &mut released => {}
                     () = tokio::time::sleep(wait) => {}
                 }
             } else if wait.is_zero() {
                 tokio::task::yield_now().await;
             } else {
-                tokio::time::sleep(wait).await;
+                tokio::select! {
+                    () = &mut released => {}
+                    () = tokio::time::sleep(wait) => {}
+                }
             }
         }
     }
@@ -135,7 +155,17 @@ impl CognitionWriteCoordinator {
     }
 }
 
+/// The first wait after a busy attempt, doubling up to [`MAX_RETRY`] while a
+/// lock held by another process stays busy.
+const MIN_RETRY: Duration = Duration::from_millis(20);
+const MAX_RETRY: Duration = Duration::from_millis(250);
+
 impl CoordinatorInner {
+    /// Whether a lease of this process holds `lock_path` right now.
+    fn held_locally(&self, lock_path: &Path) -> bool {
+        self.local.lock().contains_key(lock_path)
+    }
+
     /// Takes the writer lock when it is free right now; `None` when it is
     /// busy, the request was cancelled or its deadline passed.
     fn try_acquire(
@@ -300,6 +330,7 @@ impl CognitionWriteLease {
         let close_error = connection.close().err().map(|(_, error)| error);
         self.inner
             .remove_registration(&self.lock_path, &self.registration_id);
+        self.inner.released.notify_waiters();
         if let Some(error) = completion_error {
             return Err(sqlite_error(error));
         }

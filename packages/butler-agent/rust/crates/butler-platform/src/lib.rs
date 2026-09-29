@@ -22,6 +22,7 @@
 //! - [`user_dirs`]: the user's home and the system's own folders.
 //! - [`launcher`]: runnable programs and the release platform tag.
 //! - [`network`]: the machine's own interface addresses.
+//! - [`cpu`]: how many performance cores the machine has.
 //!
 //! macOS and Linux implement the behavior Butler shipped with. Windows
 //! compiles; a capability it does not have yet has a flag (such as
@@ -34,6 +35,7 @@
 #![deny(missing_docs)]
 
 pub mod command_sandbox;
+pub mod cpu;
 pub mod instance;
 pub mod launcher;
 pub mod network;
