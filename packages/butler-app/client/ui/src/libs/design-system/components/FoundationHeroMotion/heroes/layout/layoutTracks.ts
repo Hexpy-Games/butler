@@ -2,7 +2,6 @@ import { fit, focus, type Key, type Pose, type Track } from "../../heroTimeline"
 import { TRANSITION } from "../shared/beats";
 import { introTracks } from "../shared/Intro";
 import { reveal, select } from "../shared/Reveal";
-import { rollerTracks } from "../shared/Roller";
 import type { SceneContext } from "../scene/types";
 import { DETENTS, MODES, WINDOW, ZOOM, tokenValue, type LayoutCopy } from "./layoutCopy";
 
@@ -101,16 +100,17 @@ export function layoutTracks(copy: LayoutCopy) {
       fades(`tg-${part}`, [[at + 0.3, 1], [leave, 0]], 0, 0.4),
       ...reveal(`tl-${part}`, at + 0.4, label, close),
     ];
-    const px = (d: number) => d * z;
-    const edge = (name: string): Track => ({
+    /** The window's width and height at each stop, times `k`: canvas px for the window and its rim (k = z), device px for the app inside (k = 1). */
+    const edge = (name: string, k: number): Track => ({
       select: select(name),
-      keys: looped([{ at: 0, w: px(WINDOW.w), h: px(WINDOW.h) }, ...DRAGS.flatMap(([from, to], k): Key[] => [{ at: from, w: px(DETENTS[k]!.px) }, { at: to, w: px(DETENTS[k + 1]!.px), ease: "standard" }])], close),
+      keys: looped([{ at: 0, w: WINDOW.w * k, h: WINDOW.h * k }, ...DRAGS.flatMap(([from, to], j): Key[] => [{ at: from, w: DETENTS[j]!.px * k }, { at: to, w: DETENTS[j + 1]!.px * k, ease: "standard" }])], close),
     });
     const value = (token: string) => `${token} · ${tokenValue(token).replace(/px$/u, "")}`;
     const tracks: Track[] = [
       ...introTracks(copy.title, copy.lead, close),
       // The window's edge follows the handle; its content reflows at every width.
-      edge("win"), edge("rim"),
+      // The app inside is sized in device px by the same keys, so it is laid out at the window's width on every frame (never derived from the scaled window).
+      edge("win", z), edge("rim", z), edge("dev", 1),
       ...MODES.map((mode, k) => {
         const [into, out] = modeSpan(k);
         const pairs: Array<[number, number]> = [];
@@ -129,11 +129,10 @@ export function layoutTracks(copy: LayoutCopy) {
       // Compact: the titlebar's 48 becomes 56 (compact tokens) as the mode takes over.
       fades("dm-bar-compact", [[d2[1] - HANDOVER / 2, 1], [d3[0] - 0.8, 0]], 0, HANDOVER),
       fades("tg-bar-compact", [[d2[1] - HANDOVER / 2, 1], [d3[0] - 0.8, 0]], 0, HANDOVER),
-      // The handle and the readout: width rolls through the drag, the mode cuts at each breakpoint.
+      // The handle and the readout: width follows the window through the drag, the mode cuts at each breakpoint.
       { select: select("handle"), keys: looped([{ at: 0, sy: 0, o: 1 }, { at: AT.handle, sy: 0 }, { at: AT.handle + 0.6, sy: 1, ease: "decelerate" }, { at: AT.drawer - 0.6, o: 1 }, { at: AT.drawer, o: 0 }], close) },
       ...["ro", "hu"].flatMap((id): Track[] => [
         fades(id, [[AT.handle + 0.2, 1], [d1[1] + 0.5, 0], [d2[0] - 1.2, 1], [d2[1] + 0.5, 0], [d3[0] - 1.2, 1], [AT.drawer - 1, 0]], 0, 0.5),
-        ...rollerTracks(`${id}-w`, DETENTS.map((d) => String(d.px)), 0, [[0, 0], ...DRAGS.map(([, to], k) => [to, k + 1] as [number, number])], g.lines[`${id}-w`] ?? 0, close, DRAGS[0]![1] - DRAGS[0]![0]),
         ...MODES.map((_, k) => {
           const [into, out] = modeSpan(k);
           const pairs: Array<[number, number]> = [];

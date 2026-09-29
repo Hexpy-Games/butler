@@ -242,6 +242,10 @@
   gap: var(--space-xs);
 }
 
+.liveWidth {
+  font-variant-numeric: tabular-nums;
+}
+
 .modes {
   display: inline-grid;
 }

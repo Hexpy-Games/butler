@@ -2,8 +2,7 @@ import { useLayoutEffect, useRef, type CSSProperties } from "react";
 import { Tag } from "../../../Tag";
 import { Typo } from "../../../Typo";
 import { Reveal as R } from "../shared/Reveal";
-import { Roller } from "../shared/Roller";
-import { DETENTS, MODES, RANGES, SCREEN, tokenValue, type LayoutCopy, type Mode } from "./layoutCopy";
+import { MODES, RANGES, SCREEN, tokenValue, type LayoutCopy, type Mode } from "./layoutCopy";
 import { DeviceFrame } from "./DeviceFrame";
 import { AppScreen } from "./LayoutShell";
 import s from "./LayoutHero.module.css";
@@ -21,11 +20,31 @@ function measures(): Array<[part: string, axis: "v" | "h", label: string]> {
   ];
 }
 
-/** The width and mode as the handle drags: the width rolls, the mode cuts at each breakpoint. */
+/** The window's width in device px, read from the window itself on every frame of the drag: one tabular number that changes in place. */
+function LiveWidth() {
+  const ref = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    const node = ref.current;
+    const win = node?.closest("[data-slot=\"foundation-hero\"]")?.querySelector<HTMLElement>("[data-t=\"win\"]");
+    if (!node || !win) return undefined;
+    const show = () => {
+      // The window's box is drawn at --s canvas px per device px (LayoutHero.module.css).
+      const scale = Number.parseFloat(getComputedStyle(win.parentElement!).getPropertyValue("--s")) || 1;
+      node.textContent = String(Math.round(win.offsetWidth / scale));
+    };
+    show();
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(show) : null;
+    observer?.observe(win);
+    return () => observer?.disconnect();
+  }, []);
+  return <span className={s.liveWidth} ref={ref}>1280</span>;
+}
+
+/** The width and mode as the handle drags: the width follows the window, the mode cuts at each breakpoint. */
 function Readout({ id, className }: { id: string; className: string }) {
   return (
     <span className={className} data-t={id}>
-      <Tag tone="accent"><Roller id={`${id}-w`} poster={0} values={DETENTS.map((d) => String(d.px))} /> px</Tag>
+      <Tag tone="accent"><LiveWidth /> px</Tag>
       <span className={s.modes}>{MODES.map((mode, k) => <span data-t={`${id}-m${k}`} key={mode}><Tag>{mode}</Tag></span>)}</span>
     </span>
   );
@@ -41,7 +60,7 @@ export function WindowScene({ copy }: { copy: LayoutCopy }) {
   return (
     <div className={s.stage} data-m="stage">
       <div className={s.win} data-m="win" data-t="win">
-        <div className={s.device}>
+        <div className={s.device} data-t="dev">
           {MODES.map((mode) => (
             <div className={s.layer} data-t={`ly-${mode}`} key={mode}>
               <DeviceFrame label={mode}><AppScreen copy={copy} mode={mode} open={mode === "expanded"} /></DeviceFrame>
