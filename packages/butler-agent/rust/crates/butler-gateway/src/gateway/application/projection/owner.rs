@@ -84,10 +84,11 @@ impl ProjectionOwner {
                             {
                                 let _ = callback.try_send(Command::Transcript(file.to_owned()));
                             }
-                        } else if path == processed_root
-                            || path == failed_root
-                            || path.parent() == Some(processed_root.as_path())
-                            || path.parent() == Some(failed_root.as_path())
+                        } else if path.extension().is_none_or(|value| value != "tmp")
+                            && (path == processed_root
+                                || path == failed_root
+                                || path.parent() == Some(processed_root.as_path())
+                                || path.parent() == Some(failed_root.as_path()))
                         {
                             let _ = callback.try_send(Command::Terminal);
                         }
@@ -189,9 +190,7 @@ async fn run(
 ) -> Result<(), GatewayApplicationError> {
     let mut work = Work::default();
     for file in open_turn_transcripts(&context).await? {
-        if work.changed_set.insert(file.clone()) {
-            work.changed.push_back(file);
-        }
+        work.enqueue(file);
     }
     loop {
         match receiver.try_recv() {
@@ -296,6 +295,12 @@ struct Work {
 }
 
 impl Work {
+    fn enqueue(&mut self, file: String) {
+        if self.changed_set.insert(file.clone()) {
+            self.changed.push_back(file);
+        }
+    }
+
     async fn command(&mut self, command: Option<Command>, context: &ProjectionContext) -> bool {
         match command {
             Some(Command::Wake) => {
@@ -306,21 +311,20 @@ impl Work {
                     self.retry = SETTLE_DELAY;
                 }
             }
-            Some(Command::Transcript(file)) => {
-                if self.changed_set.insert(file.clone()) {
-                    self.changed.push_back(file);
-                }
-            }
+            Some(Command::Transcript(file)) => self.enqueue(file),
             Some(Command::Terminal) => {
                 if self.terminal {
                     self.terminal_resweep = true;
                 } else {
                     self.terminal = true;
                 }
-                if self.pending {
-                    self.resweep = true;
-                } else {
-                    self.pending = true;
+                // Only chats with an open turn or a staged outbound can be
+                // waiting on a terminal record; the staged finals themselves
+                // are replayed by the deferred sweep.
+                match open_turn_transcripts(context).await {
+                    Ok(files) => files.into_iter().for_each(|file| self.enqueue(file)),
+                    Err(_) if self.pending => self.resweep = true,
+                    Err(_) => self.pending = true,
                 }
             }
             Some(Command::Refresh(chat, completion)) => {

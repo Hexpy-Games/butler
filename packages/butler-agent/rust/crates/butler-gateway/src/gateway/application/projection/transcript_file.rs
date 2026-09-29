@@ -64,7 +64,13 @@ pub(in crate::gateway::application) async fn sync_chat_once(
     }
     let pending = read.pending;
     let completed = read.completed_spool.take();
-    let advanced = project_batch(context, chat_id, read).await?;
+    // A sweep over a chat whose file has not changed writes nothing.
+    let unchanged = read.records.is_empty() && prior.as_ref() == Some(&read.checkpoint);
+    let advanced = if unchanged {
+        true
+    } else {
+        project_batch(context, chat_id, read).await?
+    };
     if let Some(path) = completed {
         let _ = tokio::fs::remove_file(path).await;
     }
