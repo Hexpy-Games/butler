@@ -110,10 +110,11 @@ fn open_log(root: &Path) -> CognitionResult<Option<File>> {
     let path = root.join("source-quality.jsonl");
     match fs::symlink_metadata(&path) {
         Ok(metadata) if metadata.file_type().is_file() => {
-            let canonical_root = fs::canonicalize(root).map_err(|source| {
-                error(CognitionCode::MemorySourceQualityReadFailed).with_source(source)
-            })?;
-            let canonical = fs::canonicalize(&path).map_err(|source| {
+            let canonical_root =
+                butler_platform::secure_fs::canonicalize(root).map_err(|source| {
+                    error(CognitionCode::MemorySourceQualityReadFailed).with_source(source)
+                })?;
+            let canonical = butler_platform::secure_fs::canonicalize(&path).map_err(|source| {
                 error(CognitionCode::MemorySourceQualityReadFailed).with_source(source)
             })?;
             if !canonical.starts_with(&canonical_root) {

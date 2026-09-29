@@ -1,3 +1,4 @@
+use butler_platform::secure_fs::Canonical as _;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -150,11 +151,11 @@ pub(super) fn ensure_parent(prepared: &Prepared, root: &Path) -> Result<(), Muta
 }
 
 fn inside_existing_parent(root: &Path, path: &Path) -> bool {
-    let root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let root = root.canonical().unwrap_or_else(|_| root.to_path_buf());
     let mut parent = path.to_path_buf();
     let mut missing = Vec::new();
     loop {
-        if let Ok(real) = parent.canonicalize() {
+        if let Ok(real) = parent.canonical() {
             let expanded = missing
                 .into_iter()
                 .rev()

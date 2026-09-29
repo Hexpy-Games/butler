@@ -15,6 +15,11 @@ pub fn home_dir() -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
+/// [`home_dir`], unless it is set but empty.
+pub fn non_empty_home_dir() -> Option<PathBuf> {
+    home_dir().filter(|home| !home.as_os_str().is_empty())
+}
+
 /// Names the directory the CLI installs the Agent into. Set, non-empty and
 /// absolute, it replaces the per-OS default of [`agent_home`].
 pub const AGENT_HOME_VARIABLE: &str = "BUTLER_AGENT_HOME";

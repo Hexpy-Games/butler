@@ -4,6 +4,8 @@ use std::fs::Metadata;
 use std::io;
 use std::path::{Path, PathBuf};
 
+pub(super) const AGENT_BINARY: &str = "butler-agent.exe";
+
 pub(super) const RELEASE_OS: &str = "windows";
 
 const RUNNABLE_EXTENSIONS: [&str; 4] = ["exe", "com", "bat", "cmd"];
@@ -19,6 +21,10 @@ pub(super) fn is_executable(path: &Path, metadata: &Metadata) -> bool {
                 .iter()
                 .any(|runnable| extension.eq_ignore_ascii_case(runnable))
         })
+}
+
+pub(super) fn is_runnable_by_all(_metadata: &Metadata) -> bool {
+    true
 }
 
 pub(super) fn system_program_dirs() -> Vec<PathBuf> {

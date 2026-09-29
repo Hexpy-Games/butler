@@ -3,6 +3,7 @@
 //! the process timezone explicitly; there is no silent UTC fallback.
 
 use crate::host::time::timezone_data::TimeZoneData;
+use butler_platform::instance::SystemTimeZone;
 use butler_runtime::context::{ContextCode, ContextError, ContextResult};
 
 pub(crate) struct DateParser {
@@ -11,7 +12,9 @@ pub(crate) struct DateParser {
 
 impl DateParser {
     /// Capture the process timezone once. An explicit TZ uses the same compiled
-    /// zone rules as named-zone callers; otherwise use the OS localtime file.
+    /// zone rules as named-zone callers; otherwise use the system's zone: the
+    /// OS localtime file, or on Windows the IANA name of its zone, resolved
+    /// through the compiled zone rules.
     pub(crate) fn from_process() -> ContextResult<Self> {
         if let Some(value) = std::env::var_os("TZ") {
             let value = value.to_str().ok_or_else(|| {
@@ -26,7 +29,15 @@ impl DateParser {
             }
             return Self::from_zone_file(std::path::Path::new(value));
         }
-        Self::from_zone_file(std::path::Path::new("/etc/localtime"))
+        match butler_platform::instance::system_time_zone() {
+            Ok(SystemTimeZone::File(path)) => Self::from_zone_file(&path),
+            Ok(SystemTimeZone::Named(name)) => Self::new(&name),
+            Err(error) => Err(ContextError::new(
+                ContextCode::DateTimezoneUnavailable,
+                error.to_string(),
+            )
+            .with_source(error)),
+        }
     }
 
     fn from_zone_file(path: &std::path::Path) -> ContextResult<Self> {

@@ -143,3 +143,35 @@ fn mcp_reply(
         }
     }
 }
+
+/// Sends one command to the loopback control endpoint the instance record
+/// publishes (a length-prefixed JSON frame each way) and returns the reply.
+/// `token` replaces the record's token, for a request that must be refused.
+pub fn control_command(
+    record: &Value,
+    command: &str,
+    token: Option<&str>,
+) -> Result<Value, HarnessError> {
+    use std::io::Read;
+    let endpoint = record["control_endpoint"]
+        .as_str()
+        .ok_or_else(|| harness_error("the record has no control endpoint"))?;
+    let request = json!({
+        "schema": "butler.native-app-gateway-control.v1",
+        "nonce": record["nonce"],
+        "command": command,
+        "intent_id": record["nonce"],
+        "token": token.map_or_else(|| record["control_token"].clone(), Value::from),
+    });
+    let bytes = serde_json::to_vec(&request).map_err(|error| harness_error(error.to_string()))?;
+    let length = u32::try_from(bytes.len()).map_err(|error| harness_error(error.to_string()))?;
+    let mut stream = std::net::TcpStream::connect(endpoint)?;
+    stream.set_read_timeout(Some(Duration::from_secs(10)))?;
+    stream.write_all(&length.to_be_bytes())?;
+    stream.write_all(&bytes)?;
+    let mut header = [0_u8; 4];
+    stream.read_exact(&mut header)?;
+    let mut reply = vec![0_u8; u32::from_be_bytes(header) as usize];
+    stream.read_exact(&mut reply)?;
+    serde_json::from_slice(&reply).map_err(|error| harness_error(error.to_string()))
+}

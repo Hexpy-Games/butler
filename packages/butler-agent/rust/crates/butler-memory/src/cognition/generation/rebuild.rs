@@ -207,9 +207,7 @@ impl Publication {
         durable::write_json(&self.staged.join("manifest.json"), &manifest)?;
         fs::rename(&self.staged, &self.published).map_err(io_error)?;
         self.staged_cleanup.0.take();
-        File::open(&self.generations)
-            .and_then(|directory| directory.sync_all())
-            .map_err(io_error)?;
+        butler_platform::secure_fs::sync_path(&self.generations).map_err(io_error)?;
         Ok(PreparedRebuild {
             generation_id: self.generation_id,
             canonical_snapshot_id: snapshot_id,
@@ -343,9 +341,7 @@ fn vacuum_snapshot(source: &Path, target: &Path) -> CognitionResult<()> {
 }
 
 fn sync(path: &Path) -> CognitionResult<()> {
-    File::open(path)
-        .and_then(|file| file.sync_all())
-        .map_err(io_error)
+    butler_platform::secure_fs::sync_path(path).map_err(io_error)
 }
 
 fn elapsed_ms(start: SystemTime) -> u64 {

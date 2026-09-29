@@ -6,7 +6,7 @@
 //! as the delta base.
 
 use std::{
-    fs::{self, File},
+    fs,
     path::{Path, PathBuf},
     sync::Arc,
     time::SystemTime,
@@ -379,9 +379,7 @@ impl SnapshotStage {
 }
 
 fn sync_dir(path: &Path) -> CognitionResult<()> {
-    File::open(path)
-        .and_then(|dir| dir.sync_all())
-        .map_err(io_error)
+    butler_platform::secure_fs::sync_path(path).map_err(io_error)
 }
 
 fn assert_building_inactive(

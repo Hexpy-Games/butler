@@ -80,7 +80,7 @@ pub(in crate::project_ledger::publication) fn assert_owned(
     if claim.schema != "project-ledger.publication-claim.v1"
         || claim.claim_id != publication_id
         || claim.publication_id != publication_id
-        || claim.canonical_root != root.to_string_lossy()
+        || Path::new(&claim.canonical_root) != root
         || claim.base_sha256 != base_sha256
     {
         return Err(ProjectWorkPublicationError::Uncertain { source: None });
@@ -104,7 +104,7 @@ pub(in crate::project_ledger::publication) fn release_if_owned(
     })?;
     if claim.schema != "project-ledger.publication-claim.v1"
         || claim.publication_id != publication_id
-        || claim.canonical_root != root.to_string_lossy()
+        || Path::new(&claim.canonical_root) != root
         || claim.base_sha256 != base_sha256
     {
         return Ok(());

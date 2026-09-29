@@ -66,9 +66,7 @@ pub(super) fn append(
         file.write_all(b"\n").map_err(io_error)?;
         file.sync_all().map_err(io_error)?;
         if !existed {
-            File::open(parent)
-                .and_then(|dir| dir.sync_all())
-                .map_err(io_error)?;
+            butler_platform::secure_fs::sync_path(parent).map_err(io_error)?;
         }
         Ok(())
     })();
@@ -169,9 +167,7 @@ fn append_idempotent(
         file.write_all(b"\n").map_err(io_error)?;
         file.sync_all().map_err(io_error)?;
         if !existed {
-            File::open(parent)
-                .and_then(|directory| directory.sync_all())
-                .map_err(io_error)?;
+            butler_platform::secure_fs::sync_path(parent).map_err(io_error)?;
         }
         Ok(())
     })();
@@ -286,9 +282,7 @@ fn rewrite_without(path: &Path, expected: &str) -> CognitionResult<bool> {
         drop(output);
         fs::rename(&temporary, path).map_err(io_error)?;
         if let Some(parent) = path.parent() {
-            File::open(parent)
-                .and_then(|directory| directory.sync_all())
-                .map_err(io_error)?;
+            butler_platform::secure_fs::sync_path(parent).map_err(io_error)?;
         }
         Ok(true)
     })();

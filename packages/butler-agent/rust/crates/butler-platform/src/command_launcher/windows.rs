@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use super::Target;
 
 pub(super) const FILE_NAME: &str = "butler.cmd";
+pub(super) const HAS_PRE_NATIVE_LAUNCHER: bool = false;
 /// The second line of every launcher this host writes.
 pub(super) const MARKER_LINE: &str = "REM butler-native-launcher v1";
 

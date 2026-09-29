@@ -175,8 +175,8 @@ async fn indexed_memory(id: &str, replay_only: bool) -> Result<Option<Scenario>,
     std::fs::create_dir_all(&transcripts)?;
     std::fs::copy(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("fixtures/F3-legacy-transcript/telegram-garden.jsonl"),
-        transcripts.join("telegram_dm-garden.jsonl"),
+            .join("fixtures/F3-legacy-transcript/legacy-garden.jsonl"),
+        transcripts.join("legacy_dm-garden.jsonl"),
     )?;
     let s = setup.start().await?;
     let ingest = cli_json(
@@ -186,7 +186,7 @@ async fn indexed_memory(id: &str, replay_only: bool) -> Result<Option<Scenario>,
             "memory",
             "ingest",
             "--session",
-            "telegram/dm-garden",
+            "legacy/dm-garden",
             "--json",
         ],
     )

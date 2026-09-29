@@ -363,21 +363,13 @@ impl TempImageFile {
     fn create(root: &Path, extension: &str, bytes: &[u8]) -> io::Result<Self> {
         let directory = root.join(format!(".butler-zai-vision-{}", uuid::Uuid::new_v4()));
         let mut builder = fs::DirBuilder::new();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::DirBuilderExt;
-            builder.mode(0o700);
-        }
+        let _ = butler_platform::secure_fs::owner_only_dirs(&mut builder);
         builder.create(&directory)?;
         let path = directory.join(format!("input{extension}"));
         let guard = Self { directory, path };
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        let _ = butler_platform::secure_fs::owner_only(&mut options);
         let mut file = options.open(&guard.path)?;
         file.write_all(bytes)?;
         file.flush()?;
