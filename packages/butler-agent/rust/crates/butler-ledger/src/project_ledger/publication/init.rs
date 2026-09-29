@@ -36,7 +36,7 @@ struct MutationClaim {
     claim_id: String,
     host_id: String,
     process_id: u32,
-    process_started_at_ms: i64,
+    process_started_at_ms: Option<i64>,
 }
 
 pub(super) fn ensure(
@@ -194,10 +194,12 @@ fn acquire(path: &Path, owner: &MutationClaim) -> Result<(), ProjectWorkPublicat
                     return Err(ProjectWorkPublicationError::Uncertain { source: None });
                 }
                 let observed = instance::process_started_at_ms(previous.process_id);
-                if observed.is_some_and(|started| started == previous.process_started_at_ms) {
+                if observed.is_some_and(|started| Some(started) == previous.process_started_at_ms) {
                     return Err(ProjectWorkPublicationError::Uncertain { source: None });
                 }
-                if observed.is_none() && process_alive(previous.process_id) {
+                if (observed.is_none() || previous.process_started_at_ms.is_none())
+                    && process_alive(previous.process_id)
+                {
                     return Err(ProjectWorkPublicationError::Uncertain { source: None });
                 }
                 let quarantine = path.with_extension(format!("dead-{}", previous.claim_id));
@@ -238,8 +240,7 @@ fn current_claim() -> Result<MutationClaim, ProjectWorkPublicationError> {
     let host_id = instance::host_name().map_err(|source| {
         ProjectWorkPublicationError::Uncertain { source: None }.with_source(source)
     })?;
-    let started = instance::process_started_at_ms(process_id)
-        .ok_or(ProjectWorkPublicationError::Uncertain { source: None })?;
+    let started = instance::process_started_at_ms(process_id);
     Ok(MutationClaim {
         schema: "project-ledger.mutation-claim.v1".into(),
         claim_id: uuid::Uuid::new_v4().to_string(),
