@@ -241,7 +241,13 @@ impl Agent {
             .service_command()
             .stdout(stdout)
             .stderr(stderr)
-            .spawn()?;
+            .spawn()
+            .map_err(|error| {
+                harness_error(format!(
+                    "cannot launch E2E agent {}: {error}",
+                    self.launch.binary.display()
+                ))
+            })?;
         self.child = Some(child);
         Ok(log)
     }
