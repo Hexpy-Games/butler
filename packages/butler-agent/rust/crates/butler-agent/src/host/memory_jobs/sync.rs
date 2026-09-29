@@ -11,16 +11,8 @@ use std::{
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
-#[cfg(unix)]
 use crate::host::EmbeddingOwner;
-#[cfg(not(unix))]
-use butler_memory::cognition::CandidateSearchInput;
-#[cfg(not(unix))]
-use butler_memory::cognition::CognitionVectorSearch;
-#[cfg(unix)]
 use butler_memory::cognition::GenerationVectorAdapter;
-#[cfg(not(unix))]
-use butler_memory::cognition::VectorSearchFuture;
 use butler_memory::cognition::{
     CognitionError, CognitionPathEnvironment, CognitionRegistrationService,
 };
@@ -50,8 +42,8 @@ impl MemorySync {
         coordinator: Arc<CognitionWriteCoordinator>,
         provider: Arc<ModelProvider>,
         unclean_previous_exit: bool,
-        #[cfg(unix)] embedding: Arc<EmbeddingOwner>,
-        #[cfg(unix)] vector: Arc<GenerationVectorAdapter>,
+        embedding: Arc<EmbeddingOwner>,
+        vector: Arc<GenerationVectorAdapter>,
     ) -> Result<Self, BtccError> {
         let clock: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
         if active_memory_descriptor_exists(data_root, paths).map_err(error)? {
@@ -62,16 +54,7 @@ impl MemorySync {
             coordinator.clone(),
             clock.clone(),
             provider,
-            {
-                #[cfg(unix)]
-                {
-                    vector
-                }
-                #[cfg(not(unix))]
-                {
-                    Arc::new(UnavailableNativeVector)
-                }
-            },
+            vector,
             Arc::new(SystemIdentity),
         ));
         let consumer = MemorySyncConsumer::new(
@@ -82,7 +65,6 @@ impl MemorySync {
             clock,
         )
         .with_unclean_start(unclean_previous_exit);
-        #[cfg(unix)]
         let consumer = consumer.with_embedding(embedding);
         let consumer = Arc::new(consumer);
         let shutdown = CancellationToken::new();
@@ -175,22 +157,6 @@ async fn poll(
                 }
             }
         }
-    }
-}
-
-/// A configured embedding generation must not receive fabricated empty hits.
-/// The extraction policy skips this port when the manifest has embedding:null.
-#[cfg(not(unix))]
-pub(in crate::host) struct UnavailableNativeVector;
-#[cfg(not(unix))]
-impl CognitionVectorSearch for UnavailableNativeVector {
-    fn search<'a>(&'a self, _: CandidateSearchInput<'a>) -> VectorSearchFuture<'a> {
-        Box::pin(async {
-            Err(CognitionError::new(
-                "native_vector_unavailable",
-                "native_vector_unavailable",
-            ))
-        })
     }
 }
 

@@ -20,20 +20,23 @@ pub(super) fn resolve_scope(
     data_root: &Path,
     scope: ResolvedProjectWorkScope,
 ) -> Result<ResolvedProjectWorkScope, ProjectWorkPublicationError> {
-    let actual = fs::canonicalize(&scope.ledger_root).map_err(|source| {
-        ProjectWorkPublicationError::adapter("project_work_scope_unavailable").with_source(source)
-    })?;
+    let actual =
+        butler_platform::secure_fs::canonicalize(&scope.ledger_root).map_err(|source| {
+            ProjectWorkPublicationError::adapter("project_work_scope_unavailable")
+                .with_source(source)
+        })?;
     if !crate::project_ledger::active_reference::safe_id(&scope.ledger_project_id) {
         return Err(ProjectWorkPublicationError::adapter(
             "project_work_scope_mismatch",
         ));
     }
-    let expected = fs::canonicalize(data_root.join("project-ledger/projects"))
-        .map_err(|source| {
-            ProjectWorkPublicationError::adapter("project_work_scope_unavailable")
-                .with_source(source)
-        })?
-        .join(&scope.ledger_project_id);
+    let expected =
+        butler_platform::secure_fs::canonicalize(data_root.join("project-ledger/projects"))
+            .map_err(|source| {
+                ProjectWorkPublicationError::adapter("project_work_scope_unavailable")
+                    .with_source(source)
+            })?
+            .join(&scope.ledger_project_id);
     if actual != expected
         || actual.file_name().and_then(|name| name.to_str()) != Some(&scope.ledger_project_id)
     {

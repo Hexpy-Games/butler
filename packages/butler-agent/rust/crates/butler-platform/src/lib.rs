@@ -19,6 +19,7 @@
 //!   enforces read-only and write-protected access.
 //! - [`secure_fs`]: owner-only files and directories, atomic replacement,
 //!   no-follow opens, directory exchange and file identity.
+//! - [`time_zone`]: IANA time zone rules by name.
 //! - [`user_dirs`]: the user's home, the Agent home and the command
 //!   directory, and the system's own folders.
 //! - [`launcher`]: runnable programs and the release platform tag.
@@ -30,11 +31,14 @@
 //!   systemd `--user`, Task Scheduler).
 //! - [`network`]: the machine's own interface addresses.
 //! - [`cpu`]: how many performance cores the machine has.
+//! - [`desktop`]: whether a browser can open, and opening a link in it.
+//! - [`stdio`]: this process's stdin and stdout as one async stream.
 //!
 //! macOS and Linux implement the behavior Butler shipped with. Windows
-//! compiles; a capability it does not have yet has a flag (such as
-//! [`secure_fs::OWNER_ONLY`]) and reports `None` or a typed `Unsupported`
-//! error instead of pretending to succeed.
+//! implements what the service needs to run and stop (process identity,
+//! Job Object containment, host facts); a capability it does not have yet
+//! has a flag (such as [`command_sandbox::READ_ONLY_SANDBOX`]) and reports
+//! `None` or a typed `Unsupported` error instead of pretending to succeed.
 
 // Production code reads slices and strings with checked accessors.
 #![deny(clippy::indexing_slicing)]
@@ -44,6 +48,7 @@
 pub mod command_launcher;
 pub mod command_sandbox;
 pub mod cpu;
+pub mod desktop;
 pub mod install_link;
 pub mod instance;
 pub mod launcher;
@@ -52,4 +57,9 @@ pub mod process_control;
 pub mod secrets;
 pub mod secure_fs;
 pub mod service_registration;
+pub mod stdio;
+pub mod time_zone;
 pub mod user_dirs;
+
+#[cfg(windows)]
+mod process_table;

@@ -30,20 +30,17 @@
 //!    `process_control::shutdown_requests` and handles like any requested
 //!    stop. Windows has no request one process can send another: a detached
 //!    service has no console for a control event, so [`request_stop`]
-//!    reports [`StopError::Unsupported`] there. In the Windows stage the
-//!    controller instead sends the `service_stop` command to the instance's
-//!    token-protected control endpoint, which requests the same stop inside
-//!    the service, or, for an instance that has not published its endpoint
-//!    yet, writes the DATA shutdown flag (`locks/butler-shutdown`) that the
-//!    starting service checks.
+//!    reports [`StopError::Unsupported`] there. The controller instead sends
+//!    the `service_stop` command to the instance's token-protected control
+//!    endpoint, which requests the same stop inside the service, or, for an
+//!    instance that has not published its endpoint yet, writes the DATA
+//!    shutdown flag (`locks/butler-shutdown`) that the starting service
+//!    checks.
 //! 2. When the grace period passes, [`terminate`] ends the process, only
 //!    while it is still the process that started at the recorded time:
-//!    SIGKILL on Unix; in the Windows stage `TerminateProcess` on a handle
-//!    whose start time was compared, so the id cannot name another process
-//!    in between.
-//!
-//! Windows implements neither the process identity nor [`terminate`] yet:
-//! both report `Unsupported`.
+//!    SIGKILL on Unix; on Windows `TerminateProcess` while a handle to the process,
+//!    whose start time was compared through it, stays open, so the id cannot
+//!    name another process in between.
 
 use std::fs::{File, TryLockError};
 use std::io;
@@ -121,10 +118,26 @@ pub fn host_name() -> io::Result<String> {
     sys::host_name()
 }
 
-/// The operating system's release (`uname -r` on Unix), lossily decoded.
-/// Unsupported on Windows yet.
+/// The operating system's release, lossily decoded: `uname -r` on Unix,
+/// `10.0.<build>` on Windows (as Node's `os.release()`).
 pub fn os_release() -> io::Result<String> {
     sys::os_release()
+}
+
+/// Where the system's time zone rules come from.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SystemTimeZone {
+    /// A compiled TZif file: `/etc/localtime` on Unix.
+    File(std::path::PathBuf),
+    /// An IANA zone name, such as `Asia/Seoul`: Windows names its zones
+    /// differently, and the host maps its zone to the IANA name.
+    Named(String),
+}
+
+/// The system's time zone (see [`SystemTimeZone`]); an error when Windows
+/// could not name it.
+pub fn system_time_zone() -> io::Result<SystemTimeZone> {
+    sys::system_time_zone()
 }
 
 /// When process `pid` started, in epoch milliseconds at whole-second
@@ -145,21 +158,25 @@ pub enum IdentityError {
     /// Whether the process exists could not be told; the host's reason.
     #[error("{0}")]
     Probe(String),
-    /// This host cannot identify processes yet (Windows).
+    /// This host cannot identify processes.
     #[error("process identity is unsupported on this host")]
     Unsupported,
 }
 
 /// When process `pid` started, as text that differs for every process the id
 /// ever names on this host: `macos:<seconds>:<microseconds>` (the kernel's
-/// start time) or `linux:<boot id>:<start ticks>`. `None` when no process has
-/// the id. Instance records persist it, so the format is pinned.
+/// start time), `linux:<boot id>:<start ticks>` or `windows:<seconds>` (the
+/// process table's start time; a process id is not reused while a handle to
+/// the process is open, see [`terminate`]). `None` when no process has the
+/// id. Instance records persist it, so the format is pinned.
 pub fn process_start(pid: u32) -> Result<Option<String>, IdentityError> {
     sys::process_start(pid)
 }
 
 /// The executable process `pid` runs: canonical on macOS, as
-/// `/proc/<pid>/exe` reads on Linux. `None` when no process has the id.
+/// `/proc/<pid>/exe` reads on Linux, as the process table reports it on
+/// Windows (without a needless `\\?\` prefix). `None` when no process has
+/// the id.
 pub fn process_executable(pid: u32) -> Result<Option<String>, IdentityError> {
     sys::process_executable(pid)
 }
@@ -205,7 +222,8 @@ pub fn request_stop(pid: u32) -> Result<(), StopError> {
 /// Ends process `pid` at once, only while it is still the process that
 /// started at `started` (a [`process_start`] value): SIGKILL on Unix, right
 /// after the start is read again. [`StopError::Gone`] when it has exited or
-/// its id names another process now. Unsupported on Windows yet.
+/// its id names another process now. Windows ends it with `TerminateProcess`
+/// while a handle opened to read its start keeps the id from being reused.
 pub fn terminate(pid: u32, started: &str) -> Result<(), StopError> {
     sys::terminate(pid, started)
 }

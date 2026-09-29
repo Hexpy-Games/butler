@@ -206,11 +206,7 @@ fn commit(input: &HotCommit<'_>) -> Result<(), crate::host::HostError> {
     if topic.is_some() {
         let mut options = fs::OpenOptions::new();
         options.create(true).append(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        let _ = butler_platform::secure_fs::owner_only(&mut options);
         options
             .open(target)
             .and_then(|mut file| file.write_all(entry.as_bytes()))
@@ -255,11 +251,7 @@ fn commit(input: &HotCommit<'_>) -> Result<(), crate::host::HostError> {
     let result: Result<(), crate::host::HostError> = (|| {
         let mut options = fs::OpenOptions::new();
         options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        let _ = butler_platform::secure_fs::owner_only(&mut options);
         let mut file = options.open(temp).map_err(|source| {
             crate::host::HostError::new("legacy_hot_write_failed").with_source(source)
         })?;
@@ -312,11 +304,7 @@ fn acquire_lock(path: &Path) -> Result<CacheLock, crate::host::HostError> {
 fn try_create_lock(path: &Path) -> std::io::Result<()> {
     let mut options = fs::OpenOptions::new();
     options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
+    let _ = butler_platform::secure_fs::owner_only(&mut options);
     let mut file = options.open(path)?;
     if let Err(error) = writeln!(file, "{}", std::process::id()) {
         let _ = fs::remove_file(path);

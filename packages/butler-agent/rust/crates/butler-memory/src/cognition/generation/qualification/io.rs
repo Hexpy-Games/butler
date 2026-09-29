@@ -1,5 +1,6 @@
 //! Qualification file IO: stable file identities and the capture store.
 
+use butler_platform::secure_fs::Canonical as _;
 use std::{
     collections::BTreeMap,
     fs::{self, File},
@@ -30,10 +31,10 @@ pub(super) struct CaptureStore {
 
 impl CaptureStore {
     pub(super) fn new(acceptance_path: &Path, evidence_root: &Path) -> CognitionResult<Self> {
-        let acceptance_path = acceptance_path.canonicalize().map_err(|source| {
+        let acceptance_path = acceptance_path.canonical().map_err(|source| {
             invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
         })?;
-        let evidence_root = evidence_root.canonicalize().map_err(|source| {
+        let evidence_root = evidence_root.canonical().map_err(|source| {
             invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
         })?;
         Ok(Self {
@@ -63,7 +64,7 @@ impl CaptureStore {
                 .map(|(value, _)| value);
         }
         let path = self.evidence_root.join(relative_ref);
-        let canonical = path.canonicalize().map_err(|source| {
+        let canonical = path.canonical().map_err(|source| {
             invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
         })?;
         if !canonical.starts_with(&self.evidence_root) {
@@ -87,7 +88,7 @@ impl CaptureStore {
             return Ok(());
         }
         let path = self.evidence_root.join(relative_ref);
-        let canonical = path.canonicalize().map_err(|source| {
+        let canonical = path.canonical().map_err(|source| {
             invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
         })?;
         if !canonical.starts_with(&self.evidence_root) {
@@ -181,10 +182,10 @@ pub(in crate::cognition::generation) fn assert_evidence_current(
     acceptance_path: &Path,
     evidence_root: &Path,
 ) -> CognitionResult<()> {
-    let evidence_root = evidence_root.canonicalize().map_err(|source| {
+    let evidence_root = evidence_root.canonical().map_err(|source| {
         invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
     })?;
-    let acceptance_path = acceptance_path.canonicalize().map_err(|source| {
+    let acceptance_path = acceptance_path.canonical().map_err(|source| {
         invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
     })?;
 
@@ -196,7 +197,7 @@ pub(in crate::cognition::generation) fn assert_evidence_current(
                 return Err(invalid(CognitionCode::MemoryAcceptanceEvidenceChanged));
             }
             let path = evidence_root.join(&expected.relative_ref);
-            let canonical = path.canonicalize().map_err(|source| {
+            let canonical = path.canonical().map_err(|source| {
                 invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
             })?;
             if !canonical.starts_with(&evidence_root) {
@@ -230,10 +231,10 @@ pub(in crate::cognition::generation) fn assert_evidence_file_facts_current(
     acceptance_path: &Path,
     evidence_root: &Path,
 ) -> CognitionResult<()> {
-    let evidence_root = evidence_root.canonicalize().map_err(|source| {
+    let evidence_root = evidence_root.canonical().map_err(|source| {
         invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
     })?;
-    let acceptance_path = acceptance_path.canonicalize().map_err(|source| {
+    let acceptance_path = acceptance_path.canonical().map_err(|source| {
         invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
     })?;
 
@@ -245,7 +246,7 @@ pub(in crate::cognition::generation) fn assert_evidence_file_facts_current(
                 return Err(invalid(CognitionCode::MemoryAcceptanceEvidenceChanged));
             }
             let path = evidence_root.join(&expected.relative_ref);
-            let canonical = path.canonicalize().map_err(|source| {
+            let canonical = path.canonical().map_err(|source| {
                 invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
             })?;
             if !canonical.starts_with(&evidence_root) {

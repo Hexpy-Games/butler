@@ -10,7 +10,9 @@ use tokio::process::{Child, Command};
 use tokio::sync::{Notify, watch};
 use tokio_util::sync::CancellationToken;
 
-use super::process::{CaptureSink, GroupSignal, ProcessFuture, ProcessHost, signal_pid};
+use super::process::{
+    CaptureSink, GroupSignal, ProcessFuture, ProcessHost, signal_pid, spawn_contained,
+};
 use super::{
     CommandError, CommandStep, Commands, GuidedAccess, GuidedCommandInput, StructuredCommandInput,
 };
@@ -54,7 +56,7 @@ impl ProcessHost for ScriptedProcesses {
             {
                 gate.notified().await;
             }
-            command.spawn()
+            spawn_contained(command).await
         })
     }
 

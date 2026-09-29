@@ -84,4 +84,3 @@ export function Sidebar({ copy }: { copy: LayersCopy }) {
     </SidebarShell>
   );
 }
-

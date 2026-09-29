@@ -10,7 +10,8 @@ use butler_runtime::operations::ServiceReadiness;
 use butler_turn::btcc::BtccError;
 
 use crate::host::app::gateway_lifecycle::{
-    ActiveAppEndpoint, AppGatewayLifecycle, GatewayControlServer, local_auth_unconfigured,
+    ActiveAppEndpoint, AppGatewayLifecycle, ControlOwners, GatewayControlServer,
+    local_auth_unconfigured,
 };
 use crate::host::service::foreground_lease::ForegroundLease;
 use crate::host::service::ingress::IngressDispatcher;
@@ -333,8 +334,7 @@ async fn serve(
         config.data_root.clone(),
         config.installation.clone(),
         instance.nonce().to_owned(),
-        gateway.clone(),
-        runtime.restart_effect_journal.clone(),
+        control_owners(&gateway, &runtime, stop),
     )
     .await
     {
@@ -411,6 +411,21 @@ async fn serve(
         .and(close)
         .and(publication)
         .map(|()| binding.session_id)
+}
+
+/// What the control endpoint serves: the App gateway lifecycle, the restart
+/// journal and this service's stop (`service_stop`).
+fn control_owners(
+    gateway: &Arc<AppGatewayLifecycle>,
+    runtime: &AgentRuntime,
+    stop: &StopSignal,
+) -> ControlOwners {
+    let stop = stop.clone();
+    ControlOwners {
+        lifecycle: gateway.clone(),
+        effects: runtime.restart_effect_journal.clone(),
+        stop: Arc::new(move || stop.request_controlled()),
+    }
 }
 
 /// Publishes the ready record, unless a stop was requested during startup:

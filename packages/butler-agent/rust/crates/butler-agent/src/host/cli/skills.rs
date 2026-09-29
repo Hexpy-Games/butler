@@ -292,9 +292,7 @@ fn expand_home(value: &str) -> PathBuf {
 }
 
 fn user_home() -> PathBuf {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_default()
+    butler_platform::user_dirs::home_dir().unwrap_or_default()
 }
 
 fn project_values(args: &[String]) -> Option<Vec<String>> {

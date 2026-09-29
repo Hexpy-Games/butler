@@ -4,7 +4,7 @@ mod manifest;
 mod validate;
 
 use crate::btcc::StorageCode;
-use std::fs::{self, File};
+use std::fs;
 use std::path::Path;
 
 use rusqlite::{Connection, params};
@@ -94,9 +94,7 @@ impl FreshStorage<'_> {
             .map_err(StorageError::sqlite)?;
         db.close()
             .map_err(|(_, error)| StorageError::sqlite(error))?;
-        File::open(self.temp)
-            .and_then(|file| file.sync_all())
-            .map_err(io_error)
+        butler_platform::secure_fs::sync_path(self.temp).map_err(io_error)
     }
 
     /// The fresh-install receipt. A fresh source has no rows or claims:
@@ -131,9 +129,7 @@ impl FreshStorage<'_> {
             return Err(error(StorageCode::AgentBtccStoragePublishTargetExists));
         }
         fs::rename(self.temp, self.path).map_err(io_error)?;
-        File::open(self.parent)
-            .and_then(|file| file.sync_all())
-            .map_err(io_error)?;
+        butler_platform::secure_fs::sync_path(self.parent).map_err(io_error)?;
         let db = Connection::open(self.path).map_err(StorageError::sqlite)?;
         validate::receipt(&db, self.id)?;
         let marker = json!({

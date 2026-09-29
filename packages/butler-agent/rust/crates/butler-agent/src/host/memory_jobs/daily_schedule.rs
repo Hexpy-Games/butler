@@ -92,11 +92,7 @@ fn write_state(data_root: &Path, id: &str, state: &Value) -> Result<(), crate::h
         bytes.push(b'\n');
         let mut options = fs::OpenOptions::new();
         options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        let _ = butler_platform::secure_fs::owner_only(&mut options);
         let mut file = options
             .open(&temporary)
             .map_err(crate::host::HostError::from_error)?;

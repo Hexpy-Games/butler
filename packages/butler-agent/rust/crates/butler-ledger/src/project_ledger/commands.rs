@@ -320,9 +320,9 @@ pub(in crate::project_ledger::commands) fn contained_root(
         },
     )?;
     if expected.exists() {
-        let actual =
-            std::fs::canonicalize(&expected).map_err(|source| io_failure().with_source(source))?;
-        let supplied = std::fs::canonicalize(project_root)
+        let actual = butler_platform::secure_fs::canonicalize(&expected)
+            .map_err(|source| io_failure().with_source(source))?;
+        let supplied = butler_platform::secure_fs::canonicalize(project_root)
             .map_err(|source| io_failure().with_source(source))?;
         if supplied != actual {
             return Err(CliFailure::new(
