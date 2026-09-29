@@ -31,7 +31,10 @@ pub(super) fn list(
          attachments_json,content_parts_json,state,safe_error_code,dispatched_message_id,turn_id,\
          terminal_result_message_id,created_at,updated_at FROM session_queued_messages \
          WHERE chat_id=?1 AND (state='queued' OR (state='failed' AND \
-         COALESCE(safe_error_code, '') <> 'turn_cancelled')) ORDER BY rowid ASC",
+         COALESCE(safe_error_code, '') <> 'turn_cancelled')) \
+         AND CASE WHEN json_valid(control_resolution_json) \
+         THEN json_extract(control_resolution_json,'$.subsession_result') END IS NULL \
+         ORDER BY rowid ASC",
         )
         .map_err(AppStorageError::sqlite)?;
     let rows = statement
