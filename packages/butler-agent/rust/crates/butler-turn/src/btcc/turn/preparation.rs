@@ -14,7 +14,7 @@ use super::{
     ConversationProjection, PortFuture, PreparedExecution, PreparedTurn, TurnPreparation, TurnStore,
 };
 use crate::btcc::BtccCode;
-use crate::btcc::storage::{BtccRepositories, WakeAuthorization};
+use crate::btcc::storage::{BtccRepositories, StorageCode, WakeAuthorization};
 use crate::btcc::{BtccError, ReasoningEffort, TurnRequest, TurnTrigger};
 use crate::conversation::{
     AgentConversationStore, ConversationAdmissionObserver, ConversationAdmissionTurn,
@@ -134,18 +134,25 @@ impl DefaultTurnPreparation {
     /// is authorized, its context assembled and snapshotted and its model
     /// admitted.
     async fn prepare_owned(&self, request: TurnRequest) -> Result<PreparedExecution, BtccError> {
-        if let Some(turn) = self
-            .repositories
-            .find_turn(&request.turn_id)
-            .await
-            .unwrap_or(None)
-        {
+        let stored = match self.repositories.find_turn(&request.turn_id).await {
+            Ok(turn) => turn,
+            // A failed lookup of a resume must not read as "not admitted".
+            Err(error) if request.resume => return Err(error),
+            Err(_) => None,
+        };
+        if let Some(turn) = stored {
             request::assert_replay_identity(&turn, &request)?;
             let binding = request::replay_binding(&turn, &request)?;
             let command = request::resume_command(&request);
             return self
                 .finish(request, binding, command, Admission::Replay)
                 .await;
+        }
+        if request.resume {
+            return Err(BtccError::relayed(
+                StorageCode::TurnNotAdmitted.as_str(),
+                format!("BTCC Turn is not admitted: {}", request.turn_id),
+            ));
         }
         self.authorize_wake(&request).await?;
         let binding = self

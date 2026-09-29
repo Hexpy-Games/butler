@@ -70,7 +70,7 @@ export function anchoredStewardProgressByMessageId(
     result.set(parent.id, {
       child,
       turn,
-      rows: turn.progress.safe_progress_rows,
+      rows: turn.progress?.safe_progress_rows ?? [],
     });
   }
   return result;

@@ -812,6 +812,18 @@ export function createBundledAgentSupervisor({
       : {};
   }
 
+  /**
+   * Re-reads the DATA-owned token file, e.g. after the connection code was
+   * rotated. Keeps the last good token when the file is missing or invalid.
+   */
+  function reloadLocalAuth() {
+    const next = readAppLocalAuth({ butlerData });
+    if (!next) return false;
+    const changed = next.token !== localAuth?.token;
+    localAuth = next;
+    return changed;
+  }
+
   function clearShutdownTimer() {
     if (!shutdownKillTimer) return;
     clearKillTimer(shutdownKillTimer);
@@ -850,7 +862,12 @@ export function createBundledAgentSupervisor({
   }
 
   async function checkGatewayReadiness() {
-    const health = await runBoundedProbe(() => healthCheck(localAuth));
+    let health = await runBoundedProbe(() => healthCheck(localAuth));
+    // A connection code rotated elsewhere (CLI, browser) leaves this token
+    // stale; the data-folder token file holds the new one.
+    if (!health.value && reloadLocalAuth()) {
+      health = await runBoundedProbe(() => healthCheck(localAuth));
+    }
     const healthy = health.value;
     if (!healthy) {
       return { healthy: false, ready: false, timedOut: health.timedOut };
@@ -914,6 +931,7 @@ export function createBundledAgentSupervisor({
     authHeaders,
     diagnostics,
     ensureReady,
+    reloadLocalAuth,
     repair,
     restart,
     resume,

@@ -436,6 +436,7 @@ pub(super) fn request() -> TurnRequest {
         authority_request_ref: None,
         authority_client_message_id: None,
         app_queue_claim_id: None,
+        resume: false,
         preparation_cancellation: tokio_util::sync::CancellationToken::new(),
     }
 }

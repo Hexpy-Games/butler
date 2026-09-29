@@ -129,6 +129,22 @@ pub(super) fn crash_interrupted(turn_id: &str) -> Terminal<'_> {
     }
 }
 
+/// A turn BTCC rejected for a reason a retry cannot change: failed for good.
+pub(super) fn rejected<'a>(turn_id: &'a str, code: &'a str) -> Terminal<'a> {
+    Terminal {
+        text: "Butler could not continue this reply.",
+        canonical: None,
+        turn_id,
+        kind: "turn_failed",
+        safe_error: Some(code),
+        suspension: None,
+        model: None,
+        artifacts: &[],
+        changed_files: &[],
+        plan: None,
+    }
+}
+
 pub(super) fn action(
     item: &ClaimedInboundEvent,
     envelope: &Envelope,

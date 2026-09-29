@@ -48,6 +48,7 @@ async fn admission_replays_exact_source_and_rejects_unsafe_tool_content() {
             event_id: "event-1".into(),
             message_text: text.into(),
             content_parts: Some(json!([{"type":"input_text","text":text}])),
+            resume: false,
         },
         turn_id: "ct_admission".into(),
         timestamp: "2026-09-14T00:00:00.000Z".into(),

@@ -1,0 +1,475 @@
+/* 04 Sizing hero (v3 scenes). Canvas px (../shared/grid.ts). */
+
+/* ---- Title: four rails under the word, like a staff ---- */
+
+.titleRails {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: visible;
+}
+
+.titleRails line {
+  stroke: color-mix(in srgb, var(--accent) 60%, transparent);
+  stroke-width: 1.5;
+  stroke-dasharray: 100;
+}
+
+/* ---- The staff: four lanes, each one control height tall ---- */
+
+/* The rails at the pointer: the phone's hit-target floor does not lift these controls off them. */
+.staff {
+  --control-hit-target: var(--space-none);
+
+  display: grid;
+  row-gap: var(--space-xl);
+  inline-size: calc(var(--space-4xl) * 19);
+}
+
+[data-layout="tall"] .staff {
+  inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
+}
+
+.lane {
+  display: grid;
+  grid-template-columns: calc(var(--space-4xl) * 1.5) minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--space-md);
+}
+
+.laneLabel {
+  color: var(--text-secondary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
+}
+
+.laneBody {
+  position: relative;
+  border-block: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.lane[data-rail="xs"] .laneBody {
+  block-size: var(--control-height-xs);
+}
+
+.lane[data-rail="sm"] .laneBody {
+  block-size: var(--control-height-sm);
+}
+
+.lane[data-rail="md"] .laneBody {
+  block-size: var(--control-height-md);
+}
+
+.lane[data-rail="lg"] .laneBody {
+  block-size: var(--control-height-lg);
+}
+
+.laneFill {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  opacity: 0.35;
+}
+
+.note {
+  position: absolute;
+  top: 0;
+  display: inline-flex;
+}
+
+.note[data-k="0"] {
+  left: var(--space-4xl);
+}
+
+.note[data-k="1"] {
+  left: calc(var(--space-4xl) * 3.5);
+}
+
+.note[data-k="2"] {
+  --control-hit-target: var(--control-height-md);
+
+  left: calc(var(--space-4xl) * 7);
+}
+
+.note[data-k="3"] {
+  left: calc(var(--space-4xl) * 10.5);
+}
+
+[data-layout="tall"] .note {
+  left: var(--space-md);
+}
+
+/* ---- Pointer to touch ---- */
+
+.touchStage {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  column-gap: calc(var(--space-4xl) * 1.5);
+}
+
+[data-layout="tall"] .touchStage {
+  grid-template-columns: auto;
+  justify-items: center;
+  row-gap: var(--space-3xl);
+}
+
+/*
+ * The conversation pane's top edge with its real titlebar. Icon buttons keep
+ * the pointer's 30 (the titlebar action size) so the scene grows their
+ * targets itself; a target is its button's box, as on a touch screen.
+ */
+.strip {
+  --titlebar-action-size: var(--control-height-md);
+  --control-hit-target: var(--control-height-md);
+
+  position: relative;
+  display: grid;
+  box-sizing: border-box;
+  inline-size: calc(var(--space-4xl) * 11);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--workspace-bg);
+}
+
+[data-layout="tall"] .strip {
+  inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
+}
+
+/* The bar's height (sized by the timeline): the titlebar, then touch's 44 with room around it (the phone's 56). */
+.stripHeight {
+  inline-size: 1px;
+  block-size: var(--titlebar-safe-area-top);
+}
+
+.strip[data-touch] .stripHeight {
+  block-size: max(
+    var(--titlebar-safe-area-top),
+    calc(var(--touch-target) + var(--space-md))
+  );
+}
+
+/* The titlebar, centred in the bar at every height. */
+.stripBar {
+  position: absolute;
+  inset-inline: 0;
+  top: calc((100% - var(--titlebar-safe-area-top)) / 2);
+  block-size: var(--titlebar-safe-area-top);
+}
+
+/* The floating sidebar toggle, where the phone titlebar keeps room for it. */
+.stripToggle {
+  display: none;
+}
+
+.target {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  inline-size: var(--control-height-md);
+  block-size: var(--control-height-md);
+}
+
+.strip[data-touch] .target {
+  inline-size: var(--touch-target);
+  block-size: var(--touch-target);
+}
+
+.halo {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border: 1.5px dashed var(--accent);
+  border-radius: var(--radius-control);
+  pointer-events: none;
+}
+
+/* The fingertip: the touch target's size, centred on the target at every size. */
+.finger {
+  position: absolute;
+  inset: calc(-1 * var(--touch-target));
+  box-sizing: border-box;
+  inline-size: var(--touch-target);
+  block-size: var(--touch-target);
+  margin: auto;
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* The arrow's tip on the target's centre. */
+.cursor {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  inline-size: var(--space-lg);
+  block-size: var(--space-xl);
+  overflow: visible;
+  fill: var(--text-primary);
+  stroke: var(--color-surface-base);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.readout {
+  display: grid;
+  justify-items: start;
+  row-gap: var(--space-xs);
+  color: var(--text-primary);
+}
+
+[data-layout="tall"] .readout {
+  justify-items: center;
+}
+
+.bigValue {
+  font-size: calc(var(--typo-h1-size) * 2);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-strong);
+  line-height: var(--line-height-none);
+}
+
+.readToken {
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
+}
+
+.modes {
+  display: inline-grid;
+}
+
+.mode {
+  grid-area: 1 / 1;
+  color: var(--text-secondary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+}
+
+/* ---- The window's fixed measures ---- */
+
+/* A Butler window's top-left: the sidebar beside the conversation pane. */
+.window {
+  --control-hit-target: var(--control-height-md);
+
+  position: relative;
+  display: grid;
+  grid-template-columns: calc(var(--space-4xl) * 6) calc(var(--space-4xl) * 9.5);
+  box-sizing: border-box;
+  margin-inline-start: calc(var(--space-4xl) * 5.5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--sidebar-bg);
+}
+
+[data-layout="tall"] .window {
+  grid-template-columns: calc(var(--space-4xl) * 6.2);
+  margin-inline-start: calc(var(--space-4xl) * 1.6);
+}
+
+/* The window with, when tall, the ruler's legend under it. */
+.frame {
+  display: grid;
+  justify-items: start;
+  row-gap: var(--space-lg);
+}
+
+.legend {
+  display: none;
+}
+
+[data-layout="tall"] .legend {
+  display: grid;
+  row-gap: var(--space-xs);
+  margin-inline-start: calc(var(--space-4xl) * 1.6);
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
+}
+
+.side {
+  display: grid;
+  min-inline-size: 0;
+}
+
+.pane {
+  position: relative;
+  min-inline-size: 0;
+  border-inline-start: 1px solid var(--line);
+  border-start-start-radius: var(--radius-panel);
+  border-end-end-radius: var(--radius-panel);
+  background: var(--workspace-bg);
+}
+
+[data-layout="tall"] .pane {
+  display: none;
+}
+
+.measure {
+  display: block;
+  min-inline-size: 0;
+}
+
+.windowToggle {
+  position: absolute;
+  top: var(--chrome-floating-toggle-top);
+  left: var(--chrome-toggle-inset);
+  display: inline-grid;
+}
+
+.windowToggle button {
+  --icon-button-size: var(--chrome-floating-toggle-size);
+}
+
+.windowToggle button svg {
+  inline-size: var(--chrome-floating-toggle-icon-size);
+  block-size: var(--chrome-floating-toggle-icon-size);
+}
+
+/* The ruler: dimension lines on the window's outer left edge, labels left of them. */
+.ruler {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.dim {
+  position: absolute;
+  top: var(--top);
+  right: calc(100% + var(--space-xl));
+  box-sizing: border-box;
+  inline-size: var(--space-sm);
+  block-size: var(--size);
+  border-block: 1px solid var(--accent);
+  transform-origin: 50% 0;
+}
+
+.dim::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 0.5px);
+  inline-size: 1px;
+  background: var(--accent);
+  content: "";
+}
+
+.dimLabel {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + var(--space-sm));
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
+  transform: translateY(-50%);
+}
+
+/* ---- Form row on one rail ---- */
+
+.formRow {
+  --control-hit-target: var(--control-height-md);
+
+  position: relative;
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+}
+
+.formRail {
+  position: absolute;
+  inset: 0 calc(-1 * var(--space-md));
+  border-block: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  pointer-events: none;
+}
+
+/* ---- Finale tiles ---- */
+
+/* Every tile keeps the controls at one scale (a size chapter compares sizes): full width, so none is drawn larger. */
+.staffTile,
+.frameTile,
+.captioned {
+  inline-size: 100%;
+}
+
+.staffTile,
+.frameTile {
+  display: grid;
+  justify-items: center;
+}
+
+.staffTile .staff {
+  row-gap: var(--space-md);
+  inline-size: calc(var(--space-4xl) * 20);
+}
+
+[data-layout="tall"] .staffTile .staff {
+  inline-size: calc(var(--canvas-w) - var(--grid-margin) * 4);
+}
+
+.frameTile .window {
+  grid-template-columns: calc(var(--space-4xl) * 6);
+  margin-inline-start: calc(var(--space-4xl) * 5.5);
+}
+
+.frameTile .pane {
+  display: none;
+}
+
+[data-layout="tall"] .frameTile .window {
+  grid-template-columns: calc(var(--space-4xl) * 6.2);
+  margin-inline-start: calc(var(--space-4xl) * 1.6);
+}
+
+.captioned {
+  display: grid;
+  justify-items: center;
+  row-gap: var(--space-xl);
+}
+
+.captioned[data-kind="halo"] {
+  justify-items: stretch;
+  inline-size: 100%;
+}
+
+.captioned[data-kind="halo"] .strip {
+  inline-size: 100%;
+}
+
+.caption {
+  justify-self: center;
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
+}
+
+/* Tall: the lines carry only their values; the tokens are in the legend. */
+[data-layout="tall"] .dimToken {
+  display: none;
+}
+
+@media (width <= 640px) {
+  .stripToggle {
+    position: absolute;
+    top: var(--chrome-floating-toggle-top);
+    left: var(--chrome-floating-toggle-left);
+    z-index: 6;
+    display: inline-grid;
+  }
+
+  .stripToggle button {
+    --icon-button-size: var(--chrome-floating-toggle-size);
+  }
+
+  .stripToggle button svg {
+    inline-size: var(--chrome-floating-toggle-icon-size);
+    block-size: var(--chrome-floating-toggle-icon-size);
+  }
+}

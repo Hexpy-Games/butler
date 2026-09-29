@@ -282,6 +282,24 @@ async fn actual_sqlite_fresh_and_replay_skip_changed_context_and_catalog() {
             .code(),
         "turn_replay_conflict"
     );
+    absent_content.resume = true;
+    request::assert_replay_identity(&stored_null, &absent_content).unwrap();
+    // A resume skips only the content; any other difference still conflicts.
+    let changes: [fn(&mut TurnRequest); 3] = [
+        |resume| resume.message.content = "changed".into(),
+        |resume| resume.message.id = "other-message".into(),
+        |resume| resume.session_id = "other-session".into(),
+    ];
+    for change in changes {
+        let mut resume = absent_content.clone();
+        change(&mut resume);
+        assert_eq!(
+            request::assert_replay_identity(&stored_null, &resume)
+                .unwrap_err()
+                .code(),
+            "turn_replay_conflict"
+        );
+    }
 
     let mut wrong_role = request.clone();
     wrong_role.turn_id = "turn-role".into();
@@ -353,70 +371,7 @@ async fn actual_sqlite_fresh_and_replay_skip_changed_context_and_catalog() {
     drop(wake);
 
     workspace.upsert(subsession_binding()).await.unwrap();
-    let mut subsession_request = request.clone();
-    subsession_request.turn_id = "turn-subsession".into();
-    subsession_request.event_id = "event-subsession".into();
-    subsession_request.session_id = "session-subsession".into();
-    subsession_request.route.role = BtccRole::Steward;
-    subsession_request.execution_controls = Some(
-        ExecutionControls::create(
-            "turn-subsession",
-            "session-subsession",
-            ControlResolution {
-                model: "provider/model".into(),
-                reasoning_effort: ReasoningEffort::High,
-                access_mode: AccessMode::FullAccess,
-                plan_mode: true,
-                source: ControlSource::MessageOverride,
-                session_control_revision: 3,
-                catalog_generation: " catalog-1 ".into(),
-                model_fallback: Some(ModelFallback {
-                    enabled: true,
-                    models: vec![" backup/model ".into()],
-                }),
-                subsession_result: None,
-            },
-            "2026-09-14T00:00:00.000Z",
-        )
-        .unwrap(),
-    );
-    subsession_request.message.attachments = vec![
-        AttachmentRef {
-            id: "image".into(),
-            kind: AttachmentKind::Image,
-            mime_type: Some("image/png".into()),
-            file_name: None,
-            size_bytes: Some(-4.5),
-            url: None,
-            local_path: Some("/private/image.png".into()),
-            visual_manifest: None,
-        },
-        AttachmentRef {
-            id: "text".into(),
-            kind: AttachmentKind::Document,
-            mime_type: Some("text/plain".into()),
-            file_name: Some("note.txt".into()),
-            size_bytes: Some(8.25),
-            url: None,
-            local_path: Some("/workspace/note.txt".into()),
-            visual_manifest: None,
-        },
-        AttachmentRef {
-            id: "non-finite".into(),
-            kind: AttachmentKind::Binary,
-            mime_type: None,
-            file_name: None,
-            size_bytes: Some(f64::NAN),
-            url: None,
-            local_path: None,
-            visual_manifest: None,
-        },
-    ];
-    subsession_request.app_turn_context = Some(json!({
-        "session":{"id":"app-subsession"},
-        "projectSources":[{"id":"source"}],
-        "sessionReferences":[{"id":"prior"}]
-    }));
+    let subsession_request = subsession_request(&request);
     let subsession = preparation.prepare(subsession_request).await.unwrap();
     let subsession_command = serde_json::to_value(&subsession.turn.command).unwrap();
     let subsession_context = &subsession_command["context"];
@@ -494,6 +449,5 @@ mod contracts;
 mod fixtures;
 mod goldens;
 
-use goldens::*;
-
 use fixtures::*;
+use goldens::*;

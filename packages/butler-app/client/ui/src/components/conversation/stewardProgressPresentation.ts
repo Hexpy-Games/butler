@@ -12,6 +12,28 @@ const TERMINAL_STEWARD_STATES = new Set([
   "cancelled",
 ]);
 
+/**
+ * The child's settled status. A terminal child (durable result) is done no
+ * matter what its status or progress say; gateways that report the raw
+ * result statuses (`completed`, `blocked`) map onto the App statuses.
+ */
+export function effectiveStewardStatus(
+  child: Pick<StewardSessionSummaryView, "status" | "terminal" | "result">,
+): string {
+  const status: string = child.status;
+  if (status === "completed") return "delivered";
+  if (status === "blocked") return "failed";
+  if (TERMINAL_STEWARD_STATES.has(status)) return status;
+  if (!child.terminal) return status;
+  switch (child.result?.status) {
+    case "success": return "delivered";
+    case "cancelled": return "cancelled";
+    case "blocked":
+    case "failed": return "failed";
+    default: return "delivered";
+  }
+}
+
 export function activeStewardChildren(
   children: StewardSessionSummaryView[] = [],
 ): StewardSessionSummaryView[] {
@@ -20,20 +42,21 @@ export function activeStewardChildren(
       child.waiting_for_children ||
       (child.active_turn && ACTIVE_TURN_STATES.has(child.active_turn.state)),
     ) &&
-      !TERMINAL_STEWARD_STATES.has(child.status),
+      !TERMINAL_STEWARD_STATES.has(effectiveStewardStatus(child)),
   );
 }
 
 export function stewardProgressStatus(
   child: Pick<
     StewardSessionSummaryView,
-    "approved_plan_total" | "approved_plan_completed" | "status"
+    "approved_plan_total" | "approved_plan_completed" | "status" | "terminal" | "result"
   >,
 ): string {
-  if (child.status === "delivered") return appCopy.interfaceStatus.delivered;
-  if (child.status === "failed") return appCopy.interfaceStatus.failedPast;
-  if (child.status === "cancelled") return appCopy.interfaceStatus.cancelled;
-  if (child.status === "idle") return appCopy.interfaceStatus.idle;
+  const status = effectiveStewardStatus(child);
+  if (status === "delivered") return appCopy.interfaceStatus.delivered;
+  if (status === "failed") return appCopy.interfaceStatus.failedPast;
+  if (status === "cancelled") return appCopy.interfaceStatus.cancelled;
+  if (status === "idle") return appCopy.interfaceStatus.idle;
   const progress = stewardPlanProgress(child);
   if (progress) return `${appCopy.interfaceStatus.working} · ${progress}`;
   return appCopy.interfaceStatus.working;
@@ -58,7 +81,7 @@ export function stewardCurrentActivityTitle(
   if (child.waiting_for_children && !child.active_turn) {
     return appCopy.conversation.work.pendingStateLabels.waiting_for_children;
   }
-  const rows = child.active_turn?.progress.safe_progress_rows ?? [];
+  const rows = child.active_turn?.progress?.safe_progress_rows ?? [];
   const activeActivity = latestMatchingRow(rows, (row) =>
     row.kind !== "todo" &&
     row.kind !== "turn" &&
@@ -89,7 +112,7 @@ export function stewardCurrentActivityTitle(
     (latestActivity && interfaceProgressLabel(latestActivity)) ||
     (activePlanStep && interfaceProgressLabel(activePlanStep)) ||
     (genericActivity && interfaceProgressLabel(genericActivity)) ||
-    interfaceText(child.active_turn?.progress.summary_reference, child.active_turn?.progress.summary ?? "") ||
+    interfaceText(child.active_turn?.progress?.summary_reference, child.active_turn?.progress?.summary ?? "") ||
     appCopy.interfaceStatus.progress
   ).trim().replace(/\s+/gu, " ");
 }

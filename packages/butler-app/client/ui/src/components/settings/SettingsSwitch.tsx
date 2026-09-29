@@ -7,6 +7,7 @@ export function SettingsSwitch({
   description,
   id,
   checked,
+  disabled,
   onChange,
 }: {
   label: string;
@@ -14,6 +15,7 @@ export function SettingsSwitch({
   description?: string;
   id?: string;
   checked: boolean;
+  disabled?: boolean;
   onChange: (value: boolean) => void;
 }) {
   const generatedId = useId();
@@ -33,6 +35,7 @@ export function SettingsSwitch({
           id={controlId}
           aria-describedby={description ? descriptionId : undefined}
           checked={checked}
+          disabled={disabled}
           onCheckedChange={onChange}
         />
       }

@@ -98,6 +98,29 @@ export interface BriefingFallbackCopy { title: string; description: string; sugg
 
 type CountFormatter = (count: number) => string;
 
+/**
+ * An approval request as one plain question, per `approval.action_kind`
+ * (#235). `workspace` is the workspace label; `null` reads as "this workspace".
+ */
+export interface ApprovalRequestCopy {
+  editFiles: (count: number, workspace: string | null) => string;
+  runCommand: (workspace: string | null) => string;
+  networkCommand: (workspace: string | null) => string;
+  useConnector: (tool: string | null, server: string | null) => string;
+  manageSchedule: { create: string; delete: string; run: string; change: string };
+  updateProject: string;
+  startConversation: string;
+  restartService: string;
+  createWorktree: string;
+  /** Any kind this App does not know yet. */
+  generic: string;
+  /** The line after the examples. */
+  more: CountFormatter;
+  risk: { low: string; medium: string; high: string };
+  /** What "Always allow in this conversation" covers. */
+  covers: { editFiles: (workspace: string | null) => string; command: (workspace: string | null) => string; other: string };
+}
+
 export type AppLocale = "en-US" | "ko-KR";
 
 interface ConversationWorkCopy {
@@ -338,6 +361,7 @@ export interface AppCopy {
     contextMetric: (kind: "full" | "used" | "budget" | "available" | "compact", value: string | number) => string;
     activityHistory: (live: boolean, label: string, count: number) => string;
     pendingApprovals: (count: number) => string;
+    approvalRequest: ApprovalRequestCopy;
     allowedCount: (count: number) => string;
     revoke: (title: string) => string;
     skillTitle: (name: string) => string;
@@ -902,6 +926,7 @@ export interface AppCopy {
       logs: string;
       personalization: string;
       privacy: string;
+      security: string;
       system: string;
       archives: string;
       about: string;
@@ -918,6 +943,7 @@ export interface AppCopy {
       logs: string;
       personalization: string;
       privacy: string;
+      security: string;
       system: string;
       archives: string;
       about: string;
@@ -934,13 +960,14 @@ export interface AppCopy {
       logs: string[];
       personalization: string[];
       privacy: string[];
+      security: string[];
       system: string[];
       archives: string[];
       about: string[];
     };
     sectionState: { loading: string; error: string; retry: string; empty: string };
     updateComponents: { app: string; service: string };
-    pageSections: Record<"languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview", string>;
+    pageSections: Record<"languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "connectionCode" | "allowedHosts", string>;
     pageSectionDescriptions: Record<"notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     modelsAdvanced: { title: string; contents: string };
@@ -1248,6 +1275,38 @@ export interface AppCopy {
         windows: string;
         fallback: string;
       };
+    };
+    security: {
+      remoteAccess: string;
+      remoteAccessDescription: string;
+      addresses: string;
+      noAddresses: string;
+      copyAddress: string;
+      copied: string;
+      code: string;
+      createdAt: (date: string) => string;
+      reveal: string;
+      hide: string;
+      copy: string;
+      rotate: string;
+      rotateTitle: string;
+      rotateConfirm: string;
+      rotated: string;
+      hostOnly: string;
+      /** 403 admin_credential_required: this computer, but the app's admin credential is missing. */
+      adminRequired: string;
+      revealFailed: string;
+      rotateFailed: string;
+      /** The Advanced section header and the disclosure row that reveals allowed hosts. */
+      advanced: string;
+      advancedContents: string;
+      hosts: string;
+      hostsDescription: string;
+      noHosts: string;
+      hostPlaceholder: string;
+      addHost: string;
+      removeHost: (host: string) => string;
+      invalidHost: string;
     };
     workStatus: {
       title: string;

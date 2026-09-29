@@ -25,6 +25,7 @@ import { MessageMarkdown } from "./MessageMarkdown";
 import { PlanDocumentMessage } from "./PlanDocumentMessage";
 import { UserMessageText } from "./UserMessageText";
 import type { AssistantFooterMeta } from "./messageFooterMeta";
+import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
 import { StewardParentProgress } from "./StewardParentProgress";
 import type { AnchoredStewardProgress } from "./stewardParentProgressProjection";
 
@@ -74,7 +75,9 @@ function MessageContentComponent({
                   text={message.text}
                 />
               )}
-              <StewardParentProgress progress={stewardProgress} />
+              <ErrorBoundary fallback={null}>
+                <StewardParentProgress progress={stewardProgress} />
+              </ErrorBoundary>
             </Stack>
           ) : failureNotice ? (
             <AssistantFailureNotice message={message} />

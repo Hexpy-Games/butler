@@ -12,7 +12,7 @@ export function SessionObserverActivityGroup({ activities, active }: {
   active?: SessionView["active_turn"];
 }) {
   const current = active
-    ? projectTurnActivity(active.progress.safe_progress_rows, active.id)
+    ? projectTurnActivity(active.progress?.safe_progress_rows ?? [], active.id)
     : undefined;
   return (
     <Stack gap="md">

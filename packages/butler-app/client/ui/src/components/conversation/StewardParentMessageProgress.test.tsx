@@ -20,6 +20,7 @@ import { ComposerNotices } from "./ComposerNotices";
 import { StewardComposerCapsules } from "./StewardComposerCapsules";
 import { useComposerStore } from "./composerStore";
 import { anchoredStewardProgressByMessageId } from "./stewardParentProgressProjection";
+import { stewardProgressStatus } from "./stewardProgressPresentation";
 import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
 
 // These expectations are the default (English) copy; pin the locale instead of inheriting it.
@@ -189,10 +190,10 @@ test("the capsule activity follows the newest safe activity row", () => {
   child.active_turn = {
     ...child.active_turn!,
     progress: {
-      ...child.active_turn!.progress,
+      ...child.active_turn!.progress!,
       summary: "Earlier activity snapshot",
       safe_progress_rows: [
-        ...child.active_turn!.progress.safe_progress_rows,
+        ...child.active_turn!.progress!.safe_progress_rows,
         {
           id: "latest-live-activity",
           kind: "used_tool",
@@ -217,7 +218,7 @@ test("generic model waiting does not replace the latest substantive Steward acti
   child.active_turn = {
     ...child.active_turn!,
     progress: {
-      ...child.active_turn!.progress,
+      ...child.active_turn!.progress!,
       summary: "응답 생성 중",
       safe_progress_rows: [{
         id: "project-records-complete",
@@ -251,7 +252,7 @@ test("model-authored lifecycle narration does not replace factual Steward activi
   child.active_turn = {
     ...child.active_turn!,
     progress: {
-      ...child.active_turn!.progress,
+      ...child.active_turn!.progress!,
       summary: "실행 결과를 검토하고 있습니다",
       safe_progress_rows: [{
         id: "latest-factual-tool",
@@ -407,7 +408,7 @@ test("terminal Steward activity stays attached to the factual parent message", (
     delivery_state: "delivered",
     cancellable: false,
     progress: {
-      ...child.active_turn!.progress,
+      ...child.active_turn!.progress!,
       state: "delivered",
     },
   };
@@ -416,7 +417,7 @@ test("terminal Steward activity stays attached to the factual parent message", (
     id: "steward-report-artifact",
     session_id: child.session_id,
     message_id: "steward-result",
-    turn_id: child.latest_turn.id,
+    turn_id: child.latest_turn!.id,
     title: "research/qwen3.8-27b-awq-turboquant-vllm.md",
     kind: "file",
     safe_path_label: "research/qwen3.8-27b-awq-turboquant-vllm.md",
@@ -445,6 +446,52 @@ test("terminal Steward activity stays attached to the factual parent message", (
   expect(html).not.toContain('data-test-class="message-artifact-list"');
   expect(html).not.toContain("research/qwen3.8-27b-awq-turboquant-vllm.md");
   expect(html).not.toContain("Response completed");
+});
+
+// test-category: pure-logic
+test("Steward child turn without progress renders as an empty card instead of crashing", () => {
+  const summary = structuredClone(HARNESS_SS03_SUMMARY) as SessionSummaryView;
+  const child = summary.steward_children![0]!;
+  const { progress: _progress, ...bareTurn } = child.active_turn!;
+  child.latest_turn = { ...bareTurn, state: "delivered" };
+  child.active_turn = null;
+
+  const progress = anchoredStewardProgressByMessageId(
+    HARNESS_MESSAGES,
+    summary,
+  ).get("m4");
+  expect(progress?.rows).toEqual([]);
+  const html = renderToStaticMarkup(
+    <MessageContent
+      message={HARNESS_MESSAGES.find((message) => message.id === "m4")!}
+      copied={false}
+      footerMeta={null}
+      onCopyAssistantMessage={() => undefined}
+      stewardProgress={progress}
+    />,
+  );
+  expect(html).toContain("steward-parent-progress-card");
+  expect(renderToStaticMarkup(
+    <StewardComposerCapsules children={[child]} />,
+  )).not.toContain("steward-progress-capsule");
+});
+
+// test-category: pure-logic
+test("a terminal child reads as done even when its status is a raw result status", () => {
+  const child = structuredClone(HARNESS_SS03_SUMMARY.steward_children![0]!);
+  child.terminal = true;
+  child.result = { ...(child.result ?? {}), status: "success" } as typeof child.result;
+  for (const [status, expected] of [
+    ["completed", "Completed"],
+    ["blocked", "Failed"],
+    ["active", "Completed"],
+  ] as const) {
+    (child as { status: string }).status = status;
+    expect(stewardProgressStatus(child)).toContain(expected);
+  }
+  child.result = { ...child.result!, status: "blocked" };
+  (child as { status: string }).status = "active";
+  expect(stewardProgressStatus(child)).toContain("Failed");
 });
 
 test("recoverable Steward card shows replay without appearing active", () => {
