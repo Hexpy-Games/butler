@@ -11,18 +11,14 @@ on:
     paths:
       - ".github/workflows/install-smoke.yml"
       - ".github/workflows/release.yml"
+      - ".github/workflows/linux-packages.yml"
+      - "packages/butler-app/scripts/release/**"
       - ".github/actions/build-agent-archive/**"
-      - ".github/actions/rust-agent-setup/**"
-      - "deploy/install.sh"
-      - "deploy/install-smoke.sh"
+      - "deploy/**"
       - "packages/butler-npm/**"
       - "packages/butler-agent/rust/scripts/*standalone*"
-      - "packages/butler-agent/rust/docs/install-layout.md"
-      - "packages/butler-agent/rust/crates/**"
-      - "packages/butler-agent/rust/Cargo.*"
-      - "packages/butler-agent/rust/rust-toolchain.toml"
-      - "packages/butler-agent/resources/**"
       - "packages/butler-app/client/electron/scripts/prepare-native-agent.mjs"
+  workflow_call:
   workflow_dispatch:
 
 permissions:
