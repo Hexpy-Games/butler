@@ -92,7 +92,8 @@ fn files(root: &Path) -> Vec<String> {
             if path.is_dir() {
                 pending.push(path);
             } else {
-                found.push(path.strip_prefix(root).unwrap().display().to_string());
+                let relative = path.strip_prefix(root).unwrap().display().to_string();
+                found.push(relative.replace('\\', "/"));
             }
         }
     }

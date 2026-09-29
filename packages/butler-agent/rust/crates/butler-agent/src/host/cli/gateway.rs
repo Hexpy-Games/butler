@@ -357,9 +357,7 @@ pub(crate) fn resolve_data(
     explicit: Option<&str>,
     installation: &ResolvedInstallation,
 ) -> Result<PathBuf, crate::host::HostError> {
-    let home = std::env::var_os("HOME")
-        .filter(|home| !home.is_empty())
-        .map(PathBuf::from)
+    let home = butler_platform::user_dirs::non_empty_home_dir()
         .ok_or_else(|| "native_home_unavailable".to_owned())?;
     let requested = explicit
         .map(expand_home_path)
@@ -377,7 +375,7 @@ pub(crate) fn resolve_data(
 }
 
 fn expand_home_path(value: &str) -> PathBuf {
-    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let home = butler_platform::user_dirs::home_dir();
     match (value, home) {
         ("~", Some(home)) => home,
         (value, Some(home)) if value.starts_with("~/") => home.join(&value[2..]),

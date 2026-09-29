@@ -12,6 +12,7 @@ use unicode_normalization::UnicodeNormalization;
 use uuid::Uuid;
 
 use butler_core::locale::LocaleCollation;
+use butler_platform::secure_fs;
 
 const MAX_FILES: usize = 20_000;
 const MAX_DEPTH: usize = 8;
@@ -232,7 +233,7 @@ fn verified_source(path: &Path, workspace: &Path, generated: &Path) -> Option<(P
     {
         return None;
     }
-    let real = fs::canonicalize(path).ok()?;
+    let real = butler_platform::secure_fs::canonicalize(path).ok()?;
     if !real.starts_with(workspace) && !real.starts_with(generated) {
         return None;
     }
@@ -254,7 +255,10 @@ fn publish_file(root: &Path, source: &Path, bytes: &[u8]) -> Option<PathBuf> {
     fs::create_dir_all(&directory).ok()?;
     let safe = safe_name(source.file_name()?.to_str()?);
     let destination = directory.join(safe);
-    if !fs::canonicalize(&directory).ok()?.starts_with(root) {
+    if !butler_platform::secure_fs::canonicalize(&directory)
+        .ok()?
+        .starts_with(root)
+    {
         return None;
     }
     if destination.exists() {
@@ -269,11 +273,7 @@ fn publish_file(root: &Path, source: &Path, bytes: &[u8]) -> Option<PathBuf> {
         use std::io::Write;
         let mut options = fs::OpenOptions::new();
         options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        let _ = secure_fs::owner_only(&mut options);
         let mut file = options.open(&temporary).ok()?;
         file.write_all(bytes).ok()?;
         fs::rename(&temporary, &destination).ok()?;
@@ -352,7 +352,7 @@ fn visit(
             continue;
         }
         *count += 1;
-        let Ok(real) = fs::canonicalize(entry.path()) else {
+        let Ok(real) = butler_platform::secure_fs::canonicalize(entry.path()) else {
             continue;
         };
         if !real.starts_with(root) {
@@ -407,7 +407,7 @@ fn kind(path: &Path) -> &'static str {
     }
 }
 fn canonical(path: &Path) -> PathBuf {
-    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+    butler_platform::secure_fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 fn iso(value: std::time::SystemTime) -> String {
     DateTime::<Utc>::from(value).to_rfc3339_opts(SecondsFormat::Millis, true)
@@ -417,34 +417,24 @@ fn millis(value: std::time::SystemTime) -> u128 {
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |v| v.as_millis())
 }
-#[cfg(unix)]
+/// When the file's status last changed, in epoch milliseconds (0 when the
+/// host does not report it).
 fn change_millis(stat: &fs::Metadata) -> i128 {
-    use std::os::unix::fs::MetadataExt;
-    i128::from(stat.ctime()) * 1000 + i128::from(stat.ctime_nsec()) / 1_000_000
+    secure_fs::identity(stat).changed.map_or(0, |time| {
+        i128::from(time.seconds) * 1000 + i128::from(time.nanoseconds) / 1_000_000
+    })
 }
-#[cfg(not(unix))]
-fn change_millis(stat: &fs::Metadata) -> i128 {
-    stat.created().map_or(0, |time| millis(time) as i128)
-}
-#[cfg(unix)]
+/// `<device>:<inode>`, or empty where the host has no file ids.
 fn file_id(stat: &fs::Metadata) -> String {
-    use std::os::unix::fs::MetadataExt;
-    format!("{}:{}", stat.dev(), stat.ino())
+    secure_fs::identity(stat)
+        .id
+        .map(|id| format!("{}:{}", id.device, id.inode))
+        .unwrap_or_default()
 }
-#[cfg(not(unix))]
-fn file_id(_: &fs::Metadata) -> String {
-    String::new()
-}
-#[cfg(unix)]
+/// The same file with the same length and modification time.
 fn same_file(left: &fs::Metadata, right: &fs::Metadata) -> bool {
-    use std::os::unix::fs::MetadataExt;
-    left.dev() == right.dev()
-        && left.ino() == right.ino()
+    let (left_identity, right_identity) = (secure_fs::identity(left), secure_fs::identity(right));
+    left_identity.id == right_identity.id
         && left.len() == right.len()
-        && left.mtime() == right.mtime()
-        && left.mtime_nsec() == right.mtime_nsec()
-}
-#[cfg(not(unix))]
-fn same_file(left: &fs::Metadata, right: &fs::Metadata) -> bool {
-    left.len() == right.len() && left.modified().ok() == right.modified().ok()
+        && left_identity.modified == right_identity.modified
 }

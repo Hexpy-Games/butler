@@ -14,14 +14,24 @@ serde_json.workspace = true
 thiserror.workspace = true
 # Shutdown requests (host stop signals) and the stdin lease are awaited on the
 # service's runtime.
-tokio.workspace = true
+tokio = { workspace = true, features = ["io-std"] }
 
 [target.'cfg(unix)'.dependencies]
 nix.workspace = true
 rustix.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
+dunce.workspace = true
 libproc.workspace = true
+
+# The process table (identity, liveness, host facts), Job Objects that
+# contain command trees, paths without a needless `\\?\` prefix, and the
+# system time zone's IANA name.
+[target.'cfg(windows)'.dependencies]
+dunce.workspace = true
+iana-time-zone.workspace = true
+sysinfo.workspace = true
+win32job.workspace = true
 
 [features]
 # Fixture values for tests of other crates (e.g. archive entry modes).

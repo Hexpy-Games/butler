@@ -12,6 +12,7 @@
 //! is per user, not per `HOME`: `BUTLER_SERVICE_MANAGER=off` switches every
 //! request off (see `butler_platform::service_registration`).
 
+use butler_platform::secure_fs::Canonical;
 use std::path::Path;
 use std::time::Duration;
 
@@ -35,7 +36,7 @@ pub(super) fn job_is_ours(data_root: &Path) -> bool {
     let Ok(Some(registered)) = manager::registered() else {
         return false;
     };
-    let resolved = |path: &Path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let resolved = |path: &Path| path.canonical().unwrap_or_else(|_| path.to_path_buf());
     registered
         .data
         .as_deref()

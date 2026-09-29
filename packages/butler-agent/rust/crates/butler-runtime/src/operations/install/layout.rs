@@ -1,6 +1,7 @@
 //! The Agent home: `<version>-<sha8>` directories, a `current` pointer to
 //! the active one and a `previous` pointer kept for rollback.
 
+use butler_platform::secure_fs::Canonical;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -16,7 +17,7 @@ pub(super) const CURRENT: &str = "current";
 /// The pointer to the version directory `rollback` returns to.
 pub(super) const PREVIOUS: &str = "previous";
 /// The executable inside a version directory.
-pub const BINARY: &str = "butler-agent";
+pub const BINARY: &str = butler_platform::launcher::AGENT_BINARY;
 /// The resource tree inside a version directory.
 pub const RESOURCES: &str = "resources";
 
@@ -73,7 +74,7 @@ impl AgentHome {
         path.starts_with(&self.root)
             || self
                 .root
-                .canonicalize()
+                .canonical()
                 .is_ok_and(|resolved| path.starts_with(resolved))
     }
 

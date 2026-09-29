@@ -1,33 +1,26 @@
 //! Process trees: group signals reach every descendant; liveness.
 
 use butler_platform::process_control::{
-    CONTAINS_PROCESS_TREES, ExitSignal, GroupSignal, Liveness, SignalError, isolate_group,
-    liveness, signal_group, terminating_signal,
+    ExitSignal, GroupSignal, Liveness, SIGNALS, SignalError, contain_std, isolate_group, liveness,
+    signal_group, terminating_signal,
 };
 
 use super::{REPORT, eventually, helper_command, read_report, scratch};
 
+/// Every host contains a command's tree: a process group on Unix, a Job
+/// Object on Windows (which ends the tree at once for either signal).
 #[test]
 fn group_signals_stop_every_descendant_of_an_isolated_command() {
-    assert_eq!(CONTAINS_PROCESS_TREES, !cfg!(windows));
     for signal in [GroupSignal::Terminate, GroupSignal::Kill] {
         let report = scratch("tree").join("report");
         let mut command = helper_command("tree");
         command.env(REPORT, &report);
         let isolated = isolate_group(&mut command).is_some();
-        assert_eq!(isolated, CONTAINS_PROCESS_TREES);
+        assert!(isolated);
         let mut leader = command.spawn().unwrap();
+        contain_std(&leader).unwrap();
         let grandchild: u32 = read_report(&report).parse().unwrap();
         assert_eq!(liveness(grandchild), Liveness::Running);
-        if !CONTAINS_PROCESS_TREES {
-            assert!(matches!(
-                signal_group(leader.id(), signal),
-                Err(SignalError::Unsupported)
-            ));
-            leader.kill().unwrap();
-            leader.wait().unwrap();
-            continue;
-        }
         signal_group(leader.id(), signal).unwrap();
         let status = leader.wait().unwrap();
         let expected = if signal == GroupSignal::Kill {
@@ -35,7 +28,7 @@ fn group_signals_stop_every_descendant_of_an_isolated_command() {
         } else {
             ExitSignal::Terminate
         };
-        assert_eq!(terminating_signal(status), Some(expected));
+        assert_eq!(terminating_signal(status), SIGNALS.then_some(expected));
         // The orphaned grandchild is reaped by its new parent once stopped.
         eventually("the grandchild to be gone", || {
             liveness(grandchild) == Liveness::Gone
@@ -47,19 +40,15 @@ fn group_signals_stop_every_descendant_of_an_isolated_command() {
 #[test]
 fn pid_zero_is_never_signalled() {
     for signal in [GroupSignal::Terminate, GroupSignal::Kill] {
-        let refused = signal_group(0, signal);
-        if CONTAINS_PROCESS_TREES {
-            assert!(matches!(refused, Err(SignalError::InvalidPid(0))));
-        } else {
-            assert!(matches!(refused, Err(SignalError::Unsupported)));
-        }
-    }
-    if CONTAINS_PROCESS_TREES {
         assert!(matches!(
-            signal_group(u32::MAX, GroupSignal::Kill),
-            Err(SignalError::InvalidPid(u32::MAX))
+            signal_group(0, signal),
+            Err(SignalError::InvalidPid(0))
         ));
     }
+    assert!(matches!(
+        signal_group(u32::MAX, GroupSignal::Kill),
+        Err(SignalError::InvalidPid(u32::MAX))
+    ));
 }
 
 #[test]
@@ -69,14 +58,7 @@ fn a_group_that_no_longer_exists_is_already_stopped() {
     let mut leader = command.spawn().unwrap();
     let pid = leader.id();
     leader.wait().unwrap();
-    if CONTAINS_PROCESS_TREES {
-        signal_group(pid, GroupSignal::Kill).unwrap();
-    } else {
-        assert!(matches!(
-            signal_group(pid, GroupSignal::Kill),
-            Err(SignalError::Unsupported)
-        ));
-    }
+    signal_group(pid, GroupSignal::Kill).unwrap();
     assert_eq!(liveness(pid), Liveness::Gone);
 }
 

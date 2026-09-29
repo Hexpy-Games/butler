@@ -14,9 +14,7 @@ pub(super) fn resolve_data_root(
     options: &Options,
     installation: &ResolvedInstallation,
 ) -> Result<PathBuf, crate::host::HostError> {
-    let home = std::env::var_os("HOME")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from);
+    let home = butler_platform::user_dirs::non_empty_home_dir();
     let requested = options
         .data
         .clone()

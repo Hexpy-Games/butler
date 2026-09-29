@@ -34,6 +34,10 @@ pub const READ_ONLY_SANDBOX: bool = sandbox::ENFORCED;
 /// Whether [`protect_writes`] enforces its root on this host.
 pub const WRITE_PROTECTION: bool = sandbox::ENFORCED;
 
+/// Whether [`login_shell`] runs commands in a POSIX shell (`sh -c`); Windows
+/// runs them in `cmd.exe`, whose syntax differs.
+pub const POSIX_SHELL: bool = shell::POSIX;
+
 /// A program and its arguments.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Invocation {
@@ -91,6 +95,15 @@ pub fn login_shell(
         ShellAccess::Full => Ok(invocation),
         ShellAccess::ReadOnly => sandbox::read_only(invocation),
     }
+}
+
+/// Adds the arguments of `invocation` to `command`, which starts its
+/// program. Windows passes the text `cmd.exe /d /s /c` runs verbatim between
+/// one pair of quotes: `cmd` does not undo the `\"` escaping that
+/// `Command::arg` applies, so a command containing quotes would reach it
+/// mangled.
+pub fn add_arguments(command: &mut std::process::Command, invocation: &Invocation) {
+    shell::add_arguments(command, invocation);
 }
 
 /// The shell of legacy compatibility commands: `/bin/bash [-o pipefail] -lc`

@@ -39,6 +39,10 @@ pub(super) fn read(home: &Path, link: &str) -> io::Result<Option<String>> {
         .ok_or_else(not_a_pointer)
 }
 
+pub(super) fn launcher_root(home: &Path, link: &str) -> io::Result<PathBuf> {
+    Ok(home.join(link))
+}
+
 pub(super) fn remove(home: &Path, link: &str) -> io::Result<()> {
     let path = home.join(link);
     match fs::symlink_metadata(&path) {

@@ -2,7 +2,6 @@
 
 use std::{
     fs,
-    os::unix::fs::DirBuilderExt,
     path::{Path, PathBuf},
 };
 
@@ -137,7 +136,8 @@ fn write_settings(
         crate::host::HostError::new("native_path_configuration_invalid").with_source(source)
     })?;
     let mut builder = fs::DirBuilder::new();
-    builder.recursive(true).mode(0o700);
+    builder.recursive(true);
+    let _ = butler_platform::secure_fs::owner_only_dirs(&mut builder);
     builder
         .create(parent)
         .or_else(|error| {

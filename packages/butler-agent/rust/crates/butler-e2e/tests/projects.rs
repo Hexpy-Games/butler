@@ -32,6 +32,37 @@ async fn project_session(s: &Scenario, name: &str) -> Result<(String, String), H
     Ok((project, chat))
 }
 
+/// A new App project must initialize its canonical Ledger on its first turn.
+#[tokio::test]
+async fn prj_first_turn_initializes_ledger() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("PRJ-FIRST-TURN")?
+        .cassette("PRJ-02")
+        .replay_only()
+        .start()
+        .await?;
+    let (project, chat) = project_session(&s, "Garden Beds").await?;
+    let ledger = s
+        .sandbox
+        .data
+        .join("project-ledger/projects")
+        .join(&project);
+    assert!(
+        !ledger.exists(),
+        "Ledger was initialized before the first turn"
+    );
+    let (_, turn) = s.turn(&chat, PRJ_02_PROMPT).await?;
+    assert_eq!(turn_state(&turn), "delivered", "{turn}");
+    let metadata: Value = serde_json::from_slice(&std::fs::read(ledger.join("project.json"))?)?;
+    assert_eq!(metadata["id"], project);
+    assert!(
+        std::fs::read_to_string(ledger.join("ledger.jsonl"))?
+            .contains("\"type\":\"project_initialized\""),
+        "project initialization event missing"
+    );
+    s.finish().await
+}
+
 const PRJ_02_PROMPT: &str = "Track this in the project as one work item: \"Build three raised garden beds\". Create it, record a short review that the plan is sound, then mark it completed. Use only your work and ledger tools; do not create or edit files.";
 
 /// Runs the PRJ-02 turn in a fresh project session.

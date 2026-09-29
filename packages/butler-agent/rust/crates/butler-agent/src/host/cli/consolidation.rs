@@ -138,7 +138,7 @@ pub(crate) async fn run_native_consolidation_cli(
         parsed.data.clone(),
     ))));
     let user_home = user_home();
-    let os = match nix::sys::utsname::uname() {
+    let os = match butler_platform::instance::os_release() {
         Ok(value) => value,
         Err(error) => {
             return failure(
@@ -150,8 +150,7 @@ pub(crate) async fn run_native_consolidation_cli(
             );
         }
     };
-    let environment =
-        ProcessEnvironment::capture(&parsed.data, &user_home, &os.release().to_string_lossy());
+    let environment = ProcessEnvironment::capture(&parsed.data, &user_home, &os);
     let cognition_paths = environment.cognition_paths.clone();
     let briefing = match BriefingGeneration::open(
         parsed.data.clone(),
@@ -253,16 +252,10 @@ pub(crate) async fn run_native_consolidation_cli(
 fn start_signal_cancellation(
     cancellation: CancellationToken,
 ) -> Result<tokio::task::JoinHandle<()>, crate::host::HostError> {
-    use tokio::signal::unix::{SignalKind, signal};
-    let mut interrupt =
-        signal(SignalKind::interrupt()).map_err(crate::host::HostError::from_error)?;
-    let mut terminate =
-        signal(SignalKind::terminate()).map_err(crate::host::HostError::from_error)?;
+    let mut requests = butler_platform::process_control::shutdown_requests()
+        .map_err(crate::host::HostError::from_error)?;
     Ok(tokio::spawn(async move {
-        tokio::select! {
-            _ = interrupt.recv() => {},
-            _ = terminate.recv() => {},
-        }
+        requests.recv().await;
         cancellation.cancel();
     }))
 }
@@ -352,9 +345,7 @@ fn parse(
 }
 
 fn user_home() -> PathBuf {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_default()
+    butler_platform::user_dirs::home_dir().unwrap_or_default()
 }
 
 fn now_ms() -> i64 {

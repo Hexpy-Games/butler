@@ -1,20 +1,31 @@
-//! Windows has no process-group containment yet; Job Objects replace this in
-//! the Windows stage. Callers stop only their direct child meanwhile.
-//! Console control events are this process's stop requests, and a thread
-//! watches the stdin lease.
+//! Job Objects contain command trees; console control events are this
+//! process's stop requests, and a thread watches the stdin lease.
+//!
+//! A contained command runs in a Job Object of its own that ends every
+//! process in it when its last handle closes. [`contain`] assigns the
+//! command right after it starts (a child that starts processes before that
+//! moment leaves them outside the job), and [`signal_group`] closes the job:
+//! Windows has no graceful stop for console processes, so a terminate and a
+//! kill both end the tree at once. Butler holds the only handle, so its own
+//! exit ends every command tree it still contains too.
 
+use std::collections::HashMap;
 use std::io::{self, Read};
+use std::os::windows::io::{AsRawHandle, RawHandle};
 use std::os::windows::process::CommandExt;
-use std::process::{Command, ExitStatus, Stdio};
+use std::process::{Command, ExitStatus};
+use std::sync::{LazyLock, Mutex, PoisonError};
 
 use tokio::signal::windows::{
     CtrlBreak, CtrlC, CtrlClose, CtrlShutdown, ctrl_break, ctrl_c, ctrl_close, ctrl_shutdown,
 };
 use tokio::sync::watch;
+use win32job::{ExtendedLimitInfo, Job};
 
 use super::{ExitSignal, GroupSignal, Liveness, ShutdownRequest, SignalError};
+use crate::process_table::ProcessView;
 
-pub(super) const CONTAINS_PROCESS_TREES: bool = false;
+pub(super) const CONTAINS_PROCESS_TREES: bool = true;
 
 pub(super) const SIGNALS: bool = false;
 
@@ -23,6 +34,21 @@ const DETACHED_PROCESS: u32 = 0x0000_0008;
 /// `CREATE_NEW_PROCESS_GROUP`: console control events of the caller's group
 /// do not reach the child.
 const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+/// `CREATE_NO_WINDOW`: a console program runs without opening a window,
+/// even when this process (a detached service) has no console to share.
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// The Job Object of each contained command, by the command's process id.
+static JOBS: LazyLock<Mutex<HashMap<u32, Job>>> = LazyLock::new(Mutex::default);
+
+pub(super) const SYSTEM_ENVIRONMENT: &[&str] = &[
+    "ComSpec",
+    "PATH",
+    "PATHEXT",
+    "SystemDrive",
+    "SystemRoot",
+    "windir",
+];
 
 pub(super) const BASELINE_ENVIRONMENT: &[&str] = &[
     "APPDATA",
@@ -39,42 +65,68 @@ pub(super) const BASELINE_ENVIRONMENT: &[&str] = &[
     "PROGRAMFILES",
 ];
 
-pub(super) fn isolate_group(_command: &mut Command) -> Option<&mut Command> {
-    None
+pub(super) fn isolate_group(command: &mut Command) -> Option<&mut Command> {
+    Some(command.creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW))
 }
 
-pub(super) fn signal_group(_pid: u32, _signal: GroupSignal) -> Result<(), SignalError> {
-    Err(SignalError::Unsupported)
+pub(super) fn contain_tokio(child: &tokio::process::Child) -> io::Result<()> {
+    match (child.id(), child.raw_handle()) {
+        (Some(pid), Some(handle)) => contain(pid, handle),
+        _ => Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "the command exited before it was contained",
+        )),
+    }
+}
+
+pub(super) fn contain_std(child: &std::process::Child) -> io::Result<()> {
+    contain(child.id(), child.as_raw_handle())
+}
+
+/// Creates the command's job (ending its processes when closed) and assigns
+/// the process to it.
+fn contain(pid: u32, process: RawHandle) -> io::Result<()> {
+    let mut limits = ExtendedLimitInfo::new();
+    limits.limit_kill_on_job_close();
+    let job = Job::create_with_limit_info(&limits).map_err(io::Error::other)?;
+    // The handle is only passed to AssignProcessToJobObject, never closed.
+    job.assign_process(process as isize)
+        .map_err(io::Error::other)?;
+    let mut jobs = JOBS.lock().unwrap_or_else(PoisonError::into_inner);
+    // Jobs whose processes have all exited hold nothing to stop any more.
+    jobs.retain(|_, job| {
+        job.query_process_id_list()
+            .is_ok_and(|processes| !processes.is_empty())
+    });
+    jobs.insert(pid, job);
+    Ok(())
+}
+
+/// Closes the command's job, which ends every process in it. A command that
+/// was never contained, or whose job is closed already, is stopped.
+pub(super) fn signal_group(pid: u32, _signal: GroupSignal) -> Result<(), SignalError> {
+    if pid == 0 || i32::try_from(pid).is_err() {
+        return Err(SignalError::InvalidPid(pid));
+    }
+    let job = JOBS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .remove(&pid);
+    drop(job);
+    Ok(())
 }
 
 pub(super) fn terminating_signal(_status: ExitStatus) -> Option<ExitSignal> {
     None
 }
 
-/// Asks `tasklist` for the process until the Windows stage reads the process
-/// table directly. Pid 0 (the idle process) is no process of ours, and
-/// process ids stay far below `i32::MAX`, past which `tasklist` rejects the
-/// query.
+/// Reads the process table. Pid 0 (the idle process) is no process of ours,
+/// and process ids stay far below `i32::MAX`.
 pub(super) fn liveness(pid: u32) -> Liveness {
     if pid == 0 || i32::try_from(pid).is_err() {
         return Liveness::Gone;
     }
-    let output = Command::new("tasklist")
-        .args(["/FI", &format!("PID eq {pid}"), "/NH", "/FO", "CSV"])
-        .stdin(Stdio::null())
-        .stderr(Stdio::null())
-        .output();
-    let output = match output {
-        Ok(output) if output.status.success() => output,
-        _ => return Liveness::Unknown,
-    };
-    let pid = pid.to_string();
-    let listed = String::from_utf8_lossy(&output.stdout).lines().any(|line| {
-        line.split(',')
-            .nth(1)
-            .is_some_and(|field| field.trim_matches('"') == pid)
-    });
-    if listed {
+    if ProcessView::read(pid).is_some() {
         Liveness::Running
     } else {
         Liveness::Gone
@@ -109,6 +161,11 @@ pub(super) fn shutdown_requests() -> io::Result<ShutdownRequests> {
         close: ctrl_close()?,
         shutdown: ctrl_shutdown()?,
     })
+}
+
+/// Windows has no hangup or broken-pipe signal; a session ends like any stop.
+pub(super) fn session_shutdown_requests() -> io::Result<ShutdownRequests> {
+    shutdown_requests()
 }
 
 impl ShutdownRequests {

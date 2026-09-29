@@ -1,7 +1,7 @@
 //! Binds the observed native embedding identity to a generation that has none.
 
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::{self, OpenOptions},
     io::Write,
     path::Path,
 };
@@ -162,9 +162,7 @@ fn write_manifest_atomically(
             .assert_for_path(lock_path)
             .map_err(CognitionError::from)?;
         fs::rename(&temporary, manifest_path).map_err(write_error)?;
-        File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(write_error)
+        butler_platform::secure_fs::sync_path(parent).map_err(write_error)
     })();
     let _ = fs::remove_file(&temporary);
     result

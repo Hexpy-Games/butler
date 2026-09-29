@@ -34,10 +34,15 @@ pub(in crate::host::cli::doctor) fn credentials_check(data: &Path) -> Check {
         )
     } else if policy.store == "system" {
         ("pass", "new API keys go to the system credential store")
-    } else {
+    } else if butler_platform::secure_fs::OWNER_ONLY || file.owner_only == Some(true) {
         (
             "pass",
             "new API keys go to the owner-only file in the data folder",
+        )
+    } else {
+        (
+            "warn",
+            "new API keys go to a file in the data folder that this host does not restrict to its owner",
         )
     };
     Check {

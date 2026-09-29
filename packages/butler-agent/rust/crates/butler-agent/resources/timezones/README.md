@@ -5,7 +5,7 @@ Bun 1.3.11 source fixture. Bun reports ICU 74.2 in its version metadata;
 that ABI-facing value does not identify the installed resource version.
 The developer exporter checks `u_getVersion` and `zoneinfo64.TZVersion`.
 
-`source-2026c.btz` has 639 ICU names and aliases in 398640 bytes. It stores
+`source-2026c.btz` (kept in `crates/butler-platform/data`, which embeds it for `butler_platform::time_zone`) has 639 ICU names and aliases in 398640 bytes. It stores
 ICU historical transitions and source-compatible annual rules as TZif v3.
 `names-icu78.json` freezes English/root specific and metazone names with
 historical metazone intervals. `provenance.json` contains per-record and

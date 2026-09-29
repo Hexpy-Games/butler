@@ -210,8 +210,7 @@ pub(super) fn parse(
     let requested = data
         .or_else(|| std::env::var_os("BUTLER_DATA").map(PathBuf::from))
         .unwrap_or_else(|| {
-            std::env::var_os("HOME")
-                .map(PathBuf::from)
+            butler_platform::user_dirs::home_dir()
                 .unwrap_or_default()
                 .join(".butler")
         });

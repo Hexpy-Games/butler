@@ -241,7 +241,7 @@ fn loaded_from(target: &str) -> Option<PathBuf> {
 fn same_path(left: &Path, right: &Path) -> bool {
     left == right
         || matches!(
-            (left.canonicalize(), right.canonicalize()),
+            (dunce::canonicalize(left), dunce::canonicalize(right)),
             (Ok(left), Ok(right)) if left == right
         )
 }

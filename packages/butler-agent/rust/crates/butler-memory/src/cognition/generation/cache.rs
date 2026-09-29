@@ -19,7 +19,7 @@ pub(in crate::cognition) use health::{HotCacheHealth, read as read_hot_cache_hea
 use crate::cognition::CognitionCode;
 use std::{
     collections::HashSet,
-    fs::{self, File, OpenOptions},
+    fs::{self, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
     sync::Arc,
@@ -437,9 +437,7 @@ fn replace_file(data_root: &Path, path: &Path, parent: &Path, body: &str) -> Cog
         file.write_all(body.as_bytes()).map_err(io_failed)?;
         file.sync_all().map_err(io_failed)?;
         fs::rename(&temp, path).map_err(io_failed)?;
-        File::open(parent)
-            .and_then(|file| file.sync_all())
-            .map_err(io_failed)
+        butler_platform::secure_fs::sync_path(parent).map_err(io_failed)
     })();
     if written.is_err() {
         let _ = fs::remove_file(&temp);

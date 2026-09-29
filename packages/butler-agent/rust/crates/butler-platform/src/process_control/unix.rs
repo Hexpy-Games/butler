@@ -18,11 +18,22 @@ pub(super) const CONTAINS_PROCESS_TREES: bool = true;
 
 pub(super) const SIGNALS: bool = true;
 
+pub(super) const SYSTEM_ENVIRONMENT: &[&str] = &[];
+
 pub(super) const BASELINE_ENVIRONMENT: &[&str] =
     &["HOME", "LOGNAME", "PATH", "SHELL", "TERM", "USER"];
 
 pub(super) fn isolate_group(command: &mut Command) -> Option<&mut Command> {
     Some(command.process_group(0))
+}
+
+/// The process group [`isolate_group`] made contains the command already.
+pub(super) fn contain_tokio(_child: &tokio::process::Child) -> io::Result<()> {
+    Ok(())
+}
+
+pub(super) fn contain_std(_child: &std::process::Child) -> io::Result<()> {
+    Ok(())
 }
 
 pub(super) fn signal_group(pid: u32, signal: GroupSignal) -> Result<(), SignalError> {
@@ -112,18 +123,40 @@ pub(super) fn detach(command: &mut Command) -> &mut Command {
     command.process_group(0)
 }
 
-/// SIGINT and SIGTERM, in that order.
+/// SIGINT and SIGTERM, in that order; for a session, also SIGHUP and SIGPIPE.
 #[derive(Debug)]
 pub(super) struct ShutdownRequests {
     interrupt: tokio::signal::unix::Signal,
     terminate: tokio::signal::unix::Signal,
+    hangup: Option<tokio::signal::unix::Signal>,
+    pipe: Option<tokio::signal::unix::Signal>,
 }
 
 pub(super) fn shutdown_requests() -> io::Result<ShutdownRequests> {
     Ok(ShutdownRequests {
         interrupt: signal(SignalKind::interrupt())?,
         terminate: signal(SignalKind::terminate())?,
+        hangup: None,
+        pipe: None,
     })
+}
+
+pub(super) fn session_shutdown_requests() -> io::Result<ShutdownRequests> {
+    Ok(ShutdownRequests {
+        hangup: Some(signal(SignalKind::hangup())?),
+        pipe: Some(signal(SignalKind::pipe())?),
+        ..shutdown_requests()?
+    })
+}
+
+/// The next delivery of an optional signal; never without one.
+async fn next(signal: &mut Option<tokio::signal::unix::Signal>) {
+    match signal {
+        Some(signal) => {
+            signal.recv().await;
+        }
+        None => std::future::pending().await,
+    }
 }
 
 impl ShutdownRequests {
@@ -131,6 +164,8 @@ impl ShutdownRequests {
         tokio::select! {
             _ = self.interrupt.recv() => ShutdownRequest::Interrupt,
             _ = self.terminate.recv() => ShutdownRequest::Terminate,
+            () = next(&mut self.hangup) => ShutdownRequest::Terminate,
+            () = next(&mut self.pipe) => ShutdownRequest::Terminate,
         }
     }
 }

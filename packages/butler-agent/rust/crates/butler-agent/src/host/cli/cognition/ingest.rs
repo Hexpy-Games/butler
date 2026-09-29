@@ -290,12 +290,8 @@ async fn configured_summary(
 fn process_models(
     data_root: &std::path::Path,
 ) -> Result<crate::host::ProcessModels, crate::host::HostError> {
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| data_root.to_owned());
-    let os_release = nix::sys::utsname::uname()
-        .map(|value| value.release().to_string_lossy().into_owned())
-        .unwrap_or_else(|_| "unknown".into());
+    let home = butler_platform::user_dirs::home_dir().unwrap_or_else(|| data_root.to_owned());
+    let os_release = butler_platform::instance::os_release().unwrap_or_else(|_| "unknown".into());
     let environment = crate::host::ProcessEnvironment::capture(data_root, &home, &os_release);
     let collation = Arc::new(LocaleCollation::new("en-US").map_err(|source| {
         crate::host::HostError::new("native_locale_unavailable").with_source(source)

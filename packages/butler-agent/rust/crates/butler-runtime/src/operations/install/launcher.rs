@@ -4,6 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use butler_platform::command_launcher::{self, Ownership, Removal, Target};
+use butler_platform::install_link;
 
 use super::layout::{AgentHome, BINARY, RESOURCES};
 use crate::operations::update::{UpdateCode, UpdateError};
@@ -29,10 +30,11 @@ pub struct LauncherSync {
 }
 
 impl AgentHome {
-    /// The launcher target that runs the active version through `current`, so
-    /// the launcher never needs rewriting when the version changes.
+    /// The launcher target that runs the active version. Unix follows
+    /// `current`; Windows uses the version named by its pointer file.
     pub fn launcher_target(&self) -> LauncherPaths {
-        let current = self.current_path();
+        let current = install_link::launcher_root(self.root(), "current")
+            .unwrap_or_else(|_| self.current_path());
         LauncherPaths {
             program: current.join(BINARY),
             resources: current.join(RESOURCES),

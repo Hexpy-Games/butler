@@ -119,20 +119,7 @@ async fn follow(
             1,
         );
     };
-    let Ok(mut interrupt) =
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
-    else {
-        return report_error(
-            "butler logs",
-            false,
-            "signal_unavailable",
-            "Log follow signal handling is unavailable.",
-            1,
-        );
-    };
-    let Ok(mut terminate) =
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-    else {
+    let Ok(mut requests) = butler_platform::process_control::shutdown_requests() else {
         return report_error(
             "butler logs",
             false,
@@ -146,8 +133,7 @@ async fn follow(
     interval.tick().await;
     loop {
         tokio::select! {
-            _ = interrupt.recv() => return stop_follow(&mut follower),
-            _ = terminate.recv() => return stop_follow(&mut follower),
+            _ = requests.recv() => return stop_follow(&mut follower),
             _ = interval.tick() => {
                 for file in follower.paths() {
                     if let Err(message) = path::safe_data_file(&installation, &data_root, file) {
