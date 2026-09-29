@@ -1,5 +1,6 @@
 use super::*;
 
+// test-category: pure-logic
 #[tokio::test]
 async fn registered_read_preserves_bom_line_endings_errors_and_continuation() {
     let fixture = Fixture::new();
@@ -12,6 +13,8 @@ async fn registered_read_preserves_bom_line_endings_errors_and_continuation() {
             "list_files",
             "grep_files",
             "list_skills",
+            "load_skill",
+            "read_skill_file",
         ]
     );
     assert_eq!(

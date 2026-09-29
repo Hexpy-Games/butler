@@ -71,6 +71,7 @@ struct State {
     served: Mutex<u32>,
     inflight: std::sync::atomic::AtomicUsize,
     library: Mutex<Vec<(String, ResponseRecord)>>,
+    requests: Mutex<Vec<Value>>,
 }
 
 pub struct Provider {
@@ -142,6 +143,7 @@ impl Provider {
             served: Mutex::new(0),
             inflight: std::sync::atomic::AtomicUsize::new(0),
             library: Mutex::new(Vec::new()),
+            requests: Mutex::new(Vec::new()),
         });
         let shared = state.clone();
         let app = axum::Router::new().fallback(move |request: Request<Body>| {
@@ -224,6 +226,11 @@ impl Provider {
     /// Number of provider requests answered so far (harness bookkeeping).
     pub fn served(&self) -> u32 {
         *lock(&self.state.served)
+    }
+
+    /// In-memory request snapshots for public-path E2E assertions.
+    pub fn requests(&self) -> Vec<Value> {
+        lock(&self.state.requests).clone()
     }
 
     /// Replay: fails on unmatched requests. Record: waits for in-flight
@@ -326,6 +333,9 @@ async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
         .await
         .unwrap_or_default();
     let json: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    if matches!(&state.mode, Mode::Replay(_)) {
+        lock(&state.requests).push(json.clone());
+    }
     learn_echo_ids(&state, &String::from_utf8_lossy(&bytes));
     let key = matching::key(&path, &json, &lock(&state.placeholders));
     match &state.mode {

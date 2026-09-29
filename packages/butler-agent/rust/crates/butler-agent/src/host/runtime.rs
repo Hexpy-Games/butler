@@ -23,7 +23,7 @@ use crate::host::memory_jobs::daily::{DailyCognitionJobs, DailyCognitionOwners};
 use crate::host::memory_jobs::recall_metrics::RecallMetrics;
 use crate::host::runtime::environment::ProcessEnvironment;
 use crate::host::runtime::stores::RuntimeStores;
-use boundary::{setup, validate_data_installation_boundary};
+use boundary::{close_after_memory_sync_error, setup, validate_data_installation_boundary};
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
 use butler_ledger::project_ledger::{ProjectLedger, ProjectWork};
@@ -126,22 +126,21 @@ impl AgentRuntime {
                 return Err(setup(error));
             }
         };
-        let memory_sync = match crate::host::memory_jobs::sync::MemorySync::open(
-            &paths.data_root,
-            &environment.cognition_paths,
-            coordinator.clone(),
-            models.provider.clone(),
-            embedding.clone(),
-            vectors.clone(),
-        ) {
-            Ok(owner) => owner,
-            Err(error) => {
-                let _ = observer.close().await;
-                let _ = work_streams.close().await;
-                let _ = stores.close().await;
-                return Err(error);
-            }
-        };
+        let memory_sync = close_after_memory_sync_error(
+            crate::host::memory_jobs::sync::MemorySync::open(
+                &paths.data_root,
+                &environment.cognition_paths,
+                coordinator.clone(),
+                models.provider.clone(),
+                paths.unclean_previous_exit,
+                embedding.clone(),
+                vectors.clone(),
+            ),
+            &observer,
+            &work_streams,
+            &stores,
+        )
+        .await?;
         let cognition_root = environment.cognition_paths.cognition_root(&paths.data_root);
         let capsule_service = Arc::new(ProjectCapsuleService::new(
             paths.data_root.clone(),

@@ -4,20 +4,35 @@ use crate::lenient::JsonField;
 use rusqlite::OptionalExtension;
 
 use super::{
-    CatchupCursors, CognitionResult, GraphRegistration, GraphRepository, TypedRegistrationInput,
+    CatchupState, CognitionResult, GraphRegistration, GraphRepository, TypedRegistrationInput,
     db_error, jobs, typed_registration,
 };
 
 impl GraphRepository {
-    pub(in crate::cognition) fn catchup_cursors(&self) -> CognitionResult<CatchupCursors> {
-        jobs::catchup_cursors(self.connection()?)
+    pub(in crate::cognition) fn catchup_state(&self) -> CognitionResult<CatchupState> {
+        jobs::catchup_state(self.connection()?)
     }
 
-    pub(in crate::cognition) fn save_catchup_cursors(
+    pub(in crate::cognition) fn save_catchup_state(
         &mut self,
-        cursors: &CatchupCursors,
+        state: &CatchupState,
     ) -> CognitionResult<()> {
-        jobs::save_catchup_cursors(self.connection_mut()?, cursors)
+        jobs::save_catchup_state(self.connection_mut()?, state)
+    }
+
+    pub(in crate::cognition) fn has_recoverable_windows(&self) -> CognitionResult<bool> {
+        super::probe::has_recoverable_windows(self.connection()?)
+    }
+
+    pub(in crate::cognition) fn has_vector_work(&self, now: &str) -> CognitionResult<bool> {
+        super::probe::has_vector_work(self.connection()?, now)
+    }
+
+    pub(in crate::cognition) fn registered_observations(
+        &self,
+        ids: &[String],
+    ) -> CognitionResult<std::collections::HashSet<String>> {
+        jobs::registered_observations(self.connection()?, ids)
     }
 
     pub(in crate::cognition) fn rebuild_typed_cursor(

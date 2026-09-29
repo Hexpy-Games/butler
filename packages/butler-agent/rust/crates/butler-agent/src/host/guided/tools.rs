@@ -269,6 +269,8 @@ impl GuidedTools {
                     | ToolName::ReadToolEvidenceArtifact
                     | ToolName::ListFiles
                     | ToolName::ListSkills
+                    | ToolName::LoadSkill
+                    | ToolName::ReadSkillFile
                     | ToolName::ListOperationResults
                     | ToolName::ReadOperationResults
                     | ToolName::QueryMemory

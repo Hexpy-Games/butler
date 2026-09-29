@@ -11,7 +11,7 @@ import {
   isRetryableFailureMessage,
 } from "@/app/utils.ts";
 import { AssistantResponseFooter } from "./AssistantResponseFooter";
-import { BranchMessageActions } from "./BranchMessageActions";
+import { AssistantBranchActions } from "./AssistantBranchActions";
 import {
   AssistantFailureNotice,
   MessageRetryActionsContainer,
@@ -125,10 +125,7 @@ function MessageContentComponent({
           status={message.status}
           suppressTerminalStatus={Boolean(stewardProgress)}
           onCopy={() => onCopyAssistantMessage(message)}
-          actions={message.chat_id === "general" && message.text.trim() &&
-            (!message.status || ["delivered", "completed", "sent"].includes(message.status)) ? (
-              <BranchMessageActions sessionId={message.chat_id} messageId={message.id} />
-            ) : undefined}
+          actions={<AssistantBranchActions message={message} />}
         />
       )}
       {message.role !== "assistant" &&

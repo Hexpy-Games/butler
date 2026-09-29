@@ -20,6 +20,7 @@ pub(crate) struct RuntimePaths {
     pub executable_path: PathBuf,
     pub resource_root: PathBuf,
     pub workspace_root: PathBuf,
+    pub unclean_previous_exit: bool,
 }
 
 /// Ingress holds this owner, admits via BTCC, then awaits close before process exit.

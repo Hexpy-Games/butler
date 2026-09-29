@@ -10,6 +10,7 @@ mod list_files;
 mod list_skills;
 mod mutation_evidence;
 mod read_file;
+mod skill_tools;
 mod write_file;
 
 use std::path::PathBuf;
@@ -86,6 +87,15 @@ impl PartialEq for CapabilityError {
 impl Eq for CapabilityError {}
 
 impl Capabilities {
+    pub async fn compact_skill_catalog(
+        &self,
+        project_id: Option<String>,
+    ) -> Result<String, CapabilityError> {
+        self.skills
+            .compact_catalog(project_id)
+            .await
+            .map_err(|error| CapabilityError::caused(error.code(), error))
+    }
     pub fn with_skills(
         files: Arc<WorkspaceFiles>,
         mutations: Arc<WorkspaceMutations>,
@@ -105,6 +115,8 @@ impl Capabilities {
             "write_file" => Some(write_file::definition()),
             "edit_file" => Some(edit_file::definition()),
             "list_skills" => Some(list_skills::definition()),
+            "load_skill" => Some(skill_tools::load_definition()),
+            "read_skill_file" => Some(skill_tools::read_definition()),
             _ => None,
         }
     }
@@ -120,6 +132,8 @@ impl Capabilities {
             "write_file" => write_file::execute(&self.mutations, input).await,
             "edit_file" => edit_file::execute(&self.mutations, input).await,
             "list_skills" => list_skills::execute(&self.skills, input).await,
+            "load_skill" => skill_tools::load(&self.skills, input).await,
+            "read_skill_file" => skill_tools::read(&self.skills, &self.files, input).await,
             _ => Err(CapabilityError::new("unknown_capability")),
         }
     }
@@ -131,6 +145,8 @@ impl Capabilities {
             "list_files",
             "grep_files",
             "list_skills",
+            "load_skill",
+            "read_skill_file",
         ]
     }
 }
