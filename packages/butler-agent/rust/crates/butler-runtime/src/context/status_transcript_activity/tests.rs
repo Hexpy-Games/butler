@@ -86,6 +86,6 @@ fn transcript_activity_is_scanned_per_file_and_resumes_where_it_grew() {
     );
     assert!(activity.by_tool.contains_key("ignored_tail"));
     assert!(!activity.by_tool.contains_key("oversize"));
-    fs::write(&transcript, &contents[..contents.find('\n').unwrap() + 1]).unwrap();
+    fs::write(&transcript, &contents[..=contents.find('\n').unwrap()]).unwrap();
     assert_eq!(cache.read(&fixture.0, now_ms).unwrap().tools.calls, 1);
 }

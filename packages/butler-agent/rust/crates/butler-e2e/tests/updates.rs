@@ -132,6 +132,7 @@ async fn use_07_updates_read_never_waits_for_the_network() -> Result<(), Harness
         took < INSTANT,
         "GET /updates took {took:?} (manifest delay {DELAY:?})"
     );
+    eprintln!("USE-07 GET /updates: {took:?} (manifest delay {DELAY:?})");
     assert_eq!(component["available_version"], "0.0.5", "{component}");
     // The stale status started one background check, and only one.
     tokio::time::sleep(Duration::from_millis(300)).await;
@@ -159,7 +160,9 @@ async fn use_07_updates_read_never_waits_for_the_network() -> Result<(), Harness
         s.gw.post("/updates/check", json!({"component": "app"}))
             .await?;
     assert_eq!(forced.status, 200, "{}", forced.text);
-    assert!(started.elapsed() >= DELAY - Duration::from_millis(500));
+    let forced_took = started.elapsed();
+    eprintln!("USE-07 POST /updates/check: {forced_took:?}");
+    assert!(forced_took >= DELAY - Duration::from_millis(500));
     assert_eq!(manifest.hits(), hits + 1);
 
     // A manifest the App cannot use is a status, and reads stay instant.

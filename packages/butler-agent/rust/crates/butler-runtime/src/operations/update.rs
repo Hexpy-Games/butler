@@ -175,14 +175,14 @@ impl AppUpdateService {
         request: &UpdateRequest,
         status: Value,
     ) -> Result<Value, UpdateError> {
-        let view = self.view(request, status);
+        let view = self.view(request, &status);
         let _write = self.writes.lock().await;
         stage::write_json(&self.data, &self.installation, status::STATUS_LABEL, &view).await?;
         Ok(view)
     }
 
     /// The `UpdateStatusView` around one component status.
-    fn view(&self, request: &UpdateRequest, status: Value) -> Value {
+    fn view(&self, request: &UpdateRequest, status: &Value) -> Value {
         json!({
             "generated_at": status["checked_at"],
             "components": [status],

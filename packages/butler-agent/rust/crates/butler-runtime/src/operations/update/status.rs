@@ -40,7 +40,7 @@ impl AppUpdateService {
                         None,
                     )
                     .await?;
-                Ok(self.view(&request, status))
+                Ok(self.view(&request, &status))
             }
         }
     }

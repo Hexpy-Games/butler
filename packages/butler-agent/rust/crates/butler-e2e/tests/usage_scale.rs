@@ -96,6 +96,7 @@ fn write_usage_log(data: &Path, now_ms: i64) -> Result<Expected, HarnessError> {
     )?);
     let mut recent_rows = 0;
     for index in 0..ROWS {
+        let age_index = i64::try_from(index).expect("usage row count fits i64");
         let scope = match index {
             i if i < SESSION_ROWS => "btcc-guided:butler/app-general",
             i if i < SESSION_ROWS + OTHER_SESSION_ROWS => "btcc-guided:butler/app-other",
@@ -105,9 +106,9 @@ fn write_usage_log(data: &Path, now_ms: i64) -> Result<Expected, HarnessError> {
         // Old rows are 40 to 60 days old; every 20th row is under a day old.
         let recent = index % RECENT_EVERY == 0;
         let age_ms = if recent {
-            60_000 * (index as i64 % 1_000)
+            60_000 * (age_index % 1_000)
         } else {
-            40 * 86_400_000 + 1_000 * index as i64
+            40 * 86_400_000 + 1_000 * age_index
         };
         recent_rows += u64::from(recent);
         writeln!(log, "{}", usage_row(index, scope, now_ms - age_ms))?;
