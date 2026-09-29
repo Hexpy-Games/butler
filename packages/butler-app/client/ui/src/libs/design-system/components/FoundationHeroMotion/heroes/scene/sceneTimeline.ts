@@ -69,7 +69,7 @@ export function sceneTracks(spec: SceneSpec, g0: SceneGeometry): { beats: number
     // A staying finale holds the scene's last pose; otherwise the camera moves on to the poster.
     ...(stay ? [] : [{ at: finale + TRANSITION, ...rest, ease: "standard" as const }]),
     // The loop cuts back to the opening once the poster has faded (the camera never turns back).
-    { at: loop + TRANSITION - 0.01, ...(stay ? last : rest) }, { ...start, at: loop + TRANSITION },
+    { ...(stay ? last : rest), at: loop + TRANSITION - 0.01, ease: "linear" }, { ...start, at: loop + TRANSITION },
   ];
   const regions: Track[] = spec.scenes.map((name) => {
     // A staying finale keeps every scene through the hold (the chapter fades what it shows before the loop).
