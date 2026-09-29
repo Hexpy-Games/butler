@@ -137,7 +137,7 @@ jobs:
           fi
 
   linux-e2e:
-    name: E2E stub (Linux x64 ${{ matrix.shard }}/3)
+    name: E2E stub (Linux x64 ${{ matrix.shard }}/2)
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     strategy:
@@ -146,7 +146,6 @@ jobs:
         include:
           - { shard: 1, idle_disk: true }
           - { shard: 2, idle_disk: false }
-          - { shard: 3, idle_disk: false }
     env:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: sccache
@@ -167,7 +166,7 @@ jobs:
       - name: Run E2E stub tier
         uses: ./.github/actions/e2e-stub
         with:
-          partition: ${{ matrix.shard }}/3
+          partition: ${{ matrix.shard }}/2
           run-idle-disk: ${{ matrix.idle_disk }}
       - name: Assert runner home untouched
         if: always()
