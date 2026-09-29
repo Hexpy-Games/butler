@@ -11,7 +11,7 @@ This file is the status source. `HANDOFF.md` at the repo root covers what has al
 | [ ] | [05 Remove Telegram](05-remove-telegram.md) | P1 | `claude/remove-telegram` (draft PR) |
 | [ ] | [06 Branch actions and steward pill (#316)](06-branch-actions.md) | P1 | #316 |
 | [ ] | [07 Cheap read-path wins](07-read-path-quick-wins.md) | P1 | `origin/main` (reuse parts of `claude/perf-app-storage`) |
-| [ ] | [08 Skills progressive disclosure (#222)](08-skills-disclosure.md) | P1 | `origin/main` |
+| [x] | [08 Skills progressive disclosure (#222)](08-skills-disclosure.md) | P1 | `origin/main` |
 | [ ] | [09 Schedule store unification (#269)](09-schedule-store.md) | P1, before 10 | `origin/main` |
 | [ ] | [10 Schedule UX (#234)](10-schedule-ux.md) | P1 | after 09 |
 | [ ] | [11 Windows preview merge (#304)](11-windows-preview.md) | P2 (can ship after 0.1.0) | #304, after 03 |

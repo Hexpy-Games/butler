@@ -65,6 +65,24 @@ struct BoundTurn<'a> {
     base: &'a dyn ModelRoundPort,
 }
 
+impl GuidedTurnFactoryAdapter {
+    async fn skill_catalog(&self, project_id: Option<String>) -> Result<String, BtccError> {
+        self.capabilities
+            .compact_skill_catalog(project_id)
+            .await
+            .map_err(|cause| error(cause.code()))
+    }
+}
+
+fn bound_project_id(project_id: Option<&str>, context: &serde_json::Value) -> Option<String> {
+    project_id.map(str::to_owned).or_else(|| {
+        context
+            .get("projectRef")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+    })
+}
+
 impl BoundGuidedTurn for BoundTurn<'_> {
     fn take_inputs(&mut self) -> Result<GuidedTurnInputs, BtccError> {
         self.inputs
@@ -220,14 +238,10 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                     memory: CanonicalMemoryReadBinding {
                         runtime_session_id: start.turn.session_id.clone(),
                         turn_id: start.turn.turn_id.clone(),
-                        project_id: policy.project_id.clone().or_else(|| {
-                            start
-                                .turn
-                                .context
-                                .get("projectRef")
-                                .and_then(serde_json::Value::as_str)
-                                .map(str::to_owned)
-                        }),
+                        project_id: bound_project_id(
+                            policy.project_id.as_deref(),
+                            &start.turn.context,
+                        ),
                     },
                     project_id: policy.project_id.clone(),
                     project_sources: project_sources(&start.turn.context),
@@ -250,6 +264,9 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 activity.clone(),
             ));
             let text = Arc::new(GuidedTextState {
+                skill_catalog: self
+                    .skill_catalog(phase.execution_policy.project_id.clone())
+                    .await?,
                 phase,
                 work: initial_work,
                 work_service: self.preparation.work.clone(),

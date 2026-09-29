@@ -18,6 +18,7 @@ use butler_turn::btcc::{
 };
 
 pub(crate) struct GuidedTextState {
+    pub skill_catalog: String,
     pub phase: GuidedPhaseSelection,
     pub work: GuidedWork,
     pub work_service: Arc<butler_turn::btcc::DurableWorkService>,
@@ -178,6 +179,17 @@ fn source_instructions(stable: &str, documents: &documents::DocumentProjection) 
     instructions
 }
 
+fn skill_instructions(
+    state: &GuidedTextState,
+    documents: &documents::DocumentProjection,
+) -> String {
+    format!(
+        "{}\n{}",
+        source_instructions(&state.phase.stable_instruction_prefix, documents),
+        state.skill_catalog
+    )
+}
+
 fn effect_context(records: &[butler_turn::btcc::EffectRecord]) -> String {
     records
         .iter()
@@ -317,8 +329,7 @@ impl PromptPort for GuidedPrompt {
                 &attachment_context,
                 &work_stream,
             )?;
-            let exact_instructions =
-                source_instructions(&state.phase.stable_instruction_prefix, &documents);
+            let exact_instructions = skill_instructions(state, &documents);
             let excluded = state.continuation_budget_enabled
                 && match state.phase.phase {
                     GuidedPhase::Direct => {
@@ -371,10 +382,7 @@ impl PromptPort for GuidedPrompt {
                     &attachment_context,
                     &work_stream,
                 )?;
-                let candidate_instructions = source_instructions(
-                    &state.phase.stable_instruction_prefix,
-                    &candidate_documents,
-                );
+                let candidate_instructions = skill_instructions(state, &candidate_documents);
                 if request_bytes(
                     invocation,
                     &candidate_prompt,

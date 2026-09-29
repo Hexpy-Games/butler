@@ -5,7 +5,12 @@ mod catalog;
 mod contracts;
 mod projection;
 
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    time::SystemTime,
+};
 
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tokio_util::sync::CancellationToken;
@@ -30,9 +35,37 @@ struct Inner {
     native_executable: Option<PathBuf>,
     jobs: Arc<Semaphore>,
     closed: CancellationToken,
+    catalog_cache: Mutex<HashMap<Option<String>, CachedCatalog>>,
+}
+
+struct CachedCatalog {
+    fingerprint: Vec<(PathBuf, Option<SystemTime>)>,
+    skills: Vec<SkillDefinition>,
 }
 
 impl Skills {
+    pub async fn compact_catalog(&self, project_id: Option<String>) -> Result<String, SkillError> {
+        let skills = self.runtime_catalog(project_id).await?;
+        let mut text = String::from("Available skills (call load_skill for instructions):\n");
+        const MAX_BYTES: usize = 1_400;
+        for skill in skills {
+            let description = skill
+                .description
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
+            let description: String = description.chars().take(72).collect();
+            let line = format!("- {}: {description}\n", skill.name);
+            if text.len() + line.len() > MAX_BYTES {
+                if text.len() + "(more in list_skills)\n".len() <= MAX_BYTES {
+                    text.push_str("(more in list_skills)\n");
+                }
+                break;
+            }
+            text.push_str(&line);
+        }
+        Ok(text)
+    }
     pub fn new(resource_root: PathBuf, data_root: PathBuf) -> Self {
         Self::with_native_executable(resource_root, data_root, None)
     }
@@ -57,6 +90,7 @@ impl Skills {
                 native_executable,
                 jobs: Arc::new(Semaphore::new(MAX_BLOCKING_SKILL_JOBS)),
                 closed: CancellationToken::new(),
+                catalog_cache: Mutex::new(HashMap::new()),
             }),
         }
     }
@@ -69,7 +103,20 @@ impl Skills {
         let resources = self.inner.resource_root.clone();
         let data = self.inner.data_root.clone();
         let native_executable = self.inner.native_executable.clone();
+        let inner = self.inner.clone();
         blocking(permit, move || {
+            let cached = inner
+                .catalog_cache
+                .lock()
+                .expect("skill cache mutex poisoned")
+                .get(&project_id)
+                .map(|entry| (entry.fingerprint.clone(), entry.skills.clone()));
+            if let Some((stamps, skills)) = cached
+                && stamps == catalog::refresh_fingerprint(&stamps)?
+            {
+                return Ok(skills);
+            }
+            let fingerprint = catalog::fingerprint(&resources, &data, project_id.as_deref())?;
             let mut skills = catalog::runtime(&resources, &data, project_id.as_deref())?;
             if let Some(executable) = native_executable.as_deref() {
                 for skill in &mut skills {
@@ -90,6 +137,17 @@ impl Skills {
                     }
                 }
             }
+            inner
+                .catalog_cache
+                .lock()
+                .expect("skill cache mutex poisoned")
+                .insert(
+                    project_id,
+                    CachedCatalog {
+                        fingerprint,
+                        skills: skills.clone(),
+                    },
+                );
             Ok(skills)
         })
         .await
