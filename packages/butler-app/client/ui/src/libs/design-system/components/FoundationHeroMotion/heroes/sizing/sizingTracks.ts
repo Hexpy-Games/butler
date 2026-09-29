@@ -5,25 +5,20 @@ import { reveal, select } from "../shared/Reveal";
 import { rollerTracks } from "../shared/Roller";
 import type { SceneContext } from "../scene/types";
 import { HIT, RAILS, type SizingCopy } from "./sizingCopy";
-import { GHOST_PX } from "./sizingTiles";
 
 /**
  * 04 Sizing, "rails and targets", beat marks (1 beat = --motion-deliberate):
  *
  *   0–7.4     Title    four rails draw under "Sizing" like a staff
- *   6.8–21    Staff    four lanes, each one control height tall; a real
- *                      control drops into each; an off-rail 32 flashes and
- *                      snaps onto md 30
- *   21–33     Touch    the real titlebar's icon buttons: the cursor's 30 target
+ *   6.8–19    Staff    four lanes, each one control height tall; a real
+ *                      control drops into each
+ *   19–31     Touch    the real titlebar's icon buttons: the cursor's 30 target
  *                      blooms; the cursor becomes a finger and every target
  *                      grows to 44 together, the buttons moving apart as on
  *                      a touch screen (never overlapping)
- *   33–42     Chrome   the frame's fixed measures on its outer left edge
+ *   31–40     Chrome   the frame's fixed measures on its outer left edge
  */
-const AT = { staff: 6.8, drop: 11.8, ghost: 16.6, flash: 17.2, snap: 18.6, touch: 21, enter: 25.2, bloom: 26.4, others: 27.2, finger: 29, grow: 29.8, chrome: 33, dims: 37.2, end: 42 } as const;
-/** Lane gap (--space-xl) and the ghost's width, canvas px. */
-const LANE_GAP = 20;
-const GHOST = { w: 96, h: GHOST_PX } as const;
+const AT = { staff: 6.8, drop: 11.8, touch: 19, enter: 23.2, bloom: 24.4, others: 25.2, finger: 27, grow: 27.8, chrome: 31, dims: 35.2, end: 40 } as const;
 /** The bar around touch's 44: the target and --space-md (the phone titlebar's 56). */
 const TOUCH_BAR = HIT.touch + 12;
 
@@ -56,14 +51,6 @@ export function sizingTracks(copy: SizingCopy) {
         { select: select(`sf-f${k}`), keys: looped([{ at: 0, o: 0 }, { at: at + 0.7, o: 0 }, { at: at + 0.9, o: 1 }, { at: at + 1.7, o: 0.35, ease: "standard" }], close) },
       ];
     });
-    // The wrong note: a 32 between sm and md flashes, slides down and settles as 30.
-    const between = -(LANE_GAP + GHOST.h) / 2;
-    const ghost: Track[] = [
-      { select: select("sf-ghost"), keys: looped([{ at: 0, o: 0, y: between, w: GHOST.w, h: GHOST.h }, { at: AT.ghost, o: 0 }, { at: AT.ghost + 0.4, o: 1 }, { at: AT.snap, y: between, h: GHOST.h }, { at: AT.snap + 0.9, y: 0, h: RAILS[2].px, ease: "standard" }], close) },
-      { select: select("sf-gw"), keys: looped([{ at: 0, o: 1 }, { at: AT.flash, o: 1 }, { at: AT.flash + 0.3, o: 0.2 }, { at: AT.flash + 0.6, o: 1 }, { at: AT.flash + 0.9, o: 0.2 }, { at: AT.flash + 1.2, o: 1 }, { at: AT.snap + 0.4, o: 1 }, { at: AT.snap + 0.9, o: 0 }], close) },
-      { select: select("sf-gb"), keys: looped([{ at: 0, o: 0 }, { at: AT.snap + 0.5, o: 0 }, { at: AT.snap + 0.9, o: 1 }], close) },
-      shown("sf-gn", AT.ghost + 0.4, AT.snap + 0.2),
-    ];
     // Pointer → touch: the cursor arrives; its target blooms at 30, the other shows; it becomes a finger and every target grows to 44.
     const size = (px: number) => ({ w: px, h: px });
     const bar = g.boxes["tc-bar"]?.h ?? 48;
@@ -83,7 +70,7 @@ export function sizingTracks(copy: SizingCopy) {
       const at = AT.dims + k * 0.6;
       return { select: select(`ch-d${k}`), keys: looped([{ at: 0, o: 0, sy: 0 }, { at, o: 0, sy: 0 }, { at: at + 0.2, o: 1 }, { at: at + 0.7, sy: 1, ease: "decelerate" }], close) };
     });
-    return { tracks: [...introTracks(copy.title, copy.lead, close), ...title, ...staff, ...ghost, ...touch, ...chrome, shown("ch-lg", AT.dims + 0.6)], camera };
+    return { tracks: [...introTracks(copy.title, copy.lead, close), ...title, ...staff, ...touch, ...chrome, shown("ch-lg", AT.dims + 0.6)], camera };
   };
 }
 
