@@ -138,8 +138,13 @@ async fn deliver_stop(
     if !same_instance(&current, record, expected) {
         return Err("native_service_instance_changed".into());
     }
-    if !instance_is_locked(data_root)? || !process_matches(&current)? {
-        return Err("native_service_instance_ambiguous: refusing signal".into());
+    if !instance_is_locked(data_root)? {
+        return Err(
+            "native_service_instance_ambiguous: refusing signal (the DATA lock is free)".into(),
+        );
+    }
+    if !process_matches(&current)? {
+        return Err("native_service_instance_ambiguous: refusing signal (the process does not match its record)".into());
     }
     signal_intended_stop(data_root, &current, request).await
 }
@@ -202,8 +207,13 @@ async fn wait_or_force_stop(
     }
     // Re-read the lock, nonce, PID, OS start identity, and executable directly
     // before force-killing the recorded service process.
-    if !instance_is_locked(data_root)? || !process_matches(&current)? {
-        return Err("native_service_instance_ambiguous: refusing force kill".into());
+    if !instance_is_locked(data_root)? {
+        return Err(
+            "native_service_instance_ambiguous: refusing force kill (the DATA lock is free)".into(),
+        );
+    }
+    if !process_matches(&current)? {
+        return Err("native_service_instance_ambiguous: refusing force kill (the process does not match its record)".into());
     }
     force_stop(&current)?;
     if !wait_for_stop(data_root, &record.nonce, FORCE_STOP_TIMEOUT).await? {
