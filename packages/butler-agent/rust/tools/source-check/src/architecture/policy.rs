@@ -11,7 +11,7 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // butler-platform: the only OS-specific code. Independent facades; each
         // keeps its per-OS implementations as private children.
         "command_sandbox" | "instance" | "launcher" | "network" | "process_control"
-        | "secure_fs" | "user_dirs" => &[],
+        | "process_usage" | "secure_fs" | "user_dirs" => &[],
         // The credential store's owner-only fallback file is a secure_fs file.
         "secrets" => &["secure_fs"],
         // The `butler` command launcher is a runnable file under the user's
