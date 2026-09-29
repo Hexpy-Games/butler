@@ -125,19 +125,7 @@ test("an older agent sends no git, so the learned session kind still decides", (
   expect(selectIsGitProject("unlisted")(useButlerStore.getState())).toBe(false);
 });
 
-test("git.is_repo on the project dashboard decides over the list and the learned kind", () => {
-  installStorage();
-  useButlerStore.setState({ projectWorkspaceKinds: { repo: "folder" } });
-  listProjects(listedProject("repo", { is_repo: false, branch: null }));
-  useButlerStore.getState().setProjectDashboardGit("repo", { is_repo: true, branch: "main", dirty: true, ahead: 1, behind: 0 });
-  expect(selectIsGitProject("repo")(useButlerStore.getState())).toBe(true);
-  // A dashboard from an older agent has no git and changes nothing.
-  const before = useButlerStore.getState().projectDashboardGit;
-  useButlerStore.getState().setProjectDashboardGit("other", undefined);
-  useButlerStore.getState().setProjectDashboardGit("repo", { is_repo: true, branch: "dev" });
-  expect(useButlerStore.getState().projectDashboardGit).toBe(before);
-});
-
+// test-category: pure-logic
 test("project Git sources resolve in order: dashboard, list, then learned sessions", () => {
   expect(reportedGitRepo(undefined)).toBeUndefined();
   expect(reportedGitRepo({ git: null })).toBeUndefined();

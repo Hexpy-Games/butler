@@ -149,7 +149,7 @@ interface ButlerStore {
   sessionViews: Record<string, SessionView>;
   /** Git or plain folder, per project, learned from its session views (fallback for older agents). */
   projectWorkspaceKinds: ProjectWorkspaceKinds;
-  /** `git.is_repo`, per project, from the last project dashboard loaded. */
+  /** `git.is_repo`, per project, from a dashboard loaded after the last project list that reported `git`. */
   projectDashboardGit: Readonly<Record<string, boolean>>;
   observerSessionId: string | null;
   observerTargetTurnId: string | null;
@@ -2456,6 +2456,18 @@ useButlerStore.subscribe((state, previousState) => {
   if (projectWorkspaceKinds === state.projectWorkspaceKinds) return;
   writeCachedProjectWorkspaceKinds(projectWorkspaceKinds);
   useButlerStore.setState({ projectWorkspaceKinds });
+});
+
+// The latest Git answer wins: a project list that reports `git` replaces an
+// older dashboard answer for that project.
+useButlerStore.subscribe((state, previousState) => {
+  if (state.navigation === previousState.navigation) return;
+  const stale = Object.keys(state.projectDashboardGit).filter((projectId) =>
+    reportedGitRepo(state.navigation.projects.find((project) => project.id === projectId)) !== undefined);
+  if (!stale.length) return;
+  const projectDashboardGit = { ...state.projectDashboardGit };
+  for (const projectId of stale) delete projectDashboardGit[projectId];
+  useButlerStore.setState({ projectDashboardGit });
 });
 
 export const selectIsGitProject =
