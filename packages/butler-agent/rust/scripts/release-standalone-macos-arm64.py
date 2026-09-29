@@ -14,6 +14,7 @@ import tempfile
 
 
 PACKAGER_PATH = Path(__file__).with_name("package-standalone-macos-arm64.py")
+SIGN_SCRIPT = Path(__file__).resolve().parents[4] / "deploy" / "macos" / "sign-and-notarize.sh"
 SPEC = importlib.util.spec_from_file_location("native_standalone_packager", PACKAGER_PATH)
 assert SPEC and SPEC.loader
 packager = importlib.util.module_from_spec(SPEC)
@@ -44,6 +45,7 @@ def _release_manifests(
     version: str,
     app_version: str | None,
     expected_artifact_url: str | None,
+    signing: dict | None = None,
 ) -> None:
     digest = packager.sha256_file(archive)
     artifact_urls: list[str | None] = []
@@ -92,6 +94,7 @@ def _release_manifests(
                 or integrity.get("digestAlgorithm") != "sha256"
                 or integrity.get("digest") != digest
                 or integrity.get("signature") is not None
+                or artifact.get("signing") != signing
                 or artifact.get("artifact_name") != archive.name
                 or (expected_artifact_url is not None and artifact_url != expected_artifact_url)
                 or artifact.get("platform") != "darwin-arm64"
@@ -206,7 +209,16 @@ def archive_smoke(archive: Path, expected_artifact_url: str | None = None) -> di
             raise SystemExit("standalone installation checksum mismatch")
         version = packager.nonempty(manifest.get("version"), "Agent version")
         app_version = packager.optional_text(manifest.get("appVersion"))
-        _release_manifests(archive, version, app_version, expected_artifact_url)
+        signing = packager.binary_signing(binary)
+        if os.environ.get("BUTLER_SIGN_IDENTITY") and signing is None:
+            raise SystemExit("native binary is not Developer ID signed")
+        _release_manifests(archive, version, app_version, expected_artifact_url, signing)
+        if signing is not None and os.environ.get("BUTLER_SIGN_IDENTITY"):
+            verify = subprocess.run(
+                [str(SIGN_SCRIPT), "verify-agent", str(binary)], capture_output=True, text=True
+            )
+            if verify.returncode != 0:
+                raise SystemExit(f"native binary signature check failed: {verify.stderr.strip()}")
         before = packager.sha256_tree(installation)
         data = root / "data"
         data.mkdir()

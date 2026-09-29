@@ -80,13 +80,34 @@ def main() -> int:
         app_version=app_version,
         channel=args.channel,
         artifact_url=args.artifact_url,
+        signing=binary_signing(binary_source),
     )
     print(output)
     return 0
 
 
+def binary_signing(binary: Path) -> dict | None:
+    """Developer ID Team ID (and notarization) of a signed binary; None when ad-hoc or unsigned."""
+    result = subprocess.run(
+        ["/usr/bin/codesign", "-dv", "--verbose=4", str(binary)], capture_output=True, text=True
+    )
+    team = next(
+        (line.split("=", 1)[1] for line in result.stderr.splitlines() if line.startswith("TeamIdentifier=")),
+        None,
+    )
+    if not team or team == "not set":
+        return None
+    return {"teamId": team, "notarized": os.environ.get("BUTLER_AGENT_NOTARIZED") == "1"}
+
+
 def write_agent_manifests(
-    archive: Path, *, version: str, app_version: str | None, channel: str, artifact_url: str | None
+    archive: Path,
+    *,
+    version: str,
+    app_version: str | None,
+    channel: str,
+    artifact_url: str | None,
+    signing: dict | None = None,
 ) -> None:
     """Emit the native Agent artifact as its own update/release unit."""
     digest = sha256_file(archive)
@@ -103,6 +124,7 @@ def write_agent_manifests(
         "artifact_url": artifact_url,
         "sha256": digest,
         "integrity": {"digestAlgorithm": "sha256", "digest": digest, "signature": None},
+        "signing": signing,
         "bundled_components": ["service"],
         "protocol_compatibility": {
             "protocol": "butler.agent.v1",
