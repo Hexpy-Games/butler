@@ -1,5 +1,9 @@
-//! Verified Agent archive handoff; never activates or replaces the running install.
+//! Agent archive update: download and verify the archive for this platform,
+//! install it as a version of the Agent home and switch `current` to it.
+//! Restarting the service on the new version is the caller's step: it needs
+//! the new executable, which only the CLI can start.
 
+use crate::operations::install::AgentHome;
 use crate::operations::update::{UpdateCode, UpdateError};
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
@@ -7,16 +11,24 @@ use serde_json::{Value, json};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
+use super::version::version_newer;
 use super::{manifest, stage};
 
 const DEFAULT_MANIFEST: &str =
     "https://github.com/Hexpy-Games/butler/releases/latest/download/agent-update-manifest.json";
+
+/// Installed versions kept after an update, besides the active and previous
+/// ones and any a running service uses.
+pub const KEEP_VERSIONS: usize = 3;
 
 #[derive(Clone, Default)]
 pub struct AgentUpdateRequest {
     pub manifest: Option<String>,
     pub channel: Option<String>,
     pub dry_run: bool,
+    /// Executables in use (the running service's): their versions are never
+    /// pruned.
+    pub protected: Vec<PathBuf>,
 }
 
 #[derive(Clone)]
@@ -24,6 +36,7 @@ pub struct AgentArchiveUpdateService {
     data: PathBuf,
     installation: PathBuf,
     current_version: Option<String>,
+    home: Option<AgentHome>,
     manifest: String,
     client: reqwest::Client,
     writes: Arc<Mutex<()>>,
@@ -51,11 +64,20 @@ impl AgentArchiveUpdateService {
             data,
             installation,
             current_version,
+            home: None,
             manifest,
             client,
             writes: Arc::new(Mutex::new(())),
             shutdown: CancellationToken::new(),
         })
+    }
+
+    /// Installs and activates downloaded archives in `home`; without it the
+    /// service only checks and stages.
+    #[must_use]
+    pub fn with_home(mut self, home: AgentHome) -> Self {
+        self.home = Some(home);
+        self
     }
 
     pub fn close(&self) {
@@ -76,73 +98,30 @@ impl AgentArchiveUpdateService {
         let (mut status, download_url) = self.status(request).await?;
         self.persist_status(request, &status).await?;
         let available = status["update_available"] == true;
-        let mut artifact_path = None;
-        if available && !request.dry_run {
-            let url = download_url
-                .as_deref()
-                .ok_or(UpdateCode::UpdateArtifactUrlMissing)?;
-            let sha256 = status["sha256"]
-                .as_str()
-                .ok_or(UpdateCode::UpdateArtifactSha256Missing)?;
-            let name = artifact_name(
-                url,
-                status["available_version"].as_str().unwrap_or("unknown"),
-            );
-            let label = format!("updates/artifacts/{name}");
-            artifact_path = Some(
-                Box::pin(stage::download_to_label(
-                    &self.client,
-                    &self.shutdown,
-                    &self.data,
-                    &self.installation,
-                    url,
-                    sha256,
-                    &label,
-                ))
-                .await?,
-            );
-        }
-        let stage_status = if request.dry_run {
-            "dry_run"
-        } else if artifact_path.is_some() {
-            "staged"
+        let staged = if available && !request.dry_run {
+            Some(self.stage_archive(&status, download_url.as_deref()).await?)
         } else {
-            "up_to_date"
+            None
         };
-        let archive_staged = artifact_path.is_some();
-        let actions = if available {
-            vec![
-                "download Butler Agent archive",
-                "verify archive sha256",
-                "stage archive under BUTLER_DATA updates",
-                "user installs the standalone archive",
-                "user restarts Butler Agent to apply it",
-            ]
-        } else {
-            vec!["Butler Agent is already up to date"]
+        let installed = match (&staged, &self.home) {
+            (Some(label), Some(home)) => {
+                let installed = self
+                    .install_staged(home, label, &status, &request.protected)
+                    .await?;
+                stage::remove_staged(&self.data, &self.installation, label).await;
+                Some(installed)
+            }
+            _ => None,
         };
-        let object = status
-            .as_object_mut()
-            .ok_or(UpdateCode::UpdateStatusInvalid)?;
-        object.insert("staged".into(), json!(archive_staged));
-        object.insert("dry_run".into(), json!(request.dry_run));
-        object.insert("dryRun".into(), json!(request.dry_run));
-        object.insert("artifact_path".into(), json!(artifact_path));
-        object.insert("planned_actions".into(), json!(actions));
-        object.insert("stage_status".into(), json!(stage_status));
-        object.insert(
-            "activation_status".into(),
-            json!(if archive_staged {
-                "pending_user_install"
-            } else {
-                "not_required"
-            }),
-        );
-        object.insert(
-            "activation_policy".into(),
-            json!("user-installs-standalone-archive"),
-        );
-        object.insert("rollback_policy".into(), json!("not-managed-by-butler"));
+        annotate(
+            &mut status,
+            &Outcome {
+                dry_run: request.dry_run,
+                available,
+                staged,
+                installed,
+            },
+        )?;
         if !request.dry_run {
             if self.shutdown.is_cancelled() {
                 return Err(UpdateCode::UpdateCancelled.into());
@@ -160,6 +139,79 @@ impl AgentArchiveUpdateService {
             .await?;
         }
         Ok(status)
+    }
+
+    /// Downloads the archive under DATA and returns its label.
+    async fn stage_archive(
+        &self,
+        status: &Value,
+        download_url: Option<&str>,
+    ) -> Result<String, UpdateError> {
+        let url = download_url.ok_or(UpdateCode::UpdateArtifactUrlMissing)?;
+        let sha256 = status["sha256"]
+            .as_str()
+            .ok_or(UpdateCode::UpdateArtifactSha256Missing)?;
+        let name = artifact_name(
+            url,
+            status["available_version"].as_str().unwrap_or("unknown"),
+        );
+        let label = format!("updates/artifacts/{name}");
+        Box::pin(stage::download_to_label(
+            &self.client,
+            &self.shutdown,
+            &self.data,
+            &self.installation,
+            url,
+            sha256,
+            &label,
+        ))
+        .await
+    }
+
+    /// Downloads (or copies) an archive to DATA, checking `sha256` before
+    /// keeping it, and returns its path. For `butler install --from <url>`.
+    ///
+    /// # Errors
+    ///
+    /// The download and digest codes of the update flow.
+    pub async fn fetch_archive(&self, source: &str, sha256: &str) -> Result<PathBuf, UpdateError> {
+        let label = format!("updates/artifacts/{}", artifact_name(source, "install"));
+        Box::pin(stage::download_to_label(
+            &self.client,
+            &self.shutdown,
+            &self.data,
+            &self.installation,
+            source,
+            &sha256.to_ascii_lowercase(),
+            &label,
+        ))
+        .await?;
+        Ok(self.data.join(label))
+    }
+
+    /// Extracts the staged archive into the home and makes it the active
+    /// version, then prunes old versions. The home's lock is held throughout.
+    async fn install_staged(
+        &self,
+        home: &AgentHome,
+        label: &str,
+        status: &Value,
+        protected: &[PathBuf],
+    ) -> Result<Value, UpdateError> {
+        if self.shutdown.is_cancelled() {
+            return Err(UpdateCode::UpdateCancelled.into());
+        }
+        let sha256 = status["sha256"]
+            .as_str()
+            .ok_or(UpdateCode::UpdateArtifactSha256Missing)?
+            .to_owned();
+        let (home, archive, protected) = (home.clone(), self.data.join(label), protected.to_vec());
+        tokio::task::spawn_blocking(move || {
+            home.install_and_activate(&archive, Some(&sha256), KEEP_VERSIONS, &protected)
+                .map(|activated| activated.to_json())
+        })
+        .await
+        .map_err(|error| UpdateError::caused(UpdateCode::InstallWriteFailed, error))?
     }
 
     async fn persist_status(
@@ -257,13 +309,13 @@ impl AgentArchiveUpdateService {
                 "updater_owner": "butler-agent",
                 "payload_format": "agent-archive",
                 "staging_policy": "butler-data-updates",
-                "activation_policy": "user-installs-standalone-archive",
-                "rollback_policy": "not-managed-by-butler",
+                "activation_policy": manifest::ACTIVATION_POLICY,
+                "rollback_policy": manifest::ROLLBACK_POLICY,
                 "checked_at": now,
                 "staged": prior_staged,
                 "stage_path": "updates/staged/service.json",
                 "stage_status": if prior_staged { "staged" } else { "up_to_date" },
-                "activation_status": if prior_staged { "pending_user_install" } else { "not_required" },
+                "activation_status": if prior_staged { "pending_activation" } else { "not_required" },
                 "active_runtime_path": null,
                 "attempted_runtime_path": null,
                 "previous_runtime_path": null,
@@ -301,40 +353,68 @@ fn safe_version(version: &str) -> String {
         .collect()
 }
 
-fn version_newer(available: &str, current: &str) -> bool {
-    let parse = |version: &str| {
-        version
-            .split(['.', '-'])
-            .map(|part| {
-                part.chars()
-                    .take_while(char::is_ascii_digit)
-                    .collect::<String>()
-                    .parse::<u64>()
-                    .unwrap_or(0)
-            })
-            .collect::<Vec<_>>()
-    };
-    let available = parse(available);
-    let current = parse(current);
-    (0..available.len().max(current.len()).max(3))
-        .map(|index| {
-            (
-                available.get(index).copied().unwrap_or(0),
-                current.get(index).copied().unwrap_or(0),
-            )
-        })
-        .find(|(left, right)| left != right)
-        .is_some_and(|(left, right)| left > right)
+/// What one `apply` did, for the status it reports.
+struct Outcome {
+    dry_run: bool,
+    available: bool,
+    /// The staged archive's label.
+    staged: Option<String>,
+    /// The installed and activated version.
+    installed: Option<Value>,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::version_newer;
-
-    #[test]
-    fn compares_source_version_segments() {
-        assert!(version_newer("1.2.1", "1.2.0"));
-        assert!(!version_newer("1.2.0", "1.2.0"));
-        assert!(!version_newer("1.1.9", "1.2.0"));
-    }
+fn annotate(status: &mut Value, outcome: &Outcome) -> Result<(), UpdateError> {
+    // A staged archive that was installed is gone; one still here waits for
+    // activation.
+    let pending = outcome
+        .staged
+        .as_ref()
+        .filter(|_| outcome.installed.is_none());
+    let stage_status = if outcome.dry_run {
+        "dry_run"
+    } else if outcome.installed.is_some() {
+        "installed"
+    } else if pending.is_some() {
+        "staged"
+    } else {
+        "up_to_date"
+    };
+    let activation_status = match (&outcome.installed, pending) {
+        (Some(_), _) => "activated",
+        (None, Some(_)) => "pending_activation",
+        (None, None) => "not_required",
+    };
+    let actions = if outcome.available {
+        vec![
+            "download Butler Agent archive",
+            "verify archive sha256",
+            "extract it into the Agent home as <version>-<sha8>",
+            "switch current to the new version",
+            "restart the service if it is running",
+            "keep the previous version for rollback and prune older ones",
+        ]
+    } else {
+        vec!["Butler Agent is already up to date"]
+    };
+    let object = status
+        .as_object_mut()
+        .ok_or(UpdateCode::UpdateStatusInvalid)?;
+    object.insert("staged".into(), json!(pending.is_some()));
+    object.insert("dry_run".into(), json!(outcome.dry_run));
+    object.insert("dryRun".into(), json!(outcome.dry_run));
+    object.insert("artifact_path".into(), json!(pending));
+    object.insert("planned_actions".into(), json!(actions));
+    object.insert("stage_status".into(), json!(stage_status));
+    object.insert("activation_status".into(), json!(activation_status));
+    object.insert("installed".into(), json!(outcome.installed));
+    object.insert(
+        "restart_required".into(),
+        json!(outcome.installed.is_some()),
+    );
+    object.insert(
+        "activation_policy".into(),
+        json!(manifest::ACTIVATION_POLICY),
+    );
+    object.insert("rollback_policy".into(), json!(manifest::ROLLBACK_POLICY));
+    Ok(())
 }

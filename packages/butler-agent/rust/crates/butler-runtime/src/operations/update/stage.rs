@@ -184,6 +184,22 @@ pub(super) async fn read_json(data: &Path, installation: &Path, label: &str) -> 
     serde_json::from_slice(&fs::read(path).await.ok()?).ok()
 }
 
+/// Removes a staged archive once it is installed, so downloads do not
+/// accumulate under DATA. A file that cannot be reached safely stays.
+pub(super) async fn remove_staged(data: &Path, installation: &Path, label: &str) {
+    let relative = Path::new(label);
+    if relative
+        .components()
+        .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        return;
+    }
+    let path = data.join(relative);
+    if guard(data, installation, &path).await.is_ok() {
+        let _ = fs::remove_file(path).await;
+    }
+}
+
 pub(super) async fn staged_file_exists(data: &Path, installation: &Path, label: &str) -> bool {
     let relative = Path::new(label);
     if relative

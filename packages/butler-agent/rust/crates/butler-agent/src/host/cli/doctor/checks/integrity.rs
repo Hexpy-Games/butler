@@ -1,13 +1,9 @@
 //! Read-only verification against the hashes in the installed native manifest.
 
-use std::{
-    fs::{self, File},
-    io::Read,
-    path::{Path, PathBuf},
-};
+use std::path::Path;
 
+use butler_runtime::operations::{sha256_file, sha256_tree};
 use serde_json::json;
-use sha2::{Digest, Sha256};
 
 use super::{Check, ResolvedInstallation};
 
@@ -78,88 +74,11 @@ pub(crate) fn digest_check(installation: &ResolvedInstallation) -> Check {
 }
 
 fn hash_file(path: &Path) -> Result<String, &'static str> {
-    let metadata = fs::symlink_metadata(path).map_err(|_| "payload_unreadable")?;
-    if !metadata.is_file() || metadata.file_type().is_symlink() {
-        return Err("payload_unreadable");
-    }
-    let mut file = File::open(path).map_err(|_| "payload_unreadable")?;
-    let mut digest = Sha256::new();
-    let mut buffer = vec![0_u8; 1024 * 1024];
-    loop {
-        let read = file.read(&mut buffer).map_err(|_| "payload_unreadable")?;
-        if read == 0 {
-            break;
-        }
-        digest.update(&buffer[..read]);
-    }
-    let digest = digest.finalize();
-    Ok(hex_digest(&digest))
+    sha256_file(path).map_err(|_| "payload_unreadable")
 }
 
 fn hash_tree(root: &Path) -> Result<String, &'static str> {
-    let metadata = fs::symlink_metadata(root).map_err(|_| "payload_unreadable")?;
-    if !metadata.is_dir() || metadata.file_type().is_symlink() {
-        return Err("payload_unreadable");
-    }
-    let mut digest = Sha256::new();
-    hash_directory(root, "", &mut digest)?;
-    let digest = digest.finalize();
-    Ok(hex_digest(&digest))
-}
-
-fn hash_directory(root: &Path, relative: &str, digest: &mut Sha256) -> Result<(), &'static str> {
-    let mut entries = fs::read_dir(root)
-        .map_err(|_| "payload_unreadable")?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| "payload_unreadable")?;
-    entries.sort_by_key(std::fs::DirEntry::file_name);
-    for entry in entries {
-        let name = entry.file_name();
-        let name = name.to_str().ok_or("payload_unreadable")?;
-        let label = if relative.is_empty() {
-            name.to_owned()
-        } else {
-            format!("{relative}/{name}")
-        };
-        let path = entry.path();
-        let kind = entry.file_type().map_err(|_| "payload_unreadable")?;
-        if kind.is_symlink() {
-            let target: PathBuf = fs::read_link(&path).map_err(|_| "payload_unreadable")?;
-            let target = target.to_str().ok_or("payload_unreadable")?;
-            digest.update(format!("l:{label}:{target}\n").as_bytes());
-        } else if kind.is_dir() {
-            digest.update(format!("d:{label}\n").as_bytes());
-            hash_directory(&path, &label, digest)?;
-        } else if kind.is_file() {
-            digest.update(format!("f:{label}\n").as_bytes());
-            hash_file_into(&path, digest)?;
-        } else {
-            return Err("payload_unreadable");
-        }
-    }
-    Ok(())
-}
-
-fn hash_file_into(path: &Path, digest: &mut Sha256) -> Result<(), &'static str> {
-    let mut file = File::open(path).map_err(|_| "payload_unreadable")?;
-    let mut buffer = vec![0_u8; 1024 * 1024];
-    loop {
-        let read = file.read(&mut buffer).map_err(|_| "payload_unreadable")?;
-        if read == 0 {
-            break;
-        }
-        digest.update(&buffer[..read]);
-    }
-    Ok(())
-}
-
-fn hex_digest(bytes: &[u8]) -> String {
-    let mut result = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        use std::fmt::Write as _;
-        let _ = write!(result, "{byte:02x}");
-    }
-    result
+    sha256_tree(root).map_err(|_| "payload_unreadable")
 }
 
 #[cfg(test)]

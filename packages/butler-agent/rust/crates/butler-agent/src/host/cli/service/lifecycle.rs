@@ -95,7 +95,22 @@ pub(super) async fn execute(
         }
         Action::Run => Err("service run is dispatched by the native service entrypoint".into()),
         Action::RestartHandoff => Err("restart handoff has a private entrypoint".into()),
+        Action::RegisterLogin | Action::UnregisterLogin | Action::LoginStatus => {
+            Err("login registration is dispatched by the registration command".into())
+        }
     }
+}
+
+/// Whether an instance owns the data folder `requested_data` names (or the
+/// default one). A folder that cannot be examined counts as not running:
+/// starting will report the real problem.
+pub(super) fn already_running(
+    requested_data: Option<&str>,
+    installation: &ResolvedInstallation,
+) -> bool {
+    resolve_data_root(requested_data, installation)
+        .and_then(|data_root| active_service(&data_root))
+        .is_ok_and(|active| active.is_some())
 }
 
 pub(super) fn summary(action: Action, value: &Value) -> String {
@@ -119,6 +134,7 @@ pub(super) fn summary(action: Action, value: &Value) -> String {
         Action::Restart => "Butler native service restarted".into(),
         Action::Run => "Butler native service run".into(),
         Action::RestartHandoff => "Butler native service restart handoff".into(),
+        Action::RegisterLogin | Action::UnregisterLogin | Action::LoginStatus => String::new(),
     }
 }
 
@@ -245,7 +261,7 @@ async fn stop_service(
     Ok(report.to_json())
 }
 
-async fn acquire_admission(
+pub(super) async fn acquire_admission(
     data_root: &Path,
     installation: &ResolvedInstallation,
 ) -> Result<AdmissionLock, crate::host::HostError> {
@@ -263,7 +279,9 @@ async fn acquire_admission(
     }
 }
 
-fn active_service(data_root: &Path) -> Result<Option<InstanceRecord>, crate::host::HostError> {
+pub(super) fn active_service(
+    data_root: &Path,
+) -> Result<Option<InstanceRecord>, crate::host::HostError> {
     let locked = instance_is_locked(data_root)?;
     let record = read_record(data_root)?;
     match (locked, record) {
@@ -353,7 +371,7 @@ fn log_file(
     })
 }
 
-fn resolve_data_root(
+pub(super) fn resolve_data_root(
     explicit: Option<&str>,
     installation: &ResolvedInstallation,
 ) -> Result<PathBuf, crate::host::HostError> {

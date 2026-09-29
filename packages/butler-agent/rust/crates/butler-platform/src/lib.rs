@@ -19,8 +19,15 @@
 //!   enforces read-only and write-protected access.
 //! - [`secure_fs`]: owner-only files and directories, atomic replacement,
 //!   no-follow opens, directory exchange and file identity.
-//! - [`user_dirs`]: the user's home and the system's own folders.
+//! - [`user_dirs`]: the user's home, the Agent home and the command
+//!   directory, and the system's own folders.
 //! - [`launcher`]: runnable programs and the release platform tag.
+//! - [`command_launcher`]: the user's `butler` command (a launcher file
+//!   that runs the installed Agent) and who owns a file at that path.
+//! - [`install_link`]: the `current` and `previous` pointers of an Agent
+//!   home, switched atomically.
+//! - [`service_registration`]: login-time start of the service (launchd,
+//!   systemd `--user`, Task Scheduler).
 //! - [`network`]: the machine's own interface addresses.
 //!
 //! macOS and Linux implement the behavior Butler shipped with. Windows
@@ -33,11 +40,14 @@
 // Every public item says what it is for.
 #![deny(missing_docs)]
 
+pub mod command_launcher;
 pub mod command_sandbox;
+pub mod install_link;
 pub mod instance;
 pub mod launcher;
 pub mod network;
 pub mod process_control;
 pub mod secrets;
 pub mod secure_fs;
+pub mod service_registration;
 pub mod user_dirs;

@@ -1,27 +1,31 @@
-//! The user's `butler` command at `DATA/bin/butler`.
+//! The `butler` launcher kept in the data folder, `DATA/bin/butler`.
 //!
-//! Releases before the native cutover installed a Bun-compiled launcher there
+//! **One canonical launcher.** The `butler` command of a CLI installation is
+//! `~/.local/bin/butler` (see `AgentHome::sync_command_launcher`): it runs
+//! `AGENT_HOME/current`, whichever version that names. `DATA/bin/butler` is
+//! the older location, kept so a `PATH` that still names it keeps working.
+//! It is the same launcher script with two differences: it selects this data
+//! folder when the caller names none, and it runs the CLI installation when
+//! there is one (`AGENT_HOME/current`) and otherwise the installation of the
+//! service that last started, the App's bundled Agent for an App-only user.
+//! `butler install`, `update` and `rollback` and every service start
+//! rewrite it to that target, so the two never run different Agents.
+//!
+//! Releases before the native cutover installed a Bun-compiled launcher here
 //! that runs `$BUTLER_HOME/bin/butler.js`; that script no longer exists, so
 //! every `butler ...` command failed with "Module not found". An installed
-//! Butler (one with its payload manifest) repairs this path at service start:
-//! it rewrites that stale launcher, or an older launcher of its own (marked by
-//! [`MARKER`]), into a small script that execs the running installation. Any
-//! other file is the user's and is left alone, and a development build never
-//! touches the path. The first replaced stale launcher is kept as
-//! `butler.previous`; an existing `butler.previous` is never overwritten.
+//! Butler (one with its payload manifest) repairs the path: it rewrites that
+//! stale launcher, or a launcher of its own (marked in its second line), and
+//! keeps the first stale launcher as `butler.previous`; an existing
+//! `butler.previous` is never overwritten. Any other file is the user's and
+//! is left alone, and a development build never touches the path.
 
-use std::fs;
-use std::io::Write;
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
+use butler_platform::command_launcher::{self, Ownership, Target};
+use butler_runtime::operations::AgentHome;
+
 use crate::host::ResolvedInstallation;
-
-const MARKER: &str = "# butler-native-launcher v1";
-
-/// The entrypoint the pre-native Bun launcher runs; the compiled launcher
-/// embeds its name.
-const STALE_ENTRYPOINT: &[u8] = b"butler.js";
 
 /// What [`repair`] did to `DATA/bin/butler`.
 #[derive(Debug, PartialEq, Eq)]
@@ -31,7 +35,7 @@ pub(crate) enum LauncherRepair {
     /// This is not an installed Butler (no payload manifest): the launcher is
     /// not touched.
     NotInstalled,
-    /// The launcher already execs this installation.
+    /// The launcher already runs the right Agent.
     Current,
     /// An older native launcher pointed at another installation.
     Updated,
@@ -41,127 +45,121 @@ pub(crate) enum LauncherRepair {
     Foreign,
 }
 
-/// What the file at `DATA/bin/butler` is.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Existing {
-    Ours,
-    Stale,
-    Foreign,
-}
-
-fn classify(contents: &[u8]) -> Existing {
-    if contents
-        .split(|byte| *byte == b'\n')
-        .nth(1)
-        .is_some_and(|line| line == MARKER.as_bytes())
-    {
-        Existing::Ours
-    } else if contents
-        .windows(STALE_ENTRYPOINT.len())
-        .any(|window| window == STALE_ENTRYPOINT)
-    {
-        Existing::Stale
-    } else {
-        Existing::Foreign
+impl LauncherRepair {
+    /// The state in output and JSON.
+    pub(crate) fn as_str(&self) -> &'static str {
+        match self {
+            Self::Absent => "absent",
+            Self::NotInstalled => "not-installed",
+            Self::Current => "current",
+            Self::Updated => "updated",
+            Self::ReplacedStale => "replaced-stale",
+            Self::Foreign => "kept-foreign",
+        }
     }
 }
 
-/// Rewrites a stale or outdated `DATA/bin/butler` so it execs `installation`.
+/// The launcher path in a data folder.
+pub(crate) fn data_launcher_path(data_root: &Path) -> PathBuf {
+    data_root.join("bin").join(command_launcher::file_name())
+}
+
+/// Rewrites a stale or outdated `DATA/bin/butler` so it runs the CLI
+/// installation, or `installation` when there is none. An absent launcher is
+/// not created.
 pub(crate) fn repair(
     data_root: &Path,
     installation: &ResolvedInstallation,
 ) -> std::io::Result<LauncherRepair> {
-    let launcher = data_root.join("bin").join("butler");
-    match fs::symlink_metadata(&launcher) {
-        Ok(_) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(LauncherRepair::Absent);
-        }
-        Err(error) => return Err(error),
-    }
     if !matches!(installation.payload_provenance(), Ok(Some(_))) {
-        return Ok(LauncherRepair::NotInstalled);
+        // Still report a missing launcher as such.
+        return Ok(
+            match command_launcher::ownership(&data_launcher_path(data_root))? {
+                None => LauncherRepair::Absent,
+                Some(_) => LauncherRepair::NotInstalled,
+            },
+        );
     }
-    let existing = fs::read(&launcher)?;
-    let wanted = script(data_root, installation);
-    if existing == wanted.as_bytes() && is_executable(&launcher) {
-        return Ok(LauncherRepair::Current);
+    let paths = LaunchPaths::select(installation);
+    rewrite(data_root, &paths)
+}
+
+/// [`repair`] for a command that just changed the CLI installation, when no
+/// running installation is at hand.
+pub(crate) fn point_at_agent_home(
+    data_root: &Path,
+    home: &AgentHome,
+) -> std::io::Result<LauncherRepair> {
+    let target = home.launcher_target();
+    rewrite(
+        data_root,
+        &LaunchPaths {
+            program: target.program,
+            root: target.root,
+            resources: target.resources,
+        },
+    )
+}
+
+/// The executable, installation root and resource root a launcher (or a
+/// login service definition) runs.
+pub(crate) struct LaunchPaths {
+    pub(crate) program: PathBuf,
+    pub(crate) root: PathBuf,
+    pub(crate) resources: PathBuf,
+}
+
+impl LaunchPaths {
+    /// The CLI installation when one is active, else the running one.
+    pub(crate) fn select(installation: &ResolvedInstallation) -> Self {
+        if let Ok(home) = AgentHome::resolve()
+            && home.active().ok().flatten().is_some()
+            && home.current_path().join("butler-agent").is_file()
+        {
+            let target = home.launcher_target();
+            return Self {
+                program: target.program,
+                root: target.root,
+                resources: target.resources,
+            };
+        }
+        Self {
+            program: installation.executable().to_path_buf(),
+            root: installation.root().to_path_buf(),
+            resources: installation.resources().to_path_buf(),
+        }
     }
-    let kind = classify(&existing);
-    match kind {
-        Existing::Foreign => return Ok(LauncherRepair::Foreign),
-        Existing::Stale => keep_previous(&launcher)?,
-        Existing::Ours => {}
+}
+
+fn rewrite(data_root: &Path, paths: &LaunchPaths) -> std::io::Result<LauncherRepair> {
+    let launcher = data_launcher_path(data_root);
+    let Some(ownership) = command_launcher::ownership(&launcher)? else {
+        return Ok(LauncherRepair::Absent);
+    };
+    let wanted = command_launcher::render(&Target {
+        program: &paths.program,
+        installation_root: &paths.root,
+        resource_root: &paths.resources,
+        data_default: Some(data_root),
+    });
+    match ownership {
+        Ownership::Foreign => return Ok(LauncherRepair::Foreign),
+        Ownership::Ours if command_launcher::is_current(&launcher, &wanted) => {
+            return Ok(LauncherRepair::Current);
+        }
+        Ownership::Stale => command_launcher::keep_previous(&launcher)?,
+        Ownership::Ours => {}
     }
-    write_atomic(&launcher, wanted.as_bytes())?;
-    Ok(if kind == Existing::Ours {
+    command_launcher::write(&launcher, &wanted)?;
+    Ok(if ownership == Ownership::Ours {
         LauncherRepair::Updated
     } else {
         LauncherRepair::ReplacedStale
     })
 }
 
-/// Moves the stale launcher to `butler.previous` unless one is kept already
-/// (then the stale launcher is simply replaced).
-fn keep_previous(launcher: &Path) -> std::io::Result<()> {
-    let previous = previous_path(launcher);
-    match fs::symlink_metadata(&previous) {
-        Ok(_) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            fs::rename(launcher, previous)
-        }
-        Err(error) => Err(error),
-    }
-}
-
-fn script(data_root: &Path, installation: &ResolvedInstallation) -> String {
-    format!(
-        "#!/bin/sh\n{MARKER}\n# Managed by Butler: rewritten when the Butler service starts.\n\
-         BUTLER_DATA=\"${{BUTLER_DATA:-{data}}}\"\nexport BUTLER_DATA\n\
-         exec {binary} --installation-root {root} --resource-root {resources} \"$@\"\n",
-        data = double_quoted(data_root),
-        binary = single_quoted(installation.executable()),
-        root = single_quoted(installation.root()),
-        resources = single_quoted(installation.resources()),
-    )
-}
-
-fn single_quoted(path: &Path) -> String {
-    format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
-}
-
-/// Escapes a path for use inside `"..."` in a POSIX shell.
-fn double_quoted(path: &Path) -> String {
-    let mut out = String::new();
-    for character in path.to_string_lossy().chars() {
-        if matches!(character, '"' | '\\' | '$' | '`') {
-            out.push('\\');
-        }
-        out.push(character);
-    }
-    out
-}
-
-fn previous_path(launcher: &Path) -> PathBuf {
-    launcher.with_file_name("butler.previous")
-}
-
-fn is_executable(path: &Path) -> bool {
-    fs::metadata(path).is_ok_and(|metadata| metadata.permissions().mode() & 0o111 == 0o111)
-}
-
-fn write_atomic(path: &Path, contents: &[u8]) -> std::io::Result<()> {
-    let staging = path.with_file_name(format!(".butler.launcher-{}", std::process::id()));
-    let result = write_executable(&staging, contents).and_then(|()| fs::rename(&staging, path));
-    if result.is_err() {
-        let _ = fs::remove_file(&staging);
-    }
-    result
-}
-
-fn write_executable(path: &Path, contents: &[u8]) -> std::io::Result<()> {
-    let mut file = fs::File::create(path)?;
-    file.write_all(contents)?;
-    file.sync_all()?;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o755))
+/// Removes `DATA/bin/butler` when it is Butler's launcher; whether it did.
+pub(crate) fn remove(data_root: &Path) -> std::io::Result<bool> {
+    let launcher = data_launcher_path(data_root);
+    Ok(command_launcher::remove_if_ours(&launcher)? == command_launcher::Removal::Removed)
 }

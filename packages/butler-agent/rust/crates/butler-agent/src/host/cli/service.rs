@@ -6,9 +6,12 @@ use std::{ffi::OsString, path::Path};
 use serde_json::json;
 
 use crate::host::ResolvedInstallation;
-use crate::host::service::instance::{RestartIdentity, StopRequester};
+use crate::host::service::instance::{
+    AdmissionLock, InstanceRecord, RestartIdentity, StopRequester,
+};
 
 mod lifecycle;
+mod registration;
 
 #[expect(
     clippy::struct_excessive_bools,
@@ -21,6 +24,11 @@ struct Options {
     quiet: bool,
     dry_run: bool,
     detached: bool,
+    /// `--if-absent`: `service run` exits 0 when an instance owns DATA already.
+    if_absent: bool,
+    /// `--files-only`: `service install` and `uninstall` write or remove the
+    /// definition without asking the service manager to act.
+    files_only: bool,
     /// `--requested-by`: the controller recorded in the stop intent.
     requested_by: Option<StopRequester>,
     positionals: Vec<String>,
@@ -42,6 +50,12 @@ enum Action {
     Stop,
     Restart,
     RestartHandoff,
+    /// `service install`: register the service to start at login.
+    RegisterLogin,
+    /// `service uninstall`: remove that registration.
+    UnregisterLogin,
+    /// `service status`: what the service manager says about it.
+    LoginStatus,
 }
 
 impl Action {
@@ -52,6 +66,9 @@ impl Action {
             Self::Stop => "stop",
             Self::Restart => "restart",
             Self::RestartHandoff => "service restart-handoff",
+            Self::RegisterLogin => "service install",
+            Self::UnregisterLogin => "service uninstall",
+            Self::LoginStatus => "service status",
         }
     }
 }
@@ -67,7 +84,7 @@ pub(crate) fn recognizes(args: &[OsString]) -> bool {
                 index += 2;
             }
             "--json" | "--verbose" | "--quiet" | "--silent" | "--yes" | "--non-interactive"
-            | "--dry-run" | "--detached" => {
+            | "--dry-run" | "--detached" | "--if-absent" | "--files-only" => {
                 saw_option = true;
                 index += 1;
             }
@@ -89,19 +106,8 @@ pub(crate) async fn run_native_service_cli(
         Ok(value) => value,
         Err(message) => return report_error("service", json_requested, message.message()),
     };
-    if options.dry_run && matches!(action, Action::Run) {
-        return report_error(
-            "service run",
-            options.json,
-            "--dry-run is not supported for service run",
-        );
-    }
-    if options.detached && !matches!(action, Action::Run) {
-        return report_error(
-            "service",
-            options.json,
-            "--detached is only valid for service run",
-        );
+    if let Some((command, message)) = misplaced_option(&options, action) {
+        return report_error(command, options.json, message);
     }
     let data = match expand_data(options.data.as_deref()) {
         Ok(data) => data,
@@ -127,28 +133,20 @@ pub(crate) async fn run_native_service_cli(
             Err(message) => report_error(action.name(), options.json, message.message()),
         };
     }
+    if matches!(
+        action,
+        Action::RegisterLogin | Action::UnregisterLogin | Action::LoginStatus
+    ) {
+        return registration::run(action, &installation, data.as_deref(), &options);
+    }
+    if options.if_absent && lifecycle::already_running(data.as_deref(), &installation) {
+        if !options.quiet {
+            println!("Butler native service is already running");
+        }
+        return ExitCode::SUCCESS;
+    }
     if matches!(action, Action::Run) {
-        return match crate::host::service::entrypoint::run_native_service_with_options(
-            installation,
-            data,
-            options.detached,
-            options.quiet,
-        )
-        .await
-        {
-            Ok(session) => {
-                if options.json {
-                    println!(
-                        "{}",
-                        json!({"ok":true,"command":"service run","data":{"sessionId":session}})
-                    );
-                } else if let Some(session) = session.filter(|_| !options.quiet) {
-                    println!("{session}");
-                }
-                ExitCode::SUCCESS
-            }
-            Err(message) => report_error("service run", options.json, message.message()),
-        };
+        return run_service(installation, data, &options).await;
     }
     let result = lifecycle::execute(action, installation, data.as_deref(), options.control()).await;
     match result {
@@ -165,6 +163,90 @@ pub(crate) async fn run_native_service_cli(
         }
         Err(message) => report_error(action.name(), options.json, message.message()),
     }
+}
+
+/// An option that does not belong to the action: the command to report it
+/// under and what is wrong.
+fn misplaced_option(options: &Options, action: Action) -> Option<(&'static str, &'static str)> {
+    let run = matches!(action, Action::Run);
+    if options.dry_run && run {
+        Some(("service run", "--dry-run is not supported for service run"))
+    } else if (options.detached || options.if_absent) && !run {
+        Some((
+            "service",
+            "--detached and --if-absent are only valid for service run",
+        ))
+    } else if options.files_only
+        && !matches!(action, Action::RegisterLogin | Action::UnregisterLogin)
+    {
+        Some((
+            "service",
+            "--files-only is only valid for service install and uninstall",
+        ))
+    } else {
+        None
+    }
+}
+
+/// `service run`: the foreground service, until it is asked to stop.
+async fn run_service(
+    installation: ResolvedInstallation,
+    data: Option<String>,
+    options: &Options,
+) -> ExitCode {
+    match crate::host::service::entrypoint::run_native_service_with_options(
+        installation,
+        data,
+        options.detached,
+        options.quiet,
+    )
+    .await
+    {
+        Ok(session) => {
+            if options.json {
+                println!(
+                    "{}",
+                    json!({"ok":true,"command":"service run","data":{"sessionId":session}})
+                );
+            } else if let Some(session) = session.filter(|_| !options.quiet) {
+                println!("{session}");
+            }
+            ExitCode::SUCCESS
+        }
+        Err(message) => report_error("service run", options.json, message.message()),
+    }
+}
+
+/// The instance that owns `data_root`, if one is starting or ready.
+pub(super) fn running_instance(
+    data_root: &Path,
+) -> Result<Option<InstanceRecord>, crate::host::HostError> {
+    lifecycle::active_service(data_root)
+}
+
+/// Holds the DATA admission lock: while the guard lives, no controller
+/// starts, stops or restarts the service of `data_root`.
+pub(super) async fn admit(
+    installation: &ResolvedInstallation,
+    data_root: &Path,
+) -> Result<AdmissionLock, crate::host::HostError> {
+    lifecycle::acquire_admission(data_root, installation).await
+}
+
+/// Stops the service that owns `data_root` (the stop-intent `stop`, asked by
+/// the CLI) and reports what it did.
+pub(super) async fn stop_running(
+    installation: ResolvedInstallation,
+    data_root: &Path,
+) -> Result<serde_json::Value, crate::host::HostError> {
+    let data = data_root.to_string_lossy().into_owned();
+    lifecycle::execute(
+        Action::Stop,
+        installation,
+        Some(&data),
+        Options::default().control(),
+    )
+    .await
 }
 
 pub(crate) fn spawn_restart_handoff(
@@ -205,6 +287,8 @@ fn parse(args: &[OsString]) -> Result<(Options, Action), crate::host::HostError>
             "--verbose" | "--yes" | "--non-interactive" => {}
             "--dry-run" => options.dry_run = true,
             "--detached" => options.detached = true,
+            "--if-absent" => options.if_absent = true,
+            "--files-only" => options.files_only = true,
             value if value.starts_with('-') => {
                 return Err(format!("unsupported service option: {value}").into());
             }
@@ -220,8 +304,16 @@ fn parse(args: &[OsString]) -> Result<(Options, Action), crate::host::HostError>
         [service, command] if service == "service" && command == "restart-handoff" => {
             Action::RestartHandoff
         }
+        [service, command] if service == "service" && command == "install" => Action::RegisterLogin,
+        [service, command] if service == "service" && command == "uninstall" => {
+            Action::UnregisterLogin
+        }
+        [service, command] if service == "service" && command == "status" => Action::LoginStatus,
         [service] if service == "service" => {
-            return Err("supported commands: service run, start, stop, restart".into());
+            return Err(
+                "supported commands: service run|install|uninstall|status, start, stop, restart"
+                    .into(),
+            );
         }
         [command] if command == "start" => Action::Start,
         [command] if command == "stop" => Action::Stop,

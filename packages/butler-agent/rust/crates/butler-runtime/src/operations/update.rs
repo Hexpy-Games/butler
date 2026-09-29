@@ -1,14 +1,17 @@
-//! App-package update checks and DATA-only staging. Installation stays immutable.
+//! App-package update checks and DATA-only staging, and the Agent archive
+//! update that stages, installs and activates a new Agent version.
 
 mod agent;
 mod error;
 mod manifest;
 mod stage;
+mod version;
 
-pub use agent::{AgentArchiveUpdateService, AgentUpdateRequest};
+pub use agent::{AgentArchiveUpdateService, AgentUpdateRequest, KEEP_VERSIONS};
 pub(crate) use error::UpdateCode;
 pub use error::UpdateError;
 use std::{path::PathBuf, sync::Arc, time::Duration};
+pub use version::version_newer;
 
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
@@ -238,30 +241,4 @@ fn validate_request(request: &UpdateRequest) -> Result<(), UpdateError> {
         return Err(UpdateCode::UnsupportedComponent.into());
     }
     Ok(())
-}
-
-fn version_newer(available: &str, current: &str) -> bool {
-    let parse = |version: &str| -> Vec<u64> {
-        version
-            .split(['.', '-'])
-            .map(|part| {
-                part.chars()
-                    .take_while(char::is_ascii_digit)
-                    .collect::<String>()
-                    .parse()
-                    .unwrap_or(0)
-            })
-            .collect()
-    };
-    let left = parse(available);
-    let right = parse(current);
-    (0..left.len().max(right.len()).max(3))
-        .map(|index| {
-            (
-                left.get(index).copied().unwrap_or(0),
-                right.get(index).copied().unwrap_or(0),
-            )
-        })
-        .find(|(left, right)| left != right)
-        .is_some_and(|(left, right)| left > right)
 }
