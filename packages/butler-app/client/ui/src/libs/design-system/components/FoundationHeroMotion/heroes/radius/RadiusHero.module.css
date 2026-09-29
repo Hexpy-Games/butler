@@ -1,0 +1,394 @@
+/* 05 Radius and elevation hero (v3 scenes). Canvas px (../shared/grid.ts). */
+
+/* ---- The corner under the loupe ---- */
+
+.cornerStage {
+  position: relative;
+}
+
+/* One line per real pixel at ×16. */
+.pixelGrid {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(
+      to right,
+      color-mix(in srgb, var(--line) 60%, transparent) 0 1px,
+      transparent 1px var(--space-lg)
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--line) 60%, transparent) 0 1px,
+      transparent 1px var(--space-lg)
+    );
+}
+
+.cornerGroup {
+  position: absolute;
+}
+
+.surface,
+.circle,
+.rline {
+  position: absolute;
+  left: 0;
+}
+
+.surface {
+  top: 0;
+  box-sizing: border-box;
+  border: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.circle {
+  top: 0;
+  box-sizing: border-box;
+  border: 1.5px dashed color-mix(in srgb, var(--accent) 70%, transparent);
+  border-radius: var(--radius-pill);
+}
+
+.rline {
+  block-size: 2px;
+  background: var(--accent);
+}
+
+.readout {
+  position: absolute;
+  top: calc(var(--space-4xl) * 3.5);
+  left: calc(var(--space-4xl) * 16);
+  display: grid;
+  justify-items: start;
+  row-gap: var(--space-sm);
+  color: var(--text-primary);
+}
+
+/* Tall: above the specimen (its corner stands 240 down), so no arc or line ever crosses it. */
+[data-layout="tall"] .readout {
+  top: var(--space-xl);
+  left: calc(var(--space-xl) * 2);
+}
+
+.loupe {
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+}
+
+.bigValue {
+  font-size: calc(var(--typo-h1-size) * 2.4);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-strong);
+  line-height: var(--line-height-none);
+}
+
+.stack {
+  display: inline-grid;
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-h5-size);
+}
+
+.layer {
+  grid-area: 1 / 1;
+}
+
+.layer[data-tone="who"] {
+  color: var(--text-secondary);
+}
+
+.layer + .layer {
+  opacity: 0;
+}
+
+/* ---- Who wears which ---- */
+
+/* Components top-aligned, so every value sits on one line above them. */
+.wearStage {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--space-2xl) var(--space-3xl);
+  max-inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
+}
+
+/* A value line, then the components: a pair centres its button and tag on each other. */
+.wornGroup {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
+}
+
+.wornValue {
+  align-self: end;
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-body-size);
+  line-height: var(--line-height-none);
+}
+
+.wornHost {
+  position: relative;
+  display: inline-grid;
+  justify-self: start;
+}
+
+/* The arc drawn on the corner itself (radiusArc.tsx places it on the measured corner). */
+.wornArc {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.wornArc path {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-dasharray: 100;
+}
+
+/* ---- Nesting ---- */
+
+.nestStage {
+  position: relative;
+  inline-size: var(--canvas-w);
+  block-size: var(--canvas-h);
+}
+
+.nestCard {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+}
+
+/* Tall: the corner sits left of the middle, so both notes fit the portrait frame. */
+[data-layout="tall"] .nestCard {
+  left: 25%;
+}
+
+.nestButton {
+  position: relative;
+  display: inline-grid;
+}
+
+.wrong {
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--color-danger);
+}
+
+.arc {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  border-top: 1.5px solid var(--accent);
+  border-left: 1.5px solid var(--accent);
+}
+
+.arc[data-size="inner"] {
+  inline-size: calc(var(--radius-control) * 2);
+  block-size: calc(var(--radius-control) * 2);
+  border-top-left-radius: var(--radius-control);
+}
+
+.arc[data-size="outer"] {
+  inline-size: calc(var(--radius-panel) * 2);
+  block-size: calc(var(--radius-panel) * 2);
+  border-top-left-radius: var(--radius-panel);
+}
+
+.padMark {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  inline-size: var(--space-lg);
+  block-size: var(--space-lg);
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--accent) 40%, transparent) 0 1px,
+    transparent 1px 3px
+  );
+}
+
+.nestNote {
+  position: absolute;
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--font-size-1);
+  white-space: nowrap;
+}
+
+.nestNote[data-place="outer"] {
+  bottom: calc(100% + var(--space-xs));
+  left: 0;
+}
+
+.nestNote[data-place="inner"] {
+  top: calc(100% + var(--space-sm));
+  left: 0;
+}
+
+/* ---- Shadows in use: one scene each ---- */
+
+.level {
+  display: grid;
+  justify-items: start;
+  row-gap: var(--space-2xl);
+}
+
+.levelNote {
+  display: grid;
+  row-gap: var(--space-xs);
+}
+
+.levelWhen {
+  color: var(--text-primary);
+  font-size: var(--typo-h5-size);
+  font-weight: var(--font-weight-medium);
+}
+
+.levelToken {
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+}
+
+/* The control before and after the press, one over the other. */
+.swap {
+  display: grid;
+}
+
+.swap > * {
+  grid-area: 1 / 1;
+}
+
+.cards {
+  position: relative;
+  display: grid;
+  row-gap: var(--space-md);
+  inline-size: calc(var(--space-4xl) * 7);
+}
+
+.dragCard {
+  position: relative;
+  display: grid;
+}
+
+/* The lifted card stays over its neighbours; its shadow is the drag token on the card's own shape. */
+.dragCard[data-lifted] {
+  z-index: 1;
+}
+
+.dragShadow {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-drag-lift);
+}
+
+/* The window opens centred over the cards, wider than them, so it clearly stands over the page. */
+.window {
+  position: absolute;
+  inset: 0 calc(var(--space-xl) * -1);
+  z-index: 1;
+  block-size: fit-content;
+  margin-block: auto;
+}
+
+/* ---- Components and tiles ---- */
+
+.menuRow {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--control-height-md);
+  padding-inline: var(--space-sm);
+}
+
+.composer {
+  display: grid;
+  inline-size: calc(var(--space-4xl) * 8);
+}
+
+/* In the poster the composer fills its tile. */
+[data-tile] .composer {
+  inline-size: 100%;
+}
+
+.cornerTile {
+  display: grid;
+  justify-items: center;
+  row-gap: var(--space-2xl);
+  inline-size: 100%;
+}
+
+.bigArc {
+  inline-size: var(--r);
+  block-size: var(--r);
+  border-top: 3px solid var(--accent);
+  border-left: 3px solid var(--accent);
+  border-top-left-radius: var(--r);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.ladder {
+  display: flex;
+  gap: var(--space-md);
+}
+
+.rung {
+  display: grid;
+  justify-items: center;
+  row-gap: var(--space-xs);
+}
+
+.rungTile {
+  inline-size: var(--space-3xl);
+  block-size: var(--space-3xl);
+  border: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.rungName,
+.liftToken {
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+}
+
+.rowTile {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-evenly;
+  gap: var(--space-xl);
+  inline-size: 100%;
+}
+
+.rowControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.liftTile {
+  display: grid;
+  row-gap: var(--space-lg);
+  inline-size: 100%;
+}
+
+.liftName {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-xs) var(--space-md);
+}
+
+.liftToken {
+  white-space: nowrap;
+}

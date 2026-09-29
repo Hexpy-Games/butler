@@ -174,6 +174,8 @@ export function createBundledAgentSupervisor(input: {
     raw_text_included: false;
   };
   authHeaders(): Record<string, string>;
+  /** Re-reads the data-folder token file; true when the token changed. */
+  reloadLocalAuth(): boolean;
   ensureReady(): Promise<void>;
   repair(): Promise<void>;
   restart(): Promise<void>;

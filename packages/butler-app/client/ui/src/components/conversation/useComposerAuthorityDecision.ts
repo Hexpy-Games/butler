@@ -1,10 +1,14 @@
-import { appCopy } from "@/app/copy.ts";
+import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useRef, useState } from "react";
+import { approvalRequestView, type ApprovalRequestView } from "@/app/approvalRequest.ts";
 import { selectActiveAuthorityApprovals, useButlerStore } from "@/app/store.ts";
 import type { AuthorityApprovalCard } from "@/app/types.ts";
 
 export interface ComposerAuthorityDecision {
-  title: string; scope: AuthorityApprovalCard["scope"]; pending: boolean; error?: string;
+  /** The plain-language question, also shown on the pending attachment. */
+  title: string; details: string[]; risk: ApprovalRequestView["risk"]; actionKind: ApprovalRequestView["actionKind"];
+  /** What "Always allow in this conversation" covers; the grant needs the legacy `scope`. */
+  conversationScope?: string; scope: AuthorityApprovalCard["scope"]; pending: boolean; error?: string;
   composingMessage: boolean; pendingCount: number;
   onAllow: () => void; onAllowConversation: () => void; onDeny: () => void;
   onShowDecision: () => void; onOpenSource: () => void;
@@ -12,6 +16,7 @@ export interface ComposerAuthorityDecision {
 }
 
 export function useComposerAuthorityDecision(): ComposerAuthorityDecision | undefined {
+  useAppLocale();
   const requests = useButlerStore(selectActiveAuthorityApprovals);
   const request = requests[0];
   const sessionId = useButlerStore((state) => state.activeChatId);
@@ -30,9 +35,10 @@ export function useComposerAuthorityDecision(): ComposerAuthorityDecision | unde
     inFlight.current.delete(key); setPending(new Set(inFlight.current));
     if (!applied) setFailed(key);
   };
+  const view = approvalRequestView(request, appCopy.interfaceTemplates.approvalRequest);
   return {
-    title: request.scope ? `${request.scope.title} · ${request.scope.description}` : request.reason,
-    scope: request.scope, pending: pending.has(key),
+    title: view.title, details: view.details, risk: view.risk, actionKind: view.actionKind,
+    conversationScope: view.conversationScope, scope: request.scope, pending: pending.has(key),
     error: failed === key ? appCopy.interfaceDetails.decisionFailed : undefined,
     composingMessage: collapsed === key, pendingCount: requests.length,
     onAllow: () => void decide("allow"),

@@ -42,7 +42,7 @@ pub(super) fn assert_replay_identity(
         && turn.trigger_key == request.event_id
         && turn.original_message_id == *message_id
         && turn.original_message == request.message.content
-        && admitted == replay;
+        && (request.resume || admitted == replay);
     let wake_matches = match (wake, turn.wake_identity.as_ref()) {
         (None, None) => true,
         (Some((trigger, source, authority, result)), Some(stored)) => {
@@ -269,6 +269,7 @@ pub(super) fn conversation_envelope(request: &TurnRequest) -> ConversationEnvelo
         event_id: request.event_id.clone(),
         message_text: request.message.content.clone(),
         content_parts: message_content(request).cloned(),
+        resume: request.resume,
     }
 }
 

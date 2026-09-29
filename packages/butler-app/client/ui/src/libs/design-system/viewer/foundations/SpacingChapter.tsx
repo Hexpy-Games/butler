@@ -95,13 +95,13 @@ function SettingsRhythm() {
   );
 }
 
-export function SpacingChapter({ chapter, anchor, onOpen }: ChapterProps) {
+export function SpacingChapter({ chapter, anchor, locale, onOpen }: ChapterProps) {
   const s = chapterSections(chapter, [
     ["scale", "Scale"], ["gaps", "Gaps in use"], ["anatomy", "Card anatomy"], ["settings-rhythm", "Settings rhythm"],
     ["widths", "Widths and bases"], ["borders", "Borders"],
   ]);
   return (
-    <ChapterLayout anchor={anchor} chapter={chapter} onOpen={onOpen} sections={s.list}
+    <ChapterLayout anchor={anchor} chapter={chapter} locale={locale} onOpen={onOpen} sections={s.list}
       lead="Named steps on a 4px base: xs to 4xl. Layout props take the names (gap, padding); CSS takes the tokens. Space groups related things and separates the rest.">
       <GuideSection spec={s.at("scale")} lead="Nine steps. The small steps sit inside components; lg and up separate blocks and sections.">
         <Staircase tokens={tokens(/^--space-/u)} />

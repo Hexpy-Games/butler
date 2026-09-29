@@ -59,6 +59,7 @@ async fn canonical_completion_publishes_one_observation_and_one_queue_job_then_d
             event_id: "event-1".into(),
             message_text: "original user message".into(),
             content_parts: None,
+            resume: false,
         },
         turn_id: "ct_first_user".into(),
         timestamp: "2026-09-19T00:00:00.000Z".into(),

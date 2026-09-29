@@ -36,9 +36,52 @@
 }
 
 @container (width >= 52rem) {
-  .chapterHeadGrid {
+  .chapterHead:not([data-feature]) .chapterHeadGrid {
     grid-template-columns: minmax(0, 1fr) minmax(0, 24rem);
     align-items: center;
+  }
+}
+
+/* A feature hero spans the column under the title; its box is reserved at
+   the stage's own ratio so the lazy graphic lands without a layout shift. */
+.chapterHero[data-feature] {
+  display: grid;
+  inline-size: 100%;
+  aspect-ratio: 16 / 9;
+  max-block-size: 36rem;
+}
+
+/* With a feature hero the title block goes editorial and short: kicker and
+   title on the left, lead and tags on the right, so the hero sits high. */
+@container (width >= 52rem) {
+  .chapterHead[data-feature] .chapterHeadText {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 30rem);
+    column-gap: var(--space-4xl);
+    align-items: end;
+  }
+
+  .chapterHead[data-feature] .chapterKicker {
+    grid-column: 1;
+  }
+
+  .chapterHead[data-feature] .chapterTitle {
+    grid-column: 1;
+    grid-row: 2 / span 2;
+  }
+
+  .chapterHead[data-feature] .chapterHeadText > :nth-child(n + 3) {
+    grid-column: 2;
+  }
+
+  .chapterHead[data-feature] .chapterHeadText > :nth-child(3) {
+    grid-row: 1 / span 2;
+  }
+}
+
+@container (width < 45rem) {
+  .chapterHero[data-feature] {
+    aspect-ratio: 19 / 32;
+    max-block-size: none;
   }
 }
 

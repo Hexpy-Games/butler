@@ -94,6 +94,16 @@ describe("docs content", () => {
     expect(checkDocLinks(docs)).toEqual([]);
   });
 
+  test("the remote access page is published under 고급 and linked from settings and troubleshooting", () => {
+    const remote = docs.find((doc) => doc.id === "ko/advanced/remote-access");
+    expect(remote?.source).toContain("section: advanced");
+    expect(remote?.source).toContain("status: published");
+    for (const id of ["ko/settings", "ko/troubleshooting"]) {
+      const source = docs.find((doc) => doc.id === id)?.source ?? "";
+      expect(docLinks(source).map((link) => link.target)).toContain("/help/advanced/remote-access/");
+    }
+  });
+
   test("Korean pages use 예약 작업, never 자동화", () => {
     expect(findTerms(docs.filter((doc) => doc.id.startsWith("ko/")), ["자동화"])).toEqual([]);
     expect(SECTIONS.map((section) => section.title.ko).filter((title) => title.includes("자동화"))).toEqual([]);
