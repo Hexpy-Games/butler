@@ -45,10 +45,14 @@ async function eventually<T>(label: string, read: () => Promise<T | undefined>, 
 }
 
 async function openSession(page: Page, projectId: string, sessionId: string): Promise<void> {
+  // Expand the project only when it is collapsed: clicking an expanded
+  // project header collapses it.
+  const project = page.locator(`[data-tree-item="p:${projectId}"]`);
+  await project.waitFor();
+  const toggle = project.locator("[aria-expanded]").first();
+  await toggle.waitFor();
+  if (await toggle.getAttribute("aria-expanded") === "false") await toggle.click();
   const row = page.locator(`[data-tree-item="s:${sessionId}"] [data-test-class~="tree-row"]`);
-  if (!(await row.isVisible())) {
-    await page.locator(`[data-tree-item="p:${projectId}"] [data-test-class~="tree-row"]`).first().click();
-  }
   await row.click();
   await page.locator('[data-test-class~="assistant-footer"]').first().waitFor();
 }

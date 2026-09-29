@@ -13,6 +13,7 @@ use serde_json::{Value, json};
 use super::{
     HttpError, HttpState, MAX_REQUEST_BODY_SIZE, json as response_json, read_body_with_limit,
 };
+use crate::gateway::application::{AppSessionBranchDestination, AppSessionBranchRequest};
 use crate::gateway::{
     AppStartTopicConversationRequest, SendMessageCommand,
     protocol::{APP_PROTOCOL_VERSION, ApiEnvelope},
@@ -84,8 +85,9 @@ pub(super) async fn post_app(
     request: Request<Body>,
 ) -> Result<Response, HttpError> {
     let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
-    let body: Value = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
-    let input = app_branch_request(&body).ok_or_else(invalid_request)?;
+    let body: AppSessionBranchRequest =
+        serde_json::from_slice(&bytes).map_err(|_| invalid_request())?;
+    let input = app_branch_request(body).ok_or_else(invalid_request)?;
     let branch = state
         .application
         .start_topic_conversation(input, state.shutdown.clone())
@@ -99,35 +101,38 @@ pub(super) async fn post_app(
     )
 }
 
-fn app_branch_request(body: &Value) -> Option<AppStartTopicConversationRequest> {
-    let text = |value: &Value, key: &str| {
-        value
-            .get(key)
-            .and_then(Value::as_str)
-            .filter(|text| !text.trim().is_empty())
-            .map(str::to_owned)
+/// The App request as the branch owner's input. The App never starts work in
+/// the new conversation, so a `followUp` is refused rather than ignored.
+fn app_branch_request(body: AppSessionBranchRequest) -> Option<AppStartTopicConversationRequest> {
+    let present = |value: &str| !value.trim().is_empty();
+    if body.follow_up.is_some()
+        || !present(&body.source_session_id)
+        || !present(&body.source_message_id)
+    {
+        return None;
+    }
+    let (destination, project_id, project_name) = match body.destination {
+        AppSessionBranchDestination::Chat => ("chat", None, None),
+        AppSessionBranchDestination::Project { project_id } => {
+            ("project", Some(project_id).filter(|id| present(id)), None)
+        }
+        AppSessionBranchDestination::NewProject { name } => {
+            ("new_project", None, Some(name).filter(|name| present(name)))
+        }
     };
-    let destination = body.get("destination")?;
-    let kind = text(destination, "kind")?;
-    let project_id = match kind.as_str() {
-        "chat" | "new_project" => None,
-        "project" => Some(text(destination, "projectId")?),
-        _ => return None,
-    };
-    let follow_up = match body.get("followUp") {
-        None | Some(Value::Null) => None,
-        Some(value @ Value::String(_)) => Some(value.clone()),
-        Some(_) => return None,
-    };
+    if destination == "project" && project_id.is_none() {
+        return None;
+    }
     Some(AppStartTopicConversationRequest {
-        request_id: text(body, "requestId")?,
+        request_id: body.request_id,
         current_session_id: None,
-        source_session_id: Some(text(body, "sourceSessionId")?),
-        source_message_id: Some(text(body, "sourceMessageId")?),
-        title: text(body, "title")?,
-        destination: kind,
+        source_session_id: Some(body.source_session_id),
+        source_message_id: Some(body.source_message_id),
+        title: body.title,
+        destination: destination.to_owned(),
         project_id,
-        follow_up,
+        project_name,
+        follow_up: None,
     })
 }
 

@@ -51,7 +51,11 @@ impl AppApplication {
                 }
             }
             "new_project" => AppSessionBranchDestination::NewProject {
-                name: input.title.clone(),
+                name: input
+                    .project_name
+                    .clone()
+                    .filter(|name| !name.trim().is_empty())
+                    .unwrap_or_else(|| input.title.clone()),
             },
             _ => {
                 return Err(public(

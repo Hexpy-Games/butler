@@ -751,3 +751,36 @@ export const HARNESS_SS03_SUMMARY: SessionSummaryView = {
   steward_children: [HARNESS_SS03_STEWARD_CHILD],
   worker_activity: [],
 };
+
+/**
+ * SS-03 Steward child states as the gateway sends them (#307), selected with
+ * `?surface=ss03&steward=<state>`: `finalizing` is a BTCC `delivery_committed`
+ * turn (no `active_turn`, latest turn "streaming", no result yet);
+ * `delivered` is terminal with its result.
+ */
+export const HARNESS_SS03_STEWARD_STATES: Record<string, SessionSummaryView> = {
+  finalizing: {
+    ...HARNESS_SS03_SUMMARY,
+    steward_children: [{
+      ...HARNESS_SS03_STEWARD_CHILD,
+      active_turn: null,
+      latest_turn: { ...HARNESS_SS03_TURN, state: "streaming" },
+    }],
+  },
+  delivered: {
+    ...HARNESS_SS03_SUMMARY,
+    steward_children: [{
+      ...HARNESS_SS03_STEWARD_CHILD,
+      status: "delivered",
+      terminal: true,
+      active_turn: null,
+      latest_turn: {
+        ...HARNESS_SS03_TURN,
+        state: "delivered",
+        delivery_state: "delivered",
+        cancellable: false,
+        progress: { ...HARNESS_SS03_TURN.progress, state: "delivered", delivery_state: "delivered" },
+      },
+    }],
+  },
+};
