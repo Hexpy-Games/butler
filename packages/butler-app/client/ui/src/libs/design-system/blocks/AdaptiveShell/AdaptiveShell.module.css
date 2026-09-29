@@ -13,9 +13,11 @@
       var(--space-md)
   );
 
-  /* The workspace's leading corners sit on the window edge, so they follow
-     the window radius (PromptSuggestionList's backdrop reads it too). */
-  --workspace-left-radius: var(--app-window-radius, 18px);
+  /* The top-level shell is square: the host window (browser tab or native
+     macOS window) clips its own corners. The workspace's leading corners sit
+     on that edge, so they are square too (PromptSuggestionList reads it). */
+  --app-window-radius: 0px;
+  --workspace-left-radius: var(--app-window-radius);
 
   position: relative;
   display: grid;
@@ -26,16 +28,9 @@
     minmax(0, var(--adaptive-right-track));
   overflow: hidden;
   padding: var(--app-window-frame-inset, 0);
-  border-radius: var(--app-window-radius, 18px);
+  border-radius: var(--app-window-radius);
   background: var(--sidebar-bg);
   color: var(--text-primary);
-}
-
-/* The window corner radius belongs to Electron's frameless window only. In a
-   browser tab the shell fills the viewport edge to edge, so square corners
-   leave no exposed page background. */
-.root:not([data-chrome-environment="electron"]) {
-  --app-window-radius: 0px;
 }
 
 /* A docked sidebar puts the workspace's leading corners inside the window,
@@ -61,7 +56,6 @@
 }
 
 .root[data-chrome-environment="electron"][data-platform="win32"] {
-  --app-window-radius: 0px;
   --sidebar-bg: var(--windows-sidebar-bg);
 }
 
