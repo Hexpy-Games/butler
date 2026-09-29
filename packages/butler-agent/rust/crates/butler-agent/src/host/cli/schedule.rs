@@ -1,328 +1,194 @@
-//! One-shot `butler schedule` commands over the existing DATA schedule store.
-//! `butler automation` is the deprecated, hidden spelling of the same command.
+//! `butler schedule` uses the App's canonical schedule service.
 
-mod helpers;
 mod render;
 
-use crate::host::cli::error::CliError;
 use std::{ffi::OsString, path::PathBuf, process::ExitCode};
 
-use serde_json::json;
+use reqwest::Method;
+use serde_json::{Value, json};
 
-use crate::host::ResolvedInstallation;
-use crate::host::cli::settings as settings_cli;
-use butler_models::models::ModelConfigurationClock;
-use butler_runtime::operations;
-use helpers::{command_id, command_name, command_name_os, required_value, valid_id};
-use render::{redact_json_strings, report_error, report_success, safe_preview};
+use crate::host::{
+    ResolvedInstallation,
+    automation::client::ScheduleClient,
+    cli::{error::CliError, settings as settings_cli},
+};
+use render::{report_error, report_success, safe_preview};
 
-const STORE_MUTATION_PATHS: &[&str] = &["automations", "automations/.automation-store.lock"];
-/// The command word.
-const COMMAND: &str = "schedule";
-/// The command word before schedules were named schedules: still accepted,
-/// with one deprecation line on stderr, and left out of help.
-const DEPRECATED_COMMAND: &str = "automation";
+#[derive(Default)]
+struct OutputOptions {
+    json: bool,
+    quiet: bool,
+}
 
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "independent command-line flags"
-)]
 #[derive(Default)]
 struct Options {
     data: Option<PathBuf>,
-    json: bool,
-    quiet: bool,
-    yes: bool,
-    non_interactive: bool,
+    output: OutputOptions,
+    confirmed: bool,
     include_deleted: bool,
     status: Option<String>,
+    title: Option<String>,
+    prompt: Option<String>,
+    session: Option<String>,
+    interval_seconds: Option<i64>,
+    schedule_type: Option<String>,
+    run_at: Option<String>,
+    start_at: Option<String>,
+    state: Option<String>,
+    access_mode: Option<String>,
     positionals: Vec<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum Command {
-    List,
-    Show(String),
-    Run(String),
-    Delete(String),
-    MissingId(&'static str),
-    Unknown,
-}
-
-impl Command {
-    fn parse(values: &[String]) -> Option<Self> {
-        if !values.first().is_some_and(|value| is_command_word(value)) {
-            return None;
-        }
-        Some(match values.get(1).map(String::as_str) {
-            Some("list") if values.len() == 2 => Self::List,
-            Some("show") if values.len() == 2 => Self::MissingId("show"),
-            Some("show") if values.len() == 3 => Self::Show(values[2].clone()),
-            Some("run") if values.len() == 2 => Self::MissingId("run"),
-            Some("run") if values.len() == 3 => Self::Run(values[2].clone()),
-            Some("delete") if values.len() == 2 => Self::MissingId("delete"),
-            Some("delete") if values.len() == 3 => Self::Delete(values[2].clone()),
-            _ => Self::Unknown,
-        })
-    }
-
-    fn name(&self) -> &'static str {
-        match self {
-            Self::List => "butler schedule list",
-            Self::Show(_) | Self::MissingId("show") => "butler schedule show",
-            Self::Run(_) | Self::MissingId("run") => "butler schedule run",
-            Self::Delete(_) | Self::MissingId("delete") => "butler schedule delete",
-            Self::MissingId(_) | Self::Unknown => "butler schedule",
-        }
-    }
-}
-
 pub(crate) fn recognizes(args: &[OsString]) -> bool {
-    positionals_without_options(args)
-        .first()
-        .is_some_and(|value| is_command_word(value))
-}
-
-fn is_command_word(value: &str) -> bool {
-    value == COMMAND || value == DEPRECATED_COMMAND
-}
-
-/// One stderr line when the deprecated spelling was used; stdout (and so
-/// `--json` output) is unchanged.
-fn warn_if_deprecated(args: &[OsString]) {
-    if positionals_without_options(args)
-        .first()
-        .map(String::as_str)
-        == Some(DEPRECATED_COMMAND)
-    {
-        eprintln!("butler automation is deprecated; use butler schedule.");
+    let mut index = 0;
+    while let Some(arg) = args.get(index) {
+        match arg.to_string_lossy().as_ref() {
+            "--data" | "--title" | "--prompt" | "--session" | "--interval-seconds" | "--run-at"
+            | "--start-at" | "--state" | "--access-mode" | "--status" | "--schedule-type" => {
+                index += 2;
+            }
+            value if value.starts_with('-') => index += 1,
+            "schedule" | "automation" => return true,
+            _ => return false,
+        }
     }
+    false
 }
 
-pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> ExitCode {
+pub(crate) async fn run(installation: &ResolvedInstallation, args: &[OsString]) -> ExitCode {
     let json_requested = args.iter().any(|arg| arg == "--json");
     let options = match parse(args) {
         Ok(options) => options,
-        Err((command, error)) => return report_error(command, json_requested, &error),
+        Err(error) => return report_error("butler schedule", json_requested, &error),
     };
-    let Some(command) = Command::parse(&options.positionals) else {
-        return report_error(
-            command_name(&options.positionals),
-            options.json,
-            &CliError::invalid("schedule requires list, show <id>, run <id>, or delete <id>"),
-        );
+    let action = options.positionals.get(1).map(String::as_str).unwrap_or("");
+    let command = match action {
+        "list" => "butler schedule list",
+        "show" => "butler schedule show",
+        "create" => "butler schedule create",
+        "update" => "butler schedule update",
+        "run" => "butler schedule run",
+        "delete" => "butler schedule delete",
+        _ => "butler schedule",
     };
-    if command == Command::Unknown {
-        return report_error(
-            command.name(),
-            options.json,
-            &CliError::failed(
-                "unknown_command",
-                format!(
-                    "unknown schedule command: {}",
-                    options.positionals.get(1).map_or("", String::as_str)
-                ),
-            )
-            .with_exit(2),
-        );
-    }
-    if is_delete_command(&command) && !(options.yes || options.non_interactive) {
-        return report_error(
-            command.name(),
-            options.json,
-            &CliError::invalid("schedule delete requires --yes or --non-interactive"),
-        );
-    }
-    if let Command::MissingId(action) = &command {
-        return report_error(
-            command.name(),
-            options.json,
-            &CliError::invalid(format!("schedule {action} requires <id>")),
-        );
-    }
-    if options.status.is_some() && command != Command::List {
-        return report_error(
-            command.name(),
-            options.json,
-            &CliError::invalid("--status is only supported by schedule list"),
-        );
-    }
-    if options.include_deleted && command != Command::List {
-        return report_error(
-            command.name(),
-            options.json,
-            &CliError::invalid("--include-deleted is only supported by schedule list"),
-        );
-    }
     let Ok(data_root) =
         settings_cli::resolve_data_root_override(options.data.clone(), installation)
     else {
         return report_error(
-            command.name(),
-            options.json,
+            command,
+            options.output.json,
             &CliError::failed("butler_data_unavailable", "Butler DATA is unavailable."),
         );
     };
-    if let Some(id) = command_id(&command) {
-        if !valid_id(id) {
-            return report_error(
-                command.name(),
-                options.json,
-                &CliError::invalid("schedule id must contain 1-100 safe characters"),
-            );
-        }
-        if matches!(&command, Command::Run(_) | Command::Delete(_)) {
-            let record_path = format!("automations/{}.json", id.trim());
-            let mut paths = STORE_MUTATION_PATHS.to_vec();
-            paths.push(&record_path);
-            if settings_cli::validate_data_mutation_paths(&data_root, installation, &paths).is_err()
-            {
-                return report_error(
-                    command.name(),
-                    options.json,
-                    &CliError::failed(
-                        "unsafe_path",
-                        "schedule writes require non-symlink paths inside DATA",
-                    ),
-                );
-            }
-        }
-    }
-
-    let store = operations::AutomationCliStore::new(&data_root);
-    let command_name = command.name();
-    let result = match command {
-        Command::List => store
-            .list(options.include_deleted, options.status.as_deref())
-            .map_err(|error| {
-                CliError::failed("automation_store_unavailable", error.message()).with_source(error)
-            })
-            .map(|items| {
-                let items: Vec<_> = items.into_iter().map(safe_preview).collect();
-                let human = if items.is_empty() {
-                    "No schedules found.".to_owned()
-                } else {
-                    items
-                        .iter()
-                        .map(|item| {
-                            format!(
-                                "{}: {} next={}",
-                                item["id"].as_str().unwrap_or(""),
-                                item["status"].as_str().unwrap_or(""),
-                                item["next_run_at"].as_str().unwrap_or("none")
-                            )
-                        })
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                };
-                (json!({"automations":items}), human)
-            }),
-        Command::Show(id) => store
-            .show(&id)
-            .map_err(|error| {
-                CliError::failed("automation_store_unavailable", error.message()).with_source(error)
-            })
-            .and_then(|item| {
-                let item = item.ok_or_else(|| {
-                    CliError::failed("not_found", format!("schedule not found: {id}"))
-                })?;
-                let item = safe_preview(item);
-                let human = format!(
-                    "{}: {} next={}",
-                    item["id"].as_str().unwrap_or(""),
-                    item["status"].as_str().unwrap_or(""),
-                    item["next_run_at"].as_str().unwrap_or("none")
-                );
-                Ok((json!({"automation":item}), human))
-            }),
-        Command::Run(id) => store
-            .run_now(&id, now_millis())
-            .map_err(|error| CliError::failed("invalid_state", error.message()).with_source(error))
-            .map(|value| {
-                let automation = safe_preview(value["automation"].clone());
-                let envelope = redact_json_strings(value["envelope"].clone());
-                let human = format!(
-                    "Schedule run claimed: {}",
-                    automation["id"].as_str().unwrap_or("")
-                );
-                (
-                    json!({"automation":automation,"envelope":envelope,"dispatched":false}),
-                    human,
-                )
-            }),
-        Command::Delete(id) => store
-            .delete(&id, now_millis())
-            .map_err(|error| {
-                let missing = error.message().contains("not found");
-                CliError::failed(
-                    if missing {
-                        "not_found"
-                    } else {
-                        "automation_store_unavailable"
-                    },
-                    error.message(),
-                )
-            })
-            .map(|value| {
-                let automation = safe_preview(value);
-                let human = format!(
-                    "Schedule deleted: {}",
-                    automation["id"].as_str().unwrap_or("")
-                );
-                (json!({"automation":automation}), human)
-            }),
-        // Rejected above; kept total so dispatch needs no panic.
-        Command::MissingId(_) | Command::Unknown => Err(CliError::invalid(
-            "schedule requires list, show <id>, run <id>, or delete <id>",
-        )),
+    let client = match ScheduleClient::local(&data_root) {
+        Ok(client) => client,
+        Err(error) => return report_error(command, options.output.json, &cli_error(&error)),
     };
+    let result = execute(&client, &options).await;
     match result {
-        Ok((data, human)) => report_success(&options, command_name, &data, &human),
-        Err(error) => report_error(command_name, options.json, &error),
+        Ok((data, human)) => report_success(&options, command, &data, &human),
+        Err(error) => report_error(command, options.output.json, &error),
     }
 }
 
-fn is_delete_command(command: &Command) -> bool {
-    matches!(command, Command::Delete(_) | Command::MissingId("delete"))
+async fn execute(client: &ScheduleClient, options: &Options) -> Result<(Value, String), CliError> {
+    let action = options.positionals.get(1).map(String::as_str).unwrap_or("");
+    let id = options.positionals.get(2).map(String::as_str).unwrap_or("");
+    if matches!(action, "show" | "update" | "run" | "delete") && !safe_id(id) {
+        return Err(CliError::invalid(
+            "schedule id must contain 1-100 safe characters",
+        ));
+    }
+    if action == "delete" && !options.confirmed {
+        return Err(CliError::invalid(
+            "schedule delete requires --yes or --non-interactive",
+        ));
+    }
+    let data = match action {
+        "list" if options.positionals.len() == 2 => {
+            let suffix = if options.include_deleted { "?include_deleted=true" } else { "" };
+            client.request(Method::GET, &format!("/automations{suffix}"), None).await.map_err(|error| cli_error(&error))?
+        }
+        "show" if options.positionals.len() == 3 => client.request(Method::GET, &format!("/automations/{id}"), None).await.map_err(|error| cli_error(&error))?,
+        "create" if options.positionals.len() == 2 => {
+            let prompt = options.prompt.as_deref().ok_or_else(|| CliError::invalid("--prompt is required"))?;
+            let session = options.session.as_deref().ok_or_else(|| CliError::invalid("--session is required"))?;
+            let kind = options.schedule_type.as_deref().unwrap_or(if options.run_at.is_some() { "once" } else { "interval" });
+            client.request(Method::POST, "/automations", Some(json!({
+                "title": options.title.as_deref().unwrap_or(prompt), "prompt_body": prompt,
+                "target_session_id": session, "schedule_type": kind,
+                "interval_seconds": options.interval_seconds.unwrap_or(0),
+                "run_at": options.run_at, "start_at": options.start_at,
+                "access_mode": options.access_mode,
+            }))).await.map_err(|error| cli_error(&error))?
+        }
+        "update" if options.positionals.len() == 3 => client.request(Method::PATCH, &format!("/automations/{id}"), Some(json!({
+            "title": options.title, "prompt_body": options.prompt,
+            "target_session_id": options.session, "interval_seconds": options.interval_seconds,
+            "run_at": options.run_at, "start_at": options.start_at, "schedule_type": options.schedule_type,
+            "state": options.state, "access_mode": options.access_mode,
+        }))).await.map_err(|error| cli_error(&error))?,
+        "run" if options.positionals.len() == 3 => client.request(Method::POST, &format!("/automations/{id}/run"), Some(json!({}))).await.map_err(|error| cli_error(&error))?,
+        "delete" if options.positionals.len() == 3 => client.request(Method::DELETE, &format!("/automations/{id}"), None).await.map_err(|error| cli_error(&error))?,
+        _ => return Err(CliError::invalid("schedule requires list, show ID, create, update ID, run ID, or delete ID")),
+    };
+    let data = public_data(&data, action, options.status.as_deref());
+    let human = if action == "list" {
+        let count = data["automations"].as_array().map_or(0, Vec::len);
+        format!("{count} schedules")
+    } else {
+        format!(
+            "Schedule {action}: {}",
+            data["automation"]["id"].as_str().unwrap_or(id)
+        )
+    };
+    Ok((data, human))
 }
 
-fn parse(args: &[OsString]) -> Result<Options, (&'static str, CliError)> {
-    warn_if_deprecated(args);
+fn public_data(data: &Value, action: &str, status: Option<&str>) -> Value {
+    if action == "list" {
+        let items = data["automations"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|value| status.is_none_or(|wanted| value["state"] == wanted))
+            .map(safe_preview)
+            .collect::<Vec<_>>();
+        json!({"automations":items})
+    } else if action == "run" {
+        json!({"automation":safe_preview(data["automation"].clone()),"run":data["run"]})
+    } else {
+        json!({"automation":safe_preview(data["automation"].clone())})
+    }
+}
+
+fn parse(args: &[OsString]) -> Result<Options, CliError> {
     let mut options = Options::default();
     let mut index = 0;
     while index < args.len() {
-        let value = args[index].to_string_lossy();
-        match value.as_ref() {
-            "--data" => {
-                let path = required_value(args, index, "--data")?;
-                options.data = Some(PathBuf::from(path));
+        let item = args[index].to_string_lossy();
+        match item.as_ref() {
+            "--data" | "--title" | "--prompt" | "--session" | "--interval-seconds" | "--run-at"
+            | "--start-at" | "--state" | "--access-mode" | "--status" | "--schedule-type" => {
+                let value = args
+                    .get(index + 1)
+                    .and_then(|v| v.to_str())
+                    .filter(|v| !v.is_empty())
+                    .ok_or_else(|| CliError::invalid(format!("{item} requires a value")))?;
+                set_option(&mut options, &item, value)?;
                 index += 2;
-            }
-            "--status" => {
-                let status = required_value(args, index, "--status")?;
-                options.status = Some(status.to_string_lossy().into_owned());
-                index += 2;
-            }
-            "--home" => {
-                return Err((
-                    command_name_os(args),
-                    CliError::invalid("--home is unsupported; use --data for writable state"),
-                ));
             }
             "--json" => {
-                options.json = true;
+                options.output.json = true;
                 index += 1;
             }
             "--quiet" | "--silent" => {
-                options.quiet = true;
+                options.output.quiet = true;
                 index += 1;
             }
-            "--yes" => {
-                options.yes = true;
-                index += 1;
-            }
-            "--non-interactive" => {
-                options.non_interactive = true;
+            "--yes" | "--non-interactive" => {
+                options.confirmed = true;
                 index += 1;
             }
             "--include-deleted" => {
@@ -331,54 +197,58 @@ fn parse(args: &[OsString]) -> Result<Options, (&'static str, CliError)> {
             }
             "--verbose" => index += 1,
             value if value.starts_with('-') => {
-                return Err((
-                    command_name_os(args),
-                    CliError::invalid(format!("unsupported option: {value}")),
-                ));
+                return Err(CliError::invalid(format!("unsupported option: {value}")));
             }
             _ => {
-                let Some(value) = args[index].to_str() else {
-                    return Err((
-                        command_name_os(args),
-                        CliError::invalid("schedule arguments must be valid UTF-8"),
-                    ));
-                };
-                options.positionals.push(value.to_owned());
+                options.positionals.push(item.into_owned());
                 index += 1;
             }
         }
+    }
+    if options.positionals.first().map(String::as_str) == Some("automation") {
+        eprintln!("butler automation is deprecated; use butler schedule.");
     }
     if !options
         .positionals
         .first()
-        .is_some_and(|value| is_command_word(value))
+        .is_some_and(|v| v == "schedule" || v == "automation")
     {
-        return Err((
-            command_name(&options.positionals),
-            CliError::invalid("schedule command is required"),
-        ));
+        return Err(CliError::invalid("schedule command is required"));
     }
     Ok(options)
 }
 
-fn positionals_without_options(args: &[OsString]) -> Vec<String> {
-    let mut values = Vec::new();
-    let mut index = 0;
-    while index < args.len() {
-        match args[index].to_string_lossy().as_ref() {
-            "--data" | "--status" | "--home" => index += 2,
-            "--json" | "--quiet" | "--silent" | "--yes" | "--non-interactive"
-            | "--include-deleted" | "--verbose" => index += 1,
-            value if value.starts_with('-') => index += 1,
-            _ => {
-                values.push(args[index].to_string_lossy().into_owned());
-                index += 1;
-            }
+fn set_option(options: &mut Options, name: &str, value: &str) -> Result<(), CliError> {
+    match name {
+        "--data" => options.data = Some(value.into()),
+        "--title" => options.title = Some(value.into()),
+        "--prompt" => options.prompt = Some(value.into()),
+        "--session" => options.session = Some(value.into()),
+        "--interval-seconds" => {
+            options.interval_seconds = Some(
+                value
+                    .parse()
+                    .map_err(|_| CliError::invalid("invalid interval"))?,
+            );
         }
+        "--run-at" => options.run_at = Some(value.into()),
+        "--start-at" => options.start_at = Some(value.into()),
+        "--schedule-type" => options.schedule_type = Some(value.into()),
+        "--state" => options.state = Some(value.into()),
+        "--access-mode" => options.access_mode = Some(value.into()),
+        "--status" => options.status = Some(value.into()),
+        _ => return Err(CliError::invalid("unknown schedule option")),
     }
-    values
+    Ok(())
 }
 
-fn now_millis() -> i64 {
-    ModelConfigurationClock::now_epoch_millis(&crate::host::SystemIdentity)
+fn safe_id(id: &str) -> bool {
+    (1..=100).contains(&id.len())
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._:-".contains(&byte))
+}
+
+fn cli_error(error: &crate::host::automation::client::ScheduleError) -> CliError {
+    CliError::failed(error.code().to_owned(), error.message())
 }

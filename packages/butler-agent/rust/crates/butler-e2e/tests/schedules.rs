@@ -228,3 +228,146 @@ async fn sched_03_cli_is_schedule_with_a_deprecated_alias() -> Result<(), Harnes
     );
     s.finish().await
 }
+
+/// SCHED-04 — API and CLI share App storage; legacy JSON imports once and stays on disk.
+#[tokio::test]
+async fn sched_04_one_store_imports_and_shares_schedules() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = Setup::new("SCHED-04")?;
+    let legacy_dir = setup.sandbox.data.join("automations");
+    std::fs::create_dir_all(&legacy_dir)?;
+    let raw = json!({
+        "version":1,"id":"legacy-e2e","title":"Legacy","prompt":"Keep this prompt",
+        "session_id":"general","status":"active",
+        "schedule":{"type":"once","run_at":"2099-01-01T00:00:00.000Z"},
+        "next_run_at":"2099-01-01T00:00:00.000Z","last_run_at":null,
+        "run_count":2,"created_at":"2025-01-01T00:00:00.000Z",
+        "updated_at":"2025-01-01T00:00:00.000Z","extra_field":"retained"
+    })
+    .to_string();
+    let legacy_file = legacy_dir.join("legacy-e2e.json");
+    std::fs::write(&legacy_file, &raw)?;
+    let mut s = setup.start().await?;
+    let imported = s.gw.get("/automations/legacy-e2e").await?;
+    assert_eq!(imported.status, 200, "{}", imported.text);
+    assert_eq!(imported.data()["automation"]["schedule_type"], "once");
+    let api_created =
+        s.gw.post(
+            "/automations",
+            json!({
+                "title":"API schedule", "prompt_body":"API prompt",
+                "target_session_id":"general", "interval_seconds":3600
+            }),
+        )
+        .await?;
+    assert_eq!(api_created.status, 201, "{}", api_created.text);
+    let api_id = api_created.data()["automation"]["id"].as_str().unwrap();
+    let cli = s.agent.cli(&["schedule", "list", "--json"])?;
+    assert_eq!(cli.code, Some(0), "{}", cli.stderr);
+    assert!(
+        cli.json()?["data"]["automations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v["id"] == "legacy-e2e")
+    );
+    assert!(
+        cli.json()?["data"]["automations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v["id"] == api_id)
+    );
+    let retimed = s.agent.cli(&[
+        "schedule",
+        "update",
+        api_id,
+        "--schedule-type",
+        "once",
+        "--run-at",
+        "2099-01-02T00:00:00Z",
+        "--json",
+    ])?;
+    assert_eq!(retimed.code, Some(0), "{}", retimed.stderr);
+    assert_eq!(
+        s.gw.get(&format!("/automations/{api_id}")).await?.data()["automation"]["schedule_type"],
+        "once"
+    );
+    let edited = s.agent.cli(&[
+        "schedule",
+        "update",
+        "legacy-e2e",
+        "--title",
+        "Edited",
+        "--json",
+    ])?;
+    assert_eq!(edited.code, Some(0), "{}", edited.stderr);
+    assert_eq!(
+        s.gw.get("/automations/legacy-e2e").await?.data()["automation"]["title"],
+        "Edited"
+    );
+    let created = s.agent.cli(&[
+        "schedule",
+        "create",
+        "--session",
+        "general",
+        "--prompt",
+        "CLI prompt",
+        "--interval-seconds",
+        "3600",
+        "--json",
+    ])?;
+    assert_eq!(created.code, Some(0), "{}", created.stderr);
+    let id = created.json()?["data"]["automation"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(s.gw.get(&format!("/automations/{id}")).await?.status, 200);
+    let api_edited =
+        s.gw.patch(
+            &format!("/automations/{id}"),
+            json!({"title":"API edited CLI schedule"}),
+        )
+        .await?;
+    assert_eq!(api_edited.status, 200, "{}", api_edited.text);
+    let cli_read = s.agent.cli(&["schedule", "show", &id, "--json"])?;
+    assert_eq!(
+        cli_read.json()?["data"]["automation"]["title"],
+        "API edited CLI schedule"
+    );
+    s.restart().await?;
+    let db = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))
+        .map_err(|error| HarnessError(error.to_string()))?;
+    let count: i64 = db
+        .query_row(
+            "SELECT count(*) FROM app_automations WHERE id='legacy-e2e'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| HarnessError(error.to_string()))?;
+    assert_eq!(count, 1);
+    let retained: String = db
+        .query_row(
+            "SELECT legacy_record_json FROM app_automations WHERE id='legacy-e2e'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| HarnessError(error.to_string()))?;
+    assert_eq!(retained, raw);
+    let marker: String = db
+        .query_row(
+            "SELECT value_json FROM app_settings WHERE key='schedule_json_import_v1'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| HarnessError(error.to_string()))?;
+    assert_eq!(marker, "1");
+    let plan: String = db.query_row(
+        "EXPLAIN QUERY PLAN SELECT id FROM app_automation_runs WHERE state='queued' ORDER BY rowid LIMIT 20",
+        [], |row| row.get(3),
+    ).map_err(|error| HarnessError(error.to_string()))?;
+    assert!(plan.contains("app_automation_runs_queued_idx"), "{plan}");
+    assert_eq!(std::fs::read_to_string(legacy_file)?, raw);
+    drop(db);
+    s.finish().await
+}

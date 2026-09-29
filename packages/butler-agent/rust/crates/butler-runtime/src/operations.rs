@@ -3,7 +3,6 @@
 
 use std::path::Path;
 
-mod automation;
 mod conversation_metrics;
 mod cycle_metrics;
 mod developer_log;
@@ -18,10 +17,6 @@ mod update;
 mod usage_cost;
 mod web_search_metrics;
 
-pub use automation::{
-    AutomationCliStore, AutomationCode, AutomationDependencies, AutomationEnqueue, AutomationError,
-    AutomationService,
-};
 pub use conversation_metrics::{AdmissionMeasure, ConversationMetrics};
 pub use cycle_metrics::CycleMetrics;
 pub use developer_log::{

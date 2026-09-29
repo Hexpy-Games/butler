@@ -29,18 +29,12 @@ pub(super) struct RuntimeOwners {
     pub(super) mutations: WorkspaceMutations,
     pub(super) work_streams: Arc<super::super::WorkStreams>,
     pub(super) skills: Arc<Skills>,
-    pub(super) automations: Arc<butler_runtime::operations::AutomationService>,
 }
 
 impl HostDependencies for RuntimeOwners {
     fn close(&self) -> PortFuture<'_, ()> {
         Box::pin(async move {
             self.context_maintenance.close().await;
-            let automations = self
-                .automations
-                .close()
-                .await
-                .map_err(|error| BtccError::relayed(error.code(), error.message()));
             self.project_tools.close().await;
             self.project_work.close().await;
             self.session_worktrees.close().await;
@@ -83,7 +77,6 @@ impl HostDependencies for RuntimeOwners {
                 .and(memory_query)
                 .and(conversation_reference)
                 .and(observer)
-                .and(automations)
                 .and(work_streams)
                 .and(stores);
             #[cfg(unix)]

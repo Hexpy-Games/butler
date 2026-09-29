@@ -43,8 +43,25 @@ pub(super) struct ProjectionContext {
     butler_data: PathBuf,
     queue_wake: super::queue_dispatcher::QueueWake,
     retention_wake: super::retention::RetentionWake,
+    automation_wake: std::sync::Arc<tokio::sync::Notify>,
+    automation_queued: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 impl ProjectionContext {
+    fn wake_queued_automations(&self) {
+        if self
+            .automation_queued
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
+            self.automation_wake.notify_one();
+        }
+    }
+
+    async fn finish_terminal_turn(&self, turn: String) -> Result<(), GatewayApplicationError> {
+        self.retention_wake.turn(turn).await?;
+        self.wake_queued_automations();
+        Ok(())
+    }
+
     pub(super) fn new(
         storage: AppStorage,
         dependencies: std::sync::Arc<AppApplicationDependencies>,
@@ -52,6 +69,10 @@ impl ProjectionContext {
         butler_data: PathBuf,
         queue_wake: super::queue_dispatcher::QueueWake,
         retention_wake: super::retention::RetentionWake,
+        automation_signals: (
+            std::sync::Arc<tokio::sync::Notify>,
+            std::sync::Arc<std::sync::atomic::AtomicBool>,
+        ),
     ) -> Self {
         Self {
             storage,
@@ -60,6 +81,8 @@ impl ProjectionContext {
             butler_data,
             queue_wake,
             retention_wake,
+            automation_wake: automation_signals.0,
+            automation_queued: automation_signals.1,
         }
     }
 }
@@ -227,7 +250,7 @@ async fn project_event(
                     .reconcile_turn(work_outcome)
                     .await;
             }
-            context.retention_wake.turn(turn).await?;
+            context.finish_terminal_turn(turn).await?;
         }
         return Ok(true);
     }
@@ -415,7 +438,7 @@ async fn project_final(
                 status_note: "Reconciled after delivered turn replay.".into(),
             })
             .await;
-        context.retention_wake.turn(settled_turn).await?;
+        context.finish_terminal_turn(settled_turn).await?;
         context.queue_wake.chat(settled_chat).await?;
     }
     Ok(projected)

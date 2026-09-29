@@ -141,7 +141,7 @@ impl Command {
             Self::Settings => cli::settings::run(installation, args).await,
             Self::Observability => cli::observability::run(installation, args).await,
             Self::WebAccess => cli::web_access::run(installation, args).await,
-            Self::Schedule => cli::schedule::run(&installation, &args),
+            Self::Schedule => cli::schedule::run(&installation, &args).await,
             Self::Update => Box::pin(cli::update::run(installation, args)).await,
             Self::Status => cli::status::run_native_status_cli(installation, args).await,
             Self::Context => cli::context::run(installation, args).await,

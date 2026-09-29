@@ -183,6 +183,7 @@ fn run_connection_lane(
         configure(&connection)?;
         schema::migrate(&mut connection, butler_data.map(PathBuf::as_path))?;
         schema::seed(&connection, initialized_at)?;
+        schema::migrate_legacy_schedules(&mut connection, butler_data.map(PathBuf::as_path))?;
         Ok(connection)
     })();
     let mut connection = match setup {

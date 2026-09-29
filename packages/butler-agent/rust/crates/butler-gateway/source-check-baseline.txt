@@ -1,7 +1,6 @@
 # Production functions over 80 lines, ratcheted by tools/source-check.
 # Split a function and regenerate: cargo run -p butler-source-check -- --bless .
 # Entries may only shrink or disappear; new entries need review.
-src/gateway/application.rs	AppApplication::open	87
 src/gateway/application/admission.rs	inspect_with_attachment_source	141
 src/gateway/application/context_details.rs	AppApplication::context_details_owned	168
 src/gateway/application/message_projection/work_blocks.rs	project	101

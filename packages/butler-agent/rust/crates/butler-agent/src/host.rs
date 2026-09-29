@@ -57,8 +57,6 @@ mod guided;
 mod memory_jobs;
 mod service;
 mod time;
-pub(crate) use crate::host::automation::queue::AutomationQueue;
-pub(crate) use crate::host::automation::runtime::open_automation_service;
 pub(crate) use crate::host::time::date_parser::DateParser;
 
 #[cfg(unix)]

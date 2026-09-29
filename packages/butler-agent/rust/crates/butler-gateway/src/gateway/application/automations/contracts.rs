@@ -4,10 +4,14 @@ use serde_json::Value;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct CreateAutomationRequest {
+    pub id: Option<String>,
     pub title: String,
     pub prompt_body: String,
     pub target_session_id: String,
     pub interval_seconds: i64,
+    pub schedule_type: Option<String>,
+    pub run_at: Option<String>,
+    pub start_at: Option<String>,
     /// The access the schedule's runs get; the target conversation's
     /// current access mode when omitted.
     pub access_mode: Option<AccessMode>,
@@ -19,6 +23,9 @@ pub struct UpdateAutomationRequest {
     pub prompt_body: Option<String>,
     pub target_session_id: Option<String>,
     pub interval_seconds: Option<i64>,
+    pub schedule_type: Option<String>,
+    pub run_at: Option<String>,
+    pub start_at: Option<String>,
     pub state: Option<String>,
     /// Replaces the access the schedule's runs get.
     pub access_mode: Option<AccessMode>,
@@ -33,6 +40,11 @@ pub struct AutomationSummary {
     pub target_session_id: String,
     pub target_label: String,
     pub interval_seconds: i64,
+    pub schedule_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_at: Option<String>,
     pub interval_label: String,
     /// The access the schedule's runs get, whatever the target conversation's mode.
     pub access_mode: AccessMode,

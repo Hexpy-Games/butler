@@ -10,3 +10,4 @@ mod store;
 pub(crate) use contracts::*;
 pub(crate) use owner::AutomationRunOwner;
 pub(crate) use scheduler::AutomationScheduler;
+pub(crate) use scheduler::signals;

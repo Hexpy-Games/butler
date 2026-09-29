@@ -11,6 +11,8 @@ impl AppApplication {
             queue_dispatcher: None,
             queue_wake: self.queue_wake.clone(),
             automation_scheduler: None,
+            automation_wake: self.automation_wake.clone(),
+            automation_queued: self.automation_queued.clone(),
             automation_runs: self.automation_runs.clone(),
             queue_mutations: self.queue_mutations.clone(),
             session_creation: self.session_creation.clone(),

@@ -197,17 +197,6 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
         Arc::new(LocaleCollation::new("en-US").unwrap()),
     ));
     let work_streams = Arc::new(crate::host::WorkStreams::open(scratch.0.clone()).unwrap());
-    let automations = butler_runtime::operations::AutomationService::open(
-        &scratch.0.clone(),
-        butler_runtime::operations::AutomationDependencies {
-            parse_date: Arc::new(butler_core::js_date::parse_iso_millis),
-            now_millis: Arc::new(|| 0),
-            enqueue: Arc::new(crate::host::AutomationQueue(Arc::new(
-                butler_gateway::gateway::InboundQueue::new(&scratch.0.clone()),
-            ))),
-            scheduler_interval: std::time::Duration::from_secs(60),
-        },
-    );
     let factory = GuidedTurnFactoryAdapter {
         preparation,
         documents: documents.clone(),
@@ -260,7 +249,6 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
         protected_ledger_roots: vec![],
         subsessions,
         work_streams: work_streams.clone(),
-        automations: automations.clone(),
         mcp_client: Arc::new(butler_models::mcp_client::McpClient::new(
             scratch.0.clone(),
             HashMap::new(),
@@ -410,5 +398,4 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
     conversation_store.close().await.unwrap();
     files.close().await;
     work_streams.close().await.unwrap();
-    automations.close().await.unwrap();
 }

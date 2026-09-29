@@ -21,12 +21,12 @@ pub(super) async fn route(
     let method = request.method().clone();
     let path = uri.path();
     if method == Method::GET && path == "/automations" {
-        let target_session_id = query_value(uri, "target_session_id");
+        let (target_session_id, include_deleted) = list_query(uri);
         return json(
             StatusCode::OK,
             state
                 .application
-                .list_automations(target_session_id)
+                .list_automations(target_session_id, include_deleted)
                 .await?,
         );
     }
@@ -124,6 +124,12 @@ fn decode(value: &str) -> Result<String, HttpError> {
 fn query_value(uri: &Uri, key: &str) -> Option<String> {
     url::form_urlencoded::parse(uri.query()?.as_bytes())
         .find_map(|(name, value)| (name == key && !value.is_empty()).then(|| value.into_owned()))
+}
+fn list_query(uri: &Uri) -> (Option<String>, bool) {
+    (
+        query_value(uri, "target_session_id"),
+        query_value(uri, "include_deleted").as_deref() == Some("true"),
+    )
 }
 fn not_found() -> HttpError {
     HttpError::public(404, "not_found", "Route not found.")

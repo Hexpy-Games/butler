@@ -3,12 +3,14 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 use tokio::net::TcpListener;
 
 use super::*;
 
 mod dashboard;
+mod fixtures;
+use fixtures::{event, message_result};
 mod http;
 mod session_controls;
 mod wallpapers;
@@ -221,7 +223,11 @@ impl GatewayApplication for TestApplication {
     ) -> ApplicationFuture<Vec<AppSessionSummary>> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
-    fn list_automations(&self, _: Option<String>) -> ApplicationFuture<AutomationListView> {
+    fn list_automations(
+        &self,
+        _: Option<String>,
+        _: bool,
+    ) -> ApplicationFuture<AutomationListView> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn get_automation(&self, _: String) -> ApplicationFuture<AutomationDetailView> {
@@ -435,66 +441,5 @@ impl Drop for TestSubscription {
             .lock()
             .unwrap()
             .retain(|(id, _)| *id != self.id);
-    }
-}
-
-fn event(id: u64) -> AppEventEnvelope {
-    AppEventEnvelope {
-        protocol_version: "butler.app.v1".into(),
-        id,
-        event_type: "message.created".into(),
-        created_at: "2026-09-14T00:00:00.000Z".into(),
-        payload: Map::new(),
-    }
-}
-
-fn message_result() -> MessageSendResult {
-    MessageSendResult {
-        accepted: Some(MessageRecord {
-            content_parts: None,
-            id: "message-1".into(),
-            chat_id: "general".into(),
-            turn_id: Some("turn-1".into()),
-            conversation_session_id: None,
-            conversation_turn_id: None,
-            conversation_message_id: None,
-            role: MessageRole::User,
-            text: "hello".into(),
-            status: MessageStatus::Sent,
-            created_at: "2026-09-14T00:00:00.000Z".into(),
-            updated_at: "2026-09-14T00:00:00.000Z".into(),
-            safe_error_code: None,
-            delivery_state: None,
-            limitation_codes: None,
-            limitations: None,
-            retryable: false,
-            cursor: 1,
-            attachments: None,
-            artifacts: None,
-            changed_files: None,
-            plan_document: None,
-            work_blocks: None,
-            turn_activity_rows: None,
-        }),
-        queued: None,
-        reply: None,
-        replies: vec![],
-        turn: Some(TurnRecord {
-            id: "turn-1".into(),
-            chat_id: "general".into(),
-            user_message_id: Some("message-1".into()),
-            state: TurnState::Thinking,
-            safe_status_label: "Thinking".into(),
-            safe_error_code: None,
-            retryable: false,
-            cancellable: true,
-            attempt: 1,
-            created_at: "2026-09-14T00:00:00.000Z".into(),
-            updated_at: "2026-09-14T00:00:00.000Z".into(),
-            cursor: 1,
-            execution_controls: None,
-            execution_model: None,
-        }),
-        next_cursor: 1,
     }
 }

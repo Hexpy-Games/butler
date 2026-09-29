@@ -119,20 +119,7 @@ pub(super) async fn execute(
         return encoded(&result);
     }
     if call.name == ToolName::ListAutomations {
-        let result = owner
-            .automations
-            .execute(
-                &call.name,
-                call.arguments.clone(),
-                &owner.binding.source_session_id,
-            )
-            .await;
-        return encoded(&result.unwrap_or_else(|error| {
-            json!({"ok":false,"error":{
-                "code":"tool_error",
-                "message":format!("{} could not complete: {}", call.name, error.code()),
-            }})
-        }));
+        return list_automations(owner, call).await;
     }
     if call.name == ToolName::DelegateToWorker {
         let required = |key: &str| {
@@ -347,6 +334,7 @@ pub(super) async fn execute(
                 | ToolName::StartTopicConversation
                 | ToolName::RequestServiceRestart
                 | ToolName::CreateAutomation
+                | ToolName::UpdateAutomation
                 | ToolName::DeleteAutomation
                 | ToolName::RunDueAutomations
         )
@@ -462,6 +450,30 @@ fn access_mode(owner: &GuidedTools) -> String {
         butler_turn::btcc::AccessMode::ReadOnly => "read_only",
     }
     .into()
+}
+
+async fn list_automations(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+) -> Result<JsonDocument, ToolExecutionError> {
+    let result = match crate::host::automation::client::ScheduleClient::active(&owner.app_endpoint)
+    {
+        Ok(client) => {
+            client
+                .tool(
+                    &call.name,
+                    call.arguments.clone(),
+                    &owner.binding.source_session_id,
+                )
+                .await
+        }
+        Err(error) => Err(error),
+    };
+    encoded(&result.unwrap_or_else(|error| {
+        json!({"ok":false,"error":{
+            "code":error.code(), "message":error.message(),
+        }})
+    }))
 }
 
 fn encoded(value: &Value) -> Result<JsonDocument, ToolExecutionError> {
