@@ -105,9 +105,6 @@ async fn assert_result_is_hidden(s: &Scenario, result_id: &str) -> Result<(), Ha
     assert_eq!(export.status, 200, "{}", export.text);
     assert!(export.text.contains("one to twelve"), "{}", export.text);
     assert!(!export.text.contains("exactly the word"), "{}", export.text);
-
-    let sessions = s.gw.get("/sessions").await?.text;
-    assert!(!sessions.contains("exactly the word"), "{sessions}");
     Ok(())
 }
 
@@ -171,6 +168,65 @@ async fn a_result_queued_behind_a_running_turn_keeps_its_marker() -> Result<(), 
     s.finish().await
 }
 
+/// `/retry-current` on a failed result turn starts a fresh turn: it must carry
+/// the marker, so the retry adds no bubble and no live message event.
+#[tokio::test]
+async fn retrying_a_failed_result_turn_keeps_it_off_the_chat() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut s = start().await?;
+    s.agent.terminate().await?;
+    seed_failed_result_turn(&s);
+    s.gw = s.agent.start_again().await?;
+
+    let retry = s.gw.post("/turns/t-fault/retry-current", json!({})).await?;
+    assert_eq!(retry.status, 202, "{}", retry.text);
+    let turns = wait_turns(&s, 2).await?;
+    let fresh = turns
+        .iter()
+        .find(|turn| turn_id_of(turn) != Some("t-fault"))
+        .unwrap();
+    let marker = &fresh["execution_controls"]["subsession_result"];
+    assert_eq!(marker["result_id"], "steward-result-5", "{fresh}");
+
+    let messages = s.gw.messages(CHAT).await?;
+    let asked: Vec<&str> = messages
+        .iter()
+        .filter(|message| message["role"] == "user")
+        .filter_map(|message| message["text"].as_str())
+        .collect();
+    assert_eq!(asked, ["Owner question"], "the retry is visible");
+    let events = s.gw.events_since(0).await?;
+    assert!(
+        !events.iter().any(|event| {
+            event["type"] == "message.created" && event["payload"]["message"]["role"] == "user"
+        }),
+        "the retry published a user message"
+    );
+    s.finish().await
+}
+
+fn seed_failed_result_turn(s: &Scenario) {
+    let db =
+        rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
+    let controls = json!({"subsession_result": {
+        "relation_id": RELATION, "result_id": "steward-result-5", "safe_title": "Atlas"}});
+    let fault = json!({"event": {"kind": "runtime.fault", "payload": {
+        "faultId": "fault-1", "kind": "provider", "publicSummary": "The provider stopped.",
+        "retryable": true}}});
+    db.execute_batch(&format!(
+        "INSERT INTO messages(id,chat_id,role,text,status,created_at,updated_at,retryable) VALUES
+           ('m-owner','{CHAT}','user','Owner question','sent','2026-01-01T00:00:01Z','2026-01-01T00:00:01Z',0);
+         INSERT INTO turns(id,chat_id,user_message_id,state,safe_status_label,retryable,execution_controls_json,created_at,updated_at)
+           VALUES('t-fault','{CHAT}','m-fault','runtime_fault','Failed',1,'{controls}',
+             '2026-01-01T00:00:02Z','2026-01-01T00:00:02Z');
+         INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at,retryable) VALUES
+           ('m-fault','{CHAT}','t-fault','user','{RESULT}','sent','2026-01-01T00:00:02Z','2026-01-01T00:00:02Z',0);
+         INSERT INTO events(type,turn_id,payload_json,created_at)
+           VALUES('agent.turn_event','t-fault','{fault}','2026-01-01T00:00:03Z');"
+    ))
+    .unwrap();
+}
+
 /// Rows written before the fix (or by the TypeScript gateway) are hidden by
 /// the read path with no data migration: one carries the turn marker, one
 /// only the TypeScript-era structured refs.
@@ -194,6 +250,8 @@ async fn stored_result_rows_are_hidden_without_a_migration() -> Result<(), Harne
     assert!(export.text.contains("Owner question"), "{}", export.text);
     assert!(!export.text.contains("marked-row"), "{}", export.text);
     assert!(!export.text.contains("Relation ref"), "{}", export.text);
+    // The newest stored message is a hidden result, so the preview shows the
+    // owner's message only if the filter applies to the preview.
     let sessions = s.gw.get("/sessions").await?.text;
     assert!(sessions.contains("Owner question"), "{sessions}");
     assert!(!sessions.contains("marked-row"), "{sessions}");

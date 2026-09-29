@@ -32,8 +32,8 @@ pub(super) fn list(
          terminal_result_message_id,created_at,updated_at FROM session_queued_messages \
          WHERE chat_id=?1 AND (state='queued' OR (state='failed' AND \
          COALESCE(safe_error_code, '') <> 'turn_cancelled')) \
-         AND CASE WHEN json_valid(control_resolution_json) \
-         THEN json_extract(control_resolution_json,'$.subsession_result') END IS NULL \
+         AND (state='failed' OR CASE WHEN json_valid(control_resolution_json) \
+         THEN json_extract(control_resolution_json,'$.subsession_result') END IS NULL) \
          ORDER BY rowid ASC",
         )
         .map_err(AppStorageError::sqlite)?;
@@ -198,11 +198,18 @@ fn queue_record(
         .map(str::to_owned)
         .collect::<Vec<_>>();
     let files = files_for_ids(connection, &ids)?;
+    // A waiting steward result is model input and stays out of the tray; one
+    // that failed stays so the owner can clear it, shown by its title only.
+    let (text, content_parts) = match delegated_result_title(row.control_resolution_json.as_deref())
+    {
+        Some(title) => (title, None),
+        None => (row.text, parse_optional(row.content_parts_json.as_deref())?),
+    };
     Ok(QueuedMessageRecord {
-        content_parts: parse_optional(row.content_parts_json.as_deref())?,
+        content_parts,
         id: row.id,
         chat_id: row.chat_id,
-        text: row.text,
+        text,
         client_message_id: row.client_message_id,
         plan_id: public_plan_id(row.control_resolution_json.as_deref()),
         attachments: (!files.is_empty()).then_some(files),
@@ -220,6 +227,12 @@ fn queue_record(
         created_at: row.created_at,
         updated_at: row.updated_at,
     })
+}
+
+fn delegated_result_title(resolution_json: Option<&str>) -> Option<String> {
+    let resolution = serde_json::from_str::<Value>(resolution_json?).ok()?;
+    let title = resolution.get("subsession_result")?.get("safe_title")?;
+    title.as_str().map(str::to_owned)
 }
 
 fn public_plan_id(resolution_json: Option<&str>) -> Option<String> {

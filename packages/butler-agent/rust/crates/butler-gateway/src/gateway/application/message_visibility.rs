@@ -8,8 +8,10 @@
 //! is needed:
 //! - the `subsession_result` control on the turn that owns the message;
 //! - for rows written before that control existed, the structured refs the
-//!   TypeScript gateway used to recognise them (`Subsession result` text with
-//!   `Relation ref:` and `Result ref:` lines).
+//!   TypeScript gateway used to recognise them: a `Subsession result` first
+//!   line and `Relation ref: relation-<hex>` / `Result ref: steward-result-<hex>`
+//!   lines, each at a line start (GLOB cannot match a whole hex id, so the id
+//!   must start with four hex digits).
 //!
 //! The TypeScript gateway filtered these on every message read and on the
 //! live `message.created` event; the native cutover dropped that filter.
@@ -24,7 +26,9 @@ use super::storage::AppStorageError;
 macro_rules! owner_visible {
     () => {
         "NOT (m.role='user' AND (\
-         m.text GLOB 'Subsession result*Relation ref: relation-*Result ref: steward-result-*' \
+         (m.text GLOB 'Subsession result'||char(10)||'*' \
+          AND m.text GLOB '*'||char(10)||'Relation ref: relation-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]*' \
+          AND m.text GLOB '*'||char(10)||'Result ref: steward-result-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]*') \
          OR EXISTS (SELECT 1 FROM turns dt WHERE dt.user_message_id=m.id AND \
          CASE WHEN json_valid(dt.execution_controls_json) \
          THEN json_extract(dt.execution_controls_json,'$.subsession_result') END IS NOT NULL)))"

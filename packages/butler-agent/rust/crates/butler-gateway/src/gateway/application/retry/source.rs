@@ -6,7 +6,9 @@ use serde_json::Value;
 use super::{AppStorageError, execution_controls_error, not_retryable_error, queue_snapshot_error};
 use crate::gateway::application::storage::AppStorageCode;
 use butler_core::public_text::sanitize_public_text;
-use butler_turn::btcc::{ControlResolution, ExecutionControls, VerifiedExecutionControls};
+use butler_turn::btcc::{
+    ControlResolution, ExecutionControls, SubsessionResultContext, VerifiedExecutionControls,
+};
 
 pub(super) struct RetrySnapshot {
     pub turn_id: String,
@@ -54,6 +56,9 @@ pub(super) struct CurrentControlsRetrySource {
     pub user_message_id: String,
     pub text: String,
     pub attachment_ids: Vec<String>,
+    /// Set when the source turn reports a steward result: the fresh turn is
+    /// model input too and must stay off the chat.
+    pub subsession_result: Option<SubsessionResultContext>,
 }
 
 pub(super) fn retry_snapshot(
@@ -257,7 +262,27 @@ pub(super) fn current_controls_retry_source(
         user_message_id,
         text,
         attachment_ids,
+        subsession_result: source_subsession_result(db, turn_id)?,
     })
+}
+
+fn source_subsession_result(
+    db: &Connection,
+    turn_id: &str,
+) -> Result<Option<SubsessionResultContext>, AppStorageError> {
+    let marker: Option<String> = db
+        .query_row(
+            "SELECT CASE WHEN json_valid(execution_controls_json) \
+             THEN json_extract(execution_controls_json,'$.subsession_result') END \
+             FROM turns WHERE id=?1",
+            [turn_id],
+            |row| row.get(0),
+        )
+        .map_err(AppStorageError::sqlite)?;
+    marker
+        .map(|json| serde_json::from_str(&json))
+        .transpose()
+        .map_err(|source| execution_controls_error().with_source(source))
 }
 
 /// Refuses all but a retryable runtime fault or a turn interrupted by a
