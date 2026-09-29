@@ -2,8 +2,7 @@ use super::*;
 use std::{process::Stdio, time::Duration};
 use tokio::process::Command;
 
-#[tokio::test]
-async fn active_cancellation_kills_and_reaps_child() {
+fn sleeping_worker() -> (Option<WorkerChild>, u32) {
     let mut child = Command::new("/bin/sleep")
         .arg("30")
         .stdin(Stdio::piped())
@@ -11,12 +10,26 @@ async fn active_cancellation_kills_and_reaps_child() {
         .spawn()
         .expect("sleep child");
     let pid = child.id().expect("child pid");
-    let mut process = Some(WorkerChild {
+    let process = Some(WorkerChild {
         stdin: child.stdin.take().expect("child stdin"),
         stdout: child.stdout.take().expect("child stdout"),
         child,
         initialized: true,
     });
+    (process, pid)
+}
+
+fn assert_reaped(pid: u32) {
+    let status = std::process::Command::new("ps")
+        .args(["-p", &pid.to_string(), "-o", "pid="])
+        .status()
+        .expect("ps child");
+    assert!(!status.success(), "child {pid} must be reaped");
+}
+
+#[tokio::test]
+async fn cancelled_and_idle_children_are_killed_and_reaped() {
+    let (mut process, pid) = sleeping_worker();
     let inner = Inner {
         data_root: PathBuf::new(),
         executable: PathBuf::new(),
@@ -53,11 +66,25 @@ async fn active_cancellation_kills_and_reaps_child() {
     .expect("active request cancelled");
     assert_eq!(failure.code(), "embed_request_cancelled");
     assert!(process.is_none());
-    let status = std::process::Command::new("ps")
-        .args(["-p", &pid.to_string(), "-o", "pid="])
-        .status()
-        .expect("ps child");
-    assert!(!status.success(), "cancelled child must be reaped");
+    assert_reaped(pid);
+
+    // An idle child is released at its deadline; a wake-up before it leaves
+    // the child running.
+    let (mut idle, idle_pid) = sleeping_worker();
+    wait_for_work(
+        &inner,
+        &mut idle,
+        Instant::now() + Duration::from_millis(100),
+    )
+    .await;
+    assert!(idle.is_none());
+    assert_reaped(idle_pid);
+    let (mut busy, busy_pid) = sleeping_worker();
+    inner.notify.notify_one();
+    wait_for_work(&inner, &mut busy, Instant::now() + Duration::from_secs(30)).await;
+    assert!(busy.is_some(), "woken before the idle deadline");
+    kill_and_reap(&mut busy).await;
+    assert_reaped(busy_pid);
 }
 
 #[cfg(unix)]

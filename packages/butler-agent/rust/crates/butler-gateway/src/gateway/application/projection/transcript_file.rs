@@ -4,7 +4,7 @@ use std::{path::PathBuf, time::UNIX_EPOCH};
 
 use sha2::{Digest, Sha256};
 
-use super::{ProjectionContext, checkpoint::Checkpoint};
+use super::{ProjectionContext, byte_window::ReadBatch, checkpoint::Checkpoint};
 use crate::gateway::application::{GatewayApplicationError, app_error};
 
 pub(in crate::gateway::application) async fn sync_chat_once(
@@ -32,12 +32,18 @@ pub(in crate::gateway::application) async fn sync_chat_once(
         .map_err(GatewayApplicationError::internal_from)??;
     let Some(state) = state else { return Ok(false) };
     let spool_path = spool_path(&context.butler_data, chat_id, &path);
-    let mut checkpoint = prior
-        .clone()
-        .filter(|value| {
-            super::byte_window::reusable(value, &path, (state.device, state.inode), state.size)
-        })
-        .unwrap_or_else(|| fresh_checkpoint(chat_id, &session_id, &path, &spool_path, &state));
+    let mut checkpoint = match prior.clone() {
+        Some(value) if super::byte_window::reusable(&value, &path, state.size) => value,
+        found => {
+            if found.is_some() {
+                eprintln!(
+                    "[gateway] transcript checkpoint no longer matches its file; projecting {chat_id} from the start"
+                );
+            }
+            fresh_checkpoint(chat_id, &session_id, &path, &spool_path, &state)
+        }
+    };
+    (checkpoint.device, checkpoint.inode) = (state.device, state.inode);
     if checkpoint.spool_path.is_empty() {
         checkpoint.spool_path = spool_path.to_string_lossy().into_owned();
     }
@@ -48,7 +54,7 @@ pub(in crate::gateway::application) async fn sync_chat_once(
         let _ = tokio::fs::remove_file(PathBuf::from(&stale.spool_path)).await;
     }
     let mut read = tokio::task::spawn_blocking(move || {
-        super::byte_window::read_record(checkpoint, state.size, state.modified_at_ms)
+        super::byte_window::read_batch(checkpoint, state.size, state.modified_at_ms)
     })
     .await
     .map_err(GatewayApplicationError::internal_from)?
@@ -57,20 +63,35 @@ pub(in crate::gateway::application) async fn sync_chat_once(
         read.checkpoint.spool_path.clear();
     }
     let pending = read.pending;
-    let completed = read.completed_spool.clone();
-    let advanced = match read.event {
-        None => {
-            super::save_checkpoint(context, read.checkpoint).await?;
-            true
-        }
-        Some(event) => super::project_event(context, chat_id, event, read.checkpoint).await?,
-    };
+    let completed = read.completed_spool.take();
+    let advanced = project_batch(context, chat_id, read).await?;
     if let Some(path) = completed {
         let _ = tokio::fs::remove_file(path).await;
     }
     // An unproven old claim retains its original event and yields this sync.
     // Reporting pending here would replay that same record in a tight loop.
     Ok(advanced && pending)
+}
+
+/// Records that change projected state are projected one by one, each with
+/// its own checkpoint in the same transaction. Every other record only moves
+/// the checkpoint, so the batch saves it once at its end.
+async fn project_batch(
+    context: &ProjectionContext,
+    chat_id: &str,
+    read: ReadBatch,
+) -> Result<bool, GatewayApplicationError> {
+    for record in read.records {
+        if !super::changes_projection(&record.event) {
+            continue;
+        }
+        let checkpoint = read.checkpoint.at(record.end, record.anchor);
+        if !super::project_event(context, chat_id, record.event, checkpoint).await? {
+            return Ok(false);
+        }
+    }
+    super::save_checkpoint(context, read.checkpoint).await?;
+    Ok(true)
 }
 
 struct FileState {
