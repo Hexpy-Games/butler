@@ -1,0 +1,93 @@
+name: E2E stub tier
+description: Run the real agent binary against replay cassettes on the current Rust job.
+runs:
+  using: composite
+  steps:
+    - name: Restore embedding model cache
+      id: embedding-cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/e2e-models/bge-m3
+        key: bge-m3-4de13258303883538bd53b696b452bf8099f0858
+
+    - name: Fetch embedding model
+      if: steps.embedding-cache.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: ${{ runner.temp }}
+      run: |
+        set -euo pipefail
+        base=https://huggingface.co/Xenova/bge-m3/resolve/4de13258303883538bd53b696b452bf8099f0858
+        dir=e2e-models/bge-m3
+        mkdir -p "$dir/onnx"
+        while read -r sha file; do
+          curl -fsSL --retry 3 -o "$dir/$file" "$base/$file"
+          if [ "$RUNNER_OS" = macOS ]; then
+            echo "$sha  $dir/$file" | shasum -a 256 -c -
+          else
+            echo "$sha  $dir/$file" | sha256sum -c -
+          fi
+        done <<'LIST'
+        6710678b12670bc442b99edc952c4d996ae309a7020c1fa0096dd245c2faf790 tokenizer.json
+        7e4c1cc848840aeccdd763458c18dd525eb0f795c992e00ebe9c28554e7db2d4 tokenizer_config.json
+        734a79bf12d388c1467a4e3ab625f45de7f6906cffcfb93a1eca1787504bed95 config.json
+        0826f8c1ab9edf1801db86c61919d4d108e8bfc0b809ec823ad366882ff0b77d onnx/model_quantized.onnx
+        LIST
+
+    - name: Probe the systemd user manager
+      if: runner.os == 'Linux'
+      id: systemd
+      shell: bash
+      run: |
+        sudo loginctl enable-linger "$USER" || true
+        uid="$(id -u)"
+        export XDG_RUNTIME_DIR="/run/user/$uid"
+        for _ in $(seq 1 30); do
+          if systemctl --user show-environment >/dev/null 2>&1; then
+            echo "available=1" >> "$GITHUB_OUTPUT"
+            echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
+            echo "DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "available=0" >> "$GITHUB_OUTPUT"
+        echo "::notice title=INS-14 SKIPPED::no systemd --user manager on this runner"
+
+    - name: Run the stub tier
+      shell: bash
+      working-directory: packages/butler-agent/rust
+      env:
+        BUTLER_E2E_EMBEDDING_ASSETS: ${{ runner.temp }}/e2e-models/bge-m3
+        BUTLER_E2E_TIER: stub
+        BUTLER_E2E_SKIP_BUILD: "1"
+        BUTLER_E2E_SYSTEMD: ${{ steps.systemd.outputs.available }}
+        BUTLER_E2E_REPORT: ${{ runner.temp }}/e2e-report.txt
+      run: |
+        set -o pipefail
+        cargo test --locked --no-fail-fast -p butler-e2e -- --skip idle_disk_writes_and_cpu_stay_bounded 2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
+
+    # TODO(#331): once its test lands, keep this separate IDLE-DISK invocation
+    # on both platforms; its budget is still being measured on that draft PR.
+    - name: Report IDLE-DISK counters
+      if: always() && hashFiles('packages/butler-agent/rust/crates/butler-e2e/tests/idle_disk.rs') != ''
+      shell: bash
+      working-directory: packages/butler-agent/rust
+      env:
+        BUTLER_E2E_EMBEDDING_ASSETS: ${{ runner.temp }}/e2e-models/bge-m3
+        BUTLER_E2E_TIER: stub
+        BUTLER_E2E_SKIP_BUILD: "1"
+      run: |
+        mkdir -p target/e2e-tmp
+        TMPDIR="$PWD/target/e2e-tmp" cargo test --locked -p butler-e2e --test idle_disk -- --nocapture
+
+    - name: Summarize
+      if: always()
+      shell: bash
+      run: |
+        {
+          echo "### E2E stub tier ($RUNNER_OS $RUNNER_ARCH)"
+          if [ -f "$RUNNER_TEMP/e2e-stub.log" ]; then
+            grep -E "^test .* (ok|FAILED|ignored)" "$RUNNER_TEMP/e2e-stub.log" | sed 's/^/    /' || true
+          fi
+          echo "Live scenarios: SKIPPED (tier: stub)."
+        } >> "$GITHUB_STEP_SUMMARY"

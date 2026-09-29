@@ -5,7 +5,7 @@ The summaries are in `HANDOFF.md` §4. The per-item status and file:line referen
 | # | Item | Start from | Suggested model |
 |---|---|---|---|
 | [ ] | P1 BTCC storage | `origin/main` | sol medium |
-| [ ] | P2 Memory vector identity bug, plus memory idle loops and Lance maintenance | `claude/perf-memory` (draft) | sol medium |
+| [ ] | P2 Memory vector identity bug, plus memory idle loops and Lance maintenance; embedding model: see [02-embedding-model.md](02-embedding-model.md) | `claude/perf-memory` (draft) | sol medium |
 | [ ] | P3 Projection follow-up | #319 (draft, rebase after #318) | luna max |
 | [ ] | P4 App storage and read path | `claude/perf-app-storage` (draft) and the gateway audit (HANDOFF §4.4) | sol medium |
 | [ ] | P5 Turn hot path | `claude/perf-turn-hot-path` (draft) | sol medium |

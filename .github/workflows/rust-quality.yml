@@ -1,38 +1,44 @@
 name: Rust quality
 
-# Tiers, fastest first:
-# - source (every PR): format and source rules, Ubuntu, ~1 min.
-# - clippy (every PR): production and all-targets passes in parallel; only
-#   protoc, no ONNX Runtime build.
-# - test (pushes to main, PRs into main, stacked PRs labelled `full-ci`):
-#   cargo-nextest over the workspace with the static ONNX Runtime.
-# - linux-clippy (every PR) and linux-test (as test): the same clippy passes
-#   and tests on Linux x64 and arm64, each with its own pinned ORT cache;
-#   non-blocking until the platform port lands.
-# - windows-check (every PR): `cargo check` for x86_64-pc-windows-msvc; it
-#   reports what does not compile yet and never fails the workflow.
-# Future tiers plug in the same way: an E2E stub tier is one more job here
-# (`uses: ./.github/actions/rust-agent-setup` with `native-deps: ort`, then
-# build the agent binary and run the stub scenarios), and the live tier (real
-# providers, secrets) belongs in its own workflow triggered by `schedule` and
-# `workflow_dispatch`, so PR runs never see its secrets.
+# Production and all-targets Clippy use the same -D warnings flag. The
+# production invocation is retained inside each job because dev-dependency
+# test-support features can relax lints when --all-targets is selected.
 on:
   push:
     branches: [main]
     paths:
       - "packages/butler-agent/rust/**"
+      - "packages/butler-agent/resources/**"
+      - "deploy/**"
+      - "packages/butler-npm/**"
+      - ".github/workflows/release.yml"
+      - ".github/actions/build-agent-archive/**"
+      - "packages/butler-app/client/electron/scripts/prepare-native-agent.mjs"
+      - "packages/butler-agent/rust/docs/install-layout.md"
       - ".github/workflows/rust-quality.yml"
+      - ".github/workflows/e2e.yml"
+      - ".github/workflows/install-smoke.yml"
+      - ".github/workflows/windows.yml"
+      - ".github/workflows/linux-packages.yml"
+      - "packages/butler-app/scripts/release/**"
       - ".github/actions/rust-agent-setup/**"
+      - ".github/actions/e2e-stub/**"
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
     paths:
       - "packages/butler-agent/rust/**"
+      - "packages/butler-agent/resources/**"
       - ".github/workflows/rust-quality.yml"
+      - ".github/workflows/e2e.yml"
+      - ".github/workflows/windows.yml"
       - ".github/actions/rust-agent-setup/**"
+      - ".github/actions/e2e-stub/**"
+  schedule:
+    - cron: "17 3 * * *"
   workflow_dispatch:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: rust-quality-${{ github.head_ref || github.ref_name }}
@@ -49,188 +55,112 @@ defaults:
 jobs:
   source:
     name: Format and source rules
-    # Adding an unrelated label must not re-run the workflow.
-    if: github.event.action != 'labeled' || github.event.label.name == 'full-ci'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      windows: ${{ steps.paths.outputs.windows }}
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+      - uses: actions/checkout@v4
+      - name: Detect Windows-relevant PR changes
+        id: paths
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            windows:
+              - 'packages/butler-agent/rust/crates/butler-platform/**'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/service/**'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli.rs'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/**'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/main.rs'
+              - 'packages/butler-agent/rust/Cargo.lock'
+              - '.github/workflows/rust-quality.yml'
+              - '.github/workflows/windows.yml'
+      - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.91.0
           components: rustfmt
-
       - name: Check formatting
         run: cargo fmt --all -- --check
-
-      # File size caps, domain architecture and the production function-length ratchet
-      # (per-crate source-check-baseline.txt). Builds only syn.
       - name: Check Rust source rules
         run: cargo run --locked -p butler-source-check -- .
 
-  clippy:
-    # Test builds enable the crates' test-support features, which relax
-    # fixture lints (unwrap/expect/panic, dead code) on the libraries, so the
-    # production targets are linted in their own feature set. The two passes
-    # run in parallel rather than one after the other.
-    name: Clippy (${{ matrix.pass }})
-    if: github.event.action != 'labeled' || github.event.label.name == 'full-ci'
-    # The agent (and its protobuf build scripts) target macOS arm64 only.
-    runs-on: macos-15
-    timeout-minutes: 45
+  rust-checks:
+    name: Rust checks (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
         include:
-          - pass: production
-            targets: --lib --bins
-          - pass: all-targets
-            targets: --all-targets
+          - { platform: Linux x64, runner: ubuntu-latest }
+          - { platform: macOS arm64, runner: macos-15 }
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Rust and protoc
+      - uses: actions/checkout@v4
+      - name: Set up Rust and prebuilt ONNX Runtime
         uses: ./.github/actions/rust-agent-setup
         with:
           components: clippy
-          native-deps: protoc
-          cache-key: clippy-${{ matrix.pass }}
-
-      - name: Run Clippy
-        run: cargo clippy --workspace ${{ matrix.targets }} --locked -- -D warnings
-
-  test:
-    name: Tests
-    if: >-
-      (github.event.action != 'labeled' || github.event.label.name == 'full-ci') &&
-      (github.event_name != 'pull_request' || github.base_ref == 'main' ||
-       contains(github.event.pull_request.labels.*.name, 'full-ci'))
-    runs-on: macos-15
-    timeout-minutes: 120
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Rust and the static ONNX Runtime
-        uses: ./.github/actions/rust-agent-setup
-        with:
-          native-deps: ort
-          cache-key: test
-
-      - name: Install cargo-nextest
-        uses: taiki-e/install-action@v2
+          native-deps: prebuilt-ort
+          cache-key: pr-${{ runner.os }}-${{ runner.arch }}
+      - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
-
-      - name: Build tests
-        run: cargo nextest run --workspace --locked --no-run
-
+      - name: Clippy production targets
+        run: cargo clippy --workspace --lib --bins --locked --keep-going -- -D warnings
+      - name: Clippy all targets
+        run: cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
       - name: Run tests
         run: cargo nextest run --workspace --locked --no-fail-fast
-
-      # nextest does not run doctests; the crates currently have none.
-      - name: Run doctests
+      - name: Run doctests when present
         run: |
           if grep -rqE '^[[:space:]]*//[/!][[:space:]]*```' crates; then
             cargo test --workspace --doc --locked
-          else
-            echo "No documentation code blocks; no doctests to run."
           fi
+      - name: Build the agent binary under test
+        run: cargo build --locked -p butler-agent --bin butler-agent
+      - name: Run E2E stub tier
+        uses: ./.github/actions/e2e-stub
+      # TODO(#322): replace this hook with assert-home-untouched when PR #322 lands.
+      - name: Assert runner home untouched
+        if: always()
+        shell: bash
+        run: test ! -e "$HOME/.butler"
 
-  # Portability tiers. The agent ships on macOS arm64 only; these jobs track
-  # how far the workspace is from building and passing on Linux and Windows.
-  # Format and source rules are platform-independent and stay in `source`.
-  # The Linux clippy and test steps are non-blocking (step continue-on-error:
-  # the job stays green, the step and its annotation show the failure) until
-  # the platform port (crates/butler-platform, stage 0 onward) fixes the known
-  # Linux failures; then drop continue-on-error and make the jobs required.
-  # Setup failures, including the ORT recipe, still fail the job.
-  linux-clippy:
-    name: Linux clippy (${{ matrix.target }}, ${{ matrix.pass }})
-    if: github.event.action != 'labeled' || github.event.label.name == 'full-ci'
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        target: [linux-x64, linux-arm64]
-        pass: [production, all-targets]
-        include:
-          - target: linux-x64
-            runner: ubuntu-latest
-          - target: linux-arm64
-            runner: ubuntu-24.04-arm
-          - pass: production
-            targets: --lib --bins
-          - pass: all-targets
-            targets: --all-targets
+  linux-arm64:
+    name: Rust checks (Linux arm64)
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 180
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Rust and protoc
-        uses: ./.github/actions/rust-agent-setup
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust-agent-setup
         with:
           components: clippy
-          native-deps: protoc
-          cache-key: clippy-${{ matrix.pass }}-${{ matrix.target }}
-
-      # --keep-going reports every crate that fails, not only the first.
-      - name: Run Clippy
-        continue-on-error: true
-        run: cargo clippy --workspace ${{ matrix.targets }} --locked --keep-going -- -D warnings
-
-  linux-test:
-    name: Linux tests (${{ matrix.target }})
-    if: >-
-      (github.event.action != 'labeled' || github.event.label.name == 'full-ci') &&
-      (github.event_name != 'pull_request' || github.base_ref == 'main' ||
-       contains(github.event.pull_request.labels.*.name, 'full-ci'))
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 150
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: linux-x64
-            runner: ubuntu-latest
-          - target: linux-arm64
-            runner: ubuntu-24.04-arm
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Rust and the static ONNX Runtime
-        uses: ./.github/actions/rust-agent-setup
-        with:
-          native-deps: ort
-          cache-key: test-${{ matrix.target }}
-
-      - name: Install cargo-nextest
-        uses: taiki-e/install-action@v2
+          native-deps: prebuilt-ort
+          cache-key: full-linux-arm64
+      - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
-
-      - name: Build tests
-        id: build
-        continue-on-error: true
-        run: cargo nextest run --workspace --locked --no-run
-
+      - name: Clippy production targets
+        run: cargo clippy --workspace --lib --bins --locked --keep-going -- -D warnings
+      - name: Clippy all targets
+        run: cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
       - name: Run tests
-        if: steps.build.outcome == 'success'
-        continue-on-error: true
         run: cargo nextest run --workspace --locked --no-fail-fast
+      - name: Assert runner home untouched
+        if: always()
+        shell: bash
+        run: test ! -e "$HOME/.butler"
 
   windows-check:
     # Windows is not ported: the host and CLI are unix-only and main.rs prints
     # "not yet available". This compile check only reports how far the
     # workspace is from building; its failures never fail the workflow.
     name: Windows compile check (x86_64-pc-windows-msvc)
-    if: github.event.action != 'labeled' || github.event.label.name == 'full-ci'
+    needs: source
+    if: >-
+      always() && (github.event_name != 'pull_request' || needs.source.outputs.windows == 'true')
     runs-on: windows-latest
     timeout-minutes: 60
     defaults:
@@ -244,7 +174,7 @@ jobs:
       - name: Set up Rust and protoc
         uses: ./.github/actions/rust-agent-setup
         with:
-          native-deps: protoc
+          native-deps: prebuilt-ort
           cache-key: windows-check
 
       - name: Check the workspace
@@ -293,3 +223,32 @@ jobs:
                   print(f"\n| Errors | By {title} |\n| ---: | --- |")
                   print("\n".join(f"| {count} | `{name}` |" for name, count in counter.most_common(limit)))
           PY
+
+  install-full:
+    name: Full install smoke
+    if: github.event_name != 'pull_request'
+    uses: ./.github/workflows/install-smoke.yml
+
+  nightly-issue:
+    name: Report nightly failure
+    if: always() && github.event_name == 'schedule' && contains(needs.*.result, 'failure')
+    needs: [source, rust-checks, linux-arm64, windows-check, install-full]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title='Nightly Rust CI failure'
+          body="The nightly Rust CI failed: $RUN_URL"
+          number="$(gh issue list --state open --limit 1000 --json number,title --jq '.[] | select(.title == "Nightly Rust CI failure") | .number' | head -1)"
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi

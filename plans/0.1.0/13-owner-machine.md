@@ -18,4 +18,4 @@ Do this only when the owner asks. Never kill a process by name pattern. The owne
 - Keep `~/.butler/backups/pre-legacy-drop-*` until the upgraded service has run cleanly for a day. Then drop it, along with the older upgrade backups.
 
 ## Project-ledger sync
-The `butler` project in the ledger was last updated 2026-08-31. No CLI command publishes to the ledger. With the service running, open the `butler` project in the App and ask Butler to record the spec and decision entries from `HANDOFF.md` §5 as plan and spec items. Butler writes the ledger itself through its publication path; never hand-edit ledger files.
+The `butler` project in the ledger was last updated 2026-08-31. Publish with the Project Ledger CLI (`packages/project-ledger/bin/project-ledger plan|record create|update --project . --from <file>`, `BUTLER_DATA=~/.butler`), then run `render dashboard|handoff|roadmap --write` and `check`. Never hand-edit ledger files. The 2026-09-29 docs are already published (see plans/README.md).
