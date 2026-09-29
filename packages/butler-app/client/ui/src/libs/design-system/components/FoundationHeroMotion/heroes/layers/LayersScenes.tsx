@@ -1,147 +1,60 @@
-import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
-import { KeyValueRow } from "../../../../blocks/KeyValueRow";
-import { Typo } from "../../../Typo";
-import type { SceneGeometry } from "../scene/types";
+import type { CSSProperties } from "react";
 import { Reveal as R } from "../shared/Reveal";
-import { LAYERS, SHEETS, zToken, zValue, type LayersCopy, type Sheet } from "./layersCopy";
-import { Overlay, Scrim, Sticky } from "./LayersOverlays";
-import { useExtrusions, Slab } from "./LayersExtrusions";
-import { Page } from "./LayersPage";
-import { clearance, quarter, TURN } from "./layersView";
+import { Roller } from "../shared/Roller";
+import { Z, zValue, type LayersCopy } from "./layersCopy";
 import s from "./LayersHero.module.css";
 
-/** The title's touch: three offset copies of the word, merging into one. */
-export function TitleCopies({ title }: { title: string }) {
+/** Layers of the composed screen, low to high. */
+export const SCREEN = ["sticky", "drawer", "overlay", "dialog", "popover", "tooltip"] as const;
+
+/** How far each layer steps from the one below when separated (canvas px, flat). */
+export const SPREAD = { x: 20, y: 14 } as const;
+
+/**
+ * The token field: the stacking order as numbered sheets, each z token a
+ * sheet laid over the one below, stepped along a flat diagonal.
+ */
+export function LayersField() {
   return (
-    <span className={s.titleStack}>
-      <span className={s.titleCopy} data-k="2" data-t="tc-2">
-        {title}
-      </span>
-      <span className={s.titleCopy} data-k="1" data-t="tc-1">
-        {title}
-      </span>
-      <span>{title}</span>
-    </span>
-  );
-}
-
-/** The window's layout follows the hero's canvas: the phone canvas shows the compact app (no docked sidebar). */
-function useCompact(ref: RefObject<HTMLElement | null>) {
-  const [compact, setCompact] = useState(false);
-  useLayoutEffect(() => {
-    const board = ref.current?.parentElement?.closest<HTMLElement>("[data-layout]");
-    if (!board) return undefined;
-    const read = () => setCompact(board.dataset.layout === "tall");
-    read();
-    const observer = typeof MutationObserver === "function" ? new MutationObserver(read) : null;
-    observer?.observe(board, {
-      attributeFilter: ["data-layout"],
-      attributes: true,
-    });
-    return () => observer?.disconnect();
-  }, [ref]);
-  return compact;
-}
-
-function content(sheet: Sheet, copy: LayersCopy, compact: boolean): ReactNode {
-  switch (sheet) {
-    case "page":
-      return <Page compact={compact} copy={copy} />;
-    case "sticky":
-      return <Sticky compact={compact} copy={copy} />;
-    case "overlay":
-      return <Scrim />;
-    default:
-      return <Overlay copy={copy} part={sheet} />;
-  }
-}
-
-/** A sheet's label, hung on its top right corner and turned back to face the frame: token and value, then what lives there. */
-function Pin({ copy, sheet, k }: { copy: LayersCopy; sheet: Sheet; k: number }) {
-  return (
-    <span className={s.pin} data-t={`pin-${k}`}>
-      <span className={s.tag}>
-        <span className={s.tagHead}>
-          <span className={s.tagToken}>
-            <R name={`lb-${k}-t`}>{zToken(sheet)}</R>
-          </span>
-          <span className={s.tagValue}>
-            <R name={`lb-${k}-v`}>{zValue(sheet)}</R>
-          </span>
-        </span>
-        <span className={s.tagLives}>
-          <R name={`lb-${k}-d`}>{copy.lives[sheet]}</R>
-        </span>
-      </span>
-    </span>
+    <div className={s.field}>
+      <div className={s.sheets} data-m="field">
+        {Z.map((name, k) => (
+          <div className={s.sheet} data-t={`zs-${k}`} key={name} style={{ "--k": k } as CSSProperties}>
+            <span className={s.sheetNum}><R name={`zs-${k}-v`}>{zValue(name) || "0"}</R></span>
+            <span className={s.sheetName}><R name={`zs-${k}-n`}>{`--z-${name}`}</R></span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
 /**
- * The Butler window as a stack of full-size sheets, one per open layer, low
- * to high: each draws only what lives on it, where it sits in the window, so
- * flat they are one screen. Live in the scene (the timeline lifts the
- * sheets, draws their rims and hangs their labels), still in the poster.
+ * Scenes 3 and 4: a screen built layer by layer (page, sticky header,
+ * drawer, overlay, dialog, popover, tooltip), each layer with its z value;
+ * then a "separate" slider spreads the layers apart along a flat diagonal
+ * and closes them again.
  */
-export function Screen({ copy, live, g = null }: { copy: LayersCopy; live: boolean; g?: SceneGeometry | null }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const compact = useCompact(ref);
-  const boxes = useExtrusions(ref, live);
-  const t = (name: string) => (live ? name : undefined);
-  const view = g?.boxes.screen ? { ...TURN[g.layout], clear: clearance(g.layout), s: quarter(g.canvas, g.boxes.screen, g.layout, true).s } : null;
-  const style = view
-    ? ({
-        "--q-rx": `${view.rx}deg`,
-        "--q-rz": `${view.rz}deg`,
-        "--q-s": view.s,
-        "--q-clear": `${view.clear}px`,
-      } as CSSProperties)
-    : undefined;
+export function LayersScreen({ copy }: { copy: LayersCopy }) {
   return (
-    <div className={s.screen} data-m={live ? "screen" : undefined} ref={ref} style={style}>
-      {SHEETS.map((sheet, k) => (
-        <div className={s.sheet} data-sheet={sheet} data-t={t(`sh-${k}`)} key={sheet}>
-          {live ? (boxes[k] ?? []).map((box, i) => <Slab box={box} compact={compact} k={k} key={i} />) : null}
-          <div className={s.plane} data-plane data-t={t(`pl-${k}`)}>
-            {content(sheet, copy, compact)}
+    <div className={s.screenRegion}>
+      <div className={s.screenStage} data-m="screen">
+        <div className={s.screen}>
+          <div className={s.page} data-t="ly-page">
+            <span className={s.pageLabel}><R name="ly-page-t">{copy.page}</R></span>
+            {[0, 1, 2, 3, 4].map((line) => <span className={s.pageLine} key={line} />)}
           </div>
-          {live && sheet === "overlay" ? <span className={s.rim} data-t={`rim-${k}`} /> : null}
-          {live ? <Pin copy={copy} k={k} sheet={sheet} /> : null}
+          {SCREEN.map((layer, k) => (
+            <div className={s.plane} data-layer={layer} data-t={`ly-${k}`} key={layer}>
+              <span className={s.planeNote}><R name={`ly-${k}-n`}>{`--z-${layer} ${zValue(layer)}`}</R></span>
+            </div>
+          ))}
         </div>
-      ))}
-    </div>
-  );
-}
-
-/** The poster's window, drawn smaller to fit its tile. */
-export function PosterScreen({ copy }: { copy: LayersCopy }) {
-  return (
-    <div className={s.posterScreen}>
-      <Screen copy={copy} live={false} />
-    </div>
-  );
-}
-
-/** Finale: every z token, high to low, with its value and what lives there (live in the scene: each row is written in turn). */
-export function Ladder({ copy, live = false }: { copy: LayersCopy; live?: boolean }) {
-  return (
-    <div className={s.ladder}>
-      {[...LAYERS].reverse().map((layer, i) => (
-        <div data-t={live ? `lr-${i}` : undefined} key={layer}>
-          <KeyValueRow description={copy.lives[layer]} label={<Typo.Code>{zToken(layer)}</Typo.Code>} value={zValue(layer)} />
+        <div className={s.slider}>
+          <span className={s.sliderLabel}><R name="sep-t">{copy.separate}</R></span>
+          <span className={s.track}><span className={s.thumb} data-t="sep-thumb" /></span>
+          <Roller className={s.sliderRead} id="sep" poster={0} values={["0px", `${SPREAD.x}px`]} />
         </div>
-      ))}
-    </div>
-  );
-}
-
-/** The window and, beside it, the ladder the window slides to make room for: one element, so the window on the finale is the very one that was taken apart. */
-export function Ending({ copy, g }: { copy: LayersCopy; g: SceneGeometry | null }) {
-  return (
-    <div className={s.ending}>
-      <Screen copy={copy} g={g} live />
-      <div className={s.ladderBox} data-m="ladder">
-        <Ladder copy={copy} live />
       </div>
     </div>
   );
