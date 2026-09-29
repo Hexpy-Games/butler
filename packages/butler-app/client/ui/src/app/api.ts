@@ -410,6 +410,15 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (method === "PATCH" && url.pathname === "/settings") {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "updateSettings", parseBody(options.body)));
   }
+  if (method === "GET" && url.pathname === "/security") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getSecurity"));
+  }
+  if (method === "POST" && url.pathname === "/security/connection-code/reveal") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "revealConnectionCode"));
+  }
+  if (method === "POST" && url.pathname === "/security/connection-code/rotate") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "rotateConnectionCode"));
+  }
   if (method === "GET" && url.pathname === "/command-palette") {
     return await callBridge<T>(bridge, "searchCommandPalette", { query: url.searchParams.get("query") ?? "" });
   }

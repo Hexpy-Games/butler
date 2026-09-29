@@ -108,6 +108,7 @@ import {
   readCacheBudgetArtifact,
 } from "./cache-budget-runtime.mjs";
 import { createSessionFolderLauncher } from "./session-folder-launch.mjs";
+import { isSecuritySenderOrigin, readAppLocalAdmin, requestSecurityRoute } from "./app-security-admin.mjs";
 import {
   APP_RENDERER_ORIGIN,
   APP_RENDERER_SCHEME,
@@ -2381,6 +2382,34 @@ ipcMain.handle("butler:window-close", (event) => {
 ipcMain.handle("butler:get-local-auth-headers", async () =>
   await appLocalAuthHeaders(),
 );
+
+// A rotated connection code (security.connection_code_rotated, a rotate
+// response or a 401 live stream) invalidates the cached token; the data
+// folder token file holds the new one.
+ipcMain.handle("butler:reload-local-auth", () => ({
+  reloaded: bundledAgentSupervisor.reloadLocalAuth(),
+}));
+
+// Settings -> Security calls go out from main: only main reads the admin
+// credential, and it never reaches the renderer. A rotation re-reads the
+// token here; the admin credential stays.
+ipcMain.handle("butler:security-request", async (event, input) => {
+  const allowed = isSecuritySenderOrigin(event.senderFrame?.origin, {
+    appOrigin: APP_RENDERER_ORIGIN,
+    devOrigin: explicitUiUrl ? rendererOrigin : null,
+  });
+  if (!allowed) {
+    return { ok: false, error: { schema: "butler.app.bridge-error.v1", code: "sender_not_allowed" } };
+  }
+  return await requestSecurityRoute(input, {
+    ensureReady: ensureServer,
+    fetch,
+    serverUrl,
+    authHeaders: appLocalAuthHeaders,
+    adminCredential: readAppLocalAdmin({ butlerData: butlerDataRoot }),
+    onRotated: () => bundledAgentSupervisor.reloadLocalAuth(),
+  });
+});
 
 ipcMain.handle("butler:start-openai-oauth-login", async () =>
   await startOpenAIOAuthLogin(),

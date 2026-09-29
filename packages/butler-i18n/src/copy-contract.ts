@@ -902,6 +902,7 @@ export interface AppCopy {
       logs: string;
       personalization: string;
       privacy: string;
+      security: string;
       system: string;
       archives: string;
       about: string;
@@ -918,6 +919,7 @@ export interface AppCopy {
       logs: string;
       personalization: string;
       privacy: string;
+      security: string;
       system: string;
       archives: string;
       about: string;
@@ -934,13 +936,14 @@ export interface AppCopy {
       logs: string[];
       personalization: string[];
       privacy: string[];
+      security: string[];
       system: string[];
       archives: string[];
       about: string[];
     };
     sectionState: { loading: string; error: string; retry: string; empty: string };
     updateComponents: { app: string; service: string };
-    pageSections: Record<"languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview", string>;
+    pageSections: Record<"languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "connectionCode" | "allowedHosts", string>;
     pageSectionDescriptions: Record<"notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     modelsAdvanced: { title: string; contents: string };
@@ -1248,6 +1251,38 @@ export interface AppCopy {
         windows: string;
         fallback: string;
       };
+    };
+    security: {
+      remoteAccess: string;
+      remoteAccessDescription: string;
+      addresses: string;
+      noAddresses: string;
+      copyAddress: string;
+      copied: string;
+      code: string;
+      createdAt: (date: string) => string;
+      reveal: string;
+      hide: string;
+      copy: string;
+      rotate: string;
+      rotateTitle: string;
+      rotateConfirm: string;
+      rotated: string;
+      hostOnly: string;
+      /** 403 admin_credential_required: this computer, but the app's admin credential is missing. */
+      adminRequired: string;
+      revealFailed: string;
+      rotateFailed: string;
+      /** The Advanced section header and the disclosure row that reveals allowed hosts. */
+      advanced: string;
+      advancedContents: string;
+      hosts: string;
+      hostsDescription: string;
+      noHosts: string;
+      hostPlaceholder: string;
+      addHost: string;
+      removeHost: (host: string) => string;
+      invalidHost: string;
     };
     workStatus: {
       title: string;
