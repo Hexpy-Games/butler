@@ -1,3 +1,5 @@
+#[cfg(debug_assertions)]
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::{sync::Arc, time::Duration};
 
 use chrono::DateTime;
@@ -6,6 +8,14 @@ use tokio::{sync::Notify, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
 use super::super::{AppApplication, GatewayApplicationError};
+
+#[cfg(debug_assertions)]
+static NEXT_DUE_READS: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(debug_assertions)]
+pub(crate) fn next_due_read_count() -> usize {
+    NEXT_DUE_READS.load(Ordering::Relaxed)
+}
 
 pub(crate) fn signals() -> (Arc<Notify>, Arc<std::sync::atomic::AtomicBool>) {
     (
@@ -30,12 +40,16 @@ impl AutomationScheduler {
     }
 
     pub(crate) fn initialize(&self, app: AppApplication) -> Result<(), GatewayApplicationError> {
+        #[cfg(debug_assertions)]
+        NEXT_DUE_READS.store(0, Ordering::Relaxed);
         let cancel = self.cancellation.clone();
         let wake = self.wake.clone();
         *self.task.lock() = Some(tokio::spawn(async move {
             // Recovery also dispatches runs queued before a restart.
             let _ = dispatch(&app).await;
             loop {
+                #[cfg(debug_assertions)]
+                NEXT_DUE_READS.fetch_add(1, Ordering::Relaxed);
                 let next = match app.next_automation_due().await {
                     Ok(next) => next,
                     Err(_) => {

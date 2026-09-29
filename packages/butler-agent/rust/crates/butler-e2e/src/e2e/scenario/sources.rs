@@ -42,7 +42,25 @@ pub(super) async fn replay_source(
     stub_codex_home: Option<std::path::PathBuf>,
     launch: &mut Launch,
 ) -> Result<SourceSetup, HarnessError> {
-    let cassette = Cassette::load(name)?;
+    replay_loaded_cassette(Cassette::load(name)?, placeholders, stub_codex_home, launch).await
+}
+
+/// Replays an in-memory test stub through the same local provider as a cassette.
+pub(super) async fn stub_source(
+    cassette: Cassette,
+    placeholders: &Placeholders,
+    stub_codex_home: Option<std::path::PathBuf>,
+    launch: &mut Launch,
+) -> Result<SourceSetup, HarnessError> {
+    replay_loaded_cassette(cassette, placeholders, stub_codex_home, launch).await
+}
+
+async fn replay_loaded_cassette(
+    cassette: Cassette,
+    placeholders: &Placeholders,
+    stub_codex_home: Option<std::path::PathBuf>,
+    launch: &mut Launch,
+) -> Result<SourceSetup, HarnessError> {
     let choice = ModelChoice {
         model: cassette.meta.model.clone(),
         effort: cassette.meta.effort.clone(),
