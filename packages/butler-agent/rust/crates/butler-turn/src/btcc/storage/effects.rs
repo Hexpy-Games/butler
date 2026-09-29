@@ -88,6 +88,27 @@ impl StorageEffectJournal {
             .map_err(EffectFailure::from)
     }
 
+    /// Marks every handoff whose helper is gone without a report (`spawned`)
+    /// as done. Called by an instance that has just become ready: a restart
+    /// the service asked of its manager leaves no helper to report, and the
+    /// instance that came up is the outcome. A `claimed` handoff (a crash
+    /// before the spawn) stays uncertain.
+    pub async fn finish_spawned_restart_handoffs(&self) -> EffectResult<()> {
+        self.storage
+            .execute(move |db| {
+                db.execute(
+                    "UPDATE btcc_guided_effects SET handoff_state='ready', handoff_error=NULL \
+                     WHERE capability='request_service_restart' \
+                     AND status='applied' AND handoff_state='spawned'",
+                    [],
+                )
+                .map(|_| ())
+                .map_err(super::StorageError::sqlite)
+            })
+            .await
+            .map_err(EffectFailure::from)
+    }
+
     /// A helper reports its outcome through the current serialized BTCC owner.
     /// The CAS also handles a fast helper finishing before its parent writes `spawned`.
     pub async fn finish_restart_handoff(

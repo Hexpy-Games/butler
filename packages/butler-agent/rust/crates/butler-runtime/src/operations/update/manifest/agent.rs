@@ -6,7 +6,12 @@ use tokio_util::sync::CancellationToken;
 
 use super::{MAX_MANIFEST_BYTES, read_manifest};
 
-const AGENT_PLATFORM: &str = "darwin-arm64";
+/// Butler extracts, activates and restarts the archive it downloads.
+pub(crate) const ACTIVATION_POLICY: &str = "butler-managed";
+/// Butler switches back to the previous version on request.
+pub(crate) const ROLLBACK_POLICY: &str = "supported";
+const LEGACY_ACTIVATION_POLICY: &str = "user-installs-standalone-archive";
+const LEGACY_ROLLBACK_POLICY: &str = "not-managed-by-butler";
 
 pub(crate) struct AgentArtifact {
     pub(crate) version: String,
@@ -68,30 +73,18 @@ pub(crate) async fn load_agent_artifact(
         }
         candidates.push(artifact);
     }
+    // Only the artifact built for this host is ever selected: never one that
+    // names no platform, or a platform this host cannot run.
+    let host_platform = butler_platform::launcher::release_platform();
     let selected = candidates
         .iter()
         .copied()
-        .find(|artifact| string(artifact, "platform") == Some(AGENT_PLATFORM))
-        .or_else(|| {
-            candidates
-                .iter()
-                .copied()
-                .find(|artifact| string(artifact, "platform") == Some("all"))
-        })
-        .or_else(|| {
-            candidates
-                .iter()
-                .copied()
-                .find(|artifact| string(artifact, "platform").is_none())
-        })
+        .find(|artifact| string(artifact, "platform") == Some(host_platform.as_str()))
         .ok_or(UpdateCode::UpdateManifestAgentPlatformMissing)?;
     validate_source_contract(selected)?;
     let version = required_version(selected)?;
     let actual_channel = string(selected, "channel").or(channel).unwrap_or("stable");
-    let platform = string(selected, "platform").unwrap_or("all");
-    if platform != "all" && platform != AGENT_PLATFORM {
-        return Err(UpdateCode::UpdateManifestAgentPlatformMissing.into());
-    }
+    let platform = host_platform.as_str();
     let url = string_any(selected, &["artifact_url", "downloadUrl", "url"]);
     let sha256 = string(selected, "sha256").map(str::to_ascii_lowercase);
     if sha256
@@ -173,10 +166,22 @@ fn validate_source_contract(artifact: &Value) -> Result<(), UpdateError> {
         ("updater_owner", "butler-agent"),
         ("payload_format", "agent-archive"),
         ("staging_policy", "butler-data-updates"),
-        ("activation_policy", "user-installs-standalone-archive"),
-        ("rollback_policy", "not-managed-by-butler"),
     ] {
         if string(artifact, field) != Some(expected) {
+            return Err(UpdateCode::UpdateManifestIncompatible.into());
+        }
+    }
+    // Butler activates and rolls back what it installs. Manifests published
+    // before that (`user-installs-standalone-archive`, `not-managed-by-butler`)
+    // describe the same archive and stay accepted.
+    for (field, accepted) in [
+        (
+            "activation_policy",
+            [ACTIVATION_POLICY, LEGACY_ACTIVATION_POLICY],
+        ),
+        ("rollback_policy", [ROLLBACK_POLICY, LEGACY_ROLLBACK_POLICY]),
+    ] {
+        if !string(artifact, field).is_some_and(|value| accepted.contains(&value)) {
             return Err(UpdateCode::UpdateManifestIncompatible.into());
         }
     }
@@ -251,8 +256,8 @@ mod tests {
                 "updaterOwner": "butler-agent",
                 "payloadFormat": "agent-archive",
                 "stagingPolicy": "butler-data-updates",
-                "activationPolicy": "user-installs-standalone-archive",
-                "rollbackPolicy": "not-managed-by-butler"
+                "activationPolicy": "butler-managed",
+                "rollbackPolicy": "supported"
             }));
             validate_source_contract(&artifact).expect("source manifest fields are accepted");
             assert_eq!(artifact["component"], "agent");
