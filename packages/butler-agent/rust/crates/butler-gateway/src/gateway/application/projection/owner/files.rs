@@ -5,6 +5,8 @@ use rusqlite::OptionalExtension;
 use super::ProjectionContext;
 use crate::gateway::GatewayApplicationError;
 
+/// Transcript files of chats that may still be waiting on projection: those
+/// with an open turn or a staged outbound.
 pub(super) async fn open_turn_transcripts(
     context: &ProjectionContext,
 ) -> Result<Vec<String>, GatewayApplicationError> {
@@ -13,9 +15,10 @@ pub(super) async fn open_turn_transcripts(
         .execute(|db| {
             let mut statement = db
                 .prepare(
-                    "SELECT DISTINCT chat_id FROM turns WHERE state IN (\
+                    "SELECT chat_id FROM turns WHERE state IN (\
                      'queued','accepted','thinking','streaming','waiting_for_form',\
-                     'waiting_for_tool','cancelling','retrying')",
+                     'waiting_for_tool','cancelling','retrying') \
+                     UNION SELECT chat_id FROM app_transport_projection_staged_outbounds",
                 )
                 .map_err(super::super::super::storage::AppStorageError::sqlite)?;
             statement

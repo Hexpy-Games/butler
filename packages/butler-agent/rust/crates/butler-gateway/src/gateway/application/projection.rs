@@ -78,6 +78,12 @@ pub(super) struct TranscriptEvent {
     pub metadata: Option<Map<String, Value>>,
 }
 
+/// Only App outbound and delivery records can change projected state.
+fn changes_projection(event: &TranscriptEvent) -> bool {
+    event.transport.as_deref() == Some("app")
+        && matches!(event.kind.as_str(), "outbound" | "delivery")
+}
+
 async fn project_event(
     context: &ProjectionContext,
     chat_id: &str,

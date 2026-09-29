@@ -23,6 +23,10 @@ use files::{open_turn_transcripts, resolve_chat_file};
 const NOTIFICATION_CAPACITY: usize = 64;
 const SETTLE_DELAY: Duration = Duration::from_millis(25);
 const MAX_RETRY_DELAY: Duration = Duration::from_secs(1);
+/// Rest after a background sweep step that leaves more to do, so a transcript
+/// backlog is worked off at a fraction of a core. Foreground refresh and
+/// watcher-driven syncs never wait on it.
+const SWEEP_PAUSE: Duration = Duration::from_millis(25);
 
 #[derive(Clone)]
 pub(in crate::gateway::application) struct ProjectionOwner {
@@ -80,10 +84,11 @@ impl ProjectionOwner {
                             {
                                 let _ = callback.try_send(Command::Transcript(file.to_owned()));
                             }
-                        } else if path == processed_root
-                            || path == failed_root
-                            || path.parent() == Some(processed_root.as_path())
-                            || path.parent() == Some(failed_root.as_path())
+                        } else if path.extension().is_none_or(|value| value != "tmp")
+                            && (path == processed_root
+                                || path == failed_root
+                                || path.parent() == Some(processed_root.as_path())
+                                || path.parent() == Some(failed_root.as_path()))
                         {
                             let _ = callback.try_send(Command::Terminal);
                         }
@@ -185,9 +190,7 @@ async fn run(
 ) -> Result<(), GatewayApplicationError> {
     let mut work = Work::default();
     for file in open_turn_transcripts(&context).await? {
-        if work.changed_set.insert(file.clone()) {
-            work.changed.push_back(file);
-        }
+        work.enqueue(file);
     }
     loop {
         match receiver.try_recv() {
@@ -251,15 +254,16 @@ async fn run(
                 continue;
             }
             match work.sweep.step(&context).await {
-                Ok(true) if work.resweep => {
+                Ok(SweepStep::Finished) if work.resweep => {
                     work.sweep = Sweep::default();
                     work.resweep = false;
                 }
-                Ok(true) => {
+                Ok(SweepStep::Finished) => {
                     work.pending = false;
                     work.sweep = Sweep::default();
                 }
-                Ok(false) => tokio::task::yield_now().await,
+                Ok(SweepStep::Advanced) => tokio::task::yield_now().await,
+                Ok(SweepStep::Backlog) => tokio::time::sleep(SWEEP_PAUSE).await,
                 Err(_) => {
                     work.sweep = Sweep::default();
                     work.retry = (work.retry.max(SETTLE_DELAY) * 2).min(MAX_RETRY_DELAY);
@@ -291,6 +295,12 @@ struct Work {
 }
 
 impl Work {
+    fn enqueue(&mut self, file: String) {
+        if self.changed_set.insert(file.clone()) {
+            self.changed.push_back(file);
+        }
+    }
+
     async fn command(&mut self, command: Option<Command>, context: &ProjectionContext) -> bool {
         match command {
             Some(Command::Wake) => {
@@ -301,21 +311,20 @@ impl Work {
                     self.retry = SETTLE_DELAY;
                 }
             }
-            Some(Command::Transcript(file)) => {
-                if self.changed_set.insert(file.clone()) {
-                    self.changed.push_back(file);
-                }
-            }
+            Some(Command::Transcript(file)) => self.enqueue(file),
             Some(Command::Terminal) => {
                 if self.terminal {
                     self.terminal_resweep = true;
                 } else {
                     self.terminal = true;
                 }
-                if self.pending {
-                    self.resweep = true;
-                } else {
-                    self.pending = true;
+                // Only chats with an open turn or a staged outbound can be
+                // waiting on a terminal record; the staged finals themselves
+                // are replayed by the deferred sweep.
+                match open_turn_transcripts(context).await {
+                    Ok(files) => files.into_iter().for_each(|file| self.enqueue(file)),
+                    Err(_) if self.pending => self.resweep = true,
+                    Err(_) => self.pending = true,
                 }
             }
             Some(Command::Refresh(chat, completion)) => {
@@ -336,12 +345,29 @@ struct Sweep {
     deferred_after: String,
 }
 
+enum SweepStep {
+    /// Every chat and staged final has been visited.
+    Finished,
+    /// Moved on to the next chat.
+    Advanced,
+    /// Stopped inside a chat or the staged finals with more left.
+    Backlog,
+}
+
 impl Sweep {
-    // A single transcript record or staged final per step leaves room for
+    // A single transcript byte window or staged final per step leaves room for
     // foreground refresh and close without running projection concurrently.
-    async fn step(&mut self, context: &ProjectionContext) -> Result<bool, GatewayApplicationError> {
+    async fn step(
+        &mut self,
+        context: &ProjectionContext,
+    ) -> Result<SweepStep, GatewayApplicationError> {
         if self.deferred {
-            return Ok(!sync_deferred_step(context, &mut self.deferred_after).await?);
+            let more = sync_deferred_step(context, &mut self.deferred_after).await?;
+            return Ok(if more {
+                SweepStep::Backlog
+            } else {
+                SweepStep::Finished
+            });
         }
         if self.active_chat.is_none() {
             let cursor = self.chat_cursor;
@@ -361,13 +387,14 @@ impl Sweep {
         }
         let Some((rowid, chat)) = self.active_chat.as_ref() else {
             self.deferred = true;
-            return Ok(false);
+            return Ok(SweepStep::Advanced);
         };
-        if !sync_chat_once(context, chat).await? {
-            self.chat_cursor = *rowid;
-            self.active_chat = None;
+        if sync_chat_once(context, chat).await? {
+            return Ok(SweepStep::Backlog);
         }
-        Ok(false)
+        self.chat_cursor = *rowid;
+        self.active_chat = None;
+        Ok(SweepStep::Advanced)
     }
 }
 async fn sync_chat(context: &ProjectionContext, chat: &str) -> Result<(), GatewayApplicationError> {

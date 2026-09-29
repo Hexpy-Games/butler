@@ -264,8 +264,13 @@ impl Drop for AdmissionGuard {
     }
 }
 
+/// The BGE-M3 child holds about 570 MB, so an idle one is released; the next
+/// request starts it again.
+const IDLE_REAP: Duration = Duration::from_secs(600);
+
 async fn run_actor(inner: Arc<Inner>) {
     let mut child: Option<WorkerChild> = None;
+    let mut idle_since = Instant::now();
     loop {
         let next = {
             let mut state = inner.state.lock();
@@ -281,25 +286,35 @@ async fn run_actor(inner: Arc<Inner>) {
             let mut state = inner.state.lock();
             state.active_cancel = None;
             state.release(item.bytes);
+            idle_since = Instant::now();
             continue;
         }
         if inner.shutdown.is_cancelled() {
             break;
         }
-        if let Some(process) = child.as_mut() {
-            tokio::select! {
-                () = inner.notify.notified() => {},
-                () = inner.shutdown.cancelled() => {},
-                _ = process.child.wait() => { child = None; },
-            }
-        } else {
-            tokio::select! {
-                () = inner.notify.notified() => {},
-                () = inner.shutdown.cancelled() => {},
-            }
-        }
+        wait_for_work(&inner, &mut child, idle_since + IDLE_REAP).await;
     }
     kill_and_reap(&mut child).await;
+}
+
+/// Sleeps until work, shutdown, the child's exit or `reap_at`, when the idle
+/// child is reaped. Only this actor takes requests off the queue, so one that
+/// arrives during the reap waits in the queue and finds no child: it starts a
+/// new one.
+async fn wait_for_work(inner: &Inner, child: &mut Option<WorkerChild>, reap_at: Instant) {
+    let Some(process) = child.as_mut() else {
+        tokio::select! {
+            () = inner.notify.notified() => {},
+            () = inner.shutdown.cancelled() => {},
+        }
+        return;
+    };
+    tokio::select! {
+        () = inner.notify.notified() => {},
+        () = inner.shutdown.cancelled() => {},
+        _ = process.child.wait() => { *child = None; },
+        () = tokio::time::sleep_until(reap_at) => kill_and_reap(child).await,
+    }
 }
 
 async fn run_item(

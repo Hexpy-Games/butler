@@ -1,10 +1,11 @@
 //! Durable transcript byte boundary identity.
 
+use base64::{Engine, engine::general_purpose::STANDARD};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::super::storage::AppStorageError;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub(super) struct Checkpoint {
     pub chat_id: String,
     pub session_id: String,
@@ -21,7 +22,30 @@ pub(super) struct Checkpoint {
     pub spool_end_offset: u64,
 }
 
+/// `trailing` holds at most one byte window plus one partial record. Checkpoints
+/// written by the native cutover before the window was bounded kept the whole
+/// rest of the transcript here (tens of MB). Loading drops a longer value and
+/// the file is read again from `projected_bytes`: the next read starts at
+/// `projected_bytes + trailing.len()`, where the file still holds those bytes.
+const MAX_TRAILING_BYTES: usize = 128 * 1024;
+
 pub(super) fn load(db: &Connection, chat_id: &str) -> Result<Option<Checkpoint>, AppStorageError> {
+    let oversized = db
+        .query_row(
+            "SELECT length(trailing_text)>?2 FROM app_transcript_projection_checkpoints \
+             WHERE chat_id=?1",
+            params![chat_id, MAX_TRAILING_BYTES.div_ceil(3) * 4],
+            |row| row.get::<_, bool>(0),
+        )
+        .optional()
+        .map_err(AppStorageError::sqlite)?;
+    if oversized == Some(true) {
+        db.execute(
+            "UPDATE app_transcript_projection_checkpoints SET trailing_text='' WHERE chat_id=?1",
+            [chat_id],
+        )
+        .map_err(AppStorageError::sqlite)?;
+    }
     db.query_row(
         "SELECT chat_id,session_id,transcript_path,file_device,file_inode,projected_bytes,\
          modified_at_ms,trailing_text,boundary_anchor_text,spool_path,spool_bytes,spool_end_offset \
@@ -68,66 +92,12 @@ pub(super) fn save(db: &Connection, value: &Checkpoint, now: &str) -> Result<(),
     Ok(())
 }
 
-const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 fn encode(bytes: &[u8]) -> String {
-    let mut result = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let value = (u32::from(chunk[0]) << 16)
-            | (u32::from(*chunk.get(1).unwrap_or(&0)) << 8)
-            | u32::from(*chunk.get(2).unwrap_or(&0));
-        result.push(ALPHABET[((value >> 18) & 63) as usize] as char);
-        result.push(ALPHABET[((value >> 12) & 63) as usize] as char);
-        result.push(if chunk.len() > 1 {
-            ALPHABET[((value >> 6) & 63) as usize] as char
-        } else {
-            '='
-        });
-        result.push(if chunk.len() > 2 {
-            ALPHABET[(value & 63) as usize] as char
-        } else {
-            '='
-        });
-    }
-    result
+    STANDARD.encode(bytes)
 }
+
+/// Unreadable text decodes to nothing: the bytes are then read again from
+/// the transcript, which is where they came from.
 fn decode(value: &str) -> Vec<u8> {
-    let mut output = Vec::with_capacity(value.len() / 4 * 3);
-    for chunk in value.as_bytes().chunks_exact(4) {
-        let Some(a) = index(chunk[0]) else {
-            return Vec::new();
-        };
-        let Some(b) = index(chunk[1]) else {
-            return Vec::new();
-        };
-        let c = if chunk[2] == b'=' {
-            0
-        } else if let Some(v) = index(chunk[2]) {
-            v
-        } else {
-            return Vec::new();
-        };
-        let d = if chunk[3] == b'=' {
-            0
-        } else if let Some(v) = index(chunk[3]) {
-            v
-        } else {
-            return Vec::new();
-        };
-        let bits = (u32::from(a) << 18) | (u32::from(b) << 12) | (u32::from(c) << 6) | u32::from(d);
-        let [_, first, second, third] = bits.to_be_bytes();
-        output.push(first);
-        if chunk[2] != b'=' {
-            output.push(second);
-        }
-        if chunk[3] != b'=' {
-            output.push(third);
-        }
-    }
-    output
-}
-fn index(byte: u8) -> Option<u8> {
-    ALPHABET
-        .iter()
-        .position(|candidate| *candidate == byte)
-        .map(|value| u8::try_from(value).unwrap_or(u8::MAX))
+    STANDARD.decode(value).unwrap_or_default()
 }
