@@ -205,6 +205,11 @@ fn local_timezone() -> String {
             return value.to_owned();
         }
     }
+    if let Ok(butler_platform::instance::SystemTimeZone::Named(name)) =
+        butler_platform::instance::system_time_zone()
+    {
+        return name;
+    }
     std::fs::read_link("/etc/localtime")
         .ok()
         .and_then(|path| {

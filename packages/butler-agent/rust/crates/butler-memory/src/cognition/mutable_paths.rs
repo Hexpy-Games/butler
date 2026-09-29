@@ -47,8 +47,8 @@ fn canonicalize_nearest_existing(path: &Path) -> CognitionResult<PathBuf> {
             Err(_) => return Err(unsafe_path()),
         }
     }
-    let mut resolved =
-        fs::canonicalize(ancestor).map_err(|source| unsafe_path().with_source(source))?;
+    let mut resolved = butler_platform::secure_fs::canonicalize(ancestor)
+        .map_err(|source| unsafe_path().with_source(source))?;
     for component in suffix.iter().rev() {
         match Path::new(component).components().next() {
             Some(Component::Normal(name)) => resolved.push(name),

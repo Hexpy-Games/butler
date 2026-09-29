@@ -4,6 +4,12 @@ use std::collections::HashMap;
 
 use super::Invocation;
 
+pub(super) const POSIX: bool = true;
+
+pub(super) fn add_arguments(command: &mut std::process::Command, invocation: &Invocation) {
+    command.args(&invocation.arguments);
+}
+
 pub(super) fn login_shell(command: &str, _environment: &HashMap<String, String>) -> Invocation {
     Invocation {
         program: "/bin/sh".into(),

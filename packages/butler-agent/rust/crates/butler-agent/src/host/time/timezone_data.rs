@@ -9,7 +9,7 @@ fn failure(message: impl Into<String>) -> ContextError {
     ContextError::new(ContextCode::PromptTimeFormatError, message)
 }
 
-const DATA: &[u8] = include_bytes!("../../../resources/timezones/source-2026c.btz");
+const DATA: &[u8] = butler_platform::time_zone::BASELINE_ARCHIVE;
 
 struct Entry {
     name: &'static str,

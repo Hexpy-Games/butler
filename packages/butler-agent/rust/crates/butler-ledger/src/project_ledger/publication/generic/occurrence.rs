@@ -60,7 +60,7 @@ pub(super) fn read(
     if stored.schema != "butler.btcc-project-ledger-effect-occurrence.v2"
         || stored.status != "pending"
         || stored.ledger_project_id != scope.project_id
-        || stored.ledger_root != scope.root.to_string_lossy()
+        || Path::new(&stored.ledger_root) != scope.root
         || stored.operation_identity.kind != "mutation_call"
         || stored.operation_identity.id != effect_key
         || stored.occurrence_id != id

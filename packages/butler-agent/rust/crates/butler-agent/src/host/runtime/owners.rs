@@ -11,7 +11,6 @@ pub(super) struct RuntimeOwners {
     pub(super) image_files: Arc<butler_gateway::gateway::AppImageFiles>,
     pub(super) attachment_context: Arc<butler_runtime::context::AttachmentContext>,
     pub(super) memory_sync: crate::host::memory_jobs::sync::MemorySync,
-    #[cfg(unix)]
     pub(super) embedding: Arc<super::super::EmbeddingOwner>,
     pub(super) profile: Arc<ProfileService>,
     pub(super) cognition: Arc<CognitionPromptReader>,
@@ -50,7 +49,6 @@ impl HostDependencies for RuntimeOwners {
             });
             let attachment_context = self.attachment_context.close().await.map_err(setup);
             let memory_sync = self.memory_sync.close().await;
-            #[cfg(unix)]
             let embedding = self.embedding.close().await.map_err(setup);
             self.profile.close().await;
             self.cognition.close().await;
@@ -76,7 +74,7 @@ impl HostDependencies for RuntimeOwners {
             let work_streams = self.work_streams.close().await;
             let observer = self.observer.close().await.map_err(BtccError::from);
             let stores = self.stores.close().await;
-            let result = image_files
+            image_files
                 .and(attachment_context)
                 .and(memory_sync)
                 .and(conversation_tools)
@@ -85,10 +83,8 @@ impl HostDependencies for RuntimeOwners {
                 .and(observer)
                 .and(automations)
                 .and(work_streams)
-                .and(stores);
-            #[cfg(unix)]
-            let result = result.and(embedding);
-            result
+                .and(stores)
+                .and(embedding)
         })
     }
 }

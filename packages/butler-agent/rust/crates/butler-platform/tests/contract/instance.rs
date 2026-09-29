@@ -4,10 +4,10 @@ use std::fs::{self, File, OpenOptions};
 use std::path::Path;
 
 use butler_platform::instance::{
-    IdentityError, InstanceLock, LockError, StopError, process_executable, process_start,
-    same_executable, terminate,
+    InstanceLock, LockError, StopError, process_executable, process_start, same_executable,
+    terminate,
 };
-use butler_platform::process_control::{ExitSignal, terminating_signal};
+use butler_platform::process_control::{ExitSignal, SIGNALS, terminating_signal};
 
 use super::{LOCK, REPORT, helper_command, read_report, scratch};
 
@@ -97,18 +97,11 @@ fn instance_lock_is_released_when_its_identified_holder_is_terminated() {
             ));
             terminate(pid, &started).unwrap();
             let status = holder.wait().unwrap();
-            assert_eq!(terminating_signal(status), Some(ExitSignal::Kill));
+            assert_eq!(
+                terminating_signal(status),
+                SIGNALS.then_some(ExitSignal::Kill)
+            );
             assert_ne!(process_start(pid).unwrap(), Some(started));
-        }
-        // Windows identifies processes in its own stage.
-        Err(IdentityError::Unsupported) => {
-            assert!(cfg!(windows));
-            assert!(matches!(
-                terminate(pid, "any start"),
-                Err(StopError::Unsupported)
-            ));
-            holder.kill().unwrap();
-            holder.wait().unwrap();
         }
         other => panic!("the holder's identity: {other:?}"),
     }

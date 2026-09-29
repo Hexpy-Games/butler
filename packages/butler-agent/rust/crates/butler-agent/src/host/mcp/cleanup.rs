@@ -2,12 +2,12 @@
 
 use std::{
     fs::{self, OpenOptions},
-    os::unix::fs::{DirBuilderExt, OpenOptionsExt},
     path::Path,
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use nix::fcntl::{Flock, FlockArg};
+use butler_platform::instance::InstanceLock;
+use butler_platform::secure_fs;
 
 use super::super::ResolvedInstallation;
 use butler_runtime::operations;
@@ -25,13 +25,9 @@ pub(super) fn cleanup_old_tasks(
         .parent()
         .ok_or_else(|| "native_mcp_cleanup_lock_path_invalid".to_owned())?;
     validate_under_data(data_root, lock_parent, installation)?;
-    fs::DirBuilder::new()
-        .recursive(true)
-        .mode(0o700)
-        .create(lock_parent)
-        .map_err(|source| {
-            crate::host::HostError::new("native_mcp_cleanup_lock_unavailable").with_source(source)
-        })?;
+    secure_fs::create_private_dir_all(lock_parent).map_err(|source| {
+        crate::host::HostError::new("native_mcp_cleanup_lock_unavailable").with_source(source)
+    })?;
     validate_under_data(data_root, lock_parent, installation)?;
     match fs::symlink_metadata(&lock_path) {
         Ok(metadata) if metadata.file_type().is_symlink() => {
@@ -41,16 +37,12 @@ pub(super) fn cleanup_old_tasks(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(_) => return Err("native_mcp_cleanup_lock_unavailable".into()),
     }
-    let file = OpenOptions::new()
-        .create(true)
-        .read(true)
-        .write(true)
-        .truncate(false)
-        .mode(0o600)
-        .open(&lock_path)
-        .map_err(|source| {
-            crate::host::HostError::new("native_mcp_cleanup_lock_unavailable").with_source(source)
-        })?;
+    let mut options = OpenOptions::new();
+    options.create(true).read(true).write(true).truncate(false);
+    let _ = secure_fs::owner_only(&mut options);
+    let file = options.open(&lock_path).map_err(|source| {
+        crate::host::HostError::new("native_mcp_cleanup_lock_unavailable").with_source(source)
+    })?;
     if fs::symlink_metadata(&lock_path)
         .map_err(|source| {
             crate::host::HostError::new("native_mcp_cleanup_lock_unavailable").with_source(source)
@@ -60,8 +52,8 @@ pub(super) fn cleanup_old_tasks(
     {
         return Err("native_mcp_cleanup_lock_unavailable".into());
     }
-    let _lock = Flock::lock(file, FlockArg::LockExclusive)
-        .map_err(|(_, error)| format!("native_mcp_cleanup_lock_unavailable: {error}"))?;
+    let _lock = InstanceLock::exclusive(file)
+        .map_err(|error| format!("native_mcp_cleanup_lock_unavailable: {error}"))?;
 
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)

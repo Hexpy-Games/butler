@@ -2,7 +2,7 @@
 
 use std::fs;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::{is_plain_name, not_a_pointer};
 use crate::secure_fs;
@@ -37,6 +37,11 @@ pub(super) fn read(home: &Path, link: &str) -> io::Result<Option<String>> {
     } else {
         Err(not_a_pointer())
     }
+}
+
+pub(super) fn launcher_root(home: &Path, link: &str) -> io::Result<PathBuf> {
+    let target = read(home, link)?.ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))?;
+    Ok(home.join(target))
 }
 
 pub(super) fn remove(home: &Path, link: &str) -> io::Result<()> {

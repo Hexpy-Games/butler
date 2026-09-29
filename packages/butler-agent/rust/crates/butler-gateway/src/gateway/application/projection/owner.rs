@@ -57,7 +57,7 @@ impl ProjectionOwner {
         let watched_root = |relative: &str| {
             let path = context.butler_data.join(relative);
             std::fs::create_dir_all(&path)
-                .and_then(|()| std::fs::canonicalize(&path))
+                .and_then(|()| butler_platform::secure_fs::canonicalize(&path))
                 .map_err(GatewayApplicationError::internal_from)
         };
         let transcript_root = watched_root("transcripts")?;

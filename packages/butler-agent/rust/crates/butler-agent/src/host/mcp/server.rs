@@ -12,7 +12,7 @@ use rmcp::{
 use serde::Deserialize;
 use tokio_util::sync::CancellationToken;
 
-use super::{graph, model, restart, skills, status, stdio::NonblockingStdio};
+use super::{graph, model, restart, skills, status};
 use crate::host::ResolvedInstallation;
 use butler_runtime::operations;
 
@@ -23,7 +23,8 @@ pub(super) async fn serve(
 ) -> Result<(), crate::host::HostError> {
     let mut shutdown = ShutdownSignals::install().map_err(crate::host::HostError::from_error)?;
     let cancellation = CancellationToken::new();
-    let transport = NonblockingStdio::new().map_err(crate::host::HostError::from_error)?;
+    let transport =
+        butler_platform::stdio::ProcessStdio::new().map_err(crate::host::HostError::from_error)?;
     let initialization = McpServer::new(installation, data_root, name)
         .serve_with_ct(transport, cancellation.clone());
     tokio::pin!(initialization);
@@ -49,29 +50,17 @@ pub(super) async fn serve(
     }
 }
 
-struct ShutdownSignals {
-    terminate: tokio::signal::unix::Signal,
-    hangup: tokio::signal::unix::Signal,
-    pipe: tokio::signal::unix::Signal,
-}
+/// Interrupt, terminate, hangup and broken pipe (see
+/// `process_control::session_shutdown_requests`).
+struct ShutdownSignals(butler_platform::process_control::ShutdownRequests);
 
 impl ShutdownSignals {
     fn install() -> std::io::Result<Self> {
-        use tokio::signal::unix::{SignalKind, signal};
-        Ok(Self {
-            terminate: signal(SignalKind::terminate())?,
-            hangup: signal(SignalKind::hangup())?,
-            pipe: signal(SignalKind::pipe())?,
-        })
+        butler_platform::process_control::session_shutdown_requests().map(Self)
     }
 
     async fn recv(&mut self) {
-        tokio::select! {
-            _ = tokio::signal::ctrl_c() => {},
-            _ = self.terminate.recv() => {},
-            _ = self.hangup.recv() => {},
-            _ = self.pipe.recv() => {},
-        }
+        self.0.recv().await;
     }
 }
 
@@ -96,10 +85,7 @@ struct McpServer {
 
 impl McpServer {
     fn new(installation: ResolvedInstallation, data_root: PathBuf, name: String) -> Self {
-        let home = std::env::var_os("HOME")
-            .filter(|value| !value.is_empty())
-            .map(PathBuf::from)
-            .unwrap_or_default();
+        let home = butler_platform::user_dirs::non_empty_home_dir().unwrap_or_default();
         Self {
             installation,
             data_root,

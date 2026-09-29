@@ -6,7 +6,7 @@ pub use task::ingest_task_outcome_memory;
 
 use crate::cognition::CognitionCode;
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::{self, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
 };
@@ -308,9 +308,7 @@ fn append_durable(path: &Path, bytes: &[u8]) -> CognitionResult<()> {
         })
         .map_err(io_error)?;
     if !existed {
-        File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(io_error)?;
+        butler_platform::secure_fs::sync_path(parent).map_err(io_error)?;
     }
     Ok(())
 }

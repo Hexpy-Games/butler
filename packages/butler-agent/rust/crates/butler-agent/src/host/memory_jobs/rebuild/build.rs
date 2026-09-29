@@ -52,13 +52,10 @@ pub(super) async fn run(
     };
     let handle = resolve_generation(data_root, paths, &target)?;
     let inventory = read_build_inventory(data_root, &handle, cancellation)?;
-    let os = nix::sys::utsname::uname()
+    let os = butler_platform::instance::os_release()
         .map_err(|source| error(CognitionCode::EnvironmentUnavailable).with_source(source))?;
-    let home = std::env::var_os("HOME")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_default();
-    let environment =
-        ProcessEnvironment::capture(data_root, &home, &os.release().to_string_lossy());
+    let home = butler_platform::user_dirs::home_dir().unwrap_or_default();
+    let environment = ProcessEnvironment::capture(data_root, &home, &os);
     let collation = Arc::new(
         LocaleCollation::new("en-US")
             .map_err(|source| error(CognitionCode::LocaleUnavailable).with_source(source))?,

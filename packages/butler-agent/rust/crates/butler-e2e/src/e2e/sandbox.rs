@@ -2,6 +2,7 @@
 //! private `HOME`/`CODEX_HOME` so the owner's `~/.butler` and `~/.codex` are
 //! never read or written.
 
+use butler_platform::secure_fs::Canonical as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -28,7 +29,7 @@ impl Sandbox {
         let base = std::env::temp_dir().join("butler-e2e");
         fs::create_dir_all(&base)?;
         // Canonical path: macOS temp dirs are symlinks, and the product resolves them.
-        let base = base.canonicalize()?;
+        let base = base.canonical()?;
         let root = base.join(format!(
             "{}-{}",
             scenario.to_lowercase(),
@@ -36,7 +37,9 @@ impl Sandbox {
         ));
         let install = root.join("install");
         let resources = install.join("resources");
-        let binary = install.join("bin/butler-agent");
+        let binary = install
+            .join("bin")
+            .join(format!("butler-agent{}", std::env::consts::EXE_SUFFIX));
         fs::create_dir_all(install.join("bin"))?;
         // A copy (an APFS clone), never a hard link: macOS reports a process's
         // executable (proc_pidpath) under the name its file was last looked

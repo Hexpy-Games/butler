@@ -12,14 +12,10 @@ pub(in crate::gateway::application) async fn sync_chat_once(
     chat_id: &str,
 ) -> Result<bool, GatewayApplicationError> {
     let session_id = crate::gateway::application::snapshot_input::session_hint(chat_id);
-    let file_name = format!(
-        "{}.jsonl",
-        session_id.replace(
-            |ch: char| !ch.is_ascii_alphanumeric() && !"._-".contains(ch),
-            "_"
-        )
-    );
-    let path = context.butler_data.join("transcripts").join(file_name);
+    let path = context
+        .butler_data
+        .join("transcripts")
+        .join(transcript_name(&session_id));
     let chat = chat_id.to_owned();
     let prior = context
         .storage
@@ -32,8 +28,18 @@ pub(in crate::gateway::application) async fn sync_chat_once(
         .map_err(GatewayApplicationError::internal_from)??;
     let Some(state) = state else { return Ok(false) };
     let spool_path = spool_path(&context.butler_data, chat_id, &path);
+    let reusable = prior
+        .as_ref()
+        .is_some_and(|value| super::byte_window::reusable(value, &path, state.size));
+    if reusable
+        && prior
+            .as_ref()
+            .is_some_and(|value| is_complete(value, &state))
+    {
+        return Ok(false);
+    }
     let mut checkpoint = match prior.clone() {
-        Some(value) if super::byte_window::reusable(&value, &path, state.size) => value,
+        Some(value) if reusable => value,
         found => {
             if found.is_some() {
                 eprintln!(
@@ -79,6 +85,26 @@ pub(in crate::gateway::application) async fn sync_chat_once(
     // An unproven old claim retains its original event and yields this sync.
     // Reporting pending here would replay that same record in a tight loop.
     Ok(advanced && pending)
+}
+
+fn transcript_name(session_id: &str) -> String {
+    format!(
+        "{}.jsonl",
+        session_id.replace(
+            |ch: char| !ch.is_ascii_alphanumeric() && !"._-".contains(ch),
+            "_"
+        )
+    )
+}
+
+// An unchanged, completed transcript must not rewrite its checkpoint on a
+// later sweep. A changed file identity still updates the durable checkpoint.
+fn is_complete(checkpoint: &Checkpoint, state: &FileState) -> bool {
+    checkpoint.projected_bytes == state.size
+        && checkpoint.trailing.is_empty()
+        && checkpoint.spool_bytes == 0
+        && checkpoint.device == state.device
+        && checkpoint.inode == state.inode
 }
 
 struct FileState {
