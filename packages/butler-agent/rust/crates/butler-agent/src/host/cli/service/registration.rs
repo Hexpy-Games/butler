@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 
 use super::{Action, Options};
 use crate::host::ResolvedInstallation;
-use crate::host::service::cli_launcher::LaunchPaths;
+use butler_runtime::operations::AgentHome;
 
 pub(super) fn run(
     action: Action,
@@ -59,14 +59,30 @@ fn install(
             message: error.message().to_owned(),
         }
     })?;
-    let paths = LaunchPaths::select(installation);
+    // The job runs the CLI installation through `current`, so an update needs
+    // no new definition. It is never pointed at an App bundle or a legacy
+    // directory, nor set up next to a service the App supervises.
+    let home = AgentHome::resolve().map_err(|error| refused(error.code()))?;
+    let paths = home.launcher_target();
+    if home.active().ok().flatten().is_none() || !paths.program.is_file() {
+        return Err(refused(
+            "install the Agent first (butler install --from ARCHIVE)",
+        ));
+    }
+    if super::running_instance(&data_root)
+        .ok()
+        .flatten()
+        .is_some_and(|record| record.app_supervised)
+    {
+        return Err(refused("the Butler App supervises this service"));
+    }
     let data_text = data_root.to_string_lossy().into_owned();
     let mut env = vec![("BUTLER_DATA".to_owned(), data_text.clone())];
-    // A login service starts with a minimal PATH; keep the one it was
-    // installed from so the tools it runs resolve.
-    if let Ok(path) = std::env::var("PATH") {
-        env.push(("PATH".to_owned(), path));
-    }
+    // The service settings this command was run with are the job's.
+    env.extend(JOB_SETTINGS.iter().filter_map(|name| {
+        let value = std::env::var(name).ok().filter(|value| !value.is_empty())?;
+        Some(((*name).to_owned(), value))
+    }));
     let definition = Definition {
         program: paths.program,
         args: vec![
@@ -145,5 +161,21 @@ fn state_word(state: Option<bool>, yes: &'static str, no: &'static str) -> &'sta
         Some(true) => yes,
         Some(false) => no,
         None => "unknown",
+    }
+}
+
+/// Settings of the service that `service install` records in the job, when
+/// they are set: where the gateway listens and where secrets are kept.
+const JOB_SETTINGS: [&str; 3] = [
+    "BUTLER_APP_SERVER_HOST",
+    "BUTLER_APP_SERVER_PORT",
+    "BUTLER_SECRET_STORE",
+];
+
+/// A refusal to register, worded as an error of the manager call.
+fn refused(message: &str) -> Error {
+    Error::Manager {
+        command: "service install".into(),
+        message: message.to_owned(),
     }
 }

@@ -16,6 +16,7 @@ use crate::host::service::instance::{
 };
 use crate::host::{ResolvedInstallation, ServiceConfiguration};
 
+mod managed;
 mod probe_auth;
 mod readiness;
 mod restart_handoff;
@@ -172,6 +173,15 @@ async fn start_service_admitted(
         let ready = wait_until_ready(config, None, Some(record.nonce.clone())).await?;
         return Ok(start_result(&ready, false));
     }
+    if managed::job_loaded() {
+        // The login job is loaded but idle: it, not this process, runs the
+        // service, so it stays under the manager.
+        managed::request(butler_platform::service_registration::start).await?;
+        let registered = wait_for_app_respawn(data_root, "").await?;
+        drop(admission);
+        let ready = wait_until_ready(config, None, Some(registered.nonce)).await?;
+        return Ok(start_result(&ready, true));
+    }
     let mut spawned = spawn_service(installation, data_root)?;
     let registered = match wait_until_registered(data_root, &mut spawned).await {
         Ok(record) if record.pid == spawned.id() => record,
@@ -224,11 +234,15 @@ async fn start_replacement(
     let StopReport::Stopped(instance) = stopped else {
         return start_service_admitted(installation, config, admission).await;
     };
-    if !instance.app_supervised {
+    if !instance.app_supervised && !instance.managed {
         return start_service_admitted(installation, config, admission).await;
     }
-    // Admission stays held until the App's instance is registered, so no
-    // controller can start a CLI-environment instance in its place.
+    if instance.managed {
+        managed::request(butler_platform::service_registration::start).await?;
+    }
+    // Admission stays held until the App's (or the login job's) instance is
+    // registered, so no controller can start a CLI-environment instance in
+    // its place.
     let registered = wait_for_app_respawn(&config.data_root, &instance.nonce).await?;
     drop(admission);
     let ready = wait_until_ready(config, None, Some(registered.nonce)).await?;

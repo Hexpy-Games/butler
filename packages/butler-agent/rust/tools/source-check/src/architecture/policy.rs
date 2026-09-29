@@ -19,7 +19,7 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // with secure_fs; login-start definitions live under the user's home.
         "command_launcher" => &["launcher", "user_dirs"],
         "install_link" => &["secure_fs"],
-        "service_registration" => &["user_dirs"],
+        "service_registration" => &["instance", "user_dirs"],
         // butler-core: leaf codecs and mirrors; JSON sanitizes public text.
         "configuration" | "js_date" | "json_lines" | "locale" | "public_text" | "segmentation"
         | "tool_protocol" => &[],

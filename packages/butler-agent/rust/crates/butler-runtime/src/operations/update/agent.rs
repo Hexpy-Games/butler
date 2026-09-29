@@ -54,6 +54,14 @@ impl AgentArchiveUpdateService {
         }
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(60))
+            // A redirect never leaves https (or this machine) for plain http.
+            .redirect(reqwest::redirect::Policy::custom(|attempt| {
+                if attempt.previous().len() >= 5 || !secure_source(attempt.url().as_str()) {
+                    attempt.stop()
+                } else {
+                    attempt.follow()
+                }
+            }))
             .build()
             .map_err(|source| UpdateError::caused(UpdateCode::UpdateHttpUnavailable, source))?;
         let manifest = std::env::var("BUTLER_UPDATE_MANIFEST")
@@ -148,6 +156,9 @@ impl AgentArchiveUpdateService {
         download_url: Option<&str>,
     ) -> Result<String, UpdateError> {
         let url = download_url.ok_or(UpdateCode::UpdateArtifactUrlMissing)?;
+        if !secure_source(url) {
+            return Err(UpdateCode::UpdateArtifactSourceInvalid.into());
+        }
         let sha256 = status["sha256"]
             .as_str()
             .ok_or(UpdateCode::UpdateArtifactSha256Missing)?;
@@ -168,25 +179,37 @@ impl AgentArchiveUpdateService {
         .await
     }
 
-    /// Downloads (or copies) an archive to DATA, checking `sha256` before
-    /// keeping it, and returns its path. For `butler install --from <url>`.
+    /// Downloads an archive into `directory` (a scratch directory outside
+    /// DATA that the caller removes), checking `sha256` before keeping it,
+    /// and returns its path. Only `https` is fetched, and `http` from this
+    /// machine (tests); a download larger than the archive cap is refused.
+    /// For `butler install --from <url>`.
     ///
     /// # Errors
     ///
-    /// The download and digest codes of the update flow.
-    pub async fn fetch_archive(&self, source: &str, sha256: &str) -> Result<PathBuf, UpdateError> {
-        let label = format!("updates/artifacts/{}", artifact_name(source, "install"));
+    /// The download and digest codes of the update flow, and
+    /// `install_archive_too_large`.
+    pub async fn fetch_archive(
+        &self,
+        source: &str,
+        sha256: &str,
+        directory: &std::path::Path,
+    ) -> Result<PathBuf, UpdateError> {
+        if !secure_source(source) {
+            return Err(UpdateCode::UpdateArtifactSourceInvalid.into());
+        }
+        let label = "archive.tar.gz";
         Box::pin(stage::download_to_label(
             &self.client,
             &self.shutdown,
-            &self.data,
+            directory,
             &self.installation,
             source,
             &sha256.to_ascii_lowercase(),
-            &label,
+            label,
         ))
         .await?;
-        Ok(self.data.join(label))
+        Ok(directory.join(label))
     }
 
     /// Extracts the staged archive into the home and makes it the active
@@ -351,6 +374,22 @@ fn safe_version(version: &str) -> String {
             }
         })
         .collect()
+}
+
+/// Whether `source` may be downloaded: a local file, `https`, or `http` to
+/// this machine.
+fn secure_source(source: &str) -> bool {
+    let Ok(url) = url::Url::parse(source) else {
+        // A plain path is a local file.
+        return !source.contains("://");
+    };
+    match url.scheme() {
+        "https" | "file" => true,
+        "http" => url
+            .host_str()
+            .is_some_and(|host| matches!(host, "localhost" | "127.0.0.1" | "[::1]" | "::1")),
+        _ => false,
+    }
 }
 
 /// What one `apply` did, for the status it reports.

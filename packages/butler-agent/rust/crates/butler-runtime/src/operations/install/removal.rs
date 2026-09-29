@@ -37,7 +37,7 @@ impl HomeLock {
     pub fn remove_all(self) -> Result<HomeRemoval, UpdateError> {
         let home = self.home().clone();
         let mut outcome = HomeRemoval::default();
-        for version in home.versions()? {
+        for version in home.versions()?.into_iter().filter(|v| !v.legacy) {
             remove_tree(&home.version_path(&version.dir))?;
             outcome.removed.push(version.dir);
         }

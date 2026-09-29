@@ -13,9 +13,14 @@ const START_LIMIT_BURST: u32 = 3;
 /// The unit file. `Restart=on-failure` restarts the service after a crash
 /// only: an intentional stop exits 0, and `systemctl stop` never restarts.
 pub(super) fn render(definition: &Definition) -> String {
+    // A login unit starts with a minimal environment; the installing shell's
+    // PATH is not copied into it.
+    let fixed_path = ("PATH".to_owned(), UNIT_PATH.to_owned());
     let environment = definition
         .env
         .iter()
+        .filter(|(key, _)| key != "PATH")
+        .chain(std::iter::once(&fixed_path))
         .map(|(key, value)| format!("Environment={key}={}\n", quoted(value)))
         .collect::<Vec<_>>()
         .concat();
@@ -39,6 +44,9 @@ pub(super) fn render(definition: &Definition) -> String {
         ),
         format!("{environment}ExecStart={command}"),
         "Restart=on-failure".to_owned(),
+        // A SIGKILL is a forced stop (`butler stop` after its grace period),
+        // not a crash to recover from.
+        "RestartPreventExitStatus=SIGKILL".to_owned(),
         "RestartSec=5".to_owned(),
         "KillMode=control-group".to_owned(),
         String::new(),
@@ -49,7 +57,11 @@ pub(super) fn render(definition: &Definition) -> String {
     lines.join("\n")
 }
 
-/// A value in double quotes; `%` is a specifier in unit files.
+/// The `PATH` of the unit.
+const UNIT_PATH: &str = "/usr/local/bin:/usr/bin:/bin";
+
+/// A value in double quotes; `%` is a specifier and `$` starts a variable in
+/// unit files.
 pub(super) fn quoted(value: &str) -> String {
     format!(
         "\"{}\"",
@@ -57,7 +69,26 @@ pub(super) fn quoted(value: &str) -> String {
             .replace('\\', "\\\\")
             .replace('"', "\\\"")
             .replace('%', "%%")
+            .replace('$', "$$")
     )
+}
+
+/// The program the unit runs: the first word of `ExecStart=`.
+#[cfg(not(target_os = "macos"))]
+pub(super) fn program(text: &str) -> Option<String> {
+    let command = text
+        .lines()
+        .find_map(|line| line.strip_prefix("ExecStart="))?;
+    let mut characters = command.strip_prefix('"')?.chars();
+    let mut program = String::new();
+    while let Some(character) = characters.next() {
+        match character {
+            '"' => return Some(program.replace("%%", "%").replace("$$", "$")),
+            '\\' => program.push(characters.next()?),
+            other => program.push(other),
+        }
+    }
+    None
 }
 
 /// A path for `WorkingDirectory=`, which takes no quotes: anything outside a

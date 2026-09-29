@@ -46,10 +46,27 @@ pub fn build_stub_archive(
     version: &str,
     tag: &str,
 ) -> Result<Archive, HarnessError> {
+    stub(out_dir, version, tag, 0)
+}
+
+/// [`build_stub_archive`] whose executable exits with status 1: an update to
+/// it installs, and the restart onto it fails.
+pub fn build_failing_archive(
+    out_dir: &Path,
+    version: &str,
+    tag: &str,
+) -> Result<Archive, HarnessError> {
+    stub(out_dir, version, tag, 1)
+}
+
+fn stub(out_dir: &Path, version: &str, tag: &str, status: u8) -> Result<Archive, HarnessError> {
     let stage = out_dir.join(format!("stub-{version}-{tag}"));
     fs::create_dir_all(stage.join("resources/nested"))?;
     let binary = stage.join("butler-agent");
-    fs::write(&binary, format!("#!/bin/sh\n# {version} {tag}\nexit 0\n"))?;
+    fs::write(
+        &binary,
+        format!("#!/bin/sh\n# {version} {tag}\nexit {status}\n"),
+    )?;
     fs::write(stage.join("resources/a.txt"), "a")?;
     fs::write(stage.join("resources/nested/b.txt"), "b")?;
     let archive = write_archive(out_dir, version, &binary, &stage.join("resources"))?;

@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use super::{Activation, Definition, Error, Manager, Registration, Removal, Status};
+use super::{Activation, Definition, Error, Job, Manager, Registration, Removal, Status};
 
 pub(super) const MANAGER: Manager = Manager::TaskScheduler;
 
@@ -23,5 +23,21 @@ pub(super) fn status() -> Result<Status, Error> {
 }
 
 pub(super) fn is_owned_by(_: &Path) -> Result<bool, Error> {
+    Err(Error::Unsupported)
+}
+
+pub(super) fn job() -> Result<Job, Error> {
+    Err(Error::Unsupported)
+}
+
+pub(super) fn start() -> Result<(), Error> {
+    Err(Error::Unsupported)
+}
+
+pub(super) fn stop() -> Result<(), Error> {
+    Err(Error::Unsupported)
+}
+
+pub(super) fn restart() -> Result<(), Error> {
     Err(Error::Unsupported)
 }

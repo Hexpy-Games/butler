@@ -1,6 +1,6 @@
 //! A POSIX shell script.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::Target;
 
@@ -22,6 +22,28 @@ pub(super) fn render(target: &Target<'_>) -> String {
         root = single_quoted(target.installation_root),
         resources = single_quoted(target.resource_root),
     )
+}
+
+/// The program of the `exec '<program>' ...` line.
+pub(super) fn program(contents: &str) -> Option<PathBuf> {
+    let line = contents
+        .lines()
+        .find_map(|line| line.strip_prefix("exec '"))?;
+    let mut program = String::new();
+    let mut rest = line;
+    loop {
+        let end = rest.find('\'')?;
+        program.push_str(rest.get(..end)?);
+        rest = rest.get(end + 1..)?;
+        // `'\''` is an escaped quote inside a quoted word.
+        match rest.strip_prefix("\\''") {
+            Some(after) => {
+                program.push('\'');
+                rest = after;
+            }
+            None => return Some(PathBuf::from(program)),
+        }
+    }
 }
 
 fn single_quoted(path: &Path) -> String {

@@ -22,7 +22,7 @@ use butler_e2e::e2e::scenario::Setup;
 
 /// Stand-in for the stale Bun launcher: it fails the way the real one does.
 const STALE_LAUNCHER: &str = "#!/bin/sh\n\
-echo 'error: Module not found \"/Users/owner/butler/bin/butler.js\"' >&2\n\
+echo 'error: Module not found \"$BUTLER_HOME/bin/butler.js\"' >&2\n\
 exit 1\n";
 
 /// Marks the sandbox installation as an installed payload (what the App

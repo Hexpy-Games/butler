@@ -5,11 +5,11 @@
 //! `AGENT_HOME/current`, whichever version that names. `DATA/bin/butler` is
 //! the older location, kept so a `PATH` that still names it keeps working.
 //! It is the same launcher script with two differences: it selects this data
-//! folder when the caller names none, and it runs the CLI installation when
-//! there is one (`AGENT_HOME/current`) and otherwise the installation of the
-//! service that last started, the App's bundled Agent for an App-only user.
-//! `butler install`, `update` and `rollback` and every service start
-//! rewrite it to that target, so the two never run different Agents.
+//! folder when the caller names none, and it is repointed by two writers:
+//! `butler install`, `update` and `rollback` point it at `AGENT_HOME/current`,
+//! and every service start points it at the installation that service runs
+//! (the App's bundled Agent when the App chose that over the CLI
+//! installation), so it always runs the Agent that serves this data folder.
 //!
 //! Releases before the native cutover installed a Bun-compiled launcher here
 //! that runs `$BUTLER_HOME/bin/butler.js`; that script no longer exists, so
@@ -80,8 +80,10 @@ pub(crate) fn repair(
             },
         );
     }
-    let paths = LaunchPaths::select(installation);
-    rewrite(data_root, &paths)
+    // The installation that runs is the one the App (or the CLI) chose, which
+    // is not always the CLI installation: the App launches the newer of its
+    // bundled Agent and `AGENT_HOME/current`.
+    rewrite(data_root, &LaunchPaths::of(installation))
 }
 
 /// [`repair`] for a command that just changed the CLI installation, when no
@@ -103,26 +105,15 @@ pub(crate) fn point_at_agent_home(
 
 /// The executable, installation root and resource root a launcher (or a
 /// login service definition) runs.
-pub(crate) struct LaunchPaths {
-    pub(crate) program: PathBuf,
-    pub(crate) root: PathBuf,
-    pub(crate) resources: PathBuf,
+struct LaunchPaths {
+    program: PathBuf,
+    root: PathBuf,
+    resources: PathBuf,
 }
 
 impl LaunchPaths {
-    /// The CLI installation when one is active, else the running one.
-    pub(crate) fn select(installation: &ResolvedInstallation) -> Self {
-        if let Ok(home) = AgentHome::resolve()
-            && home.active().ok().flatten().is_some()
-            && home.current_path().join("butler-agent").is_file()
-        {
-            let target = home.launcher_target();
-            return Self {
-                program: target.program,
-                root: target.root,
-                resources: target.resources,
-            };
-        }
+    /// The running installation.
+    fn of(installation: &ResolvedInstallation) -> Self {
         Self {
             program: installation.executable().to_path_buf(),
             root: installation.root().to_path_buf(),

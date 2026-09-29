@@ -177,7 +177,9 @@ fn remove_launchers(context: &Context) -> Value {
     };
     let launcher = cli_launcher::data_launcher_path(&context.data_root);
     let runs_home = std::fs::read_to_string(&launcher)
-        .is_ok_and(|text| text.contains(&context.home.root().to_string_lossy().into_owned()));
+        .ok()
+        .and_then(|text| butler_platform::command_launcher::program(&text))
+        .is_some_and(|program| inside(&program, context.home.root()));
     let data_launcher = if runs_home {
         match cli_launcher::remove(&context.data_root) {
             Ok(true) => "removed",
@@ -190,15 +192,34 @@ fn remove_launchers(context: &Context) -> Value {
     json!({"command": command, "dataLauncher": data_launcher})
 }
 
+/// Whether `path` lies in `directory`, by path components (not by text), the
+/// directory taken as written or with its links resolved.
+fn inside(path: &Path, directory: &Path) -> bool {
+    path.starts_with(directory)
+        || directory
+            .canonicalize()
+            .is_ok_and(|resolved| path.starts_with(resolved))
+}
+
+/// What a Butler data folder holds: any of these marks a folder as one.
+const DATA_MARKERS: [&str; 4] = ["butler.config.json", "state", "agent-runtime", "config"];
+
 /// A data folder is only deleted when it is a real directory of its own:
 /// not a link, not the home directory or one of its parents, not a system
 /// folder, and not the Agent home or something that contains it.
 fn purge_allowed(context: &Context) -> Result<(), CliError> {
     let unsafe_path = |message: &'static str| CliError::failed("unsafe_path", message);
     let path = &context.data_root;
-    let metadata = std::fs::symlink_metadata(path);
-    if metadata.is_ok_and(|metadata| metadata.file_type().is_symlink()) {
+    // The path as the user gave it: the resolved one is never a link.
+    let named = std::fs::symlink_metadata(&context.requested_data);
+    if named.is_ok_and(|metadata| metadata.file_type().is_symlink()) {
         return Err(unsafe_path("the data folder is a symbolic link"));
+    }
+    let populated = std::fs::read_dir(path).is_ok_and(|mut entries| entries.next().is_some());
+    if populated && !DATA_MARKERS.iter().any(|marker| path.join(marker).exists()) {
+        return Err(unsafe_path(
+            "the folder does not look like a Butler data folder",
+        ));
     }
     let home = user_dirs::home_dir().and_then(|home| home.canonicalize().ok());
     let overlaps_home = home

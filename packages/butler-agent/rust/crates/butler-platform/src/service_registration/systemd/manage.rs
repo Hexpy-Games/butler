@@ -4,9 +4,9 @@ use std::path::{Path, PathBuf};
 
 use super::super::unix::{read_definition, remove_definition, run, run_checked, write_definition};
 use super::super::{
-    Activation, Definition, Error, Manager, Registration, Removal, SYSTEMD_UNIT, Status,
+    Activation, Definition, Error, Job, Manager, Registration, Removal, SYSTEMD_UNIT, Status,
 };
-use super::{quoted, render};
+use super::{program, render};
 use crate::user_dirs;
 
 pub(in super::super) const MANAGER: Manager = Manager::SystemdUser;
@@ -76,9 +76,51 @@ pub(in super::super) fn status() -> Result<Status, Error> {
 
 pub(in super::super) fn is_owned_by(directory: &Path) -> Result<bool, Error> {
     let text = read_definition(&definition_path()?)?;
-    let program = quoted(&directory.to_string_lossy());
-    let prefix = program.trim_end_matches('"');
-    Ok(text.is_some_and(|text| text.contains(&format!("ExecStart={prefix}"))))
+    Ok(text
+        .and_then(|text| program(&text))
+        .is_some_and(|program| Path::new(&program).starts_with(directory)))
+}
+
+/// The unit is loaded when `systemctl show` knows it; its `MainPID` is the
+/// process it runs (0 when none).
+pub(in super::super) fn job() -> Result<Job, Error> {
+    let Ok(output) = run(
+        "systemctl",
+        &[
+            "--user",
+            "show",
+            "--property=LoadState,MainPID",
+            SYSTEMD_UNIT,
+        ],
+    ) else {
+        return Ok(Job::default());
+    };
+    if !output.status.success() {
+        return Ok(Job::default());
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let property = |name: &str| {
+        text.lines()
+            .find_map(|line| line.strip_prefix(name)?.strip_prefix('='))
+    };
+    Ok(Job {
+        loaded: property("LoadState") == Some("loaded"),
+        pid: property("MainPID")
+            .and_then(|pid| pid.trim().parse().ok())
+            .filter(|pid| *pid != 0),
+    })
+}
+
+pub(in super::super) fn start() -> Result<(), Error> {
+    run_checked("systemctl", &["--user", "start", SYSTEMD_UNIT])
+}
+
+pub(in super::super) fn stop() -> Result<(), Error> {
+    run_checked("systemctl", &["--user", "stop", SYSTEMD_UNIT])
+}
+
+pub(in super::super) fn restart() -> Result<(), Error> {
+    run_checked("systemctl", &["--user", "restart", SYSTEMD_UNIT])
 }
 
 /// The one-word answer of `systemctl --user <verb> butler-agent.service`

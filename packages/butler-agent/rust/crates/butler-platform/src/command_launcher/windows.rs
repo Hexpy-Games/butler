@@ -1,5 +1,7 @@
 //! A `.cmd` batch file.
 
+use std::path::PathBuf;
+
 use super::Target;
 
 pub(super) const FILE_NAME: &str = "butler.cmd";
@@ -20,4 +22,10 @@ pub(super) fn render(target: &Target<'_>) -> String {
         root = target.installation_root.display(),
         resources = target.resource_root.display(),
     )
+}
+
+/// The program of the launcher's last line: its first quoted word.
+pub(super) fn program(contents: &str) -> Option<PathBuf> {
+    let line = contents.lines().find_map(|line| line.strip_prefix('"'))?;
+    Some(PathBuf::from(line.get(..line.find('"')?)?))
 }

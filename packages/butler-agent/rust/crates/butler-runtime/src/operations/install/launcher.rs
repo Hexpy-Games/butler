@@ -87,8 +87,22 @@ impl AgentHome {
         path: Option<&Path>,
     ) -> Result<(PathBuf, Removal), UpdateError> {
         let path = launcher_path(path)?;
-        let removal = command_launcher::remove_if_ours(&path)
-            .map_err(|error| UpdateError::caused(UpdateCode::InstallWriteFailed, error))?;
+        let failed = |error| UpdateError::caused(UpdateCode::InstallWriteFailed, error);
+        // A launcher that runs another Agent home is that home's.
+        let ours = match command_launcher::ownership(&path).map_err(failed)? {
+            Some(Ownership::Ours) => std::fs::read_to_string(&path)
+                .ok()
+                .and_then(|text| command_launcher::program(&text))
+                .is_some_and(|program| self.contains(&program)),
+            _ => false,
+        };
+        let removal = if ours {
+            command_launcher::remove_if_ours(&path).map_err(failed)?
+        } else if path.exists() {
+            Removal::Kept
+        } else {
+            Removal::Absent
+        };
         Ok((path, removal))
     }
 }

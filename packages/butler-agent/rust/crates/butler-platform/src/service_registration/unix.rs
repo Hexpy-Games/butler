@@ -8,11 +8,11 @@ use super::Error;
 
 #[cfg(target_os = "macos")]
 pub(super) use super::launchd::manage::{
-    MANAGER, definition_path, install, is_owned_by, status, uninstall,
+    MANAGER, definition_path, install, is_owned_by, job, restart, start, status, stop, uninstall,
 };
 #[cfg(not(target_os = "macos"))]
 pub(super) use super::systemd::manage::{
-    MANAGER, definition_path, install, is_owned_by, status, uninstall,
+    MANAGER, definition_path, install, is_owned_by, job, restart, start, status, stop, uninstall,
 };
 
 pub(super) fn run(program: &str, args: &[&str]) -> io::Result<Output> {

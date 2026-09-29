@@ -46,12 +46,26 @@ async fn rollback(
         lock.activate(&target.dir)
             .map_err(|error| install_error(&error))?
     };
-    let launchers = context.refresh_launchers();
+    let before = context.running_record();
     let service = if options.no_restart {
         json!({"wasRunning": null, "restarted": false})
     } else {
-        context.restart_if_running(&target.dir).await?
+        match context.restart_if_running(&target.dir).await {
+            Ok(service) => service,
+            Err(error) => {
+                let up = context
+                    .restore(switched.replaced.as_deref(), before.as_ref())
+                    .await;
+                let message = if up {
+                    format!("{}; the previous service is running again", error.message)
+                } else {
+                    error.message
+                };
+                return Err(CliError::failed("rollback_restart_failed", message));
+            }
+        }
     };
+    let launchers = context.refresh_launchers();
     let data = json!({
         "active": switched.active,
         "previous": switched.previous,
@@ -63,11 +77,7 @@ async fn rollback(
     let human = format!(
         "Butler Agent {} is active{}.",
         target.version,
-        if data["service"]["restarted"] == true {
-            " (service restarted)"
-        } else {
-            ""
-        }
+        super::agent::restart_note(&data["service"])
     );
     Ok((data, human))
 }
@@ -104,6 +114,7 @@ fn version_json(version: &InstalledVersion) -> Value {
         "dir": version.dir,
         "active": version.active,
         "previous": version.previous,
+        "legacy": version.legacy,
     })
 }
 

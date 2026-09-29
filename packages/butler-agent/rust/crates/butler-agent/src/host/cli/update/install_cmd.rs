@@ -41,24 +41,40 @@ async fn install(
         .map(normalize_sha256)
         .transpose()?;
     let context = Context::open(installation, options)?;
-    let archive = resolve_archive(&context, source, sha256.as_deref()).await?;
+    let (archive, scratch) = resolve_archive(&context, source, sha256.as_deref()).await?;
     let (home, protected) = (context.home.clone(), context.protected_executables());
     let sha = sha256.clone();
-    let activated = tokio::task::spawn_blocking(move || {
+    let installed = tokio::task::spawn_blocking(move || {
         home.install_and_activate(&archive, sha.as_deref(), KEEP_VERSIONS, &protected)
     })
-    .await
-    .map_err(|error| {
-        CliError::failed("install_write_failed", "the install was interrupted").with_source(error)
-    })?
-    .map_err(|error| install_error(&error))?;
+    .await;
+    // A download is deleted whatever came of the install.
+    drop(scratch);
+    let activated = installed
+        .map_err(|error| {
+            CliError::failed("install_write_failed", "the install was interrupted")
+                .with_source(error)
+        })?
+        .map_err(|error| install_error(&error))?;
     let dir = activated.installed.dir.clone();
-    let launchers = context.refresh_launchers();
+    let before = context.running_record();
     let service = if options.no_restart {
         json!({"wasRunning": null, "restarted": false})
     } else {
-        context.restart_if_running(&dir).await?
+        match context.restart_if_running(&dir).await {
+            Ok(service) => service,
+            Err(error) => {
+                let replaced = activated.switched.replaced.as_deref();
+                let message = if context.restore(replaced, before.as_ref()).await {
+                    format!("{}; the previous service is running again", error.message)
+                } else {
+                    error.message
+                };
+                return Err(CliError::failed("install_restart_failed", message));
+            }
+        }
     };
+    let launchers = context.refresh_launchers();
     let mut data = activated.to_json();
     data["agentHome"] = json!(context.home.root());
     data["launchers"] = launchers;
@@ -66,34 +82,54 @@ async fn install(
     let human = format!(
         "Butler Agent {} installed{}.",
         activated.installed.version,
-        if data["service"]["restarted"] == true {
-            " and restarted"
-        } else {
-            ""
-        }
+        super::agent::restart_note(&data["service"])
     );
     Ok((data, human))
 }
 
-/// A local path (or `file://` URL) to use as is, or a download to fetch. A
-/// download must carry its digest: nothing else vouches for it.
+/// A scratch directory for a download, outside DATA, removed when dropped.
+struct Scratch(PathBuf);
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// A local path (or `file://` URL) to use as is, or a download to fetch into
+/// a scratch directory that is deleted afterwards. A download must carry its
+/// digest: nothing else vouches for it.
 async fn resolve_archive(
     context: &Context,
     source: &str,
     sha256: Option<&str>,
-) -> Result<PathBuf, CliError> {
+) -> Result<(PathBuf, Option<Scratch>), CliError> {
     if source.starts_with("http://") || source.starts_with("https://") {
-        let sha256 = sha256
-            .ok_or_else(|| CliError::invalid("a downloaded archive needs --sha256").with_exit(2))?;
+        let sha256 =
+            sha256.ok_or_else(|| CliError::invalid("a downloaded archive needs --sha256"))?;
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.as_nanos());
+        let scratch = Scratch(
+            std::env::temp_dir().join(format!("butler-install-{}-{nanos}", std::process::id())),
+        );
+        std::fs::create_dir_all(&scratch.0).map_err(|error| {
+            CliError::failed(
+                "archive_unavailable",
+                "no scratch directory for the download",
+            )
+            .with_source(error)
+        })?;
         let service = AgentArchiveUpdateService::new(
             context.data_root.clone(),
             context.installation.root().to_path_buf(),
             None,
         )
         .map_err(|error| install_error(&error))?;
-        let fetched = service.fetch_archive(source, sha256).await;
+        let fetched = service.fetch_archive(source, sha256, &scratch.0).await;
         service.close();
-        return fetched.map_err(|error| install_error(&error));
+        let path = fetched.map_err(|error| install_error(&error))?;
+        return Ok((path, Some(scratch)));
     }
     let path = match source.strip_prefix("file://") {
         Some(_) => url::Url::parse(source)
@@ -115,7 +151,7 @@ async fn resolve_archive(
             .join(path)
     };
     if path.is_file() {
-        Ok(path)
+        Ok((path, None))
     } else {
         Err(CliError::failed(
             "archive_unavailable",

@@ -8,7 +8,7 @@
 //! user's and is left alone.
 
 use std::fs;
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
 use crate::{launcher, user_dirs};
@@ -22,9 +22,16 @@ mod windows;
 #[cfg(windows)]
 use windows as sys;
 
-/// The entrypoint the pre-native Bun launcher runs; the compiled launcher
-/// embeds its name.
+/// What the pre-native Bun launcher embeds: it runs `$BUTLER_HOME/bin/butler.js`.
+/// Both must be present, so an unrelated file that merely mentions one of them
+/// is not taken for it.
 const STALE_ENTRYPOINT: &[u8] = b"butler.js";
+const STALE_HOME_VARIABLE: &[u8] = b"BUTLER_HOME";
+/// The compiled launcher is a program of some tens of megabytes; a larger
+/// file is not it.
+const STALE_SCAN_LIMIT: u64 = 512 * 1024 * 1024;
+/// How much of the start of a file holds its marker line.
+const HEAD: usize = 4096;
 
 /// What a launcher runs.
 #[derive(Clone, Copy, Debug)]
@@ -77,22 +84,80 @@ pub fn default_path() -> Option<PathBuf> {
     Some(user_dirs::command_dir()?.join(sys::FILE_NAME))
 }
 
+/// Whether `head`, the start of a file, has the marker as its second line.
+fn has_marker(head: &[u8]) -> bool {
+    head.split(|byte| *byte == b'\n')
+        .nth(1)
+        .map(|line| line.strip_suffix(b"\r").unwrap_or(line))
+        .is_some_and(|line| line == sys::MARKER_LINE.as_bytes())
+}
+
+fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+    haystack
+        .windows(needle.len())
+        .any(|window| window == needle)
+}
+
 /// Whose launcher `contents` are.
 pub fn classify(contents: &[u8]) -> Ownership {
-    let marker_line = contents
-        .split(|byte| *byte == b'\n')
-        .nth(1)
-        .map(|line| line.strip_suffix(b"\r").unwrap_or(line));
-    if marker_line.is_some_and(|line| line == sys::MARKER_LINE.as_bytes()) {
+    if has_marker(contents) {
         Ownership::Ours
-    } else if contents
-        .windows(STALE_ENTRYPOINT.len())
-        .any(|window| window == STALE_ENTRYPOINT)
-    {
+    } else if contains(contents, STALE_ENTRYPOINT) && contains(contents, STALE_HOME_VARIABLE) {
         Ownership::Stale
     } else {
         Ownership::Foreign
     }
+}
+
+/// [`classify`] for a file, reading it in pieces: only the start is needed
+/// for the marker, and the stale launcher is found by scanning up to
+/// [`STALE_SCAN_LIMIT`] bytes.
+fn classify_file(path: &Path) -> io::Result<Ownership> {
+    let mut file = fs::File::open(path)?;
+    let mut head = vec![0_u8; HEAD];
+    let mut filled = 0;
+    while filled < head.len() {
+        let read = file.read(head.get_mut(filled..).unwrap_or_default())?;
+        if read == 0 {
+            break;
+        }
+        filled += read;
+    }
+    head.truncate(filled);
+    if has_marker(&head) {
+        return Ok(Ownership::Ours);
+    }
+    let overlap = STALE_ENTRYPOINT.len().max(STALE_HOME_VARIABLE.len());
+    let (mut entrypoint, mut variable) = (
+        contains(&head, STALE_ENTRYPOINT),
+        contains(&head, STALE_HOME_VARIABLE),
+    );
+    let mut window = head;
+    let mut scanned = filled as u64;
+    let mut chunk = vec![0_u8; 1024 * 1024];
+    while !(entrypoint && variable) && scanned < STALE_SCAN_LIMIT {
+        let read = file.read(&mut chunk)?;
+        if read == 0 {
+            break;
+        }
+        scanned += read as u64;
+        let keep = window.len().saturating_sub(overlap);
+        window.drain(..keep);
+        window.extend_from_slice(chunk.get(..read).unwrap_or_default());
+        entrypoint |= contains(&window, STALE_ENTRYPOINT);
+        variable |= contains(&window, STALE_HOME_VARIABLE);
+    }
+    Ok(if entrypoint && variable {
+        Ownership::Stale
+    } else {
+        Ownership::Foreign
+    })
+}
+
+/// The program a Butler launcher runs, read from its `exec` line; `None`
+/// for a file that is not in the shape [`render`] writes.
+pub fn program(contents: &str) -> Option<PathBuf> {
+    sys::program(contents)
 }
 
 /// Whose file is at `path`; `None` when nothing is there. A symbolic link is
@@ -108,7 +173,7 @@ pub fn ownership(path: &Path) -> io::Result<Option<Ownership>> {
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error),
     }
-    Ok(Some(classify(&fs::read(path)?)))
+    classify_file(path).map(Some)
 }
 
 /// Whether the file at `path` holds exactly `wanted` and can be run.

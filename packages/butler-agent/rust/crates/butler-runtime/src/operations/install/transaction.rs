@@ -226,6 +226,17 @@ impl HomeLock {
         })
     }
 
+    /// Makes no version active: removes `current` (never what it names).
+    ///
+    /// # Errors
+    ///
+    /// `install_switch_failed` when `current` is not a pointer or cannot be
+    /// removed.
+    pub fn deactivate(&self) -> Result<(), UpdateError> {
+        install_link::remove(self.home.root(), CURRENT)
+            .map_err(|error| UpdateError::caused(UpdateCode::InstallSwitchFailed, error))
+    }
+
     /// Switches `current` to the `previous` version, or to the version `to`
     /// names. The version that was active becomes `previous`, so a second
     /// rollback returns to it.
@@ -249,7 +260,13 @@ impl HomeLock {
     ///
     /// `install_write_failed` when a directory cannot be removed.
     pub fn prune(&self, keep: usize, protected: &[PathBuf]) -> Result<Vec<String>, UpdateError> {
-        let versions = self.home.versions()?;
+        // Directories an earlier installer made are never touched.
+        let versions: Vec<_> = self
+            .home
+            .versions()?
+            .into_iter()
+            .filter(|version| !version.legacy)
+            .collect();
         let mut retained: HashSet<&str> = versions
             .iter()
             .take(keep)
@@ -308,11 +325,14 @@ fn point(root: &Path, link: &str, dir: &str) -> Result<(), UpdateError> {
         .map_err(|error| UpdateError::caused(UpdateCode::InstallSwitchFailed, error))
 }
 
+/// Whether any protected path lies in the version directory, compared after
+/// resolving links on both sides (`/var` is `/private/var` on macOS).
 fn uses_version(protected: &[PathBuf], version_path: &Path) -> bool {
-    let version_path = version_path
-        .canonicalize()
-        .unwrap_or_else(|_| version_path.to_path_buf());
-    protected.iter().any(|path| path.starts_with(&version_path))
+    let resolved = |path: &Path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let version_path = resolved(version_path);
+    protected
+        .iter()
+        .any(|path| resolved(path).starts_with(&version_path))
 }
 
 /// Removes a directory tree without following symbolic links, read-only

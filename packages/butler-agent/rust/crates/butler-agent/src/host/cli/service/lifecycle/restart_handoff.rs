@@ -12,6 +12,7 @@ use butler_platform::{process_control, secure_fs};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use super::managed::{is_managed, request};
 use super::{
     StopReport, acquire_admission, active_service, log_file, resolve_data_root,
     service_configuration, start_replacement, stop_service_admitted,
@@ -175,6 +176,9 @@ async fn restart_once(
     };
     validate_target(installation, expected, &active)
         .map_err(|error| ("target_changed", error.to_string()))?;
+    if is_managed(&active) {
+        return managed_restart(&config, data_root, &active, admission).await;
+    }
 
     let (stopped, admission) = stop_service_admitted(
         data_root,
@@ -216,6 +220,28 @@ async fn restart_once(
         ));
     }
     Ok(started)
+}
+
+/// A restart of the instance a login job runs: one request to the manager,
+/// which stops and starts the job itself. A helper the manager runs (systemd
+/// stops everything in the unit) may not outlive the request; the job does.
+async fn managed_restart(
+    config: &crate::host::ServiceConfiguration,
+    data_root: &Path,
+    active: &InstanceRecord,
+    admission: service_instance::AdmissionLock,
+) -> Result<Value, (&'static str, String)> {
+    request(butler_platform::service_registration::restart)
+        .await
+        .map_err(|error| ("stop_failed", error.to_string()))?;
+    let registered = super::readiness::wait_for_app_respawn(data_root, &active.nonce)
+        .await
+        .map_err(|error| ("start_failed", error.to_string()))?;
+    drop(admission);
+    let ready = super::readiness::wait_until_ready(config, None, Some(registered.nonce))
+        .await
+        .map_err(|error| ("start_unverified", error.to_string()))?;
+    Ok(super::start_result(&ready, true))
 }
 
 fn stop_failure_state(error: &crate::host::HostError) -> &'static str {

@@ -15,6 +15,17 @@ use tokio_util::sync::CancellationToken;
 
 use super::manifest::AppArtifact;
 
+/// The largest archive a download may be, in bytes; `BUTLER_INSTALL_MAX_BYTES`
+/// lowers it (tests).
+const MAX_ARCHIVE_BYTES: u64 = 2 << 30;
+
+fn archive_cap() -> u64 {
+    std::env::var("BUTLER_INSTALL_MAX_BYTES")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .map_or(MAX_ARCHIVE_BYTES, |cap| cap.min(MAX_ARCHIVE_BYTES))
+}
+
 struct TempFile(PathBuf);
 
 impl Drop for TempFile {
@@ -70,56 +81,16 @@ pub(super) async fn download_to_label(
         .await
         .map_err(|source| UpdateError::caused(UpdateCode::UpdateStageUnavailable, source))?;
     let mut hash = Sha256::new();
+    let mut sink = Sink {
+        output: &mut output,
+        hash: &mut hash,
+        received: 0,
+        cap: archive_cap(),
+    };
     if url.starts_with("http://") || url.starts_with("https://") {
-        let response = tokio::select! {
-            () = shutdown.cancelled() => return Err(UpdateCode::UpdateCancelled.into()),
-            result = client.get(url).send() => result.map_err(|source| UpdateError::caused(UpdateCode::UpdateArtifactUnavailable, source))?,
-        };
-        if !response.status().is_success() {
-            return Err(UpdateCode::UpdateArtifactUnavailable.into());
-        }
-        let mut stream = response.bytes_stream();
-        while let Some(chunk) = tokio::select! {
-            () = shutdown.cancelled() => return Err(UpdateCode::UpdateCancelled.into()),
-            item = stream.next() => item,
-        } {
-            let chunk = chunk.map_err(|source| {
-                UpdateError::caused(UpdateCode::UpdateArtifactUnavailable, source)
-            })?;
-            hash.update(&chunk);
-            output.write_all(&chunk).await.map_err(|source| {
-                UpdateError::caused(UpdateCode::UpdateStageUnavailable, source)
-            })?;
-        }
+        fetch_http(client, shutdown, url, &mut sink).await?;
     } else {
-        let source = if url.starts_with("file://") {
-            url::Url::parse(url)
-                .ok()
-                .and_then(|url| url.to_file_path().ok())
-                .ok_or(UpdateCode::UpdateArtifactSourceInvalid)?
-        } else {
-            PathBuf::from(url)
-        };
-        if !source.is_absolute() {
-            return Err(UpdateCode::UpdateArtifactSourceInvalid.into());
-        }
-        let mut input = fs::File::open(source)
-            .await
-            .map_err(|source| UpdateError::caused(UpdateCode::UpdateArtifactUnavailable, source))?;
-        let mut buf = vec![0u8; 65536];
-        loop {
-            let count = tokio::select! {
-                () = shutdown.cancelled() => return Err(UpdateCode::UpdateCancelled.into()),
-                result = tokio::io::AsyncReadExt::read(&mut input, &mut buf) => result.map_err(|source| UpdateError::caused(UpdateCode::UpdateArtifactUnavailable, source))?,
-            };
-            if count == 0 {
-                break;
-            }
-            hash.update(&buf[..count]);
-            output.write_all(&buf[..count]).await.map_err(|source| {
-                UpdateError::caused(UpdateCode::UpdateStageUnavailable, source)
-            })?;
-        }
+        copy_local(shutdown, url, &mut sink).await?;
     }
     output
         .sync_all()
@@ -140,6 +111,92 @@ pub(super) async fn download_to_label(
         .await
         .map_err(|source| UpdateError::caused(UpdateCode::UpdateStageUnavailable, source))?;
     Ok(label.to_owned())
+}
+
+/// Where a download goes: the file, its digest, and the size so far, which
+/// may not pass the cap.
+struct Sink<'a> {
+    output: &'a mut fs::File,
+    hash: &'a mut Sha256,
+    received: u64,
+    cap: u64,
+}
+
+impl Sink<'_> {
+    async fn write(&mut self, chunk: &[u8]) -> Result<(), UpdateError> {
+        self.received += chunk.len() as u64;
+        if self.received > self.cap {
+            return Err(UpdateCode::InstallArchiveTooLarge.into());
+        }
+        self.hash.update(chunk);
+        self.output
+            .write_all(chunk)
+            .await
+            .map_err(|source| UpdateError::caused(UpdateCode::UpdateStageUnavailable, source))
+    }
+}
+
+async fn fetch_http(
+    client: &reqwest::Client,
+    shutdown: &CancellationToken,
+    url: &str,
+    sink: &mut Sink<'_>,
+) -> Result<(), UpdateError> {
+    let response = tokio::select! {
+        () = shutdown.cancelled() => return Err(UpdateCode::UpdateCancelled.into()),
+        result = client.get(url).send() => result.map_err(|source| UpdateError::caused(UpdateCode::UpdateArtifactUnavailable, source))?,
+    };
+    if !response.status().is_success() {
+        return Err(UpdateCode::UpdateArtifactUnavailable.into());
+    }
+    if response
+        .content_length()
+        .is_some_and(|length| length > sink.cap)
+    {
+        return Err(UpdateCode::InstallArchiveTooLarge.into());
+    }
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = tokio::select! {
+        () = shutdown.cancelled() => return Err(UpdateCode::UpdateCancelled.into()),
+        item = stream.next() => item,
+    } {
+        let chunk = chunk
+            .map_err(|source| UpdateError::caused(UpdateCode::UpdateArtifactUnavailable, source))?;
+        sink.write(&chunk).await?;
+    }
+    Ok(())
+}
+
+async fn copy_local(
+    shutdown: &CancellationToken,
+    url: &str,
+    sink: &mut Sink<'_>,
+) -> Result<(), UpdateError> {
+    let source = if url.starts_with("file://") {
+        url::Url::parse(url)
+            .ok()
+            .and_then(|url| url.to_file_path().ok())
+            .ok_or(UpdateCode::UpdateArtifactSourceInvalid)?
+    } else {
+        PathBuf::from(url)
+    };
+    if !source.is_absolute() {
+        return Err(UpdateCode::UpdateArtifactSourceInvalid.into());
+    }
+    let mut input = fs::File::open(source)
+        .await
+        .map_err(|source| UpdateError::caused(UpdateCode::UpdateArtifactUnavailable, source))?;
+    let mut buf = vec![0u8; 65536];
+    loop {
+        let count = tokio::select! {
+            () = shutdown.cancelled() => return Err(UpdateCode::UpdateCancelled.into()),
+            result = tokio::io::AsyncReadExt::read(&mut input, &mut buf) => result.map_err(|source| UpdateError::caused(UpdateCode::UpdateArtifactUnavailable, source))?,
+        };
+        if count == 0 {
+            return Ok(());
+        }
+        sink.write(&buf[..count]).await?;
+    }
 }
 
 pub(super) async fn write_json(

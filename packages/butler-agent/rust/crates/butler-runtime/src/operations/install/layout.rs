@@ -39,6 +39,9 @@ pub struct InstalledVersion {
     pub previous: bool,
     /// When the directory was installed, in milliseconds since the epoch.
     pub installed_at_ms: u64,
+    /// A directory named `<version>-rust-<sha8>` by an earlier installer:
+    /// a rollback target, but never pruned or removed.
+    pub legacy: bool,
 }
 
 impl AgentHome {
@@ -62,6 +65,16 @@ impl AgentHome {
     /// The home's directory.
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// Whether `path` lies in this home, compared by path components, with the
+    /// home as written or with its links resolved.
+    pub fn contains(&self, path: &Path) -> bool {
+        path.starts_with(&self.root)
+            || self
+                .root
+                .canonicalize()
+                .is_ok_and(|resolved| path.starts_with(resolved))
     }
 
     /// The path of an installed version's directory.
@@ -126,13 +139,15 @@ impl AgentHome {
             let Ok(manifest) = read_manifest(&entry.path()) else {
                 continue;
             };
-            if manifest.dir_name() != dir {
+            let legacy = dir == legacy_dir_name(&manifest.version, &manifest.binary_sha256);
+            if manifest.dir_name() != dir && !legacy {
                 continue;
             }
             versions.push(InstalledVersion {
                 active: active.as_deref() == Some(dir.as_str()),
                 previous: previous.as_deref() == Some(dir.as_str()),
                 installed_at_ms: modified_ms(&metadata),
+                legacy,
                 version: manifest.version,
                 dir,
             });
@@ -203,6 +218,13 @@ impl AgentHome {
 pub fn version_dir_name(version: &str, binary_sha256: &str) -> String {
     let short = binary_sha256.get(..8).unwrap_or(binary_sha256);
     format!("{version}-{short}")
+}
+
+/// The directory name earlier installers gave a version:
+/// `<version>-rust-<first 8 of binarySha256>`.
+fn legacy_dir_name(version: &str, binary_sha256: &str) -> String {
+    let short = binary_sha256.get(..8).unwrap_or(binary_sha256);
+    format!("{version}-rust-{short}")
 }
 
 fn pointer(root: &Path, link: &str) -> Result<Option<String>, UpdateError> {

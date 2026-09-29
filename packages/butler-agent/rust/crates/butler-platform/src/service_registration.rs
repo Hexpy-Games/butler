@@ -114,6 +114,15 @@ pub struct Status {
     pub running: Option<bool>,
 }
 
+/// What the manager says about the registered job.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Job {
+    /// The manager has the job loaded (it starts and supervises it).
+    pub loaded: bool,
+    /// The process the manager runs for the job now.
+    pub pid: Option<u32>,
+}
+
 /// Why a registration call failed.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -134,6 +143,12 @@ pub enum Error {
         /// What it reported.
         message: String,
     },
+    /// There is no definition to load.
+    #[error("the service is not registered")]
+    NotRegistered,
+    /// A value cannot be written into a definition safely (a line break).
+    #[error("a service definition value contains a line break")]
+    InvalidValue,
     /// Another definition of the same label is loaded from elsewhere, so it
     /// is not ours to replace.
     #[error("the service is already loaded from {0}")]
@@ -143,6 +158,7 @@ pub enum Error {
 /// The definition file text `manager` would use for `definition`.
 #[cfg_attr(not(unix), allow(unused_variables))]
 pub fn render(manager: Manager, definition: &Definition) -> Result<String, Error> {
+    validate(definition)?;
     match manager {
         #[cfg(unix)]
         Manager::Launchd => Ok(launchd::render(definition)),
@@ -176,7 +192,72 @@ pub fn definition_path() -> Result<PathBuf, Error> {
 ///
 /// The failure to write the file, or the manager's refusal.
 pub fn install(definition: &Definition, activation: Activation) -> Result<Registration, Error> {
+    validate(definition)?;
     sys::install(definition, activation)
+}
+
+/// What the manager says about the job: whether it is loaded and which
+/// process it runs. Read-only.
+///
+/// # Errors
+///
+/// [`Error::Unsupported`] on hosts without a manager; a manager that cannot
+/// be asked reports an unloaded job.
+pub fn job() -> Result<Job, Error> {
+    sys::job()
+}
+
+/// Starts the loaded job (loading it first where the manager unloads a
+/// stopped job).
+///
+/// # Errors
+///
+/// [`Error::NotRegistered`] without a definition, or the manager's refusal.
+pub fn start() -> Result<(), Error> {
+    sys::start()
+}
+
+/// Stops the job through the manager, which then does not relaunch it: the
+/// way to end a service that ignores a polite stop, since a signal sent
+/// straight to the process looks like a crash to the manager.
+///
+/// # Errors
+///
+/// The manager's refusal.
+pub fn stop() -> Result<(), Error> {
+    sys::stop()
+}
+
+/// Stops and starts the job with one request to the manager, which also
+/// works for a caller the manager stops together with the job.
+///
+/// # Errors
+///
+/// The manager's refusal.
+pub fn restart() -> Result<(), Error> {
+    sys::restart()
+}
+
+/// Every value of a definition is a single line.
+fn validate(definition: &Definition) -> Result<(), Error> {
+    let values = std::iter::once(definition.program.to_string_lossy().into_owned())
+        .chain(definition.args.iter().cloned())
+        .chain(std::iter::once(
+            definition.working_dir.to_string_lossy().into_owned(),
+        ))
+        .chain(
+            definition
+                .env
+                .iter()
+                .flat_map(|(key, value)| [key.clone(), value.clone()]),
+        );
+    if values
+        .into_iter()
+        .any(|value| value.contains(['\n', '\r', '\0']))
+    {
+        return Err(Error::InvalidValue);
+    }
+    Ok(())
 }
 
 /// Unloads the service (with [`Activation::Load`]) and removes the

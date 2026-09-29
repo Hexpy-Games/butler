@@ -100,41 +100,29 @@ async fn finish_activation(
         .as_str()
         .unwrap_or_default()
         .to_owned();
-    value["launchers"] = context.refresh_launchers();
+    let before = context.running_record();
     if options.no_restart {
+        value["launchers"] = context.refresh_launchers();
         value["service"] = json!({"wasRunning": null, "restarted": false});
         return Ok(());
     }
+    // The launchers follow the restart: a failed one leaves them as they were.
     match context.restart_if_running(&dir).await {
         Ok(service) => {
+            value["launchers"] = context.refresh_launchers();
             value["service"] = service;
             Ok(())
         }
         Err(error) => {
             let previous = value["installed"]["replaced"].as_str().map(str::to_owned);
-            let message = match previous {
-                Some(previous) if restore(context, &previous).await => {
-                    format!("{}; restored {previous}", error.message)
-                }
-                _ => error.message.clone(),
+            let message = if context.restore(previous.as_deref(), before.as_ref()).await {
+                format!("{}; the previous service is running again", error.message)
+            } else {
+                error.message.clone()
             };
             Err(CliError::failed("update_restart_failed", message))
         }
     }
-}
-
-/// Switches back to `previous` and brings the service up on it.
-async fn restore(context: &Context, previous: &str) -> bool {
-    let switched = context
-        .home
-        .lock()
-        .and_then(|lock| lock.activate(previous))
-        .is_ok();
-    if !switched {
-        return false;
-    }
-    context.refresh_launchers();
-    context.ensure_running(previous).await.is_ok()
 }
 
 fn render(value: &Value, dry_run: bool) -> String {
@@ -157,12 +145,10 @@ fn render(value: &Value, dry_run: bool) -> String {
         value["available_version"].as_str().unwrap_or("unknown"),
     );
     if value["activation_status"] == "activated" {
-        let restarted = if value["service"]["restarted"] == true {
-            " and restarted"
-        } else {
-            ""
-        };
-        return format!("Butler Agent updated: {versions}{restarted}.");
+        return format!(
+            "Butler Agent updated: {versions}{}.",
+            restart_note(&value["service"])
+        );
     }
     if value["stage_status"] == "staged" {
         return format!("Butler Agent update staged: {versions}.");
@@ -174,4 +160,20 @@ fn render(value: &Value, dry_run: bool) -> String {
         "Butler Agent is up to date ({}).",
         value["current_version"].as_str().unwrap_or("unknown")
     )
+}
+
+/// What became of the running service, from the restart's own report.
+pub(super) fn restart_note(service: &Value) -> String {
+    if service["restarted"] != true {
+        return String::new();
+    }
+    if service["onNewVersion"] == false {
+        return format!(
+            "; the service restarted on {}, not on the new version",
+            service["executable"]
+                .as_str()
+                .unwrap_or("another installation")
+        );
+    }
+    " and restarted".to_owned()
 }
