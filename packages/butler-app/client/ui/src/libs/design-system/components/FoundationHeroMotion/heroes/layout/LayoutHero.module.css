@@ -60,26 +60,15 @@
 }
 
 /* A device viewport (DeviceFrame.tsx): the app's own document, the frame's size. */
-.frameBox {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-}
-
-/* Sized in px by DeviceFrame.tsx (never by its content). */
 .frame {
-  position: absolute;
-  top: 0;
-  left: 0;
   display: block;
-  min-inline-size: 0;
-  max-inline-size: none;
+  inline-size: 100%;
+  block-size: 100%;
   border: 0;
 }
 
 /* The window's canvas, as a top-level window has (the app's body is transparent over it). */
 .deviceRoot {
-  overflow: hidden;
   background: Canvas;
 }
 
