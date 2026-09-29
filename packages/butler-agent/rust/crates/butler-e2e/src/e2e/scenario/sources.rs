@@ -61,6 +61,28 @@ pub(super) async fn replay_source(
     Ok((Some(provider), choice, None))
 }
 
+/// Load scenarios: a scripted provider on the subscription (Codex) wire.
+pub(super) async fn synthetic_source(
+    script: super::super::provider::Script,
+    model: Option<ModelChoice>,
+    stub_codex_home: Option<std::path::PathBuf>,
+    launch: &mut Launch,
+) -> Result<SourceSetup, HarnessError> {
+    let choice = model.unwrap_or_else(|| ModelChoice {
+        model: "openai/gpt-6-luna".into(),
+        effort: Some("low".into()),
+    });
+    let provider = Provider::synthetic(script).await?;
+    if let Some(key) = super::super::config::base_url_env("openai-subscription") {
+        let path = super::super::config::base_path("openai-subscription");
+        launch.set_env(key, format!("{}{path}", provider.base_url));
+    }
+    if let Some(codex_home) = stub_codex_home {
+        fixtures::stub_codex_auth(&codex_home)?;
+    }
+    Ok((Some(provider), choice, None))
+}
+
 /// Record mode: a proxy that forwards cassette `name` to the live provider
 /// and records it (`BUTLER_E2E_RECORD=1` or [`super::Setup::record_into`]).
 /// With `extends`, requests the base cassette has a recording for are

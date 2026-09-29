@@ -9,6 +9,7 @@ mod guided_policy;
 /// The ports a guided turn is composed of.
 pub mod guided_ports;
 mod guided_types;
+mod message_facts;
 mod model_round;
 pub mod operation_result_replay;
 mod ports;
@@ -26,6 +27,7 @@ pub use contracts::{
     AdmittedModelSelection, ButlerContext, EmptyResponsePolicy, ExecutionPolicy, SemanticTurn,
     TrackingMode,
 };
+pub use message_facts::{DerivedFacts, MessageFacts};
 pub use stream_relay::StreamRelay;
 pub use turn_binding::{BoundGuidedTurn, GuidedTurnFactory, GuidedTurnInputs, GuidedTurnStart};
 

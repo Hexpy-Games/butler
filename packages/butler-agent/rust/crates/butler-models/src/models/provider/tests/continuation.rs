@@ -25,6 +25,7 @@ fn message(role: ModelRoundRole, content: &str, call_id: Option<&str>) -> ModelR
         operation_result_reference: None,
         operation_result_call_id: None,
         continuation_item_id: None,
+        facts: Default::default(),
     }
 }
 

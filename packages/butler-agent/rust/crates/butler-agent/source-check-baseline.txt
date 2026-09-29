@@ -11,7 +11,6 @@ src/host/app/runtime_ports/session_workspaces.rs	<AppSessionWorkspaces as AppSes
 src/host/app/runtime_ports/settings.rs	load	83
 src/host/app/runtime_ports/settings_mutation.rs	AppSettingsMutation::apply_inner	91
 src/host/app/runtime_ports/topic_branch.rs	<AppBranchConversations as AppBranchConversationReader>::context	88
-src/host/app/runtime_ports/topic_branch.rs	<AppBranchSummarizerAdapter as AppBranchSummarizer>::summarize	89
 src/host/app/server.rs	AppServer::open_with_artifacts	162
 src/host/cli/cognition.rs	run	177
 src/host/cli/cognition/box_cli.rs	run	112

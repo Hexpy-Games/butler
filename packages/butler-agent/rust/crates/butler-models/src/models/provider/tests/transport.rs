@@ -57,6 +57,7 @@ fn messages() -> [ModelRoundMessage; 1] {
         operation_result_reference: None,
         operation_result_call_id: None,
         continuation_item_id: Some("turn-item-0".into()),
+        facts: Default::default(),
     }]
 }
 

@@ -18,6 +18,7 @@ fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
         operation_result_reference: None,
         operation_result_call_id: None,
         continuation_item_id: Some("turn-item-0".into()),
+        facts: Default::default(),
     }];
     let cancellation = CancellationToken::new();
     let mut request = request(
@@ -103,6 +104,7 @@ fn local_text_protocol_repairs_tool_markers_and_hides_reasoning_but_not_user_fen
             operation_result_reference: None,
             operation_result_call_id: None,
             continuation_item_id: Some("turn-item-0".into()),
+            facts: Default::default(),
         }];
         let tools = [ModelRoundTool {
             name: "search_web".into(),
@@ -150,6 +152,7 @@ fn local_text_protocol_repairs_tool_markers_and_hides_reasoning_but_not_user_fen
             operation_result_reference: None,
             operation_result_call_id: None,
             continuation_item_id: Some("turn-item-0".into()),
+            facts: Default::default(),
         }];
         let tools = [ModelRoundTool {
             name: "search_web".into(),
@@ -235,6 +238,7 @@ fn non_openai_carriers_preserve_source_defaults_and_stateless_items() {
             operation_result_reference: None,
             operation_result_call_id: None,
             continuation_item_id: Some("turn-item-0".into()),
+            facts: Default::default(),
         },
         ModelRoundMessage {
             role: ModelRoundRole::Assistant,
@@ -252,6 +256,7 @@ fn non_openai_carriers_preserve_source_defaults_and_stateless_items() {
             operation_result_reference: None,
             operation_result_call_id: None,
             continuation_item_id: Some("turn-item-1".into()),
+            facts: Default::default(),
         },
     ];
     let cancellation = CancellationToken::new();

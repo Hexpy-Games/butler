@@ -24,10 +24,14 @@ pub(in crate::models::transport) async fn hosted_chat(
     observer: Option<&dyn butler_turn::btcc::ProviderStreamObserver>,
 ) -> Result<Value, Box<ProviderRequestError>> {
     let mut state = ChatState::new();
-    consume(response, provider, api, Some(HOSTED_FRAME_LIMIT), |frame| {
-        progress.record_progress();
-        state.frame(frame, observer, provider, api)
-    })
+    consume(
+        response,
+        provider,
+        api,
+        &progress,
+        Some(HOSTED_FRAME_LIMIT),
+        |frame| state.frame(frame, observer, provider, api),
+    )
     .await?;
     // Some servers end the stream after the finish reason without `[DONE]`:
     // the answer is complete (their non-streamed answers always were).

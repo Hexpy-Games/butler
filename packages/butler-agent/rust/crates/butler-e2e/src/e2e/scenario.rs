@@ -22,7 +22,7 @@ use super::{HarnessError, harness_error};
 
 mod sources;
 
-use sources::{apply_credential, live_source, record_source, replay_source};
+use sources::{apply_credential, live_source, record_source, replay_source, synthetic_source};
 
 pub use sources::STUB_REFRESH_TOKEN;
 
@@ -61,6 +61,8 @@ impl Access {
 enum Source {
     None,
     Cassette(String),
+    /// A scripted model (load scenarios), not a recording.
+    Synthetic(super::provider::Script),
     Live(LiveProvider),
 }
 
@@ -131,6 +133,13 @@ impl Setup {
     /// Replays (or with `BUTLER_E2E_RECORD=1`, records) cassette `name`.
     pub fn cassette(mut self, name: &str) -> Self {
         self.source = Source::Cassette(name.to_owned());
+        self
+    }
+
+    /// Serves a scripted model instead of a recording: load scenarios that
+    /// measure the product, not a provider ([`Provider::timings`]).
+    pub fn synthetic(mut self, script: super::provider::Script) -> Self {
+        self.source = Source::Synthetic(script);
         self
     }
 
@@ -265,6 +274,10 @@ impl Setup {
                     &mut launch,
                 )
                 .await?
+            }
+            Source::Synthetic(script) => {
+                let stub_codex_home = stub_credential.then(|| sandbox.codex_home());
+                synthetic_source(script, model, stub_codex_home, &mut launch).await?
             }
             Source::Cassette(name) => {
                 let stub_codex_home = stub_credential.then(|| sandbox.codex_home());

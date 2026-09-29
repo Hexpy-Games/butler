@@ -279,6 +279,7 @@ async fn hosted_sse_decodes_split_unicode_and_requires_done() {
         operation_result_reference: None,
         operation_result_call_id: None,
         continuation_item_id: Some("turn-item-0".into()),
+        facts: Default::default(),
     }];
     let result = provider
         .run_round(request(

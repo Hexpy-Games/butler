@@ -47,6 +47,7 @@ pub(super) fn decode(
         operation_result_reference: None,
         operation_result_call_id: None,
         continuation_item_id: None,
+        facts: Default::default(),
     });
     let continuation =
         (provider == "openai").then(|| openai_continuation(&response, request, legacy_projection));

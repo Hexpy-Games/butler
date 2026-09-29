@@ -25,9 +25,12 @@ use super::{HarnessError, harness_error};
 
 mod record;
 mod replay;
+mod synthetic;
 
 use record::record;
 use replay::{learn_echo_ids, plain, remint_ids, replay, take_fault};
+use synthetic::Synthetic;
+pub use synthetic::{Script, Timing, round_overheads};
 
 /// Replay pacing: recorded delay × `scale`, capped at `cap_ms`, at least `min_ms`.
 #[derive(Clone, Copy, Debug)]
@@ -49,6 +52,8 @@ impl Default for Pacing {
 
 enum Mode {
     Replay(Cassette),
+    /// A scripted model for load scenarios; keeps the clock of each exchange.
+    Synthetic(Arc<Synthetic>),
     Record {
         upstream: String,
         meta: Meta,
@@ -93,6 +98,24 @@ impl Provider {
     ) -> Result<Self, HarnessError> {
         let count = cassette.exchanges.len();
         Self::serve(Mode::Replay(cassette), placeholders, count).await
+    }
+
+    /// A scripted model instead of a cassette (load scenarios).
+    pub async fn synthetic(script: Script) -> Result<Self, HarnessError> {
+        Self::serve(
+            Mode::Synthetic(Synthetic::new(script)),
+            Placeholders::default(),
+            0,
+        )
+        .await
+    }
+
+    /// The clock of every exchange so far (synthetic mode only).
+    pub fn timings(&self) -> Vec<Timing> {
+        match &self.state.mode {
+            Mode::Synthetic(synthetic) => synthetic.timings(),
+            _ => Vec::new(),
+        }
     }
 
     /// Record mode; the cassette is written to `out_dir` (default: the
@@ -192,7 +215,7 @@ impl Provider {
     /// `text` and whose tool round has `round_len` items (0 in record mode).
     pub fn exchange_for(&self, text: &str, round_len: usize) -> Result<usize, HarnessError> {
         match &self.state.mode {
-            Mode::Record { .. } => Ok(0),
+            Mode::Record { .. } | Mode::Synthetic(_) => Ok(0),
             Mode::Replay(cassette) => cassette
                 .exchanges
                 .iter()
@@ -329,6 +352,7 @@ async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
     learn_echo_ids(&state, &String::from_utf8_lossy(&bytes));
     let key = matching::key(&path, &json, &lock(&state.placeholders));
     match &state.mode {
+        Mode::Synthetic(synthetic) => synthetic.respond(&json, bytes.len()),
         Mode::Replay(cassette) => {
             if let Some(response) = replay_recorded(&state, cassette, &key) {
                 return response;
