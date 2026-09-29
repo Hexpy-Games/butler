@@ -6,6 +6,7 @@ use std::path::Path;
 mod conversation_metrics;
 mod cycle_metrics;
 mod developer_log;
+mod install;
 mod mcp_tasks;
 mod metric_files;
 mod observability;
@@ -22,6 +23,11 @@ pub use cycle_metrics::CycleMetrics;
 pub use developer_log::{
     DeveloperDiagnosticsSettingsPort, DeveloperLogStore, DeveloperLogWriteAuthority,
     OperationsDeveloperLogCapture,
+};
+pub use install::{
+    Activated, AgentHome, BINARY, HomeLock, HomeRemoval, Installed, InstalledVersion,
+    LauncherPaths, LauncherState, LauncherSync, RESOURCES, Switched, sha256_file, sha256_tree,
+    version_dir_name,
 };
 pub use mcp_tasks::{
     cleanup_plan, read_mcp_task, read_mcp_task_counts, read_mcp_task_list, read_mcp_task_projects,
@@ -41,7 +47,8 @@ pub use status_summary::{
     tail_operational_metric_events,
 };
 pub use update::{
-    AgentArchiveUpdateService, AgentUpdateRequest, AppUpdateService, UpdateError, UpdateRequest,
+    AgentArchiveUpdateService, AgentUpdateRequest, AppUpdateService, KEEP_VERSIONS, UpdateError,
+    UpdateRequest, version_newer,
 };
 pub use usage_cost::{
     CostReason, SessionUsage, SessionUsageIndex, SessionUsageView, UsageCostView, UsageEvent,
