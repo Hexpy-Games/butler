@@ -1,17 +1,20 @@
 /* 06 Iconography hero. Canvas px (../shared/grid.ts). */
 
-/* ---- Title: the o is a glyph's circle on its keyline ---- */
+/* ---- Title: the o is the Butler mark, on its keyline ---- */
 
 .titleWord {
   display: inline-flex;
   align-items: baseline;
 }
 
+/* Sized to the title face's "o" (Pretendard 620): ink 0.54em tall, from 0.0105em below the baseline
+   to the x-height overshoot, on a 0.5615em advance. The negative end margin drops the box onto that ink. */
 .titleO {
   display: inline-block;
-  inline-size: 0.6em;
-  block-size: 0.6em;
-  margin-inline: 0.02em;
+  inline-size: 0.54em;
+  block-size: 0.54em;
+  margin-inline: 0.011em;
+  margin-block-end: -0.0105em;
 }
 
 .titleO svg {
@@ -21,17 +24,28 @@
   overflow: visible;
 }
 
-.titleCircle {
+/* Ring weight 24/100 of 0.54em = 0.13em, the face's stem weight (its "I" is 0.132em). */
+.titleRing,
+.titleCollar {
   fill: none;
   stroke: currentcolor;
   stroke-dasharray: 100;
-  stroke-width: 4.2;
+}
+
+.titleRing {
+  stroke-width: 24;
+}
+
+.titleCollar {
+  stroke-width: 7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .titleKey {
   fill: none;
   stroke: color-mix(in srgb, var(--accent) 70%, transparent);
-  stroke-width: 0.6;
+  stroke-width: 2.8;
   opacity: 0;
 }
 

@@ -27,7 +27,7 @@ const PATH: Scene[] = ["intro", "glyph", "grow", "place"];
  * through it, so no frame between scenes is empty. The finale zooms in and
  * out about the frame centre.
  *
- *   0–6.8      Title   the "o" is a glyph: its keyline square, then its circle
+ *   0–6.8      Title   the "o" is the Butler mark: its keyline square, then its ring and collar
  *   6.8–15     Glyph   the 24px keyline grid, padding box and circle draw; the
  *                      gear is drawn stroke by stroke; notes on three sides
  *   15–29.2    Grows   one label row steps caption → body → h4 → h3 → h2; the
@@ -100,8 +100,8 @@ export function iconTimeline(copy: IconCopy, g0: SceneGeometry): { beats: number
     select: sel(name), keys: looped([{ at: 0, o: first }, ...pairs.flatMap(([at, o]): Key[] => [{ at, o: 1 - o }, { at: at + dur, o, ease: "standard" }])], close),
   });
 
-  // ---- Title: the o's keyline square, then its circle strokes on; the square fades ----
-  const title: Track[] = [fade("to-k", [[AT.titleKey, 1], [AT.titleKeyOut, 0]]), draw(sel("to-c"), 100, AT.titleO, 1.2)];
+  // ---- Title: the o's keyline square, then the Butler mark's ring and collar stroke on; the square fades ----
+  const title: Track[] = [fade("to-k", [[AT.titleKey, 1], [AT.titleKeyOut, 0]]), draw(sel("to-c"), 100, AT.titleO, 1.2), draw(sel("to-m1"), 100, AT.titleO + 1.0, 0.7), draw(sel("to-m2"), 100, AT.titleO + 1.4, 0.7)];
 
   // ---- Glyph: grid, padding box, circle, then the gear stroke by stroke; one note per side ----
   const glyph: Track[] = [
