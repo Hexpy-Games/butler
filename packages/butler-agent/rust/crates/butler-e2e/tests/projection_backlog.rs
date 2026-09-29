@@ -249,19 +249,22 @@ async fn proj_device_change_resumes_at_the_recorded_offset() -> Result<(), Harne
 const SIDE_CHATS: [&str; 3] = ["side-1", "side-2", "side-3"];
 const NUMBERS: &str = "Write the numbers from one to twelve as English words, separated by single spaces, and nothing else.";
 
-/// `(chat, updated_at)` of the side chats' checkpoints once all are projected.
-async fn side_checkpoints(s: &Scenario) -> Result<Vec<(String, String)>, HarnessError> {
+/// `(chat, updated_at)` after every side transcript reaches its final byte.
+async fn side_checkpoints(
+    s: &Scenario,
+    transcript_bytes: i64,
+) -> Result<Vec<(String, String)>, HarnessError> {
     let started = Instant::now();
     loop {
         let db = read_only(&s.sandbox.data);
         let mut statement = db
             .prepare(
                 "SELECT chat_id,updated_at FROM app_transcript_projection_checkpoints \
-                 WHERE chat_id LIKE 'side-%' AND projected_bytes>0 ORDER BY chat_id",
+                 WHERE chat_id LIKE 'side-%' AND projected_bytes=?1 ORDER BY chat_id",
             )
             .unwrap();
         let rows: Vec<(String, String)> = statement
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .query_map([transcript_bytes], |row| Ok((row.get(0)?, row.get(1)?)))
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
@@ -285,6 +288,8 @@ async fn proj_terminal_settle_leaves_unrelated_checkpoints_alone() -> Result<(),
         .await?;
     s.agent.terminate().await?;
     let db = Connection::open(s.sandbox.data.join(DATABASE)).unwrap();
+    let lines: String = (0..5).map(|index| record(index + 1)).collect();
+    let transcript_bytes = i64::try_from(lines.len()).unwrap();
     for chat in SIDE_CHATS {
         db.execute(
             "INSERT INTO chats(id,title,kind,created_at,updated_at) \
@@ -293,17 +298,16 @@ async fn proj_terminal_settle_leaves_unrelated_checkpoints_alone() -> Result<(),
         )
         .unwrap();
         // Records projection skips: none is an App outbound.
-        let lines: String = (0..5).map(|index| record(index + 1)).collect();
         let file = format!("transcripts/butler_app-{chat}.jsonl");
-        std::fs::write(s.sandbox.data.join(file), lines).unwrap();
+        std::fs::write(s.sandbox.data.join(file), &lines).unwrap();
     }
     drop(db);
     s.gw = s.agent.start_again().await?;
-    let before = side_checkpoints(&s).await?;
+    let before = side_checkpoints(&s, transcript_bytes).await?;
 
     let (_, turn) = s.turn("general", NUMBERS).await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
     tokio::time::sleep(Duration::from_secs(2)).await;
-    assert_eq!(side_checkpoints(&s).await?, before);
+    assert_eq!(side_checkpoints(&s, transcript_bytes).await?, before);
     s.finish().await
 }
