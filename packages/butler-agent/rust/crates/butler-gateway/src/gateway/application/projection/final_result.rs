@@ -101,14 +101,6 @@ pub(super) fn apply(
             &input.turn_id,
             apply.now,
         )?;
-        super::non_final::fail_unanswered(
-            &tx,
-            apply.subscribers,
-            &input.chat_id,
-            &input.turn_id,
-            "no_visible_result",
-            apply.now,
-        )?;
         settle(
             &tx,
             apply.subscribers,
@@ -254,6 +246,16 @@ fn settle(
     message: Option<&str>,
     now: &str,
 ) -> Result<(), AppStorageError> {
+    if message.is_none() && !error.is_empty() {
+        super::non_final::fail_unanswered(
+            db,
+            subscribers,
+            &input.chat_id,
+            &input.turn_id,
+            error,
+            now,
+        )?;
+    }
     if queue::claim_status(
         db,
         &input.chat_id,
