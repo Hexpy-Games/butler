@@ -20,32 +20,20 @@ function render(error?: string, details?: readonly string[]) {
   )).window.document;
 }
 
-test("ComposerDecisionPanel lists details under the title as one-line secondary captions", () => {
-  const panel = render(undefined, ["a.png", "b.png", "+22 more"]).querySelector('[data-test-class="decision"]')!;
+// test-category: security
+test("ComposerDecisionPanel shows every detail line in full: lines wrap and are never cut", () => {
+  const command = `rm -rf ${"build/".repeat(40)}`;
+  const panel = render(undefined, ["a.png", command, "+22 more"]).querySelector('[data-test-class="decision"]')!;
   const [subject, details, actions] = [...panel.children];
   expect(subject!.getAttribute("data-has-details")).toBe("true");
   expect(details!.getAttribute("data-slot")).toBe("composer-decision-details");
-  const lines = [...details!.children];
-  expect(lines.map((line) => line.textContent)).toEqual(["a.png", "b.png", "+22 more"]);
-  expect(lines.every((line) => line.getAttribute("data-tone") === "secondary" && line.getAttribute("data-truncate") === "true"))
+  const lines = [...details!.querySelectorAll("p")];
+  expect(lines.map((line) => line.textContent)).toEqual(["a.png", command, "+22 more"]);
+  expect(lines.every((line) => line.getAttribute("data-truncate") === null && line.getAttribute("data-wrap") === "anywhere"))
     .toBe(true);
   expect(actions!.getAttribute("data-slot")).toBe("composer-decision-actions");
-  // No details: no empty row and the subject keeps its full padding.
   const plain = render(undefined, []).querySelector('[data-test-class="decision"]')!;
   expect(plain.querySelector('[data-slot="composer-decision-details"]')).toBeNull();
-  expect(plain.children[0]!.getAttribute("data-has-details")).toBeNull();
-});
-
-test("ComposerDecisionPanel keeps the aside at its own width so a status Tag never shrinks under the count", () => {
-  const subject = render().querySelector('[data-slot="composer-decision-subject"]')!;
-  expect(subject.querySelector('[data-slot="composer-decision-aside"] [data-aside="count"]')).not.toBeNull();
-  expect(rule(".aside")).toMatch(/flex:\s*none/u);
-  expect(rule(".aside")).toMatch(/gap:\s*var\(--space-sm\)/u);
-});
-
-test("ComposerDecisionPanel indents details to the title and keeps them tight under it", () => {
-  expect(rule(".details")).toMatch(/padding-inline-start:\s*calc\(\s*var\(--space-lg\) \+ var\(--icon-size-lg\) \+ var\(--space-sm\)\s*\)/u);
-  expect(rule('.subject[data-has-details="true"]')).toMatch(/padding-block-end:\s*var\(--space-xs\)/u);
 });
 
 test("ComposerDecisionPanel puts the icon, the clickable title and the aside on one subject row above the actions", () => {

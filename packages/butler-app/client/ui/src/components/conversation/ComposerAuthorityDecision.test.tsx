@@ -145,13 +145,14 @@ function decisionButtons(container: HTMLElement) {
   return [...container.querySelectorAll("button")].slice(-3).map((button) => button.textContent);
 }
 
-test("a structured request reads as a plain question with examples, a risk badge, Deny and Allow once", async () => {
+// test-category: security
+test("a structured request reads as a plain question with its examples in full, a risk badge, Deny and Allow once", async () => {
   const { container } = await renderDecision([renameCard]);
   expect(container.textContent).toContain("'Desktop'의 파일 24개를 수정할까요?");
   expect(container.textContent).not.toContain("작업 폴더의 파일 편집");
   const details = container.querySelector('[data-slot="composer-decision-details"]')!;
-  expect([...details.children].map((line) => line.textContent)).toEqual([
-    "Screenshot 10.02.14.png", "Screenshot 10.05.31.png", "Screenshots/2026/…/Screenshot 10.09.02.png", "외 21개",
+  expect([...details.querySelectorAll("p")].map((line) => line.textContent)).toEqual([
+    "Screenshot 10.02.14.png", "Screenshot 10.05.31.png", "Screenshots/2026/September/holiday trip to the coast/Screenshot 10.09.02.png", "외 21개",
   ]);
   expect(container.querySelector('[data-test-class="approval-risk"][data-tone="warning"]')?.textContent).toBe("위험 보통");
   expect(decisionButtons(container)).toEqual(["거절", "이번만 허용", ""]);
@@ -159,28 +160,4 @@ test("a structured request reads as a plain question with examples, a risk badge
   // The pending attachment above a folded-away request says the same thing.
   await act(async () => { current!.onComposeMessage(); });
   expect(container.textContent).toContain("'Desktop'의 파일 24개를 수정할까요?");
-});
-
-test("the card follows the app language and shows whatever risk the request carries", async () => {
-  setAppCopyLanguage("en-US");
-  try {
-    // Fixture-driven: the risk is the agent's, so the same command can arrive at every level.
-    const command = (risk: "low" | "high"): AuthorityApprovalCard => ({ ...renameCard, approval: { ...renameCard.approval!,
-      actionKind: "run_command", count: 1, risk, examples: ["npm run deploy"], targets: [{ kind: "folder", label: "garden", path: "" }] } });
-    const { container, store } = await renderDecision([command("high")]);
-    expect(container.textContent).toContain("Run a command in 'garden'?");
-    expect(container.textContent).toContain("npm run deploy");
-    expect(container.querySelector('[data-test-class="approval-risk"][data-tone="danger"]')?.textContent).toBe("High risk");
-    expect(decisionButtons(container)).toEqual(["Deny", "Allow once", ""]);
-    await act(async () => { store.setState({ authorityApprovals: { sessionId: "general", cards: [command("low")] } }); });
-    expect(container.textContent).toContain("npm run deploy");
-    expect(container.querySelector('[data-test-class="approval-risk"][data-tone="neutral"]')?.textContent).toBe("Low risk");
-    await act(async () => { store.setState({ authorityApprovals: { sessionId: "general", cards: [
-      { ...renameCard, approval: { ...renameCard.approval!, actionKind: "update_project", risk: undefined, examples: [], targets: [] } },
-    ] } }); });
-    expect(container.textContent).toContain("Update the project records?");
-    expect(container.querySelector('[data-test-class="approval-risk"]')).toBeNull();
-  } finally {
-    setAppCopyLanguage("ko-KR");
-  }
 });

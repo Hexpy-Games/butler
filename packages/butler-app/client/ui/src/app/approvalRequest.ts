@@ -18,9 +18,10 @@ const COMMAND_KINDS: ReadonlySet<string> = new Set(["run_command", "network_comm
 export interface ApprovalRequestView {
   /** One plain question: what, where and how many. */
   title: string;
-  /** Up to three examples, then a "+N more" line. */
+  /** Up to three examples, then a "+N more" line; else the targets, else the reason. Never cut. */
   details: string[];
-  risk?: ApprovalRisk;
+  /** As the agent sent it; unknown or missing reads as high. */
+  risk: ApprovalRisk;
   /** What "Always allow in this conversation" covers. */
   conversationScope?: string;
   /** Picks the icon; `other` for unknown kinds and agents without `approval`. */
@@ -28,8 +29,10 @@ export interface ApprovalRequestView {
 }
 
 const MAX_EXAMPLES = 3;
-/** Longer example paths are cut in the middle, keeping the file name. */
-const MAX_PATH_CHARS = 44;
+/** The gateway cuts a command example after this many characters (approval.rs). */
+const GATEWAY_COMMAND_CHARS = 200;
+/** Target kinds that say what a request without examples acts on. */
+const DETAIL_TARGET_KINDS: ReadonlySet<string> = new Set(["connector", "schedule", "other"]);
 const RISKS: readonly string[] = ["low", "medium", "high"];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -73,6 +76,7 @@ export function approvalRequestView(
     return {
       title: scope ? `${scope.title} · ${scope.description}` : card.reason,
       details: [],
+      risk: "high",
       actionKind: "other",
       ...(scope ? { conversationScope: scope.description } : {}),
     };
@@ -82,8 +86,8 @@ export function approvalRequestView(
   const workspace = workspaceLabel(approval);
   return {
     title: sentence(actionKind, approval, workspace, copy),
-    details: details(approval, copy),
-    ...(approval.risk ? { risk: approval.risk } : {}),
+    details: details(approval, actionKind, card, copy),
+    risk: approval.risk ?? "high",
     conversationScope: actionKind === "edit_files" ? copy.covers.editFiles(workspace)
       : COMMAND_KINDS.has(actionKind) ? copy.covers.command(workspace)
         : copy.covers.other,
@@ -102,7 +106,7 @@ function sentence(kind: ApprovalActionKind, approval: ApprovalSummary, workspace
       return slash > 0 ? copy.useConnector(path.slice(slash + 1) || null, path.slice(0, slash))
         : copy.useConnector(path || null, null);
     }
-    case "manage_schedule": return copy.manageSchedule;
+    case "manage_schedule": return copy.manageSchedule[scheduleOperation(approval).operation];
     case "update_project": return copy.updateProject;
     case "start_conversation": return copy.startConversation;
     case "restart_service": return copy.restartService;
@@ -118,23 +122,37 @@ function workspaceLabel(approval: ApprovalSummary): string | null {
   return label || null;
 }
 
-function details(approval: ApprovalSummary, copy: ApprovalRequestCopy): string[] {
-  const command = COMMAND_KINDS.has(approval.actionKind);
-  const shown = approval.examples.slice(0, MAX_EXAMPLES).map((example) => command ? example : truncateMiddle(example));
-  // Without examples there is nothing to continue: a single call is not "+1 more".
-  const rest = shown.length > 0 ? approval.count - shown.length : 0;
-  return rest > 0 ? [...shown, copy.more(rest)] : shown;
+/** `automation:create|delete|due:<id>` (the agent's schedule target): the operation and the schedule. */
+function scheduleOperation(approval: ApprovalSummary): { operation: "create" | "delete" | "run" | "change"; id: string } {
+  const path = approval.targets.find((target) => target.kind === "schedule")?.path ?? "";
+  const [, operation = "", ...rest] = path.split(":");
+  const id = rest.join(":");
+  if (operation === "create") return { operation: "create", id };
+  if (operation === "delete") return { operation: "delete", id };
+  if (operation === "due") return { operation: "run", id: "" };
+  return { operation: "change", id: path };
 }
 
-/** Cuts a long path in the middle, at a folder boundary when it can, and keeps the file name whole when it fits. */
-export function truncateMiddle(path: string, max = MAX_PATH_CHARS): string {
-  if (path.length <= max) return path;
-  const name = path.slice(path.search(/[^\\/]*$/u));
-  if (name.length + 4 > max) {
-    const keep = max - 1;
-    return `${path.slice(0, Math.ceil(keep / 2))}…${path.slice(path.length - Math.floor(keep / 2))}`;
+function details(
+  approval: ApprovalSummary,
+  kind: ApprovalActionKind,
+  card: Pick<AuthorityApprovalCard, "scope" | "reason">,
+  copy: ApprovalRequestCopy,
+): string[] {
+  const command = COMMAND_KINDS.has(kind);
+  const shown = approval.examples.slice(0, MAX_EXAMPLES).map((example) =>
+    // A command at the gateway's cut was truncated there: mark it.
+    command && [...example].length >= GATEWAY_COMMAND_CHARS ? `${example}…` : example);
+  if (shown.length) {
+    const rest = approval.count - shown.length;
+    return rest > 0 ? [...shown, copy.more(rest)] : shown;
   }
-  const head = path.slice(0, max - name.length - 3);
-  const cut = Math.max(head.lastIndexOf("/"), head.lastIndexOf("\\"));
-  return cut > 0 ? `${head.slice(0, cut)}/…/${name}` : `${path.slice(0, max - name.length - 2)}…/${name}`;
+  // Without examples, say what the request acts on: its targets, else the reason.
+  const targets = kind === "manage_schedule"
+    ? [scheduleOperation(approval).id]
+    : approval.targets.filter((target) => DETAIL_TARGET_KINDS.has(target.kind)).map((target) => target.path);
+  const lines = targets.map((line) => line.trim()).filter(Boolean);
+  if (lines.length || kind !== "other") return lines;
+  const fallback = (card.scope?.description ?? card.reason).trim();
+  return fallback ? [fallback] : [];
 }

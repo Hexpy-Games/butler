@@ -42,6 +42,19 @@
   );
 }
 
+.detailLines {
+  display: grid;
+  min-width: 0;
+}
+
+/* Same clamp idea as QueuedMessage: the full text stays one click away. */
+.detailLines[data-clamped="true"] {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
 .actions {
   display: flex;
   min-width: 0;

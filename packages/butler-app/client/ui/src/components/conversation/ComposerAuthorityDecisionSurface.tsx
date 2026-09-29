@@ -23,12 +23,14 @@ export function ComposerAuthorityDecisionSurface({ decision }: { decision: Compo
     icon={<Icon aria-hidden="true" size="lg" />}
     title={decision.title}
     details={decision.details}
+    detailsShowMoreLabel={appCopy.conversation.messageActions.showMore}
+    detailsShowLessLabel={appCopy.conversation.messageActions.showLess}
     onOpen={decision.onOpenSource}
     error={decision.error}
     aside={<>
-      {decision.risk ? <Tag tone={RISK_TONES[decision.risk]} data-test-class="approval-risk">
+      <Tag tone={RISK_TONES[decision.risk]} data-test-class="approval-risk">
         {appCopy.interfaceTemplates.approvalRequest.risk[decision.risk]}
-      </Tag> : null}
+      </Tag>
       {decision.pendingCount > 1 ? <Typo.Caption>+{decision.pendingCount - 1}</Typo.Caption> : null}
       <Button type="button" size="sm" variant="borderless" aria-label={appCopy.interfaceDetails.composeLater} title={appCopy.interfaceDetails.composeLater} onClick={decision.onComposeMessage}>
         <ChevronDown aria-hidden="true" size="md" />

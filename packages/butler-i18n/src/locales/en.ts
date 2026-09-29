@@ -1,7 +1,7 @@
 import type { AppCopy, BriefingFallbackCopy, NewChatBriefingSuggestion } from "../copy-contract.ts";
 
 /** Where an approval request acts: the quoted workspace label, or this workspace. */
-const inWorkspace = (workspace: string | null) => workspace ? `in '${workspace}'` : "in this workspace";
+const inWorkspace = (workspace: string | null) => workspace ? `in '${workspace}'` : "in this folder";
 
 const generalFallback: BriefingFallbackCopy = {
     title: "What should we open today?",
@@ -434,7 +434,7 @@ export const enUsCopy: AppCopy = {
       runCommand: workspace => `Run a command ${inWorkspace(workspace)}?`,
       networkCommand: workspace => `Run a command that uses the internet ${inWorkspace(workspace)}?`,
       useConnector: (tool, server) => tool && server ? `Use ${tool} from ${server}?` : tool ? `Use ${tool}?` : "Use a connected tool?",
-      manageSchedule: "Change a schedule?",
+      manageSchedule: { create: "Create a schedule?", delete: "Delete a schedule?", run: "Run due schedules?", change: "Change a schedule?" },
       updateProject: "Update the project records?",
       startConversation: "Start a new conversation?",
       restartService: "Restart Butler?",

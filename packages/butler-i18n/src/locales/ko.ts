@@ -1,7 +1,7 @@
 import type { AppCopy, BriefingFallbackCopy, NewChatBriefingSuggestion } from "../copy-contract.ts";
 
-/** 허용 요청이 작업할 곳: 따옴표로 감싼 작업 공간 이름, 없으면 이 작업 공간. */
-const workspaceName = (workspace: string | null) => workspace ? `'${workspace}'` : "이 작업 공간";
+/** 허용 요청이 작업할 곳: 따옴표로 감싼 작업 폴더 이름, 없으면 이 작업 폴더. */
+const workspaceName = (workspace: string | null) => workspace ? `'${workspace}'` : "이 작업 폴더";
 
 const generalFallback: BriefingFallbackCopy = {
     title: "오늘의 일을 같이 펼쳐볼까요",
@@ -433,10 +433,10 @@ export const koKrCopy: AppCopy = {
       runCommand: workspace => `${workspaceName(workspace)}에서 명령을 실행할까요?`,
       networkCommand: workspace => `${workspaceName(workspace)}에서 인터넷을 쓰는 명령을 실행할까요?`,
       useConnector: (tool, server) => tool && server ? `${server}의 ${tool} 도구를 사용할까요?` : tool ? `${tool} 도구를 사용할까요?` : "연결된 도구를 사용할까요?",
-      manageSchedule: "예약 작업을 변경할까요?",
+      manageSchedule: { create: "예약 작업을 만들까요?", delete: "예약 작업을 삭제할까요?", run: "예정된 예약 작업을 실행할까요?", change: "예약 작업을 변경할까요?" },
       updateProject: "프로젝트 기록을 업데이트할까요?",
       startConversation: "새 대화를 시작할까요?",
-      restartService: "Butler를 다시 시작할까요?",
+      restartService: "버틀러를 다시 시작할까요?",
       createWorktree: "이 대화용 워크트리를 만들까요?",
       generic: "이 작업을 허용할까요?",
       more: count => `외 ${count}개`,

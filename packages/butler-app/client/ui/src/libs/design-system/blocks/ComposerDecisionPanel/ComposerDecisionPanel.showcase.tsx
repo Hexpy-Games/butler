@@ -21,7 +21,7 @@ const labels = {
     authority: "Allow writing files outside the workspace", later: "Compose a message first",
     deny: "Deny", once: "Allow once", scope: "Allow scope", conversation: "Always allow in this conversation",
     error: "Could not send the decision. Try again.",
-    rename: "Edit 24 files in 'Desktop'?", more: "+21 more", medium: "Medium risk",
+    rename: "Edit 24 files in 'Desktop'?", more: "+21 more", showMore: "Show more", showLess: "Show less", medium: "Medium risk",
     command: "Run a command in 'garden'?", high: "High risk",
   },
   "ko-KR": {
@@ -30,7 +30,7 @@ const labels = {
     authority: "워크스페이스 밖의 파일 쓰기 허용 요청", later: "먼저 메시지 작성",
     deny: "거절", once: "이번만 허용", scope: "허용 범위", conversation: "이 대화에서 계속 허용",
     error: "결정을 보내지 못했습니다. 다시 시도하세요.",
-    rename: "'Desktop'의 파일 24개를 수정할까요?", more: "외 21개", medium: "위험 보통",
+    rename: "'Desktop'의 파일 24개를 수정할까요?", more: "외 21개", showMore: "더보기", showLess: "접기", medium: "위험 보통",
     command: "'garden'에서 명령을 실행할까요?", high: "위험 높음",
   },
 } as const;
@@ -78,12 +78,13 @@ function ApprovalRequest({ context, command }: { context: ShowcaseRenderContext;
   const copy = labels[context.locale];
   return command ? (
     <ComposerDecisionPanel icon={<Terminal aria-hidden="true" size="lg" />} title={copy.command} onOpen={() => undefined}
-      details={["rm -rf build && npm run build"]}
+      details={[`rm -rf build && npm run build -- --out ${"dist/".repeat(16)}and a long tail of arguments that wraps`]}
+      detailsShowMoreLabel={copy.showMore} detailsShowLessLabel={copy.showLess}
       aside={<><Tag tone="danger">{copy.high}</Tag><Later copy={copy} /></>}
       actions={<AuthorityActions copy={copy} />} />
   ) : (
     <ComposerDecisionPanel icon={<Folder aria-hidden="true" size="lg" />} title={copy.rename} onOpen={() => undefined}
-      details={[...screenshots, copy.more]}
+      details={[...screenshots, copy.more]} detailsShowMoreLabel={copy.showMore} detailsShowLessLabel={copy.showLess}
       aside={<><Tag tone="warning">{copy.medium}</Tag><Later copy={copy} /></>}
       actions={<AuthorityActions copy={copy} />} />
   );

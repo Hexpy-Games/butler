@@ -4,6 +4,7 @@ import { dsClass } from "../../lib/internal";
 import { Clickable } from "../../components/Clickable";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
+import { ComposerDecisionDetails } from "./ComposerDecisionDetails";
 import styles from "./ComposerDecisionPanel.module.css";
 
 export interface ComposerDecisionPanelProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivElement>>, "title" | "children"> {
@@ -12,8 +13,11 @@ export interface ComposerDecisionPanelProps extends Omit<DsBaseProps<HTMLAttribu
   /** What is being decided; clamps to two lines and opens the source. */
   title: string;
   onOpen: () => void;
-  /** Short lines under the title (examples, a "+N more" line); each is one truncated line. */
+  /** Lines under the title (examples, a "+N more" line). Each wraps in full: what is decided is never cut. */
   details?: readonly string[];
+  /** With `detailsShowLessLabel`, clamps long details to four lines behind an inline "Show more". */
+  detailsShowMoreLabel?: string;
+  detailsShowLessLabel?: string;
   /** Trailing subject-row content (a status Tag, a pending count, a compose-later button). */
   aside?: ReactNode;
   /** A failed decision, announced as an alert between the subject and the actions. */
@@ -23,7 +27,7 @@ export interface ComposerDecisionPanelProps extends Omit<DsBaseProps<HTMLAttribu
 }
 
 /** A pending decision shown in place of the composer input: subject row, optional details and error, actions. */
-export function ComposerDecisionPanel({ icon, title, onOpen, details, aside, error, actions, className, ...props }: ComposerDecisionPanelProps) {
+export function ComposerDecisionPanel({ icon, title, onOpen, details, detailsShowMoreLabel, detailsShowLessLabel, aside, error, actions, className, ...props }: ComposerDecisionPanelProps) {
   const hasDetails = Boolean(details?.length);
   return (
     <div className={dsClass(styles.surface, className)} {...props}>
@@ -37,9 +41,7 @@ export function ComposerDecisionPanel({ icon, title, onOpen, details, aside, err
         {aside ? <div className={styles.aside} data-slot="composer-decision-aside">{aside}</div> : null}
       </div>
       {hasDetails ? (
-        <div className={styles.details} data-slot="composer-decision-details">
-          {details!.map((line, index) => <Typo.Caption key={`${index}:${line}`} as="p" tone="secondary" truncate>{line}</Typo.Caption>)}
-        </div>
+        <ComposerDecisionDetails lines={details!} showMoreLabel={detailsShowMoreLabel} showLessLabel={detailsShowLessLabel} />
       ) : null}
       {error ? (
         <div className={styles.error}>

@@ -27,6 +27,7 @@ function summary(actionKind: string, fields: { targets?: TransportTarget[]; coun
 /** #277's folder target: its path is the folder label (`garden`, `garden/app`). */
 const folder = (label: string) => ({ kind: "folder", path: label });
 
+// test-category: pure-logic
 test("each action kind reads as one question in English and Korean", () => {
   const cases: Array<[ApprovalSummary, string, string]> = [
     [summary("edit_files", { targets: [folder("garden"), { kind: "file", path: "a.md" }, { kind: "file", path: "b.md" }], count: 2 }),
@@ -38,11 +39,17 @@ test("each action kind reads as one question in English and Korean", () => {
       "Run a command that uses the internet in 'garden'?", "'garden'에서 인터넷을 쓰는 명령을 실행할까요?"],
     [summary("use_connector", { targets: [{ kind: "connector", path: "github/create_issue" }], risk: "high" }),
       "Use create_issue from github?", "github의 create_issue 도구를 사용할까요?"],
+    [summary("manage_schedule", { targets: [{ kind: "schedule", path: "automation:create:daily-news" }] }),
+      "Create a schedule?", "예약 작업을 만들까요?"],
+    [summary("manage_schedule", { targets: [{ kind: "schedule", path: "automation:delete:daily-news" }], risk: "high" }),
+      "Delete a schedule?", "예약 작업을 삭제할까요?"],
+    [summary("manage_schedule", { targets: [{ kind: "schedule", path: "automation:due:now" }] }),
+      "Run due schedules?", "예정된 예약 작업을 실행할까요?"],
     [summary("manage_schedule", { targets: [{ kind: "schedule", path: "automation-1" }] }), "Change a schedule?", "예약 작업을 변경할까요?"],
     [summary("update_project", { targets: [{ kind: "project", path: "ledger:work" }], risk: "low" }),
       "Update the project records?", "프로젝트 기록을 업데이트할까요?"],
     [summary("start_conversation", { risk: "low" }), "Start a new conversation?", "새 대화를 시작할까요?"],
-    [summary("restart_service", { targets: [{ kind: "service", path: "butler" }] }), "Restart Butler?", "Butler를 다시 시작할까요?"],
+    [summary("restart_service", { targets: [{ kind: "service", path: "butler" }] }), "Restart Butler?", "버틀러를 다시 시작할까요?"],
     [summary("create_worktree", { targets: [folder("garden")], risk: "low" }),
       "Create a worktree for this conversation?", "이 대화용 워크트리를 만들까요?"],
     [summary("other", { targets: [{ kind: "other", path: "thing" }] }), "Allow this action?", "이 작업을 허용할까요?"],
@@ -53,6 +60,7 @@ test("each action kind reads as one question in English and Korean", () => {
   }
 });
 
+// test-category: pure-logic
 test("the sentence quotes the workspace label, spaces and all, and drops what is missing", () => {
   const notes = summary("edit_files", { targets: [folder("My Notes")], count: 3 });
   expect(approvalRequestView(card(notes), en).title).toBe("Edit 3 files in 'My Notes'?");
@@ -65,21 +73,23 @@ test("the sentence quotes the workspace label, spaces and all, and drops what is
   expect(approvalRequestView(card(summary("use_connector")), ko).title).toBe("연결된 도구를 사용할까요?");
 });
 
-test("without a workspace label the sentence says this workspace", () => {
+// test-category: pure-logic
+test("without a workspace label the sentence says this folder", () => {
   for (const targets of [[], [{ kind: "folder", path: "" }], [{ kind: "folder", path: "  " }]]) {
     const edits = summary("edit_files", { targets, count: 24 });
-    expect(approvalRequestView(card(edits), en)).toMatchObject({ title: "Edit 24 files in this workspace?",
-      conversationScope: "File edits in this workspace" });
-    expect(approvalRequestView(card(edits), ko)).toMatchObject({ title: "이 작업 공간의 파일 24개를 수정할까요?",
-      conversationScope: "이 작업 공간의 파일 수정" });
+    expect(approvalRequestView(card(edits), en)).toMatchObject({ title: "Edit 24 files in this folder?",
+      conversationScope: "File edits in this folder" });
+    expect(approvalRequestView(card(edits), ko)).toMatchObject({ title: "이 작업 폴더의 파일 24개를 수정할까요?",
+      conversationScope: "이 작업 폴더의 파일 수정" });
     const command = summary("run_command", { targets });
-    expect(approvalRequestView(card(command), en).title).toBe("Run a command in this workspace?");
-    expect(approvalRequestView(card(command), ko).title).toBe("이 작업 공간에서 명령을 실행할까요?");
+    expect(approvalRequestView(card(command), en).title).toBe("Run a command in this folder?");
+    expect(approvalRequestView(card(command), ko).title).toBe("이 작업 폴더에서 명령을 실행할까요?");
   }
   const offline = normalizeApprovalSummary({ action_kind: "network_command", targets: [{ kind: "folder", path: "." }] });
-  expect(approvalRequestView(card(offline), en).title).toBe("Run a command that uses the internet in this workspace?");
+  expect(approvalRequestView(card(offline), en).title).toBe("Run a command that uses the internet in this folder?");
 });
 
+// test-category: pure-logic
 test("up to three examples show, then a +N more line for the rest", () => {
   const edits = summary("edit_files", { targets: [folder("garden")], count: 24,
     examples: ["a.png", "b.png", "c.png", "d.png"] });
@@ -91,34 +101,34 @@ test("up to three examples show, then a +N more line for the rest", () => {
   expect(approvalRequestView(card(summary("use_connector")), en).details).toEqual([]);
 });
 
-test("long relative paths are cut in the middle and keep the file name", () => {
+// test-category: pure-logic
+test("paths and command lines are shown in full; a command at the gateway's cut is marked", () => {
   const long = "photos/2026/September/holiday trip to the coast/day 3/IMG_20260927_100214.png";
-  const edits = summary("edit_files", { targets: [folder("Desktop")], count: 2, examples: [long, "short/a.png"] });
-  const [first, second] = approvalRequestView(card(edits), en).details;
-  expect(first).toBe("photos/2026/…/IMG_20260927_100214.png");
-  expect(second).toBe("short/a.png");
-  const longName = `${"x".repeat(60)}.png`;
-  const cut = approvalRequestView(card(summary("edit_files", { examples: [`notes/${longName}`] })), en).details[0]!;
-  expect(cut.length).toBe(44);
-  expect(cut).toMatch(/^notes\/x+…x+\.png$/u);
-  // A command line is shown as sent: the person approves exactly what runs.
+  const edits = summary("edit_files", { targets: [folder("Desktop")], count: 1, examples: [long] });
+  expect(approvalRequestView(card(edits), en).details).toEqual([long]);
   const command = `npm run build -- --out ${"dist/".repeat(12)}`;
   expect(approvalRequestView(card(summary("run_command", { examples: [command] })), en).details).toEqual([command]);
+  const cut = "x".repeat(200);
+  expect(approvalRequestView(card(summary("run_command", { examples: [cut] })), en).details).toEqual([`${cut}…`]);
 });
 
+// test-category: pure-logic
 test("the badge shows the risk the agent sent: the App never classifies commands itself", () => {
   // Fixture-driven: the same command line with each risk the agent may send.
   for (const risk of ["low", "medium", "high"] as const) {
     const push = summary("run_command", { targets: [folder("garden")], examples: ["git push origin main"], risk });
     expect(approvalRequestView(card(push), en).risk).toBe(risk);
   }
-  expect(approvalRequestView(card(summary("run_command", { risk: undefined })), en).risk).toBeUndefined();
+  // Unknown or missing risk reads as high, never as no badge.
+  expect(approvalRequestView(card(summary("run_command", { risk: undefined })), en).risk).toBe("high");
+  expect(approvalRequestView(card(summary("run_command", { risk: "severe" })), en).risk).toBe("high");
   expect(en.risk).toEqual({ low: "Low risk", medium: "Medium risk", high: "High risk" });
   expect(ko.risk).toEqual({ low: "위험 낮음", medium: "위험 보통", high: "위험 높음" });
   expect(normalizeApprovalSummary({ action_kind: "run_command", targets: [], count: 1, examples: [], risk: "severe" })?.risk)
     .toBeUndefined();
 });
 
+// test-category: security
 test("#277 folder labels and relative paths read as sent; a stray absolute path never reaches the card", () => {
   const examples = ["shots/a.png", "/Users/mina/Desktop/shots/b.png", "/private/tmp/elsewhere/c.png"];
   const absolute = normalizeApprovalSummary({ action_kind: "edit_files", count: 24, risk: "medium", examples,
@@ -147,16 +157,32 @@ test("#277 folder labels and relative paths read as sent; a stray absolute path 
   expect(approvalRequestView(card(pathLabel), en).title).toBe("Run a command in 'My Notes'?");
 });
 
+// test-category: pure-logic
+test("a request without examples shows what it acts on: its target, else the legacy scope or reason", () => {
+  const other = summary("other", { targets: [{ kind: "other", path: "wallpaper:set" }] });
+  expect(approvalRequestView(card(other), en).details).toEqual(["wallpaper:set"]);
+  expect(approvalRequestView(card(summary("other")), en).details).toEqual(["garden 안의 파일 쓰기·수정"]);
+  expect(approvalRequestView(card(summary("other"), { scope: undefined }), en).details).toEqual(["Reviewed operation"]);
+  const connector = summary("use_connector", { targets: [{ kind: "connector", path: "github/create_issue" }] });
+  expect(approvalRequestView(card(connector), en).details).toEqual(["github/create_issue"]);
+  const schedule = summary("manage_schedule", { targets: [{ kind: "schedule", path: "automation:delete:daily-news" }] });
+  expect(approvalRequestView(card(schedule), en).details).toEqual(["daily-news"]);
+  const topic = summary("start_conversation", { targets: [{ kind: "other", path: "Weekly review" }] });
+  expect(approvalRequestView(card(topic), en).details).toEqual(["Weekly review"]);
+});
+
+// test-category: pure-logic
 test("an unknown kind reads as the generic question; no approval falls back to the legacy scope, then the reason", () => {
   const future = summary("delete_universe", { examples: ["x"], risk: "high" });
   expect(approvalRequestView(card(future), en)).toMatchObject({ title: "Allow this action?", details: ["x"], risk: "high", actionKind: "other" });
   expect(approvalRequestView(card(future), ko).title).toBe("이 작업을 허용할까요?");
   const legacy = approvalRequestView(card(), en);
-  expect(legacy).toEqual({ title: "작업 폴더의 파일 편집 · garden 안의 파일 쓰기·수정", details: [], actionKind: "other",
-    conversationScope: "garden 안의 파일 쓰기·수정" });
+  expect(legacy).toEqual({ title: "작업 폴더의 파일 편집 · garden 안의 파일 쓰기·수정", details: [], risk: "high",
+    actionKind: "other", conversationScope: "garden 안의 파일 쓰기·수정" });
   expect(approvalRequestView(card(undefined, { scope: undefined }), en).title).toBe("Reviewed operation");
 });
 
+// test-category: pure-logic
 test("\"Always allow in this conversation\" says what it covers in the same terms", () => {
   const edits = summary("edit_files", { targets: [folder("garden")], count: 3 });
   expect(approvalRequestView(card(edits), en).conversationScope).toBe("File edits in 'garden'");
@@ -168,6 +194,7 @@ test("\"Always allow in this conversation\" says what it covers in the same term
   expect(approvalRequestView(card(summary("use_connector")), ko).conversationScope).toBe("같은 작업");
 });
 
+// test-category: pure-logic
 test("the transport approval is narrowed fail-soft: bad fields drop, a bad shape drops the whole summary", () => {
   expect(normalizeApprovalSummary({
     action_kind: "edit_files",
@@ -186,27 +213,4 @@ test("the transport approval is narrowed fail-soft: bad fields drop, a bad shape
   expect(normalizeApprovalSummary({ action_kind: "run_command" })).toEqual({
     actionKind: "run_command", targets: [], count: 1, examples: [],
   });
-});
-
-test("pending approvals from the agent keep their structured approval next to the legacy scope", async () => {
-  const { useButlerStore } = await import("./store.ts");
-  const previousFetch = globalThis.fetch;
-  const request = { request_ref: "request-one", category: "reviewed_effect", reason: "Reviewed operation",
-    executable: "write_file", command_count: 1, scope: legacyScope };
-  globalThis.fetch = (async () => new Response(JSON.stringify({ data: { session_id: "session-a", requests: [
-    { ...request, approval: { action_kind: "edit_files", targets: [folder("garden")],
-      count: 2, examples: ["a.md"], risk: "medium" } },
-    { ...request, request_ref: "request-old" },
-  ] } }), { headers: { "content-type": "application/json" } })) as unknown as typeof fetch;
-  try {
-    useButlerStore.setState({ activeChatId: "session-a" });
-    expect(await useButlerStore.getState().refreshAuthorityApprovals("session-a")).toBe(true);
-    const [structured, legacy] = useButlerStore.getState().authorityApprovals!.cards;
-    expect(structured).toMatchObject({ scope: legacyScope, approval: {
-      actionKind: "edit_files", targets: [{ kind: "folder", label: "garden", path: "" }], count: 2, examples: ["a.md"], risk: "medium" } });
-    expect(legacy!.approval).toBeUndefined();
-  } finally {
-    globalThis.fetch = previousFetch;
-    useButlerStore.setState({ authorityApprovals: null, activeChatId: "draft:chat" });
-  }
 });

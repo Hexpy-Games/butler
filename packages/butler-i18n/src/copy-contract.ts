@@ -107,7 +107,7 @@ export interface ApprovalRequestCopy {
   runCommand: (workspace: string | null) => string;
   networkCommand: (workspace: string | null) => string;
   useConnector: (tool: string | null, server: string | null) => string;
-  manageSchedule: string;
+  manageSchedule: { create: string; delete: string; run: string; change: string };
   updateProject: string;
   startConversation: string;
   restartService: string;

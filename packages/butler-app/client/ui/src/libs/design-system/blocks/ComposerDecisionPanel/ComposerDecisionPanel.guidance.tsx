@@ -50,16 +50,17 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "A hand-built row drifts from the composer padding and radius.", render: () => <Stack align="row" gap="sm" cross="center"><ListChecks size="lg" /><Typo.Label>Design system final cleanup plan</Typo.Label><Button size="sm">Accept plan</Button></Stack> },
     },
     {
-      do: { caption: "Examples go in details: one truncated line each, aligned to the title.", render: () => <ApprovalRequest /> },
+      do: { caption: "Examples go in details: each wraps in full, aligned to the title.", render: () => <ApprovalRequest /> },
       dont: { caption: "Packing examples into the title clamps them away.", render: () => <ComposerDecisionPanel icon={<Folder aria-hidden="true" size="lg" />} title="Edit 24 files in 'Desktop'? Screenshot 10.02.14.png, Screenshot 10.05.31.png, Screenshot 10.09.02.png and 21 more" onOpen={() => undefined} actions={<Button size="sm">Allow once</Button>} /> },
     },
   ],
   content: [
     "The title names the plan, or asks what the request will do: what, where and how many (Edit 24 files in 'Desktop'?).",
     "Details are short concrete items (file names, the command line), at most three, then \"+N more\".",
-    "Paths in details are relative to the workspace, never absolute; cut long ones in the middle so the file name stays.",
+    "Details show exactly what is decided: never cut a command or path; pass the Show more/less labels so a long block clamps with the full text one click away.",
+    "Paths in details are relative to the workspace, never absolute.",
     "Buttons are verbs (Accept plan, Deny, Allow once).",
   ],
-  accessibility: ["The icon is decorative (aria-hidden); the title is a button that opens the source; details are plain text; errors are announced with role=\"alert\"."],
+  accessibility: ["The icon is decorative (aria-hidden); the title is a button that opens the source; details are plain text and the Show more button carries aria-expanded and aria-controls; errors are announced with role=\"alert\"."],
   tokens: ["--adaptive-composer-radius", "--space-xs", "--space-sm", "--space-md", "--space-lg", "--icon-size-lg", "--text-secondary"],
 };

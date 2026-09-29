@@ -15,7 +15,8 @@ shape.
 | `icon` | Decision-kind icon at `size="lg"`, drawn in the secondary tone |
 | `title` | What is being decided; two lines at most, opens the source |
 | `onOpen` | Opens the plan or the request's source |
-| `details` | Short lines under the title (examples, a "+N more" line), each one truncated line in the secondary caption style, aligned to the title text |
+| `details` | Lines under the title (examples, a "+N more" line) in the secondary caption style, aligned to the title text. Every line wraps in full: what is being decided is never cut |
+| `detailsShowMoreLabel`, `detailsShowLessLabel` | With both, details longer than four lines clamp behind an inline Show more / Show less button (the QueuedMessage pattern); without them details always show in full |
 | `aside` | Trailing subject-row content: a status `Tag`, a pending count, a compose-later button |
 | `error` | A failed decision, announced with `role="alert"` |
 | `actions` | The decision buttons, usually a `ButtonContainer justify="end"` |
@@ -42,7 +43,7 @@ button radius live in the DS instead of a product CSS module.
   aside={<Tag tone="warning">Medium risk</Tag>}
   actions={<ButtonContainer size="sm" justify="end">…</ButtonContainer>} />
 ```
-Pass `data-test-class` for smokes; `details` for up to three examples and a
+Pass `data-test-class` for smokes; `details` (with the Show more/less labels) for up to three examples and a
 "+N more" line; `aside` for a status Tag, a pending count or a compose-later
 button; `error` after a failed decision.
 
