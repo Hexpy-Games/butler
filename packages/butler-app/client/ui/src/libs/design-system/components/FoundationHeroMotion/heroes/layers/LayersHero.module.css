@@ -87,6 +87,23 @@
   pointer-events: none;
 }
 
+/* A sheet's thickness: rings of its outline, one px apart down its own z. */
+.slab {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ring {
+  position: absolute;
+  inset: 0;
+  border: 3px solid var(--text-tertiary);
+  border-radius: var(--app-window-radius);
+  transform: translateZ(calc(var(--i) * -1px));
+}
+
 /* The label's pin: the sheet's top right corner, turned and scaled back to
    face the frame at canvas size (the inverse of the quarter camera). */
 .pin {
@@ -96,10 +113,10 @@
   inline-size: 0;
   block-size: 0;
   opacity: 0;
-  /* Brought toward the viewer, clear of every sheet's plane. */
+  /* Brought toward the viewer, clear of every sheet (--q-clear, set by the scene). */
   transform: scale(calc(1 / var(--q-s, 1)))
     rotateZ(calc(-1 * var(--q-rz, 0deg))) rotateX(calc(-1 * var(--q-rx, 0deg)))
-    translateZ(calc(var(--space-4xl) * 5));
+    translateZ(var(--q-clear, 0));
   transform-origin: 0 0;
 }
 

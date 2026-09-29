@@ -4,7 +4,7 @@ import { introTracks } from "../shared/Intro";
 import { reveal, revealBeats, select } from "../shared/Reveal";
 import type { SceneContext } from "../scene/types";
 import { GLASS, SHEETS, zToken, zValue, type LayersCopy } from "./layersCopy";
-import { AT, END, looped, namedAt, risesAt, settlesAt } from "./layersTiming";
+import { AT, END, labelAt, looped } from "./layersTiming";
 import { lift, quarter } from "./layersView";
 
 
@@ -14,6 +14,9 @@ export function layersTracks(copy: LayersCopy) {
     const box = g.boxes.screen!;
     const flat = view("screen", box, layout === "tall" ? 0.94 : 0.92, 1.6);
     const tilted = quarter(canvas, box, layout);
+    const zoomed = quarter(canvas, box, layout, true);
+    const spread = AT.spread + AT.spreadFor;
+    const collapse = AT.collapse + AT.collapseFor;
     const intro = view("intro", g.boxes.intro!, 1, 1);
     const camera: Key[] = [
       { at: 0, ...intro },
@@ -21,6 +24,10 @@ export function layersTracks(copy: LayersCopy) {
       { at: AT.flat + TRANSITION, ...flat },
       { at: AT.tilt, ...flat },
       { at: AT.tilt + TRANSITION, ...tilted },
+      { at: AT.spread, ...tilted },
+      { at: spread, ...zoomed, ease: "standard" },
+      { at: AT.collapse, ...zoomed },
+      { at: collapse, ...tilted, ease: "standard" },
       { at: AT.untilt, ...tilted },
       { at: AT.untilt + TRANSITION, ...flat },
       { at: END, ...flat },
@@ -44,7 +51,7 @@ export function layersTracks(copy: LayersCopy) {
         // A hair apart while flat, so coplanar sheets keep their order.
         const rest = k * 0.1;
         const up = lift(layout, k);
-        const named = namedAt(k);
+        const named = labelAt(k);
         const label: Track = {
           select: select(`pin-${k}`),
           keys: looped(
@@ -91,7 +98,21 @@ export function layersTracks(copy: LayersCopy) {
               },
             ]
           : [];
-        if (k === 0) return [label, ...texts];
+        // Rim and slab edge show for as long as the sheets are apart; all sheets spread and settle together.
+        const edge = (part: "rim" | "slab"): Track => ({
+          select: select(`${part}-${k}`),
+          keys: looped(
+            [
+              { at: 0, o: 0 },
+              { at: AT.spread, o: 0 },
+              { at: AT.spread + 0.5, o: 1 },
+              { at: collapse - 0.5, o: 1 },
+              { at: collapse, o: 0 },
+            ],
+            close,
+          ),
+        });
+        if (k === 0) return [label, ...texts, edge("slab")];
         return [
           label,
           ...texts,
@@ -101,27 +122,16 @@ export function layersTracks(copy: LayersCopy) {
             keys: looped(
               [
                 { at: 0, z: rest },
-                { at: risesAt(k), z: rest },
-                { at: risesAt(k) + AT.rise, z: up },
-                { at: settlesAt(k), z: up },
-                { at: settlesAt(k) + 1, z: rest },
+                { at: AT.spread, z: rest },
+                { at: spread, z: up, ease: "standard" },
+                { at: AT.collapse, z: up },
+                { at: collapse, z: rest, ease: "standard" },
               ],
               close,
             ),
           },
-          {
-            select: select(`rim-${k}`),
-            keys: looped(
-              [
-                { at: 0, o: 0 },
-                { at: risesAt(k), o: 0 },
-                { at: risesAt(k) + 0.4, o: 1 },
-                { at: settlesAt(k) + 0.6, o: 1 },
-                { at: settlesAt(k) + 1, o: 0 },
-              ],
-              close,
-            ),
-          },
+          edge("rim"),
+          edge("slab"),
         ];
       }),
     ];
