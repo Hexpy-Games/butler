@@ -71,8 +71,8 @@ exec '<AGENT_HOME>/current/butler-agent' --installation-root '<AGENT_HOME>/curre
 ```
 
 An existing file at that path is handled as `butler install` does: a launcher
-with the marker is rewritten; the pre-native Bun launcher (it mentions
-`butler.js`) is kept as `butler.previous` (an existing one is not overwritten)
+with the marker is rewritten; the pre-native Bun launcher (it mentions both
+`butler.js` and `BUTLER_HOME`) is kept as `butler.previous` (an existing one is not overwritten)
 and replaced; anything else, or a symlink (never followed), is left alone. The
 shell installer then stops before installing anything, and `butler install`
 reports `kept-foreign`.

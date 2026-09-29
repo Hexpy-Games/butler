@@ -75,6 +75,12 @@ if BUTLER_AGENT_HOME="$work/agent-foreign" BUTLER_BIN_DIR="$work/bin-foreign" sh
 fi
 [ "$(sed -n 2p "$work/bin-foreign/butler")" = "echo mine" ] || fail "a foreign butler was overwritten"
 [ ! -e "$work/agent-foreign" ] || fail "files were installed next to a foreign butler"
+# A file that only mentions butler.js is not the pre-native launcher.
+mkdir "$work/bin-lookalike"
+printf '#!/bin/sh\necho butler.js\n' > "$work/bin-lookalike/butler"
+if BUTLER_AGENT_HOME="$work/agent-lookalike" BUTLER_BIN_DIR="$work/bin-lookalike" sh "$here/install.sh" --no-start > /dev/null 2>&1; then
+  fail "install.sh replaced a file that is not the pre-native launcher"
+fi
 # The pre-native launcher is kept aside.
 mkdir "$work/bin-stale"
 # shellcheck disable=SC2016 # the launcher text is literal

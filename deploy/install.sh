@@ -241,7 +241,7 @@ sq() { printf "'"; printf '%s' "$1" | sed "s/'/'\\\\''/g"; printf "'"; }
 
 # Decides what to do with an existing $BIN_DIR/butler before anything is installed:
 # ours is rewritten, the pre-native (Bun) launcher is kept aside as `butler install`
-# does, anything else (or a symlink, which is never followed) stops the install.
+# does (it runs `$BUTLER_HOME/bin/butler.js`), anything else (or a symlink, which is never followed) stops the install.
 check_launcher() {
   launcher="$BIN_DIR/butler"
   stale_launcher=0
@@ -250,7 +250,7 @@ check_launcher() {
   elif [ -e "$launcher" ]; then
     if [ "$(sed -n 2p "$launcher" 2>/dev/null || true)" = "$MARKER" ]; then
       :
-    elif grep -aq 'butler\.js' "$launcher" 2>/dev/null; then
+    elif grep -aq 'butler\.js' "$launcher" 2>/dev/null && grep -aq 'BUTLER_HOME' "$launcher" 2>/dev/null; then
       stale_launcher=1
     else
       die "$launcher exists and is not a Butler launcher; move it away and re-run"
