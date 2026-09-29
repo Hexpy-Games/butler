@@ -6,12 +6,12 @@
 .stage {
   --s: 0.72;
   --win-w: calc(1280px * var(--s));
-  --win-h: calc(640px * var(--s));
-  --rim: var(--space-4xl);
+  --win-h: calc(560px * var(--s));
+  --rim: calc(var(--space-4xl) + var(--space-2xl));
 
   position: relative;
   inline-size: var(--win-w);
-  block-size: calc(var(--win-h) + var(--rim) * 2);
+  block-size: calc(var(--win-h) + var(--rim) + var(--space-xl));
 }
 
 [data-layout="tall"] .stage {
@@ -115,8 +115,8 @@
 }
 
 .dim[data-axis="h"] {
-  /* Widths sit just below the bottom edge. */
-  top: calc(100% + var(--space-md));
+  /* Widths sit just above the top edge, where the push-in camera sees them. */
+  bottom: calc(100% + var(--space-md));
   block-size: var(--space-sm);
   border-block-start: 1px solid currentcolor;
   transform-origin: 0 50%;
@@ -180,15 +180,15 @@
 
 /* Titlebar: above the top-left corner, over its measure. */
 .tag[data-part^="bar"] {
-  bottom: calc(100% + var(--space-md));
+  bottom: calc(100% + var(--space-lg));
   left: calc(var(--space-sm) * -1);
 }
 
-/* Widths: centred under their measure. */
+/* Widths: centred over their measure. */
 .tag[data-part="side"],
 .tag[data-part^="read"],
 .tag[data-part="drawer"] {
-  top: calc(100% + var(--space-xl));
+  bottom: calc(100% + var(--space-3xl));
   translate: -50% 0;
 }
 
@@ -235,7 +235,7 @@
 .readout {
   position: absolute;
   right: 0;
-  bottom: calc(100% + var(--space-md));
+  bottom: calc(100% + var(--space-3xl));
   display: flex;
   align-items: center;
   gap: var(--space-xs);

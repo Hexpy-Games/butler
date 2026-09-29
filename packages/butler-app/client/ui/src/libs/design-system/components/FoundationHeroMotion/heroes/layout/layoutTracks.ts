@@ -1,4 +1,4 @@
-import { fit, focus, type Key, type Track } from "../../heroTimeline";
+import { fit, focus, type Key, type Pose, type Track } from "../../heroTimeline";
 import { TRANSITION } from "../shared/beats";
 import { introTracks } from "../shared/Intro";
 import { reveal, select } from "../shared/Reveal";
@@ -10,19 +10,23 @@ import { DETENTS, MODES, WINDOW, ZOOM, tokenValue, type LayoutCopy } from "./lay
  * 10 Layout and platform, "one shell, three modes", beat marks:
  *
  *   0–7.4      Title    "Layout"; shell, modes, platform
- *   6.8–10.8   Window   the camera moves on to Butler at 1280 in its window
- *   10.8–16    Measures the titlebar's height, the sidebar's width and the
- *                       conversation's column, each on its nearest edge
- *   16.4–29.6  Drag     the handle drags the window to 1023, 640 and 375; the
- *                       shell reflows live; at each breakpoint the next mode
- *                       takes over (the sidebar becomes a drawer, compact
- *                       tokens apply); width and mode read above the handle
- *   34–38.8    Drawer   at 375 the sidebar opens as a full-width drawer,
+ *   6.8–11.4   Window   the camera moves on to Butler at 1280, whole, briefly
+ *   11.4–18.8  Measures the camera pushes in on the window's top edge (wide):
+ *                       the titlebar's height, the sidebar's width, then it
+ *                       pans right to the conversation's column and the handle
+ *   18.8–33.6  Drag     the whole window again; the handle drags it to 1023,
+ *                       640 and 375; the shell reflows live; at each
+ *                       breakpoint the next mode takes over (the sidebar
+ *                       becomes a drawer, compact tokens apply); width and
+ *                       mode read above the handle
+ *   38–42.8    Drawer   at 375 the sidebar opens as a full-width drawer,
  *                       pushing the conversation out, and closes again
  */
-const AT = { win: 6.8, bar: 10.8, side: 12.2, read: 13.6, handle: 15, zoom: 29.8, drawer: 34, shut: 37.4, end: 40 } as const;
+const AT = { win: 6.8, bar: 12.8, side: 14.8, pan: 16.2, read: 17.6, handle: 17.4, whole: 19, zoom: 36.2, drawer: 40.4, shut: 43.8, end: 46.4 } as const;
 /** Each drag: [start, arrive]; the next mode takes over on arrival. */
-const DRAGS: Array<[number, number]> = [[16.4, 19.6], [21.6, 24.8], [26.8, 29.6]];
+const DRAGS: Array<[number, number]> = [[20.6, 23.6], [27, 30], [33.4, 36.2]];
+/** The wide push-in: the camera's zoom on the window's top edge. */
+const PUSH = 1.6;
 /** How long a mode handover crossfades. */
 const HANDOVER = 0.4;
 
@@ -48,14 +52,34 @@ export function layoutTracks(copy: LayoutCopy) {
     // Wide: one framing holds the whole drag (the window stays centred). Tall: the far 1280 window, then the phone-width window up close.
     const onStage = view("stage", tall ? win : stage, tall ? 0.94 : 0.9, 3.2);
     const phone = { x: win.x + win.w / 2 - (DETENTS[3].px * z) / 2, y: win.y, w: DETENTS[3].px * z, h: win.h };
-    const near = tall ? focus(canvas, phone, fit(canvas, phone, 0.9, 3.2)) : onStage;
+    // Wide: the phone-width window whole, its tags above it, as large as the frame's height allows.
+    const nearZoom = Math.min(1.6, canvas.h / (win.h + 96));
+    const near = tall ? focus(canvas, phone, fit(canvas, phone, 0.9, 3.2)) : focus(canvas, { x: win.x + win.w / 2 - canvas.w / nearZoom / 2, y: win.y - 72, w: canvas.w / nearZoom, h: canvas.h / nearZoom }, nearZoom);
     const intro = view("intro", g.boxes.intro!, 1, 1);
+    // Wide push-in boxes on the window's top edge (its rim included): left (titlebar, sidebar), then right (column, handle).
+    const crop = { w: canvas.w / PUSH, h: canvas.h / PUSH };
+    const top = (x: number): Pose => focus(canvas, { x, y: stage.y - 36, ...crop }, PUSH);
+    const left = tall ? onStage : top(win.x - 24);
+    const middle = (zoom = PUSH): Pose => focus(canvas, { x: win.x + win.w / 2 - canvas.w / zoom / 2, y: stage.y - 36, w: canvas.w / zoom, h: canvas.h / zoom }, zoom);
+    const medium = tall ? onStage : top(win.x + ((WINDOW.w - DETENTS[1].px) / 2) * z - 24);
+    const compact = tall ? onStage : middle();
+    const right = tall ? onStage : top(win.x + win.w - crop.w + 24);
     const camera: Key[] = [
       { at: 0, ...intro }, { at: AT.win, ...intro }, { at: AT.win + TRANSITION, ...onStage, ease: "standard" },
+      { at: AT.bar - 1.4, ...onStage }, { at: AT.bar - 0.4, ...left, ease: "standard" },
+      { at: AT.pan, ...left }, { at: AT.pan + 1.2, ...right, ease: "standard" },
+      { at: AT.whole, ...right }, { at: AT.whole + 1.4, ...onStage, ease: "standard" },
       ...(tall
         // Tall: the camera closes in on the window as the last drag narrows it, so the phone-width shell is read up close.
         ? [{ at: DRAGS[2]![0], ...onStage }, { at: DRAGS[2]![1], ...near, ease: "standard" } as Key]
-        : [{ at: AT.zoom, ...onStage }, { at: AT.zoom + TRANSITION, ...near, ease: "standard" } as Key]),
+        // Wide: whole for each drag; on arriving at a mode the camera pushes in on what changed (medium: the sidebar gone; compact: the taller titlebar), then the phone-width window up close.
+        : ([
+          { at: DRAGS[0]![1] + 0.2, ...onStage }, { at: DRAGS[0]![1] + 1.4, ...medium, ease: "standard" },
+          { at: DRAGS[1]![0] - 1.4, ...medium }, { at: DRAGS[1]![0] - 0.2, ...onStage, ease: "standard" },
+          { at: DRAGS[1]![1] + 0.2, ...onStage }, { at: DRAGS[1]![1] + 1.4, ...compact, ease: "standard" },
+          { at: DRAGS[2]![0] - 1.4, ...compact }, { at: DRAGS[2]![0] - 0.2, ...onStage, ease: "standard" },
+          { at: AT.zoom, ...onStage }, { at: AT.zoom + TRANSITION, ...near, ease: "standard" },
+        ] satisfies Key[])),
       { at: AT.end, ...near },
     ];
     /** Opacity steps: [beat, value] pairs, each eased over `beats`. */
@@ -88,10 +112,10 @@ export function layoutTracks(copy: LayoutCopy) {
         return fades(`ly-${mode}`, pairs, k === 0 ? 1 : 0, HANDOVER);
       }),
       // The measures, each on the edge it belongs to; each leaves before the drag makes it untrue.
-      ...measure("bar", AT.bar, d2[1] - HANDOVER / 2, value("--titlebar-height"), "sy"),
-      { select: select("ld-bar"), keys: looped([{ at: 0, sy: 0, o: 1 }, { at: AT.bar + 0.2, sy: 0 }, { at: AT.bar + 0.6, sy: 1, ease: "decelerate" }, { at: d3[0] - 0.8, o: 1 }, { at: d3[0] - 0.4, o: 0, ease: "accelerate" }], close) },
-      ...measure("side", AT.side, d1[0] - 0.6, value("--sidebar-width"), "sx"),
-      ...measure("read", AT.read, d1[1] - HANDOVER / 2, value("--page-max-width-reading"), "sx"),
+      ...measure("bar", AT.bar, AT.side - 0.4, value("--titlebar-height"), "sy"),
+      { select: select("ld-bar"), keys: looped([{ at: 0, sy: 0, o: 1 }, { at: AT.bar + 0.2, sy: 0 }, { at: AT.bar + 0.6, sy: 1, ease: "decelerate" }, { at: AT.side - 0.8, o: 1 }, { at: AT.side - 0.4, o: 0, ease: "accelerate" }], close) },
+      ...measure("side", AT.side, AT.pan - 0.2, value("--sidebar-width"), "sx"),
+      ...measure("read", AT.read, AT.whole, value("--page-max-width-reading"), "sx"),
       // Medium keeps the 760 column (the sidebar is gone); it leaves as the next drag narrows it.
       fades("dm-read-medium", [[d1[1] - HANDOVER / 2, 1], [d2[0] + 0.4, 0]], 0, HANDOVER),
       fades("tg-read-medium", [[d1[1] - HANDOVER / 2, 1], [d2[0] + 0.4, 0]], 0, HANDOVER),
@@ -101,7 +125,7 @@ export function layoutTracks(copy: LayoutCopy) {
       // The handle and the readout: width rolls through the drag, the mode cuts at each breakpoint.
       { select: select("handle"), keys: looped([{ at: 0, sy: 0, o: 1 }, { at: AT.handle, sy: 0 }, { at: AT.handle + 0.6, sy: 1, ease: "decelerate" }, { at: AT.drawer - 0.6, o: 1 }, { at: AT.drawer, o: 0 }], close) },
       ...["ro", "hu"].flatMap((id): Track[] => [
-        fades(id, [[AT.handle + 0.2, 1], [AT.end - 0.6, 0]], 0, 0.5),
+        fades(id, [[AT.handle + 0.2, 1], [d1[1] + 0.5, 0], [d2[0] - 1.2, 1], [d2[1] + 0.5, 0], [d3[0] - 1.2, 1], [AT.drawer - 1, 0]], 0, 0.5),
         ...rollerTracks(`${id}-w`, DETENTS.map((d) => String(d.px)), 0, [[0, 0], ...DRAGS.map(([, to], k) => [to, k + 1] as [number, number])], g.lines[`${id}-w`] ?? 0, close, DRAGS[0]![1] - DRAGS[0]![0]),
         ...MODES.map((_, k) => {
           const [into, out] = modeSpan(k);
