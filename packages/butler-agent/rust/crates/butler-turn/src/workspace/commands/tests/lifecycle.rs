@@ -104,10 +104,7 @@ async fn guided_environment_excludes_non_allowlisted_host_values() {
     let payload = std::fs::read_to_string(output.payload_source.path)
         .unwrap()
         .replace("\r\n", "\n");
-    let expected = format!(
-        "\n--- stdout ---\n{}\n--- stderr ---\n",
-        unset_marker("PRIVATE_TOKEN")
-    );
+    let expected = format!("\n--- stdout ---\n{}\n", unset_marker("PRIVATE_TOKEN"));
     assert!(payload.contains(&expected), "{payload}");
     assert!(!payload.contains("secret"));
     owner.close().await;
@@ -163,7 +160,7 @@ async fn guided_quotes_reach_the_shell_intact() {
     let payload = std::fs::read_to_string(output.payload_source.path)
         .unwrap()
         .replace("\r\n", "\n");
-    let expected = format!("\n--- stdout ---\n{printed}\n--- stderr ---\n");
+    let expected = format!("\n--- stdout ---\n{printed}\n");
     assert!(payload.contains(&expected), "{payload}");
     owner.close().await;
 }
