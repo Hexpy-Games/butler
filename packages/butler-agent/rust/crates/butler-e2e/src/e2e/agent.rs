@@ -12,6 +12,7 @@ use super::sandbox::Sandbox;
 use super::{HarnessError, harness_error};
 
 mod app_supervisor;
+mod environment;
 mod process;
 
 /// Environment and layout needed to (re)start the agent.
@@ -169,16 +170,8 @@ impl Launch {
     /// A command for `program` (an installed Agent, or its launcher) with the
     /// scenario's isolated environment and no installation options.
     pub fn env_command(&self, program: &Path) -> Command {
-        let mut command = Command::new(program);
+        let mut command = environment::isolated_command(program, &self.data, &self.home);
         command
-            .current_dir(&self.data)
-            .env_clear()
-            .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
-            .env("HOME", &self.home)
-            .env("XDG_CONFIG_HOME", self.home.join(".config"))
-            .env("XDG_DATA_HOME", self.home.join(".local/share"))
-            .env("XDG_CACHE_HOME", self.home.join(".cache"))
-            .env("XDG_STATE_HOME", self.home.join(".local/state"))
             .env("CODEX_HOME", self.home.join(".codex"))
             .env("TMPDIR", &self.tmp)
             .env("LANG", "en_US.UTF-8")

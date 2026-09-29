@@ -5,7 +5,7 @@ This file is the status source. `HANDOFF.md` at the repo root covers what has al
 | # | Plan | Priority | Start from |
 |---|---|---|---|
 | [ ] | [01 SSD write hotfix: transcript projection](01-projection-hotfix.md) | **P0** | `claude/projection-quadratic-fix` (draft PR) |
-| [ ] | [02 Tests never touch `$HOME/.butler`](02-test-isolation-guard.md) | **P0** | `claude/tests-never-touch-home` (draft PR) |
+| [x] | [02 Tests never touch `$HOME/.butler`](02-test-isolation-guard.md) | **P0** | `claude/tests-never-touch-home` (draft PR) |
 | [ ] | [03 CLI lifecycle (#303)](03-cli-lifecycle.md) | **P0** | #303 |
 | [ ] | [04 Usage and updates latency](04-usage-updates-latency.md) | P1 | `claude/usage-updates-latency` (draft PR) |
 | [ ] | [05 Remove Telegram](05-remove-telegram.md) | P1 | `claude/remove-telegram` (draft PR) |

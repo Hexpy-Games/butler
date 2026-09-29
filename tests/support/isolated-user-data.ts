@@ -16,14 +16,6 @@ function isolate(): void {
   const inherited = process.env[ISOLATION_ROOT_ENV];
   if (inherited && existsSync(inherited)) return; // nested bun process: already isolated
 
-  // Ledger-document tests read (never write) the owner's Butler ledger: keep it reachable.
-  const ownerLedger = process.env.BUTLER_DATA
-    ? join(process.env.BUTLER_DATA, "project-ledger", "projects", "butler")
-    : "";
-  if (!process.env.PROJECT_LEDGER_ROOT && ownerLedger && existsSync(join(ownerLedger, "project.json"))) {
-    process.env.PROJECT_LEDGER_ROOT = ownerLedger;
-  }
-
   const root = realpathSync(mkdtempSync(join(tmpdir(), "butler-test-")));
   const home = join(root, "home");
   const data = join(root, "data");
@@ -38,6 +30,7 @@ function isolate(): void {
     XDG_CACHE_HOME: join(home, ".cache"),
     XDG_STATE_HOME: join(home, ".local", "state"),
   });
+  delete process.env.PROJECT_LEDGER_ROOT;
   delete process.env.PROJECT_LEDGER_REPO;
   delete process.env.BUTLER_PROJECT_LEDGER_REPO;
   process.on("exit", () => rmSync(root, { recursive: true, force: true }));

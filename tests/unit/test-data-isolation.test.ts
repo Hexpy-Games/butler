@@ -13,6 +13,7 @@ test("the test process never resolves the owner's real home or data folder", asy
   for (const name of ["HOME", "BUTLER_DATA", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME"]) {
     expect(process.env[name]?.startsWith(root)).toBe(true);
   }
+  expect(process.env.PROJECT_LEDGER_ROOT).toBeUndefined();
 
   const { ledgerRoot } = (await import(fsUrl)) as { ledgerRoot: (project: string) => string };
   const project = mkdtempSync(join(tmpdir(), "isolation-project-"));

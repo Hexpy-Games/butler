@@ -242,6 +242,11 @@ fn refuse_owner_data_root(resolved: &Path) {
     let real = |path: PathBuf| realpath_or_nearest(&path).ok();
     let owner = butler_platform::user_dirs::home_dir().and_then(|home| real(home.join(".butler")));
     let temp = real(std::env::temp_dir());
+    assert_test_data_root_is_isolated(resolved, owner.as_deref(), temp.as_deref());
+}
+
+#[cfg(test)]
+fn assert_test_data_root_is_isolated(resolved: &Path, owner: Option<&Path>, temp: Option<&Path>) {
     assert!(
         !owner.is_some_and(|owner| resolved.starts_with(owner))
             || temp.is_some_and(|temp| resolved.starts_with(temp)),
@@ -426,5 +431,22 @@ pub(crate) mod tests {
                 .ends_with(outside.file_name().unwrap())
         );
         installation.validate_workspace_root(&outside).unwrap();
+
+        let owner_root = std::env::current_dir()
+            .unwrap()
+            .join("test-owner")
+            .join(".butler");
+        let temp_root = owner_root.with_file_name("other-temp");
+        let resolved = owner_root.join("project-ledger");
+        assert!(
+            std::panic::catch_unwind(|| {
+                super::assert_test_data_root_is_isolated(
+                    &resolved,
+                    Some(&owner_root),
+                    Some(&temp_root),
+                );
+            })
+            .is_err()
+        );
     }
 }
