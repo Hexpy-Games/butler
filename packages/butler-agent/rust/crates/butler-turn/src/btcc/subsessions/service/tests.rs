@@ -115,7 +115,7 @@ fn child_root_work_scope_uses_steward_ledger_binding_but_keeps_worker_local() {
             crate::btcc::ChildRole::Steward,
             "Complete task.",
         ),
-        dispatch_intent: crate::btcc::DispatchIntent::fixture(),
+        dispatch_intent: Some(crate::btcc::DispatchIntent::fixture()),
         anchor_message_id: "anchor".into(),
         ordinal: 1,
         safe_title: "Task".into(),

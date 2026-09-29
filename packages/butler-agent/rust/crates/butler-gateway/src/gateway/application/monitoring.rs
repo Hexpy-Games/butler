@@ -262,9 +262,14 @@ pub(crate) async fn worker_activity(
     for session in sessions.into_iter().filter(|session| {
         requested_session.is_none_or(|id| id == session.id || id == session.session_hint)
     }) {
-        let projection = application
+        // One session's unreadable children never hide the others' activity.
+        let Ok(projection) = application
             .subsession_projection(session.session_hint.clone())
-            .await?;
+            .await
+        else {
+            eprintln!("[gateway] worker activity skipped a session without subsessions");
+            continue;
+        };
         append_relation_workers(
             &mut workers,
             &projection,
