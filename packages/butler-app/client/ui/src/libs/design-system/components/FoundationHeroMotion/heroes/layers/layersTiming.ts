@@ -1,6 +1,5 @@
 import type { Key } from "../../heroTimeline";
 import { HOLD, TRANSITION } from "../shared/beats";
-import { SHEETS } from "./layersCopy";
 
 /**
  * 09 Layers, "the exploded stack", beat marks:
@@ -10,20 +9,25 @@ import { SHEETS } from "./layersCopy";
  *                      conversation, composer, titlebar, a dialog over its
  *                      scrim, the select open from it, a tooltip; no labels
  *   13–17    Tilt      the camera turns to a quarter view
- *   17–31    Separate  the page is named, then each sheet rises on its own
- *                      z, bottom to top, and its label hangs on its corner:
- *                      token, value, what lives there
- *   31–35.6  Read      the whole ladder holds
- *   35.6–38  Collapse  the labels leave; the sheets settle top to bottom
+ *   17.4–20.6 Spread   every sheet leaves the page together, in one smooth
+ *                      spread along z, while the camera moves in on the stack
+ *   20.9–24  Read      the labels hang on the corners, bottom to top, a
+ *                      short stagger: token, value, what lives there
+ *   24–33.4  Hold      the whole ladder holds
+ *   33.4–37  Collapse  the labels leave; all sheets settle together and the
+ *                      camera backs out to the quarter view
  *   38–44    Flat      the camera untilts to the flat window it was all along
  */
 export const AT = {
   flat: 6.8,
   tilt: 13,
-  named: 17.2,
-  step: 2.4,
-  rise: 1.2,
-  close: 35.6,
+  spread: 17.4,
+  spreadFor: 3.2,
+  label: 20.9,
+  labelStep: 0.5,
+  close: 33.4,
+  collapse: 33.9,
+  collapseFor: 3.2,
   untilt: 38.2,
 } as const;
 export const END = AT.untilt + TRANSITION + HOLD.component;
@@ -34,7 +38,5 @@ export const looped = (keys: Key[], close: number): Key[] => {
   return [...keys, { at: close - 0.01 }, { at: close, ...first }];
 };
 
-/** When sheet k (1…) starts to rise; the page (0) is named as the tilt lands. */
-export const risesAt = (k: number) => AT.named + k * AT.step - AT.rise;
-export const namedAt = (k: number) => (k === 0 ? AT.named : risesAt(k) + AT.rise);
-export const settlesAt = (k: number) => AT.close + 0.4 + (SHEETS.length - 1 - k) * 0.35;
+/** When sheet k's label hangs (the page's first, then up the ladder). */
+export const labelAt = (k: number) => AT.label + k * AT.labelStep;

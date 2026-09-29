@@ -6,7 +6,7 @@ import { Reveal as R } from "../shared/Reveal";
 import { GLASS, LAYERS, SHEETS, zToken, zValue, type LayersCopy, type Sheet } from "./layersCopy";
 import { Overlay, Scrim, Sticky } from "./LayersOverlays";
 import { Page } from "./LayersPage";
-import { quarter, TURN } from "./layersView";
+import { clearance, quarter, TURN } from "./layersView";
 import s from "./LayersHero.module.css";
 
 /** The title's touch: three offset copies of the word, merging into one. */
@@ -55,6 +55,20 @@ function content(sheet: Sheet, copy: LayersCopy, compact: boolean): ReactNode {
   }
 }
 
+/** How many rings, one sheet-px apart, make a sheet's thickness. */
+const SLAB_RINGS = Array.from({ length: 12 }, (_, i) => i + 1);
+
+/** A sheet's thickness: its outline repeated down its own z, so the edge reads as a solid side, corners rounded like the sheet's. */
+function Slab({ k }: { k: number }) {
+  return (
+    <span className={s.slab} data-t={`slab-${k}`}>
+      {SLAB_RINGS.map((i) => (
+        <span className={s.ring} key={i} style={{ "--i": i } as CSSProperties} />
+      ))}
+    </span>
+  );
+}
+
 /** A sheet's label, hung on its top right corner and turned back to face the frame: token and value, then what lives there. */
 function Pin({ copy, sheet, k }: { copy: LayersCopy; sheet: Sheet; k: number }) {
   return (
@@ -86,12 +100,13 @@ export function Screen({ copy, live, g = null }: { copy: LayersCopy; live: boole
   const ref = useRef<HTMLDivElement>(null);
   const compact = useCompact(ref);
   const t = (name: string) => (live ? name : undefined);
-  const view = g?.boxes.screen ? { ...TURN[g.layout], s: quarter(g.canvas, g.boxes.screen, g.layout).s } : null;
+  const view = g?.boxes.screen ? { ...TURN[g.layout], clear: clearance(g.layout), s: quarter(g.canvas, g.boxes.screen, g.layout, true).s } : null;
   const style = view
     ? ({
         "--q-rx": `${view.rx}deg`,
         "--q-rz": `${view.rz}deg`,
         "--q-s": view.s,
+        "--q-clear": `${view.clear}px`,
       } as CSSProperties)
     : undefined;
   return (
@@ -107,6 +122,7 @@ export function Screen({ copy, live, g = null }: { copy: LayersCopy; live: boole
             </div>
           ) : null}
           {live && k > 0 ? <span className={s.rim} data-t={`rim-${k}`} /> : null}
+          {live ? <Slab k={k} /> : null}
           {live ? <Pin copy={copy} k={k} sheet={sheet} /> : null}
         </div>
       ))}
