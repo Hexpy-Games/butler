@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { Box, Key, Pose, Track } from "../../heroTimeline";
 import type { HeroLayout } from "./grid";
+import type { Framing } from "./scene";
 import type { ChapterFinale } from "./pack";
 import type { SketchBox } from "./Sketch";
 
@@ -135,7 +136,7 @@ export interface ChapterSpec {
 }
 
 /** Everything measured on the poster, in canvas px. */
-export interface Geometry {
+export interface Geometry extends Framing {
   layout: HeroLayout;
   canvas: { w: number; h: number };
   /** Boxes of every `data-m` element, relative to the world (as laid out), and the scene cell each belongs to. */
@@ -146,8 +147,7 @@ export interface Geometry {
   /** Line height of every `data-roller` readout. */ lines: Record<string, number>;
   field: Box;
   /** Each panel (its tile when packed), and the component drawn in it (relative to it, poster px = canvas px / posterZoom). */
-  panels: Record<string, Box>;
-  cores: Record<string, Box>;
+  panels: Record<string, Box>; cores: Record<string, Box>;
   /** Blueprint boxes (the component first) and marks of each panel, relative to it, in poster px. */
   sketches: Record<string, SketchBox[]>;
   marks: Record<string, Marks>;

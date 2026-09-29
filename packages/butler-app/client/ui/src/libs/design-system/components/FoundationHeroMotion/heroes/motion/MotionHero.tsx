@@ -42,6 +42,8 @@ function spec(copy: MotionCopy): SceneSpec {
     // Each scene shows only around its own stretch, so no neighbour peeks into a zoomed-out frame.
     spans: { intro: [0, AT.lanes], lanes: [AT.lanes, AT.exits], exits: [AT.exits, AT.score], score: [AT.score, AT.twins], twins: [AT.twins, AT.spring], spring: [AT.spring + 2] },
     hud: <Metronome />,
+    // The metronome stands on the bottom margin; the poster keeps clear of it.
+    finaleReserve: { wide: 32, tall: 20 },
     end: () => MOTION_END,
     tracks: motionTracks(copy),
   };

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { Box, Key, Pose, Track } from "../../heroTimeline";
 import type { HeroLayout } from "../shared/grid";
+import type { Framing } from "../shared/scene";
 import type { Marks } from "../shared/types";
 
 /**
@@ -12,7 +13,7 @@ import type { Marks } from "../shared/types";
  * Scenes and tiles are real DS components; motion only moves, fades, draws,
  * rounds and resizes what the static layout shows.
  */
-export interface SceneGeometry {
+export interface SceneGeometry extends Framing {
   layout: HeroLayout;
   canvas: { w: number; h: number };
   /** Boxes of every `data-m` element, relative to the world, and the scene cell each belongs to. */
@@ -73,6 +74,8 @@ export interface SceneSpec {
   deep?: string[];
   /** A layer fixed to the frame over the camera (a metronome along the bottom edge), kept through the finale. */
   hud?: ReactNode;
+  /** Canvas px kept clear along the bottom of the finale, per canvas (a fixed footer, the Motion metronome). */
+  finaleReserve?: Partial<Record<HeroLayout, number>>;
   /** Beat the last scene ends (the finale begins). */
   end: (g: SceneGeometry) => number;
   /** The scenes' motion and the camera through them (it must end on the last scene). */

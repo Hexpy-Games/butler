@@ -1,8 +1,9 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 import type { FoundationHeroLang } from "../../FoundationHeroMotion";
 import { compileTimeline } from "../../heroTimeline";
 import { CANVAS, col, gridVars, type HeroLayout } from "../shared/grid";
 import { fitLabels } from "../shared/fitLabels";
+import { useSettledCompile } from "../shared/settleInk";
 import { useFrame } from "../shared/useFrame";
 import { measureScene } from "./measureScene";
 import { sceneTracks } from "./sceneTimeline";
@@ -30,13 +31,35 @@ function useFontsReady() {
   return ready;
 }
 
+/**
+ * Wide poster: each component is sized from what it really lays out (overflow included) to fill its slot:
+ * a small one drawn larger (no hollow slot), a large one smaller (nothing clipped). Tall slots take their content's height.
+ */
+function fitTiles(root: HTMLElement, layout: HeroLayout) {
+  if (layout !== "wide") return;
+  for (const tile of root.querySelectorAll<HTMLElement>("[data-tile]")) {
+    const child = tile.firstElementChild as HTMLElement | null;
+    if (!child) continue;
+    child.style.removeProperty("zoom");
+    const room = tile.getBoundingClientRect();
+    const own = child.getBoundingClientRect();
+    const scale = own.width / Math.max(1, child.offsetWidth);
+    const w = Math.max(own.width, child.scrollWidth * scale);
+    const h = Math.max(own.height, child.scrollHeight * scale);
+    const fit = Math.min(TILE_ZOOM, (room.width * TILE_FILL) / Math.max(1, w), (room.height * TILE_FILL) / Math.max(1, h));
+    if (fit > 1.03 || fit < 0.995) child.style.setProperty("zoom", String(Math.floor(fit * 100) / 100));
+  }
+}
+
 /** The static geometry the timeline is compiled against, measured again when copy, canvas or a scene's size changes. */
-function useGeometry(root: RefObject<HTMLElement | null>, layout: HeroLayout, lang: FoundationHeroLang, ready: boolean) {
+function useGeometry(root: RefObject<HTMLElement | null>, layout: HeroLayout, lang: FoundationHeroLang, ready: boolean, fit: number) {
   const [geometry, setGeometry] = useState<SceneGeometry | null>(null);
-  useLayoutEffect(() => setGeometry(null), [lang, layout, ready]);
+  // The stage's size decides how much of the canvas shows (the finale frames that).
+  useLayoutEffect(() => setGeometry(null), [lang, layout, ready, fit]);
   useLayoutEffect(() => {
     if (geometry || !ready || !root.current) return;
     fitLabels(root.current);
+    fitTiles(root.current, layout);
     setGeometry(measureScene(root.current, layout));
   }, [geometry, ready, root, layout]);
   useEffect(() => {
@@ -70,25 +93,9 @@ export function SceneHero({ spec, lang }: { spec: SceneSpec; lang: FoundationHer
   const frame = useFrame(root, true);
   const ready = useFontsReady();
   const { layout } = frame;
-  const g = useGeometry(root, layout, lang, ready);
-  // Wide poster: each component is sized from what it really lays out (overflow included) to fill its slot:
-  // a small one drawn larger (no hollow slot), a large one smaller (nothing clipped). Tall slots take their content's height.
-  useLayoutEffect(() => {
-    if (!g || layout !== "wide" || !root.current) return;
-    for (const tile of root.current.querySelectorAll<HTMLElement>("[data-tile]")) {
-      const child = tile.firstElementChild as HTMLElement | null;
-      if (!child) continue;
-      child.style.removeProperty("zoom");
-      const room = tile.getBoundingClientRect();
-      const own = child.getBoundingClientRect();
-      const scale = own.width / Math.max(1, child.offsetWidth);
-      const w = Math.max(own.width, child.scrollWidth * scale);
-      const h = Math.max(own.height, child.scrollHeight * scale);
-      const fit = Math.min(TILE_ZOOM, (room.width * TILE_FILL) / Math.max(1, w), (room.height * TILE_FILL) / Math.max(1, h));
-      if (fit > 1.03 || fit < 0.995) child.style.setProperty("zoom", String(Math.floor(fit * 100) / 100));
-    }
-  }, [g, layout]);
-  const compiled = useMemo(() => (g ? sceneTracks(spec, g) : null), [g, spec]);
+  const g = useGeometry(root, layout, lang, ready, frame.fit);
+  const compile = useCallback((geometry: SceneGeometry) => sceneTracks(spec, geometry), [spec]);
+  const compiled = useSettledCompile(root, g, layout, compile);
   const css = useMemo(() => (compiled ? compileTimeline(scope, compiled.beats, compiled.tracks) : ""), [compiled, scope]);
   const still = compiled?.still;
   const grid = spec.poster[layout];

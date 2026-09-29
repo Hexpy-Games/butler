@@ -20,7 +20,7 @@ function spec(copy: ColorCopy): ChapterSpec {
     field: <ColorField />,
     fieldColumns: 6,
     // The finale: the swatch field on the left, the four topics stacked on the right; portrait, the components.
-    finale: { columns: [["field"], ["contrast", "action", "status", "states"]], tall: "product" },
+    finale: { columns: [["field"], ["contrast", "action", "status", "states"]], tall: "product", frame: "packed" },
     posterZoom: POSTER_ZOOM,
     // Portrait: a little smaller, so the swatch names fit beside their stickers.
     tallPosterZoom: 1.2,

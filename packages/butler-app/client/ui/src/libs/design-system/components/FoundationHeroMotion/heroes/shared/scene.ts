@@ -90,3 +90,30 @@ export function buildViews(layout: HeroLayout, canvas: { w: number; h: number },
   const stage = frames.map((box, k) => viewCell(canvas, centers[k]!, box, tall ? 0.94 : 0.8, tall ? 2.4 : 2));
   return { shift, stage };
 }
+
+/** What a poster paints and the stage's visible part of the canvas, in canvas px (fitInk.ts): the finale frames them. */
+export interface Framing {
+  ink?: Box;
+  view?: Box;
+}
+
+/** The most a finale draws the poster larger than laid out (product fidelity), and the least. */
+const REST_ZOOM = { min: 0.4, max: 1.35 } as const;
+
+/**
+ * The finale's camera: the poster's painted box centred in the visible
+ * frame, as large as fits inside one grid margin on every side, so the
+ * insets are equal all round. `reserve` keeps canvas px along the bottom
+ * clear (a chapter's fixed footer). With no measurement it is the poster at rest.
+ */
+export function inkPose(layout: HeroLayout, canvas: { w: number; h: number }, ink: Box | undefined, view?: Box, reserve = 0): Pose {
+  if (!ink) return REST;
+  const margin = GRID[layout].margin;
+  const seen = view ?? { x: 0, y: 0, w: canvas.w, h: canvas.h };
+  const room = { w: seen.w - 2 * margin, h: seen.h - 2 * margin - reserve };
+  const zoom = Math.min(REST_ZOOM.max, Math.max(REST_ZOOM.min, Math.min(room.w / ink.w, room.h / ink.h)));
+  const pose = focus(canvas, ink, zoom);
+  // The frame's own centre (the canvas's centre unless the stage crops one side more), less half the reserve.
+  const centre = { x: seen.x + seen.w / 2 - canvas.w / 2, y: seen.y + seen.h / 2 - canvas.h / 2 - reserve / 2 };
+  return { ...pose, x: (pose.x ?? 0) + centre.x, y: (pose.y ?? 0) + centre.y };
+}

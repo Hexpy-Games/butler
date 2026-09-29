@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 import type { FoundationHeroLang } from "../../FoundationHeroMotion";
 import { compileTimeline } from "../../heroTimeline";
 import { Annotations } from "./Annotations";
@@ -9,6 +9,7 @@ import { Sketch } from "./Sketch";
 import { buildFrames, chapterTracks, posterZoom } from "./timeline";
 import type { ChapterSpec, Geometry } from "./types";
 import { fitLabels } from "./fitLabels";
+import { useSettledCompile } from "./settleInk";
 import { useFrame } from "./useFrame";
 import c from "./ChapterHero.module.css";
 
@@ -28,9 +29,10 @@ function useFontsReady() {
 }
 
 /** The poster geometry the timeline is compiled against, measured again when copy, canvas or a part's size changes. */
-function useGeometry(root: RefObject<HTMLElement | null>, layout: HeroLayout, spec: ChapterSpec, lang: FoundationHeroLang, ready: boolean) {
+function useGeometry(root: RefObject<HTMLElement | null>, layout: HeroLayout, spec: ChapterSpec, lang: FoundationHeroLang, ready: boolean, fit: number) {
   const [geometry, setGeometry] = useState<Geometry | null>(null);
-  useLayoutEffect(() => setGeometry(null), [lang, layout, ready]);
+  // The stage's size decides how much of the canvas shows (the finale frames that).
+  useLayoutEffect(() => setGeometry(null), [lang, layout, ready, fit]);
   useLayoutEffect(() => {
     if (geometry || !ready || !root.current) return;
     fitLabels(root.current);
@@ -102,8 +104,9 @@ export function ChapterHero({ spec: base, lang }: { spec: ChapterSpec; lang: Fou
   const pack = usePack(root, frame.layout, base, lang, ready);
   // Packed, the poster is drawn at its natural zoom times the packing's scale.
   const spec = useMemo(() => (pack ? { ...base, posterZoom: posterZoom(base, "wide") * pack.scale } : base), [base, pack]);
-  const g = useGeometry(root, frame.layout, spec, lang, ready && (frame.layout === "tall" || Boolean(pack)));
-  const compiled = useMemo(() => (g ? chapterTracks(spec, g) : null), [g, spec]);
+  const g = useGeometry(root, frame.layout, spec, lang, ready && (frame.layout === "tall" || Boolean(pack)), frame.fit);
+  const compile = useCallback((geometry: Geometry) => chapterTracks(spec, geometry), [spec]);
+  const compiled = useSettledCompile(root, g, frame.layout, compile);
   const zoom = posterZoom(spec, frame.layout);
   const natural = posterZoom(base, frame.layout);
   const css = useMemo(() => (compiled ? compileTimeline(scope, compiled.beats, compiled.tracks) : ""), [compiled, scope]);
@@ -132,7 +135,7 @@ export function ChapterHero({ spec: base, lang }: { spec: ChapterSpec; lang: Fou
             ))}
             {layout === "tall" && spec.fieldScene ? <div className={c.cell} data-cell="field">{typeof spec.fieldScene === "function" ? spec.fieldScene(g) : spec.fieldScene}</div> : null}
           </div>
-          <div className={c.poster} data-packed={pack ? "" : undefined}>
+          <div className={c.poster} data-packed={pack ? "" : undefined} data-t="poster">
             <div className={c.field} data-t="field-mover" style={slotStyle(pack, "field", zoom, natural)}>
               {typeof spec.field === "function" ? spec.field(g) : spec.field}
             </div>

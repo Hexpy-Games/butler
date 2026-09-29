@@ -38,19 +38,20 @@ export interface PackItem {
 export interface ChapterFinale {
   /** Wide: columns of item ids ("field", build ids), left to right, each stacked; default: the 2–3 consecutive columns that draw largest. */
   columns?: string[][];
+  frame?: "ink" | "packed"; // camera: frame what the poster paints (default), or keep the packed poster at rest
   /** Tall: frame the whole poster (default), or the components alone (the field had its own scene) so nothing is drawn small beside empty bands. */
   tall?: "poster" | "product";
 }
 
 /** Whether an element paints something (text, a fill, a border, a shadow, an image). */
-function paints(node: Element): boolean {
+export function paints(node: Element): boolean {
   if ([...node.childNodes].some((child) => child.nodeType === Node.TEXT_NODE && (child.textContent ?? "").trim())) return true;
   const style = getComputedStyle(node);
   return style.backgroundColor !== "rgba(0, 0, 0, 0)" || style.backgroundImage !== "none" || style.borderTopWidth !== "0px" || style.boxShadow !== "none" || node.tagName === "IMG";
 }
 
 /** Whether a node is visible up to `stop` (no transparent or hidden ancestor). */
-function shows(node: Element, stop: Element): boolean {
+export function shows(node: Element, stop: Element): boolean {
   for (let n: Element | null = node; n && n !== stop; n = n.parentElement) {
     const style = getComputedStyle(n);
     if (style.opacity === "0" || style.visibility === "hidden" || style.display === "none") return false;
@@ -149,8 +150,7 @@ function slotsOf(cols: PackItem[][], frame: Box, gap: number, scale: number): Re
 export function packPoster(items: PackItem[], columns?: string[][], layout: HeroLayout = "wide"): Pack {
   const { margin, gutter: gap } = GRID[layout];
   const frame = { x: margin, y: margin, w: CANVAS[layout].w - 2 * margin, h: CANVAS[layout].h - 2 * margin };
-  const byId = new Map(items.map((item) => [item.id, item]));
-  const given = columns?.map((col) => col.flatMap((id) => byId.get(id) ?? []));
+  const given = columns?.map((col) => col.flatMap((id) => items.filter((item) => item.id === id)));
   const options = given && given.flat().length === items.length ? [given] : [2, 3].filter((k) => items.length >= k).flatMap((k) => partitions(items, k));
   const best = options.reduce<{ cols: PackItem[][]; scale: number } | null>((top, cols) => {
     const scale = scaleOf(cols, frame, gap);

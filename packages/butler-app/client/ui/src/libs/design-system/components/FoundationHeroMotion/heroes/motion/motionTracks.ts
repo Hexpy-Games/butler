@@ -11,9 +11,9 @@ import { scoreTracks, twinTracks } from "./motionTurnTracks";
 import { exitTimes } from "./MotionStages";
 
 /** Canvas px kept clear along the bottom edge for the metronome (and, wide, the frame's crop). */
-const BAND = { wide: 64, tall: 40 } as const;
+const BAND = { wide: 92, tall: 48 } as const;
 /** How far a scene sits above the canvas centre: half the metronome's own height (the wide crop is symmetric). */
-const LIFT = 14;
+const LIFT = { wide: 28, tall: 18 } as const;
 
 /** The title lands one letter per tick; the lead lines start on the next ticks; all leave on beat 8, faster than they came. */
 function introTracks(copy: MotionCopy, close: number): Track[] {
@@ -101,7 +101,7 @@ export function motionTracks(copy: MotionCopy) {
     const frame = (cell: string, cap = 2, y = cells[cell]!.y, box = g.boxes[cell]!): Pose => {
       const zoom = fit({ w: canvas.w, h: canvas.h - band }, box, 0.9, cap);
       const pose = focus(canvas, { x: cells[cell]!.x - 1, y: y - 1, w: 2, h: 2 }, zoom);
-      return { ...pose, y: (pose.y ?? 0) - LIFT };
+      return { ...pose, y: (pose.y ?? 0) - LIFT[g.layout] };
     };
     // Tall: Reduced stands under Full (below the cell), so the camera steps down to it before it plays.
     const tall = g.layout === "tall";

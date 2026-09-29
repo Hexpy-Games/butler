@@ -88,6 +88,8 @@ export function iconTimeline(copy: IconCopy, g0: SceneGeometry): { beats: number
   const regions: Track[] = SCENES.map((name) => {
     const keys: Key[] = [{ at: 0, ...offset(name), o: 1 }];
     // The sidebar leaves as the camera heads for the gear, before any glyph under it draws.
+    // Every earlier scene has left by the finale: none may peek in at the frame's edge round the grid (a size tag hung there).
+    if (name !== "place" && name !== "grid") keys.push({ at: AT.finale, o: 1 }, { at: AT.finale + LEAVE, o: 0, ease: "accelerate" }, { at: restart }, { at: restart + 0.01, o: 1 });
     if (name === "place") keys.push({ at: AT.finale, o: 1 }, { at: AT.finale + LEAVE, o: 0, ease: "accelerate" }, { at: restart }, { at: restart + 0.01, o: 1 });
     if (name === "grid") keys.push({ at: f.loop, o: 1 }, { at: f.loop + TRANSITION / 2, o: 0, ease: "accelerate" }, { at: restart }, { at: restart + 0.01, o: 1 });
     return { select: `[data-cell="${name}"]`, keys };

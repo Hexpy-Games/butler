@@ -5,7 +5,7 @@ import { reveal, revealBeats, select, sweep } from "./Reveal";
 import { buildFrames, posterZoom } from "./frames";
 import { gatherFlights, gatherKeys } from "./gather";
 import { introCamera } from "./Intro";
-import { buildViews, CELL, columnViews, fieldAway, finalePose, REST, scenePath, viewCell } from "./scene";
+import { buildViews, CELL, columnViews, fieldAway, finalePose, inkPose, REST, scenePath, viewCell } from "./scene";
 import { sketchTracks } from "./Sketch";
 import type { ChapterSpec, Geometry, TimelineContext } from "./types";
 
@@ -88,7 +88,7 @@ export function chapterTracks(spec: ChapterSpec, g0: Geometry): { beats: number;
   const ctx: TimelineContext = { g, cells, view, beats: t.beats, close, first: t.first, builds: t.builds, finale: t.finale, loop: t.loop };
   const own = spec.prelude.tracks(ctx), prelude = { ...own, camera: introCamera(own.camera) }; // every intro leaves alike
   const start = prelude.camera[0] ?? { at: 0, ...REST };
-  const rest = finalePose(g0.layout, canvas, [...(spec.finale?.tall === "product" ? [] : [g0.field]), ...Object.values(g0.panels)]);
+  const rest = spec.finale?.frame !== "packed" ? inkPose(g0.layout, canvas, g0.ink, g0.view) : finalePose(g0.layout, canvas, [...(spec.finale?.tall === "product" ? [] : [g0.field]), ...Object.values(g0.panels)]);
   const world: Key[] = [
     ...prelude.camera,
     { at: t.first, ...stage[0]!, ease: "standard" },

@@ -1,5 +1,6 @@
 import { CANVAS, type HeroLayout } from "./grid";
 import { measureMarks, measureSketch, relBox, roundedWithin } from "./measure";
+import { measureInk, measureView } from "./fitInk";
 import { contentBox } from "./pack";
 import { posterZoom } from "./timeline";
 import type { ChapterSpec, Geometry } from "./types";
@@ -65,6 +66,8 @@ export function measureChapter(root: HTMLElement, layout: HeroLayout, spec: Chap
     ])),
     lines: Object.fromEntries([...root.querySelectorAll<HTMLElement>("[data-roller]")].map((node) => [node.dataset.roller!, lineOf(node)])),
     field: relBox(field.getBoundingClientRect(), origin, ratio),
+    view: measureView(root, origin, ratio) ?? undefined,
+    ink: measureInk(root.querySelector<HTMLElement>('[data-t="poster"]') ?? world, origin, ratio) ?? undefined,
     panels,
     cores,
     sketches,

@@ -3,7 +3,7 @@ import { SETTLE, TRANSITION } from "../shared/beats";
 import { gatherFlights } from "../shared/gather";
 import { introCamera } from "../shared/Intro";
 import { select } from "../shared/Reveal";
-import { REST, scenePath, viewCell } from "../shared/scene";
+import { inkPose, REST, scenePath, viewCell } from "../shared/scene";
 import type { SceneContext, SceneGeometry, SceneSpec } from "./types";
 
 const center = (box: Box) => ({ x: box.x + box.w / 2, y: box.y + box.h / 2 });
@@ -18,8 +18,9 @@ const union = (boxes: Box[]): Box => {
  * The finale's pose: the poster at rest on the wide canvas; on the tall
  * canvas the whole poster fitted into the portrait frame (nothing cropped).
  */
-export function posterPose(g: SceneGeometry): Pose {
+export function posterPose(g: SceneGeometry, reserve = 0): Pose {
   const tiles = Object.values(g.tiles);
+  if (g.ink) return inkPose(g.layout, g.canvas, g.ink, g.view, reserve);
   if (g.layout === "wide" || !tiles.length) return REST;
   const all = union(tiles);
   const frame = { x: 0, y: 0, w: g.canvas.w, h: Math.max(g.canvas.h, all.y + all.h + 20) };
@@ -39,7 +40,7 @@ export function sceneTracks(spec: SceneSpec, g0: SceneGeometry): { beats: number
   const loop = finale + TRANSITION + SETTLE;
   const beats = loop + TRANSITION + 1.5;
   const close = beats - 0.05;
-  const rest = posterPose(g0);
+  const rest = posterPose(g0, spec.finaleReserve?.[g0.layout]);
   // The poster's middle is the path's end: the last scene stands one step before it.
   const poster = { x: canvas.w / 2 - (rest.x ?? 0) / (rest.s ?? 1), y: canvas.h / 2 - (rest.y ?? 0) / (rest.s ?? 1) };
   const path = scenePath(spec.scenes.length + 1, poster, canvas);

@@ -1,4 +1,5 @@
 import { CANVAS, type HeroLayout } from "../shared/grid";
+import { measureInk, measureView } from "../shared/fitInk";
 import { measureMarks, relBox } from "../shared/measure";
 import type { SceneGeometry } from "./types";
 
@@ -32,5 +33,7 @@ export function measureScene(root: HTMLElement, layout: HeroLayout): SceneGeomet
     lines: Object.fromEntries(all("[data-roller]").map((node) => [node.dataset.roller!, lineOf(node)])),
     chars: Object.fromEntries(all("[data-rv]").map((node) => [node.dataset.rv!, [...(node.textContent ?? "").trim()].length])),
     tiles: Object.fromEntries(all("[data-tile]").map((node) => [node.dataset.tile!, box(node)])),
+    view: measureView(root, origin, ratio) ?? undefined,
+    ink: measureInk(root.querySelector<HTMLElement>('[data-t="poster"]') ?? world, origin, ratio) ?? undefined,
   };
 }
