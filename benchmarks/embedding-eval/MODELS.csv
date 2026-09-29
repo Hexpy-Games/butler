@@ -1,0 +1,7 @@
+model,idle_phys_bytes,peak_phys_bytes,ort_session_load_ms,query_p50_ms,query_p95_ms,serial_16_doc_ms,recall_at_1,recall_at_3,mrr,document_vectors,non_top1_query_ids
+bge,1766705288,2953595880,448.868,22.216,26.92,531.034,15,17,0.941176,24,q_backup;q_long_tail
+snowflake,1086277096,1150486088,218.837,9.533,11.557,205.231,14,17,0.911765,24,q_backup;q_flag;q_long_tail
+gte,1139197440,2061928632,275.926,9.048,11.684,228.481,13,17,0.882353,24,q_deploy_new;q_backup;q_flag;q_long_tail
+e5-small,649348176,733250736,143.431,4.268,5.602,88.922,16,17,0.970588,30,q_flag
+e5-base,1007682952,1051461024,237.196,8.933,10.191,202.544,16,17,0.970588,30,q_backup
+bge-lowmem,1546241944,2662451936,509.242,75.92,91.661,1785.253,15,17,0.941176,24,q_backup;q_long_tail
