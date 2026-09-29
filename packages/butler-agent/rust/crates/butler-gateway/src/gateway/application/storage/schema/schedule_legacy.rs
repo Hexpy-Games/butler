@@ -4,11 +4,20 @@ use std::{fs, path::Path};
 
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde::Deserialize;
+use serde_json::Value;
 
 use super::super::{AppStorageCode, AppStorageError};
 use crate::gateway::application::settings::{access_mode_name, conversation_access_mode};
 
 const MARKER: &str = "schedule_json_import_v1";
+const LEGACY_SCHEDULE_MARKERS: [&str; 6] = [
+    "schedule",
+    "prompt",
+    "session_id",
+    "next_run_at",
+    "last_run_at",
+    "run_count",
+];
 
 #[derive(Deserialize)]
 struct LegacyRecord {
@@ -98,8 +107,9 @@ pub(super) fn migrate(
         if !metadata.is_file() || metadata.file_type().is_symlink() {
             continue;
         }
-        let raw = fs::read_to_string(&path).map_err(import_error)?;
-        let record: LegacyRecord = serde_json::from_str(&raw).map_err(import_error)?;
+        let Some((raw, record)) = read_legacy_record(&path)? else {
+            continue;
+        };
         if path.file_stem().and_then(|value| value.to_str()) != Some(record.id.as_str()) {
             continue;
         }
@@ -123,6 +133,21 @@ fn mark_empty(db: &Connection) -> Result<(), AppStorageError> {
     )
     .map_err(AppStorageError::sqlite)?;
     Ok(())
+}
+
+fn read_legacy_record(path: &Path) -> Result<Option<(String, LegacyRecord)>, AppStorageError> {
+    let raw = fs::read_to_string(path).map_err(import_error)?;
+    let value: Value = serde_json::from_str(&raw).map_err(import_error)?;
+    let is_schedule = value.as_object().is_some_and(|object| {
+        LEGACY_SCHEDULE_MARKERS
+            .iter()
+            .any(|field| object.contains_key(*field))
+    });
+    if !is_schedule {
+        return Ok(None);
+    }
+    let record = serde_json::from_value(value).map_err(import_error)?;
+    Ok(Some((raw, record)))
 }
 
 fn insert(db: &Connection, record: &LegacyRecord, raw: &str) -> Result<(), AppStorageError> {
