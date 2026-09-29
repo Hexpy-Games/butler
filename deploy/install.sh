@@ -145,8 +145,9 @@ mkdir "$staging"
 tar -xzf "$tmp/$archive" -C "$staging" || die "could not extract $archive"
 
 manifest="$staging/native-agent-manifest.json"
-[ -f "$manifest" ] && [ -x "$staging/butler-agent" ] && [ -d "$staging/resources" ] ||
-  die "$archive is not a Butler agent archive"
+for required in native-agent-manifest.json butler-agent resources; do
+  [ -e "$staging/$required" ] || die "$archive is not a Butler agent archive"
+done
 field() { sed -n "s/.*\"$1\": *\"\\([^\"]*\\)\".*/\\1/p" "$manifest" | head -n 1; }
 agent_version="$(field version)"
 binary_sha="$(field binarySha256)"
