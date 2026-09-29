@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Package an already-built native Agent payload; this script never builds it."""
+"""Package an already-built native Agent payload; this script never builds it.
+
+The target platform (darwin-arm64, linux-x64 or linux-arm64) comes from the
+prepared payload's manifest and is checked against the binary itself.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +13,7 @@ import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
+import re
 import shutil
 import subprocess
 import sys
@@ -18,6 +23,16 @@ import tempfile
 
 SCHEMA = "butler.native-agent-install.v1"
 PAYLOAD_SCHEMA = "butler.native-agent-payload.v1"
+# (platform, architecture) pairs a standalone archive can target; the joined
+# "<platform>-<architecture>" is the release platform label.
+TARGETS = {("darwin", "arm64"), ("linux", "x64"), ("linux", "arm64")}
+# Libraries every glibc Linux distribution ships; anything else would be
+# missing from an agent-only install.
+LINUX_SYSTEM_LIBRARIES = {
+    "libc.so.6", "libm.so.6", "libdl.so.2", "libpthread.so.0", "librt.so.1",
+    "libgcc_s.so.1", "libstdc++.so.6", "ld-linux-x86-64.so.2", "ld-linux-aarch64.so.1",
+}
+ELF_MACHINES = {"x64": "Advanced Micro Devices X86-64", "arm64": "AArch64"}
 
 
 def main() -> int:
@@ -43,7 +58,8 @@ def main() -> int:
     if not binary_source.is_file() or not resources_source.is_dir():
         parser.error("prepared payload must contain its native binary and resources directory")
     validate_resource_symlinks(resources_source)
-    verify_macos_arm64(binary_source)
+    platform, architecture = manifest["platform"], manifest["architecture"]
+    verify_binary(binary_source, platform, architecture)
 
     version = nonempty(manifest.get("version"), "Agent version")
     app_version = optional_text(manifest.get("appVersion"))
@@ -61,8 +77,8 @@ def main() -> int:
             "schema": SCHEMA,
             "version": version,
             "appVersion": app_version,
-            "platform": "darwin",
-            "architecture": "arm64",
+            "platform": platform,
+            "architecture": architecture,
             "binary": "butler-agent",
             "resources": "resources",
             "launcher": "butler",
@@ -79,6 +95,7 @@ def main() -> int:
         output,
         version=version,
         app_version=app_version,
+        target=f"{platform}-{architecture}",
         channel=args.channel,
         artifact_url=args.artifact_url,
         signing=binary_signing(binary_source),
@@ -108,11 +125,16 @@ def write_agent_manifests(
     *,
     version: str,
     app_version: str | None,
+    target: str,
     channel: str,
     artifact_url: str | None,
     signing: dict | None = None,
 ) -> None:
-    """Emit the native Agent artifact as its own update/release unit."""
+    """Emit this platform's Agent artifact as its own update/release unit.
+
+    `release-standalone-agent.py merge` combines the per-platform outputs into
+    the manifests a release publishes.
+    """
     digest = sha256_file(archive)
     artifact = {
         "component": "service",
@@ -122,7 +144,7 @@ def write_agent_manifests(
         "version": version,
         "app_version": app_version,
         "channel": channel.strip(),
-        "platform": "darwin-arm64",
+        "platform": target,
         "artifact_name": archive.name,
         "artifact_url": artifact_url,
         "sha256": digest,
@@ -172,8 +194,8 @@ def read_payload_manifest(path: Path) -> dict:
         raise SystemExit("prepared native payload manifest is invalid") from error
     if not isinstance(value, dict) or value.get("schema") != PAYLOAD_SCHEMA:
         raise SystemExit("unsupported prepared native payload manifest")
-    if value.get("platform") != "darwin" or value.get("architecture") != "arm64":
-        raise SystemExit("prepared payload must target macOS arm64")
+    if (value.get("platform"), value.get("architecture")) not in TARGETS:
+        raise SystemExit("prepared payload must target macOS arm64 or Linux x64/arm64")
     return value
 
 
@@ -208,22 +230,24 @@ def validate_resource_symlinks(root: Path) -> None:
                 raise SystemExit("resource payload contains an escaping symlink")
 
 
-def verify_macos_arm64(binary: Path) -> None:
+def verify_binary(binary: Path, platform: str, architecture: str) -> None:
+    """Refuse a binary of another architecture or with an unpackaged dynamic dependency."""
+    if platform == "darwin":
+        verify_macos_arm64(binary)
+    else:
+        verify_linux(binary, architecture)
+
+
+def inspect(*command: str) -> str:
     try:
-        architectures = subprocess.run(
-            ["/usr/bin/lipo", "-archs", str(binary)],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.split()
-        dependencies = subprocess.run(
-            ["/usr/bin/otool", "-L", str(binary)],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.splitlines()[1:]
+        return subprocess.run(command, check=True, capture_output=True, text=True).stdout
     except (OSError, subprocess.CalledProcessError) as error:
         raise SystemExit("native binary architecture/dependency inspection failed") from error
+
+
+def verify_macos_arm64(binary: Path) -> None:
+    architectures = inspect("/usr/bin/lipo", "-archs", str(binary)).split()
+    dependencies = inspect("/usr/bin/otool", "-L", str(binary)).splitlines()[1:]
     if architectures != ["arm64"]:
         raise SystemExit("native binary must contain only the macOS arm64 architecture")
     unsupported = [
@@ -233,6 +257,16 @@ def verify_macos_arm64(binary: Path) -> None:
         and not line.strip().split(" ", 1)[0].startswith(("/usr/lib/", "/System/Library/"))
     ]
     if unsupported:
+        raise SystemExit("native binary has a non-system dynamic dependency")
+
+
+def verify_linux(binary: Path, architecture: str) -> None:
+    header = inspect("readelf", "-h", str(binary))
+    machine = re.search(r"^\s*Machine:\s*(.+)$", header, re.MULTILINE)
+    if not machine or machine.group(1).strip() != ELF_MACHINES[architecture]:
+        raise SystemExit(f"native binary is not a Linux {architecture} executable")
+    needed = re.findall(r"\(NEEDED\)\s+Shared library: \[([^\]]+)\]", inspect("readelf", "-d", str(binary)))
+    if any(name not in LINUX_SYSTEM_LIBRARIES for name in needed):
         raise SystemExit("native binary has a non-system dynamic dependency")
 
 
@@ -300,6 +334,10 @@ def normalized_tar_info(info: tarfile.TarInfo) -> tarfile.TarInfo:
     info.uname = ""
     info.gname = ""
     info.mtime = 0
+    if info.isdir():
+        # Extractors that apply a directory's mode before filling it (GNU tar)
+        # fail on read-only directories; installers make the tree read-only.
+        info.mode |= 0o200
     return info
 
 

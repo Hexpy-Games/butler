@@ -1,0 +1,131 @@
+name: Install smoke
+
+# The CLI install path end to end, without a published release: build the
+# standalone Agent archive on each native runner, serve it locally, install it
+# with deploy/install.sh (and through npx from the packed npm tarball), run the
+# agent headless (version, start, authenticated /health, stop) and install
+# again. Nothing is published.
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/install-smoke.yml"
+      - ".github/workflows/release.yml"
+      - ".github/actions/build-agent-archive/**"
+      - ".github/actions/rust-agent-setup/**"
+      - "deploy/install.sh"
+      - "deploy/install-smoke.sh"
+      - "packages/butler-npm/**"
+      - "packages/butler-agent/rust/scripts/*standalone*"
+      - "packages/butler-agent/rust/docs/install-layout.md"
+      - "packages/butler-agent/rust/crates/**"
+      - "packages/butler-agent/rust/Cargo.*"
+      - "packages/butler-agent/rust/rust-toolchain.toml"
+      - "packages/butler-agent/resources/**"
+      - "packages/butler-app/client/electron/scripts/prepare-native-agent.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: install-smoke-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  npm-pack:
+    name: Lint scripts and dry-run the npm package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Lint the shell scripts
+        run: shellcheck -s sh deploy/install.sh deploy/install-smoke.sh
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.3
+
+      - name: Pack and dry-run the publish
+        working-directory: packages/butler-npm
+        run: |
+          set -euo pipefail
+          npm pack --pack-destination "$RUNNER_TEMP"
+          npm publish --dry-run --access public
+          files="$(tar -tzf "$RUNNER_TEMP"/hexpygames-butler-*.tgz | LC_ALL=C sort)"
+          echo "$files"
+          test "$files" = "$(printf '%s\n' package/README.md package/bin/butler-install.js package/install.sh package/package.json | LC_ALL=C sort)"
+
+      - name: Keep the tarball for the smoke
+        uses: actions/upload-artifact@v4
+        with:
+          name: butler-npm
+          path: ${{ runner.temp }}/hexpygames-butler-*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  smoke:
+    name: Install smoke (${{ matrix.platform }})
+    needs: npm-pack
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: linux-x64, runner: ubuntu-24.04 }
+          - { platform: linux-arm64, runner: ubuntu-24.04-arm }
+          - { platform: darwin-arm64, runner: macos-15 }
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build, package and smoke the Agent archive
+        uses: ./.github/actions/build-agent-archive
+        with:
+          cache-key: package-${{ matrix.platform }}
+          artifact-base-url: https://github.com/${{ github.repository }}/releases/download/v0.0.0-ci
+
+      - name: Download the npm tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: butler-npm
+          path: ${{ runner.temp }}/npm
+
+      - name: Install, run headless, reinstall
+        run: sh deploy/install-smoke.sh dist/release/agent "$(ls "$RUNNER_TEMP"/npm/hexpygames-butler-*.tgz)"
+
+      - name: Keep the archive and manifests for the merge check
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-${{ matrix.platform }}
+          path: |
+            dist/release/agent/agent-release-manifest.json
+            dist/release/agent/agent-update-manifest.json
+          if-no-files-found: error
+          retention-days: 1
+
+  # The release workflow merges the per-platform manifests on a tag; check it here.
+  merge-manifests:
+    name: Merge per-platform manifests
+    needs: smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download the manifests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: agent-*
+          path: dist/agent
+
+      - name: Merge and inspect
+        run: |
+          set -euo pipefail
+          python3 packages/butler-agent/rust/scripts/release-standalone-agent.py merge \
+            --output dist/agent/merged dist/agent/agent-darwin-arm64 dist/agent/agent-linux-x64 dist/agent/agent-linux-arm64
+          jq -r '.artifacts[] | "\(.platform) \(.artifact_name) \(.sha256)"' dist/agent/merged/agent-update-manifest.json
+          test "$(jq '.artifacts | length' dist/agent/merged/agent-update-manifest.json)" = 3
