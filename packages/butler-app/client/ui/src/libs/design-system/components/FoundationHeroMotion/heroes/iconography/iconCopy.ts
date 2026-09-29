@@ -10,12 +10,11 @@ export const ICON_COPY = {
       ["Sizes", "Six named sizes, 12 to 32; pass the name, never pixels."],
       ["Pairing", "An icon takes the size of the type it sits beside, centred on its line."],
     ] as IntroLead,
-    pairs: ["Status", "Filter", "Settings", "Butler", "Projects", "Welcome"],
     grid: "24 × 24 grid", padding: "2px padding", stroke: "1.5 stroke",
-    chats: "Chats", projects: "Projects", files: "Files", search: "Search",
-    settings: "Settings", newChat: "New chat", beta: "Beta", synced: "Synced",
-    emptyTitle: "No projects yet", emptyHint: "Start one from any conversation.", create: "New project",
-    rename: "Rename", duplicate: "Duplicate", archive: "Archive",
+    settings: "Settings",
+    // The sidebar, as the DS SidebarShell showcase and the app's space rows set it.
+    newChat: "New chat", search: "Search", schedules: "Schedules", aria: "Sidebar", filter: "All · Recent · Running",
+    sessions: ["Desktop client polish", "Release notes draft", "Weekly review", "Research"],
   },
   ko: {
     title: "Iconography",
@@ -24,12 +23,10 @@ export const ICON_COPY = {
       ["크기", "12부터 32까지 이름 붙은 여섯 크기. 픽셀 대신 이름을 씁니다."],
       ["짝짓기", "아이콘은 옆 글자의 역할 크기를 따르고, 같은 중심선에 놓입니다."],
     ] as IntroLead,
-    pairs: ["상태", "필터", "설정", "Butler", "프로젝트", "환영합니다"],
     grid: "24 × 24 격자", padding: "2px 여백", stroke: "1.5 선",
-    chats: "대화", projects: "프로젝트", files: "파일", search: "검색",
-    settings: "설정", newChat: "새 대화", beta: "베타", synced: "동기화됨",
-    emptyTitle: "아직 프로젝트가 없어요", emptyHint: "어느 대화에서든 시작할 수 있어요.", create: "새 프로젝트",
-    rename: "이름 바꾸기", duplicate: "복제", archive: "보관",
+    settings: "설정",
+    newChat: "새 대화", search: "검색", schedules: "예약 작업", aria: "사이드바", filter: "전체 · 최근 · 실행 중",
+    sessions: ["데스크톱 앱 다듬기", "릴리스 노트 초안", "주간 회고", "리서치"],
   },
 } satisfies Record<FoundationHeroLang, unknown>;
 
@@ -40,4 +37,3 @@ export const STEPS = [
   { role: "caption", icon: "xs", px: 12 }, { role: "body", icon: "md", px: 16 }, { role: "h4", icon: "lg", px: 20 },
   { role: "h3", icon: "xl", px: 24 }, { role: "h2", icon: "2xl", px: 32 },
 ] as const;
-
