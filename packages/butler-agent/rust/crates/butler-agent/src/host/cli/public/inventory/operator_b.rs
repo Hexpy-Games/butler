@@ -57,8 +57,50 @@ pub(super) const ROUTES: &[Entry] = &[
     ),
     route!(
         "update",
-        "butler update [--check|--dry-run|--apply --yes]",
-        "Check or stage a verified native update.",
+        "butler update [--check|--dry-run|--apply --yes] [--no-restart]",
+        "Install the newer Agent for this platform, switch to it and restart the service.",
+        "operator"
+    ),
+    route!(
+        "install",
+        "butler install --from ARCHIVE|URL [--sha256 HEX] [--no-restart]",
+        "Install an Agent archive as the active version.",
+        "operator"
+    ),
+    route!(
+        "versions",
+        "butler versions [--json]",
+        "List installed Agent versions and the active one.",
+        "operator"
+    ),
+    route!(
+        "rollback",
+        "butler rollback [--to VERSION] [--yes] [--dry-run] [--no-restart]",
+        "Switch to the previous (or a named) installed Agent version.",
+        "operator"
+    ),
+    route!(
+        "uninstall",
+        "butler uninstall [--keep-data|--purge-data] --yes [--dry-run]",
+        "Remove the installed Agent, its launcher and login start; data stays unless --purge-data.",
+        "operator"
+    ),
+    route!(
+        "service.install",
+        "butler service install [--files-only] [--data PATH]",
+        "Start the service at login (launchd or systemd --user).",
+        "operator"
+    ),
+    route!(
+        "service.uninstall",
+        "butler service uninstall [--files-only]",
+        "Remove the login start of the service.",
+        "operator"
+    ),
+    route!(
+        "service.status",
+        "butler service status [--json]",
+        "Show whether the service is registered to start at login.",
         "operator"
     ),
     route!(

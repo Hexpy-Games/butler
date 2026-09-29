@@ -361,7 +361,7 @@ async fn serve(
     let startup = async {
         runtime.context_maintenance.start();
         runtime.subsessions.recover_dispatches().await?;
-        mark_ready(instance, &app_endpoint, stop)
+        mark_ready(instance, &app_endpoint, &runtime, stop).await
     }
     .await;
     match startup {
@@ -415,9 +415,10 @@ async fn serve(
 /// Publishes the ready record, unless a stop was requested during startup:
 /// a process asked to stop never becomes ready (and never clears the stop
 /// intent the next instance clears).
-fn mark_ready(
+async fn mark_ready(
     instance: &mut crate::host::service::instance::InstanceGuard,
     app_endpoint: &ActiveAppEndpoint,
+    runtime: &AgentRuntime,
     stop: &StopSignal,
 ) -> Result<(), BtccError> {
     if stop.requested() {
@@ -441,5 +442,12 @@ fn mark_ready(
                 "native_service_instance_state_unavailable"
             };
             failure(code, message.to_string()).with_source(message)
-        })
+        })?;
+    // A restart the service asked of its login job leaves no helper to
+    // report: this instance coming up is the outcome.
+    let _ = runtime
+        .restart_effect_journal
+        .finish_spawned_restart_handoffs()
+        .await;
+    Ok(())
 }

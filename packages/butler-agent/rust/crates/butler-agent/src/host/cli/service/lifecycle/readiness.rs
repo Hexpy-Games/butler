@@ -124,7 +124,7 @@ pub(super) async fn wait_for_app_respawn(
         }
         if Instant::now() >= deadline {
             return Err(
-                "native_service_app_respawn_timeout: the Butler App did not start the service again"
+                "native_service_app_respawn_timeout: the Butler App or the service manager did not start the service again"
                     .into(),
             );
         }

@@ -19,7 +19,8 @@ pub enum Command {
     ConversationRecovery,
     /// Public status commands (`health`, `version`, ...).
     Public,
-    /// `start`, `service ...` and bare service options.
+    /// `start`, `service ...` (including `service install|uninstall|status`)
+    /// and bare service options.
     ServiceControl,
     /// `doctor`
     Doctor,
@@ -35,7 +36,8 @@ pub enum Command {
     WebAccess,
     /// `schedule ...` (and its deprecated spelling `automation ...`)
     Schedule,
-    /// `update ...`
+    /// `update ...`, and the rest of the Agent package lifecycle: `install`,
+    /// `rollback`, `versions`, `uninstall`.
     Update,
     /// `status`, `model status`, `metrics status`, ...
     Status,
