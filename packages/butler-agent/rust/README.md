@@ -22,8 +22,9 @@ must remain unchanged. For local runs, use an **isolated** `BUTLER_DATA` and the
 under `runtime/inbound-events`, rather than a new stdin protocol. Stop it with SIGINT/SIGTERM
 or its existing `locks/butler-shutdown` flag. Existing installed processes are not replaced.
 
-The build includes static ONNX Runtime and Lance dependencies. Follow the repository-owned
-[static dependency recipe](scripts/STATIC_ORT.md); the existing Electron native producer
+Development and CI builds use the official prebuilt ONNX Runtime binaries provided by `ort`.
+Release package builds explicitly select the repository-owned [static dependency recipe](scripts/STATIC_ORT.md)
+and build ONNX Runtime from its pinned source inputs. The existing Electron native producer
 prepares that dependency cache and builds the packaged executable. Do not use an old ad hoc
 ORT build directory as an undocumented prerequisite.
 
