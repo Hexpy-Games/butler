@@ -1,6 +1,7 @@
 //! Durable subsession state on the existing BTCC SQLite owner.
 
 mod activity;
+mod decode;
 mod records;
 
 pub use records::*;
@@ -8,6 +9,7 @@ pub use records::*;
 use rusqlite::{OptionalExtension, params};
 use serde_json::Value;
 
+use self::decode::{list, read};
 use super::{BtccStorage, StorageError};
 use crate::btcc::StorageCode;
 
@@ -41,7 +43,8 @@ pub struct StoredSubsessionDelegation {
     pub child_turn_id: String,
     pub root_work_id: String,
     pub packet: SubsessionPacket,
-    pub dispatch_intent: DispatchIntent,
+    /// Absent on delegations created before dispatch intents were stored.
+    pub dispatch_intent: Option<DispatchIntent>,
     pub anchor_message_id: String,
     pub ordinal: i64,
     pub safe_title: String,
@@ -156,16 +159,11 @@ impl SqliteSubsessionRepository {
     ) -> Result<Vec<StoredSubsessionDelegation>, StorageError> {
         self.storage
             .execute(move |db| {
-                let mut statement = db
-                    .prepare(&format!(
-                        "{SELECT} WHERE r.parent_session_id=?1 ORDER BY r.ordinal"
-                    ))
-                    .map_err(StorageError::sqlite)?;
-                let rows = statement
-                    .query_map([parent], row)
-                    .map_err(StorageError::sqlite)?;
-                rows.collect::<Result<Vec<_>, _>>()
-                    .map_err(StorageError::sqlite)
+                list(
+                    db,
+                    "WHERE r.parent_session_id=?1 ORDER BY r.ordinal",
+                    [parent],
+                )
             })
             .await
     }
@@ -307,14 +305,11 @@ impl SqliteSubsessionRepository {
     ) -> Result<Vec<StoredSubsessionDelegation>, StorageError> {
         self.storage
             .execute(move |db| {
-                let mut statement = db
-                    .prepare(&format!(
-                        "{SELECT} WHERE d.dispatch_state='pending' ORDER BY r.created_at"
-                    ))
-                    .map_err(StorageError::sqlite)?;
-                let rows = statement.query_map([], row).map_err(StorageError::sqlite)?;
-                rows.collect::<Result<Vec<_>, _>>()
-                    .map_err(StorageError::sqlite)
+                list(
+                    db,
+                    "WHERE d.dispatch_state='pending' ORDER BY r.created_at",
+                    [],
+                )
             })
             .await
     }
@@ -430,42 +425,6 @@ impl SqliteSubsessionRepository {
 }
 
 const SELECT: &str = "SELECT r.relation_id,d.delegation_id,d.task_id,r.parent_session_id,r.parent_turn_id,r.child_session_id,d.child_turn_id,d.root_work_id,d.packet_json,d.dispatch_intent_json,r.anchor_message_id,r.ordinal,r.safe_title,r.created_at FROM btcc_session_relations r JOIN btcc_subsession_delegations d ON d.relation_id=r.relation_id";
-fn read(
-    db: &rusqlite::Connection,
-    predicate: &str,
-    value: &str,
-) -> Result<Option<StoredSubsessionDelegation>, StorageError> {
-    db.query_row(&format!("{SELECT} WHERE {predicate}"), [value], row)
-        .optional()
-        .map_err(StorageError::sqlite)
-}
-fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredSubsessionDelegation> {
-    let packet: String = row.get(8)?;
-    let dispatch: String = row.get(9)?;
-    let packet = serde_json::from_str(&packet).map_err(|e| {
-        rusqlite::Error::FromSqlConversionFailure(8, rusqlite::types::Type::Text, Box::new(e))
-    })?;
-    let dispatch_intent = serde_json::from_str(&dispatch).map_err(|e| {
-        rusqlite::Error::FromSqlConversionFailure(9, rusqlite::types::Type::Text, Box::new(e))
-    })?;
-    Ok(StoredSubsessionDelegation {
-        relation_id: row.get(0)?,
-        delegation_id: row.get(1)?,
-        task_id: row.get(2)?,
-        parent_session_id: row.get(3)?,
-        parent_turn_id: row.get(4)?,
-        child_session_id: row.get(5)?,
-        child_turn_id: row.get(6)?,
-        root_work_id: row.get(7)?,
-        packet,
-        dispatch_intent,
-        anchor_message_id: row.get(10)?,
-        ordinal: row.get(11)?,
-        safe_title: row.get(12)?,
-        created_at: row.get(13)?,
-    })
-}
-
 fn direction_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredSubsessionDirection> {
     Ok(StoredSubsessionDirection {
         instruction_id: row.get(0)?,

@@ -72,7 +72,12 @@ pub(super) fn steward(
         constraints_and_non_goals: Vec::new(),
         allowed_tools_and_effects: allowed_effects(&request.access_mode),
         mutation_scope: mutation_scope(&request.access_mode),
-        parent_work_ref: parent_work_ref(reviewed, &request.parent_turn_id, plan, review),
+        parent_work_ref: Some(parent_work_ref(
+            reviewed,
+            &request.parent_turn_id,
+            plan,
+            review,
+        )),
         worker_profile: None,
         model_ref: request.model_ref.clone(),
         reasoning_effort: request.reasoning_effort.clone(),
@@ -113,7 +118,12 @@ pub(super) fn worker(
         ],
         allowed_tools_and_effects: allowed_effects(&request.access_mode),
         mutation_scope: mutation_scope(&request.access_mode),
-        parent_work_ref: parent_work_ref(reviewed, &request.parent_turn_id, plan, review),
+        parent_work_ref: Some(parent_work_ref(
+            reviewed,
+            &request.parent_turn_id,
+            plan,
+            review,
+        )),
         worker_profile: Some(crate::btcc::PacketWorkerProfile {
             id: profile.id.clone(),
             job: profile.job.clone(),
