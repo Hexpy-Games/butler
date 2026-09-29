@@ -32,15 +32,24 @@ export function DeviceFrame({ children, label }: { children: ReactNode; label: s
   // out at exactly its device width in every engine.
   useLayoutEffect(() => {
     const frame = ref.current;
-    if (!frame) return;
-    let zoom = 1;
-    for (let node: HTMLElement | null = frame.parentElement; node; node = node.parentElement) zoom *= Number.parseFloat(getComputedStyle(node).zoom) || 1;
-    if (zoom === 1) return;
-    frame.style.setProperty("zoom", String(1 / zoom));
-    frame.style.inlineSize = `${100 / zoom}%`;
-    frame.style.blockSize = `${100 / zoom}%`;
-    frame.style.transform = `scale(${zoom})`;
-    frame.style.transformOrigin = "0 0";
+    if (!frame) return undefined;
+    const apply = () => {
+      let zoom = 1;
+      for (let node: HTMLElement | null = frame.parentElement; node; node = node.parentElement) zoom *= Number.parseFloat(getComputedStyle(node).zoom) || 1;
+      const next = zoom === 1
+        ? { zoom: "", inlineSize: "", blockSize: "", transform: "", transformOrigin: "" }
+        : { zoom: String(1 / zoom), inlineSize: `${100 / zoom}%`, blockSize: `${100 / zoom}%`, transform: `scale(${zoom})`, transformOrigin: "0 0" };
+      for (const key of Object.keys(next) as Array<keyof typeof next>) if (frame.style[key] !== next[key]) frame.style[key] = next[key];
+    };
+    apply();
+    // The engine sets a tile's own zoom (the finale's fit) after its children mount, so follow it.
+    const watch = new MutationObserver(apply);
+    watch.observe(frame.closest("[data-slot=\"foundation-hero\"]") ?? document.body, { attributes: true, attributeFilter: ["style"], subtree: true });
+    const frames = [requestAnimationFrame(() => requestAnimationFrame(apply))];
+    return () => {
+      watch.disconnect();
+      for (const id of frames) cancelAnimationFrame(id);
+    };
   }, []);
   useEffect(() => {
     const frame = ref.current;
