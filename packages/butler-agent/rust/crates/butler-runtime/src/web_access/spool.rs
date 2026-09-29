@@ -1,3 +1,4 @@
+use butler_platform::secure_fs::Canonical as _;
 use std::{
     fs::{self, OpenOptions},
     io::{self, Write},
@@ -28,7 +29,7 @@ impl TemporarySpool {
     /// Creates a private spool file and returns it opened for writing.
     pub(super) fn create(data_root: &Path) -> io::Result<(Self, std::fs::File)> {
         fs::create_dir_all(data_root)?;
-        let root = data_root.canonicalize()?;
+        let root = data_root.canonical()?;
         let tmp = root.join("tmp");
         let spool_dir = tmp.join("web-access-spool");
         create_private_directory(&tmp)?;

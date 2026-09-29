@@ -14,6 +14,7 @@ use super::{HarnessError, harness_error};
 mod app_supervisor;
 mod environment;
 mod process;
+pub use process::read_all;
 
 /// Environment and layout needed to (re)start the agent.
 #[derive(Clone)]
@@ -187,6 +188,16 @@ impl Launch {
             // API keys go to the owner-only file in the data dir: a scenario
             // never touches the machine's credential store (#217).
             .env("BUTLER_SECRET_STORE", "file");
+        // What a program needs to start at all (none on Unix), and the
+        // Windows temporary folder.
+        for name in butler_platform::process_control::SYSTEM_ENVIRONMENT {
+            if let Some(value) = std::env::var_os(name) {
+                command.env(name, value);
+            }
+        }
+        if !butler_platform::process_control::SYSTEM_ENVIRONMENT.is_empty() {
+            command.env("TEMP", &self.tmp).env("TMP", &self.tmp);
+        }
         for (key, value) in &self.env {
             command.env(key, value);
         }
@@ -322,14 +333,14 @@ impl Agent {
         mut command: Command,
         observe: impl FnMut(),
     ) -> Result<CliOutput, HarnessError> {
-        command.stdin(Stdio::null());
-        let output = self
-            .while_reaping(move || command.output(), observe)
+        let (out, err) = process::capture_to_files(&mut command, &self.launch.tmp)?;
+        let status = self
+            .while_reaping(move || command.status(), observe)
             .await??;
         Ok(CliOutput {
-            code: output.status.code(),
-            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            code: status.code(),
+            stdout: fs::read_to_string(&out).unwrap_or_default(),
+            stderr: fs::read_to_string(&err).unwrap_or_default(),
         })
     }
 
@@ -475,22 +486,4 @@ pub fn free_port() -> Result<u16, HarnessError> {
         }
     }
     Err(harness_error("no free port below the ephemeral range"))
-}
-
-/// Every regular file under `dir`, concatenated (lossy UTF-8).
-pub fn read_all(dir: &Path) -> String {
-    let mut out = String::new();
-    let Ok(entries) = fs::read_dir(dir) else {
-        return out;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            out.push_str(&read_all(&path));
-        } else if let Ok(bytes) = fs::read(&path) {
-            out.push_str(&String::from_utf8_lossy(&bytes));
-            out.push('\n');
-        }
-    }
-    out
 }

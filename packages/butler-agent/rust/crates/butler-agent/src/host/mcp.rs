@@ -8,7 +8,6 @@ mod restart;
 mod server;
 mod skills;
 mod status;
-mod stdio;
 
 use std::{ffi::OsString, path::PathBuf, process::ExitCode};
 
@@ -136,9 +135,7 @@ fn resolve_data_root(
     explicit: Option<&str>,
     installation: &ResolvedInstallation,
 ) -> Result<PathBuf, crate::host::HostError> {
-    let home = std::env::var_os("HOME")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
+    let home = butler_platform::user_dirs::non_empty_home_dir()
         .ok_or_else(|| "native_home_unavailable".to_owned())?;
     let input = explicit
         .map(str::to_owned)

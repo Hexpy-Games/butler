@@ -1,3 +1,4 @@
+use butler_platform::secure_fs::Canonical as _;
 use std::path::{Component, Path, PathBuf};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -92,7 +93,7 @@ pub(super) fn listed_worktree_matches(
 
 pub(in crate::workspace) fn canonical_path(path: &str) -> std::io::Result<PathBuf> {
     Path::new(path)
-        .canonicalize()
+        .canonical()
         .or_else(|_| lexical_resolve(Path::new(path)))
 }
 

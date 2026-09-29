@@ -1,3 +1,4 @@
+use butler_platform::secure_fs::Canonical as _;
 use std::{path::Path, process::ExitCode};
 
 use serde_json::{Value, json};
@@ -41,10 +42,10 @@ pub(super) fn run(options: &Options, data_root: &Path) -> ExitCode {
                 let identity_matches = service_instance::process_matches(&record).unwrap_or(false);
                 let executable_matches = std::env::current_exe()
                     .ok()
-                    .and_then(|path| path.canonicalize().ok())
+                    .and_then(|path| path.canonical().ok())
                     .is_some_and(|current| {
                         Path::new(&record.executable)
-                            .canonicalize()
+                            .canonical()
                             .is_ok_and(|recorded| recorded == current)
                     });
                 let ready = record.state == "ready" && record.ready_at.is_some();

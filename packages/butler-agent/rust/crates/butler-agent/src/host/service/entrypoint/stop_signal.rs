@@ -58,10 +58,7 @@ impl StopSignal {
         let listener = stop.clone();
         tokio::spawn(async move {
             requests.recv().await;
-            listener.request();
-            if listener.announced() {
-                exit_after_grace();
-            }
+            listener.request_controlled();
         });
         Ok(stop)
     }
@@ -70,6 +67,17 @@ impl StopSignal {
     /// intent a controller wrote for it.
     pub(super) fn attach(&self, data_root: PathBuf, nonce: &str) {
         let _ = self.inner.instance.set((data_root, nonce.to_owned()));
+    }
+
+    /// Records a stop a controller or the host requested (a stop request
+    /// from the host, or the control endpoint's `service_stop`). A stop the
+    /// controller announced for this instance also ends the process after
+    /// [`ANNOUNCED_STOP_GRACE`], before the controller would force it.
+    pub(super) fn request_controlled(&self) {
+        self.request();
+        if self.announced() {
+            exit_after_grace();
+        }
     }
 
     /// Records a stop request.
@@ -113,6 +121,24 @@ impl StopSignal {
                 Ok(None)
             }
             Err(error) => Err(error),
+        }
+    }
+
+    /// Whether the shutdown flag at `path` stops this instance: a flag that
+    /// names another instance was left by a controller that died before it
+    /// removed it, and is removed here; one without a nonce stops any.
+    pub(super) fn flag_requested(&self, path: &std::path::Path) -> bool {
+        let Ok(text) = std::fs::read_to_string(path) else {
+            return path.exists();
+        };
+        let named = text.trim().strip_prefix("stop ").map(str::trim);
+        let ours = self.inner.instance.get().map(|(_, nonce)| nonce.as_str());
+        match (named, ours) {
+            (Some(named), Some(ours)) if named != ours => {
+                let _ = std::fs::remove_file(path);
+                false
+            }
+            _ => true,
         }
     }
 

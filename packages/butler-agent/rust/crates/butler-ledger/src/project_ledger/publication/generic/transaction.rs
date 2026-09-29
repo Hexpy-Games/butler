@@ -32,7 +32,12 @@ pub(super) fn apply(
             return Err(LedgerEffectError::NotApplied);
         }
         let mut journal = match existing {
-            Some(journal) if matches!(journal.status, Status::Prepared | Status::Committing) => {
+            Some(journal)
+                if matches!(
+                    journal.status,
+                    Status::Prepared | Status::Committing | Status::Displaced
+                ) =>
+            {
                 journal
             }
             Some(_) => return Err(LedgerEffectError::Uncertain { source: None }),
@@ -51,10 +56,9 @@ pub(super) fn apply(
             Ok(Reconciled::Applied(applied)) => Ok(applied),
             Ok(Reconciled::Ready) => {
                 let journal = evidence::read_journal(&paths, occurrence, attempt)?;
-                if journal
-                    .as_ref()
-                    .is_some_and(|journal| journal.status == Status::Committing)
-                {
+                if journal.as_ref().is_some_and(|journal| {
+                    matches!(journal.status, Status::Committing | Status::Displaced)
+                }) {
                     return Err(LedgerEffectError::Uncertain { source: None });
                 }
                 if let Some(journal) = journal.as_ref() {
@@ -124,9 +128,9 @@ fn promote(
         &journal.base.source_sha256,
     )
     .map_err(LedgerEffectError::uncertain)?;
-    let candidate = journal
+    let candidate = &journal
         .candidate_head
-        .as_ref()
+        .clone()
         .ok_or(LedgerEffectError::Uncertain { source: None })?;
     if journal.status == Status::Prepared {
         let active = head::observe(&scope.root, collation)?;
@@ -148,13 +152,16 @@ fn promote(
         journal.status = Status::Committing;
         evidence::save_journal(paths, journal)?;
     }
-    if journal.status == Status::Committing {
+    if matches!(journal.status, Status::Committing | Status::Displaced) {
+        if journal.status == Status::Displaced {
+            commit::resume_displacement(&paths.candidate, &scope.root)?;
+        }
         let active = head::observe(&scope.root, collation)?;
         if !active.same_storage(candidate) {
             if !active.same_logical(&journal.base) {
                 return Err(LedgerEffectError::Uncertain { source: None });
             }
-            commit::exchange(&paths.candidate, &scope.root)?;
+            swap(scope, paths, journal)?;
         }
         let active = head::inspect(&scope.root, collation)?;
         if !active.same_storage(candidate) {
@@ -164,6 +171,23 @@ fn promote(
         evidence::save_journal(paths, journal)?;
     }
     Ok(())
+}
+
+/// Swaps the candidate and canonical trees: atomically where the host can,
+/// else through the journaled `displaced` state.
+fn swap(
+    scope: &LedgerScope,
+    paths: &Paths,
+    journal: &mut Journal,
+) -> Result<(), LedgerEffectError> {
+    if commit::atomic_exchange() {
+        return commit::exchange(&paths.candidate, &scope.root);
+    }
+    if journal.status != Status::Displaced {
+        journal.status = Status::Displaced;
+        evidence::save_journal(paths, journal)?;
+    }
+    commit::displace(&paths.candidate, &scope.root)
 }
 
 fn observe(

@@ -7,6 +7,7 @@
 //! is a registration or launcher that belongs to it. The data folder stays
 //! unless `--purge-data` names it.
 
+use butler_platform::secure_fs::Canonical;
 use std::path::Path;
 use std::process::ExitCode;
 
@@ -197,7 +198,7 @@ fn remove_launchers(context: &Context) -> Value {
 fn inside(path: &Path, directory: &Path) -> bool {
     path.starts_with(directory)
         || directory
-            .canonicalize()
+            .canonical()
             .is_ok_and(|resolved| path.starts_with(resolved))
 }
 
@@ -221,11 +222,11 @@ fn purge_allowed(context: &Context) -> Result<(), CliError> {
             "the folder does not look like a Butler data folder",
         ));
     }
-    let home = user_dirs::home_dir().and_then(|home| home.canonicalize().ok());
+    let home = user_dirs::home_dir().and_then(|home| home.canonical().ok());
     let overlaps_home = home
         .as_ref()
         .is_some_and(|home| path == home || home.starts_with(path));
-    let agent_home = context.home.root().canonicalize().ok();
+    let agent_home = context.home.root().canonical().ok();
     let overlaps_agent = agent_home
         .as_ref()
         .is_some_and(|agent| path.starts_with(agent) || agent.starts_with(path));

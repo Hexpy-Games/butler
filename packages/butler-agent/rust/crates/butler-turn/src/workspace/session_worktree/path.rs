@@ -116,7 +116,7 @@ fn lexical_resolve(path: &Path) -> std::io::Result<PathBuf> {
 }
 
 pub(super) fn canonical_path(path: &str) -> std::io::Result<PathBuf> {
-    std::fs::canonicalize(path).or_else(|_| lexical_resolve(Path::new(path)))
+    butler_platform::secure_fs::canonicalize(path).or_else(|_| lexical_resolve(Path::new(path)))
 }
 
 fn safe_label(value: &str) -> String {

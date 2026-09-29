@@ -1,11 +1,6 @@
 //! One-shot system facts for the retained MCP `butler_status` tool.
 
-use std::{fs, path::Path, time::SystemTime};
-
-use nix::{
-    errno::Errno,
-    fcntl::{Flock, FlockArg},
-};
+use std::{path::Path, time::SystemTime};
 
 use butler_models::models;
 use butler_runtime::operations;
@@ -49,7 +44,10 @@ fn uptime(data_root: &Path) -> String {
         return "unknown".into();
     };
     if record.state != "ready"
-        || !matches!(instance_lock_is_held(data_root), Ok(true))
+        || !matches!(
+            service_instance::instance_lock_is_held_read_only(data_root),
+            Ok(true)
+        )
         || !matches!(service_instance::process_matches(&record), Ok(true))
     {
         return "unknown".into();
@@ -77,28 +75,5 @@ fn uptime(data_root: &Path) -> String {
         } else {
             format!("{hours}h {minutes}m")
         }
-    }
-}
-
-fn instance_lock_is_held(data_root: &Path) -> Result<bool, crate::host::HostError> {
-    let path = data_root.join("state/butler-agent-native-service.lock");
-    match fs::symlink_metadata(&path) {
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-        Err(_) => return Err("service_lock_unavailable".into()),
-        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
-            return Err("service_lock_path_ambiguous".into());
-        }
-        Ok(_) => {}
-    }
-    let file = fs::OpenOptions::new()
-        .read(true)
-        .open(&path)
-        .map_err(|source| {
-            crate::host::HostError::new("service_lock_unavailable").with_source(source)
-        })?;
-    match Flock::lock(file, FlockArg::LockSharedNonblock) {
-        Ok(_) => Ok(false),
-        Err((_, Errno::EAGAIN)) => Ok(true),
-        Err((_, error)) => Err(format!("service_lock_probe_failed: {error}").into()),
     }
 }

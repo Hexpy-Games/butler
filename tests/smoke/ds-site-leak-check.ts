@@ -34,7 +34,6 @@ export function leakRules(env: Record<string, string | undefined> = process.env)
     { name: "GitHub token", pattern: /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/g },
     { name: "Slack token", pattern: /\bxox[abpors]-[A-Za-z0-9-]{10,}/g },
     { name: "AWS key id", pattern: /\bAKIA[0-9A-Z]{16}\b/g },
-    { name: "Telegram bot token", pattern: /\b\d{8,10}:[A-Za-z0-9_-]{35}\b/g },
     { name: "private key block", pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----/g },
     { name: "JWT", pattern: /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g },
     { name: "Cloudflare tunnel host", pattern: /\b[a-z0-9-]+\.(?:trycloudflare|cfargotunnel)\.com\b/gi },

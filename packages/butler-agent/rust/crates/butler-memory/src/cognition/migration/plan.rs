@@ -226,7 +226,7 @@ fn visit(
         Err(_) => return Err(failure(CognitionCode::CognitionMigrationReadFailed)),
     };
     if metadata.is_dir() {
-        let canonical = fs::canonicalize(path).map_err(|source| {
+        let canonical = butler_platform::secure_fs::canonicalize(path).map_err(|source| {
             failure(CognitionCode::CognitionMigrationReadFailed).with_source(source)
         })?;
         if !visited.insert(canonical) {

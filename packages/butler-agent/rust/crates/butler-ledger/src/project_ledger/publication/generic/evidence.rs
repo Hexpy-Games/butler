@@ -18,6 +18,9 @@ pub(super) enum Status {
     Preparing,
     Prepared,
     Committing,
+    /// Promoting without an atomic exchange: the canonical tree may be moved
+    /// aside (see `commit::displace`).
+    Displaced,
     Promoted,
     Observed,
 }
@@ -119,16 +122,20 @@ pub(super) fn read_journal(
     if journal.schema != "project-ledger.publication-transaction.v1"
         || journal.publication_id != attempt.publication_id
         || journal.canonical_root != occurrence.ledger_root
-        || journal.candidate_root != paths.candidate.to_string_lossy()
-        || journal.journal_path != paths.journal.to_string_lossy()
-        || journal.claim_path != claim::path(Path::new(&occurrence.ledger_root)).to_string_lossy()
+        || Path::new(&journal.candidate_root) != paths.candidate
+        || Path::new(&journal.journal_path) != paths.journal
+        || Path::new(&journal.claim_path) != claim::path(Path::new(&occurrence.ledger_root))
         || !journal.base.same_storage(&attempt.expected_base)
     {
         return Err(LedgerEffectError::Uncertain { source: None });
     }
     if matches!(
         journal.status,
-        Status::Prepared | Status::Committing | Status::Promoted | Status::Observed
+        Status::Prepared
+            | Status::Committing
+            | Status::Displaced
+            | Status::Promoted
+            | Status::Observed
     ) != journal.candidate_head.is_some()
     {
         return Err(LedgerEffectError::Uncertain { source: None });
@@ -175,6 +182,9 @@ pub(super) fn reconcile(
     if matches!(journal.status, Status::Promoted | Status::Observed) {
         return observed(&paths, &journal, occurrence, attempt, collation);
     }
+    if journal.status == Status::Displaced {
+        commit::resume_displacement(&paths.candidate, Path::new(&occurrence.ledger_root))?;
+    }
     let active = head::observe(Path::new(&occurrence.ledger_root), collation)?;
     let candidate = journal
         .candidate_head
@@ -183,7 +193,9 @@ pub(super) fn reconcile(
     if active.same_storage(candidate) {
         return observed(&paths, &journal, occurrence, attempt, collation);
     }
-    if journal.status == Status::Committing && !active.same_logical(&journal.base) {
+    if matches!(journal.status, Status::Committing | Status::Displaced)
+        && !active.same_logical(&journal.base)
+    {
         return Err(LedgerEffectError::Uncertain { source: None });
     }
     if journal.status == Status::Prepared && !active.same_logical(&journal.base) {

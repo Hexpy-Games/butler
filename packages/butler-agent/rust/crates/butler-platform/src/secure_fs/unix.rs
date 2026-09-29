@@ -15,6 +15,7 @@ pub(super) const PERMISSION_MODES: bool = true;
 pub(super) const NO_FOLLOW: bool = true;
 pub(super) const FILE_IDS: bool = true;
 pub(super) const DIRECTORY_SYNC: bool = true;
+pub(super) const ATOMIC_EXCHANGE: bool = true;
 
 const PRIVATE_DIRECTORY: u32 = 0o700;
 const PRIVATE_FILE: u32 = FileMode::OWNER_ONLY.0;
@@ -104,6 +105,14 @@ pub(super) fn restrict_directory(path: &Path) -> Option<io::Result<()>> {
     ))
 }
 
+pub(super) fn protect_folder(_path: &Path) -> Option<io::Result<()>> {
+    None
+}
+
+pub(super) fn is_private(path: &Path) -> Option<bool> {
+    is_owner_only(&fs::symlink_metadata(path).ok()?)
+}
+
 pub(super) fn is_owner_only(metadata: &Metadata) -> Option<bool> {
     let private = if metadata.is_dir() {
         PRIVATE_DIRECTORY
@@ -126,6 +135,18 @@ pub(super) fn open_read_no_follow(path: &Path) -> io::Result<File> {
 
 pub(super) fn sync_directory(path: &Path) -> Option<io::Result<()>> {
     Some(File::open(path).and_then(|directory| directory.sync_all()))
+}
+
+pub(super) fn sync_path(path: &Path) -> io::Result<()> {
+    File::open(path)?.sync_all()
+}
+
+pub(super) fn canonicalize(path: &Path) -> io::Result<PathBuf> {
+    fs::canonicalize(path)
+}
+
+pub(super) fn rename(from: &Path, to: &Path) -> io::Result<()> {
+    fs::rename(from, to)
 }
 
 pub(super) fn exchange_directories(left: &Path, right: &Path) -> Result<(), ExchangeError> {

@@ -9,7 +9,7 @@ use nix::errno::Errno;
 use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
 
-use super::{IdentityError, StopError};
+use super::{IdentityError, StopError, SystemTimeZone};
 
 pub(super) fn host_name() -> io::Result<String> {
     let name = nix::unistd::gethostname().map_err(io::Error::from)?;
@@ -19,6 +19,10 @@ pub(super) fn host_name() -> io::Result<String> {
 pub(super) fn os_release() -> io::Result<String> {
     let system = nix::sys::utsname::uname().map_err(io::Error::from)?;
     Ok(system.release().to_string_lossy().into_owned())
+}
+
+pub(super) fn system_time_zone() -> io::Result<SystemTimeZone> {
+    Ok(SystemTimeZone::File("/etc/localtime".into()))
 }
 
 pub(super) fn process_started_at_ms(pid: u32) -> Option<i64> {

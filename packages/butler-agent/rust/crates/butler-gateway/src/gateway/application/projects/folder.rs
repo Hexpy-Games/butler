@@ -90,7 +90,7 @@ pub(super) fn create_scratch(
         )
         .with_source(source)
     })?;
-    let root = fs::canonicalize(root).map_err(|source| {
+    let root = butler_platform::secure_fs::canonicalize(root).map_err(|source| {
         error(
             400,
             "project_workspace_unavailable",
@@ -114,7 +114,7 @@ pub(super) fn create_scratch(
         }
         match fs::create_dir(&path) {
             Ok(()) => {
-                let real = fs::canonicalize(&path).map_err(|source| {
+                let real = butler_platform::secure_fs::canonicalize(&path).map_err(|source| {
                     error(
                         400,
                         "project_folder_unavailable",
@@ -176,7 +176,8 @@ pub(super) fn validate_existing(path: &Path) -> Result<PathBuf, GatewayApplicati
         ));
     }
     fs::read_dir(path).map_err(|source| invalid().with_source(source))?;
-    let real = fs::canonicalize(path).map_err(|source| invalid().with_source(source))?;
+    let real = butler_platform::secure_fs::canonicalize(path)
+        .map_err(|source| invalid().with_source(source))?;
     if sensitive(&real) {
         return Err(error(
             400,
@@ -189,7 +190,7 @@ pub(super) fn validate_existing(path: &Path) -> Result<PathBuf, GatewayApplicati
 
 pub(super) fn rollback(root: &Path, folder: &ScratchFolder) {
     let _ = (|| -> std::io::Result<()> {
-        let root = fs::canonicalize(root)?;
+        let root = butler_platform::secure_fs::canonicalize(root)?;
         let path = &folder.path;
         if path == &root || !path.starts_with(&root) {
             return Ok(());

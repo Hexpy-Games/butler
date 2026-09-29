@@ -85,6 +85,9 @@ pub fn file_name() -> &'static str {
     sys::FILE_NAME
 }
 
+/// Whether the old Bun launcher can occupy this host's command path.
+pub const HAS_PRE_NATIVE_LAUNCHER: bool = sys::HAS_PRE_NATIVE_LAUNCHER;
+
 /// Where the user's `butler` command lives (`~/.local/bin/butler` on Unix);
 /// `None` without a home directory.
 pub fn default_path() -> Option<PathBuf> {

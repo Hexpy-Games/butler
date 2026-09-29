@@ -15,7 +15,7 @@ use std::fs;
 
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::scenario::{Fixture, Setup};
-use butler_platform::secure_fs::is_owner_only;
+use butler_platform::secure_fs::{OWNER_ONLY, is_owner_only};
 use serde_json::Value;
 
 const KEY: &str = "sk-e2e-cred05-0013";
@@ -77,7 +77,10 @@ async fn cred_05_unsigned_builds_keep_keys_in_the_file() -> Result<(), HarnessEr
     assert_eq!(fingerprint.len(), 64, "{entry}");
     let store_file = data.join("auth/credential-store.json");
     assert!(fs::read_to_string(&store_file)?.contains(KEY));
-    assert_eq!(is_owner_only(&fs::metadata(&store_file)?), Some(true));
+    assert_eq!(
+        is_owner_only(&fs::metadata(&store_file)?),
+        OWNER_ONLY.then_some(true)
+    );
 
     let set = s
         .agent

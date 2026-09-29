@@ -1,9 +1,9 @@
-//! Runnable programs: marking a file executable, recognizing one, and where
-//! this host keeps system-wide programs.
+//! Runnable programs: marking a file executable, recognizing one, where this
+//! host keeps system-wide programs, and the user's `butler` command launcher.
 //!
 //! Unix runs any file with an execute bit; Windows runs files by their
-//! extension and has no execute bit to set. The user's `butler` command
-//! launcher moves here in a later stage.
+//! extension and has no execute bit to set.
+//!
 
 use std::fs::Metadata;
 use std::io;
@@ -38,6 +38,26 @@ pub fn is_executable(path: &Path, metadata: &Metadata) -> bool {
 /// are found through `PATH`.
 pub fn system_program_dirs() -> Vec<PathBuf> {
     sys::system_program_dirs()
+}
+
+/// Whether owner, group and others may all run the file `metadata`
+/// describes: every execute bit set on Unix; any file on Windows, which has
+/// no execute bits.
+pub fn is_runnable_by_all(metadata: &Metadata) -> bool {
+    sys::is_runnable_by_all(metadata)
+}
+
+/// The installed Agent executable's file name on this host.
+pub const AGENT_BINARY: &str = sys::AGENT_BINARY;
+
+/// This host as Node's `process.platform` names it: `darwin`, `linux`,
+/// `win32` (other hosts keep Rust's name).
+pub fn node_platform() -> &'static str {
+    match std::env::consts::OS {
+        "macos" => "darwin",
+        "windows" => "win32",
+        other => other,
+    }
 }
 
 /// The `<os>-<arch>` tag of the release artifacts that run on this host:

@@ -1,3 +1,4 @@
+use butler_platform::secure_fs::Canonical as _;
 use std::path::{Component, Path, PathBuf};
 
 use serde_json::{Value, json};
@@ -138,7 +139,7 @@ fn resolve_request(
         out.reason = Some("absolute_path_not_allowed");
         return Ok((out, None));
     }
-    let root_real = root_lex.canonicalize()?;
+    let root_real = root_lex.canonical()?;
     out.root = root_real.clone();
     if !requested_path.is_absolute() && has_parent_segment(requested) {
         out.reason = Some("parent_traversal_not_allowed");
@@ -205,7 +206,7 @@ pub(crate) fn resolve_workspace_path_guard(input: GuardInput<'_>) -> std::io::Re
         root_real,
         absolute,
     } = resolved;
-    let Ok(real) = absolute.canonicalize() else {
+    let Ok(real) = absolute.canonical() else {
         out.reason = Some("not_found");
         return Ok(out);
     };
@@ -231,7 +232,7 @@ impl Installation {
         let paths = root
             .map(|home| {
                 let lexical = lexical_absolute(home)?;
-                let real = lexical.canonicalize().unwrap_or_else(|_| lexical.clone());
+                let real = lexical.canonical().unwrap_or_else(|_| lexical.clone());
                 Ok::<_, std::io::Error>((lexical, real))
             })
             .transpose()?;
@@ -266,7 +267,7 @@ pub(crate) fn resolve_workspace_mutation_guard(
         root_real,
         absolute,
     } = resolved;
-    match absolute.canonicalize() {
+    match absolute.canonical() {
         Ok(real) => {
             out.real = Some(real.clone());
             out.reason = existing_target_rejection(&root_real, &absolute, &real, &installation)?;
@@ -387,7 +388,7 @@ fn realpath_or_nearest(path: &Path) -> PathBuf {
     let mut current = path.to_path_buf();
     let mut suffix = Vec::new();
     loop {
-        if let Ok(real) = current.canonicalize() {
+        if let Ok(real) = current.canonical() {
             return suffix
                 .into_iter()
                 .rev()
