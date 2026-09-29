@@ -88,6 +88,7 @@ pub(super) fn request() -> TurnRequest {
         authority_request_ref: None,
         authority_client_message_id: None,
         app_queue_claim_id: Some("claim".into()),
+        resume: false,
         preparation_cancellation: Default::default(),
     }
 }

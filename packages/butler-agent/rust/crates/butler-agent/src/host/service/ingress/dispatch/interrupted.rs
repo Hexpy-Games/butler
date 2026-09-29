@@ -27,7 +27,8 @@ pub(super) fn by_crash(record: &QueuedInboundEvent) -> bool {
 
 /// A turn already parked once for process replacement after an interruption.
 pub(super) fn replaced_once(record: &QueuedInboundEvent) -> bool {
-    metadata_flag(record, "recoveredFromRuntimeInterruption") && plain_turn(record)
+    metadata_flag(record, "recoveredFromRuntimeInterruption")
+        && (plain_turn(record) || resume_turn(record))
 }
 
 fn metadata_flag(record: &QueuedInboundEvent, key: &str) -> bool {
@@ -40,6 +41,18 @@ fn metadata_flag(record: &QueuedInboundEvent, key: &str) -> bool {
 
 fn plain_turn(record: &QueuedInboundEvent) -> bool {
     bind::Envelope::from_record(record).is_ok_and(|envelope| envelope.control.is_none())
+}
+
+/// A control record resuming an admitted turn (after an authority decision).
+fn resume_turn(record: &QueuedInboundEvent) -> bool {
+    bind::Envelope::from_record(record).is_ok_and(|envelope| {
+        envelope
+            .control
+            .as_ref()
+            .and_then(|control| control.get("kind"))
+            .and_then(serde_json::Value::as_str)
+            == Some("resume_turn")
+    })
 }
 
 /// What a failed interruption report means for the queue record.
@@ -77,7 +90,7 @@ pub(super) async fn settle(
     delivery: &dyn IngressDelivery,
     status: &str,
 ) -> Option<IngressPoll> {
-    let error = match report(item, bindings, delivery).await {
+    let error = match report(item, bindings, delivery, None).await {
         Ok(()) => {
             let completed = queue.complete(
                 item,
@@ -119,14 +132,19 @@ pub(super) async fn settle(
     }
 }
 
-async fn report(
+/// Tells the App the turn failed: interrupted, or `rejected` with that code.
+pub(super) async fn report(
     item: &ClaimedInboundEvent,
     bindings: &SessionBindingStore,
     delivery: &dyn IngressDelivery,
+    rejected: Option<&str>,
 ) -> Result<(), IngressError> {
     let envelope = bind::Envelope::from_record(&item.record)?;
     let binding = bind::existing_control_binding(&envelope, bindings).await?;
-    let report = action::crash_interrupted(item, &envelope, &binding)?;
+    let report = match rejected {
+        Some(code) => action::rejected(item, &envelope, &binding, code)?,
+        None => action::crash_interrupted(item, &envelope, &binding)?,
+    };
     if delivery.deliver(binding.session_id.clone(), report).await? {
         Ok(())
     } else {

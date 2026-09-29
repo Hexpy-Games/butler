@@ -14,7 +14,7 @@ use super::{
     ConversationProjection, PortFuture, PreparedExecution, PreparedTurn, TurnPreparation, TurnStore,
 };
 use crate::btcc::BtccCode;
-use crate::btcc::storage::{BtccRepositories, WakeAuthorization};
+use crate::btcc::storage::{BtccRepositories, StorageCode, WakeAuthorization};
 use crate::btcc::{BtccError, ReasoningEffort, TurnRequest, TurnTrigger};
 use crate::conversation::{
     AgentConversationStore, ConversationAdmissionObserver, ConversationAdmissionTurn,
@@ -146,6 +146,12 @@ impl DefaultTurnPreparation {
             return self
                 .finish(request, binding, command, Admission::Replay)
                 .await;
+        }
+        if request.resume {
+            return Err(BtccError::relayed(
+                StorageCode::TurnNotAdmitted.as_str(),
+                format!("BTCC Turn is not admitted: {}", request.turn_id),
+            ));
         }
         self.authorize_wake(&request).await?;
         let binding = self

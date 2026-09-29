@@ -105,6 +105,9 @@ pub struct ConversationEnvelope {
     pub message_text: String,
     // Passthrough: App turn context relayed from the App.
     pub content_parts: Option<Value>,
+    /// The turn resumes an admitted turn: its stored user message is accepted
+    /// whatever content parts it carries, as this envelope only names it.
+    pub resume: bool,
 }
 
 /// What a conversation admission turn needs.

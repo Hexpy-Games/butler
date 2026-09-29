@@ -195,6 +195,12 @@ pub struct TurnRequest {
     pub authority_client_message_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub app_queue_claim_id: Option<String>,
+    /// Resumes the already admitted turn `turn_id` (after an authority
+    /// decision or a recovery) instead of admitting or replaying it. The
+    /// request only names the turn: its message content is not part of the
+    /// identity, which the stored admission already fixes.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub resume: bool,
     #[serde(skip, default)]
     pub preparation_cancellation: CancellationToken,
 }

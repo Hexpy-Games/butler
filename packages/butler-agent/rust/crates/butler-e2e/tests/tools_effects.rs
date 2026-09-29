@@ -222,6 +222,14 @@ async fn all_turns_terminal(s: &Scenario, context: &str) -> Result<(), HarnessEr
     }
 }
 
+/// How many `write_file` rows of `turn_id` are in `state`.
+async fn write_rows(s: &Scenario, turn_id: &str, state: &str) -> Result<usize, HarnessError> {
+    Ok(tool_rows(&s.gw.messages("general").await?, turn_id)
+        .iter()
+        .filter(|row| row["safe_tool_name"] == "write_file" && row["state"] == state)
+        .count())
+}
+
 /// Allows `reference` for the conversation: the effect runs once with the
 /// requested content, the service does not exit, and the turn settles.
 async fn allow_and_settle(
@@ -312,7 +320,6 @@ async fn tool_07_ask_first_waits_for_approval() -> Result<(), HarnessError> {
 /// a restart, the effect runs once after Allow, and the conversation grant
 /// Allow created can be revoked.
 #[tokio::test]
-#[ignore = "product gap: TOOL-07-RESUME — resuming an ask-first turn (after Allow/Deny, or on restart with a pending request) is interrupted with turn_replay_conflict; the service exits and crash-loops on every restart"]
 async fn tool_07_authority_allow_restart_and_revoke() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("TOOL-07")?.cassette("TOOL-07").start().await?;
@@ -328,13 +335,17 @@ async fn tool_07_authority_allow_restart_and_revoke() -> Result<(), HarnessError
     );
 
     allow_and_settle(&mut s, &reference, &target).await?;
+    assert_eq!(
+        write_rows(&s, &turn_id, "delivered").await?,
+        1,
+        "the approved effect must run exactly once"
+    );
     revoke_conversation_grant(&s).await?;
     s.finish().await
 }
 
 /// TOOL-07 (deny) — a denied effect never runs and the turn ends visibly.
 #[tokio::test]
-#[ignore = "product gap: TOOL-07-RESUME — resuming an ask-first turn (after Allow/Deny, or on restart with a pending request) is interrupted with turn_replay_conflict; the service exits and crash-loops on every restart"]
 async fn tool_07_authority_deny() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("TOOL-07-DENY")?
@@ -359,16 +370,13 @@ async fn tool_07_authority_deny() -> Result<(), HarnessError> {
     assert_eq!(deny.status, 202, "{}", deny.text);
     let (_, restarts) = wait_file(&mut s, &target, Duration::from_secs(15)).await?;
     eprintln!("TOOL-07 deny: restarts {restarts}; {}", interrupts(&s));
-    let turns = s.gw.turns("general").await?;
     assert_eq!(restarts, 0, "the service exited after Deny");
-    assert!(
-        turns
-            .iter()
-            .all(|turn| TERMINAL.contains(&turn_state(turn))),
-        "turn stuck after Deny: {turns:?}"
+    all_turns_terminal(&s, "turn stuck after Deny").await?;
+    assert_eq!(
+        write_rows(&s, &turn_id, "delivered").await?,
+        0,
+        "the denied effect ran"
     );
-    let _ = turn_id;
-    tokio::time::sleep(Duration::from_secs(1)).await;
     assert!(!target.exists(), "denied effect ran");
     s.finish().await
 }

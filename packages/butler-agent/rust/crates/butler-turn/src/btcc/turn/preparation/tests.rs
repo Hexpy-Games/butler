@@ -282,6 +282,8 @@ async fn actual_sqlite_fresh_and_replay_skip_changed_context_and_catalog() {
             .code(),
         "turn_replay_conflict"
     );
+    absent_content.resume = true;
+    request::assert_replay_identity(&stored_null, &absent_content).unwrap();
 
     let mut wrong_role = request.clone();
     wrong_role.turn_id = "turn-role".into();
@@ -494,6 +496,5 @@ mod contracts;
 mod fixtures;
 mod goldens;
 
-use goldens::*;
-
 use fixtures::*;
+use goldens::*;
