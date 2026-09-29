@@ -32,7 +32,6 @@ use super::{
 };
 use checkpoint::Checkpoint;
 use deferred::{sync_deferred_once, sync_deferred_step};
-pub(super) use non_final::RECONCILED_STATUS_SQL;
 pub(super) use owner::ProjectionOwner;
 pub(super) use transcript_file::sync_chat_once;
 

@@ -316,10 +316,11 @@ impl AppApplication {
             )
             .await?;
         require_relation(&projection)?;
-        let latest = projection
+        let mut latest = projection
             .get("latest_turn")
             .cloned()
             .unwrap_or(Value::Null);
+        steward_children::complete_turn_value(&mut latest);
         let updated = child_updated_at(&projection).ok_or(GatewayApplicationError::internal())?;
         let mut view = Map::new();
         view.insert("session_id".into(), json!(session_id));
@@ -372,34 +373,11 @@ impl AppApplication {
             );
             json!({"workers": [], "steward_children": []})
         });
-        let rows = self
-            .steward_progress_rows(steward_children::turn_ids(&projection))
-            .await;
-        steward_children::complete(&mut projection, &rows);
+        let now =
+            butler_core::js_date::parse_iso_millis(&self.dependencies.identity_clock.now_iso())
+                .unwrap_or_default();
+        steward_children::complete(&mut projection, now);
         projection
-    }
-
-    /// Public progress rows of the Steward child turns the App store knows;
-    /// a turn it does not know (or cannot read) has no rows.
-    async fn steward_progress_rows(
-        &self,
-        turn_ids: Vec<String>,
-    ) -> std::collections::HashMap<String, Vec<Value>> {
-        if turn_ids.is_empty() {
-            return Default::default();
-        }
-        self.storage
-            .execute(move |db| {
-                let mut rows = std::collections::HashMap::new();
-                for id in turn_ids {
-                    if let Some(progress) = super::progress_view::read(db, &id)? {
-                        rows.insert(id, progress.safe_progress_rows);
-                    }
-                }
-                Ok(rows)
-            })
-            .await
-            .unwrap_or_default()
     }
 
     pub(super) async fn refresh_message_projection_owned(

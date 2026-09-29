@@ -101,6 +101,14 @@ pub(super) fn apply(
             &input.turn_id,
             apply.now,
         )?;
+        super::non_final::fail_unanswered(
+            &tx,
+            apply.subscribers,
+            &input.chat_id,
+            &input.turn_id,
+            "no_visible_result",
+            apply.now,
+        )?;
         settle(
             &tx,
             apply.subscribers,

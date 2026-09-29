@@ -45,6 +45,7 @@ async fn sub_legacy_01_pre_typed_delegations_are_read() -> Result<(), HarnessErr
     assert_eq!(context.status, 200, "{}", context.text);
 
     assert_handoff_message_is_final(view.data());
+    assert_branch_from_handoff_message(&s, &chat).await?;
 
     for (stewards, workers) in [
         (&view.data()["steward_children"], &view.data()["workers"]),
@@ -55,7 +56,7 @@ async fn sub_legacy_01_pre_typed_delegations_are_read() -> Result<(), HarnessErr
     ] {
         assert_eq!(
             children(stewards, "session_id"),
-            ["steward-legacy-a", "steward-legacy-b"]
+            ["steward-legacy-a", "steward-legacy-b", "steward-legacy-f"]
         );
         assert_eq!(children(workers, "session_id"), ["worker-legacy-c"]);
         assert_steward_turn_shape(stewards);
@@ -74,7 +75,12 @@ async fn sub_legacy_01_pre_typed_delegations_are_read() -> Result<(), HarnessErr
     ids.sort_unstable();
     assert_eq!(
         ids,
-        ["steward-relation-b", "steward-task-a", "worker-relation-c"],
+        [
+            "steward-relation-b",
+            "steward-relation-f",
+            "steward-task-a",
+            "worker-relation-c"
+        ],
         "{}",
         activity.text
     );
@@ -151,9 +157,17 @@ fn seed_legacy_delegations(s: &Scenario, hint: &str) {
         ("d", "steward-legacy-d", json!({"unexpected": true}), None),
         // The same, still waiting to be dispatched.
         ("e", "steward-legacy-e", json!({"unexpected": true}), None),
+        // Steward whose turn was delivered but whose result was never committed.
+        (
+            "f",
+            "steward-legacy-f",
+            legacy_packet("f", hint, true),
+            None,
+        ),
     ];
     seed_child_turn(&db, "a", "steward-legacy-a", "delivered");
     seed_child_turn(&db, "b", "steward-legacy-b", "admitted");
+    seed_child_turn(&db, "f", "steward-legacy-f", "delivered");
     for (ordinal, (key, child, packet, intent)) in (1_i64..).zip(rows) {
         db.execute(
             "INSERT INTO btcc_session_relations (relation_id,parent_session_id,parent_turn_id,child_session_id,anchor_message_id,ordinal,safe_title,created_at) VALUES (?1,?2,'turn-legacy',?3,'message-legacy',?4,'Legacy task','2026-01-01T00:00:00.000Z')",
@@ -303,6 +317,13 @@ fn assert_steward_turn_shape(stewards: &Value) {
     assert_eq!(live["latest_turn"]["state"], "thinking", "{live}");
     assert_eq!(live["latest_turn"]["cancellable"], true, "{live}");
     assert_eq!(live["active_turn"], live["latest_turn"], "{live}");
+    // A delivered turn whose result never arrived is an orphan, not work in
+    // progress.
+    let orphan = &list[2];
+    assert_eq!(orphan["status"], "failed", "{orphan}");
+    assert_eq!(orphan["terminal"], true, "{orphan}");
+    assert_eq!(orphan["result_missing"], true, "{orphan}");
+    assert!(orphan["active_turn"].is_null(), "{orphan}");
 }
 
 /// A hand-off turn as older builds left it: the turn is delivered but its
@@ -331,4 +352,28 @@ fn assert_handoff_message_is_final(view: &Value) {
         .find(|message| message["id"] == "message-stream-turn-handoff")
         .unwrap_or_else(|| panic!("hand-off message missing: {view}"));
     assert_eq!(message["status"], "delivered", "{message}");
+}
+
+/// The settled hand-off message is a valid branch source: the branch owner
+/// reads the same status as the transcript.
+async fn assert_branch_from_handoff_message(s: &Scenario, chat: &str) -> Result<(), HarnessError> {
+    let branch =
+        s.gw.post(
+            "/internal/session-branches",
+            json!({
+                "request_id": "branch-handoff", "source_session_id": chat,
+                "source_message_id": "message-stream-turn-handoff",
+                "title": "Made-up topic", "destination": "chat",
+            }),
+        )
+        .await?;
+    // The stub tier has no model for the branch summary (502); what matters
+    // is that the source answer was accepted (not 404 branch_source_unavailable).
+    assert_ne!(branch.status, 404, "{}", branch.text);
+    assert!(
+        !branch.text.contains("branch_source_unavailable"),
+        "{}",
+        branch.text
+    );
+    Ok(())
 }

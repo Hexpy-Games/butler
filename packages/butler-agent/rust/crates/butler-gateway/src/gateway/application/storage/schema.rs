@@ -49,6 +49,7 @@ pub(super) fn migrate(
     migration::backfill_queue_identity(connection)?;
     schedule_access::backfill(connection)?;
     migration::create_post_backfill_indexes(connection)?;
+    migration::settle_ended_turn_messages(connection)?;
     project_ledger_bindings::initialize(connection, butler_data)?;
     space::migrate(connection)?;
     wallpapers::create(connection)?;
