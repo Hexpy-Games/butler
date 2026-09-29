@@ -1,116 +1,126 @@
-import type { Key, Pose, Track } from "../../heroTimeline";
-import { TRANSITION } from "../shared/beats";
-import { introTracks } from "../shared/Intro";
-import { select } from "../shared/Reveal";
+import { fit, focus, type Key, type Pose, type Track } from "../../heroTimeline";
+import { motionDistance } from "../../../../lib/motion";
+import { CANVAS, GRID } from "../shared/grid";
+import { reveal, select } from "../shared/Reveal";
 import type { SceneContext } from "../scene/types";
-import { EASES, GHOSTS, ms, type MotionCopy } from "./motionCopy";
-import { TRACK } from "./motionLanes";
-import { SCORE, SCORE_SPAN } from "./MotionScenes";
+import { EASES, GHOSTS, type MotionCopy } from "./motionCopy";
+import { arrive, fillNote, looped, shown } from "./motionKeys";
+import { TICKS, TRACK } from "./motionLanes";
+import { AT, RUN } from "./motionScore";
+import { scoreTracks, twinTracks } from "./motionTurnTracks";
+import { exitTimes } from "./MotionStages";
 
-/**
- * 08 Motion, "the score", beat marks (1 beat = --motion-deliberate; a
- * metronome ticks it along the bottom edge all chapter long):
- *
- *   0–7.4     Title      "Motion" enters one letter per tick
- *   6.8–18.6  Lanes      five pucks race the same distance in the same time,
- *                        ghost frames every tenth showing each curve's spacing
- *   18.6–33   Exits      the menu enters over its note bar, then exits on a
- *                        shorter one; twice slowed, once at real speed
- *   33–51.5   Score      a real conversation turn plays over its piano roll
- *   51.5–67   Twins      Full, then Reduced: the same turn, the idle twin dimmed
- *   67–76     Spring     the Switch thumb springs; a dragged card lifts
- */
-const AT = { lanes: 6.8, run: 11.4, exits: 18.6, plays: [23, 27.6, 31.6], score: 33, s: 37.6, twins: 51.5, full: 56, reduced: 61.5, spring: 67, toggle: 71.6, lift: 73.6, end: 76 } as const;
-/** One run of the lanes (slowed ×3, like reading a curve at a third of its speed). */
-const RUN = 2.4;
-const beats = (time: number) => time / 320;
+/** Canvas px kept clear along the bottom edge for the metronome (and, wide, the frame's crop). */
+const BAND = { wide: 64, tall: 40 } as const;
+/** How far a scene sits above the canvas centre: half the metronome's own height (the wide crop is symmetric). */
+const LIFT = 14;
 
-const looped = (keys: Key[], close: number): Key[] => {
-  const { at: _at, ease: _ease, ...first } = keys[0]!;
-  return [...keys, { at: close - 0.01 }, { at: close, ...first }];
-};
+/** The title lands one letter per tick; the lead lines start on the next ticks; all leave on beat 8, faster than they came. */
+function introTracks(copy: MotionCopy, close: number): Track[] {
+  const leave = (name: string, at: number): Track => ({
+    select: select(name), keys: looped([{ at: 0, y: 0, o: 1 }, { at, y: 0, o: 1 }, { at: at + 0.7, y: -56, o: 0, ease: "accelerate" }], close),
+  });
+  const rise = motionDistance("lg") || 24;
+  return [
+    ...[...copy.title].map((_, k) => arrive(`ml-${k}`, k, 1, { y: rise }, close)),
+    ...copy.lead.flatMap(([key, text], n) => [...reveal(`i-k${n}`, 2 + n, key, close), ...reveal(`i-l${n}`, 2.5 + n, text, close)]),
+    leave("i-title", AT.lanes), ...copy.lead.map((_, n) => leave(`i-p${n}`, AT.lanes + 0.5 * (n + 1))),
+  ];
+}
 
-/** A part hidden until `at`, then arriving from `from` over `length` beats, held to the close. */
-function arrive(name: string, at: number, length: number, from: Pose, close: number, ease: Key["ease"] = "decelerate"): Track {
-  const rest = Object.fromEntries(Object.keys(from).map((field) => [field, field === "s" ? 1 : 0])) as Pose;
-  return { select: select(name), keys: looped([{ at: 0, ...from, o: 0 }, { at, ...from, o: 0 }, { at: at + length, ...rest, o: 1, ease }], close) };
+/** The metronome's cursor steps onto the next tick on every beat (landing in a quarter beat), from the top each cycle. */
+function metronome(beats: number, close: number, layout: "wide" | "tall"): Track {
+  const step = (CANVAS[layout].w - GRID[layout].margin * 2 - 1) / (TICKS - 1);
+  const x = (beat: number) => (beat % TICKS) * step;
+  const keys: Key[] = [{ at: 0, x: 0 }];
+  for (let beat = 1; beat < beats - 0.3; beat += 1) {
+    if (beat % TICKS === 0) keys.push({ at: beat - 0.01, x: x(beat - 1) }, { at: beat, x: 0 });
+    else keys.push({ at: beat, x: x(beat - 1) }, { at: beat + 0.25, x: x(beat), ease: "decelerate" });
+  }
+  keys.push({ at: close - 0.01 }, { at: close, x: 0 });
+  return { select: select("metro"), keys };
+}
+
+/** Two runs of the five pucks; the ghosts appear with the first and stay. */
+function laneTracks(layout: "wide" | "tall", close: number): Track[] {
+  const track = TRACK[layout];
+  const [one, two] = AT.run;
+  return EASES.flatMap((ease): Track[] => [
+    { select: select(`lp-${ease}`), keys: looped([{ at: 0, x: 0 }, { at: one, x: 0 }, { at: one + RUN, x: track, ease }, { at: two - 0.26, x: track }, { at: two - 0.25, x: 0 }, { at: two, x: 0 }, { at: two + RUN, x: track, ease }], close) },
+    ...Array.from({ length: GHOSTS }, (_, k) => arrive(`lg-${ease}-${k}`, one + (k / (GHOSTS - 1)) * RUN, 0.15, {}, close, "linear")),
+  ]);
+}
+
+/** In fast, out faster: two plays at half speed, one at real speed; each note fills while its move plays. */
+function exitTracks(close: number): Track[] {
+  const { enter, exit } = exitTimes();
+  const speed = (p: number) => (p < 2 ? 160 : 320);
+  const rise = motionDistance("sm") || 4;
+  const menu: Key[] = [{ at: 0, o: 0, s: 0.97, y: rise }];
+  const inPlays: Array<[number, number]> = [];
+  const outPlays: Array<[number, number]> = [];
+  AT.plays.forEach(([a, b], p) => {
+    const [e, x] = [enter / speed(p), exit / speed(p)];
+    menu.push({ at: a, o: 0, s: 0.97, y: rise }, { at: a + e, o: 1, s: 1, y: 0, ease: "standard" }, { at: b, o: 1, s: 1, y: 0 }, { at: b + x, o: 0, s: 0.97, y: 0, ease: "accelerate" });
+    inPlays.push([a, e]);
+    outPlays.push([b, x]);
+  });
+  const realAt = AT.plays[2]![0] - 0.5;
+  return [
+    { select: select("ex-menu"), keys: looped(menu, close) },
+    ...fillNote("exb-in", inPlays, close), ...fillNote("exb-out", outPlays, close),
+    { select: select("ex-half"), keys: looped([{ at: 0, o: 1 }, { at: realAt, o: 1 }, { at: realAt + 0.2, o: 0 }], close) },
+    shown("ex-real", realAt, null, close),
+  ];
+}
+
+/** The Switch toggles on three ticks; its thumb springs over --motion-base (one beat) each time. */
+function springTracks(close: number): Track[] {
+  const [on, off, again] = AT.toggles;
+  const fade = 0.2;
+  const layer = (first: number): Key[] => [{ at: 0, o: first }];
+  const onKeys = layer(0);
+  const offKeys = layer(1);
+  for (const [at, to] of [[on, 1], [off, 0], [again, 1]] as const) {
+    onKeys.push({ at, o: 1 - to }, { at: at + fade, o: to });
+    offKeys.push({ at, o: to }, { at: at + fade, o: 1 - to });
+  }
+  const thumb = (name: string, keys: Key[]): Track => ({ select: `${select(name)} [data-slot="switch-thumb"]`, keys: looped(keys, close) });
+  return [
+    { select: select("sp-on"), keys: looped(onKeys, close) }, { select: select("sp-off"), keys: looped(offKeys, close) },
+    thumb("sp-on", [{ at: 0, x: 0 }, { at: on, x: 0 }, { at: on + 1, x: 14, ease: "spring" }, { at: again - 0.01, x: 14 }, { at: again, x: 0 }, { at: again + 1, x: 14, ease: "spring" }]),
+    thumb("sp-off", [{ at: 0, x: 0 }, { at: off - 0.01, x: 0 }, { at: off, x: 14 }, { at: off + 1, x: 0, ease: "spring" }]),
+  ];
 }
 
 export function motionTracks(copy: MotionCopy) {
-  return ({ g, close, view }: SceneContext): { tracks: Track[]; camera: Key[] } => {
-    const cells = ["lanes", "exits", "score", "twins", "spring"] as const;
-    const starts = [AT.lanes, AT.exits, AT.score, AT.twins, AT.spring];
-    const poses = cells.map((cell) => view(cell, g.boxes[cell]!, 0.9, 2));
-    const front = view("intro", g.boxes.intro!, 1, 1);
-    const camera: Key[] = [{ at: 0, ...front }, ...cells.flatMap((_, k): Key[] => [
-      { at: starts[k]!, ...(k === 0 ? front : poses[k - 1]!) }, { at: starts[k]! + TRANSITION, ...poses[k]!, ease: "standard" },
-    ]), { at: AT.end, ...poses.at(-1)! }];
-    const track = TRACK[g.layout];
-    const run2 = AT.run + RUN + 1.4;
+  return ({ g, cells, close, beats }: SceneContext): { tracks: Track[]; camera: Key[] } => {
+    const canvas = g.canvas;
+    const band = BAND[g.layout];
+    // A scene's frame: on its cell's centre line (one-axis moves), zoomed to fit `box` above the metronome's band.
+    const frame = (cell: string, cap = 2, y = cells[cell]!.y, box = g.boxes[cell]!): Pose => {
+      const zoom = fit({ w: canvas.w, h: canvas.h - band }, box, 0.9, cap);
+      const pose = focus(canvas, { x: cells[cell]!.x - 1, y: y - 1, w: 2, h: 2 }, zoom);
+      return { ...pose, y: (pose.y ?? 0) - LIFT };
+    };
+    // Tall: Reduced stands under Full (below the cell), so the camera steps down to it before it plays.
+    const tall = g.layout === "tall";
+    const reduced = tall ? g.boxes.twr : undefined;
+    const moves: Array<[number, Pose]> = [
+      [AT.lanes, frame("lanes")], [AT.exits, frame("exits")], [AT.score, frame("score")], [AT.twins, tall ? frame("twins", 2, g.boxes.twf!.y + g.boxes.twf!.h / 2, g.boxes.twf) : frame("twins")],
+      ...(reduced ? [[AT.reduced - 4, frame("twins", 2, reduced.y + reduced.h / 2, reduced)] as [number, Pose]] : []),
+      [AT.spring, frame("spring", 1.4)],
+    ];
+    const front = focus(canvas, { x: cells.intro!.x - 1, y: cells.intro!.y - 1, w: 2, h: 2 }, 1);
+    const camera: Key[] = [{ at: 0, ...front }, ...moves.flatMap(([at, pose], k): Key[] => [
+      { at, ...(k === 0 ? front : moves[k - 1]![1]) }, { at: at + 4, ...pose, ease: "standard" },
+    ]), { at: AT.end, ...moves.at(-1)![1] }];
     const tracks: Track[] = [
-      ...introTracks(copy.title, copy.lead, close),
-      ...[...copy.title].map((_, k) => arrive(`ml-${k}`, 0.4 + k, 0.8, { y: 24 }, close)),
-      // The lanes: two runs; the ghosts stay after the first.
-      ...EASES.flatMap((ease): Track[] => [
-        { select: select(`lp-${ease}`), keys: looped([{ at: 0, x: 0 }, { at: AT.run, x: 0 }, { at: AT.run + RUN, x: track, ease }, { at: run2 - 0.01, x: track }, { at: run2, x: 0 }, { at: run2 + RUN, x: track, ease }], close) },
-        ...Array.from({ length: GHOSTS }, (_, k) => arrive(`lg-${ease}-${k}`, AT.run + (k / (GHOSTS - 1)) * RUN, 0.2, {}, close, "linear")),
-      ]),
-      ...exitTracks(close),
-      ...scoreTracks(close),
-      // Twins: Full plays with the reduced side dimmed, then Reduced with the full side dimmed.
-      { select: select("tw-r"), keys: looped([{ at: 0, o: 1 }, { at: AT.full - 0.4, o: 1 }, { at: AT.full, o: 0.4 }, { at: AT.reduced - 0.4, o: 0.4 }, { at: AT.reduced, o: 1 }], close) },
-      { select: select("tw-f"), keys: looped([{ at: 0, o: 1 }, { at: AT.reduced - 0.4, o: 1 }, { at: AT.reduced, o: 0.4 }, { at: AT.spring, o: 0.4 }, { at: AT.spring + 1, o: 1 }], close) },
-      arrive("tw-f-b", AT.full, 2, { y: 40 }, close, "standard"), arrive("tw-f-r", AT.full + 2.2, 1.5, { y: 8 }, close),
-      arrive("tw-r-b", AT.reduced, 2, {}, close, "standard"), arrive("tw-r-r", AT.reduced + 2.2, 1.5, {}, close),
-      // Spring: the thumb overshoots and settles; the dragged card lifts.
-      { select: select("sp-off"), keys: looped([{ at: 0, o: 1 }, { at: AT.toggle, o: 1 }, { at: AT.toggle + 0.2, o: 0 }], close) },
-      { select: select("sp-on"), keys: looped([{ at: 0, o: 0 }, { at: AT.toggle, o: 0 }, { at: AT.toggle + 0.2, o: 1 }], close) },
-      { select: `${select("sp-on")} [data-slot="switch-thumb"]`, keys: looped([{ at: 0, x: 0 }, { at: AT.toggle, x: 0 }, { at: AT.toggle + 1.2, x: 14, ease: "spring" }], close) },
-      { select: select("sp-card"), keys: looped([{ at: 0, s: 1 }, { at: AT.lift, s: 1 }, { at: AT.lift + 0.8, s: 1.02, ease: "standard" }], close) },
+      ...introTracks(copy, close), ...laneTracks(g.layout, close), ...exitTracks(close),
+      ...scoreTracks(g, close), ...twinTracks(g, close), ...springTracks(close), metronome(beats, close, g.layout),
     ];
     return { tracks, camera };
   };
-}
-
-/** In fast, out faster: each play enters the top menu, then exits the bottom one; bars light as they play. */
-function exitTracks(close: number): Track[] {
-  const [enter, exit] = [beats(ms("--motion-enter-menu", 140)), beats(ms("exit-menu"))];
-  const slow = [6, 6, 1];
-  const inKeys: Key[] = [{ at: 0, s: 0.97, o: 0 }];
-  const outKeys: Key[] = [{ at: 0, s: 1, o: 1 }];
-  const light = (at: number, length: number): Key[] => [{ at: at - 0.01, o: 0.3 }, { at, o: 1 }, { at: at + length + 0.6, o: 1 }, { at: at + length + 1, o: 0.3 }];
-  const inBar: Key[] = [{ at: 0, o: 0.3 }];
-  const outBar: Key[] = [{ at: 0, o: 0.3 }];
-  AT.plays.forEach((at, p) => {
-    const [e, x] = [enter * slow[p]!, exit * slow[p]!];
-    inKeys.push({ at: at - 0.3, s: 0.97, o: 0 }, { at, s: 0.97, o: 0 }, { at: at + e, s: 1, o: 1, ease: "standard" });
-    outKeys.push({ at: at - 0.3, s: 1, o: 1 }, { at: at + e + 0.4, s: 1, o: 1 }, { at: at + e + 0.4 + x, s: 0.97, o: 0, ease: "accelerate" });
-    inBar.push(...light(at, e));
-    outBar.push(...light(at + e + 0.4, x));
-  });
-  return [
-    { select: select("ex-in"), keys: looped(inKeys, close) }, { select: select("ex-out"), keys: looped(outKeys, close) },
-    { select: select("exb-in"), keys: looped(inBar, close) }, { select: select("exb-out"), keys: looped(outBar, close) },
-    arrive("ex-real", AT.plays[2]! - 0.8, 0.5, {}, close),
-  ];
-}
-
-/** The score: the turn's events in order, each bar lighting as the playhead reaches it. */
-function scoreTracks(close: number): Track[] {
-  const S = AT.s;
-  const pulses: Key[] = [{ at: 0, s: 1, o: 0 }, { at: S + 3.7, s: 1, o: 0 }, { at: S + 3.8, o: 1 }];
-  for (let k = 0; k < 4; k += 1) pulses.push({ at: S + 3.7 + k * 0.6 + 0.3, s: 1.15, ease: "standard" }, { at: S + 3.7 + k * 0.6 + 0.6, s: 1, ease: "standard" });
-  pulses.push({ at: S + 6.1, o: 1 }, { at: S + 6.4, o: 0 });
-  return [
-    { select: select("sc-send"), keys: looped([{ at: 0, s: 1 }, { at: S + 1, s: 1 }, { at: S + 1.25, s: 0.97, ease: "standard" }, { at: S + 1.5, s: 1, ease: "standard" }], close) },
-    arrive("sc-bubble", S + 1.5, 2, { y: 150 }, close, "standard"),
-    { select: select("sc-think"), keys: looped(pulses, close) },
-    arrive("sc-reply", S + 6.3, 1.5, { y: 8 }, close),
-    arrive("sc-check", S + 8, 0.8, { s: 0.85 }, close, "spring"),
-    { select: select("sc-notice"), keys: looped([{ at: 0, y: 24, o: 0 }, { at: S + 9, y: 24, o: 0 }, { at: S + 10.2, y: 0, o: 1, ease: "decelerate" }, { at: S + 11.2, o: 1 }, { at: S + 11.8, o: 0, ease: "accelerate" }], close) },
-    { select: select("sc-play"), keys: looped([{ at: 0, xp: 0, o: 0 }, { at: S, xp: 0, o: 1 }, { at: S + SCORE_SPAN, xp: 100, ease: "linear" }], close) },
-    ...SCORE.map(([, start], j): Track => ({ select: select(`sb-${j}`), keys: looped([{ at: 0, o: 0.25 }, { at: S + start - 0.01, o: 0.25 }, { at: S + start + 0.2, o: 1 }], close) })),
-  ];
 }
 
 export const MOTION_END = AT.end;
