@@ -293,17 +293,6 @@ verify_agent() {
 }
 
 agent() {
-  local i
-  assert_signed "$1"
-  # The online ticket can lag the notarization result; Gatekeeper is advisory for a bare binary.
-  for i in 1 2 3; do
-    if spctl -a -vv -t exec "$1"; then return 0; fi
-    sleep 10
-  done
-  log "warning: spctl did not accept the bare Agent binary (notarization was Accepted)"
-}
-
-agent() {
   [ -f "$1" ] || die "agent binary missing: $1"
   sign_path "$1" --identifier "$agent_identifier"
   assert_signed "$1"
