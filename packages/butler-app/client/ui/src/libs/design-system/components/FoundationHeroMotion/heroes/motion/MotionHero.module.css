@@ -532,3 +532,12 @@
 [data-layout="tall"] .tail :is(.exits, .springNote) {
   display: none;
 }
+
+/* The finale's composition is centred in the frame: equal insets left and right, top and bottom. */
+[data-layout="wide"] [data-t="poster"] {
+  translate: -18.7px 17.8px;
+}
+
+[data-layout="tall"] [data-t="poster"] {
+  translate: -15.3px 0;
+}
