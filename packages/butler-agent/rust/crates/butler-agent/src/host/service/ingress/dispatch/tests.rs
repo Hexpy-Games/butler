@@ -1,14 +1,14 @@
 use std::{
     fs,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
     },
 };
 
 use serde_json::json;
 
-use super::interrupted::{self};
+use super::{interrupted, rejected};
 use crate::host::service::ingress::{DeliveryFuture, IngressDelivery};
 use butler_core::json::JsonDocument;
 use butler_gateway::gateway::InboundQueue;
@@ -41,7 +41,7 @@ impl IngressDelivery for Unavailable {
 }
 
 #[tokio::test]
-async fn crash_interrupted_turn_whose_report_fails_is_deferred_not_run() {
+async fn unreported_turns_are_deferred_and_rejected_turns_fail() {
     let root = std::env::temp_dir().join(format!(
         "butler-native-ingress-crash-{}",
         uuid::Uuid::new_v4()
@@ -107,7 +107,54 @@ async fn crash_interrupted_turn_whose_report_fails_is_deferred_not_run() {
         not_before.timestamp_millis() >= before.timestamp_millis() + 999,
         "deferred without a backoff: {not_before}"
     );
+    // A resume BTCC rejects for good is reported failed and its record failed:
+    // it is never parked for a process replacement.
+    let resume = json!({"kind":"resume_turn","requestId":"request-1","turnId":"turn-1"});
+    let interrupted = json!({"recoveredFromRuntimeInterruption":true});
+    let rejected_id = queue
+        .enqueue_idempotent_with_metadata(
+            JsonDocument::from_value(&event("resume-1", Some(&resume))).unwrap(),
+            interrupted.as_object().unwrap().clone(),
+        )
+        .unwrap()
+        .queue_id;
+    let claimed = queue.claim_eligible(1, |_| true).unwrap();
+    assert_eq!(claimed[0].record.queue_id, rejected_id);
+    assert!(interrupted::replaced_once(&claimed[0].record));
+    let recording = Recording(Mutex::new(Vec::new()));
+    let poll = rejected::settle(
+        &claimed[0],
+        &queue,
+        &bindings,
+        &recording,
+        "turn_replay_conflict",
+        false,
+    )
+    .await;
+    assert_eq!((poll.failed, poll.interrupted), (1, 0));
+    let reports = recording.0.lock().unwrap();
+    assert_eq!(reports.len(), 1);
+    assert_eq!(reports[0]["metadata"]["kind"], "turn_failed");
+    assert_eq!(
+        reports[0]["metadata"]["safeErrorCode"],
+        "turn_replay_conflict"
+    );
+    assert!(
+        root.join("runtime/inbound-events/failed")
+            .join(format!("{rejected_id}.json"))
+            .exists()
+    );
     fs::remove_dir_all(root).unwrap();
+}
+
+/// A delivery that keeps what it is given.
+struct Recording(Mutex<Vec<serde_json::Value>>);
+
+impl IngressDelivery for Recording {
+    fn deliver(&self, _: String, action: serde_json::Value) -> DeliveryFuture {
+        self.0.lock().unwrap().push(action);
+        Box::pin(async { Ok(true) })
+    }
 }
 
 fn app_binding() -> UpsertSessionBinding {

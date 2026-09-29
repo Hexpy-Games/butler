@@ -72,6 +72,14 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   ],
   logs: [{ id: "developer-logs", kind: "list", fields: [] }],
   privacy: [{ id: "diagnostics", kind: "form", fields: ["diagnostics"] }],
+  // Only the remote-access line shows for other computers (403
+  // `loopback_required`). Allowed hosts show when Advanced is open.
+  security: [
+    { id: "remote-access", kind: "form", fields: ["remote-access-enabled", "lan-urls"] },
+    { id: "connection-code", kind: "form", fields: ["connection-code"], optional: true },
+    { id: "security-advanced", kind: "form", fields: [], optional: true },
+    { id: "allowed-hosts", kind: "form", fields: ["allowed-hosts"], optional: true },
+  ],
   system: [{ id: "system-events", kind: "list", fields: [] }],
   archives: [{ id: "archives", kind: "list", fields: [] }],
   about: [

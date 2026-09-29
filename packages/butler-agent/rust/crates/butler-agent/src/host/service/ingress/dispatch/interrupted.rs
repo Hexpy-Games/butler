@@ -25,9 +25,10 @@ pub(super) fn by_crash(record: &QueuedInboundEvent) -> bool {
         && plain_turn(record)
 }
 
-/// A turn already parked once for process replacement after an interruption.
+/// An item already parked once for process replacement after an
+/// interruption: whatever its kind, it is replaced at most once.
 pub(super) fn replaced_once(record: &QueuedInboundEvent) -> bool {
-    metadata_flag(record, "recoveredFromRuntimeInterruption") && plain_turn(record)
+    metadata_flag(record, "recoveredFromRuntimeInterruption")
 }
 
 fn metadata_flag(record: &QueuedInboundEvent, key: &str) -> bool {
@@ -77,7 +78,7 @@ pub(super) async fn settle(
     delivery: &dyn IngressDelivery,
     status: &str,
 ) -> Option<IngressPoll> {
-    let error = match report(item, bindings, delivery).await {
+    let error = match report(item, bindings, delivery, None).await {
         Ok(()) => {
             let completed = queue.complete(
                 item,
@@ -119,14 +120,19 @@ pub(super) async fn settle(
     }
 }
 
-async fn report(
+/// Tells the App the turn failed: interrupted, or `rejected` with that code.
+pub(super) async fn report(
     item: &ClaimedInboundEvent,
     bindings: &SessionBindingStore,
     delivery: &dyn IngressDelivery,
+    rejected: Option<&str>,
 ) -> Result<(), IngressError> {
     let envelope = bind::Envelope::from_record(&item.record)?;
     let binding = bind::existing_control_binding(&envelope, bindings).await?;
-    let report = action::crash_interrupted(item, &envelope, &binding)?;
+    let report = match rejected {
+        Some(code) => action::rejected(item, &envelope, &binding, code)?,
+        None => action::crash_interrupted(item, &envelope, &binding)?,
+    };
     if delivery.deliver(binding.session_id.clone(), report).await? {
         Ok(())
     } else {

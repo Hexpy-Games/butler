@@ -15,7 +15,7 @@ import {
   CheckmarkCircle02Icon, CircleIcon, Clock03Icon, CollapseIcon, CommandIcon, ComputerIcon,
   Copy01Icon, CubeIcon, DatabaseIcon, Delete02Icon, DragDropVerticalIcon, ExpandIcon, File02Icon,
   FilterIcon, FloppyDiskIcon, Folder01Icon, Folder02Icon, FolderAddIcon, GitBranchIcon,
-  Globe02Icon, Image01Icon, LayoutGridIcon, MagicWand01Icon, McpServerIcon, Message01Icon,
+  Globe02Icon, Image01Icon, LayoutGridIcon, LockIcon, MagicWand01Icon, McpServerIcon, Message01Icon,
   MessageAdd01Icon, MinusSignIcon, Moon02Icon, MoreHorizontalIcon as MoreHorizontalGlyph,
   Note01Icon, PaintBrush02Icon, PanelLeftIcon, PanelLeftOpenIcon, PanelRightCloseIcon,
   PanelRightIcon, PencilEdit01Icon, PencilEdit02Icon, PinIcon, PlayIcon, ReloadIcon,
@@ -86,6 +86,7 @@ export const Globe2 = createIcon(Globe02Icon);
 export const History = createIcon(Time03Icon);
 export const ImageIcon = createIcon(Image01Icon);
 export const LayoutDashboard = createIcon(LayoutGridIcon);
+export const Lock = createIcon(LockIcon);
 export const MagicWand = createIcon(MagicWand01Icon);
 export const McpServer = createIcon(McpServerIcon);
 export const ListChecks = createIcon(Task01Icon);
