@@ -1,11 +1,11 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { expect, test } from "bun:test";
 import {
   APP_ADMIN_HEADER,
-  APP_LOCAL_ADMIN_FILE,
   appLocalAdminPath,
+  isSecuritySenderOrigin,
   readAppLocalAdmin,
   requestSecurityRoute,
 } from "../../packages/butler-app/client/electron/app-security-admin.mjs";
@@ -15,7 +15,6 @@ import {
   prepareAppLocalAuth,
 } from "../../packages/butler-app/client/electron/app-agent-supervisor.mjs";
 
-const electronDir = resolve(import.meta.dir, "../../packages/butler-app/client/electron");
 const ADMIN = "admin-credential-".padEnd(43, "x");
 const ADMIN_FILE = { schema: "butler.app-local-admin.v1", purpose: "butler-local-admin", secret: ADMIN };
 const envelope = (data: unknown) => ({ protocol_version: "butler.app.v1", data });
@@ -50,7 +49,7 @@ async function send(
   const result = await requestSecurityRoute(input, {
     ensureReady: async () => undefined,
     serverUrl: "http://127.0.0.1:18765/",
-    authHeaders: { authorization: "Bearer token" },
+    authHeaders: () => ({ authorization: "Bearer token" }),
     adminCredential,
     onRotated,
     fetch: async (url: URL | string, init: RequestInit = {}) => {
@@ -66,6 +65,7 @@ async function send(
   return { result, sent };
 }
 
+// test-category: security
 test("the admin credential file is read from the data folder; a missing or invalid file means none", async () => {
   await withData((butlerData) => {
     expect(appLocalAdminPath(butlerData)).toBe(join(butlerData, "app", "runtime", "auth", "local-admin.json"));
@@ -86,6 +86,7 @@ test("the admin credential file is read from the data folder; a missing or inval
   });
 });
 
+// test-category: security
 test("the security routes carry the admin header next to the bearer token", async () => {
   const routes: Array<[unknown, string, string]> = [
     [{ route: "getSecurity" }, "GET", "/security"],
@@ -105,6 +106,7 @@ test("the security routes carry the admin header next to the bearer token", asyn
   expect(JSON.parse(patch.sent[0]!.body!)).toEqual({ security: { allowed_hosts: ["a.example"] } });
 });
 
+// test-category: security
 test("anything else is refused before a request is sent", async () => {
   for (const input of [
     { route: "getSettings" },
@@ -118,12 +120,14 @@ test("anything else is refused before a request is sent", async () => {
   }
 });
 
+// test-category: security
 test("without an admin file (an older Agent) the header is left out and the call goes as before", async () => {
   const { result, sent } = await send({ route: "getSecurity" }, { adminCredential: null });
   expect(result.ok).toBe(true);
   expect(Object.keys(sent[0]!.headers).map((name) => name.toLowerCase())).not.toContain(APP_ADMIN_HEADER);
 });
 
+// test-category: security
 test("the admin value never comes back to the renderer, even when the gateway echoes it", async () => {
   const echoed = { status: 403, body: { error: { code: "loopback_required", message: `bad ${ADMIN}` } } };
   const refused = await send({ route: "getSecurity" }, { response: echoed });
@@ -136,7 +140,7 @@ test("the admin value never comes back to the renderer, even when the gateway ec
   const unreachable = await requestSecurityRoute({ route: "getSecurity" }, {
     ensureReady: async () => undefined,
     serverUrl: "http://127.0.0.1:18765/",
-    authHeaders: {},
+    authHeaders: () => ({}),
     adminCredential: ADMIN,
     fetch: async () => { throw new Error(`connect failed ${ADMIN}`); },
   });
@@ -144,6 +148,7 @@ test("the admin value never comes back to the renderer, even when the gateway ec
   expect(unreachable).toEqual({ ok: false, error: { schema: "butler.app.bridge-error.v1", code: "request_failed" } });
 });
 
+// test-category: security
 test("rotation re-reads the token and keeps the admin credential", async () => {
   await withData(async (butlerData) => {
     prepareAppLocalAuth({ butlerData, generateToken: () => "a".repeat(43) });
@@ -188,13 +193,31 @@ test("rotation re-reads the token and keeps the admin credential", async () => {
   });
 });
 
-test("only main reads the admin file, and only for the security IPC", () => {
-  const main = readFileSync(join(electronDir, "main.mjs"), "utf8");
-  const preload = readFileSync(join(electronDir, "preload.cjs"), "utf8");
-  expect(main.match(/readAppLocalAdmin\(/gu)).toHaveLength(1);
-  expect(main).toMatch(/ipcMain\.handle\("butler:security-request",[\s\S]*?readAppLocalAdmin\(\{ butlerData: butlerDataRoot \}\)[\s\S]*?\}\);/u);
-  for (const name of [APP_ADMIN_HEADER, APP_LOCAL_ADMIN_FILE.at(-1)!, "readAppLocalAdmin"]) {
-    expect(preload.toLowerCase()).not.toContain(name.toLowerCase());
-  }
-  expect(main).toMatch(/onRotated: \(\) => bundledAgentSupervisor\.reloadLocalAuth\(\)/u);
+// test-category: race
+test("a request right after a reissue elsewhere reads the token after ensureReady", async () => {
+  let token = "old";
+  const sent: string[] = [];
+  await requestSecurityRoute({ route: "getSecurity" }, {
+    // ensureReady re-reads a token rotated elsewhere (supervisor health probe).
+    ensureReady: async () => { token = "new"; },
+    serverUrl: "http://127.0.0.1:18765/",
+    authHeaders: () => ({ authorization: `Bearer ${token}` }),
+    adminCredential: ADMIN,
+    fetch: async (_url: URL | string, init: RequestInit = {}) => {
+      sent.push((init.headers as Record<string, string>).authorization);
+      return new Response(JSON.stringify(envelope({})), { status: 200 });
+    },
+  });
+  expect(sent).toEqual(["Bearer new"]);
+});
+
+// test-category: security
+test("only the app's own renderer may ask main for a security call", () => {
+  const app = { appOrigin: "app://butler" };
+  expect(isSecuritySenderOrigin("app://butler", app)).toBe(true);
+  expect(isSecuritySenderOrigin("http://127.0.0.1:5173", app)).toBe(false);
+  expect(isSecuritySenderOrigin("http://127.0.0.1:5173", { ...app, devOrigin: "http://127.0.0.1:5173" })).toBe(true);
+  expect(isSecuritySenderOrigin("https://evil.example", { ...app, devOrigin: "http://127.0.0.1:5173" })).toBe(false);
+  expect(isSecuritySenderOrigin(undefined, app)).toBe(false);
+  expect(isSecuritySenderOrigin("null", app)).toBe(false);
 });

@@ -32,6 +32,14 @@ const SECURITY_ROUTES = Object.freeze({
   updateSecuritySettings: { method: "PATCH", path: "/settings" },
 });
 
+/**
+ * Only the app's own renderer may ask main for a security call:
+ * `app://butler`, plus the dev UI origin in dev.
+ */
+export function isSecuritySenderOrigin(origin, { appOrigin, devOrigin = null }) {
+  return typeof origin === "string" && (origin === appOrigin || (devOrigin !== null && origin === devOrigin));
+}
+
 export function appLocalAdminPath(butlerData) {
   return join(butlerData, ...APP_LOCAL_ADMIN_FILE);
 }
@@ -61,7 +69,9 @@ export function readAppLocalAdmin({ butlerData }) {
  * Sends one security route from main with the bearer token and, when there
  * is one, the admin credential. Answers the preload's bridge envelope: the
  * data, or a bounded error code and status (never response text or headers).
- * `onRotated` runs after a successful rotation (the token re-read).
+ * `authHeaders` is read after `ensureReady`, which may have re-read a token
+ * rotated elsewhere. `onRotated` runs after a successful rotation (the
+ * token re-read).
  */
 export async function requestSecurityRoute(
   input,
@@ -77,11 +87,12 @@ export async function requestSecurityRoute(
   }
   try {
     await ensureReady();
+    const bearer = await authHeaders();
     const response = await fetch(new URL(route.path, serverUrl), {
       method: route.method,
       headers: {
         ...(needsBody ? { "content-type": "application/json" } : {}),
-        ...authHeaders,
+        ...bearer,
         ...(adminCredential ? { [APP_ADMIN_HEADER]: adminCredential } : {}),
       },
       ...(needsBody ? { body: JSON.stringify({ security }) } : {}),

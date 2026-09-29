@@ -17,6 +17,10 @@ export type SecurityBridgeResult =
       error: { schema: "butler.app.bridge-error.v1"; code: string; status?: number };
     };
 
+export function isSecuritySenderOrigin(
+  origin: unknown,
+  options: { appOrigin: string; devOrigin?: string | null },
+): boolean;
 export function appLocalAdminPath(butlerData: string): string;
 export function readAppLocalAdmin(input: { butlerData: string }): string | null;
 export function requestSecurityRoute(
@@ -25,7 +29,7 @@ export function requestSecurityRoute(
     ensureReady: () => Promise<unknown>;
     fetch: (url: URL, init: RequestInit) => Promise<Response>;
     serverUrl: string;
-    authHeaders: Record<string, string>;
+    authHeaders: () => Record<string, string> | Promise<Record<string, string>>;
     adminCredential: string | null;
     onRotated?: () => unknown;
   },

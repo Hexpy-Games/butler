@@ -108,7 +108,7 @@ import {
   readCacheBudgetArtifact,
 } from "./cache-budget-runtime.mjs";
 import { createSessionFolderLauncher } from "./session-folder-launch.mjs";
-import { readAppLocalAdmin, requestSecurityRoute } from "./app-security-admin.mjs";
+import { isSecuritySenderOrigin, readAppLocalAdmin, requestSecurityRoute } from "./app-security-admin.mjs";
 import {
   APP_RENDERER_ORIGIN,
   APP_RENDERER_SCHEME,
@@ -2393,16 +2393,23 @@ ipcMain.handle("butler:reload-local-auth", () => ({
 // Settings -> Security calls go out from main: only main reads the admin
 // credential, and it never reaches the renderer. A rotation re-reads the
 // token here; the admin credential stays.
-ipcMain.handle("butler:security-request", async (_event, input) =>
-  await requestSecurityRoute(input, {
+ipcMain.handle("butler:security-request", async (event, input) => {
+  const allowed = isSecuritySenderOrigin(event.senderFrame?.origin, {
+    appOrigin: APP_RENDERER_ORIGIN,
+    devOrigin: explicitUiUrl ? rendererOrigin : null,
+  });
+  if (!allowed) {
+    return { ok: false, error: { schema: "butler.app.bridge-error.v1", code: "sender_not_allowed" } };
+  }
+  return await requestSecurityRoute(input, {
     ensureReady: ensureServer,
     fetch,
     serverUrl,
-    authHeaders: await appLocalAuthHeaders(),
+    authHeaders: appLocalAuthHeaders,
     adminCredential: readAppLocalAdmin({ butlerData: butlerDataRoot }),
     onRotated: () => bundledAgentSupervisor.reloadLocalAuth(),
-  }),
-);
+  });
+});
 
 ipcMain.handle("butler:start-openai-oauth-login", async () =>
   await startOpenAIOAuthLogin(),

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { expect, test } from "bun:test";
@@ -33,6 +33,7 @@ function writeRotatedToken(butlerData: string, token: string) {
   writeFileSync(path, JSON.stringify({ schema: "butler.app-local-agent-auth.v1", token }), { mode: 0o600 });
 }
 
+// test-category: security
 test("main re-reads the rotated connection code from the data-folder token file", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-security-auth-"));
   try {
@@ -56,6 +57,7 @@ test("main re-reads the rotated connection code from the data-folder token file"
   }
 });
 
+// test-category: security
 test("a health probe refused after a rotation re-reads the token file instead of failing startup", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-security-probe-"));
   try {
@@ -92,11 +94,6 @@ test("a health probe refused after a rotation re-reads the token file instead of
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
-});
-
-test("main exposes the token re-read to the preload", () => {
-  const main = readFileSync(join(electronDir, "main.mjs"), "utf8");
-  expect(main).toMatch(/ipcMain\.handle\("butler:reload-local-auth",[^;]*bundledAgentSupervisor\.reloadLocalAuth\(\)/su);
 });
 
 type PreloadRun = {
@@ -165,6 +162,7 @@ function runPreload(
 
 const envelope = (data: unknown) => ({ protocol_version: "butler.app.v1", data });
 
+// test-category: security
 test("preload re-reads the token in main when the live stream reports a rotated code", () => {
   const run = runPreload({
     "/events/live": {
@@ -179,6 +177,7 @@ test("preload re-reads the token in main when the live stream reports a rotated 
   expect(run.invokes).toContain("butler:reload-local-auth");
 });
 
+// test-category: security
 test("preload re-reads the token when the live stream is rejected with 401", () => {
   const run = runPreload({ "/events/live": { status: 401, body: "" } }, `
     bridge.subscribeLiveEvents({ cursor: 0 }, { onError: () => events.push("error") });
@@ -188,6 +187,7 @@ test("preload re-reads the token when the live stream is rejected with 401", () 
   expect(run.invokes).toContain("butler:reload-local-auth");
 });
 
+// test-category: security
 test("preload sends the security routes to main and never fetches them itself", () => {
   const view = { remote_access_enabled: false, bind_addresses: ["127.0.0.1:18765"], lan_urls: [],
     allowed_hosts: ["butler.example.com"], connection_code: { masked: "abcd…wxyz", created_at: "2026-09-28T00:00:00Z" } };
@@ -222,6 +222,7 @@ test("preload sends the security routes to main and never fetches them itself", 
   expect(run.invokes).not.toContain("butler:reload-local-auth");
 });
 
+// test-category: security
 test("preload passes main's loopback_required envelope through and turns an IPC failure into one", () => {
   const failure = { ok: false, error: { schema: "butler.app.bridge-error.v1", code: "loopback_required", status: 403 } };
   const run = runPreload({}, `

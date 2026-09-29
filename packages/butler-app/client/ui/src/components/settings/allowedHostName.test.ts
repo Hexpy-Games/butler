@@ -4,6 +4,7 @@ import { expect, test } from "bun:test";
 import { normalizeAllowedHost } from "./allowedHostName";
 
 /** The gateway's allowed-host table (#275 `normalize_allowed_host`). */
+// test-category: pure-logic
 test("allowed hosts are names or addresses with an optional port", () => {
   const cases: Array<[string, string | null]> = [
     [" Butler.Example.Info ", "butler.example.info"],
