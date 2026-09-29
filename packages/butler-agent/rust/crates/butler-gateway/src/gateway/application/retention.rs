@@ -20,6 +20,7 @@ use tokio_util::sync::CancellationToken;
 use super::{AppStorage, GatewayApplicationError, events::EventSubscribers};
 
 mod compaction;
+mod drain;
 mod sweep;
 
 use compaction::{CompactResult, compact};

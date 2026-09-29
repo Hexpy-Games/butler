@@ -308,7 +308,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
 
 /// The `role`/`status` terms repeat the predicate of the partial
 /// `messages_streaming_turn_idx`, which makes it applicable.
-pub(super) const SETTLE_ENDED_SQL: &str = "UPDATE messages SET \
+pub(super) const SETTLE_ENDED_SQL: &str = "UPDATE messages INDEXED BY messages_streaming_turn_idx SET \
        status=CASE (SELECT t.state FROM turns t WHERE t.id=messages.turn_id) \
          WHEN 'delivered' THEN 'delivered' WHEN 'cancelled' THEN 'cancelled' ELSE 'failed' END, \
        safe_error_code=COALESCE(safe_error_code,(SELECT t.safe_error_code FROM turns t WHERE t.id=messages.turn_id)) \

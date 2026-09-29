@@ -28,7 +28,7 @@ const TURNS: u32 = 5_000;
 const UNCOMPACTED: u32 = 100;
 const PROGRESS_EVENTS: u32 = 30;
 /// Events per compacted turn; with the progress events, about 200k in all.
-const TURN_EVENTS: u32 = 36;
+const TURN_EVENTS: u32 = 40;
 const SEEDED_AT: &str = "2000-01-01 00:00:00";
 
 fn database(s: &Scenario) -> Connection {
@@ -140,6 +140,17 @@ async fn delivered_in(s: &Scenario) -> Result<Duration, HarnessError> {
     Ok(started.elapsed())
 }
 
+async fn session_view_p95(s: &Scenario) -> Result<Duration, HarnessError> {
+    let mut samples = Vec::with_capacity(20);
+    for _ in 0..20 {
+        let started = Instant::now();
+        s.gw.get("/session-view?session_id=general").await?;
+        samples.push(started.elapsed());
+    }
+    samples.sort();
+    Ok(samples[18])
+}
+
 /// The projection rows retention wrote or rewrote, as `turn:compacted_at`.
 fn projection_stamps(db: &Connection) -> Vec<String> {
     let mut statement = db
@@ -176,10 +187,18 @@ async fn perf_01_owner_scale_delivery_and_restart() -> Result<(), HarnessError> 
     s.gw = s.agent.start_again().await?;
     let first_ready = started.elapsed();
     let at_scale = delivered_in(&s).await?;
+    let view_p95 = session_view_p95(&s).await?;
+    eprintln!(
+        "PERF-01 empty turn {empty:?}; owner-scale start {first_ready:?}, turn {at_scale:?}, session-view p95 {view_p95:?}"
+    );
     let settled = wait_retention_settled(&s).await;
     eprintln!(
         "PERF-01 empty turn {empty:?}; owner-scale start {first_ready:?}, turn {at_scale:?}, \
-         retention settled {settled:?} after the turn"
+         session-view p95 {view_p95:?}, retention settled {settled:?} after the turn"
+    );
+    assert!(
+        view_p95 < Duration::from_millis(150),
+        "session-view p95 {view_p95:?}"
     );
     // The projection of a delivered turn does not scale with the events table.
     assert!(
