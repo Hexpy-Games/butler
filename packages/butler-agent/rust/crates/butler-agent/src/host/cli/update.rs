@@ -1,4 +1,6 @@
-//! One-shot App package update check and dry run; never starts the App runtime.
+//! The Agent package commands: `update` (check, dry run, apply), `install`,
+//! `rollback`, `versions` and `uninstall`. The App update check and dry run
+//! live here too. None of them starts the App runtime.
 
 use std::{
     ffi::OsString,
@@ -13,6 +15,11 @@ use crate::host::cli::settings as settings_cli;
 use butler_runtime::operations::{AppUpdateService, UpdateRequest};
 
 mod agent;
+mod context;
+mod install_cmd;
+mod report;
+mod rollback_cmd;
+mod uninstall_cmd;
 
 #[expect(
     clippy::struct_excessive_bools,
@@ -30,17 +37,38 @@ struct Options {
     apply: bool,
     yes: bool,
     component: Option<String>,
+    /// `install --from`: an archive path or URL.
+    from: Option<String>,
+    /// `install --sha256`: the archive's digest.
+    sha256: Option<String>,
+    /// `rollback --to`: a version or version directory.
+    to: Option<String>,
+    /// `update --list`: the installed versions.
+    list: bool,
+    /// `uninstall --keep-data`: the default, spelled out.
+    keep_data: bool,
+    /// `uninstall --purge-data`: delete the data folder too.
+    purge_data: bool,
+    /// Do not restart the service on the new version.
+    no_restart: bool,
+    /// Write or remove service definitions without asking the service
+    /// manager to load or unload them.
+    files_only: bool,
     positionals: Vec<String>,
 }
+
+/// The verbs this family dispatches.
+const VERBS: [&str; 5] = ["update", "install", "rollback", "versions", "uninstall"];
 
 pub(crate) fn recognizes(args: &[OsString]) -> bool {
     let mut index = 0;
     while index < args.len() {
         let arg = args[index].to_string_lossy();
         match arg.as_ref() {
-            "--data" | "--component" | "--channel" | "--manifest" | "--home" => index += 2,
+            "--data" | "--component" | "--channel" | "--manifest" | "--home" | "--from"
+            | "--sha256" | "--to" => index += 2,
             value if value.starts_with('-') => index += 1,
-            value => return value == "update",
+            value => return VERBS.contains(&value),
         }
     }
     false
@@ -52,14 +80,23 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
         Ok(options) => options,
         Err(error) => return failure(json_requested, "invalid_arguments", error.message(), 2),
     };
-    if options.positionals != ["update"] {
-        return failure(
+    match options.positionals.as_slice() {
+        [verb] if verb == "install" => install_cmd::run(installation, &options).await,
+        [verb] if verb == "rollback" => rollback_cmd::run(installation, &options).await,
+        [verb] if verb == "versions" => rollback_cmd::list(installation, &options),
+        [verb] if verb == "uninstall" => uninstall_cmd::run(installation, &options).await,
+        [verb] if verb == "update" && options.list => rollback_cmd::list(installation, &options),
+        [verb] if verb == "update" => Box::pin(update(installation, options)).await,
+        _ => failure(
             options.json,
             "invalid_arguments",
             "update accepts --check or --dry-run",
             2,
-        );
+        ),
     }
+}
+
+async fn update(installation: ResolvedInstallation, options: Options) -> ExitCode {
     let component = options.component.as_deref().unwrap_or("agent");
     if matches!(component, "agent" | "service" | "butler-agent") {
         return Box::pin(agent::run(installation, &options)).await;
@@ -72,6 +109,11 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
             2,
         );
     }
+    Box::pin(app_update(installation, options)).await
+}
+
+/// The App update check and dry run.
+async fn app_update(installation: ResolvedInstallation, options: Options) -> ExitCode {
     if options.apply || (!options.check && !options.dry_run) {
         return failure(
             options.json,
@@ -169,7 +211,8 @@ fn parse(args: &[OsString]) -> Result<Options, crate::host::HostError> {
     while index < args.len() {
         let value = args[index].to_string_lossy();
         match value.as_ref() {
-            "--data" | "--manifest" | "--channel" | "--component" => {
+            "--data" | "--manifest" | "--channel" | "--component" | "--from" | "--sha256"
+            | "--to" => {
                 let next = args
                     .get(index + 1)
                     .map(|arg| arg.to_string_lossy().into_owned())
@@ -179,6 +222,9 @@ fn parse(args: &[OsString]) -> Result<Options, crate::host::HostError> {
                     "--data" => options.data = Some(next.into()),
                     "--manifest" => options.manifest = Some(next),
                     "--channel" => options.channel = Some(next),
+                    "--from" => options.from = Some(next),
+                    "--sha256" => options.sha256 = Some(next),
+                    "--to" => options.to = Some(next),
                     _ => options.component = Some(next),
                 }
                 index += 2;
@@ -192,6 +238,11 @@ fn parse(args: &[OsString]) -> Result<Options, crate::host::HostError> {
             "--home" => return Err("--home is unsupported; use --data".into()),
             "--apply" => options.apply = true,
             "--yes" => options.yes = true,
+            "--list" => options.list = true,
+            "--keep-data" => options.keep_data = true,
+            "--purge-data" => options.purge_data = true,
+            "--no-restart" => options.no_restart = true,
+            "--files-only" => options.files_only = true,
             flag if flag.starts_with('-') => return Err("unknown update option".into()),
             _ => options.positionals.push(value.into_owned()),
         }

@@ -79,6 +79,30 @@ pub(super) fn sync_directory(_path: &Path) -> Option<io::Result<()>> {
     None
 }
 
+/// Clears the read-only attribute of every file and directory under `root`.
+pub(super) fn make_tree_writable(root: &Path) -> io::Result<()> {
+    let metadata = fs::symlink_metadata(root)?;
+    if metadata.file_type().is_symlink() {
+        return Ok(());
+    }
+    let mut permissions = metadata.permissions();
+    if permissions.readonly() {
+        // The read-only attribute is all a Windows file permission is.
+        #[allow(
+            clippy::permissions_set_readonly_false,
+            reason = "Windows has only the read-only attribute; there is no world-writable bit to grant"
+        )]
+        permissions.set_readonly(false);
+        fs::set_permissions(root, permissions)?;
+    }
+    if metadata.is_dir() {
+        for entry in fs::read_dir(root)? {
+            make_tree_writable(&entry?.path())?;
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn exchange_directories(_left: &Path, _right: &Path) -> Result<(), ExchangeError> {
     Err(ExchangeError::Unsupported)
 }
