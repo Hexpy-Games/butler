@@ -3,10 +3,10 @@ import { KeyValueRow } from "../../../../blocks/KeyValueRow";
 import { Typo } from "../../../Typo";
 import type { SceneGeometry } from "../scene/types";
 import { Reveal as R } from "../shared/Reveal";
-import { GLASS, LAYERS, SHEETS, zToken, zValue, type LayersCopy, type Sheet } from "./layersCopy";
+import { LAYERS, SHEETS, zToken, zValue, type LayersCopy, type Sheet } from "./layersCopy";
 import { Overlay, Scrim, Sticky } from "./LayersOverlays";
 import { Page } from "./LayersPage";
-import { quarter, TURN } from "./layersView";
+import { clearance, quarter, TURN } from "./layersView";
 import s from "./LayersHero.module.css";
 
 /** The title's touch: three offset copies of the word, merging into one. */
@@ -80,33 +80,28 @@ function Pin({ copy, sheet, k }: { copy: LayersCopy; sheet: Sheet; k: number }) 
  * The Butler window as a stack of full-size sheets, one per open layer, low
  * to high: each draws only what lives on it, where it sits in the window, so
  * flat they are one screen. Live in the scene (the timeline lifts the
- * sheets, draws their rims and hangs their labels), still in the poster.
+ * sheets, hangs their labels), still in the poster.
  */
 export function Screen({ copy, live, g = null }: { copy: LayersCopy; live: boolean; g?: SceneGeometry | null }) {
   const ref = useRef<HTMLDivElement>(null);
   const compact = useCompact(ref);
   const t = (name: string) => (live ? name : undefined);
-  const view = g?.boxes.screen ? { ...TURN[g.layout], s: quarter(g.canvas, g.boxes.screen, g.layout).s } : null;
+  const view = g?.boxes.screen ? { ...TURN[g.layout], clear: clearance(g.layout), s: quarter(g.canvas, g.boxes.screen, g.layout, true).s } : null;
   const style = view
     ? ({
         "--q-rx": `${view.rx}deg`,
         "--q-rz": `${view.rz}deg`,
         "--q-s": view.s,
+        "--q-clear": `${view.clear}px`,
       } as CSSProperties)
     : undefined;
   return (
     <div className={s.screen} data-m={live ? "screen" : undefined} ref={ref} style={style}>
       {SHEETS.map((sheet, k) => (
         <div className={s.sheet} data-sheet={sheet} data-t={t(`sh-${k}`)} key={sheet}>
-          <div className={s.plane} data-t={t(`gp-${k}`)}>
+          <div className={s.plane} data-plane data-t={t(`pl-${k}`)}>
             {content(sheet, copy, compact)}
           </div>
-          {live && GLASS.includes(sheet) ? (
-            <div className={`${s.plane} ${s.clear}`} data-t={`cp-${k}`}>
-              {content(sheet, copy, compact)}
-            </div>
-          ) : null}
-          {live && k > 0 ? <span className={s.rim} data-t={`rim-${k}`} /> : null}
           {live ? <Pin copy={copy} k={k} sheet={sheet} /> : null}
         </div>
       ))}
@@ -123,13 +118,27 @@ export function PosterScreen({ copy }: { copy: LayersCopy }) {
   );
 }
 
-/** Finale: every z token, high to low, with its value and what lives there. */
-export function Ladder({ copy }: { copy: LayersCopy }) {
+/** Finale: every z token, high to low, with its value and what lives there (live in the scene: each row is written in turn). */
+export function Ladder({ copy, live = false }: { copy: LayersCopy; live?: boolean }) {
   return (
     <div className={s.ladder}>
-      {[...LAYERS].reverse().map((layer) => (
-        <KeyValueRow description={copy.lives[layer]} key={layer} label={<Typo.Code>{zToken(layer)}</Typo.Code>} value={zValue(layer)} />
+      {[...LAYERS].reverse().map((layer, i) => (
+        <div data-t={live ? `lr-${i}` : undefined} key={layer}>
+          <KeyValueRow description={copy.lives[layer]} label={<Typo.Code>{zToken(layer)}</Typo.Code>} value={zValue(layer)} />
+        </div>
       ))}
+    </div>
+  );
+}
+
+/** The window and, beside it, the ladder the window slides to make room for: one element, so the window on the finale is the very one that was taken apart. */
+export function Ending({ copy, g }: { copy: LayersCopy; g: SceneGeometry | null }) {
+  return (
+    <div className={s.ending}>
+      <Screen copy={copy} g={g} live />
+      <div className={s.ladderBox} data-m="ladder">
+        <Ladder copy={copy} live />
+      </div>
     </div>
   );
 }
