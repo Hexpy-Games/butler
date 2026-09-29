@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import s from "./LayoutHero.module.css";
 
@@ -24,6 +24,24 @@ function copySheet(node: HTMLStyleElement | HTMLLinkElement): Node {
 export function DeviceFrame({ children, label }: { children: ReactNode; label: string }) {
   const ref = useRef<HTMLIFrameElement>(null);
   const [body, setBody] = useState<HTMLElement | null>(null);
+  // The hero board is drawn under CSS `zoom` (see the engine's .board). A frame under a zoomed
+  // ancestor is laid out by WebKit at the zoomed width while its `innerWidth` and the app's
+  // own media queries disagree, so the app reflowed for a width it does not have (cropped
+  // bubbles, wrong mode). The frame is therefore drawn at zoom 1 (its zoom undone, its box
+  // shrunk by the same factor) and scaled back up by a transform: the same box on screen, laid
+  // out at exactly its device width in every engine.
+  useLayoutEffect(() => {
+    const frame = ref.current;
+    if (!frame) return;
+    let zoom = 1;
+    for (let node: HTMLElement | null = frame.parentElement; node; node = node.parentElement) zoom *= Number.parseFloat(getComputedStyle(node).zoom) || 1;
+    if (zoom === 1) return;
+    frame.style.setProperty("zoom", String(1 / zoom));
+    frame.style.inlineSize = `${100 / zoom}%`;
+    frame.style.blockSize = `${100 / zoom}%`;
+    frame.style.transform = `scale(${zoom})`;
+    frame.style.transformOrigin = "0 0";
+  }, []);
   useEffect(() => {
     const frame = ref.current;
     if (!frame) return undefined;
