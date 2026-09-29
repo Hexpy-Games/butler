@@ -21,9 +21,6 @@ use butler_runtime::operations::{
 
 use crate::host::SystemIdentity;
 
-/// How long opening Settings waits for due polls before answering with
-/// what the store has; the polls finish in the background.
-const SETTINGS_WAIT: Duration = Duration::from_millis(2_500);
 /// How long `refresh=1` waits for its poll (above the fetch timeouts).
 const EXPLICIT_WAIT: Duration = Duration::from_secs(25);
 const POLLING_ENV: &str = "BUTLER_PROVIDER_QUOTA_POLLING";
@@ -97,16 +94,17 @@ fn polling_configured(config_path: &Path, provider_id: &str) -> bool {
         .unwrap_or(true)
 }
 
-/// Runs a poll in the background and waits for it at most `wait`.
-pub(super) async fn poll_within(
-    poller: Arc<ProviderQuotaPoller>,
-    trigger: QuotaPollTrigger,
-    provider_id: Option<String>,
-) {
-    let wait = match trigger {
-        QuotaPollTrigger::Explicit => EXPLICIT_WAIT,
-        QuotaPollTrigger::SettingsOpened | QuotaPollTrigger::Scheduled => SETTINGS_WAIT,
-    };
-    let task = tokio::spawn(async move { poller.poll(trigger, provider_id.as_deref()).await });
-    let _ = tokio::time::timeout(wait, task).await;
+/// Starts the due polls without waiting for them.
+pub(super) fn poll_in_background(poller: Arc<ProviderQuotaPoller>, trigger: QuotaPollTrigger) {
+    tokio::spawn(async move { poller.poll(trigger, None).await });
+}
+
+/// Runs an explicit poll (`refresh=1`) and waits for it.
+pub(super) async fn poll_explicit(poller: Arc<ProviderQuotaPoller>, provider_id: String) {
+    let task = tokio::spawn(async move {
+        poller
+            .poll(QuotaPollTrigger::Explicit, Some(provider_id.as_str()))
+            .await;
+    });
+    let _ = tokio::time::timeout(EXPLICIT_WAIT, task).await;
 }

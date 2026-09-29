@@ -44,12 +44,13 @@ pub use prompt::*;
 pub(crate) use recent::{RecentConversationInput, include_recent_context};
 pub use round_projection::ContextPortAdapter;
 pub(crate) use status::evaluate_status_budget;
+pub(crate) use status_conversation::TranscriptScanError;
 pub use status_conversation::{
     StatusConversationSummary, StatusFact, StatusTranscriptSummary, read_status_conversation_facts,
     read_status_transcript_summary,
 };
 pub(crate) use status_transcript_activity::{
-    StatusTranscriptToolUsageBucket, read_status_transcript_activity,
+    StatusTranscriptActivity, StatusTranscriptToolUsageBucket, TranscriptActivityCache,
 };
 pub(crate) use tool_artifact_slice::{ExactText, ToolArtifactTextSlice};
 pub use tool_output::{

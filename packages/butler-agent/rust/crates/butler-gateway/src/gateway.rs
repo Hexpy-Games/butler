@@ -208,6 +208,10 @@ pub trait GatewayApplication:
         &self,
         request: butler_runtime::operations::UpdateRequest,
     ) -> ApplicationFuture<serde_json::Value>;
+    /// The last saved update status, without a network check.
+    fn app_update_status(&self) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn apply_app_update(
         &self,
         request: butler_runtime::operations::UpdateRequest,

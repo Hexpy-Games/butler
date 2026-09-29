@@ -429,6 +429,9 @@ export interface ComponentUpdateStatus {
   activation_policy: UpdateActivationPolicy;
   rollback_policy: UpdateRollbackPolicy;
   checked_at: string;
+  /** "unavailable": no usable manifest at the last check; "unchecked": never checked. */
+  check_state?: "ok" | "unavailable" | "unchecked";
+  check_error?: string | null;
   staged: boolean;
   stage_path: string;
   stage_status: "up_to_date" | "staged" | "activated" | "rolled_back" | "dry_run";

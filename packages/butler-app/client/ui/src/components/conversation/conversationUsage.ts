@@ -1,5 +1,5 @@
 import { appCopy, getAppLocale } from "@/app/copy.ts";
-import type { ContextDetailsView, UsageMonitorView } from "@/app/types.ts";
+import type { ContextDetailsView, ProviderQuotaResultView, UsageMonitorView } from "@/app/types.ts";
 import type { UsageQuotaWindow, UsageSummaryRowsProps, UsageTokenRow } from "@/butler-ds";
 import { windowLabel } from "../settings/providerQuotaPresentation";
 import type { UsageAuthMode } from "./usageAuthMode";
@@ -11,6 +11,8 @@ export interface ConversationUsageInput {
   context: ContextDetailsView;
   /** The last /usage-monitor view for this session, kept across refetches. */
   view: UsageMonitorView | null;
+  /** The provider's stored quota, read apart from (and before) the monitor. */
+  quota?: ProviderQuotaResultView | null;
   status: ConversationUsageStatus;
 }
 
@@ -27,9 +29,12 @@ export function usageTime(value: string, now = Date.now()): string {
   return new Intl.DateTimeFormat(getAppLocale(), options).format(timestamp);
 }
 
-function quotaWindows(view: UsageMonitorView, context: ContextDetailsView): UsageQuotaWindow[] | null {
+function viewQuota(view: UsageMonitorView, context: ContextDetailsView): ProviderQuotaResultView | undefined {
   const providerId = context.provider_id ?? view.providerUsage.activeProviderId;
-  const quota = view.providerUsage.providers.find((provider) => provider.providerId === providerId)?.remaining;
+  return view.providerUsage.providers.find((provider) => provider.providerId === providerId)?.remaining;
+}
+
+function quotaWindows(quota: ProviderQuotaResultView | null | undefined): UsageQuotaWindow[] | null {
   if (!quota?.available || quota.windows.length === 0) return null;
   return quota.windows.map((window) => ({
     id: window.id,
@@ -50,17 +55,15 @@ function tokenRows(view: UsageMonitorView): UsageTokenRow[] {
   ];
 }
 
-function quotaUpdatedAt(view: UsageMonitorView, context: ContextDetailsView): string | null {
-  const providerId = context.provider_id ?? view.providerUsage.activeProviderId;
-  const quota = view.providerUsage.providers.find((provider) => provider.providerId === providerId)?.remaining;
-  return quota?.stale ? quota.fetchedAt ?? view.generated_at : null;
+function quotaUpdatedAt(quota: ProviderQuotaResultView | null | undefined, fallback: string): string | null {
+  return quota?.stale ? quota.fetchedAt ?? fallback : null;
 }
 
 /**
  * The popover's usage section for this conversation, or null when the mode
  * has none (local and unknown models show context only).
  */
-export function conversationUsageSummary({ mode, context, view, status }: ConversationUsageInput): UsageSummaryRowsProps | null {
+export function conversationUsageSummary({ mode, context, view, quota, status }: ConversationUsageInput): UsageSummaryRowsProps | null {
   if (mode === "local" || mode === "unknown") return null;
   const copy = appCopy.composer.usage;
   const base: UsageSummaryRowsProps = {
@@ -70,14 +73,19 @@ export function conversationUsageSummary({ mode, context, view, status }: Conver
     remainingLabel: copy.left,
     locale: getAppLocale(),
   };
-  if (!view) return { ...base, state: status === "failed" ? "unavailable" : "loading" };
-  const staleAt = status === "failed" ? view.generated_at : null;
   if (mode === "subscription") {
-    const windows = quotaWindows(view, context);
-    if (!windows) return { ...base, state: "unavailable" };
-    const updatedAt = quotaUpdatedAt(view, context) ?? staleAt;
+    // The monitor's quota is the one the whole page shows; the stored quota
+    // stands in until the monitor answers.
+    const own = view ? viewQuota(view, context) : undefined;
+    const source = own?.available ? own : quota ?? own;
+    const windows = quotaWindows(source);
+    if (!windows) return { ...base, state: !view && status !== "failed" ? "loading" : "unavailable" };
+    const staleAt = status === "failed" && view ? view.generated_at : null;
+    const updatedAt = quotaUpdatedAt(source, view?.generated_at ?? "") ?? staleAt;
     return { ...base, state: "ready", quotaWindows: windows, updatedLabel: updatedAt ? copy.updated(usageTime(updatedAt)) : undefined };
   }
+  if (!view) return { ...base, state: status === "failed" ? "unavailable" : "loading" };
+  const staleAt = status === "failed" ? view.generated_at : null;
   const usd = view.cost.available ? view.cost.estimatedUsd : null;
   return {
     ...base,

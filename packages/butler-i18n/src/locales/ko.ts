@@ -1625,6 +1625,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       updateComponent: "업데이트",
       upToDate: "최신",
       updateChecking: "확인 중",
+      updateUnavailable: "최신 정보를 확인할 수 없음",
       updateApplying: "적용 중",
     },
     placeholders: {
