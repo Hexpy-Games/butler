@@ -234,6 +234,7 @@
 
 .readout {
   position: absolute;
+  opacity: 0; /* the timeline shows it; the still poster has none */
   right: 0;
   bottom: calc(100% + var(--space-3xl));
   display: flex;
@@ -261,6 +262,7 @@
 
 .hud {
   position: absolute;
+  opacity: 0; /* the timeline shows it; the still poster has none */
   top: var(--space-xl);
   right: var(--space-xl);
   display: none;

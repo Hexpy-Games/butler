@@ -39,6 +39,7 @@ export function DeviceFrame({ children, label }: { children: ReactNode; label: s
         const theme = [...document.body.classList].filter((name) => name.startsWith("theme-")).join(" ");
         doc.documentElement.className = `${document.documentElement.className} ${theme} ${s.deviceRoot}`;
         doc.documentElement.lang = document.documentElement.lang;
+        doc.documentElement.style.colorScheme = getComputedStyle(document.body).colorScheme;
         doc.body.className = `${document.body.className} ${s.deviceBody}`;
         if (document.body.dataset.motion) doc.body.dataset.motion = document.body.dataset.motion;
       };

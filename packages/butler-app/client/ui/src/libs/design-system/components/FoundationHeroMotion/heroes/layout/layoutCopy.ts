@@ -63,7 +63,7 @@ export const RANGES: Record<Mode, string> = { expanded: "≥ 1024", medium: "641
 
 /** The window's size at the start of the drag (device px), and the screens' in the poster. */
 export const WINDOW = { w: 1280, h: 560 } as const;
-export const SCREEN = { expanded: { w: 1280, h: 800 }, medium: { w: 1023, h: 800 }, compact: { w: 375, h: 812 } } as const;
+export const SCREEN = { expanded: { w: 1024, h: 640 }, medium: { w: 768, h: 640 }, compact: { w: 375, h: 640 } } as const;
 
 /** Canvas px per device px of the window in the drag, per canvas (LayoutHero.module.css --s). */
 export const ZOOM = { wide: 0.72, tall: 0.3 } as const;

@@ -64,24 +64,36 @@ export function layoutTracks(copy: LayoutCopy) {
     const medium = tall ? onStage : top(win.x + ((WINDOW.w - DETENTS[1].px) / 2) * z - 24);
     const compact = tall ? onStage : middle();
     const right = tall ? onStage : top(win.x + win.w - crop.w + 24);
-    const camera: Key[] = [
+    // Tall: the camera stays close through the drag, on the window's moving right edge and what reflows beside it,
+    // centring on the window once it is narrower than the frame.
+    const zt = 2.9;
+    const seen = { w: canvas.w / zt, h: canvas.h / zt };
+    const follow = (px: number): Pose => focus(canvas, { x: win.x + win.w / 2 + Math.max(0, (px * z) / 2 - seen.w / 2 + 8) - seen.w / 2, y: win.y + win.h / 2 - seen.h / 2, ...seen }, zt);
+    const [d1, d2, d3] = DRAGS as [[number, number], [number, number], [number, number]];
+    const at = (t: number, pose: Pose, ease = false): Key => ({ at: t, ...pose, ...(ease ? { ease: "standard" as const } : {}) });
+    const head: Key[] = [
       { at: 0, ...intro }, { at: AT.win, ...intro }, { at: AT.win + TRANSITION, ...onStage, ease: "standard" },
-      { at: AT.bar - 1.4, ...onStage }, { at: AT.bar - 0.4, ...left, ease: "standard" },
-      { at: AT.pan, ...left }, { at: AT.pan + 1.2, ...right, ease: "standard" },
-      { at: AT.whole, ...right }, { at: AT.whole + 1.4, ...onStage, ease: "standard" },
-      ...(tall
-        // Tall: the camera closes in on the window as the last drag narrows it, so the phone-width shell is read up close.
-        ? [{ at: DRAGS[2]![0], ...onStage }, { at: DRAGS[2]![1], ...near, ease: "standard" } as Key]
-        // Wide: whole for each drag; on arriving at a mode the camera pushes in on what changed (medium: the sidebar gone; compact: the taller titlebar), then the phone-width window up close.
-        : ([
-          { at: DRAGS[0]![1] + 0.2, ...onStage }, { at: DRAGS[0]![1] + 1.4, ...medium, ease: "standard" },
-          { at: DRAGS[1]![0] - 1.4, ...medium }, { at: DRAGS[1]![0] - 0.2, ...onStage, ease: "standard" },
-          { at: DRAGS[1]![1] + 0.2, ...onStage }, { at: DRAGS[1]![1] + 1.4, ...compact, ease: "standard" },
-          { at: DRAGS[2]![0] - 1.4, ...compact }, { at: DRAGS[2]![0] - 0.2, ...onStage, ease: "standard" },
-          { at: AT.zoom, ...onStage }, { at: AT.zoom + TRANSITION, ...near, ease: "standard" },
-        ] satisfies Key[])),
-      { at: AT.end, ...near },
     ];
+    const camera: Key[] = tall
+      ? [
+        ...head, at(d1[0] - 1.6, onStage), at(d1[0] - 0.2, follow(DETENTS[0].px), true),
+        at(d1[1], follow(DETENTS[1].px), true), at(d2[0], follow(DETENTS[1].px)),
+        at(d2[1], follow(DETENTS[2].px), true), at(d3[0], follow(DETENTS[2].px)),
+        at(d3[1], follow(DETENTS[3].px), true), at(AT.end, follow(DETENTS[3].px)),
+      ]
+      // Wide: the measures on the window's top edge; then the camera rides the moving right edge (the handle, the readout, the column
+      // reflowing), pushes in on the left when the sidebar goes, and holds the narrowing window close, whole, through the last drags.
+      : [
+        ...head,
+        at(AT.bar - 1.4, onStage), at(AT.bar - 0.4, left, true),
+        at(AT.pan, left), at(AT.pan + 1.2, right, true),
+        at(d1[0], right), at(d1[1], top(win.x + win.w - crop.w + 24 - ((WINDOW.w - DETENTS[1].px) / 2) * z), true),
+        at(d1[1] + 0.2, top(win.x + win.w - crop.w + 24 - ((WINDOW.w - DETENTS[1].px) / 2) * z)), at(d1[1] + 1.4, medium, true),
+        at(d2[0] - 1.4, medium), at(d2[0] - 0.2, near, true),
+        at(d2[1] + 0.2, near), at(d2[1] + 1.4, compact, true),
+        at(d3[0] - 1.4, compact), at(d3[0] - 0.2, near, true),
+        at(AT.end, near),
+      ];
     /** Opacity steps: [beat, value] pairs, each eased over `beats`. */
     const fades = (name: string, pairs: Array<[number, number]>, first = 0, beats = 0.5): Track => ({
       select: select(name),
@@ -94,7 +106,6 @@ export function layoutTracks(copy: LayoutCopy) {
       ...reveal(`tl-${part}`, at + 0.4, label, close),
     ];
     const px = (d: number) => d * z;
-    const [d1, d2, d3] = DRAGS as [[number, number], [number, number], [number, number]];
     const edge = (name: string): Track => ({
       select: select(name),
       keys: looped([{ at: 0, w: px(WINDOW.w), h: px(WINDOW.h) }, ...DRAGS.flatMap(([from, to], k): Key[] => [{ at: from, w: px(DETENTS[k]!.px) }, { at: to, w: px(DETENTS[k + 1]!.px), ease: "standard" }])], close),

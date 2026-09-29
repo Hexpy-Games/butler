@@ -21,10 +21,11 @@ function spec(copy: LayoutCopy): SceneSpec {
       ruler: <Ruler />,
     },
     poster: {
-      wide: { columns: "3.1fr 1fr", rows: "1fr auto", areas: ["expanded compact", "ruler ruler"] },
-      tall: { columns: "1fr", rows: "150px 330px auto", areas: ["expanded", "compact", "ruler"] },
+      wide: { columns: "1fr 2.75fr", rows: "1fr auto", areas: ["compact expanded", "ruler ruler"] },
+      tall: { columns: "1fr", rows: "460px auto", areas: ["compact", "ruler"] },
     },
     hud: <Hud />,
+    posterZoom: { wide: 1, tall: 1 },
     end: () => LAYOUT_END,
     tracks: layoutTracks(copy),
   };
