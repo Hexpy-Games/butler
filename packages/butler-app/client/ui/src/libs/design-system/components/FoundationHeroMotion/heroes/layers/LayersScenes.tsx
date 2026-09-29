@@ -117,16 +117,26 @@ function useExtrusions(ref: RefObject<HTMLElement | null>, live: boolean) {
   return boxes;
 }
 
-/** A component's thickness: the side faces the quarter view sees (bottom edge, right edge, the corner between), following its shape and sharing one fade. */
-function Slab({ k, box }: { k: number; box: Ext }) {
-  const style = { "--x": `${box.x}px`, "--y": `${box.y}px`, "--w": `${box.w}px`, "--h": `${box.h}px`, "--r": `${box.r}px` } as CSSProperties;
-  return (
-    <>
-      <span className={`${s.face} ${s.faceBottom}`} data-t={`slab-${k}`} style={style} />
-      <span className={`${s.face} ${s.faceRight}`} data-t={`slab-${k}`} style={style} />
-      {box.r > 1 ? <span className={`${s.face} ${s.faceCorner}`} data-t={`slab-${k}`} style={style} /> : null}
-    </>
-  );
+/** Thickness of the components' edge, in sheet px (the window's own, or the phone's). */
+const SLAB = { wide: 9, tall: 14 } as const;
+/** How many hard steps make the edge (each about a screen px, so the curve round a corner reads smooth). */
+const EDGE_STEPS = 10;
+
+/**
+ * A component's thickness: its empty silhouette (its size and corner radius) copied, a px at a time, along the
+ * sheet's own plane to where its depth lands on the frame at the quarter view: the projection of "straight down
+ * z" back onto the sheet (rx, rz of the camera), so the edge follows every rounded corner as one smooth curve.
+ * One element per component, no depth layers of its own.
+ */
+function Slab({ k, box, compact }: { k: number; box: Ext; compact: boolean }) {
+  const layout = compact ? "tall" : "wide";
+  const { rx, rz } = TURN[layout];
+  const rad = (deg: number) => (deg * Math.PI) / 180;
+  const dy = SLAB[layout] * Math.tan(rad(rx)) * Math.cos(rad(rz));
+  const dx = dy * Math.tan(rad(rz));
+  const edge = Array.from({ length: EDGE_STEPS }, (_, i) => `${((i + 1) / EDGE_STEPS) * dx}px ${((i + 1) / EDGE_STEPS) * dy}px 0 var(--slab-tone)`).join(", ");
+  const style = { "--x": `${box.x}px`, "--y": `${box.y}px`, "--w": `${box.w}px`, "--h": `${box.h}px`, "--r": `${box.r}px`, boxShadow: edge } as CSSProperties;
+  return <span className={s.copy} data-t={`slab-${k}`} style={style} />;
 }
 
 /** A sheet's label, hung on its top right corner and turned back to face the frame: token and value, then what lives there. */
@@ -174,11 +184,11 @@ export function Screen({ copy, live, g = null }: { copy: LayersCopy; live: boole
     <div className={s.screen} data-m={live ? "screen" : undefined} ref={ref} style={style}>
       {SHEETS.map((sheet, k) => (
         <div className={s.sheet} data-sheet={sheet} data-t={t(`sh-${k}`)} key={sheet}>
+          {live ? (boxes[k] ?? []).map((box, i) => <Slab box={box} compact={compact} k={k} key={i} />) : null}
           <div className={s.plane} data-plane data-t={t(`pl-${k}`)}>
             {content(sheet, copy, compact)}
           </div>
           {live && sheet === "overlay" ? <span className={s.rim} data-t={`rim-${k}`} /> : null}
-          {live ? (boxes[k] ?? []).map((box, i) => <Slab box={box} k={k} key={i} />) : null}
           {live ? <Pin copy={copy} k={k} sheet={sheet} /> : null}
         </div>
       ))}
