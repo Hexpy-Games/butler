@@ -67,6 +67,9 @@ CREATE TABLE IF NOT EXISTS conversation_public_source_state (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1), revision INTEGER NOT NULL
 );
 INSERT OR IGNORE INTO conversation_public_source_state (singleton, revision) VALUES (1, 0);
+CREATE TABLE IF NOT EXISTS conversation_source_identity (
+  singleton INTEGER PRIMARY KEY CHECK (singleton = 1), identity TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS conversation_turns_session_seq_idx ON conversation_turns(session_id, seq);
 CREATE INDEX IF NOT EXISTS conversation_messages_session_seq_idx ON conversation_messages(session_id, seq);
 CREATE INDEX IF NOT EXISTS conversation_messages_role_created_idx ON conversation_messages(role, created_at, id);
@@ -85,6 +88,12 @@ pub(super) fn ensure(
 ) -> ConversationResult<()> {
     connection
         .execute_batch(SQL)
+        .map_err(ConversationError::sqlite)?;
+    connection
+        .execute(
+            "INSERT OR IGNORE INTO conversation_source_identity (singleton, identity) VALUES (1, ?1)",
+            [uuid::Uuid::new_v4().to_string()],
+        )
         .map_err(ConversationError::sqlite)?;
     for column in [
         "origin_kind TEXT NOT NULL DEFAULT 'unknown'",

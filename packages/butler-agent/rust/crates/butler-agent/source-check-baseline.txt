@@ -93,7 +93,7 @@ src/host/memory_jobs/recall_metrics.rs	<RecallMetrics as RecallMetricSink>::reco
 src/host/memory_jobs/transcript_sync.rs	LegacySessionSync::run	194
 src/host/memory_jobs/transcript_sync/hot.rs	LegacyHot::save	125
 src/host/memory_jobs/transcript_sync/hot.rs	commit	91
-src/host/runtime.rs	AgentRuntime::open	424
+src/host/runtime.rs	AgentRuntime::open	423
 src/host/runtime/environment.rs	ProcessEnvironment::capture	82
 src/host/service/entrypoint.rs	serve	159
 src/host/service/ingress.rs	IngressDispatcher::poll	86

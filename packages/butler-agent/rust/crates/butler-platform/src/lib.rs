@@ -30,6 +30,7 @@
 //! - [`service_registration`]: login-time start of the service (launchd,
 //!   systemd `--user`, Task Scheduler).
 //! - [`network`]: the machine's own interface addresses.
+//! - [`cpu`]: how many performance cores the machine has.
 //! - [`desktop`]: whether a browser can open, and opening a link in it.
 //! - [`stdio`]: this process's stdin and stdout as one async stream.
 //!
@@ -46,6 +47,7 @@
 
 pub mod command_launcher;
 pub mod command_sandbox;
+pub mod cpu;
 pub mod desktop;
 pub mod install_link;
 pub mod instance;
