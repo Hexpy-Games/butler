@@ -33,7 +33,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   appearance: [
     { id: "theme", kind: "form", fields: ["theme", "translucent-sidebar"] },
     { id: "sidebar", kind: "form", fields: ["smart-groups"] },
-    { id: "home-screen", kind: "form", fields: ["main-screen-theme", "main-screen-preset", "main-screen-colors"] },
+    { id: "home-screen", kind: "form", fields: ["main-screen-wallpaper", "main-screen-motion", "main-screen-battery"] },
   ],
   personalization: [
     { id: "profile", kind: "form", fields: ["butler-nickname", "principal-name", "preferred-address"] },
@@ -45,6 +45,8 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   models: [
     { id: "butler-model", kind: "form", fields: ["primary-model", "reasoning", "context-limit", "local-reasoning-budget"] },
     { id: "backup-models", kind: "form", fields: ["backup-models-summary", "backup-models-enabled", "backup-models"] },
+    // Hidden only for an agent without the #217 key routes.
+    { id: "saved-keys", kind: "list", fields: [] },
     { id: "permissions", kind: "form", fields: ["access-mode", "plan-mode-default"] },
     { id: "advanced-models", kind: "form", fields: [] },
     { id: "memory-cleanup", kind: "form", fields: ["consolidation-model", "consolidation-reasoning"], optional: true },

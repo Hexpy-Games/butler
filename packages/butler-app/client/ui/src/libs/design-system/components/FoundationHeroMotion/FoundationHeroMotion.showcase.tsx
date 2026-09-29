@@ -30,7 +30,7 @@ function Heroes({ context, still = false }: { context: ShowcaseRenderContext; st
     <Grid columns={{ base: "1", wide: "2" }} gap="xl">
       {FOUNDATION_HERO_VARIANTS.map((variant) => (
         <Stack gap="sm" key={variant}>
-          <FoundationHeroMotion variant={variant} still={still} />
+          <FoundationHeroMotion variant={variant} still={still} lang={context.locale === "ko-KR" ? "ko" : "en"} />
           <Typo.Caption tone="secondary">{copy[variant]}</Typo.Caption>
         </Stack>
       ))}

@@ -1,0 +1,64 @@
+{
+  "id": "butler.photo-daisies",
+  "name": {
+    "en": "Daisy Field",
+    "ko": "데이지 들판"
+  },
+  "version": "0.2.0",
+  "engine": 1,
+  "motion": "animated",
+  "image": "required",
+  "timePeriod": 120,
+  "imageDim": "noDarkStep",
+  "defaultImage": "photo.jpg",
+  "params": [
+    {
+      "key": "sunlight",
+      "type": "number",
+      "label": {
+        "en": "Sunlight through leaves",
+        "ko": "잎 사이 햇빛"
+      },
+      "default": 1,
+      "min": 0,
+      "max": 2,
+      "step": 0.05
+    },
+    {
+      "key": "bokeh",
+      "type": "number",
+      "label": {
+        "en": "Bokeh shimmer",
+        "ko": "보케 반짝임"
+      },
+      "default": 1,
+      "min": 0,
+      "max": 2,
+      "step": 0.05
+    },
+    {
+      "key": "wind",
+      "type": "number",
+      "label": {
+        "en": "Breeze",
+        "ko": "바람"
+      },
+      "default": 0.1,
+      "min": 0,
+      "max": 2,
+      "step": 0.05
+    },
+    {
+      "key": "veil",
+      "type": "number",
+      "label": {
+        "en": "Headline veil",
+        "ko": "제목 뒤 베일"
+      },
+      "default": 1,
+      "min": 0,
+      "max": 1.5,
+      "step": 0.05
+    }
+  ]
+}

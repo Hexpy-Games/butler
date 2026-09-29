@@ -63,6 +63,8 @@ fn fresh_schema_has_full_support_and_functional_message_fts() {
     assert!(table_exists(&connection, "app_session_context_gate"));
     assert!(table_exists(&connection, "app_session_branches"));
     assert!(table_exists(&connection, "app_space_nodes"));
+    assert!(table_exists(&connection, "app_wallpaper_assets"));
+    assert!(table_exists(&connection, "app_wallpaper_module_status"));
 }
 
 fn deployed_events_gain_actual_turn_index_without_rewriting_payloads() {

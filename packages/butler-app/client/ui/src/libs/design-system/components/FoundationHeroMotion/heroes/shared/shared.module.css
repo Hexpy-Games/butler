@@ -1,0 +1,70 @@
+/* Primitives every feature hero shares: the left-to-right reveal window and
+   the blueprint sketch. Motion is compiled at runtime (heroTimeline.ts); the
+   static rules here are the poster, where text shows and sketches hide. */
+
+/* Blueprint: thin construction lines along every edge, past the corners. */
+.sketch {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.sketchLine {
+  position: absolute;
+  background: var(--accent);
+  opacity: 0;
+}
+
+.sketchSvg {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: visible;
+}
+
+/* The element's real outline, its corner radius as measured, drawn along the edge. */
+.sketchOutline {
+  fill: none;
+  opacity: 0;
+  stroke: var(--accent);
+  stroke-dasharray: var(--dash) var(--dash);
+  stroke-width: 1px;
+}
+
+.sketchLine[data-side="t"],
+.sketchLine[data-side="b"] {
+  block-size: 1px;
+}
+
+.sketchLine[data-side="l"],
+.sketchLine[data-side="r"] {
+  inline-size: 1px;
+}
+
+.sketchLine[data-side="t"] {
+  transform-origin: 0 50%;
+}
+
+.sketchLine[data-side="b"] {
+  transform-origin: 100% 50%;
+}
+
+.sketchLine[data-side="l"] {
+  transform-origin: 50% 100%;
+}
+
+.sketchLine[data-side="r"] {
+  transform-origin: 50% 0;
+}
+
+/* Text revealed left to right: a window and its content move oppositely. */
+.reveal {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+}
+
+.revealIn {
+  display: inline-block;
+}

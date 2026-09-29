@@ -83,6 +83,8 @@ export * from "./blocks/OverflowActionMenu";
 export * from "./blocks/FormSection";
 export * from "./blocks/PanelHeader";
 export * from "./blocks/PromptSuggestionList";
+export * from "./blocks/Wallpaper";
+export * from "./blocks/WallpaperPicker";
 export * from "./blocks/SurfacePanel";
 export * from "./blocks/MetricCard";
 export * from "./blocks/MetricGrid";

@@ -1,0 +1,25 @@
+/* DS Viewer stages: bounded boxes the wallpaper fills. */
+.stage {
+  position: relative;
+  height: 320px;
+  overflow: hidden;
+  border-radius: var(--radius-panel);
+  isolation: isolate;
+}
+
+/* Paint containment makes the fixed viewport layer relative to the stage. */
+.viewportStage {
+  position: relative;
+  display: grid;
+  height: 220px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--radius-panel);
+  contain: layout paint;
+  isolation: isolate;
+}
+
+.caption {
+  position: relative;
+  z-index: 1;
+}

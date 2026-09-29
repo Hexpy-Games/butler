@@ -77,7 +77,9 @@ pub struct SubsessionPacket {
     pub constraints_and_non_goals: Vec<String>,
     pub allowed_tools_and_effects: Vec<String>,
     pub mutation_scope: Vec<String>,
-    pub parent_work_ref: ParentWorkRef,
+    /// Absent on packets written before the reviewed parent Work was recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_work_ref: Option<ParentWorkRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worker_profile: Option<PacketWorkerProfile>,
     pub model_ref: String,
@@ -168,6 +170,8 @@ pub struct EnvelopeMessage {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EnvelopeRouting {
+    /// Named `stewardId` before envelopes could target workers.
+    #[serde(alias = "stewardId")]
     pub session_id: String,
     pub turn_id: String,
 }
@@ -177,11 +181,17 @@ pub struct EnvelopeRouting {
 #[serde(rename_all = "camelCase")]
 pub struct NativeStewardContext {
     pub version: u32,
+    /// Absent on envelopes written when only stewards were dispatched.
+    #[serde(default = "legacy_context_role")]
     pub role: String,
     pub project_name: String,
     pub workspace_path: String,
     pub model_ref: String,
     pub reasoning_effort: String,
+}
+
+fn legacy_context_role() -> String {
+    "steward".into()
 }
 
 /// The provenance of an envelope.
@@ -269,13 +279,13 @@ impl SubsessionPacket {
             constraints_and_non_goals: Vec::new(),
             allowed_tools_and_effects: Vec::new(),
             mutation_scope: Vec::new(),
-            parent_work_ref: ParentWorkRef {
+            parent_work_ref: Some(ParentWorkRef {
                 work_id: "work".into(),
                 session_id: "parent-session".into(),
                 turn_id: "parent-turn".into(),
                 plan_revision_id: "plan".into(),
                 review_revision_id: "review".into(),
-            },
+            }),
             worker_profile: None,
             model_ref: "provider/model".into(),
             reasoning_effort: "medium".into(),

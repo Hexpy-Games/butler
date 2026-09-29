@@ -167,3 +167,32 @@ export function easeProgress(name: MotionEasingName, t: number): number {
   if (!points || points.length !== 4 || points.some(Number.isNaN)) return clamped;
   return cubicBezier(points[0]!, points[1]!, points[2]!, points[3]!, clamped);
 }
+
+type ViewTransitionDocument = Document & {
+  startViewTransition?: (update: () => void) => { ready: Promise<void> };
+};
+
+/**
+ * Cross-fades the whole window from its current look to what `update`
+ * renders — the View Transitions API: a snapshot of the old page fades into
+ * the live new one over --motion-deliberate — e.g. the app appearance
+ * switching light/dark on its own. `update` must change the DOM
+ * synchronously (in React, wrap the state change in `flushSync`); it runs
+ * later, once the old look is captured. Without support or under reduced
+ * motion it runs right away, without a fade.
+ */
+export function crossfadeDocumentChange(update: () => void): void {
+  const target = typeof document === "undefined" ? undefined : (document as ViewTransitionDocument);
+  if (!target?.startViewTransition || prefersReducedMotion()) {
+    update();
+    return;
+  }
+  const transition = target.startViewTransition.call(target, update);
+  void transition.ready.then(() => {
+    for (const animation of target.getAnimations()) {
+      const effect = animation.effect as KeyframeEffect | null;
+      if (!effect?.pseudoElement?.startsWith("::view-transition")) continue;
+      effect.updateTiming({ duration: motionDuration("deliberate"), easing: motionEasing("standard") });
+    }
+  }).catch(() => undefined);
+}

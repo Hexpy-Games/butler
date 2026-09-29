@@ -27,7 +27,7 @@ export function SessionObserverTimeline({
     }
   }
   if (activeTurn) sources.set(activeTurn.id, { turn_id: activeTurn.id,
-    created_at: activeTurn.created_at, rows: activeTurn.progress.safe_progress_rows });
+    created_at: activeTurn.created_at, rows: activeTurn.progress?.safe_progress_rows ?? [] });
   const ordered = [
     ...[...sources.values()].flatMap((source) =>
       projectTurnActivity(source.rows, source.turn_id).phaseActivities.map((activity) => ({

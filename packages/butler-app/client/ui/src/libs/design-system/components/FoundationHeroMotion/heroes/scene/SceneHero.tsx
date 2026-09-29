@@ -1,0 +1,138 @@
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
+import type { FoundationHeroLang } from "../../FoundationHeroMotion";
+import { compileTimeline } from "../../heroTimeline";
+import { CANVAS, col, gridVars, type HeroLayout } from "../shared/grid";
+import { fitLabels } from "../shared/fitLabels";
+import { useSettledCompile } from "../shared/settleInk";
+import { useFrame } from "../shared/useFrame";
+import { measureScene } from "./measureScene";
+import { sceneTracks } from "./sceneTimeline";
+import type { SceneGeometry, SceneSpec } from "./types";
+import c from "../shared/ChapterHero.module.css";
+import s from "./SceneHero.module.css";
+
+/** The most a tile draws its component larger to fill it. */
+const TILE_ZOOM = 1.8;
+/** How much of its slot a component fills (room for focus rings and shadows, which layout boxes leave out). */
+const TILE_FILL = 0.94;
+
+/** Fonts ready (layout depends on them). */
+function useFontsReady() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let live = true;
+    const fonts = typeof document === "undefined" ? undefined : document.fonts;
+    if (fonts) void fonts.ready.then(() => live && setReady(true));
+    else setReady(true);
+    return () => {
+      live = false;
+    };
+  }, []);
+  return ready;
+}
+
+/**
+ * Wide poster: each component is sized from what it really lays out (overflow included) to fill its slot:
+ * a small one drawn larger (no hollow slot), a large one smaller (nothing clipped). Tall slots take their content's height.
+ */
+function fitTiles(root: HTMLElement, layout: HeroLayout) {
+  if (layout !== "wide") return;
+  for (const tile of root.querySelectorAll<HTMLElement>("[data-tile]")) {
+    const child = tile.firstElementChild as HTMLElement | null;
+    if (!child) continue;
+    // An explicit zoom is absolute (an unset one inherits the poster's), so measure and set on the same footing.
+    child.style.setProperty("zoom", "1");
+    const room = tile.getBoundingClientRect();
+    const own = child.getBoundingClientRect();
+    const scale = own.width / Math.max(1, child.offsetWidth);
+    const w = Math.max(own.width, child.scrollWidth * scale);
+    const h = Math.max(own.height, child.scrollHeight * scale);
+    const fit = Math.min(TILE_ZOOM, (room.width * TILE_FILL) / Math.max(1, w), (room.height * TILE_FILL) / Math.max(1, h));
+    child.style.setProperty("zoom", String(Math.floor(fit * 100) / 100));
+  }
+}
+
+/** The static geometry the timeline is compiled against, measured again when copy, canvas or a scene's size changes. */
+function useGeometry(root: RefObject<HTMLElement | null>, layout: HeroLayout, lang: FoundationHeroLang, ready: boolean, fit: number) {
+  const [geometry, setGeometry] = useState<SceneGeometry | null>(null);
+  // The stage's size decides how much of the canvas shows (the finale frames that).
+  useLayoutEffect(() => setGeometry(null), [lang, layout, ready, fit]);
+  useLayoutEffect(() => {
+    if (geometry || !ready || !root.current) return;
+    fitLabels(root.current);
+    fitTiles(root.current, layout);
+    setGeometry(measureScene(root.current, layout));
+  }, [geometry, ready, root, layout]);
+  useEffect(() => {
+    const parts = ['[data-t="prelude"]', '[data-t="poster"]'].map((selector) => root.current?.querySelector(selector)).filter(Boolean) as Element[];
+    if (!geometry || typeof ResizeObserver !== "function" || parts.length === 0) return undefined;
+    const sizes = new Map<Element, string>();
+    const observer = new ResizeObserver((entries) => {
+      const changed = entries.some((entry) => {
+        const size = `${Math.round(entry.contentRect.width)}x${Math.round(entry.contentRect.height)}`;
+        const before = sizes.get(entry.target);
+        sizes.set(entry.target, size);
+        return before !== undefined && before !== size;
+      });
+      if (changed) setGeometry(null);
+    });
+    for (const part of parts) observer.observe(part);
+    return () => observer.disconnect();
+  }, [geometry, root]);
+  return geometry;
+}
+
+/**
+ * A v3 Foundations chapter hero (see types.ts): the chapter's own scenes on a
+ * one-axis camera path, then a finale where the poster's tiles, packed edge
+ * to edge by the chapter's grid, fly in from the frame's nearest edges and
+ * hold. The static layout is the poster (reduced motion).
+ */
+export function SceneHero({ spec, lang }: { spec: SceneSpec; lang: FoundationHeroLang }) {
+  const root = useRef<HTMLDivElement>(null);
+  const scope = `sh${useId().replace(/[^a-z0-9]/giu, "")}`;
+  const frame = useFrame(root, true);
+  const ready = useFontsReady();
+  const { layout } = frame;
+  const g = useGeometry(root, layout, lang, ready, frame.fit);
+  const compile = useCallback((geometry: SceneGeometry) => sceneTracks(spec, geometry), [spec]);
+  const compiled = useSettledCompile(root, g, layout, compile);
+  const css = useMemo(() => (compiled ? compileTimeline(scope, compiled.beats, compiled.tracks) : ""), [compiled, scope]);
+  const still = compiled?.still;
+  const grid = spec.poster[layout];
+  const zoom = spec.posterZoom?.[layout] ?? (layout === "wide" ? 1 : 1.2);
+  const style = {
+    ...gridVars(layout),
+    "--fit": frame.fit,
+    "--poster-zoom": zoom,
+    "--canvas-w": `${CANVAS[layout].w}px`,
+    "--canvas-h": `${CANVAS[layout].h}px`,
+    "--col": `${col(layout, 1).w}px`,
+    inlineSize: `${CANVAS[layout].w}px`,
+    blockSize: `${CANVAS[layout].h}px`,
+  } as CSSProperties;
+  const posterGrid = { gridTemplateColumns: grid.columns, gridTemplateRows: grid.rows, gridTemplateAreas: grid.areas.map((row) => `"${row}"`).join(" ") } as CSSProperties;
+  return (
+    <div className={c.board} data-hero-scope={scope} data-layout={layout} data-marks={compiled?.marks.join(" ")} data-ready={css ? "" : undefined} inert lang={lang} ref={root} style={style}>
+      {css ? <style>{css}</style> : null}
+      <div className={c.camera}>
+        {/* The still poster (reduced motion) rests on the finale's framing. */}
+        <div className={`${c.world} ${s.world}`} data-t="world" style={still ? { transform: `translate(${still.x ?? 0}px, ${still.y ?? 0}px) scale(${still.s ?? 1})` } : undefined}>
+          <div className={`${c.prelude} ${s.prelude}`} data-t="prelude">
+            {spec.scenes.map((name) => {
+              const region = spec.regions[name];
+              return <div className={`${c.cell} ${s.cell}`} data-cell={name} data-deep={spec.deep?.includes(name) ? "" : undefined} key={name}>{typeof region === "function" ? region(g) : region}</div>;
+            })}
+          </div>
+          <div className={s.poster} data-layout={layout} data-t="poster" style={posterGrid}>
+            {/* A tile the canvas's grid leaves out is not drawn there (the phone poster drops some). */}
+            {Object.entries(spec.tiles).filter(([id]) => grid.areas.some((row) => row.split(/\s+/u).includes(id))).map(([id, tile]) => (
+              <div className={s.tile} data-t={`tile-${id}`} data-tile={id} key={id} style={{ gridArea: id }}>{tile}</div>
+            ))}
+          </div>
+        </div>
+      </div>
+      {spec.hud ? <div className={s.hud}>{spec.hud}</div> : null}
+    </div>
+  );
+}

@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { NavRow } from "../../blocks/NavRow";
 import { Button } from "../../components/Button";
 import { Collapsible } from "../../components/Collapsible";
-import { FoundationHeroMotion } from "../../components/FoundationHeroMotion";
+import { FOUNDATION_FEATURE_HEROES, FoundationHeroMotion } from "../../components/FoundationHeroMotion";
 import { Stack } from "../../components/Stack";
 import { Tag } from "../../components/Tag";
 import { Typo } from "../../components/Typo";
@@ -23,6 +23,9 @@ export function chapterSections(chapter: FoundationChapter, sections: Array<[str
   return { list, at: (id: string): SectionSpec => list.find((spec) => spec.id === id) ?? list[0]! };
 }
 
+/** Chapters whose hero is the centrepiece: full width under the title instead of a panel beside it. */
+const FEATURE_HEROES: ReadonlySet<string> = FOUNDATION_FEATURE_HEROES;
+
 export function ChapterHeader({ chapter, lead, onOpen, locale, children }: {
   chapter: FoundationChapter;
   lead: ReactNode;
@@ -32,8 +35,9 @@ export function ChapterHeader({ chapter, lead, onOpen, locale, children }: {
   children?: ReactNode;
 }) {
   const count = chapterTokens(tokenCatalog, chapter).length;
+  const feature = FEATURE_HEROES.has(chapter.id) ? "" : undefined;
   return (
-    <header className={f.chapterHead} data-ds-chapter-head={chapter.id}>
+    <header className={f.chapterHead} data-ds-chapter-head={chapter.id} data-feature={feature}>
       <div className={f.chapterHeadGrid}>
         <div className={f.chapterHeadText}>
           <div className={f.chapterKicker}>
@@ -48,7 +52,7 @@ export function ChapterHeader({ chapter, lead, onOpen, locale, children }: {
             {children}
           </Stack>
         </div>
-        <div className={f.chapterHero} data-ds-chapter-hero={chapter.id}>
+        <div className={f.chapterHero} data-ds-chapter-hero={chapter.id} data-feature={feature}>
           <FoundationHeroMotion variant={chapter.id} lang={locale} />
         </div>
       </div>

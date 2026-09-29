@@ -4,7 +4,7 @@ import { useButlerStore } from "@/app/store.ts";
 import { useProjectDashboard } from "@/hooks/useProjectDashboard.ts";
 import { Stack, Notice, Button, Tabs, TabsList, TabsTrigger, TabsContent, Section, LayoutDashboard, ListChecks, Folder, History, Activity } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
-import { ManagementPage } from "@/butler-ds";
+import { ManagementPage, ManagementPagePanel } from "@/butler-ds";
 import type {
   ProjectDashboardDocument,
   ProjectDashboardView as ProjectDashboardData,
@@ -27,6 +27,7 @@ import { ProjectResultsPanel } from "./ProjectResultsPanel.tsx";
 import { ProjectBriefingPanel } from "./ProjectBriefingPanel.tsx";
 import { useProjectArtifactAttachment } from "@/hooks/useProjectArtifactAttachment.ts";
 import { useProjectDashboardScroll } from "@/hooks/useProjectDashboardScroll.ts";
+import { useProjectDashboardBackground } from "@/hooks/useProjectDashboardBackground.tsx";
 
 export function ProjectDashboardView({
   project: projectProp,
@@ -58,6 +59,7 @@ export function ProjectDashboardView({
   const setTab = (tab: string) => { if (project) updateDashboardState(project.id, { tab }); };
   const selectionEpoch = useRef(0);
   const attachArtifact = useProjectArtifactAttachment(project?.id);
+  const { background, headerRef } = useProjectDashboardBackground(project);
   const ledgerRevision = dashboard?.overview?.status === "ready" ? dashboard.overview.sourceRevision : "unavailable";
   const publicRevision = `${ledgerRevision}:${sessions.map((session) => `${session.id}:${session.last_activity_at}:${session.active_turn_state ?? ""}`).join("|")}`;
   useEffect(() => { selectionEpoch.current++; setSelectedDocument(null); }, [project?.id]);
@@ -72,7 +74,7 @@ export function ProjectDashboardView({
   if (status !== "ready") {
     const copy = appCopy.feedback;
     return (
-      <ManagementPage dataTestClass="project-dashboard-view">
+      <ManagementPage dataTestClass="project-dashboard-view" background={background}>
         <div role="status" aria-live="polite" data-test-class="project-dashboard-status">
           <Notice tone={status === "error" ? "error" : "info"}
             title={status === "error" ? copy.dashboardFailed : status === "missing" ? copy.projectMissing : undefined}
@@ -88,12 +90,13 @@ export function ProjectDashboardView({
   }
 
   return (
-    <ManagementPage dataTestClass="project-dashboard-view" scrollRef={scrollRef}
+    <ManagementPage dataTestClass="project-dashboard-view" scrollRef={scrollRef} background={background}
       footerPlacement="overlay" footerReserve={composerHeight}
       footer={project && <ProjectDashboardComposer key={project.id} projectId={project.id} onReserveChange={setComposerHeight} />}>
       <Stack as="main" gap="xl">
         {refreshFailed && <Notice tone="error" title={appCopy.feedback.dashboardFailed} message={appCopy.feedback.dashboardRetry}
           action={<Button variant="outline" onClick={retry}>{appCopy.feedback.retry}</Button>} />}
+        <ManagementPagePanel ref={headerRef}>
         <ProjectDashboardHeader
           dashboard={dashboard}
           project={project}
@@ -102,7 +105,8 @@ export function ProjectDashboardView({
         />
         {project && <ProjectDescription key={project.id} projectId={project.id} description={dashboard?.description ?? null}
           revision={dashboard?.preferences?.revision ?? 0} onUpdated={retry} />}
-        <Tabs value={tab} onValueChange={setTab} gap="2xl">
+        </ManagementPagePanel>
+        <ManagementPagePanel><Tabs value={tab} onValueChange={setTab} gap="2xl">
           <TabsList variant="line">
             <TabsTrigger value="overview"><LayoutDashboard />{appCopy.projectSignpost.overview}</TabsTrigger>
             <TabsTrigger value="work"><ListChecks />{appCopy.projectSignpost.work}</TabsTrigger>
@@ -129,7 +133,7 @@ export function ProjectDashboardView({
           projectId={project.id} onSelect={selectDocument} preferences={dashboard?.preferences} onUpdated={retry} />
           <ProjectResultsPanel key={`${project.id}:${publicRevision}`} projectId={project.id} preferences={dashboard?.preferences} onUpdated={retry} onSelect={selectDocument} /></Stack>}</TabsContent>
         <TabsContent value="history">{project && <ProjectHistoryPanel key={`${project.id}:${publicRevision}`} projectId={project.id} onSelect={selectDocument} onOpenSession={onOpenSession ?? openSession} />}</TabsContent>
-        </Tabs>
+        </Tabs></ManagementPagePanel>
       </Stack>
       <ProjectDocumentDialog
         document={selectedDocument}

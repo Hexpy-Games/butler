@@ -1,0 +1,534 @@
+/* 08 Motion hero ("the score"). Canvas px (../shared/grid.ts). Every surface
+   is a real DS component on the page background; this sheet only lays the
+   scenes out and draws the chart marks (lanes, notes, grid, metronome). */
+
+.letters {
+  display: inline-flex;
+}
+
+.letter {
+  display: inline-block;
+}
+
+/* ---- Shared chart text ---- */
+
+.token,
+.rollToken,
+.exitValue,
+.exitHead,
+.twinHow,
+.springNote,
+.barNumber,
+.rollHeader {
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.token {
+  color: var(--text-primary);
+}
+
+.job,
+.rollLabel {
+  color: var(--text-secondary);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
+}
+
+/* ---- Onion-skin lanes ---- */
+
+.lanes {
+  --track: 460px;
+
+  display: grid;
+  row-gap: var(--space-3xl);
+}
+
+[data-layout="tall"] .lanes {
+  --track: 190px;
+
+  row-gap: var(--space-xl);
+}
+
+.lane {
+  display: grid;
+  grid-template-columns: calc(var(--space-4xl) * 5) var(--track) auto;
+  align-items: center;
+  column-gap: var(--space-2xl);
+}
+
+[data-layout="tall"] .lane {
+  grid-template-areas:
+    "name name"
+    "track plot";
+  grid-template-columns: var(--track) auto;
+  row-gap: var(--space-sm);
+}
+
+[data-layout="tall"] .laneName {
+  grid-area: name;
+}
+
+.laneName {
+  display: grid;
+  row-gap: var(--space-xs);
+}
+
+.track {
+  position: relative;
+  block-size: var(--space-2xl);
+}
+
+.post {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  inline-size: 1.5px;
+  background: var(--line-strong);
+}
+
+.post[data-end="start"] {
+  left: 0;
+}
+
+.post[data-end="finish"] {
+  left: var(--track);
+  background: var(--accent);
+}
+
+.ghost,
+.puck {
+  position: absolute;
+  top: 50%;
+  border-radius: var(--radius-pill);
+  translate: -50% -50%;
+}
+
+.ghost {
+  left: calc(var(--track) * var(--p));
+  inline-size: var(--space-md);
+  block-size: var(--space-md);
+  border: 1.5px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.puck {
+  left: 0;
+  inline-size: var(--space-lg);
+  block-size: var(--space-lg);
+  background: var(--accent);
+}
+
+.puck[data-home] {
+  left: var(--track);
+}
+
+.plot {
+  inline-size: var(--space-4xl);
+  block-size: var(--space-4xl);
+  overflow: visible;
+}
+
+.plotAxis,
+.plotCurve {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.plotAxis {
+  stroke: var(--line-strong);
+}
+
+.plotCurve {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+/* ---- The metronome: a tick every beat, a taller one every bar ---- */
+
+.metro {
+  position: absolute;
+  right: var(--grid-margin);
+  bottom: calc(var(--grid-margin) + var(--crop, 0px));
+  left: var(--grid-margin);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  block-size: var(--space-lg);
+}
+
+.tick {
+  inline-size: 1px;
+  block-size: var(--space-sm);
+  background: var(--line-strong);
+}
+
+.tick[data-down] {
+  block-size: var(--space-md);
+  background: var(--text-tertiary);
+}
+
+.cursor {
+  position: absolute;
+  bottom: 0;
+  left: -1px;
+  inline-size: 3px;
+  block-size: var(--space-lg);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+/* ---- Notes (the roll and the exit bars share them) ---- */
+
+.noteSlot {
+  position: absolute;
+  inset-block: var(--space-xs);
+  left: calc(var(--l) * 100%);
+  inline-size: calc(var(--w) * 100%);
+  min-inline-size: var(--space-sm);
+}
+
+.noteSlot[data-flat] {
+  inset-block: calc(50% - 1.5px);
+}
+
+.noteBase,
+.noteWindow {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+}
+
+.noteBase {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.noteFill {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+/* A loop (the working mark): one short note per beat. */
+.noteSlot[data-loop] .noteBase,
+.noteSlot[data-loop] .noteWindow {
+  border-radius: 0;
+}
+
+.noteSlot[data-loop] .noteBase {
+  background: linear-gradient(
+      to right,
+      color-mix(in srgb, var(--accent) 16%, transparent) 0 55%,
+      transparent 55%
+    )
+    0 0 / calc(100% / var(--reps)) 100% repeat-x;
+}
+
+.noteSlot[data-loop] .noteFill {
+  border-radius: 0;
+  background: linear-gradient(to right, var(--accent) 0 55%, transparent 55%) 0
+    0 / calc(100% / var(--reps)) 100% repeat-x;
+}
+
+/* ---- The piano roll ---- */
+
+.roll {
+  --roll-name: calc(var(--space-4xl) * 2.2);
+  --head: var(--space-lg);
+
+  position: relative;
+  display: grid;
+  row-gap: var(--space-sm);
+  inline-size: var(--roll-w, calc(var(--space-4xl) * 9));
+}
+
+.rollHead,
+.rollLane {
+  display: grid;
+  grid-template-columns: var(--roll-name) minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--space-md);
+}
+
+.rollHead {
+  block-size: var(--head);
+}
+
+.bars {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+}
+
+.barNumber {
+  padding-inline-start: var(--space-xs);
+  border-inline-start: 1px solid var(--line-strong);
+  line-height: var(--head);
+}
+
+.rollName {
+  display: grid;
+  min-width: 0;
+}
+
+.rollTrack {
+  position: relative;
+  block-size: var(--space-xl);
+  background:
+    linear-gradient(to right, var(--line-strong) 0 1px, transparent 1px) 0 0 /
+      calc(100% / var(--span) * 4) 100%,
+    linear-gradient(to right, var(--line) 0 1px, transparent 1px) 0 0 /
+      calc(100% / var(--span)) 100%;
+}
+
+.playRail {
+  position: absolute;
+  inset: calc(var(--head) + var(--space-sm)) 0 0
+    calc(var(--roll-name) + var(--space-md));
+  pointer-events: none;
+}
+
+.playhead {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  border-inline-start: 2px solid var(--text-primary);
+  opacity: 0;
+}
+
+/* ---- In fast, out faster ---- */
+
+.exits {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: end;
+  column-gap: calc(var(--space-4xl) * 1.5);
+}
+
+[data-layout="tall"] .exits {
+  grid-template-columns: auto;
+  row-gap: var(--space-3xl);
+}
+
+.exitStage {
+  display: grid;
+  justify-items: start;
+  row-gap: var(--space-sm);
+  inline-size: calc(var(--space-4xl) * 8.5);
+}
+
+.menuAnchor {
+  margin-inline-start: var(--space-sm);
+  transform-origin: left bottom;
+}
+
+.menuInset {
+  padding: var(--space-1);
+}
+
+.exitBars {
+  display: grid;
+  row-gap: var(--space-lg);
+  padding-block-end: var(--space-md);
+}
+
+.exitHead {
+  display: grid;
+}
+
+.exitHead > * {
+  grid-area: 1 / 1;
+}
+
+.exitRow {
+  display: grid;
+  grid-template-columns:
+    calc(var(--space-4xl) * 4.2) calc(var(--space-4xl) * 5)
+    calc(var(--space-4xl) * 1.5);
+  align-items: center;
+  column-gap: var(--space-lg);
+}
+
+[data-layout="tall"] .exitRow {
+  grid-template-areas:
+    "name name"
+    "track value";
+  grid-template-columns: calc(var(--space-4xl) * 5) auto;
+  row-gap: var(--space-xs);
+}
+
+[data-layout="tall"] .exitRow > .rollName {
+  grid-area: name;
+}
+
+.exitTrack {
+  position: relative;
+  block-size: var(--space-xl);
+}
+
+.exitValue {
+  text-align: end;
+}
+
+/* ---- The score ---- */
+
+.score {
+  --turn-w: calc(var(--space-4xl) * 10);
+
+  display: grid;
+  grid-template-columns: var(--turn-w) auto;
+  align-items: center;
+  column-gap: var(--space-4xl);
+}
+
+[data-layout="tall"] .score {
+  --turn-w: calc(var(--canvas-w) - var(--grid-margin) * 2);
+  --roll-w: var(--turn-w);
+
+  grid-template-columns: var(--turn-w);
+  row-gap: var(--space-2xl);
+}
+
+.turn {
+  display: grid;
+  row-gap: var(--space-sm);
+  inline-size: var(--turn-w);
+}
+
+.rows,
+.part,
+.layer {
+  display: grid;
+  min-width: 0;
+}
+
+.slot,
+.composerSlot {
+  position: relative;
+  display: grid;
+}
+
+.layer {
+  grid-area: 1 / 1;
+}
+
+.activity {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+}
+
+.draft {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+}
+
+/* ---- Twins ---- */
+
+.twins {
+  --twin-w: calc(var(--space-4xl) * 8);
+
+  display: grid;
+  grid-template-columns: repeat(2, var(--twin-w));
+  column-gap: calc(var(--space-4xl) * 1.5);
+}
+
+[data-layout="tall"] .twins {
+  --twin-w: calc(var(--canvas-w) - var(--grid-margin) * 2);
+
+  grid-template-columns: var(--twin-w);
+  row-gap: var(--space-3xl);
+}
+
+/* Tall: Reduced stands under Full, in flow (the cell holds both), so the camera frames one twin at a time. */
+[data-layout="tall"] .twins:not([data-tile] > *) {
+  row-gap: calc(var(--space-4xl) * 4);
+}
+
+.twin {
+  --turn-w: var(--twin-w);
+  --roll-w: var(--twin-w);
+
+  display: grid;
+  align-content: start;
+  row-gap: var(--space-lg);
+}
+
+.twin .roll {
+  --roll-name: calc(var(--space-4xl) * 1.6);
+}
+
+.twinHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  padding-block-end: var(--space-xs);
+  border-block-end: 1px solid var(--line);
+}
+
+.twinTitle {
+  color: var(--text-primary);
+  font-size: var(--typo-label-size);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ---- Spring ---- */
+
+.spring {
+  display: grid;
+  row-gap: var(--space-md);
+  inline-size: calc(var(--space-4xl) * 13);
+}
+
+[data-layout="tall"] .spring {
+  inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
+}
+
+.switchStack {
+  display: inline-grid;
+}
+
+.switchLayer {
+  display: inline-grid;
+  grid-area: 1 / 1;
+}
+
+/* The finale's tiles are the specimens themselves on the page background (no tile fill). */
+[data-tile]:has(> .lanes, > .score, > .twins, > .tail) {
+  border: 0;
+  background: none;
+  place-items: start;
+}
+
+/* One scale for every tile (the poster's zoom), so no specimen is drawn larger than its neighbours. */
+[data-tile] > :is(.lanes, .score, .twins, .tail) {
+  zoom: 1 !important;
+}
+
+/* The phone poster: the score fills its tile. */
+[data-layout="tall"] [data-tile] > .score {
+  --turn-w: 100%;
+  --roll-w: 100%;
+
+  inline-size: 100%;
+}
+
+/* The finale's tail tile: the exit pair over the Switch row. */
+.tail {
+  display: grid;
+  row-gap: var(--space-3xl);
+}
+
+/* The phone finale: the score over the Switch row fills the column. */
+[data-layout="tall"] .tail :is(.exits, .springNote) {
+  display: none;
+}

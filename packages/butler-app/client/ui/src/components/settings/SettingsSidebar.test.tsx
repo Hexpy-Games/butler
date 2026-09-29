@@ -76,6 +76,7 @@ test("model settings stay on the Models page and old links still resolve", () =>
   expect(settingsPageSchema.models.map((section) => [section.id, section.optional === true])).toEqual([
     ["butler-model", false],
     ["backup-models", false],
+    ["saved-keys", false],
     ["permissions", false],
     ["advanced-models", false],
     ["memory-cleanup", true],
@@ -95,6 +96,7 @@ test("settings search matches labels, descriptions, and bounded aliases", () => 
   expect(sectionIds("project folder")).toEqual(["server"]);
   expect(sectionIds("worker")).toEqual(["models"]);
   expect(sectionIds("backup")).toEqual(["models"]);
+  expect(sectionIds("api keys")).toEqual(["models"]);
   expect(sectionIds("developer logs")).toEqual(["logs"]);
   expect(sectionIds("does not exist")).toEqual([]);
   expect(filterSettingsSectionGroups(groups, " ")).toBe(groups);

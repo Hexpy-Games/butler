@@ -61,17 +61,46 @@ test("tracked files do not contain operator-specific hardcoded fixtures", () => 
   expect(findings).toEqual([]);
 });
 
-test("tracked files do not contain private LAN IP address literals", () => {
-  const privateLanAddress =
-    /\b(?:10\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])|172\.(?:1[6-9]|2[0-9]|3[0-1])\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])|192\.168\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9]))\b/gu;
+const privateLanAddress =
+  /\b(?:10\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])|172\.(?:1[6-9]|2[0-9]|3[0-1])\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])|192\.168\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9]))\b/gu;
 
+// Tests that verify LAN classification need real private-range literals
+// (documentation ranges such as 192.0.2.x are not private). Such a line may
+// opt out with this marker; it is honored only in test files, only on that line.
+const ALLOW_PRIVATE_IP_MARKER = "privacy-hygiene: allow-private-ip";
+const TEST_FILE_PATH = /(?:^|\/)(?:tests?|__tests__)(?:\/|\.rs$)|[._-]test\.[cm]?[jt]sx?$|_test\.rs$/u;
+
+function findPrivateLanAddresses(file: string, text: string): string[] {
+  const markersHonored = TEST_FILE_PATH.test(file);
+  const findings: string[] = [];
+  for (const line of text.split("\n")) {
+    if (markersHonored && line.includes(ALLOW_PRIVATE_IP_MARKER)) continue;
+    for (const match of line.matchAll(privateLanAddress)) {
+      findings.push(`${file}: ${match[0]}`);
+    }
+  }
+  return findings;
+}
+
+test("allow-private-ip marker is honored only on marked lines of test files", () => {
+  const ip = ["192", "168", "0", "20"].join(".");
+  const marked = `("${ip}", true), // ${ALLOW_PRIVATE_IP_MARKER} (LAN test)`;
+  expect(findPrivateLanAddresses("crate/src/policy/tests.rs", marked)).toEqual([]);
+  expect(findPrivateLanAddresses("tests/unit/lan.test.ts", marked)).toEqual([]);
+  expect(findPrivateLanAddresses("crate/src/policy/mod.rs", marked)).toEqual([
+    `crate/src/policy/mod.rs: ${ip}`,
+  ]);
+  expect(
+    findPrivateLanAddresses("crate/src/policy/tests.rs", `${marked}\nlet x = "${ip}";`),
+  ).toEqual([`crate/src/policy/tests.rs: ${ip}`]);
+});
+
+test("tracked files do not contain private LAN IP address literals", () => {
   const findings: string[] = [];
   for (const file of trackedFiles()) {
     const text = readTrackedText(file);
     if (text === null) continue;
-    for (const match of text.matchAll(privateLanAddress)) {
-      findings.push(`${file}: ${match[0]}`);
-    }
+    findings.push(...findPrivateLanAddresses(file, text));
   }
 
   expect(findings).toEqual([]);
