@@ -1,5 +1,6 @@
 //! Detached one-shot restart handoff for a service-owned request.
 
+use butler_platform::secure_fs::Canonical as _;
 use std::{
     io::{Read, Write},
     path::Path,
@@ -45,7 +46,7 @@ pub(in crate::host::cli::service) fn spawn_restart_handoff(
     validate_identity(installation, expected)?;
     validate_intent_id(intent_id)?;
     let input = encode_input(expected, intent_id)?;
-    let data_root = data_root.canonicalize().map_err(|source| {
+    let data_root = data_root.canonical().map_err(|source| {
         crate::host::HostError::new("native_path_configuration_invalid").with_source(source)
     })?;
     crate::host::service::instance::validate_write_destinations(&data_root, installation)?;
@@ -53,7 +54,7 @@ pub(in crate::host::cli::service) fn spawn_restart_handoff(
         .map_err(|source| {
             crate::host::HostError::new("native_service_executable_unavailable").with_source(source)
         })?
-        .canonicalize()
+        .canonical()
         .map_err(|source| {
             crate::host::HostError::new("native_service_executable_unavailable").with_source(source)
         })?;

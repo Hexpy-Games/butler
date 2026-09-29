@@ -96,6 +96,13 @@ async fn initialized_candidate_preference_and_path_escape() {
 // test-category: race
 #[tokio::test]
 async fn before_image_remains_authoritative_until_claim_release() {
+    use butler_platform::process_control::Liveness;
+
+    assert!(super::publication::process_may_be_alive(
+        Liveness::OtherOwner
+    ));
+    assert!(!super::publication::process_may_be_alive(Liveness::Gone));
+
     let fixture = Fixture::new();
     let native = fixture.native();
     let publication: Value =

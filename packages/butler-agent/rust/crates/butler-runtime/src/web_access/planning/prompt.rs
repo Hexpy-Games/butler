@@ -1,5 +1,4 @@
 use serde_json::json;
-use std::{fs, path::Path};
 use tz::TimeZone;
 
 use super::super::providers::contracts::SearchInput;
@@ -174,10 +173,6 @@ fn zone(name: &str) -> Option<TimeZone> {
     if name.is_empty() || name.starts_with('/') || name.split('/').any(|part| part == "..") {
         return None;
     }
-    ["/usr/share/zoneinfo", "/var/db/timezone/zoneinfo"]
-        .iter()
-        .find_map(|root| {
-            let bytes = fs::read(Path::new(root).join(name)).ok()?;
-            TimeZone::from_tz_data(&bytes).ok()
-        })
+    let bytes = butler_platform::time_zone::zone_rules(name).ok()?;
+    TimeZone::from_tz_data(&bytes).ok()
 }

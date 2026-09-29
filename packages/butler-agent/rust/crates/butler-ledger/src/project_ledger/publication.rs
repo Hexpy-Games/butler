@@ -20,6 +20,8 @@ pub use contracts::{
     ProjectWorkTarget, ProjectWorkTargetState, RecordEvidence, RecordSections,
 };
 pub use generic::{LedgerEffectError, LedgerEffectReconciliation, LedgerEffectRequest};
+#[cfg(test)]
+pub(super) use init::process_may_be_alive;
 pub(super) use init::with_mutation_claim;
 
 pub(super) use generic::{apply as apply_record_effect, reconcile as reconcile_record_effect};

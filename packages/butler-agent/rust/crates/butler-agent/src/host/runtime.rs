@@ -14,13 +14,11 @@ pub(super) mod stores;
 mod subsession_queue;
 mod web_owner;
 use super::{AcceptedPlanProducer, ActiveAppEndpoint, CognitionPrompt, ConversationObserver};
-#[cfg(unix)]
 use super::{
     EmbeddingOwner, GuidedCatalog, GuidedPreparation, GuidedTurnFactoryAdapter,
     ProfileConversationSources, ResolvedInstallation, SystemIdentity, SystemPromptClock,
 };
 use crate::host::memory_jobs::context_maintenance::ContextMaintenance;
-#[cfg(unix)]
 use crate::host::memory_jobs::daily::{DailyCognitionJobs, DailyCognitionOwners};
 use crate::host::memory_jobs::recall_metrics::RecallMetrics;
 use crate::host::runtime::environment::ProcessEnvironment;
@@ -29,7 +27,6 @@ use boundary::{setup, validate_data_installation_boundary};
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
 use butler_ledger::project_ledger::{ProjectLedger, ProjectWork};
-#[cfg(unix)]
 use butler_memory::cognition::GenerationVectorAdapter;
 use butler_memory::cognition::{CognitionPromptReader, CompletionPublisher, ExactMemoryQuery};
 use butler_memory::cognition::{MemoryRecall, ProjectCapsuleService};
@@ -92,9 +89,7 @@ impl AgentRuntime {
         let metric_files = Arc::new(MetricFiles::new(paths.data_root.clone()));
         let coordinator =
             Arc::new(CognitionWriteCoordinator::new(Arc::new(SystemIdentity)).map_err(setup)?);
-        #[cfg(unix)]
         let embedding = Arc::new(EmbeddingOwner::new(paths.data_root.clone()).map_err(setup)?);
-        #[cfg(unix)]
         let vectors = Arc::new(GenerationVectorAdapter::new(
             paths.data_root.clone(),
             environment.cognition_paths.clone(),
@@ -136,9 +131,7 @@ impl AgentRuntime {
             &environment.cognition_paths,
             coordinator.clone(),
             models.provider.clone(),
-            #[cfg(unix)]
             embedding.clone(),
-            #[cfg(unix)]
             vectors.clone(),
         ) {
             Ok(owner) => owner,
@@ -191,7 +184,6 @@ impl AgentRuntime {
             context_budget.clone(),
             metric_files.clone(),
         );
-        #[cfg(unix)]
         let daily_cognition = Arc::new(DailyCognitionJobs::new(DailyCognitionOwners {
             data_root: paths.data_root.clone(),
             paths: environment.cognition_paths.clone(),
@@ -212,7 +204,6 @@ impl AgentRuntime {
             tool_output.clone(),
             metric_files.clone(),
             date_parser.clone(),
-            #[cfg(unix)]
             daily_cognition,
         ));
         let command = Arc::new(crate::host::guided::command::GuidedCommand::new(
@@ -242,7 +233,6 @@ impl AgentRuntime {
             2,
         )
         .with_metric_sink(Arc::new(RecallMetrics::new(metric_files.clone())));
-        #[cfg(unix)]
         let memory_recall = memory_recall.with_vector_port(vectors);
         let memory_recall = Arc::new(memory_recall);
         let conversation_context = ContextConversation::new(
@@ -428,7 +418,6 @@ impl AgentRuntime {
             image_files: image_files.clone(),
             attachment_context,
             memory_sync,
-            #[cfg(unix)]
             embedding,
             profile: profile.clone(),
             cognition,

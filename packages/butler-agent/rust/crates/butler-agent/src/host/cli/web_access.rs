@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests;
 
-use std::{env, ffi::OsString, path::PathBuf, process::ExitCode, sync::Arc};
+use std::{ffi::OsString, path::PathBuf, process::ExitCode, sync::Arc};
 
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
@@ -172,12 +172,10 @@ async fn run_search_test(
     data_root: PathBuf,
     metrics: Arc<butler_runtime::operations::WebSearchMetrics>,
 ) -> ExitCode {
-    let home = env::var_os("HOME")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| data_root.clone());
-    let os_release = match nix::sys::utsname::uname() {
-        Ok(value) => value.release().to_string_lossy().into_owned(),
+    let home =
+        butler_platform::user_dirs::non_empty_home_dir().unwrap_or_else(|| data_root.clone());
+    let os_release = match butler_platform::instance::os_release() {
+        Ok(value) => value,
         Err(_) => "unknown".into(),
     };
     let environment = ProcessEnvironment::capture(&data_root, &home, &os_release);

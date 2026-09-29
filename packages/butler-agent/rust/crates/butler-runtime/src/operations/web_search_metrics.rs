@@ -1,6 +1,7 @@
 //! DATA-scoped web-search counters and usage events.
 
 use butler_platform::secure_fs;
+use butler_platform::secure_fs::Canonical as _;
 use parking_lot::Mutex;
 use std::{
     fs::{self, OpenOptions},
@@ -55,7 +56,7 @@ impl WebSearchMetrics {
             Err(_) => return fallback,
         }
         if !runtime
-            .canonicalize()
+            .canonical()
             .is_ok_and(|path| path.starts_with(&canonical_root))
         {
             return fallback;
@@ -129,7 +130,7 @@ fn create_private_dir(data_root: &std::path::Path, path: &std::path::Path) -> io
     if metadata.file_type().is_symlink() || !metadata.is_dir() {
         return Err(unsafe_metrics_path());
     }
-    if !path.canonicalize()?.starts_with(&canonical_root) {
+    if !path.canonical()?.starts_with(&canonical_root) {
         return Err(unsafe_metrics_path());
     }
     Ok(())
@@ -140,7 +141,7 @@ fn ensure_data_root(data_root: &std::path::Path) -> io::Result<PathBuf> {
     if metadata.file_type().is_symlink() || !metadata.is_dir() {
         return Err(unsafe_metrics_path());
     }
-    data_root.canonicalize()
+    data_root.canonical()
 }
 
 fn ensure_regular_file(
@@ -156,7 +157,7 @@ fn ensure_regular_file(
     if parent_metadata.file_type().is_symlink() || !parent_metadata.is_dir() {
         return Err(unsafe_metrics_path());
     }
-    if !parent.canonicalize()?.starts_with(&canonical_root) {
+    if !parent.canonical()?.starts_with(&canonical_root) {
         return Err(unsafe_metrics_path());
     }
     match fs::symlink_metadata(path) {

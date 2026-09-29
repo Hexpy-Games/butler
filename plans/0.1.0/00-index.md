@@ -14,7 +14,7 @@ This file is the status source. `HANDOFF.md` at the repo root covers what has al
 | [ ] | [08 Skills progressive disclosure (#222)](08-skills-disclosure.md) | P1 | `origin/main` |
 | [x] | [09 Schedule store unification (#269)](09-schedule-store.md) | P1, before 10 | `origin/main` |
 | [ ] | [10 Schedule UX (#234)](10-schedule-ux.md) | P1 | after 09 |
-| [ ] | [11 Windows preview merge (#304)](11-windows-preview.md) | P2 (can ship after 0.1.0) | #304, after 03 |
+| [x] | [11 Windows preview merge (#304)](11-windows-preview.md) | P2 (can ship after 0.1.0) | #304, after 03 |
 | [ ] | [12 Release v0.1.0](12-release.md) | final | after 01–10 |
 | [ ] | [13 Live upgrade, cleanup, project-ledger sync](13-owner-machine.md) | **OWNER-MACHINE** | after 01, and again after 12 |
 

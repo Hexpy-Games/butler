@@ -1,3 +1,4 @@
+use butler_platform::secure_fs::Canonical as _;
 use std::path::PathBuf;
 
 use super::validate_write_destinations;
@@ -33,7 +34,7 @@ fn test_installation(executable: &PathBuf) -> ResolvedInstallation {
 pub(crate) fn state_and_log_symlinks_into_installation_are_rejected_before_writes() {
     let executable = std::env::current_exe()
         .expect("test executable is available")
-        .canonicalize()
+        .canonical()
         .expect("test executable is canonical");
     let installation = test_installation(&executable);
 

@@ -3,10 +3,10 @@
 //!
 //! Unix starts a contained command as the leader of its own process group and
 //! signals the whole group, so descendants a command leaves behind stop with
-//! it. Windows has no process-group containment yet (Job Objects replace it):
-//! [`CONTAINS_PROCESS_TREES`] is `false`, [`isolate_group`] returns `None`,
-//! group signals report [`SignalError::Unsupported`] and callers stop only
-//! their direct child.
+//! it. Windows puts the command in a Job Object of its own right after it
+//! starts ([`contain`]) and closes the job to stop the tree: it has no
+//! graceful stop for console processes, so [`GroupSignal::Terminate`] ends
+//! the tree at once, like [`GroupSignal::Kill`].
 //!
 //! A service learns that it should stop from [`shutdown_requests`] (SIGTERM
 //! and SIGINT on Unix; Ctrl+C, Ctrl+Break, console close and system shutdown
@@ -41,6 +41,12 @@ pub const SIGNALS: bool = sys::SIGNALS;
 /// program needs to find the user, the shell and executables on this host
 /// (the MCP SDK's default inherited environment).
 pub const BASELINE_ENVIRONMENT: &[&str] = sys::BASELINE_ENVIRONMENT;
+
+/// The variables any program needs from its parent to start at all on this
+/// host, which a cleared test environment passes on: none on Unix; the
+/// system folders, the command interpreter and the executable search path on
+/// Windows (Winsock, for one, fails without `SystemRoot`).
+pub const SYSTEM_ENVIRONMENT: &[&str] = sys::SYSTEM_ENVIRONMENT;
 
 /// The signal sent to a command's process group.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -91,7 +97,8 @@ pub enum SignalError {
         /// The host's description of the failure.
         detail: String,
     },
-    /// This host has no process-group signals (see [`CONTAINS_PROCESS_TREES`]).
+    /// This host has no process-group signals (see [`CONTAINS_PROCESS_TREES`];
+    /// every supported host has them now).
     #[error("process-group signals are unsupported on this host")]
     Unsupported,
 }
@@ -116,9 +123,24 @@ pub fn isolate_group(command: &mut Command) -> Option<&mut Command> {
     sys::isolate_group(command)
 }
 
-/// Signals the process group led by `pid`. A group that no longer exists, or
-/// whose remaining members are all zombies, is already stopped. Pid 0 (the
-/// caller's own group) and ids outside the host's range are refused.
+/// Puts the command `child` (started from a command prepared with
+/// [`isolate_group`]) in its own containment, so [`signal_group`] reaches
+/// everything it starts: a no-op on Unix, where the process group already
+/// does; a Job Object on Windows. A command that cannot be contained must be
+/// stopped by the caller, not run uncontained.
+pub fn contain(child: &tokio::process::Child) -> io::Result<()> {
+    sys::contain_tokio(child)
+}
+
+/// [`contain`] for a child started with the standard library.
+pub fn contain_std(child: &std::process::Child) -> io::Result<()> {
+    sys::contain_std(child)
+}
+
+/// Signals the process group led by `pid` (the Job Object of the command
+/// `pid` on Windows). A group that no longer exists, or whose remaining
+/// members are all zombies, is already stopped. Pid 0 (the caller's own
+/// group) and ids outside the host's range are refused.
 pub fn signal_group(pid: u32, signal: GroupSignal) -> Result<(), SignalError> {
     sys::signal_group(pid, signal)
 }
@@ -177,6 +199,13 @@ impl ShutdownRequests {
 /// Must be called within a Tokio runtime.
 pub fn shutdown_requests() -> io::Result<ShutdownRequests> {
     sys::shutdown_requests().map(ShutdownRequests)
+}
+
+/// [`shutdown_requests`] for a process that serves a session over its stdio
+/// (the MCP server): on Unix, SIGHUP (its terminal closed) and SIGPIPE (its
+/// peer went away) are stop requests too.
+pub fn session_shutdown_requests() -> io::Result<ShutdownRequests> {
+    sys::session_shutdown_requests().map(ShutdownRequests)
 }
 
 /// A supervisor's lease on this process, carried by its stdin pipe: the

@@ -7,6 +7,7 @@ use super::AppApplication;
 use crate::gateway::GatewayApplicationError;
 use butler_memory::cognition::{BriefingScope, NewChatBriefing};
 use butler_memory::{cognition, profile};
+use butler_platform::instance::SystemTimeZone;
 
 impl AppApplication {
     #[expect(
@@ -101,22 +102,32 @@ impl AppApplication {
 }
 
 fn local_minute(epoch_ms: i64) -> Result<u16, GatewayApplicationError> {
-    let path = match std::env::var("TZ") {
+    let rules = match std::env::var("TZ") {
         Ok(zone) if zone.is_empty() => None,
         Ok(zone) => {
             let zone = zone.strip_prefix(':').unwrap_or(&zone);
             if zone.starts_with('/') {
-                Some(std::path::PathBuf::from(zone))
+                Some(std::fs::read(zone).map_err(GatewayApplicationError::internal_from)?)
             } else if !zone.split('/').any(|part| matches!(part, "" | "." | "..")) {
-                Some(std::path::Path::new("/usr/share/zoneinfo").join(zone))
+                Some(
+                    butler_platform::time_zone::zone_rules(zone)
+                        .map_err(GatewayApplicationError::internal_from)?,
+                )
             } else {
                 return Err(GatewayApplicationError::internal());
             }
         }
-        Err(_) => Some(std::path::PathBuf::from("/etc/localtime")),
+        Err(_) => Some(
+            match butler_platform::instance::system_time_zone()
+                .map_err(GatewayApplicationError::internal_from)?
+            {
+                SystemTimeZone::File(path) => std::fs::read(path),
+                SystemTimeZone::Named(name) => butler_platform::time_zone::zone_rules(&name),
+            }
+            .map_err(GatewayApplicationError::internal_from)?,
+        ),
     };
-    let offset = if let Some(path) = path {
-        let bytes = std::fs::read(path).map_err(GatewayApplicationError::internal_from)?;
+    let offset = if let Some(bytes) = rules {
         let zone =
             tz::TimeZone::from_tz_data(&bytes).map_err(GatewayApplicationError::internal_from)?;
         zone.find_local_time_type(epoch_ms.div_euclid(1000))

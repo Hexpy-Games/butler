@@ -398,7 +398,14 @@ async fn q_02_queue_durability_and_conflicts() -> Result<(), HarnessError> {
         let settled = turns
             .iter()
             .all(|turn| butler_e2e::e2e::gateway::TERMINAL.contains(&turn_state(turn)));
-        if settled && queue(&s).await?.is_empty() && turns.len() >= 2 {
+        // A message the restart interrupted stays listed as failed and
+        // retryable (an announced stop drains for 6 s at most); drained
+        // means nothing is still waiting.
+        let waiting = queue(&s)
+            .await?
+            .iter()
+            .any(|item| item["state"] == "queued");
+        if settled && !waiting && turns.len() >= 2 {
             break;
         }
         assert!(

@@ -2,6 +2,7 @@
 //! archive as a version directory, switching `current`, rolling back and
 //! pruning old versions.
 
+use butler_platform::secure_fs::Canonical;
 use std::collections::HashSet;
 use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
@@ -328,7 +329,7 @@ fn point(root: &Path, link: &str, dir: &str) -> Result<(), UpdateError> {
 /// Whether any protected path lies in the version directory, compared after
 /// resolving links on both sides (`/var` is `/private/var` on macOS).
 fn uses_version(protected: &[PathBuf], version_path: &Path) -> bool {
-    let resolved = |path: &Path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let resolved = |path: &Path| path.canonical().unwrap_or_else(|_| path.to_path_buf());
     let version_path = resolved(version_path);
     protected
         .iter()

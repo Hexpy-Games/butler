@@ -6,9 +6,10 @@ use std::io::{self, Write};
 
 use butler_platform::secure_fs::{
     DIRECTORY_SYNC, ExchangeError, FILE_IDS, FileMode, NO_FOLLOW, OWNER_ONLY, PERMISSION_MODES,
-    create_private_dir_all, exchange_directories, file_mode, identity, is_owner_only, no_follow,
-    open_read_no_follow, owner_only, replace_private, restrict_directory, restrict_file,
-    restrict_open_file, same_file, set_file_mode, symlink, sync_directory,
+    create_private_dir_all, exchange_directories, file_mode, identity, is_owner_only, is_private,
+    no_follow, open_read_no_follow, owner_only, protect_folder, replace_private,
+    restrict_directory, restrict_file, restrict_open_file, same_file, set_file_mode, symlink,
+    sync_directory,
 };
 
 use super::scratch;
@@ -77,6 +78,7 @@ fn private_directories_and_files_are_owner_only_where_supported() {
     create_private_dir_all(&nested).unwrap();
     let private = OWNER_ONLY.then_some(true);
     assert_eq!(is_owner_only(&fs::metadata(&nested).unwrap()), private);
+    assert_eq!(is_private(&nested), Some(true));
 
     let created = nested.join("created");
     let mut options = OpenOptions::new();
@@ -84,6 +86,19 @@ fn private_directories_and_files_are_owner_only_where_supported() {
     assert_eq!(owner_only(&mut options).is_some(), OWNER_ONLY);
     options.open(&created).unwrap();
     assert_eq!(is_owner_only(&fs::metadata(&created).unwrap()), private);
+    assert_eq!(is_private(&created), Some(true));
+
+    // A folder made elsewhere is protected on hosts that use access lists.
+    let elsewhere = directory.join("elsewhere");
+    fs::create_dir(&elsewhere).unwrap();
+    assert_eq!(
+        protect_folder(&elsewhere).transpose().unwrap().is_some(),
+        !OWNER_ONLY
+    );
+    if !OWNER_ONLY {
+        fs::write(elsewhere.join("secret"), "x").unwrap();
+        assert_eq!(is_private(&elsewhere.join("secret")), Some(true));
+    }
 
     let restricted = nested.join("restricted");
     fs::write(&restricted, "x").unwrap();

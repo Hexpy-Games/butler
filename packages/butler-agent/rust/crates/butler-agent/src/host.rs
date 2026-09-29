@@ -11,23 +11,19 @@
 
 mod error;
 mod installation;
-#[cfg(unix)]
 mod mcp;
 mod oauth_callback;
 pub(crate) use crate::host::guided::tool_artifact::ToolArtifactReader;
 pub(crate) use butler_memory::cognition::MemorySourceReader;
 mod runtime;
 
-#[cfg(unix)]
 pub(crate) use crate::host::app::monitoring::AppMonitoring;
-#[cfg(unix)]
 pub(crate) use crate::host::app::runtime_ports::{
     AppAdmission, AppApprovalClaimsAdapter, AppAssets, AppBranchConversations,
     AppBranchSummarizerAdapter, AppContextRead, AppIngress, AppModelCatalog, AppPersonalization,
     AppQueueOwnerLivenessAdapter, AppReadiness, AppSessionProgress, AppSessionWorkspaces,
     AppSettingsFactsAdapter, AppSettingsMutation,
 };
-#[cfg(unix)]
 pub(crate) use crate::host::app::server::{AppServer, AppServerOwners};
 pub(crate) use crate::host::app::subsessions::AppSubsessions;
 pub(crate) use crate::host::guided::activity::GuidedActivity;
@@ -59,16 +55,13 @@ mod service;
 mod time;
 pub(crate) use crate::host::time::date_parser::DateParser;
 
-#[cfg(unix)]
 pub(crate) use crate::host::app::gateway_lifecycle::ActiveAppEndpoint;
-#[cfg(unix)]
 pub(crate) use crate::host::embedding::owner::EmbeddingOwner;
 pub(crate) use crate::host::guided::tool_output::open_tool_output;
 
 pub(crate) use crate::host::guided::active_plan::AcceptedPlanProducer;
 pub(crate) use crate::host::guided::vision::{ZaiVisionCapability, catalog_for_visual_admission};
 pub(crate) use crate::host::guided::work_streams::WorkStreams;
-#[cfg(unix)]
 pub(crate) use crate::host::guided::worker_profiles::AppWorkerProfileReader;
 pub(crate) use crate::host::memory_jobs::profile_sources::ProfileConversationSources;
 pub(crate) use crate::host::runtime::environment::ProcessEnvironment;

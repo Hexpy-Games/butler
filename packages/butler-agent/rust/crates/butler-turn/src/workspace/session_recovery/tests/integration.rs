@@ -1,3 +1,4 @@
+use butler_platform::secure_fs::Canonical as _;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -190,7 +191,7 @@ async fn actual_binding_git_worktree_reopen_dirty_and_invalid_authority() {
         .unwrap();
     assert_eq!(
         valid.workspace_reference.get().unwrap(),
-        fixture.target.canonicalize().unwrap()
+        fixture.target.canonical().unwrap()
     );
     assert!(matches!(
         valid.authority,

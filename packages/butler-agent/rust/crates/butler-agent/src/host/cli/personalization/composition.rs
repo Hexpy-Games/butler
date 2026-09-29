@@ -25,15 +25,12 @@ pub(super) fn open(
             crate::host::HostError::new("profile coordinator is unavailable").with_source(source)
         })?,
     );
-    let home = env::var_os("HOME")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| data_root.to_path_buf());
-    let os = nix::sys::utsname::uname().map_err(|source| {
+    let home =
+        butler_platform::user_dirs::non_empty_home_dir().unwrap_or_else(|| data_root.to_path_buf());
+    let os = butler_platform::instance::os_release().map_err(|source| {
         crate::host::HostError::new("native environment is unavailable").with_source(source)
     })?;
-    let environment =
-        ProcessEnvironment::capture(data_root, &home, &os.release().to_string_lossy());
+    let environment = ProcessEnvironment::capture(data_root, &home, &os);
     let cognition_root = environment.cognition_paths.cognition_root(data_root);
     validate_cognition_paths(data_root, installation, &cognition_root, mutating)?;
     let locale = process_locale();

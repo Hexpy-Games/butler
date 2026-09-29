@@ -1,5 +1,6 @@
 //! Identity-checked client for the private same-DATA gateway control endpoint.
 
+use butler_platform::secure_fs::Canonical as _;
 use std::{net::SocketAddr, path::Path, time::Duration};
 
 use serde_json::{Value, json};
@@ -46,7 +47,7 @@ pub(super) fn verified_instance(
                     crate::host::HostError::new("native_service_executable_unavailable")
                         .with_source(source)
                 })?
-                .canonicalize()
+                .canonical()
                 .map_err(|source| {
                     crate::host::HostError::new("native_service_executable_unavailable")
                         .with_source(source)

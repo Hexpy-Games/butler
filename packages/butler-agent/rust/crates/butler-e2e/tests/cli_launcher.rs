@@ -65,6 +65,10 @@ fn run_launcher(launcher: &Path, home: &Path, args: &[&str]) -> Result<Output, H
 #[tokio::test]
 async fn ins_01_stale_launcher_is_replaced_at_start() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        butler_platform::command_launcher::HAS_PRE_NATIVE_LAUNCHER,
+        "this host has no pre-native launcher at this path"
+    );
     let setup = Setup::new("INS-01")?;
     let bin = setup.sandbox.data.join("bin");
     fs::create_dir_all(&bin)?;
@@ -111,6 +115,10 @@ async fn ins_01_stale_launcher_is_replaced_at_start() -> Result<(), HarnessError
 #[tokio::test]
 async fn ins_01_launcher_repair_touches_only_butlers_launcher() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        butler_platform::command_launcher::HAS_PRE_NATIVE_LAUNCHER,
+        "this host has no pre-native launcher at this path"
+    );
     let setup = Setup::new("INS-01-GUARDS")?;
     let bin = setup.sandbox.data.join("bin");
     fs::create_dir_all(&bin)?;
