@@ -22,7 +22,9 @@ mod readiness;
 mod restart_handoff;
 mod stop;
 use readiness::{cleanup_spawned, wait_for_app_respawn, wait_until_ready, wait_until_registered};
-pub(super) use restart_handoff::{execute_restart_handoff, spawn_restart_handoff};
+pub(super) use restart_handoff::{
+    asked_of_manager, execute_restart_handoff, spawn_restart_handoff,
+};
 use stop::{StopReport, stop_service_admitted};
 
 const START_TIMEOUT: Duration = Duration::from_secs(90);
@@ -86,6 +88,11 @@ pub(super) async fn execute(
                 }));
             }
             let admission = acquire_admission(&data_root, &installation).await?;
+            if let Some(active) = active_service(&data_root)?
+                && managed::is_managed(&data_root, &active)
+            {
+                return managed::restart_instance(&config, &active, admission, requested_by).await;
+            }
             let request = StopRequest {
                 reason: StopReason::Restart,
                 requested_by,
@@ -173,9 +180,10 @@ async fn start_service_admitted(
         let ready = wait_until_ready(config, None, Some(record.nonce.clone())).await?;
         return Ok(start_result(&ready, false));
     }
-    if managed::job_loaded() {
-        // The login job is loaded but idle: it, not this process, runs the
-        // service, so it stays under the manager.
+    if managed::job_is_ours(data_root) {
+        // This DATA's login job is registered: it, not this process, runs the
+        // service, so it stays under the manager (which loads the job again
+        // if it was unloaded).
         managed::request(butler_platform::service_registration::start).await?;
         let registered = wait_for_app_respawn(data_root, "").await?;
         drop(admission);

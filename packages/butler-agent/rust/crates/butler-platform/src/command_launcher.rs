@@ -22,11 +22,18 @@ mod windows;
 #[cfg(windows)]
 use windows as sys;
 
-/// What the pre-native Bun launcher embeds: it runs `$BUTLER_HOME/bin/butler.js`.
-/// Both must be present, so an unrelated file that merely mentions one of them
-/// is not taken for it.
-const STALE_ENTRYPOINT: &[u8] = b"butler.js";
-const STALE_HOME_VARIABLE: &[u8] = b"BUTLER_HOME";
+/// What the pre-native Bun launcher embeds. It was compiled from
+/// `packages/butler-agent/src/interfaces/cli/launcher.ts` (removed in the
+/// native cutover), which runs `$BUTLER_HOME/bin/butler.js` with
+/// `$BUTLER_BUN` and reports "Could not launch Butler CLI with ...": a file is
+/// that launcher only when it contains every one of these strings, so an
+/// unrelated program that mentions one of them is never taken for it.
+const STALE_SIGNATURE: [&[u8]; 4] = [
+    b"Could not launch Butler CLI with",
+    b"butler.js",
+    b"BUTLER_HOME",
+    b"BUTLER_BUN",
+];
 /// The compiled launcher is a program of some tens of megabytes; a larger
 /// file is not it.
 const STALE_SCAN_LIMIT: u64 = 512 * 1024 * 1024;
@@ -102,7 +109,10 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
 pub fn classify(contents: &[u8]) -> Ownership {
     if has_marker(contents) {
         Ownership::Ours
-    } else if contains(contents, STALE_ENTRYPOINT) && contains(contents, STALE_HOME_VARIABLE) {
+    } else if STALE_SIGNATURE
+        .iter()
+        .all(|needle| contains(contents, needle))
+    {
         Ownership::Stale
     } else {
         Ownership::Foreign
@@ -127,15 +137,16 @@ fn classify_file(path: &Path) -> io::Result<Ownership> {
     if has_marker(&head) {
         return Ok(Ownership::Ours);
     }
-    let overlap = STALE_ENTRYPOINT.len().max(STALE_HOME_VARIABLE.len());
-    let (mut entrypoint, mut variable) = (
-        contains(&head, STALE_ENTRYPOINT),
-        contains(&head, STALE_HOME_VARIABLE),
-    );
+    let overlap = STALE_SIGNATURE
+        .iter()
+        .map(|needle| needle.len())
+        .max()
+        .unwrap_or(0);
+    let mut found = STALE_SIGNATURE.map(|needle| contains(&head, needle));
     let mut window = head;
     let mut scanned = filled as u64;
     let mut chunk = vec![0_u8; 1024 * 1024];
-    while !(entrypoint && variable) && scanned < STALE_SCAN_LIMIT {
+    while !found.iter().all(|found| *found) && scanned < STALE_SCAN_LIMIT {
         let read = file.read(&mut chunk)?;
         if read == 0 {
             break;
@@ -144,10 +155,11 @@ fn classify_file(path: &Path) -> io::Result<Ownership> {
         let keep = window.len().saturating_sub(overlap);
         window.drain(..keep);
         window.extend_from_slice(chunk.get(..read).unwrap_or_default());
-        entrypoint |= contains(&window, STALE_ENTRYPOINT);
-        variable |= contains(&window, STALE_HOME_VARIABLE);
+        for (found, needle) in found.iter_mut().zip(STALE_SIGNATURE) {
+            *found |= contains(&window, needle);
+        }
     }
-    Ok(if entrypoint && variable {
+    Ok(if found.iter().all(|found| *found) {
         Ownership::Stale
     } else {
         Ownership::Foreign

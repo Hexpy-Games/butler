@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
+use super::source::{redirect_allowed, secure_source};
 use super::version::version_newer;
 use super::{manifest, stage};
 
@@ -53,13 +54,15 @@ impl AgentArchiveUpdateService {
             return Err(UpdateCode::ButlerDataOverlapsInstallation.into());
         }
         let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(60))
-            // A redirect never leaves https (or this machine) for plain http.
+            // A slow download is fine, a stalled one is not: no limit on the
+            // whole request, a limit on connecting and on each read.
+            .connect_timeout(Duration::from_secs(15))
+            .read_timeout(Duration::from_secs(60))
             .redirect(reqwest::redirect::Policy::custom(|attempt| {
-                if attempt.previous().len() >= 5 || !secure_source(attempt.url().as_str()) {
-                    attempt.stop()
-                } else {
+                if redirect_allowed(attempt.previous(), attempt.url()) {
                     attempt.follow()
+                } else {
+                    attempt.stop()
                 }
             }))
             .build()
@@ -115,9 +118,10 @@ impl AgentArchiveUpdateService {
             (Some(label), Some(home)) => {
                 let installed = self
                     .install_staged(home, label, &status, &request.protected)
-                    .await?;
+                    .await;
+                // Installed or not, the download is not kept under DATA.
                 stage::remove_staged(&self.data, &self.installation, label).await;
-                Some(installed)
+                Some(installed?)
             }
             _ => None,
         };
@@ -374,22 +378,6 @@ fn safe_version(version: &str) -> String {
             }
         })
         .collect()
-}
-
-/// Whether `source` may be downloaded: a local file, `https`, or `http` to
-/// this machine.
-fn secure_source(source: &str) -> bool {
-    let Ok(url) = url::Url::parse(source) else {
-        // A plain path is a local file.
-        return !source.contains("://");
-    };
-    match url.scheme() {
-        "https" | "file" => true,
-        "http" => url
-            .host_str()
-            .is_some_and(|host| matches!(host, "localhost" | "127.0.0.1" | "[::1]" | "::1")),
-        _ => false,
-    }
 }
 
 /// What one `apply` did, for the status it reports.

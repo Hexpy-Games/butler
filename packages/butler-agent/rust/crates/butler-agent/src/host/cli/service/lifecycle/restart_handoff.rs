@@ -12,7 +12,7 @@ use butler_platform::{process_control, secure_fs};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::managed::{is_managed, request};
+use super::managed::{is_managed, is_pid_managed, restart_instance};
 use super::{
     StopReport, acquire_admission, active_service, log_file, resolve_data_root,
     service_configuration, start_replacement, stop_service_admitted,
@@ -119,6 +119,34 @@ pub(in crate::host::cli::service) fn spawn_restart_handoff(
     Ok(())
 }
 
+/// A restart the service asks of itself while a login job runs it goes to the
+/// manager as one queued request, with the stop intent written first: a helper
+/// started from inside the unit would be stopped with it (systemd stops
+/// everything in the unit's cgroup), so no process has to outlive the request.
+/// Whether the manager took it; when not, the helper carries the restart out.
+pub(in crate::host::cli::service) fn asked_of_manager(
+    data_root: &Path,
+    expected: &RestartIdentity,
+) -> bool {
+    let Ok(Some(record)) = service_instance::read_record(data_root) else {
+        return false;
+    };
+    if !expected.matches(&record) || !is_pid_managed(data_root, record.pid) {
+        return false;
+    }
+    let intent = service_instance::StopIntent::new(HANDOFF_STOP, &record);
+    if service_instance::write_stop_intent(data_root, &intent).is_err() {
+        return false;
+    }
+    match butler_platform::service_registration::restart_detached() {
+        Ok(true) => true,
+        _ => {
+            let _ = service_instance::withdraw_stop_intent(data_root, &record.nonce);
+            false
+        }
+    }
+}
+
 pub(in crate::host::cli::service) async fn execute_restart_handoff(
     installation: ResolvedInstallation,
     data_argument: &str,
@@ -176,8 +204,10 @@ async fn restart_once(
     };
     validate_target(installation, expected, &active)
         .map_err(|error| ("target_changed", error.to_string()))?;
-    if is_managed(&active) {
-        return managed_restart(&config, data_root, &active, admission).await;
+    if is_managed(data_root, &active) {
+        return restart_instance(&config, &active, admission, HANDOFF_STOP.requested_by)
+            .await
+            .map_err(|error| ("stop_failed", error.to_string()));
     }
 
     let (stopped, admission) = stop_service_admitted(
@@ -220,28 +250,6 @@ async fn restart_once(
         ));
     }
     Ok(started)
-}
-
-/// A restart of the instance a login job runs: one request to the manager,
-/// which stops and starts the job itself. A helper the manager runs (systemd
-/// stops everything in the unit) may not outlive the request; the job does.
-async fn managed_restart(
-    config: &crate::host::ServiceConfiguration,
-    data_root: &Path,
-    active: &InstanceRecord,
-    admission: service_instance::AdmissionLock,
-) -> Result<Value, (&'static str, String)> {
-    request(butler_platform::service_registration::restart)
-        .await
-        .map_err(|error| ("stop_failed", error.to_string()))?;
-    let registered = super::readiness::wait_for_app_respawn(data_root, &active.nonce)
-        .await
-        .map_err(|error| ("start_failed", error.to_string()))?;
-    drop(admission);
-    let ready = super::readiness::wait_until_ready(config, None, Some(registered.nonce))
-        .await
-        .map_err(|error| ("start_unverified", error.to_string()))?;
-    Ok(super::start_result(&ready, true))
 }
 
 fn stop_failure_state(error: &crate::host::HostError) -> &'static str {

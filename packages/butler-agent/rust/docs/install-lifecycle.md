@@ -27,7 +27,11 @@ All commands take `--json` (one envelope: `ok`, `command`, `data`, `error`,
 this machine). A downloaded archive must come with `--sha256` (nothing else
 vouches for it); it goes to a scratch directory outside DATA that is deleted
 afterwards, is refused above 2 GiB (`install_archive_too_large`;
-`BUTLER_INSTALL_MAX_BYTES` lowers the cap), and a redirect never leaves https.
+`BUTLER_INSTALL_MAX_BYTES` lowers the cap), and a redirect never leaves https (plain http only within this machine, and
+only when the download began there). The scratch directory is private (0700).
+A download may take as long as it needs but may not stall: 15 s to connect, 60 s
+per read. A staged archive is removed from DATA whether the install worked or
+not.
 For a local file `--sha256` is optional, because the archive's manifest digests
 are checked after extraction either way. Order of work:
 
@@ -115,13 +119,22 @@ artifact for another platform, or one with no platform, is never selected
 - **Pointer:** `DATA/bin/butler` (`host/service/cli_launcher.rs`) is the older
   location. It is the same script plus a default `BUTLER_DATA`, and it is only
   ever *repointed*, never created. `install`, `update` and `rollback` point it
-  at `AGENT_HOME/current`; every service start points it at the installation
+  at `AGENT_HOME/current` (and leave it alone when the service they restarted
+  runs an Agent from elsewhere); every service start points it at the installation
   that service runs, which is what the App chose when it launches the newer of
   its bundled Agent and `current`. So it always runs the Agent that serves that
   data folder. Only a file with the marker or the exact stale Bun launcher
-  (a program that runs `$BUTLER_HOME/bin/butler.js`) is rewritten, the first
+  (see below) is rewritten, the first
   stale one is kept as `butler.previous`, an existing `butler.previous` is never
   overwritten, and any other file is left alone.
+- **The stale Bun launcher** is the program compiled from the pre-native
+  `packages/butler-agent/src/interfaces/cli/launcher.ts`. It is recognized by
+  content, never by name or size: a file is it only when it contains **all
+  four** of `Could not launch Butler CLI with`, `butler.js`, `BUTLER_HOME` and
+  `BUTLER_BUN` (scanned up to 512 MiB). Any other file at the path, such as a
+  script that merely mentions `butler.js`, is the user's. An installer
+  (`install.sh`, the npm wrapper) that needs to recognize the stale launcher
+  must use exactly this rule, or leave the file to `butler install`.
 - **Migration:** nothing to do for an existing owner. A `DATA/bin/butler` that
   pointed at the App bundle is repointed to `AGENT_HOME/current` the first time
   a CLI install is activated (it is never created, so a data folder that never
@@ -154,25 +167,44 @@ relies on the stop-intent contract: `butler stop` and SIGTERM make the service
 exit 0, which the manager does not restart. `--if-absent` makes `service run`
 exit 0 when an instance already owns DATA.
 
-**A supervised instance stays supervised.** A signal sent straight to the
-process (the SIGKILL `butler stop` escalates to after its grace period) looks
-like a crash to the manager. So when the manager runs the instance
-(`service_registration::job()` is loaded and its pid is the record's):
+**The manager is per user, not per `HOME`.** A launchd job or a systemd user
+unit of this label is the same one whatever `HOME` a process runs with, so a
+sandboxed `HOME` isolates nothing. `BUTLER_SERVICE_MANAGER=off` switches every
+manager request off: jobs read as not loaded, `start`/`stop`/`restart` fail as
+disabled, `service install`/`uninstall` only write or remove the file. The E2E
+harness sets it for every command; only INS-14 turns it on.
+
+**A supervised instance stays supervised.** The job is *this DATA's* only when
+its registered definition names this data folder (`--data`) and runs a program
+from the Agent home; a registration for another data folder, an App bundle or
+another home is left alone. A signal sent straight to the process (the SIGKILL
+`butler stop` escalates to after its grace period) looks like a crash to the
+manager. So, for this DATA's job:
 
 - a stop that outlives its grace period goes through the manager (`launchctl
-  bootout`, `systemctl --user stop`) instead of a kill, and the systemd unit
-  also carries `RestartPreventExitStatus=SIGKILL`;
-- `restart` stops the instance politely (SIGTERM, clean exit) and starts the
-  replacement through the manager (`launchctl kickstart`, `systemctl --user
-  start`), so it is supervised again;
-- a restart the service asks for itself (the restart handoff) is one request to
-  the manager (`systemctl --user restart`, or unload, wait, load on launchd),
-  because systemd stops everything in the unit's cgroup with the old process,
-  including a helper and a replacement started from inside it;
-- `start` with the job loaded but idle starts it through the manager.
+  bootout`, `systemctl --user stop`) instead of a kill; when the manager cannot
+  be asked at that moment, nothing is killed and the stop fails
+  (`native_service_manager_unavailable`). The systemd unit also carries
+  `RestartPreventExitStatus=SIGKILL`, and `TimeoutStopSec` / `ExitTimeOut` are
+  20 s, so the manager's own stop is bounded;
+- `start` goes through the manager whenever the definition is registered and
+  ours (it loads an unloaded job again), so the service is supervised even
+  after `butler stop` unloaded it;
+- `restart` writes the stop intent and makes one request to the manager
+  (`systemctl --user restart --no-block`, or for launchd unload, wait for the
+  old process by pid and start time, load again with one retry), so no process
+  the job owns has to survive it: a restart from a shell inside the unit, from
+  `update --apply`, or the service's own request (the restart handoff, which
+  then spawns no helper) works. A `spawned` handoff whose helper is gone is
+  marked done when the next instance becomes ready.
 
-When no job is loaded (nothing registered, a sandbox `HOME`, no manager) none
-of this applies and the CLI starts and stops the service itself.
+When no job of this DATA is registered none of this applies and the CLI starts
+and stops the service itself.
+
+The systemd unit has no `WorkingDirectory=`: a user unit starts in the home
+directory and the service takes its data folder from `--data`; `ExecStart=`
+words are quoted with `%` and `$` doubled, `Environment=` values with `%`
+doubled (`$` is literal there). Line breaks in any value are refused.
 
 The labels differ from the legacy `com.hexpy.butler` / `butler.service` that the
 App's one-time migration removes (`app-legacy-service-migration.mjs`), so that
@@ -181,9 +213,12 @@ migration of the legacy labels in the CLI; the App owns it. `uninstall` removes
 a registration only when its program lies inside the Agent home (a path-component
 comparison, so `.../agent` does not own `.../agent-home`).
 
-Tests never let the real manager load a definition from a sandbox `HOME`: E2E
-registers with `--files-only` and checks the generated file. INS-14 runs a real
-`systemd --user` job on Linux CI (skipped where the runner has no user manager).
+E2E registers with `--files-only` and never reaches the real manager
+(`BUTLER_SERVICE_MANAGER=off`). INS-14 runs a real `systemd --user` job on
+Linux CI (skipped where the runner has no user manager) with a data folder whose
+name has a space and a non-ASCII letter, and covers stop staying stopped, a
+stopped-process forced stop, start, restart, a restart from inside the unit's
+cgroup, and update.
 
 ## Uninstall
 
@@ -205,6 +240,10 @@ admission lock (the one `start`, `stop` and `restart` take) while it deletes, so
 a start cannot race the deletion. The App bundle is never touched.
 
 ## App
+
+INS-15 covers this end to end: Node runs the App's resolver against an Agent
+home `butler install` wrote (bundled newer, installed older, installed newer,
+after a rollback).
 
 `bundled-native-agent.mjs` (`resolveNativeAgentInstallation`, packaged App)
 compares the bundled Agent's version with `AGENT_HOME/current`'s manifest

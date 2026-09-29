@@ -183,6 +183,10 @@ impl Launch {
             .env("BUTLER_APP_SERVER_HOST", "127.0.0.1")
             .env("BUTLER_APP_SERVER_PORT", self.port.to_string())
             .env("BUTLER_METRICS_ENABLED", "0")
+            // launchd and the systemd user manager belong to the user, not to
+            // this sandbox: no scenario reaches them unless it turns them on
+            // (`set_env("BUTLER_SERVICE_MANAGER", "on")`).
+            .env("BUTLER_SERVICE_MANAGER", "off")
             // API keys go to the owner-only file in the data dir: a scenario
             // never touches the machine's credential store (#217).
             .env("BUTLER_SECRET_STORE", "file");

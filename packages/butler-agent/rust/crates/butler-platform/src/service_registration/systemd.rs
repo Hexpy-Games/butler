@@ -1,7 +1,7 @@
 //! The systemd user unit: its text (every Unix host can render it) and, off
 //! macOS, the `systemctl --user` calls that manage it.
 
-use super::Definition;
+use super::{Definition, STOP_GRACE_SECONDS};
 
 #[cfg(not(target_os = "macos"))]
 pub(super) mod manage;
@@ -21,14 +21,16 @@ pub(super) fn render(definition: &Definition) -> String {
         .iter()
         .filter(|(key, _)| key != "PATH")
         .chain(std::iter::once(&fixed_path))
-        .map(|(key, value)| format!("Environment={key}={}\n", quoted(value)))
+        .map(|(key, value)| format!("Environment={key}={}\n", environment_quoted(value)))
         .collect::<Vec<_>>()
         .concat();
     let command = std::iter::once(definition.program.to_string_lossy().into_owned())
         .chain(definition.args.iter().cloned())
-        .map(|value| quoted(&value))
+        .map(|value| exec_quoted(&value))
         .collect::<Vec<_>>()
         .join(" ");
+    // No `WorkingDirectory=`: a user unit starts in the user's home, and the
+    // service takes its data folder from `--data`.
     let lines = [
         "[Unit]".to_owned(),
         "Description=Butler Agent service".to_owned(),
@@ -38,16 +40,14 @@ pub(super) fn render(definition: &Definition) -> String {
         String::new(),
         "[Service]".to_owned(),
         "Type=simple".to_owned(),
-        format!(
-            "WorkingDirectory={}",
-            path_value(&definition.working_dir.to_string_lossy())
-        ),
         format!("{environment}ExecStart={command}"),
         "Restart=on-failure".to_owned(),
         // A SIGKILL is a forced stop (`butler stop` after its grace period),
         // not a crash to recover from.
         "RestartPreventExitStatus=SIGKILL".to_owned(),
         "RestartSec=5".to_owned(),
+        // How long systemd waits for the process to exit before it kills it.
+        format!("TimeoutStopSec={STOP_GRACE_SECONDS}"),
         "KillMode=control-group".to_owned(),
         String::new(),
         "[Install]".to_owned(),
@@ -60,9 +60,9 @@ pub(super) fn render(definition: &Definition) -> String {
 /// The `PATH` of the unit.
 const UNIT_PATH: &str = "/usr/local/bin:/usr/bin:/bin";
 
-/// A value in double quotes; `%` is a specifier and `$` starts a variable in
-/// unit files.
-pub(super) fn quoted(value: &str) -> String {
+/// A word of `ExecStart=` in double quotes: `\` and `"` are escaped, `%` is a
+/// specifier and `$` starts a variable there.
+pub(super) fn exec_quoted(value: &str) -> String {
     format!(
         "\"{}\"",
         value
@@ -73,37 +73,42 @@ pub(super) fn quoted(value: &str) -> String {
     )
 }
 
-/// The program the unit runs: the first word of `ExecStart=`.
-#[cfg(not(target_os = "macos"))]
-pub(super) fn program(text: &str) -> Option<String> {
-    let command = text
-        .lines()
-        .find_map(|line| line.strip_prefix("ExecStart="))?;
-    let mut characters = command.strip_prefix('"')?.chars();
-    let mut program = String::new();
-    while let Some(character) = characters.next() {
-        match character {
-            '"' => return Some(program.replace("%%", "%").replace("$$", "$")),
-            '\\' => program.push(characters.next()?),
-            other => program.push(other),
-        }
-    }
-    None
+/// A value of `Environment=` in double quotes: `$` has no meaning there, but
+/// `%` is still a specifier.
+pub(super) fn environment_quoted(value: &str) -> String {
+    format!(
+        "\"{}\"",
+        value
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('%', "%%")
+    )
 }
 
-/// A path for `WorkingDirectory=`, which takes no quotes: anything outside a
-/// safe set is escaped byte by byte.
-pub(super) fn path_value(value: &str) -> String {
-    let mut escaped = String::new();
-    for character in value.chars() {
-        if character.is_ascii_alphanumeric() || matches!(character, '/' | '_' | '.' | ':' | '-') {
-            escaped.push(character);
-        } else {
-            let mut buffer = [0_u8; 4];
-            for byte in character.encode_utf8(&mut buffer).bytes() {
-                escaped.push_str(&format!("\\x{byte:02x}"));
+/// The words of `ExecStart=`: the program, then its arguments.
+#[cfg(not(target_os = "macos"))]
+pub(super) fn arguments(text: &str) -> Vec<String> {
+    let Some(command) = text
+        .lines()
+        .find_map(|line| line.strip_prefix("ExecStart="))
+    else {
+        return Vec::new();
+    };
+    let mut words = Vec::new();
+    let mut characters = command.chars();
+    while let Some(start) = characters.next() {
+        if start != '"' {
+            continue;
+        }
+        let mut word = String::new();
+        while let Some(character) = characters.next() {
+            match character {
+                '"' => break,
+                '\\' => word.extend(characters.next()),
+                other => word.push(other),
             }
         }
+        words.push(word.replace("%%", "%").replace("$$", "$"));
     }
-    escaped
+    words
 }

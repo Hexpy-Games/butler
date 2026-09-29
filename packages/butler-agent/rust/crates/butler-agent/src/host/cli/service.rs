@@ -255,6 +255,9 @@ pub(crate) fn spawn_restart_handoff(
     expected: &RestartIdentity,
     intent_id: &str,
 ) -> Result<(), crate::host::HostError> {
+    if lifecycle::asked_of_manager(data_root, expected) {
+        return Ok(());
+    }
     lifecycle::spawn_restart_handoff(installation, data_root, expected, intent_id)
 }
 

@@ -41,3 +41,11 @@ pub(super) fn stop() -> Result<(), Error> {
 pub(super) fn restart() -> Result<(), Error> {
     Err(Error::Unsupported)
 }
+
+pub(super) fn restart_detached() -> Result<bool, Error> {
+    Err(Error::Unsupported)
+}
+
+pub(super) fn arguments(_: &str) -> Vec<String> {
+    Vec::new()
+}

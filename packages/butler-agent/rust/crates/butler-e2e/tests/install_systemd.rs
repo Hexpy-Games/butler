@@ -86,6 +86,38 @@ fn supervised(launch: &Launch) -> Value {
     record
 }
 
+/// Stops the process without ending it, so it cannot answer a SIGTERM.
+fn signal_stop(pid: u64) {
+    let _ = Command::new("kill")
+        .args(["-STOP", &pid.to_string()])
+        .output();
+}
+
+/// Runs `butler restart` as a process of the unit's own cgroup. False when
+/// this user cannot move a process there.
+fn restart_from_inside_the_unit(launch: &Launch, launcher: &std::path::Path) -> bool {
+    let group = Command::new("systemctl")
+        .args(["--user", "show", "--property=ControlGroup", "--value", UNIT])
+        .output()
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+        .unwrap_or_default();
+    let procs = format!("/sys/fs/cgroup{group}/cgroup.procs");
+    if group.is_empty() || !std::path::Path::new(&procs).exists() {
+        return false;
+    }
+    let script = format!(
+        "echo $$ > '{procs}' || exit 111; exec '{}' restart --json",
+        launcher.display()
+    );
+    let moved = launch
+        .env_command(std::path::Path::new("/bin/sh"))
+        .args(["-c", &script])
+        .stdin(std::process::Stdio::null())
+        .output();
+    // The shell that could not move exits 111 before it restarts anything.
+    moved.is_ok_and(|output| output.status.code() != Some(111))
+}
+
 /// Removes the unit and stops the service when the scenario ends.
 struct Cleanup(Launch, PathBuf);
 
@@ -109,7 +141,13 @@ fn ins_14_a_systemd_user_job_stays_supervised() -> Result<(), HarnessError> {
     }
     let (sandbox, mut launch) = sandbox("INS-14")?;
     launch.use_data_folder_token();
+    // The one scenario that uses the real manager says so.
+    launch.set_env("BUTLER_SERVICE_MANAGER", "on");
     launch.home = butler_platform::user_dirs::home_dir().expect("HOME");
+    // A data folder with a space and a non-ASCII letter reaches the unit's
+    // ExecStart= and Environment= intact.
+    launch.data = sandbox.root.join("d\u{e2}ta folder");
+    std::fs::create_dir_all(&launch.data)?;
     for key in ["XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"] {
         if let Ok(value) = std::env::var(key) {
             launch.set_env(key, value);
@@ -157,6 +195,30 @@ fn ins_14_a_systemd_user_job_stays_supervised() -> Result<(), HarnessError> {
     ok(&butler(&["restart", "--json"])?)?;
     let restarted = supervised(&launch);
     assert_ne!(restarted["nonce"], started["nonce"]);
+
+    // A service that ignores the polite stop is stopped through the manager,
+    // not killed behind its back, and stays stopped.
+    signal_stop(restarted["pid"].as_u64().unwrap());
+    ok(&butler(&["stop", "--json"])?)?;
+    std::thread::sleep(Duration::from_secs(12));
+    assert!(record(&launch).is_none(), "a forced stop was relaunched");
+    assert_eq!(main_pid(), None);
+    ok(&butler(&["start", "--json"])?)?;
+    let again = supervised(&launch);
+
+    // A restart requested from inside the unit (its shell, or the service
+    // itself) is one request to systemd: nothing in the unit has to outlive it.
+    let inside = restart_from_inside_the_unit(&launch, &launcher);
+    if inside {
+        let deadline = Instant::now() + Duration::from_secs(90);
+        while record(&launch).is_none_or(|record| record["nonce"] == again["nonce"]) {
+            assert!(Instant::now() < deadline, "no restart from inside the unit");
+            std::thread::sleep(Duration::from_millis(200));
+        }
+        supervised(&launch);
+    } else {
+        eprintln!("SKIPPED the in-unit restart: the unit's cgroup is not writable here");
+    }
 
     // And an update onto the new version.
     let updated = ok(&butler(&["update", "--apply", "--yes", "--json"])?)?;

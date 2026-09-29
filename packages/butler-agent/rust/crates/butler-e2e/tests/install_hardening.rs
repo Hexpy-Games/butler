@@ -19,7 +19,8 @@ use std::time::{Duration, Instant};
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::agent::Launch;
 use butler_e2e::e2e::install_fixture::{
-    build_failing_archive, build_stub_archive, release_platform, write_update_manifest,
+    Archive, RawEntry, build_failing_archive, build_stub_archive, file_sha256, hostile_archive,
+    release_platform, write_update_manifest,
 };
 use butler_e2e::e2e::sandbox::Sandbox;
 use butler_e2e::e2e::stop_intent::{StopOnDrop, instance_record};
@@ -97,6 +98,34 @@ fn ins_09_failed_restart_restores_what_was_running() -> Result<(), HarnessError>
     assert!(
         !sandbox.home.join(".local/bin/butler").exists(),
         "a launcher runs the version that failed"
+    );
+
+    // An update whose archive cannot be installed leaves no download under DATA.
+    let broken = sandbox.root.join("fixtures/broken.tar.gz");
+    hostile_archive(
+        &broken,
+        &[RawEntry {
+            name: "butler-agent",
+            kind: tar::EntryType::Regular,
+            link: None,
+            data: b"x",
+        }],
+    )?;
+    let offered = Archive {
+        sha256: file_sha256(&broken)?,
+        path: broken,
+        version: "0.0.3".into(),
+        dir: String::new(),
+    };
+    write_update_manifest(&manifest, &[(Some(release_platform()), &offered)])?;
+    let output = run(launch
+        .command()
+        .args(["update", "--apply", "--yes", "--json"]))?;
+    assert_eq!(error_code(&output)?, "install_manifest_invalid");
+    assert_eq!(
+        entries(&sandbox.data.join("updates/artifacts")),
+        0,
+        "the download of a failed update was kept"
     );
     Ok(())
 }
@@ -232,16 +261,37 @@ fn ins_11_purge_deletes_only_a_butler_data_folder() -> Result<(), HarnessError> 
     Ok(())
 }
 
-/// Serves `body` at `/a.tar.gz` on a loopback port.
+/// Serves `body` at `/a.tar.gz` on a loopback port, and beside it `/stream`
+/// (4 MiB with no Content-Length), `/redirect` (to `/a.tar.gz` on the same
+/// origin) and `/out` (a redirect to plain http on another host).
 async fn serve(body: Vec<u8>) -> Result<u16, HarnessError> {
+    use axum::response::Redirect;
+    use axum::routing::get;
     let bytes = bytes::Bytes::from(body);
-    let app = axum::Router::new().route(
-        "/a.tar.gz",
-        axum::routing::get(move || {
-            let bytes = bytes.clone();
-            async move { bytes }
-        }),
-    );
+    let app = axum::Router::new()
+        .route(
+            "/a.tar.gz",
+            get(move || {
+                let bytes = bytes.clone();
+                async move { bytes }
+            }),
+        )
+        .route(
+            "/stream",
+            get(|| async {
+                let chunk = bytes::Bytes::from(vec![7_u8; 65536]);
+                let chunks = (0..64).map(move |_| Ok::<_, std::io::Error>(chunk.clone()));
+                axum::body::Body::from_stream(futures_util::stream::iter(chunks))
+            }),
+        )
+        .route(
+            "/redirect",
+            get(|| async { Redirect::temporary("/a.tar.gz") }),
+        )
+        .route(
+            "/out",
+            get(|| async { Redirect::temporary("http://example.invalid/a.tar.gz") }),
+        );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let port = listener.local_addr()?.port();
     tokio::spawn(async move {
@@ -303,6 +353,27 @@ async fn ins_12_a_download_is_verified_capped_and_cleaned_up() -> Result<(), Har
         Some(("BUTLER_INSTALL_MAX_BYTES", "100")),
     )?;
     assert_eq!(error_code(&capped)?, "install_archive_too_large");
+    // The cap holds for a body that announces no length, too.
+    let streamed = install(
+        &format!("http://127.0.0.1:{port}/stream"),
+        Some(&archive.sha256),
+        Some(("BUTLER_INSTALL_MAX_BYTES", "100000")),
+    )?;
+    assert_eq!(error_code(&streamed)?, "install_archive_too_large");
+    // A redirect within this machine is followed (the download reaches its
+    // digest check); one to plain http elsewhere is not.
+    let followed = install(
+        &format!("http://127.0.0.1:{port}/redirect"),
+        Some(&"0".repeat(64)),
+        None,
+    )?;
+    assert_eq!(error_code(&followed)?, "update_artifact_sha256_mismatch");
+    let refused = install(
+        &format!("http://127.0.0.1:{port}/out"),
+        Some(&archive.sha256),
+        None,
+    )?;
+    assert_eq!(error_code(&refused)?, "update_artifact_unavailable");
     assert_eq!(scratch_left(), 0, "a failed download was left behind");
     assert!(!sandbox.root.join("agent-home").join(&archive.dir).exists());
 

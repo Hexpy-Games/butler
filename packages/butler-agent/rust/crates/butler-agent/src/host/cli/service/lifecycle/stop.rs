@@ -4,7 +4,7 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 
-use super::managed::{is_managed, request};
+use super::managed::{is_managed, manager_unreachable, request};
 use super::readiness::wait_for_stop;
 use super::{FORCE_STOP_TIMEOUT, STOP_TIMEOUT, active_service};
 use crate::host::ResolvedInstallation;
@@ -84,7 +84,7 @@ pub(super) async fn stop_service_admitted(
     if expected.is_some_and(|identity| !identity.matches(&record)) {
         return Err("native_service_instance_changed".into());
     }
-    let managed = is_managed(&record);
+    let managed = is_managed(data_root, &record);
     let previous = mark_stopping(data_root, &record.nonce, installation)?;
     if let Err(error) = deliver_stop(data_root, &record, expected, request) {
         return Err(revert_undelivered_stop(
@@ -196,10 +196,18 @@ async fn wait_or_force_stop(
     if !instance_is_locked(data_root)? || !process_matches(&current)? {
         return Err("native_service_instance_ambiguous: refusing force kill".into());
     }
-    if is_managed(&current) {
+    if is_managed(data_root, &current) {
         // A signal sent straight to a supervised process looks like a crash
         // to its manager, which would relaunch it: the manager stops it.
         request(butler_platform::service_registration::stop).await?;
+    } else if manager_unreachable(data_root).await {
+        // The job is this DATA's but the manager does not answer, so the
+        // service may be running under it: a kill could be answered by a
+        // relaunch. Nothing is forced.
+        return Err(
+            "native_service_manager_unavailable: the service did not stop and its login job cannot be reached; stop it through the service manager"
+                .into(),
+        );
     } else {
         force_stop(&current)?;
     }

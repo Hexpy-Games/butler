@@ -113,7 +113,7 @@ async fn resolve_archive(
         let scratch = Scratch(
             std::env::temp_dir().join(format!("butler-install-{}-{nanos}", std::process::id())),
         );
-        std::fs::create_dir_all(&scratch.0).map_err(|error| {
+        butler_platform::secure_fs::create_private_dir_all(&scratch.0).map_err(|error| {
             CliError::failed(
                 "archive_unavailable",
                 "no scratch directory for the download",

@@ -1,7 +1,7 @@
 //! The launchd LaunchAgent: its plist text (every Unix host can render it)
 //! and, on macOS, the `launchctl` calls that manage it.
 
-use super::{Definition, LAUNCHD_LABEL};
+use super::{Definition, LAUNCHD_LABEL, STOP_GRACE_SECONDS};
 
 #[cfg(target_os = "macos")]
 pub(super) mod manage;
@@ -54,25 +54,32 @@ pub(super) fn render(definition: &Definition) -> String {
             "    <key>SuccessfulExit</key>",
             "    <false/>",
             "  </dict>",
-            "</dict>",
-            "</plist>",
+            "  <key>ExitTimeOut</key>",
         ]
         .map(str::to_owned),
     );
-    lines.push(String::new());
+    // How long launchd waits for the process to exit before it kills it.
+    lines.push(format!("  <integer>{STOP_GRACE_SECONDS}</integer>"));
+    lines.extend(["</dict>", "</plist>", ""].map(str::to_owned));
     lines.join("\n")
 }
 
 /// The `PATH` of the job.
 const JOB_PATH: &str = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin";
 
-/// The program the plist runs: the first `ProgramArguments` string.
+/// The `ProgramArguments` strings: the program, then its arguments.
 #[cfg(target_os = "macos")]
-pub(super) fn program(text: &str) -> Option<String> {
-    let after = text.split("<key>ProgramArguments</key>").nth(1)?;
-    let start = after.find("<string>")? + "<string>".len();
-    let length = after.get(start..)?.find("</string>")?;
-    Some(unxml(after.get(start..start + length)?))
+pub(super) fn arguments(text: &str) -> Vec<String> {
+    let Some(after) = text.split("<key>ProgramArguments</key>").nth(1) else {
+        return Vec::new();
+    };
+    let array = after.split("</array>").next().unwrap_or_default();
+    array
+        .split("<string>")
+        .skip(1)
+        .filter_map(|piece| piece.split("</string>").next())
+        .map(unxml)
+        .collect()
 }
 
 #[cfg(target_os = "macos")]

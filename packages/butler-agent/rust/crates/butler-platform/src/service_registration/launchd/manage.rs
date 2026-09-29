@@ -7,7 +7,7 @@ use super::super::unix::{read_definition, remove_definition, run, run_checked, w
 use super::super::{
     Activation, Definition, Error, Job, LAUNCHD_LABEL, Manager, Registration, Removal, Status,
 };
-use super::{program, render};
+use super::{arguments, render};
 use crate::{instance, user_dirs};
 
 pub(in super::super) const MANAGER: Manager = Manager::Launchd;
@@ -85,15 +85,19 @@ pub(in super::super) fn status() -> Result<Status, Error> {
 pub(in super::super) fn is_owned_by(directory: &Path) -> Result<bool, Error> {
     let text = read_definition(&definition_path()?)?;
     Ok(text
-        .and_then(|text| program(&text))
+        .and_then(|text| arguments(&text).into_iter().next())
         .is_some_and(|program| Path::new(&program).starts_with(directory)))
 }
 
 pub(in super::super) fn job() -> Result<Job, Error> {
-    let printed = print(&target()?);
+    let printed = print_state(&target()?);
     Ok(Job {
-        loaded: printed.is_some(),
-        pid: printed.as_deref().and_then(pid_of),
+        loaded: matches!(printed, Printed::Loaded(_)),
+        pid: match &printed {
+            Printed::Loaded(text) => pid_of(text),
+            _ => None,
+        },
+        reachable: !matches!(printed, Printed::Unknown),
     })
 }
 
@@ -121,17 +125,34 @@ pub(in super::super) fn stop() -> Result<(), Error> {
 }
 
 /// Unloads the job, waits for its process to be gone (a new one would find
-/// the old one still running) and loads the job again.
+/// the old one still running) and loads the job again. It fails, without
+/// loading, while the old process still runs; the process is told from a
+/// reused pid by its start time. Loading is tried twice.
 pub(in super::super) fn restart() -> Result<(), Error> {
     let pid = job()?.pid;
+    let started = pid.and_then(|pid| instance::process_start(pid).ok().flatten());
     stop()?;
-    if let Some(pid) = pid {
+    if let (Some(pid), Some(started)) = (pid, started) {
         let deadline = Instant::now() + EXIT_TIMEOUT;
-        while instance::process_start(pid).ok().flatten().is_some() && Instant::now() < deadline {
+        while instance::process_start(pid).ok().flatten().as_ref() == Some(&started) {
+            if Instant::now() >= deadline {
+                return Err(Error::Manager {
+                    command: "launchctl bootout".into(),
+                    message: "the service did not exit; it was not loaded again".into(),
+                });
+            }
             std::thread::sleep(Duration::from_millis(100));
         }
     }
-    start()
+    start().or_else(|_| {
+        std::thread::sleep(Duration::from_secs(1));
+        start()
+    })
+}
+
+/// launchd has no queued restart: a caller the job owns cannot survive it.
+pub(in super::super) fn restart_detached() -> Result<bool, Error> {
+    Ok(false)
 }
 
 fn bootstrap(path: &Path) -> Result<(), Error> {
@@ -165,13 +186,37 @@ fn target() -> Result<String, Error> {
     Ok(format!("{}/{LAUNCHD_LABEL}", domain()?))
 }
 
-/// `launchctl print` of the job; `None` when it is not loaded.
+/// What `launchctl print` says about the job.
+enum Printed {
+    Loaded(String),
+    /// launchd answered that there is no such job.
+    NotLoaded,
+    /// launchd could not be asked (or answered something else).
+    Unknown,
+}
+
+/// `launchctl` exits with this status for a service it does not know.
+const NO_SUCH_SERVICE: i32 = 113;
+
+fn print_state(target: &str) -> Printed {
+    let Ok(output) = run("launchctl", &["print", target]) else {
+        return Printed::Unknown;
+    };
+    if output.status.success() {
+        Printed::Loaded(String::from_utf8_lossy(&output.stdout).into_owned())
+    } else if output.status.code() == Some(NO_SUCH_SERVICE) {
+        Printed::NotLoaded
+    } else {
+        Printed::Unknown
+    }
+}
+
+/// `launchctl print` of the job; `None` unless it is loaded.
 fn print(target: &str) -> Option<String> {
-    let output = run("launchctl", &["print", target]).ok()?;
-    output
-        .status
-        .success()
-        .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
+    match print_state(target) {
+        Printed::Loaded(text) => Some(text),
+        _ => None,
+    }
 }
 
 /// The process of the job (`pid = N`).

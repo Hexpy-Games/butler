@@ -110,8 +110,18 @@ impl Context {
                 })
             })
             .unwrap_or_else(|error| json!({"state": "failed", "code": error.code()}));
-        let data = cli_launcher::point_at_agent_home(&self.data_root, &self.home)
-            .map_or("failed", |state| state.as_str());
+        // The data folder's launcher follows the Agent that serves it: the
+        // CLI installation, unless the service runs another (the App's newer
+        // bundled Agent), which its own start points the launcher at.
+        let elsewhere = self
+            .running_record()
+            .is_some_and(|record| !self.home.contains(Path::new(&record.executable)));
+        let data = if elsewhere {
+            "kept"
+        } else {
+            cli_launcher::point_at_agent_home(&self.data_root, &self.home)
+                .map_or("failed", |state| state.as_str())
+        };
         json!({"command": canonical, "dataLauncher": data})
     }
 

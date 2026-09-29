@@ -6,7 +6,7 @@ use super::super::unix::{read_definition, remove_definition, run, run_checked, w
 use super::super::{
     Activation, Definition, Error, Job, Manager, Registration, Removal, SYSTEMD_UNIT, Status,
 };
-use super::{program, render};
+use super::{arguments, render};
 use crate::user_dirs;
 
 pub(in super::super) const MANAGER: Manager = Manager::SystemdUser;
@@ -77,7 +77,7 @@ pub(in super::super) fn status() -> Result<Status, Error> {
 pub(in super::super) fn is_owned_by(directory: &Path) -> Result<bool, Error> {
     let text = read_definition(&definition_path()?)?;
     Ok(text
-        .and_then(|text| program(&text))
+        .and_then(|text| arguments(&text).into_iter().next())
         .is_some_and(|program| Path::new(&program).starts_with(directory)))
 }
 
@@ -104,6 +104,7 @@ pub(in super::super) fn job() -> Result<Job, Error> {
             .find_map(|line| line.strip_prefix(name)?.strip_prefix('='))
     };
     Ok(Job {
+        reachable: true,
         loaded: property("LoadState") == Some("loaded"),
         pid: property("MainPID")
             .and_then(|pid| pid.trim().parse().ok())
@@ -126,6 +127,17 @@ pub(in super::super) fn start() -> Result<(), Error> {
 
 pub(in super::super) fn stop() -> Result<(), Error> {
     run_checked("systemctl", &["--user", "stop", SYSTEMD_UNIT])
+}
+
+/// One queued request: systemd does the stop and the start itself even if the
+/// caller, which may be in the unit, is stopped meanwhile.
+pub(in super::super) fn restart_detached() -> Result<bool, Error> {
+    clear_start_limit();
+    run_checked(
+        "systemctl",
+        &["--user", "restart", "--no-block", SYSTEMD_UNIT],
+    )?;
+    Ok(true)
 }
 
 pub(in super::super) fn restart() -> Result<(), Error> {

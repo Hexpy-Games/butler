@@ -4,6 +4,7 @@
 mod agent;
 mod error;
 mod manifest;
+mod source;
 mod stage;
 mod version;
 
