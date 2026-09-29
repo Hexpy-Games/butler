@@ -65,9 +65,7 @@ async fn run(input: &Input, schedule: Schedule) -> CognitionResult<CatchupReport
         }
         Err(error) => return Err(error),
     };
-    let graph = GraphRepository::open_readonly(&handle.graph_path)?;
-    let stored = graph.catchup_state()?;
-    graph.close()?;
+    let stored = input.probe.catchup_state(&handle.graph_path)?;
     let canonical = match ConversationSourceReader::open(&canonical_path(&handle, &input.data_root))
     {
         Ok(reader) => reader,
@@ -78,11 +76,21 @@ async fn run(input: &Input, schedule: Schedule) -> CognitionResult<CatchupReport
     };
     let now_ms = epoch_ms(&(input.clock)());
     let revision = canonical.public_revision().map_err(CognitionError::from)?;
+    if schedule == Schedule::IfDue
+        && stored.sweep_done
+        && stored.sweep_revision == Some(revision)
+        && stored
+            .swept_at_ms
+            .is_some_and(|done| now_ms.saturating_sub(done) < DAILY_SWEEP_MS)
+    {
+        canonical.close().map_err(CognitionError::from)?;
+        return Ok(CatchupReport::default());
+    }
     let mut pass = Pass::begin(stored.clone(), revision, now_ms);
     pass.read_outcomes(&canonical)?;
     pass.read_recovered_sources(&canonical)?;
     canonical.close().map_err(CognitionError::from)?;
-    let work = unregistered(&handle, std::mem::take(&mut pass.work))?;
+    let work = unregistered(input, &handle, std::mem::take(&mut pass.work))?;
     let scanned = pass.scanned;
     let registration = register(input, &handle, work).await?;
     if !registration.interrupted {
@@ -117,6 +125,7 @@ fn epoch_ms(iso: &str) -> i64 {
 /// Drops the notices whose observation a registered job already recorded.
 /// Registering them again would only replay that job.
 fn unregistered(
+    input: &Input,
     handle: &crate::cognition::MemoryGenerationHandle,
     work: Vec<(CognitionConversationSourceNotice, String)>,
 ) -> CognitionResult<Vec<(CognitionConversationSourceNotice, String)>> {
@@ -124,10 +133,9 @@ fn unregistered(
         return Ok(work);
     }
     let ids: Vec<String> = work.iter().map(|(_, id)| id.clone()).collect();
-    let graph = GraphRepository::open_readonly(&handle.graph_path)?;
-    let known = graph.registered_observations(&ids);
-    graph.close()?;
-    let known = known?;
+    let known = input
+        .probe
+        .registered_observations(&handle.graph_path, &ids)?;
     Ok(work
         .into_iter()
         .filter(|(_, id)| !known.contains(id))

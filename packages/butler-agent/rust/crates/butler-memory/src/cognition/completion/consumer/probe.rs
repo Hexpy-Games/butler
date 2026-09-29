@@ -2,12 +2,13 @@
 //! answers "is there work?" without opening the database or taking the write
 //! lease on every tick.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use parking_lot::Mutex;
 
 use crate::cognition::CognitionResult;
-use crate::cognition::graph::{GraphRepository, PendingSemanticJob};
+use crate::cognition::graph::{CatchupState, GraphRepository, PendingSemanticJob};
 
 /// A read-only connection to the graph of the generation being served. It is
 /// reopened when the generation changes and after any read error.
@@ -52,6 +53,18 @@ impl ProbeReader {
     /// Whether a vector claim would find a unit to embed or recover.
     pub(super) fn vector_work(&self, path: &Path, now: &str) -> CognitionResult<bool> {
         self.with(path, |graph| graph.has_vector_work(now))
+    }
+
+    pub(super) fn catchup_state(&self, path: &Path) -> CognitionResult<CatchupState> {
+        self.with(path, GraphRepository::catchup_state)
+    }
+
+    pub(super) fn registered_observations(
+        &self,
+        path: &Path,
+        ids: &[String],
+    ) -> CognitionResult<HashSet<String>> {
+        self.with(path, |graph| graph.registered_observations(ids))
     }
 
     /// Closes the connection.
