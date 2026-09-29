@@ -430,6 +430,7 @@ pub(super) fn prepared(turn_id: &str, trigger_key: &str, hash: &str) -> Prepared
         authority_request_ref: None,
         authority_client_message_id: None,
         app_queue_claim_id: None,
+        resume: false,
         preparation_cancellation: Default::default(),
     };
     let command = crate::btcc::TurnCommand::fixture_run(
