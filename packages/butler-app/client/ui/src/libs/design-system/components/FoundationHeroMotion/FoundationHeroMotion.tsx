@@ -8,6 +8,12 @@ export const FOUNDATION_HERO_VARIANTS = [
 
 export type FoundationHeroVariant = (typeof FOUNDATION_HERO_VARIANTS)[number];
 
+/**
+ * Feature heroes: full width of their column at 16:9 (up to 36rem tall),
+ * portrait 19:32 under a 45rem column, built on the shared chapter engine.
+ */
+export const FOUNDATION_FEATURE_HEROES: ReadonlySet<FoundationHeroVariant> = new Set<FoundationHeroVariant>(["color", "typography", "spacing", "sizing", "radius", "iconography", "focus", "motion", "z-index", "layout"]);
+
 /** Language of the sample lines some heroes set (the type specimen). */
 export type FoundationHeroLang = "en" | "ko";
 
@@ -21,8 +27,9 @@ export interface FoundationHeroMotionProps extends Omit<DsBaseProps<HTMLAttribut
 
 const FoundationHeroStage = lazy(() => import("./FoundationHeroStage"));
 
-/** Holds the stage's box (8:5, at most 17rem tall, as in the stage CSS) while the hero loads. */
+/** Holds the stage's box (8:5 at most 17rem tall, or a feature hero's 16:9, as in the stage CSS) while the hero loads. */
 const PLACEHOLDER = { inlineSize: "100%", aspectRatio: "8 / 5", maxBlockSize: "17rem" } as const;
+const FEATURE_PLACEHOLDER = { inlineSize: "100%", aspectRatio: "16 / 9", maxBlockSize: "36rem" } as const;
 
 /**
  * A chapter hero: a calm looping motion graphic drawn from the live tokens of
@@ -33,7 +40,7 @@ const PLACEHOLDER = { inlineSize: "100%", aspectRatio: "8 / 5", maxBlockSize: "1
  */
 export function FoundationHeroMotion(props: FoundationHeroMotionProps) {
   return (
-    <Suspense fallback={<div aria-hidden="true" data-slot="foundation-hero-placeholder" style={PLACEHOLDER} />}>
+    <Suspense fallback={<div aria-hidden="true" data-slot="foundation-hero-placeholder" style={FOUNDATION_FEATURE_HEROES.has(props.variant) ? FEATURE_PLACEHOLDER : PLACEHOLDER} />}>
       <FoundationHeroStage {...props} />
     </Suspense>
   );

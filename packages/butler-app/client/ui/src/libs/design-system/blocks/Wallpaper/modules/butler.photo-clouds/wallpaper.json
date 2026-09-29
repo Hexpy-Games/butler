@@ -1,0 +1,61 @@
+{
+  "id": "butler.photo-clouds",
+  "name": {
+    "en": "Sunset Clouds",
+    "ko": "노을 구름"
+  },
+  "version": "0.2.0",
+  "engine": 1,
+  "motion": "animated",
+  "image": "required",
+  "timePeriod": 120,
+  "imageDim": "noDarkStep",
+  "defaultImage": "photo.jpg",
+  "params": [
+    {
+      "key": "billow",
+      "type": "number",
+      "label": {
+        "en": "Cloud motion",
+        "ko": "구름 움직임"
+      },
+      "default": 1,
+      "min": 0,
+      "max": 2,
+      "step": 0.05
+    },
+    {
+      "key": "light",
+      "type": "number",
+      "label": {
+        "en": "Changing light",
+        "ko": "빛 변화"
+      },
+      "default": 1,
+      "min": 0,
+      "max": 2,
+      "step": 0.05
+    },
+    {
+      "key": "bird",
+      "type": "boolean",
+      "label": {
+        "en": "Bird in flight",
+        "ko": "나는 새"
+      },
+      "default": true
+    },
+    {
+      "key": "veil",
+      "type": "number",
+      "label": {
+        "en": "Headline veil",
+        "ko": "제목 뒤 베일"
+      },
+      "default": 1,
+      "min": 0,
+      "max": 1.5,
+      "step": 0.05
+    }
+  ]
+}

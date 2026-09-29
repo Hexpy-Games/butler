@@ -1,0 +1,64 @@
+/* The scene hero engine (SceneHero.tsx): scenes in cells over the world and
+   the poster, a grid of tiles packed edge to edge that is the finale and the
+   reduced-motion still. Canvas px on the grid of ../shared/grid.ts; the
+   poster is laid out --poster-zoom times larger (CSS zoom scales back). */
+
+/* Scenes may explode into depth (the Layers sheets, the elevation floor):
+   the world and each cell keep their children in 3D. */
+.world,
+.prelude,
+.cell {
+  transform-style: preserve-3d;
+}
+
+/* A deep scene shows by scale (see sceneTimeline.ts), so it is opaque from the start. */
+.cell[data-deep] {
+  opacity: 1;
+}
+
+.poster {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  gap: calc(var(--grid-gutter) / var(--poster-zoom));
+  box-sizing: border-box;
+  inline-size: calc(var(--canvas-w) / var(--poster-zoom));
+  block-size: calc(var(--canvas-h) / var(--poster-zoom));
+  padding: calc(var(--grid-margin) / var(--poster-zoom));
+  zoom: var(--poster-zoom);
+}
+
+/* Tall: the poster takes its tiles' height; the finale fits all of it. */
+.poster[data-layout="tall"] {
+  block-size: auto;
+}
+
+/* A layer fixed to the frame, over the camera. */
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* A tile: a slot of the poster's grid. It draws nothing itself (no panel,
+   fill or border): the real component stands on the page, on its column's
+   left edge (so titles in a column share one inset), centred in the slot's
+   height and zoomed to fit inside it (SceneHero.tsx). */
+.tile {
+  position: relative;
+  display: grid;
+  place-items: center start;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+}
+
+.tile > * {
+  max-inline-size: 100%;
+}
+
+/* Tall: one column, each component centred on it. */
+.poster[data-layout="tall"] > .tile {
+  place-items: center;
+}

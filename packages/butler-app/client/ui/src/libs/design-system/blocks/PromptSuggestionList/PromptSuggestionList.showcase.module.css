@@ -1,4 +1,4 @@
-/* DS Viewer stage: a bounded, painted box so the fixed fluid layer stays inside. */
+/* DS Viewer stage: a bounded, painted box so the fixed wallpaper layer stays inside. */
 .showcaseStage {
   position: relative;
   height: 640px;

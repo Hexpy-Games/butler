@@ -40,6 +40,11 @@ gateway or Electron runtime.
 - App release: `release/manifest.ts`, `release/release-gate.ts`, and
   `release/package-app-release.ts` validate and package app artifacts without
   depending on service release internals.
+- Linux App packages: `release/package-linux-app.ts` builds the DEB (x64,
+  arm64) and Arch (x64) packages with the bundled native agent on a Linux host
+  of the target architecture; `release/linux-package-smoke.sh` installs one in
+  a clean container and runs its agent headless. CI:
+  `.github/workflows/linux-packages.yml` (tags, manual runs; artifacts only).
 - UI quality: `lint/`.
 - Codemods: `codemods/ds-unsafe-style.ts` (ts-morph) moves geometry-only `style` on
   design-system components to `UNSAFE_style` and fails while any `className`/`style`

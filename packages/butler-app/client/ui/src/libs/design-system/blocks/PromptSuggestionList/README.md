@@ -2,7 +2,7 @@
 
 ## What is this component
 
-PromptSuggestionList is a Butler design-system block for new-chat and empty prompt surfaces. It pairs a moment label, title, optional title icon, optional description, optional low-cost fluid background, and a horizontal rail of tall tinted-glass suggestion cards.
+PromptSuggestionList is a Butler design-system block for new-chat and empty prompt surfaces. It pairs a moment label, title, optional title icon, optional description, an optional `Wallpaper` behind it, and a horizontal rail of tall tinted-glass suggestion cards.
 
 ## When to use this component
 
@@ -20,7 +20,7 @@ At compact widths, the title icon moves into the moment row beside the three-dot
 
 ## How to use this component
 
-Pass a `title`, optional `moment`, optional `titleIcon`, optional `description`, optional `fluidBackground`, optional `fluidPalette`, optional `fluidPaletteOptions`, optional `fluidTone` (omit it to follow the nearest theme scope, live), optional `fluidVariant`, and `suggestions` with stable ids, `title`, `description`, prompt `text`, optional `meta`, and select handlers. The start surface intentionally uses ordinals instead of item icons or abstract card graphics.
+Pass a `title`, optional `moment`, optional `titleIcon`, optional `description`, optional `wallpaper` (a `WallpaperSource`; keep its identity stable), optional `wallpaperMotion` and `wallpaperPauseOnBattery` (the stored setting's motion preferences), optional `wallpaperTone` (omit it to follow the nearest theme scope, live; the wallpaper's `contentRect` is measured here: the header plus the visible cards, so modules keep the headline and cards readable), and `suggestions` with stable ids, `title`, `description`, prompt `text`, optional `meta`, and select handlers. The start surface intentionally uses ordinals instead of item icons or abstract card graphics.
 
 ## Who can use this component
 

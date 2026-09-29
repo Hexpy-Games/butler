@@ -34,6 +34,7 @@ pub(crate) use contracts::{TestProjectDashboardBriefing, TestProjectDashboardLed
 
 use super::super::{AppApplication, GatewayApplicationError};
 use crate::gateway::MessageFileRef;
+use crate::gateway::application::wallpapers::WallpaperOrigin;
 use serde_json::Value;
 
 impl AppApplication {
@@ -97,7 +98,29 @@ impl AppApplication {
         project_id: String,
         update: AppProjectDashboardPreferencesUpdate,
     ) -> Result<Value, GatewayApplicationError> {
-        preferences::update(self, &project_id, update).await
+        preferences::update(self, &project_id, update, WallpaperOrigin::User).await
+    }
+
+    /// A project's wallpaper: `"inherit"` or its source.
+    pub(in crate::gateway::application) async fn project_wallpaper(
+        &self,
+        project_id: &str,
+    ) -> Result<Value, GatewayApplicationError> {
+        let project = project::read_project(self, project_id).await?;
+        let preferences = project::preferences(&project).map_err(super::super::app_error)?;
+        Ok(super::super::settings::project_wallpaper_view(
+            preferences.get("wallpaper"),
+        ))
+    }
+
+    /// Sets a project's wallpaper for `origin`; returns the previous one.
+    pub(in crate::gateway::application) async fn set_project_wallpaper(
+        &self,
+        project_id: &str,
+        wallpaper: &Value,
+        origin: WallpaperOrigin,
+    ) -> Result<Value, GatewayApplicationError> {
+        preferences::set_wallpaper(self, project_id, wallpaper, origin).await
     }
 
     pub(crate) async fn request_project_dashboard_briefing_owned(

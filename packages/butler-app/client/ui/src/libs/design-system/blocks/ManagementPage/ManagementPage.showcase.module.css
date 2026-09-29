@@ -1,0 +1,8 @@
+/* DS Viewer stage: a bounded page, so the background fills it and the content scrolls. */
+.stage {
+  height: 440px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  isolation: isolate;
+}

@@ -58,7 +58,7 @@ export function stewardCurrentActivityTitle(
   if (child.waiting_for_children && !child.active_turn) {
     return appCopy.conversation.work.pendingStateLabels.waiting_for_children;
   }
-  const rows = child.active_turn?.progress.safe_progress_rows ?? [];
+  const rows = child.active_turn?.progress?.safe_progress_rows ?? [];
   const activeActivity = latestMatchingRow(rows, (row) =>
     row.kind !== "todo" &&
     row.kind !== "turn" &&
@@ -89,7 +89,7 @@ export function stewardCurrentActivityTitle(
     (latestActivity && interfaceProgressLabel(latestActivity)) ||
     (activePlanStep && interfaceProgressLabel(activePlanStep)) ||
     (genericActivity && interfaceProgressLabel(genericActivity)) ||
-    interfaceText(child.active_turn?.progress.summary_reference, child.active_turn?.progress.summary ?? "") ||
+    interfaceText(child.active_turn?.progress?.summary_reference, child.active_turn?.progress?.summary ?? "") ||
     appCopy.interfaceStatus.progress
   ).trim().replace(/\s+/gu, " ");
 }

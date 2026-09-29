@@ -100,10 +100,10 @@ function ShadowTiles() {
   );
 }
 
-export function ShapeChapter({ chapter, anchor, onOpen }: ChapterProps) {
+export function ShapeChapter({ chapter, anchor, locale, onOpen }: ChapterProps) {
   const s = chapterSections(chapter, [["radius", "Radius"], ["nesting", "Nesting"], ["layers", "Elevation in layers"], ["shadows", "Shadows"]]);
   return (
-    <ChapterLayout anchor={anchor} chapter={chapter} onOpen={onOpen} sections={s.list}
+    <ChapterLayout anchor={anchor} chapter={chapter} locale={locale} onOpen={onOpen} sections={s.list}
       lead="Corners grow with the surface: 8px controls, 10px cards, 12px overlays, 22px for the composer. Shadows are soft, few and deeper in dark mode, where contrast comes from light, not lines.">
       <GuideSection spec={s.at("radius")} lead="Each radius on the surface it belongs to.">
         <RadiusShapes />

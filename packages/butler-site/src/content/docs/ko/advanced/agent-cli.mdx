@@ -150,6 +150,7 @@ butler doctor --check service --json
 | `installation` | 실행 파일, 리소스, 버전, 무결성을 한 번에 점검합니다. |
 | `executable`, `resources`, `version`, `integrity` | 설치 항목을 하나씩 점검합니다. |
 | `data` | 데이터 폴더가 있는지 확인합니다. 폴더를 만들지는 않습니다. |
+| `credentials` | 새 API 키를 저장할 위치, 아직 옮기지 않은 이전 키, 다른 사용자가 읽을 수 있는 키 파일이 있는지 확인합니다. |
 | `service`, `owned_service` | 실행 중인 서비스의 기록과 프로세스가 일치하는지 확인합니다. |
 
 각 항목은 `PASS`, `WARN`, `FAIL` 중 하나로 표시됩니다. 모든 항목이 `PASS`이면 `healthy`와 종료 코드 0을, 하나라도 아니면 `degraded`와 종료 코드 1을 반환합니다.
@@ -165,15 +166,23 @@ butler doctor --check service --json
 | `butler auth status` | 저장된 모델 인증 상태를 보여 줍니다. 비밀값은 가려서 표시합니다. |
 | `butler auth login` | 브라우저에서 OpenAI Codex 구독 OAuth 로그인을 진행합니다. 인증 결과는 `http://localhost:1455/auth/callback`으로 받습니다. |
 | `butler auth logout --yes` | 데이터 폴더의 로컬 인증 프로필을 삭제합니다. `.env`에 저장한 API 키는 건드리지 않습니다. |
+| `butler auth keys` | 저장한 API 키를 가려서 보여 줍니다. 키마다 이름, 제공자, 저장 위치, 쓰는 모델 수, id가 표시됩니다. `butler auth keys list`와 같습니다. |
+| `butler auth keys replace NAME` | 저장한 키를 새 키로 바꿉니다. 키 이름과 이 키를 쓰는 모델은 그대로 유지됩니다. `--verify`를 붙이면 제공자가 새 키를 먼저 확인하고, 거부한 키는 저장하지 않습니다. |
+| `butler auth keys delete NAME --yes` | 저장한 키를 삭제합니다. 기본 모델이 쓰는 키는 삭제하지 않습니다. 다른 모델이 쓰는 키는 `--force`를 붙여야 삭제되며, 그 모델도 함께 삭제됩니다. |
 | `butler model status` | 현재 모델 설정을 보여 줍니다. |
 | `butler model list` | 내장 카탈로그의 OpenAI 모델을 `openai/모델` 형식으로 보여 줍니다. |
 | `butler model set PROVIDER/MODEL` | 기본 모델을 바꿉니다. `제공자/모델` 형식으로 입력합니다. |
 
 ```bash
 butler auth status
+butler auth keys
 butler model list
 butler model status
 ```
+
+`NAME`에는 키의 id를 적습니다. 같은 이름의 키가 하나뿐이면 키 이름을 적어도 됩니다.
+
+`butler auth keys replace`는 새 키를 명령줄 인자로 받지 않습니다. 터미널에서 실행하면 화면에 표시되지 않는 입력란에 키를 입력하고, 파이프로 실행하면 표준 입력의 한 줄을 키로 읽습니다.
 
 ## 설정
 

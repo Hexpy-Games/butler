@@ -111,6 +111,7 @@ import {
   freezeMessageActivity as freezeMessageWorkBlocksForRecord,
 } from "./conversation-progress";
 import { isServerBackedSessionId } from "./sessionIds.ts";
+import { turnProgressOf } from "./turnProgress.ts";
 import { finishVisibleCancellation } from "./cancellation/finish-visible-cancellation.ts";
 
 type ProjectAction = "rename" | "pin" | "archive" | "delete";
@@ -593,7 +594,7 @@ function messageListViewFromSessionView(view: SessionView): MessageListView {
   const turnProgress =
     view.latest_turn?.id && view.latest_turn.progress
       ? { [view.latest_turn.id]: {
-          ...view.latest_turn.progress,
+          ...turnProgressOf(view.latest_turn),
           started_at: view.latest_turn.created_at,
         } }
       : {};
@@ -610,7 +611,7 @@ function messageListViewFromSessionView(view: SessionView): MessageListView {
 
 function summaryFromSessionView(view: SessionView): SessionSummaryView {
   const latestProgress = view.latest_turn ? {
-    ...view.latest_turn.progress,
+    ...turnProgressOf(view.latest_turn),
     started_at: view.latest_turn.created_at,
   } : {
     state: "idle",

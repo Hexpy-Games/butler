@@ -234,24 +234,24 @@ const HARNESS_SS03_STEWARD_CHILD: StewardSessionSummaryView = {
   active_turn: {
     ...HARNESS_STEWARD_CHILD.active_turn!,
     progress: {
-      ...HARNESS_STEWARD_CHILD.active_turn!.progress,
+      ...HARNESS_STEWARD_CHILD.active_turn!.progress!,
       summary: HARNESS_SS03_CURRENT_ACTIVITY.safe_label,
       safe_progress_rows: [
         HARNESS_SS03_CURRENT_ACTIVITY,
         ...HARNESS_SS03_TOOL_ACTIVITY,
-        ...HARNESS_STEWARD_CHILD.active_turn!.progress.safe_progress_rows,
+        ...HARNESS_STEWARD_CHILD.active_turn!.progress!.safe_progress_rows,
       ],
     },
   },
   latest_turn: {
     ...HARNESS_STEWARD_CHILD.latest_turn!,
     progress: {
-      ...HARNESS_STEWARD_CHILD.latest_turn!.progress,
+      ...HARNESS_STEWARD_CHILD.latest_turn!.progress!,
       summary: HARNESS_SS03_CURRENT_ACTIVITY.safe_label,
       safe_progress_rows: [
         HARNESS_SS03_CURRENT_ACTIVITY,
         ...HARNESS_SS03_TOOL_ACTIVITY,
-        ...HARNESS_STEWARD_CHILD.latest_turn!.progress.safe_progress_rows,
+        ...HARNESS_STEWARD_CHILD.latest_turn!.progress!.safe_progress_rows,
       ],
     },
   },

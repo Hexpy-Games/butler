@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import { KeyValueRow } from "../../blocks/KeyValueRow";
-import { PromptFluidBackground } from "../../blocks/PromptSuggestionList";
+import { Wallpaper, type WallpaperSource } from "../../blocks/Wallpaper";
 import { Tag } from "../../components/Tag";
 import { TintedGlass } from "../../components/TintedGlass";
 import { Stack } from "../../components/Stack";
@@ -11,6 +11,8 @@ import styles from "../DesignSystemViewer.module.css";
 
 type AppLocale = ShowcaseRenderContext["locale"];
 
+const HERO_WALLPAPER: WallpaperSource = { kind: "live", module: "butler.bloom" };
+
 const GLASS = {
   "en-US": { title: "Glass over live content", body: "The fluid background keeps moving under the surface; the tint and the edge keep the text readable in both themes." },
   "ko-KR": { title: "움직이는 내용 위의 유리", body: "유체 배경이 표면 아래에서 계속 움직여도 틴트와 가장자리 덕분에 두 테마 모두에서 글이 잘 읽힙니다." },
@@ -19,7 +21,7 @@ const GLASS = {
 export function GlassOverContent({ locale }: { locale: AppLocale }) {
   return (
     <div className={styles.glassStage}>
-      <div className={styles.heroFluid}><PromptFluidBackground /></div>
+      <div className={styles.heroFluid}><Wallpaper source={HERO_WALLPAPER} /></div>
       <TintedGlass radius="composer" padding="lg">
         <Stack gap="xs">
           <Typo.PanelTitle>{GLASS[locale].title}</Typo.PanelTitle>

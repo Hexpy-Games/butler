@@ -2,7 +2,8 @@
 //! before every effect except three actions, which proceed without an
 //! approval: first-conversation onboarding (ACC-01), memory save (ACC-02)
 //! and analysis of an image the user attached. An MCP tool still asks
-//! (ACC-04).
+//! (ACC-04), and so does the agent's wallpaper change, a persistent write of
+//! the user's settings (ACC-07).
 //!
 //! The attached-image exemption covers the Z.AI image tool, which only a
 //! Z.AI model with its vision server is offered; no recording can come from
@@ -353,4 +354,108 @@ async fn schedule(s: &Scenario) -> Result<Value, HarnessError> {
     let reply = s.gw.post("/automations", body).await?;
     assert_eq!(reply.status, 201, "{}", reply.text);
     Ok(reply.data()["automation"].clone())
+}
+
+/// ACC-07 — In ask-first, the agent's wallpaper change asks first: the turn
+/// waits for approval of `set_wallpaper`, and the wallpaper setting is
+/// unchanged until the user decides.
+#[tokio::test]
+async fn acc_07_wallpaper_change_asks_in_ask_first() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("ACC-07")?
+        .cassette("ACC-07")
+        .access(Access::AskFirst)
+        .start()
+        .await?;
+    let before = s.gw.settings().await?["wallpaper"].clone();
+    let accepted =
+        s.gw.say(
+            "general",
+            "Change my App wallpaper to the Silk live wallpaper, app-wide.",
+        )
+        .await?;
+    let turn_id = accepted_turn_id(&accepted)?;
+    let turn = settled(&s, "general", &turn_id).await?;
+    assert_eq!(turn_state(&turn), "waiting_for_form", "{turn}");
+    let requests = s.gw.approval_requests("general").await?;
+    assert!(
+        requests.iter().any(|request| {
+            request["source_turn_id"] == turn_id.as_str()
+                && request["executable"] == "set_wallpaper"
+        }),
+        "no approval request for the wallpaper change: {requests:?}"
+    );
+    assert_eq!(
+        s.gw.settings().await?["wallpaper"],
+        before,
+        "the wallpaper changed before approval"
+    );
+    s.finish().await
+}
+
+/// ACC-07 (allow) — After Allow, the approved wallpaper change is applied
+/// once. Needs the resumed turn, so its recording (ACC-07-ALLOW) waits for
+/// that product gap to close.
+#[tokio::test]
+#[ignore = "product gap: TOOL-07-RESUME — resuming an ask-first turn after Allow is interrupted with turn_replay_conflict; the service exits and crash-loops on every restart"]
+async fn acc_07_allow_applies_the_wallpaper_change() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut s = Setup::new("ACC-07-ALLOW")?
+        .cassette("ACC-07-ALLOW")
+        .access(Access::AskFirst)
+        .start()
+        .await?;
+    let before = s.gw.settings().await?["wallpaper"].clone();
+    let accepted =
+        s.gw.say(
+            "general",
+            "Change my App wallpaper to the Silk live wallpaper, app-wide.",
+        )
+        .await?;
+    let turn_id = accepted_turn_id(&accepted)?;
+    let turn = settled(&s, "general", &turn_id).await?;
+    assert_eq!(turn_state(&turn), "waiting_for_form", "{turn}");
+    let requests = s.gw.approval_requests("general").await?;
+    let request = requests
+        .iter()
+        .find(|request| {
+            request["source_turn_id"] == turn_id.as_str()
+                && request["executable"] == "set_wallpaper"
+        })
+        .unwrap_or_else(|| panic!("no approval request for the wallpaper change: {requests:?}"));
+    assert_eq!(
+        s.gw.settings().await?["wallpaper"],
+        before,
+        "the wallpaper changed before approval"
+    );
+    let reference = request["request_ref"]
+        .as_str()
+        .or_else(|| request["ref"].as_str())
+        .unwrap_or_default()
+        .to_owned();
+    let allow =
+        s.gw.post(
+            &format!("/authority-requests/{reference}/allow?session_id=general"),
+            json!({"scope": "once"}),
+        )
+        .await?;
+    assert_eq!(allow.status, 202, "{}", allow.text);
+    let deadline = std::time::Instant::now() + Duration::from_secs(turn_timeout());
+    let mut restarts = 0;
+    let applied = loop {
+        if s.supervise().await? {
+            restarts += 1;
+        }
+        let source = s.gw.settings().await?["wallpaper"]["source"].clone();
+        if source["module"] == "butler.silk" || std::time::Instant::now() > deadline {
+            break source;
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    };
+    assert_eq!(applied["module"], "butler.silk", "not applied after Allow");
+    assert_eq!(
+        restarts, 0,
+        "the service exited while resuming the approved turn"
+    );
+    s.finish().await
 }

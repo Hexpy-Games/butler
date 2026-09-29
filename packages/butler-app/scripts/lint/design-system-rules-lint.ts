@@ -139,7 +139,8 @@ export const OFF_SCALE_ALLOWLIST: Record<string, readonly string[]> = {
   // Reading rhythm and glass card radii of conversation and dashboard content.
   "components/management/ProjectInformation.module.css": ["spacing:30"],
   "libs/design-system/blocks/MessageRow/MessageRow.module.css": ["radius:14", "spacing:10", "spacing:18", "spacing:26", "spacing:28", "spacing:6"],
-  "libs/design-system/blocks/PromptSuggestionList/PromptSuggestionList.module.css": ["radius:18"],
+  // The viewport wallpaper's leading corners follow the workspace frame (--workspace-left-radius fallback).
+  "libs/design-system/blocks/Wallpaper/Wallpaper.module.css": ["radius:18"],
   // The queued bubble must match the MessageRow user bubble box so a delivered message resolves in place.
   "libs/design-system/blocks/QueuedMessage/QueuedMessage.module.css": ["radius:14", "spacing:10", "spacing:6"],
   "libs/design-system/blocks/WorkActivityBlock/WorkActivityBlock.module.css": ["spacing:5"],

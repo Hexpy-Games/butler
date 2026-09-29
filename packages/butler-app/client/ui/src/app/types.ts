@@ -1,4 +1,6 @@
 import type { ReactElement, ReactNode } from "react";
+// Relative (not `@/butler-ds`): the root typecheck reaches this file without the UI path aliases.
+import type { WallpaperSetting, WallpaperSource } from "../libs/design-system/blocks/Wallpaper/types.ts";
 
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 export type AccessMode = "full_access" | "ask_first" | "read_only";
@@ -118,14 +120,47 @@ export interface AppModelSummary {
 
 export type ProviderAuthMethod = "api_key" | "codex_oauth";
 
+/** Where a saved API key is kept (#217). */
+export type CredentialStorage =
+  | "keychain"
+  | "secret_service"
+  | "credential_manager"
+  | "fallback_file"
+  | "legacy_plaintext";
+
 export interface ProviderCredentialView {
   id: string;
   provider_id: string;
   auth_type: ProviderAuthMethod;
   label: string;
   masked_value: string;
+  storage?: CredentialStorage;
   created_at: string;
   updated_at: string;
+}
+
+/** `GET /credentials`: a saved key and the registered models that use it. */
+export interface SavedCredentialView extends ProviderCredentialView {
+  model_refs: string[];
+}
+
+export interface CredentialListView {
+  credentials: SavedCredentialView[];
+  store: {
+    backend: CredentialStorage;
+    reason: "unsigned_build" | "signed_build" | "config" | "test_override";
+    fallback_reason?: string;
+    error?: string;
+    override_ignored: boolean;
+    legacy_plaintext: number;
+  };
+}
+
+/** `DELETE /credentials/{name}`. */
+export interface CredentialDeletionResult {
+  credential: ProviderCredentialView;
+  removed_model_refs: string[];
+  secret_removed: boolean;
 }
 
 export interface WorkerModelPreset {
@@ -543,6 +578,8 @@ export interface SettingsView {
     string,
     string,
   ];
+  /** The home screen wallpaper; derived from the legacy `main_screen_theme*` keys until one is saved. */
+  wallpaper: WallpaperSetting;
   translucent_sidebar: boolean;
   smart_grouping_enabled: boolean;
   diagnostics_enabled: boolean;
@@ -748,12 +785,17 @@ export interface CreateSessionResult {
   session: SessionSummary;
 }
 
+/** A project's wallpaper: follow the global `wallpaper` setting, or its own source. */
+export type ProjectWallpaper = "inherit" | WallpaperSource;
+
 export interface ProjectSummary {
   id: string;
   display_name: string;
   last_activity_at: string;
   pinned: boolean;
   archived: boolean;
+  /** From the dashboard preferences; absent (older gateways, optimistic rows) means `inherit`. */
+  wallpaper?: ProjectWallpaper;
   sessions?: SessionSummary[];
 }
 
@@ -1005,7 +1047,8 @@ export interface SessionViewTurn {
   delivery_state?: RuntimeDeliveryState;
   limitation_codes?: string[];
   limitations?: string[];
-  progress: TurnProgressSnapshot;
+  /** Optional: the gateway may omit progress for a turn (treat as no rows). */
+  progress?: TurnProgressSnapshot;
   created_at: string;
   updated_at: string;
   execution_controls?: {
@@ -1407,10 +1450,25 @@ export interface PaginationView {
   has_more: boolean;
 }
 
+export interface ProjectDashboardPreferences {
+  revision: number;
+  pinnedSourceRefs: Array<{ kind: string; id: string; revision: string }>;
+  /** Absent from older gateways: `inherit`. */
+  wallpaper?: ProjectWallpaper;
+}
+
+/** `PATCH /projects/:id/dashboard/preferences`: revision-checked, at least one field. */
+export interface ProjectDashboardPreferencesPatch {
+  expectedRevision: number;
+  description?: string;
+  pinnedSourceRefs?: ProjectDashboardPreferences["pinnedSourceRefs"];
+  wallpaper?: ProjectWallpaper;
+}
+
 export interface ProjectDashboardView {
   briefing?: import("../../../shared/app-contracts.ts").DashboardBriefingView;
   description?: string | null;
-  preferences?: { revision: number; pinnedSourceRefs: Array<{ kind: string; id: string; revision: string }> };
+  preferences?: ProjectDashboardPreferences;
   overview?: import("../../../shared/app-contracts.ts").DashboardOverview;
   project: ProjectSummary;
   stats: {
@@ -1566,6 +1624,8 @@ export interface TimelineEvent {
     row?: ProgressRow;
     event?: AgentTurnEvent;
     event_id?: string;
+    /** `settings.updated`: the changed settings subset. */
+    settings?: Record<string, unknown>;
   };
 }
 
