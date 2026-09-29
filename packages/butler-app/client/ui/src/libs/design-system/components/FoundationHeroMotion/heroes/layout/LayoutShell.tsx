@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import {
   AdaptiveShell,
   AdaptiveShellChrome,
@@ -14,7 +15,21 @@ import {
 import { Stack } from "../../../Stack";
 import type { LayoutCopy, Mode } from "./layoutCopy";
 
-import { Sidebar, Titlebar, Turn } from "./LayoutParts";
+import { Sidebar, Titlebar } from "./LayoutParts";
+import { Turn } from "./LayoutTurn";
+
+/** A conversation held at its latest message, as the app is when a chat is open: the bottom stays in view as the width reflows. */
+function useLatestInView() {
+  return useCallback((node: HTMLDivElement | null) => {
+    if (!node) return undefined;
+    const pin = () => { node.scrollTop = node.scrollHeight; };
+    pin();
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(pin) : null;
+    observer?.observe(node);
+    if (node.firstElementChild) observer?.observe(node.firstElementChild);
+    return () => observer?.disconnect();
+  }, []);
+}
 
 /**
  * Butler's app shell exactly as AppShell composes it (AdaptiveShell, the
@@ -32,6 +47,7 @@ export function AppScreen({ copy, mode, open = mode === "expanded", closedLook =
   t?: (part: string) => string | undefined;
 }) {
   const drawer = mode !== "expanded";
+  const scrollRef = useLatestInView();
   return (
     <AdaptiveShell chromeEnvironment="browser" compactSidebarFullWidth data-panel-layout={drawer ? "drawer" : "docked"} data-screen={mode} leftOpen={open} rightOpen={false}>
       <AdaptiveShellSidebar data-t={t?.("side")} open={open}><Sidebar copy={copy} touch={mode === "compact"} /></AdaptiveShellSidebar>
@@ -39,7 +55,7 @@ export function AppScreen({ copy, mode, open = mode === "expanded", closedLook =
         <Titlebar collapsed={closedLook} copy={copy} />
         <Stack fill gap="none">
           <ConversationShell composerReserve={96}>
-            <ConversationScroll masked={false} scrollable={false}><Turn copy={copy} /></ConversationScroll>
+            <ConversationScroll scrollRef={scrollRef} scrollable={false}><Turn copy={copy} /></ConversationScroll>
             <ComposerCard expanded={false} floating onSubmit={(event) => event.preventDefault()}>
               <ComposerCardToolbar>
                 <IconButton label={copy.more}><Plus size="md" /></IconButton>

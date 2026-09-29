@@ -1,16 +1,12 @@
 import type { ReactNode } from "react";
+import { useCallback } from "react";
 import { CollapsibleNavGroup } from "../../../../blocks/CollapsibleNavGroup";
-import { MessageListSurface } from "../../../../blocks/ConversationShell";
-import { MarkdownContent } from "../../../../blocks/MarkdownContent";
-import { MessageFooter, MessageRow, MessageStatusLabel, MessageStatusRow } from "../../../../blocks/MessageRow";
 import { NavRow } from "../../../../blocks/NavRow";
 import { NavSectionHeading } from "../../../../blocks/NavSection";
 import { SidebarBrand, SidebarNav, SidebarShell } from "../../../../blocks/SidebarShell";
 import { TitlebarShell } from "../../../../blocks/TitlebarShell";
 import { Box } from "../../../Box";
-import { ButlerThinkingMark } from "../../../ButlerThinkingMark";
 import { ButtonContainer } from "../../../ButtonContainer";
-import { CopyButton } from "../../../CopyButton";
 import { IconButton } from "../../../IconButton";
 import { IconSlot } from "../../../IconSlot";
 import {
@@ -26,10 +22,15 @@ const glyph = (icon: ReactNode) => <IconSlot size="sidebar">{icon}</IconSlot>;
 
 /** The space sidebar as the app draws it (SpaceSidebar): brand, entry rows, favourites, the browse tabs, the space tree, settings. */
 export function Sidebar({ copy, touch }: { copy: LayoutCopy; touch: boolean }) {
-  const [first, active] = copy.sessions;
+  // In the touch drawer the list is short of room, so it is scrolled up to the browse tabs, as a person browsing it would leave it.
+  const scrollRef = useCallback((node: HTMLDivElement | null) => {
+    const head = node?.querySelector<HTMLElement>("[data-slot=\"sidebar-scroll-header\"]");
+    if (touch && node && head) node.scrollTop = head.offsetHeight;
+  }, [touch]);
   return (
     <SidebarShell
       density={touch ? "touch" : "comfortable"}
+      scrollRef={scrollRef}
       titlebar={<SidebarBrand><Typo.AppTitle>{copy.app}</Typo.AppTitle></SidebarBrand>}
       scrollHeader={
         <Stack gap="2xl">
@@ -72,8 +73,9 @@ export function Sidebar({ copy, touch }: { copy: LayoutCopy; touch: boolean }) {
         onToggle={() => undefined}
         stickyDepth={0}
       >
-        <NavRow icon={glyph(<Notebook />)} label={first} />
-        <NavRow actions={<IconButton label={copy.more}><MoreHorizontal /></IconButton>} actionsVisibility="visible" active icon={glyph(<Notebook />)} label={active} />
+        {copy.sessions.map((label, k) => k === copy.active
+          ? <NavRow actions={<IconButton label={copy.more}><MoreHorizontal /></IconButton>} actionsVisibility="visible" active icon={glyph(<Notebook />)} key={label} label={label} />
+          : <NavRow icon={glyph(<Notebook />)} key={label} label={label} />)}
       </CollapsibleNavGroup>
     </SidebarShell>
   );
@@ -95,7 +97,7 @@ export function Titlebar({ copy, collapsed }: { copy: LayoutCopy; collapsed: boo
           </Stack>
         </Stack>
       }
-      title={copy.sessions[1]}
+      title={copy.sessions[copy.active]}
       trailing={
         <ButtonContainer size="icon-sm">
           <IconButton label={copy.more}><MoreHorizontal size="md" /></IconButton>
@@ -105,34 +107,3 @@ export function Titlebar({ copy, collapsed }: { copy: LayoutCopy; collapsed: boo
     />
   );
 }
-
-/** One finished turn (MessageList): the user bubble and its footer, the markdown reply, its footer and the completed status. */
-export function Turn({ copy }: { copy: LayoutCopy }) {
-  return (
-    <MessageListSurface>
-      <MessageRow
-        footer={<MessageFooter><Typo.Text as="time" numeric="tabular">{copy.time}</Typo.Text><CopyButton copiedLabel={copy.copy} label={copy.copy} text={copy.ask} /></MessageFooter>}
-        role="user"
-      >
-        {copy.ask}
-      </MessageRow>
-      <MessageRow role="assistant">
-        <MarkdownContent>
-          <p>{copy.answer}</p>
-          <ol>{copy.steps.map((step) => <li key={step}>{step}</li>)}</ol>
-        </MarkdownContent>
-        <MessageFooter>
-          <CopyButton copiedLabel={copy.copy} label={copy.copy} text={copy.answer} />
-          <span>{copy.worked}</span>
-          <Typo.Text as="time" numeric="tabular">{copy.time}</Typo.Text>
-        </MessageFooter>
-        <MessageStatusRow>
-          <MessageStatusLabel mark={<ButlerThinkingMark state="idle" />}>
-            <Typo.Caption as="span">{copy.done}</Typo.Caption>
-          </MessageStatusLabel>
-        </MessageStatusRow>
-      </MessageRow>
-    </MessageListSurface>
-  );
-}
-
