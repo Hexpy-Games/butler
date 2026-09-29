@@ -12,9 +12,12 @@ use tokio::sync::mpsc;
 
 use super::super::cassette::{self, Chunk, Exchange, RequestRecord, ResponseRecord};
 use super::super::faults::{ArgsMutation, Transform, mutate_chunk};
-use super::super::sanitize::{HEADER_ALLOWLIST, sanitize_body};
+use super::super::sanitize::{keep_header, sanitize_body};
 use super::replay::{consume_fault, plain, take_fault};
 use super::{State, lock};
+
+/// Where `/oauth/*` requests are recorded from.
+const OAUTH_UPSTREAM: &str = "https://auth.openai.com";
 
 #[expect(clippy::too_many_arguments, reason = "one forwarding step, kept flat")]
 pub(super) async fn record(
@@ -32,6 +35,13 @@ pub(super) async fn record(
         method.as_str(),
         serde_json::to_string(&key).unwrap_or_default()
     );
+    // The Codex login refresh (`Setup::codex_login_refresh`) goes to the
+    // OpenAI auth host, whatever the provider's upstream.
+    let upstream = if path.starts_with("/oauth/") {
+        OAUTH_UPSTREAM
+    } else {
+        upstream
+    };
     let mut request = client.request(
         reqwest::Method::from_bytes(method.as_str().as_bytes()).unwrap_or(reqwest::Method::POST),
         format!("{}{path}", upstream.trim_end_matches('/')),
@@ -63,8 +73,8 @@ pub(super) async fn record(
             continue;
         }
         builder = builder.header(name.as_str(), value.as_bytes());
-        if HEADER_ALLOWLIST.contains(&name.as_str())
-            && let Ok(value) = value.to_str()
+        if let Ok(value) = value.to_str()
+            && keep_header(name.as_str(), value)
         {
             kept_headers.push((name.as_str().to_owned(), value.to_owned()));
         }

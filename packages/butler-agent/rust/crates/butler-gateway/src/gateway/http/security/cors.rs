@@ -9,7 +9,7 @@ use axum::response::Response;
 use super::request_policy::RequestOrigin;
 
 const ALLOWED_METHODS: &str = "GET, POST, PATCH, DELETE";
-const ALLOWED_HEADERS: &str = "authorization, content-type";
+const ALLOWED_HEADERS: &str = "authorization, content-type, x-butler-admin";
 const PREFLIGHT_MAX_AGE_SECONDS: &str = "600";
 
 /// Marks every response as varying by Origin and echoes an allowlisted one.

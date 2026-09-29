@@ -1,15 +1,11 @@
 import type { DsPrivateStyleProps } from "../../lib/dsProps";
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
 import { useScrollEdges } from "../../lib/useScrollEdges";
-import { PromptFluidBackground } from "./PromptFluidBackground";
-import {
-  PromptFluidPaletteControl,
-  type PromptFluidPaletteOption,
-} from "./PromptFluidPaletteControl";
+import { Wallpaper, type WallpaperMotion, type WallpaperSource, type WallpaperTone } from "../Wallpaper";
 import { PromptSuggestionCard } from "./PromptSuggestionCard";
-import type { FluidPalette, FluidTone, FluidVariant } from "./promptFluid";
+import { usePromptContentRect } from "./usePromptContentRect";
 import styles from "./PromptSuggestionList.module.css";
 import { dsClass } from "../../lib/internal";
 
@@ -27,12 +23,14 @@ export interface PromptSuggestionListProps extends DsPrivateStyleProps {
   title: ReactNode;
   suggestions: PromptSuggestionItem[];
   description?: ReactNode;
-  fluidBackground?: boolean;
-  fluidPalette?: FluidPalette;
-  fluidPaletteOptions?: readonly PromptFluidPaletteOption[];
+  /** Full-screen wallpaper behind the prompt; omit or `none` for a plain background. */
+  wallpaper?: WallpaperSource;
+  /** `paused` holds a still frame (the user's pause). */
+  wallpaperMotion?: WallpaperMotion;
+  /** Hold a still frame while the device runs on battery. */
+  wallpaperPauseOnBattery?: boolean;
   /** Omit to follow the nearest theme scope. */
-  fluidTone?: FluidTone;
-  fluidVariant?: FluidVariant;
+  wallpaperTone?: WallpaperTone;
   moment?: ReactNode;
   titleIcon?: ReactNode;
 }
@@ -42,39 +40,41 @@ export function PromptSuggestionList({
   suggestions,
   className,
   description,
-  fluidBackground = false,
-  fluidPalette,
-  fluidPaletteOptions,
-  fluidTone,
-  fluidVariant = "bloom",
+  wallpaper,
+  wallpaperMotion,
+  wallpaperPauseOnBattery,
+  wallpaperTone,
   moment,
   titleIcon,
 }: PromptSuggestionListProps) {
-  const [fluidPaletteId, setFluidPaletteId] = useState(
-    () => fluidPaletteOptions?.[0]?.id ?? "",
-  );
-  const selectedPaletteOption = useMemo(
-    () =>
-      fluidPaletteOptions?.find((option) => option.id === fluidPaletteId) ??
-      fluidPaletteOptions?.[0],
-    [fluidPaletteId, fluidPaletteOptions],
-  );
   const titleIconState = titleIcon ? "true" : undefined;
   const railFadeRef = useScrollEdges("x");
+  const [header, setHeader] = useState<HTMLElement | null>(null);
+  const [rail, setRail] = useState<HTMLDivElement | null>(null);
+  const [grid, setGrid] = useState<HTMLDivElement | null>(null);
+  const railRef = useCallback((node: HTMLDivElement | null) => {
+    setRail(node);
+    return railFadeRef(node);
+  }, [railFadeRef]);
+  // Modules keep the headline and cards readable (u_contentRect), as they are composed around them.
+  const contentRect = usePromptContentRect(wallpaper ? header : null, rail, grid);
 
   return (
     <section
       className={cn(styles.root, className)}
       data-test-class="new-chat-empty-state"
     >
-      {fluidBackground ? (
-        <PromptFluidBackground
-          palette={fluidPalette ?? selectedPaletteOption?.colors}
-          tone={fluidTone}
-          variant={fluidVariant}
+      {wallpaper ? (
+        <Wallpaper
+          contentRect={contentRect}
+          dataTestClass="new-chat-fluid-gradient"
+          motion={wallpaperMotion}
+          pauseOnBattery={wallpaperPauseOnBattery}
+          source={wallpaper}
+          tone={wallpaperTone}
         />
       ) : null}
-      <header className={styles.header} data-has-title-icon={titleIconState}>
+      <header className={styles.header} data-has-title-icon={titleIconState} ref={setHeader}>
         {moment || titleIcon ? (
           <div className={styles.metaRow}>
             {titleIcon ? (
@@ -120,20 +120,13 @@ export function PromptSuggestionList({
             ) : null}
           </div>
         </div>
-        {fluidPaletteOptions && fluidPaletteOptions.length > 1 ? (
-          <PromptFluidPaletteControl
-            onSelect={setFluidPaletteId}
-            options={fluidPaletteOptions}
-            selectedId={selectedPaletteOption?.id}
-          />
-        ) : null}
       </header>
       <div
-        ref={railFadeRef}
+        ref={railRef}
         className={styles.railViewport}
         data-test-class="new-chat-suggestion-rail"
       >
-        <div className={styles.grid} data-test-class="new-chat-suggestions">
+        <div className={styles.grid} data-test-class="new-chat-suggestions" ref={setGrid}>
           {suggestions.map((suggestion, index) => (
             <PromptSuggestionCard
               key={suggestion.id}

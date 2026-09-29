@@ -12,6 +12,9 @@ async fn session_messages(store: &AgentConversationStore) -> Vec<ConversationMes
         .unwrap()
 }
 
+/// Security boundary: transcript admission replays the exact source and
+/// rejects unsafe tool content.
+// test-category: security
 #[tokio::test]
 async fn admission_replays_exact_source_and_rejects_unsafe_tool_content() {
     let path = test_path("admission");

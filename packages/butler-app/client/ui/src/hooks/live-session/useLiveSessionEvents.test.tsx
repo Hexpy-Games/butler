@@ -1,9 +1,10 @@
 /// <reference types="bun" />
 
-import { afterAll, afterEach, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, expect, mock, spyOn, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { toast } from "sonner";
 import type { NavigationView, SessionSummary } from "@/app/types.ts";
 import { activeChatFromNavigation } from "@/app/utils.ts";
 import { projectSpace } from "@/app/space/projection";
@@ -26,6 +27,7 @@ let unsubscribeCalls = 0;
 const refreshedSessions: string[] = [];
 const appliedRefreshes: string[] = [];
 const appliedEvents: unknown[] = [];
+const appliedSettings: Array<Record<string, unknown>> = [];
 let navigationRefreshCalls = 0;
 let navigationRefreshResolver: (() => void) | undefined;
 const navigationRefreshSnapshots: NavigationView[] = [];
@@ -102,6 +104,10 @@ const storeState = {
       assistant_messages: false,
       task_completions: false,
     },
+  } as Record<string, unknown>,
+  setSettings(settings: Record<string, unknown>) {
+    appliedSettings.push(settings);
+    this.settings = settings;
   },
   applyTimelineEvents(events: unknown[]) {
     if (applyFailuresRemaining > 0) {
@@ -200,6 +206,7 @@ const useButlerStore = Object.assign(selectStore, {
 mock.module("@/app/store.ts", () => ({ useButlerStore }));
 
 const { useLiveSessionEvents } = await import("./useLiveSessionEvents.ts");
+const { noteSettingsSnapshotRequest } = await import("./liveSettingsSync.ts");
 
 let renderedRoot: Root | undefined;
 let fakeClock: FakeClock | undefined;
@@ -223,6 +230,14 @@ afterEach(async () => {
   holdRefresh = false;
   refreshResolvers.splice(0).forEach((resolve) => resolve());
   appliedEvents.splice(0);
+  appliedSettings.splice(0);
+  storeState.settings = {
+    desktop_notifications: {
+      enabled: false,
+      assistant_messages: false,
+      task_completions: false,
+    },
+  };
   applyFailuresRemaining = 0;
   storeState.sessionView.active_turn = null;
   unsubscribeCalls = 0;
@@ -628,6 +643,87 @@ test("navigation event reconciliation ignores unrelated, stale, archived, and de
   expect(storeState.navigation.projects[0]?.sessions?.some(
     (session) => session.id === "session-live-events",
   )).toBe(false);
+});
+
+test("settings.updated merges into the app settings without a reload", async () => {
+  await renderHarness();
+  const wallpaper = {
+    source: { kind: "live", module: "butler.silk" },
+    motion: "paused",
+    pauseOnBattery: true,
+  };
+  deliverEvent(0, {
+    id: 43,
+    type: "settings.updated",
+    created_at: new Date().toISOString(),
+    payload: { settings: { wallpaper, appearance_theme: "dark", enabled_worker_profile_count: 1 } },
+  });
+  await flushMicrotasks();
+
+  expect(appliedSettings).toHaveLength(1);
+  expect(storeState.settings.wallpaper).toEqual(wallpaper);
+  expect(storeState.settings.appearance_theme).toBe("dark");
+  expect(storeState.settings.desktop_notifications).toEqual({
+    enabled: false,
+    assistant_messages: false,
+    task_completions: false,
+  });
+  expect(storeState.settings).not.toHaveProperty("enabled_worker_profile_count");
+
+  deliverEvent(0, { id: 44, type: "project.updated", payload: { project: { id: "project-one" } } });
+  await flushMicrotasks();
+  expect(appliedSettings).toHaveLength(1);
+});
+
+test("replayed settings.updated events older than the startup settings snapshot are ignored", async () => {
+  const snapshotAt = Date.now();
+  noteSettingsSnapshotRequest(snapshotAt);
+  try {
+    await renderHarness();
+    // The stream starts at cursor 0 and replays history: an old wallpaper must not flash back.
+    deliverEvent(0, {
+      id: 3,
+      type: "settings.updated",
+      created_at: new Date(snapshotAt - 60_000).toISOString(),
+      payload: { settings: { wallpaper: { source: { kind: "image", asset: "deleted", fit: "cover", dim: 0, blur: 0 } } } },
+    });
+    await flushMicrotasks();
+    expect(appliedSettings).toHaveLength(0);
+    deliverEvent(0, {
+      id: 4,
+      type: "settings.updated",
+      created_at: new Date(snapshotAt + 1_000).toISOString(),
+      payload: { settings: { appearance_theme: "dark" } },
+    });
+    await flushMicrotasks();
+    expect(appliedSettings).toHaveLength(1);
+    expect(storeState.settings.appearance_theme).toBe("dark");
+  } finally {
+    noteSettingsSnapshotRequest(null);
+  }
+});
+
+test("an agent's wallpaper.changed shows one undo toast; the user's own change shows none", async () => {
+  const message = spyOn(toast, "message");
+  try {
+    await renderHarness();
+    const change = (id: number, origin: string) => ({
+      id,
+      type: "wallpaper.changed",
+      created_at: new Date(Date.now()).toISOString(),
+      payload: { scope: "global", previous: { kind: "live", module: "butler.silk" }, next: { kind: "none" }, origin },
+    });
+    deliverEvent(0, change(50, "user"));
+    await flushMicrotasks();
+    expect(message).not.toHaveBeenCalled();
+    deliverEvent(0, change(51, "agent"));
+    await flushMicrotasks();
+    expect(message).toHaveBeenCalledTimes(1);
+    const options = message.mock.calls[0]?.[1] as { action?: { label?: string } } | undefined;
+    expect(options?.action?.label).toBeTruthy();
+  } finally {
+    message.mockRestore();
+  }
 });
 
 test("projection failures reconnect from the last successfully applied cursor", async () => {

@@ -8,6 +8,8 @@ pub(super) struct PromptDecoded {
     pub text: Option<String>,
     pub usage: Option<PromptUsageReport>,
     pub cache_write_tokens: Option<Option<f64>>,
+    pub reasoning_tokens: Option<f64>,
+    pub cache_write_1h_tokens: Option<f64>,
 }
 
 pub(super) fn decode(response: &Value, model: &str, carrier: Carrier) -> PromptDecoded {
@@ -53,7 +55,8 @@ pub(super) fn decode(response: &Value, model: &str, carrier: Carrier) -> PromptD
     };
     let cache_write = response
         .pointer("/usage/prompt_tokens_details/cache_write_tokens")
-        .or_else(|| response.pointer("/usage/input_tokens_details/cache_write_tokens"));
+        .or_else(|| response.pointer("/usage/input_tokens_details/cache_write_tokens"))
+        .or_else(|| response.pointer("/usage/cache_creation_input_tokens"));
     PromptDecoded {
         text,
         usage: stats.map(|stats| PromptUsageReport {
@@ -64,6 +67,8 @@ pub(super) fn decode(response: &Value, model: &str, carrier: Carrier) -> PromptD
             output_tokens: stats.output,
         }),
         cache_write_tokens: cache_write.map(number_value),
+        reasoning_tokens: super::super::result::reasoning_tokens(response),
+        cache_write_1h_tokens: super::super::result::cache_write_1h_tokens(response),
     }
 }
 
@@ -195,6 +200,3 @@ fn number(value: Option<&Value>) -> Option<f64> {
 fn number_value(value: &Value) -> Option<f64> {
     value.as_f64().filter(|value| value.is_finite())
 }
-
-#[cfg(test)]
-mod tests;

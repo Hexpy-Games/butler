@@ -64,7 +64,7 @@ pub(super) async fn configured(
         },
         "openai-web-search" => match access.environment_value("OPENAI_API_KEY")? {
             Some(key) => fallback(
-                Box::new(OpenAIWebSearchProvider::new(key, model, api_base)),
+                Box::new(OpenAIWebSearchProvider::new(&key, model, api_base)),
                 ddg(),
             ),
             None => ddg(),
@@ -97,7 +97,7 @@ pub(super) async fn configured(
             } else {
                 match resolve_auth(access).await {
                     Ok(ProviderAuth::ApiKey(key)) => fallback(
-                        Box::new(OpenAIWebSearchProvider::new(key, model, api_base)),
+                        Box::new(OpenAIWebSearchProvider::new(&key, model, api_base)),
                         ddg(),
                     ),
                     Ok(auth @ ProviderAuth::Codex { .. }) => {

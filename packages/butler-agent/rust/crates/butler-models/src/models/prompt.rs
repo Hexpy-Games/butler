@@ -8,4 +8,4 @@ pub use contracts::{
     PromptUsageReport, PromptUsageSectionAttribution, ProviderPromptFuture,
     ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest, ProviderPromptResult,
 };
-pub use contracts::{PromptBudgetStateSource, PromptCacheBoundary};
+pub use contracts::{PromptBudgetStateSource, PromptCacheBoundary, UsageAuthMode};

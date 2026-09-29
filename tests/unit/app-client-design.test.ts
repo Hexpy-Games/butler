@@ -642,7 +642,7 @@ test("electron shell injects a minimal preload-only app API contract", () => {
   expect(electronMain).toContain("BUTLER_APP_UI_URL");
   expect(electronMain).toContain("rendererUrl");
   expect(electronMain).toContain("defaultRendererUrl");
-  expect(electronMain).toContain("resolveStaticRendererUrl");
+  expect(electronMain).toContain("resolveStaticRendererDist");
   expect(electronMain).toContain('join(process.resourcesPath, "app-client")');
   expect(electronMain).toContain("serverHealthUrl");
   expect(electronMain).toContain('new URL("/health", serverUrl).toString()');
@@ -660,6 +660,9 @@ test("electron shell injects a minimal preload-only app API contract", () => {
   expect(electronMain).toContain("function appLocalAuthHeaders");
   expect(electronMain).toContain("normalizeLocalHttpUrl");
   expect(supervisor).toContain("BUTLER_APP_DEV_ORIGIN");
+  expect(electronMain).toContain(
+    "getDevOrigin: () => (explicitUiUrl ? rendererOrigin : null)",
+  );
   expect(electronMain).toContain("await win.loadURL(rendererUrl)");
   expect(electronMain).toContain("handleFatalStartupError");
   expect(electronMain).toContain(".catch(handleFatalStartupError)");
@@ -1261,6 +1264,9 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   const messageMedia = read(
     "packages/butler-app/client/ui/src/components/conversation/messageMedia.ts",
   );
+  const messageInlineImage = read(
+    "packages/butler-app/client/ui/src/components/conversation/MessageInlineImage.tsx",
+  );
   const autoScroll = read(
     "packages/butler-app/client/ui/src/components/conversation/hooks/useConversationAutoScroll.ts",
   );
@@ -1291,14 +1297,26 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   const markdownContentStyles = read(
     "packages/butler-app/client/ui/src/libs/design-system/blocks/MarkdownContent/MarkdownContent.module.css",
   );
-  const promptFluid = read(
-    "packages/butler-app/client/ui/src/libs/design-system/blocks/PromptSuggestionList/promptFluid.ts",
+  const wallpaperRenderer = read(
+    "packages/butler-app/client/ui/src/libs/design-system/blocks/Wallpaper/renderer.ts",
   );
-  const promptFluidShaders = read(
-    "packages/butler-app/client/ui/src/libs/design-system/blocks/PromptSuggestionList/promptFluidShaders.ts",
+  const wallpaperScheduler = read(
+    "packages/butler-app/client/ui/src/libs/design-system/blocks/Wallpaper/scheduler.ts",
   );
-  const promptFluidPalettes = read(
-    "packages/butler-app/client/ui/src/libs/design-system/blocks/PromptSuggestionList/promptFluidPalettes.ts",
+  const wallpaperStyles = read(
+    "packages/butler-app/client/ui/src/libs/design-system/blocks/Wallpaper/Wallpaper.module.css",
+  );
+  const bloomShader = read(
+    "packages/butler-app/client/ui/src/libs/design-system/blocks/Wallpaper/modules/butler.bloom/shader.frag",
+  );
+  const bloomManifest = read(
+    "packages/butler-app/client/ui/src/libs/design-system/blocks/Wallpaper/modules/butler.bloom/wallpaper.json",
+  );
+  const silkShader = read(
+    "packages/butler-app/client/ui/src/libs/design-system/blocks/Wallpaper/modules/butler.silk/shader.frag",
+  );
+  const silkManifest = read(
+    "packages/butler-app/client/ui/src/libs/design-system/blocks/Wallpaper/modules/butler.silk/wallpaper.json",
   );
   const normalizedComposerCardStyles = collapseWhitespace(composerCardStyles);
   const messageVirtualizer = read(
@@ -1434,11 +1452,12 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(renderer).toContain("cancelActiveTurn");
   expect(renderer).toContain("Export app-visible transcript");
   expect(renderer).toContain("attachments={message.attachments}");
-  expect(messageMarkdown).toContain("resolveMarkdownImageSource");
-  expect(messageMarkdown).toContain('data-test-class="markdown-inline-image"');
-  expect(messageMarkdown).toContain('decoding="async"');
-  expect(messageMarkdown).toContain('loading="lazy"');
-  expect(messageMedia).toContain("MESSAGE_FILE_URL_PATTERN");
+  expect(messageMarkdown).toContain("<MessageInlineImage");
+  expect(messageInlineImage).toContain("markdownImageFile");
+  expect(messageInlineImage).toContain('data-test-class="markdown-inline-image"');
+  expect(messageInlineImage).toContain('decoding="async"');
+  expect(messageInlineImage).toContain('loading="lazy"');
+  expect(messageMedia).toContain("messageFilePath(source)");
   expect(messageMedia).toContain('attachment.kind === "image"');
   expect(messageMedia).toContain("normalizedFileName(attachment.safe_name)");
   expect(markdownContentStyles).toContain(".markdown img");
@@ -1464,11 +1483,9 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
     'data-slot="prompt-suggestion-title-copy"',
   );
   expect(promptSuggestionList).toContain("description");
-  expect(promptSuggestionList).toContain("fluidBackground");
-  expect(promptSuggestionList).toContain("fluidPalette");
-  expect(promptSuggestionList).toContain("fluidPaletteOptions");
-  expect(promptSuggestionList).toContain("fluidTone");
-  expect(promptSuggestionList).toContain("fluidVariant");
+  expect(promptSuggestionList).toContain("<Wallpaper");
+  expect(promptSuggestionList).toContain("wallpaperTone");
+  expect(promptSuggestionList).not.toContain("fluidPaletteOptions");
   expect(promptSuggestionList).toContain("moment");
   expect(promptSuggestionCard).toContain("<TintedGlass");
   expect(promptSuggestionCard).toContain("prompt-suggestion-meta");
@@ -1476,7 +1493,8 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(promptSuggestionCard).toContain("prompt-suggestion-description");
   expect(promptSuggestionList).not.toContain("suggestion.icon");
   expect(promptSuggestionList).not.toContain("suggestion.graphic");
-  expect(renderer).toContain("<PromptFluidBackground");
+  expect(renderer).toContain("<Wallpaper");
+  expect(renderer).not.toContain("PromptFluidBackground");
   expect(promptSuggestionListStyles).toContain("grid-auto-flow: column");
   expect(promptSuggestionListStyles).toContain("overflow: auto hidden");
   expect(promptSuggestionListStyles).toContain(
@@ -1485,9 +1503,7 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(promptSuggestionListStyles).toContain(
     "padding: var(--titlebar-safe-area-top) 0 0",
   );
-  expect(promptSuggestionListStyles).toContain(
-    "inset: 0",
-  );
+  expect(wallpaperStyles).toContain("inset: 0");
   expect(promptSuggestionListStyles).toContain(
     "grid-auto-columns: minmax(198px, 224px)",
   );
@@ -1497,8 +1513,7 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(promptSuggestionListStyles).toContain("--tinted-glass-bg");
   expect(promptSuggestionListStyles).toContain("--tinted-glass-shadow: none");
   expect(promptSuggestionListStyles).toContain("min-height: 260px");
-  expect(promptSuggestionListStyles).toContain(".paletteControl");
-  expect(promptSuggestionListStyles).toContain(".paletteSwatch");
+  expect(promptSuggestionListStyles).not.toContain(".paletteControl");
   expect(renderer).toContain("new-chat-fluid-gradient");
   expect(promptSuggestionListStyles).toContain("--typo-new-chat-title-size");
   expect(promptSuggestionListStyles).toContain(
@@ -1512,7 +1527,7 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   );
   expect(promptSuggestionListStyles).toContain(".titleIcon img");
   expect(promptSuggestionListStyles).toContain("object-fit: contain");
-  expect(promptSuggestionListStyles).toContain(
+  expect(wallpaperStyles).toContain(
     "border-radius: var(--workspace-left-radius, 18px) 0 0",
   );
   expect(conversationShellStyles).toContain("--conversation-content-width");
@@ -1521,46 +1536,35 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(promptSuggestionListStyles).not.toContain("--prompt-title-offset");
   expect(promptSuggestionListStyles).toContain("word-break: keep-all");
   expect(promptSuggestionListStyles).toContain("overflow-wrap: break-word");
-  expect(promptFluidShaders).toContain("vec3 color=mix(base,liquid");
-  expect(promptFluid).not.toContain("brightLiquid");
-  expect(promptFluidPalettes).toContain("PROMPT_FLUID_PALETTES");
-  expect(promptFluidPalettes).toContain("monochrome");
-  expect(promptFluidPalettes).toContain("[50, 66, 77]");
-  expect(promptFluidPalettes).toContain(
-    "DEFAULT_PROMPT_FLUID_PALETTE = PROMPT_FLUID_PALETTES.monochrome",
-  );
-  expect(promptFluidPalettes).toContain("VIOLET_COLOR");
-  expect(promptFluidPalettes).toContain("[139, 92, 246]");
-  expect(promptFluidPalettes).toContain("INDIGO_COLOR");
-  expect(promptFluidPalettes).toContain("[99, 102, 241]");
-  expect(promptFluidPalettes).toContain("[56, 189, 248]");
-  expect(promptFluidPalettes).toContain("[45, 212, 191]");
-  expect(promptFluid).toContain("VISIBLE_LIQUID_SATURATION");
-  expect(promptFluid).toContain("MAX_FLUID_CANVAS_PIXELS");
-  expect(promptFluid).toContain("MAX_FLUID_PIXEL_RATIO");
-  expect(promptFluid).toContain('powerPreference: "low-power"');
-  expect(promptSuggestionListStyles).toContain("contain: strict");
-  expect(promptSuggestionListStyles).not.toContain("filter: saturate(1.06)");
-  expect(promptFluidShaders).toContain("uniform vec3 p0");
-  expect(promptFluidShaders).toContain("uniform float d");
-  expect(promptFluid).toContain("setPaletteUniforms");
-  expect(promptFluid).toContain("FRAGMENT_SHADER");
-  expect(promptFluid).toContain("SILK_FRAGMENT_SHADER");
-  expect(promptFluid).toContain("createFluidRenderer");
-  expect(promptFluid).toContain("FluidVariant");
-  expect(promptFluid).toContain("FluidTone");
-  expect(promptFluidShaders).toContain("float a1=blob");
-  expect(promptFluidShaders).toContain("SILK_FRAGMENT_SHADER");
-  expect(promptFluidShaders).toContain("silkNoise");
-  expect(promptFluidShaders).toContain("rotateSilk");
-  expect(promptFluidShaders).toContain("float fold=");
-  expect(promptFluidShaders).toContain("vec3 color=mix(p0,shade");
+  expect(bloomShader).toContain("vec3 color=mix(base,liquid");
+  expect(bloomShader).toContain("float a1=blob");
+  expect(bloomShader).toContain("p_colors[5]");
+  expect(bloomShader).not.toContain("brightLiquid");
+  expect(bloomManifest).toContain('"type": "palette"');
+  expect(bloomManifest).toContain('"monochrome"');
+  expect(bloomManifest).toContain('"#32424d"');
+  expect(bloomManifest).toContain('"#8b5cf6"');
+  expect(bloomManifest).toContain('"#6366f1"');
+  expect(bloomManifest).toContain('"#38bdf8"');
+  expect(bloomManifest).toContain('"#2dd4bf"');
+  expect(wallpaperScheduler).toContain("maxPixelRatio: 1, maxPixels: 1_400_000");
+  expect(wallpaperScheduler).toContain("WALLPAPER_ANIMATED_FPS = 20");
+  expect(wallpaperRenderer).toContain('powerPreference: "low-power"');
+  expect(wallpaperRenderer).toContain('canvas.getContext("webgl2"');
+  expect(wallpaperRenderer).toContain("linkWallpaperModule");
+  expect(wallpaperStyles).toContain("contain: strict");
+  expect(wallpaperStyles).not.toContain("filter: saturate(1.06)");
+  expect(silkShader).toContain("silkNoise");
+  expect(silkShader).toContain("rotateSilk");
+  expect(silkShader).toContain("float fold=");
+  expect(silkShader).toContain("vec3 color=mix(p_base,shade");
+  expect(silkManifest).toContain('"defaultDark": "#1a1b1e"');
   expect(renderer).toContain("function MainScreenThemeSettings");
-  expect(renderer).toContain('draft.main_screen_theme === "bloom"');
-  expect(renderer).toContain("paletteMonochrome");
-  expect(renderer).toContain("settings-main-screen-theme-select");
-  expect(renderer).toContain("settings-main-screen-theme-preset-select");
-  expect(renderer).toContain("settings-main-screen-theme-color");
+  // Home screen: the DS wallpaper picker (modules, images, upload) with manifest-driven controls.
+  expect(renderer).toContain("<WallpaperPicker");
+  expect(renderer).toContain("settings-main-screen-wallpaper-picker");
+  expect(renderer).toContain("uploadedWallpaperSource(asset)");
+  expect(renderer).toContain("function WallpaperPaletteControl");
   expect(renderer).toContain("ColorSwatchInput");
   expect(
     read(
@@ -1577,10 +1581,10 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
       "packages/butler-app/client/ui/src/libs/design-system/components/ColorSwatchInput/ColorSwatchInput.module.css",
     ),
   ).toContain(".input::-webkit-color-swatch");
-  expect(renderer).toContain("mainScreenFluidEnabled");
-  expect(renderer).toContain("mainScreenFluidPalette");
-  expect(renderer).toContain("mainScreenFluidVariant");
-  expect(renderer).toContain("SYSTEM_BACKGROUND_PALETTES");
+  expect(renderer).toContain("mainScreenWallpaper(settings)");
+  expect(renderer).toContain("wallpaperPauseOnBattery");
+  expect(renderer).not.toContain("PROMPT_FLUID_PALETTES");
+  expect(renderer).not.toContain("SYSTEM_BACKGROUND_PALETTES");
   expect(renderer).toContain("main-screen-theme-bloom");
   expect(renderer).toContain("main-screen-theme-silk");
   expect(renderer).toContain("main-screen-theme-none");

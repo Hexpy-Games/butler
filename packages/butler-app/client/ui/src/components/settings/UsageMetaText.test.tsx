@@ -30,7 +30,7 @@ for (const language of ["en", "ko"] as const) {
       renderToStaticMarkup(<UsageProviderRow provider={{
         ...bucket, providerId: "anthropic", source: "provider_adapter", billing: { available: true, reason: "" },
         remaining: { available: false, stale: false, sourceKind: "provider_quota", sourceId: "x", planKind: "unknown",
-          planName: null, windows: [], fetchedAt: null, reason: { code: "provider_quota_surface_unavailable", message: "" } },
+          planName: null, windows: [], fetchedAt: null, reason: { code: "provider_quota_pending", message: "" } },
       } as never} />),
     ].join("");
     const texts = metaTexts(markup);

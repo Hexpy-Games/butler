@@ -54,6 +54,9 @@ impl Fixture {
     }
 }
 
+/// Race: concurrent distinct model registrations share one full-file write
+/// sequence, so neither update is lost.
+// test-category: race
 #[tokio::test]
 async fn concurrent_distinct_registrations_share_the_full_file_write_sequence() {
     let fixture = Fixture::new();
@@ -264,14 +267,11 @@ async fn custom_model_credentials_are_endpoint_scoped_private_and_clearable() {
     let secret_path = fixture.0.join("auth/custom-model-credentials.json");
     let secrets: Value = serde_json::from_slice(&fs::read(&secret_path).unwrap()).unwrap();
     assert_eq!(secrets["local/org-model.gguf"], "private-key");
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        assert_eq!(
-            fs::metadata(&secret_path).unwrap().permissions().mode() & 0o777,
-            0o600
-        );
-    }
+    // Hosts without owner-only permissions report `None`.
+    assert_ne!(
+        butler_platform::secure_fs::is_owner_only(&fs::metadata(&secret_path).unwrap()),
+        Some(false)
+    );
 
     let reuse = LocalModelMutation {
         api_key: None,

@@ -8,6 +8,8 @@ import { BackupModelsSummary } from "./BackupModelsSummary";
 import { ButlerModelFields } from "./ButlerModelFields";
 import { MemoryCleanupFields } from "./MemoryCleanupFields";
 import { PermissionsFields } from "./PermissionsFields";
+import { SavedKeysRows } from "./SavedKeysRows";
+import { useSavedKeys } from "./hooks/useSavedKeys";
 import { ModelAddEditPage } from "./ModelAddEditPage";
 import { ModelManagementPage } from "./ModelManagementPage";
 import { WorkerProfileControls } from "./WorkerProfileControls";
@@ -15,15 +17,14 @@ import { WorkerProfileEditor } from "./WorkerProfileEditor";
 import { useWorkerProfiles } from "./hooks/useWorkerProfiles";
 
 /**
- * The Models page. The main model, backup models and permissions are always
- * visible; memory cleanup and worker profiles sit in a collapsed Advanced
+ * The Models page. The main model, backup models, saved API keys and
+ * permissions are always visible; memory cleanup and worker profiles sit in a collapsed Advanced
  * disclosure on the same page.
  */
 export function ModelsSettings() {
   useAppLocale();
   const draft = useSettingsUIStore((state) => state.draft);
   const modelRoute = useSettingsUIStore((state) => state.modelRoute);
-  const workers = useWorkerProfiles();
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   if (!draft) return null;
@@ -33,7 +34,13 @@ export function ModelsSettings() {
   if (modelRoute.page === "edit") {
     return <ModelAddEditPage modelRef={modelRoute.modelRef} />;
   }
+  return <ModelsRootPage advancedOpen={advancedOpen} onToggleAdvanced={() => setAdvancedOpen(!advancedOpen)} />;
+}
 
+/** Mounted on each return from Add or Manage, so the saved keys load fresh. */
+function ModelsRootPage({ advancedOpen, onToggleAdvanced }: { advancedOpen: boolean; onToggleAdvanced: () => void }) {
+  const workers = useWorkerProfiles();
+  const savedKeys = useSavedKeys();
   const settingsCopy = appCopy.settings;
   const sections = settingsCopy.pageSections;
   return (
@@ -44,6 +51,18 @@ export function ModelsSettings() {
       <SettingsSection id="backup-models" kind="form" title={sections.backupModels}>
         <BackupModelsSummary />
       </SettingsSection>
+      {savedKeys.state !== "unsupported" && (
+        <SettingsSection
+          id="saved-keys"
+          kind="list"
+          title={sections.savedKeys}
+          state={savedKeys.state === "ready" && savedKeys.credentials.length === 0 ? "empty" : savedKeys.state}
+          emptyMessage={settingsCopy.savedKeys.empty}
+          onRetry={() => void savedKeys.reload()}
+        >
+          <SavedKeysRows keys={savedKeys} />
+        </SettingsSection>
+      )}
       <SettingsSection id="permissions" kind="form" title={sections.permissions}>
         <PermissionsFields />
       </SettingsSection>
@@ -53,7 +72,7 @@ export function ModelsSettings() {
           data-test-class="settings-models-advanced"
           title={settingsCopy.modelsAdvanced.contents}
           open={advancedOpen}
-          onToggle={() => setAdvancedOpen(!advancedOpen)}
+          onToggle={onToggleAdvanced}
         />
       </SettingsSection>
       {advancedOpen && (

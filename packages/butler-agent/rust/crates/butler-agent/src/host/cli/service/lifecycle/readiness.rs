@@ -4,8 +4,7 @@ use std::path::Path;
 use std::process::Child;
 use std::time::{Duration, Instant};
 
-use nix::sys::signal::{Signal, kill};
-use nix::unistd::Pid;
+use butler_platform::instance::{StopError, request_stop};
 use serde::Deserialize;
 
 use super::probe_auth::{is_loopback_endpoint, probe_tokens};
@@ -231,20 +230,21 @@ pub(super) async fn wait_for_stop(
     }
 }
 
+/// Stops a child whose start failed: a stop request first (SIGTERM), then,
+/// after 5 s or where the host has no stop request (Windows), a kill.
 pub(super) async fn cleanup_spawned(mut child: Child) {
     let pid = child.id();
     if child.try_wait().ok().flatten().is_some() {
         return;
     }
-    if let Ok(pid) = i32::try_from(pid) {
-        let _ = kill(Pid::from_raw(pid), Signal::SIGTERM);
-    }
-    let deadline = Instant::now() + Duration::from_secs(5);
-    loop {
-        match child.try_wait() {
-            Ok(Some(_)) | Err(_) => return,
-            Ok(None) if Instant::now() >= deadline => break,
-            Ok(None) => tokio::time::sleep(POLL_INTERVAL).await,
+    if !matches!(request_stop(pid), Err(StopError::Unsupported)) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            match child.try_wait() {
+                Ok(Some(_)) | Err(_) => return,
+                Ok(None) if Instant::now() >= deadline => break,
+                Ok(None) => tokio::time::sleep(POLL_INTERVAL).await,
+            }
         }
     }
     // Child::try_wait keeps a live direct child unreaped, so the PID cannot be

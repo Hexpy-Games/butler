@@ -85,3 +85,69 @@ test("settings cache preserves an explicit custom palette draft", () => {
 
   expect(settings.main_screen_theme_preset).toBe("custom");
 });
+
+test("settings defaults carry the gateway's default wallpaper", () => {
+  expect(EMPTY_SETTINGS.wallpaper).toEqual({
+    source: {
+      kind: "live",
+      module: "butler.bloom",
+      params: { colors: "monochrome" },
+    },
+    motion: "auto",
+    pauseOnBattery: false,
+  });
+});
+
+test("settings cached before the wallpaper setting derive it from the legacy keys", () => {
+  installLocalStorage();
+  const { wallpaper: _wallpaper, ...legacy } = EMPTY_SETTINGS;
+  const cache = (value: Record<string, unknown>) =>
+    globalThis.localStorage.setItem("butler:settings:v1", JSON.stringify(value));
+
+  cache({ ...legacy, main_screen_theme: "silk" });
+  expect(readCachedSettings().wallpaper).toEqual({
+    source: { kind: "live", module: "butler.silk" },
+    motion: "auto",
+    pauseOnBattery: false,
+  });
+
+  cache({ ...legacy, main_screen_theme: "none" });
+  expect(readCachedSettings().wallpaper.source).toEqual({ kind: "none" });
+
+  cache({
+    ...legacy,
+    main_screen_theme_preset: "custom",
+    main_screen_theme_custom_colors: [
+      "#112233", "#445566", "#778899", "#AABBCC", "#DDEEFF", "#010203",
+    ],
+  });
+  expect(readCachedSettings().wallpaper.source).toEqual({
+    kind: "live",
+    module: "butler.bloom",
+    params: {
+      colors: ["#112233", "#445566", "#778899", "#aabbcc", "#ddeeff", "#010203"],
+    },
+  });
+});
+
+test("a cached wallpaper setting wins over the legacy keys; a malformed one is ignored", () => {
+  const stored = {
+    source: { kind: "live", module: "butler.silk", params: { base: "#223344" } },
+    motion: "paused",
+    pauseOnBattery: true,
+  } as const;
+  expect(
+    settingsWithDefaults({ ...EMPTY_SETTINGS, main_screen_theme: "none", wallpaper: stored }).wallpaper,
+  ).toEqual(stored);
+  expect(
+    settingsWithDefaults({
+      ...EMPTY_SETTINGS,
+      main_screen_theme: "silk",
+      wallpaper: { source: { kind: "live" }, motion: "paused" },
+    }).wallpaper,
+  ).toEqual({
+    source: { kind: "live", module: "butler.silk" },
+    motion: "auto",
+    pauseOnBattery: false,
+  });
+});

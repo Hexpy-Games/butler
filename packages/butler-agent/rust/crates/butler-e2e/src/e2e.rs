@@ -5,6 +5,7 @@ pub mod binary;
 pub mod cassette;
 pub mod config;
 pub mod events;
+pub mod fake_servers;
 pub mod faults;
 pub mod fixtures;
 pub mod gateway;
@@ -15,6 +16,7 @@ pub mod provider;
 pub mod sandbox;
 pub mod sanitize;
 pub mod scenario;
+pub mod security;
 pub mod stop_intent;
 
 use sha2::{Digest, Sha256};

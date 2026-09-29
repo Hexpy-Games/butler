@@ -4,6 +4,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use butler_platform::secure_fs;
+
 pub(super) struct FetchedBody {
     pub(super) final_url: String,
     pub(super) status: u16,
@@ -34,11 +36,7 @@ impl TemporarySpool {
         let path = spool_dir.join(format!("{}.body", uuid::Uuid::new_v4()));
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        secure_fs::owner_only(&mut options);
         let open_file = options.open(&path)?;
         Ok((Self { path }, open_file))
     }
@@ -69,18 +67,7 @@ fn create_private_directory(path: &Path) -> io::Result<()> {
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(error) => return Err(error),
     }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        let mut builder = fs::DirBuilder::new();
-        match builder.mode(0o700).create(path) {
-            Ok(()) => {}
-            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
-            Err(error) => return Err(error),
-        }
-    }
-    #[cfg(not(unix))]
-    match fs::create_dir(path) {
+    match secure_fs::create_private_dir(path) {
         Ok(()) => {}
         Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
         Err(error) => return Err(error),
@@ -93,23 +80,4 @@ fn create_private_directory(path: &Path) -> io::Result<()> {
         ));
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::create_private_directory;
-    use std::fs;
-
-    #[test]
-    fn spool_parent_refuses_symlink_aliases() {
-        let root = std::env::temp_dir().join(format!("web-spool-{}", uuid::Uuid::new_v4()));
-        fs::create_dir_all(&root).unwrap();
-        let outside = root.join("outside");
-        fs::create_dir(&outside).unwrap();
-        #[cfg(unix)]
-        std::os::unix::fs::symlink(&outside, root.join("alias")).unwrap();
-        #[cfg(unix)]
-        assert!(create_private_directory(&root.join("alias")).is_err());
-        let _ = fs::remove_dir_all(root);
-    }
 }

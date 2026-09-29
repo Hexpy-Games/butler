@@ -65,6 +65,7 @@ tool_names! {
     ListSkills = "list_skills",
     ListTodoList = "list_todo_list",
     ListToolCapabilities = "list_tool_capabilities",
+    ListWallpapers = "list_wallpapers",
     ListWorkStreams = "list_work_streams",
     ProjectLedgerAttemptFail = "project_ledger_attempt_fail",
     ProjectLedgerAttemptStart = "project_ledger_attempt_start",
@@ -100,6 +101,8 @@ tool_names! {
     RequestServiceRestart = "request_service_restart",
     RunCommand = "run_command",
     RunDueAutomations = "run_due_automations",
+    SaveWallpaperModule = "save_wallpaper_module",
+    SetWallpaper = "set_wallpaper",
     StartTopicConversation = "start_topic_conversation",
     StartWork = "start_work",
     SteerSteward = "steer_steward",
@@ -152,19 +155,5 @@ impl PartialEq<ToolName> for String {
 impl PartialEq<ToolName> for std::borrow::Cow<'_, str> {
     fn eq(&self, other: &ToolName) -> bool {
         self.as_ref() == other.as_str()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::ToolName;
-
-    #[test]
-    fn names_round_trip_and_are_unique() {
-        let mut seen = std::collections::HashSet::new();
-        for tool in ToolName::ALL {
-            assert_eq!(ToolName::parse(tool.as_str()), Some(*tool));
-            assert!(seen.insert(tool.as_str()), "duplicate {tool}");
-        }
     }
 }

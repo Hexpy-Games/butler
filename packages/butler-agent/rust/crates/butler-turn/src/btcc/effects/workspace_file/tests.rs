@@ -1,6 +1,7 @@
 use super::{path, *};
 
 struct WritesThenReject(std::path::PathBuf);
+
 impl RegisteredWritePort for WritesThenReject {
     fn write(&self, prepared: PreparedWrite) -> EffectFuture<'_, Value> {
         Box::pin(async move {
@@ -11,6 +12,10 @@ impl RegisteredWritePort for WritesThenReject {
         })
     }
 }
+
+/// Security boundary: write-effect inputs and targets (`..`, mixed
+/// separators, absolute paths) normalize inside the workspace or are refused.
+// test-category: security
 #[test]
 fn write_effect_inputs_and_targets_normalize_inside_the_workspace() {
     let workspace = std::path::Path::new("/tmp/butler-workspace-fixture");
@@ -133,8 +138,7 @@ async fn observed_write_precedes_registered_rejection_and_reconcile_is_conservat
 }
 
 /// KEEP: the journaled write_file input (identity-hashed) is byte-stable.
-#[test]
-fn write_effect_normalized_input_is_byte_stable() {
+pub(crate) fn write_effect_normalized_input_is_byte_stable() {
     let workspace = std::path::Path::new("/tmp/butler-workspace-fixture");
     let input = json!({"expected_sha256":"A".repeat(64),"overwrite":true,"content":"x",
         "create_parents":true,"path":"a/b"});

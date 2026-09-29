@@ -1,5 +1,6 @@
 import { DEFAULT_WEB_SEARCH_SETTINGS, EMPTY_SETTINGS } from "./constants.ts";
 import type { SettingsView } from "./types.ts";
+import { legacyWallpaperSetting, parseWallpaperSetting } from "./wallpaperSetting.ts";
 
 const APP_SETTINGS_CACHE_KEY = "butler:settings:v1";
 
@@ -90,15 +91,23 @@ export function settingsWithDefaults(
           : EMPTY_SETTINGS.model_fallback.models,
       }
     : EMPTY_SETTINGS.model_fallback;
-  const colors = normalizeThemeColors(record.main_screen_theme_custom_colors);
-  return {
-    ...EMPTY_SETTINGS,
-    ...(record as Partial<SettingsView>),
+  const legacyTheme = {
     main_screen_theme: normalizeMainScreenTheme(record.main_screen_theme),
     main_screen_theme_preset: normalizeThemePreset(
       record.main_screen_theme_preset,
     ),
-    main_screen_theme_custom_colors: colors,
+    main_screen_theme_custom_colors: normalizeThemeColors(
+      record.main_screen_theme_custom_colors,
+    ),
+  };
+  return {
+    ...EMPTY_SETTINGS,
+    ...(record as Partial<SettingsView>),
+    ...legacyTheme,
+    // Settings cached before the `wallpaper` key keep their legacy look.
+    wallpaper:
+      parseWallpaperSetting(record.wallpaper) ??
+      legacyWallpaperSetting(legacyTheme),
     desktop_notifications: normalizeDesktopNotifications(
       record.desktop_notifications,
     ),

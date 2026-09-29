@@ -105,7 +105,7 @@ pub(super) async fn resolve(
     };
     let mut request = owner.client.get(endpoint);
     request = match &auth {
-        ProviderAuth::ApiKey(key) => request.bearer_auth(key),
+        ProviderAuth::ApiKey(key) => request.bearer_auth(key.as_str()),
         ProviderAuth::Codex { authorization, .. } => request.header("authorization", authorization),
         ProviderAuth::None => request,
     };

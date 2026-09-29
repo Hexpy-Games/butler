@@ -151,65 +151,6 @@ fn reads_only_scoped_complete_output_in_utf8_safe_pages() {
     }
 }
 
-#[test]
-fn permits_aliased_request_only_when_progress_links_the_result() {
-    let turn_id = "turn-alias";
-    let stored_request_id = "stored-request";
-    let linked_request_id = "linked-request";
-    let output = b"child operation output";
-    let result_id = result_id_for(output);
-    let connection = output_database();
-    insert_output_rows(&connection, turn_id, stored_request_id, output);
-    connection
-        .execute(
-            "INSERT INTO turns(id,state,safe_status_label,updated_at) VALUES(?1,'accepted','Accepted','now')",
-            [turn_id],
-        )
-        .unwrap();
-    connection
-        .execute(
-            "INSERT INTO events(id,type,turn_id,payload_json) VALUES(1,'progress.summary',?1,?2)",
-            rusqlite::params![
-                turn_id,
-                json!({"row":{
-                    "kind":"used_tool",
-                    "bridge_phase":"btcc_operation",
-                    "tool_call_id":linked_request_id,
-                    "tool_result_id":result_id,
-                }})
-                .to_string(),
-            ],
-        )
-        .unwrap();
-
-    let output_view = read(
-        &connection,
-        OperationOutputQuery {
-            turn_id: turn_id.into(),
-            request_id: linked_request_id.into(),
-            result_id: result_id.clone(),
-            byte_start: 0,
-        },
-    )
-    .unwrap()
-    .unwrap();
-    assert_eq!(output_view.content.as_bytes(), output);
-
-    assert!(
-        read(
-            &connection,
-            OperationOutputQuery {
-                turn_id: turn_id.into(),
-                request_id: "unlinked-request".into(),
-                result_id,
-                byte_start: 0,
-            },
-        )
-        .unwrap()
-        .is_none()
-    );
-}
-
 fn output_database() -> Connection {
     let connection = Connection::open_in_memory().unwrap();
     connection

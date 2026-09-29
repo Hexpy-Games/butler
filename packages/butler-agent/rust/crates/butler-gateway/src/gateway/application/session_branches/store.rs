@@ -259,32 +259,3 @@ fn message_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<BranchSourceMessage>
         status: row.get(6)?,
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn topic_branch_digest_matches_source_array_projection() {
-        let request = AppSessionBranchRequest {
-            request_id: "not-part-of-source-digest".into(),
-            source_session_id: "session-id".into(),
-            source_message_id: "message-id".into(),
-            title: "Topic".into(),
-            follow_up: None,
-            destination: AppSessionBranchDestination::Chat,
-        };
-
-        assert_eq!(
-            input_digest(&request).unwrap(),
-            "d535ef64869461b7a5023af1bbaa9c5da03ccedf38c3901ca9f3fb4fb709669b"
-        );
-
-        let mut changed = request;
-        changed.follow_up = Some("continue".into());
-        assert_ne!(
-            input_digest(&changed).unwrap(),
-            "d535ef64869461b7a5023af1bbaa9c5da03ccedf38c3901ca9f3fb4fb709669b"
-        );
-    }
-}

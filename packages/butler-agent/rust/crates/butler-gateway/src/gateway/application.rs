@@ -29,6 +29,7 @@ mod projects;
 mod queue;
 mod queue_dispatcher;
 mod queue_view;
+mod quota_events;
 mod read_model;
 mod recovery;
 mod relocation_port;
@@ -43,6 +44,7 @@ mod session_relocation;
 mod session_views;
 mod sessions;
 mod settings;
+mod setup;
 pub use settings::diagnostics_enabled_readonly;
 mod shell;
 mod space;
@@ -50,6 +52,7 @@ mod storage;
 mod transcript_export;
 mod turn_cancellation;
 mod updates;
+mod wallpapers;
 
 use serde_json::Value;
 use std::{path::PathBuf, sync::Arc};
@@ -58,6 +61,7 @@ use super::{
     AppEventEnvelope, ApplicationFuture, EventSubscription, GatewayApplication,
     GatewayApplicationError, MessageContent, MessageSendResult, RuntimeReadinessView,
     SendMessageCommand, SessionQueueUpdateRequest, SessionQueueView,
+    wallpaper_store::AppWallpaperFiles,
 };
 use admission_identity::stringify;
 pub(crate) use automations::*;
@@ -99,7 +103,8 @@ pub use projects::{
     AppProjectDashboardPreferencesUpdate, AppProjectDashboardRecordsQuery,
     AppProjectDashboardReview, AppProjectDashboardSnapshot, AppProjectDashboardSource,
     AppProjectDashboardSourceQuery, AppProjectDashboardStatisticsQuery, AppProjectDashboardWork,
-    AppProjectDashboardWorkHistoryEntry, AppProjectList, AppProjectSource, AppProjectUpdate,
+    AppProjectDashboardWorkHistoryEntry, AppProjectGit, AppProjectList, AppProjectSource,
+    AppProjectUpdate,
 };
 #[cfg(test)]
 pub(crate) use projects::{TestProjectDashboardBriefing, TestProjectDashboardLedger};
@@ -119,6 +124,14 @@ pub use sessions::{
     AppSessionUpdate, AppSessionWorkProgress, AppSessionWorkspaceProvisioner,
     AppSessionWorkspaceSnapshot, AppWorkProgress, AppWorkStreamQuery, AppWorkStreamReader,
     AppWorkStreamTurnOutcome, AppWorkspaceMode,
+};
+#[cfg(test)]
+pub(crate) use setup::test_setup_port;
+pub use setup::{
+    AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
+    LocalModelServersView, OauthFlowStatus, OauthFlowView, ProviderKeyVerificationView,
+    ReplacedCredentialView, SETUP_READINESS_EVENT, SavedCredentialView, SetupReadinessStatus,
+    SetupReadinessStep, SetupReadinessView, SetupStepError, SetupStepStatus,
 };
 pub use space::{AppSpaceCommand, AppSpaceMutationResult, AppSpaceOrigin};
 use storage::{AppStorage, AppStorageError};
@@ -160,8 +173,11 @@ pub struct AppApplication {
     project_dashboard_briefing: projects::ProjectDashboardBriefingOwner,
     queue_owner: String,
     butler_data: PathBuf,
+    wallpapers: AppWallpaperFiles,
     settings_update_lock: Arc<tokio::sync::Mutex<()>>,
     plan_decision_locks: PlanDecisionLocks,
+    setup_readiness: setup::ReadinessRelay,
+    quota_events: Arc<quota_events::QuotaEventForwarder>,
 }
 
 impl AppApplication {
@@ -169,20 +185,14 @@ impl AppApplication {
         config: AppApplicationConfig,
         dependencies: AppApplicationDependencies,
     ) -> Result<Self, GatewayApplicationError> {
-        let initialized_at = dependencies.identity_clock.now_iso();
         let storage = AppStorage::open(
             config.database_path,
             Some(config.butler_data.clone()),
-            initialized_at,
+            dependencies.identity_clock.now_iso(),
         )
         .await
         .map_err(app_error)?;
-        let queue_owner = format!(
-            "app-session-queue:{}:{}:{}",
-            std::process::id(),
-            dependencies.identity_clock.new_uuid(),
-            dependencies.identity_clock.new_uuid()
-        );
+        let queue_owner = queue_owner_id(dependencies.identity_clock.as_ref());
         let fallback_project_root = config.project_workspace_root.clone();
         let project_root = match storage
             .execute(move |db| projects::initial_root(db, &fallback_project_root))
@@ -196,16 +206,7 @@ impl AppApplication {
         };
         let dependencies = Arc::new(dependencies);
         let subscribers = EventSubscribers::default();
-        let retention_cursor = match storage
-            .execute(|connection| events::latest(connection))
-            .await
-        {
-            Ok(cursor) => cursor,
-            Err(error) => {
-                let _ = storage.close().await;
-                return Err(app_error(error));
-            }
-        };
+        let retention_cursor = latest_event_cursor(&storage).await?;
         let (queue_dispatcher, queue_wake) = queue_dispatcher::QueueDispatcher::start();
         let automation_scheduler = automations::AutomationScheduler::start();
         let automation_runs = automations::AutomationRunOwner::start();
@@ -254,9 +255,12 @@ impl AppApplication {
             transcript_exports: TranscriptExportOwner::new(),
             project_dashboard_briefing: projects::ProjectDashboardBriefingOwner::new(),
             queue_owner,
+            wallpapers: AppWallpaperFiles::new(&config.butler_data),
             butler_data: config.butler_data,
             settings_update_lock: Arc::new(tokio::sync::Mutex::new(())),
             plan_decision_locks: PlanDecisionLocks::default(),
+            setup_readiness: setup::ReadinessRelay::default(),
+            quota_events: Arc::default(),
         };
         if let Err(error) = application.recover_session_relocation_owned().await {
             let _ = application.close().await;
@@ -281,17 +285,27 @@ impl AppApplication {
         self.automation_runs.initialize(self.clone_handle()).await?;
         automation_scheduler.initialize(self.clone_handle())?;
         self.recover_turn_cancellations().await?;
+        self.watch_wallpaper_modules();
         // Failed authority retries remain durable for the next startup.
         let _ = self.dependencies.authority_handoff.retry_decided().await;
+        self.setup_readiness.start(
+            self.dependencies.setup.readiness(),
+            self.storage.clone(),
+            self.subscribers.clone(),
+            self.dependencies.identity_clock.clone(),
+        );
+        self.quota_events.start(self.clone_handle());
         Ok(())
     }
 
     pub async fn stop_dispatch(&self) -> Result<(), GatewayApplicationError> {
+        self.setup_readiness.close().await;
         let automations = match &self.automation_scheduler {
             Some(scheduler) => scheduler.close().await,
             None => Ok(()),
         };
         let automation_runs = self.automation_runs.close().await;
+        self.quota_events.close().await;
         let queue = match &self.queue_dispatcher {
             Some(dispatcher) => dispatcher.close().await,
             None => Ok(()),
@@ -309,6 +323,7 @@ impl AppApplication {
         self.project_creation.close().await;
         self.session_branches.close().await;
         self.space_mutations.close().await;
+        self.wallpapers.close().await;
         let projection = self.projection.close().await;
         let retention = match &self.retention {
             Some(retention) => retention.close().await,
@@ -361,6 +376,30 @@ impl AppApplication {
             .await
             .map_err(app_error)
     }
+}
+
+/// The newest durable event cursor; storage is closed when it cannot be read.
+async fn latest_event_cursor(storage: &AppStorage) -> Result<u64, GatewayApplicationError> {
+    match storage
+        .execute(|connection| events::latest(connection))
+        .await
+    {
+        Ok(cursor) => Ok(cursor),
+        Err(error) => {
+            let _ = storage.close().await;
+            Err(app_error(error))
+        }
+    }
+}
+
+/// A process-unique owner id for the session queue claim.
+fn queue_owner_id(clock: &dyn AppIdentityClock) -> String {
+    format!(
+        "app-session-queue:{}:{}:{}",
+        std::process::id(),
+        clock.new_uuid(),
+        clock.new_uuid()
+    )
 }
 
 fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
@@ -423,9 +462,7 @@ fn app_error(error: AppStorageError) -> GatewayApplicationError {
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
-pub(crate) use test_support::{
-    seed_test_assistant_attachment, seed_test_authority_queue, seed_test_transcript_messages,
-};
+pub(crate) use test_support::seed_test_assistant_attachment;
 
 mod snapshot_input;
 #[cfg(test)]

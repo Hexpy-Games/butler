@@ -21,7 +21,12 @@ const APP_ORIGIN: &str = "app://butler";
 /// Loopback names the gateway always answers, with its bound port.
 const LOOPBACK_NAMES: [&str; 3] = ["127.0.0.1", "localhost", "[::1]"];
 /// Routes whose bodies are multipart uploads, not JSON.
-const MULTIPART_ROUTES: [&str; 2] = ["/message-files", "/skills/import"];
+const MULTIPART_ROUTES: [&str; 4] = [
+    "/message-files",
+    "/skills/import",
+    "/wallpapers",
+    "/wallpaper-modules/import",
+];
 
 /// Where a request says it comes from (its raw `Origin` header).
 #[derive(Clone, Debug)]
@@ -30,7 +35,12 @@ pub(in crate::gateway::http) enum RequestOrigin {
     /// navigation or `GET`.
     Absent,
     /// An allowlisted browser origin, echoed in CORS response headers.
-    Allowed(HeaderValue),
+    Allowed {
+        value: HeaderValue,
+        /// A page served on this computer (loopback, the App renderer, the
+        /// dev renderer), not one on a LAN or configured name.
+        local: bool,
+    },
 }
 
 impl RequestOrigin {
@@ -38,40 +48,55 @@ impl RequestOrigin {
     pub(in crate::gateway::http) fn allowed(&self) -> Option<&HeaderValue> {
         match self {
             Self::Absent => None,
-            Self::Allowed(origin) => Some(origin),
+            Self::Allowed { value, .. } => Some(value),
         }
+    }
+
+    /// No Origin, or one of this computer's pages.
+    pub(in crate::gateway::http) fn is_local(&self) -> bool {
+        matches!(self, Self::Absent | Self::Allowed { local: true, .. })
     }
 }
 
 /// The Host names and browser origins this gateway answers.
 pub(in crate::gateway::http) struct RequestPolicy {
     hosts: HashSet<String>,
-    origins: HashSet<String>,
+    /// Origins of pages on this computer.
+    local_origins: HashSet<String>,
+    /// Origins of LAN names and configured names.
+    remote_origins: HashSet<String>,
 }
 
 impl RequestPolicy {
     /// Loopback names and the literal bound address (with the bound port),
     /// the App origin, the dev renderer origins (comma-separated, only when
-    /// configured) and the operator's extra host names.
+    /// configured), the operator's extra host names and, while remote access
+    /// is on, the LAN authorities (`ip:port`, `<name>.local:port`).
     pub(in crate::gateway::http) fn new(
         local_addr: SocketAddr,
         allowed_hosts: &[String],
         dev_origins: Option<&str>,
+        lan_authorities: &[String],
     ) -> Self {
         let port = local_addr.port();
         let mut policy = Self {
             hosts: HashSet::new(),
-            origins: HashSet::from([APP_ORIGIN.to_owned()]),
+            local_origins: HashSet::from([APP_ORIGIN.to_owned()]),
+            remote_origins: HashSet::new(),
         };
         for name in LOOPBACK_NAMES {
-            policy.allow_plain_http(&format!("{name}:{port}"));
+            policy.allow_plain_http(&format!("{name}:{port}"), true);
         }
-        policy.allow_plain_http(&local_addr.to_string());
+        let bound_loopback = local_addr.ip().to_canonical().is_loopback();
+        policy.allow_plain_http(&local_addr.to_string(), bound_loopback);
+        for authority in lan_authorities {
+            policy.allow_plain_http(authority, false);
+        }
         for entry in allowed_hosts {
             policy.allow_configured_host(entry, port);
         }
         let dev_origins = dev_origins.unwrap_or_default().split(',').map(str::trim);
-        policy.origins.extend(
+        policy.local_origins.extend(
             dev_origins
                 .filter(|origin| !origin.is_empty() && *origin != "null")
                 .map(str::to_owned),
@@ -79,9 +104,14 @@ impl RequestPolicy {
         policy
     }
 
-    fn allow_plain_http(&mut self, authority: &str) {
+    fn allow_plain_http(&mut self, authority: &str, local: bool) {
         let authority = authority.to_ascii_lowercase();
-        self.origins.insert(format!("http://{authority}"));
+        let origins = if local {
+            &mut self.local_origins
+        } else {
+            &mut self.remote_origins
+        };
+        origins.insert(format!("http://{authority}"));
         self.hosts.insert(authority);
     }
 
@@ -99,8 +129,8 @@ impl RequestPolicy {
             vec![format!("{entry}:{port}"), entry]
         };
         for authority in authorities {
-            self.origins.insert(format!("http://{authority}"));
-            self.origins.insert(format!("https://{authority}"));
+            self.remote_origins.insert(format!("http://{authority}"));
+            self.remote_origins.insert(format!("https://{authority}"));
             self.hosts.insert(authority);
         }
     }
@@ -129,22 +159,34 @@ impl RequestPolicy {
         headers: &HeaderMap,
     ) -> Result<RequestOrigin, HttpError> {
         let mut values = headers.get_all(header::ORIGIN).iter();
+        let local = |origin: &HeaderValue| {
+            let value = origin.to_str().ok()?;
+            if self.local_origins.contains(value) {
+                Some(true)
+            } else {
+                self.remote_origins.contains(value).then_some(false)
+            }
+        };
         match (values.next(), values.next()) {
             (None, _) => Ok(RequestOrigin::Absent),
-            (Some(origin), None)
-                if origin
-                    .to_str()
-                    .is_ok_and(|value| self.origins.contains(value)) =>
-            {
-                Ok(RequestOrigin::Allowed(origin.clone()))
-            }
-            _ => Err(HttpError::public(
-                403,
-                "origin_not_allowed",
-                "Requests from this origin are not allowed.",
-            )),
+            (Some(origin), None) => match local(origin) {
+                Some(local) => Ok(RequestOrigin::Allowed {
+                    value: origin.clone(),
+                    local,
+                }),
+                None => Err(origin_not_allowed()),
+            },
+            _ => Err(origin_not_allowed()),
         }
     }
+}
+
+fn origin_not_allowed() -> HttpError {
+    HttpError::public(
+        403,
+        "origin_not_allowed",
+        "Requests from this origin are not allowed.",
+    )
 }
 
 /// A request that sends a body must send JSON, except to the multipart
@@ -223,126 +265,4 @@ fn host_not_allowed() -> HttpError {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn headers(pairs: &[(&'static str, &'static str)]) -> HeaderMap {
-        let mut headers = HeaderMap::new();
-        for (name, value) in pairs {
-            headers.append(*name, HeaderValue::from_static(value));
-        }
-        headers
-    }
-
-    fn policy() -> RequestPolicy {
-        RequestPolicy::new(
-            "127.0.0.1:18765".parse().unwrap(),
-            &["butler.lan".to_owned(), "box.local:443".to_owned()],
-            Some("http://127.0.0.1:5173"),
-        )
-    }
-
-    /// Security boundary: the Host names the gateway answers.
-    #[test]
-    fn host_allowlist_is_loopback_with_port_plus_configured_names() {
-        let policy = policy();
-        let cases = [
-            ("127.0.0.1:18765", true),
-            ("LOCALHOST:18765", true),
-            ("[::1]:18765", true),
-            ("butler.lan", true),
-            ("butler.lan:18765", true),
-            ("box.local:443", true),
-            ("localhost", false),
-            ("localhost:5173", false),
-            ("box.local", false),
-            ("attacker.example:18765", false),
-        ];
-        for (host, allowed) in cases {
-            let result = policy.check_host(&headers(&[("host", host)]));
-            assert_eq!(result.is_ok(), allowed, "Host {host}");
-        }
-        assert!(policy.check_host(&HeaderMap::new()).is_err());
-        let repeated = headers(&[("host", "127.0.0.1:18765"), ("host", "127.0.0.1:18765")]);
-        assert!(policy.check_host(&repeated).is_err());
-    }
-
-    /// Security boundary: the Host names browsers send Fetch Metadata to.
-    #[test]
-    fn loopback_hosts_are_the_potentially_trustworthy_names() {
-        let cases = [
-            ("127.0.0.1:18765", true),
-            ("LOCALHOST:18765", true),
-            ("[::1]:18765", true),
-            ("[::1]", true),
-            ("127.8.0.1", true),
-            ("preview.localhost:3000", true),
-            ("localhost.attacker.example:18765", false),
-            ("butler.lan:18765", false),
-            ("192.0.2.10:18765", false),
-            ("[fe80::1]:18765", false),
-        ];
-        for (host, loopback) in cases {
-            assert_eq!(
-                is_loopback_host(&headers(&[("host", host)])),
-                loopback,
-                "Host {host}"
-            );
-        }
-        assert!(!is_loopback_host(&HeaderMap::new()));
-    }
-
-    /// Security boundary: raw-string Origin allowlist; `null` never passes.
-    #[test]
-    fn origin_allowlist_compares_raw_strings() {
-        let policy = policy();
-        let cases = [
-            ("app://butler", true),
-            ("http://127.0.0.1:18765", true),
-            ("http://localhost:18765", true),
-            ("http://127.0.0.1:5173", true),
-            ("https://butler.lan", true),
-            ("http://butler.lan:18765", true),
-            ("null", false),
-            ("app://butler/", false),
-            ("APP://BUTLER", false),
-            ("http://localhost:3000", false),
-            ("https://attacker.example", false),
-        ];
-        for (origin, allowed) in cases {
-            let result = policy.classify_origin(&headers(&[("origin", origin)]));
-            assert_eq!(result.is_ok(), allowed, "Origin {origin}");
-        }
-        assert!(matches!(
-            policy.classify_origin(&HeaderMap::new()),
-            Ok(RequestOrigin::Absent)
-        ));
-    }
-
-    type Headers = &'static [(&'static str, &'static str)];
-
-    #[test]
-    fn json_content_type_is_required_only_for_json_bodies() {
-        const JSON: Headers = &[
-            ("content-length", "2"),
-            ("content-type", "application/json; charset=utf-8"),
-        ];
-        const TEXT: Headers = &[("content-length", "2"), ("content-type", "text/plain")];
-        const CHUNKED: Headers = &[("transfer-encoding", "chunked")];
-        const EMPTY: Headers = &[("content-length", "0")];
-        // Method, path, request headers, whether the body rule admits it.
-        let cases: [(Method, &str, Headers, bool); 7] = [
-            (Method::POST, "/messages", JSON, true),
-            (Method::POST, "/messages", TEXT, false),
-            (Method::PATCH, "/settings", CHUNKED, false),
-            (Method::POST, "/turns/t/cancel", EMPTY, true),
-            (Method::DELETE, "/session-queue/q", &[], true),
-            (Method::POST, "/message-files", TEXT, true),
-            (Method::GET, "/settings", TEXT, true),
-        ];
-        for (method, path, pairs, allowed) in cases {
-            let result = require_json_body(&method, path, &headers(pairs));
-            assert_eq!(result.is_ok(), allowed, "{method} {path}");
-        }
-    }
-}
+mod tests;

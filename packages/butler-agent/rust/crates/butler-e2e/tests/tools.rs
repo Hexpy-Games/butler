@@ -224,8 +224,7 @@ async fn escape(case: &str) -> Result<(), HarnessError> {
     let name = format!("TOOL-05-{case}");
     let setup = Setup::new(&name)?.cassette(&name);
     let root = setup.sandbox.root.clone();
-    #[cfg(unix)]
-    std::os::unix::fs::symlink(&setup.sandbox.home, setup.sandbox.data.join("link"))?;
+    butler_platform::secure_fs::symlink(&setup.sandbox.home, &setup.sandbox.data.join("link"))?;
     fs::write(root.join("outside.txt"), "original-outside")?;
     let (path, target) = match case {
         "parent" => ("../outside.txt".to_owned(), root.join("outside.txt")),

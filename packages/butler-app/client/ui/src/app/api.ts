@@ -262,6 +262,52 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (method === "POST" && url.pathname === "/setup/start") return await callBridge<T>(bridge, "startSetup", parseBody(options.body));
   if (method === "POST" && url.pathname === "/setup/cancel") return await callBridge<T>(bridge, "cancelSetup", parseBody(options.body));
   if (method === "GET" && url.pathname === "/setup/diagnostics") return await callBridge<T>(bridge, "exportSetupDiagnostics");
+  // #230 first-run routes (Rust agent, #279). Envelopes keep the public error code across contextBridge.
+  if (method === "GET" && url.pathname === "/setup/readiness") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getSetupReadiness"));
+  }
+  if (method === "POST" && url.pathname === "/setup/readiness/retry") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "retrySetupReadiness"));
+  }
+  if (method === "POST" && url.pathname === "/setup/oauth/start") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "startSetupOAuth", parseBody(options.body)));
+  }
+  if (method === "GET" && url.pathname === "/setup/local-model-servers") return await callBridge<T>(bridge, "getLocalModelServers");
+  if (method === "POST" && url.pathname === "/setup/credentials/verify") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "verifySetupCredential", parseBody(options.body)));
+  }
+  if (method === "POST" && url.pathname === "/credentials") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "saveCredential", parseBody(options.body)));
+  }
+  // #217 saved keys: list (masked), replace (`verify`), delete (`?force=true`).
+  if (method === "GET" && url.pathname === "/credentials") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "listCredentials"));
+  }
+  const credentialMatch = url.pathname.match(/^\/credentials\/([^/]+)$/u);
+  if (method === "PATCH" && credentialMatch) {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "replaceCredential", {
+      name: decodeURIComponent(credentialMatch[1]!),
+      request: parseBody(options.body),
+    }));
+  }
+  if (method === "DELETE" && credentialMatch) {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "deleteCredential", {
+      name: decodeURIComponent(credentialMatch[1]!),
+      force: url.searchParams.get("force") === "true",
+    }));
+  }
+  const setupOAuthCancel = method === "POST" ? url.pathname.match(/^\/setup\/oauth\/([^/]+)\/cancel$/u) : null;
+  if (setupOAuthCancel) {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "cancelSetupOAuth", {
+      flowId: decodeURIComponent(setupOAuthCancel[1]!),
+    }));
+  }
+  const setupOAuthFlow = method === "GET" ? url.pathname.match(/^\/setup\/oauth\/([^/]+)$/u) : null;
+  if (setupOAuthFlow) {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getSetupOAuthFlow", {
+      flowId: decodeURIComponent(setupOAuthFlow[1]!),
+    }));
+  }
   if (method === "GET" && url.pathname === "/chats") return await callBridge<T>(bridge, "listChats");
   if (method === "GET" && url.pathname === "/navigation") return await callBridge<T>(bridge, "listNavigation");
   if (url.pathname.startsWith("/space/")) {
@@ -707,12 +753,13 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   }
   if (method === "POST" && url.pathname === "/automations") {
     const body = parseBody(options.body);
-    return await callBridge<T>(bridge, "createAutomation", {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "createAutomation", {
       title: body.title,
       promptBody: body.prompt_body,
       targetSessionId: body.target_session_id,
       intervalSeconds: body.interval_seconds,
-    });
+      accessMode: body.access_mode,
+    }));
   }
   const automationMatch = url.pathname.match(/^\/automations\/([^/]+)$/);
   if (automationMatch && method === "GET") {
@@ -720,14 +767,15 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   }
   if (automationMatch && method === "PATCH") {
     const body = parseBody(options.body);
-    return await callBridge<T>(bridge, "updateAutomation", {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "updateAutomation", {
       automationId: decodeURIComponent(automationMatch[1]),
       title: body.title,
       promptBody: body.prompt_body,
       targetSessionId: body.target_session_id,
       intervalSeconds: body.interval_seconds,
       state: body.state,
-    });
+      accessMode: body.access_mode,
+    }));
   }
   if (automationMatch && method === "DELETE") {
     return await callBridge<T>(bridge, "deleteAutomation", { automationId: decodeURIComponent(automationMatch[1]) });

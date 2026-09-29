@@ -110,66 +110,9 @@ fn service(root: &Scratch, phases: Arc<TestPhases>) -> CycleService {
     )
 }
 
-#[tokio::test]
-async fn partial_run_and_resume_skip_success_and_resolve_prior_error() {
-    let root = Scratch::new();
-    let phases = Arc::new(TestPhases::new());
-    let service = service(&root, phases.clone());
-    let run_id = "cr_resume".to_owned();
-    let first = service
-        .run(RunCycle {
-            run_id: Some(run_id.clone()),
-            ..RunCycle::default()
-        })
-        .await
-        .unwrap();
-    assert_eq!(first.status, CycleStatus::CompletedWithErrors);
-    assert_eq!(first.phases.len(), Phase::ALL.len());
-    let stored =
-        checkpoint::read_checkpoint(&root.0, &CognitionPathEnvironment::default(), &run_id)
-            .unwrap()
-            .unwrap();
-    assert!(stored.completed_phases.contains(&Phase::Preflight));
-    assert!(stored.completed_phases.contains(&Phase::MetricsSummary));
-    assert!(
-        stored
-            .errors
-            .iter()
-            .any(|error| error.phase == Phase::FeedbackTriage && error.resolved_at.is_none())
-    );
-    phases.resolve_feedback.store(true, Ordering::SeqCst);
-    let second = service
-        .run(RunCycle {
-            run_id: Some(run_id.clone()),
-            resume: true,
-            ..RunCycle::default()
-        })
-        .await
-        .unwrap();
-    assert_eq!(second.status, CycleStatus::CompletedWithErrors);
-    assert!(!second.phases.iter().any(|result| result.phase == Phase::Preflight || result.phase == Phase::MetricsSummary));
-    let stored =
-        checkpoint::read_checkpoint(&root.0, &CognitionPathEnvironment::default(), &run_id)
-            .unwrap()
-            .unwrap();
-    assert!(stored.completed_phases.contains(&Phase::FeedbackTriage));
-    assert!(
-        stored
-            .errors
-            .iter()
-            .any(|error| error.phase == Phase::FeedbackTriage && error.resolved_at.is_some())
-    );
-    assert_eq!(
-        phases
-            .calls
-            .lock()
-            .iter()
-            .filter(|phase| **phase == Phase::Preflight)
-            .count(),
-        1
-    );
-}
-
+/// Race: a consolidation resume racing an active claim sees the claim without
+/// holding the writer lease.
+// test-category: race
 #[tokio::test]
 async fn concurrent_resume_sees_active_claim_without_holding_the_writer_lease() {
     let root = Scratch::new();

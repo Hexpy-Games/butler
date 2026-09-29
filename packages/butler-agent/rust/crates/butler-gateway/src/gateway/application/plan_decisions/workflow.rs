@@ -28,7 +28,7 @@ impl AppApplication {
             return Err(public(
                 400,
                 "invalid_plan_reference",
-                "A session and Project Ledger Plan are required.",
+                "A conversation and a plan are required.",
             ));
         }
         let _decision = self
@@ -56,12 +56,12 @@ impl AppApplication {
             .map_err(map_read_error)?
             .as_ref()
             .and_then(|plan| normalized_plan(plan, &plan_id))
-            .ok_or_else(|| public(404, "plan_not_found", "Project Ledger Plan not found."))?;
+            .ok_or_else(|| public(404, "plan_not_found", "Plan not found."))?;
         if plan.status != "draft" {
             return Err(public(
                 409,
                 "plan_decision_conflict",
-                "This Project Ledger Plan has already received a decision.",
+                "This plan has already been decided.",
             ));
         }
         let (active_turn, pending_plan) = self
@@ -98,12 +98,8 @@ impl AppApplication {
                     )
                     .await
                     .map_err(|source| {
-                        public(
-                            409,
-                            "plan_update_failed",
-                            "Project Ledger Plan could not be updated.",
-                        )
-                        .with_source(source)
+                        public(409, "plan_update_failed", "The plan could not be updated.")
+                            .with_source(source)
                     })?;
                 plan = self
                     .read_plan(&project, &plan_id)

@@ -1,5 +1,7 @@
 //! One process-owned App HTTP listener and its App-only artifact file owner.
 
+mod security_store;
+
 use std::net::SocketAddr;
 use std::sync::{
     Arc,
@@ -10,7 +12,8 @@ use tokio::net::TcpListener;
 
 use butler_gateway::gateway::{
     AppApplication, AppApplicationConfig, AppApplicationDependencies, AppIdentityClock,
-    AppMessageFiles, GatewayApplicationError, GatewayServer, InboundQueue, serve_gateway,
+    AppMessageFiles, GatewayApplicationError, GatewayConfig, GatewayServer, InboundQueue,
+    LocalAuthConfig, serve_gateway,
 };
 use butler_runtime::operations::ServiceReadiness;
 use butler_turn::btcc::BtccError;
@@ -19,6 +22,7 @@ use crate::host::app::dashboard::AppDashboardLedger;
 use crate::host::app::dashboard_briefing::AppDashboardBriefing;
 use crate::host::app::plan_decision::AppPlanDecisionLedger;
 use crate::host::app::runtime_ports::AppRuntimeInfo;
+use crate::host::app::runtime_ports::{AppSetup, AppSetupParts};
 use crate::host::service::configuration::AppServiceConfiguration;
 use crate::host::{
     AgentRuntime, AppAdmission, AppApprovalClaimsAdapter, AppAssets, AppBranchConversations,
@@ -27,6 +31,7 @@ use crate::host::{
     AppSettingsFactsAdapter, AppSettingsMutation, AuthorityHandoff, ResolvedInstallation,
     SystemIdentity,
 };
+use security_store::AppSecurityStore;
 
 pub(crate) struct AppServer {
     listener: Option<GatewayServer>,
@@ -35,6 +40,16 @@ pub(crate) struct AppServer {
     listener_ready: Arc<AtomicBool>,
     application: Arc<AppApplication>,
     artifacts: Arc<AppMessageFiles>,
+    setup: AppSetup,
+}
+
+/// What the process owns and hands every App server it starts.
+pub(crate) struct AppServerOwners {
+    pub(crate) queue: Arc<InboundQueue>,
+    pub(crate) receipt: Arc<ServiceReadiness>,
+    /// The process's token, shared with its other gateway clients, so a
+    /// rotated connection code reaches all of them.
+    pub(crate) local_auth: LocalAuthConfig,
 }
 
 impl AppServer {
@@ -47,8 +62,7 @@ impl AppServer {
         data_root: &std::path::Path,
         installation: &ResolvedInstallation,
         app_config: &AppServiceConfiguration,
-        queue: Arc<InboundQueue>,
-        receipt: Arc<ServiceReadiness>,
+        owners: AppServerOwners,
     ) -> Result<Self, BtccError> {
         let artifacts = Arc::new(AppMessageFiles::new(data_root, Arc::new(SystemIdentity)));
         let result = Self::open_with_artifacts(
@@ -56,8 +70,7 @@ impl AppServer {
             data_root,
             installation,
             app_config,
-            queue,
-            receipt,
+            owners,
             artifacts.clone(),
         )
         .await;
@@ -72,23 +85,19 @@ impl AppServer {
         data_root: &std::path::Path,
         installation: &ResolvedInstallation,
         app_config: &AppServiceConfiguration,
-        queue: Arc<InboundQueue>,
-        receipt: Arc<ServiceReadiness>,
+        owners: AppServerOwners,
         artifacts: Arc<AppMessageFiles>,
     ) -> Result<Self, BtccError> {
         let listener_ready = Arc::new(AtomicBool::new(false));
         let identity_clock: Arc<dyn AppIdentityClock> = Arc::new(SystemIdentity);
-        let settings = Arc::new(
-            AppSettingsFactsAdapter::open(
-                runtime.models.configuration.clone(),
-                runtime.profile.clone(),
-                data_root.to_path_buf(),
-                format!("http://{}:{}", app_config.host, app_config.port),
-                "local".into(),
-            )
-            .await
-            .map_err(app_error)?,
-        );
+        let settings = Arc::new(open_settings(runtime, data_root, app_config).await?);
+        let setup = AppSetup::start(AppSetupParts {
+            configuration: runtime.models.configuration.clone(),
+            settings: settings.clone(),
+            installation: installation.clone(),
+            data_root: data_root.to_path_buf(),
+            executor: owners.receipt.clone(),
+        });
         let session_workspaces = Arc::new(AppSessionWorkspaces::new(
             runtime.bindings.clone(),
             runtime.session_worktrees.clone(),
@@ -97,16 +106,11 @@ impl AppServer {
             runtime.conversations.clone(),
         ));
         let dependencies = AppApplicationDependencies {
-            updates: Arc::new(
-                crate::host::cli::update::open_app_update(data_root, installation).map_err(
-                    |code| {
-                        BtccError::relayed(code.to_string(), "App update service is unavailable")
-                    },
-                )?,
-            ),
+            updates: Arc::new(open_updates(data_root, installation)?),
+            setup: Arc::new(setup.clone()),
             skills: runtime.skills.clone(),
             mcp_client: runtime.mcp_client.clone(),
-            native_ingress: Arc::new(AppIngress::new(queue.clone())),
+            native_ingress: Arc::new(AppIngress::new(owners.queue.clone())),
             native_assets: Arc::new(AppAssets::new(
                 runtime.conversations.clone(),
                 runtime.image_files.clone(),
@@ -114,7 +118,7 @@ impl AppServer {
                 runtime.mcp_client.clone(),
                 data_root,
             )),
-            executor_readiness: Arc::new(AppReadiness::new(receipt, listener_ready.clone())),
+            executor_readiness: Arc::new(AppReadiness::new(owners.receipt, listener_ready.clone())),
             admission: Arc::new(AppAdmission::new(
                 runtime.project_ledger.clone(),
                 runtime.image_files.clone(),
@@ -145,10 +149,7 @@ impl AppServer {
                 data_root.to_path_buf(),
                 identity_clock.clone(),
             )),
-            monitoring: Arc::new(AppMonitoring::new(
-                data_root.to_path_buf(),
-                runtime.session_work.clone(),
-            )),
+            monitoring: Arc::new(AppMonitoring::for_runtime(runtime, data_root)),
             context_read: Arc::new(AppContextRead::new(
                 data_root.to_path_buf(),
                 runtime.context_budget.clone(),
@@ -159,7 +160,7 @@ impl AppServer {
             queue_owner_liveness: Arc::new(AppQueueOwnerLivenessAdapter),
             authority_handoff: Arc::new(AuthorityHandoff::new(
                 runtime.authority.clone(),
-                queue,
+                owners.queue,
                 Arc::new(|| {
                     butler_models::models::ModelConfigurationClock::now_iso(&SystemIdentity)
                 }),
@@ -214,8 +215,7 @@ impl AppServer {
                 ));
             }
         };
-        let mut gateway_config = app_config.gateway_config();
-        gateway_config.static_ui_root = Some(installation.resources().join("app-client/dist"));
+        let gateway_config = gateway_config(app_config, data_root, installation, owners.local_auth);
         let server = match serve_gateway(listener, application.clone(), gateway_config) {
             Ok(server) => server,
             Err(error) => {
@@ -239,6 +239,7 @@ impl AppServer {
             listener_ready,
             application,
             artifacts,
+            setup,
         })
     }
 
@@ -260,6 +261,7 @@ impl AppServer {
     /// Drain the App projection and its file jobs before native runtime owners.
     pub(crate) async fn close_application(&mut self) -> Result<(), BtccError> {
         let listener = self.stop_listener().await;
+        self.setup.close().await;
         let application = self.application.close().await.map_err(app_error);
         let artifacts = self.artifacts.close().await.map_err(app_error);
         listener.and(application).and(artifacts)
@@ -270,6 +272,48 @@ impl Drop for AppServer {
     fn drop(&mut self) {
         self.listener_ready.store(false, Ordering::Release);
     }
+}
+
+/// The listener configuration: the captured settings with the process's
+/// token, the bundled UI and the Settings → Security store.
+fn gateway_config(
+    app_config: &AppServiceConfiguration,
+    data_root: &std::path::Path,
+    installation: &ResolvedInstallation,
+    local_auth: LocalAuthConfig,
+) -> GatewayConfig {
+    let mut config = app_config.gateway_config();
+    config.local_auth = local_auth;
+    config.static_ui_root = Some(installation.resources().join("app-client/dist"));
+    config.security_store = Some(Arc::new(AppSecurityStore::new(
+        data_root.to_path_buf(),
+        installation.clone(),
+    )));
+    config
+}
+
+async fn open_settings(
+    runtime: &AgentRuntime,
+    data_root: &std::path::Path,
+    app_config: &AppServiceConfiguration,
+) -> Result<AppSettingsFactsAdapter, BtccError> {
+    AppSettingsFactsAdapter::open(
+        runtime.models.configuration.clone(),
+        runtime.profile.clone(),
+        data_root.to_path_buf(),
+        format!("http://{}:{}", app_config.host, app_config.port),
+        "local".into(),
+    )
+    .await
+    .map_err(app_error)
+}
+
+fn open_updates(
+    data_root: &std::path::Path,
+    installation: &ResolvedInstallation,
+) -> Result<butler_runtime::operations::AppUpdateService, BtccError> {
+    crate::host::cli::update::open_app_update(data_root, installation)
+        .map_err(|code| BtccError::relayed(code.to_string(), "App update service is unavailable"))
 }
 
 fn app_error(error: GatewayApplicationError) -> BtccError {

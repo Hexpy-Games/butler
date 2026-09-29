@@ -87,13 +87,13 @@ test("usage provider panel renders fresh, stale, unavailable, and partial states
             stale: false,
             sourceKind: "provider_quota",
             sourceId: "anthropic-unsupported",
-            planKind: "unknown",
+            planKind: "api",
             planName: null,
             windows: [],
             fetchedAt: null,
             reason: {
-              code: "provider_quota_surface_unavailable",
-              message: "공식 잔여량 표면 없음",
+              code: "provider_quota_not_offered",
+              message: "The provider offers no remaining quota to read.",
             },
           }),
           providerId: "zai",
@@ -114,8 +114,8 @@ test("usage provider panel renders fresh, stale, unavailable, and partial states
   expect(markup).toContain('aria-label="주간 한도: 45% 남음"');
   expect(markup).toContain("재설정");
   expect(markup).toContain("OpenAI Codex 공식 사용량");
-  expect(markup).toContain("공식 잔여량 조회를 지원하지 않습니다.");
-  expect(markup.match(/공식 잔여량 조회를 지원하지 않습니다\./g)).toHaveLength(1);
+  expect(markup.match(/API 요금제/g)).toHaveLength(1);
+  expect(markup).not.toContain("offers no remaining quota");
   expect(markup).toContain("프로바이더 사용량 응답 시간이 초과되었습니다.");
   expect(markup).toContain("이전 확인값");
   expect(markup).not.toContain("provider_timeout");

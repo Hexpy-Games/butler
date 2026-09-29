@@ -8,6 +8,7 @@ publish.workspace = true
 
 [dependencies]
 butler-core = { path = "../butler-core" }
+butler-platform = { path = "../butler-platform" }
 butler-turn = { path = "../butler-turn" }
 base64.workspace = true
 bytes.workspace = true
@@ -23,6 +24,9 @@ serde.workspace = true
 serde_json.workspace = true
 ryu-js.workspace = true
 sha2.workspace = true
+# Key fingerprints and wiped key buffers (#217).
+hmac.workspace = true
+zeroize.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 thiserror.workspace = true

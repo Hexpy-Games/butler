@@ -14,8 +14,6 @@
 )]
 
 use std::io::Write;
-use std::os::unix::fs::PermissionsExt;
-use std::os::unix::process::ExitStatusExt;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
@@ -25,6 +23,9 @@ use butler_e2e::e2e::stop_intent::{
     RestartWatch, StopOnDrop, instance_record, intent_path, mcp_tool_call, read_intent,
 };
 use butler_e2e::e2e::{HarnessError, harness_error};
+use butler_platform::instance::request_stop;
+use butler_platform::process_control::{ExitSignal, SIGNALS, terminating_signal};
+use butler_platform::secure_fs::{OWNER_ONLY, is_owner_only};
 use serde_json::{Value, json};
 
 const INTENT_SCHEMA: &str = "butler.agent-stop-intent.v1";
@@ -149,8 +150,8 @@ async fn svc_02_stop_is_announced_and_sticks() -> Result<(), HarnessError> {
     );
     let intent = read_intent(&data).expect("stop wrote no intent");
     assert_intent(&intent, "stop", "cli", &record);
-    let mode = std::fs::metadata(intent_path(&data))?.permissions().mode();
-    assert_eq!(mode & 0o777, 0o600);
+    let metadata = std::fs::metadata(intent_path(&data))?;
+    assert_eq!(is_owner_only(&metadata), OWNER_ONLY.then_some(true));
 
     wait_exited(&mut s).await;
     assert_exited_cleanly(&s, pid);
@@ -416,7 +417,11 @@ async fn svc_05_crash_leaves_no_intent() -> Result<(), HarnessError> {
         .exit_status(pid)
         .expect("the killed agent was reaped");
     assert!(!status.success(), "a crash exited {status}");
-    assert_eq!(status.signal(), Some(9), "{status}");
+    assert_eq!(
+        terminating_signal(status),
+        SIGNALS.then_some(ExitSignal::Kill),
+        "{status}"
+    );
     s.gw = s.agent.start_again().await?;
     ready_record(&data, Duration::from_secs(30)).await;
     assert!(read_intent(&data).is_none());
@@ -456,9 +461,7 @@ async fn svc_07_stop_during_startup_exits_zero() -> Result<(), HarnessError> {
     // SIGTERM while the instance is starting, without an announcement.
     let pid = s.agent.start_process()?;
     starting_record(&data, pid).await;
-    let target = nix::unistd::Pid::from_raw(i32::try_from(pid).unwrap());
-    nix::sys::signal::kill(target, nix::sys::signal::Signal::SIGTERM)
-        .map_err(|error| harness_error(error.to_string()))?;
+    request_stop(pid).map_err(|error| harness_error(error.to_string()))?;
     wait_exited(&mut s).await;
     assert_exited_cleanly(&s, pid);
     assert!(

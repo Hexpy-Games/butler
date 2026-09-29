@@ -28,7 +28,7 @@ test("Korean catalog uses Korean for generic UI words", () => {
   expect(ko.settings.modelManagement.apiKeyAuth).toBe("API 키");
   expect(ko.settings.modelManagement.apiBaseUrl).toBe("API 기본 URL");
   expect(ko.settings.fields.searchProviderApiKey).toBe("API 키");
-  expect(ko.settings.options.mainScreenThemeNone).toBe("없음");
+  expect(ko.settings.wallpaper.none).toBe("없음");
   expect(ko.settings.developerLogViewer.labels.raw).toBe("원본");
   expect(ko.conversation.work.webSearchSummary(3)).toBe("웹 검색 3회");
   expect(ko.conversation.work.toolStepsSummary("read_file", 2)).toBe("read_file 2단계");
@@ -109,6 +109,28 @@ test("scheduled-run feature uses one term: 예약 작업 (never 자동화) and S
   for (const [locale, term] of [["ko-KR", "예약 작업"], ["en-US", "Schedules"]] as const) {
     const copy = getAppCopy(locale);
     expect([copy.space.automations, copy.sidebar.automations, copy.automations.title, copy.inspector.tabs.automations]).toEqual([term, term, term, term]);
+  }
+});
+
+test("API key copy claims Keychain storage only where the agent reports it (#217)", () => {
+  // Unsigned builds keep keys in a local file (#243), so first run says only "this computer".
+  expect(getAppCopy("en-US").firstRun.keyStored).toBe("Your key stays on this computer.");
+  expect(getAppCopy("ko-KR").firstRun.keyStored).toBe("키는 이 컴퓨터에만 저장됩니다.");
+  expect(getAppCopy("en-US").settings.savedKeys.storage.local).toBe("Stored only on this computer");
+  expect(getAppCopy("ko-KR").settings.savedKeys.storage.local).toBe("이 컴퓨터에만 저장");
+  for (const locale of ["en-US", "ko-KR"] as const) {
+    const copy = getAppCopy(locale);
+    const reported = new Set(Object.values(copy.settings.savedKeys.storage));
+    const claims = strings(copy).filter((text) => !reported.has(text) && /keychain|키체인|secure storage|encrypt|암호화/iu.test(text));
+    expect(claims, locale).toEqual([]);
+  }
+});
+
+test("the schedule access hint names the Ask first mode with the composer's label", () => {
+  for (const locale of ["en-US", "ko-KR"] as const) {
+    const copy = getAppCopy(locale);
+    expect(copy.automations.accessHint).toContain(copy.permissions.askFirst);
+    expect(copy.automations.accessHint).not.toContain("\n");
   }
 });
 

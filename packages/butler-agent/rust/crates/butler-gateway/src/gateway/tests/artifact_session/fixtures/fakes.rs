@@ -105,6 +105,7 @@ pub(super) fn test_dependencies() -> AppApplicationDependencies {
         subsessions: Arc::new(TestSessions),
         branch_conversations: Arc::new(TestBranchConversations),
         branch_summarizer: Arc::new(TestBranchSummarizer),
+        setup: crate::gateway::application::test_setup_port(),
     }
 }
 
@@ -182,6 +183,8 @@ impl AppContextReadPort for TestContextRead {
                     source: "provider_prompt_usage".into(),
                 }),
                 compaction_summary: None,
+                session_usage: None,
+                auth_mode: butler_models::models::UsageAuthMode::Unknown,
                 budget: AppContextBudgetFacts {
                     context_window_tokens: 200_000,
                     reserved_output_tokens: 8_000,
@@ -365,6 +368,7 @@ impl AppSettingsFactsProvider for TestSettings {
             config_model_fallback: Default::default(),
             catalog_generation: "test".into(),
             native_settings: serde_json::json!({}),
+            routine_presets: Arc::from([]),
         }))
     }
 }

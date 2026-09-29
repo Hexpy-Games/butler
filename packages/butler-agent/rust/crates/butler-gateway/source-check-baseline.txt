@@ -1,21 +1,21 @@
 # Production functions over 80 lines, ratcheted by tools/source-check.
 # Split a function and regenerate: cargo run -p butler-source-check -- --bless .
 # Entries may only shrink or disappear; new entries need review.
-src/gateway/application.rs	AppApplication::open	99
+src/gateway/application.rs	AppApplication::open	87
 src/gateway/application/admission.rs	inspect_with_attachment_source	141
-src/gateway/application/context_details.rs	AppApplication::context_details_owned	236
+src/gateway/application/context_details.rs	AppApplication::context_details_owned	168
 src/gateway/application/message_projection/work_blocks.rs	project	101
 src/gateway/application/monitoring/conversation.rs	AppApplication::work_status_conversation_owned	117
 src/gateway/application/new_chat_briefing.rs	AppApplication::new_chat_briefing_view	85
 src/gateway/application/operation_output/chunk.rs	verify_rows	115
-src/gateway/application/plan_decisions/workflow.rs	AppApplication::decide_session_plan_owned	150
+src/gateway/application/plan_decisions/workflow.rs	AppApplication::decide_session_plan_owned	146
 src/gateway/application/progress_view.rs	read	106
 src/gateway/application/project_sources.rs	AppApplication::resolve_project_sources	132
 src/gateway/application/projection.rs	project_event	198
 src/gateway/application/projection.rs	project_final	143
 src/gateway/application/projection/final_candidate.rs	candidate	87
 src/gateway/application/projection/final_result.rs	apply	214
-src/gateway/application/projection/non_final.rs	apply	216
+src/gateway/application/projection/non_final.rs	apply	186
 src/gateway/application/projection/non_final.rs	project_runtime_event	92
 src/gateway/application/projection/non_final/runtime_progress.rs	row_from_runtime_event	139
 src/gateway/application/projection/owner.rs	run	93
@@ -28,7 +28,6 @@ src/gateway/application/projects/dashboard/history.rs	get	106
 src/gateway/application/projects/dashboard/history.rs	read_ledger_events	113
 src/gateway/application/projects/dashboard/materials.rs	get	264
 src/gateway/application/projects/dashboard/overview.rs	facts	99
-src/gateway/application/projects/dashboard/preferences.rs	update	136
 src/gateway/application/projects/dashboard/source.rs	get	153
 src/gateway/application/projects/dashboard/statistics.rs	get	84
 src/gateway/application/projects/dashboard/statistics/app.rs	read_turns	120
@@ -44,18 +43,18 @@ src/gateway/application/session_queue_mutations.rs	AppApplication::update_sessio
 src/gateway/application/session_relocation.rs	AppApplication::perform_relocation	166
 src/gateway/application/session_relocation/records.rs	reserve	83
 src/gateway/application/session_views.rs	AppApplication::session_summary_owned	96
-src/gateway/application/session_views.rs	AppApplication::session_view_owned	132
+src/gateway/application/session_views.rs	AppApplication::session_view_owned	126
 src/gateway/application/settings/update/patch/project.rs	project	223
 src/gateway/application/settings/update/patch/sanitize.rs	sanitize	223
-src/gateway/application/settings/view.rs	read	269
+src/gateway/application/settings/view.rs	read	256
 src/gateway/application/shell.rs	command_palette	169
 src/gateway/application/snapshot_input.rs	claimed_snapshot	120
 src/gateway/application/space/commands.rs	execute	125
 src/gateway/application/space/owner.rs	commit_relocation	102
 src/gateway/application/storage/schema/project_ledger_bindings.rs	initialize	109
-src/gateway/http.rs	route	188
+src/gateway/http.rs	route	161
 src/gateway/http/automations.rs	route	101
-src/gateway/http/dashboard.rs	route	244
+src/gateway/http/dashboard.rs	route	214
 src/gateway/http/message_files/mime.rs	inferred_content_type	84
 src/gateway/http/model_catalog.rs	route	96
 src/gateway/http/monitors.rs	route	139

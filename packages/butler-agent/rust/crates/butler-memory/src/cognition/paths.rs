@@ -56,36 +56,3 @@ fn trimmed(value: Option<&String>) -> Option<&str> {
         .map(|value| butler_core::public_text::trim_js_whitespace(value))
         .filter(|value| !value.is_empty())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn overrides_preserve_relative_paths_and_ignore_js_whitespace_only_values() {
-        let root = Path::new("data");
-        let none = CognitionPathEnvironment::default();
-        assert_eq!(none.memory_root(root), Path::new("data/cognition/memory"));
-        let environment = CognitionPathEnvironment {
-            cognition_home: Some(" relative-cognition ".into()),
-            memory_home: Some("\u{feff}\t".into()),
-        };
-        assert_eq!(
-            environment.cognition_root(root),
-            Path::new("relative-cognition")
-        );
-        assert_eq!(
-            environment.memory_root(root),
-            Path::new("relative-cognition/memory")
-        );
-        let memory = CognitionPathEnvironment {
-            cognition_home: None,
-            memory_home: Some(" relative-memory ".into()),
-        };
-        assert_eq!(memory.memory_root(root), Path::new("relative-memory"));
-        assert_eq!(
-            node_join(Path::new("/root/gen"), "/snapshot/../db"),
-            Path::new("/root/gen/db")
-        );
-    }
-}

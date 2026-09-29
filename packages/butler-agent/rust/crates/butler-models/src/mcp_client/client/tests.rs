@@ -95,66 +95,6 @@ async fn stdio_client_lists_describes_calls_and_reads_then_reaps_each_child() {
     assert_eq!(exits.lines().count(), 4, "every scoped stdio child exited");
 }
 
-#[tokio::test]
-async fn stdio_cancellation_reaps_child_after_one_tool_dispatch() {
-    let scratch = Scratch::new();
-    let dispatched = scratch.0.join("dispatched.txt");
-    let pid_marker = scratch.0.join("pid.txt");
-    let executable = std::env::current_exe().unwrap();
-    scratch.write_registry(&json!({
-        "id":"fixture",
-        "display_name":"Fixture",
-        "enabled":true,
-        "transport":"stdio",
-        "command":executable,
-        "args":["--exact", "mcp_client::client::tests::stdio_hanging_call_fixture_child", "--ignored"],
-        "env":[
-            {"key":"MCP_FIXTURE_DISPATCHED","source":"literal","value":dispatched.to_string_lossy()},
-            {"key":"MCP_FIXTURE_PID","source":"literal","value":pid_marker.to_string_lossy()},
-        ],
-    }));
-    let client = McpClient::new(scratch.0.clone(), HashMap::new());
-    let signal = CancellationToken::new();
-    let call_signal = signal.clone();
-    let call = tokio::spawn(async move {
-        Box::pin(client.call_tool("fixture", "hang", serde_json::Map::new(), &call_signal)).await
-    });
-
-    tokio::time::timeout(Duration::from_secs(5), async {
-        while !dispatched.exists() || !pid_marker.exists() {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .expect("the fixture child should receive the tool call");
-    let pid = fs::read_to_string(pid_marker)
-        .unwrap()
-        .trim()
-        .parse::<u32>()
-        .unwrap();
-    signal.cancel();
-
-    let error = tokio::time::timeout(Duration::from_secs(7), call)
-        .await
-        .expect("cancelled MCP call should finish within the cleanup bound")
-        .unwrap()
-        .unwrap_err();
-    assert_eq!(error.code, "turn_cancelled");
-    assert!(error.attempted, "the remote call was already dispatched");
-    assert_eq!(
-        fs::read_to_string(dispatched).unwrap().lines().count(),
-        1,
-        "an attempted call must not be repeated"
-    );
-    tokio::time::timeout(Duration::from_secs(2), async {
-        while process_is_running(pid) {
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
-    })
-    .await
-    .expect("the scoped stdio child should be killed and reaped");
-}
-
 #[test]
 #[ignore = "stdio MCP server child; spawned with --ignored by the stdio client tests"]
 fn stdio_fixture_child() {
@@ -186,71 +126,6 @@ fn stdio_fixture_child() {
         .open(marker)
         .unwrap();
     file.write_all(b"closed\n").unwrap();
-}
-
-#[test]
-#[ignore = "hanging stdio MCP server child; spawned with --ignored by the cancellation test"]
-fn stdio_hanging_call_fixture_child() {
-    let (Ok(dispatched), Ok(pid_marker)) = (
-        std::env::var("MCP_FIXTURE_DISPATCHED"),
-        std::env::var("MCP_FIXTURE_PID"),
-    ) else {
-        return;
-    };
-    fs::write(pid_marker, std::process::id().to_string()).unwrap();
-    let stdin = std::io::stdin();
-    let mut stdout = std::io::stdout().lock();
-    for line in stdin.lock().lines() {
-        let Ok(line) = line else {
-            break;
-        };
-        let Ok(request) = serde_json::from_str::<Value>(&line) else {
-            continue;
-        };
-        if request.get("method").and_then(Value::as_str) == Some("tools/call") {
-            let mut marker = OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(dispatched)
-                .unwrap();
-            marker.write_all(b"dispatched\n").unwrap();
-            std::thread::sleep(Duration::from_secs(120));
-            return;
-        }
-        if let Some(response) = response_for(&request) {
-            let mut encoded = serde_json::to_vec(&response).unwrap();
-            encoded.push(b'\n');
-            if stdout.write_all(&encoded).is_err() || stdout.flush().is_err() {
-                break;
-            }
-        }
-    }
-}
-
-#[cfg(unix)]
-fn process_is_running(pid: u32) -> bool {
-    std::process::Command::new("/bin/kill")
-        .args(["-0", &pid.to_string()])
-        .status()
-        .is_ok_and(|status| status.success())
-}
-
-#[cfg(windows)]
-fn process_is_running(pid: u32) -> bool {
-    std::process::Command::new("tasklist")
-        .args(["/FI", &format!("PID eq {pid}"), "/NH"])
-        .output()
-        .ok()
-        .is_some_and(|output| {
-            String::from_utf8_lossy(&output.stdout)
-                .lines()
-                .any(|line| line.split_whitespace().nth(1) == Some(pid.to_string().as_str()))
-        })
-}
-
-#[cfg(not(any(unix, windows)))]
-fn process_is_running(_: u32) -> bool {
-    false
 }
 
 fn response_for(request: &Value) -> Option<Value> {

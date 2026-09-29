@@ -157,4 +157,4 @@ fn failure(message: impl Into<String>) -> ContextError {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

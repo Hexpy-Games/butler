@@ -72,6 +72,84 @@ async function requestBridgeResult(path, options = {}) {
   }
 }
 
+function wallpaperPath(id, suffix = "") {
+  return `/wallpapers/${encodeURIComponent(String(id ?? ""))}${suffix}`;
+}
+
+/** A wallpaper image's bytes (or its thumbnail) with the local bearer token, as a bridge result envelope. */
+async function readWallpaperImage({ id, variant } = {}) {
+  try {
+    await ensureLocalServer();
+    const serverUrl = await currentServerUrl();
+    const authHeaders = await localAuthHeaders();
+    const path = wallpaperPath(id, variant === "thumbnail" ? "/thumbnail" : "");
+    const response = await fetch(new URL(path, serverUrl), { headers: authHeaders });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      const error = new Error("Wallpaper image request failed.");
+      error.code = body?.error?.code ?? "request_failed";
+      error.status = response.status;
+      throw error;
+    }
+    const mimeType = response.headers.get("content-type") ?? "";
+    return { ok: true, data: { bytes: await response.arrayBuffer(), mimeType } };
+  } catch (error) {
+    return { ok: false, error: bridgeErrorEnvelope(error) };
+  }
+}
+
+function wallpaperModulePath(id, suffix) {
+  return `/wallpaper-modules/${encodeURIComponent(String(id ?? ""))}/${suffix}`;
+}
+
+/** A user wallpaper module file (`shader`, `overlay` or `image`) with the local bearer token; throws the gateway's error code. */
+async function fetchWallpaperModuleFile(id, suffix) {
+  await ensureLocalServer();
+  const serverUrl = await currentServerUrl();
+  const authHeaders = await localAuthHeaders();
+  const response = await fetch(new URL(wallpaperModulePath(id, suffix), serverUrl), { headers: authHeaders });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    const error = new Error("Wallpaper module request failed.");
+    error.code = body?.error?.code ?? "request_failed";
+    error.status = response.status;
+    throw error;
+  }
+  return response;
+}
+
+/** A user wallpaper module's text file (shader.frag, overlay.frag) and its files' revision (the ETag), as a bridge result envelope. */
+async function readWallpaperModuleText(id, suffix) {
+  try {
+    const response = await fetchWallpaperModuleFile(id, suffix);
+    return { ok: true, data: { text: await response.text(), revision: response.headers.get("etag") ?? undefined } };
+  } catch (error) {
+    return { ok: false, error: bridgeErrorEnvelope(error) };
+  }
+}
+
+const readWallpaperModuleShader = ({ id } = {}) => readWallpaperModuleText(id, "shader");
+const readWallpaperModuleOverlay = ({ id } = {}) => readWallpaperModuleText(id, "overlay");
+
+/** A user wallpaper module's default image bytes (its manifest `defaultImage`), as a bridge result envelope. */
+async function readWallpaperModuleImage({ id } = {}) {
+  try {
+    const response = await fetchWallpaperModuleFile(id, "image");
+    const mimeType = response.headers.get("content-type") ?? "";
+    return { ok: true, data: { bytes: await response.arrayBuffer(), mimeType, revision: response.headers.get("etag") ?? undefined } };
+  } catch (error) {
+    return { ok: false, error: bridgeErrorEnvelope(error) };
+  }
+}
+
+function bridgeBytes(bytes) {
+  return bytes instanceof ArrayBuffer
+    ? bytes
+    : ArrayBuffer.isView(bytes)
+      ? bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+      : new ArrayBuffer(0);
+}
+
 function isBoundedCacheInteger(value, maximum) {
   return Number.isInteger(value) && value > 0 && value <= maximum;
 }
@@ -499,6 +577,45 @@ const butlerApp = Object.freeze({
     ipcRenderer.invoke("butler:first-run-setup-cancel", request ?? {}),
   exportSetupDiagnostics: () =>
     ipcRenderer.invoke("butler:first-run-setup-diagnostics"),
+  // #230 first-run routes served by the agent (#279). Envelopes keep the
+  // public error code (invalid_key, no_access, network, ...) across contextBridge.
+  getSetupReadiness: () => requestBridgeResult("/setup/readiness"),
+  retrySetupReadiness: () => requestBridgeResult("/setup/readiness/retry", {
+    method: "POST",
+    body: JSON.stringify({}),
+  }),
+  startSetupOAuth: (request) => requestBridgeResult("/setup/oauth/start", {
+    method: "POST",
+    body: JSON.stringify(request ?? {}),
+  }),
+  getSetupOAuthFlow: ({ flowId } = {}) =>
+    requestBridgeResult(`/setup/oauth/${encodeURIComponent(flowId ?? "")}`),
+  getLocalModelServers: () => requestJson("/setup/local-model-servers"),
+  verifySetupCredential: (request) => requestBridgeResult("/setup/credentials/verify", {
+    method: "POST",
+    body: JSON.stringify(request ?? {}),
+  }),
+  saveCredential: (request) => requestBridgeResult("/credentials", {
+    method: "POST",
+    body: JSON.stringify(request ?? {}),
+  }),
+  // #217 saved keys, with the same envelopes (invalid_key, credential_in_use, ...).
+  listCredentials: () => requestBridgeResult("/credentials"),
+  replaceCredential: ({ name, request } = {}) =>
+    requestBridgeResult(`/credentials/${encodeURIComponent(name ?? "")}`, {
+      method: "PATCH",
+      body: JSON.stringify(request ?? {}),
+    }),
+  deleteCredential: ({ name, force } = {}) =>
+    requestBridgeResult(
+      `/credentials/${encodeURIComponent(name ?? "")}${force === true ? "?force=true" : ""}`,
+      { method: "DELETE" },
+    ),
+  cancelSetupOAuth: ({ flowId } = {}) =>
+    requestBridgeResult(`/setup/oauth/${encodeURIComponent(flowId ?? "")}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
   getAgentServiceStatus: () => ipcRenderer.invoke("butler:agent-service-status"),
   installAgentService: (request = {}) =>
     ipcRenderer.invoke("butler:agent-service-install", request ?? {}),
@@ -846,12 +963,50 @@ const butlerApp = Object.freeze({
     ipcRenderer.invoke("butler:set-native-shell-preferences", {
       trayEnabled,
     }),
+  getAgentState: () => ipcRenderer.invoke("butler:agent-state"),
+  startAgent: () => ipcRenderer.invoke("butler:agent-start"),
+  onAgentState: (handler) => {
+    if (typeof handler !== "function") return () => {};
+    const listener = (_event, state) => handler(state);
+    ipcRenderer.on("butler:agent-state", listener);
+    return () => ipcRenderer.removeListener("butler:agent-state", listener);
+  },
   onNativeNavigation: (handler) => {
     if (typeof handler !== "function") return () => {};
     const listener = (_event, request) => handler(request);
     ipcRenderer.on("butler:native-navigation", listener);
     return () => ipcRenderer.removeListener("butler:native-navigation", listener);
   },
+  listWallpapers: () => requestBridgeResult("/wallpapers"),
+  uploadWallpaper: ({ name, mimeType, bytes } = {}) => {
+    const form = new FormData();
+    const fileBytes = bytes instanceof ArrayBuffer
+      ? bytes
+      : ArrayBuffer.isView(bytes)
+        ? bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+        : new ArrayBuffer(0);
+    form.set("file", new Blob([fileBytes], { type: mimeType || "application/octet-stream" }), name || "wallpaper");
+    return requestBridgeResult("/wallpapers", { method: "POST", body: form });
+  },
+  deleteWallpaper: ({ id } = {}) => requestBridgeResult(wallpaperPath(id), { method: "DELETE" }),
+  readWallpaperImage,
+  listWallpaperModules: () => requestBridgeResult("/wallpaper-modules"),
+  readWallpaperModuleShader,
+  readWallpaperModuleOverlay,
+  readWallpaperModuleImage,
+  importWallpaperModule: ({ name, bytes, replace } = {}) => {
+    const form = new FormData();
+    form.set("file", new Blob([bridgeBytes(bytes)], { type: "application/zip" }), name || "module.zip");
+    return requestBridgeResult(`/wallpaper-modules/import${replace === true ? "?replace=1" : ""}`, { method: "POST", body: form });
+  },
+  deleteWallpaperModule: ({ id } = {}) => requestBridgeResult(`/wallpaper-modules/${encodeURIComponent(String(id ?? ""))}`, { method: "DELETE" }),
+  reportWallpaperModuleStatus: ({ id, state, message, revision } = {}) => requestBridgeResult(wallpaperModulePath(id, "status"), {
+    method: "POST",
+    body: JSON.stringify({
+      ...(state === "error" ? { state, message: String(message ?? "") } : { state: state === "checking" ? "checking" : "ok" }),
+      ...(typeof revision === "string" && revision ? { revision } : {}),
+    }),
+  }),
   listMcpServers: () => requestJson("/mcp-servers"),
   listMcpCapabilities: () => requestJson("/mcp-capabilities"),
   listSkills: () => requestJson("/skills"),
@@ -915,6 +1070,9 @@ const butlerApp = Object.freeze({
     ipcRenderer.invoke("butler:restart-openai-oauth-login"),
   getOpenAIOAuthLoginStatus: () =>
     ipcRenderer.invoke("butler:get-openai-oauth-login-status"),
+  // Fallback for agents without the #279 sign-in routes.
+  cancelOpenAIOAuthLogin: ({ flowId } = {}) =>
+    ipcRenderer.invoke("butler:cancel-openai-oauth-login", { flowId }),
   submitOpenAIOAuthCallback: (request = {}) =>
     ipcRenderer.invoke("butler:submit-openai-oauth-callback", request ?? {}),
   deleteHostedModel: ({ modelRef } = {}) => requestJson(`/model-catalog/registered-models/${encodeURIComponent(modelRef ?? "")}`, {
@@ -1015,17 +1173,21 @@ const butlerApp = Object.freeze({
     return requestJson(query ? `/automations?${query}` : "/automations");
   },
   getAutomation: ({ automationId }) => requestJson(`/automations/${encodeURIComponent(automationId)}`),
-  createAutomation: ({ title, promptBody, targetSessionId, intervalSeconds }) => requestJson("/automations", {
+  // Schedule saves return the bridge envelope so a refused save keeps its
+  // code and status (the form shows 400s inline). An omitted accessMode lets
+  // the gateway use the target conversation's current mode.
+  createAutomation: ({ title, promptBody, targetSessionId, intervalSeconds, accessMode }) => requestBridgeResult("/automations", {
     method: "POST",
     body: JSON.stringify({
       title,
       prompt_body: promptBody,
       target_session_id: targetSessionId,
       interval_seconds: intervalSeconds,
+      access_mode: accessMode,
     }),
   }),
-  updateAutomation: ({ automationId, title, promptBody, targetSessionId, intervalSeconds, state }) =>
-    requestJson(`/automations/${encodeURIComponent(automationId)}`, {
+  updateAutomation: ({ automationId, title, promptBody, targetSessionId, intervalSeconds, state, accessMode }) =>
+    requestBridgeResult(`/automations/${encodeURIComponent(automationId)}`, {
       method: "PATCH",
       body: JSON.stringify({
         title,
@@ -1033,6 +1195,7 @@ const butlerApp = Object.freeze({
         target_session_id: targetSessionId,
         interval_seconds: intervalSeconds,
         state,
+        access_mode: accessMode,
       }),
     }),
   deleteAutomation: ({ automationId }) => requestJson(`/automations/${encodeURIComponent(automationId)}`, {

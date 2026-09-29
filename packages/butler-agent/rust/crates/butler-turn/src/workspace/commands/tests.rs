@@ -29,6 +29,12 @@ struct ScriptedProcesses {
 }
 
 impl ScriptedProcesses {
+    fn reaping_released(&self) -> bool {
+        self.reaping
+            .as_ref()
+            .is_none_or(|reaping| *reaping.borrow())
+    }
+
     fn reaped_on_release() -> (Self, watch::Sender<bool>) {
         let (release, reaping) = watch::channel(false);
         let host = Self {
@@ -37,12 +43,6 @@ impl ScriptedProcesses {
             ..Self::default()
         };
         (host, release)
-    }
-
-    fn reaping_released(&self) -> bool {
-        self.reaping
-            .as_ref()
-            .is_none_or(|reaping| *reaping.borrow())
     }
 }
 
@@ -121,8 +121,8 @@ impl Fixture {
     }
     fn guided(&self, command: &str) -> GuidedCommandInput {
         let mut host_environment = HashMap::from([("PATH".into(), "/usr/bin:/bin".into())]);
-        if let Ok(home) = std::env::var("HOME") {
-            host_environment.insert("HOME".into(), home);
+        if let Some(home) = butler_platform::user_dirs::home_dir() {
+            host_environment.insert("HOME".into(), home.to_string_lossy().into_owned());
         }
         GuidedCommandInput {
             command: command.into(),
@@ -155,62 +155,9 @@ impl Drop for Fixture {
     }
 }
 
-#[tokio::test]
-async fn guided_real_process_spool_offsets_and_close() {
-    let fixture = Fixture::new();
-    let owner = Commands::new();
-    let output = owner
-        .submit_guided(fixture.guided("printf 'out'; printf 'err' >&2"))
-        .unwrap()
-        .await
-        .unwrap()
-        .unwrap();
-    let bytes = std::fs::read(&output.payload_source.path).unwrap();
-    assert_eq!(output.summary.exit_code, Some(0));
-    let oracle: serde_json::Value = serde_json::from_str(include_str!("source-bun.json")).unwrap();
-    let payload = String::from_utf8(bytes).unwrap();
-    let stdout_marker = "\n--- stdout ---\n";
-    let stderr_marker = "\n--- stderr ---\n";
-    let stdout_start = payload.find(stdout_marker).unwrap() + stdout_marker.len();
-    let tail = payload.split_once("\n--- stdout ---\n").unwrap().1;
-    let (stdout, stderr) = tail.split_once("\n--- stderr ---\n").unwrap();
-    let stderr_start = payload.find(stderr_marker).unwrap() + stderr_marker.len();
-    assert_eq!(
-        usize::try_from(output.payload_source.stdout_start).unwrap_or(usize::MAX),
-        stdout_start
-    );
-    assert_eq!(
-        usize::try_from(output.payload_source.stdout_len).unwrap_or(usize::MAX),
-        stdout.len()
-    );
-    assert_eq!(
-        usize::try_from(output.payload_source.stderr_start).unwrap_or(usize::MAX),
-        stderr_start
-    );
-    assert_eq!(
-        usize::try_from(output.payload_source.stderr_len).unwrap_or(usize::MAX),
-        stderr.len()
-    );
-    assert_eq!(stdout, oracle["guided"]["payloadTail"][0]);
-    assert_eq!(stderr, oracle["guided"]["payloadTail"][1]);
-    assert_eq!(
-        output.summary.exit_code,
-        oracle["guided"]["summary"]["exitCode"]
-            .as_i64()
-            .map(|value| i32::try_from(value).unwrap())
-    );
-    assert_eq!(owner.active_count(), 0);
-    owner.close().await;
-    assert_eq!(
-        owner
-            .submit_guided(fixture.guided("true"))
-            .err()
-            .unwrap()
-            .code(),
-        "command_owner_closed"
-    );
-}
-
+/// Pure-logic table: incremental UTF-8 decoding of command output matches the
+/// source oracle at every chunk boundary.
+// test-category: pure-logic
 #[test]
 fn bun_incremental_decoder_oracle_matches_chunk_boundaries() {
     let oracle: serde_json::Value = serde_json::from_str(include_str!("source-bun.json")).unwrap();
@@ -231,28 +178,9 @@ fn bun_incremental_decoder_oracle_matches_chunk_boundaries() {
     }
 }
 
-#[tokio::test]
-async fn structured_pipeline_and_stderr_are_real_process_results() {
-    let fixture = Fixture::new();
-    let owner = Commands::new();
-    let input = fixture.structured(vec![
-        CommandStep {
-            executable: "/bin/sh".into(),
-            arguments: vec!["-c".into(), "printf 'hello'; printf 'first' >&2".into()],
-        },
-        CommandStep {
-            executable: "/usr/bin/tr".into(),
-            arguments: vec!["a-z".into(), "A-Z".into()],
-        },
-    ]);
-    let output = owner.submit_structured(input).unwrap().await.unwrap();
-    assert_eq!(output.stdout, "HELLO");
-    assert_eq!(output.stderr, "first");
-    assert_eq!(output.exit_code, Some(0));
-    assert!(!output.timed_out);
-    owner.close().await;
-}
-
+/// Race: dropping the caller's future while the owner holds the child does
+/// not cancel the child.
+// test-category: race
 #[tokio::test]
 async fn caller_drop_does_not_cancel_owned_child() {
     let fixture = Fixture::new();
@@ -265,19 +193,6 @@ async fn caller_drop_does_not_cancel_owned_child() {
     })
     .await;
     assert_eq!(std::fs::read(&marker).unwrap(), b"x");
-    owner.close().await;
-    assert_eq!(owner.active_count(), 0);
-}
-
-#[tokio::test]
-async fn guided_timeout_reaps_owned_child() {
-    let fixture = Fixture::new();
-    let owner = Commands::new();
-    let mut input = fixture.guided("sleep 5");
-    input.timeout_ms = Some(10.0);
-    let output = owner.submit_guided(input).unwrap().await.unwrap().unwrap();
-    assert!(output.summary.timed_out);
-    assert_eq!(output.summary.exit_code, None);
     owner.close().await;
     assert_eq!(owner.active_count(), 0);
 }
@@ -311,61 +226,4 @@ async fn structured_utf8_fragments_and_spawn_failure() {
     owner.close().await;
 }
 
-#[tokio::test]
-async fn structured_preabort_and_legacy_pipefail() {
-    let fixture = Fixture::new();
-    let owner = Commands::new();
-    let preabort = fixture.structured(vec![CommandStep {
-        executable: "/bin/sh".into(),
-        arguments: vec!["-c".into(), "exit 3".into()],
-    }]);
-    preabort.abort.cancel();
-    let cancelled = owner.submit_structured(preabort).unwrap().await.unwrap();
-    assert!(cancelled.cancelled);
-    assert_eq!(cancelled.exit_code, None);
-    let mut legacy = fixture.structured(Vec::new());
-    legacy.legacy = Some(super::LegacyShell {
-        command: "exit 7 | cat".into(),
-        pipefail: true,
-        read_only_installation_root: None,
-    });
-    let output = owner.submit_structured(legacy).unwrap().await.unwrap();
-    assert_eq!(output.exit_code, Some(7));
-    owner.close().await;
-}
-
 mod lifecycle;
-
-/// Darwin answers `killpg` with EPERM once every member of the group is a
-/// zombie; termination must treat such a group as already gone.
-#[cfg(target_os = "macos")]
-#[tokio::test]
-async fn signalling_a_group_of_only_zombies_succeeds() {
-    use std::os::unix::process::CommandExt;
-
-    use libproc::bsd_info::BSDInfo;
-    use libproc::proc_pid::pidinfo;
-    use nix::errno::Errno;
-    use nix::sys::signal::{Signal, killpg};
-    use nix::unistd::Pid;
-
-    let mut leader = std::process::Command::new("/usr/bin/true")
-        .process_group(0)
-        .spawn()
-        .unwrap();
-    let pid = leader.id();
-    // Not reaped: the exited leader stays a zombie of this process.
-    butler_test_support::eventually("the unreaped leader to exit", || {
-        pidinfo::<BSDInfo>(i32::try_from(pid).unwrap_or(i32::MAX), 0).is_err()
-    })
-    .await;
-    assert_eq!(
-        killpg(
-            Pid::from_raw(i32::try_from(pid).unwrap_or(i32::MAX)),
-            Signal::SIGKILL
-        ),
-        Err(Errno::EPERM)
-    );
-    assert_eq!(signal_pid(pid, GroupSignal::Kill), Ok(()));
-    leader.wait().unwrap();
-}

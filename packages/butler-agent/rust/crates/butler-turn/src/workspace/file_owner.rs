@@ -9,9 +9,6 @@ use super::files::{ReadFileInput, WorkspaceFileRead, read_one_blocking};
 use super::grep::{GrepCandidate, GrepRead, read_candidate};
 use super::path_guard::{GuardInput, GuardResult, PathForm, resolve_workspace_path_guard};
 
-#[cfg(test)]
-mod tests;
-
 /// Runs blocking workspace file reads with bounded concurrency until closed.
 #[derive(Clone)]
 pub struct WorkspaceFiles {

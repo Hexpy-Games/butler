@@ -141,8 +141,13 @@ async fn real_turn_work_journal_authority_resume_outcome_and_reopen() {
             "scope",
             "source_turn_id",
             "source_session_id",
-            "source_call_id"
+            "source_call_id",
+            "approval"
         ]
+    );
+    assert_eq!(
+        encoded["approval"]["action_kind"], "run_command",
+        "{encoded}"
     );
     let call_status: String = storage
         .execute(|db| {

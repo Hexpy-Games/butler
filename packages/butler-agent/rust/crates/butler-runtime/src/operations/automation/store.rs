@@ -3,9 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-#[cfg(unix)]
-use std::os::unix::fs::OpenOptionsExt;
-
+use butler_platform::secure_fs;
 use serde_json::{Map, Value};
 
 use super::{
@@ -236,10 +234,8 @@ impl AutomationStore {
         let path = self.root.join(STORE_LOCK_FILE);
         let mut options = OpenOptions::new();
         options.read(true).write(true).create(true);
-        #[cfg(unix)]
-        options
-            .mode(0o600)
-            .custom_flags(nix::libc::O_NOFOLLOW | nix::libc::O_CLOEXEC);
+        let _ = secure_fs::owner_only(&mut options);
+        let _ = secure_fs::no_follow(&mut options);
         let file = options.open(path).map_err(io_error)?;
         if !file.metadata().map_err(io_error)?.is_file() {
             return Err(invalid("automation store lock must be a regular file"));

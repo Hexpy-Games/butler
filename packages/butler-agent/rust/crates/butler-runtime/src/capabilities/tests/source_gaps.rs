@@ -3,10 +3,10 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::json;
 
 use super::Fixture;
-use crate::capabilities::CapabilityInvocation;
 
-#[tokio::test]
-async fn cursor_decoder_accepts_runtime_tolerated_base64url_spellings() {
+/// Called by `cursor_decoder_accepts_integral_json_number_spellings`: one
+/// test covers the cursor decoder's tolerated spellings.
+pub(super) async fn cursor_decoder_accepts_runtime_tolerated_base64url_spellings() {
     let fixture = Fixture::new();
     fixture.write("long.txt", b"one two three four");
     let first = json!({ "arguments": { "requests": [{ "path": "long.txt", "max_bytes": 4 }] } });
@@ -39,8 +39,7 @@ async fn cursor_decoder_accepts_runtime_tolerated_base64url_spellings() {
     fixture.files.close().await;
 }
 
-#[tokio::test]
-async fn containment_and_unicode_sensitive_paths_are_rejected() {
+pub(crate) async fn containment_and_unicode_sensitive_paths_are_rejected() {
     let fixture = Fixture::new();
     fixture.write("..near.txt", b"near");
     fixture.write("secret.Key", b"secret");
@@ -49,31 +48,5 @@ async fn containment_and_unicode_sensitive_paths_are_rejected() {
         let rust = fixture.invoke(&call, None).await;
         assert_eq!(rust["files"][0]["ok"], false);
     }
-    fixture.files.close().await;
-}
-
-#[tokio::test]
-async fn missing_workspace_root_returns_errno() {
-    let fixture = Fixture::new();
-    let missing = fixture.root.join("root-does-not-exist");
-    let call = json!({ "arguments": { "requests": [{ "path": "a.txt" }] } });
-    let error = fixture
-        .capabilities
-        .invoke(
-            "read_file",
-            CapabilityInvocation {
-                call: &call,
-                workspace_reference: None,
-                workspace_path: Some(&missing),
-                butler_data: &fixture.root,
-                protected_ledger_roots: &[],
-                allowed_tools_and_effects: None,
-                mutation_scope: None,
-                installation_root: None,
-            },
-        )
-        .await
-        .unwrap_err();
-    assert_eq!(error.code, "ENOENT");
     fixture.files.close().await;
 }

@@ -8,6 +8,7 @@ import {
 import { appCopy } from "@/app/copy.ts";
 import { useComposerStore } from "./composerStore";
 import { useButlerStore } from "@/app/store.ts";
+import { agentNoticeLabel } from "@/app/agentRuntime.ts";
 import { AccessModeMenu } from "./AccessModeMenu";
 import { ComposerAttachmentMenu } from "./ComposerAttachmentMenu";
 import { ComposerContextControl } from "./ComposerContextControl";
@@ -26,6 +27,7 @@ export function ComposerToolbar() {
   const [blockedImage] = useComposerStore((store) => store.blockedAttachments).values();
   const onStop = useComposerStore((store) => store.onStop);
   const reconnecting = useButlerStore((store) => store.liveConnectionLost);
+  const agentNotice = useButlerStore((store) => store.agentNotice);
 
   return (
     <ComposerCardToolbar>
@@ -39,7 +41,10 @@ export function ComposerToolbar() {
         <ComposerContextControl />
         <ModelMenu />
       </ComposerCardExpandedControls>
-      {reconnecting ? (
+      {agentNotice ? (
+        <ComposerSendButton busy={agentNotice === "restarting"} disabled
+          aria-label={agentNoticeLabel(agentNotice)} title={agentNoticeLabel(agentNotice)} />
+      ) : reconnecting ? (
         <ComposerSendButton busy aria-label={appCopy.feedback.reconnectingShort}
           title={appCopy.feedback.reconnectingShort} />
       ) : (isSending || activeTurn) && canStop && !canSend ? (

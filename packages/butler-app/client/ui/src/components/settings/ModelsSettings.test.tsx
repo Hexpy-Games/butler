@@ -80,9 +80,9 @@ const sectionIds = (container: HTMLElement) =>
 const settingIds = (container: HTMLElement) =>
   Array.from(container.querySelectorAll("[data-setting-id]")).map((field) => field.getAttribute("data-setting-id"));
 
-test("the Models page keeps backup models visible and folds cleanup and workers into Advanced", async () => {
+test("the Models page keeps backup models and API keys visible and folds cleanup and workers into Advanced", async () => {
   await render(<ModelsSettings />, {}, async (container) => {
-    expect(sectionIds(container)).toEqual(["butler-model", "backup-models", "permissions", "advanced-models"]);
+    expect(sectionIds(container)).toEqual(["butler-model", "backup-models", "saved-keys", "permissions", "advanced-models"]);
     // Like every section, Advanced has its header outside the card; the card holds the disclosure row.
     const section = container.querySelector('[data-settings-section-id="advanced-models"]')!;
     expect(section.querySelector('[data-slot="form-section-header"] h3')?.textContent).toBe("Advanced");
@@ -93,7 +93,7 @@ test("the Models page keeps backup models visible and folds cleanup and workers 
     await act(async () => advanced.click());
     expect(advanced.getAttribute("aria-expanded")).toBe("true");
     expect(sectionIds(container)).toEqual([
-      "butler-model", "backup-models", "permissions", "advanced-models", "memory-cleanup", "worker-profiles",
+      "butler-model", "backup-models", "saved-keys", "permissions", "advanced-models", "memory-cleanup", "worker-profiles",
     ]);
     expect(settingIds(container)).toContain("consolidation-model");
   });

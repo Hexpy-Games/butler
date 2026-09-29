@@ -375,8 +375,8 @@ pub(super) fn protected_path(root: &Path, target: &Path, extra: &[PathBuf]) -> b
     {
         roots.push(PathBuf::from(data).join("project-ledger/projects"));
     }
-    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-        roots.push(PathBuf::from(home).join(".butler/project-ledger/projects"));
+    if let Some(home) = butler_platform::user_dirs::home_dir() {
+        roots.push(home.join(".butler/project-ledger/projects"));
     }
     roots.extend_from_slice(extra);
     roots

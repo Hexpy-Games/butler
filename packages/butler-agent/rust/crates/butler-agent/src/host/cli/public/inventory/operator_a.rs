@@ -122,6 +122,12 @@ pub(super) const ROUTES: &[Entry] = &[
         "operator"
     ),
     route!(
+        "auth.keys",
+        "butler auth keys [list | replace NAME [--verify] | delete NAME --yes [--force]]",
+        "List, replace or delete saved API keys (replace reads the key from stdin).",
+        "operator"
+    ),
+    route!(
         "model.status",
         "butler model status",
         "Show current native model configuration.",

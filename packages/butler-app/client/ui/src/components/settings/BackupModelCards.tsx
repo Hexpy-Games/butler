@@ -3,6 +3,7 @@ import { SortableCardList } from "@/butler-ds";
 import { modelDisplayName, tokenWindowLabel } from "@/app/utils.ts";
 import type { AppModelSummary, SettingsView } from "@/app/types.ts";
 import { appCopy } from "@/app/copy.ts";
+import { ProviderMark } from "./ProviderMark";
 
 export function BackupModelCards({
   models,
@@ -24,6 +25,7 @@ export function BackupModelCards({
           label: modelDisplayName(model),
           title: modelDisplayName(model),
           description: `${model.provider_label} · ${model.model_ref}`,
+          leading: <ProviderMark providerId={model.provider_id} platform={model.platform} />,
           meta: tokenWindowLabel(model.context_window_tokens),
         }]
       : [];

@@ -1,0 +1,108 @@
+{
+  "id": "butler.lamina",
+  "name": {
+    "en": "Lamina",
+    "ko": "이끼 잎"
+  },
+  "version": "0.2.0",
+  "engine": 1,
+  "motion": "animated",
+  "image": "none",
+  "timePeriod": 300,
+  "params": [
+    {
+      "key": "magnification",
+      "type": "number",
+      "label": {
+        "en": "Magnification",
+        "ko": "배율"
+      },
+      "default": 1,
+      "min": 0.6,
+      "max": 1.6,
+      "step": 0.05
+    },
+    {
+      "key": "streaming",
+      "type": "number",
+      "label": {
+        "en": "Cytoplasmic streaming (px/s)",
+        "ko": "원형질 유동 (px/s)"
+      },
+      "default": 1.5,
+      "min": 0,
+      "max": 12,
+      "step": 0.5
+    },
+    {
+      "key": "rackFocus",
+      "type": "boolean",
+      "label": {
+        "en": "Focus breathing",
+        "ko": "초점 호흡"
+      },
+      "default": true
+    },
+    {
+      "key": "condenser",
+      "type": "number",
+      "label": {
+        "en": "Condenser aperture (open → stopped down)",
+        "ko": "콘덴서 조리개 (개방 → 조임)"
+      },
+      "default": 0.35,
+      "min": 0,
+      "max": 1,
+      "step": 0.01
+    },
+    {
+      "key": "focusPlane",
+      "type": "number",
+      "label": {
+        "en": "Focus depth (margin → interior)",
+        "ko": "초점 깊이 (가장자리 → 안쪽)"
+      },
+      "default": 0,
+      "min": 0,
+      "max": 1,
+      "step": 0.01
+    },
+    {
+      "key": "chloroplasts",
+      "type": "number",
+      "label": {
+        "en": "Chloroplast density",
+        "ko": "엽록체 밀도"
+      },
+      "default": 0.9,
+      "min": 0.2,
+      "max": 1,
+      "step": 0.01
+    },
+    {
+      "key": "grain",
+      "type": "number",
+      "label": {
+        "en": "Film grain",
+        "ko": "필름 그레인"
+      },
+      "default": 0.35,
+      "min": 0,
+      "max": 1,
+      "step": 0.01
+    },
+    {
+      "key": "slide",
+      "type": "number",
+      "label": {
+        "en": "Slide",
+        "ko": "슬라이드"
+      },
+      "default": 0,
+      "min": 0,
+      "max": 99,
+      "step": 1,
+      "control": "shuffle"
+    }
+  ]
+}

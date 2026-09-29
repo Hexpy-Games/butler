@@ -1,6 +1,5 @@
 //! Native App HTTP and durable file-queue entrypoint with one shutdown sequence.
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde_json::json;
@@ -11,7 +10,7 @@ use butler_runtime::operations::ServiceReadiness;
 use butler_turn::btcc::BtccError;
 
 use crate::host::app::gateway_lifecycle::{
-    ActiveAppEndpoint, AppGatewayLifecycle, GatewayControlServer,
+    ActiveAppEndpoint, AppGatewayLifecycle, GatewayControlServer, local_auth_unconfigured,
 };
 use crate::host::service::foreground_lease::ForegroundLease;
 use crate::host::service::ingress::IngressDispatcher;
@@ -120,9 +119,8 @@ async fn run_until_stopped(
     logs: ServiceLogMode,
     stop: &StopSignal,
 ) -> Result<String, BtccError> {
-    let user_home = std::env::var_os("HOME")
-        .filter(|home| !home.is_empty())
-        .map(PathBuf::from)
+    let user_home = butler_platform::user_dirs::home_dir()
+        .filter(|home| !home.as_os_str().is_empty())
         .ok_or_else(|| failure("native_home_unavailable", "User home is unavailable"))?;
     let config = ServiceConfiguration::capture(explicit_data, &user_home, &installation)?;
     report_credential_errors(&config, logs);
@@ -138,12 +136,8 @@ async fn run_until_stopped(
     })?;
     stop.attach(config.data_root.clone(), instance.nonce());
     repair_cli_launcher(&config, logs);
-    let os = nix::sys::utsname::uname().map_err(io)?;
-    let environment = ProcessEnvironment::capture(
-        &config.data_root,
-        &user_home,
-        &os.release().to_string_lossy(),
-    );
+    let os_release = butler_platform::instance::os_release().map_err(io)?;
+    let environment = ProcessEnvironment::capture(&config.data_root, &user_home, &os_release);
     let worker_profiles = Arc::new(crate::host::AppWorkerProfileReader::new(
         &config.app,
         config.app.gateway_config().local_auth,
@@ -214,6 +208,29 @@ fn report_credential_errors(config: &ServiceConfiguration, logs: ServiceLogMode)
             "[native-app] local auth unavailable {}",
             error.diagnostic()
         ));
+    }
+}
+
+/// Starts the App gateway and logs its outcome: `ready` only when it serves
+/// clients. Without its token it stays up refusing every client
+/// (`local_auth_unconfigured`), which is logged as a problem, not as ready.
+async fn start_app_gateway(
+    gateway: &AppGatewayLifecycle,
+    config: &ServiceConfiguration,
+    endpoint: &ActiveAppEndpoint,
+    logs: ServiceLogMode,
+) {
+    if let Err(error) = gateway.start_initial(&config.app).await {
+        logs.write(&format!("[native-app] unavailable code={}", error.code()));
+    } else if let Some(active) = endpoint.snapshot() {
+        if local_auth_unconfigured(&active.local_auth) {
+            logs.problem(&format!(
+                "[native-app] refusing clients address={} code=local_auth_unconfigured",
+                active.base_url
+            ));
+        } else {
+            logs.write(&format!("[native-app] ready address={}", active.base_url));
+        }
     }
 }
 
@@ -310,11 +327,7 @@ async fn serve(
         app_endpoint.clone(),
         instance.nonce().to_owned(),
     ));
-    if let Err(error) = gateway.start_initial(&config.app).await {
-        logs.write(&format!("[native-app] unavailable code={}", error.code()));
-    } else if let Some(active) = app_endpoint.snapshot() {
-        logs.write(&format!("[native-app] ready address={}", active.base_url));
-    }
+    start_app_gateway(&gateway, config, &app_endpoint, logs).await;
     let control = match GatewayControlServer::bind(
         config.data_root.clone(),
         config.installation.clone(),

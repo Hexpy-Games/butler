@@ -3,11 +3,12 @@
 use std::path::Path;
 
 use rusqlite::{Connection, OptionalExtension, Row, params};
+use serde_json::Value;
 
 use super::{AppProjectSource, AppProjectSummary, AppSessionSummary};
 use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::{
-    AppIdentityClock, EventSubscribers, events, storage::AppStorageError,
+    AppIdentityClock, EventSubscribers, events, settings, storage::AppStorageError,
 };
 use butler_core::public_text::trim_js_whitespace;
 
@@ -15,6 +16,7 @@ pub(super) struct ProjectRow {
     id: String,
     pub(super) display_name: String,
     pub(super) status: String,
+    pub(super) workspace_path: String,
     workspace_label: String,
     safe_path_label: String,
     ledger_project_id: Option<String>,
@@ -23,6 +25,7 @@ pub(super) struct ProjectRow {
     error_summary: Option<String>,
     updated_at: String,
     created_at: String,
+    preferences_json: Option<String>,
 }
 
 fn decode(row: &Row<'_>) -> rusqlite::Result<ProjectRow> {
@@ -30,6 +33,7 @@ fn decode(row: &Row<'_>) -> rusqlite::Result<ProjectRow> {
         id: row.get(0)?,
         display_name: row.get(1)?,
         status: row.get(2)?,
+        workspace_path: row.get(3)?,
         workspace_label: row.get(4)?,
         safe_path_label: row.get(5)?,
         ledger_project_id: row.get(6)?,
@@ -38,10 +42,11 @@ fn decode(row: &Row<'_>) -> rusqlite::Result<ProjectRow> {
         error_summary: row.get(9)?,
         updated_at: row.get(10)?,
         created_at: row.get(11)?,
+        preferences_json: row.get(12)?,
     })
 }
 
-const SELECT: &str = "SELECT id,display_name,status,workspace_path,workspace_label,safe_path_label,ledger_project_id,pinned,archived,error_summary,updated_at,created_at FROM projects";
+const SELECT: &str = "SELECT id,display_name,status,workspace_path,workspace_label,safe_path_label,ledger_project_id,pinned,archived,error_summary,updated_at,created_at,dashboard_preferences_json FROM projects";
 
 pub(super) fn list(db: &Connection) -> Result<Vec<ProjectRow>, AppStorageError> {
     let mut statement = db
@@ -253,6 +258,7 @@ pub(super) fn summary(
                 .map(str::to_owned)
         })
         .unwrap_or_else(|| row.updated_at.clone());
+    let wallpaper = wallpaper(row.preferences_json.as_deref());
     AppProjectSummary {
         id: row.id,
         display_name: row.display_name,
@@ -264,8 +270,21 @@ pub(super) fn summary(
         error_summary: row.error_summary,
         workspace_label: row.workspace_label,
         safe_path_label: row.safe_path_label,
+        wallpaper,
         sessions,
+        git: None,
     }
+}
+
+/// The project wallpaper its dashboard preferences hold: a source, or
+/// `"inherit"` when unset or unreadable.
+pub(super) fn wallpaper(preferences_json: Option<&str>) -> Value {
+    let preferences = preferences_json.and_then(|raw| serde_json::from_str::<Value>(raw).ok());
+    settings::project_wallpaper_view(
+        preferences
+            .as_ref()
+            .and_then(|value| value.get("wallpaper")),
+    )
 }
 
 pub(super) fn id(row: &ProjectRow) -> &str {

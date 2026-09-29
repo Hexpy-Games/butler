@@ -14,6 +14,7 @@ pub(in crate::host) use monitoring::MonitoringReaders;
 mod profile;
 mod project_source;
 mod resume;
+mod wallpaper;
 pub(in crate::host) use message::structured_raw as structured_tool_preview;
 
 use butler_core::tool_protocol::ToolName;
@@ -313,6 +314,9 @@ impl GuidedTools {
                     | ToolName::RunDueAutomations
                     | ToolName::WebSearch
                     | ToolName::WebRead
+                    | ToolName::ListWallpapers
+                    | ToolName::SetWallpaper
+                    | ToolName::SaveWallpaperModule
             )
         ) || GuidedWorkTools::is_work_tool(name)
             || crate::host::guided::project_tools::GuidedProjectTools::supports(name)

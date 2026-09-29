@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { chromium } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import type { NavigationView } from "../../packages/butler-app/client/ui/src/app/types.ts";
-import { FIRST_RUN_STORAGE_KEY, firstRunCompleteState } from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
+import { LEGACY_FIRST_RUN_STORAGE_KEY as FIRST_RUN_STORAGE_KEY, legacyFirstRunCompleteRecord } from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "butler-drag-scroll-"));
 const server = await createNativeAppServer({
@@ -24,7 +24,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1200, height: 550 } });
   await server.signIn(page);
   await page.addInitScript(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), {
-    key: FIRST_RUN_STORAGE_KEY, value: firstRunCompleteState("ko"),
+    key: FIRST_RUN_STORAGE_KEY, value: legacyFirstRunCompleteRecord(),
   });
   await page.goto(server.url);
   const show = page.getByRole("button", { name: "사이드바 보기", exact: true });

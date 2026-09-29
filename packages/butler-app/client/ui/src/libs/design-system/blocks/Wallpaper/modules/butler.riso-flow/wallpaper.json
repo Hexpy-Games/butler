@@ -1,0 +1,90 @@
+{
+  "id": "butler.riso-flow",
+  "name": {
+    "en": "Riso Flow",
+    "ko": "리소 플로우"
+  },
+  "version": "0.4.0",
+  "engine": 1,
+  "motion": "animated",
+  "image": "none",
+  "timePeriod": 240,
+  "params": [
+    {
+      "key": "inks",
+      "type": "enum",
+      "label": {
+        "en": "Inks",
+        "ko": "잉크"
+      },
+      "default": "pinkBlue",
+      "defaultDark": "neon",
+      "options": [
+        {
+          "value": "pinkBlue",
+          "label": {
+            "en": "Pink · Blue · Yellow",
+            "ko": "핑크 · 블루 · 옐로"
+          }
+        },
+        {
+          "value": "dusk",
+          "label": {
+            "en": "Orange · Federal Blue · Sunflower",
+            "ko": "오렌지 · 페더럴 블루 · 선플라워"
+          }
+        },
+        {
+          "value": "lagoon",
+          "label": {
+            "en": "Teal · Fluo Pink · Sunflower",
+            "ko": "틸 · 형광 핑크 · 선플라워"
+          }
+        },
+        {
+          "value": "neon",
+          "label": {
+            "en": "Fluo Pink · Aqua · Yellow",
+            "ko": "형광 핑크 · 아쿠아 · 옐로"
+          }
+        }
+      ]
+    },
+    {
+      "key": "loupe",
+      "type": "number",
+      "label": {
+        "en": "Loupe (dot size, px)",
+        "ko": "루페 (망점 크기, px)"
+      },
+      "default": 9,
+      "min": 6,
+      "max": 14,
+      "step": 0.5
+    },
+    {
+      "key": "flow",
+      "type": "number",
+      "label": {
+        "en": "Flow speed",
+        "ko": "흐름 속도"
+      },
+      "default": 2,
+      "min": 1,
+      "max": 4,
+      "step": 1
+    },
+    {
+      "key": "misreg",
+      "type": "number",
+      "label": {
+        "en": "Misregistration (px)",
+        "ko": "판 어긋남 (px)"
+      },
+      "default": 3,
+      "min": 0,
+      "max": 8,
+      "step": 0.5
+    }
+  ]
+}

@@ -7,8 +7,12 @@ mod commit;
 mod coverage;
 mod discovery;
 mod import;
+#[cfg(test)]
+pub(crate) use import::tests::persisted_import_normalization_hash_and_id_are_stable;
 mod parser;
 mod prompt;
+#[cfg(test)]
+pub(crate) use prompt::tests::persisted_window_coverage_key_and_evidence_ref_are_stable;
 mod result;
 mod runtime;
 mod targets;

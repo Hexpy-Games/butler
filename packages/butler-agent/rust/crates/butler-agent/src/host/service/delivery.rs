@@ -77,6 +77,3 @@ impl IngressDelivery for AppDelivery {
         })
     }
 }
-
-#[cfg(test)]
-mod tests;

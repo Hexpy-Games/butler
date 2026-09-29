@@ -82,6 +82,9 @@ pub use agent_loop::{
 pub use agent_loop::{
     AdmittedModelSelection, ButlerContext, EmptyResponsePolicy, ExecutionPolicy, TrackingMode,
 };
+pub use authority::approval::{
+    ApprovalActionKind, ApprovalRisk, ApprovalTarget, ApprovalTargetKind, AuthorityApproval,
+};
 pub use authority::contracts::{
     AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityDecisionInput, AuthorityError,
     AuthorityExecutionInput, AuthorityOutcomeInput, AuthorityRequestProjection,

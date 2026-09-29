@@ -11,6 +11,7 @@ use super::*;
 mod dashboard;
 mod http;
 mod session_controls;
+mod wallpapers;
 pub(super) use http::{authorized_json, request};
 
 pub(super) async fn start(
@@ -122,6 +123,17 @@ impl GatewayApplication for TestApplication {
     }
     fn retry_turn_with_current_controls(&self, _: String) -> ApplicationFuture<MessageSendResult> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    fn get_provider_quota(
+        &self,
+        provider_id: String,
+        _refresh: bool,
+    ) -> ApplicationFuture<butler_runtime::operations::ProviderQuotaView> {
+        Box::pin(async move {
+            Ok(butler_runtime::operations::unavailable_quota_view(
+                &provider_id,
+            ))
+        })
     }
     fn get_usage_monitor(&self, _: AppUsageMonitorQuery) -> ApplicationFuture<Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
@@ -321,8 +333,8 @@ impl GatewayApplication for TestApplication {
     ) -> ApplicationFuture<Vec<SessionArtifactSummary>> {
         Box::pin(async { Ok(Vec::new()) })
     }
-    fn export_transcript(&self, session_id: String) -> ApplicationFuture<TranscriptExport> {
-        super::transcript_export::empty_export(session_id)
+    fn export_transcript(&self, _: String) -> ApplicationFuture<TranscriptExport> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn list_session_queue(&self, session_id: String) -> ApplicationFuture<SessionQueueView> {
         Box::pin(async move {

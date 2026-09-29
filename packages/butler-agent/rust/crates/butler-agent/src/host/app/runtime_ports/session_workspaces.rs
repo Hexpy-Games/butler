@@ -8,7 +8,7 @@ use std::sync::Arc;
 use serde_json::{Map, Value};
 
 use butler_gateway::gateway::{
-    AppSessionWorkspaceProvisioner, AppSessionWorkspaceSnapshot, ApplicationFuture,
+    AppProjectGit, AppSessionWorkspaceProvisioner, AppSessionWorkspaceSnapshot, ApplicationFuture,
     GatewayApplicationError,
 };
 use butler_turn::btcc::SubsessionService;
@@ -214,6 +214,27 @@ impl AppSessionWorkspaceProvisioner for AppSessionWorkspaces {
                 }
             };
             Ok(value)
+        })
+    }
+
+    fn project_git(
+        &self,
+        workspace_path: String,
+        cancellation: tokio_util::sync::CancellationToken,
+    ) -> ApplicationFuture<Option<AppProjectGit>> {
+        let recovery = self.recovery.clone();
+        Box::pin(async move {
+            let status = recovery
+                .project_git_status(&workspace_path, cancellation)
+                .await
+                .map_err(GatewayApplicationError::internal_from)?;
+            Ok(status.map(|status| AppProjectGit {
+                is_repo: true,
+                branch: status.branch,
+                dirty: Some(status.dirty),
+                ahead: status.ahead,
+                behind: status.behind,
+            }))
         })
     }
 }

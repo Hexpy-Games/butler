@@ -2,14 +2,9 @@ use std::fs;
 
 use serde_json::json;
 
-use super::{
-    io::{safe_ref, valid_git_commit, valid_sha},
-    source::EvidenceInventory,
-    validate_evidence,
-};
+use super::{source::EvidenceInventory, validate_evidence};
 
-#[test]
-fn memory_inventory_hash_matches_source_ecmascript_projection() {
+pub(crate) fn memory_inventory_hash_matches_source_ecmascript_projection() {
     let inventory = json!({
         "schema": "s",
         "origin": { "version": null },
@@ -87,16 +82,4 @@ fn acceptance_without_its_own_implementation_revision_is_rejected_without_git_lo
     .unwrap_err();
     let _ = fs::remove_dir_all(root);
     assert_eq!(error.code(), "memory_acceptance_version_mismatch");
-}
-
-#[test]
-fn references_and_versions_reject_path_escape_and_noncanonical_hashes() {
-    assert!(safe_ref("case/trace.json"));
-    assert!(!safe_ref("../trace.json"));
-    assert!(!safe_ref("case\\..\\trace.json"));
-    assert!(!safe_ref("/absolute/trace.json"));
-    assert!(valid_sha(&"a".repeat(64)));
-    assert!(!valid_sha(&"A".repeat(64)));
-    assert!(valid_git_commit(&"b".repeat(40)));
-    assert!(!valid_git_commit(&"b".repeat(39)));
 }

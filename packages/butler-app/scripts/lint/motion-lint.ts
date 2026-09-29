@@ -266,11 +266,18 @@ export const CANVAS_MOTION_ENGINES: readonly CanvasMotionEngine[] = [
     },
   },
   {
-    prefix: "libs/design-system/blocks/PromptSuggestionList/",
-    justification: "Ambient WebGL fluid behind the new-chat prompt suggestions.",
+    prefix: "libs/design-system/blocks/Wallpaper/",
+    justification: "WebGL2 wallpaper engine: ambient shader modules (bloom, silk, the analog collection, living photos, user modules) drawn behind app surfaces under the wallpaper performance policy.",
     constants: {
-      FRAME_INTERVAL_MS: "Caps the ambient fluid at 20fps to bound GPU/CPU cost; a performance budget, not a duration.",
-      FLUID_TIME_PERIOD_SECONDS: "Common period of the shader's time terms, used to wrap the uniform for mediump precision; not a duration.",
+      WALLPAPER_ANIMATED_FPS: "Frame cap of animated modules (20fps) to bound GPU/CPU and battery cost; a performance budget, not a duration.",
+      WALLPAPER_DAY_PHASE_REFRESH_MS: "How often a still frame of a module that reads u_dayPhase re-renders (15 min) so time-of-day color follows the clock; a refresh budget, not UI timing.",
+      WALLPAPER_WATCHDOG_SLOW_RENDER_MS: "Render time above which the frame-time watchdog counts an animated frame as slow (GPU overload detection); a health threshold, not a duration.",
+      WALLPAPER_WATCHDOG_RETRY_MS: "Quiet period before a degraded wallpaper retries animating (doubles per retry); a recovery budget, not UI timing.",
+      WALLPAPER_WATCHDOG_RETRY_MAX_MS: "Cap of the watchdog's growing retry period; a recovery budget, not UI timing.",
+      WALLPAPER_MAX_CLOCK_STEP_MS: "Largest step of the shader clock per frame so a stalled or resumed loop never jumps the animation (simulation stability).",
+      WALLPAPER_TIME_PERIOD_SECONDS: "Common period (5000*PI s) of the built-in shaders' time terms, used to wrap u_time for mediump precision; not a duration.",
+      SECONDS_PER_DAY: "Unit conversion from local time to u_dayPhase (0..1); not a duration.",
+      WALLPAPER_SCENE_TONE_CHECK_MS: "How often a real-time wallpaper's scene tone (light/dark by time of day) re-reads the clock; a polling budget for a sunrise/sunset flip, not UI timing.",
     },
   },
   {

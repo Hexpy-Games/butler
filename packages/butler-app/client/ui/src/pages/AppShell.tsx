@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import {
   AdaptivePanelResizeHandle,
@@ -17,6 +17,7 @@ import { useOrganizationNotice } from "@/components/space/hooks/useOrganizationN
 import { Titlebar } from "@/components/layout/Titlebar.tsx";
 import { LiveConnectionNotice } from "@/components/layout/LiveConnectionNotice.tsx";
 import { Conversation } from "@/components/conversation/Conversation.tsx";
+import { activeChatWallpaper } from "@/components/conversation/mainScreenTheme.ts";
 import { Inspector } from "@/components/inspector/Inspector.tsx";
 import { ProjectDashboardView } from "@/components/management/ProjectDashboardView.tsx";
 import { AutomationsView } from "@/components/management/AutomationsView.tsx";
@@ -38,10 +39,13 @@ import {
   useButlerStore,
 } from "@/app/store.ts";
 import { useAppBootstrap } from "@/hooks/useAppBootstrap.ts";
+import { useAgentRuntimeState } from "@/hooks/useAgentRuntimeState.ts";
 import { useNativeAppearanceTheme } from "@/hooks/useNativeAppearanceTheme.ts";
 import { useNativeShellPreferences } from "@/hooks/useNativeShellPreferences.ts";
 import { usePortalThemeClasses } from "@/hooks/usePortalThemeClasses.ts";
 import { useSystemThemePreference } from "@/hooks/useSystemThemePreference.ts";
+import { useWallpaperAppearance } from "@/hooks/useWallpaperAppearance.ts";
+import { useAppearanceTheme } from "@/stores/appearanceStore.ts";
 import {
   LEFT_PANEL_MAX_WIDTH,
   LEFT_PANEL_MIN_WIDTH,
@@ -50,26 +54,28 @@ import {
 import { useNarrowRightPanelAutoCollapse } from "@/hooks/useNarrowRightPanelAutoCollapse.ts";
 import { useBrowserChromeThemeColor } from "@/hooks/useBrowserChromeThemeColor.ts";
 import { FirstRunSetup } from "@/components/first-run/FirstRunSetup.tsx";
-import { readFirstRunState } from "@/app/firstRunSetup.ts";
+import { notifyStatus } from "@/app/notifications.ts";
+import { useOnboardingGate } from "@/hooks/useOnboardingGate.ts";
+import { useOnboardingStore } from "@/stores/onboardingStore.ts";
 
 export function AppShell() {
   useAppLocale();
-  const [firstRunState, setFirstRunState] = useState(() =>
-    readFirstRunState(
-      window.localStorage,
-      typeof navigator !== "undefined" ? navigator.languages : [],
-    ),
-  );
-  const openSettings = useButlerStore((state) => state.openSettings);
-  if (firstRunState.status !== "complete") {
+  const { gate, markComplete } = useOnboardingGate();
+  const rerunOpen = useOnboardingStore((state) => state.rerunOpen);
+  const closeRerun = useOnboardingStore((state) => state.closeRerun);
+  if (gate !== "workspace" || rerunOpen) {
+    const mode = rerunOpen ? "rerun" : gate === "consent" ? "consent" : "first-run";
     return (
       <>
         <FirstRunTheme />
         <FirstRunSetup
-          initialState={firstRunState}
-          onComplete={(mode, completedState) => {
-            setFirstRunState(completedState);
-            if (mode === "model-settings") openSettings("models");
+          key={mode}
+          mode={mode}
+          onCancel={closeRerun}
+          onComplete={(result) => {
+            if (result) useOnboardingStore.getState().setConnected(result.cardId);
+            markComplete();
+            closeRerun();
           }}
         />
         <AppToaster />
@@ -77,6 +83,20 @@ export function AppShell() {
     );
   }
   return <AppWorkspaceShell />;
+}
+
+/** After a first run, open a new chat and say which AI is connected (once). */
+function useFirstRunLanding() {
+  const connectedCardId = useOnboardingStore((state) => state.connectedCardId);
+  useEffect(() => {
+    if (!connectedCardId) return;
+    useOnboardingStore.getState().setConnected(null);
+    useButlerStore.getState().openNewChat();
+    notifyStatus(appCopy.firstRun.connectedToast(appCopy.firstRun.providerNames[connectedCardId]), {
+      id: "first-run-connected",
+      tone: "ok",
+    });
+  }, [connectedCardId]);
 }
 
 /** First-run renders outside the themed workspace, so theme the portal root. */
@@ -90,18 +110,25 @@ function FirstRunTheme() {
 
 function AppWorkspaceShell() {
   useAppBootstrap();
+  useFirstRunLanding();
+  useAgentRuntimeState();
   useOrganizationNotice();
   const leftOpen = useButlerStore((state) => state.leftOpen);
   const setLeftOpen = useButlerStore((state) => state.setLeftOpen);
   const view = useButlerStore((state) => state.view);
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const settings = useButlerStore((state) => state.settings);
+  const navigation = useButlerStore((state) => state.navigation);
   const rightOpen = useButlerStore((state) => state.rightOpen);
   const setRightOpen = useButlerStore((state) => state.setRightOpen);
   const systemPrefersDark = useSystemThemePreference();
-  useNativeAppearanceTheme(settings.appearance_theme);
+  // A real-time wallpaper may set light/dark (its scene tone) over the setting.
+  useWallpaperAppearance();
+  const appearance = useAppearanceTheme();
+  const themeSettings = appearance === settings.appearance_theme ? settings : { ...settings, appearance_theme: appearance };
+  useNativeAppearanceTheme(appearance);
   useNativeShellPreferences(settings);
-  usePortalThemeClasses(settings, systemPrefersDark);
+  usePortalThemeClasses(themeSettings, systemPrefersDark);
   const commandOpen = useButlerStore((state) => state.commandOpen);
   useCommandPaletteHotkey();
   const renameProject = useButlerStore((state) => state.renameProject);
@@ -115,8 +142,7 @@ function AppWorkspaceShell() {
   const newChatActive =
     view.kind === "session" && isDraftChatId(activeChatId);
   const browserChromeDark =
-    settings.appearance_theme === "dark" ||
-    (settings.appearance_theme === "system" && systemPrefersDark);
+    appearance === "dark" || (appearance === "system" && systemPrefersDark);
   useBrowserChromeThemeColor({
     active: newChatActive,
     dark: browserChromeDark,
@@ -147,7 +173,7 @@ function AppWorkspaceShell() {
   return (
     <AdaptiveShell
       ref={shellRef}
-      theme={appShellTheme(settings, systemPrefersDark)}
+      theme={appShellTheme(themeSettings, systemPrefersDark)}
       chromeEnvironment={chromeEnvironment()}
       data-test-class="mac-window"
       leftOpen={leftOpen}
@@ -159,8 +185,7 @@ function AppWorkspaceShell() {
       UNSAFE_style={panelStyle}
       transparentWorkspace={
         newChatActive &&
-        (settings.main_screen_theme === "bloom" ||
-          settings.main_screen_theme === "silk")
+        activeChatWallpaper(settings, navigation, activeChatId).source.kind !== "none"
       }
     >
       {isSettingsView ? (
