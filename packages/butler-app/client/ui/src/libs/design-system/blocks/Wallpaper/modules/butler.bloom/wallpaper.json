@@ -1,0 +1,39 @@
+{
+  "id": "butler.bloom",
+  "name": { "en": "Bloom", "ko": "Bloom" },
+  "version": "1.0.0",
+  "engine": 1,
+  "motion": "animated",
+  "image": "none",
+  "params": [
+    {
+      "key": "colors",
+      "label": { "en": "Colors", "ko": "색상" },
+      "type": "palette",
+      "size": 6,
+      "default": ["#32424d", "#555d7c", "#485c70", "#6a7d9a", "#53708d", "#434d70"],
+      "presets": {
+        "monochrome": {
+          "light": ["#32424d", "#555d7c", "#485c70", "#6a7d9a", "#53708d", "#434d70"],
+          "dark": ["#32424d", "#555d7c", "#485c70", "#6a7d9a", "#53708d", "#434d70"]
+        },
+        "aurora": {
+          "light": ["#8b5cf6", "#6366f1", "#38bdf8", "#2dd4bf", "#f472b6", "#fbbf24"],
+          "dark": ["#8b5cf6", "#6366f1", "#38bdf8", "#2dd4bf", "#f472b6", "#fbbf24"]
+        },
+        "bloom": {
+          "light": ["#d946ef", "#f472b6", "#fb923c", "#facc15", "#34d399", "#818cf8"],
+          "dark": ["#d946ef", "#f472b6", "#fb923c", "#facc15", "#34d399", "#818cf8"]
+        },
+        "lavender": {
+          "light": ["#8b5cf6", "#6366f1", "#a78bfa", "#818cf8", "#c4b5fd", "#93c5fd"],
+          "dark": ["#8b5cf6", "#6366f1", "#a78bfa", "#818cf8", "#c4b5fd", "#93c5fd"]
+        },
+        "morning": {
+          "light": ["#7dd3fc", "#60a5fa", "#a5b4fc", "#fbcfe8", "#fed7aa", "#bbf7d0"],
+          "dark": ["#7dd3fc", "#60a5fa", "#a5b4fc", "#fbcfe8", "#fed7aa", "#bbf7d0"]
+        }
+      }
+    }
+  ]
+}

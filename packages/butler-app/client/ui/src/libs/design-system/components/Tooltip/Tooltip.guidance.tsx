@@ -30,7 +30,10 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Paragraphs in a tooltip vanish before they are read.", render: () => <Stack gap="xs"><Typo.Caption>Tooltips with long instructions, links or several sentences</Typo.Caption></Stack> },
     },
   ],
-  content: ["Sentence fragments, no trailing period; under about 60 characters."],
+  content: [
+    "Sentence fragments, no trailing period; under about 60 characters.",
+    "wrap lets a longer label (e.g. the first line of an error log) wrap within the tooltip's width instead of one clipped line.",
+  ],
   accessibility: ["Opens on focus-visible without delay; linked with aria-describedby while open; never holds focusable content."],
   tokens: ["--tinted-glass-bg", "--radius-control", "--motion-enter-menu", "--z-tooltip"],
 };

@@ -2,7 +2,8 @@
 //! before every effect except three actions, which proceed without an
 //! approval: first-conversation onboarding (ACC-01), memory save (ACC-02)
 //! and analysis of an image the user attached. An MCP tool still asks
-//! (ACC-04).
+//! (ACC-04), and so does the agent's wallpaper change, a persistent write of
+//! the user's settings (ACC-07).
 //!
 //! The attached-image exemption covers the Z.AI image tool, which only a
 //! Z.AI model with its vision server is offered; no recording can come from
@@ -353,4 +354,41 @@ async fn schedule(s: &Scenario) -> Result<Value, HarnessError> {
     let reply = s.gw.post("/automations", body).await?;
     assert_eq!(reply.status, 201, "{}", reply.text);
     Ok(reply.data()["automation"].clone())
+}
+
+/// ACC-07 — In ask-first, the agent's wallpaper change asks first: the turn
+/// waits for approval of `set_wallpaper`, and the wallpaper setting is
+/// unchanged until the user decides.
+#[tokio::test]
+async fn acc_07_wallpaper_change_asks_in_ask_first() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("ACC-07")?
+        .cassette("ACC-07")
+        .access(Access::AskFirst)
+        .start()
+        .await?;
+    let before = s.gw.settings().await?["wallpaper"].clone();
+    let accepted =
+        s.gw.say(
+            "general",
+            "Change my App wallpaper to the Silk live wallpaper, app-wide.",
+        )
+        .await?;
+    let turn_id = accepted_turn_id(&accepted)?;
+    let turn = settled(&s, "general", &turn_id).await?;
+    assert_eq!(turn_state(&turn), "waiting_for_form", "{turn}");
+    let requests = s.gw.approval_requests("general").await?;
+    assert!(
+        requests.iter().any(|request| {
+            request["source_turn_id"] == turn_id.as_str()
+                && request["executable"] == "set_wallpaper"
+        }),
+        "no approval request for the wallpaper change: {requests:?}"
+    );
+    assert_eq!(
+        s.gw.settings().await?["wallpaper"],
+        before,
+        "the wallpaper changed before approval"
+    );
+    s.finish().await
 }

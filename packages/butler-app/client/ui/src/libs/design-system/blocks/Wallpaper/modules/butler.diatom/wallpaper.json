@@ -1,0 +1,159 @@
+{
+  "id": "butler.diatom",
+  "name": {
+    "en": "Diatom Areolae",
+    "ko": "규조 격자"
+  },
+  "version": "0.4.0",
+  "engine": 1,
+  "motion": "animated",
+  "image": "none",
+  "timePeriod": 240,
+  "overlay": true,
+  "params": [
+    {
+      "key": "corner",
+      "type": "enum",
+      "label": {
+        "en": "Corner",
+        "ko": "위치"
+      },
+      "options": [
+        {
+          "value": "lowerRight",
+          "label": {
+            "en": "Lower right",
+            "ko": "오른쪽 아래"
+          }
+        },
+        {
+          "value": "lowerLeft",
+          "label": {
+            "en": "Lower left",
+            "ko": "왼쪽 아래"
+          }
+        }
+      ],
+      "default": "lowerRight"
+    },
+    {
+      "key": "imaging",
+      "type": "enum",
+      "label": {
+        "en": "Illumination",
+        "ko": "조명 방식"
+      },
+      "options": [
+        {
+          "value": "brightfield",
+          "label": {
+            "en": "Brightfield",
+            "ko": "명시야"
+          }
+        },
+        {
+          "value": "darkfield",
+          "label": {
+            "en": "Darkfield",
+            "ko": "암시야"
+          }
+        },
+        {
+          "value": "dic",
+          "label": {
+            "en": "DIC",
+            "ko": "미분간섭"
+          }
+        }
+      ],
+      "default": "brightfield",
+      "defaultDark": "darkfield"
+    },
+    {
+      "key": "species",
+      "type": "enum",
+      "label": {
+        "en": "Valve",
+        "ko": "각판"
+      },
+      "options": [
+        {
+          "value": "radial",
+          "label": {
+            "en": "Centric · radial ribs",
+            "ko": "원심형 · 방사 늑"
+          }
+        },
+        {
+          "value": "concentric",
+          "label": {
+            "en": "Centric · areolate",
+            "ko": "원심형 · 벌집 격자"
+          }
+        }
+      ],
+      "default": "radial"
+    },
+    {
+      "key": "focus",
+      "type": "number",
+      "label": {
+        "en": "Focus (pore halftone inverts)",
+        "ko": "초점 (격자 명암 반전)"
+      },
+      "default": 0.97,
+      "min": -1.6,
+      "max": 1.6,
+      "step": 0.01
+    },
+    {
+      "key": "magnification",
+      "type": "number",
+      "label": {
+        "en": "Magnification",
+        "ko": "배율"
+      },
+      "default": 1.08,
+      "min": 0.7,
+      "max": 1.4,
+      "step": 0.01
+    },
+    {
+      "key": "aperture",
+      "type": "number",
+      "label": {
+        "en": "Condenser aperture",
+        "ko": "집광기 조리개"
+      },
+      "default": 0.45,
+      "min": 0,
+      "max": 1,
+      "step": 0.01
+    },
+    {
+      "key": "composition",
+      "type": "number",
+      "label": {
+        "en": "Slide position",
+        "ko": "슬라이드 위치"
+      },
+      "default": 0.117,
+      "min": 0,
+      "max": 1,
+      "step": 0.001,
+      "control": "shuffle"
+    },
+    {
+      "key": "grain",
+      "type": "number",
+      "label": {
+        "en": "Film grain",
+        "ko": "필름 그레인"
+      },
+      "default": 0.35,
+      "min": 0,
+      "max": 1,
+      "step": 0.01
+    }
+  ]
+}

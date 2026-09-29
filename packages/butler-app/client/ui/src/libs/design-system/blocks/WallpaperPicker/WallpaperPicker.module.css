@@ -1,0 +1,134 @@
+.root {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-lg);
+}
+
+/* Tiles fill the row: two on a phone, more as the box widens. */
+.grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 112px), 1fr));
+  gap: var(--space-md);
+}
+
+/* The radiogroup wraps only the options; its tiles still sit in the grid. */
+.options {
+  display: contents;
+}
+
+.tile {
+  position: relative;
+  min-width: 0;
+}
+
+.option {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  gap: var(--space-xs);
+  outline: none;
+}
+
+.option:disabled {
+  cursor: progress;
+}
+
+.option[aria-disabled="true"] {
+  cursor: var(--interactive-disabled-cursor);
+}
+
+/* The name truncates; a marker (the user's own module) keeps its width. */
+.caption {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--space-xs);
+}
+
+.mine {
+  flex: none;
+}
+
+.thumbnail {
+  display: grid;
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  border-radius: var(--radius-control);
+  background: var(--muted);
+  box-shadow: inset 0 0 0 var(--border-hairline) var(--line);
+  color: var(--text-secondary);
+  place-items: center;
+  transition: box-shadow var(--motion-fast) var(--motion-ease-standard);
+}
+
+.image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.option[aria-disabled="true"] .thumbnail {
+  color: var(--interactive-disabled-fg);
+}
+
+.option:hover:not([aria-disabled="true"]) .thumbnail {
+  box-shadow: inset 0 0 0 var(--border-hairline) var(--line-strong);
+}
+
+/* Selected: a flat ring, no glow. */
+.option[data-state="on"] .thumbnail {
+  box-shadow: 0 0 0 var(--border-width-strong) var(--text-primary);
+}
+
+.option:focus-visible .thumbnail {
+  box-shadow: var(--focus-ring);
+}
+
+.uploadField {
+  box-shadow: inset 0 0 0 var(--border-hairline) var(--line-strong);
+}
+
+.option[data-drop-active="true"] .uploadField {
+  background: var(--selection);
+  box-shadow: inset 0 0 0 var(--border-width-strong)
+    var(--color-border-interactive);
+}
+
+/* Delete sits on the image: shown on hover or focus, always on touch. */
+.delete {
+  position: absolute;
+  top: var(--space-xs);
+  right: var(--space-xs);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-control);
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--motion-ease-standard);
+}
+
+.tile:hover .delete,
+.tile:focus-within .delete {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .delete {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thumbnail,
+  .delete {
+    transition: none;
+  }
+}

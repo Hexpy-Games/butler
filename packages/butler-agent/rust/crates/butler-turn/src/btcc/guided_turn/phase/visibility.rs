@@ -51,10 +51,17 @@ const NON_FULL: &[&str] = &[
     "recall_memory",
     "query_memory",
     "list_automations",
+    "list_wallpapers",
+    "set_wallpaper",
+    "save_wallpaper_module",
     "read_mcp_resource",
     "list_skills",
     "transform_public_data_table",
 ];
+/// Non-full tools that change something: offered when asking first, where
+/// each asks for approval before it runs (the wallpaper writes are reviewed
+/// persistent effects there), and never to a read-only turn.
+const ASK_FIRST_WRITES: &[&str] = &["run_command", "set_wallpaper", "save_wallpaper_module"];
 const STEWARD_PARENT: &[&str] = &["delegate_to_steward", "steer_steward", "cancel_steward"];
 const WORKER_DELEGATION: &[&str] = &["delegate_to_worker", "steer_worker", "wait_for_worker"];
 /// The tools a guided turn is authorized to call on the legacy surface, from
@@ -197,7 +204,8 @@ fn authorized_profiles(
 /// Full access adds effect-free tools, commands, file writes and MCP calls.
 /// Ask-first keeps the non-full allowlist with commands, file writes and MCP
 /// calls (each asks before it runs) and the required tools of its
-/// approval-free actions. Read-only keeps only the non-full allowlist.
+/// approval-free actions. Read-only keeps only the non-full allowlist, without
+/// its writes (`ASK_FIRST_WRITES`).
 fn apply_access_mode(
     names: &mut HashSet<String>,
     catalog: &GuidedCatalogSnapshot,
@@ -234,7 +242,8 @@ fn apply_access_mode(
         );
     }
     names.retain(|name| {
-        NON_FULL.contains(&name.as_str()) && (name != ToolName::RunCommand || ask_first)
+        NON_FULL.contains(&name.as_str())
+            && (!ASK_FIRST_WRITES.contains(&name.as_str()) || ask_first)
             || ask_first && name == ToolName::CallMcpTool
             || policy.required_tools.contains(name) && policy.access_mode.exempts_tool(name)
     });

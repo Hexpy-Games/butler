@@ -7,11 +7,7 @@ import { useButlerStore } from "@/app/store.ts";
 import type { ButlerMarkTheme } from "@/butler-ds";
 import butlerMarkDarkSrc from "@/assets/butler-mark-white.png";
 import butlerMarkLightSrc from "@/assets/butler-mark.png";
-import {
-  mainScreenFluidEnabled,
-  mainScreenFluidPalette,
-  mainScreenFluidVariant,
-} from "./mainScreenTheme";
+import { activeChatWallpaper } from "./mainScreenTheme";
 import { activeProjectId } from "./composerProjectContext";
 import {
   fillComposerWithTemplate,
@@ -77,6 +73,7 @@ export function EmptyState({
   const titleIconSrc =
     markTheme === "dark" ? butlerMarkDarkSrc : butlerMarkLightSrc;
   const momentLabel = briefing?.moment ?? newChatMomentLabel();
+  const wallpaper = activeChatWallpaper(settings, navigation, activeChatId);
 
   return (
     <PromptSuggestionList
@@ -86,10 +83,10 @@ export function EmptyState({
           : activeChat.title
       }
       description={description}
-      fluidBackground={mainScreenFluidEnabled(settings)}
-      fluidPalette={mainScreenFluidPalette(settings, markTheme)}
-      fluidTone={markTheme}
-      fluidVariant={mainScreenFluidVariant(settings)}
+      wallpaper={wallpaper.source}
+      wallpaperMotion={wallpaper.motion}
+      wallpaperPauseOnBattery={wallpaper.pauseOnBattery}
+      wallpaperTone={markTheme}
       moment={momentLabel}
       titleIcon={<img alt="" draggable={false} src={titleIconSrc} />}
       suggestions={suggestions.map(({ template, ...suggestion }) => ({

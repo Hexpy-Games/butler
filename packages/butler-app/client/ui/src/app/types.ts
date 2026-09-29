@@ -1,4 +1,6 @@
 import type { ReactElement, ReactNode } from "react";
+// Relative (not `@/butler-ds`): the root typecheck reaches this file without the UI path aliases.
+import type { WallpaperSetting, WallpaperSource } from "../libs/design-system/blocks/Wallpaper/types.ts";
 
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 export type AccessMode = "full_access" | "ask_first" | "read_only";
@@ -575,6 +577,8 @@ export interface SettingsView {
     string,
     string,
   ];
+  /** The home screen wallpaper; derived from the legacy `main_screen_theme*` keys until one is saved. */
+  wallpaper: WallpaperSetting;
   translucent_sidebar: boolean;
   smart_grouping_enabled: boolean;
   diagnostics_enabled: boolean;
@@ -756,12 +760,17 @@ export interface CreateSessionResult {
   session: SessionSummary;
 }
 
+/** A project's wallpaper: follow the global `wallpaper` setting, or its own source. */
+export type ProjectWallpaper = "inherit" | WallpaperSource;
+
 export interface ProjectSummary {
   id: string;
   display_name: string;
   last_activity_at: string;
   pinned: boolean;
   archived: boolean;
+  /** From the dashboard preferences; absent (older gateways, optimistic rows) means `inherit`. */
+  wallpaper?: ProjectWallpaper;
   sessions?: SessionSummary[];
 }
 
@@ -1415,10 +1424,25 @@ export interface PaginationView {
   has_more: boolean;
 }
 
+export interface ProjectDashboardPreferences {
+  revision: number;
+  pinnedSourceRefs: Array<{ kind: string; id: string; revision: string }>;
+  /** Absent from older gateways: `inherit`. */
+  wallpaper?: ProjectWallpaper;
+}
+
+/** `PATCH /projects/:id/dashboard/preferences`: revision-checked, at least one field. */
+export interface ProjectDashboardPreferencesPatch {
+  expectedRevision: number;
+  description?: string;
+  pinnedSourceRefs?: ProjectDashboardPreferences["pinnedSourceRefs"];
+  wallpaper?: ProjectWallpaper;
+}
+
 export interface ProjectDashboardView {
   briefing?: import("../../../shared/app-contracts.ts").DashboardBriefingView;
   description?: string | null;
-  preferences?: { revision: number; pinnedSourceRefs: Array<{ kind: string; id: string; revision: string }> };
+  preferences?: ProjectDashboardPreferences;
   overview?: import("../../../shared/app-contracts.ts").DashboardOverview;
   project: ProjectSummary;
   stats: {
@@ -1574,6 +1598,8 @@ export interface TimelineEvent {
     row?: ProgressRow;
     event?: AgentTurnEvent;
     event_id?: string;
+    /** `settings.updated`: the changed settings subset. */
+    settings?: Record<string, unknown>;
   };
 }
 

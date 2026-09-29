@@ -26,19 +26,6 @@
   padding: var(--titlebar-safe-area-top) 0 0;
 }
 
-.fluidBackground {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  width: 100%;
-  height: var(--adaptive-viewport-block-size);
-  border-radius: var(--workspace-left-radius, 18px) 0 0
-    var(--workspace-left-radius, 18px);
-  pointer-events: none;
-  opacity: 1;
-  contain: strict;
-}
-
 .header {
   position: relative;
   z-index: 2;
@@ -159,72 +146,6 @@
 .description {
   max-width: 560px;
   color: var(--text-secondary);
-}
-
-.paletteControl {
-  display: flex;
-  width: fit-content;
-  max-width: 100%;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
-  -webkit-app-region: no-drag;
-}
-
-.paletteOption {
-  display: inline-flex;
-  height: var(--control-height-sm);
-  align-items: center;
-  gap: var(--space-xs);
-  padding: 0 var(--space-sm);
-  border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
-  border-radius: var(--radius-pill);
-  appearance: none;
-  background: color-mix(in srgb, var(--surface-raised) 54%, transparent);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font: inherit;
-  transition:
-    background var(--motion-base) var(--motion-ease-standard),
-    border-color var(--motion-base) var(--motion-ease-standard),
-    color var(--motion-base) var(--motion-ease-standard),
-    transform var(--motion-base) var(--motion-ease-standard);
-}
-
-.paletteOption:hover,
-.paletteOption[data-active="true"] {
-  border-color: color-mix(in srgb, var(--text-primary) 20%, var(--line));
-  background: color-mix(in srgb, var(--surface-raised) 76%, transparent);
-  color: var(--text-primary);
-}
-
-.paletteOption:hover {
-  transform: translateY(-1px);
-}
-
-.paletteSwatches {
-  display: inline-flex;
-  align-items: center;
-}
-
-.paletteSwatch {
-  width: 12px;
-  height: 12px;
-  margin-inline-start: -3px;
-  border-radius: var(--radius-pill);
-  box-shadow: 0 0 0 1px
-    color-mix(in srgb, var(--surface-raised) 80%, transparent);
-}
-
-.paletteSwatch:first-child {
-  margin-inline-start: 0;
-}
-
-.paletteLabel {
-  font-size: var(--font-size-2);
-  font-weight: var(--typo-label-weight);
-  letter-spacing: 0;
-  line-height: var(--typo-label-line-height);
-  white-space: nowrap;
 }
 
 .railViewport {
@@ -374,11 +295,9 @@
 }
 
 @container conversation (width <= 560px) {
-  .fluidBackground {
-    border-radius: 0;
-  }
-
   .root {
+    --workspace-left-radius: 0;
+
     gap: var(--space-lg);
     padding-block-start: var(--space-md);
   }
@@ -405,20 +324,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .fluidBackground {
-    opacity: 0.72;
-  }
-
   .itemFrame {
     transition: none;
-  }
-
-  .paletteOption {
-    transition: none;
-  }
-
-  .paletteOption:hover {
-    transform: none;
   }
 
   .itemFrame:hover:not([data-disabled="true"]),

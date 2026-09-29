@@ -8,6 +8,7 @@ import {
   Inline,
   SettingsField,
   Stack,
+  Tooltip,
 } from "@/butler-ds";
 import { useId, type ReactNode } from "react";
 
@@ -25,6 +26,7 @@ export function SettingsSelect({
   description,
   id,
   disabled,
+  disabledReason,
   controlWidth,
   action,
   triggerTestClass,
@@ -37,6 +39,8 @@ export function SettingsSelect({
   description?: string;
   id?: string;
   disabled?: boolean;
+  /** Disables the control and names why in a tooltip on it. */
+  disabledReason?: string;
   controlWidth?: "default" | "full";
   action?: ReactNode;
   triggerTestClass?: string;
@@ -50,28 +54,32 @@ export function SettingsSelect({
   const selectedOption = options.find((option) => option.value === value);
   const selectedHasDescription = Boolean(selectedOption?.description);
 
+  const inactive = Boolean(disabled || disabledReason);
+  const trigger = (
+    <SelectTrigger
+      id={controlId}
+      aria-describedby={description ? descriptionId : undefined}
+      data-test-class={triggerTestClass}
+      data-multiline={selectedHasDescription ? "true" : undefined}
+      disabled={inactive}
+    >
+      <SelectValue icon={selectedOption?.icon}>
+        {selectedOption && (
+          <span data-slot="select-value-stack">
+            <span data-slot="select-value-label">{selectedOption.label}</span>
+            {selectedOption.description && (
+              <span data-slot="select-value-description">
+                {selectedOption.description}
+              </span>
+            )}
+          </span>
+        )}
+      </SelectValue>
+    </SelectTrigger>
+  );
   const selectControl = (
-    <Select value={value} onValueChange={onChange} disabled={disabled}>
-      <SelectTrigger
-        id={controlId}
-        aria-describedby={description ? descriptionId : undefined}
-        data-test-class={triggerTestClass}
-        data-multiline={selectedHasDescription ? "true" : undefined}
-        disabled={disabled}
-      >
-        <SelectValue icon={selectedOption?.icon}>
-          {selectedOption && (
-            <span data-slot="select-value-stack">
-              <span data-slot="select-value-label">{selectedOption.label}</span>
-              {selectedOption.description && (
-                <span data-slot="select-value-description">
-                  {selectedOption.description}
-                </span>
-              )}
-            </span>
-          )}
-        </SelectValue>
-      </SelectTrigger>
+    <Select value={value} onValueChange={onChange} disabled={inactive}>
+      {disabledReason ? <Tooltip label={disabledReason}>{trigger}</Tooltip> : trigger}
       <SelectContent>
         <SelectGroup>
           {options.map((option) => (
