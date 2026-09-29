@@ -143,7 +143,6 @@ staging="$AGENT_HOME/.staging-$$"
 rm -rf "$staging"
 mkdir "$staging"
 tar -xzf "$tmp/$archive" -C "$staging" || die "could not extract $archive"
-chmod -R a-w "$staging"
 
 manifest="$staging/native-agent-manifest.json"
 for required in native-agent-manifest.json butler-agent resources; do
@@ -162,6 +161,7 @@ if [ -d "$AGENT_HOME/$dir" ]; then
 else
   mv "$staging" "$AGENT_HOME/$dir"
   staging=""
+  chmod -R a-w "$AGENT_HOME/$dir" # macOS cannot rename a read-only directory, so only now
 fi
 
 # Points AGENT_HOME/<name> at <target> by renaming a fresh symlink over the old
