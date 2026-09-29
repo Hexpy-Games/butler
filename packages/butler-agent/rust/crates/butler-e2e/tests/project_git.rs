@@ -184,8 +184,7 @@ fn init_repository(folder: &Path) -> Result<(), HarnessError> {
 /// execute bit it is marked executable; Git for Windows runs it with its own
 /// `sh`.
 fn script(path: &Path, lines: &[&str]) -> Result<(), HarnessError> {
-    std::fs::write(path, format!("#!/bin/sh\n{}\n", lines.join("\n")))?;
-    butler_platform::launcher::mark_executable(path).transpose()?;
+    butler_e2e::e2e::executable::write_script(path, &format!("#!/bin/sh\n{}\n", lines.join("\n")))?;
     Ok(())
 }
 

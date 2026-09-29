@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use super::HarnessError;
 use super::binary::{agent_binary, resource_source};
 use super::config::flag;
+use super::executable;
 
 pub struct Sandbox {
     pub root: PathBuf,
@@ -46,7 +47,7 @@ impl Sandbox {
         // up by, so sandboxes sharing one inode see each other's paths, and
         // the product's instance identity check then refuses the CLI's
         // gateway control requests (`gateway_control_identity_invalid`).
-        fs::copy(agent_binary()?, &binary)?;
+        executable::copy(&agent_binary()?, &binary)?;
         copy_tree(&resource_source(), &resources)?;
         fs::create_dir_all(resources.join("app-client/dist"))?;
         fs::write(

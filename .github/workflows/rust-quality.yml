@@ -121,6 +121,11 @@ jobs:
         run: cargo build --locked -p butler-agent --bin butler-agent
       - name: Run E2E stub tier
         uses: ./.github/actions/e2e-stub
+      - name: Stress executable publication and spawn
+        if: runner.os == 'Linux'
+        env:
+          BUTLER_E2E_EMBEDDING_ASSETS: ${{ runner.temp }}/e2e-models/bge-m3
+        run: bash crates/butler-e2e/scripts/stress-etxtbsy.sh 3 4
       # TODO(#322): replace this hook with assert-home-untouched when PR #322 lands.
       - name: Assert runner home untouched
         if: always()
