@@ -3,7 +3,43 @@ name: Bun unit tests
 on:
   push:
     branches: [main]
+    paths:
+      - "packages/**/*.ts"
+      - "packages/**/*.tsx"
+      - "packages/**/*.js"
+      - "packages/**/*.jsx"
+      - "packages/**/*.mjs"
+      - "packages/**/package.json"
+      - "packages/butler-app/client/ui/**/*.css"
+      - "tests/**"
+      - "tools/**/*.ts"
+      - "tools/**/*.js"
+      - "tools/**/*.mjs"
+      - "package.json"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "tsconfig*.json"
+      - ".github/actions/assert-home-untouched/**"
+      - ".github/workflows/bun-unit.yml"
   pull_request:
+    paths:
+      - "packages/**/*.ts"
+      - "packages/**/*.tsx"
+      - "packages/**/*.js"
+      - "packages/**/*.jsx"
+      - "packages/**/*.mjs"
+      - "packages/**/package.json"
+      - "packages/butler-app/client/ui/**/*.css"
+      - "tests/**"
+      - "tools/**/*.ts"
+      - "tools/**/*.js"
+      - "tools/**/*.mjs"
+      - "package.json"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "tsconfig*.json"
+      - ".github/actions/assert-home-untouched/**"
+      - ".github/workflows/bun-unit.yml"
 
 permissions:
   contents: read

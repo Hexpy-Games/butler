@@ -1,25 +1,11 @@
 name: E2E
 
 # Real-binary end-to-end scenarios (packages/butler-agent/rust/crates/butler-e2e).
-# - e2e-stub: every PR and push to main; replays committed provider cassettes.
-# - e2e-stub-linux: the same stub tier on Linux x64.
+# - Stub tiers run inside rust-quality.yml on PR and main.
 # - e2e-live: nightly and on demand against a real provider; runs only when a
 #   credential secret is configured, otherwise the job reports SKIPPED.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "packages/butler-agent/rust/**"
-      - "packages/butler-agent/resources/**"
-      - ".github/workflows/e2e.yml"
-      - ".github/actions/rust-agent-setup/**"
-  pull_request:
-    paths:
-      - "packages/butler-agent/rust/**"
-      - "packages/butler-agent/resources/**"
-      - ".github/workflows/e2e.yml"
-      - ".github/actions/rust-agent-setup/**"
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
@@ -45,215 +31,6 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  e2e-stub:
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
-    # The agent links the static ONNX Runtime recipe, which targets macOS arm64.
-    name: E2E stub tier (macOS arm64)
-    runs-on: macos-latest
-    timeout-minutes: 120
-    defaults:
-      run:
-        working-directory: packages/butler-agent/rust
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.91.0
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Identify runner image
-        id: image
-        run: echo "version=${ImageOS:-unknown}-${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
-
-      - name: Restore static ONNX Runtime cache
-        id: ort-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ runner.temp }}/ort-cache/native-deps
-          key: static-ort-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.version }}-${{ hashFiles('packages/butler-agent/rust/scripts/static-ort.lock.json', 'packages/butler-agent/rust/scripts/prepare-static-ort.py', 'packages/butler-agent/rust/rust-toolchain.toml') }}
-
-      - name: Prepare pinned static ONNX Runtime and protoc
-        env:
-          ORT_CACHE_TARGET: ${{ runner.temp }}/ort-cache
-        run: |
-          set -euo pipefail
-          prepared="$(CARGO_TARGET_DIR="$ORT_CACHE_TARGET" python scripts/prepare-static-ort.py)"
-          {
-            echo "ORT_LIB_PATH=$(jq -r .ort_lib_path <<<"$prepared")"
-            echo "PROTOC=$(jq -r .protoc <<<"$prepared")"
-            echo "ORT_PREFER_DYNAMIC_LINK=0"
-            echo "ORT_SKIP_DOWNLOAD=1"
-          } >> "$GITHUB_ENV"
-
-      - name: Save static ONNX Runtime cache
-        if: steps.ort-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ runner.temp }}/ort-cache/native-deps
-          key: ${{ steps.ort-cache.outputs.cache-primary-key }}
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: packages/butler-agent/rust
-          cache-on-failure: true
-          key: e2e
-
-      - name: Build the agent binary under test
-        run: cargo build --locked -p butler-agent --bin butler-agent
-
-      # The local embedding model memory recall needs (MEM-*), pinned to the
-      # revision and SHA-256 values in butler-agent/src/host/embedding/worker/assets.rs.
-      - name: Restore embedding model cache
-        id: embedding-cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/e2e-models/bge-m3
-          key: bge-m3-4de13258303883538bd53b696b452bf8099f0858
-
-      - name: Fetch embedding model
-        if: steps.embedding-cache.outputs.cache-hit != 'true'
-        working-directory: ${{ runner.temp }}
-        run: |
-          set -euo pipefail
-          base=https://huggingface.co/Xenova/bge-m3/resolve/4de13258303883538bd53b696b452bf8099f0858
-          dir=e2e-models/bge-m3
-          mkdir -p "$dir/onnx"
-          while read -r sha file; do
-            curl -fsSL --retry 3 -o "$dir/$file" "$base/$file"
-            echo "$sha  $dir/$file" | shasum -a 256 -c -
-          done <<'LIST'
-          6710678b12670bc442b99edc952c4d996ae309a7020c1fa0096dd245c2faf790 tokenizer.json
-          7e4c1cc848840aeccdd763458c18dd525eb0f795c992e00ebe9c28554e7db2d4 tokenizer_config.json
-          734a79bf12d388c1467a4e3ab625f45de7f6906cffcfb93a1eca1787504bed95 config.json
-          0826f8c1ab9edf1801db86c61919d4d108e8bfc0b809ec823ad366882ff0b77d onnx/model_quantized.onnx
-          LIST
-
-      - name: Run the stub tier
-        env:
-          BUTLER_E2E_EMBEDDING_ASSETS: ${{ runner.temp }}/e2e-models/bge-m3
-          BUTLER_E2E_TIER: stub
-          BUTLER_E2E_SKIP_BUILD: "1"
-          BUTLER_E2E_REPORT: ${{ runner.temp }}/e2e-report.txt
-        run: |
-          set -o pipefail
-          # --no-fail-fast: one run reports every failing scenario binary.
-          cargo test --locked --no-fail-fast -p butler-e2e 2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
-
-      - name: Assert the scenarios left the runner home untouched
-        if: always()
-        uses: ./.github/actions/assert-home-untouched
-
-      - name: Summarize
-        if: always()
-        run: |
-          {
-            echo "### E2E stub tier"
-            grep -E "^test .* (ok|FAILED|ignored)" "$RUNNER_TEMP/e2e-stub.log" | sed 's/^/    /' || true
-            echo
-            echo "Live scenarios: SKIPPED (tier: stub)."
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  # The same stub tier on Linux x64, so a Linux-only failure (process,
-  # socket, file-system or timing semantics) cannot land unnoticed. The
-  # static ONNX Runtime comes from the portable recipe (#261) through the
-  # shared setup action.
-  e2e-stub-linux:
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
-    name: E2E stub tier (Linux x64)
-    runs-on: ubuntu-latest
-    timeout-minutes: 150
-    defaults:
-      run:
-        working-directory: packages/butler-agent/rust
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Rust and the static ONNX Runtime
-        uses: ./.github/actions/rust-agent-setup
-        with:
-          native-deps: ort
-          cache-key: e2e-linux-x64
-
-      - name: Build the agent binary under test
-        run: cargo build --locked -p butler-agent --bin butler-agent
-
-      # Same pinned model files and SHA-256 values as the macOS job.
-      - name: Restore embedding model cache
-        id: embedding-cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/e2e-models/bge-m3
-          key: bge-m3-4de13258303883538bd53b696b452bf8099f0858
-
-      - name: Fetch embedding model
-        if: steps.embedding-cache.outputs.cache-hit != 'true'
-        working-directory: ${{ runner.temp }}
-        run: |
-          set -euo pipefail
-          base=https://huggingface.co/Xenova/bge-m3/resolve/4de13258303883538bd53b696b452bf8099f0858
-          dir=e2e-models/bge-m3
-          mkdir -p "$dir/onnx"
-          while read -r sha file; do
-            curl -fsSL --retry 3 -o "$dir/$file" "$base/$file"
-            echo "$sha  $dir/$file" | sha256sum -c -
-          done <<'LIST'
-          6710678b12670bc442b99edc952c4d996ae309a7020c1fa0096dd245c2faf790 tokenizer.json
-          7e4c1cc848840aeccdd763458c18dd525eb0f795c992e00ebe9c28554e7db2d4 tokenizer_config.json
-          734a79bf12d388c1467a4e3ab625f45de7f6906cffcfb93a1eca1787504bed95 config.json
-          0826f8c1ab9edf1801db86c61919d4d108e8bfc0b809ec823ad366882ff0b77d onnx/model_quantized.onnx
-          LIST
-
-      # INS-14 runs a real `systemd --user` job. The runner has no login
-      # session by default: lingering starts the user manager, and the
-      # scenario reports SKIPPED unless the probe finds it answering.
-      - name: Probe the systemd user manager
-        id: systemd
-        run: |
-          sudo loginctl enable-linger "$USER" || true
-          uid="$(id -u)"
-          export XDG_RUNTIME_DIR="/run/user/$uid"
-          for _ in $(seq 1 30); do
-            if systemctl --user show-environment >/dev/null 2>&1; then
-              echo "available=1" >> "$GITHUB_OUTPUT"
-              echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
-              echo "DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus" >> "$GITHUB_ENV"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "available=0" >> "$GITHUB_OUTPUT"
-          echo "::notice title=INS-14 SKIPPED::no systemd --user manager on this runner"
-
-      - name: Run the stub tier
-        env:
-          BUTLER_E2E_EMBEDDING_ASSETS: ${{ runner.temp }}/e2e-models/bge-m3
-          BUTLER_E2E_TIER: stub
-          BUTLER_E2E_SKIP_BUILD: "1"
-          BUTLER_E2E_SYSTEMD: ${{ steps.systemd.outputs.available }}
-          BUTLER_E2E_REPORT: ${{ runner.temp }}/e2e-report.txt
-        run: |
-          set -o pipefail
-          # --no-fail-fast: one run reports every failing scenario binary.
-          cargo test --locked --no-fail-fast -p butler-e2e 2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
-
-      - name: Assert the scenarios left the runner home untouched
-        if: always()
-        uses: ./.github/actions/assert-home-untouched
-
-      - name: Summarize
-        if: always()
-        run: |
-          {
-            echo "### E2E stub tier (Linux x64)"
-            grep -E "^test .* (ok|FAILED|ignored)" "$RUNNER_TEMP/e2e-stub.log" | sed 's/^/    /' || true
-            echo
-            echo "Live scenarios: SKIPPED (tier: stub)."
-          } >> "$GITHUB_STEP_SUMMARY"
-
   e2e-live:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     name: E2E live tier
@@ -290,35 +67,12 @@ jobs:
       - uses: actions/checkout@v4
         if: steps.credential.outputs.available == 'true'
 
-      - uses: dtolnay/rust-toolchain@master
+      - name: Set up Rust and prebuilt ONNX Runtime
         if: steps.credential.outputs.available == 'true'
+        uses: ./.github/actions/rust-agent-setup
         with:
-          toolchain: 1.91.0
-
-      - uses: actions/setup-python@v5
-        if: steps.credential.outputs.available == 'true'
-        with:
-          python-version: "3.12"
-
-      - name: Prepare pinned static ONNX Runtime and protoc
-        if: steps.credential.outputs.available == 'true'
-        env:
-          ORT_CACHE_TARGET: ${{ runner.temp }}/ort-cache
-        run: |
-          set -euo pipefail
-          prepared="$(CARGO_TARGET_DIR="$ORT_CACHE_TARGET" python scripts/prepare-static-ort.py)"
-          {
-            echo "ORT_LIB_PATH=$(jq -r .ort_lib_path <<<"$prepared")"
-            echo "PROTOC=$(jq -r .protoc <<<"$prepared")"
-            echo "ORT_PREFER_DYNAMIC_LINK=0"
-            echo "ORT_SKIP_DOWNLOAD=1"
-          } >> "$GITHUB_ENV"
-
-      - uses: Swatinem/rust-cache@v2
-        if: steps.credential.outputs.available == 'true'
-        with:
-          workspaces: packages/butler-agent/rust
-          key: e2e
+          native-deps: prebuilt-ort
+          cache-key: e2e
 
       - name: Install the credential
         if: steps.credential.outputs.available == 'true'
@@ -361,3 +115,27 @@ jobs:
         if: always()
         working-directory: ${{ github.workspace }}
         run: rm -f "$RUNNER_TEMP/codex-auth.json"
+
+  nightly-issue:
+    name: Report nightly E2E failure
+    if: always() && github.event_name == 'schedule' && needs.e2e-live.result == 'failure'
+    needs: e2e-live
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title='Nightly E2E failure'
+          body="The nightly E2E run failed: $RUN_URL"
+          number="$(gh issue list --state open --limit 1000 --json number,title --jq '.[] | select(.title == "Nightly E2E failure") | .number' | head -1)"
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
