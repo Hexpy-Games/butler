@@ -8,7 +8,7 @@ mod projection;
 use std::{
     collections::HashMap,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, MutexGuard},
     time::SystemTime,
 };
 
@@ -35,12 +35,26 @@ struct Inner {
     native_executable: Option<PathBuf>,
     jobs: Arc<Semaphore>,
     closed: CancellationToken,
-    catalog_cache: Mutex<HashMap<Option<String>, CachedCatalog>>,
+    catalog_cache: Mutex<CatalogCache>,
 }
 
 struct CachedCatalog {
     fingerprint: Vec<(PathBuf, Option<SystemTime>)>,
     skills: Vec<SkillDefinition>,
+}
+
+type CatalogCache = HashMap<Option<String>, CachedCatalog>;
+
+fn lock_catalog_cache(cache: &Mutex<CatalogCache>) -> MutexGuard<'_, CatalogCache> {
+    match cache.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            let mut guard = poisoned.into_inner();
+            guard.clear();
+            cache.clear_poison();
+            guard
+        }
+    }
 }
 
 impl Skills {
@@ -105,10 +119,7 @@ impl Skills {
         let native_executable = self.inner.native_executable.clone();
         let inner = self.inner.clone();
         blocking(permit, move || {
-            let cached = inner
-                .catalog_cache
-                .lock()
-                .expect("skill cache mutex poisoned")
+            let cached = lock_catalog_cache(&inner.catalog_cache)
                 .get(&project_id)
                 .map(|entry| (entry.fingerprint.clone(), entry.skills.clone()));
             if let Some((stamps, skills)) = cached
@@ -137,17 +148,13 @@ impl Skills {
                     }
                 }
             }
-            inner
-                .catalog_cache
-                .lock()
-                .expect("skill cache mutex poisoned")
-                .insert(
-                    project_id,
-                    CachedCatalog {
-                        fingerprint,
-                        skills: skills.clone(),
-                    },
-                );
+            lock_catalog_cache(&inner.catalog_cache).insert(
+                project_id,
+                CachedCatalog {
+                    fingerprint,
+                    skills: skills.clone(),
+                },
+            );
             Ok(skills)
         })
         .await
