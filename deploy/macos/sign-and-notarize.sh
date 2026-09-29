@@ -44,7 +44,7 @@ setup() {
   fi
   [ "$set_count" -eq 6 ] || die "signing secrets missing or partial ($set_count/6 set)"
 
-  local pw kc="$default_keychain" p12 g2 identity key
+  local pw kc="$default_keychain" p12 g2 identity key g2_note=""
   pw=$(openssl rand -base64 24)
   echo "::add-mask::$pw"
   umask 077
@@ -59,10 +59,11 @@ setup() {
   # Apple's public intermediate, so the chain builds; a failure surfaces at verify.
   g2=$key_dir/DeveloperIDG2CA.cer
   if curl -fsSL --retry 3 -o "$g2" https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer; then
-    security import "$g2" -k "$kc" >/dev/null || log "warning: intermediate import failed"
+    security import "$g2" -k "$kc" >/dev/null || g2_note=" (Developer ID G2 intermediate import failed)"
   else
-    log "warning: could not fetch the Developer ID G2 intermediate"
+    g2_note=" (Developer ID G2 intermediate could not be fetched)"
   fi
+  if [ -n "$g2_note" ]; then log "warning:$g2_note"; fi
   # Prepend to the user search list; delete-keychain in cleanup removes it again.
   # shellcheck disable=SC2046
   security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
@@ -70,7 +71,7 @@ setup() {
 
   identity=$(security find-identity -v -p codesigning "$kc" |
     awk -v team="($APPLE_TEAM_ID)" '/Developer ID Application/ && index($0, team) {print $2; exit}')
-  [ -n "$identity" ] || die "no Developer ID Application identity for the configured team"
+  [ -n "$identity" ] || die "no Developer ID Application identity for the configured team$g2_note"
 
   key=$key_dir/AuthKey.p8
   if printf '%s' "$APPLE_API_KEY_P8" | grep -q -- '-----BEGIN'; then
@@ -78,6 +79,8 @@ setup() {
   else
     printf '%s' "$APPLE_API_KEY_P8" | base64 --decode > "$key"
   fi
+  xcrun notarytool history --key "$key" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID" >/dev/null ||
+    die "notary API key rejected by App Store Connect"
   {
     echo "BUTLER_SIGN_IDENTITY=$identity"
     echo "BUTLER_SIGN_KEYCHAIN=$kc"
@@ -216,9 +219,15 @@ notarize() {
     *) sub=$work/$(basename "$path").zip; ditto -c -k --keepParent "$path" "$sub" ;;
   esac
   log "notarizing $(basename "$path")"
-  out=$(xcrun notarytool submit "$sub" "${auth[@]}" --wait --output-format json) || true
-  status=$(printf '%s' "$out" | sed -n 's/.*"status" *: *"\([^"]*\)".*/\1/p' | head -n 1)
-  id=$(printf '%s' "$out" | sed -n 's/.*"id" *: *"\([^"]*\)".*/\1/p' | head -n 1)
+  # A missing status means upload/network trouble, not a verdict: retry those only.
+  for i in 1 2 3; do
+    out=$(xcrun notarytool submit "$sub" "${auth[@]}" --wait --output-format json) || true
+    status=$(printf '%s' "$out" | sed -n 's/.*"status" *: *"\([^"]*\)".*/\1/p' | head -n 1)
+    id=$(printf '%s' "$out" | sed -n 's/.*"id" *: *"\([^"]*\)".*/\1/p' | head -n 1)
+    if [ -n "$status" ]; then break; fi
+    log "notarytool gave no verdict (attempt $i/3)"
+    sleep 20
+  done
   rm -rf "$work"
   if [ "$status" != Accepted ]; then
     if [ -n "$id" ]; then xcrun notarytool log "$id" "${auth[@]}" || true; fi
@@ -239,21 +248,51 @@ notarize() {
 
 # ---- verification -----------------------------------------------------------
 
+# gatekeeper <spctl args>: require the Notarized Developer ID source. Hosts with
+# assessments disabled (override=security disabled) pass with a warning; the
+# stapled ticket checked before this call is the proof there.
+gatekeeper() {
+  local out
+  if ! out=$(spctl -a -vv "$@" 2>&1); then
+    printf '%s\n' "$out" >&2
+    return 1
+  fi
+  if printf '%s\n' "$out" | grep -q '^source=Notarized Developer ID$'; then return 0; fi
+  if printf '%s\n' "$out" | grep -q '^override=security disabled$'; then
+    log "warning: Gatekeeper assessments are disabled on this host"
+    return 0
+  fi
+  printf '%s\n' "$out" >&2
+  return 1
+}
+
 verify_app() {
   local app=${1%/}
   codesign --verify --strict --deep --verbose=2 "$app" || die "app failed deep verification"
   assert_signed "$app"
   xcrun stapler validate "$app" || die "app is not stapled"
-  spctl -a -vv -t exec "$app" || die "Gatekeeper rejects the app"
+  gatekeeper -t exec "$app" || die "Gatekeeper does not accept the app as notarized"
 }
 
 verify_dmg() {
   BUTLER_SIGN_NO_RUNTIME=1 assert_signed "$1"
   xcrun stapler validate "$1" || die "dmg is not stapled"
-  spctl -a -vv -t open --context context:primary-signature "$1" || die "Gatekeeper rejects the dmg"
+  gatekeeper -t open --context context:primary-signature "$1" || die "Gatekeeper does not accept the dmg as notarized"
 }
 
+# A bare binary can't be stapled: check the online ticket. It can lag the
+# notarization verdict briefly, so retry a few times.
 verify_agent() {
+  local i
+  assert_signed "$1"
+  for i in 1 2 3; do
+    if codesign --verify -R='=notarized' --check-notarization "$1"; then return 0; fi
+    sleep 15
+  done
+  die "agent has no notarization ticket: $1"
+}
+
+agent() {
   local i
   assert_signed "$1"
   # The online ticket can lag the notarization result; Gatekeeper is advisory for a bare binary.

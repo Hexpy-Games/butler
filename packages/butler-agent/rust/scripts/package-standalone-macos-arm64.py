@@ -11,6 +11,7 @@ import os
 from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 
@@ -88,6 +89,8 @@ def main() -> int:
 
 def binary_signing(binary: Path) -> dict | None:
     """Developer ID Team ID (and notarization) of a signed binary; None when ad-hoc or unsigned."""
+    if sys.platform != "darwin":
+        return None
     result = subprocess.run(
         ["/usr/bin/codesign", "-dv", "--verbose=4", str(binary)], capture_output=True, text=True
     )
