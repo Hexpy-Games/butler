@@ -78,6 +78,12 @@ export interface SceneSpec {
   /** Tall finale framed by its tiles, not by what they paint (a scene that paints wider than it ends). */
   tallByTiles?: boolean;
   finaleReserve?: Partial<Record<HeroLayout, number>>;
+  /**
+   * The finale is the last scene itself, rearranged by the chapter's own tracks (same elements, no copy): the
+   * camera stays on the scene's final pose, no tile flies in, and the scene holds until the loop. The poster
+   * remains the reduced-motion still.
+   */
+  stay?: boolean;
   /** Beat the last scene ends (the finale begins). */
   end: (g: SceneGeometry) => number;
   /** The scenes' motion and the camera through them (it must end on the last scene). */

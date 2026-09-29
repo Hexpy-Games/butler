@@ -15,7 +15,7 @@ export const TURN: Record<HeroLayout, { rx: number; rz: number }> = {
 };
 
 /** Canvas px between neighbouring sheets on the frame (the label ladder's pitch). */
-export const PITCH: Record<HeroLayout, number> = { wide: 40, tall: 76 };
+export const PITCH: Record<HeroLayout, number> = { wide: 64, tall: 88 };
 
 /** Room the labels take right of the stack, and above and below its ends (canvas px). */
 const LABEL = { wide: { w: 224, h: 22 }, tall: { w: 200, h: 40 } } as const;

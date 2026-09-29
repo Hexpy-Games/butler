@@ -134,9 +134,6 @@ export type Layer = (typeof LAYERS)[number];
 export const SHEETS = ["page", "sticky", "overlay", "dialog", "popover", "tooltip"] as const satisfies readonly Layer[];
 export type Sheet = (typeof SHEETS)[number];
 
-/** Sheets whose parts are tinted glass: while the camera is turned they draw clear (see LayersHero.module.css). */
-export const GLASS: readonly Sheet[] = ["dialog", "popover", "tooltip"];
-
 /** The selected interval of the open select (its item lines up with the trigger). */
 export const PICKED = 2;
 

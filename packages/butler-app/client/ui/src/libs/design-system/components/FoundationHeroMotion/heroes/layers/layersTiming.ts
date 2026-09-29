@@ -1,5 +1,5 @@
 import type { Key } from "../../heroTimeline";
-import { HOLD, TRANSITION } from "../shared/beats";
+import { TRANSITION } from "../shared/beats";
 
 /**
  * 09 Layers, "the exploded stack", beat marks:
@@ -16,7 +16,10 @@ import { HOLD, TRANSITION } from "../shared/beats";
  *   24–33.4  Hold      the whole ladder holds
  *   33.4–37  Collapse  the labels leave; all sheets settle together and the
  *                      camera backs out to the quarter view
- *   38–44    Flat      the camera untilts to the flat window it was all along
+ *   38–42.2  Flat      the camera untilts to the flat window it was all along
+ *   42.2–46.2 Slide    the same window slides sideways (the camera moves and
+ *                      backs out) to make room; the z token ladder is written
+ *                      beside it, high to low: the finale, edge to edge
  */
 export const AT = {
   flat: 6.8,
@@ -29,8 +32,17 @@ export const AT = {
   collapse: 33.9,
   collapseFor: 3.2,
   untilt: 38.2,
+  /** The window slides sideways as the ladder is written beside it. */
+  slide: 38.2 + TRANSITION,
+  rows: 38.2 + TRANSITION + 2.8,
+  rowStep: 0.3,
+  rowFor: 0.6,
 } as const;
-export const END = AT.untilt + TRANSITION + HOLD.component;
+/** The finale (the slid window and the whole ladder) is complete. */
+export const END = AT.rows + 7 * AT.rowStep + AT.rowFor + 0.4;
+
+/** Beats the intro's frames are pre-painted while the window waits off stage (see layersTracks). */
+export const WARM = { from: 0.3, to: 2.4 } as const;
 
 /** The first cycle's keys, then a cut back to their first pose for the next one. */
 export const looped = (keys: Key[], close: number): Key[] => {
@@ -40,3 +52,6 @@ export const looped = (keys: Key[], close: number): Key[] => {
 
 /** When sheet k's label hangs (the page's first, then up the ladder). */
 export const labelAt = (k: number) => AT.label + k * AT.labelStep;
+
+/** When the finale's ladder row i is written (top row, the highest layer, first). */
+export const rowAt = (i: number) => AT.rows + i * AT.rowStep;

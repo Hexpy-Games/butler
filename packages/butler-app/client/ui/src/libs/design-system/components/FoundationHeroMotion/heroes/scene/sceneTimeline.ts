@@ -63,13 +63,17 @@ export function sceneTracks(spec: SceneSpec, g0: SceneGeometry): { beats: number
   const own = { ...mine, camera: introCamera(mine.camera) };
   const start = own.camera[0] ?? { at: 0, ...REST };
   const last = own.camera.at(-1) ?? start;
+  const stay = spec.stay === true;
   const world: Key[] = [
-    ...own.camera, { ...last, at: finale }, { at: finale + TRANSITION, ...rest, ease: "standard" },
+    ...own.camera, { ...last, at: finale },
+    // A staying finale holds the scene's last pose; otherwise the camera moves on to the poster.
+    ...(stay ? [] : [{ at: finale + TRANSITION, ...rest, ease: "standard" as const }]),
     // The loop cuts back to the opening once the poster has faded (the camera never turns back).
-    { at: loop + TRANSITION - 0.01, ...rest }, { ...start, at: loop + TRANSITION },
+    { at: loop + TRANSITION - 0.01, ...(stay ? last : rest) }, { ...start, at: loop + TRANSITION },
   ];
   const regions: Track[] = spec.scenes.map((name) => {
-    const [from = 0, to = finale] = spec.spans?.[name] ?? [];
+    // A staying finale keeps every scene through the hold (the chapter fades what it shows before the loop).
+    const [from = 0, to = stay ? loop + TRANSITION - 1.4 : finale] = spec.spans?.[name] ?? [];
     const shown = from > 0 ? 0 : 1;
     if (spec.deep?.includes(name)) {
       // Shown and hidden by a cut in scale: an opacity animation would flatten its 3D.
@@ -89,8 +93,10 @@ export function sceneTracks(spec: SceneSpec, g0: SceneGeometry): { beats: number
     };
   });
   // Tiles fly in from the frame's nearest edges; each shows as it sets off.
-  const flights = gatherFlights(g0.tiles, null, finale);
+  const flights = stay ? {} : gatherFlights(g0.tiles, null, finale);
   const zoom = spec.posterZoom?.[g0.layout] ?? (g0.layout === "wide" ? 1 : 1.2);
+  // A staying finale draws no tile: the poster is the still only.
+  const hidden: Track[] = stay ? Object.keys(g0.tiles).map((id): Track => ({ select: select(`tile-${id}`), keys: [{ at: 0, o: 0 }] })) : [];
   const tiles: Track[] = Object.entries(flights).map(([id, flight]) => {
     const from = { x: flight.from.x / zoom, y: flight.from.y / zoom };
     return {
@@ -101,5 +107,5 @@ export function sceneTracks(spec: SceneSpec, g0: SceneGeometry): { beats: number
       ],
     };
   });
-  return { beats, still: rest, marks: [finale, finale + TRANSITION + 2], tracks: [{ select: select("world"), keys: world }, ...regions, ...own.tracks, ...tiles] };
+  return { beats, still: rest, marks: [finale, finale + TRANSITION + 2], tracks: [{ select: select("world"), keys: world }, ...regions, ...own.tracks, ...tiles, ...hidden] };
 }

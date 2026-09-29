@@ -33,9 +33,45 @@
   transform-style: preserve-3d;
 }
 
+/* The window and its ladder: the ladder waits right of the window, and the finale's camera frames both. */
+.ending {
+  --fz: 0.6;
+  --inner-w: 960px;
+  --inner-h: 505px;
+  --gap: 24px;
+  --screen-w: calc(var(--space-4xl) * 27.5);
+
+  position: relative;
+  transform-style: preserve-3d;
+}
+
+[data-layout="tall"] .ending {
+  --fz: 0.42;
+  --inner-w: 340px;
+  --inner-h: 600px;
+  --gap: 12px;
+  --screen-w: calc(var(--space-4xl) * 9.75);
+}
+
+/* Drawn at the size it has on the finale (the frame's inner box less the window, at the finale's zoom), then
+   zoomed by the inverse of that zoom, so its type is the size it reads at. */
+.ladderBox {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + var(--gap));
+  inline-size: calc(var(--inner-w) - var(--screen-w) * var(--fz) - var(--gap));
+  block-size: var(--inner-h);
+  translate: 0 -50%;
+  zoom: calc(1 / var(--fz));
+}
+
 .screen {
   --adaptive-viewport-block-size: 100%;
   --app-window-radius: 18px;
+  /* The sheets' thickness and the two tones of its side faces (the bottom edge is lit, the right edge turns from it), in sheet px. */
+  --slab: 9px;
+  --slab-lit: color-mix(in srgb, var(--text-tertiary) 78%, var(--surface));
+  --slab-shade: color-mix(in srgb, var(--text-secondary) 84%, var(--surface));
 
   position: relative;
   inline-size: calc(var(--space-4xl) * 27.5);
@@ -44,6 +80,8 @@
 }
 
 [data-layout="tall"] .screen {
+  --slab: 14px;
+
   inline-size: calc(var(--space-4xl) * 9.75);
   block-size: calc(var(--space-4xl) * 20);
 }
@@ -66,13 +104,9 @@
   block-size: 100%;
 }
 
-/* Glass loses its backdrop once the camera turns (a backdrop filter can not
-   sample through a 3D stack): the tilted sheets draw the same parts clear. */
-.clear {
-  opacity: 0;
-}
-
-.clear [data-glass] {
+/* Glass draws without its backdrop: a backdrop filter can not sample through a 3D stack, and each sheet
+   holds only its own part, so there is nothing behind it to blur. The tinted surface itself is unchanged. */
+.plane [data-glass] {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
@@ -87,21 +121,46 @@
   pointer-events: none;
 }
 
-/* A sheet's thickness: rings of its outline, one px apart down its own z. */
-.slab {
+/* A sheet's thickness: the two side faces the quarter view can see (the bottom
+   edge and the right edge, standing on the sheet's outline and reaching down
+   its own z) and a chamfer across the rounded corner between them. Faces turned
+   away from the camera are culled, so no ring stack is needed. Each face fades
+   on its own (an opacity on a wrapper would flatten the 3D). */
+.face {
   position: absolute;
-  inset: 0;
-  transform-style: preserve-3d;
   opacity: 0;
   pointer-events: none;
+  backface-visibility: hidden;
 }
 
-.ring {
-  position: absolute;
-  inset: 0;
-  border: 3px solid var(--text-tertiary);
-  border-radius: var(--app-window-radius);
-  transform: translateZ(calc(var(--i) * -1px));
+.faceBottom {
+  top: 100%;
+  right: var(--app-window-radius);
+  left: var(--app-window-radius);
+  block-size: var(--slab);
+  background: var(--slab-lit);
+  transform: rotateX(-90deg);
+  transform-origin: 50% 0;
+}
+
+.faceRight {
+  top: var(--app-window-radius);
+  bottom: var(--app-window-radius);
+  left: 100%;
+  inline-size: var(--slab);
+  background: var(--slab-shade);
+  transform: rotateY(90deg);
+  transform-origin: 0 50%;
+}
+
+.faceCorner {
+  top: 100%;
+  left: calc(100% - var(--app-window-radius));
+  inline-size: calc(var(--app-window-radius) * 1.4142);
+  block-size: var(--slab);
+  background: linear-gradient(90deg, var(--slab-lit), var(--slab-shade));
+  transform: rotateZ(-45deg) rotateX(-90deg);
+  transform-origin: 0 0;
 }
 
 /* The label's pin: the sheet's top right corner, turned and scaled back to
@@ -286,7 +345,11 @@
   zoom: 0.86;
 }
 
+/* The rows fill the ladder's height, the first on its top edge and the last on its bottom edge. */
 .ladder {
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
   inline-size: 100%;
+  block-size: 100%;
 }
