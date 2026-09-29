@@ -88,9 +88,6 @@ src/host/runtime.rs	11	cfg(unix)
 src/host/runtime/environment.rs	1	consts::OS
 src/host/runtime/owners.rs	3	cfg(unix)
 src/host/service.rs	6	cfg(unix)
-src/host/service/cli_launcher.rs	2	0o111
-src/host/service/cli_launcher.rs	1	0o755
-src/host/service/cli_launcher.rs	1	os::unix::fs::PermissionsExt
 src/lib.rs	1	cfg(unix)
 src/main.rs	1	cfg(not(unix))
 src/main.rs	1	cfg(unix)

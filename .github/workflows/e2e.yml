@@ -207,11 +207,33 @@ jobs:
           0826f8c1ab9edf1801db86c61919d4d108e8bfc0b809ec823ad366882ff0b77d onnx/model_quantized.onnx
           LIST
 
+      # INS-14 runs a real `systemd --user` job. The runner has no login
+      # session by default: lingering starts the user manager, and the
+      # scenario reports SKIPPED unless the probe finds it answering.
+      - name: Probe the systemd user manager
+        id: systemd
+        run: |
+          sudo loginctl enable-linger "$USER" || true
+          uid="$(id -u)"
+          export XDG_RUNTIME_DIR="/run/user/$uid"
+          for _ in $(seq 1 30); do
+            if systemctl --user show-environment >/dev/null 2>&1; then
+              echo "available=1" >> "$GITHUB_OUTPUT"
+              echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
+              echo "DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "available=0" >> "$GITHUB_OUTPUT"
+          echo "::notice title=INS-14 SKIPPED::no systemd --user manager on this runner"
+
       - name: Run the stub tier
         env:
           BUTLER_E2E_EMBEDDING_ASSETS: ${{ runner.temp }}/e2e-models/bge-m3
           BUTLER_E2E_TIER: stub
           BUTLER_E2E_SKIP_BUILD: "1"
+          BUTLER_E2E_SYSTEMD: ${{ steps.systemd.outputs.available }}
           BUTLER_E2E_REPORT: ${{ runner.temp }}/e2e-report.txt
         run: |
           set -o pipefail

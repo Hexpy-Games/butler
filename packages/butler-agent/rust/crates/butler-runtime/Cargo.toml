@@ -39,6 +39,8 @@ tz-rs.workspace = true
 url.workspace = true
 regress.workspace = true
 zip.workspace = true
+flate2.workspace = true
+tar.workspace = true
 
 [features]
 # Exposes test fixtures to tests in dependent crates.

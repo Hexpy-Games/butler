@@ -71,8 +71,10 @@ exec '<AGENT_HOME>/current/butler-agent' --installation-root '<AGENT_HOME>/curre
 ```
 
 An existing file at that path is handled as `butler install` does: a launcher
-with the marker is rewritten; the pre-native Bun launcher (it mentions both
-`butler.js` and `BUTLER_HOME`) is kept as `butler.previous` (an existing one is not overwritten)
+with the marker is rewritten; the pre-native Bun launcher (the program compiled from the removed
+`interfaces/cli/launcher.ts`, recognized only when it contains all of `Could not
+launch Butler CLI with`, `butler.js`, `BUTLER_HOME` and `BUTLER_BUN`; see
+[install-lifecycle.md](install-lifecycle.md)) is kept as `butler.previous` (an existing one is not overwritten)
 and replaced; anything else, or a symlink (never followed), is left alone. The
 shell installer then stops before installing anything, and `butler install`
 reports `kept-foreign`.
@@ -87,9 +89,11 @@ The App-bundled Agent (`.../bundled-agent/bin/butler-agent`, payload manifest
 `butler.native-agent-payload.v1`) is a different, read-only layout and never
 appears in `AGENT_HOME`. `DATA/bin/butler` (the older launcher, `cli_launcher.rs`)
 is a second entry with a default `BUTLER_DATA`. It is never created, only
-repointed: to `AGENT_HOME/current` once a CLI installation is active (by
-`butler install/update/rollback`, and at every service start), otherwise to the
-installation that started the service.
+repointed: to `AGENT_HOME/current` by `butler install/update/rollback`, and at
+every service start to the installation that service runs (the App's bundled
+Agent when the App picked that over the CLI installation). The commands that
+change the installation, and how login-start, restarts and uninstall behave,
+are in [install-lifecycle.md](install-lifecycle.md).
 
 ## Release assets
 
