@@ -314,6 +314,10 @@ def normalized_tar_info(info: tarfile.TarInfo) -> tarfile.TarInfo:
     info.uname = ""
     info.gname = ""
     info.mtime = 0
+    if info.isdir():
+        # Extractors that apply a directory's mode before filling it (GNU tar)
+        # fail on read-only directories; installers make the tree read-only.
+        info.mode |= 0o200
     return info
 
 

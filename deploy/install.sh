@@ -143,6 +143,7 @@ staging="$AGENT_HOME/.staging-$$"
 rm -rf "$staging"
 mkdir "$staging"
 tar -xzf "$tmp/$archive" -C "$staging" || die "could not extract $archive"
+chmod -R a-w "$staging"
 
 manifest="$staging/native-agent-manifest.json"
 for required in native-agent-manifest.json butler-agent resources; do
