@@ -40,7 +40,7 @@ export function gatherFlights(slots: Record<string, Box>, last: string | null, f
   const flights: Record<string, Flight> = last ? { [last]: { from: { x: 0, y: 0 }, start: finale, end: finale + 0.4 } } : {};
   edges.forEach(({ id, from }, n) => {
     const start = finale + 0.2 + n * STAGGER;
-    flights[id] = { from, start, end: start + TRANSITION * 0.8 };
+    flights[id] = { from, start, end: finale + TRANSITION };
   });
   return flights;
 }
@@ -50,6 +50,6 @@ export function gatherKeys(flight: Flight, before: { x: number; y: number }, fin
   const from = { x: flight.from.x / pz, y: flight.from.y / pz };
   return [
     { at: finale - 0.01, ...before }, { at: finale, ...from }, { at: flight.start, ...from },
-    { at: flight.end, x: 0, y: 0, ease: "decelerate" },
+    { at: flight.end, x: 0, y: 0, ease: "standard" },
   ];
 }

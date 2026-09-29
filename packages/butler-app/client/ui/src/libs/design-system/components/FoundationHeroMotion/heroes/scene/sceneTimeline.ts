@@ -96,7 +96,7 @@ export function sceneTracks(spec: SceneSpec, g0: SceneGeometry): { beats: number
     return {
       select: select(`tile-${id}`),
       keys: [
-        { at: 0, ...from, o: 0 }, { at: flight.start, ...from, o: 0 }, { at: flight.start + 0.5, o: 1 }, { at: flight.end, x: 0, y: 0, ease: "decelerate" },
+        { at: 0, ...from, o: 0 }, { at: flight.start, ...from, o: 0 }, { at: flight.start + 0.5, o: 1 }, { at: flight.end, x: 0, y: 0, ease: "standard" },
         { at: loop + 0.2 }, { at: loop + TRANSITION / 2 + 0.2, o: 0, ease: "accelerate" }, { at: close - 0.01 }, { at: close, ...from, o: 0 },
       ],
     };
