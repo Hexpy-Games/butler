@@ -1,4 +1,5 @@
-//! Tool-originated topic branch creation through the App session owner.
+//! Topic branch creation through the App session owner: tool-originated
+//! (`/internal/session-branches`) and App-originated (`/space/branches`).
 
 use std::sync::Arc;
 
@@ -73,6 +74,61 @@ pub(super) async fn post(
             data,
         },
     )
+}
+
+/// `POST /space/branches`: the App's "new conversation / new project from this
+/// answer" request (`SessionBranchRequest`). Any App session with a completed
+/// answer is a valid source, project sessions included.
+pub(super) async fn post_app(
+    state: Arc<HttpState>,
+    request: Request<Body>,
+) -> Result<Response, HttpError> {
+    let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
+    let body: Value = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
+    let input = app_branch_request(&body).ok_or_else(invalid_request)?;
+    let branch = state
+        .application
+        .start_topic_conversation(input, state.shutdown.clone())
+        .await?;
+    response_json(
+        StatusCode::OK,
+        ApiEnvelope {
+            protocol_version: APP_PROTOCOL_VERSION,
+            data: json!({ "session": branch.session, "seed": branch.seed }),
+        },
+    )
+}
+
+fn app_branch_request(body: &Value) -> Option<AppStartTopicConversationRequest> {
+    let text = |value: &Value, key: &str| {
+        value
+            .get(key)
+            .and_then(Value::as_str)
+            .filter(|text| !text.trim().is_empty())
+            .map(str::to_owned)
+    };
+    let destination = body.get("destination")?;
+    let kind = text(destination, "kind")?;
+    let project_id = match kind.as_str() {
+        "chat" | "new_project" => None,
+        "project" => Some(text(destination, "projectId")?),
+        _ => return None,
+    };
+    let follow_up = match body.get("followUp") {
+        None | Some(Value::Null) => None,
+        Some(value @ Value::String(_)) => Some(value.clone()),
+        Some(_) => return None,
+    };
+    Some(AppStartTopicConversationRequest {
+        request_id: text(body, "requestId")?,
+        current_session_id: None,
+        source_session_id: Some(text(body, "sourceSessionId")?),
+        source_message_id: Some(text(body, "sourceMessageId")?),
+        title: text(body, "title")?,
+        destination: kind,
+        project_id,
+        follow_up,
+    })
 }
 
 fn invalid_request() -> HttpError {

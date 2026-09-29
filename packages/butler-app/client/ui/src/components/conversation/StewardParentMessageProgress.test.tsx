@@ -10,6 +10,7 @@ import {
 import {
   HARNESS_MESSAGES,
   HARNESS_SS03_SUMMARY,
+  HARNESS_STEWARD_CHILD,
 } from "@/app/fixtures.ts";
 import type { MessageRecord, SessionSummaryView } from "@/app/types.ts";
 import { MessageContent } from "./MessageContent";
@@ -21,7 +22,7 @@ import { StewardComposerCapsules } from "./StewardComposerCapsules";
 import { useComposerStore } from "./composerStore";
 import { anchoredStewardProgressByMessageId } from "./stewardParentProgressProjection";
 import { stewardProgressStatus } from "./stewardProgressPresentation";
-import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
+import { appCopy, getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
 
 // These expectations are the default (English) copy; pin the locale instead of inheriting it.
 const previousLocale = getAppLocale();
@@ -710,3 +711,56 @@ test("child progress does not add a standalone activity row or child Composer lo
   expect(renderToStaticMarkup(<ComposerToolbar />)).toContain('aria-label="Send"');
   expect(renderToStaticMarkup(<ComposerToolbar />)).not.toContain('aria-label="Stop"');
 });
+
+// test-category: pure-logic
+test("the composer pill follows the #307 Steward child contract", () => {
+  const pill = (child: typeof HARNESS_STEWARD_CHILD) => renderToStaticMarkup(
+    <ComposerNotices summary={{ ...HARNESS_SS03_SUMMARY, steward_children: [child] }} />,
+  );
+  // Admitted: status "active", active_turn "thinking", progress without rows.
+  const admitted = pill(HARNESS_STEWARD_CHILD);
+  expect(admitted.match(/steward-progress-capsule/g)).toHaveLength(1);
+  expect(admitted).toContain("Review the activity surface");
+  expect(admitted).toContain(appCopy.interfaceStatus.progress);
+
+  // Streaming its answer (BTCC delivery_committed): no active_turn yet no result.
+  const streaming = structuredClone(HARNESS_STEWARD_CHILD);
+  streaming.active_turn = null;
+  streaming.latest_turn = { ...streaming.latest_turn!, state: "streaming" };
+  expect(pill(streaming)).toContain("steward-progress-capsule");
+
+  // Every terminal shape the gateway sends hides the pill.
+  const delivered = structuredClone(HARNESS_STEWARD_CHILD);
+  Object.assign(delivered, { status: "delivered", terminal: true, active_turn: null });
+  delivered.latest_turn = { ...delivered.latest_turn!, state: "delivered", delivery_state: "delivered", cancellable: false };
+  expect(pill(delivered)).not.toContain("steward-progress-capsule");
+  const orphan = structuredClone(delivered);
+  Object.assign(orphan, { status: "failed", result_missing: true });
+  expect(pill(orphan)).not.toContain("steward-progress-capsule");
+  const committing = structuredClone(delivered);
+  Object.assign(committing, { status: "active", terminal: false });
+  expect(pill(committing)).not.toContain("steward-progress-capsule");
+});
+
+// test-category: pure-logic
+test("a Steward hand-off keeps copy, its observer action and the branch actions", () => {
+  const summary = structuredClone(HARNESS_SS03_SUMMARY) as SessionSummaryView;
+  const progress = anchoredStewardProgressByMessageId(HARNESS_MESSAGES, summary).get("m4");
+  const handOff = { ...HARNESS_MESSAGES.find((message) => message.id === "m4")!, status: "delivered" };
+  const render = (message: MessageRecord) => renderToStaticMarkup(
+    <MessageContent message={message} copied={false} footerMeta={null}
+      onCopyAssistantMessage={() => undefined} stewardProgress={progress} />,
+  );
+  const branch = `aria-label="${appCopy.interfaceStatus.branchChat}"`;
+  const general = render({ ...handOff, chat_id: "general" });
+  expect(general).toContain(`aria-label="${appCopy.interfacePanels.copyResponse}"`);
+  expect(general).toContain('data-test-class="steward-observer-action"');
+  expect(general).toContain(branch);
+  expect(general).toContain(`aria-label="${appCopy.interfaceStatus.branchProject}"`);
+  // The Steward card's own status replaces the answer status row.
+  expect(general).not.toContain("assistant-terminal-status-row");
+  // Neither general nor a known project session (e.g. a Steward child), or unsettled.
+  expect(render({ ...handOff, chat_id: "harness-steward" })).not.toContain(branch);
+  expect(render({ ...handOff, chat_id: "general", status: "streaming" })).not.toContain(branch);
+});
+

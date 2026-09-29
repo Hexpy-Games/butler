@@ -3,7 +3,9 @@ import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { Dialog, DialogContent, FolderPlus, IconButton, MessageSquarePlus } from "@/butler-ds";
 import { SessionBranchForm } from "./SessionBranchForm";
 
-export function BranchMessageActions({ sessionId, messageId }: { sessionId: string; messageId: string }) {
+export function BranchMessageActions({ sessionId, messageId, projectId = null }: {
+  sessionId: string; messageId: string; projectId?: string | null;
+}) {
   useAppLocale();
   const [mode, setMode] = useState<"topic" | "project" | null>(null);
   const [pending, setPending] = useState(false);
@@ -17,7 +19,8 @@ export function BranchMessageActions({ sessionId, messageId }: { sessionId: stri
     <Dialog open={mode !== null} onOpenChange={open => { if (!open && !pending) setMode(null); }}>
       <DialogContent closeLabel={appCopy.common.close}>
         {mode && <SessionBranchForm key={mode} sourceSessionId={sessionId} sourceMessageId={messageId}
-          project={mode === "project"} onPendingChange={setPending} onClose={() => setMode(null)} />}
+          project={mode === "project"} topicProjectId={projectId}
+          onPendingChange={setPending} onClose={() => setMode(null)} />}
       </DialogContent>
     </Dialog>
   </>;
