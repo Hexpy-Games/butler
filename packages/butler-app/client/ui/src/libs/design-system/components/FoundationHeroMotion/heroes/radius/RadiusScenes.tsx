@@ -1,13 +1,15 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { SurfacePanel } from "../../../../blocks/SurfacePanel";
 import { Box } from "../../../Box";
 import { Button } from "../../../Button";
+import { SegmentedControl } from "../../../SegmentedControl";
+import { Stack } from "../../../Stack";
 import { Tag } from "../../../Tag";
 import { Typo } from "../../../Typo";
 import type { HeroLayout } from "../shared/grid";
-import { Mark } from "../shared/Mark";
 import { Reveal as R } from "../shared/Reveal";
 import { Roller } from "../shared/Roller";
+import { Worn } from "./radiusArc";
 import { LEVELS, RADII, SPECIMEN, specimenRadius, type RadiusCopy } from "./radiusCopy";
 import { Composer, MenuCard, ReportCard } from "./radiusTiles";
 import s from "./RadiusHero.module.css";
@@ -24,7 +26,8 @@ export function CornerScene({ copy, layout }: { copy: RadiusCopy; layout: HeroLa
       <div className={s.cornerGroup} data-t="cg" style={{ left: px(spec.corner.x), top: px(spec.corner.y) }}>
         <span className={s.surface} data-t="cs" style={{ inlineSize: px(spec.surface.w), blockSize: px(spec.surface.h), borderRadius: px(r) }} />
         <span className={s.circle} data-t="cc" style={{ inlineSize: px(2 * r), blockSize: px(2 * r) }} />
-        <span className={s.rline} data-t="cr" style={{ inlineSize: px(r), top: px(r) }} />
+        {/* The radius line, centred on the circle's horizontal diameter (2px thick). */}
+        <span className={s.rline} data-t="cr" style={{ inlineSize: px(r), top: px(r - 1) }} />
       </div>
       <div className={s.readout} data-t="cread">
         <span className={s.loupe}><R name="loupe">{copy.loupe}</R></span>
@@ -36,26 +39,17 @@ export function CornerScene({ copy, layout }: { copy: RadiusCopy; layout: HeroLa
   );
 }
 
-/** A component in the row, its corner marked for the ghost arc and its value set above it. */
-function Worn({ n, value, children }: { n: string; value: string; children: ReactNode }) {
-  return (
-    <span className={s.worn}>
-      <span className={s.wornValue} data-t={`wv-${n}`}>{value}</span>
-      <Mark n={n}>{children}</Mark>
-    </span>
-  );
-}
-
-/** Scene 3: who wears which corner: real components on one line, a ghost arc landing on each top-left corner. */
+/** Scene 3: who wears which corner: real components top-aligned under one line of values; an arc draws itself on each real corner in turn. */
 export function WearScene({ copy }: { copy: RadiusCopy }) {
   return (
-    <div className={s.wearStage} data-m="wear" data-mark-scope="wear">
-      <Worn n="w0" value="8"><Button text={copy.button} /></Worn>
-      <Worn n="w1" value="10"><ReportCard copy={copy} /></Worn>
-      <Worn n="w2" value="12"><MenuCard copy={copy} /></Worn>
-      <Worn n="w3" value="22"><Composer copy={copy} /></Worn>
-      <Worn n="w4" value="999"><Tag>{copy.tag}</Tag></Worn>
-      <span className={s.ghost} data-t="ghost" />
+    <div className={s.wearStage} data-m="wear">
+      <span className={s.wornGroup} data-pair="">
+        <Worn n="0"><Button text={copy.button} /></Worn>
+        <Worn n="1" value="999"><Tag>{copy.tag}</Tag></Worn>
+      </span>
+      <span className={s.wornGroup}><Worn n="2"><ReportCard copy={copy} /></Worn></span>
+      <span className={s.wornGroup}><Worn n="3"><MenuCard copy={copy} /></Worn></span>
+      <span className={s.wornGroup}><Worn n="4"><Composer copy={copy} /></Worn></span>
     </div>
   );
 }
@@ -81,20 +75,71 @@ export function NestScene({ copy }: { copy: RadiusCopy }) {
   );
 }
 
-/** Scene 5: a floor in quarter view; three real surfaces lie on it and rise in turn, their floor shadows widening and softening. */
-export function FloorScene({ copy }: { copy: RadiusCopy }) {
-  const items = [<Button key="b" text={copy.button} />, <ReportCard copy={copy} key="c" />, <SurfacePanel elevation="high" key="w"><Typo.Label as="span">{copy.panelTitle}</Typo.Label></SurfacePanel>];
+/** An elevation scene: the moment one shadow is cast, and under it when that shadow is used and its token. */
+function Level({ k, copy, children }: { k: number; copy: RadiusCopy; children: ReactNode }) {
+  const level = LEVELS[k]!;
   return (
-    <div className={s.floorStage} data-m="floor">
-      <span className={s.floor} />
-      {LEVELS.map((level, k) => (
-        <div className={s.spot} key={level.token} style={{ "--k": k } as CSSProperties}>
-          <span className={s.floorShadow} data-level={level.elevation} data-t={`fs-${k}`} />
-          <span className={s.post}><span className={s.postIn} data-t={`fp-${k}`} style={{ blockSize: px(level.rise) }} /></span>
-          <div className={s.lift} data-t={`fl-${k}`}>{items[k]}</div>
-          <span className={s.floorLabel} data-t={`fn-${k}`}>{`${copy[level.elevation]} · ${level.token}`}</span>
-        </div>
-      ))}
+    <div className={s.level} data-m={`lv-${k}`}>
+      {children}
+      <span className={s.levelNote}>
+        <span className={s.levelWhen}><R name={`lw-${k}`}>{copy[level.when]}</R></span>
+        <span className={s.levelToken}><R name={`lt-${k}`}>{level.token}</R></span>
+      </span>
     </div>
+  );
+}
+
+const cardBody = (title: string, body: string) => (
+  <Box border="hairline" padding="md" radius="panel" surface="raised">
+    <Stack gap="xs"><Typo.Label as="span">{title}</Typo.Label><Typo.Caption>{body}</Typo.Caption></Stack>
+  </Box>
+);
+
+/** Scene 5: a control you press: the chosen segment rises off its track on --shadow-control (the real SegmentedControl, before and after). */
+export function PressScene({ copy }: { copy: RadiusCopy }) {
+  const options = [{ value: "day", label: copy.day }, { value: "week", label: copy.week }, { value: "month", label: copy.month }];
+  const noop = () => undefined;
+  return (
+    <Level copy={copy} k={0}>
+      <span className={s.swap}>
+        <span data-t="px-0"><SegmentedControl ariaLabel={copy.period} onValueChange={noop} options={options} value="day" /></span>
+        <span data-t="px-1"><SegmentedControl ariaLabel={copy.period} onValueChange={noop} options={options} value="week" /></span>
+      </span>
+    </Level>
+  );
+}
+
+/** Scene 6: a card you drag: it lifts (scale and --shadow-drag-lift, as SortableCardList does), moves down a slot and settles. */
+export function DragScene({ copy }: { copy: RadiusCopy }) {
+  return (
+    <Level copy={copy} k={1}>
+      <span className={s.cards}>
+        {copy.cards.map(([title, body], k) => (
+          <span className={s.dragCard} data-lifted={k === 0 ? "" : undefined} data-m={`dc-${k}`} data-t={`dc-${k}`} key={title}>
+            {k === 0 ? <span className={s.dragShadow} data-t="dshadow" /> : null}
+            {cardBody(title, body)}
+          </span>
+        ))}
+      </span>
+    </Level>
+  );
+}
+
+/** Scene 7: a window over content: a panel at elevation high opens over the page's cards on --shadow-window. */
+export function OverScene({ copy }: { copy: RadiusCopy }) {
+  return (
+    <Level copy={copy} k={2}>
+      <span className={s.cards}>
+        {copy.cards.map(([title, body]) => <span key={title}>{cardBody(title, body)}</span>)}
+        <span className={s.window} data-t="win">
+          <SurfacePanel elevation="high">
+            <Stack gap="md">
+              <Stack gap="xs"><Typo.Label as="span">{copy.shareTitle}</Typo.Label><Typo.Caption>{copy.shareBody}</Typo.Caption></Stack>
+              <Stack align="row" gap="sm" justify="end"><Button size="sm" text={copy.cancel} variant="outline" /><Button size="sm" text={copy.share} /></Stack>
+            </Stack>
+          </SurfacePanel>
+        </span>
+      </span>
+    </Level>
   );
 }

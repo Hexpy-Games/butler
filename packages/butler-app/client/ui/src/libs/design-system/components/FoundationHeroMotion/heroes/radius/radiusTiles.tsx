@@ -81,18 +81,22 @@ export function RowTile({ copy }: { copy: RadiusCopy }) {
   );
 }
 
-/** Finale: the three elevations front-on, each on its own shadow. */
+/** Finale: the three shadows front-on, each on the surface that casts it: a control's panel, a dragged card, a window. */
 export function LiftTile({ copy }: { copy: RadiusCopy }) {
+  const name = (k: number) => (
+    <span className={s.liftName}>
+      <Typo.Label as="span">{copy[LEVELS[k]!.when]}</Typo.Label>
+      <span className={s.liftToken}>{LEVELS[k]!.token}</span>
+    </span>
+  );
   return (
     <div className={s.liftTile}>
-      {LEVELS.map((level) => (
-        <SurfacePanel elevation={level.elevation} key={level.token}>
-          <span className={s.liftName}>
-            <Typo.Label as="span">{copy[level.elevation]}</Typo.Label>
-            <span className={s.liftToken}>{level.token}</span>
-          </span>
-        </SurfacePanel>
-      ))}
+      <SurfacePanel elevation="low">{name(0)}</SurfacePanel>
+      <span className={s.dragCard} data-lifted="">
+        <span className={s.dragShadow} />
+        <Box border="hairline" padding="md" radius="panel" surface="raised">{name(1)}</Box>
+      </span>
+      <SurfacePanel elevation="high">{name(2)}</SurfacePanel>
     </div>
   );
 }

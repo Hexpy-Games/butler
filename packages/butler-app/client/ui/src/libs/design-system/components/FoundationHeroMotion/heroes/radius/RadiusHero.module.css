@@ -1,23 +1,5 @@
 /* 05 Radius and elevation hero (v3 scenes). Canvas px (../shared/grid.ts). */
 
-/* ---- Title: a control-radius outline behind the R's bowl ---- */
-
-.bowl {
-  position: absolute;
-  top: 0.14em;
-  left: 0.04em;
-  inline-size: 0.56em;
-  block-size: 0.4em;
-  overflow: visible;
-}
-
-.bowl rect {
-  fill: none;
-  stroke: color-mix(in srgb, var(--accent) 70%, transparent);
-  stroke-width: 3;
-  stroke-dasharray: 100;
-}
-
 /* ---- The corner under the loupe ---- */
 
 .cornerStage {
@@ -81,9 +63,10 @@
   color: var(--text-primary);
 }
 
+/* Tall: above the specimen (its corner stands 240 down), so no arc or line ever crosses it. */
 [data-layout="tall"] .readout {
-  top: calc(var(--space-4xl) * 11.5);
-  left: var(--space-xl);
+  top: var(--space-xl);
+  left: calc(var(--space-xl) * 2);
 }
 
 .loupe {
@@ -120,41 +103,52 @@
 
 /* ---- Who wears which ---- */
 
+/* Components top-aligned, so every value sits on one line above them. */
 .wearStage {
   position: relative;
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: center;
-  gap: var(--space-4xl) var(--space-3xl);
+  gap: var(--space-2xl) var(--space-3xl);
   max-inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
-  padding-block-start: var(--space-3xl);
 }
 
-.worn {
-  position: relative;
-  display: inline-grid;
+/* A value line, then the components: a pair centres its button and tag on each other. */
+.wornGroup {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
 }
 
 .wornValue {
-  position: absolute;
-  bottom: calc(100% + var(--space-sm));
-  left: 0;
+  align-self: end;
   color: var(--accent);
   font: var(--font-code);
   font-size: var(--typo-body-size);
+  line-height: var(--line-height-none);
 }
 
-.ghost {
+.wornHost {
+  position: relative;
+  display: inline-grid;
+  justify-self: start;
+}
+
+/* The arc drawn on the corner itself (radiusArc.tsx places it on the measured corner). */
+.wornArc {
   position: absolute;
-  top: 0;
-  left: 0;
-  box-sizing: border-box;
-  inline-size: var(--space-lg);
-  block-size: var(--space-lg);
-  border-top: 2.5px solid var(--accent);
-  border-left: 2.5px solid var(--accent);
+  overflow: visible;
   pointer-events: none;
+}
+
+.wornArc path {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-dasharray: 100;
 }
 
 /* ---- Nesting ---- */
@@ -239,88 +233,71 @@
   left: 0;
 }
 
-/* ---- The floor (quarter view) ---- */
+/* ---- Shadows in use: one scene each ---- */
 
-.floorStage {
+.level {
+  display: grid;
+  justify-items: start;
+  row-gap: var(--space-2xl);
+}
+
+.levelNote {
+  display: grid;
+  row-gap: var(--space-xs);
+}
+
+.levelWhen {
+  color: var(--text-primary);
+  font-size: var(--typo-h5-size);
+  font-weight: var(--font-weight-medium);
+}
+
+.levelToken {
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+}
+
+/* The control before and after the press, one over the other. */
+.swap {
+  display: grid;
+}
+
+.swap > * {
+  grid-area: 1 / 1;
+}
+
+.cards {
   position: relative;
-  inline-size: calc(var(--space-4xl) * 19);
-  block-size: calc(var(--space-4xl) * 9);
-  transform-style: preserve-3d;
+  display: grid;
+  row-gap: var(--space-md);
+  inline-size: calc(var(--space-4xl) * 7);
 }
 
-[data-layout="tall"] .floorStage {
-  inline-size: calc(var(--space-4xl) * 8);
-  block-size: calc(var(--space-4xl) * 13);
+.dragCard {
+  position: relative;
+  display: grid;
 }
 
-.floor {
-  position: absolute;
-  inset: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-composer);
-  background: color-mix(in srgb, var(--surface-raised) 50%, transparent);
+/* The lifted card stays over its neighbours; its shadow is the drag token on the card's own shape. */
+.dragCard[data-lifted] {
+  z-index: 1;
 }
 
-.spot {
-  position: absolute;
-  top: calc(var(--space-4xl) * 3);
-  left: calc(var(--space-4xl) * (1.5 + var(--k) * 5.8));
-  transform-style: preserve-3d;
-}
-
-[data-layout="tall"] .spot {
-  top: calc(var(--space-4xl) * (1 + var(--k) * 4));
-  left: calc(var(--space-4xl) * (0.8 + var(--k) * 0.9));
-}
-
-.floorShadow {
+.dragShadow {
   position: absolute;
   inset: 0;
   border-radius: var(--radius-panel);
-  background: var(--dialog-overlay-bg);
+  box-shadow: var(--shadow-drag-lift);
 }
 
-.floorShadow[data-level="low"] {
-  filter: blur(4px);
-}
-
-.floorShadow[data-level="medium"] {
-  filter: blur(12px);
-}
-
-.floorShadow[data-level="high"] {
-  filter: blur(26px);
-}
-
-.post {
+/* The window opens centred over the cards, wider than them, so it clearly stands over the page. */
+.window {
   position: absolute;
-  top: 50%;
-  left: calc(var(--space-md) * -1);
-  transform: rotateX(-90deg);
-  transform-origin: 50% 0;
-  transform-style: preserve-3d;
-}
-
-.postIn {
-  display: block;
-  inline-size: 2px;
-  background: var(--accent);
-  transform-origin: 50% 0;
-}
-
-.lift {
-  position: relative;
-  transform-style: preserve-3d;
-}
-
-.floorLabel {
-  position: absolute;
-  top: calc(100% + var(--space-md));
-  left: 0;
-  color: var(--text-tertiary);
-  font: var(--font-code);
-  font-size: var(--typo-caption-size);
-  white-space: nowrap;
+  inset: 0 calc(var(--space-xl) * -1);
+  z-index: 1;
+  block-size: fit-content;
+  margin-block: auto;
 }
 
 /* ---- Components and tiles ---- */
@@ -406,7 +383,12 @@
 
 .liftName {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: var(--space-md);
+  gap: var(--space-xs) var(--space-md);
+}
+
+.liftToken {
+  white-space: nowrap;
 }
