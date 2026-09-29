@@ -865,6 +865,7 @@ name = "butler-e2e"
 version = "0.0.0"
 dependencies = [
  "axum",
+ "base64 0.22.1",
  "butler-platform",
  "bytes",
  "chrono",

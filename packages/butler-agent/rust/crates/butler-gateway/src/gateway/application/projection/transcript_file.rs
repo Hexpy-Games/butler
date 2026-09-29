@@ -32,12 +32,18 @@ pub(in crate::gateway::application) async fn sync_chat_once(
         .map_err(GatewayApplicationError::internal_from)??;
     let Some(state) = state else { return Ok(false) };
     let spool_path = spool_path(&context.butler_data, chat_id, &path);
-    let mut checkpoint = prior
-        .clone()
-        .filter(|value| {
-            super::byte_window::reusable(value, &path, (state.device, state.inode), state.size)
-        })
-        .unwrap_or_else(|| fresh_checkpoint(chat_id, &session_id, &path, &spool_path, &state));
+    let mut checkpoint = match prior.clone() {
+        Some(value) if super::byte_window::reusable(&value, &path, state.size) => value,
+        found => {
+            if found.is_some() {
+                eprintln!(
+                    "[gateway] transcript checkpoint no longer matches its file; projecting {chat_id} from the start"
+                );
+            }
+            fresh_checkpoint(chat_id, &session_id, &path, &spool_path, &state)
+        }
+    };
+    (checkpoint.device, checkpoint.inode) = (state.device, state.inode);
     if checkpoint.spool_path.is_empty() {
         checkpoint.spool_path = spool_path.to_string_lossy().into_owned();
     }
@@ -59,6 +65,8 @@ pub(in crate::gateway::application) async fn sync_chat_once(
     let pending = read.pending;
     let completed = read.completed_spool.clone();
     let advanced = match read.event {
+        // A sweep over a chat whose file has not changed writes nothing.
+        None if prior.as_ref() == Some(&read.checkpoint) => true,
         None => {
             super::save_checkpoint(context, read.checkpoint).await?;
             true
