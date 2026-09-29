@@ -1744,8 +1744,8 @@ export type AuthorityRequestRef = string;
 
 /**
  * Narrow read-only UI card for one pending self-session authority request.
- * Only category, reason, executable, and command count are renderable; the
- * request reference exists solely as an in-memory React key and narrow
+ * The card renders `approval` (or, from older agents, `scope` and `reason`);
+ * the request reference exists solely as an in-memory React key and narrow
  * decision handle.
  */
 export interface AuthorityApprovalCard {
@@ -1754,10 +1754,40 @@ export interface AuthorityApprovalCard {
   reason: string;
   executable: string;
   commandCount: number;
+  /** Legacy Korean display text; kept for older agents and the conversation grant. */
   scope?: { title: string; description: string };
+  /** What the request would do, as data the App phrases in its own language. */
+  approval?: ApprovalSummary;
   sourceTurnId?: string;
   sourceCallId?: string;
   sourceSessionId?: string;
+}
+
+export type ApprovalRisk = "low" | "medium" | "high";
+
+/**
+ * The narrowed `approval` of a pending authority request. `actionKind` and
+ * target kinds stay open strings: kinds this App does not know fall back to a
+ * generic sentence instead of dropping the request.
+ */
+export interface ApprovalSummary {
+  actionKind: string;
+  /** The folder first where there is one, then files, a connector or a named target. */
+  targets: ApprovalTarget[];
+  count: number;
+  /** Up to three concrete items: relative file paths, or the command line as sent. */
+  examples: string[];
+  /** As the agent classified it; the App never classifies. */
+  risk?: ApprovalRisk;
+}
+
+/** One thing a request touches. Never an absolute path. */
+export interface ApprovalTarget {
+  kind: string;
+  /** Relative to the workspace (empty for a folder), `server/tool` or a target name. */
+  path: string;
+  /** A folder's label as #277 sends it in `path`: `garden`, or `garden/app` inside it. */
+  label?: string;
 }
 
 export interface ConversationPermissionView {

@@ -12,13 +12,29 @@ function rule(selector: string): string {
   return new RegExp(`${escaped}\\s*\\{([^}]*)\\}`, "u").exec(css)?.[1] ?? "";
 }
 
-function render(error?: string) {
+function render(error?: string, details?: readonly string[]) {
   return new JSDOM(renderToStaticMarkup(
     <ComposerDecisionPanel data-test-class="decision" icon={<svg data-icon="shield" />} title="Allow writing outside the workspace"
-      onOpen={() => undefined} error={error} aside={<span data-aside="count">+2</span>}
+      onOpen={() => undefined} error={error} details={details} aside={<span data-aside="count">+2</span>}
       actions={<><button type="button">Deny</button><button type="button">Allow</button></>} />,
   )).window.document;
 }
+
+// test-category: security
+test("ComposerDecisionPanel shows every detail line in full: lines wrap and are never cut", () => {
+  const command = `rm -rf ${"build/".repeat(40)}`;
+  const panel = render(undefined, ["a.png", command, "+22 more"]).querySelector('[data-test-class="decision"]')!;
+  const [subject, details, actions] = [...panel.children];
+  expect(subject!.getAttribute("data-has-details")).toBe("true");
+  expect(details!.getAttribute("data-slot")).toBe("composer-decision-details");
+  const lines = [...details!.querySelectorAll("p")];
+  expect(lines.map((line) => line.textContent)).toEqual(["a.png", command, "+22 more"]);
+  expect(lines.every((line) => line.getAttribute("data-truncate") === null && line.getAttribute("data-wrap") === "anywhere"))
+    .toBe(true);
+  expect(actions!.getAttribute("data-slot")).toBe("composer-decision-actions");
+  const plain = render(undefined, []).querySelector('[data-test-class="decision"]')!;
+  expect(plain.querySelector('[data-slot="composer-decision-details"]')).toBeNull();
+});
 
 test("ComposerDecisionPanel puts the icon, the clickable title and the aside on one subject row above the actions", () => {
   const document = render();

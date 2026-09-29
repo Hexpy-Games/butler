@@ -4,6 +4,7 @@ import { dsClass } from "../../lib/internal";
 import { Clickable } from "../../components/Clickable";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
+import { ComposerDecisionDetails } from "./ComposerDecisionDetails";
 import styles from "./ComposerDecisionPanel.module.css";
 
 export interface ComposerDecisionPanelProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivElement>>, "title" | "children"> {
@@ -12,7 +13,12 @@ export interface ComposerDecisionPanelProps extends Omit<DsBaseProps<HTMLAttribu
   /** What is being decided; clamps to two lines and opens the source. */
   title: string;
   onOpen: () => void;
-  /** Trailing subject-row content (a pending count, a compose-later button). */
+  /** Lines under the title (examples, a "+N more" line). Each wraps in full: what is decided is never cut. */
+  details?: readonly string[];
+  /** With `detailsShowLessLabel`, clamps long details to four lines behind an inline "Show more". */
+  detailsShowMoreLabel?: string;
+  detailsShowLessLabel?: string;
+  /** Trailing subject-row content (a status Tag, a pending count, a compose-later button). */
   aside?: ReactNode;
   /** A failed decision, announced as an alert between the subject and the actions. */
   error?: string;
@@ -20,19 +26,23 @@ export interface ComposerDecisionPanelProps extends Omit<DsBaseProps<HTMLAttribu
   actions: ReactNode;
 }
 
-/** A pending decision shown in place of the composer input: subject row, optional error, actions. */
-export function ComposerDecisionPanel({ icon, title, onOpen, aside, error, actions, className, ...props }: ComposerDecisionPanelProps) {
+/** A pending decision shown in place of the composer input: subject row, optional details and error, actions. */
+export function ComposerDecisionPanel({ icon, title, onOpen, details, detailsShowMoreLabel, detailsShowLessLabel, aside, error, actions, className, ...props }: ComposerDecisionPanelProps) {
+  const hasDetails = Boolean(details?.length);
   return (
     <div className={dsClass(styles.surface, className)} {...props}>
-      <div className={styles.subject} data-slot="composer-decision-subject">
+      <div className={styles.subject} data-slot="composer-decision-subject" data-has-details={hasDetails ? "true" : undefined}>
         {icon}
         <Stack.Item grow minWidth="0">
           <Clickable variant="text" onClick={onOpen} title={title}>
             <Typo.Label weight="medium" tone="primary" lineClamp={2} wrap="anywhere">{title}</Typo.Label>
           </Clickable>
         </Stack.Item>
-        {aside}
+        {aside ? <div className={styles.aside} data-slot="composer-decision-aside">{aside}</div> : null}
       </div>
+      {hasDetails ? (
+        <ComposerDecisionDetails lines={details!} showMoreLabel={detailsShowMoreLabel} showLessLabel={detailsShowLessLabel} />
+      ) : null}
       {error ? (
         <div className={styles.error}>
           <Typo.Caption as="p" tone="secondary" role="alert">{error}</Typo.Caption>

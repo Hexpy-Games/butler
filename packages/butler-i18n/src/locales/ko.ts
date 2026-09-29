@@ -1,5 +1,8 @@
 import type { AppCopy, BriefingFallbackCopy, NewChatBriefingSuggestion } from "../copy-contract.ts";
 
+/** 허용 요청이 작업할 곳: 따옴표로 감싼 작업 폴더 이름, 없으면 이 작업 폴더. */
+const workspaceName = (workspace: string | null) => workspace ? `'${workspace}'` : "이 작업 폴더";
+
 const generalFallback: BriefingFallbackCopy = {
     title: "오늘의 일을 같이 펼쳐볼까요",
     description: "짧게 열어볼 만한 시작점 몇 가지가 있습니다.",
@@ -425,6 +428,25 @@ export const koKrCopy: AppCopy = {
     contextMetric: (kind, value) => ({ full: `${value}% 사용`, used: `${value} 사용`, budget: `${value} 한도`, available: `압축 전 ${value} 사용 가능`, compact: `${value}에서 자동 압축` })[kind],
     activityHistory: (live, label, count) => `${live ? "현재" : "활동"} · ${label} · ${count}개 기록`,
     pendingApprovals: count => `허용 대기 ${count}개`, allowedCount: count => `허용 ${count}개`, revoke: title => `${title} — 해제`,
+    approvalRequest: {
+      editFiles: (count, workspace) => `${workspaceName(workspace)}의 ${count > 0 ? `파일 ${count}개를` : "파일을"} 수정할까요?`,
+      runCommand: workspace => `${workspaceName(workspace)}에서 명령을 실행할까요?`,
+      networkCommand: workspace => `${workspaceName(workspace)}에서 인터넷을 쓰는 명령을 실행할까요?`,
+      useConnector: (tool, server) => tool && server ? `${server}의 ${tool} 도구를 사용할까요?` : tool ? `${tool} 도구를 사용할까요?` : "연결된 도구를 사용할까요?",
+      manageSchedule: { create: "예약 작업을 만들까요?", delete: "예약 작업을 삭제할까요?", run: "예정된 예약 작업을 실행할까요?", change: "예약 작업을 변경할까요?" },
+      updateProject: "프로젝트 기록을 업데이트할까요?",
+      startConversation: "새 대화를 시작할까요?",
+      restartService: "버틀러를 다시 시작할까요?",
+      createWorktree: "이 대화용 워크트리를 만들까요?",
+      generic: "이 작업을 허용할까요?",
+      more: count => `외 ${count}개`,
+      risk: { low: "위험 낮음", medium: "위험 보통", high: "위험 높음" },
+      covers: {
+        editFiles: workspace => `${workspaceName(workspace)}의 파일 수정`,
+        command: workspace => `${workspaceName(workspace)}에서 이 명령 실행`,
+        other: "같은 작업",
+      },
+    },
     skillTitle: name => `${name}과 어떤 스킬을 만들어볼까요?`, reportPreparing: title => `${title} 작업에 대한 보고 준비 중`,
     progressDetails: (title, activity, progress) => `${title}, ${activity}${progress ? `, 진행도 ${progress}` : ""}, 진행 상세 보기`,
     viewActivity: title => `${title}, 활동 보기`, more: (title, count) => `${title} 외 ${count}개`, deleteItem: title => `"${title}" 항목을 삭제할까요?`,

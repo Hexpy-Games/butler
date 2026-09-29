@@ -98,6 +98,29 @@ export interface BriefingFallbackCopy { title: string; description: string; sugg
 
 type CountFormatter = (count: number) => string;
 
+/**
+ * An approval request as one plain question, per `approval.action_kind`
+ * (#235). `workspace` is the workspace label; `null` reads as "this workspace".
+ */
+export interface ApprovalRequestCopy {
+  editFiles: (count: number, workspace: string | null) => string;
+  runCommand: (workspace: string | null) => string;
+  networkCommand: (workspace: string | null) => string;
+  useConnector: (tool: string | null, server: string | null) => string;
+  manageSchedule: { create: string; delete: string; run: string; change: string };
+  updateProject: string;
+  startConversation: string;
+  restartService: string;
+  createWorktree: string;
+  /** Any kind this App does not know yet. */
+  generic: string;
+  /** The line after the examples. */
+  more: CountFormatter;
+  risk: { low: string; medium: string; high: string };
+  /** What "Always allow in this conversation" covers. */
+  covers: { editFiles: (workspace: string | null) => string; command: (workspace: string | null) => string; other: string };
+}
+
 export type AppLocale = "en-US" | "ko-KR";
 
 interface ConversationWorkCopy {
@@ -338,6 +361,7 @@ export interface AppCopy {
     contextMetric: (kind: "full" | "used" | "budget" | "available" | "compact", value: string | number) => string;
     activityHistory: (live: boolean, label: string, count: number) => string;
     pendingApprovals: (count: number) => string;
+    approvalRequest: ApprovalRequestCopy;
     allowedCount: (count: number) => string;
     revoke: (title: string) => string;
     skillTitle: (name: string) => string;

@@ -1,5 +1,8 @@
 import type { AppCopy, BriefingFallbackCopy, NewChatBriefingSuggestion } from "../copy-contract.ts";
 
+/** Where an approval request acts: the quoted workspace label, or this workspace. */
+const inWorkspace = (workspace: string | null) => workspace ? `in '${workspace}'` : "in this folder";
+
 const generalFallback: BriefingFallbackCopy = {
     title: "What should we open today?",
     description: "A few simple starting points are ready.",
@@ -425,6 +428,26 @@ export const enUsCopy: AppCopy = {
     contextMetric: (kind, value) => ({ full: `${value}% full`, used: `${value} used`, budget: `${value} budget`, available: `${value} available before compaction pressure`, compact: `auto compact at ${value}` })[kind],
     activityHistory: (live, label, count) => `${live ? "Current" : "Activity"} · ${label} · ${count} ${count === 1 ? "record" : "records"}`,
     pendingApprovals: count => `${count} pending ${count === 1 ? "approval" : "approvals"}`, allowedCount: count => `${count} allowed`, revoke: title => `${title} — Revoke`,
+    approvalRequest: {
+      editFiles: (count, workspace) =>
+        `Edit ${count > 0 ? `${count} ${count === 1 ? "file" : "files"}` : "files"} ${inWorkspace(workspace)}?`,
+      runCommand: workspace => `Run a command ${inWorkspace(workspace)}?`,
+      networkCommand: workspace => `Run a command that uses the internet ${inWorkspace(workspace)}?`,
+      useConnector: (tool, server) => tool && server ? `Use ${tool} from ${server}?` : tool ? `Use ${tool}?` : "Use a connected tool?",
+      manageSchedule: { create: "Create a schedule?", delete: "Delete a schedule?", run: "Run due schedules?", change: "Change a schedule?" },
+      updateProject: "Update the project records?",
+      startConversation: "Start a new conversation?",
+      restartService: "Restart Butler?",
+      createWorktree: "Create a worktree for this conversation?",
+      generic: "Allow this action?",
+      more: count => `+${count} more`,
+      risk: { low: "Low risk", medium: "Medium risk", high: "High risk" },
+      covers: {
+        editFiles: workspace => `File edits ${inWorkspace(workspace)}`,
+        command: workspace => `This command ${inWorkspace(workspace)}`,
+        other: "This same action",
+      },
+    },
     skillTitle: name => `What skill shall we build with ${name}?`, reportPreparing: title => `Preparing report for ${title}`,
     progressDetails: (title, activity, progress) => `${title}, ${activity}${progress ? `, progress ${progress}` : ""}, view progress details`,
     viewActivity: title => `${title}, view activity`, more: (title, count) => `${title} and ${count} more`, deleteItem: title => `Delete "${title}"?`,
