@@ -1,9 +1,10 @@
 name: Linux packages
 
 # Linux App packages (#260 Linux track): the Electron App with the bundled
-# native Butler Agent (portable static ORT recipe, #261) as a DEB for x64 and
-# arm64 and an Arch package for x64. Every package is installed in a clean
-# distribution container and its agent is run headless (start, /health, stop).
+# native Butler Agent (prebuilt ORT in CI, portable static ORT on tagged
+# releases, #261) as a DEB for x64 and arm64 and an Arch package for x64. Every
+# package is installed in a clean distribution container and its agent is run
+# headless (start, /health, stop).
 # Artifacts only: nothing is published to a GitHub Release.
 
 on:
@@ -97,7 +98,7 @@ jobs:
           if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == refs/tags/v* ]]; then
             cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
           else
-            cargo build --release --locked -p butler-agent --bin butler-agent
+            cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features prebuilt-ort
           fi
           echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$PWD/target/release/butler-agent" >> "$GITHUB_ENV"
 
