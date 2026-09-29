@@ -44,12 +44,10 @@ export function WindowScene({ copy }: { copy: LayoutCopy }) {
         <div className={s.device}>
           {MODES.map((mode) => (
             <div className={s.layer} data-t={`ly-${mode}`} key={mode}>
-              <div className={s.layer} data-t={`push-${mode}`}>
-                <DeviceFrame label={mode}><AppScreen copy={copy} mode={mode} open={mode === "expanded"} /></DeviceFrame>
-              </div>
+              <DeviceFrame label={mode}><AppScreen copy={copy} mode={mode} open={mode === "expanded"} /></DeviceFrame>
             </div>
           ))}
-          {/* Compact's drawer, open: it slides in over the whole width as the conversation is pushed out. */}
+          {/* Compact's drawer, open: it slides in over the whole width, the conversation staying where it is under it. */}
           <div className={s.layer} data-t="ly-drawer">
             <DeviceFrame label="drawer"><AppScreen copy={copy} mode="compact" open /></DeviceFrame>
           </div>

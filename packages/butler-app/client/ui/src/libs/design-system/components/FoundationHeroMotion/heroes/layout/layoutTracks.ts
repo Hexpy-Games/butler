@@ -19,8 +19,8 @@ import { DETENTS, MODES, WINDOW, ZOOM, tokenValue, type LayoutCopy } from "./lay
  *                       breakpoint the next mode takes over (the sidebar
  *                       becomes a drawer, compact tokens apply); width and
  *                       mode read above the handle
- *   38–42.8    Drawer   at 375 the sidebar opens as a full-width drawer,
- *                       pushing the conversation out, and closes again
+ *   38–42.8    Drawer   at 375 the sidebar opens as a full-width drawer
+ *                       over the conversation, and closes again
  */
 const AT = { win: 6.8, bar: 12.8, side: 14.8, pan: 16.2, read: 17.6, handle: 17.4, whole: 19, zoom: 36.2, drawer: 40.4, shut: 43.8, end: 46.4 } as const;
 /** Each drag: [start, arrive]; the next mode takes over on arrival. */
@@ -142,9 +142,8 @@ export function layoutTracks(copy: LayoutCopy) {
           return fades(`${id}-m${k}`, pairs, k === 0 ? 1 : 0, HANDOVER);
         }),
       ]),
-      // Compact at 375: the drawer slides in over the whole width, pushing the conversation out, and back.
+      // Compact at 375: the drawer slides in over the whole width (the conversation stays put under it), and back.
       { select: select("ly-drawer"), keys: looped([{ at: 0, xp: -100 }, { at: AT.drawer, xp: -100 }, { at: AT.drawer + 1.2, xp: 0, ease: "emphasized" }, { at: AT.shut, xp: 0 }, { at: AT.shut + 1.2, xp: -100, ease: "emphasized" }], close) },
-      { select: select("push-compact"), keys: looped([{ at: 0, xp: 0 }, { at: AT.drawer, xp: 0 }, { at: AT.drawer + 1.2, xp: 100, ease: "emphasized" }, { at: AT.shut, xp: 100 }, { at: AT.shut + 1.2, xp: 0, ease: "emphasized" }], close) },
       ...measure("drawer", AT.drawer + 0.6, AT.shut, "--adaptive-drawer-width · 100vw", "sx"),
     ];
     return { tracks, camera };
