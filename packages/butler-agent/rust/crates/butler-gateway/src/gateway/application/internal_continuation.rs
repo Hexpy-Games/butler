@@ -3,7 +3,7 @@
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Map, Value, json};
 
-use super::storage::AppStorageError;
+use super::storage::{AppStorageError, CachedSql};
 
 const DELETE_BATCH: usize = 64;
 
@@ -18,7 +18,7 @@ pub(super) fn remember(
     if !is_internal(event) {
         return Ok(());
     }
-    db.execute(
+    db.execute_cached(
         "INSERT OR IGNORE INTO app_internal_continuation_progress_events(turn_id,event_id) VALUES(?1,?2)",
         params![turn,event_id],
     ).map_err(AppStorageError::sqlite)?;
@@ -34,18 +34,18 @@ pub(super) fn retain_marker(
     let Some(event_id) = token(payload.get("event_id")) else {
         return Ok(false);
     };
-    let found = db.query_row(
+    let found = db.query_row_cached(
         "SELECT 1 FROM app_internal_continuation_progress_events WHERE turn_id=?1 AND event_id=?2",
         params![turn,event_id], |_|Ok(())
     ).optional().map_err(AppStorageError::sqlite)?.is_some();
     if !found {
         return Ok(false);
     }
-    db.execute(
+    db.execute_cached(
         "UPDATE app_internal_continuation_progress_events SET source_event_id=?1 WHERE turn_id=?2 AND event_id=?3",
         params![source_event_id,turn,event_id],
     ).map_err(AppStorageError::sqlite)?;
-    db.execute(
+    db.execute_cached(
         "INSERT OR REPLACE INTO app_terminal_turn_progress_rows(turn_id,source_event_id,row_json) VALUES(?1,?2,?3)",
         params![turn,source_event_id,json!({
             "id":format!("internal-continuation-{source_event_id}"),
@@ -56,13 +56,13 @@ pub(super) fn retain_marker(
 }
 
 pub(super) fn clear_batch(db: &Connection, turn: &str) -> Result<bool, AppStorageError> {
-    db.execute(&format!(
+    db.execute_cached(&format!(
         "DELETE FROM app_terminal_turn_progress_rows WHERE turn_id=?1 AND source_event_id IN (SELECT source_event_id FROM app_internal_continuation_progress_events WHERE turn_id=?1 LIMIT {DELETE_BATCH})"
     ),[turn]).map_err(AppStorageError::sqlite)?;
-    db.execute(&format!(
+    db.execute_cached(&format!(
         "DELETE FROM app_internal_continuation_progress_events WHERE turn_id=?1 AND event_id IN (SELECT event_id FROM app_internal_continuation_progress_events WHERE turn_id=?1 LIMIT {DELETE_BATCH})"
     ),[turn]).map_err(AppStorageError::sqlite)?;
-    db.query_row(
+    db.query_row_cached(
         "SELECT 1 FROM app_internal_continuation_progress_events WHERE turn_id=?1 LIMIT 1",
         [turn],
         |_| Ok(()),

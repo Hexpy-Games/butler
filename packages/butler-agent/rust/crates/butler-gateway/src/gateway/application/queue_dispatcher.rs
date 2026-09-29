@@ -12,7 +12,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use super::{
-    AppApplication, AppStorageError, GatewayApplicationError, app_error, queue,
+    AppApplication, AppStorageError, CachedSql, GatewayApplicationError, app_error, queue,
     send::ResolvedAppAdmission, settings,
 };
 
@@ -309,7 +309,7 @@ struct QueuedRow {
     control_resolution_json: String,
 }
 fn queued_rows(db: &mut Connection, chat: &str) -> Result<Vec<QueuedRow>, AppStorageError> {
-    let mut statement = db.prepare("SELECT id,text,control_resolution_json FROM session_queued_messages WHERE chat_id=?1 AND state='queued' AND NOT EXISTS (SELECT 1 FROM session_queue_pauses p WHERE p.chat_id=?1) ORDER BY rowid ASC LIMIT ?2")
+    let mut statement = db.prepare_cached("SELECT id,text,control_resolution_json FROM session_queued_messages WHERE chat_id=?1 AND state='queued' AND NOT EXISTS (SELECT 1 FROM session_queue_pauses p WHERE p.chat_id=?1) ORDER BY rowid ASC LIMIT ?2")
         .map_err(AppStorageError::sqlite)?;
     statement
         .query_map(params![chat, FIFO_WINDOW], |row| {
@@ -323,8 +323,21 @@ fn queued_rows(db: &mut Connection, chat: &str) -> Result<Vec<QueuedRow>, AppSto
         .collect::<Result<Vec<_>, _>>()
         .map_err(AppStorageError::sqlite)
 }
+/// The `state IN` term repeats the predicate of the partial
+/// `session_queued_messages_active_idx`, which makes it applicable.
+pub(super) const QUEUED_CHATS_SQL: &str = "SELECT chat_id FROM session_queued_messages q \
+    WHERE state='queued' AND state IN ('queued','dispatching') AND NOT EXISTS \
+    (SELECT 1 FROM session_queue_pauses p WHERE p.chat_id=q.chat_id) \
+    GROUP BY chat_id ORDER BY MIN(rowid)";
+/// Same index term as `QUEUED_CHATS_SQL`.
+pub(super) const LEASE_DEADLINE_SQL: &str = "SELECT MIN(lease_expires_at) \
+    FROM session_queued_messages WHERE state='dispatching' AND state IN ('queued','dispatching') \
+    AND lease_expires_at IS NOT NULL AND lease_expires_at>?1 \
+    AND (claim_owner IS NULL OR claim_owner<>?2)";
+
 fn queued_chats(db: &mut Connection) -> Result<Vec<String>, AppStorageError> {
-    let mut statement = db.prepare("SELECT chat_id FROM session_queued_messages q WHERE state='queued' AND NOT EXISTS (SELECT 1 FROM session_queue_pauses p WHERE p.chat_id=q.chat_id) GROUP BY chat_id ORDER BY MIN(rowid)")
+    let mut statement = db
+        .prepare_cached(QUEUED_CHATS_SQL)
         .map_err(AppStorageError::sqlite)?;
     statement
         .query_map([], |row| row.get(0))
@@ -333,21 +346,30 @@ fn queued_chats(db: &mut Connection) -> Result<Vec<String>, AppStorageError> {
         .map_err(AppStorageError::sqlite)
 }
 fn session_has_active_turn(db: &mut Connection, chat: &str) -> Result<bool, AppStorageError> {
-    db.query_row("SELECT 1 FROM turns WHERE chat_id=?1 AND state IN ('accepted','thinking','streaming','waiting_for_form','waiting_for_tool','cancelling','retrying') LIMIT 1", [chat], |_| Ok(()))
+    db.query_row_cached("SELECT 1 FROM turns WHERE chat_id=?1 AND state IN ('accepted','thinking','streaming','waiting_for_form','waiting_for_tool','cancelling','retrying') LIMIT 1", [chat], |_| Ok(()))
         .optional().map(|row| row.is_some()).map_err(AppStorageError::sqlite)
 }
 async fn next_deadline(app: &AppApplication) -> Result<Option<Duration>, GatewayApplicationError> {
     let owner = app.queue_owner.clone();
     let now = app.dependencies.identity_clock.now_iso();
-    app.storage.execute(move |db| {
-        let value: Option<String> = db.query_row("SELECT MIN(lease_expires_at) FROM session_queued_messages WHERE state='dispatching' AND lease_expires_at IS NOT NULL AND lease_expires_at>?1 AND (claim_owner IS NULL OR claim_owner<>?2)", params![now, owner], |row| row.get(0)).map_err(AppStorageError::sqlite)?;
-        let current = DateTime::parse_from_rfc3339(&now).ok();
-        Ok(value.and_then(|value| {
-            let millis = u64::try_from((DateTime::parse_from_rfc3339(&value).ok()? - current?)
-                .num_milliseconds().max(0)).unwrap_or_default();
-            Some(Duration::from_millis(millis))
-        }))
-    }).await.map_err(app_error)
+    app.storage
+        .execute(move |db| {
+            let value: Option<String> = db
+                .query_row_cached(LEASE_DEADLINE_SQL, params![now, owner], |row| row.get(0))
+                .map_err(AppStorageError::sqlite)?;
+            let current = DateTime::parse_from_rfc3339(&now).ok();
+            Ok(value.and_then(|value| {
+                let millis = u64::try_from(
+                    (DateTime::parse_from_rfc3339(&value).ok()? - current?)
+                        .num_milliseconds()
+                        .max(0),
+                )
+                .unwrap_or_default();
+                Some(Duration::from_millis(millis))
+            }))
+        })
+        .await
+        .map_err(app_error)
 }
 fn lock<T>(value: &Mutex<T>) -> parking_lot::MutexGuard<'_, T> {
     value.lock()
