@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { MessageListSurface } from "../../../../blocks/ConversationShell";
-import { MarkdownContent } from "../../../../blocks/MarkdownContent";
-import { MessageFooter, MessageRow } from "../../../../blocks/MessageRow";
+import { MarkdownCodeFrame, MarkdownContent } from "../../../../blocks/MarkdownContent";
+import { MessageFooter, MessageRow, MessageStatusLabel, MessageStatusRow } from "../../../../blocks/MessageRow";
+import { ButlerThinkingMark } from "../../../ButlerThinkingMark";
 import { CopyButton } from "../../../CopyButton";
 import { Typo } from "../../../Typo";
 import type { LayoutCopy } from "./layoutCopy";
@@ -17,7 +18,7 @@ function UserTurn({ copy, text }: { copy: LayoutCopy; text: string }) {
   );
 }
 
-function AssistantTurn({ copy, children, text }: { copy: LayoutCopy; children: ReactNode; text: string }) {
+function AssistantTurn({ copy, children, text, last }: { copy: LayoutCopy; children: ReactNode; text: string; last: boolean }) {
   return (
     <MessageRow role="assistant">
       <MarkdownContent>{children}</MarkdownContent>
@@ -26,18 +27,32 @@ function AssistantTurn({ copy, children, text }: { copy: LayoutCopy; children: R
         <span>{copy.worked}</span>
         <Typo.Text as="time" numeric="tabular">{copy.time}</Typo.Text>
       </MessageFooter>
+      {last ? (
+        <MessageStatusRow>
+          <MessageStatusLabel mark={<ButlerThinkingMark state="idle" />}>
+            <Typo.Caption as="span">{copy.done}</Typo.Caption>
+          </MessageStatusLabel>
+        </MessageStatusRow>
+      ) : null}
     </MessageRow>
   );
 }
 
-/** The conversation (MessageList): one finished turn, the user bubble with its footer and the markdown reply (a paragraph, a list with inline code); short enough to fit the phone-width window, so nothing scrolls under the titlebar or composer. */
+/** The conversation (MessageList): two finished turns, the user bubbles with their footers and the markdown replies (a paragraph, a list, a code block). */
 export function Turn({ copy }: { copy: LayoutCopy }) {
   return (
     <MessageListSurface>
       <UserTurn copy={copy} text={copy.ask1} />
-      <AssistantTurn copy={copy} text={copy.answer1}>
+      <AssistantTurn copy={copy} last={false} text={copy.answer1}>
         <p>{copy.answer1}</p>
         <ul>{copy.steps.map(([text, code, rest]) => <li key={text}>{text}{code ? <code>{code}</code> : null}{rest}</li>)}</ul>
+      </AssistantTurn>
+      <UserTurn copy={copy} text={copy.ask2} />
+      <AssistantTurn copy={copy} last text={copy.answer2}>
+        <p>{copy.answer2}</p>
+        <MarkdownCodeFrame actions={<CopyButton copiedLabel={copy.copy} label={copy.copy} text={copy.code} />} language="ts">
+          <code>{copy.code}</code>
+        </MarkdownCodeFrame>
       </AssistantTurn>
     </MessageListSurface>
   );
