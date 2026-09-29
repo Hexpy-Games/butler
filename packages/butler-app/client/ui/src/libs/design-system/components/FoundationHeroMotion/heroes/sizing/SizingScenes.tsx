@@ -14,9 +14,9 @@ export const TitleRails = (
   </svg>
 );
 
-/** Scene 2: the staff; a control drops into each lane; then an off-rail 32 flashes and snaps onto md. */
+/** Scene 2: the staff; a control drops into each lane. */
 export function StaffScene({ copy }: { copy: SizingCopy }) {
-  return <div className={s.staffStage} data-m="staff"><Staff copy={copy} ghost name="sf" /></div>;
+  return <div className={s.staffStage} data-m="staff"><Staff copy={copy} name="sf" /></div>;
 }
 
 /** Scene 3 (signature): the real titlebar; the pointer's 30 targets; the cursor becomes a finger and every target grows to 44, the buttons moving apart. */

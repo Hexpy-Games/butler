@@ -88,6 +88,8 @@
 }
 
 .note[data-k="2"] {
+  --control-hit-target: var(--control-height-md);
+
   left: calc(var(--space-4xl) * 7);
 }
 
@@ -97,62 +99,6 @@
 
 [data-layout="tall"] .note {
   left: var(--space-md);
-}
-
-/* The off-rail note: a 32 outline between the lanes, then a real Button on md (sized by the timeline). */
-.ghost {
-  position: absolute;
-  top: 0;
-  left: calc(var(--space-4xl) * 11.5);
-  inline-size: calc(var(--space-4xl) * 2.4);
-  block-size: var(--control-height-md);
-  opacity: 0;
-}
-
-[data-layout="tall"] .ghost {
-  right: var(--space-md);
-  left: auto;
-}
-
-.ghostWrong {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  box-sizing: border-box;
-  border: 1.5px dashed var(--danger);
-  border-radius: var(--radius-control);
-  background: color-mix(in srgb, var(--danger) 10%, transparent);
-  color: var(--danger);
-  font: var(--font-code);
-  font-size: var(--typo-caption-size);
-}
-
-.ghostButton {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  opacity: 0;
-}
-
-.ghostButton > * {
-  inline-size: 100%;
-}
-
-.ghostNote {
-  position: absolute;
-  inset-block: 0;
-  left: calc(100% + var(--space-md));
-  display: grid;
-  align-items: center;
-  color: var(--danger);
-  font: var(--font-code);
-  font-size: var(--typo-caption-size);
-  white-space: nowrap;
-}
-
-[data-layout="tall"] .ghostNote {
-  display: none;
 }
 
 /* ---- Pointer to touch ---- */
@@ -309,6 +255,8 @@
 
 /* A Butler window's top-left: the sidebar beside the conversation pane. */
 .window {
+  --control-hit-target: var(--control-height-md);
+
   position: relative;
   display: grid;
   grid-template-columns: calc(var(--space-4xl) * 6) calc(var(--space-4xl) * 9.5);
@@ -426,7 +374,7 @@
 /* ---- Form row on one rail ---- */
 
 .formRow {
-  --control-hit-target: var(--space-none);
+  --control-hit-target: var(--control-height-md);
 
   position: relative;
   display: inline-flex;

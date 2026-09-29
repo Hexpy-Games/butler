@@ -18,15 +18,12 @@ import s from "./SizingHero.module.css";
 
 const noop = () => undefined;
 
-/** The height the wrong note tries (canvas px): on no rail. */
-export const GHOST_PX = 32;
-
 /** The controls on the staff, one per rail (xs to lg), each exactly its rail's height. */
 function railControls(copy: SizingCopy): ReactNode[] {
   return [
     <Tag key="xs" size="md">{copy.tag}</Tag>,
     <SegmentedControl ariaLabel={copy.period} key="sm" onValueChange={noop} options={[{ value: "d", label: copy.day }, { value: "w", label: copy.week }]} size="sm" value="w" />,
-    <SelectButton aria-label={copy.model} key="md">{copy.auto}</SelectButton>,
+    <SelectButton aria-label={copy.model} data-size="sm" key="md">{copy.auto}</SelectButton>,
     <Button key="lg" size="lg" text={copy.find} />,
   ];
 }
@@ -34,10 +31,9 @@ function railControls(copy: SizingCopy): ReactNode[] {
 /**
  * The staff: four lanes, each exactly one control height tall (the live
  * token) between two rail lines, labelled at the left; a real control sits
- * in each. `name` prefixes the timeline's parts; `ghost` adds the off-rail
- * outline that snaps onto md and becomes a real Button there.
+ * in each. `name` prefixes the timeline's parts.
  */
-export function Staff({ copy, name, ghost = false }: { copy: SizingCopy; name?: string; ghost?: boolean }) {
+export function Staff({ copy, name }: { copy: SizingCopy; name?: string }) {
   const controls = railControls(copy);
   const t = (part: string) => (name ? `${name}-${part}` : undefined);
   return (
@@ -48,13 +44,6 @@ export function Staff({ copy, name, ghost = false }: { copy: SizingCopy; name?: 
           <span className={s.laneBody}>
             <span className={s.laneFill} data-t={t(`f${k}`)} />
             <span className={s.note} data-k={k} data-t={t(`c${k}`)}>{controls[k]}</span>
-            {ghost && rail.name === "md" ? (
-              <span className={s.ghost} data-t={t("ghost")}>
-                <span className={s.ghostWrong} data-t={t("gw")}>{GHOST_PX}</span>
-                <span className={s.ghostButton} data-t={t("gb")}><Button text={copy.send} variant="outline" /></span>
-                <span className={s.ghostNote} data-t={t("gn")}>{copy.offRail}</span>
-              </span>
-            ) : null}
           </span>
         </div>
       ))}
@@ -102,7 +91,7 @@ export function Frame({ copy, name, space = false }: { copy: SizingCopy; name?: 
 export function FormRow({ copy }: { copy: SizingCopy }) {
   return (
     <span className={s.formRow}>
-      <SelectButton aria-label={copy.model}>{copy.auto}</SelectButton>
+      <SelectButton aria-label={copy.model} data-size="sm">{copy.auto}</SelectButton>
       <Button text={copy.cancel} variant="outline" />
       <Button text={copy.save} />
       <span className={s.formRail} />
