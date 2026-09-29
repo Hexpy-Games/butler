@@ -64,14 +64,17 @@ if BUTLER_INSTALL_BASE_URL="$BUTLER_INSTALL_BASE_URL/bad" BUTLER_AGENT_HOME="$wo
   fail "install.sh accepted a checksum mismatch"
 fi
 grep -q "checksum mismatch" "$work/bad.out" || { cat "$work/bad.out"; fail "no checksum error"; }
-[ ! -e "$work/agent-bad" ] && [ ! -e "$work/bin-bad" ] || fail "a rejected download left files behind"
+for left in "$work/agent-bad" "$work/bin-bad"; do
+  [ ! -e "$left" ] || fail "a rejected download left files behind: $left"
+done
 # A `butler` that is not ours stops the install before anything is placed.
 mkdir "$work/bin-foreign"
 printf '#!/bin/sh\necho mine\n' > "$work/bin-foreign/butler"
 if BUTLER_AGENT_HOME="$work/agent-foreign" BUTLER_BIN_DIR="$work/bin-foreign" sh "$here/install.sh" --no-start > "$work/foreign.out" 2>&1; then
   fail "install.sh overwrote a foreign butler"
 fi
-[ "$(sed -n 2p "$work/bin-foreign/butler")" = "echo mine" ] && [ ! -e "$work/agent-foreign" ] || fail "a foreign butler was touched or files were installed"
+[ "$(sed -n 2p "$work/bin-foreign/butler")" = "echo mine" ] || fail "a foreign butler was overwritten"
+[ ! -e "$work/agent-foreign" ] || fail "files were installed next to a foreign butler"
 # The pre-native launcher is kept aside.
 mkdir "$work/bin-stale"
 # shellcheck disable=SC2016 # the launcher text is literal
