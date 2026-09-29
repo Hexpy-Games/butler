@@ -10,9 +10,14 @@ use crate::host::ResolvedInstallation;
 use crate::host::service::instance::{
     AdmissionLock, InstanceRecord, RestartIdentity, StopDelivery, StopIntent, StopRequest,
     StoppingFrom, force_stop, instance_is_locked, mark_stopping, process_matches,
-    refuse_live_legacy_process, remove_shutdown_flag, request_stop, revert_stopping,
-    withdraw_stop_intent, write_stop_intent,
+    record_process_gone, refuse_live_legacy_process, remove_shutdown_flag, request_stop,
+    revert_stopping, withdraw_stop_intent, write_stop_intent,
 };
+
+/// How often, and how far apart, an instance that looks like it is ending is
+/// checked for having exited.
+const EXIT_POLLS: u32 = 40;
+const EXIT_POLL: std::time::Duration = std::time::Duration::from_millis(50);
 
 /// What a controlled stop found and did.
 pub(super) enum StopReport {
@@ -138,15 +143,38 @@ async fn deliver_stop(
     if !same_instance(&current, record, expected) {
         return Err("native_service_instance_changed".into());
     }
-    if !instance_is_locked(data_root)? {
-        return Err(
-            "native_service_instance_ambiguous: refusing signal (the DATA lock is free)".into(),
-        );
-    }
-    if !process_matches(&current)? {
-        return Err("native_service_instance_ambiguous: refusing signal (the process does not match its record)".into());
+    // A startup that finds its record `stopping` ends itself, so the instance
+    // can exit before, or while, it is checked (it frees the lock, then ends):
+    // nothing is left to signal. The announcement is still written, for a
+    // supervisor that reads it after the exit.
+    let locked = instance_is_locked(data_root)?;
+    if !(locked && process_matches(&current)?) {
+        if !exits_soon(&current).await? {
+            return Err(if locked {
+                "native_service_instance_ambiguous: refusing signal (the process does not match its record)"
+            } else {
+                "native_service_instance_ambiguous: refusing signal (the DATA lock is free)"
+            }
+            .into());
+        }
+        write_stop_intent(data_root, &StopIntent::new(request, &current)).map_err(|source| {
+            crate::host::HostError::new("native_service_stop_intent_unavailable")
+                .with_source(source)
+        })?;
+        return Ok(None);
     }
     signal_intended_stop(data_root, &current, request).await
+}
+
+/// Whether the process `record` names is gone, or ends within a moment.
+async fn exits_soon(record: &InstanceRecord) -> Result<bool, crate::host::HostError> {
+    for _ in 0..EXIT_POLLS {
+        if record_process_gone(record)? {
+            return Ok(true);
+        }
+        tokio::time::sleep(EXIT_POLL).await;
+    }
+    record_process_gone(record)
 }
 
 /// Announces the stop to supervisors, then asks the instance to stop
