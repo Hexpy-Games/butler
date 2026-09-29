@@ -42,8 +42,8 @@ src/gateway/application/session_queue_mutations.rs	AppApplication::create_sessio
 src/gateway/application/session_queue_mutations.rs	AppApplication::update_session_queue_inner	214
 src/gateway/application/session_relocation.rs	AppApplication::perform_relocation	166
 src/gateway/application/session_relocation/records.rs	reserve	83
-src/gateway/application/session_views.rs	AppApplication::session_summary_owned	96
-src/gateway/application/session_views.rs	AppApplication::session_view_owned	126
+src/gateway/application/session_views.rs	AppApplication::session_summary_owned	92
+src/gateway/application/session_views.rs	AppApplication::session_view_owned	122
 src/gateway/application/settings/update/patch/project.rs	project	223
 src/gateway/application/settings/update/patch/sanitize.rs	sanitize	223
 src/gateway/application/settings/view.rs	read	256
