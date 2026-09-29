@@ -124,6 +124,24 @@ impl StopSignal {
         }
     }
 
+    /// Whether the shutdown flag at `path` stops this instance: a flag that
+    /// names another instance was left by a controller that died before it
+    /// removed it, and is removed here; one without a nonce stops any.
+    pub(super) fn flag_requested(&self, path: &std::path::Path) -> bool {
+        let Ok(text) = std::fs::read_to_string(path) else {
+            return path.exists();
+        };
+        let named = text.trim().strip_prefix("stop ").map(str::trim);
+        let ours = self.inner.instance.get().map(|(_, nonce)| nonce.as_str());
+        match (named, ours) {
+            (Some(named), Some(ours)) if named != ours => {
+                let _ = std::fs::remove_file(path);
+                false
+            }
+            _ => true,
+        }
+    }
+
     /// Whether the stop intent on disk names this instance.
     fn announced(&self) -> bool {
         let pid = std::process::id();

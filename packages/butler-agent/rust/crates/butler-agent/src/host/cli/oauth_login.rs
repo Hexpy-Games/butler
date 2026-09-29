@@ -177,7 +177,10 @@ fn account_label(profile: &serde_json::Value) -> &str {
 }
 
 async fn open_browser(url: &str) -> Result<bool, crate::host::HostError> {
-    let Ok(mut child) = tokio::process::Command::from(desktop::open_url(url))
+    let Some(command) = desktop::open_url(url) else {
+        return Ok(false);
+    };
+    let Ok(mut child) = tokio::process::Command::from(command)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())

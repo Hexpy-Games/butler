@@ -100,3 +100,66 @@ pub(super) fn remove_directory(path: &Path) -> Result<(), LedgerEffectError> {
         Err(_) => Err(LedgerEffectError::Uncertain { source: None }),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    use super::{displace, displaced_path, resume_displacement};
+
+    fn scratch(name: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "butler-displace-{name}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |elapsed| elapsed.as_nanos())
+        ));
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    fn tree(path: &Path, text: &str) {
+        fs::create_dir_all(path).unwrap();
+        fs::write(path.join("record"), text).unwrap();
+    }
+
+    fn text(path: &Path) -> String {
+        fs::read_to_string(path.join("record")).unwrap()
+    }
+
+    // test-category: race
+    #[test]
+    fn displacement_promotes_the_candidate_and_finishes_after_a_crash() {
+        let root = scratch("promote");
+        let (canonical, candidate) = (root.join("ledger"), root.join("ledger.candidate"));
+        tree(&canonical, "old");
+        tree(&candidate, "new");
+        displace(&candidate, &canonical).unwrap();
+        // The candidate is canonical now; the old tree is where an atomic
+        // exchange would have left it.
+        assert_eq!(text(&canonical), "new");
+        assert_eq!(text(&candidate), "old");
+        assert!(!displaced_path(&candidate).exists());
+
+        // A crash after the first rename leaves the canonical tree aside.
+        let root = scratch("crash");
+        let (canonical, candidate) = (root.join("ledger"), root.join("ledger.candidate"));
+        tree(&canonical, "old");
+        tree(&candidate, "new");
+        fs::rename(&canonical, displaced_path(&candidate)).unwrap();
+        resume_displacement(&candidate, &canonical).unwrap();
+        assert_eq!(text(&canonical), "new");
+        assert_eq!(text(&candidate), "old");
+
+        // Nothing moved yet: the canonical tree stays.
+        let root = scratch("untouched");
+        let (canonical, candidate) = (root.join("ledger"), root.join("ledger.candidate"));
+        tree(&canonical, "old");
+        tree(&candidate, "new");
+        resume_displacement(&candidate, &canonical).unwrap();
+        assert_eq!(text(&canonical), "old");
+        assert_eq!(text(&candidate), "new");
+    }
+}

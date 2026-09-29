@@ -81,6 +81,14 @@ pub(super) fn restrict_directory(path: &Path) -> Option<io::Result<()>> {
     ))
 }
 
+pub(super) fn protect_folder(_path: &Path) -> Option<io::Result<()>> {
+    None
+}
+
+pub(super) fn is_private(path: &Path) -> Option<bool> {
+    is_owner_only(&fs::symlink_metadata(path).ok()?)
+}
+
 pub(super) fn is_owner_only(metadata: &Metadata) -> Option<bool> {
     let private = if metadata.is_dir() {
         PRIVATE_DIRECTORY

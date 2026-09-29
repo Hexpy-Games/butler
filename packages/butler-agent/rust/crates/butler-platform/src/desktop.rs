@@ -20,9 +20,16 @@ pub fn has_display() -> bool {
         .any(|name| std::env::var_os(name).is_some_and(|value| !value.is_empty()))
 }
 
-/// The command that opens `url` in the default browser. It exits once the
-/// link is handed over; its status says whether that worked.
-pub fn open_url(url: &str) -> Command {
+/// The command that opens `url` in the default browser; `None` unless it is
+/// an `http://` or `https://` link (the handlers on some hosts run anything
+/// else, such as a file path or another protocol). It exits once the link is
+/// handed over; its status says whether that worked.
+pub fn open_url(url: &str) -> Option<Command> {
+    let scheme_end = url.find("://")?;
+    let scheme = url.get(..scheme_end)?;
+    if !(scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https")) {
+        return None;
+    }
     let mut command = if cfg!(target_os = "macos") {
         Command::new("open")
     } else if cfg!(windows) {
@@ -33,5 +40,5 @@ pub fn open_url(url: &str) -> Command {
         Command::new("xdg-open")
     };
     command.arg(url);
-    command
+    Some(command)
 }

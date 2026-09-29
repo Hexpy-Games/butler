@@ -97,6 +97,15 @@ pub fn login_shell(
     }
 }
 
+/// Adds the arguments of `invocation` to `command`, which starts its
+/// program. Windows passes the text `cmd.exe /d /s /c` runs verbatim between
+/// one pair of quotes: `cmd` does not undo the `\"` escaping that
+/// `Command::arg` applies, so a command containing quotes would reach it
+/// mangled.
+pub fn add_arguments(command: &mut std::process::Command, invocation: &Invocation) {
+    shell::add_arguments(command, invocation);
+}
+
 /// The shell of legacy compatibility commands: `/bin/bash [-o pipefail] -lc`
 /// on Unix and PowerShell on Windows (`BUTLER_POWERSHELL` in `environment`
 /// overrides `powershell.exe`).

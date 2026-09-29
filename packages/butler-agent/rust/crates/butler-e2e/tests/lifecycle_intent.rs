@@ -470,6 +470,8 @@ async fn svc_07_stop_during_startup_exits_zero() -> Result<(), HarnessError> {
             "{:?}",
             instance_record(&data)
         );
+    } else {
+        eprintln!("butler-e2e: SKIPPED (unannounced stop: this host has no stop signals)");
     }
 
     s.gw = s.agent.start_again().await?;

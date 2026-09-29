@@ -38,7 +38,7 @@
 //!    checks.
 //! 2. When the grace period passes, [`terminate`] ends the process, only
 //!    while it is still the process that started at the recorded time:
-//!    SIGKILL on Unix; on Windows `taskkill /F` while a handle to the process,
+//!    SIGKILL on Unix; on Windows `TerminateProcess` while a handle to the process,
 //!    whose start time was compared through it, stays open, so the id cannot
 //!    name another process in between.
 
@@ -222,7 +222,7 @@ pub fn request_stop(pid: u32) -> Result<(), StopError> {
 /// Ends process `pid` at once, only while it is still the process that
 /// started at `started` (a [`process_start`] value): SIGKILL on Unix, right
 /// after the start is read again. [`StopError::Gone`] when it has exited or
-/// its id names another process now. Windows ends it with `taskkill /F`
+/// its id names another process now. Windows ends it with `TerminateProcess`
 /// while a handle opened to read its start keeps the id from being reused.
 pub fn terminate(pid: u32, started: &str) -> Result<(), StopError> {
     sys::terminate(pid, started)

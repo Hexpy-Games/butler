@@ -15,6 +15,11 @@ mod windows;
 #[cfg(windows)]
 use windows as sys;
 
+/// The baseline zone archive (`BTZ2`: a count, then per zone its name,
+/// canonical name and TZif bytes, sorted by lower-case name), frozen from ICU
+/// and embedded in the executable.
+pub const BASELINE_ARCHIVE: &[u8] = include_bytes!("../data/source-2026c.btz");
+
 /// The compiled (TZif) rules of the IANA zone `name` (such as
 /// `Asia/Seoul`). The caller checks that `name` is a relative path without
 /// `.` or `..` parts. A zone the host does not know is a

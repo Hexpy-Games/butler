@@ -180,12 +180,27 @@ fn init_repository(folder: &Path) -> Result<(), HarnessError> {
     Ok(())
 }
 
-/// Writes an executable shell script: `lines`, one per line.
+/// Writes a shell script: `lines`, one per line. Where files run by their
+/// execute bit it is marked executable; Git for Windows runs it with its own
+/// `sh`.
 fn script(path: &Path, lines: &[&str]) -> Result<(), HarnessError> {
     std::fs::write(path, format!("#!/bin/sh\n{}\n", lines.join("\n")))?;
-    butler_platform::launcher::mark_executable(path)
-        .expect("shell scripts run by name on this host")?;
+    butler_platform::launcher::mark_executable(path).transpose()?;
     Ok(())
+}
+
+/// `path` with forward slashes: what Git's shell and config both take.
+fn slash(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+/// Proves a hook script can run at all here, so that "it did not run" in the
+/// scenario means the product refused it: Git runs it with `args`, then the
+/// marker it leaves is removed.
+fn assert_hook_can_run(folder: &Path, args: &[&str], marker: &Path) {
+    git(folder, args);
+    assert!(marker.exists(), "the hook cannot run in this environment");
+    std::fs::remove_file(marker).unwrap();
 }
 
 /// PRJ-05 — the dashboard never runs a program the repository's own config
@@ -196,20 +211,15 @@ fn script(path: &Path, lines: &[&str]) -> Result<(), HarnessError> {
 #[tokio::test]
 async fn prj_05_repository_config_never_runs_programs() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    if !butler_platform::command_sandbox::POSIX_SHELL {
-        return Ok(());
-    }
     let s = Setup::new("PRJ-05")?.start().await?;
     let (monitored_id, monitored) = project(&s, "Monitored").await?;
     init_repository(&monitored)?;
     let fsmonitor_ran = s.sandbox.root.join("fsmonitor-ran");
     let hook = s.sandbox.root.join("fsmonitor-hook.sh");
-    let touch = format!("touch '{}'", fsmonitor_ran.display());
+    let touch = format!("touch '{}'", slash(&fsmonitor_ran));
     script(&hook, &[&touch, "exit 1"])?;
-    git(
-        &monitored,
-        &["config", "core.fsmonitor", hook.to_str().unwrap()],
-    );
+    git(&monitored, &["config", "core.fsmonitor", &slash(&hook)]);
+    assert_hook_can_run(&monitored, &["status", "--porcelain"], &fsmonitor_ran);
     std::fs::write(monitored.join("draft.txt"), "untracked")?;
     assert_eq!(
         dashboard_status(&s, &monitored_id, &monitored).await?,
@@ -221,13 +231,11 @@ async fn prj_05_repository_config_never_runs_programs() -> Result<(), HarnessErr
     init_repository(&filtered)?;
     let filter_ran = s.sandbox.root.join("filter-ran");
     let filter = s.sandbox.root.join("filter.sh");
-    let touch = format!("touch '{}'", filter_ran.display());
+    let touch = format!("touch '{}'", slash(&filter_ran));
     script(&filter, &[&touch, "cat"])?;
-    git(
-        &filtered,
-        &["config", "filter.evil.clean", filter.to_str().unwrap()],
-    );
+    git(&filtered, &["config", "filter.evil.clean", &slash(&filter)]);
     std::fs::write(filtered.join(".gitattributes"), "* filter=evil\n")?;
+    assert_hook_can_run(&filtered, &["hash-object", "tracked.txt"], &filter_ran);
     std::fs::write(filtered.join("tracked.txt"), "changed\n")?;
     assert_eq!(
         dashboard_git(&s, &filtered_id).await?,
@@ -257,9 +265,10 @@ async fn prj_05_repository_config_never_runs_programs() -> Result<(), HarnessErr
 #[tokio::test]
 async fn prj_06_missing_or_hanging_git_leaves_status_unknown() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    if !butler_platform::command_sandbox::POSIX_SHELL {
-        return Ok(());
-    }
+    butler_e2e::skip_unless!(
+        butler_platform::command_sandbox::POSIX_SHELL,
+        "this scenario replays commands recorded for a POSIX shell; the Windows shell is covered by butler-turn tests"
+    );
     let expected = state(true, Some("main"), None, None, None);
 
     let setup = Setup::new("PRJ-06-MISSING")?;

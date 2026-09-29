@@ -98,6 +98,8 @@ async fn onb_01_unusable_data_dirs_are_refused() -> Result<(), HarnessError> {
             0,
             "partial files in the read-only data dir"
         );
+    } else {
+        eprintln!("butler-e2e: SKIPPED (part (a): this host has no read-only directories)");
     }
     // (b) data dir inside the installation dir.
     let inside = setup.sandbox.install.join("data");

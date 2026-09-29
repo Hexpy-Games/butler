@@ -108,6 +108,11 @@ impl InstanceGuard {
         app_supervised: bool,
     ) -> Result<Self, crate::host::HostError> {
         validate_write_destinations(data_root, installation)?;
+        // Where files have no owner-only mode (Windows), the DATA folder's
+        // access list keeps its secrets from other users.
+        if secure_fs::is_private(data_root) == Some(false) {
+            let _ = secure_fs::protect_folder(data_root);
+        }
         let lock_path = instance_lock_path(data_root);
         let file = open_lock(&lock_path, true)?;
         let lock = InstanceLock::try_exclusive(file).map_err(|error| match error {

@@ -27,6 +27,11 @@ use windows as sys;
 /// Whether this host can restrict files and directories to their owner.
 pub const OWNER_ONLY: bool = sys::OWNER_ONLY;
 
+/// Whether [`protect_folder`] and [`is_private`] work: every host can keep a
+/// folder, and what is created in it, to its owner (with modes on Unix, with
+/// an access list on Windows).
+pub const PROTECTED_FOLDERS: bool = true;
+
 /// Whether this host has permission modes ([`FileMode`]).
 pub const PERMISSION_MODES: bool = sys::PERMISSION_MODES;
 
@@ -91,6 +96,21 @@ pub fn create_private_dir_all(path: &Path) -> io::Result<()> {
 /// [`io::ErrorKind::AlreadyExists`].
 pub fn create_private_dir(path: &Path) -> io::Result<()> {
     sys::create_private_dir(path)
+}
+
+/// Restricts the folder `path`, and everything created in it afterwards, to
+/// its owner (and the system) with an access list: the Windows way, where
+/// files get no owner-only mode of their own but inherit their folder's
+/// list. `None` where permission modes already do it (Unix).
+pub fn protect_folder(path: &Path) -> Option<io::Result<()>> {
+    sys::protect_folder(path)
+}
+
+/// Whether the file or folder at `path` is only its owner's (Windows: and the
+/// system's) whatever way the host expresses it; `None` where that cannot be
+/// read.
+pub fn is_private(path: &Path) -> Option<bool> {
+    sys::is_private(path)
 }
 
 /// Makes `builder` create directories only the owner may use; `None` (and

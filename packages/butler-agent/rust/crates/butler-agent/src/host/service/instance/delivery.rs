@@ -50,7 +50,7 @@ pub(crate) async fn request_stop(
         Err(error) => return Err(stop_error(error)),
     }
     if record.control_endpoint.is_none() {
-        write_shutdown_flag(data_root)?;
+        write_shutdown_flag(data_root, &record.nonce)?;
         return Ok(StopDelivery::ShutdownFlag);
     }
     match crate::host::app::gateway_lifecycle::request_service_stop(record).await {
@@ -63,12 +63,15 @@ pub(crate) async fn request_stop(
     }
 }
 
-fn write_shutdown_flag(data_root: &Path) -> Result<(), crate::host::HostError> {
+/// The flag names the instance it stops (`stop <nonce>`), so a flag left by
+/// a controller that died does not stop the next instance. A flag without a
+/// nonce (written by hand) stops whichever instance finds it.
+fn write_shutdown_flag(data_root: &Path, nonce: &str) -> Result<(), crate::host::HostError> {
     let path = shutdown_flag_path(data_root);
     let written = path
         .parent()
         .map_or(Ok(()), butler_platform::secure_fs::create_private_dir_all)
-        .and_then(|()| fs::write(&path, b"stop\n"));
+        .and_then(|()| fs::write(&path, format!("stop {nonce}\n")));
     written.map_err(|source| {
         crate::host::HostError::new("native_service_shutdown_flag_unavailable").with_source(source)
     })
@@ -83,7 +86,7 @@ pub(crate) fn remove_shutdown_flag(data_root: &Path) -> io::Result<()> {
     }
 }
 
-/// Ends the instance `record` names at once (SIGKILL; on Windows `taskkill /F`
+/// Ends the instance `record` names at once (SIGKILL; on Windows `TerminateProcess`
 /// while a handle to the process is held), only while its process still
 /// started when the record says; otherwise it has exited
 /// (`native_service_process_exited`).

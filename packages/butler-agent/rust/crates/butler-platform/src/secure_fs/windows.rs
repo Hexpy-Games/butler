@@ -3,16 +3,20 @@
 //! `Unsupported`; directories and files are still created, and renames are
 //! retried while another process briefly holds a file.
 //!
-//! Files get the access list they inherit from their folder. The default
-//! DATA folder, `%USERPROFILE%\.butler`, inherits the user profile's list
-//! (the user, SYSTEM and Administrators), so other users cannot read it; a
-//! DATA folder elsewhere is not restricted. Setting an owner-only access
-//! list needs the Win32 security API, which no maintained crate offers
-//! without `unsafe` here, so [`OWNER_ONLY`] stays `false` until one does.
+//! Files get no owner-only mode of their own: they inherit the access list of
+//! their folder. A folder [`protect_folder`] restricted (and every folder
+//! [`create_private_dir_all`] creates) grants full control to the current
+//! account and the system only, through `icacls` by absolute path, so no
+//! unsafe Win32 calls are needed. [`is_private`] reads a list back the same
+//! way. [`OWNER_ONLY`] stays `false`: it describes per-file modes, which
+//! Windows lacks, and `is_owner_only` cannot tell from metadata.
 
 use std::fs::{self, DirBuilder, File, Metadata, OpenOptions};
 use std::io;
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::{ExchangeError, FileIdentity, FileMode, FileTime, Writability};
@@ -27,15 +31,120 @@ pub(super) const ATOMIC_EXCHANGE: bool = false;
 /// `ERROR_SHARING_VIOLATION` and `ERROR_LOCK_VIOLATION`.
 const SHARING_ERRORS: [i32; 2] = [32, 33];
 /// How often, and how far apart, a refused rename is retried.
-const RENAME_ATTEMPTS: u32 = 20;
-const RENAME_BACKOFF: std::time::Duration = std::time::Duration::from_millis(50);
+const RENAME_ATTEMPTS: u32 = 10;
+const RENAME_BACKOFF: std::time::Duration = std::time::Duration::from_millis(20);
 
+/// Creates the folder and its missing parents; the topmost one created is
+/// restricted to its owner, and everything below inherits that.
 pub(super) fn create_private_dir_all(path: &Path) -> io::Result<()> {
-    fs::create_dir_all(path)
+    let top = path
+        .ancestors()
+        .take_while(|folder| !folder.exists())
+        .last();
+    fs::create_dir_all(path)?;
+    match top {
+        Some(top) => grant(top, true),
+        None => Ok(()),
+    }
 }
 
 pub(super) fn create_private_dir(path: &Path) -> io::Result<()> {
-    fs::create_dir(path)
+    fs::create_dir(path)?;
+    grant(path, true)
+}
+
+pub(super) fn protect_folder(path: &Path) -> Option<io::Result<()>> {
+    Some(grant(path, true))
+}
+
+/// The account that runs this process: `whoami /user` names it and its SID.
+struct Account {
+    name: String,
+    sid: String,
+}
+
+fn account() -> Option<&'static Account> {
+    static ACCOUNT: OnceLock<Option<Account>> = OnceLock::new();
+    ACCOUNT
+        .get_or_init(|| {
+            let output = system_tool("whoami")
+                .args(["/user", "/fo", "csv", "/nh"])
+                .output()
+                .ok()
+                .filter(|output| output.status.success())?;
+            let text = String::from_utf8_lossy(&output.stdout).into_owned();
+            let mut fields = text.trim().split("\",\"");
+            let name = fields.next()?.trim_start_matches('"').to_owned();
+            let sid = fields.next()?.trim_end_matches('"').to_owned();
+            sid.starts_with("S-1-").then_some(Account { name, sid })
+        })
+        .as_ref()
+}
+
+/// A tool of the Windows system folder, by absolute path and without a
+/// console window.
+fn system_tool(name: &str) -> Command {
+    let root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
+    let mut command = Command::new(PathBuf::from(root).join("System32").join(name));
+    command.creation_flags(CREATE_NO_WINDOW);
+    command
+}
+
+/// `CREATE_NO_WINDOW`.
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+/// The local system account, which keeps access so services and backups work.
+const SYSTEM_SID: &str = "S-1-5-18";
+
+/// Removes the inherited access list of `path` and grants full control to
+/// the current account and the system only; a folder's grant is inherited by
+/// what is created in it (`icacls`, so no unsafe Win32 calls are needed).
+fn grant(path: &Path, folder: bool) -> io::Result<()> {
+    let account = account().ok_or_else(|| io::Error::other("the current account is unknown"))?;
+    let rights = if folder { "(OI)(CI)F" } else { "F" };
+    let output = system_tool("icacls")
+        .arg(path)
+        .args(["/inheritance:r", "/grant:r"])
+        .arg(format!("*{}:{rights}", account.sid))
+        .arg(format!("*{SYSTEM_SID}:{rights}"))
+        .output()?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(io::Error::other(format!(
+            "icacls could not restrict the folder: {}",
+            String::from_utf8_lossy(&output.stdout).trim()
+        )))
+    }
+}
+
+/// Reads the access list with `icacls`: private when only the current
+/// account and the system are on it.
+pub(super) fn is_private(path: &Path) -> Option<bool> {
+    let account = account()?;
+    let output = system_tool("icacls").arg(path).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout).into_owned();
+    let shown = path.display().to_string();
+    let mut entries = 0;
+    for line in text.lines() {
+        let line = line.trim();
+        let line = line.strip_prefix(shown.as_str()).unwrap_or(line).trim();
+        let Some((who, rights)) = line.split_once(":(") else {
+            continue;
+        };
+        if !rights.contains(')') {
+            continue;
+        }
+        entries += 1;
+        let who = who.trim();
+        let system = who.eq_ignore_ascii_case("NT AUTHORITY\\SYSTEM") || who == SYSTEM_SID;
+        if !(system || who.eq_ignore_ascii_case(&account.name) || who == account.sid) {
+            return Some(false);
+        }
+    }
+    (entries > 0).then_some(true)
 }
 
 pub(super) fn owner_only_dirs(_builder: &mut DirBuilder) -> Option<&mut DirBuilder> {

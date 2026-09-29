@@ -74,7 +74,7 @@ pub(super) async fn poll_service(
     );
     fallback_poll.set_missed_tick_behavior(MissedTickBehavior::Skip);
     let result = loop {
-        if stop.requested() || shutdown_flag.exists() {
+        if stop.requested() || stop.flag_requested(&shutdown_flag) {
             stop.request();
             break Ok(());
         }

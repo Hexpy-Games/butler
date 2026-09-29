@@ -1,14 +1,12 @@
-//! Windows has no zoneinfo directory: the rules are the baseline set that the
+//! Windows has no zoneinfo directory: the rules are the baseline archive that the
 //! executable embeds (`BTZ2`: a count, then per zone its name, canonical
 //! name and TZif bytes, sorted by lower-case name).
 
 use std::cmp::Ordering;
 use std::io;
 
-const DATA: &[u8] = include_bytes!("../../../butler-agent/resources/timezones/source-2026c.btz");
-
 pub(super) fn zone_rules(name: &str) -> io::Result<Vec<u8>> {
-    lookup(DATA, name).ok_or_else(|| io::ErrorKind::NotFound.into())
+    lookup(super::BASELINE_ARCHIVE, name).ok_or_else(|| io::ErrorKind::NotFound.into())
 }
 
 fn lookup(data: &[u8], name: &str) -> Option<Vec<u8>> {

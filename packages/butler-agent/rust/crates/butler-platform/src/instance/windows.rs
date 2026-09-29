@@ -107,7 +107,7 @@ pub(super) fn terminate(pid: u32, started: &str) -> Result<(), StopError> {
         Ok(())
     } else {
         Err(StopError::Delivery(
-            "taskkill could not end the process".to_owned(),
+            "the process could not be ended".to_owned(),
         ))
     }
 }

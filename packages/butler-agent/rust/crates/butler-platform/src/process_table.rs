@@ -46,7 +46,8 @@ impl ProcessView {
         Some(dunce::simplified(executable).to_path_buf())
     }
 
-    /// Ends the process at once (`taskkill /F`), while this view keeps its id
+    /// Ends the process at once (`TerminateProcess` through the handle this
+    /// view holds, not a tool found on `PATH`), while the view keeps its id
     /// from naming another process. Whether the process was ended.
     pub(crate) fn kill(&self) -> bool {
         self.system

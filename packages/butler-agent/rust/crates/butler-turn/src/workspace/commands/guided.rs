@@ -162,7 +162,7 @@ async fn prepare_command(
         ));
     }
     let cwd = resolve_guided_cwd(&input.workspace_root, input.cwd.as_deref()).await?;
-    let (executable, arguments) = invocation(input)?;
+    let invocation = invocation(input)?;
     let environment = tokio::task::spawn_blocking({
         let host = input.host_environment.clone();
         let butler_data = input.butler_data.clone();
@@ -179,9 +179,9 @@ async fn prepare_command(
             "Command owner is closing",
         ));
     }
-    let mut command = Command::new(executable);
+    let mut command = Command::new(&invocation.program);
+    command_sandbox::add_arguments(command.as_std_mut(), &invocation);
     command
-        .args(arguments)
         .current_dir(&cwd)
         .env_clear()
         .envs(environment)
@@ -367,7 +367,7 @@ pub(super) fn guarded_directory(
 
 /// The login-shell invocation of a guided command. Read-only commands run in
 /// the host sandbox; a host without one refuses them.
-fn invocation(input: &GuidedCommandInput) -> Result<(String, Vec<String>), CommandError> {
+fn invocation(input: &GuidedCommandInput) -> Result<command_sandbox::Invocation, CommandError> {
     let access = match input.access {
         GuidedAccess::FullAccessContained => ShellAccess::Full,
         GuidedAccess::ReadOnlyObservation => ShellAccess::ReadOnly,
@@ -379,7 +379,7 @@ fn invocation(input: &GuidedCommandInput) -> Result<(String, Vec<String>), Comma
                 "This host cannot enforce the admitted read-only local command boundary.",
             )
         })?;
-    Ok((invocation.program, invocation.arguments))
+    Ok(invocation)
 }
 
 pub(super) fn guided_timeout(value: Option<f64>) -> Duration {

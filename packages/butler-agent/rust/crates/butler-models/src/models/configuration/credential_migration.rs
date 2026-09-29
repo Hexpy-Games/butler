@@ -101,8 +101,8 @@ impl CredentialMigrationReport {
 pub struct CredentialFileSummary {
     /// Whether the credentials file exists.
     pub present: bool,
-    /// Whether the file is only its owner's; `None` where the host has no
-    /// owner-only permissions or the file is absent.
+    /// Whether the file is only its owner's (mode bits, or the folder's
+    /// access list on Windows); `None` where that cannot be read.
     pub owner_only: Option<bool>,
     /// Entries per store (`keychain`, ..., `legacy_plaintext`).
     pub storage: std::collections::BTreeMap<String, usize>,
@@ -115,12 +115,16 @@ pub struct CredentialFileSummary {
 /// Summarizes `data_root`'s credentials file (read-only).
 pub fn credential_file_summary(data_root: &Path) -> CredentialFileSummary {
     let path = data_root.join(CREDENTIALS_FILE);
-    let Ok(metadata) = std::fs::symlink_metadata(&path) else {
-        return CredentialFileSummary::default();
-    };
+    if std::fs::symlink_metadata(&path).is_err() {
+        // Absent: `owner_only` says whether the folder new keys go to is.
+        return CredentialFileSummary {
+            owner_only: secure_fs::is_private(data_root),
+            ..CredentialFileSummary::default()
+        };
+    }
     let mut summary = CredentialFileSummary {
         present: true,
-        owner_only: secure_fs::is_owner_only(&metadata),
+        owner_only: secure_fs::is_private(&path),
         ..CredentialFileSummary::default()
     };
     let document = read_object_sync(&path);
