@@ -6,7 +6,7 @@ import { rollerTracks } from "../shared/Roller";
 import type { SceneContext } from "../scene/types";
 import { COMPACT_PAD, GAPS, STEPS, type GapId, type SpacingCopy } from "./spacingCopy";
 import { RHYTHM } from "./SpacingScenes";
-import { count, sum } from "./spacingTiles";
+import { count, sum } from "./spacingCount";
 
 /**
  * 03 Spacing, "counted space", beat marks (1 beat = --motion-deliberate):

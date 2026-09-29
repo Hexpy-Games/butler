@@ -12,7 +12,8 @@ import { posterFit } from "./typography/typeCamera";
 import { AXIS, BEATS, select } from "./typography/typeChoreography";
 import { TYPE_COPY } from "./typography/typeCopy";
 import { CANVAS, col, columnWidth, gridVars, SPECIMEN, type TypeLayout } from "./typography/typeGrid";
-import { Specimen, WeightControl } from "./typography/TypeSpecimen";
+import { Specimen } from "./typography/Specimen";
+import { WeightControl } from "./typography/WeightControl";
 import t from "./typography/TypographyHero.module.css";
 
 /** Poster height of the specimen's em box (px), on the baseline grid. */

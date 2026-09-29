@@ -4,8 +4,16 @@ import { SceneHero } from "../scene/SceneHero";
 import type { SceneSpec } from "../scene/types";
 import { Intro } from "../shared/Intro";
 import { RADIUS_COPY, type RadiusCopy } from "./radiusCopy";
-import { CornerScene, DragScene, NestScene, OverScene, PressScene, WearScene } from "./RadiusScenes";
-import { Composer, CornerTile, LiftTile, RowTile } from "./radiusTiles";
+import { CornerScene } from "./CornerScene";
+import { DragScene } from "./DragScene";
+import { NestScene } from "./NestScene";
+import { OverScene } from "./OverScene";
+import { PressScene } from "./PressScene";
+import { WearScene } from "./WearScene";
+import { Composer } from "./Composer";
+import { CornerTile } from "./CornerTile";
+import { LiftTile } from "./LiftTile";
+import { RowTile } from "./RowTile";
 import { RADIUS_END, RADIUS_SPANS, radiusTracks } from "./radiusTracks";
 
 function spec(copy: RadiusCopy): SceneSpec {

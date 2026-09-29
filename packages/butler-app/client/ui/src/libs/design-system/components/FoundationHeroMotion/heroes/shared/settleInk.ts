@@ -21,7 +21,7 @@ function measureSettled(root: HTMLElement, layout: HeroLayout, beat: number, bea
     const duration = Number(animation.effect?.getTiming().duration ?? 0);
     animation.currentTime = (duration * beat) / beats;
   }
-  // The world's own box maps the canvas onto its rect at any pose (flat, uniform zoom).
+  // The world's own box maps the canvas onto its rect at every pose (flat, uniform zoom).
   const origin = world.getBoundingClientRect();
   const ink = origin.width > 0 ? measureInk(poster, origin, origin.width / CANVAS[layout].w) : null;
   animations.forEach((animation, k) => {

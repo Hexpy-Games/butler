@@ -21,7 +21,7 @@ export interface TypeMeasure {
 /**
  * Reads the poster layout (no animation applied) in canvas px: boxes are
  * taken relative to the world and divided by the stage's fit scale, so they
- * hold at any stage size. Returns null until everything is laid out.
+ * hold at every stage size. Returns null until everything is laid out.
  */
 export function measureType(root: HTMLElement, layout: TypeLayout): TypeMeasure | null {
   const world = root.querySelector<HTMLElement>(select("world"));

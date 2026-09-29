@@ -151,7 +151,7 @@
   );
 }
 
-/* The titlebar, centred in the bar at any height. */
+/* The titlebar, centred in the bar at every height. */
 .stripBar {
   position: absolute;
   inset-inline: 0;
@@ -186,7 +186,7 @@
   pointer-events: none;
 }
 
-/* The fingertip: the touch target's size, centred on the target at any size. */
+/* The fingertip: the touch target's size, centred on the target at every size. */
 .finger {
   position: absolute;
   inset: calc(-1 * var(--touch-target));

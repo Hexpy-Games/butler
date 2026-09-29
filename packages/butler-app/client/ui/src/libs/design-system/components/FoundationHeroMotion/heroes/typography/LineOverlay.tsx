@@ -10,7 +10,7 @@ export function tagSteps(line: LineInfo, copy: TypeCopy, compact: boolean): stri
   const token = compact ? line.token : `${copy.roles[line.role]} · ${line.token}`;
   const size = `${Math.round(line.font.size)}px`;
   const leading = `${size}/${Math.round(line.font.lineHeight)}`;
-  // Tracking only when the token sets any; zero or default values are not annotated.
+  // Tracking only when the token sets some; zero or default values are not annotated.
   const tracked = Number.parseFloat(line.font.tracking) !== 0 && !Number.isNaN(Number.parseFloat(line.font.tracking));
   return [token, `${line.token} · ${size}`, `${line.token} · ${leading}`, ...(tracked ? [`${line.token} · ${leading} · ${line.font.tracking}`] : [])];
 }

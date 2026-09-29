@@ -104,7 +104,7 @@
   white-space: nowrap;
 }
 
-/* The whole frame in the other theme, through a window as large as any
+/* The whole frame in the other theme, through a window as large as the largest
    frame around the field; a line rides the window's leading edge (there and
    back). The still poster is the page's own theme (window closed). */
 .wipe {

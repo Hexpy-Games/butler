@@ -4,7 +4,10 @@ import { SceneHero } from "../scene/SceneHero";
 import type { SceneSpec } from "../scene/types";
 import { Intro } from "../shared/Intro";
 import { LAYOUT_COPY, type LayoutCopy } from "./layoutCopy";
-import { Hud, Ruler, ScreenTile, WindowScene } from "./LayoutScenes";
+import { Hud } from "./LayoutScenes";
+import { Ruler } from "./Ruler";
+import { ScreenTile } from "./ScreenTile";
+import { WindowScene } from "./WindowScene";
 import { LAYOUT_END, layoutTracks } from "./layoutTracks";
 
 function spec(copy: LayoutCopy): SceneSpec {

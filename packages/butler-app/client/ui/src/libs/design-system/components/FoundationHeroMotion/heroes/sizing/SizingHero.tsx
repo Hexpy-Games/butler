@@ -4,7 +4,10 @@ import { SceneHero } from "../scene/SceneHero";
 import type { SceneSpec } from "../scene/types";
 import { Intro } from "../shared/Intro";
 import { SIZING_COPY, type SizingCopy } from "./sizingCopy";
-import { ChromeScene, StaffScene, TitleRails, TouchScene } from "./SizingScenes";
+import { ChromeScene } from "./ChromeScene";
+import { TitleRails } from "./SizingScenes";
+import { StaffScene } from "./StaffScene";
+import { TouchScene } from "./TouchScene";
 import { FormTile, FrameTile, HaloTile, StaffTile } from "./sizingTiles";
 import { SIZING_END, sizingTracks } from "./sizingTracks";
 

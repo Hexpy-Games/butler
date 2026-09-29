@@ -61,7 +61,7 @@ function show(from: number, to: number, end: readonly [number, number] = CLEAR, 
   return [{ at: 0, o: 0, ...extra }, { at: from, o: 0 }, { at: to, o: 1, ease: "decelerate" }, { at: end[0], o: 1 }, { at: end[1], o: 0, ease: "accelerate" }];
 }
 
-/** Keys over the weight marks for any quantity that follows the weight. */
+/** Keys over the weight marks for each quantity that follows the weight. */
 function byWeight(value: (weight: 300 | 800 | 620) => Pose): Key[] {
   return [{ at: 0, ...value(300) }, ...WEIGHT.map(([at, weight]): Key => ({ at, ...value(weight), ease: EASE_AT[at as keyof typeof EASE_AT] ?? "standard" }))];
 }
