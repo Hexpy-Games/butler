@@ -72,6 +72,7 @@ pub(crate) struct InstanceGuard {
     record_update_lock_path: PathBuf,
     installation: ResolvedInstallation,
     record: InstanceRecord,
+    unclean_previous_exit: bool,
 }
 
 /// The start admission lock: one controller at a time starts, stops or
@@ -124,13 +125,17 @@ impl InstanceGuard {
 
         refuse_live_legacy_process(data_root)?;
         let record_path = instance_record_path(data_root);
-        if let Some(previous) = read_record_at(&record_path)?
-            && process_matches(&previous)?
+        let previous = read_record_at(&record_path)?;
+        if let Some(previous) = &previous
+            && process_matches(previous)?
         {
             return Err(
                 "native_service_instance_ambiguous: a recorded service process is alive without the DATA lock".into(),
             );
         }
+        let unclean_previous_exit = previous
+            .as_ref()
+            .is_some_and(|previous| !stop_announced_for(data_root, previous.pid, &previous.nonce));
 
         let executable = executable.canonical().map_err(|source| {
             crate::host::HostError::new("native_service_executable_unavailable").with_source(source)
@@ -167,6 +172,7 @@ impl InstanceGuard {
             record_update_lock_path,
             installation: installation.clone(),
             record,
+            unclean_previous_exit,
         })
     }
 
@@ -238,6 +244,10 @@ impl InstanceGuard {
 
     pub(crate) fn nonce(&self) -> &str {
         &self.record.nonce
+    }
+
+    pub(crate) fn unclean_previous_exit(&self) -> bool {
+        self.unclean_previous_exit
     }
 
     /// Whether the App supervises this instance through its foreground lease.

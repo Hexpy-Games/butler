@@ -1,25 +1,28 @@
 //! Private, lazy BGE-M3 CPU embedding engine. It does not select a memory generation.
 
-use std::{
-    fs::File,
-    io::Read,
-    path::{Path, PathBuf},
-};
+use std::path::Path;
 
-use ort::{session::Session, value::Tensor};
+use ort::session::Session;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokenizers::{Encoding, Tokenizer, TruncationDirection};
 use unicode_segmentation::UnicodeSegmentation;
 
-use super::mutable_paths::ensure_data_authority;
+mod assets;
+mod cache;
+mod infer;
+
+use assets::{Assets, MODEL_FILE, positive_json_integer};
+use cache::{Key, VectorCache};
 
 const MODEL_ID: &str = "Xenova/bge-m3";
-const MODEL_FILE: &str = "onnx/model_quantized.onnx";
 const TOKENIZER_VERSION: &str = "0.22.2";
 const ORT_WRAPPER_VERSION: &str = "2.0.0-rc.13";
 const MAX_EMBEDDINGS: usize = 32;
 const EXPECTED_DIMENSION: usize = 1024;
+/// The most threads one inference uses; more do not speed a single BGE-M3
+/// batch up enough to be worth taking the cores from everything else.
+const MAX_INTRA_THREADS: usize = 4;
 
 /// A failure of the private embedding worker. Only `code` crosses the worker
 /// protocol; the source stays in the worker for diagnostics.
@@ -104,58 +107,19 @@ pub struct Tokenization {
     pub(crate) max_tokens: usize,
 }
 
-/// The model and tokenizer files under the data root.
-struct Assets {
-    root: std::path::PathBuf,
-    tokenizer_file: std::path::PathBuf,
-    tokenizer_config: std::path::PathBuf,
-    model_config: std::path::PathBuf,
-    model_file: std::path::PathBuf,
-}
-
-impl Assets {
-    /// The asset paths, checked to stay inside the data root and to exist.
-    fn new(data_root: &Path) -> Result<Self, EmbeddingFailure> {
-        let root = data_root.join("cache/models/Xenova/bge-m3");
-        let assets = Self {
-            tokenizer_file: root.join("tokenizer.json"),
-            tokenizer_config: root.join("tokenizer_config.json"),
-            model_config: root.join("config.json"),
-            model_file: root.join(MODEL_FILE),
-            root,
-        };
-        ensure_data_authority(
-            data_root,
-            &[
-                &assets.root,
-                &assets.tokenizer_file,
-                &assets.tokenizer_config,
-                &assets.model_config,
-                &assets.model_file,
-            ],
-        )
-        .map_err(EmbeddingFailure::caused("embed_asset_path_unsafe"))?;
-        for path in [
-            &assets.tokenizer_file,
-            &assets.tokenizer_config,
-            &assets.model_config,
-            &assets.model_file,
-        ] {
-            if !path.is_file() {
-                return Err(EmbeddingFailure::new("embed_asset_unavailable"));
-            }
-        }
-        Ok(assets)
-    }
-}
-
-/// A single-threaded ONNX session whose inputs the engine can feed.
+/// An ONNX session whose inputs the engine can feed. It computes on as many
+/// performance cores as a batch can use, up to four, and its threads sleep
+/// between requests instead of spinning.
 fn load_session(model_file: &Path) -> Result<Session, EmbeddingFailure> {
+    let threads = butler_platform::cpu::performance_cores().clamp(1, MAX_INTRA_THREADS);
     let builder =
         Session::builder().map_err(EmbeddingFailure::caused("embed_model_unavailable"))?;
     // Builder errors own the (non-Send) builder, so they cannot be kept.
     let builder = builder
-        .with_intra_threads(1)
+        .with_intra_threads(threads)
+        .map_err(|_builder_error| EmbeddingFailure::new("embed_model_unavailable"))?;
+    let builder = builder
+        .with_intra_op_spinning(false)
         .map_err(|_builder_error| EmbeddingFailure::new("embed_model_unavailable"))?;
     let mut builder = builder
         .with_inter_threads(1)
@@ -190,9 +154,18 @@ fn identity(mut identity: EmbeddingIdentity) -> Result<EmbeddingIdentity, Embedd
 pub struct EmbeddingEngine {
     strict_tokenizer: Tokenizer,
     session: Session,
+    pad_id: i64,
     max_tokens: usize,
     checked_identity: EmbeddingIdentity,
     unchecked_identity: EmbeddingIdentity,
+    cache: VectorCache,
+}
+
+/// A text with its token encoding, made once and used for the length check,
+/// the batch plan and the inference.
+struct Prepared {
+    text: String,
+    encoded: Encoding,
 }
 
 impl EmbeddingEngine {
@@ -201,8 +174,8 @@ impl EmbeddingEngine {
     pub fn load(data_root: &Path) -> Result<Self, EmbeddingFailure> {
         let assets = Assets::new(data_root)?;
         let tokenizer_asset_sha256 =
-            aggregate_hash(&assets.root, &["tokenizer.json", "tokenizer_config.json"])?;
-        let model_asset_sha256 = aggregate_hash(&assets.root, &["config.json", MODEL_FILE])?;
+            assets.aggregate_hash(&["tokenizer.json", "tokenizer_config.json"])?;
+        let model_asset_sha256 = assets.aggregate_hash(&["config.json", MODEL_FILE])?;
         let mut strict_tokenizer = Tokenizer::from_file(&assets.tokenizer_file)
             .map_err(EmbeddingFailure::caused("embed_tokenizer_unavailable"))?;
         strict_tokenizer
@@ -243,12 +216,15 @@ impl EmbeddingEngine {
             version: String::new(),
             ..checked_identity.clone()
         })?;
+        let pad_id = strict_tokenizer.token_to_id("<pad>").map_or(1, i64::from);
         Ok(Self {
             strict_tokenizer,
             session,
+            pad_id,
             max_tokens,
             checked_identity,
             unchecked_identity,
+            cache: VectorCache::default(),
         })
     }
 
@@ -285,37 +261,40 @@ impl EmbeddingEngine {
         if max_embeddings.is_some_and(|n| n == 0 || n > MAX_EMBEDDINGS) {
             return Err(EmbeddingFailure::new("embed_invalid_request"));
         }
-        let prepared = if checked && resplit {
+        let mut prepared = if checked && resplit {
             self.resplit(texts)?
         } else {
-            texts.to_vec()
+            texts
+                .iter()
+                .map(|text| self.prepare(text))
+                .collect::<Result<Vec<_>, _>>()?
         };
         if prepared.len() > MAX_EMBEDDINGS && max_embeddings.is_none() {
             return Err(EmbeddingFailure::new("embed_request_too_large"));
         }
         let limit = max_embeddings.unwrap_or(prepared.len()).min(prepared.len());
         let omitted_count = prepared.len() - limit;
-        let embedded_texts = prepared.get(..limit).unwrap_or_default().to_vec();
-        let mut embeddings = Vec::with_capacity(limit);
-        let mut token_counts = Vec::with_capacity(limit);
-        for text in &embedded_texts {
-            let mut encoded = self.encode(text)?;
-            if checked && encoded.len() > self.max_tokens {
+        prepared.truncate(limit);
+        for item in &mut prepared {
+            if checked && item.encoded.len() > self.max_tokens {
                 return Err(EmbeddingFailure::new("embed_input_too_long"));
             }
-            if !checked && encoded.len() > self.max_tokens {
+            if !checked && item.encoded.len() > self.max_tokens {
                 // transformers.js 3.8.1 truncates the already postprocessed
                 // sequence, so an overlong legacy input may lose its EOS.
-                encoded.truncate(self.max_tokens, 0, TruncationDirection::Right);
-                encoded.get_overflowing_mut().clear();
+                item.encoded
+                    .truncate(self.max_tokens, 0, TruncationDirection::Right);
+                item.encoded.get_overflowing_mut().clear();
             }
-            token_counts.push(encoded.len());
-            embeddings.push(self.infer(&encoded, checked)?);
         }
+        let embeddings = self.vectors(&prepared, checked)?;
+        let token_counts = prepared.iter().map(|item| item.encoded.len()).collect();
+        let embedded_texts =
+            (checked && resplit).then(|| prepared.into_iter().map(|item| item.text).collect());
         Ok(EmbeddingResult {
             embeddings,
             token_counts,
-            embedded_texts: (checked && resplit).then_some(embedded_texts),
+            embedded_texts,
             omitted_count: (checked && resplit).then_some(omitted_count),
             metadata: if checked {
                 self.checked_identity.clone()
@@ -325,18 +304,78 @@ impl EmbeddingEngine {
         })
     }
 
+    /// The vector of each text, in order. Texts seen before come from the
+    /// cache and equal texts of one request are embedded once; the rest run
+    /// through the model in padded batches of similar length.
+    fn vectors(
+        &mut self,
+        prepared: &[Prepared],
+        checked: bool,
+    ) -> Result<Vec<Vec<f32>>, EmbeddingFailure> {
+        let keys: Vec<Key> = prepared
+            .iter()
+            .map(|item| Key::new(checked, &item.text))
+            .collect();
+        // The first position of each distinct text the cache does not hold.
+        let mut missing: Vec<usize> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for (index, key) in keys.iter().enumerate() {
+            if self.cache.get(key).is_none() && seen.insert(*key) {
+                missing.push(index);
+            }
+        }
+        let lengths: Vec<usize> = missing
+            .iter()
+            .map(|index| prepared.get(*index).map_or(0, |item| item.encoded.len()))
+            .collect();
+        for batch in infer::plan_batches(&lengths) {
+            let positions: Vec<usize> = batch
+                .iter()
+                .filter_map(|slot| missing.get(*slot).copied())
+                .collect();
+            let encodings: Vec<&Encoding> = positions
+                .iter()
+                .filter_map(|index| prepared.get(*index).map(|item| &item.encoded))
+                .collect();
+            let vectors = infer::embed_batch(&mut self.session, self.pad_id, &encodings, checked)?;
+            for (index, vector) in positions.into_iter().zip(vectors) {
+                if let Some(key) = keys.get(index) {
+                    self.cache.insert(*key, vector);
+                }
+            }
+        }
+        keys.iter()
+            .map(|key| {
+                self.cache
+                    .get(key)
+                    .cloned()
+                    .ok_or(EmbeddingFailure::new("embed_output_invalid"))
+            })
+            .collect()
+    }
+
+    fn prepare(&self, text: &str) -> Result<Prepared, EmbeddingFailure> {
+        Ok(Prepared {
+            text: text.to_owned(),
+            encoded: self.encode(text)?,
+        })
+    }
+
     fn encode(&self, text: &str) -> Result<Encoding, EmbeddingFailure> {
         self.strict_tokenizer
             .encode(text, true)
             .map_err(EmbeddingFailure::caused("embed_tokenization_failed"))
     }
 
-    fn resplit(&self, texts: &[String]) -> Result<Vec<String>, EmbeddingFailure> {
+    /// Splits texts over the model limit in halves at grapheme boundaries
+    /// until every piece fits. Each piece is tokenized once, here.
+    fn resplit(&self, texts: &[String]) -> Result<Vec<Prepared>, EmbeddingFailure> {
         let mut result = Vec::new();
         let mut pending: Vec<String> = texts.iter().rev().cloned().collect();
         while let Some(text) = pending.pop() {
-            if self.encode(&text)?.len() <= self.max_tokens {
-                result.push(text);
+            let encoded = self.encode(&text)?;
+            if encoded.len() <= self.max_tokens {
+                result.push(Prepared { text, encoded });
             } else {
                 let graphemes: Vec<&str> = text.graphemes(true).collect();
                 if graphemes.len() <= 1 {
@@ -352,121 +391,6 @@ impl EmbeddingEngine {
         }
         Ok(result)
     }
-
-    fn infer(&mut self, encoded: &Encoding, checked: bool) -> Result<Vec<f32>, EmbeddingFailure> {
-        let len = encoded.len();
-        let mut inputs = Vec::with_capacity(self.session.inputs().len());
-        for input in self.session.inputs() {
-            let values: Vec<i64> = match input.name() {
-                "input_ids" => encoded.get_ids(),
-                "attention_mask" => encoded.get_attention_mask(),
-                "token_type_ids" => encoded.get_type_ids(),
-                _ => return Err(EmbeddingFailure::new("embed_model_input_unsupported")),
-            }
-            .iter()
-            .map(|value| i64::from(*value))
-            .collect();
-            let tensor = Tensor::from_array(([1usize, len], values))
-                .map_err(EmbeddingFailure::caused("embed_inference_failed"))?;
-            inputs.push((input.name().to_owned(), tensor));
-        }
-        let outputs = self
-            .session
-            .run(inputs)
-            .map_err(EmbeddingFailure::caused("embed_inference_failed"))?;
-        let output = ["last_hidden_state", "logits", "token_embeddings"]
-            .into_iter()
-            .find_map(|name| outputs.get(name))
-            .ok_or(EmbeddingFailure::new("embed_output_invalid"))?;
-        let (shape, data) = output
-            .try_extract_tensor::<f32>()
-            .map_err(EmbeddingFailure::caused("embed_output_invalid"))?;
-        let expected_shape = [
-            1,
-            i64::try_from(len).unwrap_or(i64::MAX),
-            i64::try_from(EXPECTED_DIMENSION).unwrap_or(i64::MAX),
-        ];
-        if **shape != expected_shape || data.len() != len * EXPECTED_DIMENSION {
-            return Err(EmbeddingFailure::new("embed_dimension_invalid"));
-        }
-        let mut vector = vec![0.0_f32; EXPECTED_DIMENSION];
-        if checked {
-            let first = data
-                .get(..EXPECTED_DIMENSION)
-                .ok_or(EmbeddingFailure::new("embed_output_invalid"))?;
-            vector.copy_from_slice(first);
-        } else {
-            let mask = encoded.get_attention_mask();
-            let count: u32 = mask.iter().sum();
-            if count == 0 {
-                return Err(EmbeddingFailure::new("embed_output_invalid"));
-            }
-            for (active, row) in mask.iter().zip(data.chunks_exact(EXPECTED_DIMENSION)) {
-                if *active == 0 {
-                    continue;
-                }
-                for (total, value) in vector.iter_mut().zip(row) {
-                    *total += *value / count as f32;
-                }
-            }
-        }
-        let squared: f64 = vector
-            .iter()
-            .map(|value| f64::from(*value) * f64::from(*value))
-            .sum();
-        if !squared.is_finite() || squared <= 0.0 {
-            return Err(EmbeddingFailure::new("embed_output_invalid"));
-        }
-        #[expect(
-            clippy::cast_possible_truncation,
-            reason = "the finite positive norm of f32 components fits f32"
-        )]
-        let norm = squared.sqrt() as f32;
-        for value in &mut vector {
-            *value /= norm;
-        }
-        if vector.iter().any(|value| !value.is_finite()) {
-            return Err(EmbeddingFailure::new("embed_output_invalid"));
-        }
-        Ok(vector)
-    }
-}
-
-fn positive_json_integer(path: &Path, key: &str) -> Option<usize> {
-    let value: serde_json::Value = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
-    value
-        .get(key)?
-        .as_u64()
-        .and_then(|number| usize::try_from(number).ok())
-        .filter(|number| *number > 0)
-}
-
-fn aggregate_hash(root: &Path, files: &[&str]) -> Result<String, EmbeddingFailure> {
-    let mut aggregate = Sha256::new();
-    for relative in files {
-        let digest = hash_file(&root.join(relative))?;
-        let pair = serde_json::to_vec(&(relative, digest))
-            .map_err(EmbeddingFailure::caused("embed_asset_identity_unavailable"))?;
-        aggregate.update(pair);
-    }
-    Ok(format!("{:x}", aggregate.finalize()))
-}
-
-fn hash_file(path: &PathBuf) -> Result<String, EmbeddingFailure> {
-    let mut file =
-        File::open(path).map_err(EmbeddingFailure::caused("embed_asset_identity_unavailable"))?;
-    let mut digest = Sha256::new();
-    let mut buffer = vec![0_u8; 64 * 1024];
-    loop {
-        let count = file
-            .read(&mut buffer)
-            .map_err(EmbeddingFailure::caused("embed_asset_identity_unavailable"))?;
-        if count == 0 {
-            break;
-        }
-        digest.update(buffer.get(..count).unwrap_or_default());
-    }
-    Ok(format!("{:x}", digest.finalize()))
 }
 
 fn hash_bytes(bytes: &[u8]) -> String {

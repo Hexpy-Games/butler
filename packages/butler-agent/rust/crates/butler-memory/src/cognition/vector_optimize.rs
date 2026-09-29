@@ -9,14 +9,14 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use lancedb::{Table, table::OptimizeAction};
+use lancedb::Table;
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 
 use super::{
     CognitionError, CognitionPathEnvironment, CognitionResult, MemoryGenerationHandle,
-    MemoryGenerationTarget, assert_mutation_authority, graph::GraphRepository, lance_store,
-    mutable_paths, resolve_active_generation,
+    MemoryGenerationTarget, assert_mutation_authority, graph::GraphRepository, lance_maintenance,
+    lance_store, mutable_paths, resolve_active_generation,
 };
 use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator};
 
@@ -120,20 +120,20 @@ impl VectorOptimizeService {
             .collect();
         ordered.sort();
         let vectors_pruned = prune(&table, &ordered, cancellation, deadline_at_epoch_ms).await?;
-        // A compaction failure is optional in the legacy path. Compact files
-        // only: pruning old Lance versions would erase retained rollback data.
-        let lancedb_compacted =
-            if ordered.is_empty() || check_entry(cancellation, deadline_at_epoch_ms).is_err() {
-                false
-            } else {
-                table
-                    .optimize(OptimizeAction::Compact {
-                        options: Default::default(),
-                        remap_options: None,
-                    })
-                    .await
-                    .is_ok()
-            };
+        // Maintenance is best effort: a failure leaves the table as it was.
+        // Old versions beyond the newest few are pruned, so a rollback reaches
+        // back a bounded number of writes, not to the table's creation.
+        let lancedb_compacted = if check_entry(cancellation, deadline_at_epoch_ms).is_err() {
+            false
+        } else {
+            match lance_maintenance::maintain(&table).await {
+                Ok(maintained) => maintained.compacted,
+                Err(_) => {
+                    lance_store::forget(&generation.root.join("butler.lance"), "butler_memory");
+                    false
+                }
+            }
+        };
         lease
             .release(true)
             .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
@@ -219,10 +219,7 @@ impl LanceStore {
         if !uri.exists() {
             return Ok(None);
         }
-        let connection = lance_store::connect(&uri)
-            .await
-            .map_err(|source| error(CognitionCode::VectorStoreUnavailable).with_source(source))?;
-        match lance_store::open(&connection, "butler_memory").await {
+        match lance_store::shared(&uri, "butler_memory").await {
             Ok(table) => Ok(Some(table)),
             Err(_) => Ok(None),
         }

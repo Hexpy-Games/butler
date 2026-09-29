@@ -41,8 +41,7 @@ fn mark_installed(install: &Path) -> Result<(), HarnessError> {
 }
 
 fn write_launcher(path: &Path, contents: &str) -> Result<(), HarnessError> {
-    fs::write(path, contents)?;
-    butler_platform::launcher::mark_executable(path).transpose()?;
+    butler_e2e::e2e::executable::write_script(path, contents)?;
     Ok(())
 }
 

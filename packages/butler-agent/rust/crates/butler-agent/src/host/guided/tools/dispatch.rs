@@ -423,23 +423,8 @@ pub(super) async fn execute(
             .read(owner.binding.memory.clone(), args)
             .await
             .map_err(|error| BtccError::relayed(error.code(), error.message())),
-        "read_file" | "list_files" | "grep_files" | "list_skills" => owner
-            .capabilities
-            .invoke(
-                &call.name,
-                CapabilityInvocation {
-                    call: &json!({"arguments": args, "projectId": owner.binding.memory.project_id}),
-                    workspace_reference: owner.binding.workspace_reference.as_ref(),
-                    workspace_path: Some(&owner.binding.workspace_path),
-                    butler_data: &owner.binding.butler_data,
-                    protected_ledger_roots: &owner.binding.protected_ledger_roots,
-                    allowed_tools_and_effects: owner.binding.allowed_tools_and_effects.as_deref(),
-                    mutation_scope: owner.binding.mutation_scope.as_deref(),
-                    installation_root: owner.binding.installation_root.as_deref(),
-                },
-            )
-            .await
-            .map_err(|error| BtccError::relay(error.code(), error.code(), error)),
+        "read_file" | "list_files" | "grep_files" | "list_skills" | "load_skill"
+        | "read_skill_file" => file_capability(owner, call, &args).await,
         _ => {
             return Err(ToolExecutionError::Integrity(BtccError::relayed(
                 "guided_tool_executor_missing",
@@ -452,6 +437,30 @@ pub(super) async fn execute(
             "code":"tool_error", "message":format!("{} could not complete: {}",call.name,error.code())
         }})
     }))
+}
+
+async fn file_capability(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+    args: &Value,
+) -> Result<Value, BtccError> {
+    owner
+        .capabilities
+        .invoke(
+            &call.name,
+            CapabilityInvocation {
+                call: &json!({"arguments": args, "projectId": owner.binding.memory.project_id}),
+                workspace_reference: owner.binding.workspace_reference.as_ref(),
+                workspace_path: Some(&owner.binding.workspace_path),
+                butler_data: &owner.binding.butler_data,
+                protected_ledger_roots: &owner.binding.protected_ledger_roots,
+                allowed_tools_and_effects: owner.binding.allowed_tools_and_effects.as_deref(),
+                mutation_scope: owner.binding.mutation_scope.as_deref(),
+                installation_root: owner.binding.installation_root.as_deref(),
+            },
+        )
+        .await
+        .map_err(|error| BtccError::relay(error.code(), error.code(), error))
 }
 
 /// The Turn's access mode as delegation requests name it.

@@ -22,6 +22,11 @@ pub(super) async fn route(
 ) -> Result<Option<Response>, HttpError> {
     let path = uri.path();
     let method = request.method().clone();
+    if method == Method::POST && path == "/space/branches" {
+        return super::session_branches::post_app(state, request)
+            .await
+            .map(Some);
+    }
     if method == Method::POST && path == "/space/relocations" {
         let value = parse_body(request).await?;
         let relocation = relocation_request(&value)?;

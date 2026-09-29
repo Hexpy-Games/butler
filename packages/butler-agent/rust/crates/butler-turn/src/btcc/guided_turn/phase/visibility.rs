@@ -56,6 +56,8 @@ const NON_FULL: &[&str] = &[
     "save_wallpaper_module",
     "read_mcp_resource",
     "list_skills",
+    "load_skill",
+    "read_skill_file",
     "transform_public_data_table",
 ];
 /// Non-full tools that change something: offered when asking first, where
@@ -263,7 +265,7 @@ fn apply_role(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
 }
 
 /// Tools every legacy surface shows.
-const LEGACY_BASE: [&str; 16] = [
+const LEGACY_BASE: [&str; 18] = [
     "tool_search",
     "tool_describe",
     "tool_call",
@@ -280,6 +282,8 @@ const LEGACY_BASE: [&str; 16] = [
     "project_ledger_status",
     "update_todo_list",
     "list_todo_list",
+    "load_skill",
+    "read_skill_file",
 ];
 
 pub(super) fn legacy_visible<'a>(
