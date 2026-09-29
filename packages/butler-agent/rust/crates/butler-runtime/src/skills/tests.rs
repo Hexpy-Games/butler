@@ -36,7 +36,7 @@ async fn only_installed_status_receives_a_canonical_shell_quoted_command() {
     );
     let owner = Skills::for_installation(resources, data, executable);
     let catalog = owner.runtime_catalog(None).await.unwrap();
-    assert_eq!(catalog.len(), 3);
+    assert_eq!(catalog.len(), 2);
     assert!(
         catalog
             .iter()

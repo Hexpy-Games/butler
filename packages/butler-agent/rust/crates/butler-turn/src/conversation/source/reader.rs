@@ -110,6 +110,71 @@ impl ConversationSourceReader {
             .map_err(ConversationError::sqlite)
     }
 
+    /// The store's public source revision. It moves on every message, turn,
+    /// outcome or session change, so an unchanged value means an unchanged
+    /// inventory. A store without the counter reads as revision 0.
+    pub fn public_revision(&self) -> ConversationResult<u64> {
+        let connection = self.connection()?;
+        let counted: bool = connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='conversation_public_source_state')",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(ConversationError::sqlite)?;
+        if !counted {
+            return Ok(0);
+        }
+        super::super::codec::public_revision(connection)
+    }
+
+    /// Stable identity of this canonical store, including across appends.
+    pub fn source_identity(&self) -> ConversationResult<Option<String>> {
+        let connection = self.connection()?;
+        let exists: bool = connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='conversation_source_identity')",
+            [], |row| row.get(0),
+        ).map_err(ConversationError::sqlite)?;
+        if !exists {
+            return Ok(None);
+        }
+        connection
+            .query_row(
+                "SELECT identity FROM conversation_source_identity WHERE singleton=1",
+                [],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(ConversationError::sqlite)
+    }
+
+    /// Whether both saved catch-up cursors still name canonical rows.
+    pub fn catchup_cursors_exist(
+        &self,
+        outcome: Option<&str>,
+        message: Option<&str>,
+    ) -> ConversationResult<bool> {
+        let connection = self.connection()?;
+        for (table, id) in [
+            ("conversation_turn_outcomes", outcome),
+            ("conversation_messages", message),
+        ] {
+            if let Some(id) = id {
+                let exists: bool = connection
+                    .query_row(
+                        &format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE id=?1)"),
+                        [id],
+                        |row| row.get(0),
+                    )
+                    .map_err(ConversationError::sqlite)?;
+                if !exists {
+                    return Ok(false);
+                }
+            }
+        }
+        Ok(true)
+    }
+
     /// A page of turn outcomes for recall.
     pub fn read_recall_outcome_page(
         &self,

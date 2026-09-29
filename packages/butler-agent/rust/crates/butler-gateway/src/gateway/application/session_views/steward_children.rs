@@ -19,6 +19,13 @@ use super::helpers::child_status;
 /// terminal) and never becomes a result by itself.
 const RESULT_COMMIT_GRACE_MS: i64 = 5 * 60 * 1000;
 
+/// How long a Steward's turn may stay finalizing (`delivery_committed`: its
+/// answer is committed, delivery is not settled yet). The turn's `updated_at`
+/// is its start until it completes, so this window also covers a long turn
+/// that only just entered finalizing; a turn still finalizing after it is
+/// stuck and never settles by itself.
+const FINALIZING_GRACE_MS: i64 = 60 * 60 * 1000;
+
 /// Complete each Steward child in place; `now_ms` is the current time.
 pub(super) fn complete(subsessions: &mut Value, now_ms: i64) {
     let Some(list) = subsessions
@@ -74,22 +81,22 @@ fn complete_child(child: &mut Map<String, Value>, now_ms: i64) {
     child.entry("changed_files").or_insert(changed_files);
 }
 
-/// A child without a result whose latest turn settled longer ago than the
-/// commit grace.
+/// A child without a result whose latest turn settled (or stayed finalizing)
+/// longer than its grace.
 fn is_orphan(child: &Value, now_ms: i64) -> bool {
     if child.get("result").is_some_and(|result| !result.is_null()) {
         return false;
     }
-    let settled = matches!(
-        child.pointer("/latest_turn/state").and_then(Value::as_str),
-        Some("delivered" | "cancelled")
-    );
+    let grace = match child.pointer("/latest_turn/state").and_then(Value::as_str) {
+        Some("delivered" | "cancelled") => RESULT_COMMIT_GRACE_MS,
+        Some("delivery_committed") => FINALIZING_GRACE_MS,
+        _ => return false,
+    };
     let updated = child
         .pointer("/latest_turn/updated_at")
         .and_then(Value::as_str)
         .and_then(butler_core::js_date::parse_iso_millis);
-    settled
-        && updated.is_some_and(|updated| now_ms.saturating_sub(updated) > RESULT_COMMIT_GRACE_MS)
+    updated.is_some_and(|updated| now_ms.saturating_sub(updated) > grace)
 }
 
 /// A BTCC turn state as an App turn state.

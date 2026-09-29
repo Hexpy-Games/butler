@@ -1,5 +1,13 @@
 name: E2E stub tier
 description: Run the real agent binary against replay cassettes on the current Rust job.
+inputs:
+  partition:
+    description: Nextest slice in m/n form.
+    required: true
+  run-idle-disk:
+    description: Run the separate IDLE-DISK check when its test file is present.
+    required: false
+    default: "false"
 runs:
   using: composite
   steps:
@@ -57,6 +65,7 @@ runs:
       shell: bash
       working-directory: packages/butler-agent/rust
       env:
+        PARTITION: ${{ inputs.partition }}
         BUTLER_E2E_EMBEDDING_ASSETS: ${{ runner.temp }}/e2e-models/bge-m3
         BUTLER_E2E_TIER: stub
         BUTLER_E2E_SKIP_BUILD: "1"
@@ -64,12 +73,15 @@ runs:
         BUTLER_E2E_REPORT: ${{ runner.temp }}/e2e-report.txt
       run: |
         set -o pipefail
-        cargo test --locked --no-fail-fast -p butler-e2e -- --skip idle_disk_writes_and_cpu_stay_bounded 2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
+        cargo nextest run --locked --no-fail-fast -p butler-e2e \
+          --partition "slice:$PARTITION" \
+          -E 'not test(idle_disk_writes_and_cpu_stay_bounded)' \
+          2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
 
-    # TODO(#331): once its test lands, keep this separate IDLE-DISK invocation
-    # on both platforms; its budget is still being measured on that draft PR.
     - name: Report IDLE-DISK counters
-      if: always() && hashFiles('packages/butler-agent/rust/crates/butler-e2e/tests/idle_disk.rs') != ''
+      if: >-
+        always() && inputs.run-idle-disk == 'true' &&
+        hashFiles('packages/butler-agent/rust/crates/butler-e2e/tests/idle_disk.rs') != ''
       shell: bash
       working-directory: packages/butler-agent/rust
       env:
@@ -82,12 +94,14 @@ runs:
 
     - name: Summarize
       if: always()
+      env:
+        PARTITION: ${{ inputs.partition }}
       shell: bash
       run: |
         {
-          echo "### E2E stub tier ($RUNNER_OS $RUNNER_ARCH)"
+          echo "### E2E stub tier ($RUNNER_OS $RUNNER_ARCH, slice $PARTITION)"
           if [ -f "$RUNNER_TEMP/e2e-stub.log" ]; then
-            grep -E "^test .* (ok|FAILED|ignored)" "$RUNNER_TEMP/e2e-stub.log" | sed 's/^/    /' || true
+            grep -E '^(PASS|FAIL|SKIP|CANCEL)' "$RUNNER_TEMP/e2e-stub.log" | sed 's/^/    /' || true
           fi
           echo "Live scenarios: SKIPPED (tier: stub)."
         } >> "$GITHUB_STEP_SUMMARY"
