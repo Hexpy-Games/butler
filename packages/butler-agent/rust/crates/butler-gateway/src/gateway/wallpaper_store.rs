@@ -7,8 +7,6 @@
 mod files;
 mod pipeline;
 
-pub(crate) use pipeline::{MAX_SOURCE_PIXELS, MAX_SOURCE_SIDE, within_source_limits};
-
 use std::{
     path::{Path, PathBuf},
     sync::Arc,

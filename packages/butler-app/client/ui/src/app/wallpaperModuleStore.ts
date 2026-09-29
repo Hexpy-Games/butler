@@ -71,7 +71,9 @@ interface Entry {
 }
 
 /** Verdicts that are not the module's content (a taken id, an unreadable file): listed, never reported. */
-const LOCAL_REVISIONS = new Set(["taken", "unreadable"]);
+/** Revision of a module held back while another client's `checking` mark is younger than the timeout. */
+const PENDING_CHECK = "pending-check";
+const LOCAL_REVISIONS = new Set(["taken", "unreadable", PENDING_CHECK]);
 
 /** Failures when drawn that are the module's own (anything else is the image, the device or the setting). */
 const RUNTIME_FAILURES = new Set<WallpaperError["reason"]>(["compile", "link", "degraded", "context-lost"]);
@@ -91,7 +93,10 @@ function publicEntry({ id, name, verdict }: Entry): WallpaperUserModule {
 
 const failed = (message: string): WallpaperModuleReport => ({ state: "error", message });
 
-/** A `checking` mark the gateway still holds when this app first sees the module: that check never finished. */
+/** A `checking` mark older than this is a check that never finished, whoever made it. */
+const CHECK_TIMEOUT_MS = 60_000;
+
+/** A `checking` mark this client has seen for longer than the timeout: that check never finished. */
 export const HUNG_DURING_CHECK = "hung during check (the app stopped while compiling or drawing it)";
 
 /** The gateway already holds this verdict. */
@@ -101,6 +106,20 @@ function holds(status: WallpaperModuleStatus, verdict: WallpaperModuleReport): b
 
 /** Built-ins plus user modules; the registry is rebuilt only when what it offers changes. */
 export function createWallpaperModuleStore(deps: WallpaperModuleStoreDeps): WallpaperModuleStore {
+  /** When this client first saw each `checking` mark (`id` + its `checkedAt`), on this client's clock only. */
+  const seenMarks = new Map<string, number>();
+  /** How long this client has seen the mark; the first sight also schedules one look after the timeout. */
+  const markAge = (id: string, checkedAt: string | undefined) => {
+    const key = `${id}\n${checkedAt ?? ""}`;
+    const first = seenMarks.get(key);
+    if (first !== undefined) return Date.now() - first;
+    for (const seen of seenMarks.keys()) if (seen.startsWith(`${id}\n`)) seenMarks.delete(seen);
+    seenMarks.set(key, Date.now());
+    setTimeout(() => recheck(id), CHECK_TIMEOUT_MS + 1_000);
+    return 0;
+  };
+  /** Set once the store exists: looks at a held-back module again after the timeout. */
+  let recheck: (id: string) => void = () => undefined;
   let entries = new Map<string, Entry>();
   let snapshot: WallpaperModuleSnapshot = { registry: BUILTIN_WALLPAPERS, userModules: [] };
   let signature = "";
@@ -174,10 +193,17 @@ export function createWallpaperModuleStore(deps: WallpaperModuleStoreDeps): Wall
     const revision = wallpaperModuleRevision(module);
     // Unchanged content keeps its verdict, including a failure when drawn.
     if (previous?.revision === revision) return { ...previous, ...base, files: files ?? previous.files, module: previous.module };
-    // First sight of a checked module: the gateway's verdict stands. A `checking` mark left from before
-    // this app started is a check that never finished (a GPU hang): the module is retired, never drawn.
-    if (!previous && status.state === "checking") return { ...base, files, revision, module, verdict: failed(HUNG_DURING_CHECK) };
-    if (!previous && status.state !== "unknown") {
+    // First sight of a checked module: the gateway's verdict stands. A `checking` mark is some client's
+    // check in progress (maybe one that hung the GPU and took its app down): the module is held back,
+    // neither drawn nor checked, until the mark gives way to a verdict or this client has seen it for
+    // the timeout, when it counts as a check that never finished and the module is retired.
+    const firstSight = !previous || previous.revision === PENDING_CHECK;
+    if (firstSight && status.state === "checking") {
+      if (markAge(id, status.checkedAt) >= CHECK_TIMEOUT_MS) return { ...base, files, revision, module, verdict: failed(HUNG_DURING_CHECK) };
+      return { ...base, files, revision: PENDING_CHECK };
+    }
+    for (const key of [...seenMarks.keys()]) if (key.startsWith(`${id}\n`)) seenMarks.delete(key);
+    if (firstSight && status.state !== "unknown") {
       return { ...base, files, revision, module, verdict: status.state === "ok" ? { state: "ok" } : failed(status.message ?? "error") };
     }
     if (files && deps.markChecking && deps.canCheck?.() !== false) await deps.markChecking(id, files).catch(() => undefined);
@@ -211,7 +237,7 @@ export function createWallpaperModuleStore(deps: WallpaperModuleStoreDeps): Wall
     running = null;
   }
 
-  return {
+  const store: WallpaperModuleStore = {
     getSnapshot: () => snapshot,
     subscribe(listener) {
       listeners.add(listener);
@@ -239,4 +265,6 @@ export function createWallpaperModuleStore(deps: WallpaperModuleStoreDeps): Wall
       deps.notifyFailure(publicEntry(entry));
     },
   };
+  recheck = (id) => void store.refresh([id]);
+  return store;
 }
