@@ -57,3 +57,8 @@
 .tile > * {
   max-inline-size: 100%;
 }
+
+/* Tall: one column, each component centred on it. */
+.poster[data-layout="tall"] > .tile {
+  place-items: center;
+}

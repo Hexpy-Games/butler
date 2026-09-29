@@ -75,6 +75,8 @@ export interface SceneSpec {
   /** A layer fixed to the frame over the camera (a metronome along the bottom edge), kept through the finale. */
   hud?: ReactNode;
   /** Canvas px kept clear along the bottom of the finale, per canvas (a fixed footer, the Motion metronome). */
+  /** Tall finale framed by its tiles, not by what they paint (a scene that paints wider than it ends). */
+  tallByTiles?: boolean;
   finaleReserve?: Partial<Record<HeroLayout, number>>;
   /** Beat the last scene ends (the finale begins). */
   end: (g: SceneGeometry) => number;

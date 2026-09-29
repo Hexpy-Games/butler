@@ -29,7 +29,7 @@ function spec(copy: RadiusCopy): SceneSpec {
       lift: <LiftTile copy={copy} />,
     },
     poster: {
-      wide: { columns: "0.8fr 1fr 1fr", rows: "1fr 1fr", areas: ["corner row row", "corner composer lift"] },
+      wide: { columns: "0.7fr 1fr", rows: "0.8fr 0.9fr 0.9fr", areas: ["corner row", "corner composer", "corner lift"] },
       tall: { columns: "1fr", rows: "auto", areas: ["corner", "row", "composer", "lift"] },
     },
     // The pill fades as the camera sets off; the row shows once it has gone (the pill's zoom-out would overlap it).

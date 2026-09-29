@@ -40,14 +40,15 @@ function fitTiles(root: HTMLElement, layout: HeroLayout) {
   for (const tile of root.querySelectorAll<HTMLElement>("[data-tile]")) {
     const child = tile.firstElementChild as HTMLElement | null;
     if (!child) continue;
-    child.style.removeProperty("zoom");
+    // An explicit zoom is absolute (an unset one inherits the poster's), so measure and set on the same footing.
+    child.style.setProperty("zoom", "1");
     const room = tile.getBoundingClientRect();
     const own = child.getBoundingClientRect();
     const scale = own.width / Math.max(1, child.offsetWidth);
     const w = Math.max(own.width, child.scrollWidth * scale);
     const h = Math.max(own.height, child.scrollHeight * scale);
     const fit = Math.min(TILE_ZOOM, (room.width * TILE_FILL) / Math.max(1, w), (room.height * TILE_FILL) / Math.max(1, h));
-    if (fit > 1.03 || fit < 0.995) child.style.setProperty("zoom", String(Math.floor(fit * 100) / 100));
+    child.style.setProperty("zoom", String(Math.floor(fit * 100) / 100));
   }
 }
 

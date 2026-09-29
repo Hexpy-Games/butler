@@ -25,11 +25,12 @@ function spec(copy: LayersCopy): SceneSpec {
       ladder: <Ladder copy={copy} />,
     },
     poster: {
-      wide: { columns: "1.7fr 1fr", rows: "1fr", areas: ["screen ladder"] },
+      wide: { columns: "3.6fr 1fr", rows: "1fr", areas: ["screen ladder"] },
       tall: { columns: "1fr", rows: "auto", areas: ["screen", "ladder"] },
     },
     posterZoom: { wide: 0.8, tall: 0.9 },
     deep: ["screen"],
+    tallByTiles: true,
     end: () => LAYERS_END,
     tracks: layersTracks(copy),
   };
