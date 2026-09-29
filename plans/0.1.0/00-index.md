@@ -7,6 +7,7 @@ This file is the status source. `HANDOFF.md` at the repo root covers what has al
 | [ ] | [01 SSD write hotfix: transcript projection](01-projection-hotfix.md) | **P0** | `claude/projection-quadratic-fix` (draft PR) |
 | [ ] | [02 Tests never touch `$HOME/.butler`](02-test-isolation-guard.md) | **P0** | `claude/tests-never-touch-home` (draft PR) |
 | [ ] | [03 CLI lifecycle (#303)](03-cli-lifecycle.md) | **P0** | #303 |
+| [x] | [14 Idle disk-write CI guard](14-idle-disk-gate.md) | **P0** | `origin/main` |
 | [ ] | [04 Usage and updates latency](04-usage-updates-latency.md) | P1 | `claude/usage-updates-latency` (draft PR) |
 | [ ] | [05 Remove Telegram](05-remove-telegram.md) | P1 | `claude/remove-telegram` (draft PR) |
 | [ ] | [06 Branch actions and steward pill (#316)](06-branch-actions.md) | P1 | #316 |
@@ -21,5 +22,5 @@ This file is the status source. `HANDOFF.md` at the repo root covers what has al
 Dependencies:
 - 03 lands before 11.
 - 09 lands before 10.
-- 01, 02 and 03 land before 12.
+- 01, 02, 03 and 14 land before 12.
 - Don't cut any release tag until #300 and 03 are both on main. The current updater on main selects only darwin artifacts.

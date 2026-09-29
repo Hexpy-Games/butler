@@ -141,7 +141,17 @@ jobs:
         run: |
           set -o pipefail
           # --no-fail-fast: one run reports every failing scenario binary.
-          cargo test --locked --no-fail-fast -p butler-e2e 2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
+          cargo test --locked --no-fail-fast -p butler-e2e -- --skip idle_disk_writes_and_cpu_stay_bounded 2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
+
+      - name: Report IDLE-DISK counters
+        if: always()
+        env:
+          BUTLER_E2E_EMBEDDING_ASSETS: ${{ runner.temp }}/e2e-models/bge-m3
+          BUTLER_E2E_TIER: stub
+          BUTLER_E2E_SKIP_BUILD: "1"
+        run: |
+          mkdir -p target/e2e-tmp
+          TMPDIR="$PWD/target/e2e-tmp" cargo test --locked -p butler-e2e --test idle_disk -- --nocapture
 
       - name: Summarize
         if: always()
@@ -234,7 +244,17 @@ jobs:
         run: |
           set -o pipefail
           # --no-fail-fast: one run reports every failing scenario binary.
-          cargo test --locked --no-fail-fast -p butler-e2e 2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
+          cargo test --locked --no-fail-fast -p butler-e2e -- --skip idle_disk_writes_and_cpu_stay_bounded 2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
+
+      - name: Report IDLE-DISK counters
+        if: always()
+        env:
+          BUTLER_E2E_EMBEDDING_ASSETS: ${{ runner.temp }}/e2e-models/bge-m3
+          BUTLER_E2E_TIER: stub
+          BUTLER_E2E_SKIP_BUILD: "1"
+        run: |
+          mkdir -p target/e2e-tmp
+          TMPDIR="$PWD/target/e2e-tmp" cargo test --locked -p butler-e2e --test idle_disk -- --nocapture
 
       - name: Summarize
         if: always()

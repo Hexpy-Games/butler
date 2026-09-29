@@ -13,6 +13,7 @@
 //!
 //! - [`process_control`]: process groups, group signals, exit signals,
 //!   liveness, detached processes and the stop requests a service receives.
+//! - [`process_usage`]: cumulative per-process disk I/O and CPU time.
 //! - [`instance`]: the instance lock, host facts, process identity and
 //!   stopping another instance.
 //! - [`command_sandbox`]: the shells commands run in and the sandbox that
@@ -47,6 +48,7 @@ pub mod instance;
 pub mod launcher;
 pub mod network;
 pub mod process_control;
+pub mod process_usage;
 pub mod secrets;
 pub mod secure_fs;
 pub mod service_registration;
