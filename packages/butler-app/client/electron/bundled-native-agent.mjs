@@ -1,5 +1,6 @@
 import { constants, accessSync, existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { preferNewerAgent, resolveCliInstalledAgent } from "./cli-installed-native-agent.mjs";
 
 const manifestName = "native-agent-manifest.json";
 
@@ -86,7 +87,8 @@ export function resolveNativeAgentInstallation({
       butlerData, resourcesPath, execPath, platform,
     });
     if (!installation) throw new Error("Packaged Butler App is missing bundled native Agent resources.");
-    return installation;
+    // A newer CLI-installed Agent (AGENT_HOME/current) wins over the bundled one.
+    return preferNewerAgent(installation, resolveCliInstalledAgent({ butlerData, platform, env }));
   }
   const configured = env.BUTLER_NATIVE_AGENT_EXECUTABLE?.trim();
   if (!configured || !isAbsolute(configured)) {
