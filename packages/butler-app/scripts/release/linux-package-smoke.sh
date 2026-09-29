@@ -49,6 +49,8 @@ before="$(find "$install_dir" -type f -exec sha256sum {} + | sort | sha256sum)"
 
 # The agent runs as an ordinary user, as the App would start it.
 id butler-smoke >/dev/null 2>&1 || useradd -m butler-smoke
+app_dir="$install_dir/resources/app.asar"
+[ -e "$app_dir" ] || app_dir="$install_dir/resources/app"
 work="$(runuser -u butler-smoke -- mktemp -d)"
 cat > "$work/run.sh" <<EOF
 set -eu
@@ -65,7 +67,7 @@ const { resolveBundledNativeAgentInstallation } = await import(pathToFileURL(app
 const installation = resolveBundledNativeAgentInstallation({ butlerData: "/tmp/butler-smoke-data", resourcesPath, execPath, platform: "linux" });
 console.log(JSON.stringify(installation));
 JS
-ELECTRON_RUN_AS_NODE=1 "$install_dir/Butler" resolve.mjs "$install_dir/resources/app" "$install_dir/resources" "$install_dir/Butler" > resolved.json || { cat resolved.json; exit 10; }
+ELECTRON_RUN_AS_NODE=1 "$install_dir/Butler" resolve.mjs "$app_dir" "$install_dir/resources" "$install_dir/Butler" > resolved.json || { cat resolved.json; exit 10; }
 grep -q '"command":"'"$agent"'"' resolved.json || { cat resolved.json; exit 10; }
 grep -q '"'"$install_dir"'"' resolved.json || { cat resolved.json; exit 10; }
 agent() { "$agent" --installation-root "$install_dir" --resource-root "$resources" "\$@"; }
