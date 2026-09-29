@@ -193,6 +193,7 @@ impl ConversationAdmissionTurn {
             || message.message.role != role
             || content != text
             || (role == ConversationRole::User
+                && !self.input.envelope.resume
                 && stringify_optional(content_parts)? != stringify_optional(expected)?)
         {
             return Err(ConversationError::new(

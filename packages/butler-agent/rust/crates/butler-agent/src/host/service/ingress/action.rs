@@ -80,6 +80,35 @@ pub(super) fn crash_interrupted(
     envelope: &Envelope,
     binding: &StoredSessionBinding,
 ) -> Result<Value, IngressError> {
+    failure(
+        item,
+        envelope,
+        binding,
+        terminal::crash_interrupted(bind::routed_turn_id(envelope)),
+    )
+}
+
+/// The App action reporting a turn BTCC rejected with the safe error `code`.
+pub(super) fn rejected(
+    item: &ClaimedInboundEvent,
+    envelope: &Envelope,
+    binding: &StoredSessionBinding,
+    code: &str,
+) -> Result<Value, IngressError> {
+    failure(
+        item,
+        envelope,
+        binding,
+        terminal::rejected(bind::routed_turn_id(envelope), code),
+    )
+}
+
+fn failure(
+    item: &ClaimedInboundEvent,
+    envelope: &Envelope,
+    binding: &StoredSessionBinding,
+    terminal: terminal::Terminal<'_>,
+) -> Result<Value, IngressError> {
     let target = app_target(binding, envelope).ok_or_else(|| {
         IngressError::new(
             "inbound_app_target_missing",
@@ -90,7 +119,7 @@ pub(super) fn crash_interrupted(
         item,
         envelope,
         target,
-        terminal::crash_interrupted(bind::routed_turn_id(envelope)),
+        terminal,
         terminal::RichTerminal {
             artifacts: Vec::new(),
             changed_files: Vec::new(),

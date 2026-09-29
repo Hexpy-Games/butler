@@ -47,13 +47,7 @@ pub(super) async fn bind(
     {
         return Err(invalid("Native subsession binding mismatch"));
     }
-    let content = envelope
-        .message
-        .text
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| invalid("Missing user message"))?
-        .to_owned();
+    let content = super::user_message(envelope)?;
     let turn_role = if expected_role == SessionRole::Steward {
         TurnRole::Steward
     } else {
@@ -91,6 +85,7 @@ pub(super) async fn bind(
         authority_request_ref: None,
         authority_client_message_id: None,
         app_queue_claim_id: None,
+        resume: false,
         preparation_cancellation: CancellationToken::new(),
     })
 }

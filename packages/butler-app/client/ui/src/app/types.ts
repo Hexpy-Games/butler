@@ -18,6 +18,7 @@ export type SettingsSectionId =
   | "logs"
   | "personalization"
   | "privacy"
+  | "security"
   | "system"
   | "archives"
   | "about";
@@ -589,12 +590,36 @@ export interface SettingsView {
   profile_label: string;
   /** #230: onboarding state kept by the agent; absent on agents before #230. */
   onboarding?: OnboardingSettingsView;
+  /** Local clients that send the admin credential only. */
+  security?: SecuritySettingsView;
 }
 
 export interface OnboardingSettingsView {
   consent_version?: number | null;
   accepted_at?: string | null;
   completed_at?: string | null;
+}
+
+/** The `security` object of GET/PATCH /settings. */
+export interface SecuritySettingsView {
+  remote_access_enabled: boolean;
+  allowed_hosts: string[];
+}
+
+/**
+ * GET /security: local clients with the admin credential only (403
+ * `loopback_required` or `admin_credential_required` otherwise).
+ */
+export interface SecurityView {
+  remote_access_enabled: boolean;
+  /** Every listen address, loopback first. */
+  bind_addresses: string[];
+  /** Empty while remote access is off. */
+  lan_urls: string[];
+  /** Extra host names the gateway answers (tunnels, reverse proxies). */
+  allowed_hosts: string[];
+  /** Null when local auth is off; `created_at` null when the token file has none. */
+  connection_code: { masked: string; created_at: string | null } | null;
 }
 
 export interface ModelFallbackSettingsView {
