@@ -6,13 +6,18 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+default = ["prebuilt-ort"]
+prebuilt-ort = ["butler-memory/prebuilt-ort"]
+static-ort = ["butler-memory/static-ort"]
+
 [dependencies]
 butler-core = { path = "../butler-core" }
 butler-platform = { path = "../butler-platform" }
 butler-turn = { path = "../butler-turn" }
 butler-models = { path = "../butler-models" }
 butler-runtime = { path = "../butler-runtime" }
-butler-memory = { path = "../butler-memory" }
+butler-memory = { path = "../butler-memory", default-features = false }
 axum.workspace = true
 base64.workspace = true
 bytes.workspace = true

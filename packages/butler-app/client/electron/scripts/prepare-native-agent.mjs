@@ -145,7 +145,10 @@ function buildNativeAgent() {
     ORT_SKIP_DOWNLOAD: "1",
     PROTOC: prepared.protoc,
   });
-  run("cargo", ["build", "--release", "--locked", "-p", "butler-agent"], rustRoot, buildEnv);
+  run("cargo", [
+    "build", "--release", "--locked", "-p", "butler-agent",
+    "--no-default-features", "--features", "static-ort",
+  ], rustRoot, buildEnv);
   const targetRoot = process.env.CARGO_TARGET_DIR
     ? resolve(rustRoot, process.env.CARGO_TARGET_DIR)
     : join(rustRoot, "target");
