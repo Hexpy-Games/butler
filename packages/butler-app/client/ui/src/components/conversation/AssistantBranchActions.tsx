@@ -1,20 +1,9 @@
-import { useButlerStore } from "@/app/store.ts";
-import type { MessageRecord, NavigationView } from "@/app/types.ts";
+import { createContext, useContext } from "react";
+import type { MessageRecord } from "@/app/types.ts";
 import { BranchMessageActions } from "./BranchMessageActions";
 
 const BRANCHABLE_STATUSES = ["delivered", "completed", "sent"];
-// One session → project index per navigation snapshot, shared by every message.
-const projectIndexes = new WeakMap<NavigationView, Map<string, string>>();
-
-function projectIdOf(navigation: NavigationView, sessionId: string): string | null {
-  let index = projectIndexes.get(navigation);
-  if (!index) {
-    index = new Map(navigation.projects.flatMap((project) =>
-      (project.sessions ?? []).map((session) => [session.id, project.id] as const)));
-    projectIndexes.set(navigation, index);
-  }
-  return index.get(sessionId) ?? null;
-}
+export const BranchProjectContext = createContext<string | null>(null);
 
 /**
  * Branch actions for a settled answer in `general` or a project session. From
@@ -22,8 +11,7 @@ function projectIdOf(navigation: NavigationView, sessionId: string): string | nu
  */
 export function AssistantBranchActions({ message }: { message: MessageRecord }) {
   const sessionId = message.chat_id ?? "";
-  const projectId = useButlerStore((state) =>
-    sessionId === "general" ? null : projectIdOf(state.navigation, sessionId));
+  const projectId = useContext(BranchProjectContext);
   const settled = Boolean(message.text.trim()) &&
     (!message.status || BRANCHABLE_STATUSES.includes(message.status));
   if (!settled || (sessionId !== "general" && !projectId)) return null;

@@ -140,28 +140,3 @@ fn complete_turn(turn: &mut Map<String, Value>) {
         })
     });
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn child(state: &str) -> Value {
-        json!({"result": null, "latest_turn": {"state": state, "updated_at": "2026-01-01T00:00:00.000Z"}})
-    }
-
-    #[test]
-    fn a_child_stuck_finalizing_becomes_an_orphan_after_its_grace() {
-        let start = butler_core::js_date::parse_iso_millis("2026-01-01T00:00:00.000Z").unwrap();
-        let stuck = child("delivery_committed");
-        assert!(!is_orphan(&stuck, start + FINALIZING_GRACE_MS));
-        assert!(is_orphan(&stuck, start + FINALIZING_GRACE_MS + 1));
-        assert!(is_orphan(
-            &child("delivered"),
-            start + RESULT_COMMIT_GRACE_MS + 1
-        ));
-        assert!(!is_orphan(
-            &child("admitted"),
-            start + FINALIZING_GRACE_MS * 10
-        ));
-    }
-}

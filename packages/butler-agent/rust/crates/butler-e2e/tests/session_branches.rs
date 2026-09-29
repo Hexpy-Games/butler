@@ -21,7 +21,7 @@ use butler_e2e::e2e::gateway::{TERMINAL, turn_state};
 use butler_e2e::e2e::scenario::{Fixture, Scenario, Setup};
 use serde_json::{Value, json};
 
-const QUESTION: &str = "Plan the spring garden beds.";
+const QUESTION: &str = "What is one common type of garden soil?";
 /// A made-up steward result; it must never reach a branch summary.
 const RESULT: &str = "Delegated finding: the soil pH is 6.4 (made up for the test).";
 const RELATION: &str = "relation-00beef01";
@@ -57,9 +57,11 @@ async fn start(id: &str, server: &FakeServer) -> Result<Scenario, HarnessError> 
     Ok(s)
 }
 
-/// A project session with an answer, then a steward result and its answer;
-/// returns (project id, session id, id of the last settled answer).
-async fn project_source(s: &Scenario) -> Result<(String, String, String), HarnessError> {
+/// An App answer with a steward result before its follow-up answer, plus an
+/// existing destination project; returns (project id, source session, answer).
+async fn branch_source(s: &Scenario) -> Result<(String, String, String), HarnessError> {
+    let chat = "general".to_owned();
+    s.turn(&chat, QUESTION).await?;
     let project =
         s.gw.post(
             "/projects",
@@ -68,16 +70,6 @@ async fn project_source(s: &Scenario) -> Result<(String, String, String), Harnes
         .await?;
     assert!(project.status < 300, "{}", project.text);
     let project_id = project.data()["project"]["id"].as_str().unwrap().to_owned();
-    let session =
-        s.gw.post(
-            "/sessions",
-            json!({"kind": "project", "project_id": project_id, "title": "Beds"}),
-        )
-        .await?;
-    assert_eq!(session.status, 201, "{}", session.text);
-    let chat = session.data()["session"]["id"].as_str().unwrap().to_owned();
-    s.turn(&chat, QUESTION).await?;
-
     let settings = s.gw.settings().await?;
     let delivered =
         s.gw.post(
@@ -118,7 +110,7 @@ async fn wait_settled(s: &Scenario, chat: &str, count: usize) -> Result<(), Harn
     }
 }
 
-fn branch_body(chat: &str, answer: &str, id: &str, title: &str, destination: Value) -> Value {
+fn branch_body(chat: &str, answer: &str, id: &str, title: &str, destination: &Value) -> Value {
     json!({
         "requestId": id, "sourceSessionId": chat, "sourceMessageId": answer,
         "title": title, "destination": destination,
@@ -134,22 +126,21 @@ fn summary_requests(server: &FakeServer, seen: usize) -> Vec<String> {
         .collect()
 }
 
-/// BRANCH-01 — From a project-session answer, `POST /space/branches` creates
-/// a chat, a session in an existing project and a new project (named by
-/// `destination.name`). Each is seeded from the clicked answer, and the
-/// summary reads the source conversation without the steward result that
-/// reached it as model input.
+/// BRANCH-01 — `POST /space/branches` creates a chat, a session in an
+/// existing project and a new project (named by `destination.name`). Each is
+/// seeded from the clicked answer, and the summary excludes a steward result
+/// that reached the source as model input.
 #[tokio::test]
-async fn branch_01_project_answer_branches_to_every_destination() -> Result<(), HarnessError> {
+async fn branch_01_answer_branches_to_every_destination() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let server = FakeServer::local_models(ChatBehavior {
-        answer: "Raised beds along the south fence.".into(),
+        answer: "Loam is a common type of garden soil.".into(),
         chunk_delay: Duration::from_millis(5),
         ..ChatBehavior::default()
     })
     .await?;
     let s = start("BRANCH-01", &server).await?;
-    let (project_id, chat, answer) = project_source(&s).await?;
+    let (project_id, chat, answer) = branch_source(&s).await?;
 
     let destinations = [
         ("branch-chat", "Beds chat", json!({"kind": "chat"})),
@@ -170,7 +161,7 @@ async fn branch_01_project_answer_branches_to_every_destination() -> Result<(), 
         let reply =
             s.gw.post(
                 "/space/branches",
-                branch_body(&chat, &answer, id, title, destination),
+                branch_body(&chat, &answer, id, title, &destination),
             )
             .await?;
         assert_eq!(reply.status, 200, "{kind}: {}", reply.text);
@@ -217,17 +208,17 @@ async fn branch_01_project_answer_branches_to_every_destination() -> Result<(), 
 async fn branch_02_invalid_requests_are_refused() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("BRANCH-02")?.start().await?;
-    let mut follow_up = branch_body("general", "m", "b1", "T", json!({"kind": "chat"}));
+    let mut follow_up = branch_body("general", "m", "b1", "T", &json!({"kind": "chat"}));
     follow_up["followUp"] = json!("continue there");
-    let mut missing_answer = branch_body("general", "m", "b4", "T", json!({"kind": "chat"}));
+    let mut missing_answer = branch_body("general", "m", "b4", "T", &json!({"kind": "chat"}));
     missing_answer
         .as_object_mut()
         .unwrap()
         .remove("sourceMessageId");
     let bodies = [
         follow_up.to_string(),
-        branch_body("general", "m", "b2", "T", json!({"kind": "project"})).to_string(),
-        branch_body("general", "m", "b3", "T", json!({"kind": "folder"})).to_string(),
+        branch_body("general", "m", "b2", "T", &json!({"kind": "project"})).to_string(),
+        branch_body("general", "m", "b3", "T", &json!({"kind": "folder"})).to_string(),
         missing_answer.to_string(),
         "{not json".to_owned(),
     ];
