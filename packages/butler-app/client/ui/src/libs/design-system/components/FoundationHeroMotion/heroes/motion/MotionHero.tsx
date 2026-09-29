@@ -6,7 +6,7 @@ import { Intro } from "../shared/Intro";
 import { MOTION_COPY, type MotionCopy } from "./motionCopy";
 import { Lanes, Metronome } from "./motionLanes";
 import { Score, Twins } from "./MotionScenes";
-import { Exits, Spring } from "./MotionStages";
+import { Exits, Spring, Tail } from "./MotionStages";
 import { AT } from "./motionScore";
 import { MOTION_END, motionTracks } from "./motionTracks";
 import s from "./MotionHero.module.css";
@@ -32,11 +32,11 @@ function spec(copy: MotionCopy): SceneSpec {
       lanes: <Lanes copy={copy} live={false} />,
       score: <Score copy={copy} live={false} />,
       twins: <Twins copy={copy} live={false} />,
-      spring: <Spring copy={copy} live={false} />,
+      tail: <Tail copy={copy} />,
     },
     poster: {
-      wide: { columns: "0.94fr 1fr", rows: "auto 1fr", areas: ["lanes score", "twins spring"] },
-      tall: { columns: "1fr", rows: "auto", areas: ["score"] },
+      wide: { columns: "1fr 1fr", rows: "auto auto", areas: ["lanes score", "twins tail"] },
+      tall: { columns: "1fr", rows: "auto", areas: ["score", "tail"] },
     },
     posterZoom: { wide: 0.55, tall: 1 },
     // Each scene shows only around its own stretch, so no neighbour peeks into a zoomed-out frame.

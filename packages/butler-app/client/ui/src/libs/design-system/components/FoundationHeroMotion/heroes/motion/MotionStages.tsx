@@ -42,22 +42,23 @@ export function exitTimes() {
  * (the longest spans the track), each filled while it plays, with its value
  * in a column of its own so no number sits on a bar.
  */
-export function Exits({ copy }: { copy: MotionCopy }) {
+export function Exits({ copy, live = true }: { copy: MotionCopy; live?: boolean }) {
+  const t = (name: string) => (live ? name : undefined);
   const { enter, exit } = exitTimes();
   const rows = [
     { id: "in", name: copy.enter, token: "--motion-enter-overlay", time: enter },
     { id: "out", name: copy.exit, token: "--motion-exit-fast", time: exit },
   ];
   return (
-    <div className={s.exits} data-m="exits">
+    <div className={s.exits} data-m={t("exits")}>
       <div className={s.exitStage}>
-        <div className={s.menuAnchor} data-t="ex-menu"><AddMenu copy={copy} /></div>
+        {live ? <div className={s.menuAnchor} data-t="ex-menu"><AddMenu copy={copy} /></div> : null}
         <CompactComposer copy={copy} running={false} />
       </div>
       <div className={s.exitBars}>
         <span className={s.exitHead}>
-          <span data-t="ex-half">{copy.half}</span>
-          <span data-t="ex-real">{copy.real}</span>
+          {live ? <span data-t="ex-half">{copy.half}</span> : null}
+          <span data-t={t("ex-real")}>{copy.real}</span>
         </span>
         {rows.map((row) => (
           <div className={s.exitRow} key={row.id}>
@@ -68,7 +69,7 @@ export function Exits({ copy }: { copy: MotionCopy }) {
             <span className={s.exitTrack}>
               <span className={s.noteSlot} style={{ "--l": 0, "--w": row.time / enter } as CSSProperties}>
                 <span className={s.noteBase} />
-                <span className={s.noteWindow} data-t={`exb-${row.id}`}><span className={s.noteFill} data-t={`exb-${row.id}-in`} /></span>
+                <span className={s.noteWindow} data-t={t(`exb-${row.id}`)}><span className={s.noteFill} data-t={t(`exb-${row.id}-in`)} /></span>
               </span>
             </span>
             <span className={s.exitValue}>{`${row.time} ms`}</span>
@@ -94,6 +95,16 @@ export function Spring({ copy, live }: { copy: MotionCopy; live: boolean }) {
         <SettingsField control={control} description={copy.fieldHint} label={copy.field} />
       </SettingsSection>
       <span className={s.springNote}>--motion-ease-spring · --motion-base</span>
+    </div>
+  );
+}
+
+/** The finale's tail tile: the exit pair over the Switch row, both still. */
+export function Tail({ copy }: { copy: MotionCopy }) {
+  return (
+    <div className={s.tail}>
+      <Exits copy={copy} live={false} />
+      <Spring copy={copy} live={false} />
     </div>
   );
 }

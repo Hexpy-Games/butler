@@ -503,14 +503,14 @@
 }
 
 /* The finale's tiles are the specimens themselves on the page background (no tile fill). */
-[data-tile]:has(> .lanes, > .score, > .twins, > .spring) {
+[data-tile]:has(> .lanes, > .score, > .twins, > .tail) {
   border: 0;
   background: none;
   place-items: start;
 }
 
 /* One scale for every tile (the poster's zoom), so no specimen is drawn larger than its neighbours. */
-[data-tile] > :is(.lanes, .score, .twins, .spring) {
+[data-tile] > :is(.lanes, .score, .twins, .tail) {
   zoom: 1 !important;
 }
 
@@ -520,4 +520,15 @@
   --roll-w: 100%;
 
   inline-size: 100%;
+}
+
+/* The finale's tail tile: the exit pair over the Switch row. */
+.tail {
+  display: grid;
+  row-gap: var(--space-3xl);
+}
+
+/* The phone finale: the score over the Switch row fills the column. */
+[data-layout="tall"] .tail :is(.exits, .springNote) {
+  display: none;
 }
