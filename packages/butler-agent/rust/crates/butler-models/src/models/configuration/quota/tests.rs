@@ -58,7 +58,7 @@ pub(crate) fn zai_quota_url_admits_loopback_only_from_the_environment() {
         Some("http://127.0.0.1:4321/api/monitor/usage/quota/limit")
     );
     assert_eq!(
-        zai_quota_url("http://10.0.0.2:4321/api/coding/paas/v4", true),
+        zai_quota_url("http://10.0.0.2:4321/api/coding/paas/v4", true), // privacy-hygiene: allow-private-ip (non-loopback rejection test)
         None
     );
 }

@@ -96,13 +96,13 @@ fn host_allowlist_is_loopback_with_port_plus_configured_names() {
     assert_eq!(normalize_allowed_host("  "), Err(AllowedHostError::Empty));
 
     let cases = [
-        ("192.168.0.20", true),
-        ("10.0.0.2", true),
-        ("172.16.4.2", true),
+        ("192.168.0.20", true), // privacy-hygiene: allow-private-ip (LAN classification test)
+        ("10.0.0.2", true),     // privacy-hygiene: allow-private-ip (LAN classification test)
+        ("172.16.4.2", true),   // privacy-hygiene: allow-private-ip (LAN classification test)
         ("100.101.102.103", false),
         ("169.254.10.1", true),
         ("fd12:3456::1", true),
-        ("::ffff:10.1.2.3", true),
+        ("::ffff:10.1.2.3", true), // privacy-hygiene: allow-private-ip (LAN classification test)
         ("127.0.0.1", false),
         ("::1", false),
         ("8.8.8.8", false),
