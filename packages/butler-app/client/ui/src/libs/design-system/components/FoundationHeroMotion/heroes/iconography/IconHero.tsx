@@ -3,7 +3,11 @@ import type { FoundationHeroLang } from "../../FoundationHeroMotion";
 import type { HeroLayout } from "../shared/grid";
 import { Intro } from "../shared/Intro";
 import { ICON_COPY } from "./iconCopy";
-import { GlyphScene, GridScene, GrowScene, PlaceScene, TitleWord } from "./IconScenes";
+import { GlyphScene } from "./GlyphScene";
+import { GridScene } from "./GridScene";
+import { GrowScene } from "./GrowScene";
+import { PlaceScene } from "./PlaceScene";
+import { TitleWord } from "./TitleWord";
 import { IconStage } from "./IconStage";
 
 /**

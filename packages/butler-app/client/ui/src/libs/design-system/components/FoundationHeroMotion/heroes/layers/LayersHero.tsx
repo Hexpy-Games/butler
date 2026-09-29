@@ -4,7 +4,10 @@ import { SceneHero } from "../scene/SceneHero";
 import type { SceneSpec } from "../scene/types";
 import { Intro } from "../shared/Intro";
 import { LAYERS_COPY, type LayersCopy } from "./layersCopy";
-import { Ending, Ladder, PosterScreen, TitleCopies } from "./LayersScenes";
+import { Ending } from "./Ending";
+import { Ladder } from "./Ladder";
+import { PosterScreen } from "./PosterScreen";
+import { TitleCopies } from "./TitleCopies";
 import { LAYERS_END, layersTracks } from "./layersTracks";
 import s from "./LayersHero.module.css";
 

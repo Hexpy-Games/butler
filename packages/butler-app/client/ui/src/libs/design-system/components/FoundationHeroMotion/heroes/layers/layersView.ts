@@ -26,7 +26,7 @@ const rad = (deg: number) => (deg * Math.PI) / 180;
 /** How far the camera moves in on the stack while its sheets are spread (the stack crops at the frame, its labels do not). */
 export const ZOOM: Record<HeroLayout, number> = { wide: 2.7, tall: 2.5 };
 
-/** A sheet's height above the page (sheet px along its normal): the camera scales x and y, not z, so the sheets stand PITCH apart on the frame at any zoom. */
+/** A sheet's height above the page (sheet px along its normal): the camera scales x and y, not z, so the sheets stand PITCH apart on the frame at every zoom. */
 export const lift = (layout: HeroLayout, k: number) => (k * PITCH[layout]) / Math.sin(rad(TURN[layout].rx));
 
 /**

@@ -4,8 +4,15 @@ import { SceneHero } from "../scene/SceneHero";
 import type { SceneSpec } from "../scene/types";
 import { Intro } from "../shared/Intro";
 import { FOCUS_COPY, type FocusCopy } from "./focusCopy";
-import { CloseUp, RouteScene, GroupScene, RowScene, TitleWords } from "./FocusScenes";
-import { CloseTile, GroupTile, RowTile, ShellTile } from "./focusTiles";
+import { CloseUp } from "./CloseUp";
+import { GroupScene } from "./GroupScene";
+import { RouteScene } from "./RouteScene";
+import { RowScene } from "./RowScene";
+import { TitleWords } from "./TitleWords";
+import { CloseTile } from "./CloseTile";
+import { GroupTile } from "./GroupTile";
+import { RowTile } from "./RowTile";
+import { ShellTile } from "./ShellTile";
 import { focusEnd, focusTracks } from "./focusTracks";
 
 function spec(copy: FocusCopy): SceneSpec {

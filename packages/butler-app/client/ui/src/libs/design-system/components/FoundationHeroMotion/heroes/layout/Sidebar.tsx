@@ -4,15 +4,11 @@ import { CollapsibleNavGroup } from "../../../../blocks/CollapsibleNavGroup";
 import { NavRow } from "../../../../blocks/NavRow";
 import { NavSectionHeading } from "../../../../blocks/NavSection";
 import { SidebarBrand, SidebarNav, SidebarShell } from "../../../../blocks/SidebarShell";
-import { TitlebarShell } from "../../../../blocks/TitlebarShell";
 import { Box } from "../../../Box";
 import { ButtonContainer } from "../../../ButtonContainer";
 import { IconButton } from "../../../IconButton";
 import { IconSlot } from "../../../IconSlot";
-import {
-  Activity, Briefcase, ChevronDown, Clock3, GitBranch, LayoutDashboard, ListFilter, MoreHorizontal,
-  Notebook, PanelRight, PencilLine, Plus, Search, Settings,
-} from "../../../Icons";
+import { Activity, Briefcase, ChevronDown, Clock3, LayoutDashboard, ListFilter, MoreHorizontal, Notebook, PencilLine, Plus, Search, Settings } from "../../../Icons";
 import { Stack } from "../../../Stack";
 import { Tabs, TabsList, TabsTrigger } from "../../../Tabs";
 import { Typo } from "../../../Typo";
@@ -78,32 +74,5 @@ export function Sidebar({ copy, touch }: { copy: LayoutCopy; touch: boolean }) {
           : <NavRow icon={glyph(<Notebook />)} key={label} label={label} />)}
       </CollapsibleNavGroup>
     </SidebarShell>
-  );
-}
-
-/** The session titlebar (Titlebar): title, project and workspace, the session menu and the inspector toggle. */
-export function Titlebar({ copy, collapsed }: { copy: LayoutCopy; collapsed: boolean }) {
-  return (
-    <TitlebarShell
-      collapsed={collapsed}
-      dataTestClass="custom-titlebar"
-      dragRegion
-      subtitle={
-        <Stack as="span" inline align="row" cross="center" gap="sm" minWidth="0">
-          <Typo.Text grow minWidth="0" truncate>{copy.project}</Typo.Text>
-          <Stack as="span" inline align="row" cross="center" gap="xs" minWidth="0">
-            <IconSlot size="xs" tone="secondary"><GitBranch size="xs" aria-hidden="true" /></IconSlot>
-            <Typo.Text truncate>{copy.local}</Typo.Text>
-          </Stack>
-        </Stack>
-      }
-      title={copy.sessions[copy.active]}
-      trailing={
-        <ButtonContainer size="icon-sm">
-          <IconButton label={copy.more}><MoreHorizontal size="md" /></IconButton>
-          <IconButton label={copy.panel}><PanelRight size="md" /></IconButton>
-        </ButtonContainer>
-      }
-    />
   );
 }

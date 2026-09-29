@@ -4,7 +4,7 @@ import { motionEasing, type MotionEasingName } from "../../lib/motion";
  * A small declarative timeline for long hero sequences: tracks of poses at beat marks, compiled into one CSS
  * @keyframes rule per track on a shared cycle: plain CSS animation (transform and opacity, plus paint-only dash
  * offset, font weight, corner radius and a small box's size), so pausing, reduced motion and the motion trace treat
- * it like any other hero. Easing is per segment, from the --motion-ease-* tokens (var() is not honored in @keyframes).
+ * it like every other hero. Easing is per segment, from the --motion-ease-* tokens (var() is not honored in @keyframes).
  */
 
 /** A pose in canvas px and degrees; unset fields carry over from the previous key. */

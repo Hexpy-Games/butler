@@ -1,11 +1,9 @@
 import { TitlebarShell } from "../../../../blocks/TitlebarShell";
 import { ButtonContainer } from "../../../ButtonContainer";
 import { IconButton } from "../../../IconButton";
-import { IconSlot } from "../../../IconSlot";
-import { GitBranch, MoreHorizontal, PanelLeft, PanelRight } from "../../../Icons";
-import { Stack } from "../../../Stack";
-import { Typo } from "../../../Typo";
+import { MoreHorizontal, PanelLeft, PanelRight } from "../../../Icons";
 import type { SizingCopy } from "./sizingCopy";
+import { Subtitle } from "./Subtitle";
 import s from "./SizingHero.module.css";
 
 /** The cursor: an arrow whose tip rests on the target's centre. */
@@ -14,19 +12,6 @@ function Cursor() {
     <svg aria-hidden="true" className={s.cursor} data-t="cur" viewBox="0 0 16 20">
       <path d="M1 1 L1 16 L5 12 L8 19 L10.5 18 L7.5 11 L13 11 Z" />
     </svg>
-  );
-}
-
-/** The product's titlebar subtitle: the project, then the local workspace with its branch glyph. */
-export function Subtitle({ copy }: { copy: SizingCopy }) {
-  return (
-    <Stack align="row" as="span" cross="center" gap="sm" inline minWidth="0">
-      <Typo.Text minWidth="0" truncate>{copy.project}</Typo.Text>
-      <Stack align="row" as="span" cross="center" gap="xs" inline minWidth="0">
-        <IconSlot size="xs" tone="secondary"><GitBranch aria-hidden="true" size="xs" /></IconSlot>
-        <Typo.Text tone="secondary" truncate>{copy.local}</Typo.Text>
-      </Stack>
-    </Stack>
   );
 }
 

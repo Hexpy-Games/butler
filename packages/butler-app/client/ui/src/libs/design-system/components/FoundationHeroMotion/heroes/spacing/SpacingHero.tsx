@@ -4,7 +4,11 @@ import { SceneHero } from "../scene/SceneHero";
 import type { SceneSpec } from "../scene/types";
 import { Intro } from "../shared/Intro";
 import { SPACING_COPY, type SpacingCopy } from "./spacingCopy";
-import { CountScene, DensityScene, RhythmScene, StairScene, TitleLetters } from "./SpacingScenes";
+import { CountScene } from "./CountScene";
+import { DensityScene } from "./DensityScene";
+import { RhythmScene } from "./RhythmScene";
+import { StairScene } from "./StairScene";
+import { TitleLetters } from "./TitleLetters";
 import { CardTile, InlineTile, SectionTile, StairsTile } from "./spacingTiles";
 import { SPACING_END, spacingTracks } from "./spacingTracks";
 

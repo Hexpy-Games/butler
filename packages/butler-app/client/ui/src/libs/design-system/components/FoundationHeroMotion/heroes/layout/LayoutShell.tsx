@@ -15,7 +15,8 @@ import {
 import { Stack } from "../../../Stack";
 import type { LayoutCopy, Mode } from "./layoutCopy";
 
-import { Sidebar, Titlebar } from "./LayoutParts";
+import { Sidebar } from "./Sidebar";
+import { Titlebar } from "./Titlebar";
 import { Turn } from "./LayoutTurn";
 
 /** A conversation held at its latest message, as the app is when a chat is open: the bottom stays in view as the width reflows. */
@@ -37,7 +38,7 @@ function useLatestInView() {
  * held in one mode: expanded docks the sidebar; medium and compact put it in
  * a drawer (the layout AdaptiveShell picks below mediumMax in the browser),
  * full width on compact. `open` shows the drawer. The mode is fixed here
- * rather than read from the page's viewport, so a frame of any width on the
+ * rather than read from the page's viewport, so a frame of whatever width on the
  * page lays out as the app does at that window width.
  */
 export function AppScreen({ copy, mode, open = mode === "expanded", closedLook = !open, t }: {

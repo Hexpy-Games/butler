@@ -11,7 +11,7 @@ function lineOf(element: Element): number {
 /**
  * Reads the static layout (no animation applied) in canvas px: boxes are
  * taken relative to the world and divided by the stage's fit scale, so they
- * hold at any stage size. Returns null until laid out.
+ * hold at every stage size. Returns null until laid out.
  */
 export function measureScene(root: HTMLElement, layout: HeroLayout): SceneGeometry | null {
   const world = root.querySelector<HTMLElement>('[data-t="world"]');

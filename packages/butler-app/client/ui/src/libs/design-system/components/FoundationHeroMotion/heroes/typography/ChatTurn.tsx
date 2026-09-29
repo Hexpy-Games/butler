@@ -5,7 +5,9 @@ import { CopyButton } from "../../../CopyButton";
 import { IconButton } from "../../../IconButton";
 import { CheckCircle2, FolderPlus, MessageSquarePlus } from "../../../Icons";
 import { Typo } from "../../../Typo";
-import { Box, Line, Part } from "./BuildParts";
+import { Box } from "./Box";
+import { Line } from "./Line";
+import { Part } from "./Part";
 import type { TypeCopy } from "./typeCopy";
 
 /**
