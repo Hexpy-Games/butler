@@ -101,11 +101,11 @@ export function Screen({ copy, live, g = null }: { copy: LayersCopy; live: boole
     <div className={s.screen} data-m={live ? "screen" : undefined} ref={ref} style={style}>
       {SHEETS.map((sheet, k) => (
         <div className={s.sheet} data-sheet={sheet} data-t={t(`sh-${k}`)} key={sheet}>
+          {live ? (boxes[k] ?? []).map((box, i) => <Slab box={box} compact={compact} k={k} key={i} />) : null}
           <div className={s.plane} data-plane data-t={t(`pl-${k}`)}>
             {content(sheet, copy, compact)}
           </div>
           {live && sheet === "overlay" ? <span className={s.rim} data-t={`rim-${k}`} /> : null}
-          {live ? (boxes[k] ?? []).map((box, i) => <Slab box={box} k={k} key={i} />) : null}
           {live ? <Pin copy={copy} k={k} sheet={sheet} /> : null}
         </div>
       ))}
