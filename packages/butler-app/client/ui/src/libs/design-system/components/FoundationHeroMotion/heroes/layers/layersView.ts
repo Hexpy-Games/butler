@@ -11,14 +11,14 @@ import { SHEETS } from "./layersCopy";
  */
 export const TURN: Record<HeroLayout, { rx: number; rz: number }> = {
   wide: { rx: 58, rz: 14 },
-  tall: { rx: 58, rz: 0 },
+  tall: { rx: 58, rz: 18 },
 };
 
 /** Canvas px between neighbouring sheets on the frame (the label ladder's pitch). */
-export const PITCH: Record<HeroLayout, number> = { wide: 40, tall: 66 };
+export const PITCH: Record<HeroLayout, number> = { wide: 40, tall: 76 };
 
 /** Room the labels take right of the stack, and above and below its ends (canvas px). */
-const LABEL = { wide: { w: 224, h: 22 }, tall: { w: 170, h: 40 } } as const;
+const LABEL = { wide: { w: 224, h: 22 }, tall: { w: 200, h: 40 } } as const;
 const MARGIN = { wide: 36, tall: 16 } as const;
 
 const rad = (deg: number) => (deg * Math.PI) / 180;

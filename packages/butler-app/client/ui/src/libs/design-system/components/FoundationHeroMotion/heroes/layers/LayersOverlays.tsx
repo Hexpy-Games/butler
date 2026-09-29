@@ -9,7 +9,7 @@ import { ButtonContainer } from "../../../ButtonContainer";
 import dialog from "../../../Dialog/Dialog.module.css";
 import { Field, FieldLabel } from "../../../Field";
 import { IconButton } from "../../../IconButton";
-import { CheckIcon, MoreHorizontal, PanelLeft, PanelRight, XIcon } from "../../../Icons";
+import { CheckIcon, MoreHorizontal, PanelLeft, PanelLeftOpen, PanelRight, XIcon } from "../../../Icons";
 import { Input } from "../../../Input";
 import { SelectButton } from "../../../Select";
 import select from "../../../Select/Select.module.css";
@@ -41,7 +41,7 @@ export function Sticky({ copy, compact }: { copy: LayersCopy; compact: boolean }
       </div>
       <ChromeFloatingToggleLayer>
         <IconButton label={copy.showLeft}>
-          <PanelLeft size="md" />
+          {compact ? <PanelLeft size="md" /> : <PanelLeftOpen size="md" />}
         </IconButton>
       </ChromeFloatingToggleLayer>
     </>
@@ -95,7 +95,7 @@ export function Overlay({ copy, part }: { copy: LayersCopy; part: OverlayPart })
           title={copy.dialogTitle}
           footer={
             <ButtonContainer justify="end" size="default">
-              <Button text={copy.cancel} type="button" variant="outline" />
+              <Button text={copy.cancel} type="button" variant="ghost" />
               <Button text={copy.create} type="button" />
             </ButtonContainer>
           }
