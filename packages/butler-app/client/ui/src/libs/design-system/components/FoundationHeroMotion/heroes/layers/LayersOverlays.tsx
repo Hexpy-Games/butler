@@ -22,7 +22,7 @@ import s from "./LayersHero.module.css";
 export function Sticky({ copy, compact }: { copy: LayersCopy; compact: boolean }) {
   return (
     <>
-      <div className={s.titlebar}>
+      <div className={s.titlebar} data-ext>
         <TitlebarShell
           collapsed={compact}
           dragRegion
@@ -56,7 +56,7 @@ export function Scrim() {
 /** The open select's list, item-aligned on its trigger as Radix places it (the picked interval over the value). */
 function Menu({ copy }: { copy: LayersCopy }) {
   return (
-    <div className={cn(tintedGlassSurfaceClassName, select.content, s.menu)} data-align-trigger="true" data-glass="popover" data-radius="popover" data-slot="select-content" style={{ "--picked": PICKED } as CSSProperties}>
+    <div className={cn(tintedGlassSurfaceClassName, select.content, s.menu)} data-align-trigger="true" data-ext data-glass="popover" data-radius="popover" data-slot="select-content" style={{ "--picked": PICKED } as CSSProperties}>
       <div className={select.viewport} data-position="item-aligned">
         {copy.intervals.map((interval, k) => (
           <div className={cn(select.item, k === PICKED && s.hovered)} data-slot="select-item" key={interval}>
@@ -72,7 +72,7 @@ function Menu({ copy }: { copy: LayersCopy }) {
 /** A tooltip as the Tooltip primitive draws it, 8px under its trigger. */
 function Tip({ label }: { label: string }) {
   return (
-    <span className={cn(tintedGlassSurfaceClassName, tip.tooltip, s.tip)} data-glass="popover" data-radius="control" data-slot="tooltip-content" role="tooltip">
+    <span className={cn(tintedGlassSurfaceClassName, tip.tooltip, s.tip)} data-ext data-glass="popover" data-radius="control" data-slot="tooltip-content" role="tooltip">
       {label}
     </span>
   );
@@ -90,7 +90,7 @@ export function Overlay({ copy, part }: { copy: LayersCopy; part: OverlayPart })
   const id = useId();
   return (
     <div className={s.dialogBox} data-part={part}>
-      <div className={cn(tintedGlassSurfaceClassName, dialog.content)} data-glass="popover" data-layout="flow" data-radius="composer" data-size="sm" data-slot="dialog-content" data-surface="tinted-glass" role="dialog">
+      <div className={cn(tintedGlassSurfaceClassName, dialog.content)} data-ext={part === "dialog" ? "" : undefined} data-glass="popover" data-layout="flow" data-radius="composer" data-size="sm" data-slot="dialog-content" data-surface="tinted-glass" role="dialog">
         <DialogForm
           title={copy.dialogTitle}
           footer={

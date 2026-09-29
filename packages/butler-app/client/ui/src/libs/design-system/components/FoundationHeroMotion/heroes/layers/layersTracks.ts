@@ -20,7 +20,6 @@ export function layersTracks(copy: LayersCopy) {
     const box = g.boxes.screen!;
     const ladder = g.boxes.ladder!;
     const flat = view("screen", box, layout === "tall" ? 0.94 : 0.92, 1.6);
-    const tilted = quarter(canvas, box, layout);
     const zoomed = quarter(canvas, box, layout, true);
     // The finale: the window and its ladder fill the frame, one inset (the grid's margin) on every side.
     const all = union(box, ladder);
@@ -34,12 +33,9 @@ export function layersTracks(copy: LayersCopy) {
       { at: AT.flat, ...intro },
       { at: AT.flat + TRANSITION, ...flat },
       { at: AT.tilt, ...flat },
-      { at: AT.tilt + TRANSITION, ...tilted },
-      { at: AT.spread, ...tilted },
-      { at: spread, ...zoomed, ease: "standard" },
-      { at: AT.collapse, ...zoomed },
-      { at: collapse, ...tilted, ease: "standard" },
-      { at: AT.untilt, ...tilted },
+      // The camera turns and comes in close together, and stays close through the spread and the collapse.
+      { at: AT.tilt + TRANSITION, ...zoomed },
+      { at: AT.untilt, ...zoomed },
       { at: AT.untilt + TRANSITION, ...flat },
       // The same window slides sideways (one axis) and backs out to make room for its ladder.
       { at: AT.slide, ...flat },

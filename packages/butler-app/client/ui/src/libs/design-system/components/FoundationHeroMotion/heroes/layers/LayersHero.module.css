@@ -121,9 +121,10 @@
   pointer-events: none;
 }
 
-/* A sheet's thickness: the two side faces the quarter view can see (the bottom
-   edge and the right edge, standing on the sheet's outline and reaching down
-   its own z) and a chamfer across the rounded corner between them. Faces turned
+/* A component's thickness: the two side faces the quarter view can see (the
+   bottom edge and the right edge, standing on the component's outline and
+   reaching down its own z) and a chamfer across the rounded corner between them.
+   The sheets themselves are clear and carry none. Faces turned
    away from the camera are culled, so no ring stack is needed. Each face fades
    on its own (an opacity on a wrapper would flatten the 3D). */
 .face {
@@ -134,9 +135,9 @@
 }
 
 .faceBottom {
-  top: 100%;
-  right: var(--app-window-radius);
-  left: var(--app-window-radius);
+  top: calc(var(--y) + var(--h));
+  left: calc(var(--x) + var(--r));
+  inline-size: calc(var(--w) - var(--r) * 2);
   block-size: var(--slab);
   background: var(--slab-lit);
   transform: rotateX(-90deg);
@@ -144,19 +145,19 @@
 }
 
 .faceRight {
-  top: var(--app-window-radius);
-  bottom: var(--app-window-radius);
-  left: 100%;
+  top: calc(var(--y) + var(--r));
+  left: calc(var(--x) + var(--w));
   inline-size: var(--slab);
+  block-size: calc(var(--h) - var(--r) * 2);
   background: var(--slab-shade);
   transform: rotateY(90deg);
   transform-origin: 0 50%;
 }
 
 .faceCorner {
-  top: 100%;
-  left: calc(100% - var(--app-window-radius));
-  inline-size: calc(var(--app-window-radius) * 1.4142);
+  top: calc(var(--y) + var(--h));
+  left: calc(var(--x) + var(--w) - var(--r));
+  inline-size: calc(var(--r) * 1.4142);
   block-size: var(--slab);
   background: linear-gradient(90deg, var(--slab-lit), var(--slab-shade));
   transform: rotateZ(-45deg) rotateX(-90deg);
