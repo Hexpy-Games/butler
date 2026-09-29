@@ -52,6 +52,7 @@ impl AppSubsessionPort for AppSubsessions {
                 .get("relation")
                 .is_none_or(serde_json::Value::is_null)
             {
+                with_turn_times(&conversations, &mut projection).await;
                 return Ok(projection);
             }
             let canonical_session_id = conversation_session_id_for_durable_session(&session_id);
@@ -259,6 +260,48 @@ fn map_error(error: &butler_turn::btcc::BtccError) -> GatewayApplicationError {
             code: error.code().to_owned(),
             message: message.into(),
             source: None,
+        }
+    }
+}
+
+/// The children's turns carry the BTCC relation time; replace it with the
+/// conversation turn's own start and end where the conversation store has the
+/// turn, so clients (and the result-commit grace) see when the turn settled.
+async fn with_turn_times(
+    conversations: &AgentConversationStore,
+    projection: &mut serde_json::Value,
+) {
+    for key in ["steward_children", "workers"] {
+        let Some(children) = projection
+            .get_mut(key)
+            .and_then(serde_json::Value::as_array_mut)
+        else {
+            continue;
+        };
+        for child in children {
+            let Some(id) = child
+                .pointer("/latest_turn/id")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned)
+            else {
+                continue;
+            };
+            let Ok(Some(turn)) = conversations.read_turn(&id).await else {
+                continue;
+            };
+            let updated = turn
+                .completed_at
+                .clone()
+                .unwrap_or_else(|| turn.started_at.clone());
+            for turn_key in ["latest_turn", "active_turn"] {
+                if let Some(value) = child
+                    .get_mut(turn_key)
+                    .and_then(serde_json::Value::as_object_mut)
+                {
+                    value.insert("created_at".into(), serde_json::json!(turn.started_at));
+                    value.insert("updated_at".into(), serde_json::json!(updated));
+                }
+            }
         }
     }
 }

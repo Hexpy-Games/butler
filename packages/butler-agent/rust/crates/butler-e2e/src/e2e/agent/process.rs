@@ -3,7 +3,7 @@
 //! launchd (`KeepAlive: {SuccessfulExit: false}`) and systemd
 //! (`Restart=on-failure`) restart only an Agent that exits non-zero.
 
-use std::fs::File;
+use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -114,4 +114,22 @@ pub(super) fn capture_to_files(
         .stdout(File::create(&stdout)?)
         .stderr(File::create(&stderr)?);
     Ok((stdout, stderr))
+}
+
+/// Every regular file under `dir`, concatenated (lossy UTF-8).
+pub fn read_all(dir: &Path) -> String {
+    let mut out = String::new();
+    let Ok(entries) = fs::read_dir(dir) else {
+        return out;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            out.push_str(&read_all(&path));
+        } else if let Ok(bytes) = fs::read(&path) {
+            out.push_str(&String::from_utf8_lossy(&bytes));
+            out.push('\n');
+        }
+    }
+    out
 }

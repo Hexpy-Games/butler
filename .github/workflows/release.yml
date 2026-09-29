@@ -12,6 +12,8 @@ jobs:
   native-release:
     name: Build and publish native macOS arm64 artifacts
     runs-on: macos-15
+    # Holds the Apple signing secrets; restricted to v* tags (docs: packages/butler-app/scripts/README.md).
+    environment: deploy
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -56,8 +58,30 @@ jobs:
           npm --prefix packages/butler-app/client/electron ci
           npm --prefix packages/butler-app/client/ui ci
 
+      # The renderer ships in the Agent's resources (app-client/dist).
+      - name: Build the App renderer
+        run: npm --prefix packages/butler-app/client/ui run build
+
       - name: Prepare the native Agent payload
         run: node packages/butler-app/client/electron/scripts/prepare-native-agent.mjs darwin arm64 "$BUTLER_NATIVE_AGENT_PAYLOAD"
+
+      # After every third-party install step: keychain and notary key exist only from here on.
+      - name: Set up macOS code signing
+        env:
+          BUTLER_SIGN_REQUIRED: "1"
+          APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+          APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: deploy/macos/sign-and-notarize.sh setup
+
+      - name: Sign and notarize the native Agent binary
+        timeout-minutes: 60
+        run: |
+          deploy/macos/sign-and-notarize.sh agent "$BUTLER_NATIVE_AGENT_PAYLOAD/bin/butler-agent"
+          echo "BUTLER_AGENT_NOTARIZED=1" >> "$GITHUB_ENV"
 
       - name: Select the versioned Agent archive path
         run: |
@@ -76,6 +100,16 @@ jobs:
           bun run release:agent:package -- \
             --artifact-url "$artifact_url"
           bun run release:agent:smoke -- --artifact-url "$artifact_url"
+
+      # The darwin-arm64 entries of the multi-platform Agent manifests.
+      - name: Keep the darwin-arm64 Agent manifests for the merge
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-darwin-arm64
+          path: |
+            dist/release/agent/agent-release-manifest.json
+            dist/release/agent/agent-update-manifest.json
+          if-no-files-found: error
 
       - name: Publish Butler Agent GitHub Release files
         env:
@@ -100,10 +134,10 @@ jobs:
             exit 1
           fi
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release edit "$tag" --title "$tag" "${notes_args[@]}"
+            gh release edit "$tag" --draft --title "$tag" "${notes_args[@]}"
             gh release upload "$tag" "${files[@]}" --clobber
           else
-            gh release create "$tag" "${files[@]}" --title "$tag" "${notes_args[@]}"
+            gh release create "$tag" "${files[@]}" --draft --title "$tag" "${notes_args[@]}"
           fi
 
       - name: Fetch the previous App release manifest
@@ -137,6 +171,7 @@ jobs:
         run: bun run release:app:gate -- --platform=darwin-arm64
 
       - name: Package the native App release
+        timeout-minutes: 90
         run: |
           bun run release:app:package -- \
             --platform=darwin-arm64 \
@@ -144,8 +179,6 @@ jobs:
             --artifact-base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
 
       - name: Verify the native App release artifacts
-        env:
-          BUTLER_APP_RELEASE_SMOKE_MODE: ad-hoc
         run: bun run release:app:smoke -- --platform=darwin-arm64 --out dist/release/app
 
       - name: Publish native App GitHub Release files
@@ -170,10 +203,93 @@ jobs:
           fi
           gh release upload "$tag" "${files[@]}" --clobber
 
+      - name: Remove the signing keychain and keys
+        if: always()
+        run: deploy/macos/sign-and-notarize.sh cleanup
+
+  agent-linux:
+    name: Build Linux Agent archive (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: linux-x64, runner: ubuntu-24.04 }
+          - { platform: linux-arm64, runner: ubuntu-24.04-arm }
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build, package and smoke the Agent archive
+        uses: ./.github/actions/build-agent-archive
+        with:
+          cache-key: package-${{ matrix.platform }}
+          artifact-base-url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
+
+      - name: Keep the archive and its manifests for the release
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-${{ matrix.platform }}
+          path: dist/release/agent/*
+          if-no-files-found: error
+
+  # Runs after the macOS job, whose single-platform manifests it replaces with
+  # the merged ones (the update manifest lists one artifact per platform).
+  agent-release:
+    name: Publish Linux Agent archives, merged manifests and the installer
+    runs-on: ubuntu-latest
+    needs: [native-release, agent-linux]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # install.sh refuses an archive whose Agent version is not the release's.
+      - name: Check the tag against the Agent version
+        run: |
+          set -euo pipefail
+          agent_version="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' packages/butler-agent/rust/crates/butler-agent/Cargo.toml | head -n 1)"
+          if [ "${GITHUB_REF_NAME#v}" != "$agent_version" ]; then
+            printf 'Tag %s does not match the Agent version %s in crates/butler-agent/Cargo.toml\n' "$GITHUB_REF_NAME" "$agent_version" >&2
+            exit 1
+          fi
+
+      - name: Download the per-platform Agent outputs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: agent-*
+          path: dist/agent
+
+      - name: Merge the Agent manifests
+        run: |
+          set -euo pipefail
+          python3 packages/butler-agent/rust/scripts/release-standalone-agent.py merge \
+            --output dist/agent/merged dist/agent/agent-darwin-arm64 dist/agent/agent-linux-x64 dist/agent/agent-linux-arm64
+
+      - name: Publish to the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(
+            dist/agent/agent-linux-x64/butler-agent-*-linux-x64.tar.gz
+            dist/agent/agent-linux-arm64/butler-agent-*-linux-arm64.tar.gz
+            dist/agent/merged/agent-release-manifest.json
+            dist/agent/merged/agent-update-manifest.json
+            deploy/install.sh
+          )
+          if [ "${#files[@]}" -ne 5 ]; then
+            printf 'Expected 5 Agent release files, got %s\n' "${#files[@]}" >&2
+            printf '%s\n' "${files[@]}" >&2
+            exit 1
+          fi
+          gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+
   release-checksums:
     name: Publish consolidated release checksums
     runs-on: ubuntu-latest
-    needs: native-release
+    needs: [native-release, agent-release]
     steps:
       - name: Build consolidated checksum asset from published outputs
         env:
@@ -190,6 +306,9 @@ jobs:
           shopt -s nullglob
           files=(
             dist/release/checksums/assets/butler-agent-*-darwin-arm64.tar.gz
+            dist/release/checksums/assets/butler-agent-*-linux-x64.tar.gz
+            dist/release/checksums/assets/butler-agent-*-linux-arm64.tar.gz
+            dist/release/checksums/assets/install.sh
             dist/release/checksums/assets/agent-release-manifest.json
             dist/release/checksums/assets/agent-update-manifest.json
             dist/release/checksums/assets/butler-app-*-darwin-arm64.dmg
@@ -199,8 +318,8 @@ jobs:
             dist/release/checksums/assets/app-release-manifest.json
             dist/release/checksums/assets/app-update-manifest.json
           )
-          if [ "${#files[@]}" -ne 9 ]; then
-            printf 'Expected 9 current native release outputs, got %s\n' "${#files[@]}" >&2
+          if [ "${#files[@]}" -ne 12 ]; then
+            printf 'Expected 12 current native release outputs, got %s\n' "${#files[@]}" >&2
             printf '%s\n' "${files[@]}" >&2
             exit 1
           fi
@@ -212,9 +331,68 @@ jobs:
             done
           ) > "$checksum_file"
           checksum_count="$(wc -l < "$checksum_file" | tr -d ' ')"
-          if [ "$checksum_count" -ne 9 ]; then
-            printf 'Expected 9 checksummed native release outputs, got %s\n' "$checksum_count" >&2
+          if [ "$checksum_count" -ne 12 ]; then
+            printf 'Expected 12 checksummed native release outputs, got %s\n' "$checksum_count" >&2
             cat "$checksum_file" >&2
             exit 1
           fi
           gh release upload "$tag" "$checksum_file" --clobber
+
+  # The release stays a draft until every asset above exists; only now does
+  # /releases/latest (and so install.sh) see it. A tag with a hyphen is a
+  # preview and is marked as a prerelease, which /releases/latest skips.
+  publish-release:
+    name: Publish the GitHub Release
+    runs-on: ubuntu-latest
+    needs: release-checksums
+    steps:
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          prerelease=false
+          case "$GITHUB_REF_NAME" in *-*) prerelease=true ;; esac
+          gh release edit "$GITHUB_REF_NAME" --draft=false --prerelease="$prerelease"
+
+  # After the release is public, so `npx @hexpygames/butler install` works the
+  # moment the package is visible. Tag runs only; PRs get the pack dry run in
+  # install-smoke.yml.
+  npm-publish:
+    name: Publish the npm package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs: publish-release
+    environment: deploy
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.3
+          registry-url: https://registry.npmjs.org
+
+      # The first publish of a package always becomes `latest`, whatever --tag
+      # says, so a preview must not be the first one.
+      - name: Publish with provenance
+        working-directory: packages/butler-npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          dist_tag=latest
+          case "$version" in *-*) dist_tag=next ;; esac
+          name="$(node -p 'require("./package.json").name')"
+          if [ "$dist_tag" = next ] && ! npm view "$name" dist-tags.latest >/dev/null 2>&1; then
+            printf '%s has no stable release yet; publish a stable version first so `latest` is not a preview.\n' "$name" >&2
+            exit 1
+          fi
+          npm version "$version" --no-git-tag-version --allow-same-version
+          npm publish --access public --provenance --tag "$dist_tag"

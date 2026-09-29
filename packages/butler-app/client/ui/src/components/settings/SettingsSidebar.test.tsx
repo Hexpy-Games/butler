@@ -25,7 +25,7 @@ test("everyday settings come first and agent-level pages sit in a last Advanced 
     groups.map((group) => group.sections.map((section) => section.id)),
   ).toEqual([
     ["general", "appearance", "personalization", "models"],
-    ["updates", "usage", "privacy", "system", "archives", "about"],
+    ["updates", "usage", "privacy", "security", "system", "archives", "about"],
     ["mcp", "skills", "server"],
   ]);
   expect(
@@ -45,6 +45,7 @@ test("developer logs stay in the app group when enabled", () => {
     "usage",
     "logs",
     "privacy",
+    "security",
     "system",
     "archives",
     "about",
@@ -82,6 +83,14 @@ test("model settings stay on the Models page and old links still resolve", () =>
     ["memory-cleanup", true],
     ["worker-profiles", true],
   ]);
+  // Security: host-only sections are absent for other computers, and allowed
+  // hosts sit in the page's collapsed Advanced disclosure.
+  expect(settingsPageSchema.security.map((section) => [section.id, section.optional === true])).toEqual([
+    ["remote-access", false],
+    ["connection-code", true],
+    ["security-advanced", true],
+    ["allowed-hosts", true],
+  ]);
   expect(Object.keys(settingsPageSchema)).not.toContain("helpers");
 });
 
@@ -98,6 +107,8 @@ test("settings search matches labels, descriptions, and bounded aliases", () => 
   expect(sectionIds("backup")).toEqual(["models"]);
   expect(sectionIds("api keys")).toEqual(["models"]);
   expect(sectionIds("developer logs")).toEqual(["logs"]);
+  expect(sectionIds("connection code")).toEqual(["security"]);
+  expect(sectionIds("remote access")).toEqual(["security"]);
   expect(sectionIds("does not exist")).toEqual([]);
   expect(filterSettingsSectionGroups(groups, " ")).toBe(groups);
 });

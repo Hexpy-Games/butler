@@ -33,10 +33,7 @@ src/host/cli/observability/process.rs	run	91
 src/host/cli/personalization.rs	run	101
 src/host/cli/personalization/commands.rs	set	104
 src/host/cli/schedule.rs	run	182
-src/host/cli/service.rs	run_native_service_cli	87
 src/host/cli/service/lifecycle/restart_handoff.rs	spawn_restart_handoff	82
-src/host/cli/update.rs	run	105
-src/host/cli/update/agent.rs	run	83
 src/host/cli/web_access.rs	run	124
 src/host/cli/web_access.rs	run_search_test	92
 src/host/embedding/owner.rs	EmbeddingOwner::embed_request	82
@@ -100,9 +97,9 @@ src/host/runtime.rs	AgentRuntime::open	424
 src/host/runtime/environment.rs	ProcessEnvironment::capture	82
 src/host/service/entrypoint.rs	serve	159
 src/host/service/ingress.rs	IngressDispatcher::poll	86
-src/host/service/ingress/bind.rs	bind_and_request	141
-src/host/service/ingress/bind.rs	control_request	89
-src/host/service/ingress/bind/internal_subsession.rs	bind	92
+src/host/service/ingress/bind.rs	bind_and_request	136
+src/host/service/ingress/bind.rs	control_request	81
+src/host/service/ingress/bind/internal_subsession.rs	bind	87
 src/host/service/ingress/bind/policy.rs	upsert_app_binding	213
 src/host/service/ingress/dispatch.rs	execute	128
 src/host/service/progress_publisher.rs	ProgressPublisher::publish	89

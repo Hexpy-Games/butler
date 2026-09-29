@@ -6,7 +6,7 @@ order: 1
 status: published
 ---
 
-Butler Agent CLI는 데스크톱 앱 없이 Butler 런타임을 설치하고 실행하는 명령줄 도구입니다. standalone Agent 아카이브에 들어 있으며, 서비스 시작과 중지, 설치 점검, 모델과 설정 관리, MCP 서버 실행을 명령으로 처리합니다.
+Butler Agent CLI는 데스크톱 앱 없이 Butler 런타임을 설치하고 실행하는 명령줄 도구입니다. 설치 스크립트나 standalone Agent 아카이브로 설치하며, 서비스 시작과 중지, 설치 점검, 모델과 설정 관리, MCP 서버 실행을 명령으로 처리합니다.
 
 <Notice tone="info">
   Butler 앱을 쓴다면 CLI를 따로 설치하지 않아도 됩니다. 앱에 포함된 Agent는 앱이 직접 관리합니다.
@@ -14,24 +14,74 @@ Butler Agent CLI는 데스크톱 앱 없이 Butler 런타임을 설치하고 실
 
 ## 지원 환경
 
-- Apple Silicon Mac(`darwin-arm64`) 전용입니다. Linux와 Intel Mac에서는 실행되지 않습니다.
-- 네이티브 Agent 아카이브(`butler-agent-<버전>-darwin-arm64.tar.gz`)를 게시한 릴리스가 필요합니다.
+- Apple Silicon Mac(`darwin-arm64`)과 Linux x64·arm64(glibc)를 지원합니다.
+- Intel Mac, Alpine 같은 musl 기반 Linux는 실행되지 않습니다. Windows는 준비 중입니다.
+- 네이티브 Agent 아카이브(`butler-agent-<버전>-<플랫폼>.tar.gz`)를 게시한 릴리스가 필요합니다.
 
 ## 설치
 
-아카이브는 버전마다 새 폴더에 풀어 쓰는 설치 패키지입니다. 실행 중에 바뀌는 데이터는 설치 폴더가 아니라 데이터 폴더(기본값 `~/.butler`)에 저장합니다.
+서버나 원격 PC처럼 앱 없이 쓸 때는 설치 스크립트 한 줄이면 됩니다.
+
+```bash
+curl -fsSL https://github.com/Hexpy-Games/butler/releases/latest/download/install.sh | sh
+```
+
+Node.js가 있다면 npx로도 같은 설치를 실행할 수 있습니다.
+
+```bash
+npx @hexpygames/butler install
+```
+
+설치 스크립트는 다음 순서로 진행합니다.
+
+<Steps>
+  1. 운영체제와 CPU를 확인하고 최신 릴리스(또는 지정한 버전)의 아카이브와 `butler-<버전>-SHA256SUMS`를 내려받습니다.
+  2. 체크섬이 맞는지 확인한 뒤 새 버전 폴더에 풉니다. 검증이 끝나기 전에는 기존 설치를 바꾸지 않습니다.
+  3. `current` 링크를 새 버전으로 바꾸고 `~/.local/bin/butler` 실행 파일을 만듭니다.
+  4. `butler doctor --check installation`으로 설치를 점검한 뒤 Butler를 시작합니다.
+</Steps>
+
+같은 명령을 다시 실행해도 안전합니다. 이미 설치된 버전은 다시 풀지 않고, 데이터 폴더는 건드리지 않습니다. 이미 Butler가 실행 중이라면 `butler restart`로 새 버전을 적용합니다.
+
+옵션은 `sh -s --` 뒤에 붙입니다(npx는 `install` 뒤에 붙입니다).
+
+```bash
+curl -fsSL https://github.com/Hexpy-Games/butler/releases/latest/download/install.sh | sh -s -- --version X.Y.Z --no-start
+```
+
+| 옵션 | 설명 |
+| --- | --- |
+| `--version X.Y.Z` | 최신 릴리스 대신 이 버전을 설치합니다. `BUTLER_VERSION` 환경 변수로도 지정할 수 있습니다. |
+| `--no-start` | 설치만 하고 Butler를 시작하지 않습니다. |
+| `--modify-path` | `~/.local/bin`이 `PATH`에 없을 때 셸 설정 파일에 추가합니다. 옵션이 없으면 추가할 줄을 안내만 합니다. |
+
+`BUTLER_AGENT_HOME`으로 설치 폴더를, `BUTLER_BIN_DIR`로 `butler` 실행 파일 위치를 바꿀 수 있습니다. 두 값은 절대 경로여야 합니다. root로는 실행되지 않으며(`BUTLER_ALLOW_ROOT=1`로 허용), `~/.local/bin/butler`에 Butler의 실행 파일이 아닌 파일이 있으면 설치를 멈춥니다. 이전(네이티브 이전) 실행 파일은 `butler.previous`로 옮겨 둡니다.
+
+### 설치 위치
+
+| 항목 | macOS | Linux |
+| --- | --- | --- |
+| 설치 폴더 | `~/Applications/ButlerAgent` | `~/.local/share/butler/agent` |
+| `butler` 명령 | `~/.local/bin/butler` | `~/.local/bin/butler` |
+
+설치 폴더 안에는 버전마다 `<버전>-<해시 8자리>` 폴더가 생기고, `current`가 사용 중인 버전을, `previous`가 직전 버전을 가리킵니다. 오래된 버전은 최근 3개까지만 남기며(사용 중인 버전, 직전 버전, 실행 중인 버전은 항상 남깁니다) 나머지는 `butler update`나 `butler install`이 정리합니다. 데이터는 설치 폴더가 아니라 데이터 폴더(기본값 `~/.butler`)에 저장합니다. 데스크톱 앱과 CLI는 같은 설치 구조를 씁니다.
+
+### 수동 설치
+
+설치 스크립트를 쓸 수 없다면 아카이브를 직접 풀어 쓸 수 있습니다. 아카이브는 버전마다 새 폴더에 풀어 쓰는 설치 패키지입니다.
 
 <Steps>
   1. [GitHub Releases](https://github.com/Hexpy-Games/butler/releases)에서 네이티브 Agent 아카이브가 올라간 버전을 확인합니다.
-  2. 아래 스크립트를 파일(예: `install-butler-agent.sh`)로 저장하고 `VERSION`을 그 버전으로 바꿉니다.
+  2. 아래 스크립트를 파일(예: `install-butler-agent.sh`)로 저장하고 `VERSION`과 `PLATFORM`을 바꿉니다.
   3. `bash install-butler-agent.sh`로 실행합니다. 아카이브와 `butler-<버전>-SHA256SUMS`를 내려받아 체크섬을 확인한 뒤 새 버전 폴더에 풉니다.
   4. 마지막의 `version`과 `doctor` 명령이 오류 없이 끝나면 설치가 완료됩니다.
 </Steps>
 
 ```bash
 set -euo pipefail
-VERSION=0.0.21 # 네이티브 Agent 아카이브가 있는 릴리스 버전으로 바꿉니다.
-ARCHIVE="butler-agent-${VERSION}-darwin-arm64.tar.gz"
+VERSION=X.Y.Z # 네이티브 Agent 아카이브가 있는 릴리스 버전으로 바꿉니다.
+PLATFORM=darwin-arm64 # darwin-arm64, linux-x64, linux-arm64 중 하나입니다.
+ARCHIVE="butler-agent-${VERSION}-${PLATFORM}.tar.gz"
 RELEASE_URL="https://github.com/Hexpy-Games/butler/releases/download/v${VERSION}"
 DOWNLOAD_DIR="$HOME/Downloads/butler-agent-${VERSION}"
 INSTALL_ROOT="$HOME/.local/opt/butler-agent"
@@ -57,19 +107,17 @@ tar -xzf "$ARCHIVE" -C "$INSTALL_DIR"
 "$INSTALL_DIR/butler" --data "$BUTLER_DATA" doctor --check installation --json
 ```
 
-설치 폴더에는 다음 파일이 들어 있습니다.
+아카이브에는 다음 파일이 들어 있습니다.
 
 - `butler-agent`: 실행 파일입니다.
 - `butler`: `butler-agent`를 가리키는 링크입니다. 이 문서의 명령은 `butler`로 적습니다.
 - `resources/`: 실행에 필요한 리소스입니다.
 - `native-agent-manifest.json`: 버전과 SHA-256 정보를 담은 설치 매니페스트입니다.
 
-### PATH에 추가하기 (선택)
-
-전체 경로 없이 `butler`로 실행하려면 설치 폴더를 `PATH`에 추가합니다. 셸 설정 파일(`~/.zshrc` 등)에 넣으면 새 터미널에서도 적용됩니다.
+수동으로 설치했다면 전체 경로 없이 `butler`로 실행하기 위해 설치 폴더를 `PATH`에 추가합니다. 셸 설정 파일(`~/.zshrc` 등)에 넣으면 새 터미널에서도 적용됩니다.
 
 ```bash
-export PATH="$HOME/.local/opt/butler-agent/0.0.21:$PATH"
+export PATH="$HOME/.local/opt/butler-agent/X.Y.Z:$PATH"
 butler version
 ```
 
@@ -230,19 +278,20 @@ butler mcp test docs
 - `auth/openai-codex.json`: OAuth 로그인 프로필의 기본 위치입니다.
 - `logs/`: 서비스 로그입니다.
 
-설치 폴더(예: `~/.local/opt/butler-agent/0.0.21`)는 실행 중에 바뀌지 않습니다. 파일을 직접 수정하지 않습니다.
+설치 폴더(예: `~/.local/share/butler/agent/0.0.21-1a2b3c4d`)는 실행 중에 바뀌지 않습니다. 파일을 직접 수정하지 않습니다.
 
 ## 업데이트
 
-Butler는 설치된 버전을 바꾸거나 데이터를 옮기지 않습니다. 새 버전은 이전 버전 옆에 따로 설치합니다.
+새 버전은 이전 버전 옆에 따로 설치되고, 데이터 폴더는 옮기지 않습니다.
 
 <Steps>
   1. `butler update --check`로 새 버전이 있는지 확인합니다.
   2. 필요하면 `butler update --dry-run`으로 수행할 작업을 미리 봅니다.
-  3. `butler update --apply --yes`를 실행하면 검증한 아카이브를 데이터 폴더에 내려받아 둡니다. 이 단계에서는 설치하지 않습니다.
-  4. 위 [설치](#설치) 절차를 새 버전으로 반복해 새 버전 폴더에 설치합니다.
-  5. 이후에는 새 버전 폴더의 `butler`를 실행합니다. 이전 설치 폴더는 그대로 두고, 같은 `BUTLER_DATA`를 계속 씁니다.
+  3. `butler update --apply --yes`를 실행하면 검증한 아카이브를 새 버전 폴더에 설치하고 `current`를 바꿉니다. 실행 중인 Butler는 새 버전으로 다시 시작됩니다(`--no-restart`로 건너뜁니다).
+  4. 문제가 생기면 `butler rollback`으로 직전 버전으로 돌아갑니다. `butler versions`로 설치된 버전을 볼 수 있습니다.
 </Steps>
+
+설치 스크립트를 다시 실행해도 같은 결과입니다. 수동으로 설치했다면 [수동 설치](#수동-설치) 절차를 새 버전으로 반복하고 새 버전 폴더의 `butler`를 실행합니다.
 
 ## 주의 사항
 

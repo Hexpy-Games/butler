@@ -63,6 +63,7 @@ export interface BundledAgentResource {
 const ELECTRON_ROOT = join("packages", "butler-app", "client", "electron");
 const APP_RENDERER_DIST = join("packages", "butler-app", "client", "ui", "dist");
 const MAC_SIGN_SCRIPT = join(ELECTRON_ROOT, "scripts", "adhoc-sign-mac.mjs");
+const MAC_SIGNING_SCRIPT = join("deploy", "macos", "sign-and-notarize.sh");
 const MAC_NORMALIZE_SCRIPT = join(ELECTRON_ROOT, "scripts", "normalize-mac-bundle.mjs");
 const MAC_APP_BUNDLE_IDENTIFIER = "com.hexpy.butler";
 const MAC_HELPER_BUNDLE_IDENTIFIER = "com.hexpy.butler.helper";
@@ -115,6 +116,8 @@ function createNativeMacReleasePackage(options: AppReleasePackageOptions): AppRe
     item.updaterArtifactName = artifact.updaterArtifactName;
     item.updaterSha256 = artifact.updaterSha256;
     item.dependencyClosure = artifact.nativeClosure;
+    const teamId = process.env.BUTLER_SIGN_TEAM_ID?.trim();
+    if (process.env.BUTLER_SIGN_IDENTITY?.trim() && teamId) item.signing = { teamId, notarized: true };
     if (!item.dependencyClosure) throw new Error("signed native mac App closure is missing");
     const releaseManifestPath = join(outDir, "app-release-manifest.json");
     writeJson(releaseManifestPath, manifest);
@@ -185,9 +188,10 @@ function packagePlatform(input: {
   signMacBundle(input.root, appBundle);
   const nativeClosure = closureFromNativeMacBundle(appBundle, input.manifest);
   verifyNativeMacBundle(appBundle, nativeClosure);
-  notarizeMacAppIfConfigured(appBundle);
+  runMacSigning(input.root, "notarize", appBundle);
   createMacDmg({ appBundle, artifactPath });
-  signAndNotarizeMacContainerIfConfigured(artifactPath);
+  runMacSigning(input.root, "sign-dmg", artifactPath);
+  runMacSigning(input.root, "notarize", artifactPath);
   const updaterArtifactName = `butler-app-${input.manifest.version}-darwin-arm64.zip`;
   const updaterArtifactPath = join(input.outDir, updaterArtifactName);
   createMacZip(appBundle, updaterArtifactPath);
@@ -389,26 +393,12 @@ function normalizeMacBundle(root: string, appBundle: string): void {
 }
 
 function signMacBundle(root: string, appBundle: string): void {
-  const identity = process.env.BUTLER_APP_SIGN_IDENTITY?.trim();
-  if (identity) {
-    const result = spawnSync("codesign", [
-      "--force",
-      "--deep",
-      "--options",
-      "runtime",
-      "--timestamp",
-      "--sign",
-      identity,
-      appBundle,
-    ], { encoding: "utf8" });
-    if (result.status !== 0) {
-      throw new Error(`mac Developer ID signing failed: ${result.stderr.trim() || result.stdout.trim()}`);
-    }
-    verifyMacCodeSignature(appBundle);
+  if (process.env.BUTLER_SIGN_IDENTITY?.trim()) {
+    runMacSigning(root, "sign-app", appBundle);
     return;
   }
   if (process.env.BUTLER_APP_REQUIRE_PRODUCTION_SIGNING === "1") {
-    throw new Error("BUTLER_APP_SIGN_IDENTITY is required for production macOS releases");
+    throw new Error("BUTLER_SIGN_IDENTITY is required for production macOS releases");
   }
   const result = spawnSync("node", [join(root, MAC_SIGN_SCRIPT), appBundle], {
     cwd: root,
@@ -423,12 +413,15 @@ function signMacBundle(root: string, appBundle: string): void {
   }
 }
 
-function verifyMacCodeSignature(path: string): void {
-  const result = spawnSync("codesign", ["--verify", "--deep", "--strict", "--verbose=4", path], {
+/** Developer ID signing, notarization and stapling; a logged no-op without BUTLER_SIGN_IDENTITY. */
+function runMacSigning(root: string, command: "sign-app" | "sign-dmg" | "notarize", path: string): void {
+  const result = spawnSync(join(root, MAC_SIGNING_SCRIPT), [command, path], {
+    cwd: root,
     encoding: "utf8",
   });
+  if (result.stdout.trim()) process.stdout.write(result.stdout);
   if (result.status !== 0) {
-    throw new Error(`mac code signature verification failed: ${result.stderr.trim() || result.stdout.trim()}`);
+    throw new Error(`mac ${command} failed: ${result.stderr.trim() || result.stdout.trim() || "unknown error"}`);
   }
 }
 
@@ -477,58 +470,6 @@ function createMacZip(appBundle: string, artifactPath: string): void {
   ], { encoding: "utf8" });
   if (result.status !== 0) {
     throw new Error(`mac app updater ZIP creation failed: ${result.stderr.trim() || result.stdout.trim()}`);
-  }
-}
-
-function notarizeMacAppIfConfigured(appBundle: string): void {
-  const keychainProfile = process.env.BUTLER_APP_NOTARY_KEYCHAIN_PROFILE?.trim();
-  if (!keychainProfile) {
-    if (process.env.BUTLER_APP_REQUIRE_PRODUCTION_SIGNING === "1") {
-      throw new Error("BUTLER_APP_NOTARY_KEYCHAIN_PROFILE is required for production macOS releases");
-    }
-    return;
-  }
-  const workDir = mkdtempSync(join(tmpdir(), "butler-app-notary-"));
-  try {
-    const submission = join(workDir, "Butler.zip");
-    createMacZip(appBundle, submission);
-    submitMacNotarization(submission, keychainProfile);
-    stapleMacArtifact(appBundle);
-  } finally {
-    rmSync(workDir, { recursive: true, force: true });
-  }
-}
-
-function signAndNotarizeMacContainerIfConfigured(artifactPath: string): void {
-  const identity = process.env.BUTLER_APP_SIGN_IDENTITY?.trim();
-  const keychainProfile = process.env.BUTLER_APP_NOTARY_KEYCHAIN_PROFILE?.trim();
-  if (!identity || !keychainProfile) return;
-  const sign = spawnSync("codesign", ["--force", "--timestamp", "--sign", identity, artifactPath], {
-    encoding: "utf8",
-  });
-  if (sign.status !== 0) throw new Error(`mac DMG signing failed: ${sign.stderr.trim() || sign.stdout.trim()}`);
-  submitMacNotarization(artifactPath, keychainProfile);
-  stapleMacArtifact(artifactPath);
-}
-
-function submitMacNotarization(artifactPath: string, keychainProfile: string): void {
-  const submit = spawnSync("xcrun", [
-    "notarytool",
-    "submit",
-    artifactPath,
-    "--keychain-profile",
-    keychainProfile,
-    "--wait",
-  ], { encoding: "utf8" });
-  if (submit.status !== 0) {
-    throw new Error(`mac notarization failed: ${submit.stderr.trim() || submit.stdout.trim()}`);
-  }
-}
-
-function stapleMacArtifact(artifactPath: string): void {
-  const staple = spawnSync("xcrun", ["stapler", "staple", artifactPath], { encoding: "utf8" });
-  if (staple.status !== 0) {
-    throw new Error(`mac notarization staple failed: ${staple.stderr.trim() || staple.stdout.trim()}`);
   }
 }
 

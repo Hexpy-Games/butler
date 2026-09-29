@@ -20,6 +20,41 @@
   color: var(--text-secondary);
 }
 
+/* Only the title shrinks; a status Tag and the count keep their width. */
+.aside {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+/* Details read as the title's next lines: tight under it, aligned to its text. */
+.subject[data-has-details="true"] {
+  padding-block-end: var(--space-xs);
+}
+
+.details {
+  display: grid;
+  min-width: 0;
+  padding: 0 var(--space-lg) var(--space-md);
+  padding-inline-start: calc(
+    var(--space-lg) + var(--icon-size-lg) + var(--space-sm)
+  );
+}
+
+.detailLines {
+  display: grid;
+  min-width: 0;
+}
+
+/* Same clamp idea as QueuedMessage: the full text stays one click away. */
+.detailLines[data-clamped="true"] {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
 .actions {
   display: flex;
   min-width: 0;

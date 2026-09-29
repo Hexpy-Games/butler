@@ -130,39 +130,72 @@ pub(super) async fn one(item: ClaimedInboundEvent, deps: DispatchDependencies) -
     match result {
         Ok(executed) => handled(&item, executed, &queue, &restart_handoff).await,
         Err(error) => {
-            // BTCC supplies a stable code here, never the provider body or prompt.
-            // Keep that cause observable when the outer queue error is generic.
-            if error.code == "inbound_turn_interrupted"
-                && error.message.len() <= 128
-                && error
-                    .message
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
-            {
-                eprintln!("[native-btcc] interrupted code={}", error.message);
-            }
-            // A turn that is interrupted again in the replacement process
-            // ends failed with retry available instead of replacing the
-            // process forever.
-            if interrupted::replaced_once(&item.record)
-                && let Some(poll) = interrupted::settle(
-                    &item,
-                    &queue,
-                    &bindings,
-                    delivery.as_ref(),
-                    "replacement-interrupted",
-                )
-                .await
-            {
-                return poll;
-            }
-            let _ = queue.park_for_process_replacement(&item, error.code);
-            IngressPoll {
-                interrupted: 1,
-                ..Default::default()
-            }
+            let subsessions = subsessions.as_ref();
+            failed(
+                &item,
+                &error,
+                &queue,
+                &bindings,
+                delivery.as_ref(),
+                subsessions,
+            )
+            .await
         }
     }
+}
+
+/// Settles an item whose execution failed: an item no replacement can run
+/// fails, an item already replaced once ends failed with retry available,
+/// any other interrupted item is parked for the process replacement.
+async fn failed(
+    item: &ClaimedInboundEvent,
+    error: &super::IngressError,
+    queue: &InboundQueue,
+    bindings: &SessionBindingStore,
+    delivery: &dyn IngressDelivery,
+    subsessions: &butler_turn::btcc::SubsessionService,
+) -> IngressPoll {
+    // BTCC supplies a stable code here, never the provider body or prompt.
+    // Keep that cause observable when the outer queue error is generic.
+    if error.code == "inbound_turn_interrupted"
+        && error.message.len() <= 128
+        && error
+            .message
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+    {
+        eprintln!("[native-btcc] interrupted code={}", error.message);
+    }
+    let replaced = interrupted::replaced_once(&item.record);
+    if let Some(code) = rejected::safe_code(error) {
+        return rejected::reject(item, queue, bindings, delivery, subsessions, code).await;
+    }
+    if replaced
+        && let Some(poll) =
+            interrupted::settle(item, queue, bindings, delivery, "replacement-interrupted").await
+    {
+        return poll;
+    }
+    if replaced {
+        // The turn never started, so its report is unavailable: no second replacement.
+        return rejected::reject(item, queue, bindings, delivery, subsessions, error.code).await;
+    }
+    let _ = queue.park_for_process_replacement(item, error.code);
+    IngressPoll {
+        interrupted: 1,
+        ..Default::default()
+    }
+}
+
+/// A BTCC error as a queue error: a rejection no replacement process can
+/// change fails the item; any other error interrupts the turn.
+fn turn_error(error: &butler_turn::btcc::BtccError) -> super::IngressError {
+    let code = if rejected::is_rejection(error) {
+        rejected::REJECTED
+    } else {
+        "inbound_turn_interrupted"
+    };
+    super::IngressError::new(code, error.code())
 }
 
 /// Settles an executed item and hands a delivered final to restart handoff.
@@ -217,9 +250,10 @@ async fn execute(
             let request =
                 bind::bind_and_request(&envelope, bindings, data_root, default_workspace).await?;
             let session_id = request.session_id.clone();
-            let outcome = btcc.run_turn(request).await.map_err(|error| {
-                super::IngressError::new("inbound_turn_interrupted", error.code())
-            })?;
+            let outcome = btcc
+                .run_turn(request)
+                .await
+                .map_err(|error| turn_error(&error))?;
             let binding = bindings
                 .get_by_session_id(&session_id)
                 .await
@@ -258,17 +292,16 @@ async fn execute(
                     turn_id: turn_id.into(),
                 })
                 .await
-                .map_err(|error| {
-                    super::IngressError::new("inbound_turn_interrupted", error.code())
-                })?;
+                .map_err(|error| turn_error(&error))?;
             (binding, outcome)
         }
         Some("resume_turn") => {
             let binding = bind::existing_control_binding(&envelope, bindings).await?;
             let request = bind::control_request(&envelope, &binding)?;
-            let outcome = btcc.run_turn(request).await.map_err(|error| {
-                super::IngressError::new("inbound_turn_interrupted", error.code())
-            })?;
+            let outcome = btcc
+                .run_turn(request)
+                .await
+                .map_err(|error| turn_error(&error))?;
             (binding, outcome)
         }
         Some(_) => {
@@ -371,5 +404,6 @@ async fn complete_subsession_child(
 }
 
 mod interrupted;
+mod rejected;
 #[cfg(test)]
 mod tests;

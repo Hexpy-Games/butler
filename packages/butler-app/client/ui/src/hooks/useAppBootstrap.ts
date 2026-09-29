@@ -14,6 +14,7 @@ import {
 import { readCachedSettings } from "@/app/settingsCache.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { isDraftChatId } from "@/app/utils.ts";
+import { turnProgressOf } from "@/app/turnProgress.ts";
 import { isServerBackedSessionId } from "@/app/sessionIds.ts";
 import {
   selectActiveSessionView,
@@ -227,7 +228,7 @@ export function useAppBootstrap() {
             messages: data.messages,
             turn_progress: data.latest_turn?.id
               ? { [data.latest_turn.id]: {
-                  ...data.latest_turn.progress,
+                  ...turnProgressOf(data.latest_turn),
                   started_at: data.latest_turn.created_at,
                 } }
               : {},

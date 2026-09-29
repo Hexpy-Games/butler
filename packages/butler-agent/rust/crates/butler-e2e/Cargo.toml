@@ -13,7 +13,9 @@ publish.workspace = true
 [dependencies]
 butler-platform = { path = "../butler-platform", features = ["test-support"] }
 axum.workspace = true
+base64.workspace = true
 bytes.workspace = true
+flate2.workspace = true
 chrono.workspace = true
 futures-util.workspace = true
 regex.workspace = true
@@ -22,6 +24,7 @@ rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+tar.workspace = true
 tokio.workspace = true
 uuid.workspace = true
 zip.workspace = true

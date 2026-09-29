@@ -16,6 +16,12 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "instance" | "process_control" => &["process_table"],
         // The credential store's owner-only fallback file is a secure_fs file.
         "secrets" => &["secure_fs"],
+        // The `butler` command launcher is a runnable file under the user's
+        // command directory; the Agent home's pointers are replaced atomically
+        // with secure_fs; login-start definitions live under the user's home.
+        "command_launcher" => &["launcher", "user_dirs"],
+        "install_link" => &["secure_fs"],
+        "service_registration" => &["instance", "user_dirs"],
         // butler-core: leaf codecs and mirrors; JSON sanitizes public text.
         "configuration" | "js_date" | "json_lines" | "locale" | "public_text" | "segmentation"
         | "tool_protocol" => &[],

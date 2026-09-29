@@ -4,6 +4,7 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 
+use super::managed::{is_managed, manager_unreachable, request};
 use super::readiness::wait_for_stop;
 use super::{FORCE_STOP_TIMEOUT, STOP_TIMEOUT, active_service};
 use crate::host::ResolvedInstallation;
@@ -37,6 +38,9 @@ pub(super) struct StoppedInstance {
     pub(super) forced: bool,
     /// The App supervised it, so the App starts its replacement on restart.
     pub(super) app_supervised: bool,
+    /// A login job (launchd, systemd) ran it, so the manager starts its
+    /// replacement on restart.
+    pub(super) managed: bool,
 }
 
 impl StopReport {
@@ -87,6 +91,7 @@ pub(super) async fn stop_service_admitted(
     if expected.is_some_and(|identity| !identity.matches(&record)) {
         return Err("native_service_instance_changed".into());
     }
+    let managed = is_managed(data_root, &record);
     let previous = mark_stopping(data_root, &record.nonce, installation)?;
     let delivery = match deliver_stop(data_root, &record, expected, request).await {
         Ok(delivery) => delivery,
@@ -115,6 +120,7 @@ pub(super) async fn stop_service_admitted(
         nonce: record.nonce,
         forced,
         app_supervised: record.app_supervised,
+        managed,
     };
     Ok((StopReport::Stopped(stopped), admission))
 }
@@ -243,7 +249,21 @@ async fn wait_or_force_stop(
     if !process_matches(&current)? {
         return Err("native_service_instance_ambiguous: refusing force kill (the process does not match its record)".into());
     }
-    force_stop(&current)?;
+    if is_managed(data_root, &current) {
+        // A signal sent straight to a supervised process looks like a crash
+        // to its manager, which would relaunch it: the manager stops it.
+        request(butler_platform::service_registration::stop).await?;
+    } else if manager_unreachable(data_root).await {
+        // The job is this DATA's but the manager does not answer, so the
+        // service may be running under it: a kill could be answered by a
+        // relaunch. Nothing is forced.
+        return Err(
+            "native_service_manager_unavailable: the service did not stop and its login job cannot be reached; stop it through the service manager"
+                .into(),
+        );
+    } else {
+        force_stop(&current)?;
+    }
     if !wait_for_stop(data_root, &record.nonce, FORCE_STOP_TIMEOUT).await? {
         return Err("native_service_stop_timeout".into());
     }

@@ -63,6 +63,30 @@ pub(super) fn set_file_mode(path: &Path, mode: FileMode) -> Option<io::Result<()
     ))
 }
 
+/// Gives the owner access to every directory (read, write, search) and
+/// write access to every file under `root`, links not followed.
+pub(super) fn make_tree_writable(root: &Path) -> io::Result<()> {
+    let metadata = fs::symlink_metadata(root)?;
+    if metadata.file_type().is_symlink() {
+        return Ok(());
+    }
+    let mode = metadata.permissions().mode();
+    let wanted = if metadata.is_dir() {
+        mode | 0o700
+    } else {
+        mode | 0o200
+    };
+    if wanted != mode {
+        fs::set_permissions(root, fs::Permissions::from_mode(wanted))?;
+    }
+    if metadata.is_dir() {
+        for entry in fs::read_dir(root)? {
+            make_tree_writable(&entry?.path())?;
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn restrict_file(path: &Path) -> Option<io::Result<()>> {
     Some(fs::set_permissions(
         path,

@@ -157,13 +157,7 @@ pub(super) async fn bind_and_request(
         SessionRole::Worker => TurnRole::Worker,
         SessionRole::Unknown(_) => return Err(invalid("Unsupported session role")),
     };
-    let content = envelope
-        .message
-        .text
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| invalid("Missing user message"))?
-        .to_owned();
+    let content = user_message(envelope)?;
     Ok(TurnRequest {
         turn_id: turn_id.to_owned(),
         recovery_attempt: hints.turn_attempt,
@@ -221,6 +215,7 @@ pub(super) async fn bind_and_request(
             .as_ref()
             .filter(|value| !value.is_empty())
             .cloned(),
+        resume: false,
         preparation_cancellation: CancellationToken::new(),
     })
 }
@@ -268,13 +263,7 @@ fn automation_request(
         SessionRole::Worker => TurnRole::Worker,
         SessionRole::Unknown(_) => return Err(invalid("Unsupported session role")),
     };
-    let content = envelope
-        .message
-        .text
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| invalid("Missing user message"))?
-        .to_owned();
+    let content = user_message(envelope)?;
     let turn_id = routed_turn_id(envelope).to_owned();
     Ok(TurnRequest {
         turn_id,
@@ -309,6 +298,7 @@ fn automation_request(
         authority_request_ref: None,
         authority_client_message_id: None,
         app_queue_claim_id: None,
+        resume: false,
         preparation_cancellation: CancellationToken::new(),
     })
 }
@@ -368,13 +358,7 @@ pub(super) fn control_request(
         SessionRole::Worker => TurnRole::Worker,
         SessionRole::Unknown(_) => return Err(invalid("Unsupported session role")),
     };
-    let content = envelope
-        .message
-        .text
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| invalid("Missing user message"))?
-        .to_owned();
+    let content = user_message(envelope)?;
     Ok(TurnRequest {
         turn_id: turn_id.into(),
         recovery_attempt: hints.turn_attempt,
@@ -390,7 +374,7 @@ pub(super) fn control_request(
         sender: envelope.sender.clone(),
         message: TurnMessage {
             id: envelope.message.id.clone(),
-            content: content.clone(),
+            content,
             timestamp: envelope.message.timestamp.clone(),
             attachments: envelope.message.attachments.clone(),
             image_admission: envelope.message.image_admission.clone(),
@@ -416,10 +400,7 @@ pub(super) fn control_request(
             }
             .into(),
         ),
-        app_turn_context: Some(json!({
-            "session":{"id":binding.session_id},
-            "contentParts":[{"type":"text","text":content}],
-        })),
+        app_turn_context: None,
         authority_request_ref: hints
             .authority_request_ref
             .as_ref()
@@ -435,6 +416,7 @@ pub(super) fn control_request(
             .as_ref()
             .filter(|value| !value.is_empty())
             .cloned(),
+        resume: true,
         preparation_cancellation: CancellationToken::new(),
     })
 }
@@ -476,6 +458,17 @@ fn verify_context(
         return Err(invalid("App turn context identity mismatch"));
     }
     Ok(())
+}
+
+/// The non-blank text of the user message an envelope carries.
+fn user_message(envelope: &Envelope) -> Result<String, IngressError> {
+    envelope
+        .message
+        .text
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_owned)
+        .ok_or_else(|| invalid("Missing user message"))
 }
 
 fn invalid(message: &'static str) -> IngressError {

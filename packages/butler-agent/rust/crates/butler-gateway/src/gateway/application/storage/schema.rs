@@ -23,11 +23,11 @@ pub(super) fn migrate(
 ) -> Result<(), AppStorageError> {
     let turns_new = !migration::table_exists(connection, "turns")?;
     core::create(connection)?;
-    if turns_new {
-        connection
-            .execute_batch("CREATE INDEX turns_state_rowid_idx ON turns(state)")
-            .map_err(AppStorageError::sqlite)?;
-    }
+    // Open-turn lookups filter on the state alone; databases that predate the
+    // index get it here.
+    connection
+        .execute_batch("CREATE INDEX IF NOT EXISTS turns_state_rowid_idx ON turns(state)")
+        .map_err(AppStorageError::sqlite)?;
     supporting::create(connection)?;
     // An App database from before ask-first (#236) keeps full access until
     // the user saves a mode; a new one asks first. Before the schedule
@@ -49,6 +49,7 @@ pub(super) fn migrate(
     migration::backfill_queue_identity(connection)?;
     schedule_access::backfill(connection)?;
     migration::create_post_backfill_indexes(connection)?;
+    migration::settle_ended_turn_messages(connection)?;
     project_ledger_bindings::initialize(connection, butler_data)?;
     space::migrate(connection)?;
     wallpapers::create(connection)?;

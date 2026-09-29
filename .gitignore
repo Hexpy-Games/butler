@@ -28,7 +28,7 @@ tests/.env.test
 
 # ── Build artifacts ───────────────────────────────────────────────────────────
 __pycache__/
-node_modules/
+node_modules
 dist/
 dist-ds-site*/
 app-client/ui/.*/skills/

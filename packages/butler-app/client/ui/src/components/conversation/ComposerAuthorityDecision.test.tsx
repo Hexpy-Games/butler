@@ -5,6 +5,7 @@ import type { Root } from "react-dom/client";
 import type { ComposerAuthorityDecision } from "./useComposerAuthorityDecision";
 import type { ComposerSubmit } from "./hooks/composerEventTypes";
 import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
+import type { AuthorityApprovalCard } from "@/app/types.ts";
 
 // These expectations are the Korean copy; pin the locale instead of inheriting it.
 const previousLocale = getAppLocale();
@@ -20,7 +21,21 @@ let dom: JSDOM | undefined;
 let current: ComposerAuthorityDecision | undefined;
 let submitCurrent: ComposerSubmit;
 
-async function renderDecision() {
+const legacyCards: AuthorityApprovalCard[] = [{ requestRef: "request-one", category: "command",
+  executable: "git", commandCount: 1, reason: "Run one reviewed command",
+  scope: { title: "동일한 명령 실행", description: "git · 현재 요청과 동일한 명령·작업 위치에만 적용" },
+}, { requestRef: "request-two", category: "command", executable: "other", commandCount: 1, reason: "Second request" }];
+
+const renameCard: AuthorityApprovalCard = { requestRef: "request-rename", category: "reviewed_effect",
+  executable: "edit_file", commandCount: 1, reason: "Reviewed operation",
+  scope: { title: "작업 폴더의 파일 편집", description: "Desktop 안의 파일 쓰기·수정" },
+  approval: { actionKind: "edit_files", count: 24, risk: "medium",
+    targets: [{ kind: "folder", label: "Desktop", path: "" }, { kind: "file", path: "Screenshot 10.02.14.png" }],
+    examples: ["Screenshot 10.02.14.png", "Screenshot 10.05.31.png",
+      "Screenshots/2026/September/holiday trip to the coast/Screenshot 10.09.02.png"] },
+};
+
+async function renderDecision(cards: AuthorityApprovalCard[] = legacyCards) {
   dom = new JSDOM("<div id='root'></div>", { url: "http://localhost", pretendToBeVisual: true });
   Object.assign(globalThis, { window: dom.window, document: dom.window.document,
     navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement, Element: dom.window.Element,
@@ -36,12 +51,7 @@ async function renderDecision() {
   const { ComposerAuthorityDecisionSurface } = await import("./ComposerAuthorityDecisionSurface");
   const { ComposerTextArea } = await import("./ComposerTextArea");
   const { ComposerDecisionAttachment } = await import("./ComposerDecisionAttachment");
-  useButlerStore.setState({ activeChatId: "general", authorityApprovals: {
-    sessionId: "general", cards: [{ requestRef: "request-one", category: "command",
-      executable: "git", commandCount: 1, reason: "Run one reviewed command",
-      scope: { title: "동일한 명령 실행", description: "git · 현재 요청과 동일한 명령·작업 위치에만 적용" },
-    }, { requestRef: "request-two", category: "command", executable: "other", commandCount: 1, reason: "Second request" }],
-  } });
+  useButlerStore.setState({ activeChatId: "general", authorityApprovals: { sessionId: "general", cards } });
   useComposerStore.setState({ text: "보존할 일반 대화 초안", textAreaRef: React.createRef<HTMLTextAreaElement>() });
   function Harness() {
     const decisionOwner = useComposerDecision(false);
@@ -129,4 +139,25 @@ test("form and keyboard submissions follow the visible decision instead of consu
   await act(async () => { current!.onComposeMessage(); });
   await act(async () => { submitCurrent(event); });
   expect(normalSubmissions).toBe(1);
+});
+
+function decisionButtons(container: HTMLElement) {
+  return [...container.querySelectorAll("button")].slice(-3).map((button) => button.textContent);
+}
+
+// test-category: security
+test("a structured request reads as a plain question with its examples in full, a risk badge, Deny and Allow once", async () => {
+  const { container } = await renderDecision([renameCard]);
+  expect(container.textContent).toContain("'Desktop'의 파일 24개를 수정할까요?");
+  expect(container.textContent).not.toContain("작업 폴더의 파일 편집");
+  const details = container.querySelector('[data-slot="composer-decision-details"]')!;
+  expect([...details.querySelectorAll("p")].map((line) => line.textContent)).toEqual([
+    "Screenshot 10.02.14.png", "Screenshot 10.05.31.png", "Screenshots/2026/September/holiday trip to the coast/Screenshot 10.09.02.png", "외 21개",
+  ]);
+  expect(container.querySelector('[data-test-class="approval-risk"][data-tone="warning"]')?.textContent).toBe("위험 보통");
+  expect(decisionButtons(container)).toEqual(["거절", "이번만 허용", ""]);
+  expect(current?.conversationScope).toBe("'Desktop'의 파일 수정");
+  // The pending attachment above a folded-away request says the same thing.
+  await act(async () => { current!.onComposeMessage(); });
+  expect(container.textContent).toContain("'Desktop'의 파일 24개를 수정할까요?");
 });

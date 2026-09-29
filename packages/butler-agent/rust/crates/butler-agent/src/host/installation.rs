@@ -83,16 +83,25 @@ impl ResolvedInstallation {
         &self.resource_root
     }
 
+    /// The directory that holds the payload manifest: the parent of the
+    /// resource root, which is the installation root for a standalone
+    /// installation and `bundled-agent/` inside an App bundle or package
+    /// (whose installation root is the App itself). An installation whose
+    /// resources sit elsewhere keeps its manifest in the installation root.
+    pub(crate) fn payload_root(&self) -> PathBuf {
+        self.resource_root
+            .parent()
+            .filter(|parent| parent.starts_with(&self.installation_root))
+            .map_or_else(|| self.installation_root.clone(), Path::to_path_buf)
+    }
+
     pub(crate) fn app_version(&self) -> Option<String> {
         if let Ok(value) = std::env::var("BUTLER_APP_VERSION")
             && !value.trim().is_empty()
         {
             return Some(value.trim().to_owned());
         }
-        let manifest = self
-            .resource_root
-            .parent()?
-            .join("native-agent-manifest.json");
+        let manifest = self.payload_root().join("native-agent-manifest.json");
         if !std::fs::symlink_metadata(&manifest)
             .ok()?
             .file_type()
@@ -118,7 +127,8 @@ impl ResolvedInstallation {
     pub(crate) fn payload_provenance(
         &self,
     ) -> Result<Option<PayloadProvenance>, crate::host::HostError> {
-        let manifest_path = self.installation_root.join("native-agent-manifest.json");
+        let payload_root = self.payload_root();
+        let manifest_path = payload_root.join("native-agent-manifest.json");
         let metadata = match std::fs::symlink_metadata(&manifest_path) {
             Ok(metadata) => metadata,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -130,7 +140,7 @@ impl ResolvedInstallation {
         let manifest_path = manifest_path.canonical().map_err(|source| {
             crate::host::HostError::new("installation_manifest_unavailable").with_source(source)
         })?;
-        if !manifest_path.starts_with(&self.installation_root) {
+        if !manifest_path.starts_with(&payload_root) {
             return Err("installation_manifest_invalid".into());
         }
         let value: serde_json::Value =
@@ -157,14 +167,14 @@ impl ResolvedInstallation {
         if binary != expected_binary || resources != "resources" {
             return Err("installation_manifest_layout_invalid".into());
         }
-        let binary_path = safe_manifest_path(&self.installation_root, binary)?;
-        let resources_path = safe_manifest_path(&self.installation_root, resources)?;
+        let binary_path = safe_manifest_path(&payload_root, binary)?;
+        let resources_path = safe_manifest_path(&payload_root, resources)?;
         if binary_path != self.executable_path || resources_path != self.resource_root {
             return Err("installation_manifest_layout_invalid".into());
         }
         let version = string_field(&value, "version");
         if schema == "butler.native-agent-install.v1" {
-            check_install_manifest(&value, &self.installation_root)?;
+            check_install_manifest(&value, &payload_root)?;
         }
         let binary_sha256 = string_field(&value, "binarySha256");
         let resources_sha256 = string_field(&value, "resourcesSha256");

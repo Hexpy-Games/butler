@@ -85,7 +85,7 @@ export function MotionPage({ entries, locale, state, anchor, onChange, onOpen }:
   const s = chapterSections(chapter, [["durations", "Durations"], ["easings", "Easings"], ["distances", "Distances and scales"], ["loops", "Loops"], ["components", "DS motion components"]]);
   return (
     <div data-ds-motion-page>
-      <ChapterLayout anchor={anchor} chapter={chapter} onOpen={onOpen} sections={s.list}
+      <ChapterLayout anchor={anchor} chapter={chapter} locale={locale === "ko-KR" ? "ko" : "en"} onOpen={onOpen} sections={s.list}
         lead="Short, decelerating entrances; faster exits; no bounce except the Switch thumb and the drag lift. Motion lives in DS components and tokens; product code never declares transitions. Reduced motion keeps the fades and drops the travel."
         headerExtra={(
           <SegmentedControl ariaLabel="Reduced motion" size="sm" options={[{ value: "full", label: "Full motion" }, { value: "reduced", label: "Reduced motion" }]}

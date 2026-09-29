@@ -18,6 +18,7 @@ export type SettingsSectionId =
   | "logs"
   | "personalization"
   | "privacy"
+  | "security"
   | "system"
   | "archives"
   | "about";
@@ -589,12 +590,36 @@ export interface SettingsView {
   profile_label: string;
   /** #230: onboarding state kept by the agent; absent on agents before #230. */
   onboarding?: OnboardingSettingsView;
+  /** Local clients that send the admin credential only. */
+  security?: SecuritySettingsView;
 }
 
 export interface OnboardingSettingsView {
   consent_version?: number | null;
   accepted_at?: string | null;
   completed_at?: string | null;
+}
+
+/** The `security` object of GET/PATCH /settings. */
+export interface SecuritySettingsView {
+  remote_access_enabled: boolean;
+  allowed_hosts: string[];
+}
+
+/**
+ * GET /security: local clients with the admin credential only (403
+ * `loopback_required` or `admin_credential_required` otherwise).
+ */
+export interface SecurityView {
+  remote_access_enabled: boolean;
+  /** Every listen address, loopback first. */
+  bind_addresses: string[];
+  /** Empty while remote access is off. */
+  lan_urls: string[];
+  /** Extra host names the gateway answers (tunnels, reverse proxies). */
+  allowed_hosts: string[];
+  /** Null when local auth is off; `created_at` null when the token file has none. */
+  connection_code: { masked: string; created_at: string | null } | null;
 }
 
 export interface ModelFallbackSettingsView {
@@ -760,6 +785,18 @@ export interface CreateSessionResult {
   session: SessionSummary;
 }
 
+/**
+ * A project folder's Git state; what the agent could not read is null. The
+ * project list fills only `is_repo` and `branch`; the dashboard fills all.
+ */
+export interface ProjectGitState {
+  is_repo: boolean;
+  branch: string | null;
+  dirty?: boolean | null;
+  ahead?: number | null;
+  behind?: number | null;
+}
+
 /** A project's wallpaper: follow the global `wallpaper` setting, or its own source. */
 export type ProjectWallpaper = "inherit" | WallpaperSource;
 
@@ -772,6 +809,8 @@ export interface ProjectSummary {
   /** From the dashboard preferences; absent (older gateways, optimistic rows) means `inherit`. */
   wallpaper?: ProjectWallpaper;
   sessions?: SessionSummary[];
+  /** Absent from agents that predate project Git state. */
+  git?: ProjectGitState | null;
 }
 
 export type { SpaceCommand, SpaceNode, SpaceGroup, SpaceView, SpaceMutationResult } from "../../../shared/app-contracts.ts";
@@ -1022,7 +1061,8 @@ export interface SessionViewTurn {
   delivery_state?: RuntimeDeliveryState;
   limitation_codes?: string[];
   limitations?: string[];
-  progress: TurnProgressSnapshot;
+  /** Optional: the gateway may omit progress for a turn (treat as no rows). */
+  progress?: TurnProgressSnapshot;
   created_at: string;
   updated_at: string;
   execution_controls?: {
@@ -1704,8 +1744,8 @@ export type AuthorityRequestRef = string;
 
 /**
  * Narrow read-only UI card for one pending self-session authority request.
- * Only category, reason, executable, and command count are renderable; the
- * request reference exists solely as an in-memory React key and narrow
+ * The card renders `approval` (or, from older agents, `scope` and `reason`);
+ * the request reference exists solely as an in-memory React key and narrow
  * decision handle.
  */
 export interface AuthorityApprovalCard {
@@ -1714,10 +1754,40 @@ export interface AuthorityApprovalCard {
   reason: string;
   executable: string;
   commandCount: number;
+  /** Legacy Korean display text; kept for older agents and the conversation grant. */
   scope?: { title: string; description: string };
+  /** What the request would do, as data the App phrases in its own language. */
+  approval?: ApprovalSummary;
   sourceTurnId?: string;
   sourceCallId?: string;
   sourceSessionId?: string;
+}
+
+export type ApprovalRisk = "low" | "medium" | "high";
+
+/**
+ * The narrowed `approval` of a pending authority request. `actionKind` and
+ * target kinds stay open strings: kinds this App does not know fall back to a
+ * generic sentence instead of dropping the request.
+ */
+export interface ApprovalSummary {
+  actionKind: string;
+  /** The folder first where there is one, then files, a connector or a named target. */
+  targets: ApprovalTarget[];
+  count: number;
+  /** Up to three concrete items: relative file paths, or the command line as sent. */
+  examples: string[];
+  /** As the agent classified it; the App never classifies. */
+  risk?: ApprovalRisk;
+}
+
+/** One thing a request touches. Never an absolute path. */
+export interface ApprovalTarget {
+  kind: string;
+  /** Relative to the workspace (empty for a folder), `server/tool` or a target name. */
+  path: string;
+  /** A folder's label as #277 sends it in `path`: `garden`, or `garden/app` inside it. */
+  label?: string;
 }
 
 export interface ConversationPermissionView {

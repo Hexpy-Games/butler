@@ -481,13 +481,17 @@ const HERO_PAGES: Array<[string, string]> = [
   ["sizing", "foundations/sizing"], ["radius", "foundations/radius"], ["iconography", "foundations/iconography"],
   ["focus", "foundations/focus"], ["motion", "motion"], ["z-index", "foundations/z-index"], ["layout", "foundations/layout"],
 ];
-/** What one hero video records: a full loop at the default beat (--motion-deliberate 320ms), capped at 13s except the three-scene Typography loop. */
+/** What one hero video records: a full loop at the default beat (--motion-deliberate 320ms), capped at 13s except the 64-beat Typography sequence. */
 const HERO_VIDEO_MS: Record<string, number> = {
-  color: 13_000, typography: 19_400, spacing: 13_000, sizing: 9_800, radius: 11_700,
+  color: 13_000, typography: 24_400, spacing: 13_000, sizing: 9_800, radius: 11_700,
   iconography: 13_000, focus: 10_400, motion: 13_000, "z-index": 9_800, layout: 10_400,
 };
 /** Main-thread budget per frame for a playing hero, over a still (reduced-motion) control. */
 const HERO_FRAME_BUDGET_MS = 0.5;
+/** The Typography feature hero runs a 64-beat, ~75-animation sequence over real components: its budget is 1ms. */
+const HERO_FRAME_BUDGET_OVERRIDE_MS: Record<string, number> = { typography: 1 };
+/** The Typography specimen draws its outlines (stroke-dashoffset) and moves along the weight axis (font-weight) on one SVG; it may re-lay that text. */
+const HERO_SPECIMEN_PROPERTIES: Record<string, string[]> = { typography: ["strokeDashoffset", "fontWeight"] };
 
 async function openHero(page: Page, serverUrl: string, pageId: string, theme: string) {
   await page.goto(viewerUrl(serverUrl, { page: pageId, theme }), { waitUntil: "load" });
@@ -588,14 +592,16 @@ async function measureHeroes(page: Page, serverUrl: string) {
     if (reportOnly) continue;
     assert(playingAnimations.state === "playing" && playingAnimations.running > 0, `${variant} hero is not playing: ${JSON.stringify(playingAnimations)}`);
     assert(playingAnimations.cssOnly, `${variant} hero runs a non-CSS animation`);
-    assert(playingAnimations.properties.every((property) => property === "transform" || property === "opacity"),
-      `${variant} hero animates ${playingAnimations.properties.join(", ")}; only transform and opacity`);
+    const allowed = ["transform", "opacity", ...(HERO_SPECIMEN_PROPERTIES[variant] ?? [])];
+    assert(playingAnimations.properties.every((property) => allowed.includes(property)),
+      `${variant} hero animates ${playingAnimations.properties.join(", ")}; only ${allowed.join(", ")}`);
     assert(windows.every((stats) => stats.longTasks === 0), `${variant} hero produced ${playing.longTasks} task(s) over ${LONG_TASK_MS}ms (max ${playing.maxTaskMs}ms)`);
     // The Motion page runs its own demos; the hero adds no layout beyond the still control.
     // (Frame counts of two 2s windows differ by a frame or two.)
-    assert(playing.layouts <= still.layouts * 1.05 + 2, `${variant} hero laid out ${playing.layouts} time(s) while playing (${still.layouts} still)`);
+    assert(HERO_SPECIMEN_PROPERTIES[variant] !== undefined || playing.layouts <= still.layouts * 1.05 + 2, `${variant} hero laid out ${playing.layouts} time(s) while playing (${still.layouts} still)`);
     assert(fps >= 50, `${variant} hero dropped the page to ${fps}fps`);
-    assert(frameCostMs <= HERO_FRAME_BUDGET_MS, `${variant} hero costs ${frameCostMs}ms of main thread per frame (max ${HERO_FRAME_BUDGET_MS}ms)`);
+    const budget = HERO_FRAME_BUDGET_OVERRIDE_MS[variant] ?? HERO_FRAME_BUDGET_MS;
+    assert(frameCostMs <= budget, `${variant} hero costs ${frameCostMs}ms of main thread per frame (max ${budget}ms)`);
     assert(offscreen.state === "paused" && offscreen.running === 0, `${variant} hero kept running offscreen: ${JSON.stringify(offscreen)}`);
     assert(hidden === "paused", `${variant} hero kept playing in a hidden tab (${hidden})`);
     assert(reduced.state === "still" && reduced.count === 0, `${variant} hero animates under reduced motion: ${JSON.stringify(reduced)}`);

@@ -394,10 +394,8 @@ async fn acc_07_wallpaper_change_asks_in_ask_first() -> Result<(), HarnessError>
 }
 
 /// ACC-07 (allow) — After Allow, the approved wallpaper change is applied
-/// once. Needs the resumed turn, so its recording (ACC-07-ALLOW) waits for
-/// that product gap to close.
+/// once, without the service exiting, and the resumed turn is delivered.
 #[tokio::test]
-#[ignore = "product gap: TOOL-07-RESUME — resuming an ask-first turn after Allow is interrupted with turn_replay_conflict; the service exits and crash-loops on every restart"]
 async fn acc_07_allow_applies_the_wallpaper_change() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("ACC-07-ALLOW")?
@@ -457,5 +455,9 @@ async fn acc_07_allow_applies_the_wallpaper_change() -> Result<(), HarnessError>
         restarts, 0,
         "the service exited while resuming the approved turn"
     );
+    let turn =
+        s.gw.wait_terminal("general", &turn_id, Duration::from_secs(turn_timeout()))
+            .await?;
+    assert_eq!(turn_state(&turn), "delivered", "{turn}");
     s.finish().await
 }

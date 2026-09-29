@@ -17,12 +17,15 @@ use crate::host::service::instance::{
 };
 use crate::host::{ResolvedInstallation, ServiceConfiguration};
 
+mod managed;
 mod probe_auth;
 mod readiness;
 mod restart_handoff;
 mod stop;
 use readiness::{cleanup_spawned, wait_for_app_respawn, wait_until_ready, wait_until_registered};
-pub(super) use restart_handoff::{execute_restart_handoff, spawn_restart_handoff};
+pub(super) use restart_handoff::{
+    asked_of_manager, execute_restart_handoff, spawn_restart_handoff,
+};
 use stop::{StopReport, stop_service_admitted};
 
 const START_TIMEOUT: Duration = Duration::from_secs(90);
@@ -86,6 +89,11 @@ pub(super) async fn execute(
                 }));
             }
             let admission = acquire_admission(&data_root, &installation).await?;
+            if let Some(active) = active_service(&data_root)?
+                && managed::is_managed(&data_root, &active)
+            {
+                return managed::restart_instance(&config, &active, admission, requested_by).await;
+            }
             let request = StopRequest {
                 reason: StopReason::Restart,
                 requested_by,
@@ -96,7 +104,22 @@ pub(super) async fn execute(
         }
         Action::Run => Err("service run is dispatched by the native service entrypoint".into()),
         Action::RestartHandoff => Err("restart handoff has a private entrypoint".into()),
+        Action::RegisterLogin | Action::UnregisterLogin | Action::LoginStatus => {
+            Err("login registration is dispatched by the registration command".into())
+        }
     }
+}
+
+/// Whether an instance owns the data folder `requested_data` names (or the
+/// default one). A folder that cannot be examined counts as not running:
+/// starting will report the real problem.
+pub(super) fn already_running(
+    requested_data: Option<&str>,
+    installation: &ResolvedInstallation,
+) -> bool {
+    resolve_data_root(requested_data, installation)
+        .and_then(|data_root| active_service(&data_root))
+        .is_ok_and(|active| active.is_some())
 }
 
 pub(super) fn summary(action: Action, value: &Value) -> String {
@@ -120,6 +143,7 @@ pub(super) fn summary(action: Action, value: &Value) -> String {
         Action::Restart => "Butler native service restarted".into(),
         Action::Run => "Butler native service run".into(),
         Action::RestartHandoff => "Butler native service restart handoff".into(),
+        Action::RegisterLogin | Action::UnregisterLogin | Action::LoginStatus => String::new(),
     }
 }
 
@@ -156,6 +180,16 @@ async fn start_service_admitted(
         drop(admission);
         let ready = wait_until_ready(config, None, Some(record.nonce.clone())).await?;
         return Ok(start_result(&ready, false));
+    }
+    if managed::job_is_ours(data_root) {
+        // This DATA's login job is registered: it, not this process, runs the
+        // service, so it stays under the manager (which loads the job again
+        // if it was unloaded).
+        managed::request(butler_platform::service_registration::start).await?;
+        let registered = wait_for_app_respawn(data_root, "").await?;
+        drop(admission);
+        let ready = wait_until_ready(config, None, Some(registered.nonce)).await?;
+        return Ok(start_result(&ready, true));
     }
     let mut spawned = spawn_service(installation, data_root)?;
     let registered = match wait_until_registered(data_root, &mut spawned).await {
@@ -209,11 +243,15 @@ async fn start_replacement(
     let StopReport::Stopped(instance) = stopped else {
         return start_service_admitted(installation, config, admission).await;
     };
-    if !instance.app_supervised {
+    if !instance.app_supervised && !instance.managed {
         return start_service_admitted(installation, config, admission).await;
     }
-    // Admission stays held until the App's instance is registered, so no
-    // controller can start a CLI-environment instance in its place.
+    if instance.managed {
+        managed::request(butler_platform::service_registration::start).await?;
+    }
+    // Admission stays held until the App's (or the login job's) instance is
+    // registered, so no controller can start a CLI-environment instance in
+    // its place.
     let registered = wait_for_app_respawn(&config.data_root, &instance.nonce).await?;
     drop(admission);
     let ready = wait_until_ready(config, None, Some(registered.nonce)).await?;
@@ -246,7 +284,7 @@ async fn stop_service(
     Ok(report.to_json())
 }
 
-async fn acquire_admission(
+pub(super) async fn acquire_admission(
     data_root: &Path,
     installation: &ResolvedInstallation,
 ) -> Result<AdmissionLock, crate::host::HostError> {
@@ -264,7 +302,9 @@ async fn acquire_admission(
     }
 }
 
-fn active_service(data_root: &Path) -> Result<Option<InstanceRecord>, crate::host::HostError> {
+pub(super) fn active_service(
+    data_root: &Path,
+) -> Result<Option<InstanceRecord>, crate::host::HostError> {
     let locked = instance_is_locked(data_root)?;
     let record = read_record(data_root)?;
     match (locked, record) {
@@ -354,7 +394,7 @@ fn log_file(
     })
 }
 
-fn resolve_data_root(
+pub(super) fn resolve_data_root(
     explicit: Option<&str>,
     installation: &ResolvedInstallation,
 ) -> Result<PathBuf, crate::host::HostError> {

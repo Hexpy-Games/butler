@@ -93,13 +93,13 @@ function GlassOverPalette() {
   );
 }
 
-export function ColorChapter({ chapter, anchor, onOpen }: ChapterProps) {
+export function ColorChapter({ chapter, anchor, locale, onOpen }: ChapterProps) {
   const s = chapterSections(chapter, [
     ["palette", "Palette"], ["roles", "Roles on surfaces"], ["surfaces", "Surfaces"], ["status", "Status"],
     ["semantic-map", "Semantic map"], ["data-and-code", "Charts and code"], ["glass", "Glass"],
   ]);
   return (
-    <ChapterLayout anchor={anchor} chapter={chapter} onOpen={onOpen} sections={s.list}
+    <ChapterLayout anchor={anchor} chapter={chapter} locale={locale} onOpen={onOpen} sections={s.list}
       lead="Neutrals carry the interface; blue marks the one action that matters; green, amber and red speak only for status. Product code uses role tokens. Palette steps only feed them.">
       <GuideSection spec={s.at("palette")} lead="Ten-step ramps and twelve greys. Steps are raw material, never used directly in product CSS.">
         <PaletteBands />

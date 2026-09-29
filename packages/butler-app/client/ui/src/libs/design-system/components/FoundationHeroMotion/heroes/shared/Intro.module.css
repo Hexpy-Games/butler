@@ -1,0 +1,96 @@
+/* A chapter's intro, above the poster: the title large on the left, the
+   chapter's intent line by line on the right (below it when tall). */
+
+.intro {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: var(--grid-gutter);
+  align-items: center;
+  inline-size: 100%;
+  block-size: 100%;
+  padding: var(--grid-margin);
+}
+
+.introTitle {
+  position: relative;
+  isolation: isolate;
+  grid-column: 1 / span 6;
+  min-width: 0;
+  /* Room for descenders inside the clip, without moving the title. */
+  margin-block-end: -0.16em;
+  padding-block-end: 0.16em;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: calc(var(--typo-h1-size) * 4 * var(--title-fit, 1));
+  white-space: nowrap;
+  font-weight: var(--font-weight-strong);
+  letter-spacing: -0.02em;
+  line-height: var(--line-height-none);
+}
+
+/* A chapter's touch on its title, behind the letters. */
+.decor {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.introLead {
+  display: grid;
+  grid-column: 7 / span 6;
+  row-gap: var(--space-xl);
+}
+
+.leadLine {
+  display: grid;
+  row-gap: var(--space-xs);
+  margin: 0;
+}
+
+.leadKey {
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+}
+
+.leadText {
+  color: var(--text-secondary);
+  font-size: var(--typo-h4-size);
+  line-height: var(--typo-h4-line-height);
+}
+
+/* Tall: the title at the top of the portrait frame and the intent filling
+   the rest, so the frame has no empty bands. */
+[data-layout="tall"] .intro {
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  align-content: stretch;
+  row-gap: var(--space-3xl);
+  padding-block: calc(var(--grid-margin) * 2);
+}
+
+[data-layout="tall"] .introTitle,
+[data-layout="tall"] .introLead {
+  grid-column: 1;
+}
+
+[data-layout="tall"] .introTitle {
+  align-self: start;
+  font-size: calc(var(--typo-h1-size) * 2.6 * var(--title-fit, 1));
+}
+
+[data-layout="tall"] .introLead {
+  align-self: stretch;
+  align-content: space-evenly;
+}
+
+[data-layout="tall"] .leadKey {
+  font-size: var(--typo-body-size);
+}
+
+[data-layout="tall"] .leadText {
+  font-size: var(--typo-h3-size);
+  line-height: var(--typo-h3-line-height);
+}
