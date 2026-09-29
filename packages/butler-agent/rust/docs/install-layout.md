@@ -34,15 +34,23 @@ AGENT_HOME/
 
 - A version dir is the extracted standalone archive, unmodified (see
   `scripts/STANDALONE_AGENT.md`). `version` and `binarySha256` come from its
-  `native-agent-manifest.json`. Entries are read-only, so uninstall must
-  `chmod -R u+w` before `rm -rf`.
-- Versions are created by extracting into `.staging-*` and renaming, so a
-  version dir is always complete. Installing a version that already exists
-  changes nothing but `current`, `previous` and the launcher.
+  `native-agent-manifest.json`; `version` is at most 64 characters of
+  `[A-Za-z0-9._+-]`, starts with a letter or digit, and equals the release's.
+- Versions are created by extracting into `.staging-*`, checking the tree
+  (the binary matches the manifest digest and `doctor --check installation`
+  passes) and renaming, so a version dir is always complete and verified before
+  `current` moves. Only after the rename is the tree made read-only (a
+  read-only directory cannot be renamed on macOS), so uninstall must
+  `chmod -R u+w` before `rm -rf`. An existing version dir is reused only if it
+  verifies the same way; otherwise it is replaced.
 - `current` and `previous` change only by renaming a fresh symlink over the old
   one, never remove-then-create. A running Agent keeps using its old version dir
-  until restarted, so installs never delete old versions. Anything else in
-  `AGENT_HOME` (dot-prefixed scratch aside) is not ours and is left alone.
+  until restarted.
+- Retention: `butler install/update` keeps the three most recently installed
+  versions plus the active one, `previous`, and any version a running service
+  executes from, and prunes the rest. `install.sh` never prunes. Names that are
+  not version dirs (and anything else foreign in `AGENT_HOME`, dot-prefixed
+  scratch aside) are never touched.
 - `previous` is written by the installer for `butler rollback`. Without it, a
   reader falls back to the newest other version dir.
 - Windows: `current` becomes a one-line file holding the version dir name,
@@ -62,6 +70,13 @@ leave any other file at that path alone:
 exec '<AGENT_HOME>/current/butler-agent' --installation-root '<AGENT_HOME>/current' --resource-root '<AGENT_HOME>/current/resources' "$@"
 ```
 
+An existing file at that path is handled as `butler install` does: a launcher
+with the marker is rewritten; the pre-native Bun launcher (it mentions
+`butler.js`) is kept as `butler.previous` (an existing one is not overwritten)
+and replaced; anything else, or a symlink (never followed), is left alone. The
+shell installer then stops before installing anything, and `butler install`
+reports `kept-foreign`.
+
 It points at `current`, not at a version dir, so switching versions needs no
 launcher rewrite. The Agent canonicalizes both roots, so they resolve to the
 active version dir and satisfy the layout check (executable and resources inside
@@ -70,8 +85,11 @@ does not set `BUTLER_DATA`.
 
 The App-bundled Agent (`.../bundled-agent/bin/butler-agent`, payload manifest
 `butler.native-agent-payload.v1`) is a different, read-only layout and never
-appears in `AGENT_HOME`. `DATA/bin/butler` (a legacy launcher repaired by
-`cli_launcher.rs`) is separate from the PATH entry.
+appears in `AGENT_HOME`. `DATA/bin/butler` (the older launcher, `cli_launcher.rs`)
+is a second entry with a default `BUTLER_DATA`. It is never created, only
+repointed: to `AGENT_HOME/current` once a CLI installation is active (by
+`butler install/update/rollback`, and at every service start), otherwise to the
+installation that started the service.
 
 ## Release assets
 

@@ -30,9 +30,8 @@ if (process.platform === "win32") {
 }
 
 if (args[0] === "install") {
-  // A checkout runs the installer from deploy/; a published package carries its own copy.
-  const installer = [join(root, "install.sh"), join(root, "../../deploy/install.sh")].find(existsSync);
-  if (!installer) fail("install.sh is missing from the package");
+  const installer = join(root, "install.sh");
+  if (!existsSync(installer)) fail("install.sh is missing; run `npm pack` (its prepack step bundles it)");
   run("sh", [installer, ...args.slice(1)], { BUTLER_VERSION: version, ...process.env });
 }
 

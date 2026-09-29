@@ -74,20 +74,27 @@ Running it again is safe. The desktop App and the CLI share this layout
 (`packages/butler-agent/rust/docs/install-layout.md`).
 
 Options go after `sh -s --`, for example
-`... | sh -s -- --version 0.0.21 --no-start`: `--version X.Y.Z` picks a release,
+`... | sh -s -- --version X.Y.Z --no-start`: `--version X.Y.Z` picks a release,
 `--no-start` skips starting Butler, and `--modify-path` adds `~/.local/bin` to
-your shell profile (otherwise you get a hint).
+your shell profile (otherwise you get a hint). It refuses to run as root
+unless `BUTLER_ALLOW_ROOT=1`. An existing file at `~/.local/bin/butler` that is
+not Butler's launcher stops the install; the old pre-native launcher is kept as
+`butler.previous`.
+
+To update, run `butler update --check`, then `butler update --apply --yes`,
+which installs the new version beside the old one and restarts a running
+Butler. `butler rollback` returns to the previous version, and the installer
+can be re-run at any time.
 
 ### Manual install
 
 If you cannot run the installer, extract a release archive yourself. Each
 archive is an immutable installation package: extract each version to a new
-directory and keep runtime data separate under `BUTLER_DATA`. Butler does not
-replace an installed version or move user data when updating.
+directory and keep runtime data separate under `BUTLER_DATA`.
 
 ```bash
 set -euo pipefail
-VERSION=0.0.21 # Replace with a release version that has the native Agent archive.
+VERSION=X.Y.Z # A release version that publishes the native Agent archive.
 PLATFORM=darwin-arm64 # darwin-arm64, linux-x64, or linux-arm64
 ARCHIVE="butler-agent-${VERSION}-${PLATFORM}.tar.gz"
 RELEASE_URL="https://github.com/Hexpy-Games/butler/releases/download/v${VERSION}"

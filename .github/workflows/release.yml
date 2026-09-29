@@ -221,6 +221,16 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      # install.sh refuses an archive whose Agent version is not the release's.
+      - name: Check the tag against the Agent version
+        run: |
+          set -euo pipefail
+          agent_version="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' packages/butler-agent/rust/crates/butler-agent/Cargo.toml | head -n 1)"
+          if [ "${GITHUB_REF_NAME#v}" != "$agent_version" ]; then
+            printf 'Tag %s does not match the Agent version %s in crates/butler-agent/Cargo.toml\n' "$GITHUB_REF_NAME" "$agent_version" >&2
+            exit 1
+          fi
+
       - name: Download the per-platform Agent outputs
         uses: actions/download-artifact@v4
         with:
@@ -252,40 +262,6 @@ jobs:
             exit 1
           fi
           gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
-
-  # After the release assets exist, so `npx @hexpygames/butler install` works
-  # the moment the package is visible. Tag runs only; PRs get the pack dry run
-  # in install-smoke.yml.
-  npm-publish:
-    name: Publish the npm package
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    needs: agent-release
-    environment: deploy
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.23.3
-          registry-url: https://registry.npmjs.org
-
-      - name: Publish with provenance
-        working-directory: packages/butler-npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
-        run: |
-          set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
-          npm version "$version" --no-git-tag-version --allow-same-version
-          dist_tag=latest
-          case "$version" in *-*) dist_tag=next ;; esac
-          npm publish --access public --provenance --tag "$dist_tag"
 
   release-checksums:
     name: Publish consolidated release checksums
@@ -338,3 +314,62 @@ jobs:
             exit 1
           fi
           gh release upload "$tag" "$checksum_file" --clobber
+
+  # The release stays a draft until every asset above exists; only now does
+  # /releases/latest (and so install.sh) see it. A tag with a hyphen is a
+  # preview and is marked as a prerelease, which /releases/latest skips.
+  publish-release:
+    name: Publish the GitHub Release
+    runs-on: ubuntu-latest
+    needs: release-checksums
+    steps:
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          prerelease=false
+          case "$GITHUB_REF_NAME" in *-*) prerelease=true ;; esac
+          gh release edit "$GITHUB_REF_NAME" --draft=false --prerelease="$prerelease"
+
+  # After the release is public, so `npx @hexpygames/butler install` works the
+  # moment the package is visible. Tag runs only; PRs get the pack dry run in
+  # install-smoke.yml.
+  npm-publish:
+    name: Publish the npm package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs: publish-release
+    environment: deploy
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.3
+          registry-url: https://registry.npmjs.org
+
+      # The first publish of a package always becomes `latest`, whatever --tag
+      # says, so a preview must not be the first one.
+      - name: Publish with provenance
+        working-directory: packages/butler-npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          dist_tag=latest
+          case "$version" in *-*) dist_tag=next ;; esac
+          name="$(node -p 'require("./package.json").name')"
+          if [ "$dist_tag" = next ] && ! npm view "$name" dist-tags.latest >/dev/null 2>&1; then
+            printf '%s has no stable release yet; publish a stable version first so `latest` is not a preview.\n' "$name" >&2
+            exit 1
+          fi
+          npm version "$version" --no-git-tag-version --allow-same-version
+          npm publish --access public --provenance --tag "$dist_tag"

@@ -21,7 +21,7 @@ fail() { echo "install smoke FAILED: $*" >&2; exit 1; }
 set -- "$dist"/butler-agent-*.tar.gz
 [ -f "$1" ] || fail "no butler-agent-*.tar.gz in $dist"
 name="$(basename "$1")"
-version="$(printf '%s' "$name" | sed 's/^butler-agent-\([^-]*\)-.*/\1/')"
+version="$(printf '%s' "$name" | sed -E 's/^butler-agent-(.*)-(darwin-arm64|linux-x64|linux-arm64)\.tar\.gz$/\1/')"
 
 work="$(mktemp -d)"
 server=""
@@ -54,6 +54,32 @@ until curl -fs "$BUTLER_INSTALL_BASE_URL/butler-$version-SHA256SUMS" >/dev/null 
   i=$((i + 1)); [ "$i" -lt 30 ] || fail "local release server did not start"; sleep 0.2
 done
 
+echo "== refused installs change nothing"
+# A checksum that does not match: nothing is installed.
+mkdir "$work/serve/bad"
+ln -s "$(cd "$dist" && pwd)/$name" "$work/serve/bad/$name"
+printf '%064d  %s\n' 0 "$name" > "$work/serve/bad/butler-$version-SHA256SUMS"
+if BUTLER_INSTALL_BASE_URL="$BUTLER_INSTALL_BASE_URL/bad" BUTLER_AGENT_HOME="$work/agent-bad" BUTLER_BIN_DIR="$work/bin-bad" \
+  sh "$here/install.sh" --no-start > "$work/bad.out" 2>&1; then
+  fail "install.sh accepted a checksum mismatch"
+fi
+grep -q "checksum mismatch" "$work/bad.out" || { cat "$work/bad.out"; fail "no checksum error"; }
+[ ! -e "$work/agent-bad" ] && [ ! -e "$work/bin-bad" ] || fail "a rejected download left files behind"
+# A `butler` that is not ours stops the install before anything is placed.
+mkdir "$work/bin-foreign"
+printf '#!/bin/sh\necho mine\n' > "$work/bin-foreign/butler"
+if BUTLER_AGENT_HOME="$work/agent-foreign" BUTLER_BIN_DIR="$work/bin-foreign" sh "$here/install.sh" --no-start > "$work/foreign.out" 2>&1; then
+  fail "install.sh overwrote a foreign butler"
+fi
+[ "$(sed -n 2p "$work/bin-foreign/butler")" = "echo mine" ] && [ ! -e "$work/agent-foreign" ] || fail "a foreign butler was touched or files were installed"
+# The pre-native launcher is kept aside.
+mkdir "$work/bin-stale"
+# shellcheck disable=SC2016 # the launcher text is literal
+printf '#!/bin/sh\nexec bun "$BUTLER_HOME/bin/butler.js" "$@"\n' > "$work/bin-stale/butler"
+BUTLER_AGENT_HOME="$work/agent-stale" BUTLER_BIN_DIR="$work/bin-stale" sh "$here/install.sh" --no-start > /dev/null || fail "install.sh over the stale launcher"
+grep -q 'butler.js' "$work/bin-stale/butler.previous" || fail "the old launcher was not kept"
+[ "$(sed -n 2p "$work/bin-stale/butler")" = "# butler-native-launcher v1" ] || fail "the stale launcher was not replaced"
+
 echo "== install (fresh, starts Butler)"
 sh "$here/install.sh" || fail "install.sh"
 command -v butler >/dev/null || fail "butler is not on PATH after install"
@@ -77,8 +103,19 @@ before="$(state)"
 sh "$here/install.sh" --no-start || fail "second install.sh"
 [ "$before" = "$(state)" ] || fail "a second install changed the installation or data"
 
-echo "== install over another active version (switches current, keeps previous)"
+echo "== install over a damaged version (replaces it)"
 active="$(readlink "$BUTLER_AGENT_HOME/current")"
+good="$(cd "$BUTLER_AGENT_HOME/$active" && cksum butler-agent)"
+chmod -R u+w "$BUTLER_AGENT_HOME/$active"
+printf x >> "$BUTLER_AGENT_HOME/$active/butler-agent"
+sh "$here/install.sh" --no-start || fail "install.sh over a damaged version"
+[ "$(cd "$BUTLER_AGENT_HOME/$active" && cksum butler-agent)" = "$good" ] || fail "the damaged version was reused"
+for scratch in "$BUTLER_AGENT_HOME"/.[!.]*; do
+  [ ! -e "$scratch" ] || fail "scratch file left in the install directory: $scratch"
+done
+butler version --json | grep -q '"ok": *true' || fail "butler after the repair"
+
+echo "== install over another active version (switches current, keeps previous)"
 mkdir "$BUTLER_AGENT_HOME/0.0.0-00000000"
 ln -sfn 0.0.0-00000000 "$BUTLER_AGENT_HOME/current"
 sh "$here/install.sh" --no-start || fail "install.sh over another version"
