@@ -12,6 +12,7 @@ use flate2::write::GzEncoder;
 use sha2::{Digest, Sha256};
 use tar::{Builder, EntryType, Header};
 
+use super::executable;
 use super::{HarnessError, harness_error};
 
 /// A built archive and what its manifest says about it.
@@ -63,9 +64,9 @@ fn stub(out_dir: &Path, version: &str, tag: &str, status: u8) -> Result<Archive,
     let stage = out_dir.join(format!("stub-{version}-{tag}"));
     fs::create_dir_all(stage.join("resources/nested"))?;
     let binary = stage.join("butler-agent");
-    fs::write(
+    executable::write_script(
         &binary,
-        format!("#!/bin/sh\n# {version} {tag}\nexit {status}\n"),
+        &format!("#!/bin/sh\n# {version} {tag}\nexit {status}\n"),
     )?;
     fs::write(stage.join("resources/a.txt"), "a")?;
     fs::write(stage.join("resources/nested/b.txt"), "b")?;

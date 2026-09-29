@@ -16,6 +16,7 @@ mod invalidation;
 mod jobs;
 mod operator_repair;
 mod plan;
+mod probe;
 mod progress_adapters;
 mod projection;
 mod recall;
@@ -49,7 +50,7 @@ pub use jobs::{GraphProgress, JobOutcome};
 pub(in crate::cognition) use stage_state::StageWrite;
 pub use stage_state::{StageState, StageStatus};
 
-pub(in crate::cognition) use jobs::{CatchupCursors, PendingSemanticJob};
+pub(in crate::cognition) use jobs::{CatchupState, PendingSemanticJob};
 pub(in crate::cognition) use operator_repair::CandidateInputRepairRequest;
 pub use operator_repair::{
     CandidateInputRepairResult, ProjectionModelPolicy, ProjectionModelPolicyInput,

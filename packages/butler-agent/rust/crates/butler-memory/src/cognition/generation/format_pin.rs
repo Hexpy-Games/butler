@@ -146,6 +146,7 @@ async fn conversation_store(root: &Path) {
 
 type Coordinator = Arc<CognitionWriteCoordinator>;
 
+// test-category: format-pin
 #[tokio::test]
 async fn generation_files_and_results_keep_their_pre_typing_bytes() {
     let coordinator = Arc::new(CognitionWriteCoordinator::new(Arc::new(Host)).unwrap());
@@ -217,6 +218,13 @@ async fn pin_prepared_rebuild(
     let legacy: serde_json::Value =
         serde_json::from_str(&read(&legacy_root.join("manifest.json"))).unwrap();
     let root = memory.join("generations").join(&prepared.generation_id);
+    let prepared_manifest: serde_json::Value =
+        serde_json::from_str(&read(&root.join("manifest.json"))).unwrap();
+    let snapshot_hash = prepared_manifest["canonical_snapshot"]["file_sha256"]
+        .as_str()
+        .unwrap();
+    assert_eq!(snapshot_hash.len(), 64);
+    assert!(snapshot_hash.bytes().all(|byte| byte.is_ascii_hexdigit()));
     let normalize = Normalizer(vec![
         (legacy_id.clone(), "<LEGACY>".into()),
         (
@@ -225,6 +233,9 @@ async fn pin_prepared_rebuild(
         ),
         (prepared.generation_id.clone(), "<REBUILD>".into()),
         (prepared.canonical_snapshot_id.clone(), "<SNAPSHOT>".into()),
+        // The source store now carries a random persistent identity. Its
+        // snapshot hash varies per run while the manifest layout stays pinned.
+        (snapshot_hash.into(), "<SNAPSHOT_SHA256>".into()),
     ]);
     pin(
         "legacy-manifest.json",

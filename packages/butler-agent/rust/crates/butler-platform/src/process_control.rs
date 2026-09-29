@@ -18,6 +18,20 @@
 use std::io;
 use std::process::{Command, ExitStatus};
 
+/// Linux refuses exec while another process holds the inode open for writing.
+/// Callers may retry a failed spawn after the writer closes its handle.
+pub fn is_executable_busy(error: &io::Error) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        error.raw_os_error() == Some(26) // ETXTBSY
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = error;
+        false
+    }
+}
+
 #[cfg(unix)]
 mod unix;
 #[cfg(unix)]

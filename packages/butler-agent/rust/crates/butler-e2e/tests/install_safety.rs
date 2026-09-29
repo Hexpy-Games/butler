@@ -47,7 +47,7 @@ fn ins_03_version_reads_the_bundled_payload_manifest() -> Result<(), HarnessErro
         let root = sandbox.root.join("apps").join(name);
         let payload = root.join(payload);
         fs::create_dir_all(payload.join("bin"))?;
-        fs::copy(&sandbox.binary, payload.join("bin/butler-agent"))?;
+        butler_e2e::e2e::executable::copy(&sandbox.binary, &payload.join("bin/butler-agent"))?;
         butler_e2e::e2e::sandbox::copy_tree(&sandbox.resources, &payload.join("resources"))?;
         fs::write(
             payload.join("native-agent-manifest.json"),

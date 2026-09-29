@@ -35,6 +35,10 @@ pub(super) async fn process(
         return Ok(false);
     }
     let now = (input.clock)();
+    // The claim takes the write lease; look first, without it.
+    if !input.probe.vector_work(&generation.graph_path, &now)? {
+        return Ok(false);
+    }
     let units = {
         let _lease = acquire(input, "memory-vector-claim").await?;
         assert_generation_current(input, &generation, Admission::Required)?;

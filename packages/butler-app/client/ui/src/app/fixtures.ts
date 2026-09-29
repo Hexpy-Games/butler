@@ -7,6 +7,7 @@ import type {
   ProjectDashboardView,
   SessionSummaryView,
   SessionView,
+  SessionViewTurn,
   StewardSessionSummaryView,
 } from "./types.ts";
 
@@ -112,7 +113,33 @@ export const HARNESS_MODEL_CATALOG: ModelCatalogView = {
   ],
 };
 
-const HARNESS_STEWARD_CHILD: StewardSessionSummaryView = {
+/**
+ * An active Steward child exactly as the native gateway projects it (#307):
+ * App `status` "active" (BTCC `admitted`), `terminal` false until a result is
+ * committed, `active_turn` mirrors `latest_turn`, the BTCC `admitted` state
+ * maps to "thinking" with delivery "running", and every turn carries
+ * `progress` (rows are not projected yet, so they are empty).
+ */
+const HARNESS_STEWARD_TURN = {
+  id: "harness-steward-turn",
+  state: "thinking",
+  delivery_state: "running",
+  limitations: [],
+  limitation_codes: [],
+  cancellable: true,
+  retryable: false,
+  progress: {
+    turn_id: "harness-steward-turn",
+    state: "thinking",
+    delivery_state: "running",
+    updated_at: "2026-05-01T00:10:00.000Z",
+    safe_progress_rows: [],
+  },
+  created_at: "2026-05-01T00:09:45.000Z",
+  updated_at: "2026-05-01T00:10:00.000Z",
+} satisfies SessionViewTurn;
+
+export const HARNESS_STEWARD_CHILD: StewardSessionSummaryView = {
   relation: {
     relation_id: "harness-relation",
     parent_session_id: "butler-client",
@@ -126,75 +153,25 @@ const HARNESS_STEWARD_CHILD: StewardSessionSummaryView = {
   session_id: "harness-steward",
   title: "Review the activity surface",
   status: "active",
-  active_turn: {
-    id: "harness-steward-turn",
-    state: "thinking",
-    delivery_state: "running",
-    limitations: [],
-    limitation_codes: [],
-    cancellable: true,
-    retryable: false,
-    progress: {
-      summary: "Inspecting the activity surface",
-      updated_at: "2026-05-01T00:10:00.000Z",
-      turn_id: "harness-steward-turn",
-      state: "thinking",
-      safe_progress_rows: [{
-        id: "harness-steward-action",
-        kind: "todo",
-        state: "active",
-        safe_label: "Inspecting the activity surface",
-        safe_input_label: "activity-surface",
-        safe_order: 1,
-        bridge_phase: "btcc_work_ledger",
-      }],
-    },
-    created_at: "2026-05-01T00:09:45.000Z",
-    updated_at: "2026-05-01T00:10:00.000Z",
-  },
-  latest_turn: {
-    id: "harness-steward-turn",
-    state: "thinking",
-    delivery_state: "running",
-    limitations: [],
-    limitation_codes: [],
-    cancellable: true,
-    retryable: false,
-    progress: {
-      summary: "Inspecting the activity surface",
-      updated_at: "2026-05-01T00:10:00.000Z",
-      turn_id: "harness-steward-turn",
-      state: "thinking",
-      safe_progress_rows: [{
-        id: "harness-steward-action",
-        kind: "todo",
-        state: "active",
-        safe_label: "Inspecting the activity surface",
-        safe_input_label: "activity-surface",
-        safe_order: 1,
-        bridge_phase: "btcc_work_ledger",
-      }],
-    },
-    created_at: "2026-05-01T00:09:45.000Z",
-    updated_at: "2026-05-01T00:10:00.000Z",
-  },
-  activity_rows: [{
-    id: "harness-steward-action",
-    kind: "todo",
-    state: "active",
-    safe_label: "Inspecting the activity surface",
-    safe_input_label: "activity-surface",
-    safe_order: 1,
-    bridge_phase: "btcc_work_ledger",
-  }],
-  approved_plan_revision: 7,
-  approved_plan_total: 3,
-  approved_plan_completed: 1,
+  active_turn: HARNESS_STEWARD_TURN,
+  latest_turn: HARNESS_STEWARD_TURN,
+  waiting_for_children: false,
+  activity_rows: [],
   artifacts: [],
   changed_files: [],
   result: null,
-  updated_at: "2026-05-01T00:10:00.000Z",
+  updated_at: "2026-05-01T00:09:30.000Z",
   terminal: false,
+};
+
+const HARNESS_SS03_PLAN_STEP = {
+  id: "harness-steward-action",
+  kind: "todo" as const,
+  state: "active",
+  safe_label: "Inspecting the activity surface",
+  safe_input_label: "activity-surface",
+  safe_order: 1,
+  bridge_phase: "btcc_work_ledger" as const,
 };
 
 const HARNESS_SS03_CURRENT_ACTIVITY = {
@@ -228,38 +205,31 @@ const HARNESS_SS03_TOOL_ACTIVITY = [
   },
 ];
 
-/** SS-03 uses the same live child projection in the current-message slot. */
+/**
+ * SS-03 layers the optional contract fields the gateway does not project yet
+ * (progress rows, Plan counts) on the #307 child for the richer visual frame.
+ */
+const HARNESS_SS03_ROWS = [
+  HARNESS_SS03_CURRENT_ACTIVITY,
+  ...HARNESS_SS03_TOOL_ACTIVITY,
+  HARNESS_SS03_PLAN_STEP,
+];
+const HARNESS_SS03_TURN = {
+  ...HARNESS_STEWARD_TURN,
+  progress: {
+    ...HARNESS_STEWARD_TURN.progress,
+    summary: HARNESS_SS03_CURRENT_ACTIVITY.safe_label,
+    safe_progress_rows: HARNESS_SS03_ROWS,
+  },
+} satisfies SessionViewTurn;
 const HARNESS_SS03_STEWARD_CHILD: StewardSessionSummaryView = {
   ...HARNESS_STEWARD_CHILD,
-  active_turn: {
-    ...HARNESS_STEWARD_CHILD.active_turn!,
-    progress: {
-      ...HARNESS_STEWARD_CHILD.active_turn!.progress!,
-      summary: HARNESS_SS03_CURRENT_ACTIVITY.safe_label,
-      safe_progress_rows: [
-        HARNESS_SS03_CURRENT_ACTIVITY,
-        ...HARNESS_SS03_TOOL_ACTIVITY,
-        ...HARNESS_STEWARD_CHILD.active_turn!.progress!.safe_progress_rows,
-      ],
-    },
-  },
-  latest_turn: {
-    ...HARNESS_STEWARD_CHILD.latest_turn!,
-    progress: {
-      ...HARNESS_STEWARD_CHILD.latest_turn!.progress!,
-      summary: HARNESS_SS03_CURRENT_ACTIVITY.safe_label,
-      safe_progress_rows: [
-        HARNESS_SS03_CURRENT_ACTIVITY,
-        ...HARNESS_SS03_TOOL_ACTIVITY,
-        ...HARNESS_STEWARD_CHILD.latest_turn!.progress!.safe_progress_rows,
-      ],
-    },
-  },
-  activity_rows: [
-    HARNESS_SS03_CURRENT_ACTIVITY,
-    ...HARNESS_SS03_TOOL_ACTIVITY,
-    ...HARNESS_STEWARD_CHILD.activity_rows,
-  ],
+  active_turn: HARNESS_SS03_TURN,
+  latest_turn: HARNESS_SS03_TURN,
+  activity_rows: HARNESS_SS03_ROWS,
+  approved_plan_revision: 7,
+  approved_plan_total: 3,
+  approved_plan_completed: 1,
 };
 
 export const HARNESS_NAVIGATION: NavigationView = {
@@ -780,4 +750,37 @@ export const HARNESS_SS03_SUMMARY: SessionSummaryView = {
   },
   steward_children: [HARNESS_SS03_STEWARD_CHILD],
   worker_activity: [],
+};
+
+/**
+ * SS-03 Steward child states as the gateway sends them (#307), selected with
+ * `?surface=ss03&steward=<state>`: `finalizing` is a BTCC `delivery_committed`
+ * turn (no `active_turn`, latest turn "streaming", no result yet);
+ * `delivered` is terminal with its result.
+ */
+export const HARNESS_SS03_STEWARD_STATES: Record<string, SessionSummaryView> = {
+  finalizing: {
+    ...HARNESS_SS03_SUMMARY,
+    steward_children: [{
+      ...HARNESS_SS03_STEWARD_CHILD,
+      active_turn: null,
+      latest_turn: { ...HARNESS_SS03_TURN, state: "streaming" },
+    }],
+  },
+  delivered: {
+    ...HARNESS_SS03_SUMMARY,
+    steward_children: [{
+      ...HARNESS_SS03_STEWARD_CHILD,
+      status: "delivered",
+      terminal: true,
+      active_turn: null,
+      latest_turn: {
+        ...HARNESS_SS03_TURN,
+        state: "delivered",
+        delivery_state: "delivered",
+        cancellable: false,
+        progress: { ...HARNESS_SS03_TURN.progress, state: "delivered", delivery_state: "delivered" },
+      },
+    }],
+  },
 };
