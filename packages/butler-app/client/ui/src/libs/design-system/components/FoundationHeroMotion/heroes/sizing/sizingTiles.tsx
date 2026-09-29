@@ -1,21 +1,33 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { NavRow } from "../../../../blocks/NavRow";
+import { SidebarBrand, SidebarNav, SidebarShell } from "../../../../blocks/SidebarShell";
 import { TitlebarShell } from "../../../../blocks/TitlebarShell";
 import { Button } from "../../../Button";
-import { Folder, MessageSquare, PanelLeft, Plus, Search, Settings } from "../../../Icons";
-import { Input } from "../../../Input";
+import { ButtonContainer } from "../../../ButtonContainer";
+import { IconButton } from "../../../IconButton";
+import { Briefcase, FileText, MessageSquare, MoreHorizontal, PanelLeftOpen, PanelRight, PencilLine, Search } from "../../../Icons";
+import { SegmentedControl } from "../../../SegmentedControl";
+import { SelectButton } from "../../../Select";
 import { Tag } from "../../../Tag";
+import { Typo } from "../../../Typo";
 import { Reveal as R } from "../shared/Reveal";
 import { HIT, RAILS, type SizingCopy } from "./sizingCopy";
+import { Ruler, RulerLegend, useRulerMarks } from "./SizingRuler";
+import { Subtitle, TouchBar } from "./SizingTouchBar";
 import s from "./SizingHero.module.css";
 
-/** The controls on the staff, one per rail (xs to lg). */
+const noop = () => undefined;
+
+/** The height the wrong note tries (canvas px): on no rail. */
+export const GHOST_PX = 32;
+
+/** The controls on the staff, one per rail (xs to lg), each exactly its rail's height. */
 function railControls(copy: SizingCopy): ReactNode[] {
   return [
     <Tag key="xs" size="md">{copy.tag}</Tag>,
-    <Button key="sm" size="sm" text={copy.search} variant="outline" />,
-    <Button key="md" text={copy.save} />,
-    <span className={s.railInput} key="lg"><Input aria-label={copy.search} readOnly value={copy.query} /></span>,
+    <SegmentedControl ariaLabel={copy.period} key="sm" onValueChange={noop} options={[{ value: "d", label: copy.day }, { value: "w", label: copy.week }]} size="sm" value="w" />,
+    <SelectButton aria-label={copy.model} key="md">{copy.auto}</SelectButton>,
+    <Button key="lg" size="lg" text={copy.find} />,
   ];
 }
 
@@ -23,7 +35,7 @@ function railControls(copy: SizingCopy): ReactNode[] {
  * The staff: four lanes, each exactly one control height tall (the live
  * token) between two rail lines, labelled at the left; a real control sits
  * in each. `name` prefixes the timeline's parts; `ghost` adds the off-rail
- * control that snaps onto md.
+ * outline that snaps onto md and becomes a real Button there.
  */
 export function Staff({ copy, name, ghost = false }: { copy: SizingCopy; name?: string; ghost?: boolean }) {
   const controls = railControls(copy);
@@ -38,8 +50,8 @@ export function Staff({ copy, name, ghost = false }: { copy: SizingCopy; name?: 
             <span className={s.note} data-k={k} data-t={t(`c${k}`)}>{controls[k]}</span>
             {ghost && rail.name === "md" ? (
               <span className={s.ghost} data-t={t("ghost")}>
-                <span className={s.ghostWrong} data-t={t("gw")} />
-                <span className={s.ghostRight} data-t={t("gr")} />
+                <span className={s.ghostWrong} data-t={t("gw")}>{GHOST_PX}</span>
+                <span className={s.ghostButton} data-t={t("gb")}><Button text={copy.send} variant="outline" /></span>
                 <span className={s.ghostNote} data-t={t("gn")}>{copy.offRail}</span>
               </span>
             ) : null}
@@ -50,89 +62,49 @@ export function Staff({ copy, name, ghost = false }: { copy: SizingCopy; name?: 
   );
 }
 
-/** The cursor: an arrow; on touch, a fingertip disc takes its place. */
-function Pointer() {
-  return (
-    <>
-      <svg className={s.cursor} data-t="cur" viewBox="0 0 16 20" aria-hidden="true">
-        <path d="M1 1 L1 16 L5 12 L8 19 L10.5 18 L7.5 11 L13 11 Z" />
-      </svg>
-      <span className={s.finger} data-t="fin" />
-    </>
-  );
-}
-
 /**
- * Three 24px icon buttons, 44 apart centre to centre, each with its dashed
- * hit target around it (pointer 30, or touch 44 in the poster). `name`
- * prefixes the timeline's parts; `pointer` adds the cursor on the middle one.
+ * A Butler window's top-left: the sidebar (SidebarShell with the brand in
+ * its titlebar row and the first rows) beside the conversation pane's
+ * titlebar, the floating sidebar toggle over both. The ruler on the outer
+ * left edge measures the titlebar row and each sidebar row.
  */
-export function Halos({ copy, name, touch = false, pointer = false }: { copy: SizingCopy; name?: string; touch?: boolean; pointer?: boolean }) {
-  const icons = [[copy.newChat, <Plus key="i" size="sm" />], [copy.search, <Search key="i" size="sm" />], [copy.settings, <Settings key="i" size="sm" />]] as const;
-  return (
-    <span className={s.halos}>
-      {icons.map(([label, icon], k) => (
-        <span className={s.target} key={label}>
-          <span className={s.halo} data-t={name ? `${name}-h${k}` : undefined} data-touch={touch ? "" : undefined} />
-          <Button aria-label={label} iconStart={icon} size="icon-xs" variant="ghost" />
-          {pointer && k === 1 ? <Pointer /> : null}
-        </span>
-      ))}
-    </span>
-  );
-}
-
-/** A titlebar strip carrying the three icon buttons. */
-export function Strip({ copy, children }: { copy: SizingCopy; children: ReactNode }) {
-  return (
-    <div className={s.strip}>
-      <TitlebarShell leading={<Button aria-label={copy.title2} iconStart={<PanelLeft size="md" />} size="icon-sm" variant="ghost" />} subtitle={copy.subtitle} title={copy.title2} trailing={children} />
-    </div>
-  );
-}
-
-/** A dimension line on the left edge of its parent, labelled with the parent's measured height (the live token). */
-function Dim({ token, name }: { token: string; name?: string }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const [px, setPx] = useState<number | null>(null);
-  useLayoutEffect(() => {
-    const parent = ref.current?.parentElement;
-    if (parent) setPx(parent.offsetHeight);
-  }, []);
-  return (
-    <span className={s.dim} data-t={name} ref={ref}>
-      <span className={s.dimLabel}>{`${token} ${px ?? ""}`}</span>
-    </span>
-  );
-}
-
-/** The app frame: a titlebar and sidebar rows, each measured on the outer left edge. */
-export function Frame({ copy, name }: { copy: SizingCopy; name?: string }) {
-  const rows = [[copy.chats, <MessageSquare key="i" size="sm" />], [copy.projects, <Folder key="i" size="sm" />], [copy.files, <Search key="i" size="sm" />]] as const;
+export function Frame({ copy, name, space = false }: { copy: SizingCopy; name?: string; space?: boolean }) {
+  const rows = [[copy.newConversation, <PencilLine key="i" />], [copy.search, <Search key="i" />], [copy.general, <MessageSquare key="i" />]] as const;
+  const more = [[copy.project, <Briefcase key="i" />], [copy.session, <FileText key="i" />]] as const;
+  const host = useRef<HTMLDivElement>(null);
+  const marks = useRulerMarks(host);
   return (
     <div className={s.frame}>
-      <div className={s.frameBar}>
-        <Dim name={name ? `${name}-d0` : undefined} token="--titlebar-height" />
-        <TitlebarShell subtitle={copy.subtitle} title={copy.title2} />
+    <div className={s.window} ref={host}>
+      <div className={s.side}>
+        <SidebarShell titlebar={<span className={s.measure} data-dim="--titlebar-height"><SidebarBrand><Typo.AppTitle>{copy.product}</Typo.AppTitle></SidebarBrand></span>}>
+          <SidebarNav>
+            {rows.map(([label, icon], k) => (
+              <span className={s.measure} data-dim="--sidebar-row-height" key={label}><NavRow active={k === 2 && !space} icon={icon} label={label} /></span>
+            ))}
+            {space ? more.map(([label, icon], k) => <NavRow active={k === 1} icon={icon} key={label} label={label} />) : null}
+          </SidebarNav>
+        </SidebarShell>
       </div>
-      <div className={s.frameRows}>
-        {rows.map(([label, icon], k) => (
-          <div className={s.frameRow} key={label}>
-            <Dim name={name ? `${name}-d${k + 1}` : undefined} token="--sidebar-row-height" />
-            <NavRow active={k === 0} icon={icon} label={label} />
-          </div>
-        ))}
+      <div className={s.pane}>
+        <TitlebarShell subtitle={<Subtitle copy={copy} />} title={copy.session}
+          trailing={<ButtonContainer size="icon-sm"><IconButton label={copy.sessionMenu}><MoreHorizontal size="md" /></IconButton><IconButton label={copy.rightPanel}><PanelRight size="md" /></IconButton></ButtonContainer>} />
       </div>
+      <span className={s.windowToggle}><IconButton label={copy.hideSidebar}><PanelLeftOpen size="md" /></IconButton></span>
+      <Ruler marks={marks} name={name} />
+    </div>
+    <RulerLegend marks={marks} name={name} />
     </div>
   );
 }
 
-/** A form row on one rail: the input and its button both lg 34. */
+/** A form row on one rail: the model picker and its buttons, all md 30, on one pair of rail lines. */
 export function FormRow({ copy }: { copy: SizingCopy }) {
   return (
     <span className={s.formRow}>
-      <span className={s.railInput}><Input aria-label={copy.search} readOnly value={copy.query} /></span>
-      <Button size="lg" text={copy.find} />
+      <SelectButton aria-label={copy.model}>{copy.auto}</SelectButton>
+      <Button text={copy.cancel} variant="outline" />
+      <Button text={copy.save} />
       <span className={s.formRail} />
     </span>
   );
@@ -140,16 +112,16 @@ export function FormRow({ copy }: { copy: SizingCopy }) {
 
 /** Finale tiles. */
 export const StaffTile = ({ copy }: { copy: SizingCopy }) => <div className={s.staffTile}><Staff copy={copy} /></div>;
-export const FrameTile = ({ copy }: { copy: SizingCopy }) => <div className={s.frameTile}><Frame copy={copy} /></div>;
+export const FrameTile = ({ copy }: { copy: SizingCopy }) => <div className={s.frameTile}><Frame copy={copy} space /></div>;
 export const HaloTile = ({ copy }: { copy: SizingCopy }) => (
-  <div className={s.captioned}>
-    <Halos copy={copy} touch />
+  <div className={s.captioned} data-kind="halo">
+    <TouchBar copy={copy} touch />
     <span className={s.caption}>{`--control-hit-target ${HIT.pointer} → ${copy.touch} ${HIT.touch}`}</span>
   </div>
 );
 export const FormTile = ({ copy }: { copy: SizingCopy }) => (
   <div className={s.captioned}>
     <FormRow copy={copy} />
-    <span className={s.caption}>--control-height-lg 34</span>
+    <span className={s.caption}>--control-height-md 30</span>
   </div>
 );

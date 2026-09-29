@@ -10,11 +10,11 @@ export const SIZING_COPY = {
       ["Hit targets", "Small controls keep a 30px target; touch grows it to 44."],
       ["Chrome", "Titlebar and sidebar rows take fixed, named measures."],
     ] as IntroLead,
-    pointer: "pointer", touch: "touch", offRail: "32 · off the rails",
-    tag: "Filter", more: "More", save: "Save", search: "Search", query: "Weekly report", find: "Find",
-    title2: "Butler", subtitle: "Workspace", newChat: "New chat", settings: "Settings",
-    auto: "Automatic", autoSend: "Send on Enter",
-    chats: "Chats", projects: "Projects", files: "Files",
+    pointer: "pointer", touch: "touch", offRail: "off the rails",
+    tag: "Filter", period: "Period", day: "Day", week: "Week", model: "Model", auto: "Automatic", find: "Find", send: "Send", save: "Save", cancel: "Cancel",
+    product: "Butler", session: "Weekly report", project: "Workspace", local: "Local",
+    sessionMenu: "Session menu", rightPanel: "Show right panel", showSidebar: "Show sidebar", hideSidebar: "Hide sidebar",
+    newConversation: "New conversation", search: "Search", general: "General",
   },
   ko: {
     title: "Sizing",
@@ -23,11 +23,11 @@ export const SIZING_COPY = {
       ["누를 영역", "작은 컨트롤도 30px 영역을 지키고, 터치에서는 44로 커집니다."],
       ["크롬", "타이틀바와 사이드바 행은 이름 붙은 고정 치수를 씁니다."],
     ] as IntroLead,
-    pointer: "포인터", touch: "터치", offRail: "32 · 레일 밖",
-    tag: "필터", more: "더 보기", save: "저장", search: "검색", query: "주간 리포트", find: "찾기",
-    title2: "Butler", subtitle: "워크스페이스", newChat: "새 대화", settings: "설정",
-    auto: "자동", autoSend: "Enter로 보내기",
-    chats: "대화", projects: "프로젝트", files: "파일",
+    pointer: "포인터", touch: "터치", offRail: "레일 밖",
+    tag: "필터", period: "기간", day: "일", week: "주", model: "모델", auto: "자동", find: "찾기", send: "보내기", save: "저장", cancel: "취소",
+    product: "Butler", session: "주간 리포트", project: "워크스페이스", local: "로컬",
+    sessionMenu: "세션 메뉴", rightPanel: "오른쪽 패널 보기", showSidebar: "사이드바 보기", hideSidebar: "사이드바 숨기기",
+    newConversation: "새 대화", search: "검색", general: "일반",
   },
 } satisfies Record<FoundationHeroLang, unknown>;
 
@@ -40,6 +40,3 @@ export const RAILS = [
 
 /** Hit targets: pointer and touch (px as in tokens.css). */
 export const HIT = { pointer: 30, touch: 44 } as const;
-
-/** The icon buttons' own size (Button icon-xs, --control-height-xs). */
-export const ICON = 24;

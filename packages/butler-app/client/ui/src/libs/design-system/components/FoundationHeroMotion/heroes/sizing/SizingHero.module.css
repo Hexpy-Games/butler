@@ -24,7 +24,7 @@
 
   display: grid;
   row-gap: var(--space-xl);
-  inline-size: calc(var(--space-4xl) * 18);
+  inline-size: calc(var(--space-4xl) * 19);
 }
 
 [data-layout="tall"] .staff {
@@ -84,11 +84,11 @@
 }
 
 .note[data-k="1"] {
-  left: calc(var(--space-4xl) * 4.5);
+  left: calc(var(--space-4xl) * 3.5);
 }
 
 .note[data-k="2"] {
-  left: calc(var(--space-4xl) * 8);
+  left: calc(var(--space-4xl) * 7);
 }
 
 .note[data-k="3"] {
@@ -99,12 +99,7 @@
   left: var(--space-md);
 }
 
-.railInput {
-  display: inline-block;
-  inline-size: calc(var(--space-4xl) * 4.5);
-}
-
-/* The off-rail control: 32 tall, then 30 on md (sized by the timeline). */
+/* The off-rail note: a 32 outline between the lanes, then a real Button on md (sized by the timeline). */
 .ghost {
   position: absolute;
   top: 0;
@@ -115,36 +110,49 @@
 }
 
 [data-layout="tall"] .ghost {
-  left: calc(var(--space-4xl) * 3);
-}
-
-.ghostWrong,
-.ghostRight {
-  position: absolute;
-  inset: 0;
-  box-sizing: border-box;
-  border-radius: var(--radius-control);
+  right: var(--space-md);
+  left: auto;
 }
 
 .ghostWrong {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
   border: 1.5px dashed var(--danger);
+  border-radius: var(--radius-control);
   background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
 }
 
-.ghostRight {
-  border: 1.5px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+.ghostButton {
+  position: absolute;
+  inset: 0;
+  display: grid;
   opacity: 0;
+}
+
+.ghostButton > * {
+  inline-size: 100%;
 }
 
 .ghostNote {
   position: absolute;
-  bottom: calc(100% + var(--space-xs));
-  left: 0;
+  inset-block: 0;
+  left: calc(100% + var(--space-md));
+  display: grid;
+  align-items: center;
   color: var(--danger);
   font: var(--font-code);
   font-size: var(--typo-caption-size);
   white-space: nowrap;
+}
+
+[data-layout="tall"] .ghostNote {
+  display: none;
 }
 
 /* ---- Pointer to touch ---- */
@@ -162,56 +170,92 @@
   row-gap: var(--space-3xl);
 }
 
-/* A titlebar in a window-top of its own height; icon buttons keep their 24 (the targets are drawn). */
+/*
+ * The conversation pane's top edge with its real titlebar. Icon buttons keep
+ * the pointer's 30 (the titlebar action size) so the scene grows their
+ * targets itself; a target is its button's box, as on a touch screen.
+ */
 .strip {
-  --control-hit-target: var(--control-height-xs);
+  --titlebar-action-size: var(--control-height-md);
+  --control-hit-target: var(--control-height-md);
 
   position: relative;
+  display: grid;
   box-sizing: border-box;
-  overflow: hidden;
   inline-size: calc(var(--space-4xl) * 11);
-  block-size: var(--titlebar-safe-area-top);
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
-  background: var(--color-surface-base);
+  background: var(--workspace-bg);
 }
 
 [data-layout="tall"] .strip {
   inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
 }
 
-.halos {
-  --control-hit-target: var(--control-height-xs);
+/* The bar's height (sized by the timeline): the titlebar, then touch's 44 with room around it (the phone's 56). */
+.stripHeight {
+  inline-size: 1px;
+  block-size: var(--titlebar-safe-area-top);
+}
 
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xl);
+.strip[data-touch] .stripHeight {
+  block-size: max(
+    var(--titlebar-safe-area-top),
+    calc(var(--touch-target) + var(--space-md))
+  );
+}
+
+/* The titlebar, centred in the bar at any height. */
+.stripBar {
+  position: absolute;
+  inset-inline: 0;
+  top: calc((100% - var(--titlebar-safe-area-top)) / 2);
+  block-size: var(--titlebar-safe-area-top);
+}
+
+/* The floating sidebar toggle, where the phone titlebar keeps room for it. */
+.stripToggle {
+  display: none;
 }
 
 .target {
   position: relative;
   display: inline-grid;
+  place-items: center;
+  inline-size: var(--control-height-md);
+  block-size: var(--control-height-md);
+}
+
+.strip[data-touch] .target {
+  inline-size: var(--touch-target);
+  block-size: var(--touch-target);
 }
 
 .halo {
   position: absolute;
-  top: calc(50% - var(--control-height-md) / 2);
-  left: calc(50% - var(--control-height-md) / 2);
+  inset: 0;
   box-sizing: border-box;
-  inline-size: var(--control-height-md);
-  block-size: var(--control-height-md);
   border: 1.5px dashed var(--accent);
   border-radius: var(--radius-control);
   pointer-events: none;
 }
 
-.halo[data-touch] {
-  top: calc(50% - var(--touch-target) / 2);
-  left: calc(50% - var(--touch-target) / 2);
+/* The fingertip: the touch target's size, centred on the target at any size. */
+.finger {
+  position: absolute;
+  inset: calc(-1 * var(--touch-target));
+  box-sizing: border-box;
   inline-size: var(--touch-target);
   block-size: var(--touch-target);
+  margin: auto;
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  opacity: 0;
+  pointer-events: none;
 }
 
+/* The arrow's tip on the target's centre. */
 .cursor {
   position: absolute;
   top: 50%;
@@ -222,19 +266,7 @@
   fill: var(--text-primary);
   stroke: var(--color-surface-base);
   stroke-width: 1;
-}
-
-.finger {
-  position: absolute;
-  top: calc(50% - var(--touch-target) / 2);
-  left: calc(50% - var(--touch-target) / 2);
-  box-sizing: border-box;
-  inline-size: var(--touch-target);
-  block-size: var(--touch-target);
-  border: 2px solid var(--accent);
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-  opacity: 0;
+  pointer-events: none;
 }
 
 .readout {
@@ -273,54 +305,101 @@
   font-size: var(--typo-caption-size);
 }
 
-/* ---- The frame's fixed measures ---- */
+/* ---- The window's fixed measures ---- */
 
-.frame {
+/* A Butler window's top-left: the sidebar beside the conversation pane. */
+.window {
+  position: relative;
+  display: grid;
+  grid-template-columns: calc(var(--space-4xl) * 6) calc(var(--space-4xl) * 9.5);
   box-sizing: border-box;
-  inline-size: calc(var(--space-4xl) * 9);
-  margin-inline-start: calc(var(--space-4xl) * 5);
-  overflow: visible;
+  margin-inline-start: calc(var(--space-4xl) * 5.5);
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
-  background: var(--color-surface-base);
+  background: var(--sidebar-bg);
 }
 
-[data-layout="tall"] .frame {
-  inline-size: calc(var(--space-4xl) * 3.8);
-  margin-inline-start: calc(var(--space-4xl) * 4.6);
+[data-layout="tall"] .window {
+  grid-template-columns: calc(var(--space-4xl) * 6.2);
+  margin-inline-start: calc(var(--space-4xl) * 1.6);
 }
 
-.frameBar {
-  position: relative;
-  box-sizing: border-box;
-  block-size: var(--titlebar-safe-area-top);
-  border-block-end: 1px solid var(--line);
-}
-
-.frameRows {
+/* The window with, when tall, the ruler's legend under it. */
+.frame {
   display: grid;
-  row-gap: var(--sidebar-row-spacing, var(--space-xs));
-  padding: var(--space-sm);
+  justify-items: start;
+  row-gap: var(--space-lg);
 }
 
-.frameRow {
+.legend {
+  display: none;
+}
+
+[data-layout="tall"] .legend {
+  display: grid;
+  row-gap: var(--space-xs);
+  margin-inline-start: calc(var(--space-4xl) * 1.6);
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
+}
+
+.side {
+  display: grid;
+  min-inline-size: 0;
+}
+
+.pane {
   position: relative;
+  min-inline-size: 0;
+  border-inline-start: 1px solid var(--line);
+  border-start-start-radius: var(--radius-panel);
+  border-end-end-radius: var(--radius-panel);
+  background: var(--workspace-bg);
 }
 
-/* A dimension line on the outer left edge, its label to the left of it. */
+[data-layout="tall"] .pane {
+  display: none;
+}
+
+.measure {
+  display: block;
+  min-inline-size: 0;
+}
+
+.windowToggle {
+  position: absolute;
+  top: var(--chrome-floating-toggle-top);
+  left: var(--chrome-toggle-inset);
+  display: inline-grid;
+}
+
+.windowToggle button {
+  --icon-button-size: var(--chrome-floating-toggle-size);
+}
+
+.windowToggle button svg {
+  inline-size: var(--chrome-floating-toggle-icon-size);
+  block-size: var(--chrome-floating-toggle-icon-size);
+}
+
+/* The ruler: dimension lines on the window's outer left edge, labels left of them. */
+.ruler {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
 .dim {
   position: absolute;
-  top: 0;
+  top: var(--top);
   right: calc(100% + var(--space-xl));
-  bottom: 0;
   box-sizing: border-box;
   inline-size: var(--space-sm);
+  block-size: var(--size);
   border-block: 1px solid var(--accent);
   transform-origin: 50% 0;
-}
-
-.frameRow .dim {
-  right: calc(100% + var(--space-sm) + var(--space-xl));
 }
 
 .dim::before {
@@ -364,7 +443,21 @@
 
 /* ---- Finale tiles ---- */
 
+/* Every tile keeps the controls at one scale (a size chapter compares sizes): full width, so none is drawn larger. */
+.staffTile,
+.frameTile,
+.captioned {
+  inline-size: 100%;
+}
+
+.staffTile,
+.frameTile {
+  display: grid;
+  justify-items: center;
+}
+
 .staffTile .staff {
+  row-gap: var(--space-md);
   inline-size: calc(var(--space-4xl) * 20);
 }
 
@@ -372,9 +465,18 @@
   inline-size: calc(var(--canvas-w) - var(--grid-margin) * 4);
 }
 
-.frameTile .frame {
-  inline-size: calc(var(--space-4xl) * 6);
-  margin-inline-start: calc(var(--space-4xl) * 4.5);
+.frameTile .window {
+  grid-template-columns: calc(var(--space-4xl) * 6);
+  margin-inline-start: calc(var(--space-4xl) * 5.5);
+}
+
+.frameTile .pane {
+  display: none;
+}
+
+[data-layout="tall"] .frameTile .window {
+  grid-template-columns: calc(var(--space-4xl) * 6.2);
+  margin-inline-start: calc(var(--space-4xl) * 1.6);
 }
 
 .captioned {
@@ -383,22 +485,43 @@
   row-gap: var(--space-xl);
 }
 
+.captioned[data-kind="halo"] {
+  justify-items: stretch;
+  inline-size: 100%;
+}
+
+.captioned[data-kind="halo"] .strip {
+  inline-size: 100%;
+}
+
 .caption {
+  justify-self: center;
   color: var(--accent);
   font: var(--font-code);
   font-size: var(--typo-caption-size);
   white-space: nowrap;
 }
 
-[data-layout="tall"] .frameTile .frame {
-  inline-size: calc(var(--space-4xl) * 3.8);
-  margin-inline-start: calc(var(--space-4xl) * 4.6);
+/* Tall: the lines carry only their values; the tokens are in the legend. */
+[data-layout="tall"] .dimToken {
+  display: none;
 }
 
-/* Tall: a dimension label wraps within the frame left margin. */
-[data-layout="tall"] .dimLabel {
-  inline-size: calc(var(--space-4xl) * 3.2);
-  text-align: end;
-  white-space: normal;
-  overflow-wrap: anywhere;
+@media (width <= 640px) {
+  .stripToggle {
+    position: absolute;
+    top: var(--chrome-floating-toggle-top);
+    left: var(--chrome-floating-toggle-left);
+    z-index: 6;
+    display: inline-grid;
+  }
+
+  .stripToggle button {
+    --icon-button-size: var(--chrome-floating-toggle-size);
+  }
+
+  .stripToggle button svg {
+    inline-size: var(--chrome-floating-toggle-icon-size);
+    block-size: var(--chrome-floating-toggle-icon-size);
+  }
 }
