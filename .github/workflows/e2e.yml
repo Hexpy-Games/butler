@@ -143,6 +143,10 @@ jobs:
           # --no-fail-fast: one run reports every failing scenario binary.
           cargo test --locked --no-fail-fast -p butler-e2e 2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
 
+      - name: Assert the scenarios left the runner home untouched
+        if: always()
+        uses: ./.github/actions/assert-home-untouched
+
       - name: Summarize
         if: always()
         run: |
@@ -213,6 +217,10 @@ jobs:
           set -o pipefail
           # --no-fail-fast: one run reports every failing scenario binary.
           cargo test --locked --no-fail-fast -p butler-e2e 2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
+
+      - name: Assert the scenarios left the runner home untouched
+        if: always()
+        uses: ./.github/actions/assert-home-untouched
 
       - name: Summarize
         if: always()

@@ -132,6 +132,10 @@ jobs:
       - name: Run tests
         run: cargo nextest run --workspace --locked --no-fail-fast
 
+      - name: Assert tests left the runner home untouched
+        if: always()
+        uses: ./.github/actions/assert-home-untouched
+
       # nextest does not run doctests; the crates currently have none.
       - name: Run doctests
         run: |
@@ -224,6 +228,10 @@ jobs:
         if: steps.build.outcome == 'success'
         continue-on-error: true
         run: cargo nextest run --workspace --locked --no-fail-fast
+
+      - name: Assert tests left the runner home untouched
+        if: always()
+        uses: ./.github/actions/assert-home-untouched
 
   windows-check:
     # Windows is not ported: the host and CLI are unix-only and main.rs prints

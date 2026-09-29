@@ -204,6 +204,8 @@ impl ResolvedInstallation {
         {
             return Err("butler_data_overlaps_installation".to_owned().into());
         }
+        #[cfg(test)]
+        refuse_owner_data_root(&resolved);
         Ok(resolved)
     }
 
@@ -220,6 +222,22 @@ impl ResolvedInstallation {
         }
         Ok(())
     }
+}
+
+/// Unit tests never resolve the owner's own data folder: `cargo test` run from a
+/// shell that exports `BUTLER_DATA=~/.butler` would otherwise read and write real
+/// data. A test uses a temp data root; a `~/.butler` inside the temp dir is fine.
+#[cfg(test)]
+fn refuse_owner_data_root(resolved: &Path) {
+    let real = |path: PathBuf| realpath_or_nearest(&path).ok();
+    let owner = butler_platform::user_dirs::home_dir().and_then(|home| real(home.join(".butler")));
+    let temp = real(std::env::temp_dir());
+    assert!(
+        !owner.is_some_and(|owner| resolved.starts_with(owner))
+            || temp.is_some_and(|temp| resolved.starts_with(temp)),
+        "test resolved the owner's data folder {}; point it at a temp dir",
+        resolved.display()
+    );
 }
 
 /// Platforms a standalone installation (`butler.native-agent-install.v1`) may
