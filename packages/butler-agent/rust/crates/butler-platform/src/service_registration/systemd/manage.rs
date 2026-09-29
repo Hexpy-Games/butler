@@ -111,7 +111,16 @@ pub(in super::super) fn job() -> Result<Job, Error> {
     })
 }
 
+/// An explicit start or restart clears the crash budget (`StartLimitBurst`):
+/// every start counts against it, and a few restarts in a minute would
+/// otherwise leave the unit refusing to start. The unit may not have failed,
+/// so this can fail harmlessly.
+fn clear_start_limit() {
+    let _ = run("systemctl", &["--user", "reset-failed", SYSTEMD_UNIT]);
+}
+
 pub(in super::super) fn start() -> Result<(), Error> {
+    clear_start_limit();
     run_checked("systemctl", &["--user", "start", SYSTEMD_UNIT])
 }
 
@@ -120,6 +129,7 @@ pub(in super::super) fn stop() -> Result<(), Error> {
 }
 
 pub(in super::super) fn restart() -> Result<(), Error> {
+    clear_start_limit();
     run_checked("systemctl", &["--user", "restart", SYSTEMD_UNIT])
 }
 
