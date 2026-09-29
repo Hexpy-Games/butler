@@ -1022,7 +1022,8 @@ export interface SessionViewTurn {
   delivery_state?: RuntimeDeliveryState;
   limitation_codes?: string[];
   limitations?: string[];
-  progress: TurnProgressSnapshot;
+  /** Optional: the gateway may omit progress for a turn (treat as no rows). */
+  progress?: TurnProgressSnapshot;
   created_at: string;
   updated_at: string;
   execution_controls?: {
