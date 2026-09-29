@@ -1,34 +1,61 @@
-/* 07 Focus ring hero (v3 scenes). Canvas px (../shared/grid.ts). */
+/* 07 Focus ring hero. Canvas px (../shared/grid.ts). Every ring is the DS
+   focus-visible style itself: --focus-ring (a 2px spread on the control's own
+   corner), or the base outline 2px at 1px offset where the control keeps it. */
 
-/* ---- Title: a ring around each word in turn ---- */
-
-.titleWords {
-  display: inline-flex;
-  gap: 0.28em;
-}
-
-.word {
-  position: relative;
-  display: inline-block;
-}
-
-.wordRing {
-  position: absolute;
-  inset: 0.08em -0.12em 0.02em;
-  border-radius: var(--radius-pill);
-  box-shadow: var(--focus-ring);
-  opacity: 0;
-}
-
-/* ---- The ring: one overlay, sized and rounded per stop ---- */
+/* ---- The ring: one overlay per scene, sized and rounded per stop ---- */
 
 .ring {
   position: absolute;
   top: 0;
   left: 0;
   box-shadow: var(--focus-ring);
+  opacity: 0;
   pointer-events: none;
 }
+
+/* A control drawn with its focus ring at rest (the poster, the close-up). */
+.ringOn > *,
+.ringItem [role="radio"][data-state="on"] {
+  box-shadow: var(--focus-ring);
+}
+
+/* Send keeps the base :focus-visible outline (tokens.css). */
+.ringOutline > * {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: 1px;
+}
+
+.ringOn,
+.ringOutline,
+.ringItem {
+  display: inline-grid;
+}
+
+.named {
+  display: contents;
+}
+
+/* ---- Title: each word a stop, with room for the ring inside the title box ---- */
+
+.titleWords {
+  position: relative;
+  display: inline-flex;
+  gap: 0.12em;
+  padding: calc(var(--focus-ring-width) * 2);
+}
+
+.word {
+  display: inline-block;
+  padding-inline: 0.1em;
+  border-radius: calc(var(--radius-control) * 4 * var(--title-fit, 1));
+}
+
+/* The reveal window is the word's line box: it makes room for the descender, so the "g" is never cut. */
+.word [data-rv] {
+  padding-block: 0.04em 0.2em;
+}
+
+/* ---- Keys ---- */
 
 .keys {
   display: inline-grid;
@@ -39,7 +66,10 @@
   display: inline-grid;
   grid-area: 1 / 1;
   justify-self: center;
+  opacity: 0;
 }
+
+/* ---- One ring ---- */
 
 .rowStage {
   display: grid;
@@ -56,8 +86,9 @@
   gap: var(--space-xl);
 }
 
+/* Tall: the row stands as a column, so the portrait frame fills. */
 [data-layout="tall"] .row {
-  max-inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
+  flex-direction: column;
 }
 
 /* ---- Close-up ---- */
@@ -70,16 +101,6 @@
 .closeTarget {
   position: relative;
   display: inline-grid;
-}
-
-.staticRing,
-.ringed::after {
-  position: absolute;
-  inset: 0;
-  border-radius: var(--radius-control);
-  box-shadow: var(--focus-ring);
-  pointer-events: none;
-  content: "";
 }
 
 .note {
@@ -103,6 +124,22 @@
   top: calc(100% + var(--space-md));
 }
 
+.closeTile {
+  display: inline-grid;
+  justify-items: center;
+  row-gap: var(--space-md);
+}
+
+.noteFlow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--accent);
+  font: var(--font-code);
+  font-size: var(--font-size-1);
+  white-space: nowrap;
+}
+
 .swatch {
   inline-size: var(--space-sm);
   block-size: var(--space-sm);
@@ -110,53 +147,156 @@
   background: var(--focus-ring-color);
 }
 
-/* ---- The route ---- */
+/* ---- The route: the real app window ---- */
+
+.routes {
+  display: grid;
+}
+
+[data-layout="wide"] [data-layout-only="tall"],
+[data-layout="tall"] [data-layout-only="wide"] {
+  display: none;
+}
 
 .routeStage {
+  display: grid;
+  grid-area: 1 / 1;
+}
+
+.routeFrame {
   position: relative;
-  display: grid;
-}
-
-.shell {
-  display: grid;
-  grid-template-columns: calc(var(--space-4xl) * 5.5) calc(
-      var(--space-4xl) * 10
-    );
-  align-items: start;
-  gap: var(--space-2xl);
-}
-
-[data-layout="tall"] .shell {
-  grid-template-columns: calc(var(--canvas-w) - var(--grid-margin) * 2);
-}
-
-.sidebar {
-  display: grid;
-  row-gap: var(--sidebar-row-spacing, var(--space-xs));
-}
-
-.main {
-  display: grid;
-  row-gap: var(--space-md);
-}
-
-.turn {
   display: grid;
   row-gap: var(--space-sm);
 }
 
-.region,
-.roving {
+/* The app window. It contains the shell's fixed layers (the chrome, the
+   floating toggle), as the viewport would. */
+.window {
+  --adaptive-viewport-block-size: 500px;
+
+  contain: layout;
+
+  inline-size: 920px;
+  block-size: 500px;
+}
+
+/* The poster's window fills its tile. */
+.tileWindow {
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+[data-layout="tall"] .tileWindow .window {
+  --adaptive-viewport-block-size: 540px;
+
+  block-size: 540px;
+}
+
+.tileWindow .window {
+  --adaptive-viewport-block-size: 100%;
+
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.window[data-shell="compact"] {
+  --adaptive-viewport-block-size: 540px;
+
+  /* Room for the toggle's ring inside the window (the compact app sits it on the edge). */
+  --chrome-toggle-inset: var(--space-sm);
+
+  inline-size: calc(var(--canvas-w) - var(--grid-margin) * 2);
+  block-size: 540px;
+}
+
+.conversation {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  box-sizing: border-box;
+  min-height: 0;
+  padding: var(--space-lg) var(--space-2xl) var(--space-xl);
+}
+
+.window[data-shell="compact"] .conversation {
+  padding-inline: var(--space-lg);
+}
+
+.turn {
+  display: grid;
+  align-content: start;
+  row-gap: var(--space-lg);
+}
+
+.composerSlot {
+  display: grid;
+}
+
+.draft {
+  position: absolute;
+  top: var(--composer-inner-padding-block);
+  left: var(--composer-inner-padding-inline);
+  display: inline-flex;
+  color: var(--text-primary);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/* A text field shows focus as its caret. */
+.caret {
+  position: absolute;
+  top: 0.15em;
+  left: 0;
+  inline-size: var(--focus-ring-width);
+  block-size: 1.2em;
+  background: var(--text-primary);
+  opacity: 0;
+}
+
+.sendSwap,
+.stacked {
+  display: inline-grid;
+}
+
+.sendSwap > *,
+.stacked > * {
+  display: grid;
+  grid-area: 1 / 1;
+}
+
+.captions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-block-size: var(--space-2xl);
+}
+
+.captions[data-edge="top"] {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) 1fr;
+}
+
+.captions[data-edge="top"] .caption[data-for="list"] {
+  padding-inline-start: var(--space-2xl);
+}
+
+.captions[data-edge="bottom"] {
+  padding-inline-start: var(--sidebar-width);
+}
+
+[data-layout="tall"] .captions[data-edge="bottom"] {
+  justify-content: center;
+  padding-inline-start: 0;
+}
+
+.caption {
   color: var(--text-tertiary);
   font: var(--font-code);
   font-size: var(--typo-caption-size);
+  white-space: nowrap;
 }
 
-.typed {
-  position: absolute;
-  top: var(--space-md);
-  left: var(--space-md);
-  color: var(--text-primary);
+.captions[data-edge="bottom"] .caption {
+  padding-inline-start: var(--space-2xl);
 }
 
 .route {
@@ -170,103 +310,33 @@
 
 .route path {
   fill: none;
-  stroke: var(--accent);
+  stroke: var(--focus-ring-color);
   stroke-dasharray: 100;
-  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-width: var(--focus-ring-width);
 }
 
-.tabsLayer {
-  position: absolute;
-  top: 50%;
-  left: 50%;
+/* ---- A group is one stop ---- */
+
+.groupStage {
   display: grid;
   justify-items: center;
-  row-gap: var(--space-xl);
-  translate: -50% -50%;
+  row-gap: var(--space-2xl);
 }
 
-.indicator {
-  position: absolute;
-  top: 0;
-  left: 0;
-  background: var(--accent);
-}
-
-.keys:last-child {
-  margin-block-start: var(--space-2xl);
+.groupFrame {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  row-gap: var(--space-2xl);
 }
 
 /* ---- Tiles ---- */
 
-.ringed {
-  position: relative;
-  display: inline-grid;
-}
-
-.ringed:has(> [data-slot="switch"])::after {
-  border-radius: var(--radius-pill);
-}
-
-.stop {
-  position: absolute;
-  top: calc(var(--space-sm) * -1);
-  right: calc(var(--space-sm) * -1);
-  display: grid;
-  place-items: center;
-  inline-size: var(--space-lg);
-  block-size: var(--space-lg);
-  border-radius: var(--radius-pill);
-  background: var(--accent);
-  color: var(--color-on-accent, var(--color-surface-base));
-  font: var(--font-code);
-  font-size: var(--font-size-1);
-}
-
-.stopped {
-  position: relative;
-  display: inline-grid;
-}
-
-.stopped[data-block] {
-  display: grid;
-}
-
-.stop[data-inset] {
-  top: var(--space-sm);
-  right: var(--space-sm);
-}
-
-.closeTile {
-  display: inline-grid;
-  justify-items: center;
-  row-gap: var(--space-md);
-}
-
-.tileNote {
-  display: inline-flex;
+.rowTile {
+  display: flex;
   align-items: center;
-  gap: var(--space-xs);
-  color: var(--accent);
-  font: var(--font-code);
-  font-size: var(--font-size-1);
-  white-space: nowrap;
-}
-
-/* The finale's route: drawn solid under the stops, over the shell's surfaces. */
-.shell[data-route] {
-  position: relative;
-}
-
-.shell[data-route] .route {
-  z-index: 1;
-}
-
-.shell[data-route] .route path {
-  stroke-dasharray: none;
-}
-
-.shell[data-route] .stop {
-  z-index: 2;
+  gap: var(--space-lg);
 }
 
 .tabsTile {

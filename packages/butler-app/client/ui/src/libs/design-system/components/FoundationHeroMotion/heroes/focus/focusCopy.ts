@@ -1,7 +1,7 @@
 import type { FoundationHeroLang } from "../../FoundationHeroMotion";
 import type { IntroLead } from "../shared/Intro";
 
-/** Sample copy of the Focus ring hero. Token names, key names and numbers never translate. */
+/** Sample copy of the Focus ring hero; the shell uses the app's own strings. Token names, key names and numbers never translate. */
 export const FOCUS_COPY = {
   en: {
     title: "Focus", title2: "ring",
@@ -11,10 +11,11 @@ export const FOCUS_COPY = {
       ["Back", "Shift+Tab walks the route back, stop by stop."],
     ] as IntroLead,
     continue: "Continue", name: "Butler", week: "Week", month: "Month", autoSave: "Auto-save",
-    chats: "Chats", projects: "Projects", files: "Files",
-    ask: "What changed this week?", reply: "Three changes landed since Monday.",
-    placeholder: "Ask Butler anything", typed: "Summarize…", send: "Send",
-    summary: "Summary", activity: "Activity", filesTab: "Files", open: "Open",
+    app: "Butler", newChat: "New chat", search: "Search", recent: "Recent",
+    chat: "Weekly review", settings: "Settings",
+    ask: "What changed this week?", reply: "Three changes landed since Monday: the sidebar density, the composer toolbar and the release notes.",
+    placeholder: "Ask Butler anything", typed: "Summarize them", more: "More", access: "Ask first", model: "GPT-5.1", send: "Send",
+    day: "Day", range: "Range", apply: "Apply",
     roving: "roving focus", regions: ["sidebar", "list", "composer"],
   },
   ko: {
@@ -25,15 +26,13 @@ export const FOCUS_COPY = {
       ["되돌아가기", "Shift+Tab은 경로를 한 정거장씩 되짚습니다."],
     ] as IntroLead,
     continue: "계속", name: "Butler", week: "주", month: "월", autoSave: "자동 저장",
-    chats: "대화", projects: "프로젝트", files: "파일",
-    ask: "이번 주에 뭐가 바뀌었어?", reply: "월요일 이후 세 가지가 바뀌었어요.",
-    placeholder: "Butler에게 무엇이든 물어보세요", typed: "요약해 줘…", send: "보내기",
-    summary: "요약", activity: "활동", filesTab: "파일", open: "열기",
+    app: "Butler", newChat: "새 대화", search: "검색", recent: "최신",
+    chat: "주간 회고", settings: "설정",
+    ask: "이번 주에 뭐가 바뀌었어?", reply: "월요일 이후 세 가지가 바뀌었어요. 사이드바 밀도, 컴포저 도구 막대, 릴리스 노트입니다.",
+    placeholder: "Butler에게 무엇이든 물어보세요", typed: "요약해 줘", more: "추가 기능", access: "먼저 확인", model: "GPT-5.1", send: "전송",
+    day: "일", range: "기간", apply: "적용",
     roving: "roving focus", regions: ["사이드바", "목록", "컴포저"],
   },
 } satisfies Record<FoundationHeroLang, unknown>;
 
 export type FocusCopy = (typeof FOCUS_COPY)["en"];
-
-/** The ring's gap outside a control (px): the ring sits on the control's edge, drawn by --focus-ring. */
-export const RING_PAD = 0;
