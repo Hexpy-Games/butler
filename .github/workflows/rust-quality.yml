@@ -6,32 +6,7 @@ name: Rust quality
 on:
   push:
     branches: [main]
-    paths:
-      - "packages/butler-agent/rust/**"
-      - "packages/butler-agent/resources/**"
-      - "deploy/**"
-      - "packages/butler-npm/**"
-      - ".github/workflows/release.yml"
-      - ".github/actions/build-agent-archive/**"
-      - "packages/butler-app/client/electron/scripts/prepare-native-agent.mjs"
-      - "packages/butler-agent/rust/docs/install-layout.md"
-      - ".github/workflows/rust-quality.yml"
-      - ".github/workflows/e2e.yml"
-      - ".github/workflows/install-smoke.yml"
-      - ".github/workflows/windows.yml"
-      - ".github/workflows/linux-packages.yml"
-      - "packages/butler-app/scripts/release/**"
-      - ".github/actions/rust-agent-setup/**"
-      - ".github/actions/e2e-stub/**"
   pull_request:
-    paths:
-      - "packages/butler-agent/rust/**"
-      - "packages/butler-agent/resources/**"
-      - ".github/workflows/rust-quality.yml"
-      - ".github/workflows/e2e.yml"
-      - ".github/workflows/windows.yml"
-      - ".github/actions/rust-agent-setup/**"
-      - ".github/actions/e2e-stub/**"
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
@@ -58,15 +33,42 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
+      macos: ${{ steps.paths.outputs.macos }}
       windows: ${{ steps.paths.outputs.windows }}
     steps:
       - uses: actions/checkout@v4
-      - name: Detect Windows-relevant PR changes
+      - name: Detect platform-specific PR checks
         id: paths
         if: github.event_name == 'pull_request'
         uses: dorny/paths-filter@v3
         with:
           filters: |
+            macos:
+              - 'packages/butler-agent/rust/crates/butler-platform/**'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/service/**'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/app.rs'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/app/gateway_lifecycle.rs'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/app/gateway_lifecycle/**'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/service.rs'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/service/**'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/update.rs'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/update/install_cmd.rs'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/update/uninstall_cmd.rs'
+              - 'packages/butler-agent/rust/Cargo.lock'
+              - 'packages/butler-app/client/electron/**'
+              - 'deploy/macos/**'
+              - 'deploy/install.sh'
+              - 'deploy/install-smoke.sh'
+              - 'deploy/app/**'
+              - 'packages/butler-agent/rust/scripts/package-standalone-agent.py'
+              - 'packages/butler-agent/rust/scripts/prepare-static-ort.py'
+              - 'packages/butler-agent/rust/scripts/release-standalone-agent.py'
+              - 'packages/butler-app/scripts/release/**'
+              - 'packages/butler-npm/**'
+              - '.github/actions/build-agent-archive/**'
+              - '.github/actions/e2e-stub/**'
+              - '.github/actions/rust-agent-setup/**'
+              - '.github/workflows/**'
             windows:
               - 'packages/butler-agent/rust/crates/butler-platform/**'
               - 'packages/butler-agent/rust/crates/butler-agent/src/host/service/**'
@@ -85,16 +87,100 @@ jobs:
       - name: Check Rust source rules
         run: cargo run --locked -p butler-source-check -- .
 
-  rust-checks:
-    name: Rust checks (${{ matrix.platform }})
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 180
+  linux-clippy:
+    name: Clippy (Linux x64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: sccache
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+      - name: Set up Rust and prebuilt ONNX Runtime
+        uses: ./.github/actions/rust-agent-setup
+        with:
+          components: clippy
+          native-deps: prebuilt-ort
+          cache-key: pr-linux-x64-clippy
+      - name: Clippy production targets
+        run: cargo clippy --workspace --lib --bins --locked --keep-going -- -D warnings
+      - name: Clippy all targets
+        run: cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
+
+  linux-tests:
+    name: Tests (Linux x64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: sccache
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+      - name: Set up Rust and prebuilt ONNX Runtime
+        uses: ./.github/actions/rust-agent-setup
+        with:
+          native-deps: prebuilt-ort
+          cache-key: pr-linux-x64-tests
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: Run tests
+        run: cargo nextest run --workspace --locked --no-fail-fast
+      - name: Run doctests when present
+        run: |
+          if grep -rqE '^[[:space:]]*//[/!][[:space:]]*```' crates; then
+            cargo test --workspace --doc --locked
+          fi
+
+  linux-e2e:
+    name: E2E stub (Linux x64 ${{ matrix.shard }}/3)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { platform: Linux x64, runner: ubuntu-latest }
-          - { platform: macOS arm64, runner: macos-15 }
+          - { shard: 1, idle_disk: true }
+          - { shard: 2, idle_disk: false }
+          - { shard: 3, idle_disk: false }
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: sccache
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+      - name: Set up Rust and prebuilt ONNX Runtime
+        uses: ./.github/actions/rust-agent-setup
+        with:
+          native-deps: prebuilt-ort
+          cache-key: pr-linux-x64-e2e-${{ matrix.shard }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: Build the agent binary under test
+        run: cargo build --locked -p butler-agent --bin butler-agent
+      - name: Run E2E stub tier
+        uses: ./.github/actions/e2e-stub
+        with:
+          partition: ${{ matrix.shard }}/3
+          run-idle-disk: ${{ matrix.idle_disk }}
+      - name: Assert runner home untouched
+        if: always()
+        shell: bash
+        run: test ! -e "$HOME/.butler"
+
+  macos-arm64:
+    name: Rust checks (macOS arm64)
+    needs: source
+    if: >-
+      always() && (github.event_name != 'pull_request' || needs.source.outputs.macos == 'true')
+    runs-on: macos-15
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - name: Set up Rust and prebuilt ONNX Runtime
@@ -102,7 +188,7 @@ jobs:
         with:
           components: clippy
           native-deps: prebuilt-ort
-          cache-key: pr-${{ runner.os }}-${{ runner.arch }}
+          cache-key: pr-macos-arm64
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
@@ -121,7 +207,9 @@ jobs:
         run: cargo build --locked -p butler-agent --bin butler-agent
       - name: Run E2E stub tier
         uses: ./.github/actions/e2e-stub
-      # TODO(#322): replace this hook with assert-home-untouched when PR #322 lands.
+        with:
+          partition: 1/1
+          run-idle-disk: "true"
       - name: Assert runner home untouched
         if: always()
         shell: bash
@@ -132,8 +220,13 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 180
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: sccache
     steps:
       - uses: actions/checkout@v4
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
       - uses: ./.github/actions/rust-agent-setup
         with:
           components: clippy
@@ -159,6 +252,8 @@ jobs:
     # workspace is from building; its failures never fail the workflow.
     name: Windows compile check (x86_64-pc-windows-msvc)
     needs: source
+    outputs:
+      compile: ${{ steps.check.outcome }}
     if: >-
       always() && (github.event_name != 'pull_request' || needs.source.outputs.windows == 'true')
     runs-on: windows-latest
@@ -231,9 +326,15 @@ jobs:
 
   nightly-issue:
     name: Report nightly failure
-    if: always() && github.event_name == 'schedule' && contains(needs.*.result, 'failure')
-    needs: [source, rust-checks, linux-arm64, windows-check, install-full]
+    if: >-
+      always() &&
+      (github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) &&
+      (contains(needs.*.result, 'failure') || needs.windows-check.outputs.compile == 'failure')
+    needs: [source, linux-clippy, linux-tests, linux-e2e, macos-arm64, linux-arm64, windows-check, install-full]
     runs-on: ubuntu-latest
+    concurrency:
+      group: ci-failure-report-${{ github.ref }}
+      cancel-in-progress: false
     permissions:
       contents: read
       issues: write
@@ -243,9 +344,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EVENT_LABEL: ${{ github.event_name == 'schedule' && 'nightly' || 'main push' }}
         run: |
           title='Nightly Rust CI failure'
-          body="The nightly Rust CI failed: $RUN_URL"
+          body="The $EVENT_LABEL Rust CI failed: $RUN_URL"
           number="$(gh issue list --state open --limit 1000 --json number,title --jq '.[] | select(.title == "Nightly Rust CI failure") | .number' | head -1)"
           if [ -n "$number" ]; then
             gh issue comment "$number" --body "$body"
