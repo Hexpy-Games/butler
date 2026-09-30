@@ -37,8 +37,13 @@ symbols after building, without changing assertions or test selection. Compiler
 profiles stay unchanged to reuse existing dependency caches. The build and
 Clippy jobs use Cargo's `-j 8` option rather than changing dependency-cache
 environment inputs.
+The agent qualification build script reads Git with optional locks disabled,
+so checking a watched index cannot refresh it and trigger a second agent link.
 Post-build stripping preserves dependency cache fingerprints; the job restores the former workspace Tests
-cache rather than the smaller E2E cache. The nextest archive is already
+cache rather than the smaller E2E cache. The gate reads the existing sccache
+compiler cache; only rust-cache writes dependency archives. Per-crate sccache
+uploads exhausted the cache API write quota and prevented the bulk cache save
+during the cold round-2 measurement. The nextest archive is already
 zstd-compressed. The separate real agent is gzip-compressed, and upload-artifact's additional compression is
 turned off. macOS and Windows retain their linker settings and coverage in
 `post-merge-ci.yml`; duplicate platform jobs were removed from Rust quality.
