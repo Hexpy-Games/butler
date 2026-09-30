@@ -26,7 +26,7 @@ use crate::host::{
 };
 use poll::{PollOwners, PollShutdown, poll_service};
 use stop_signal::{START_CANCELLED, StopSignal};
-use support::{close_runtime, failure, holds_foreground_lease, io, process_locale};
+use support::{close_runtime, close_serving, failure, holds_foreground_lease, io, process_locale};
 
 /// The product binary's sole entrypoint; domains remain crate-private.
 ///
@@ -372,28 +372,6 @@ fn capture_foreground_lease(
     } else {
         Ok(None)
     }
-}
-
-/// Stops lifecycle admission, then drains App and inbound producers while
-/// BTCC and transcript publication remain live.
-async fn close_serving(
-    control: GatewayControlServer,
-    gateway: &AppGatewayLifecycle,
-    dispatcher: &IngressDispatcher,
-    progress: &crate::host::ProgressPublisher,
-) -> Result<(), BtccError> {
-    control.stop_accepting();
-    gateway.stop_accepting().await;
-    let turns = dispatcher
-        .close()
-        .await
-        .map_err(|e| failure(e.code, e.message));
-    let control_close = control.close().await.map_err(|message| {
-        failure("gateway_control_close_failed", message.to_string()).with_source(message)
-    });
-    let publication = progress.reconcile().await.map(|_| ());
-    let app_close = gateway.close().await;
-    turns.and(control_close).and(publication).and(app_close)
 }
 
 /// Rolls back the App and dispatcher if the private control plane cannot start.

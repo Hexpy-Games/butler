@@ -247,11 +247,12 @@ impl AppServer {
         })
     }
 
-    pub(crate) fn stop_accepting(&self) {
+    pub(crate) async fn stop_accepting(&self) -> Result<(), BtccError> {
         self.listener_ready.store(false, Ordering::Release);
         if let Some(listener) = &self.listener {
             listener.stop_accepting();
         }
+        self.application.quiesce_queue().await.map_err(app_error)
     }
 
     /// Stop HTTP admission before the process drains its native inbound queue.

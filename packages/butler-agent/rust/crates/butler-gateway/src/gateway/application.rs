@@ -328,6 +328,15 @@ impl AppApplication {
         self.projection.drain().await
     }
 
+    /// Stop new queue admissions and finish any durable handoff in progress.
+    /// Projection can still publish terminal turns through the queue wake channel.
+    pub async fn quiesce_queue(&self) -> Result<(), GatewayApplicationError> {
+        match &self.queue_dispatcher {
+            Some(dispatcher) => dispatcher.quiesce().await,
+            None => Ok(()),
+        }
+    }
+
     pub async fn stop_dispatch(&self) -> Result<(), GatewayApplicationError> {
         self.setup_readiness.close().await;
         let automations = match &self.automation_scheduler {
