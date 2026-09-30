@@ -48,4 +48,9 @@ with tempfile.TemporaryDirectory(prefix="butler-source-cache-") as temporary:
     source.unlink()
     restore()
     assert str(source.relative_to(root)) not in json.loads(snapshot.read_text())
+    deleted = subprocess.run(
+        ["cargo", "build", "--offline", "-j", "8"], cwd=crate, env=env,
+        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+    )
+    assert deleted.returncode != 0 and b"no targets specified" in deleted.stderr
 print("Cargo source-cache correctness proof passed")

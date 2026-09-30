@@ -59,3 +59,21 @@ registration, uninstall, and stable-restart assertions. Fixture compression
 and product installation still process every byte of the real binary.
 See the round-2 PR for measurements; local build-host timings and GitHub
 runner job timings should be compared separately.
+
+## Cache population measurement
+
+The new workspace cache must be populated once before it can reuse Butler's
+libraries. [Run 36682415547](https://github.com/Hexpy-Games/butler/actions/runs/36682415547)
+seeded its dependency cache, checked all 2,546 tracked workspace files, ran
+every gated test, and saved workspace artifacts. Its gate took 6m26s from
+event creation. A fully cold dependency run took 15m53s; both remain in the
+round-2 PR's report alongside the final warm measurement.
+
+| Job | #346 baseline | Workspace cache population |
+| --- | ---: | ---: |
+| Archive | 2m19s (E2E only) | 3m36s (whole workspace) |
+| Unit/integration tests | 3m42s | 26s |
+| Clippy | 3m00s | 3m13s |
+| Slowest stub shard | 4m14s | 2m24s |
+| Slowest install selection | 3m25s | 2m16s |
+| Gate, including queue time | 6m38s | 6m26s |
