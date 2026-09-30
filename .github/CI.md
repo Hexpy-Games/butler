@@ -27,9 +27,9 @@ Six hash partitions cover non-install stub scenarios. INS-02 and INS-14 each
 have a dedicated job; a third install job covers the other fourteen scenarios.
 PERF-01 keeps main's dedicated performance job and p95 report; PERF-IDLE retains
 its release opt-in tier. Actual nextest discovery proves the selections are
-disjoint and exhaustive: stub counts 27/34/24/27/34/36, install counts 1/1/14,
-and two performance selections. The inventory has 219 scenarios, including
-19 ignored live scenarios and the opt-in PERF-IDLE selection. Retries are zero;
+disjoint and exhaustive: stub counts 29/34/24/27/39/34, install counts 1/1/14,
+and two performance selections. The inventory has 220 scenarios, including
+15 existing ignored scenarios (ten live and five retired/opt-in scenarios) and the opt-in PERF-IDLE selection. Retries are zero;
 E2E uses at most eight test threads.
 
 Full startup-deadline and idle-memory/calendar observation windows run early
@@ -95,11 +95,14 @@ current child PID within the original ninety-second deadline. A controlled
 healthy-HTTP/instance-starting regression exposed premature readiness; the
 regression also rejects readiness from a foreign PID (#366).
 
-Shutdown pauses App queue admission and completes any in-flight durable handoff
-before closing the native consumer, while terminal projection notifications stay
-live until drain completes. Controlled pauses reproduced acceptance without
-native enqueue in Q-02 (#374): the unchanged test failed in 121.874s before the
-fix and passed in 4.505s afterward under identical pauses. Diagnostic pauses were
-removed; assertions, replay pacing, cassettes and deadlines are unchanged. Final
-local validation passed all 198 locally runnable replay scenarios in 161.831s,
-including Q-02 in 3.663s. INS-14 remains mandatory on Linux CI.
+Main's #377 shutdown implementation stops App queue dispatch and completes any
+in-flight admission before closing the native consumer. Interrupted work settles
+with `turn_interrupted`; queued input resumes after restart. The earlier branch
+Q-02 fix is superseded by main's implementation. Both main regression scenarios
+are included in the single binary.
+
+The in-flight admission fixture observes its committed claim through a separate
+SQLite connection. Awaiting an HTTP terminal read can queue behind the deliberately
+slow admission and miss the transaction under test (#381). The fixture keeps its
+in-flight assertion and full post-restart turn/message/provider-call checks without
+changing timeouts or budgets. Both shutdown queue regressions pass locally.
