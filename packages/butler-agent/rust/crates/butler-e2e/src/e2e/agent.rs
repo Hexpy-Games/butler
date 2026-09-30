@@ -13,6 +13,7 @@ use super::sandbox::Sandbox;
 use super::{HarnessError, harness_error};
 
 mod app_supervisor;
+mod environment;
 mod process;
 pub use process::read_all;
 
@@ -171,12 +172,8 @@ impl Launch {
     /// A command for `program` (an installed Agent, or its launcher) with the
     /// scenario's isolated environment and no installation options.
     pub fn env_command(&self, program: &Path) -> Command {
-        let mut command = Command::new(program);
+        let mut command = environment::isolated_command(program, &self.data, &self.home);
         command
-            .current_dir(&self.data)
-            .env_clear()
-            .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
-            .env("HOME", &self.home)
             .env("CODEX_HOME", self.home.join(".codex"))
             .env("TMPDIR", &self.tmp)
             .env("LANG", "en_US.UTF-8")
@@ -242,7 +239,12 @@ impl Agent {
         let stderr = stdout.try_clone()?;
         let mut command = self.launch.service_command();
         command.stdout(stdout).stderr(stderr);
-        let child = executable::spawn(&mut command)?;
+        let child = executable::spawn(&mut command).map_err(|error| {
+            harness_error(format!(
+                "cannot launch E2E agent {}: {error}",
+                self.launch.binary.display()
+            ))
+        })?;
         self.child = Some(child);
         Ok(log)
     }

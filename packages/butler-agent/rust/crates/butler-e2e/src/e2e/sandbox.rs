@@ -6,10 +6,10 @@ use butler_platform::secure_fs::Canonical as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::HarnessError;
 use super::binary::{agent_binary, resource_source};
 use super::config::flag;
 use super::executable;
+use super::{HarnessError, harness_error};
 
 pub struct Sandbox {
     pub root: PathBuf,
@@ -31,11 +31,7 @@ impl Sandbox {
         fs::create_dir_all(&base)?;
         // Canonical path: macOS temp dirs are symlinks, and the product resolves them.
         let base = base.canonical()?;
-        let root = base.join(format!(
-            "{}-{}",
-            scenario.to_lowercase(),
-            &uuid::Uuid::new_v4().simple().to_string()[..8]
-        ));
+        let root = create_root(&base, scenario)?;
         let install = root.join("install");
         let resources = install.join("resources");
         let binary = install
@@ -47,7 +43,14 @@ impl Sandbox {
         // up by, so sandboxes sharing one inode see each other's paths, and
         // the product's instance identity check then refuses the CLI's
         // gateway control requests (`gateway_control_identity_invalid`).
-        executable::copy(&agent_binary()?, &binary)?;
+        let source = agent_binary()?;
+        executable::copy(&source, &binary).map_err(|error| {
+            harness_error(format!(
+                "copy E2E agent {} to {}: {error}",
+                source.display(),
+                binary.display()
+            ))
+        })?;
         copy_tree(&resource_source(), &resources)?;
         fs::create_dir_all(resources.join("app-client/dist"))?;
         fs::write(
@@ -88,6 +91,24 @@ impl Sandbox {
         entries.sort();
         Ok(entries)
     }
+}
+
+fn create_root(base: &Path, scenario: &str) -> Result<PathBuf, HarnessError> {
+    for _ in 0..16 {
+        let root = base.join(format!(
+            "{}-{}",
+            scenario.to_lowercase(),
+            uuid::Uuid::new_v4().simple()
+        ));
+        match fs::create_dir(&root) {
+            Ok(()) => return Ok(root),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Err(harness_error(
+        "could not allocate a unique E2E sandbox directory",
+    ))
 }
 
 impl Drop for Sandbox {
