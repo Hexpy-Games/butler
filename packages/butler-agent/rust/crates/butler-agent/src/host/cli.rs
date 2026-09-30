@@ -9,6 +9,7 @@ pub(super) mod oauth_login;
 pub(super) mod observability;
 pub(super) mod open;
 pub(super) mod public;
+pub(super) mod remote;
 pub(super) mod schedule;
 pub(super) mod service;
 pub(super) mod settings;
