@@ -27,7 +27,11 @@ impl AppApplication {
         id: String,
         trigger: &'static str,
     ) -> Result<AutomationRunResult, GatewayApplicationError> {
-        self.automation_runs.execute(id, trigger).await
+        let result = self.automation_runs.execute(id, trigger).await;
+        if result.is_ok() {
+            self.automation_wake.notify_one();
+        }
+        result
     }
 
     pub(crate) async fn dispatch_due_owned(
@@ -69,6 +73,9 @@ impl AppApplication {
             Ok((row, busy))
         }).await.map_err(app_error)?;
         if queued {
+            self.automation_queued
+                .store(true, std::sync::atomic::Ordering::Release);
+            self.automation_wake.notify_one();
             return self
                 .complete_fresh_run(
                     row,
@@ -94,15 +101,29 @@ impl AppApplication {
             .execute(|db| records::queued(db))
             .await
             .map_err(app_error)?;
+        self.automation_queued
+            .store(!queued.is_empty(), std::sync::atomic::Ordering::Release);
         let mut runs = Vec::new();
+        let mut still_queued = false;
+        let batch_full = queued.len() == 20;
+        let mut dispatched_queued = 0;
         for row in queued {
             if self
                 .target_has_active_turn(row.run_target_id.clone())
                 .await?
             {
+                still_queued = true;
                 continue;
             }
             runs.push(self.dispatch_queued(row).await?);
+            dispatched_queued += 1;
+        }
+        self.automation_queued.store(
+            still_queued || batch_full,
+            std::sync::atomic::Ordering::Release,
+        );
+        if batch_full && dispatched_queued > 0 {
+            self.automation_wake.notify_one();
         }
         let now = self.dependencies.identity_clock.now_iso();
         let due = self
@@ -224,7 +245,9 @@ impl AppApplication {
         result: DispatchResult,
     ) -> Result<AutomationRunResult, GatewayApplicationError> {
         let completed = self.dependencies.identity_clock.now_iso();
-        let next = if row.state == "enabled" {
+        let next = if row.schedule_type == "once" {
+            None
+        } else if row.state == "enabled" {
             Some(
                 self.dependencies
                     .identity_clock
@@ -238,7 +261,7 @@ impl AppApplication {
         self.storage.execute(move|db|{
             let placeholder=if result.state=="queued"{result.turn_id.as_deref()}else{None};
             record_run(db,&run_id,&result,&completed,placeholder)?;
-            db.execute("UPDATE app_automations SET next_run_at=?1,last_run_at=?2,last_run_state=?3,last_safe_error_code=?4,run_count=run_count+1,consecutive_failure_count=CASE WHEN ?3='failed' THEN consecutive_failure_count+1 ELSE 0 END,updated_at=?2 WHERE id=?5",params![next,completed,result.state,result.safe_error,row.id]).map_err(AppStorageError::sqlite)?;
+            db.execute("UPDATE app_automations SET next_run_at=?1,last_run_at=?2,last_run_state=?3,last_safe_error_code=?4,run_count=run_count+1,consecutive_failure_count=CASE WHEN ?3='failed' THEN consecutive_failure_count+1 ELSE 0 END,updated_at=?2,state=CASE WHEN schedule_type='once' THEN 'paused' ELSE state END WHERE id=?5",params![next,completed,result.state,result.safe_error,row.id]).map_err(AppStorageError::sqlite)?;
             let run=records::run(db,&run_id)?;
             publish(
                 db,

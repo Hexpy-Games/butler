@@ -115,6 +115,7 @@ tool_names! {
     ToolSearch = "tool_search",
     TransformPublicDataTable = "transform_public_data_table",
     UpdateExplicitMemory = "update_explicit_memory",
+    UpdateAutomation = "update_automation",
     UpdateOnboardingProfile = "update_onboarding_profile",
     UpdateTodoList = "update_todo_list",
     UpdateWorkStreamState = "update_work_stream_state",

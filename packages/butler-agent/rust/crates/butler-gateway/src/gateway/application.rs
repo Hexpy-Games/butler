@@ -166,6 +166,8 @@ pub struct AppApplication {
     queue_dispatcher: Option<queue_dispatcher::QueueDispatcher>,
     queue_wake: queue_dispatcher::QueueWake,
     automation_scheduler: Option<automations::AutomationScheduler>,
+    automation_wake: Arc<tokio::sync::Notify>,
+    automation_queued: Arc<std::sync::atomic::AtomicBool>,
     automation_runs: automations::AutomationRunOwner,
     queue_mutations: SessionQueueMutationOwner,
     session_creation: sessions::SessionCreationOwner,
@@ -183,6 +185,22 @@ pub struct AppApplication {
     quota_events: Arc<quota_events::QuotaEventForwarder>,
 }
 
+async fn initial_project_root(
+    storage: &AppStorage,
+    fallback: PathBuf,
+) -> Result<PathBuf, GatewayApplicationError> {
+    match storage
+        .execute(move |db| projects::initial_root(db, &fallback))
+        .await
+    {
+        Ok(root) => Ok(root),
+        Err(error) => {
+            let _ = storage.close().await;
+            Err(app_error(error))
+        }
+    }
+}
+
 impl AppApplication {
     pub async fn open(
         config: AppApplicationConfig,
@@ -196,22 +214,14 @@ impl AppApplication {
         .await
         .map_err(app_error)?;
         let queue_owner = queue_owner_id(dependencies.identity_clock.as_ref());
-        let fallback_project_root = config.project_workspace_root.clone();
-        let project_root = match storage
-            .execute(move |db| projects::initial_root(db, &fallback_project_root))
-            .await
-        {
-            Ok(root) => root,
-            Err(error) => {
-                let _ = storage.close().await;
-                return Err(app_error(error));
-            }
-        };
+        let project_root =
+            initial_project_root(&storage, config.project_workspace_root.clone()).await?;
         let dependencies = Arc::new(dependencies);
         let subscribers = EventSubscribers::default();
         let retention_cursor = latest_event_cursor(&storage).await?;
         let (queue_dispatcher, queue_wake) = queue_dispatcher::QueueDispatcher::start();
-        let automation_scheduler = automations::AutomationScheduler::start();
+        let (automation_wake, automation_queued) = automations::signals();
+        let automation_scheduler = automations::AutomationScheduler::start(automation_wake.clone());
         let automation_runs = automations::AutomationRunOwner::start();
         let (retention, retention_wake) = retention::RetentionOwner::start(
             storage.clone(),
@@ -226,6 +236,7 @@ impl AppApplication {
                 config.butler_data.clone(),
                 queue_wake.clone(),
                 retention_wake,
+                (automation_wake.clone(), automation_queued.clone()),
             )) {
                 Ok(projection) => projection,
                 Err(error) => {
@@ -246,6 +257,8 @@ impl AppApplication {
             queue_dispatcher: Some(queue_dispatcher.clone()),
             queue_wake,
             automation_scheduler: Some(automation_scheduler),
+            automation_wake,
+            automation_queued,
             automation_runs,
             queue_mutations: SessionQueueMutationOwner::new(),
             session_creation: sessions::SessionCreationOwner::new(),
@@ -265,11 +278,16 @@ impl AppApplication {
             setup_readiness: setup::ReadinessRelay::default(),
             quota_events: Arc::default(),
         };
-        if let Err(error) = application.recover_session_relocation_owned().await {
-            let _ = application.close().await;
+        application.recover_for_open().await?;
+        Ok(application)
+    }
+
+    async fn recover_for_open(&self) -> Result<(), GatewayApplicationError> {
+        if let Err(error) = self.recover_session_relocation_owned().await {
+            let _ = self.close().await;
             return Err(error);
         }
-        Ok(application)
+        Ok(())
     }
 
     /// The HTTP owner activates recovery only after its listener is ready.

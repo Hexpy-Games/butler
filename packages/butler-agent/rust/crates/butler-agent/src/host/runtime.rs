@@ -322,8 +322,6 @@ impl AgentRuntime {
         );
         let work_service = Arc::new(DurableWorkService::new(work_repository));
         let inbound_queue = Arc::new(butler_gateway::gateway::InboundQueue::new(&paths.data_root));
-        let automations =
-            super::open_automation_service(&paths.data_root, date_parser, inbound_queue.clone());
         let subsessions = Arc::new(butler_turn::btcc::SubsessionService::new(
             SqliteSubsessionRepository::new(stores.btcc.clone()),
             stores.bindings.clone(),
@@ -385,7 +383,6 @@ impl AgentRuntime {
             installation_root: paths.installation_root,
             subsessions: subsessions.clone(),
             work_streams: work_streams.clone(),
-            automations: automations.clone(),
             mcp_client: mcp_client.clone(),
             profile: profile.clone(),
             monitoring: monitoring::open(
@@ -437,7 +434,6 @@ impl AgentRuntime {
             work_streams: work_streams.clone(),
             skills: skills.clone(),
             context_maintenance: context_maintenance.clone(),
-            automations: automations.clone(),
         });
         let assembly = btcc::assemble(&TurnFacadeDependencies {
             preparation,

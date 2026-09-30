@@ -108,7 +108,6 @@ pub(crate) struct GuidedTools {
     catalog: Arc<crate::host::GuidedCatalog>,
     subsessions: Arc<butler_turn::btcc::SubsessionService>,
     work_streams: Arc<crate::host::WorkStreams>,
-    automations: Arc<butler_runtime::operations::AutomationService>,
     mcp_client: Arc<butler_models::mcp_client::McpClient>,
     verified_image_payload: Arc<dyn butler_turn::btcc::VerifiedImagePayloadPort>,
     profile: Arc<butler_memory::profile::ProfileService>,
@@ -178,7 +177,6 @@ impl GuidedTools {
         catalog: Arc<crate::host::GuidedCatalog>,
         subsessions: Arc<butler_turn::btcc::SubsessionService>,
         work_streams: Arc<crate::host::WorkStreams>,
-        automations: Arc<butler_runtime::operations::AutomationService>,
         mcp_client: Arc<butler_models::mcp_client::McpClient>,
         verified_image_payload: Arc<dyn butler_turn::btcc::VerifiedImagePayloadPort>,
         profile: Arc<butler_memory::profile::ProfileService>,
@@ -240,7 +238,6 @@ impl GuidedTools {
             catalog,
             subsessions,
             work_streams,
-            automations,
             mcp_client,
             verified_image_payload,
             profile,
@@ -311,6 +308,7 @@ impl GuidedTools {
                     | ToolName::ListWorkStreams
                     | ToolName::UpdateWorkStreamState
                     | ToolName::CreateAutomation
+                    | ToolName::UpdateAutomation
                     | ToolName::ListAutomations
                     | ToolName::DeleteAutomation
                     | ToolName::RunDueAutomations

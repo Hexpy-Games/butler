@@ -21,12 +21,13 @@ pub(super) fn safe_preview(value: Value) -> Value {
     redact_json_strings(json!({
         "id": value["id"],
         "title": text("title"),
-        "session_id": value["session_id"],
-        "status": value["status"],
-        "schedule": value["schedule"],
+        "session_id": value.get("target_session_id").unwrap_or(&value["session_id"]),
+        "status": value.get("state").unwrap_or(&value["status"]),
+        "schedule": value.get("schedule").cloned().unwrap_or_else(|| json!({"type": value["schedule_type"], "run_at": value["run_at"], "start_at": value["start_at"], "interval_seconds": value["interval_seconds"]})),
         "next_run_at": value["next_run_at"],
         "last_run_at": value["last_run_at"],
         "run_count": value["run_count"],
+        "access_mode": value["access_mode"],
         "prompt_preview": text("prompt_preview"),
     }))
 }
@@ -68,7 +69,7 @@ pub(super) fn report_success(
     data: &Value,
     human: &str,
 ) -> std::process::ExitCode {
-    if options.json {
+    if options.output.json {
         println!(
             "{}",
             json!({
@@ -79,7 +80,7 @@ pub(super) fn report_success(
                 "privacy": { "rawTextIncluded": false, "secretsIncluded": false }
             })
         );
-    } else if !options.quiet {
+    } else if !options.output.quiet {
         println!("{human}");
     }
     std::process::ExitCode::SUCCESS

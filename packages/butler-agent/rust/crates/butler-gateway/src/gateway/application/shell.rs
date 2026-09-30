@@ -24,7 +24,7 @@ impl AppApplication {
     pub(crate) async fn read_navigation(&self) -> Result<Value, GatewayApplicationError> {
         let chats = self.list_sessions(Some("chat".into()), None).await?;
         let projects = self.list_projects(true).await?;
-        let automations = self.list_automations_owned(None).await?;
+        let automations = self.list_automations_owned(None, false).await?;
         let space = self.read_space().await?;
         let generated_at = self.dependencies.identity_clock.now_iso();
         Ok(json!({
@@ -60,7 +60,7 @@ impl AppApplication {
         let space = self.read_space().await?;
         let projects = self.list_projects(false).await?.projects;
         let sessions = self.list_sessions(None, None).await?;
-        let automations = self.list_automations_owned(None).await?.automations;
+        let automations = self.list_automations_owned(None, false).await?.automations;
         Ok(command_palette(
             &query,
             &space,

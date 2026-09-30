@@ -218,6 +218,7 @@ fn run_connection_lane(
         tuning::configure(&connection)?;
         schema::migrate(&mut connection, butler_data.map(PathBuf::as_path))?;
         schema::seed(&connection, initialized_at)?;
+        schema::migrate_legacy_schedules(&mut connection, butler_data.map(PathBuf::as_path))?;
         tuning::analyze_at_open(&connection)?;
         event_outbox::install(&connection);
         Ok(connection)

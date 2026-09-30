@@ -87,15 +87,13 @@ impl From<UpdateCode> for UpdateError {
 mod tests {
     use super::UpdateCode;
     use crate::context::ContextCode;
-    use crate::operations::automation::AutomationCode;
     use crate::web_access::WebAccessCode;
 
     fn spelled<T: Copy>(all: &[T], as_str: fn(T) -> &'static str) -> Vec<&'static str> {
         all.iter().map(|code| as_str(*code)).collect()
     }
 
-    /// Format pin: every wire code table of the runtime (context, automation,
-    /// update and web access) keeps its pinned spelling and order.
+    /// Format pin: active runtime wire code tables keep their pinned spelling and order.
     // test-category: format-pin
     #[test]
     fn wire_codes_are_stable() {
@@ -104,11 +102,6 @@ mod tests {
                 "update",
                 spelled(UpdateCode::ALL, UpdateCode::as_str),
                 include_str!("wire_codes.txt"),
-            ),
-            (
-                "automation",
-                spelled(AutomationCode::ALL, AutomationCode::as_str),
-                include_str!("../automation/wire_codes.txt"),
             ),
             (
                 "context",
