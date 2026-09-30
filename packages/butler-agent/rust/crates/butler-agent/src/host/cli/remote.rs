@@ -1,5 +1,6 @@
 //! User-facing remote access commands; all mutations go through the service.
 mod client;
+mod pair;
 use crate::host::{
     ResolvedInstallation,
     cli::{error::CliError, settings},
@@ -7,20 +8,15 @@ use crate::host::{
 use client::Client;
 use reqwest::Method;
 use serde_json::{Value, json};
-use std::{
-    ffi::OsString,
-    io::{self, IsTerminal, Write},
-    path::PathBuf,
-    process::ExitCode,
-};
+use std::{ffi::OsString, path::PathBuf, process::ExitCode};
 
 #[derive(Default)]
 struct Options {
     data: Option<PathBuf>,
     words: Vec<String>,
     json: bool,
-    rotate: bool,
-    yes: bool,
+    revoke: Option<String>,
+    revoke_all: bool,
 }
 
 pub(crate) fn recognizes(args: &[OsString]) -> bool {
@@ -42,26 +38,28 @@ pub(crate) async fn run(installation: &ResolvedInstallation, args: &[OsString]) 
         let root = settings::resolve_data_root_override(options.data.clone(), installation)
             .map_err(|_| CliError::failed("data_unavailable", "Butler DATA is unavailable."))?;
         let client = Client::local(&root)?;
+        if matches!(options.words[1].as_str(), "pair" | "code") {
+            return pair::run(&client).await;
+        }
         let data = execute(&client, &options).await?;
-        // Only stdout reaches the local caller; no tracing, service log or argv contains the code.
         if options.json {
             println!(
                 "{}",
                 json!({"ok":true,"command":"butler remote","data":data,"error":null,
-                "privacy":{"rawTextIncluded":false,"secretsIncluded": options.words[1] == "code"}})
+                "privacy":{"rawTextIncluded":false,"secretsIncluded":false}})
             );
-        } else if options.words[1] == "code" {
+        } else if options.words[1] == "devices" {
             println!(
                 "{}",
-                data["code"].as_str().ok_or_else(|| CliError::failed(
-                    "code_unavailable",
-                    "Connection code unavailable."
+                serde_json::to_string_pretty(&data).map_err(|_| CliError::failed(
+                    "remote_response_invalid",
+                    "Invalid device response."
                 ))?
             );
         } else {
             render_status(&data);
             if options.words[1] == "enable" {
-                println!("연결 코드: butler remote code / Connection code: butler remote code");
+                println!("기기 연결: butler remote pair / Pair a device: butler remote pair");
             }
         }
         Ok::<(), CliError>(())
@@ -100,8 +98,18 @@ fn parse(args: &[OsString]) -> Result<Options, CliError> {
                 );
             }
             "--json" => options.json = true,
-            "--rotate" => options.rotate = true,
-            "--yes" => options.yes = true,
+            "--revoke-all" => options.revoke_all = true,
+            "--revoke" => {
+                index += 1;
+                let id = args
+                    .get(index)
+                    .ok_or_else(|| CliError::invalid("--revoke requires a device ID"))?
+                    .to_string_lossy();
+                if uuid::Uuid::parse_str(&id).is_err() {
+                    return Err(CliError::invalid("Invalid device ID."));
+                }
+                options.revoke = Some(id.into_owned());
+            }
             value if value.starts_with("--data=") => options.data = Some(value[7..].into()),
             value if value.starts_with('-') => {
                 return Err(CliError::invalid(format!("Unsupported option: {value}")));
@@ -113,14 +121,16 @@ fn parse(args: &[OsString]) -> Result<Options, CliError> {
     let words = options.words.iter().map(String::as_str).collect::<Vec<_>>();
     let valid = matches!(
         words.as_slice(),
-        ["remote", "status" | "enable" | "disable" | "code"]
-            | ["remote", "hosts", "add" | "remove", _]
+        [
+            "remote",
+            "status" | "enable" | "disable" | "pair" | "code" | "devices"
+        ] | ["remote", "hosts", "add" | "remove", _]
     );
-    let code = words.get(1) == Some(&"code");
+    let devices = words.get(1) == Some(&"devices");
     if !valid
-        || (options.rotate && !code)
-        || (options.yes && !options.rotate)
-        || (options.json && !matches!(words.get(1), Some(&"status" | &"code")))
+        || ((options.revoke.is_some() || options.revoke_all) && !devices)
+        || (options.revoke.is_some() && options.revoke_all)
+        || (options.json && !matches!(words.get(1), Some(&"status" | &"devices")))
     {
         return Err(CliError::invalid("Use butler help remote."));
     }
@@ -129,16 +139,15 @@ fn parse(args: &[OsString]) -> Result<Options, CliError> {
 
 async fn execute(client: &Client, options: &Options) -> Result<Value, CliError> {
     match options.words[1].as_str() {
-        "code" => {
-            if options.rotate && !options.yes {
-                confirm_rotation()?;
+        "devices" => {
+            if options.revoke_all || options.revoke.is_some() {
+                let path = options.revoke.as_ref().map_or_else(
+                    || "/security/devices".into(),
+                    |id| format!("/security/devices/{id}"),
+                );
+                client.request(Method::DELETE, &path, None).await?;
             }
-            let path = if options.rotate {
-                "/security/connection-code/rotate"
-            } else {
-                "/security/connection-code/reveal"
-            };
-            client.request(Method::POST, path, None).await
+            client.request(Method::GET, "/security/devices", None).await
         }
         "status" => client.request(Method::GET, "/security", None).await,
         action => {
@@ -177,26 +186,6 @@ async fn execute(client: &Client, options: &Options) -> Result<Value, CliError> 
     }
 }
 
-fn confirm_rotation() -> Result<(), CliError> {
-    if !io::stdin().is_terminal() {
-        return Err(CliError::invalid(
-            "Rotation invalidates the old code. Run with --yes to confirm.",
-        ));
-    }
-    eprint!("새 코드 발급 (기존 코드 무효화)? / Rotate code (invalidate old code)? [y/N] ");
-    io::stderr()
-        .flush()
-        .map_err(|_| CliError::failed("confirmation_failed", "Cannot confirm rotation."))?;
-    let mut answer = String::new();
-    io::stdin()
-        .read_line(&mut answer)
-        .map_err(|_| CliError::failed("confirmation_failed", "Cannot confirm rotation."))?;
-    if !answer.trim().eq_ignore_ascii_case("y") && !answer.trim().eq_ignore_ascii_case("yes") {
-        return Err(CliError::invalid("Rotation cancelled."));
-    }
-    Ok(())
-}
-
 fn render_status(data: &Value) {
     println!(
         "원격 접근 / Remote access: {}",
@@ -214,8 +203,4 @@ fn render_status(data: &Value) {
     ] {
         println!("{label}: {}", data[key]);
     }
-    println!(
-        "연결 코드 / Connection code: {} (created: {})",
-        data["connection_code"]["masked"], data["connection_code"]["created_at"]
-    );
 }

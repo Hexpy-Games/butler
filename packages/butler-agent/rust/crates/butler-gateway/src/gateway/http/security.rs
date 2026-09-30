@@ -9,6 +9,9 @@
 //! keeps the key set it was authorized under ([`KeySet`]).
 
 mod browser_session;
+mod devices;
+pub(super) use connect::connect_request;
+pub(super) use devices::DeviceRegistry;
 mod client_place;
 mod connect;
 mod connect_page;
@@ -24,13 +27,13 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use axum::body::Body;
-use axum::http::{HeaderMap, HeaderValue, Method, Request, StatusCode, Uri, header};
+use axum::http::{HeaderMap, Method, Request, StatusCode, Uri, header};
 use axum::response::Response;
 use parking_lot::RwLock;
 use tokio_util::sync::CancellationToken;
 
 pub(super) use client_place::is_local_client;
-pub(super) use connect::{CONNECT_PATH, MAX_FORM_BYTES as MAX_CONNECT_FORM_BYTES};
+pub(super) use connect::CONNECT_PATH;
 pub(super) use cors::{apply as apply_cors, preflight};
 pub(super) use keys::KeySet;
 pub(super) use request_policy::{RequestOrigin, require_json_body};
@@ -41,7 +44,7 @@ use crate::gateway::auth::{self, LocalAuthConfig};
 use crate::gateway::crypto::constant_time_eq;
 use crate::gateway::protocol::{APP_PROTOCOL_VERSION, ApiEnvelope};
 use connect_page::ConnectPage;
-use fetch_metadata::{SessionRefusal, SessionRequest};
+use fetch_metadata::SessionRefusal;
 use keys::{Keyed, SigningKey};
 use request_policy::RequestPolicy;
 
@@ -256,10 +259,10 @@ impl GatewaySecurity {
         Some(previous.streams.clone())
     }
 
-    /// A new browser-session cookie under the current key.
-    pub(super) fn issue_session(&self) -> Option<HeaderValue> {
+    pub(super) fn sessions(&self) -> Option<Arc<Keyed>> {
         let keyed = self.keyed.read().clone();
-        keyed.sessions.as_ref()?.issue(SystemTime::now())
+        keyed.sessions.as_ref()?;
+        Some(keyed)
     }
 
     /// Decides the request's credential, or answers it directly.
@@ -267,17 +270,22 @@ impl GatewaySecurity {
         &self,
         request: &Request<Body>,
         origin: &RequestOrigin,
+        device: Option<&CancellationToken>,
     ) -> Result<Admission, HttpError> {
         let (method, uri, headers) = (request.method(), request.uri(), request.headers());
         let now = SystemTime::now();
         let keyed = self.keyed.read().clone();
-        if *method == Method::GET && uri.path() == CONNECT_PATH {
-            return Ok(Admission::Respond(connect::from_query(&keyed, uri, now)));
-        }
         let grant = |access| {
             Admission::Granted(Grant {
                 access,
-                keys: KeySet(keyed.clone()),
+                keys: KeySet(
+                    keyed.clone(),
+                    if access == Access::BrowserSession {
+                        device.cloned()
+                    } else {
+                        None
+                    },
+                ),
             })
         };
         if static_ui::is_public_asset(method, uri.path()) {
@@ -290,7 +298,7 @@ impl GatewaySecurity {
             origin,
             now,
         };
-        match self.credential(&keyed, &request) {
+        match self.credential(&keyed, &request, device.is_some()) {
             Ok(access) => Ok(grant(access)),
             // A navigation without a usable session (none, or one another
             // local page's link carried) gets the connection-code screen.
@@ -303,14 +311,12 @@ impl GatewaySecurity {
         }
     }
 
-    /// `POST /connect` (the connection page's form): a one-time code or
-    /// the connection code for a session cookie.
-    pub(super) fn connect_form(&self, body: &[u8]) -> Result<Response, HttpError> {
-        let keyed = self.keyed.read().clone();
-        connect::from_form(&keyed, body, SystemTime::now())
-    }
-
-    fn credential(&self, keyed: &Keyed, request: &CredentialRequest<'_>) -> Result<Access, Denial> {
+    fn credential(
+        &self,
+        keyed: &Keyed,
+        request: &CredentialRequest<'_>,
+        device: bool,
+    ) -> Result<Access, Denial> {
         if !self.auth.required {
             return Ok(Access::AuthDisabled);
         }
@@ -325,18 +331,13 @@ impl GatewaySecurity {
         if auth::bearer_matches(headers, token) {
             return Ok(Access::Bearer);
         }
-        let session_refusal = if keyed
-            .sessions
-            .as_ref()
-            .is_some_and(|sessions| sessions.has_session(headers, now))
-        {
-            let refusal = fetch_metadata::session_use(SessionRequest {
+        let session_refusal = if device {
+            match fetch_metadata::session_use(fetch_metadata::SessionRequest {
                 method,
                 headers,
                 origin_allowed: origin.allowed().is_some(),
                 loopback_host: request_policy::is_loopback_host(headers),
-            });
-            match refusal {
+            }) {
                 Ok(()) => return Ok(Access::BrowserSession),
                 Err(refusal) => Some(refusal),
             }

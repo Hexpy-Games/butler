@@ -1,47 +1,50 @@
 ---
 title: "Remote access"
-description: "Connect to Butler from another computer, including WSL and servers."
+description: "Pair a browser with Butler on WSL, a server, or another computer."
 section: advanced
 order: 2
 status: published
 ---
 
-Remote access is off by default. On the computer running Butler, Settings → Security lets you enable access from other computers, reveal or rotate the connection code, and manage allowed hosts. These settings require a local client; a browser on another computer cannot manage them.
+Remote access is off by default. Enable it on the computer running Butler. Settings → Security still controls access and allowed hosts; device pairing and revocation currently use the CLI. Security administration requires a local client and the local admin credential.
 
 ## Headless / WSL / server
-
-Run these commands in a terminal on the computer running Butler:
 
 ```bash
 butler start
 butler remote enable
-butler remote code
+butler remote pair
 ```
 
-On another computer, open `http://HOST:PORT` and enter the connection code. Use the server address or an address forwarded to WSL for `HOST`, and the port shown in the LAN URLs for `PORT`. Configure any firewall or port forwarding separately. Enable access only on trusted networks: anyone with the code can connect.
+On another computer, open a LAN URL shown by `butler remote enable` and enter the eight-digit pairing code into the connect form. Use the server address or an address forwarded to WSL. Configure any firewall or port forwarding separately. Use a trusted network.
 
-The code is printed only to your local terminal. Keep it private and avoid capturing its output in logs.
+`pair` stays in the foreground without opening a browser. The code lasts 60 seconds and works once. Three failed attempts invalidate it. The terminal shows a countdown and automatically issues a new code on expiry or invalidation, until a device pairs or you press Ctrl-C. Issuing a new code invalidates the previous code. Pairing codes work only in the form POST, never in a URL. Keep terminal output private; avoid capturing it in logs.
 
 ```bash
 butler remote status --json
-butler remote code --json
-butler remote code --rotate        # Confirm; invalidates the old code
-butler remote code --rotate --yes  # Skip confirmation
+butler remote devices
+butler remote devices --json
+butler remote devices --revoke DEVICE_ID
+butler remote devices --revoke-all
 butler remote disable
 ```
 
-Status includes enabled state, bind addresses, LAN URLs, per-address bind errors, allowed hosts, and the masked code with its creation date. JSON code output includes the full secret. Rotation invalidates the old code and existing browser sessions. Commands need the running service and never start it automatically; if unavailable, run `butler start`.
+Devices survive restarts. Revoking a device immediately rejects its cookie and closes its live event stream. Revoking all devices leaves local bearer authentication available. `butler open` still opens a one-time link for this computer and creates a revocable device named “This computer · browser”. Previous v1 cookies require pairing again. The long connection token is no longer shown or accepted in the connect form. `remote code` is a hidden preview alias for `remote pair`.
+
+The browser cookie is HttpOnly and SameSite=Strict. Plain HTTP on LAN host names cannot use a Secure cookie; the connection and cookie are not encrypted. Use a trusted network or provide HTTPS through your own proxy. Browser Origin and Fetch Metadata checks remain enforced. Last-seen timestamps update in memory on requests and persist at most once per 15 minutes; idle devices cause no writes.
+
+Status shows enabled state, bind addresses, LAN URLs, bind errors, and allowed hosts. Commands require the running service and never start it automatically; if unavailable, run `butler start`.
 
 ## Forwarders and allowed hosts
 
-When a WSL port forwarder, tunnel, or reverse proxy presents a different Host, add that name or IP to `allowedHosts`. For example, add the Windows host IP used to forward to WSL:
+When a WSL forwarder, tunnel, or reverse proxy presents a different Host, register its name or IP:
 
 ```bash
 butler remote hosts add 192.0.2.10
 butler remote hosts remove 192.0.2.10
 ```
 
-Allowed hosts still require the connection code. You manage the forwarder and its security yourself.
+Allowed hosts still require pairing. Forwarding does not grant Security administration. You manage the forwarder and its security yourself.
 
 ## App port
 

@@ -1,4 +1,6 @@
 mod authority;
+mod start;
+pub(super) use start::serve;
 mod automations;
 mod dashboard;
 mod error;
@@ -45,12 +47,10 @@ use axum::{
 };
 use http_body_util::LengthLimitError;
 use serde_json::Value;
-use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
 use super::{
-    EventReplayView, GatewayApplication, GatewayConfig, GatewayExposure, GatewaySecurityStore,
-    HealthView, SendMessageCommand,
+    EventReplayView, GatewayApplication, GatewaySecurityStore, HealthView, SendMessageCommand,
     live::create_live_stream,
     message_validation::{MessageRequestError, validate_message_request},
     protocol::{APP_PROTOCOL_VERSION, ApiEnvelope},
@@ -66,50 +66,8 @@ use read_routes::{
 const DEFAULT_PAGE_LIMIT: usize = 200;
 const MAX_REQUEST_BODY_SIZE: usize = 128 * 1024 * 1024;
 
-/// Serves `listener` (loopback) until `shutdown`, and binds the LAN
-/// listeners too when remote access is enabled.
-pub(super) fn serve(
-    listener: TcpListener,
-    application: Arc<dyn GatewayApplication>,
-    config: GatewayConfig,
-    shutdown: CancellationToken,
-    local_addr: SocketAddr,
-) -> JoinHandle<std::io::Result<()>> {
-    let exposure = GatewayExposure {
-        remote_access_enabled: config.remote_access_enabled,
-        allowed_hosts: config.allowed_hosts.clone(),
-    };
-    let state = Arc::new(HttpState {
-        application,
-        security: security::GatewaySecurity::new(security::SecurityConfig {
-            auth: config.local_auth,
-            admin: config.admin_credential,
-            local_addr,
-            allowed_hosts: config.allowed_hosts.clone(),
-            dev_origins: config.dev_cors_origin,
-            signed_url_ttl: config.signed_url_ttl,
-            shutdown: shutdown.clone(),
-        }),
-        remote: listeners::RemoteAccess::new(local_addr, config.allowed_hosts),
-        security_store: config.security_store,
-        session_cursor_secret: uuid::Uuid::new_v4().to_string(),
-        limiter: FixedWindowRateLimiter::new(
-            config.message_rate_limit_max,
-            config.message_rate_limit_window,
-        ),
-        shutdown: shutdown.clone(),
-        uploads: tokio::sync::Semaphore::new(2),
-        static_ui_root: config.static_ui_root,
-    });
-    // Publish the saved exposure before loopback admission: a successful
-    // health probe must not race initialization of Settings → Security.
-    if exposure.remote_access_enabled {
-        state.remote.apply(&state, exposure);
-    }
-    listeners::spawn(listener, state, shutdown)
-}
-
 struct HttpState {
+    devices: security::DeviceRegistry,
     application: Arc<dyn GatewayApplication>,
     security: security::GatewaySecurity,
     remote: listeners::RemoteAccess,
@@ -183,12 +141,16 @@ async fn authorized_route(
     mut request: Request<Body>,
     origin: &security::RequestOrigin,
 ) -> Result<Response, HttpError> {
-    if request.method() == Method::POST && request.uri().path() == security::CONNECT_PATH {
-        let body =
-            read_body_with_limit(request.into_body(), security::MAX_CONNECT_FORM_BYTES).await?;
-        return state.security.connect_form(&body);
+    if matches!(*request.method(), Method::GET | Method::POST)
+        && request.uri().path() == security::CONNECT_PATH
+    {
+        return security::connect_request(&state, request).await;
     }
-    let grant = match state.security.authorize(&request, origin)? {
+    let grant = match state.security.authorize(
+        &request,
+        origin,
+        state.devices.authenticate(request.headers()).as_ref(),
+    )? {
         security::Admission::Respond(response) => return Ok(response),
         security::Admission::Granted(grant) => grant,
     };

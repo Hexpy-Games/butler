@@ -443,3 +443,18 @@ impl Drop for TestSubscription {
             .retain(|(id, _)| *id != self.id);
     }
 }
+
+impl crate::gateway::GatewayDevices for TestApplication {
+    fn load_devices(&self) -> ApplicationFuture<Vec<crate::gateway::PairedDevice>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+    fn save_device(&self, _: crate::gateway::PairedDevice) -> ApplicationFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
+    fn revoke_devices(&self, _: Option<String>, _: u64) -> ApplicationFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
+    fn touch_device(&self, _: String, _: u64) -> ApplicationFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
+}

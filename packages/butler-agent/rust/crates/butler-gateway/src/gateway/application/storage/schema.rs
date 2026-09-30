@@ -6,6 +6,7 @@ mod monitoring;
 mod project_ledger_bindings;
 mod schedule_access;
 mod schedule_legacy;
+mod security;
 mod space;
 mod supporting;
 mod wallpapers;
@@ -25,6 +26,7 @@ pub(super) fn migrate(
 ) -> Result<(), AppStorageError> {
     let turns_new = !migration::table_exists(connection, "turns")?;
     core::create(connection)?;
+    security::create(connection)?;
     // Open-turn lookups filter on the state alone; databases that predate the
     // index get it here.
     connection

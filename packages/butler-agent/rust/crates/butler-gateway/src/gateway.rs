@@ -7,6 +7,7 @@
 mod application;
 mod auth;
 mod crypto;
+mod devices;
 mod http;
 mod image_files;
 mod live;
@@ -16,6 +17,7 @@ mod protocol;
 mod published_event;
 mod rate_limit;
 mod security_settings;
+pub use devices::{GatewayDevices, PairedDevice};
 mod server;
 mod session_references;
 mod transcript;
@@ -201,6 +203,7 @@ pub trait GatewayApplication:
     GatewayMutationCommands
     + GatewayProjectDashboard
     + GatewaySessionControls
+    + GatewayDevices
     + GatewayWallpapers
     + Send
     + Sync

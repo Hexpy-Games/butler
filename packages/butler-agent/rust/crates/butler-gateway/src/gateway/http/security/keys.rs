@@ -38,11 +38,11 @@ impl SigningKey {
 }
 
 /// One token and what it keys.
-pub(super) struct Keyed {
+pub(in crate::gateway::http) struct Keyed {
     /// The bearer token (none when local auth is off or unconfigured).
     pub(super) token: Option<Arc<str>>,
     pub(super) signer: Option<Arc<ResourceSigner>>,
-    pub(super) sessions: Option<BrowserSessions>,
+    pub(in crate::gateway::http) sessions: Option<BrowserSessions>,
     /// Closes the live streams opened while this token was current.
     pub(super) streams: CancellationToken,
 }
@@ -51,7 +51,7 @@ impl Keyed {
     /// Derives the set for `token`; its streams close with `shutdown`.
     pub(super) fn derive(
         token: Option<Arc<str>>,
-        port: u16,
+        _port: u16,
         ttl_seconds: u64,
         shutdown: &CancellationToken,
     ) -> Self {
@@ -60,7 +60,7 @@ impl Keyed {
             signer: key
                 .clone()
                 .map(|key| Arc::new(ResourceSigner::new(key, ttl_seconds))),
-            sessions: key.map(|key| BrowserSessions::new(key, port)),
+            sessions: key.map(|_| BrowserSessions::new()),
             token,
             streams: shutdown.child_token(),
         }
@@ -71,7 +71,10 @@ impl Keyed {
 /// its whole life: a rotation during the request cannot hand it the new
 /// signer or the new token's stream closer.
 #[derive(Clone)]
-pub(in crate::gateway::http) struct KeySet(pub(super) Arc<Keyed>);
+pub(in crate::gateway::http) struct KeySet(
+    pub(super) Arc<Keyed>,
+    pub(super) Option<CancellationToken>,
+);
 
 impl KeySet {
     /// Adds `signed_url`s to an authenticated JSON response.
@@ -96,6 +99,6 @@ impl KeySet {
 
     /// Fires when this key set's token rotates (or the gateway stops).
     pub(in crate::gateway::http) fn live_streams(&self) -> CancellationToken {
-        self.0.streams.clone()
+        self.1.clone().unwrap_or_else(|| self.0.streams.clone())
     }
 }

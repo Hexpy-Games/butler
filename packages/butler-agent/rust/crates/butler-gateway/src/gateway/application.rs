@@ -10,6 +10,7 @@ mod errors;
 mod event_outbox;
 mod events;
 use errors::app_error;
+mod devices;
 #[cfg(debug_assertions)]
 mod faults;
 mod gateway_dashboard_impl;
