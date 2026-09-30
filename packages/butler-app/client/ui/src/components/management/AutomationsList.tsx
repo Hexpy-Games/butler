@@ -1,3 +1,6 @@
+import { useEffect } from "react";
+import { hintScheduleLogin } from "@/app/loginSettings";
+import { scheduleFrequency, scheduleNextRun, scheduleState } from "@/app/scheduleLabels";
 import { useAppLocale } from "@/app/copy.ts";
 import {
   Button,
@@ -32,6 +35,7 @@ export function AutomationsList({
 }: AutomationsListProps) {
   useAppLocale();
   const copy = appCopy.automations;
+  useEffect(() => { if (automations.length) void hintScheduleLogin(); }, [automations.length]);
 
   return (
     <ManagementPage dataTestClass="automations-view">
@@ -60,10 +64,11 @@ export function AutomationsList({
                 title={automation.title}
                 description={automation.target_label}
                 meta={[
-                  automation.state,
-                  automation.interval_label,
+                  scheduleState(automation.state),
+                  scheduleFrequency(automation),
+                  scheduleNextRun(automation),
                   isAccessMode(automation.access_mode) ? accessLabel(automation.access_mode) : "",
-                ].filter(Boolean).join(" / ")}
+                ].filter(Boolean).join(" · ")}
               />
             </Clickable>
           ))

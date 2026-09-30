@@ -176,12 +176,12 @@ fn command_palette(
                 "subtitle":if place.is_empty() {"스페이스"} else {&place},"route":format!("group:{id}")}));
         }
     }
-    for automation in automations {
-        if matches(&automation.title) {
-            results.push(json!({"id":automation.id,"kind":"automation","title":automation.title,
-                "subtitle":automation.interval_label,"route":format!("automation:{}",automation.id)}));
-        }
-    }
+    results.extend(
+        automations
+            .iter()
+            .filter(|item| matches(&item.title))
+            .map(schedule_result),
+    );
     for section in [
         "General",
         "Appearance",
@@ -241,5 +241,9 @@ fn command_palette(
     json!({"results":results.into_iter().take(30).collect::<Vec<_>>()})
 }
 
-#[cfg(test)]
-mod tests;
+fn schedule_result(automation: &super::automations::AutomationSummary) -> Value {
+    json!({"id":automation.id,"kind":"automation","title":automation.title,
+        "schedule":automation.schedule,"interval_seconds":automation.interval_seconds,
+        "schedule_type":automation.schedule_type,"next_run_at":automation.next_run_at,
+        "route":format!("automation:{}",automation.id)})
+}

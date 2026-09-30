@@ -14,6 +14,8 @@ import {
 import { appCopy } from "@/app/copy.ts";
 import { useAutomationStore } from "@/stores/automationStore";
 import type { AutomationFormField } from "@/stores/automationForm.ts";
+import { scheduleState } from "@/app/scheduleLabels";
+import { ScheduleTimingFields } from "./ScheduleTimingFields";
 import { AutomationAccessField } from "./AutomationAccessField";
 
 interface AutomationFormProps {
@@ -25,7 +27,6 @@ export function AutomationForm({ children }: AutomationFormProps) {
   const title = useAutomationStore((state) => state.title);
   const promptBody = useAutomationStore((state) => state.promptBody);
   const targetSessionId = useAutomationStore((state) => state.targetSessionId);
-  const intervalSeconds = useAutomationStore((state) => state.intervalSeconds);
   const sessionOptions = useAutomationStore((state) => state.sessionOptions);
   const state = useAutomationStore((state) => state.state);
   const saveError = useAutomationStore((state) => state.saveError);
@@ -34,14 +35,6 @@ export function AutomationForm({ children }: AutomationFormProps) {
   const setTargetSessionId = useAutomationStore(
     (state) => state.setTargetSessionId,
   );
-  const setIntervalSeconds = useAutomationStore(
-    (state) => state.setIntervalSeconds,
-  );
-  const intervalSelectValue = [600, 1800, 3600, 7200, 86400].includes(
-    Number(intervalSeconds),
-  )
-    ? String(intervalSeconds)
-    : "custom";
   const copy = appCopy.automations;
   const errorFor = (field: AutomationFormField) =>
     saveError?.field === field ? saveError.message : undefined;
@@ -90,47 +83,8 @@ export function AutomationForm({ children }: AutomationFormProps) {
           </Select>
         </Field>
         <AutomationAccessField />
-        <Field>
-          <FieldLabel>{copy.fields.interval}</FieldLabel>
-          <Select
-            value={intervalSelectValue}
-            onValueChange={(value) =>
-              setIntervalSeconds(value === "custom" ? 900 : Number(value))
-            }
-          >
-            <SelectTrigger aria-invalid={errorFor("interval") ? true : undefined}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="600">10 minutes</SelectItem>
-                <SelectItem value="1800">30 minutes</SelectItem>
-                <SelectItem value="3600">1 hour</SelectItem>
-                <SelectItem value="7200">2 hours</SelectItem>
-                <SelectItem value="86400">24 hours</SelectItem>
-                <SelectItem value="custom">{appCopy.interfacePanels.custom}</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <FieldError>{errorFor("interval")}</FieldError>
-        </Field>
-        {intervalSelectValue === "custom" && (
-          <Field>
-            <FieldLabel>{copy.fields.customMinutes}</FieldLabel>
-            <Input
-              type="number"
-              min="5"
-              max="1440"
-              value={Math.round(Number(intervalSeconds) / 60)}
-              onChange={(event) => {
-                const minutes = Number(event.target.value);
-                if (Number.isFinite(minutes))
-                  setIntervalSeconds(Math.max(5, Math.min(1440, minutes)) * 60);
-              }}
-            />
-          </Field>
-        )}
-        <KeyValueRow label={copy.fields.state} value={state} />
+        <ScheduleTimingFields />
+        <KeyValueRow label={copy.fields.state} value={scheduleState(state)} />
         <FieldError>{errorFor("form")}</FieldError>
         {children}
       </Section>

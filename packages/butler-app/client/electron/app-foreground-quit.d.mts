@@ -10,6 +10,7 @@ export function classifyAppForegroundActiveWork(
   input?: Record<string, unknown>,
 ): AppForegroundActiveWorkSnapshot;
 export function confirmAppForegroundQuit(input: {
+  language?: string;
   snapshot: AppForegroundActiveWorkSnapshot;
   showMessageBox: (options: Record<string, unknown>) => Promise<{ response: number }>;
 }): Promise<boolean>;

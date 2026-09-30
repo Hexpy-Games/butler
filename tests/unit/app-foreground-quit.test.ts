@@ -41,6 +41,7 @@ describe("App foreground quit", () => {
     expect(prompts).toBe(0);
   });
 
+  // test-category: pure-logic
   test("uses destructive intent and honors Cancel", async () => {
     let options: Record<string, unknown> | null = null;
     const confirmed = await confirmAppForegroundQuit({
@@ -51,12 +52,21 @@ describe("App foreground quit", () => {
       },
     });
     expect(confirmed).toBeFalse();
-    expect(APP_FOREGROUND_QUIT_COPY).toContain("예약 작업");
+    expect(APP_FOREGROUND_QUIT_COPY).toContain("schedules");
     expect(APP_FOREGROUND_QUIT_COPY).not.toContain("자동화");
     expect(options).toMatchObject({
       message: APP_FOREGROUND_QUIT_COPY,
-      buttons: ["취소", "Butler 종료"],
+      buttons: ["Cancel", "Quit Butler"],
       cancelId: 0,
+    });
+    await confirmAppForegroundQuit({
+      language: "ko",
+      snapshot: classifyAppForegroundActiveWork({ readFailed: true }),
+      showMessageBox: async (input) => { options = input; return { response: 1 }; },
+    });
+    expect(options).toMatchObject({
+      message: "버틀러를 종료하면 작업과 예약 작업이 중지됩니다.",
+      buttons: ["취소", "버틀러 종료"],
     });
   });
 });

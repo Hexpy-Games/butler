@@ -1,3 +1,4 @@
+import { StartAtLoginField } from "./StartAtLoginField";
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -118,6 +119,7 @@ export function GeneralSettings() {
           checked={draft.desktop_tray_enabled}
           onChange={(desktopTrayEnabled) => update({ desktop_tray_enabled: desktopTrayEnabled }, setSettings)}
         />
+        <StartAtLoginField />
         <RerunSetupField />
       </SettingsSection>
       <SettingsSection

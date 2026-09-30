@@ -4,7 +4,7 @@ use rusqlite::{Connection, OptionalExtension, Row};
 use super::contracts::{AutomationRunSummary, AutomationSummary};
 use crate::gateway::application::storage::{AppStorageCode, AppStorageError};
 
-const COLUMNS: &str = "a.id,a.title,a.prompt_body,a.target_kind,a.target_session_id,a.interval_seconds,a.state,a.next_run_at,a.last_run_at,a.last_run_state,a.last_safe_error_code,a.run_count,a.consecutive_failure_count,a.created_at,a.updated_at,COALESCE(c.title,'Unavailable session'),a.access_mode,a.schedule_type,a.run_at,a.start_at";
+const COLUMNS: &str = "a.id,a.title,a.prompt_body,a.target_kind,a.target_session_id,a.interval_seconds,a.state,a.next_run_at,a.last_run_at,a.last_run_state,a.last_safe_error_code,a.run_count,a.consecutive_failure_count,a.created_at,a.updated_at,COALESCE(c.title,'Unavailable session'),a.access_mode,a.schedule_type,a.run_at,a.start_at,a.schedule_json";
 
 #[derive(Clone)]
 pub(super) struct AutomationRow {
@@ -14,6 +14,7 @@ pub(super) struct AutomationRow {
     pub target_kind: String,
     pub target_id: String,
     pub interval: i64,
+    pub schedule: Option<super::CalendarSchedule>,
     pub schedule_type: String,
     pub run_at: Option<String>,
     pub start_at: Option<String>,
@@ -152,11 +153,6 @@ pub(super) fn run(db: &Connection, id: &str) -> Result<AutomationRunSummary, App
 }
 
 pub(super) fn summary(value: AutomationRow) -> AutomationSummary {
-    let label = if value.schedule_type == "once" {
-        "Once".into()
-    } else {
-        interval_label(value.interval)
-    };
     AutomationSummary {
         id: value.id,
         title: value.title,
@@ -168,7 +164,7 @@ pub(super) fn summary(value: AutomationRow) -> AutomationSummary {
         schedule_type: value.schedule_type,
         run_at: value.run_at,
         start_at: value.start_at,
-        interval_label: label,
+        schedule: value.schedule,
         access_mode: value.access,
         next_run_at: value.next,
         last_run_at: value.last,
@@ -199,6 +195,7 @@ fn row_at(item: &Row<'_>, at: usize) -> rusqlite::Result<AutomationRow> {
         schedule_type: item.get(at + 17)?,
         run_at: item.get(at + 18)?,
         start_at: item.get(at + 19)?,
+        schedule: schedule_at(item, at + 20)?,
         state: item.get(at + 6)?,
         next: item.get(at + 7)?,
         last: item.get(at + 8)?,
@@ -233,13 +230,17 @@ fn run_row(item: &Row<'_>) -> rusqlite::Result<AutomationRunSummary> {
         turn_id: item.get(9)?,
     })
 }
-fn interval_label(seconds: i64) -> String {
-    match seconds {
-        600 => "10 minutes".into(),
-        1800 => "30 minutes".into(),
-        3600 => "1 hour".into(),
-        value if value % 3600 == 0 => format!("{} hours", value / 3600),
-        value if value % 60 == 0 => format!("{} minutes", value / 60),
-        value => format!("{value} seconds"),
-    }
+fn schedule_at(item: &Row<'_>, at: usize) -> rusqlite::Result<Option<super::CalendarSchedule>> {
+    let stored: Option<String> = item.get(at)?;
+    stored
+        .map(|value| {
+            serde_json::from_str(&value).map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    at,
+                    rusqlite::types::Type::Text,
+                    Box::new(error),
+                )
+            })
+        })
+        .transpose()
 }

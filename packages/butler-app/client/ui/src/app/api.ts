@@ -773,6 +773,10 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       targetSessionId: body.target_session_id,
       intervalSeconds: body.interval_seconds,
       accessMode: body.access_mode,
+      schedule: body.schedule,
+      scheduleType: body.schedule_type,
+      runAt: body.run_at,
+      startAt: body.start_at,
     }));
   }
   const automationMatch = url.pathname.match(/^\/automations\/([^/]+)$/);
@@ -789,6 +793,10 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       intervalSeconds: body.interval_seconds,
       state: body.state,
       accessMode: body.access_mode,
+      schedule: body.schedule,
+      scheduleType: body.schedule_type,
+      runAt: body.run_at,
+      startAt: body.start_at,
     }));
   }
   if (automationMatch && method === "DELETE") {

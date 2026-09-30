@@ -549,7 +549,7 @@ export const HARNESS_SUMMARY: SessionSummaryView = {
     {
       automation_id: "auto-1",
       title: "Daily project pulse",
-      interval_label: "1 hour",
+      interval_seconds: 3600, schedule_type: "interval",
     },
   ],
   context_details: {

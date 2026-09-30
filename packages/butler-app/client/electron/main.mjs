@@ -12,6 +12,7 @@ import {
   protocol,
   shell,
 } from "electron";
+import { getDesktopCopy } from "./i18n/desktop-copy.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import { createHmac, randomUUID } from "node:crypto";
 import {
@@ -1143,6 +1144,12 @@ function appInfoView() {
   };
 }
 
+let desktopLanguage = "en";
+async function readDesktopLanguage() {
+  try { desktopLanguage = (await readSetupSettings()).language ?? "en"; } catch { /* Keep the last known app language. */ }
+  return desktopLanguage;
+}
+
 async function readSetupSettings() {
   const response = await appServerFetch("/settings");
   const body = await response.json().catch(() => null);
@@ -1518,6 +1525,7 @@ async function readAppData(path) {
 
 async function loadInitialNativeShellPreferences() {
   const settings = await readAppData("/settings");
+  desktopLanguage = settings?.language ?? desktopLanguage;
   nativeShellPreferences.trayEnabled = usesAppForegroundLifecycle ||
     settings?.desktop_tray_enabled !== false;
 }
@@ -1665,7 +1673,7 @@ async function refreshTrayMenu() {
           click: () => { void runTrayAgentServiceAction("restart"); },
         },
         {
-          label: "Start Butler at Login",
+          label: getDesktopCopy(desktopLanguage).startAtLogin,
           type: "checkbox",
           checked: getButlerLoginItemSettings().openAtLogin,
           click: (item) => {
@@ -2153,9 +2161,10 @@ async function ensureLegacyAppServiceMigration() {
     butlerData: butlerDataRoot,
     platform: process.platform,
     activeWorkSnapshot: readForegroundActiveWorkSnapshot,
-    confirm: (snapshot) => confirmAppForegroundQuit({
+    confirm: async (snapshot) => confirmAppForegroundQuit({
       snapshot,
-      showMessageBox: (options) => dialog.showMessageBox(options),
+      language: await readDesktopLanguage(),
+    showMessageBox: (options) => dialog.showMessageBox(options),
     }),
   }).catch((error) => {
     legacyMigrationPromise = null;
@@ -2316,6 +2325,7 @@ async function runAppUpdateQuit(quitAndInstall) {
     confirmQuit: async (snapshot) =>
       await confirmAppForegroundQuit({
         snapshot,
+        language: await readDesktopLanguage(),
         showMessageBox: (options) => dialog.showMessageBox(options),
       }),
     stopForUpdate: async (snapshot) => {
@@ -2459,6 +2469,16 @@ ipcMain.handle("butler:set-native-shell-preferences", async (_event, input) => {
   return {
     desktop_tray_enabled: nativeShellPreferences.trayEnabled,
   };
+});
+
+ipcMain.handle("butler:get-login-settings", () => ({
+  openAtLogin: getButlerLoginItemSettings().openAtLogin === true,
+}));
+ipcMain.handle("butler:set-login-settings", async (_event, input) => {
+  if (typeof input?.openAtLogin !== "boolean") throw new Error("invalid_login_settings");
+  setButlerLoginItemSettings(input.openAtLogin);
+  await refreshTrayMenu();
+  return { openAtLogin: getButlerLoginItemSettings().openAtLogin === true };
 });
 
 ipcMain.handle("butler:get-native-notification-status", async () => {
@@ -2690,6 +2710,7 @@ async function confirmForegroundQuitIfNeeded() {
   preconfirmedE2eQuit = false;
   const confirmed = preconfirmed || await confirmAppForegroundQuit({
     snapshot,
+    language: await readDesktopLanguage(),
     showMessageBox: (options) => dialog.showMessageBox(options),
   });
   foregroundQuitSnapshot = confirmed ? snapshot : null;

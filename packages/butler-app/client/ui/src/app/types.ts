@@ -1524,7 +1524,10 @@ export interface SessionArtifactSummary {
 export interface AutomationTargetSummary {
   automation_id: string;
   title: string;
-  interval_label: string;
+  interval_seconds?: number;
+  schedule_type?: string;
+  schedule?: CalendarSchedule | null;
+  next_run_at?: string | null;
 }
 
 export type WorkerActivityPhase =
@@ -1680,6 +1683,9 @@ export type AppView =
   | { kind: "project-dashboard"; projectId: string };
 
 export interface CommandPaletteResult {
+  schedule?: CalendarSchedule | null;
+  schedule_type?: string;
+  interval_seconds?: number;
   id: string;
   kind: "chat" | "project" | "project_session" | "group" | "automation" | "settings";
   title: string;
@@ -1692,7 +1698,10 @@ export interface AutomationSummary {
   title: string;
   target_label: string;
   state: string;
-  interval_label: string;
+  interval_seconds?: number;
+  schedule_type?: string;
+  schedule?: CalendarSchedule | null;
+  next_run_at?: string | null;
   /** The access the schedule's runs get; it never changes the target conversation's mode. */
   access_mode: AccessMode;
 }
@@ -1807,3 +1816,10 @@ export interface AuthorityApprovalProjection {
 export type IconElement = ReactElement<{ size?: number | "xs" | "sm" | "md" | "lg" | "xl" | "2xl" }>;
 export type ChildrenProps = { children?: ReactNode };
 import type { InterfaceContentReferences, InterfaceTextReference } from "../../../../../butler-i18n/src/index.ts";
+
+export interface CalendarSchedule {
+  kind: "daily" | "weekly";
+  time: string;
+  weekdays: number[];
+  tz: string;
+}

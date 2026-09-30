@@ -8,7 +8,9 @@ pub struct CreateAutomationRequest {
     pub title: String,
     pub prompt_body: String,
     pub target_session_id: String,
+    #[serde(default)]
     pub interval_seconds: i64,
+    pub schedule: Option<CalendarSchedule>,
     pub schedule_type: Option<String>,
     pub run_at: Option<String>,
     pub start_at: Option<String>,
@@ -23,6 +25,7 @@ pub struct UpdateAutomationRequest {
     pub prompt_body: Option<String>,
     pub target_session_id: Option<String>,
     pub interval_seconds: Option<i64>,
+    pub schedule: Option<CalendarSchedule>,
     pub schedule_type: Option<String>,
     pub run_at: Option<String>,
     pub start_at: Option<String>,
@@ -45,7 +48,7 @@ pub struct AutomationSummary {
     pub run_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub start_at: Option<String>,
-    pub interval_label: String,
+    pub schedule: Option<CalendarSchedule>,
     /// The access the schedule's runs get, whatever the target conversation's mode.
     pub access_mode: AccessMode,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -104,4 +107,14 @@ pub struct AutomationRunListView {
 pub struct AutomationRunResult {
     pub automation: AutomationSummary,
     pub run: AutomationRunSummary,
+}
+
+/// Local wall-clock recurrence. Weekdays use ISO numbering (Monday = 1).
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct CalendarSchedule {
+    pub kind: String,
+    pub time: String,
+    #[serde(default)]
+    pub weekdays: Vec<u8>,
+    pub tz: String,
 }
