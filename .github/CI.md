@@ -92,3 +92,11 @@ cannot restore that PR's cache. Keep cold and warm results separate and include
 runner queue/startup time in the gate critical path. The integration-output
 cache proof also confirmed identical complete nextest inventories after
 restoration (local binary discovery: 3.51s missing outputs, 0.46s restored).
+
+After deferring non-gate PR builds,
+[run 36691615695](https://github.com/Hexpy-Games/butler/actions/runs/36691615695)
+started all nine E2E selections within five seconds of the archive finishing.
+Its gate passed in 6m31s: the workspace caches had been evicted, so the build
+restored only dependencies, verified 2,550 source files without a saved timestamp
+snapshot, and repopulated its workspace cache. Runner ordering fixes queue
+contention; it cannot promise a warm build after GitHub cache quota eviction.
