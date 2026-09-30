@@ -129,6 +129,24 @@ pub(crate) enum AppStorageError {
 }
 
 impl AppStorageError {
+    pub(crate) fn is_busy(&self) -> bool {
+        matches!(self, Self::Sqlite { source } if matches!(
+            source.sqlite_error_code(),
+            Some(rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked)
+        ))
+    }
+
+    /// Normal close has no lower-level cause; a disconnected lane does.
+    pub(crate) fn is_stopping(&self) -> bool {
+        matches!(
+            self,
+            Self::Detected {
+                code: AppStorageCode::AppSqliteOwnerClosed,
+                ..
+            }
+        )
+    }
+
     pub(crate) fn new(code: AppStorageCode, message: impl Into<String>) -> Self {
         Self::Detected {
             code,
