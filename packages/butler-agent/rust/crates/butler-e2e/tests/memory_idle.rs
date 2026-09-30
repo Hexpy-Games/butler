@@ -222,13 +222,8 @@ async fn mem_idle_catches_changed_source_without_restart() -> Result<(), Harness
     let setup = Setup::new("MEM-IDLE-CHANGE")?.fixture(Fixture::Empty);
     let graph = initialize_empty(&setup.sandbox.data)?;
     let s = setup.start().await?;
-    // Operator maintenance completes a catch-up pass even on an empty source.
-    let cycle = s
-        .agent
-        .cli_async(&["cognition", "memory", "maintain", "--json"])
-        .await?
-        .json()?;
-    assert_eq!(cycle["ok"], true, "{cycle}");
+    // Let the service's initial empty-source poll settle before changing it.
+    // Memory maintenance is service-owned; the CLI no longer exposes it.
     tokio::time::sleep(Duration::from_secs(3)).await;
     assert_eq!(recovery_observations(&graph), 0);
     seed_imported_message(&s.sandbox.data);

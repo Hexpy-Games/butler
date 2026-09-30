@@ -79,6 +79,12 @@ impl Launch {
             port: 0,
             token,
             env: vec![
+                // Child commands clear inherited environment. The product's
+                // fixed App/scheduler clock is enabled only on the stub tier.
+                (
+                    "BUTLER_E2E_TIER".into(),
+                    super::config::nonempty("BUTLER_E2E_TIER").unwrap_or_else(|| "stub".into()),
+                ),
                 ("BUTLER_APP_LOCAL_AUTH_REQUIRED".into(), "1".into()),
                 (
                     "BUTLER_APP_LOCAL_AUTH_FILE".into(),

@@ -274,6 +274,8 @@ async fn onb_02_provider_401_fails_without_retry_storm() -> Result<(), HarnessEr
     butler_e2e::gate!();
     use butler_e2e::e2e::faults::{Fault, Transform};
     let s = Setup::new("ONB-02-401")?
+        // After the daily jobs' due time, on a day independent of the host clock.
+        .env("BUTLER_E2E_APP_NOW", "2026-09-27T12:00:00Z")
         .cassette("ONB-02")
         .replay_only()
         .start()
