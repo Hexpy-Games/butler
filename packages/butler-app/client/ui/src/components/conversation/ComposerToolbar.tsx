@@ -1,4 +1,5 @@
 import { useAppLocale } from "@/app/copy.ts";
+import { memo } from "react";
 import {
   ComposerCardToolbar,
   ComposerCardToolbarSpacer,
@@ -18,7 +19,7 @@ import { ComposerPlanModeBadge } from "./ComposerPlanModeBadge";
 import { ComposerWorkspaceSelect } from "./ComposerWorkspaceSelect";
 import { imageRefusalLabel } from "./composerImagePolicy";
 
-export function ComposerToolbar() {
+export const ComposerToolbar = memo(function ComposerToolbar() {
   useAppLocale();
   const isSending = useComposerStore((store) => store.isSending);
   const activeTurn = useComposerStore((store) => store.activeTurn);
@@ -64,4 +65,4 @@ export function ComposerToolbar() {
       )}
     </ComposerCardToolbar>
   );
-}
+});

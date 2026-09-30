@@ -11,6 +11,7 @@ import {
   Typo,
 } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
+import type { SessionViewStatus } from "@/app/types.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { TurnActivityPending } from "@/components/conversation/TurnActivityPending.tsx";
 import { SessionObserverTimeline } from "./SessionObserverTimeline.tsx";
@@ -79,7 +80,7 @@ export function SessionObserverDialog() {
             ) : null}
             {!view?.messages.length && !view?.active_turn &&
                 !view?.waiting_for_children ? (
-              <Typo.Caption>{appCopy.conversation.work.pendingLabel}</Typo.Caption>
+              <Typo.Caption>{emptyObserverLabel(view?.status)}</Typo.Caption>
             ) : null}
           </Stack>
         </ScrollArea>
@@ -120,4 +121,13 @@ export function SessionObserverDialog() {
       </DialogContent>
     </Dialog>
   );
+}
+
+function emptyObserverLabel(status?: SessionViewStatus): string {
+  switch (status) {
+    case "delivered": return appCopy.interfaceStatus.delivered;
+    case "failed": return appCopy.interfaceStatus.failedPast;
+    case "cancelled": return appCopy.interfaceStatus.cancelled;
+    default: return appCopy.conversation.work.pendingLabel;
+  }
 }

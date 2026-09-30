@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { mergeSessionViewWindow } from "./sessionViewWindow.ts";
 import { chromeEnvironment } from "./chromeEnvironment.ts";
 import {
   currentAdaptiveMode,
@@ -649,6 +650,7 @@ function upsertSessionView(
   views: Record<string, SessionView>,
   view: SessionView,
 ): Record<string, SessionView> {
+  view = mergeSessionViewWindow(views[view.session_id], view);
   const normalized = view.messages.length > view.cursors.messages
     ? {
         ...view,
@@ -817,6 +819,7 @@ function applySessionView(
   view: SessionView,
 ): ButlerStore | Partial<ButlerStore> {
   const sessionViews = upsertSessionView(state.sessionViews, view);
+  view = sessionViews[view.session_id] ?? view;
   if (state.activeChatId !== view.session_id) {
     return sessionViews === state.sessionViews ? state : { sessionViews };
   }
