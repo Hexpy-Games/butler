@@ -621,8 +621,6 @@ export interface SecurityView {
   lan_urls: string[];
   /** Extra host names the gateway answers (tunnels, reverse proxies). */
   allowed_hosts: string[];
-  /** Null when local auth is off; `created_at` null when the token file has none. */
-  connection_code: { masked: string; created_at: string | null } | null;
 }
 
 export interface ModelFallbackSettingsView {

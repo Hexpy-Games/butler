@@ -87,7 +87,8 @@ test("model settings stay on the Models page and old links still resolve", () =>
   // hosts sit in the page's collapsed Advanced disclosure.
   expect(settingsPageSchema.security.map((section) => [section.id, section.optional === true])).toEqual([
     ["remote-access", false],
-    ["connection-code", true],
+    ["device-pairing", true],
+    ["paired-devices", true],
     ["security-advanced", true],
     ["allowed-hosts", true],
   ]);
