@@ -137,23 +137,23 @@ jobs:
         include:
           - job_name: "E2E stub (Linux x64 1/3)"
             partition: "1/3"
-            filterset: "not test(/^ins_02_|^ins_14_/)"
+            filterset: "not test(/^ins_/)"
             idle_disk: true
           - job_name: "E2E stub (Linux x64 2/3)"
             partition: "2/3"
-            filterset: "not test(/^ins_02_|^ins_14_/)"
+            filterset: "not test(/^ins_/)"
             idle_disk: false
           - job_name: "E2E stub (Linux x64 3/3)"
             partition: "3/3"
-            filterset: "not test(/^ins_02_|^ins_14_/)"
+            filterset: "not test(/^ins_/)"
             idle_disk: false
-          - job_name: "E2E install (Linux x64, ins_02)"
-            partition: ""
-            filterset: "test(/^ins_02_/)"
+          - job_name: "E2E install (Linux x64 1/2)"
+            partition: "1/2"
+            filterset: "test(/^ins_/)"
             idle_disk: false
-          - job_name: "E2E install (Linux x64, ins_14)"
-            partition: ""
-            filterset: "test(/^ins_14_/)"
+          - job_name: "E2E install (Linux x64 2/2)"
+            partition: "2/2"
+            filterset: "test(/^ins_/)"
             idle_disk: false
     steps:
       - uses: actions/checkout@v4
