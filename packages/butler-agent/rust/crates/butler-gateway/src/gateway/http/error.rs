@@ -62,7 +62,17 @@ impl From<GatewayApplicationError> for HttpError {
                 code,
                 message,
             },
-            GatewayApplicationError::Internal { .. } => Self::Internal,
+            GatewayApplicationError::Internal { source } => {
+                eprintln!("[gateway] internal request failure");
+                let mut cause = source
+                    .as_deref()
+                    .map(|error| error as &dyn std::error::Error);
+                while let Some(error) = cause {
+                    eprintln!("[gateway] caused by: {error}");
+                    cause = error.source();
+                }
+                Self::Internal
+            }
         }
     }
 }

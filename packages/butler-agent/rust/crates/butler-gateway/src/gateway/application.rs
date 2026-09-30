@@ -445,10 +445,6 @@ fn skill_error(error: butler_runtime::skills::SkillError) -> GatewayApplicationE
         _ => GatewayApplicationError::internal(),
     }
 }
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn app_error(error: AppStorageError) -> GatewayApplicationError {
     match error.code() {
         "automation_interval_invalid"
@@ -476,7 +472,7 @@ fn app_error(error: AppStorageError) -> GatewayApplicationError {
         | "queued_message_not_found"
         | "turn_not_found" => public(404, error.code(), &error.detail()),
         "turn_control_resolution_invalid" => public(500, error.code(), &error.detail()),
-        _ => GatewayApplicationError::internal(),
+        _ => GatewayApplicationError::internal_from(error),
     }
 }
 
