@@ -20,28 +20,39 @@ const rangeOptions = () => [
 
 type UsageRange = ReturnType<typeof rangeOptions>[number]["id"];
 
+/** The last view of each range, so reopening the page shows it at once while it refreshes. */
+const lastViews = new Map<UsageRange, UsageMonitorView>();
+
+export function resetUsageSettingsCache(): void {
+  lastViews.clear();
+}
+
 export function UsageSettings() {
   useAppLocale();
   const [range, setRange] = useState<UsageRange>("24h");
-  const [view, setView] = useState<UsageMonitorView | null>(null);
+  const [views, setViews] = useState<Partial<Record<UsageRange, UsageMonitorView>>>(() => Object.fromEntries(lastViews));
+  const view = views[range] ?? null;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const selected = rangeOptions().find((item) => item.id === range)!;
 
   const refresh = useCallback(async () => {
+    const asked = range;
     const params = new URLSearchParams();
     if (selected.hours !== null) params.set("since_hours", String(selected.hours));
     setLoading(true);
     setError(false);
     try {
       const query = params.toString();
-      setView(await api<UsageMonitorView>(query ? `/usage-monitor?${query}` : "/usage-monitor"));
+      const next = await api<UsageMonitorView>(query ? `/usage-monitor?${query}` : "/usage-monitor");
+      lastViews.set(asked, next);
+      setViews((previous) => ({ ...previous, [asked]: next }));
     } catch {
       setError(true);
     } finally {
       setLoading(false);
     }
-  }, [selected.hours]);
+  }, [range, selected.hours]);
 
   useEffect(() => {
     void refresh();

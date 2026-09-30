@@ -3,7 +3,7 @@ import type { ContextDetailsView } from "@/app/types.ts";
 import { Button, formatUsageTokens, Inline, ProgressMeter, Stack, Typo, UsageSummaryRows } from "@/butler-ds";
 import { conversationUsageSummary } from "./conversationUsage";
 import type { UsageAuthMode } from "./usageAuthMode";
-import { useConversationUsage, type UsageLoader } from "./useConversationUsage";
+import { useConversationUsage, type QuotaLoader, type UsageLoader } from "./useConversationUsage";
 
 interface ContextUsagePopoverProps {
   context?: ContextDetailsView | null;
@@ -11,6 +11,7 @@ interface ContextUsagePopoverProps {
   sessionId: string | null;
   onDetails?: () => void;
   load?: UsageLoader;
+  loadQuota?: QuotaLoader;
 }
 
 function contextRevision(context: ContextDetailsView): string {
@@ -18,7 +19,7 @@ function contextRevision(context: ContextDetailsView): string {
 }
 
 /** Context meter, this conversation's usage for the model's auth mode, and Details. */
-export function ContextUsagePopover({ context, mode, sessionId, onDetails, load }: ContextUsagePopoverProps) {
+export function ContextUsagePopover({ context, mode, sessionId, onDetails, load, loadQuota }: ContextUsagePopoverProps) {
   useAppLocale();
   const tracked = mode === "subscription" || mode === "api_key";
   const usage = useConversationUsage({
@@ -26,6 +27,8 @@ export function ContextUsagePopover({ context, mode, sessionId, onDetails, load 
     open: Boolean(context),
     revision: context ? contextRevision(context) : "",
     load,
+    providerId: mode === "subscription" ? context?.provider_id ?? null : null,
+    loadQuota,
   });
   if (!context) return null;
   const percent = Math.round(Math.max(0, Math.min(1, context.ratio)) * 100);

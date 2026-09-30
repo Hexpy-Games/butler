@@ -8,6 +8,7 @@ mod conversation_metrics;
 mod cycle_metrics;
 mod developer_log;
 mod install;
+mod log_tail;
 mod mcp_tasks;
 mod metric_files;
 mod observability;
@@ -47,8 +48,8 @@ pub use provider_quota::{
 };
 pub use service_readiness::ServiceReadiness;
 pub use status_summary::{
-    UsageMonitorSources, read_context_tool, read_metrics_status, read_prompt_cache_telemetry,
-    read_usage_monitor, read_usage_tool, render_metrics_status, render_status_context,
+    UsageMonitor, UsageMonitorSources, read_context_tool, read_metrics_status,
+    read_prompt_cache_telemetry, read_usage_tool, render_metrics_status, render_status_context,
     tail_operational_metric_events,
 };
 pub use update::{

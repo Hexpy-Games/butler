@@ -1370,6 +1370,7 @@ export interface AppCopy {
       updateComponent: string;
       upToDate: string;
       updateChecking: string;
+      updateUnavailable: string;
       updateApplying: string;
     };
     placeholders: {

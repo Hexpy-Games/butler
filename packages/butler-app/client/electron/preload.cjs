@@ -1165,6 +1165,10 @@ const butlerApp = Object.freeze({
     const query = params.toString();
     return requestJson(query ? `/usage-monitor?${query}` : "/usage-monitor");
   },
+  getProviderQuota: ({ providerId }) => {
+    const params = new URLSearchParams({ provider_id: providerId });
+    return requestJson(`/provider-quota?${params.toString()}`);
+  },
   searchCommandPalette: ({ query = "" } = {}) => {
     const params = new URLSearchParams({ query });
     return requestJson(`/command-palette?${params.toString()}`);

@@ -247,6 +247,7 @@ fn usage_query(parameters: &std::collections::HashMap<String, String>) -> AppUsa
         .filter(|hours| hours.is_finite() && *hours > 0.0);
     AppUsageMonitorQuery {
         session_id,
+        runtime_session_id: None,
         since_ts: hours
             .map(|hours| chrono::Utc::now().timestamp_millis() as f64 - hours * 3_600_000.0),
     }
