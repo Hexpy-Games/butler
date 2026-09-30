@@ -69,6 +69,13 @@ runs:
         echo "available=0" >> "$GITHUB_OUTPUT"
         echo "::notice title=INS-14 SKIPPED::no systemd --user manager on this runner"
 
+    - name: Restore agent binary permissions
+      if: inputs.agent-binary != ''
+      shell: bash
+      env:
+        AGENT_BINARY: ${{ inputs.agent-binary }}
+      run: chmod +x "$AGENT_BINARY"
+
     - name: Run the stub tier
       shell: bash
       working-directory: packages/butler-agent/rust
