@@ -3,6 +3,8 @@ use std::sync::Arc;
 use butler_models::models::ModelConfigurationClock;
 use butler_turn::btcc::BtccError;
 
+use crate::host::app::gateway_lifecycle::{AppGatewayLifecycle, GatewayControlServer};
+use crate::host::service::ingress::IngressDispatcher;
 use crate::host::{AgentRuntime, SystemIdentity};
 
 pub(super) async fn deliver_parent_results(
@@ -107,4 +109,30 @@ pub(super) async fn open_writer(
             Err(io(error))
         }
     }
+}
+
+/// Stops lifecycle admission, then drains App and inbound producers while
+/// BTCC and transcript publication remain live.
+pub(super) async fn close_serving(
+    control: GatewayControlServer,
+    gateway: &AppGatewayLifecycle,
+    dispatcher: &IngressDispatcher,
+    progress: &crate::host::ProgressPublisher,
+) -> Result<(), BtccError> {
+    control.stop_accepting();
+    let admission = gateway.stop_accepting().await;
+    let turns = dispatcher
+        .close()
+        .await
+        .map_err(|e| failure(e.code, e.message));
+    let control_close = control.close().await.map_err(|message| {
+        failure("gateway_control_close_failed", message.to_string()).with_source(message)
+    });
+    let publication = progress.reconcile().await.map(|_| ());
+    let app_close = gateway.close().await;
+    admission
+        .and(turns)
+        .and(control_close)
+        .and(publication)
+        .and(app_close)
 }
