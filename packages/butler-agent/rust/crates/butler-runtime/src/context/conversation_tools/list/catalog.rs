@@ -27,6 +27,7 @@ pub(super) fn read(data_root: &Path, ids: &[String]) -> (HashMap<String, Label>,
     };
     let operation = || -> rusqlite::Result<()> {
         let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+        db.busy_timeout(std::time::Duration::from_secs(5))?;
         let columns = db
             .prepare("PRAGMA table_info(chats)")?
             .query_map([], |row| row.get::<_, String>(1))?

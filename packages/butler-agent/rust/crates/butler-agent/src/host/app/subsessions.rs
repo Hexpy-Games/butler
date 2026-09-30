@@ -36,6 +36,41 @@ impl AppSubsessions {
 }
 
 impl AppSubsessionPort for AppSubsessions {
+    fn activity_cursor_parents(
+        &self,
+        worker: String,
+        history: bool,
+        parent: Option<String>,
+    ) -> ApplicationFuture<Option<Vec<String>>> {
+        let repository = self.service.repository();
+        Box::pin(async move {
+            repository
+                .activity_cursor_parents(worker, history, parent)
+                .await
+                .map(Some)
+                .map_err(GatewayApplicationError::internal_from)
+        })
+    }
+
+    fn activity_page(
+        &self,
+        history: bool,
+        after: Option<(String, String, String)>,
+        parent: Option<String>,
+        limit: usize,
+    ) -> ApplicationFuture<Option<butler_gateway::gateway::AppWorkerActivitySourcePage>> {
+        let repository = self.service.repository();
+        Box::pin(async move {
+            let (children, after) = repository
+                .activity_page(history, after, parent, limit)
+                .await
+                .map_err(GatewayApplicationError::internal_from)?;
+            Ok(Some(butler_gateway::gateway::AppWorkerActivitySourcePage {
+                children,
+                after,
+            }))
+        })
+    }
     fn projection(
         &self,
         session_id: String,

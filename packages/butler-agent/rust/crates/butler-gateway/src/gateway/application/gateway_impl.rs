@@ -1,11 +1,8 @@
 use super::*;
 
 impl GatewayApplication for AppApplication {
-    fn get_usage_monitor(&self, mut query: AppUsageMonitorQuery) -> ApplicationFuture<Value> {
-        // A session's runtime id is derived from its id (`read::session`
-        // does the same), so no session lookup stands in the way.
-        query.runtime_session_id = query.session_id.as_deref().map(app_session_hint);
-        self.dependencies.monitoring.usage_monitor(query)
+    fn get_usage_monitor(&self, query: AppUsageMonitorQuery) -> ApplicationFuture<Value> {
+        self.usage_monitor_query(query)
     }
     fn get_provider_quota(
         &self,
@@ -18,6 +15,12 @@ impl GatewayApplication for AppApplication {
     }
     fn work_status(&self) -> ApplicationFuture<Vec<AppBoundWorkStatusFact>> {
         self.dependencies.monitoring.work_status()
+    }
+    fn worker_activity_page(
+        &self,
+        query: AppWorkerActivityQuery,
+    ) -> ApplicationFuture<Option<Value>> {
+        super::monitoring::activity::read_owned(self.clone_handle(), query)
     }
     fn work_status_conversation(
         &self,

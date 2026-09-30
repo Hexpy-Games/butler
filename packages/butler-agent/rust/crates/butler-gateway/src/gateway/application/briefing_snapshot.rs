@@ -27,6 +27,12 @@ pub fn read_new_chat_briefing_settings(database_path: &Path) -> Value {
     else {
         return Value::Object(Map::new());
     };
+    if database
+        .busy_timeout(std::time::Duration::from_secs(5))
+        .is_err()
+    {
+        return Value::Object(Map::new());
+    }
     let settings = read_settings(&database);
     drop(database);
     settings
@@ -40,6 +46,7 @@ pub fn read_new_chat_briefing_projects(
     }
     let database = Connection::open_with_flags(database_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(AppNewChatBriefingReadError)?;
+    database.busy_timeout(std::time::Duration::from_secs(5))?;
     let projects = read_projects(&database)?;
     drop(database);
     Ok(Some(projects))

@@ -36,7 +36,11 @@ pub(super) async fn process(
     }
     let now = (input.clock)();
     // The claim takes the write lease; look first, without it.
-    if !input.probe.vector_work(&generation.graph_path, &now)? {
+    if !input
+        .probe
+        .vector_work(&generation.graph_path, &now)
+        .await?
+    {
         return Ok(false);
     }
     let units = {

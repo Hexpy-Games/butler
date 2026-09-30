@@ -93,7 +93,10 @@ const WORK_STATUS_CANDIDATES: &str = "SELECT work.work_id, work.session_id, work
        WHERE blocker.work_id = work.work_id AND blocker.status = 'unresolved'), \
      (SELECT COUNT(*) FROM btcc_guided_effects effect \
        WHERE effect.work_id = work.work_id) \
-     FROM btcc_guided_works work \
+     FROM (SELECT * FROM btcc_guided_works \
+     WHERE status != 'abandoned' \
+     ORDER BY CASE WHEN status IN ('open', 'blocked') THEN 0 ELSE 1 END, \
+       updated_at DESC LIMIT 24) work \
      LEFT JOIN btcc_guided_turn_work_bindings binding \
        ON binding.rowid = (SELECT candidate.rowid \
          FROM btcc_guided_turn_work_bindings candidate \

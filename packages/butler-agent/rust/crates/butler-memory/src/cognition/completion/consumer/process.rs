@@ -24,6 +24,7 @@ use crate::coordination::{CognitionWaitClass, CognitionWriteCoordinator};
 use crate::lenient::{Arg, Obj};
 use butler_turn::conversation::{ConversationSourceReader, conversation_store_path};
 
+#[derive(Clone)]
 pub(super) struct Input {
     pub data_root: PathBuf,
     pub environment: CognitionPathEnvironment,
@@ -41,7 +42,7 @@ pub(super) struct Input {
 
 /// The head of `queue/sync.jsonl`, read leniently: every field keeps what
 /// was sent so mismatches and dead letters behave as on the raw request.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 pub(super) struct SyncRequest {
     #[serde(default)]
     schema_version: Arg<String>,
@@ -52,7 +53,7 @@ pub(super) struct SyncRequest {
 }
 
 /// The source a sync request asks to register.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 pub(super) struct SyncSource {
     #[serde(default)]
     pub kind: Arg<String>,
@@ -104,7 +105,8 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
     if input.shutdown.is_cancelled() {
         return Ok(MemorySyncPoll::Deferred);
     }
-    if paused(&input)? {
+    let owned = input.clone();
+    if super::blocking::run(move || paused(&owned)).await? {
         return Ok(MemorySyncPoll::Deferred);
     }
     if input.target.is_some() {
@@ -124,7 +126,8 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
     let mut processed = false;
     let mut queued = false;
     let mut queue_error = None;
-    match super::super::queue::peek(&root) {
+    let queue_root = root.clone();
+    match super::blocking::run(move || super::super::queue::peek(&queue_root)).await {
         Ok(Some(entry)) => {
             queued = true;
             let request: SyncRequest = crate::lenient::view(&entry);
@@ -188,8 +191,17 @@ async fn process_entry(
     if kind != Some("conversation_turn") {
         return Err(error(CognitionCode::MemorySyncSourceUnavailable));
     }
-    let Some(observation) = super::super::observation::read_verified(root, job_id) else {
-        return reject_invalid(root, request, job_id, &(input.clock)());
+    let observation_root = root.to_owned();
+    let observation_id = job_id.to_owned();
+    let observation = super::blocking::run(move || {
+        Ok(super::super::observation::read_verified(
+            &observation_root,
+            &observation_id,
+        ))
+    })
+    .await?;
+    let Some(observation) = observation else {
+        return reject_invalid(root, request, job_id, &(input.clock)()).await;
     };
     if !source
         .session_id
@@ -199,7 +211,7 @@ async fn process_entry(
             .outcome_generation
             .same_json(&observation.outcome_generation)
     {
-        return reject_invalid(root, request, job_id, &(input.clock)());
+        return reject_invalid(root, request, job_id, &(input.clock)()).await;
     }
     let invalid = || error(CognitionCode::MemorySyncEntryInvalid);
     let session = source.session_id.valid().ok_or_else(invalid)?;
@@ -221,7 +233,11 @@ async fn register_turn(
     job_id: &str,
     (session, turn, generation): (&str, &str, f64),
 ) -> CognitionResult<bool> {
-    let handle = resolve_active_generation(&input.data_root, &input.environment)?;
+    let owned = input.clone();
+    let handle = super::blocking::run(move || {
+        resolve_active_generation(&owned.data_root, &owned.environment)
+    })
+    .await?;
     let registered = input
         .registration
         .register_conversation_source(RegisterConversationSourceInput {
@@ -244,13 +260,13 @@ async fn register_turn(
     let registered = match registered {
         Ok(outcome) => outcome,
         Err(error) if error.code() == "memory_source_ineligible" => {
-            return super::super::queue::ack(root, job_id);
+            return super::blocking::ack(root, job_id).await;
         }
         Err(error) => {
             if input.shutdown.is_cancelled() {
                 return Ok(false);
             }
-            let _ = dead_letter(root, request, error.code(), &(input.clock)());
+            let _ = dead_letter(root, request, error.code(), &(input.clock)()).await;
             return Ok(false);
         }
     };
@@ -258,27 +274,40 @@ async fn register_turn(
         ConversationRegistrationOutcome::Registered(progress)
         | ConversationRegistrationOutcome::Replayed(progress) => progress,
         ConversationRegistrationOutcome::InternalControlSuperseded => {
-            return super::super::queue::ack(root, job_id);
+            return super::blocking::ack(root, job_id).await;
         }
     };
     if !progress.source.is_complete() {
         return Ok(false);
     }
-    super::super::queue::ack(root, job_id)
+    super::blocking::ack(root, job_id).await
 }
 
-fn reject_invalid(
+async fn reject_invalid(
     root: &std::path::Path,
     request: &SyncRequest,
     job_id: &str,
     now: &str,
 ) -> CognitionResult<bool> {
-    let _ = dead_letter(root, request, "completion_observation_invalid", now);
-    super::super::queue::ack(root, job_id)
+    let _ = dead_letter(root, request, "completion_observation_invalid", now).await;
+    super::blocking::ack(root, job_id).await
 }
 
 /// Appends the request to `queue/dead-letter.jsonl` with `reason`.
-fn dead_letter(
+async fn dead_letter(
+    root: &std::path::Path,
+    request: &SyncRequest,
+    reason: &str,
+    now: &str,
+) -> CognitionResult<()> {
+    let root = root.to_owned();
+    let request = request.clone();
+    let reason = reason.to_owned();
+    let now = now.to_owned();
+    super::blocking::run(move || dead_letter_sync(&root, &request, &reason, &now)).await
+}
+
+fn dead_letter_sync(
     root: &std::path::Path,
     request: &SyncRequest,
     reason: &str,
@@ -322,14 +351,15 @@ pub(super) async fn project_next(input: &Input) -> CognitionResult<bool> {
     if input.shutdown.is_cancelled() {
         return Ok(false);
     }
-    let handle = match resolve_input_generation(input) {
+    let owned = input.clone();
+    let handle = match super::blocking::run(move || resolve_input_generation(&owned)).await {
         Ok(handle) => handle,
         Err(error) if error.code() == "memory_generation_unavailable" => return Ok(false),
         Err(error) => return Err(error),
     };
     // Recovery takes the write lease, so it runs only when a window is held
     // by an owner that may have died.
-    if input.probe.recoverable_windows(&handle.graph_path)? {
+    if input.probe.recoverable_windows(&handle.graph_path).await? {
         input
             .registration
             .recover_semantic_windows(
@@ -347,12 +377,15 @@ pub(super) async fn project_next(input: &Input) -> CognitionResult<bool> {
     }
     let pending = input
         .probe
-        .pending_job(&handle.graph_path, &(input.clock)())?;
+        .pending_job(&handle.graph_path, &(input.clock)())
+        .await?;
     let Some(pending) = pending else {
         return Ok(false);
     };
     let job_id = pending.job_id.clone();
-    let notice = pending_notice(input, &handle, pending)?;
+    let owned = input.clone();
+    let generation = handle.clone();
+    let notice = super::blocking::run(move || pending_notice(&owned, &generation, pending)).await?;
     let projected = input
         .registration
         .project_semantic_window(ProjectSemanticWindowInput {
