@@ -1,0 +1,31 @@
+---
+import { Typo } from "../../../ds/components/Typo";
+import { BrandMark } from "../../../ds/web/BrandMark/BrandMark";
+import pageStyles from "../../../ds/web/DocPage/DocPage.module.css";
+import DocsLayout from "../../../ds/web/DocsLayout/DocsLayout.astro";
+import { DocsHome } from "../../../ds/web/DocsHome/DocsHome";
+import styles from "../../../ds/web/DocsHome/DocsHome.module.css";
+import { alternates, loadNav } from "../../../site/docs";
+import { docsRoot } from "../../../site/nav";
+
+const title = "Butler manual";
+const description = "Manage Butler from a terminal and connect from another computer.";
+const nav = await loadNav("en", "");
+---
+<DocsLayout
+  alternates={await alternates(null)}
+  description={description}
+  homeHref={docsRoot(import.meta.env.BASE_URL, "en")}
+  locale="en"
+  nav={nav}
+  title={title}
+>
+  <article class={pageStyles.article}>
+    <header class={styles.hero} data-mark-hover>
+      <span class={styles.heroMark}><BrandMark client:load intro size="hero" /></span>
+      <Typo.H1>{title}</Typo.H1>
+      <p class={pageStyles.lead}>{description}</p>
+    </header>
+    <DocsHome plannedBadge="Planned" plannedReason="Documentation in progress" sections={nav} />
+  </article>
+</DocsLayout>

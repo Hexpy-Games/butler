@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { isPreviewRelease } from "../../packages/butler-app/scripts/release/preview-policy.ts";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
@@ -269,11 +270,11 @@ function verifyMacCodeSignature(appPath: string, label = "Mac App"): void {
 }
 
 function verifyMacStapling(path: string, label: string): void {
-  const validate = spawnSync("xcrun", ["stapler", "validate", path], { encoding: "utf8" });
-  if (validate.status !== 0) {
-    throw new Error(
-      `${label} notarization staple validation failed: ${validate.stderr.trim() || validate.stdout.trim() || "unknown error"}`,
-    );
+  if (!isPreviewRelease()) {
+    const validate = spawnSync("xcrun", ["stapler", "validate", path], { encoding: "utf8" });
+    if (validate.status !== 0) {
+      throw new Error(`${label} notarization staple validation failed: ${validate.stderr.trim() || validate.stdout.trim() || "unknown error"}`);
+    }
   }
   // Team ID, hardened runtime, timestamp and the Gatekeeper assessment.
   const trust = spawnSync(

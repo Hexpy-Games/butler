@@ -81,7 +81,9 @@ jobs:
         timeout-minutes: 60
         run: |
           deploy/macos/sign-and-notarize.sh agent "$BUTLER_NATIVE_AGENT_PAYLOAD/bin/butler-agent"
-          echo "BUTLER_AGENT_NOTARIZED=1" >> "$GITHUB_ENV"
+          notarized=1
+          if [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-preview\..+$ ]]; then notarized=0; fi
+          echo "BUTLER_AGENT_NOTARIZED=$notarized" >> "$GITHUB_ENV"
 
       - name: Select the versioned Agent archive path
         run: |
@@ -118,6 +120,9 @@ jobs:
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
           notes_file=".github/releases/${tag}.md"
+          if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-preview\..+$ ]]; then
+            notes_file=".github/releases/${tag%%-preview.*}-preview.md"
+          fi
           notes_args=(--notes "Butler Agent release $tag")
           if [ -f "$notes_file" ]; then
             notes_args=(--notes-file "$notes_file")
@@ -443,7 +448,7 @@ jobs:
           case "$version" in *-*) dist_tag=next ;; esac
           name="$(node -p 'require("./package.json").name')"
           if [ "$dist_tag" = next ] && ! npm view "$name" dist-tags.latest >/dev/null 2>&1; then
-            printf '%s has no stable release yet; publish a stable version first so `latest` is not a preview.\n' "$name" >&2
+            printf '%s has no stable release yet; publish a stable version first so latest is not a preview.\n' "$name" >&2
             exit 1
           fi
           npm version "$version" --no-git-tag-version --allow-same-version

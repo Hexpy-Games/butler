@@ -11,7 +11,7 @@
 #
 # Driven by env. Without BUTLER_SIGN_IDENTITY every command except setup and
 # cleanup logs one line and exits 0, so PR CI and local builds stay ad-hoc.
-#   BUTLER_SIGN_IDENTITY  certificate SHA-1 or name ("-" = ad-hoc, self-test only)
+#   BUTLER_SIGN_IDENTITY  certificate SHA-1 or name ("-" = ad-hoc preview or self-test)
 #   BUTLER_SIGN_KEYCHAIN  keychain holding the identity (optional)
 #   BUTLER_SIGN_TEAM_ID   expected Team ID on every signature (optional)
 #   BUTLER_NOTARY_KEY_PATH / BUTLER_NOTARY_KEY_ID / BUTLER_NOTARY_ISSUER_ID
@@ -27,12 +27,14 @@ key_dir=$tmp_dir/butler-signing-keys
 log() { printf 'sign: %s\n' "$*"; }
 die() { printf 'sign: error: %s\n' "$*" >&2; exit 1; }
 enabled() { [ -n "${BUTLER_SIGN_IDENTITY:-}" ]; }
+preview() { [[ ${GITHUB_REF_NAME:-} =~ ^v[0-9]+\.[0-9]+\.[0-9]+-preview\..+$ ]]; }
 adhoc() { [ "${BUTLER_SIGN_IDENTITY:-}" = "-" ]; }
 
 # ---- CI credentials ---------------------------------------------------------
 
 setup() {
   [ "${GITHUB_ACTIONS:-}" = true ] || die "setup runs only in GitHub Actions"
+  if preview; then setup_preview; return 0; fi
   local names="APPLE_DEVELOPER_ID_P12_BASE64 APPLE_DEVELOPER_ID_P12_PASSWORD APPLE_API_KEY_ID APPLE_API_ISSUER_ID APPLE_API_KEY_P8 APPLE_TEAM_ID"
   local set_count=0 name
   for name in $names; do
@@ -44,7 +46,31 @@ setup() {
   fi
   [ "$set_count" -eq 6 ] || die "signing secrets missing or partial ($set_count/6 set)"
 
-  local pw kc="$default_keychain" p12 g2 identity key g2_note=""
+  "$here/sign-and-notarize.sh" setup-certificate
+  local key
+  key=$key_dir/AuthKey.p8
+  if printf '%s' "$APPLE_API_KEY_P8" | grep -q -- '-----BEGIN'; then
+    printf '%s\n' "$APPLE_API_KEY_P8" > "$key"
+  else
+    printf '%s' "$APPLE_API_KEY_P8" | base64 --decode > "$key"
+  fi
+  xcrun notarytool history --key "$key" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID" >/dev/null ||
+    die "notary API key rejected by App Store Connect"
+  {
+    echo "BUTLER_NOTARY_KEY_PATH=$key"
+    echo "BUTLER_NOTARY_KEY_ID=$APPLE_API_KEY_ID"
+    echo "BUTLER_NOTARY_ISSUER_ID=$APPLE_API_ISSUER_ID"
+  } >> "$GITHUB_ENV"
+}
+
+# Separate process preserves errexit even when preview setup catches its failure.
+setup_certificate() {
+  [ "${GITHUB_ACTIONS:-}" = true ] || die "setup runs only in GitHub Actions"
+  if [ -z "${APPLE_DEVELOPER_ID_P12_BASE64:-}" ] ||
+    [ -z "${APPLE_DEVELOPER_ID_P12_PASSWORD:-}" ] || [ -z "${APPLE_TEAM_ID:-}" ]; then
+    die "certificate secrets missing or partial"
+  fi
+  local pw kc="$default_keychain" p12 g2 identity g2_note=""
   pw=$(openssl rand -base64 24)
   echo "::add-mask::$pw"
   umask 077
@@ -73,24 +99,27 @@ setup() {
     awk -v team="($APPLE_TEAM_ID)" '/Developer ID Application/ && index($0, team) {print $2; exit}')
   [ -n "$identity" ] || die "no Developer ID Application identity for the configured team$g2_note"
 
-  key=$key_dir/AuthKey.p8
-  if printf '%s' "$APPLE_API_KEY_P8" | grep -q -- '-----BEGIN'; then
-    printf '%s\n' "$APPLE_API_KEY_P8" > "$key"
-  else
-    printf '%s' "$APPLE_API_KEY_P8" | base64 --decode > "$key"
-  fi
-  xcrun notarytool history --key "$key" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID" >/dev/null ||
-    die "notary API key rejected by App Store Connect"
   {
     echo "BUTLER_SIGN_IDENTITY=$identity"
     echo "BUTLER_SIGN_KEYCHAIN=$kc"
     echo "BUTLER_SIGN_TEAM_ID=$APPLE_TEAM_ID"
-    echo "BUTLER_NOTARY_KEY_PATH=$key"
-    echo "BUTLER_NOTARY_KEY_ID=$APPLE_API_KEY_ID"
-    echo "BUTLER_NOTARY_ISSUER_ID=$APPLE_API_ISSUER_ID"
     echo "BUTLER_APP_REQUIRE_PRODUCTION_SIGNING=1"
   } >> "$GITHUB_ENV"
   log "signing identity ready for team $APPLE_TEAM_ID"
+}
+
+setup_preview() {
+  if ! "$here/sign-and-notarize.sh" setup-certificate; then
+    cleanup
+    {
+      echo "BUTLER_SIGN_IDENTITY=-"
+      echo "BUTLER_SIGN_KEYCHAIN="
+      echo "BUTLER_SIGN_TEAM_ID="
+      echo "BUTLER_APP_REQUIRE_PRODUCTION_SIGNING=1"
+    } >> "$GITHUB_ENV"
+    log "certificate setup failed; unofficial preview uses ad-hoc signing"
+  fi
+  log "unofficial preview: notarization disabled"
 }
 
 cleanup() {
@@ -207,6 +236,7 @@ sign_dmg() {
 # ---- notarization -----------------------------------------------------------
 
 notarize() {
+  if preview; then log "unofficial preview: skipping notarization and stapling"; return 0; fi
   local path=${1%/} work sub out status id i
   if [ -z "${BUTLER_NOTARY_KEY_PATH:-}" ] || [ -z "${BUTLER_NOTARY_KEY_ID:-}" ] ||
     [ -z "${BUTLER_NOTARY_ISSUER_ID:-}" ]; then
@@ -270,12 +300,14 @@ verify_app() {
   local app=${1%/}
   codesign --verify --strict --deep --verbose=2 "$app" || die "app failed deep verification"
   assert_signed "$app"
+  if preview; then return 0; fi
   xcrun stapler validate "$app" || die "app is not stapled"
   gatekeeper -t exec "$app" || die "Gatekeeper does not accept the app as notarized"
 }
 
 verify_dmg() {
   BUTLER_SIGN_NO_RUNTIME=1 assert_signed "$1"
+  if preview; then return 0; fi
   xcrun stapler validate "$1" || die "dmg is not stapled"
   gatekeeper -t open --context context:primary-signature "$1" || die "Gatekeeper does not accept the dmg as notarized"
 }
@@ -285,6 +317,7 @@ verify_dmg() {
 verify_agent() {
   local i
   assert_signed "$1"
+  if preview; then return 0; fi
   for i in 1 2 3; do
     if codesign --verify -R='=notarized' --check-notarization "$1"; then return 0; fi
     sleep 15
@@ -298,7 +331,7 @@ agent() {
   assert_signed "$1"
   notarize "$1"
   verify_agent "$1"
-  log "agent signed and notarized"
+  log "agent signing and release verification complete"
 }
 
 # ---- dispatch ---------------------------------------------------------------
@@ -307,9 +340,13 @@ command=${1:-}
 [ -n "$command" ] || die "usage: $(basename "$0") <command> [path]"
 shift
 case "$command" in
+  setup-certificate) setup_certificate; exit 0 ;;
   setup) setup; exit 0 ;;
   cleanup) cleanup; exit 0 ;;
 esac
+if [ "${BUTLER_SIGN_REQUIRED:-}" = 1 ] && ! preview; then
+  if ! enabled || adhoc; then die "stable releases require Developer ID signing"; fi
+fi
 if ! enabled; then
   log "no BUTLER_SIGN_IDENTITY; skipping $command (ad-hoc build)"
   exit 0

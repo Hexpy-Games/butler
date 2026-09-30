@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# test-category: security
 # PR-safe check of sign-and-notarize.sh: no-identity mode is a no-op, and the
 # inside-out order produces a valid deep signature on a synthetic Electron-shaped
 # bundle (ad-hoc identity "-", no keychain, no network). macOS only.
@@ -40,4 +41,21 @@ codesign -d --verbose=2 "$app/Contents/Resources/bundled-agent/bin/butler-agent"
   grep -q 'Identifier=com.hexpy.butler.agent' || { echo "agent identifier missing" >&2; exit 1; }
 codesign -d --entitlements - "$app" 2>&1 | grep -q allow-jit || { echo "app entitlements missing" >&2; exit 1; }
 [ "$(stat -f %Lp "$app/Contents/Resources/bundled-agent/bin/butler-agent")" = 555 ] || { echo "agent mode not restored" >&2; exit 1; }
+# Unofficial previews still verify real signatures, without an online ticket.
+export GITHUB_REF_NAME=v0.1.0-preview.1 BUTLER_SIGN_IDENTITY=-
+"$script" agent "$app/Contents/Resources/bundled-agent/bin/butler-agent"
+"$script" verify-app "$app"
+python3 - "$script" "$app/Contents/Resources/bundled-agent/bin/butler-agent" <<'PYTEST'
+import importlib.util
+import os
+from pathlib import Path
+import sys
+packager = Path(sys.argv[1]).parents[2] / "packages/butler-agent/rust/scripts/package-standalone-agent.py"
+spec = importlib.util.spec_from_file_location("packager", packager)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+assert module.binary_signing(Path(sys.argv[2])) == {"teamId": "", "notarized": False}
+os.environ["GITHUB_REF_NAME"] = "v0.1.0"
+assert module.binary_signing(Path(sys.argv[2])) is None
+PYTEST
 echo "selftest: ok"
