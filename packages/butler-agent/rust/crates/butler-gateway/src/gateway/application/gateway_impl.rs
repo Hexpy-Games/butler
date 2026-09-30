@@ -221,7 +221,7 @@ impl GatewayApplication for AppApplication {
     }
     fn dispatch_due_automations(&self) -> ApplicationFuture<AutomationRunListView> {
         let this = self.clone_handle();
-        Box::pin(async move { this.dispatch_due_owned().await })
+        Box::pin(async move { this.dispatch_due_request().await })
     }
     fn list_automation_runs(&self, id: String) -> ApplicationFuture<AutomationRunListView> {
         let this = self.clone_handle();

@@ -8,6 +8,7 @@ mod tuning;
 pub(super) use cached::CachedSql;
 pub(super) use error::{AppStorageCode, AppStorageError};
 use std::{
+    panic::{AssertUnwindSafe, catch_unwind},
     path::PathBuf,
     sync::{Arc, Weak},
     thread::JoinHandle,
@@ -234,7 +235,16 @@ fn run_connection_lane(
         return close_connection(connection);
     }
     while let Some(operation) = receiver.blocking_recv() {
-        operation(&mut connection);
+        if let Err(payload) = catch_unwind(AssertUnwindSafe(|| operation(&mut connection))) {
+            super::panic_isolation::report("app-sqlite", payload.as_ref());
+            // RAII transactions roll back while unwinding. Raw BEGINs must
+            // also be cleared before another operation uses this connection.
+            if !connection.is_autocommit()
+                && let Err(error) = connection.execute_batch("ROLLBACK")
+            {
+                eprintln!("[app-sqlite] panic rollback failed: {error}");
+            }
+        }
     }
     // Statistics are an optimization: a failure must not fail the close.
     let _best_effort = tuning::optimize(&connection);
