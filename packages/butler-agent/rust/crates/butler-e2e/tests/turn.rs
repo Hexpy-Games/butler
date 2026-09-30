@@ -132,7 +132,12 @@ async fn turn_01_reply_is_delivered_persisted_and_survives_restart() -> Result<(
             event["type"] == "message.created" && event["payload"]["message"]["role"] == "assistant"
         })
         .await?;
-    tokio::time::sleep(Duration::from_millis(300)).await;
+    live.wait_for(Duration::from_secs(10), |event| {
+        event["type"] == "turn.state_changed"
+            && event_turn_id(event) == Some(turn_id.as_str())
+            && event["payload"]["turn"]["state"] == "delivered"
+    })
+    .await?;
     assert_delivered_once_in_order(&live.snapshot(), &turn_id);
 
     let messages = s.gw.messages("general").await?;
@@ -256,11 +261,16 @@ async fn turn_02_duplicate_submit_is_idempotent() -> Result<(), HarnessError> {
     // One of the two may answer with the queued entry; the turn is found via /turns.
     let deadline = Instant::now() + Duration::from_secs(20);
     let turn_id = loop {
-        if let Some(turn) = s.gw.turns("general").await?.first() {
-            break butler_e2e::e2e::gateway::turn_id_of(turn)
-                .unwrap_or_default()
+        let turns = s.gw.turns("general").await?;
+        if turns.len() == 1 {
+            break butler_e2e::e2e::gateway::turn_id_of(&turns[0])
+                .ok_or_else(|| butler_e2e::e2e::harness_error("turn has no id"))?
                 .to_owned();
         }
+        assert!(
+            turns.is_empty(),
+            "duplicate submit created multiple turns: {turns:?}"
+        );
         assert!(Instant::now() < deadline, "no turn created");
         tokio::time::sleep(Duration::from_millis(50)).await;
     };
@@ -282,11 +292,25 @@ async fn turn_02_duplicate_submit_is_idempotent() -> Result<(), HarnessError> {
         changed.text
     );
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-    let messages = s.gw.messages("general").await?;
+    let settle_deadline = Instant::now() + Duration::from_secs(10);
+    let (messages, turns) = loop {
+        let messages = s.gw.messages("general").await?;
+        let turns = s.gw.turns("general").await?;
+        if by_role(&messages, "user").len() == 1
+            && by_role(&messages, "assistant").len() == 1
+            && turns.len() == 1
+        {
+            break (messages, turns);
+        }
+        assert!(
+            Instant::now() < settle_deadline,
+            "idempotent submit did not settle to one turn: messages={messages:?}, turns={turns:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    };
     assert_eq!(by_role(&messages, "user").len(), 1, "{messages:?}");
     assert_eq!(by_role(&messages, "assistant").len(), 1, "{messages:?}");
-    assert_eq!(s.gw.turns("general").await?.len(), 1);
+    assert_eq!(turns.len(), 1);
     s.finish().await
 }
 

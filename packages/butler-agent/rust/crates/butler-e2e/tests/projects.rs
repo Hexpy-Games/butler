@@ -325,12 +325,9 @@ fn plan_file(s: &Scenario, project: &str) -> std::path::PathBuf {
         .join("project-ledger/projects")
         .join(project)
         .join("plans");
-    std::fs::read_dir(&plans)
-        .unwrap()
-        .flatten()
-        .next()
-        .unwrap()
-        .path()
+    let mut entries: Vec<_> = std::fs::read_dir(&plans).unwrap().flatten().collect();
+    entries.sort_by_key(std::fs::DirEntry::file_name);
+    entries.first().unwrap().path()
 }
 
 async fn materials(s: &Scenario, project: &str) -> Result<Value, HarnessError> {

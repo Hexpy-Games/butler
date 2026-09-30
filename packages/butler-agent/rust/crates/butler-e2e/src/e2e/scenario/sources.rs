@@ -14,6 +14,14 @@ use super::SANITIZATION;
 /// A provider source plus the credential the agent runs with.
 type SourceSetup = (Option<Provider>, ModelChoice, Option<(String, Credential)>);
 
+pub(super) fn fixture_app_now(env: &[(String, String)]) -> String {
+    env.iter()
+        .rev()
+        .find(|(key, _)| key == "BUTLER_E2E_APP_NOW")
+        .map(|(_, value)| value.clone())
+        .unwrap_or_else(|| fixtures::FIXTURE_TIME.to_owned())
+}
+
 /// Live mode: the agent talks to the real provider directly.
 pub(super) fn live_source(
     live_provider: &LiveProvider,

@@ -59,13 +59,15 @@ async fn assert_refused(
 
 /// The gateway's LAN listeners (every bind address but the loopback one).
 fn lan_listeners(view: &Value) -> Vec<String> {
-    view["bind_addresses"]
+    let mut listeners: Vec<_> = view["bind_addresses"]
         .as_array()
         .unwrap()
         .iter()
         .skip(1)
         .map(|address| address.as_str().unwrap().to_owned())
-        .collect()
+        .collect();
+    listeners.sort();
+    listeners
 }
 
 /// Waits until nothing accepts connections on `address`.
@@ -323,14 +325,16 @@ fn assert_lan_port(view: &Value, port: u16) {
 }
 
 fn lan_addresses() -> Vec<std::net::IpAddr> {
-    butler_platform::network::external_addresses()
+    let mut addresses: Vec<_> = butler_platform::network::external_addresses()
         .unwrap_or_default()
         .into_iter()
         .filter(|ip| match ip.to_canonical() {
             std::net::IpAddr::V4(ip) => ip.is_private() || ip.is_link_local(),
             std::net::IpAddr::V6(ip) => ip.segments()[0] & 0xfe00 == 0xfc00,
         })
-        .collect()
+        .collect();
+    addresses.sort();
+    addresses
 }
 
 /// Fixed configured port, including saved exposure at initial admission and

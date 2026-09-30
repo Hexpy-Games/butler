@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 use super::executable;
 use super::gateway::Gateway;
 use super::sandbox::Sandbox;
+use super::stop_intent;
 use super::{HarnessError, harness_error};
 
 mod app_supervisor;
@@ -267,7 +268,12 @@ impl Agent {
                 format!("http://127.0.0.1:{}", self.launch.port),
                 self.launch.token.clone(),
             );
-            if !self.launch.token.is_empty() && gateway.healthy().await {
+            let instance_ready = self.pid().is_some_and(|pid| {
+                stop_intent::instance_record(&self.launch.data).is_some_and(|record| {
+                    stop_intent::instance_ready(&record) && record["pid"] == pid
+                })
+            });
+            if !self.launch.token.is_empty() && gateway.healthy().await && instance_ready {
                 self.remember_instance();
                 return Ok(gateway);
             }
@@ -278,13 +284,13 @@ impl Agent {
             {
                 let tail = process::log_tail(&log);
                 return Err(harness_error(format!(
-                    "agent exited ({status}) before its gateway was ready (port={}):\n{tail}",
+                    "agent exited ({status}) before its gateway and instance record were ready (port={}):\n{tail}",
                     self.launch.port
                 )));
             }
-            if Instant::now() > deadline {
+            if Instant::now() >= deadline {
                 return Err(harness_error(format!(
-                    "agent gateway not ready within 90s (pid={:?}, port={}):\n{}",
+                    "agent gateway and instance record not ready within 90s (pid={:?}, port={}):\n{}",
                     self.pid(),
                     self.launch.port,
                     process::log_tail(&log)

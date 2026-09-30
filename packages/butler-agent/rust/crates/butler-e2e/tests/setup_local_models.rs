@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::agent::free_port;
-use butler_e2e::e2e::events::LiveEvents;
+use butler_e2e::e2e::events::{LiveEvents, event_turn_id};
 use butler_e2e::e2e::fake_servers::{ChatBehavior, FakeServer, LOCAL_MODEL};
 use butler_e2e::e2e::fixtures;
 use butler_e2e::e2e::gateway::turn_state;
@@ -33,7 +33,7 @@ async fn with_local_server(id: &str, ollama: &FakeServer) -> Result<Scenario, Ha
         .env("BUTLER_OLLAMA_BASE_URL", ollama.base_url.clone())
         .env("BUTLER_LM_STUDIO_BASE_URL", closed);
     fixtures::onboarding_complete(&setup.sandbox.data)?;
-    fixtures::scheduler_ran_today(&setup.sandbox.data)?;
+    fixtures::scheduler_ran_today(&setup.sandbox.data, fixtures::FIXTURE_TIME)?;
     setup.start().await
 }
 
@@ -244,6 +244,7 @@ async fn setup_04_stop_during_a_stream_retry_keeps_no_cut_text() -> Result<(), H
     let server = FakeServer::local_models(behavior).await?;
     let s = with_local_server("SETUP-04-RETRY-STOP", &server).await?;
     use_local_model(&s, &server.base_url).await?;
+    let live = LiveEvents::subscribe(&s.gw, 0).await?;
     let accepted =
         s.gw.say("general", "Say something about local models.")
             .await?;
@@ -261,8 +262,16 @@ async fn setup_04_stop_during_a_stream_retry_keeps_no_cut_text() -> Result<(), H
         assert!(Instant::now() < deadline, "the cut stream was not retried");
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    // Let the discard reach the App before stopping.
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    live.wait_for(
+        deadline.saturating_duration_since(Instant::now()),
+        |event| {
+            event["type"] == "agent.turn_event"
+                && event_turn_id(event) == Some(turn_id.as_str())
+                && event["payload"]["event"]["kind"] == "model.stream.completed"
+                && event["payload"]["event"]["payload"]["status"] == "discarded"
+        },
+    )
+    .await?;
     let cancel =
         s.gw.post(&format!("/turns/{turn_id}/cancel"), json!({}))
             .await?;
