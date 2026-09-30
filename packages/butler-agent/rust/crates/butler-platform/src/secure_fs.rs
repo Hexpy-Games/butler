@@ -9,6 +9,9 @@
 //! returns `None`. Renames that replace a file retry on Windows while
 //! another process briefly holds it ([`rename`]).
 
+mod fault;
+pub use fault::{checkpoint as fault_checkpoint, write as fault_write};
+
 use std::fs::{self, DirBuilder, File, Metadata, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};

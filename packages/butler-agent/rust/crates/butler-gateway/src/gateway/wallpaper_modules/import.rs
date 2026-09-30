@@ -228,6 +228,7 @@ pub(crate) fn install(
                 .try_for_each(|(name, bytes)| write_private(&staging.join(name), bytes))
         })
         .and_then(|()| keep_thumbnail(&target, &staging, unpacked))
+        .and_then(|()| secure_fs::sync_directory(&staging).unwrap_or(Ok(())))
         .and_then(|()| swap_in(root, id, &staging, unique));
     if written.is_err() {
         let _ = fs::remove_dir_all(&staging);
@@ -240,7 +241,7 @@ pub(crate) fn remove(root: &Path, id: &str, unique: &str) -> Result<bool, Gatewa
     if !user::is_folder_name(id) {
         return Ok(false);
     }
-    let trash = root.join(format!(".trash-{unique}"));
+    let trash = root.join(format!(".removed-{unique}"));
     match fs::rename(root.join(id), &trash) {
         Ok(()) => discard(&trash)
             .map(|()| true)
@@ -250,8 +251,9 @@ pub(crate) fn remove(root: &Path, id: &str, unique: &str) -> Result<bool, Gatewa
     }
 }
 
-/// Deletes the `.import-*` and `.trash-*` folders an interrupted install or
-/// removal left under `root`. Best effort.
+/// Recovers interrupted replacements before deleting abandoned staging. The
+/// manifest supplies the id even for legacy `.trash-<unique>` names.
+/// Caller holds the module write lock.
 pub(crate) fn sweep(root: &Path) {
     let Ok(entries) = fs::read_dir(root) else {
         return;
@@ -259,9 +261,45 @@ pub(crate) fn sweep(root: &Path) {
     for entry in entries.flatten() {
         let name = entry.file_name();
         let name = name.to_string_lossy();
-        if name.starts_with(".import-") || name.starts_with(".trash-") {
+        if name.starts_with(".removed-") || name.starts_with(".import-") {
             let _ = discard(&entry.path());
+        } else if name.starts_with(".trash-") {
+            recover_copy(root, &entry.path());
         }
+    }
+}
+
+fn recover_copy(root: &Path, path: &Path) {
+    let id = user::limited(&path.join(MANIFEST), MAX_MANIFEST_BYTES)
+        .ok()
+        .and_then(|read| match read {
+            FileRead::Bytes(bytes) => serde_json::from_slice::<serde_json::Value>(&bytes).ok(),
+            _ => None,
+        })
+        .and_then(|manifest| {
+            manifest
+                .get("id")
+                .and_then(|id| id.as_str())
+                .map(str::to_owned)
+        })
+        .filter(|id| user::is_folder_name(id));
+    let Some(id) = id else {
+        return;
+    };
+    match fs::symlink_metadata(root.join(&id)) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            let _ = secure_fs::rename(path, &root.join(&id));
+        }
+        Ok(_) => {
+            // An orphan has no ordering journal. Never replace an existing
+            // previous copy with a potentially older abandoned transaction.
+            if root.join(PREVIOUS).join(&id).exists() {
+                let _ = discard(path);
+            } else {
+                let _ = keep_previous(root, &id, path);
+            }
+        }
+        Err(_) => {}
     }
 }
 
@@ -270,7 +308,9 @@ fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let mut options = fs::OpenOptions::new();
     options.write(true).create_new(true);
     let _ = secure_fs::owner_only(&mut options);
-    options.open(path)?.write_all(bytes)
+    let mut file = options.open(path)?;
+    file.write_all(bytes)?;
+    file.sync_all()
 }
 
 /// Copies the installed module's `thumbnail.png` into `staging` when the new
@@ -289,38 +329,80 @@ fn keep_thumbnail(target: &Path, staging: &Path, unpacked: &Unpacked) -> io::Res
     }
 }
 
-/// Moves `staging` to `<root>/<id>`, setting an existing copy aside first
-/// (restored if the move fails, else kept as `.previous/<id>`).
+/// Exchanges complete trees where supported. The fallback leaves a recoverable
+/// `.trash-*` journal between renames and rolls back ordinary I/O failures.
 fn swap_in(root: &Path, id: &str, staging: &Path, unique: &str) -> io::Result<()> {
     let target = root.join(id);
+    if !target.exists() {
+        secure_fs::rename(staging, &target)?;
+        return secure_fs::sync_directory(root).unwrap_or(Ok(()));
+    }
     let aside = root.join(format!(".trash-{unique}"));
-    let replaced = match fs::rename(&target, &aside) {
-        Ok(()) => true,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => false,
-        Err(error) => return Err(error),
-    };
-    if let Err(error) = fs::rename(staging, &target) {
-        if replaced {
-            let _ = fs::rename(&aside, &target);
+    let old = match secure_fs::exchange_directories(staging, &target) {
+        Ok(()) => {
+            // Give the exchanged old tree a recovery name before retention.
+            // If this rename fails the current tree is still complete.
+            if secure_fs::rename(staging, &aside).is_err() {
+                return Ok(());
+            }
+            &aside
         }
-        return Err(error);
-    }
-    if replaced && keep_previous(root, id, &aside).is_err() {
-        let _ = discard(&aside);
-    }
+        Err(secure_fs::ExchangeError::Unsupported) => {
+            secure_fs::rename(&target, &aside)?;
+            if let Err(error) = secure_fs::sync_directory(root)
+                .unwrap_or(Ok(()))
+                .and_then(|()| secure_fs::rename(staging, &target))
+            {
+                let _ = secure_fs::rename(&aside, &target);
+                return Err(error);
+            }
+            &aside
+        }
+        Err(error) => return Err(io::Error::other(error)),
+    };
+    // Publication succeeded. A failed retention leaves the complete old copy
+    // for sweep, rather than deleting the only recoverable previous version.
+    let _ = secure_fs::sync_directory(root).unwrap_or(Ok(()));
+    let _ = keep_previous(root, id, old);
     Ok(())
 }
 
-/// Makes `aside` the one kept previous copy of module `id`.
+/// Publishes the new previous copy before discarding the older previous copy.
 fn keep_previous(root: &Path, id: &str, aside: &Path) -> io::Result<()> {
     let previous = root.join(PREVIOUS);
     secure_fs::create_private_dir_all(&previous)?;
     let kept = previous.join(id);
-    match discard(&kept) {
-        Err(error) if error.kind() != io::ErrorKind::NotFound => return Err(error),
-        _ => {}
+    secure_fs::fault_checkpoint("wallpaper_previous")?;
+    if !kept.exists() {
+        secure_fs::rename(aside, &kept)?;
+        return sync_retention(root, &previous);
     }
-    fs::rename(aside, kept)
+    match secure_fs::exchange_directories(aside, &kept) {
+        Ok(()) => {
+            sync_retention(root, &previous)?;
+            discard(aside)
+        }
+        Err(secure_fs::ExchangeError::Unsupported) => {
+            let retired = previous.join(format!(".retired-{id}"));
+            if retired.exists() {
+                sync_retention(root, &previous)?;
+                discard(&retired)?;
+            }
+            secure_fs::rename(&kept, &retired)?;
+            if let Err(error) = secure_fs::rename(aside, &kept) {
+                let _ = secure_fs::rename(&retired, &kept);
+                return Err(error);
+            }
+            sync_retention(root, &previous)?;
+            discard(&retired)
+        }
+        Err(error) => Err(io::Error::other(error)),
+    }
+}
+
+fn sync_retention(root: &Path, previous: &Path) -> io::Result<()> {
+    secure_fs::sync_directory(root).unwrap_or(Ok(()))?;
+    secure_fs::sync_directory(previous).unwrap_or(Ok(()))
 }
 
 /// Deletes a folder, or the link or file in its place, without following it.

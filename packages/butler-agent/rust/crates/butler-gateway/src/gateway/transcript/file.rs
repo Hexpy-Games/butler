@@ -25,21 +25,25 @@ pub(super) fn append(
         })
         .collect();
     let path = directory.join(format!("{name}.jsonl"));
+    let mut bytes = Vec::new();
     for event in events {
-        let mut line = serde_json::to_vec(event).map_err(|error| {
+        serde_json::to_writer(&mut bytes, event).map_err(|error| {
             TranscriptError::new(
                 TranscriptCode::TranscriptEventJsonInvalid,
                 error.to_string(),
             )
             .with_source(error)
         })?;
-        line.push(b'\n');
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-            .map_err(io_error)?;
-        file.write_all(&line).map_err(io_error)?;
+        bytes.push(b'\n');
+    }
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(io_error)?;
+    file.write_all(&bytes).map_err(io_error)?;
+    if events.len() > 1 {
+        butler_platform::secure_fs::fault_checkpoint("transcript_pair").map_err(io_error)?;
     }
     Ok(())
 }

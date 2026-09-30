@@ -311,7 +311,7 @@ impl AppApplication {
         self.automation_runs.initialize(self.clone_handle()).await?;
         automation_scheduler.initialize(self.clone_handle())?;
         self.recover_turn_cancellations().await?;
-        self.watch_wallpaper_modules();
+        self.watch_wallpaper_modules().await;
         // Failed authority retries remain durable for the next startup.
         let _ = self.dependencies.authority_handoff.retry_decided().await;
         self.setup_readiness.start(

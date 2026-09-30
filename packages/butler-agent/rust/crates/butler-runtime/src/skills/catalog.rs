@@ -217,7 +217,9 @@ pub(super) fn load(root: &Path) -> Result<Vec<SkillDefinition>, SkillError> {
     let mut skills = Vec::new();
     for entry in entries {
         let entry = entry.map_err(SkillError::Io)?;
-        if !entry.file_type().map_err(SkillError::Io)?.is_dir() {
+        if entry.file_name().to_string_lossy().starts_with('.')
+            || !entry.file_type().map_err(SkillError::Io)?.is_dir()
+        {
             continue;
         }
         if let Some(skill) = read(&entry.path().join("SKILL.md"))? {
@@ -288,7 +290,7 @@ fn summaries(
         .collect()
 }
 
-fn read(path: &Path) -> Result<Option<SkillDefinition>, SkillError> {
+pub(super) fn read(path: &Path) -> Result<Option<SkillDefinition>, SkillError> {
     let content = match fs::read_to_string(path) {
         Ok(content) => content,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
