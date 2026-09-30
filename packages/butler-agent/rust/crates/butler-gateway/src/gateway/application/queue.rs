@@ -2,7 +2,12 @@
 
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::{events, events::EventSubscribers, service, storage::AppStorageError};
+use super::{
+    events,
+    events::EventSubscribers,
+    service,
+    storage::{AppStorageError, CachedSql},
+};
 use crate::gateway::application::storage::AppStorageCode;
 
 pub(super) const SESSION_QUEUE_LEASE_MILLIS: i64 = 60_000;
@@ -46,7 +51,7 @@ pub(super) fn existing_control_resolution(
     input_identity_digest: &str,
 ) -> Result<Option<String>, AppStorageError> {
     let existing = connection
-        .query_row(
+        .query_row_cached(
             "SELECT input_identity_digest,control_resolution_json FROM session_queued_messages \
              WHERE chat_id=?1 AND client_message_id=?2",
             params![chat_id, client_message_id],
@@ -84,7 +89,7 @@ pub(super) fn pause(
     now: &str,
 ) -> Result<(), AppStorageError> {
     connection
-        .execute(
+        .execute_cached(
             "INSERT INTO session_queue_pauses(chat_id,turn_id,created_at) VALUES(?1,?2,?3) \
              ON CONFLICT(chat_id) DO UPDATE SET turn_id=excluded.turn_id,created_at=excluded.created_at",
             params![chat_id, turn_id, now],
@@ -98,7 +103,7 @@ pub(super) fn reserve(
     input: &QueueReservation,
 ) -> Result<bool, AppStorageError> {
     let existing = connection
-        .query_row(
+        .query_row_cached(
             "SELECT input_identity_digest FROM session_queued_messages \
              WHERE chat_id = ?1 AND client_message_id = ?2",
             params![input.chat_id, input.client_message_id],
@@ -116,7 +121,7 @@ pub(super) fn reserve(
         ));
     }
     connection
-        .execute(
+        .execute_cached(
             "INSERT INTO session_queued_messages (\
                id, chat_id, text, client_message_id, input_identity_digest, \
                control_resolution_json, controls_json, attachments_json, content_parts_json, \
@@ -142,7 +147,7 @@ pub(super) fn reserve(
     // New user input (a send, a queue add or a retry) resumes a queue paused
     // by Stop; the messages queued before it run first (see `claim`).
     connection
-        .execute(
+        .execute_cached(
             "DELETE FROM session_queue_pauses WHERE chat_id=?1",
             [&input.chat_id],
         )
@@ -170,7 +175,7 @@ pub(super) fn claim(
     subscribers: &EventSubscribers,
 ) -> Result<Option<QueueClaim>, AppStorageError> {
     let changed = connection
-        .execute(
+        .execute_cached(
             "UPDATE session_queued_messages SET state='dispatching', claim_id=?1, \
                claim_owner=?2, claimed_at=?3, lease_expires_at=?4, updated_at=?3 \
              WHERE id=?5 AND chat_id=?6 AND state='queued' AND NOT EXISTS (\
@@ -214,7 +219,7 @@ pub(super) fn link_dispatch(
     updated_at: &str,
 ) -> Result<bool, AppStorageError> {
     let changed = connection
-        .execute(
+        .execute_cached(
             "UPDATE session_queued_messages SET dispatched_message_id=?1, turn_id=?2, updated_at=?3 \
              WHERE id=?4 AND chat_id=?5 AND state='dispatching' AND claim_id=?6",
             params![
@@ -237,7 +242,7 @@ pub(super) fn claim_status(
     claim_id: Option<&str>,
 ) -> Result<QueuedTurnClaimStatus, AppStorageError> {
     let row = connection
-        .query_row(
+        .query_row_cached(
             "SELECT state, claim_id FROM session_queued_messages \
              WHERE chat_id=?1 AND turn_id=?2 ORDER BY rowid DESC LIMIT 1",
             params![chat_id, turn_id],
@@ -267,7 +272,7 @@ pub(super) fn fence(
     claim_id: &str,
 ) -> Result<bool, AppStorageError> {
     connection
-        .execute(
+        .execute_cached(
             "UPDATE session_queued_messages SET updated_at=updated_at \
              WHERE chat_id=?1 AND turn_id=?2 AND state='dispatching' AND claim_id=?3",
             params![chat_id, turn_id, claim_id],
@@ -325,6 +330,26 @@ pub(super) fn restore_interrupted_claim(
     )
 }
 
+/// Recovered claims a delivered or interrupted turn settles. `e.turn_id<>''`
+/// makes the partial `events_turn_id_idx` applicable.
+pub(super) const RESTORE_CLAIM_SQL: &str = "UPDATE session_queued_messages SET state='dispatching',claim_id=?1 \
+     WHERE chat_id=?2 AND turn_id=?3 AND state='queued' AND claim_id IS NULL \
+       AND claim_owner IS NULL AND lease_expires_at IS NULL \
+       AND terminal_result_message_id IS NULL AND dispatched_message_id=?4 \
+       AND input_identity_digest IS NOT NULL AND input_identity_digest<>'' \
+       AND EXISTS (SELECT 1 FROM turns t JOIN messages m ON m.id=t.user_message_id \
+         WHERE t.id=?3 AND t.chat_id=?2 \
+           AND (t.state='thinking' OR (?5=1 AND t.state IN ('accepted','retrying'))) \
+           AND m.id=?4 AND m.chat_id=?2 AND m.role='user' AND m.status='sent' \
+           AND m.text=session_queued_messages.text \
+           AND m.content_parts_json IS session_queued_messages.content_parts_json) \
+       AND EXISTS (SELECT 1 FROM events e \
+         WHERE e.turn_id=?3 AND e.turn_id<>'' AND e.type='session_queue.changed' \
+           AND e.created_at=session_queued_messages.updated_at \
+           AND json_extract(e.payload_json,'$.queued_message_id')=session_queued_messages.id \
+           AND json_extract(e.payload_json,'$.action')='recovered' \
+           AND json_extract(e.payload_json,'$.recovery_reason')='dispatch_lease_expired')";
+
 fn restore_claim(
     connection: &Connection,
     chat_id: &str,
@@ -334,24 +359,8 @@ fn restore_claim(
     restore: ClaimRestore,
 ) -> Result<bool, AppStorageError> {
     connection
-        .execute(
-            "UPDATE session_queued_messages SET state='dispatching',claim_id=?1 \
-             WHERE chat_id=?2 AND turn_id=?3 AND state='queued' AND claim_id IS NULL \
-               AND claim_owner IS NULL AND lease_expires_at IS NULL \
-               AND terminal_result_message_id IS NULL AND dispatched_message_id=?4 \
-               AND input_identity_digest IS NOT NULL AND input_identity_digest<>'' \
-               AND EXISTS (SELECT 1 FROM turns t JOIN messages m ON m.id=t.user_message_id \
-                 WHERE t.id=?3 AND t.chat_id=?2 \
-                   AND (t.state='thinking' OR (?5=1 AND t.state IN ('accepted','retrying'))) \
-                   AND m.id=?4 AND m.chat_id=?2 AND m.role='user' AND m.status='sent' \
-                   AND m.text=session_queued_messages.text \
-                   AND m.content_parts_json IS session_queued_messages.content_parts_json) \
-               AND EXISTS (SELECT 1 FROM events e \
-                 WHERE e.turn_id=?3 AND e.type='session_queue.changed' \
-                   AND e.created_at=session_queued_messages.updated_at \
-                   AND json_extract(e.payload_json,'$.queued_message_id')=session_queued_messages.id \
-                   AND json_extract(e.payload_json,'$.action')='recovered' \
-                   AND json_extract(e.payload_json,'$.recovery_reason')='dispatch_lease_expired')",
+        .execute_cached(
+            RESTORE_CLAIM_SQL,
             params![
                 original_claim,
                 chat_id,
@@ -379,7 +388,7 @@ pub(super) fn settle(
         "dispatched"
     };
     connection
-        .execute(
+        .execute_cached(
             "UPDATE session_queued_messages SET state=?1, terminal_result_message_id=?2, \
                safe_error_code=?3, claim_id=NULL, claim_owner=NULL, claimed_at=NULL, \
                lease_expires_at=NULL, updated_at=?4 \

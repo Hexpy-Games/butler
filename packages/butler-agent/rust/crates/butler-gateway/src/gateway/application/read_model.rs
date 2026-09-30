@@ -69,7 +69,7 @@ pub(super) fn list_message_page(
         visible = owner_visible!()
     );
     let mut statement = connection
-        .prepare(&query)
+        .prepare_cached(&query)
         .map_err(AppStorageError::sqlite)?;
     let mut rows = statement
         .query_map(params![chat_id, cursor, bounded + 1], |row| {

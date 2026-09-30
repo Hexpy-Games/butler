@@ -126,7 +126,7 @@ pub(super) fn session(db: &Connection, id: &str) -> Result<AppSessionSummary, Ap
 
 pub(super) fn chats(db: &mut Connection) -> Result<Vec<AppChatSummary>, AppStorageError> {
     let mut statement = db
-        .prepare(
+        .prepare_cached(
             r"
 SELECT id,title,kind,project_id,created_at,updated_at FROM chats
 WHERE archived=0 AND NOT EXISTS(
@@ -182,7 +182,7 @@ pub(super) fn sessions(
         params.push(project_id);
     }
     sql.push_str(" ORDER BY c.pinned DESC,c.updated_at DESC,c.created_at DESC");
-    let mut statement = db.prepare(&sql).map_err(AppStorageError::sqlite)?;
+    let mut statement = db.prepare_cached(&sql).map_err(AppStorageError::sqlite)?;
     statement
         .query_map(params_from_iter(params), session_row)
         .map_err(AppStorageError::sqlite)?
@@ -198,7 +198,7 @@ pub(super) fn archives(
          SELECT 1 FROM app_session_branches b WHERE b.target_session_id=c.id AND b.state='prepared')\
          ORDER BY c.updated_at DESC,c.created_at DESC"
     );
-    let mut statement = db.prepare(&sql).map_err(AppStorageError::sqlite)?;
+    let mut statement = db.prepare_cached(&sql).map_err(AppStorageError::sqlite)?;
     statement
         .query_map([], session_row)
         .map_err(AppStorageError::sqlite)?

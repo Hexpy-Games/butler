@@ -474,7 +474,7 @@ impl GatewayApplication for AppApplication {
     }
     fn subscribe_events(
         &self,
-        listener: Arc<dyn Fn(AppEventEnvelope) + Send + Sync>,
+        listener: Arc<dyn Fn(Arc<PublishedEvent>) + Send + Sync>,
     ) -> Result<Box<dyn EventSubscription>, GatewayApplicationError> {
         Ok(self.subscribers.subscribe(listener))
     }
