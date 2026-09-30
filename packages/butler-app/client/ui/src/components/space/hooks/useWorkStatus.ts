@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { getWorkStatus, subscribeLiveEvents } from "@/app/api.ts";
+import { subscribeAgentRuntimeState } from "@/app/agentRuntime.ts";
+import { getWorkStatus } from "@/app/api.ts";
 import type { WorkStatusView } from "@/app/types.ts";
+import { createLiveEventConnection } from "@/hooks/live-session/liveEventConnection.ts";
 
 export function useWorkStatus(): {
   view: WorkStatusView | null;
@@ -42,11 +44,25 @@ export function useWorkStatus(): {
       }, 1500);
     };
     void refresh();
-    const unsubscribe = subscribeLiveEvents(0, schedule, () => undefined);
+    const cursor = { current: 0 };
+    const disconnect = createLiveEventConnection({
+      cursor: () => cursor.current,
+      onEvent: (event) => {
+        if (typeof event.id === "number" && Number.isFinite(event.id)) {
+          cursor.current = Math.max(cursor.current, event.id);
+        }
+        schedule();
+      },
+      onLostChange: () => undefined,
+      onRecovered: schedule,
+      subscribeResume: (resume) => subscribeAgentRuntimeState((state) => {
+        if (state === "running") resume();
+      }),
+    });
     return () => {
       active = false;
       if (timer) clearTimeout(timer);
-      unsubscribe();
+      disconnect();
     };
   }, []);
 
