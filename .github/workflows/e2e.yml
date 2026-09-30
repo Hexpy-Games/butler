@@ -1,7 +1,8 @@
 name: E2E
 
 # Real-binary end-to-end scenarios (packages/butler-agent/rust/crates/butler-e2e).
-# - Stub tiers run inside rust-quality.yml on PR and main.
+# - Linux x64 stub tiers run inside rust-quality.yml on PR and main; path-filtered
+#   native macOS coverage remains in post-merge-ci.yml.
 # - e2e-live: nightly and on demand against a real provider; runs only when a
 #   credential secret is configured, otherwise the job reports SKIPPED.
 
@@ -126,6 +127,7 @@ jobs:
       issues: write
     steps:
       - name: Open or update issue
+        working-directory: ${{ runner.temp }}
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
