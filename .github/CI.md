@@ -156,3 +156,17 @@ sampling. Its deadline and assertions are unchanged. In
 that failure, so contention is not claimed as a demonstrated root cause.
 The issue remains open; the scheduling change gives latency checks a consistent
 measurement environment without skipping any scenarios.
+
+
+PR workflow concurrency is scoped to the head commit, so the next gate does
+not wait for cancellation cleanup in a previous head's native checks. Three
+small coordination jobs acquire the platform/package/install caller groups
+as soon as path detection finishes, cancelling superseded callers while the
+new archive builds. The new deferred callers acquire those same groups after
+the gate; all path filters and test steps remain intact. Main, merge-queue,
+nightly and manual workflow concurrency keep their previous branch scope.
+[Warm run 36710223068](https://github.com/Hexpy-Games/butler/actions/runs/36710223068)
+passed the Rust gate in 6m03s, including 78s before its build jobs started;
+archive 2m11s, Clippy 1m23s. Its prior workflow's cancellation cleanup held
+startup. The next measurement includes the new head-scoped coordination and
+reports event-to-gate time, without subtracting queues.

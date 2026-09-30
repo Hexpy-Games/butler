@@ -16,7 +16,7 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: rust-quality-${{ github.head_ref || github.ref_name }}
+  group: rust-quality-${{ github.head_ref || github.ref_name }}${{ github.event_name == 'pull_request' && format('-{0}', github.event.pull_request.head.sha) || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -78,6 +78,23 @@ jobs:
               - 'packages/butler-npm/**'
               - 'packages/butler-agent/rust/scripts/*standalone*'
               - 'packages/butler-app/client/electron/scripts/prepare-native-agent.mjs'
+
+  # Acquire the deferred callers' groups early. Their cancellation can finish
+  # while the new gate builds, without holding the workflow's startup queue.
+  superseded-checks:
+    name: Release superseded ${{ matrix.check }} runners
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        check: [platform, packages, install]
+    concurrency:
+      group: ci-pr-${{ github.event.pull_request.number }}-${{ matrix.check }}
+      cancel-in-progress: true
+    steps:
+      - name: Release the previous deferred caller's concurrency group
+        run: ':'
 
   source:
     needs: changes
@@ -404,6 +421,9 @@ jobs:
     name: Platform checks after PR gate
     needs: [changes, pr-gate]
     if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true' }}
+    concurrency:
+      group: ci-pr-${{ github.event.pull_request.number }}-platform
+      cancel-in-progress: true
     permissions:
       contents: read
       pull-requests: read
@@ -414,6 +434,9 @@ jobs:
     name: Packages after PR gate
     needs: [changes, pr-gate]
     if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true' && needs.changes.outputs.packages == 'true' }}
+    concurrency:
+      group: ci-pr-${{ github.event.pull_request.number }}-packages
+      cancel-in-progress: true
     permissions:
       contents: read
       issues: write
@@ -423,6 +446,9 @@ jobs:
     name: Install smoke after PR gate
     needs: [changes, pr-gate]
     if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true' && needs.changes.outputs.install == 'true' }}
+    concurrency:
+      group: ci-pr-${{ github.event.pull_request.number }}-install
+      cancel-in-progress: true
     permissions:
       contents: read
     uses: ./.github/workflows/install-smoke.yml
