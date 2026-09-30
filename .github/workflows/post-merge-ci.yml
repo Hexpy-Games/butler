@@ -1,7 +1,5 @@
-name: Rust quality
+name: Post-merge CI
 
-# The PR gate stays on Linux. Platform checks and full install smoke run in
-# post-merge-ci.yml, with path-filtered macOS and Windows checks on relevant PRs.
 on:
   push:
     branches: [main]
@@ -12,179 +10,74 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
-  group: rust-quality-${{ github.head_ref || github.ref_name }}
+  group: post-merge-ci-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: short
 
 defaults:
   run:
     working-directory: packages/butler-agent/rust
 
 jobs:
-  source:
-    name: Format and source rules
+  platform-paths:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    outputs:
+      macos: ${{ steps.paths.outputs.macos }}
+      windows: ${{ steps.paths.outputs.windows }}
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@master
+      - name: Detect platform-specific PR checks
+        id: paths
+        uses: dorny/paths-filter@v3
         with:
-          toolchain: 1.91.0
-          components: rustfmt
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-      - name: Check Rust source rules
-        run: cargo run --locked -p butler-source-check -- .
-
-  linux-clippy:
-    name: Clippy (Linux x64)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: sccache
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
-      - name: Set up Rust and prebuilt ONNX Runtime
-        uses: ./.github/actions/rust-agent-setup
-        with:
-          components: clippy
-          native-deps: prebuilt-ort
-          cache-key: pr-linux-x64-clippy
-      - name: Clippy production targets
-        run: cargo clippy --workspace --lib --bins --locked --keep-going -- -D warnings
-      - name: Clippy all targets
-        run: cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
-
-  linux-tests:
-    name: Tests (Linux x64)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: sccache
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
-      - name: Set up Rust and prebuilt ONNX Runtime
-        uses: ./.github/actions/rust-agent-setup
-        with:
-          native-deps: prebuilt-ort
-          cache-key: pr-linux-x64-tests
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-      - name: Run tests
-        run: cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" run --workspace --locked --no-fail-fast
-      - name: Run doctests when present
-        run: |
-          if grep -rqE '^[[:space:]]*//[/!][[:space:]]*```' crates; then
-            cargo test --workspace --doc --locked
-          fi
-
-  linux-e2e-archive:
-    name: Build E2E archive (Linux x64)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: sccache
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
-      - name: Set up Rust and prebuilt ONNX Runtime
-        uses: ./.github/actions/rust-agent-setup
-        with:
-          native-deps: prebuilt-ort
-          cache-key: pr-linux-x64-e2e
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-      - name: Build the agent binary under test
-        run: cargo build --locked -p butler-agent --bin butler-agent
-      - name: Build and archive E2E tests
-        run: cargo nextest archive --locked -p butler-e2e --archive-file "$RUNNER_TEMP/nextest-archive.tar.zst"
-      - name: Prepare the E2E artifact
-        run: |
-          mkdir -p "$RUNNER_TEMP/e2e-artifact"
-          cp "$RUNNER_TEMP/nextest-archive.tar.zst" "$RUNNER_TEMP/e2e-artifact/nextest-archive.tar.zst"
-          cp target/debug/butler-agent "$RUNNER_TEMP/e2e-artifact/butler-agent"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: e2e-linux-x64
-          path: ${{ runner.temp }}/e2e-artifact/*
-          if-no-files-found: error
-          retention-days: 1
-
-  linux-e2e:
-    name: ${{ matrix.job_name }}
-    needs: linux-e2e-archive
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - job_name: "E2E stub (Linux x64 1/3)"
-            partition: "1/3"
-            filterset: "not test(/^ins_/)"
-            idle_disk: true
-          - job_name: "E2E stub (Linux x64 2/3)"
-            partition: "2/3"
-            filterset: "not test(/^ins_/)"
-            idle_disk: false
-          - job_name: "E2E stub (Linux x64 3/3)"
-            partition: "3/3"
-            filterset: "not test(/^ins_/)"
-            idle_disk: false
-          - job_name: "E2E install (Linux x64 1/2)"
-            partition: "1/2"
-            filterset: "test(/^ins_/)"
-            idle_disk: false
-          - job_name: "E2E install (Linux x64 2/2)"
-            partition: "2/2"
-            filterset: "test(/^ins_/)"
-            idle_disk: false
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.91.0
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-      - uses: actions/download-artifact@v4
-        with:
-          name: e2e-linux-x64
-          path: ${{ runner.temp }}/e2e-artifact
-      - name: Run E2E stub tier
-        uses: ./.github/actions/e2e-stub
-        with:
-          partition: ${{ matrix.partition }}
-          filterset: ${{ matrix.filterset }}
-          archive-file: ${{ runner.temp }}/e2e-artifact/nextest-archive.tar.zst
-          agent-binary: ${{ runner.temp }}/e2e-artifact/butler-agent
-          run-idle-disk: ${{ matrix.idle_disk }}
-      - name: Assert runner home untouched
-        if: always()
-        uses: ./.github/actions/assert-home-untouched
+          filters: |
+            macos:
+              - 'packages/butler-agent/rust/crates/butler-platform/**'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/service/**'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/app.rs'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/app/gateway_lifecycle.rs'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/app/gateway_lifecycle/**'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/service.rs'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/service/**'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/update.rs'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/update/install_cmd.rs'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/update/uninstall_cmd.rs'
+              - 'packages/butler-agent/rust/Cargo.lock'
+              - 'packages/butler-app/client/electron/**'
+              - 'deploy/macos/**'
+              - 'deploy/install.sh'
+              - 'deploy/install-smoke.sh'
+              - 'deploy/app/**'
+              - 'packages/butler-agent/rust/scripts/package-standalone-agent.py'
+              - 'packages/butler-agent/rust/scripts/prepare-static-ort.py'
+              - 'packages/butler-agent/rust/scripts/release-standalone-agent.py'
+              - 'packages/butler-app/scripts/release/**'
+              - 'packages/butler-npm/**'
+              - '.github/actions/build-agent-archive/**'
+              - '.github/actions/e2e-stub/**'
+              - '.github/actions/rust-agent-setup/**'
+              - '.github/workflows/**'
+            windows:
+              - 'packages/butler-agent/rust/crates/butler-platform/**'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/service/**'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli.rs'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/**'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/main.rs'
+              - 'packages/butler-agent/rust/Cargo.lock'
+              - '.github/workflows/rust-quality.yml'
+              - '.github/workflows/windows.yml'
 
   macos-arm64:
     name: Rust checks (macOS arm64)
-    needs: source
+    needs: platform-paths
     if: >-
-      always() && (github.event_name != 'pull_request' || needs.source.outputs.macos == 'true')
+      always() && (github.event_name != 'pull_request' || needs.platform-paths.outputs.macos == 'true')
     runs-on: macos-15
     timeout-minutes: 180
     steps:
@@ -203,7 +96,7 @@ jobs:
       - name: Clippy all targets
         run: cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
       - name: Run tests
-        run: cargo nextest run --workspace --locked --no-fail-fast
+        run: cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" run --workspace --locked --no-fail-fast
       - name: Run doctests when present
         run: |
           if grep -rqE '^[[:space:]]*//[/!][[:space:]]*```' crates; then
@@ -218,7 +111,8 @@ jobs:
           run-idle-disk: "true"
       - name: Assert runner home untouched
         if: always()
-        uses: ./.github/actions/assert-home-untouched
+        shell: bash
+        run: test ! -e "$HOME/.butler"
 
   linux-arm64:
     name: Rust checks (Linux arm64)
@@ -245,21 +139,22 @@ jobs:
       - name: Clippy all targets
         run: cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
       - name: Run tests
-        run: cargo nextest run --workspace --locked --no-fail-fast
+        run: cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" run --workspace --locked --no-fail-fast
       - name: Assert runner home untouched
         if: always()
-        uses: ./.github/actions/assert-home-untouched
+        shell: bash
+        run: test ! -e "$HOME/.butler"
 
   windows-check:
     # Windows is not ported: the host and CLI are unix-only and main.rs prints
     # "not yet available". This compile check only reports how far the
     # workspace is from building; its failures never fail the workflow.
     name: Windows compile check (x86_64-pc-windows-msvc)
-    needs: source
+    needs: platform-paths
     outputs:
       compile: ${{ steps.check.outcome }}
     if: >-
-      always() && (github.event_name != 'pull_request' || needs.source.outputs.windows == 'true')
+      always() && (github.event_name != 'pull_request' || needs.platform-paths.outputs.windows == 'true')
     runs-on: windows-latest
     timeout-minutes: 60
     defaults:
@@ -269,13 +164,11 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-
       - name: Set up Rust and protoc
         uses: ./.github/actions/rust-agent-setup
         with:
           native-deps: prebuilt-ort
           cache-key: windows-check
-
       - name: Check the workspace
         id: check
         continue-on-error: true
@@ -283,9 +176,6 @@ jobs:
           set -o pipefail
           cargo check --workspace --locked --keep-going --target x86_64-pc-windows-msvc \
             --message-format short 2>&1 | tee "$RUNNER_TEMP/windows-check.log"
-
-      # Groups the errors by crate, file and code so the port can be planned
-      # from the run summary.
       - name: Summarize
         if: always()
         env:
@@ -329,12 +219,12 @@ jobs:
     uses: ./.github/workflows/install-smoke.yml
 
   nightly-issue:
-    name: Report nightly failure
+    name: Report main or nightly failure
     if: >-
       always() &&
       (github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) &&
       (contains(needs.*.result, 'failure') || needs.windows-check.outputs.compile == 'failure')
-    needs: [source, linux-clippy, linux-tests, linux-e2e-archive, linux-e2e, macos-arm64, linux-arm64, windows-check, install-full]
+    needs: [platform-paths, macos-arm64, linux-arm64, windows-check, install-full]
     runs-on: ubuntu-latest
     concurrency:
       group: ci-failure-report-${{ github.ref }}
@@ -344,6 +234,7 @@ jobs:
       issues: write
     steps:
       - name: Open or update issue
+        working-directory: ${{ runner.temp }}
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
