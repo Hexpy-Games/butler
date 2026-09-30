@@ -203,6 +203,7 @@ jobs:
         with:
           filterset: "test(/^perf_/)"
           test-threads: "1"
+          success-output: final
           archive-file: ${{ runner.temp }}/e2e-artifact/nextest-archive.tar.zst
           agent-binary: ${{ runner.temp }}/e2e-artifact/butler-agent
       - name: Assert runner home untouched
