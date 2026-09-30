@@ -24,7 +24,7 @@
     },
     "packages/butler-app/client/electron": {
       "name": "butler-electron-client",
-      "version": "0.0.21",
+      "version": "0.1.0",
       "devDependencies": {
         "@electron/packager": "^20.3.0",
         "@electron/windows-sign": "^1.2.2",
