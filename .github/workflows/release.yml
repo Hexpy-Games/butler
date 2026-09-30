@@ -250,7 +250,11 @@ jobs:
         run: |
           set -euo pipefail
           agent_version="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' packages/butler-agent/rust/crates/butler-agent/Cargo.toml | head -n 1)"
-          if [ "${GITHUB_REF_NAME#v}" != "$agent_version" ]; then
+          tag_version="${GITHUB_REF_NAME#v}"
+          # Preview tags share the base Cargo Agent version; keep the full tag
+          # for release URLs and the npm next dist-tag.
+          release_version="${tag_version%%-*}"
+          if [ "$release_version" != "$agent_version" ]; then
             printf 'Tag %s does not match the Agent version %s in crates/butler-agent/Cargo.toml\n' "$GITHUB_REF_NAME" "$agent_version" >&2
             exit 1
           fi
