@@ -6,7 +6,9 @@ The summary accepts skipped Rust jobs only when the path detector confirms
 that every changed path is under `plans/`, a `docs/` directory, or ends in
 `.md`. Scheduled and manual runs always execute the Rust checks.
 
-Linux builds the real agent and all workspace test targets in one job. The
+Linux builds all workspace targets in one Cargo invocation, including the real
+agent and test executables. Nextest then packages those binaries without
+recompiling a second dependency feature graph. The
 nextest archive contains unit/integration binaries and fixture executables.
 The Tests job runs every binary except the `e2e` integration binary; E2E jobs
 select that binary explicitly. Doctests remain in the build job.

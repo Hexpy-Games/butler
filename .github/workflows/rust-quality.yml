@@ -154,11 +154,11 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
-      - name: Build the agent binary under test
+      - name: Build all workspace targets once
         run: |
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
           export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
-          cargo build --locked -p butler-agent --bin butler-agent
+          cargo build --locked --workspace --all-targets
       - name: Build and archive workspace tests
         run: |
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
