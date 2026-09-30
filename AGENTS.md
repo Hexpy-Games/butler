@@ -10,6 +10,8 @@ Read [plans/README.md](plans/README.md) first. It holds the repo rules: test pol
 - **Scope.** Write only inside your worktree, plus the build caches (`~/.cargo`, `~/.bun`, temp dirs). Never kill processes by name pattern (`pkill`, `killall`); kill only PIDs you started. Never print tokens or keys.
 - **Model calls.** Tests use stub or replay only. If a cassette must be re-recorded live, use only `openai/gpt-6-luna`, even when existing cassettes name other models.
 - **Root causes.** Fix the cause, not the symptom. Never skip, weaken or retry tests to get green. Never raise timeouts or loosen performance budgets. If you can't reproduce a failure, say so; don't claim a cause you haven't shown.
+- **Performance without cutting quality.** Meet a latency or throughput budget by doing less *work*, never by returning less *content*. Truncating, dropping fields, skipping items, lowering fidelity or serving stale cached data to pass a budget is a failure. Every timed perf check must also assert that the response is complete and correct (counts, order, latest state).
+- **Flaky tests.** Don't retry, skip, or mark tests ignored to get green. A test that fails on main without a code change gets a GitHub issue the same day and a fix within 48 hours. Re-run CI only with that issue linked in a PR comment.
 - **Before pushing:**
   - `git fetch origin` and merge `origin/main` if it moved;
   - run `cargo fmt`, `clippy -D warnings` on touched crates, and `cargo run -p butler-source-check -- .`;
