@@ -18,6 +18,9 @@ use butler_e2e::e2e::scenario::{Scenario, Setup};
 use reqwest::header::HeaderMap;
 use serde_json::json;
 
+#[path = "gateway_browser/connect.rs"]
+mod connect;
+
 /// The policy every message file except a PDF is served under.
 const SANDBOXED_FILE_POLICY: &str = "sandbox; default-src 'none'";
 

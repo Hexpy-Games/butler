@@ -177,11 +177,32 @@ impl GatewaySecurity {
         }
     }
 
-    /// Host check, then Origin classification (every request, before CORS).
-    pub(super) fn admit(&self, headers: &HeaderMap) -> Result<RequestOrigin, HttpError> {
+    /// Host check, then the connect form's Fetch Metadata and Origin checks.
+    pub(super) fn admit(
+        &self,
+        method: &Method,
+        path: &str,
+        headers: &HeaderMap,
+    ) -> Result<RequestOrigin, HttpError> {
         let policy = self.policy.read().clone();
         policy.check_host(headers)?;
+        if *method == Method::POST && path == CONNECT_PATH {
+            fetch_metadata::connect_post_site(headers)?;
+        }
         policy.classify_origin(headers)
+    }
+
+    /// Renders an HTTP error as the connection page for an HTML form
+    /// navigation. Fetch/XHR requests continue to receive JSON errors.
+    pub(super) fn connect_error_response(error: &HttpError) -> Response {
+        let status = error.status();
+        let page = match status {
+            StatusCode::UNAUTHORIZED => ConnectPage::Rejected,
+            StatusCode::FORBIDDEN => ConnectPage::RequestDenied,
+            StatusCode::TOO_MANY_REQUESTS => ConnectPage::RateLimited,
+            _ => ConnectPage::Failed,
+        };
+        page.response_with_status(status)
     }
 
     /// Answers `allowed_hosts` and the LAN authorities from now on.
@@ -284,7 +305,7 @@ impl GatewaySecurity {
 
     /// `POST /connect` (the connection page's form): a one-time code or
     /// the connection code for a session cookie.
-    pub(super) fn connect_form(&self, body: &[u8]) -> Response {
+    pub(super) fn connect_form(&self, body: &[u8]) -> Result<Response, HttpError> {
         let keyed = self.keyed.read().clone();
         connect::from_form(&keyed, body, SystemTime::now())
     }
