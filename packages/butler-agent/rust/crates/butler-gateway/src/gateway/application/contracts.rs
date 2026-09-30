@@ -318,7 +318,30 @@ pub trait AppContextReadPort: Send + Sync {
     fn read(&self, query: AppContextReadQuery) -> ApplicationFuture<AppContextReadFacts>;
 }
 
+pub struct AppWorkerActivitySourcePage {
+    pub children: Vec<Value>,
+    pub after: Option<(String, String, String)>,
+}
+
 pub trait AppSubsessionPort: Send + Sync {
+    fn activity_cursor_parents(
+        &self,
+        _worker: String,
+        _history: bool,
+        _parent: Option<String>,
+    ) -> ApplicationFuture<Option<Vec<String>>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn activity_page(
+        &self,
+        _history: bool,
+        _after: Option<(String, String, String)>,
+        _parent: Option<String>,
+        _limit: usize,
+    ) -> ApplicationFuture<Option<AppWorkerActivitySourcePage>> {
+        Box::pin(async { Ok(None) })
+    }
     fn projection(
         &self,
         session_id: String,

@@ -68,55 +68,36 @@ async fn run(input: &Input, schedule: Schedule) -> CognitionResult<CatchupReport
     if input.shutdown.is_cancelled() || !claim_slot(input, schedule) {
         return Ok(CatchupReport::default());
     }
-    let handle = match resolve_input_generation(input) {
+    let owned = input.clone();
+    let handle = match super::blocking::run(move || resolve_input_generation(&owned)).await {
         Ok(handle) => handle,
         Err(error) if error.code() == "memory_generation_unavailable" => {
             return Ok(CatchupReport::default());
         }
         Err(error) => return Err(error),
     };
-    let persisted = input.probe.catchup_state(&handle.graph_path)?;
+    let persisted = input.probe.catchup_state(&handle.graph_path).await?;
     let stored = input
         .catchup_progress
         .lock()
         .as_ref()
         .filter(|(path, _)| path == &handle.graph_path)
         .map_or_else(|| persisted.clone(), |(_, state)| state.clone());
-    let canonical = match ConversationSourceReader::open(&canonical_path(&handle, &input.data_root))
-    {
-        Ok(reader) => reader,
-        Err(error) if error.code() == "conversation_source_unavailable" => {
-            return Ok(CatchupReport::default());
-        }
-        Err(error) => return Err(CognitionError::from(error)),
+    let owned = input.clone();
+    let generation = handle.clone();
+    let loaded = super::blocking::run(move || load(&owned, &generation, stored)).await?;
+    let Some(Loaded {
+        mut pass,
+        work,
+        unchanged,
+    }) = loaded
+    else {
+        return Ok(CatchupReport::default());
     };
-    let revision = canonical.public_revision().map_err(CognitionError::from)?;
-    let identity = canonical.source_identity().map_err(CognitionError::from)?;
-    let cursors_valid = canonical
-        .catchup_cursors_exist(stored.outcome.as_deref(), stored.message.as_deref())
-        .map_err(CognitionError::from)?;
-    let unclean = input
-        .unclean_start
-        .swap(false, std::sync::atomic::Ordering::AcqRel);
-    if inventory_unchanged(
-        &stored,
-        revision,
-        identity.as_deref(),
-        unclean || !cursors_valid,
-    ) {
-        canonical.close().map_err(CognitionError::from)?;
-        return Ok(unchanged_report(stored));
+    if unchanged {
+        return Ok(unchanged_report(pass.state));
     }
-    let mut pass = Pass::begin(
-        stored.clone(),
-        revision,
-        identity,
-        unclean || !cursors_valid,
-    );
-    pass.read_outcomes(&canonical)?;
-    pass.read_recovered_sources(&canonical)?;
-    canonical.close().map_err(CognitionError::from)?;
-    let work = unregistered(input, &handle, std::mem::take(&mut pass.work))?;
+    let work = unregistered(input, &handle, work).await?;
     let scanned = pass.scanned;
     let missing = work.len();
     let registration = register(input, &handle, work).await?;
@@ -136,6 +117,53 @@ async fn run(input: &Input, schedule: Schedule) -> CognitionResult<CatchupReport
         outcome_cursor: pass.state.outcome,
         recovered_message_cursor: pass.state.message,
     })
+}
+
+struct Loaded {
+    pass: Pass,
+    work: Vec<(CognitionConversationSourceNotice, String)>,
+    unchanged: bool,
+}
+
+fn load(
+    input: &Input,
+    handle: &crate::cognition::MemoryGenerationHandle,
+    stored: CatchupState,
+) -> CognitionResult<Option<Loaded>> {
+    let canonical = match ConversationSourceReader::open(&canonical_path(handle, &input.data_root))
+    {
+        Ok(reader) => reader,
+        Err(error) if error.code() == "conversation_source_unavailable" => {
+            return Ok(None);
+        }
+        Err(error) => return Err(CognitionError::from(error)),
+    };
+    let revision = canonical.public_revision().map_err(CognitionError::from)?;
+    let identity = canonical.source_identity().map_err(CognitionError::from)?;
+    let cursors_valid = canonical
+        .catchup_cursors_exist(stored.outcome.as_deref(), stored.message.as_deref())
+        .map_err(CognitionError::from)?;
+    let unclean = input
+        .unclean_start
+        .swap(false, std::sync::atomic::Ordering::AcqRel);
+    let unchanged = inventory_unchanged(
+        &stored,
+        revision,
+        identity.as_deref(),
+        unclean || !cursors_valid,
+    );
+    let mut pass = Pass::begin(stored, revision, identity, unclean || !cursors_valid);
+    if !unchanged {
+        pass.read_outcomes(&canonical)?;
+        pass.read_recovered_sources(&canonical)?;
+    }
+    canonical.close().map_err(CognitionError::from)?;
+    let work = std::mem::take(&mut pass.work);
+    Ok(Some(Loaded {
+        pass,
+        work,
+        unchanged,
+    }))
 }
 
 /// Native messages beyond the recovered cursor must not be rescanned every
@@ -175,7 +203,7 @@ fn epoch_ms(iso: &str) -> i64 {
 
 /// Drops the notices whose observation a registered job already recorded.
 /// Registering them again would only replay that job.
-fn unregistered(
+async fn unregistered(
     input: &Input,
     handle: &crate::cognition::MemoryGenerationHandle,
     work: Vec<(CognitionConversationSourceNotice, String)>,
@@ -186,7 +214,8 @@ fn unregistered(
     let ids: Vec<String> = work.iter().map(|(_, id)| id.clone()).collect();
     let known = input
         .probe
-        .registered_observations(&handle.graph_path, &ids)?;
+        .registered_observations(&handle.graph_path, &ids)
+        .await?;
     Ok(work
         .into_iter()
         .filter(|(_, id)| !known.contains(id))
@@ -416,15 +445,23 @@ async fn save_state(
         .unwrap_or(MemoryGenerationTarget::Active {
             expected_generation: handle.generation_id.clone(),
         });
-    let result = (|| {
-        assert_mutation_authority(&input.data_root, &input.environment, &target, handle)?;
-        let mut graph = GraphRepository::open(&handle.graph_path)?;
-        let saved = graph.save_catchup_state(state);
-        graph.close()?;
-        saved
-    })();
-    let released = lease.release(result.is_ok()).map_err(CognitionError::from);
-    result.and(released)
+    let owned = input.clone();
+    let handle = handle.clone();
+    let state = state.clone();
+    super::blocking::run(move || {
+        let input = &owned;
+        let result = (|| {
+            lease.assert_for_path(&lock).map_err(CognitionError::from)?;
+            assert_mutation_authority(&input.data_root, &input.environment, &target, &handle)?;
+            let mut graph = GraphRepository::open(&handle.graph_path)?;
+            let saved = graph.save_catchup_state(&state);
+            graph.close()?;
+            saved
+        })();
+        let released = lease.release(result.is_ok()).map_err(CognitionError::from);
+        result.and(released)
+    })
+    .await
 }
 
 fn error(code: CognitionCode) -> CognitionError {

@@ -62,3 +62,10 @@ pub(super) fn checkpoint(connection: &Connection) -> StorageResult<()> {
         .execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
         .map_err(AppStorageError::sqlite)
 }
+
+/// Retention must never wait for foreground readers to release the WAL.
+pub(super) fn passive_checkpoint(connection: &Connection) -> StorageResult<()> {
+    connection
+        .execute_batch("PRAGMA wal_checkpoint(PASSIVE)")
+        .map_err(AppStorageError::sqlite)
+}

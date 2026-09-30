@@ -1,5 +1,6 @@
 mod controls;
 
+mod projection_burst;
 mod projection_tests;
 mod retry;
 mod session_views;

@@ -104,7 +104,10 @@ fn session_row(row: &Row<'_>) -> rusqlite::Result<SessionRow> {
     })
 }
 
-pub(super) fn session(db: &Connection, id: &str) -> Result<AppSessionSummary, AppStorageError> {
+pub(in crate::gateway::application) fn session(
+    db: &Connection,
+    id: &str,
+) -> Result<AppSessionSummary, AppStorageError> {
     let sql = format!("{SESSION_SELECT} WHERE c.id=?1");
     let row = db
         .query_row(&sql, [id], session_row)
