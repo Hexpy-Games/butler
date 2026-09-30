@@ -291,10 +291,51 @@ jobs:
           fi
           gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
 
+  app-linux:
+    name: Build and smoke Linux App packages
+    # The reusable workflow declares an issues-writing main/nightly reporter.
+    permissions:
+      contents: read
+      issues: write
+    uses: ./.github/workflows/linux-packages.yml
+
+  app-linux-release:
+    name: Attach Linux App packages to the draft release
+    runs-on: ubuntu-latest
+    needs: [native-release, app-linux]
+    steps:
+      - name: Download the Linux App packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: butler-app-linux-*
+          path: dist/release/app-linux
+          merge-multiple: true
+
+      - name: Upload packages and their checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Like the Agent archives, preview tags use the base component version.
+          version="${GITHUB_REF_NAME#v}"
+          version="${version%%-*}"
+          cd dist/release/app-linux
+          files=(
+            "butler-app-${version}-linux-x64.deb"
+            "butler-app-${version}-linux-arm64.deb"
+            "butler-app-${version}-archlinux-x64.pkg.tar.zst"
+          )
+          for file in "${files[@]}"; do
+            test -f "$file"
+            sha256sum -c "$file.sha256"
+          done
+          gh release upload "$GITHUB_REF_NAME" "${files[@]}" "${files[@]/%/.sha256}" --clobber
+
   release-checksums:
     name: Publish consolidated release checksums
     runs-on: ubuntu-latest
-    needs: [native-release, agent-release]
+    needs: [native-release, agent-release, app-linux-release]
     steps:
       - name: Build consolidated checksum asset from published outputs
         env:
@@ -322,9 +363,15 @@ jobs:
             dist/release/checksums/assets/butler-app-*-darwin-arm64.zip.sha256
             dist/release/checksums/assets/app-release-manifest.json
             dist/release/checksums/assets/app-update-manifest.json
+            dist/release/checksums/assets/butler-app-*-linux-x64.deb
+            dist/release/checksums/assets/butler-app-*-linux-x64.deb.sha256
+            dist/release/checksums/assets/butler-app-*-linux-arm64.deb
+            dist/release/checksums/assets/butler-app-*-linux-arm64.deb.sha256
+            dist/release/checksums/assets/butler-app-*-archlinux-x64.pkg.tar.zst
+            dist/release/checksums/assets/butler-app-*-archlinux-x64.pkg.tar.zst.sha256
           )
-          if [ "${#files[@]}" -ne 12 ]; then
-            printf 'Expected 12 current native release outputs, got %s\n' "${#files[@]}" >&2
+          if [ "${#files[@]}" -ne 18 ]; then
+            printf 'Expected 18 current release outputs, got %s\n' "${#files[@]}" >&2
             printf '%s\n' "${files[@]}" >&2
             exit 1
           fi
@@ -336,8 +383,8 @@ jobs:
             done
           ) > "$checksum_file"
           checksum_count="$(wc -l < "$checksum_file" | tr -d ' ')"
-          if [ "$checksum_count" -ne 12 ]; then
-            printf 'Expected 12 checksummed native release outputs, got %s\n' "$checksum_count" >&2
+          if [ "$checksum_count" -ne 18 ]; then
+            printf 'Expected 18 checksummed release outputs, got %s\n' "$checksum_count" >&2
             cat "$checksum_file" >&2
             exit 1
           fi
