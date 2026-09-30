@@ -1,4 +1,4 @@
-//! Native session admission prepared before either service listener starts.
+//! Native session admission prepared before either service listener begins serving.
 
 use std::sync::Arc;
 

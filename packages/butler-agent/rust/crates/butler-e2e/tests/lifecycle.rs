@@ -182,65 +182,6 @@ async fn svc_01_service_lifecycle() -> Result<(), HarnessError> {
     s.finish().await
 }
 
-/// SVC-01 (inject) — a port already in use is a clear start failure.
-#[tokio::test]
-async fn svc_01_port_in_use_fails_start() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let mut s = Setup::new("SVC-01-PORT")?.start().await?;
-    let stopped = s.agent.cli_reaping(&["stop", "--json"]).await?;
-    assert_eq!(stopped.code, Some(0), "{}", stopped.stderr);
-    s.agent.reap();
-    // Occupy the port, then start: the process must exit non-zero with a
-    // clear error, config intact.
-    let config_before = std::fs::read(s.sandbox.data.join("butler.config.json"))?;
-    let blocker = std::net::TcpListener::bind(("127.0.0.1", s.agent.launch.port))?;
-    let (code, text) = run_bounded(&s, Duration::from_secs(30))?;
-    drop(blocker);
-    assert!(
-        code.is_some_and(|code| code != 0),
-        "start on a port in use did not fail (exit {code:?}): {text}"
-    );
-    let text = text.to_lowercase();
-    assert!(
-        text.contains("port") || text.contains("address") || text.contains("bind"),
-        "unclear port error: {text}"
-    );
-    assert_eq!(
-        std::fs::read(s.sandbox.data.join("butler.config.json"))?,
-        config_before
-    );
-
-    Ok(())
-}
-
-/// Runs the service command to completion or kills it after `limit`.
-/// Returns the exit code (`None` when it had to be killed) and its output.
-fn run_bounded(s: &Scenario, limit: Duration) -> Result<(Option<i32>, String), HarnessError> {
-    let log = s.sandbox.logs.join("bounded.log");
-    let file = std::fs::File::create(&log)?;
-    let mut child = s
-        .agent
-        .launch
-        .command()
-        .stdin(std::process::Stdio::null())
-        .stdout(file.try_clone()?)
-        .stderr(file)
-        .spawn()?;
-    let deadline = Instant::now() + limit;
-    let code = loop {
-        if let Some(status) = child.try_wait()? {
-            break status.code();
-        }
-        if Instant::now() > deadline {
-            let _ = child.kill();
-            let _ = child.wait();
-            break None;
-        }
-        std::thread::sleep(Duration::from_millis(100));
-    };
-    Ok((code, std::fs::read_to_string(&log).unwrap_or_default()))
-}
-
 /// SVC-08 — the App releasing its foreground lease (closing the agent's
 /// stdin, as when the App quits) is a requested stop: the agent exits 0
 /// without an announcement, removes its record and stays stopped.

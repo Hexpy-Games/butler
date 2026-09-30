@@ -9,7 +9,7 @@ use std::{
 };
 
 use serde_json::{Value, json};
-use tokio::sync::Mutex;
+use tokio::{net::TcpListener, sync::Mutex};
 
 use butler_gateway::gateway::InboundQueue;
 use butler_runtime::operations::ServiceReadiness;
@@ -75,13 +75,14 @@ impl AppGatewayLifecycle {
     pub(crate) async fn start_initial(
         &self,
         initial: &AppServiceConfiguration,
+        listener: Option<TcpListener>,
     ) -> Result<bool, BtccError> {
         let mut current = self.current.lock().await;
         if !initial.enabled {
             return Ok(false);
         }
         self.require_captured_dependencies(initial)?;
-        self.start_locked(&mut current, initial).await
+        self.start_locked(&mut current, initial, listener).await
     }
 
     pub(crate) async fn execute(
@@ -102,7 +103,7 @@ impl AppGatewayLifecycle {
                     return Ok(view);
                 }
                 let already = current.is_some();
-                self.start_locked(&mut current, &desired)
+                self.start_locked(&mut current, &desired, None)
                     .await
                     .map_err(error_text)?;
                 let mut view = self.view(current.as_ref()).await?;
@@ -128,7 +129,7 @@ impl AppGatewayLifecycle {
                     return Ok(view);
                 }
                 self.stop_locked(&mut current).await?;
-                self.start_locked(&mut current, &desired)
+                self.start_locked(&mut current, &desired, None)
                     .await
                     .map_err(error_text)?;
                 let mut view = self.view(current.as_ref()).await?;
@@ -155,6 +156,7 @@ impl AppGatewayLifecycle {
         &self,
         current: &mut Option<AppServer>,
         app_config: &AppServiceConfiguration,
+        listener: Option<TcpListener>,
     ) -> Result<bool, BtccError> {
         if current.is_some() {
             return Ok(false);
@@ -164,6 +166,10 @@ impl AppGatewayLifecycle {
             self.allocated_port.load(Ordering::Relaxed)
         } else {
             app_config.port
+        };
+        let listener = match listener {
+            Some(listener) => listener,
+            None => AppServer::bind(&app_config.host, port).await?,
         };
         let mut server = AppServer::open(
             &self.runtime,
@@ -175,7 +181,7 @@ impl AppGatewayLifecycle {
                 receipt: self.readiness.clone(),
                 local_auth: local_auth.clone(),
             },
-            port,
+            listener,
         )
         .await?;
         let address = server.local_addr();
@@ -288,7 +294,7 @@ impl AppGatewayLifecycle {
             "lifecycle":"process",
             "transport":"app",
             "enabled":enabled,
-            "configured":!desired.host.is_empty(),
+            "configured":desired.server_url().is_some(),
             "running":running,
             "status":status,
             "restartRequired":restart_required,
@@ -296,7 +302,7 @@ impl AppGatewayLifecycle {
             "config":{
                 "host":desired.host,
                 "port":desired.port,
-                "serverUrl":format!("http://{}:{}", desired.host, desired.port),
+                "serverUrl":desired.server_url(),
                 "dbConfigured":desired.db_configured,
                 "remoteAccessEnabled":desired.remote_access_enabled(),
                 "allowedHosts":desired.allowed_hosts(),

@@ -67,50 +67,46 @@ async fn module(gw: &Gateway, id: &str) -> Result<Value, HarnessError> {
         .unwrap_or_else(|| panic!("{id} not listed: {}", reply.text)))
 }
 
-/// Plays the App for one save: waits until module `id` has files other than
-/// revision `before`, marks them `checking` (the save keeps waiting), then
-/// reports them `ok`.
-async fn app_checks(gw: &Gateway, id: &str, before: &str) -> Result<(), HarnessError> {
-    let path = format!("/wallpaper-modules/{id}/status");
-    for _ in 0..100 {
-        let revision = module(gw, id).await?["revision"]
-            .as_str()
-            .unwrap_or_default()
-            .to_owned();
-        if revision != before {
-            let checking = gw
-                .post(&path, json!({"state": "checking", "revision": revision}))
-                .await?;
-            assert_eq!(checking.status, 200, "{}", checking.text);
-            assert_eq!(module(gw, id).await?["status"]["state"], "checking");
-            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-            let ok = gw
-                .post(&path, json!({"state": "ok", "revision": revision}))
-                .await?;
-            assert_eq!(ok.status, 200, "{}", ok.text);
-            return Ok(());
+/// Polls alongside the save until its new revision is observable, then plays
+/// the App's checking/verdict handshake. No settling sleep: the save must stay
+/// pending while checking, and every concurrent listing must retain the module.
+async fn save_checked(gw: &Gateway, before: &str, request: Value) -> Result<Reply, HarnessError> {
+    let saved = gw.post(SAVE, request);
+    tokio::pin!(saved);
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+    let revision = loop {
+        tokio::select! {
+            result = &mut saved => panic!("save returned before the App check: {}", result?.text),
+            () = tokio::time::sleep_until(deadline) => panic!("user.rain was never written"),
+            listed = module(gw, "user.rain") => {
+                let listed = listed?;
+                let revision = listed["revision"].as_str().unwrap().to_owned();
+                if revision != before {
+                    break revision;
+                }
+            }
         }
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    };
+    let path = "/wallpaper-modules/user.rain/status";
+    let checking = gw
+        .post(path, json!({"state": "checking", "revision": revision}))
+        .await?;
+    assert_eq!(checking.status, 200, "{}", checking.text);
+    tokio::select! {
+        result = &mut saved => panic!("save returned while checking: {}", result?.text),
+        listed = module(gw, "user.rain") => {
+            assert_eq!(listed?["status"]["state"], "checking");
+        }
     }
-    panic!("{id} was never written");
+    let ok = gw
+        .post(path, json!({"state": "ok", "revision": revision}))
+        .await?;
+    assert_eq!(ok.status, 200, "{}", ok.text);
+    saved.await
 }
 
 fn read(path: &Path) -> String {
     std::fs::read_to_string(path).unwrap_or_default()
-}
-
-/// A concurrent listing must see the old or new module throughout a save,
-/// including the interval between moving the old folder aside and publishing
-/// its replacement. The save still waits for the App's normal status check.
-async fn save_while_listed(gw: &Gateway, request: Value) -> Result<Reply, HarnessError> {
-    let saving = gw.post(SAVE, request);
-    tokio::pin!(saving);
-    loop {
-        tokio::select! {
-            reply = &mut saving => return reply,
-            listed = module(gw, "user.rain") => { listed?; }
-        }
-    }
 }
 
 /// WALL-05 — `wallpaper.changed` announces each change of an effective
@@ -259,12 +255,7 @@ async fn wall_06_module_saves_never_silently_replace_a_module() -> Result<(), Ha
     }
     assert_eq!(read(&folder.join("shader.frag")), FRAGMENT);
 
-    let (saved, checked) = tokio::join!(
-        save_while_listed(&s.gw, save(Some(&before))),
-        app_checks(&s.gw, "user.rain", &before)
-    );
-    let saved = saved?;
-    checked?;
+    let saved = save_checked(&s.gw, &before, save(Some(&before))).await?;
     assert_eq!(saved.status, 200, "{}", saved.text);
     assert_eq!(saved.data()["status"]["state"], "ok", "{}", saved.text);
     assert_eq!(read(&folder.join("shader.frag")), edited);

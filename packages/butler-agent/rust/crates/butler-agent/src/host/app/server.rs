@@ -57,17 +57,24 @@ impl AppServer {
         self.address
     }
 
+    /// Reserve the address before any startup persistence or runtime DB opens.
+    pub(crate) async fn bind(host: &str, port: u16) -> Result<TcpListener, BtccError> {
+        TcpListener::bind((host, port)).await.map_err(|error| {
+            BtccError::relayed(
+                "app_listener_bind_failed",
+                format!("{host}:{port}: {error}"),
+            )
+        })
+    }
+
     pub(crate) async fn open(
         runtime: &AgentRuntime,
         data_root: &std::path::Path,
         installation: &ResolvedInstallation,
         app_config: &AppServiceConfiguration,
         owners: AppServerOwners,
-        port: u16,
+        listener: TcpListener,
     ) -> Result<Self, BtccError> {
-        let listener = TcpListener::bind((app_config.host.as_str(), port))
-            .await
-            .map_err(|error| BtccError::relayed("app_listener_bind_failed", error.to_string()))?;
         let artifacts = Arc::new(AppMessageFiles::new(data_root, Arc::new(SystemIdentity)));
         let result = Self::open_with_artifacts(
             runtime,

@@ -120,7 +120,13 @@ async fn run_until_stopped(
     let user_home = butler_platform::user_dirs::home_dir()
         .filter(|home| !home.as_os_str().is_empty())
         .ok_or_else(|| failure("native_home_unavailable", "User home is unavailable"))?;
-    let config = ServiceConfiguration::capture(explicit_data, &user_home, &installation)?;
+    let mut config = ServiceConfiguration::capture(explicit_data, &user_home, &installation)?;
+    let listener = if config.app.enabled {
+        Some(crate::host::AppServer::bind(&config.app.host, config.app.port).await?)
+    } else {
+        None
+    };
+    config.initialize_app_credentials();
     report_credential_errors(&config, logs);
     let executable = std::env::current_exe().map_err(io)?;
     let mut instance = crate::host::service::instance::InstanceGuard::acquire(
@@ -169,7 +175,7 @@ async fn run_until_stopped(
     };
     let result = serve(
         runtime.clone(),
-        app_endpoint,
+        (app_endpoint, listener),
         &config,
         writer.clone(),
         &mut instance,
@@ -218,8 +224,9 @@ async fn start_app_gateway(
     config: &ServiceConfiguration,
     endpoint: &ActiveAppEndpoint,
     logs: ServiceLogMode,
+    listener: Option<tokio::net::TcpListener>,
 ) -> Result<(), BtccError> {
-    gateway.start_initial(&config.app).await?;
+    gateway.start_initial(&config.app, listener).await?;
     if let Some(active) = endpoint.snapshot() {
         if local_auth_unconfigured(&active.local_auth) {
             logs.problem(&format!(
@@ -252,13 +259,14 @@ fn repair_cli_launcher(config: &ServiceConfiguration, logs: ServiceLogMode) {
 
 async fn serve(
     runtime: Arc<AgentRuntime>,
-    app_endpoint: Arc<ActiveAppEndpoint>,
+    app: (Arc<ActiveAppEndpoint>, Option<tokio::net::TcpListener>),
     config: &ServiceConfiguration,
     writer: Arc<TranscriptWriter>,
     instance: &mut crate::host::service::instance::InstanceGuard,
     logs: ServiceLogMode,
     stop: &StopSignal,
 ) -> Result<String, BtccError> {
+    let (app_endpoint, listener) = app;
     let admission::Admission {
         session_id,
         model,
@@ -286,28 +294,18 @@ async fn serve(
         app_endpoint.clone(),
         instance.nonce().to_owned(),
     ));
-    if let Err(error) = start_app_gateway(&gateway, config, &app_endpoint, logs).await {
+    if let Err(error) = start_app_gateway(&gateway, config, &app_endpoint, logs, listener).await {
         let _ = gateway.close().await;
         let _ = dispatcher.close().await;
         return Err(error);
     }
     let control = start_control(&gateway, &runtime, config, instance, &dispatcher, stop).await?;
     logs.write(&format!("[native-butler] ready model={model}"));
-    let startup = async {
-        runtime.context_maintenance.start();
-        runtime.subsessions.recover_dispatches().await?;
-        mark_ready(instance, &app_endpoint, &runtime, stop).await
-    }
-    .await;
-    match startup {
-        Ok(()) => {}
-        Err(error) => {
-            let _ = control.close().await;
-            let _ = gateway.close().await;
-            let _ = dispatcher.close().await;
-            drop(readiness);
-            return Err(error);
-        }
+    if let Err(error) = start_runtime(&runtime, instance, &app_endpoint, stop).await {
+        let _ = control.close().await;
+        let _ = gateway.close().await;
+        let _ = dispatcher.close().await;
+        return Err(error);
     }
     let subsessions = runtime.subsessions.repository();
     let result = poll_service(
@@ -330,6 +328,18 @@ async fn serve(
     let close = close_serving(control, &gateway, &dispatcher, &progress).await;
     drop(readiness);
     result.and(close).map(|()| session_id)
+}
+
+/// Recover durable dispatches before publishing the ready instance.
+async fn start_runtime(
+    runtime: &AgentRuntime,
+    instance: &mut crate::host::service::instance::InstanceGuard,
+    app_endpoint: &ActiveAppEndpoint,
+    stop: &StopSignal,
+) -> Result<(), BtccError> {
+    runtime.context_maintenance.start();
+    runtime.subsessions.recover_dispatches().await?;
+    mark_ready(instance, app_endpoint, runtime, stop).await
 }
 
 fn capture_foreground_lease(
