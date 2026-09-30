@@ -41,8 +41,10 @@ requires the Linux runner's user manager and uses its config directory with
 a temporary HOME. It retains both 12-second stable-stop observations.
 
 Linux setup uses mold. The archive job strips debug information and executable
-symbols after building, without changing assertions or test selection. Compiler
-profiles stay unchanged to reuse existing dependency caches. The build and
+symbols after building, without changing assertions or test selection. The Linux archive build disables debug information for dev/test profiles;
+optimizations, debug assertions, overflow checks and test selections stay
+unchanged. Clippy and macOS/Windows keep their existing profiles. The archive
+cache therefore needs one population run with the new compiler inputs. The build and
 Clippy jobs use Cargo's `-j 8` option rather than changing dependency-cache
 environment inputs. Workspace libraries are cached as well. Each tracked Rust
 workspace file is hashed in full: only matching contents reuse a cached source

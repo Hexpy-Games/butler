@@ -182,6 +182,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
+      # Test assertions/overflow checks stay enabled. Executable debug data is
+      # stripped before running anyway; avoid generating it during compilation.
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
       # Keep compiler-cache reads, but let rust-cache own the bulk uploads.
       # Per-crate writes rate-limited the dependency-cache save in round 2.
       SCCACHE_GHA_ENABLED: "true"
