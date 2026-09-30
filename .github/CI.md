@@ -143,9 +143,16 @@ keeps cold, warm, failed and queued measurements separate.
 The shutdown MCP scenario added on main also resolves its fixture through
 nextest's runtime path. Its archive relocation check passed with the original
 build-host fixture executable removed; shutdown/reap deadlines remain intact.
-The unchanged Q-02 failure in the preceding CI run is tracked in
-[issue #374](https://github.com/Hexpy-Games/butler/issues/374). It did not reproduce
-in the isolated local archive run; no cause or fix is claimed.
+The Q-02 failure is tracked in
+[issue #374](https://github.com/Hexpy-Games/butler/issues/374). A controlled
+shutdown-boundary reproduction exposed queue admission racing consumer shutdown:
+the dispatcher could be cancelled after persisting acceptance but before native
+enqueue. With identical diagnostic pauses, the unchanged Q-02 failed in 121.874s
+before the fix and passed in 4.505s afterward. Shutdown now pauses new queue
+admissions and waits for an in-flight durable handoff before closing the native
+consumer. The queue owner remains alive for terminal projection notifications
+until publication drains. Diagnostic pauses were removed from the final code;
+Q-02 assertions, replay pacing and deadlines are unchanged.
 
 
 The control-request shutdown scenario measures an unchanged two-second budget;
@@ -182,3 +189,14 @@ Local repeated stripping of ten cached binaries took 0.507s before and 0.023s
 after, with identical SHA256 hashes and mtimes. A freshly compiled debug ELF
 was stripped once, skipped on the second call, and retained its complete output.
 The next measurement includes both corrections and early startup scheduling.
+
+
+Workspace caches include a hash of Rust workspace sources, so a successful
+changed-source build saves its new artifacts instead of repeatedly rebuilding
+from an immutable old snapshot. On a miss, read-only cache metadata selects the
+newest source snapshot visible to this PR ref or main, for the same runner OS
+and architecture. rust-cache still validates compiler/environment/lockfile
+compatibility, and the full-content source checks still invalidate changed or
+deleted files. The prior source-independent cache remains a migration fallback.
+Docs and target artifacts do not affect the source hash. This introduces no
+per-crate cache calls or writes to other refs.

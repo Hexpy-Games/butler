@@ -120,7 +120,7 @@ runs:
       uses: Swatinem/rust-cache@v2
       with:
         workspaces: packages/butler-agent/rust
-        shared-key: ${{ inputs.cache-key }}-${{ inputs.native-deps }}${{ inputs.cache-workspace-crates == 'true' && '-workspace-v2' || '' }}
+        shared-key: ${{ inputs.cache-key }}-${{ inputs.native-deps }}${{ inputs.cache-workspace-crates == 'true' && format('-workspace-v3-{0}', hashFiles('packages/butler-agent/rust/**', '!packages/butler-agent/rust/**/target/**', '!packages/butler-agent/rust/**/*.md')) || '' }}
         cache-workspace-crates: ${{ inputs.cache-workspace-crates }}
         cache-directories: |
           ${{ runner.temp }}/ort-download-cache
@@ -131,8 +131,49 @@ runs:
         save-if: ${{ github.event_name != 'pull_request' || inputs.cache-workspace-crates == 'true' }}
         cache-on-failure: false
 
-    - name: Seed from the previous workspace cache
+    - name: Find the newest compatible workspace source snapshot
       if: inputs.cache-workspace-crates == 'true' && steps.cargo-cache.outputs.cache-hit != 'true'
+      id: workspace-seed
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        WORKSPACE_CACHE_BASE: ${{ inputs.cache-key }}-${{ inputs.native-deps }}-workspace-v3-
+      run: |
+        export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
+        export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
+        python3 "$GITHUB_WORKSPACE/.github/scripts/select-workspace-cache.py"
+
+    - name: Seed from the newest workspace source snapshot
+      if: inputs.cache-workspace-crates == 'true' && steps.cargo-cache.outputs.cache-hit != 'true' && steps.workspace-seed.outputs.shared-key != ''
+      id: source-workspace-cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: packages/butler-agent/rust
+        shared-key: ${{ steps.workspace-seed.outputs.shared-key }}
+        cache-workspace-crates: true
+        cache-directories: |
+          ${{ runner.temp }}/ort-download-cache
+          ${{ runner.temp }}/ci-source-mtimes
+          ${{ runner.temp }}/ci-workspace-targets
+        save-if: false
+
+    - name: Seed from the prior source-independent workspace cache
+      if: inputs.cache-workspace-crates == 'true' && steps.cargo-cache.outputs.cache-hit != 'true' && steps.source-workspace-cache.outputs.cache-hit != 'true'
+      id: legacy-workspace-cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: packages/butler-agent/rust
+        shared-key: ${{ inputs.cache-key }}-${{ inputs.native-deps }}-workspace-v2
+        cache-workspace-crates: true
+        cache-directories: |
+          ${{ runner.temp }}/ort-download-cache
+          ${{ runner.temp }}/ci-source-mtimes
+          ${{ runner.temp }}/ci-workspace-targets
+        save-if: false
+
+    - name: Seed from the previous workspace cache
+      if: inputs.cache-workspace-crates == 'true' && steps.cargo-cache.outputs.cache-hit != 'true' && steps.source-workspace-cache.outputs.cache-hit != 'true' && steps.legacy-workspace-cache.outputs.cache-hit != 'true'
       id: previous-workspace-cache
       uses: Swatinem/rust-cache@v2
       with:
@@ -144,7 +185,7 @@ runs:
         save-if: false
 
     - name: Seed the workspace cache from existing dependencies
-      if: inputs.cache-workspace-crates == 'true' && steps.cargo-cache.outputs.cache-hit != 'true' && steps.previous-workspace-cache.outputs.cache-hit != 'true'
+      if: inputs.cache-workspace-crates == 'true' && steps.cargo-cache.outputs.cache-hit != 'true' && steps.source-workspace-cache.outputs.cache-hit != 'true' && steps.legacy-workspace-cache.outputs.cache-hit != 'true' && steps.previous-workspace-cache.outputs.cache-hit != 'true'
       uses: Swatinem/rust-cache@v2
       with:
         workspaces: packages/butler-agent/rust
