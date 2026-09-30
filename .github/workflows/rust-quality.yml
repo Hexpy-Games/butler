@@ -118,16 +118,8 @@ jobs:
     name: Clippy (Linux x64)
     runs-on: ubuntu-24.04
     timeout-minutes: 90
-    env:
-      # Keep compiler-cache reads, but let rust-cache own the bulk uploads.
-      # Per-crate writes rate-limited the dependency-cache save in round 2.
-      SCCACHE_GHA_ENABLED: "true"
-      SCCACHE_GHA_RW_MODE: READ_ONLY
-      RUSTC_WRAPPER: sccache
     steps:
       - uses: actions/checkout@v4
-      - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
       - name: Set up Rust and prebuilt ONNX Runtime
         uses: ./.github/actions/rust-agent-setup
         with:
@@ -187,15 +179,8 @@ jobs:
       # stripped before running anyway; avoid generating it during compilation.
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
-      # Keep compiler-cache reads, but let rust-cache own the bulk uploads.
-      # Per-crate writes rate-limited the dependency-cache save in round 2.
-      SCCACHE_GHA_ENABLED: "true"
-      SCCACHE_GHA_RW_MODE: READ_ONLY
-      RUSTC_WRAPPER: sccache
     steps:
       - uses: actions/checkout@v4
-      - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
       - name: Set up Rust and prebuilt ONNX Runtime
         uses: ./.github/actions/rust-agent-setup
         with:

@@ -126,7 +126,10 @@ runs:
           ${{ runner.temp }}/ort-download-cache
           ${{ inputs.cache-workspace-crates == 'true' && format('{0}/ci-source-mtimes', runner.temp) || '' }}
           ${{ inputs.cache-workspace-crates == 'true' && format('{0}/ci-workspace-targets', runner.temp) || '' }}
-        cache-on-failure: ${{ inputs.cache-workspace-crates != 'true' }}
+        # Restore main caches for every job, but reserve PR cache writes for
+        # the gate. Non-gate copies evicted its workspace cache at the quota.
+        save-if: ${{ github.event_name != 'pull_request' || inputs.cache-workspace-crates == 'true' }}
+        cache-on-failure: false
 
     - name: Seed from the previous workspace cache
       if: inputs.cache-workspace-crates == 'true' && steps.cargo-cache.outputs.cache-hit != 'true'

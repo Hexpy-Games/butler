@@ -55,14 +55,19 @@ The source job proves both artifact reuse and rebuilding changed contents with
 an actual Cargo fixture, including saving/restoring its executable and
 dependency records. Non-library targets discarded by rust-cache are kept in
 a separate cache directory, so unchanged integration binaries also stay fresh. The new cache can seed itself from existing dependency
-caches and only saves after successful builds.
+caches and only saves after successful builds. Non-gate PR jobs still restore
+main caches, but do not save competing PR copies. Failed/cancelled jobs do not
+save build caches, avoiding quota churn and prolonged cancellation cleanup.
+Main/nightly cache writes remain enabled for successful jobs.
 The agent qualification build script reads Git with optional locks disabled,
 so checking a watched index cannot refresh it and trigger a second agent link.
 Post-build stripping preserves dependency cache fingerprints; the job restores the former workspace Tests
-cache rather than the smaller E2E cache. The gate reads the existing sccache
-compiler cache; only rust-cache writes dependency archives. Per-crate sccache
-uploads exhausted the cache API write quota and prevented the bulk cache save
-during the cold round-2 measurement. The nextest archive is already
+cache rather than the smaller E2E cache. Linux uses the bulk Cargo cache without per-crate GitHub sccache calls. One
+Clippy run made 704 Rust cache misses and zero Rust hits, then hit a service
+rate limit while saving its bulk cache—even with per-crate writes disabled.
+Removing those lookups avoids hundreds of unproductive cache requests. Non-gate
+PR jobs restore caches without saving competing copies; failed/cancelled jobs
+do not save build caches. The nextest archive is already
 zstd-compressed. The separate real agent is gzip-compressed, and upload-artifact's additional compression is
 turned off. macOS and Windows retain their linker settings and coverage in
 `post-merge-ci.yml`; duplicate platform jobs were removed from Rust quality.
@@ -106,3 +111,10 @@ Its gate passed in 6m31s: the workspace caches had been evicted, so the build
 restored only dependencies, verified 2,550 source files without a saved timestamp
 snapshot, and repopulated its workspace cache. Runner ordering fixes queue
 contention; it cannot promise a warm build after GitHub cache quota eviction.
+
+The E2E harness waits for both authenticated HTTP health and lifecycle readiness
+of the actual child PID within the original 90-second startup deadline.
+[Issue #366](https://github.com/Hexpy-Games/butler/issues/366) was reproduced with
+a healthy HTTP fixture held in the `starting` lifecycle state; the old harness
+returned early. Its regression also rejects a different PID's ready record.
+The startup-port CLI assertions remain unchanged.
