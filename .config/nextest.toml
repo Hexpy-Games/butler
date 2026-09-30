@@ -19,3 +19,11 @@ success-output = "final"
 [[profile.default.overrides]]
 filter = 'binary(=e2e) and (test(/^memory_idle::mem_idle_/) or test(/^schedule_store::sched_06_/))'
 priority = 10
+
+# The control-read shutdown test measures the unchanged two-second budget.
+# Reserve the runner while sampling, as PERF-01 does for request latency.
+[[profile.default.overrides]]
+filter = 'binary(=e2e) and test(/^shutdown_order::shutdown_interrupts_a_control_request_read$/)'
+threads-required = 8
+priority = 90
+success-output = "final"

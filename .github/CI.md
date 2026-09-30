@@ -118,3 +118,41 @@ of the actual child PID within the original 90-second startup deadline.
 a healthy HTTP fixture held in the `starting` lifecycle state; the old harness
 returned early. Its regression also rejects a different PID's ready record.
 The startup-port CLI assertions remain unchanged.
+
+
+The stability batch merged during round-2 work adds a dedicated PERF-01 job;
+its filter now selects module-qualified `::perf_` names from the single E2E
+binary, and **PR gate** includes its result and unchanged 150 ms p95 limit.
+PERF-IDLE keeps its existing opt-in release tier. Nextest inventory validation
+covers 219 scenarios: 19 ignored live and 200 non-ignored selections. Six stub
+partitions contain 27/34/24/27/34/36 scenarios, the install selections contain
+1/1/14, and the performance job contains 2 (including opt-in PERF-IDLE).
+Selections are disjoint and exhaustive; workspace archive tests run separately.
+
+Cache transfer success and retention must be verified before calling a run
+warm. In [run 36705834173](https://github.com/Hexpy-Games/butler/actions/runs/36705834173),
+Clippy saved its 562 MB cache, but the archive save was rate-limited. That
+Clippy entry was evicted before the next run. Removing this workflow's per-crate
+cache calls reduced its requests but did not resolve shared cache pressure.
+[Run 36707877010](https://github.com/Hexpy-Games/butler/actions/runs/36707877010)
+then built the whole workspace cold in an 8m45s job (7m44s Cargo build), and
+saved both workspace caches: 1,327,147,736 archive bytes and 562,193,734 Clippy
+bytes. Cold compilation still exceeds the five-minute target. The PR report
+keeps cold, warm, failed and queued measurements separate.
+
+The shutdown MCP scenario added on main also resolves its fixture through
+nextest's runtime path. Its archive relocation check passed with the original
+build-host fixture executable removed; shutdown/reap deadlines remain intact.
+The unchanged Q-02 failure in the preceding CI run is tracked in
+[issue #374](https://github.com/Hexpy-Games/butler/issues/374). It did not reproduce
+in the isolated local archive run; no cause or fix is claimed.
+
+
+The control-request shutdown scenario measures an unchanged two-second budget;
+like PERF-01, it reserves the runner's eight nextest execution slots while
+sampling. Its deadline and assertions are unchanged. In
+[issue #375](https://github.com/Hexpy-Games/butler/issues/375), CI recorded
+2.146s with concurrent fixtures. The two-core local shard did not reproduce
+that failure, so contention is not claimed as a demonstrated root cause.
+The issue remains open; the scheduling change gives latency checks a consistent
+measurement environment without skipping any scenarios.
