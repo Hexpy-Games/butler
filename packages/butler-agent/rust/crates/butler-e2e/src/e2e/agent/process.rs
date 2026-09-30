@@ -141,6 +141,22 @@ pub(super) fn log_tail(path: &Path) -> String {
 }
 
 /// Every regular file under `dir`, concatenated (lossy UTF-8).
+pub(super) fn print_failure_logs(dir: &Path, starts: u32) {
+    use std::io::Write;
+    let mut stderr = std::io::stderr().lock();
+    for start in 1..=starts {
+        let path = dir.join(format!("agent-{start}.log"));
+        // Diagnostics must never cause a second panic during unwinding.
+        let _ = writeln!(
+            stderr,
+            "\n--- {} (last 16 KiB) ---\n{}",
+            path.display(),
+            log_tail(&path)
+        );
+    }
+}
+
+/// Every regular file under `dir`, concatenated (lossy UTF-8).
 pub fn read_all(dir: &Path) -> String {
     let mut out = String::new();
     let Ok(entries) = fs::read_dir(dir) else {
