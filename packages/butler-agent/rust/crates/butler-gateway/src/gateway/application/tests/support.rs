@@ -391,6 +391,7 @@ impl AppQueueOwnerLiveness for Liveness {
 
 pub(super) fn dependencies(native: Arc<Native>, clock: u64) -> AppApplicationDependencies {
     AppApplicationDependencies {
+        service_shutdown: tokio_util::sync::CancellationToken::new(),
         updates: test_updates(),
         skills: test_skills(),
         mcp_client: Arc::new(butler_models::mcp_client::McpClient::new(

@@ -29,6 +29,9 @@ Read [plans/README.md](plans/README.md) first. It holds the repo rules: test pol
 
 Newest first. The coordinator adds an entry whenever a mistake repeats. Each entry gives the rule, then what happened.
 
+- **2026-10-01: Shutdown paths: test the full queue (active turn plus queued follow-ups), not only the active turn.**
+  - What happened: Q-02 left a follow-up permanently failed after restart; queue recovery raced executor readiness and shutdown errors had no pending recovery path.
+
 - **2026-09-30: running checks against the real home dir.** Isolate every check and test run (see Isolation).
   - What happened: `bun run check` ran without a temp `HOME`/`BUTLER_DATA`, and the Project Ledger tests tried to write under `~/.butler`. The sandbox blocked it twice (tasks sync-329 and ratchet-324).
   - The same test gap had earlier left about 1,400 fixture dirs (720 MB) in the owner's real `~/.butler/project-ledger/projects/`.

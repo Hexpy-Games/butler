@@ -113,13 +113,7 @@ impl AppServer {
             BtccError::relayed("app_listener_address_failed", error.to_string())
         })?;
         let settings = Arc::new(open_settings(runtime, data_root, address).await?);
-        let setup = AppSetup::start(AppSetupParts {
-            configuration: runtime.models.configuration.clone(),
-            settings: settings.clone(),
-            installation: installation.clone(),
-            data_root: data_root.to_path_buf(),
-            executor: owners.receipt.clone(),
-        });
+        let setup = owners.start_setup(runtime, settings.clone(), installation, data_root);
         let session_workspaces = Arc::new(AppSessionWorkspaces::new(
             runtime.bindings.clone(),
             runtime.session_worktrees.clone(),
@@ -128,6 +122,7 @@ impl AppServer {
             runtime.conversations.clone(),
         ));
         let dependencies = AppApplicationDependencies {
+            service_shutdown: runtime.service_shutdown.clone(),
             updates: Arc::new(open_updates(data_root, installation)?),
             setup: Arc::new(setup.clone()),
             skills: runtime.skills.clone(),
@@ -351,4 +346,22 @@ async fn start_application(
     // old claims remain valid until terminal projection settles them.
     application.drain_projection().await?;
     application.start_dispatch().await
+}
+
+impl AppServerOwners {
+    fn start_setup(
+        &self,
+        runtime: &AgentRuntime,
+        settings: Arc<AppSettingsFactsAdapter>,
+        installation: &ResolvedInstallation,
+        data_root: &std::path::Path,
+    ) -> AppSetup {
+        AppSetup::start(AppSetupParts {
+            configuration: runtime.models.configuration.clone(),
+            settings,
+            installation: installation.clone(),
+            data_root: data_root.to_path_buf(),
+            executor: self.receipt.clone(),
+        })
+    }
 }
