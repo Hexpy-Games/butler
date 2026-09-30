@@ -22,6 +22,14 @@ struct DispatchResult {
 }
 
 impl AppApplication {
+    pub(crate) async fn dispatch_due_request(
+        &self,
+    ) -> Result<AutomationRunListView, GatewayApplicationError> {
+        #[cfg(debug_assertions)]
+        self.inject_dispatch_fault().await?;
+        self.dispatch_due_owned().await
+    }
+
     pub(crate) async fn run_automation_owned(
         &self,
         id: String,

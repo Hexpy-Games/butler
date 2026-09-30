@@ -436,6 +436,9 @@ impl Agent {
 
 impl Drop for Agent {
     fn drop(&mut self) {
+        if std::thread::panicking() {
+            process::print_failure_logs(&self.launch.logs, self.starts);
+        }
         if let Some(mut child) = self.child.take() {
             let _ = child.kill();
             let _ = child.wait();
