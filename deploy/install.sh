@@ -147,7 +147,10 @@ resolve_version() {
 download() {
   base="${BUTLER_INSTALL_BASE_URL:-https://github.com/$REPO/releases/download/v$version}"
   base="${base%/}"
-  archive="butler-agent-$version-$platform.tar.gz"
+  # Prerelease tags name the release, while the Agent archive keeps the base
+  # Cargo version (for example, tag v0.1.0-preview.1 contains Agent 0.1.0).
+  archive_version="${version%%-*}"
+  archive="butler-agent-$archive_version-$platform.tar.gz"
   sums="butler-$version-SHA256SUMS"
   info "installing Butler $version ($platform)"
   fetch "$base/$sums" "$tmp/$sums"
@@ -175,7 +178,7 @@ unpack() {
   [ "$(field platform)-$(field architecture)" = "$platform" ] || die "$archive was built for another platform"
   agent_version="$(field version)"
   valid_version "$agent_version" || die "$archive has an invalid version"
-  [ "$agent_version" = "$version" ] || die "release $version contains agent $agent_version"
+  [ "$agent_version" = "$archive_version" ] || die "release $version contains agent $agent_version"
   binary_sha="$(field binarySha256)"
   printf '%s' "$binary_sha" | grep -Eq '^[0-9a-f]{64}$' || die "$archive has an invalid manifest"
   dir="$agent_version-$(printf '%s' "$binary_sha" | cut -c1-8)"
