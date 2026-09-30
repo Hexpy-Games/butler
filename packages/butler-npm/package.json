@@ -1,6 +1,6 @@
 {
   "name": "@hexpygames/butler",
-  "version": "0.0.21",
+  "version": "0.1.0",
   "description": "Installs the Butler agent: npx @hexpygames/butler install",
   "license": "MIT",
   "type": "module",
