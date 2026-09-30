@@ -3,7 +3,12 @@ description: Run the real agent binary against replay cassettes on the current R
 inputs:
   partition:
     description: Nextest partition in m/n form.
-    required: true
+    required: false
+    default: ""
+  filterset:
+    description: Nextest filterset expression applied to the stub tier.
+    required: false
+    default: ""
   archive-file:
     description: Optional nextest archive to run without rebuilding test binaries.
     required: false
@@ -81,6 +86,7 @@ runs:
       working-directory: packages/butler-agent/rust
       env:
         PARTITION: ${{ inputs.partition }}
+        TEST_FILTERSET: ${{ inputs.filterset }}
         ARCHIVE_FILE: ${{ inputs.archive-file }}
         BUTLER_E2E_EMBEDDING_ASSETS: ${{ runner.temp }}/e2e-models/bge-m3
         BUTLER_E2E_TIER: stub
@@ -90,18 +96,30 @@ runs:
         BUTLER_E2E_REPORT: ${{ runner.temp }}/e2e-report.txt
       run: |
         set -o pipefail
+        filterset='not test(idle_disk_writes_and_cpu_stay_bounded)'
+        if [ -n "$TEST_FILTERSET" ]; then
+          filterset="($TEST_FILTERSET) and $filterset"
+        fi
+        nextest_partition_args=()
+        if [ -n "$PARTITION" ]; then
+          if [ -n "$ARCHIVE_FILE" ]; then
+            nextest_partition_args=(--partition "count:$PARTITION")
+          else
+            nextest_partition_args=(--partition "slice:$PARTITION")
+          fi
+        fi
         if [ -n "$ARCHIVE_FILE" ]; then
           cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
-            run --no-fail-fast --archive-file "$ARCHIVE_FILE" \
+            run --no-fail-fast --retries 0 --archive-file "$ARCHIVE_FILE" \
             --extract-to "$PWD" \
-            --partition "count:$PARTITION" \
-            -E 'not test(idle_disk_writes_and_cpu_stay_bounded)' \
+            "${nextest_partition_args[@]}" \
+            -E "$filterset" \
             2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
         else
           cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
-            run --locked --no-fail-fast -p butler-e2e \
-            --partition "slice:$PARTITION" \
-            -E 'not test(idle_disk_writes_and_cpu_stay_bounded)' \
+            run --locked --no-fail-fast --retries 0 -p butler-e2e \
+            "${nextest_partition_args[@]}" \
+            -E "$filterset" \
             2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
         fi
 
@@ -123,10 +141,16 @@ runs:
       if: always()
       env:
         PARTITION: ${{ inputs.partition }}
+        TEST_FILTERSET: ${{ inputs.filterset }}
       shell: bash
       run: |
         {
-          echo "### E2E stub tier ($RUNNER_OS $RUNNER_ARCH, partition $PARTITION)"
+          if [ -n "$PARTITION" ]; then
+            selection="partition $PARTITION"
+          else
+            selection="filterset $TEST_FILTERSET"
+          fi
+          echo "### E2E stub tier ($RUNNER_OS $RUNNER_ARCH, $selection)"
           if [ -f "$RUNNER_TEMP/e2e-stub.log" ]; then
             grep -E '^(PASS|FAIL|SKIP|CANCEL)' "$RUNNER_TEMP/e2e-stub.log" | sed 's/^/    /' || true
           fi
