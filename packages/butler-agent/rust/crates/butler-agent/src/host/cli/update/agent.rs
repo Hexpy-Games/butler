@@ -64,7 +64,7 @@ async fn run_service(context: &Context, options: &Options) -> Result<Value, CliE
     )
     .map_err(|error| install_error(&error))?
     .with_home(context.home.clone());
-    let Ok(signal_task) = crate::host::memory_jobs::maintain::signals(service.cancellation_token())
+    let Ok(signal_task) = crate::host::memory_jobs::signals::signals(service.cancellation_token())
     else {
         service.close();
         return Err(CliError::failed(

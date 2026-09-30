@@ -27,6 +27,7 @@ pub(crate) struct ProcessModels {
 }
 
 impl ProcessModels {
+    #[cfg(test)]
     pub(crate) fn new(
         data_root: PathBuf,
         environment: ModelConfigurationEnvironment,

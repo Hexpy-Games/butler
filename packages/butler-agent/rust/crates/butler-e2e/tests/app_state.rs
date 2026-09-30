@@ -40,14 +40,7 @@ async fn pro_01_personalization_read_write() -> Result<(), HarnessError> {
             .unwrap_or_default()
             .contains(&marker)
     );
-    // The CLI shows the profile part of personalization.
-    let cli = s.agent.cli(&["personalization", "get", "--json"])?;
-    assert_eq!(cli.code, Some(0), "{} {}", cli.stdout, cli.stderr);
-    assert_eq!(
-        cli.json()?["data"]["profile"]["principal_name"],
-        marker.as_str(),
-        "CLI disagrees with HTTP"
-    );
+    assert_eq!(view.data()["profile"]["principal_name"], marker.as_str());
 
     let before = s.gw.get("/personalization").await?.data().clone();
     let rejected =

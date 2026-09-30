@@ -1,4 +1,4 @@
-//! `butler service install | uninstall | status`: start the service at login
+//! `butler startup enable | disable | status`: start the service at login
 //! through the host's service manager (launchd, systemd `--user`).
 //!
 //! The definition runs `service run --detached --if-absent` from the CLI
@@ -55,7 +55,7 @@ fn install(
 ) -> Result<(Value, String), Error> {
     let data_root = super::lifecycle::resolve_data_root(data, installation).map_err(|error| {
         Error::Manager {
-            command: "service install".into(),
+            command: "startup enable".into(),
             message: error.message().to_owned(),
         }
     })?;
@@ -164,7 +164,7 @@ fn state_word(state: Option<bool>, yes: &'static str, no: &'static str) -> &'sta
     }
 }
 
-/// Settings of the service that `service install` records in the job, when
+/// Settings of the service that `startup enable` records in the job, when
 /// they are set: where the gateway listens and where secrets are kept.
 const JOB_SETTINGS: [&str; 3] = [
     "BUTLER_APP_SERVER_HOST",
@@ -175,7 +175,7 @@ const JOB_SETTINGS: [&str; 3] = [
 /// A refusal to register, worded as an error of the manager call.
 fn refused(message: &str) -> Error {
     Error::Manager {
-        command: "service install".into(),
+        command: "startup enable".into(),
         message: message.to_owned(),
     }
 }

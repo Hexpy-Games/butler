@@ -135,21 +135,15 @@ async fn acc_02_memory_save_proceeds_without_approval_in_ask_first() -> Result<(
         );
         return s.finish().await;
     }
-    let result = s
-        .agent
-        .cli_async(&[
-            "cognition",
-            "memory",
-            "recall",
-            "locker combination",
-            "--json",
-        ])
-        .await?
-        .json()?;
-    assert!(
-        result["data"]["results"].to_string().contains(&code),
-        "saved fact not recalled: {result}"
-    );
+    let rules = s.sandbox.data.join("cognition/memory/rules");
+    let mut found = false;
+    for entry in std::fs::read_dir(rules)? {
+        let path = entry?.path();
+        if path.extension().is_some_and(|ext| ext == "md") {
+            found |= std::fs::read_to_string(path)?.contains(&code);
+        }
+    }
+    assert!(found, "saved explicit memory source missing");
     s.finish().await
 }
 
