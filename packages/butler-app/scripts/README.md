@@ -44,7 +44,8 @@ gateway or Electron runtime.
   arm64) and Arch (x64) packages with the bundled native agent on a Linux host
   of the target architecture; `release/linux-package-smoke.sh` installs one in
   a clean container and runs its agent headless. CI:
-  `.github/workflows/linux-packages.yml` (tags, manual runs; artifacts only).
+  `.github/workflows/linux-packages.yml` (PRs, main, nightly and manual runs;
+  called by `release.yml` for tags before packages are attached to the draft).
 - UI quality: `lint/`.
 - Codemods: `codemods/ds-unsafe-style.ts` (ts-morph) moves geometry-only `style` on
   design-system components to `UNSAFE_style` and fails while any `className`/`style`
