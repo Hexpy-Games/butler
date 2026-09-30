@@ -73,19 +73,44 @@ impl ModelConfiguration {
         let Some(patch) = patch.as_object() else {
             return Err(SettingsError::Rejected("User settings update is invalid."));
         };
-        let _write = self.configuration_writes.acquire().await;
-        let root = root.unwrap_or(&self.data_root);
-        let path = root.join("butler.config.json");
-        let _change = configuration::lock_file_async(&path).await?;
-        let mut config = configuration::read_json_object(&path)?;
-        let object = butler_core::json::object_mut(&mut config);
-        let user = butler_core::json::object_field_mut(object, "user");
-        for (key, value) in patch {
-            user.insert(key.clone(), value.clone());
-        }
-        let value = Value::Object(user.clone());
-        configuration::write_json_atomic(&path, &config)?;
-        Ok(ConfigUserSettings { value })
+        let guard = self.configuration_writes.acquire_owned().await;
+        let path = root.unwrap_or(&self.data_root).join("butler.config.json");
+        let patch = patch.clone();
+        tokio::task::spawn_blocking(move || {
+            let _guard = guard;
+            let _change = configuration::lock_file(&path)?;
+            let mut config = configuration::read_json_object(&path)?;
+            let object = butler_core::json::object_mut(&mut config);
+            let user = butler_core::json::object_field_mut(object, "user");
+            // A stored key predating default provenance is always explicit.
+            if patch.contains_key("responseLanguage") {
+                user.insert(
+                    "responseLanguageDefaultSource".into(),
+                    Value::from("explicit"),
+                );
+            } else if patch.get("language").and_then(Value::as_str) == Some("ko")
+                && (user.get("responseLanguage").is_none()
+                    || (user.get("responseLanguage").and_then(Value::as_str) == Some("en")
+                        && user
+                            .get("responseLanguageDefaultSource")
+                            .and_then(Value::as_str)
+                            == Some("fallback")))
+            {
+                user.insert("responseLanguage".into(), Value::from("ko"));
+                user.insert(
+                    "responseLanguageDefaultSource".into(),
+                    Value::from("installer"),
+                );
+            }
+            for (key, value) in patch {
+                user.insert(key, value);
+            }
+            let value = Value::Object(user.clone());
+            configuration::write_json_atomic(&path, &config)?;
+            Ok(ConfigUserSettings { value })
+        })
+        .await
+        .map_err(SettingsError::WriteTask)?
     }
 
     /// Merge the App-owned web-search fields while retaining unrelated config

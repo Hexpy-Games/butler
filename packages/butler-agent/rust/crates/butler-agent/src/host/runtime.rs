@@ -2,6 +2,7 @@
 
 mod boundary;
 mod contracts;
+mod defaults;
 pub(super) mod environment;
 mod mcp_owner;
 pub(super) mod models;
@@ -16,7 +17,7 @@ mod web_owner;
 use super::{AcceptedPlanProducer, ActiveAppEndpoint, CognitionPrompt, ConversationObserver};
 use super::{
     EmbeddingOwner, GuidedCatalog, GuidedPreparation, GuidedTurnFactoryAdapter,
-    ProfileConversationSources, ResolvedInstallation, SystemIdentity, SystemPromptClock,
+    ResolvedInstallation, SystemIdentity, SystemPromptClock,
 };
 use crate::host::memory_jobs::context_maintenance::ContextMaintenance;
 use crate::host::memory_jobs::daily::{DailyCognitionJobs, DailyCognitionOwners};
@@ -31,7 +32,7 @@ use butler_memory::cognition::GenerationVectorAdapter;
 use butler_memory::cognition::{CognitionPromptReader, CompletionPublisher, ExactMemoryQuery};
 use butler_memory::cognition::{MemoryRecall, ProjectCapsuleService};
 use butler_memory::coordination::CognitionWriteCoordinator;
-use butler_memory::profile::{PersonaPresets, ProfileService};
+use butler_memory::profile::ProfileService;
 use butler_models::models::ModelConfigurationClock;
 use butler_runtime::context::{
     ContextBudgetOwner, ContextConversation, ConversationSessionReference, ConversationTools,
@@ -47,7 +48,6 @@ use butler_turn::btcc::{
     StorageEffectJournal, StorageProgressPublication, ToolJournalRepository,
     TurnFacadeDependencies, TurnModelExecutionFactory,
 };
-use butler_turn::conversation::conversation_store_path;
 use butler_turn::workspace::{
     Commands, SessionWorkspaceRecovery, SessionWorktrees, WorkspaceFiles, WorkspaceMutations,
 };
@@ -69,6 +69,8 @@ impl AgentRuntime {
         let (app_endpoint, stop) = app;
         stores::check_startup(stop)?;
         validate_data_installation_boundary(&paths.data_root, &paths.installation_root)?;
+        let response_language =
+            defaults::initialize(&paths, &app_database_path, &installation).await?;
         // All fallible in-memory setup precedes the first store owner.
         let collation = Arc::new(LocaleCollation::new(locale).map_err(setup)?);
         let writes = Arc::new(ConfigurationWrites::new());
@@ -141,18 +143,15 @@ impl AgentRuntime {
             environment.cognition_paths.clone(),
             2,
         ));
-        let profile = Arc::new(ProfileService::new(
-            paths.data_root.clone(),
+        let profile = defaults::open_profile(
+            &paths,
             cognition_root.clone(),
-            Arc::new(PersonaPresets::new(paths.resource_root.clone())),
             writes,
             coordinator.clone(),
-            Arc::new(SystemIdentity),
-            Arc::new(ProfileConversationSources::new(conversation_store_path(
-                &paths.data_root,
-            ))),
             models.provider.clone(),
-        ));
+            &response_language,
+        )
+        .await?;
         let project_ledger = ProjectLedger::with_collation(&paths.data_root, 2, collation.clone());
         let plans = AcceptedPlanProducer::from_ledger(project_ledger.clone());
         let project_tools = Arc::new(crate::host::guided::project_tools::GuidedProjectTools::new(

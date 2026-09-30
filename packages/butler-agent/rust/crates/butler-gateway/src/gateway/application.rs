@@ -53,7 +53,7 @@ mod sessions;
 mod settings;
 mod setup;
 mod turn_dispatch;
-pub use settings::diagnostics_enabled_readonly;
+pub use settings::{diagnostics_enabled_readonly, stored_ui_language_readonly};
 mod shell;
 mod space;
 mod storage;
