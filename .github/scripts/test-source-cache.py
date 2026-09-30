@@ -8,6 +8,7 @@ import sys
 import tempfile
 
 script = Path(__file__).with_name("restore-source-mtimes.py")
+targets_script = Path(__file__).with_name("cache-workspace-targets.py")
 with tempfile.TemporaryDirectory(prefix="butler-source-cache-") as temporary:
     root = Path(temporary)
     crate = root / "packages/butler-agent/rust"
@@ -36,6 +37,13 @@ with tempfile.TemporaryDirectory(prefix="butler-source-cache-") as temporary:
     restore()
     assert not build()
     original = source.stat().st_mtime_ns
+    target_cache = root / "target-cache"
+    subprocess.run([sys.executable, str(targets_script), "save", str(target_cache)],
+                   cwd=crate, env=env, check=True)
+    for name in json.loads((target_cache / "files.json").read_text()):
+        (root / "target" / name).unlink()
+    subprocess.run([sys.executable, str(targets_script), "restore", str(target_cache)],
+                   cwd=crate, env=env, check=True)
     os.utime(source, None)  # A new checkout of the same contents.
     restore()
     assert source.stat().st_mtime_ns == original

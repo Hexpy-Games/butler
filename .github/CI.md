@@ -40,7 +40,9 @@ environment inputs. Workspace libraries are cached as well. Each tracked Rust
 workspace file is hashed in full: only matching contents reuse a cached source
 timestamp, and changed contents receive a fresh timestamp even when backdated.
 The source job proves both artifact reuse and rebuilding changed contents with
-an actual Cargo fixture. The new cache can seed itself from existing dependency
+an actual Cargo fixture, including saving/restoring its executable and
+dependency records. Non-library targets discarded by rust-cache are kept in
+a separate cache directory, so unchanged integration binaries also stay fresh. The new cache can seed itself from existing dependency
 caches and only saves after successful builds.
 The agent qualification build script reads Git with optional locks disabled,
 so checking a watched index cannot refresh it and trigger a second agent link.

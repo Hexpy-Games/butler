@@ -111,6 +111,13 @@ jobs:
           export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
           cargo clippy -j 8 --workspace --all-targets --locked --keep-going -- -D warnings
 
+      - name: Retain non-library workspace targets in the cache
+        run: |
+          export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
+          export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/cache-workspace-targets.py" \
+            save "$RUNNER_TEMP/ci-workspace-targets"
+
   linux-tests:
     name: Tests (Linux x64, archive)
     needs: linux-e2e-archive
@@ -183,6 +190,12 @@ jobs:
           if grep -rqE '^[[:space:]]*//[/!][[:space:]]*```' crates; then
             cargo test -j 8 --workspace --doc --locked
           fi
+      - name: Retain non-library workspace targets in the cache
+        run: |
+          export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
+          export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/cache-workspace-targets.py" \
+            save "$RUNNER_TEMP/ci-workspace-targets"
       - name: Prepare the E2E artifact
         run: |
           mkdir -p "$RUNNER_TEMP/e2e-artifact"

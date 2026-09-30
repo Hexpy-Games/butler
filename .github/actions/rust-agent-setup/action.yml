@@ -120,21 +120,44 @@ runs:
       uses: Swatinem/rust-cache@v2
       with:
         workspaces: packages/butler-agent/rust
-        shared-key: ${{ inputs.cache-key }}-${{ inputs.native-deps }}${{ inputs.cache-workspace-crates == 'true' && '-workspace-v1' || '' }}
+        shared-key: ${{ inputs.cache-key }}-${{ inputs.native-deps }}${{ inputs.cache-workspace-crates == 'true' && '-workspace-v2' || '' }}
         cache-workspace-crates: ${{ inputs.cache-workspace-crates }}
         cache-directories: |
           ${{ runner.temp }}/ort-download-cache
           ${{ inputs.cache-workspace-crates == 'true' && format('{0}/ci-source-mtimes', runner.temp) || '' }}
+          ${{ inputs.cache-workspace-crates == 'true' && format('{0}/ci-workspace-targets', runner.temp) || '' }}
         cache-on-failure: ${{ inputs.cache-workspace-crates != 'true' }}
 
-    - name: Seed the workspace cache from existing dependencies
+    - name: Seed from the previous workspace cache
       if: inputs.cache-workspace-crates == 'true' && steps.cargo-cache.outputs.cache-hit != 'true'
+      id: previous-workspace-cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: packages/butler-agent/rust
+        shared-key: ${{ inputs.cache-key }}-${{ inputs.native-deps }}-workspace-v1
+        cache-directories: |
+          ${{ runner.temp }}/ort-download-cache
+          ${{ runner.temp }}/ci-source-mtimes
+        save-if: false
+
+    - name: Seed the workspace cache from existing dependencies
+      if: inputs.cache-workspace-crates == 'true' && steps.cargo-cache.outputs.cache-hit != 'true' && steps.previous-workspace-cache.outputs.cache-hit != 'true'
       uses: Swatinem/rust-cache@v2
       with:
         workspaces: packages/butler-agent/rust
         shared-key: ${{ inputs.cache-key }}-${{ inputs.native-deps }}
         cache-directories: ${{ runner.temp }}/ort-download-cache
         save-if: false
+
+    - name: Restore non-library workspace targets
+      if: inputs.cache-workspace-crates == 'true'
+      shell: bash
+      working-directory: packages/butler-agent/rust
+      run: |
+        export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
+        export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
+        python3 "$GITHUB_WORKSPACE/.github/scripts/cache-workspace-targets.py" \
+          restore "$RUNNER_TEMP/ci-workspace-targets"
 
     - name: Restore timestamps for sources with matching contents
       if: inputs.cache-workspace-crates == 'true'
