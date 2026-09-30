@@ -11,6 +11,7 @@ use std::io::{BufRead, Write};
 use serde_json::{Value, json};
 
 fn main() {
+    prepare_process();
     let mode = std::env::var("E2E_MCP_MODE").unwrap_or_default();
     let nonce = std::env::var("E2E_MCP_NONCE").unwrap_or_default();
     let required = std::env::var("E2E_MCP_REQUIRE_SECRET").unwrap_or_default();
@@ -27,6 +28,11 @@ fn main() {
         let method = request["method"].as_str().unwrap_or_default();
         let result = match method {
             "initialize" => {
+                if mode == "hang_init" {
+                    loop {
+                        std::thread::sleep(std::time::Duration::from_secs(3600));
+                    }
+                }
                 if !required.is_empty() && std::env::var(&required).is_err() {
                     Err(json!({"code": -32000, "message": "required secret missing"}))
                 } else {
@@ -65,5 +71,32 @@ fn main() {
         };
         let _ = writeln!(stdout, "{response}");
         let _ = stdout.flush();
+    }
+}
+
+fn prepare_process() {
+    if std::env::args().any(|arg| arg == "--descendant") {
+        if let Ok(path) = std::env::var("E2E_MCP_CHILD_PID_FILE") {
+            let _ = std::fs::write(path, std::process::id().to_string());
+        }
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(3600));
+        }
+    }
+    if std::env::var("E2E_MCP_CHILD_PID_FILE").is_ok() {
+        let child = std::env::current_exe().ok().and_then(|exe| {
+            std::process::Command::new(exe)
+                .arg("--descendant")
+                .spawn()
+                .ok()
+        });
+        if child.is_none() {
+            std::process::exit(2);
+        }
+    }
+    if let Ok(path) = std::env::var("E2E_MCP_PID_FILE")
+        && std::fs::write(path, std::process::id().to_string()).is_err()
+    {
+        std::process::exit(2);
     }
 }

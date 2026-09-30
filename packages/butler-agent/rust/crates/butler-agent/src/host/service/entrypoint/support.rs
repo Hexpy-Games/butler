@@ -89,3 +89,22 @@ pub(super) async fn close_runtime(runtime: Arc<AgentRuntime>) -> Result<(), Btcc
         )),
     }
 }
+
+pub(super) async fn open_writer(
+    runtime: Arc<AgentRuntime>,
+    data_root: std::path::PathBuf,
+) -> Result<
+    (
+        Arc<AgentRuntime>,
+        Arc<butler_gateway::gateway::TranscriptWriter>,
+    ),
+    BtccError,
+> {
+    match butler_gateway::gateway::TranscriptWriter::new(data_root, Arc::new(SystemIdentity)) {
+        Ok(writer) => Ok((runtime, Arc::new(writer))),
+        Err(error) => {
+            let _ = close_runtime(runtime).await;
+            Err(io(error))
+        }
+    }
+}

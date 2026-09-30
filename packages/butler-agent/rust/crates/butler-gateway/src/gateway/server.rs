@@ -65,6 +65,11 @@ impl GatewayServer {
         self.local_addr
     }
 
+    /// Refuse new HTTP work without closing application storage or waiting for handlers.
+    pub fn stop_accepting(&self) {
+        self.shutdown.cancel();
+    }
+
     /// Stop admission, terminate live streams, and wait for the listener task.
     /// LAN listeners stop with it.
     pub async fn close(mut self) -> std::io::Result<()> {

@@ -324,6 +324,10 @@ impl AppApplication {
         Ok(())
     }
 
+    pub async fn drain_projection(&self) -> Result<(), GatewayApplicationError> {
+        self.projection.drain().await
+    }
+
     pub async fn stop_dispatch(&self) -> Result<(), GatewayApplicationError> {
         self.setup_readiness.close().await;
         let automations = match &self.automation_scheduler {

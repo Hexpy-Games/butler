@@ -267,23 +267,49 @@ impl InstanceGuard {
 
 impl Drop for InstanceGuard {
     fn drop(&mut self) {
-        let Some(data_root) = self.record_path.parent().and_then(Path::parent) else {
-            return;
-        };
-        if validate_write_destinations(data_root, &self.installation).is_err() {
-            return;
-        }
-        let Ok(_record_update_lock) = acquire_record_update_lock(&self.record_update_lock_path)
-        else {
-            return;
-        };
-        if read_record_at(&self.record_path)
+        release_record_at(
+            &self.record_path,
+            &self.installation,
+            &self.record.nonce,
+            true,
+        );
+    }
+}
+
+/// Release only this instance's record; the OS releases its process lock at exit.
+pub(crate) fn release_record(data_root: &Path, installation: &ResolvedInstallation, nonce: &str) {
+    release_record_at(&instance_record_path(data_root), installation, nonce, false);
+}
+
+fn release_record_at(
+    record_path: &Path,
+    installation: &ResolvedInstallation,
+    nonce: &str,
+    wait: bool,
+) {
+    let Some(data_root) = record_path.parent().and_then(Path::parent) else {
+        return;
+    };
+    if validate_write_destinations(data_root, installation).is_err() {
+        return;
+    }
+    let lock_path = record_update_lock_path(data_root);
+    let lock = if wait {
+        acquire_record_update_lock(&lock_path).ok()
+    } else {
+        open_lock(&lock_path, false)
             .ok()
-            .flatten()
-            .is_some_and(|current| current.nonce == self.record.nonce)
-        {
-            let _ = fs::remove_file(&self.record_path);
-        }
+            .and_then(|file| InstanceLock::try_exclusive(file).ok())
+    };
+    let Some(_record_update_lock) = lock else {
+        return;
+    };
+    if read_record_at(record_path)
+        .ok()
+        .flatten()
+        .is_some_and(|current| current.nonce == nonce)
+    {
+        let _ = fs::remove_file(record_path);
     }
 }
 

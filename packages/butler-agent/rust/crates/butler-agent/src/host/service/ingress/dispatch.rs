@@ -23,6 +23,7 @@ struct Executed {
 }
 
 pub(super) struct DispatchDependencies {
+    pub shutdown: tokio_util::sync::CancellationToken,
     pub queue: Arc<InboundQueue>,
     pub btcc: Btcc,
     pub bindings: SessionBindingStore,
@@ -94,6 +95,7 @@ pub(super) fn eligible_for_claim(
 
 pub(super) async fn one(item: ClaimedInboundEvent, deps: DispatchDependencies) -> IngressPoll {
     let DispatchDependencies {
+        shutdown,
         queue,
         btcc,
         bindings,
@@ -119,7 +121,7 @@ pub(super) async fn one(item: ClaimedInboundEvent, deps: DispatchDependencies) -
     }
     let result = execute(
         &item,
-        &btcc,
+        (&btcc, &shutdown),
         &bindings,
         &data_root,
         &default_workspace,
@@ -234,13 +236,14 @@ async fn handled(
 
 async fn execute(
     item: &ClaimedInboundEvent,
-    btcc: &Btcc,
+    turn: (&Btcc, &tokio_util::sync::CancellationToken),
     bindings: &SessionBindingStore,
     data_root: &Path,
     default_workspace: &Path,
     delivery: &dyn IngressDelivery,
     subsessions: &butler_turn::btcc::SubsessionService,
 ) -> Result<Executed, super::IngressError> {
+    let (btcc, shutdown) = turn;
     let envelope = Envelope::from_record(&item.record)?;
     let kind = envelope
         .control
@@ -252,8 +255,7 @@ async fn execute(
             let request =
                 bind::bind_and_request(&envelope, bindings, data_root, default_workspace).await?;
             let session_id = request.session_id.clone();
-            let outcome = btcc
-                .run_turn(request)
+            let outcome = super::shutdown::run(btcc, request, shutdown)
                 .await
                 .map_err(|error| turn_error(&error))?;
             let binding = bindings
@@ -300,8 +302,7 @@ async fn execute(
         Some("resume_turn") => {
             let binding = bind::existing_control_binding(&envelope, bindings).await?;
             let request = bind::control_request(&envelope, &binding)?;
-            let outcome = btcc
-                .run_turn(request)
+            let outcome = super::shutdown::run(btcc, request, shutdown)
                 .await
                 .map_err(|error| turn_error(&error))?;
             (binding, outcome)
@@ -409,3 +410,25 @@ mod interrupted;
 mod rejected;
 #[cfg(test)]
 mod tests;
+
+pub(super) fn needs_interruption_report(record: &QueuedInboundEvent) -> bool {
+    interrupted::by_crash(record) || interrupted::replaced_once(record)
+}
+
+/// Startup publishes only old interrupted outcomes; it never executes queued work.
+pub(super) async fn recover_interrupted(
+    item: ClaimedInboundEvent,
+    queue: &InboundQueue,
+    bindings: &SessionBindingStore,
+    delivery: &dyn IngressDelivery,
+) -> Result<(), super::IngressError> {
+    if interrupted::settle(&item, queue, bindings, delivery, "shutdown-interrupted")
+        .await
+        .is_none()
+    {
+        queue
+            .defer_async(item, "startup_turn_not_started".into())
+            .await?;
+    }
+    Ok(())
+}
