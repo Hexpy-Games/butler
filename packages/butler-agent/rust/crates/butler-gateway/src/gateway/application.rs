@@ -328,6 +328,14 @@ impl AppApplication {
         self.projection.drain().await
     }
 
+    /// Finish any claimed queue admission while native enqueue is still ready.
+    pub async fn stop_queue_dispatch(&self) -> Result<(), GatewayApplicationError> {
+        match &self.queue_dispatcher {
+            Some(dispatcher) => dispatcher.close().await,
+            None => Ok(()),
+        }
+    }
+
     pub async fn stop_dispatch(&self) -> Result<(), GatewayApplicationError> {
         self.setup_readiness.close().await;
         let automations = match &self.automation_scheduler {
@@ -336,10 +344,7 @@ impl AppApplication {
         };
         let automation_runs = self.automation_runs.close().await;
         self.quota_events.close().await;
-        let queue = match &self.queue_dispatcher {
-            Some(dispatcher) => dispatcher.close().await,
-            None => Ok(()),
-        };
+        let queue = self.stop_queue_dispatch().await;
         automations.and(automation_runs).and(queue)
     }
 

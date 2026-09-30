@@ -383,7 +383,7 @@ async fn close_serving(
     progress: &crate::host::ProgressPublisher,
 ) -> Result<(), BtccError> {
     control.stop_accepting();
-    gateway.stop_accepting().await;
+    let admission = gateway.stop_accepting().await;
     let turns = dispatcher
         .close()
         .await
@@ -393,7 +393,11 @@ async fn close_serving(
     });
     let publication = progress.reconcile().await.map(|_| ());
     let app_close = gateway.close().await;
-    turns.and(control_close).and(publication).and(app_close)
+    admission
+        .and(turns)
+        .and(control_close)
+        .and(publication)
+        .and(app_close)
 }
 
 /// Rolls back the App and dispatcher if the private control plane cannot start.

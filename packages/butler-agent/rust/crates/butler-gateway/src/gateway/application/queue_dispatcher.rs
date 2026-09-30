@@ -20,19 +20,28 @@ const COMMAND_CAPACITY: usize = 64;
 const FIFO_WINDOW: usize = 20;
 
 #[derive(Clone)]
-pub(super) struct QueueWake(mpsc::Sender<Command>);
+pub(super) struct QueueWake {
+    sender: mpsc::Sender<Command>,
+    cancellation: CancellationToken,
+}
 
 impl QueueWake {
     pub(super) async fn chat(&self, chat_id: String) -> Result<(), GatewayApplicationError> {
-        self.0
-            .send(Command::Wake(Some(chat_id)))
-            .await
-            .map_err(GatewayApplicationError::internal_from)
+        // Terminal projection still settles claims after queue admission stops.
+        // Persisted waiting input will be dispatched by the next process.
+        if self.cancellation.is_cancelled() {
+            return Ok(());
+        }
+        match self.sender.send(Command::Wake(Some(chat_id))).await {
+            Ok(()) => Ok(()),
+            Err(_) if self.cancellation.is_cancelled() => Ok(()),
+            Err(error) => Err(GatewayApplicationError::internal_from(error)),
+        }
     }
 
     pub(super) async fn drain_chat(&self, chat_id: String) -> Result<(), GatewayApplicationError> {
         let (reply, result) = oneshot::channel();
-        self.0
+        self.sender
             .send(Command::Drain { chat_id, reply })
             .await
             .map_err(GatewayApplicationError::internal_from)?;
@@ -81,10 +90,16 @@ impl QueueDispatcher {
                     result: None,
                 }),
                 closed: Notify::new(),
-                cancellation,
+                cancellation: cancellation.clone(),
             }),
         };
-        (owner, QueueWake(sender))
+        (
+            owner,
+            QueueWake {
+                sender,
+                cancellation,
+            },
+        )
     }
 
     pub(super) async fn initialize(
@@ -177,14 +192,9 @@ async fn run(
                     }
                 }
                 Some(Command::Drain { chat_id, reply }) => {
-                    let result = tokio::select! {
-                        () = cancellation.cancelled() => Err(GatewayApplicationError::internal()),
-                        result = async {
-                            match application.as_ref() {
-                                Some(app) => recover_and_drain(&cancellation, app, Some(&chat_id)).await,
-                                None => Err(GatewayApplicationError::internal()),
-                            }
-                        } => result,
+                    let result = match application.as_ref() {
+                        Some(app) => recover_and_drain(&cancellation, app, Some(&chat_id)).await,
+                        None => Err(GatewayApplicationError::internal()),
                     };
                     if let Some(app) = application.as_ref() {
                         deadline = next_deadline(app).await.ok().flatten();
@@ -204,10 +214,10 @@ async fn run(
 }
 
 async fn cycle(cancellation: &CancellationToken, app: &AppApplication, chat: Option<&str>) -> bool {
-    tokio::select! {
-        () = cancellation.cancelled() => false,
-        _ = recover_and_drain(cancellation, app, chat) => true,
-    }
+    // An admission owns a durable App claim before native enqueue. Dropping it
+    // on close can leave a thinking turn with no native record to recover.
+    let _ = recover_and_drain(cancellation, app, chat).await;
+    !cancellation.is_cancelled()
 }
 
 async fn recover_and_drain(
@@ -225,12 +235,16 @@ async fn recover_and_drain(
         app.storage.execute(queued_chats).await.map_err(app_error)?
     };
     for chat in chats {
-        drain_chat(app, &chat).await?;
+        drain_chat(cancellation, app, &chat).await?;
     }
     Ok(())
 }
 
-async fn drain_chat(app: &AppApplication, chat_id: &str) -> Result<(), GatewayApplicationError> {
+async fn drain_chat(
+    cancellation: &CancellationToken,
+    app: &AppApplication,
+    chat_id: &str,
+) -> Result<(), GatewayApplicationError> {
     let chat = chat_id.to_owned();
     let rows = app
         .storage
@@ -238,6 +252,9 @@ async fn drain_chat(app: &AppApplication, chat_id: &str) -> Result<(), GatewayAp
         .await
         .map_err(app_error)?;
     for row in rows {
+        if cancellation.is_cancelled() {
+            return Ok(());
+        }
         let chat = chat_id.to_owned();
         let active = app
             .storage
