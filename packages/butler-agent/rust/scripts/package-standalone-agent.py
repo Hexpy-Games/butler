@@ -116,6 +116,9 @@ def binary_signing(binary: Path) -> dict | None:
         None,
     )
     if not team or team == "not set":
+        if (result.returncode == 0 and os.environ.get("BUTLER_SIGN_IDENTITY") == "-"
+                and re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+-preview\..+", os.environ.get("GITHUB_REF_NAME", ""))):
+            return {"teamId": "", "notarized": False}
         return None
     return {"teamId": team, "notarized": os.environ.get("BUTLER_AGENT_NOTARIZED") == "1"}
 
