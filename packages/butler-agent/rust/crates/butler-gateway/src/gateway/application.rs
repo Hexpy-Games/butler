@@ -295,9 +295,9 @@ impl AppApplication {
         Ok(())
     }
 
-    /// The HTTP owner activates recovery only after its listener is ready.
-    /// Otherwise a persisted queued message can fail the readiness admission
-    /// guard during startup before it ever reaches the native queue.
+    /// The host initializes native admission before activating recovery, then
+    /// starts HTTP admission only after this completes. Persisted queued
+    /// messages can reach the native queue without racing external requests.
     pub async fn start_dispatch(&self) -> Result<(), GatewayApplicationError> {
         self.queue_dispatcher
             .as_ref()

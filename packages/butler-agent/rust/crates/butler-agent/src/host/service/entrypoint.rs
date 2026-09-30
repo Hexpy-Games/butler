@@ -16,7 +16,9 @@ use crate::host::service::ingress::IngressDispatcher;
 mod admission;
 mod maintenance;
 mod poll;
+mod startup;
 mod stop_signal;
+pub(crate) use startup::STARTUP_TIMEOUT;
 mod support;
 use crate::host::{
     AgentRuntime, ProcessEnvironment, ResolvedInstallation, RuntimePaths, ServiceConfiguration,
@@ -105,8 +107,16 @@ async fn run(
     // once the record is published, and it must never find the signal's
     // default action (death by SIGTERM) in place.
     let stop = StopSignal::listen().map_err(io)?;
-    let result =
-        run_until_stopped(installation, explicit_data, foreground_lease, logs, &stop).await;
+    let (ready, initialized) = tokio::sync::oneshot::channel();
+    let service = Box::pin(run_until_stopped(
+        installation,
+        explicit_data,
+        foreground_lease,
+        logs,
+        &stop,
+        ready,
+    ));
+    let result = startup::until_ready(service, initialized, &stop).await;
     stop.settle(result, |line| logs.problem(line))
 }
 
@@ -116,6 +126,7 @@ async fn run_until_stopped(
     foreground_lease: Option<bool>,
     logs: ServiceLogMode,
     stop: &StopSignal,
+    ready: tokio::sync::oneshot::Sender<()>,
 ) -> Result<String, BtccError> {
     let user_home = butler_platform::user_dirs::home_dir()
         .filter(|home| !home.as_os_str().is_empty())
@@ -175,7 +186,7 @@ async fn run_until_stopped(
     };
     let result = serve(
         runtime.clone(),
-        (app_endpoint, listener),
+        (app_endpoint, listener, ready),
         &config,
         writer.clone(),
         &mut instance,
@@ -259,14 +270,18 @@ fn repair_cli_launcher(config: &ServiceConfiguration, logs: ServiceLogMode) {
 
 async fn serve(
     runtime: Arc<AgentRuntime>,
-    app: (Arc<ActiveAppEndpoint>, Option<tokio::net::TcpListener>),
+    app: (
+        Arc<ActiveAppEndpoint>,
+        Option<tokio::net::TcpListener>,
+        tokio::sync::oneshot::Sender<()>,
+    ),
     config: &ServiceConfiguration,
     writer: Arc<TranscriptWriter>,
     instance: &mut crate::host::service::instance::InstanceGuard,
     logs: ServiceLogMode,
     stop: &StopSignal,
 ) -> Result<String, BtccError> {
-    let (app_endpoint, listener) = app;
+    let (app_endpoint, listener, ready) = app;
     let admission::Admission {
         session_id,
         model,
@@ -307,6 +322,7 @@ async fn serve(
         let _ = dispatcher.close().await;
         return Err(error);
     }
+    let _ = ready.send(());
     let subsessions = runtime.subsessions.repository();
     let result = poll_service(
         PollOwners {
