@@ -106,7 +106,7 @@ pub(super) fn local_view(
         "lifecycle":"process",
         "transport":"app",
         "enabled":enabled,
-        "configured":!app.host.is_empty() && app.port > 0,
+        "configured":app.server_url().is_some(),
         "running":running,
         "status":status,
         "restartRequired":restart_required,
@@ -114,7 +114,7 @@ pub(super) fn local_view(
         "config":{
             "host":app.host,
             "port":app.port,
-            "serverUrl":format!("http://{}:{}", app.host, app.port),
+            "serverUrl":app.server_url(),
             "dbConfigured":app.db_configured,
             "remoteAccessEnabled":app.remote_access_enabled(),
             "allowedHosts":app.allowed_hosts(),

@@ -2,7 +2,7 @@
 
 Dev-only end-to-end harness. It runs the real `butler-agent` binary with an
 isolated data dir, `HOME`/`CODEX_HOME` sandbox, gateway auth token, `TZ=UTC`
-and free ports, and drives it only through gateway HTTP, `/events` and
+and an OS-assigned gateway port, and drives it only through gateway HTTP, `/events` and
 `/events/live`, the CLI and the data dir. Model traffic goes to a local
 record/replay provider reached through the product's own base-URL variables.
 
@@ -28,6 +28,15 @@ BUTLER_E2E_TIER=live BUTLER_E2E_RECORD=1 cargo test -p butler-e2e --test turn
 
 The harness builds `butler-agent` itself (`cargo build -p butler-agent`) unless
 `BUTLER_E2E_BIN` names a binary or `BUTLER_E2E_SKIP_BUILD=1`.
+
+Port 0 is test-harness-only, accepted through `BUTLER_APP_SERVER_PORT` or
+`--port=0`; a zero in `gateways/app.json` falls back to 18765. A zero override reports
+`configured: false` and a null `serverUrl`; the bound endpoint is published
+in the instance record.
+
+The agent binds port 0 and the harness reads its published instance endpoint;
+subsequent restarts keep that port. Readiness failures include the last 16 KiB
+of agent stdout/stderr. The readiness deadline remains 90 seconds.
 
 | Variable | Meaning |
 |----------|---------|
@@ -78,6 +87,16 @@ the recorder (`/oauth/*` is forwarded to `https://auth.openai.com`). Recording
 it makes the test login expire, as LIVE-10 does, and the agent writes the
 refreshed login back to the same profile; replay runs with a refreshable
 placeholder login.
+
+## Owner-scale usage and updates
+
+USE-06 (`tests/usage_scale.rs`) writes an owner-sized data folder at test time
+(44,000 usage rows and about 320 MB of transcripts, nothing committed) and
+asserts that `/usage-monitor` answers a window or a session in milliseconds
+without reading the transcripts, that the all-time view is a cache hit on its
+second read, and that a session counts only its own usage. USE-07
+(`tests/updates.rs`) points `BUTLER_UPDATE_MANIFEST` at a local server that
+delays its answer and asserts that `GET /updates` never waits for it.
 
 Reset times in usage replies are recorded relative to the recording time and
 rounded to the hour (`{{EPOCH_MS+Δ}}`, `{{EPOCH_S+Δ}}`); replay turns them

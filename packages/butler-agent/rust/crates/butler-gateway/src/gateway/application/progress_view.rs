@@ -8,7 +8,7 @@ mod rows;
 #[cfg(test)]
 mod rows_tests;
 
-use super::storage::AppStorageError;
+use super::storage::{AppStorageError, CachedSql};
 use crate::gateway::{DeliveryState, ProgressState, TurnProgressSnapshotView};
 
 const INTERNAL_CODES: &[&str] = &[
@@ -18,12 +18,16 @@ const INTERNAL_CODES: &[&str] = &[
     "completion_review_incomplete",
 ];
 
+/// Progress events newer than the retained snapshot. `turn_id<>''` makes the
+/// partial `events_turn_id_idx` applicable.
+pub(super) const LIVE_ROWS_SQL: &str = "SELECT payload_json FROM events WHERE id>?1 AND turn_id=?2 AND turn_id<>'' AND type IN ('progress.summary','agent.turn_event.progress') AND NOT (type='agent.turn_event.progress' AND EXISTS (SELECT 1 FROM app_internal_continuation_progress_events hidden WHERE hidden.turn_id=?2 AND hidden.event_id=json_extract(events.payload_json,'$.event_id'))) ORDER BY id";
+
 pub(super) fn read(
     db: &Connection,
     turn_id: &str,
 ) -> Result<Option<TurnProgressSnapshotView>, AppStorageError> {
     let turn = db
-        .query_row(
+        .query_row_cached(
             "SELECT state,safe_status_label,safe_error_code,updated_at FROM turns WHERE id=?1",
             [turn_id],
             |row| {
@@ -41,7 +45,7 @@ pub(super) fn read(
         return Ok(None);
     };
     let retained = db
-        .query_row(
+        .query_row_cached(
             "SELECT progress_rows_json,source_event_high_water,delivery_metadata_json FROM app_terminal_turn_projections WHERE turn_id=?1",
             [turn_id],
             |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?, row.get::<_, Option<String>>(2)?)),
@@ -52,7 +56,7 @@ pub(super) fn read(
         Some((json, cursor, delivery)) => (parse_rows(&json)?, cursor, delivery),
         None => (Vec::new(), 0, None),
     };
-    let mut retained_rows = db.prepare(
+    let mut retained_rows = db.prepare_cached(
         "SELECT row_json FROM app_terminal_turn_progress_rows WHERE turn_id=?1 ORDER BY source_event_id",
     ).map_err(AppStorageError::sqlite)?;
     let encoded_rows = retained_rows
@@ -63,9 +67,9 @@ pub(super) fn read(
     for encoded in encoded_rows {
         rows.push(serde_json::from_str(&encoded).map_err(json_error)?);
     }
-    let mut statement = db.prepare(
-        "SELECT payload_json FROM events WHERE id>?1 AND turn_id=?2 AND type IN ('progress.summary','agent.turn_event.progress') AND NOT (type='agent.turn_event.progress' AND EXISTS (SELECT 1 FROM app_internal_continuation_progress_events hidden WHERE hidden.turn_id=?2 AND hidden.event_id=json_extract(events.payload_json,'$.event_id'))) ORDER BY id",
-    ).map_err(AppStorageError::sqlite)?;
+    let mut statement = db
+        .prepare_cached(LIVE_ROWS_SQL)
+        .map_err(AppStorageError::sqlite)?;
     let live = statement
         .query_map(params![high_water, turn_id], |row| row.get::<_, String>(0))
         .map_err(AppStorageError::sqlite)?

@@ -43,7 +43,14 @@ impl Sandbox {
         // up by, so sandboxes sharing one inode see each other's paths, and
         // the product's instance identity check then refuses the CLI's
         // gateway control requests (`gateway_control_identity_invalid`).
-        executable::copy(&agent_binary()?, &binary)?;
+        let source = agent_binary()?;
+        executable::copy(&source, &binary).map_err(|error| {
+            harness_error(format!(
+                "copy E2E agent {} to {}: {error}",
+                source.display(),
+                binary.display()
+            ))
+        })?;
         copy_tree(&resource_source(), &resources)?;
         fs::create_dir_all(resources.join("app-client/dist"))?;
         fs::write(

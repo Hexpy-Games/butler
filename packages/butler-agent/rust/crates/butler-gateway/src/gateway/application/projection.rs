@@ -13,6 +13,9 @@ mod terminal_records;
 mod transcript_file;
 mod turn_event_sequence;
 
+#[cfg(test)]
+pub(in crate::gateway::application) use final_turn_events::HAS_KIND_SQL;
+
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};

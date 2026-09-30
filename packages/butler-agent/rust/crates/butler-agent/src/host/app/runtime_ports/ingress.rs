@@ -26,7 +26,8 @@ impl AppNativeIngress for AppIngress {
         Box::pin(async move {
             let document = envelope(turn)?;
             let record = queue
-                .enqueue_idempotent(document)
+                .enqueue_async(document)
+                .await
                 .map_err(GatewayApplicationError::internal_from)?;
             Ok(EnqueueReceipt {
                 queue_id: record.queue_id,
@@ -39,7 +40,8 @@ impl AppNativeIngress for AppIngress {
         Box::pin(async move {
             let document = envelope(turn)?;
             queue
-                .find_idempotent(&document)
+                .find_async(document)
+                .await
                 .map(|record| {
                     record.map(|item| EnqueueReceipt {
                         queue_id: item.queue_id,
@@ -67,7 +69,8 @@ impl AppNativeIngress for AppIngress {
             let document =
                 JsonDocument::from_value(&value).map_err(GatewayApplicationError::internal_from)?;
             let record = queue
-                .enqueue_idempotent(document)
+                .enqueue_async(document)
+                .await
                 .map_err(GatewayApplicationError::internal_from)?;
             Ok(EnqueueReceipt {
                 queue_id: record.queue_id,

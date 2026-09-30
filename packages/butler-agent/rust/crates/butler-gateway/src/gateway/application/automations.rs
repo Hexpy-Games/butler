@@ -7,6 +7,9 @@ mod records;
 mod scheduler;
 mod store;
 
+#[cfg(test)]
+pub(in crate::gateway::application) use records::queued_sql;
+
 pub(crate) use contracts::*;
 pub(crate) use owner::AutomationRunOwner;
 pub(crate) use scheduler::AutomationScheduler;

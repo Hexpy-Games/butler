@@ -108,11 +108,18 @@ pub(super) fn next_due(db: &Connection) -> Result<Option<String>, AppStorageErro
     ).optional().map_err(AppStorageError::sqlite)
 }
 
-pub(super) fn queued(db: &Connection) -> Result<Vec<QueuedRunRow>, AppStorageError> {
-    let sql = format!(
+/// Runs waiting for their target session; served by the partial
+/// `app_automation_runs_queued_idx`.
+pub(in crate::gateway::application) fn queued_sql() -> String {
+    format!(
         "SELECT r.id,r.trigger,r.queued_message_id,r.target_session_id,{COLUMNS} FROM app_automation_runs r JOIN app_automations a ON a.id=r.automation_id LEFT JOIN chats c ON c.id=a.target_session_id WHERE r.state='queued' AND a.state!='deleted' ORDER BY r.rowid LIMIT 20"
-    );
-    let mut statement = db.prepare(&sql).map_err(AppStorageError::sqlite)?;
+    )
+}
+
+pub(super) fn queued(db: &Connection) -> Result<Vec<QueuedRunRow>, AppStorageError> {
+    let mut statement = db
+        .prepare_cached(&queued_sql())
+        .map_err(AppStorageError::sqlite)?;
     statement
         .query_map([], |item| {
             Ok(QueuedRunRow {

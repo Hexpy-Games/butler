@@ -50,11 +50,31 @@ pub(super) fn migrate(
     migration::backfill_queue_identity(connection)?;
     schedule_access::backfill(connection)?;
     migration::create_post_backfill_indexes(connection)?;
+    run_backfills_once(connection)?;
     migration::settle_ended_turn_messages(connection)?;
     project_ledger_bindings::initialize(connection, butler_data)?;
     space::migrate(connection)?;
     wallpapers::create(connection)?;
     Ok(())
+}
+
+/// `PRAGMA user_version` once the full-table backfills of an older database
+/// have run. Both leave a current database untouched, but finding that out
+/// reads every message.
+const BACKFILLS_DONE: i64 = 1;
+
+fn run_backfills_once(connection: &Connection) -> Result<(), AppStorageError> {
+    let version: i64 = connection
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .map_err(AppStorageError::sqlite)?;
+    if version >= BACKFILLS_DONE {
+        return Ok(());
+    }
+    supporting::backfill_search_index(connection)?;
+    migration::backfill_message_updated_at(connection)?;
+    connection
+        .pragma_update(None, "user_version", BACKFILLS_DONE)
+        .map_err(AppStorageError::sqlite)
 }
 
 pub(super) fn seed(connection: &Connection, now: &str) -> Result<(), AppStorageError> {
@@ -83,5 +103,7 @@ pub(super) fn migrate_legacy_schedules(
     schedule_legacy::migrate(connection, butler_data)
 }
 
+#[cfg(test)]
+mod plans;
 #[cfg(test)]
 mod tests;

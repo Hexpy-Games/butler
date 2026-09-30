@@ -6,6 +6,7 @@ mod automations;
 mod briefing_snapshot;
 mod context_details;
 mod contracts;
+mod event_outbox;
 mod events;
 mod gateway_dashboard_impl;
 mod gateway_impl;
@@ -60,8 +61,8 @@ use std::{path::PathBuf, sync::Arc};
 
 use super::{
     AppEventEnvelope, ApplicationFuture, EventSubscription, GatewayApplication,
-    GatewayApplicationError, MessageContent, MessageSendResult, RuntimeReadinessView,
-    SendMessageCommand, SessionQueueUpdateRequest, SessionQueueView,
+    GatewayApplicationError, MessageContent, MessageSendResult, PublishedEvent,
+    RuntimeReadinessView, SendMessageCommand, SessionQueueUpdateRequest, SessionQueueView,
     wallpaper_store::AppWallpaperFiles,
 };
 use admission_identity::stringify;
@@ -136,7 +137,7 @@ pub use setup::{
     SetupReadinessStep, SetupReadinessView, SetupStepError, SetupStepStatus,
 };
 pub use space::{AppSpaceCommand, AppSpaceMutationResult, AppSpaceOrigin};
-use storage::{AppStorage, AppStorageError};
+use storage::{AppStorage, AppStorageError, CachedSql};
 type SkillImportResult = butler_runtime::skills::SkillImportResult;
 type SkillSettingsView = butler_runtime::skills::SkillSettingsView;
 type StagedSkillArchive = butler_runtime::skills::StagedSkillArchive;

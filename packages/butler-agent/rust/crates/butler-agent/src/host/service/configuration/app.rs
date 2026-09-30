@@ -120,12 +120,14 @@ impl AppServiceConfiguration {
             .unwrap_or_else(|| "127.0.0.1".to_owned());
         let env_port = env::var("BUTLER_APP_SERVER_PORT").ok();
         let cli_port = argv_port();
+        let harness_port = env_port.is_some() || cli_port.is_some();
         let port = normalize_port(
             env_port
                 .as_deref()
                 .map(number_from_string)
                 .or(cli_port)
                 .or_else(|| config.and_then(|value| number_value(value.get("port")))),
+            harness_port,
         );
         let configured_db = env_trimmed("BUTLER_APP_SERVER_DB").or_else(|| {
             config
@@ -162,6 +164,21 @@ impl AppServiceConfiguration {
             ),
             credential_errors,
         }
+    }
+
+    /// Refresh only authority after binding; keep the reserved address and DB.
+    pub(super) fn initialize_credentials(&mut self, data_root: &Path, files: CredentialFiles) {
+        let refreshed = Self::capture_with(data_root, files);
+        self.folder_selection_secret = refreshed.folder_selection_secret;
+        self.gateway.local_auth = refreshed.gateway.local_auth;
+        self.gateway.admin_credential = refreshed.gateway.admin_credential;
+        self.credential_errors = refreshed.credential_errors;
+    }
+
+    /// Port zero has no usable URL until the harness listener is bound.
+    pub(crate) fn server_url(&self) -> Option<String> {
+        (!self.host.is_empty() && self.port > 0)
+            .then(|| format!("http://{}:{}", self.host, self.port))
     }
 
     /// Why the data folder's gateway token or folder secret could not be
@@ -225,9 +242,13 @@ fn number_value(value: Option<&Value>) -> Option<f64> {
     }
 }
 
-fn normalize_port(value: Option<f64>) -> u16 {
+fn normalize_port(value: Option<f64>, harness_port: bool) -> u16 {
     match value {
-        Some(value) if value.is_finite() && (1.0..=65_535.0).contains(&value) => {
+        // Only harness overrides may request an OS-assigned port.
+        Some(value)
+            if value.is_finite()
+                && ((harness_port && value == 0.0) || (1.0..=65_535.0).contains(&value)) =>
+        {
             butler_core::json::saturating_u16(value)
         }
         _ => 18_765,

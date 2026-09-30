@@ -81,18 +81,20 @@ pub(super) async fn settle(
             error.code
         );
         if ReportFailure::of(error.code) == ReportFailure::Transient {
-            let _ = queue.defer(item, error.code);
+            let _ = queue.defer_async(item.clone(), error.code.to_owned()).await;
             return IngressPoll::default();
         }
     }
-    let failed = queue.fail(
-        item,
-        code,
-        json!({
-            "source":"gateway/btcc/btcc-inbound-dispatcher.ts",
-            "dispatchStatus":"turn-rejected","handled":false,
-        }),
-    );
+    let failed = queue
+        .fail_async(
+            item.clone(),
+            code.to_owned(),
+            json!({
+                "source":"gateway/btcc/btcc-inbound-dispatcher.ts",
+                "dispatchStatus":"turn-rejected","handled":false,
+            }),
+        )
+        .await;
     IngressPoll {
         failed: usize::from(matches!(failed, Ok(true))),
         ..Default::default()

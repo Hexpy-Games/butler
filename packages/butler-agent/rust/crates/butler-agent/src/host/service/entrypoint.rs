@@ -2,8 +2,6 @@
 
 use std::sync::Arc;
 
-use serde_json::json;
-
 use butler_gateway::gateway::TranscriptWriter;
 use butler_models::models::ModelConfigurationClock;
 use butler_runtime::operations::ServiceReadiness;
@@ -15,15 +13,14 @@ use crate::host::app::gateway_lifecycle::{
 };
 use crate::host::service::foreground_lease::ForegroundLease;
 use crate::host::service::ingress::IngressDispatcher;
-use crate::host::service::restart_handoff::RestartHandoff;
+mod admission;
 mod maintenance;
 mod poll;
 mod stop_signal;
 mod support;
-use crate::host::service::delivery::AppDelivery;
 use crate::host::{
-    AgentRuntime, ProcessEnvironment, ProgressPublisher, ResolvedInstallation, RuntimePaths,
-    ServiceConfiguration, SystemIdentity, require_model_ref,
+    AgentRuntime, ProcessEnvironment, ResolvedInstallation, RuntimePaths, ServiceConfiguration,
+    SystemIdentity,
 };
 use poll::{PollOwners, PollShutdown, poll_service};
 use stop_signal::{START_CANCELLED, StopSignal};
@@ -123,7 +120,13 @@ async fn run_until_stopped(
     let user_home = butler_platform::user_dirs::home_dir()
         .filter(|home| !home.as_os_str().is_empty())
         .ok_or_else(|| failure("native_home_unavailable", "User home is unavailable"))?;
-    let config = ServiceConfiguration::capture(explicit_data, &user_home, &installation)?;
+    let mut config = ServiceConfiguration::capture(explicit_data, &user_home, &installation)?;
+    let listener = if config.app.enabled {
+        Some(crate::host::AppServer::bind(&config.app.host, config.app.port).await?)
+    } else {
+        None
+    };
+    config.initialize_app_credentials();
     report_credential_errors(&config, logs);
     let executable = std::env::current_exe().map_err(io)?;
     let mut instance = crate::host::service::instance::InstanceGuard::acquire(
@@ -172,7 +175,7 @@ async fn run_until_stopped(
     };
     let result = serve(
         runtime.clone(),
-        app_endpoint,
+        (app_endpoint, listener),
         &config,
         writer.clone(),
         &mut instance,
@@ -221,10 +224,10 @@ async fn start_app_gateway(
     config: &ServiceConfiguration,
     endpoint: &ActiveAppEndpoint,
     logs: ServiceLogMode,
-) {
-    if let Err(error) = gateway.start_initial(&config.app).await {
-        logs.write(&format!("[native-app] unavailable code={}", error.code()));
-    } else if let Some(active) = endpoint.snapshot() {
+    listener: Option<tokio::net::TcpListener>,
+) -> Result<(), BtccError> {
+    gateway.start_initial(&config.app, listener).await?;
+    if let Some(active) = endpoint.snapshot() {
         if local_auth_unconfigured(&active.local_auth) {
             logs.problem(&format!(
                 "[native-app] refusing clients address={} code=local_auth_unconfigured",
@@ -234,6 +237,7 @@ async fn start_app_gateway(
             logs.write(&format!("[native-app] ready address={}", active.base_url));
         }
     }
+    Ok(())
 }
 
 /// Self-repair of the user's `butler` command; never blocks the service.
@@ -255,66 +259,27 @@ fn repair_cli_launcher(config: &ServiceConfiguration, logs: ServiceLogMode) {
 
 async fn serve(
     runtime: Arc<AgentRuntime>,
-    app_endpoint: Arc<ActiveAppEndpoint>,
+    app: (Arc<ActiveAppEndpoint>, Option<tokio::net::TcpListener>),
     config: &ServiceConfiguration,
     writer: Arc<TranscriptWriter>,
     instance: &mut crate::host::service::instance::InstanceGuard,
     logs: ServiceLogMode,
     stop: &StopSignal,
 ) -> Result<String, BtccError> {
-    let bootstrap = config
-        .bootstrap_butler_session(&runtime.bindings, &runtime.collation)
-        .await?;
-    let binding = bootstrap.binding;
-    if bootstrap.newly_registered {
-        writer
-            .append_lifecycle(
-                binding.session_id.clone(),
-                "butler".into(),
-                "active".into(),
-                Some("native-butler-bootstrap".into()),
-                json!({"projectId":binding.project_id,"workspacePath":binding.workspace_path}),
-            )
-            .await
-            .map_err(|e| failure(e.code(), e.message()))?;
-    }
-    config.persist_session_pointer(&binding.session_id)?;
-    let model = require_model_ref(&binding)?;
-    let progress = Arc::new(ProgressPublisher::new(
-        runtime.progress.clone(),
-        writer.clone(),
-    ));
-    let queue = runtime.inbound_queue.clone();
-    let restart_handoff = Arc::new(RestartHandoff::new(
-        runtime.restart_tool_journal.clone(),
-        runtime.restart_effect_journal.clone(),
-        config.installation.clone(),
-        config.data_root.clone(),
-        instance.restart_identity(),
-    ));
-    queue
-        .recover_runtime_interruptions()
-        .map_err(|e| failure(e.code(), e.message()))?;
-    let dispatcher = IngressDispatcher::new(
-        queue.clone(),
-        runtime.btcc.clone(),
-        runtime.authority.clone(),
-        runtime.bindings.clone(),
-        config.data_root.clone(),
-        config.data_root.clone(),
-        Arc::new(AppDelivery::new(writer, progress.clone())),
-        runtime.subsessions.clone(),
-        restart_handoff,
-    );
+    let (app_endpoint, listener) = app;
+    let admission::Admission {
+        session_id,
+        model,
+        progress,
+        queue,
+        dispatcher,
+    } = admission::prepare(&runtime, config, writer, instance).await?;
+
     let parent_client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(io)?;
-    let foreground_lease = if instance.app_supervised() {
-        Some(ForegroundLease::capture().map_err(io)?)
-    } else {
-        None
-    };
+    let foreground_lease = capture_foreground_lease(instance)?;
     let now_ms = SystemIdentity.now_epoch_millis();
     ServiceReadiness::startup_grace(&config.data_root, now_ms).map_err(io)?;
     let readiness = Arc::new(
@@ -329,51 +294,18 @@ async fn serve(
         app_endpoint.clone(),
         instance.nonce().to_owned(),
     ));
-    start_app_gateway(&gateway, config, &app_endpoint, logs).await;
-    let control = match GatewayControlServer::bind(
-        config.data_root.clone(),
-        config.installation.clone(),
-        instance.nonce().to_owned(),
-        control_owners(&gateway, &runtime, stop),
-    )
-    .await
-    {
-        Ok(control) => control,
-        Err(message) => {
-            let _ = gateway.close().await;
-            let _ = dispatcher.close().await;
-            drop(readiness);
-            return Err(failure("gateway_control_unavailable", message.to_string()));
-        }
-    };
-    if let Err(message) =
-        instance.publish_control(control.endpoint().to_owned(), control.token().to_owned())
-    {
+    if let Err(error) = start_app_gateway(&gateway, config, &app_endpoint, logs, listener).await {
+        let _ = gateway.close().await;
+        let _ = dispatcher.close().await;
+        return Err(error);
+    }
+    let control = start_control(&gateway, &runtime, config, instance, &dispatcher, stop).await?;
+    logs.write(&format!("[native-butler] ready model={model}"));
+    if let Err(error) = start_runtime(&runtime, instance, &app_endpoint, stop).await {
         let _ = control.close().await;
         let _ = gateway.close().await;
         let _ = dispatcher.close().await;
-        drop(readiness);
-        return Err(failure(
-            "native_service_instance_state_unavailable",
-            message.to_string(),
-        ));
-    }
-    logs.write(&format!("[native-butler] ready model={model}"));
-    let startup = async {
-        runtime.context_maintenance.start();
-        runtime.subsessions.recover_dispatches().await?;
-        mark_ready(instance, &app_endpoint, &runtime, stop).await
-    }
-    .await;
-    match startup {
-        Ok(()) => {}
-        Err(error) => {
-            let _ = control.close().await;
-            let _ = gateway.close().await;
-            let _ = dispatcher.close().await;
-            drop(readiness);
-            return Err(error);
-        }
+        return Err(error);
     }
     let subsessions = runtime.subsessions.repository();
     let result = poll_service(
@@ -393,8 +325,41 @@ async fn serve(
         },
     )
     .await;
-    // The private control plane stops admitting lifecycle requests before App
-    // owners drain; BTCC, inbound dispatch, and transcript publication remain live.
+    let close = close_serving(control, &gateway, &dispatcher, &progress).await;
+    drop(readiness);
+    result.and(close).map(|()| session_id)
+}
+
+/// Recover durable dispatches before publishing the ready instance.
+async fn start_runtime(
+    runtime: &AgentRuntime,
+    instance: &mut crate::host::service::instance::InstanceGuard,
+    app_endpoint: &ActiveAppEndpoint,
+    stop: &StopSignal,
+) -> Result<(), BtccError> {
+    runtime.context_maintenance.start();
+    runtime.subsessions.recover_dispatches().await?;
+    mark_ready(instance, app_endpoint, runtime, stop).await
+}
+
+fn capture_foreground_lease(
+    instance: &crate::host::service::instance::InstanceGuard,
+) -> Result<Option<ForegroundLease>, BtccError> {
+    if instance.app_supervised() {
+        ForegroundLease::capture().map(Some).map_err(io)
+    } else {
+        Ok(None)
+    }
+}
+
+/// Stops lifecycle admission, then drains App and inbound producers while
+/// BTCC and transcript publication remain live.
+async fn close_serving(
+    control: GatewayControlServer,
+    gateway: &AppGatewayLifecycle,
+    dispatcher: &IngressDispatcher,
+    progress: &crate::host::ProgressPublisher,
+) -> Result<(), BtccError> {
     let control_close = control.close().await.map_err(|message| {
         failure("gateway_control_close_failed", message.to_string()).with_source(message)
     });
@@ -404,13 +369,45 @@ async fn serve(
         .await
         .map_err(|e| failure(e.code, e.message));
     let publication = progress.reconcile().await.map(|_| ());
-    drop(readiness);
-    result
-        .and(control_close)
-        .and(app_close)
-        .and(close)
-        .and(publication)
-        .map(|()| binding.session_id)
+    control_close.and(app_close).and(close).and(publication)
+}
+
+/// Rolls back the App and dispatcher if the private control plane cannot start.
+async fn start_control(
+    gateway: &Arc<AppGatewayLifecycle>,
+    runtime: &AgentRuntime,
+    config: &ServiceConfiguration,
+    instance: &mut crate::host::service::instance::InstanceGuard,
+    dispatcher: &IngressDispatcher,
+    stop: &StopSignal,
+) -> Result<GatewayControlServer, BtccError> {
+    let control = match GatewayControlServer::bind(
+        config.data_root.clone(),
+        config.installation.clone(),
+        instance.nonce().to_owned(),
+        control_owners(gateway, runtime, stop),
+    )
+    .await
+    {
+        Ok(control) => control,
+        Err(message) => {
+            let _ = gateway.close().await;
+            let _ = dispatcher.close().await;
+            return Err(failure("gateway_control_unavailable", message.to_string()));
+        }
+    };
+    if let Err(message) =
+        instance.publish_control(control.endpoint().to_owned(), control.token().to_owned())
+    {
+        let _ = control.close().await;
+        let _ = gateway.close().await;
+        let _ = dispatcher.close().await;
+        return Err(failure(
+            "native_service_instance_state_unavailable",
+            message.to_string(),
+        ));
+    }
+    Ok(control)
 }
 
 /// What the control endpoint serves: the App gateway lifecycle, the restart
@@ -465,5 +462,15 @@ async fn mark_ready(
         .restart_effect_journal
         .finish_spawned_restart_handoffs()
         .await;
+    Ok(())
+}
+
+async fn recover_inbound_queue(
+    queue: Arc<butler_gateway::gateway::InboundQueue>,
+) -> Result<(), BtccError> {
+    tokio::task::spawn_blocking(move || queue.recover_runtime_interruptions())
+        .await
+        .map_err(|error| failure("inbound_queue_worker_failed", error.to_string()))?
+        .map_err(|error| failure(error.code(), error.message()))?;
     Ok(())
 }

@@ -301,6 +301,16 @@ const CORE_SCHEMA: &str = r"
     CREATE INDEX IF NOT EXISTS session_queued_messages_session_idx
     ON session_queued_messages(chat_id, state);
 
+    -- The queue poll, lease recovery and dispatch deadline read only these
+    -- states; their queries repeat the IN term so the index applies.
+    CREATE INDEX IF NOT EXISTS session_queued_messages_active_idx
+    ON session_queued_messages(state, chat_id)
+    WHERE state IN ('queued', 'dispatching');
+
+    CREATE INDEX IF NOT EXISTS app_automation_runs_queued_idx
+    ON app_automation_runs(state)
+    WHERE state = 'queued';
+
     CREATE INDEX IF NOT EXISTS turns_chat_state_idx
     ON turns(chat_id, state);
 

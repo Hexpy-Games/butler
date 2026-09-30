@@ -88,6 +88,10 @@ pub(crate) fn recognizes(args: &[OsString]) -> bool {
                 saw_option = true;
                 index += 1;
             }
+            value if value.starts_with("--port=") => {
+                saw_option = true;
+                index += 1;
+            }
             value if value.starts_with('-') => return false,
             "service" | "start" | "stop" | "restart" => return true,
             _ => return false,
@@ -287,6 +291,8 @@ fn parse(args: &[OsString]) -> Result<(Options, Action), crate::host::HostError>
             "--home" => return Err("--home is unsupported; use --data for writable state".into()),
             "--json" => options.json = true,
             "--quiet" | "--silent" => options.quiet = true,
+            // The service configuration reads harness port overrides from argv.
+            value if value.starts_with("--port=") => {}
             "--verbose" | "--yes" | "--non-interactive" => {}
             "--dry-run" => options.dry_run = true,
             "--detached" => options.detached = true,
@@ -323,6 +329,13 @@ fn parse(args: &[OsString]) -> Result<(Options, Action), crate::host::HostError>
         [command] if command == "restart" => Action::Restart,
         _ => return Err("unexpected service arguments".into()),
     };
+    if !matches!(action, Action::Run)
+        && args
+            .iter()
+            .any(|arg| arg.to_string_lossy().starts_with("--port="))
+    {
+        return Err("--port= is only supported for service run".into());
+    }
     if matches!(action, Action::RestartHandoff) && options.data.is_none() {
         return Err("service restart-handoff requires --data".into());
     }

@@ -13,6 +13,7 @@ use super::sandbox::Sandbox;
 use super::{HarnessError, harness_error};
 
 mod app_supervisor;
+mod environment;
 mod process;
 pub use process::read_all;
 
@@ -74,7 +75,7 @@ impl Launch {
             home: sandbox.home.clone(),
             tmp,
             logs: sandbox.logs.clone(),
-            port: free_port()?,
+            port: 0,
             token,
             env: vec![
                 ("BUTLER_APP_LOCAL_AUTH_REQUIRED".into(), "1".into()),
@@ -171,12 +172,8 @@ impl Launch {
     /// A command for `program` (an installed Agent, or its launcher) with the
     /// scenario's isolated environment and no installation options.
     pub fn env_command(&self, program: &Path) -> Command {
-        let mut command = Command::new(program);
+        let mut command = environment::isolated_command(program, &self.data, &self.home);
         command
-            .current_dir(&self.data)
-            .env_clear()
-            .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
-            .env("HOME", &self.home)
             .env("CODEX_HOME", self.home.join(".codex"))
             .env("TMPDIR", &self.tmp)
             .env("LANG", "en_US.UTF-8")
@@ -242,7 +239,12 @@ impl Agent {
         let stderr = stdout.try_clone()?;
         let mut command = self.launch.service_command();
         command.stdout(stdout).stderr(stderr);
-        let child = executable::spawn(&mut command)?;
+        let child = executable::spawn(&mut command).map_err(|error| {
+            harness_error(format!(
+                "cannot launch E2E agent {}: {error}",
+                self.launch.binary.display()
+            ))
+        })?;
         self.child = Some(child);
         Ok(log)
     }
@@ -251,6 +253,11 @@ impl Agent {
         let log = self.launch_child()?;
         let deadline = Instant::now() + Duration::from_secs(90);
         loop {
+            if self.launch.port == 0
+                && let Some(port) = process::bound_port(&self.launch.data, self.pid())
+            {
+                self.launch.port = port;
+            }
             if self.launch.token.is_empty()
                 && let Some(token) = self.launch.data_folder_token()
             {
@@ -269,21 +276,19 @@ impl Agent {
                 .as_mut()
                 .and_then(|child| child.try_wait().ok().flatten())
             {
-                let tail = fs::read_to_string(&log).unwrap_or_default();
-                let tail: String = tail
-                    .chars()
-                    .rev()
-                    .take(2000)
-                    .collect::<String>()
-                    .chars()
-                    .rev()
-                    .collect();
+                let tail = process::log_tail(&log);
                 return Err(harness_error(format!(
-                    "agent exited ({status}) before its gateway was ready:\n{tail}"
+                    "agent exited ({status}) before its gateway was ready (port={}):\n{tail}",
+                    self.launch.port
                 )));
             }
             if Instant::now() > deadline {
-                return Err(harness_error("agent gateway not ready within 90s"));
+                return Err(harness_error(format!(
+                    "agent gateway not ready within 90s (pid={:?}, port={}):\n{}",
+                    self.pid(),
+                    self.launch.port,
+                    process::log_tail(&log)
+                )));
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
@@ -456,14 +461,8 @@ impl CliOutput {
     }
 }
 
-/// A port no listener holds, for a process that binds it later.
-///
-/// Drawn from below the ephemeral ranges (Linux 32768+, macOS 49152+), so a
-/// stub that binds port 0 in a parallel scenario cannot be handed the port
-/// between this check and the agent's own bind. Picking with `bind(0)` did
-/// exactly that on Linux, which reuses a just-freed ephemeral port: the stub
-/// took the agent's port and the agent never came up. Each test process
-/// starts at its own offset and walks the range, skipping held ports.
+/// An unused port for closed-endpoint fixtures. This probe does not reserve it.
+/// Agents bind port 0 themselves and publish the OS-assigned endpoint instead.
 pub fn free_port() -> Result<u16, HarnessError> {
     use std::sync::atomic::{AtomicU32, Ordering};
     const FIRST: u32 = 20_000;

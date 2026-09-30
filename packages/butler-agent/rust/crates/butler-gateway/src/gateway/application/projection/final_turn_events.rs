@@ -4,7 +4,10 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Map, Value, json};
 
 use crate::gateway::application::storage::AppStorageCode;
-use crate::gateway::application::{events::EventSubscribers, storage::AppStorageError};
+use crate::gateway::application::{
+    events::EventSubscribers,
+    storage::{AppStorageError, CachedSql},
+};
 
 pub(super) struct FinalTurnEventIds {
     pub started: String,
@@ -55,16 +58,16 @@ pub(super) fn append_if_missing(
     Ok(())
 }
 
+/// `turn_id<>''` makes the partial `events_turn_id_idx` applicable.
+pub(in crate::gateway::application) const HAS_KIND_SQL: &str = "SELECT 1 FROM events \
+    WHERE type='agent.turn_event' AND turn_id=?1 AND turn_id<>'' \
+    AND json_extract(payload_json,'$.event.kind')=?2 ORDER BY id DESC LIMIT 1";
+
 fn has_kind(db: &Connection, turn_id: &str, kind: &str) -> Result<bool, AppStorageError> {
-    db.query_row(
-        "SELECT 1 FROM events WHERE type='agent.turn_event' AND turn_id=?1 \
-         AND json_extract(payload_json,'$.event.kind')=?2 ORDER BY id DESC LIMIT 1",
-        params![turn_id, kind],
-        |_| Ok(()),
-    )
-    .optional()
-    .map(|row| row.is_some())
-    .map_err(AppStorageError::sqlite)
+    db.query_row_cached(HAS_KIND_SQL, params![turn_id, kind], |_| Ok(()))
+        .optional()
+        .map(|row| row.is_some())
+        .map_err(AppStorageError::sqlite)
 }
 
 fn object(value: &Value) -> Result<Map<String, Value>, AppStorageError> {

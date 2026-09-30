@@ -1,0 +1,18 @@
+name: Assert the runner home is untouched
+description: >-
+  Run after a test suite. Fails when a test created Butler data under the
+  runner's real home (~/.butler, or the platform's equivalent), which tests must
+  never touch: they run against temp dirs. On a developer machine the same leak
+  writes into the owner's own data, so CI catches it before it ships.
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        if [ -e "$HOME/.butler" ]; then
+          echo "::error::A test created $HOME/.butler; tests must use a temp HOME and BUTLER_DATA."
+          find "$HOME/.butler" -maxdepth 4 | head -50
+          exit 1
+        fi
+        echo "No Butler data under $HOME."

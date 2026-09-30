@@ -167,31 +167,16 @@ impl IngressDispatcher {
         if summary.interrupted > 0 {
             return Ok(summary);
         }
-        self.queue
-            .recover_stale_processing_except(&state.active_queue_ids)?;
+        recover_stale(self.queue.clone(), state.active_queue_ids.clone()).await?;
         let capacity = 5usize.saturating_sub(state.tasks.len());
-        let waiting_sessions = self
-            .authority
-            .waiting_source_sessions()
-            .await
-            .map_err(|source| {
-                IngressError::new(
-                    "inbound_authority_state_unavailable",
-                    "Waiting session state unavailable",
-                )
-                .with_source(source)
-            })?
-            .into_iter()
-            .collect::<HashSet<_>>();
-        let mut batch = HashSet::new();
-        let claimed = self.queue.claim_eligible(capacity, |record| {
-            dispatch::eligible_for_claim(
-                record,
-                &waiting_sessions,
-                &state.active_sessions,
-                &mut batch,
-            )
-        })?;
+        let waiting_sessions = waiting_sessions(&self.authority).await?;
+        let claimed = claim_pending(
+            self.queue.clone(),
+            capacity,
+            waiting_sessions,
+            state.active_sessions.clone(),
+        )
+        .await?;
         summary.claimed = claimed.len();
         for item in claimed {
             let session = dispatch::session_key(&item.record);
@@ -243,4 +228,45 @@ impl IngressDispatcher {
         }
         Ok(())
     }
+}
+
+async fn recover_stale(
+    queue: Arc<InboundQueue>,
+    active_ids: HashSet<String>,
+) -> Result<(), IngressError> {
+    tokio::task::spawn_blocking(move || queue.recover_stale_processing_except(&active_ids))
+        .await
+        .map_err(|error| IngressError::new("inbound_queue_worker_failed", error.to_string()))??;
+    Ok(())
+}
+
+async fn claim_pending(
+    queue: Arc<InboundQueue>,
+    capacity: usize,
+    waiting_sessions: HashSet<String>,
+    active_sessions: HashSet<String>,
+) -> Result<Vec<butler_gateway::gateway::ClaimedInboundEvent>, IngressError> {
+    tokio::task::spawn_blocking(move || {
+        let mut batch = HashSet::new();
+        queue.claim_eligible(capacity, |record| {
+            dispatch::eligible_for_claim(record, &waiting_sessions, &active_sessions, &mut batch)
+        })
+    })
+    .await
+    .map_err(|error| IngressError::new("inbound_queue_worker_failed", error.to_string()))?
+    .map_err(IngressError::from)
+}
+
+async fn waiting_sessions(authority: &PrincipalAuthority) -> Result<HashSet<String>, IngressError> {
+    authority
+        .waiting_source_sessions()
+        .await
+        .map_err(|source| {
+            IngressError::new(
+                "inbound_authority_state_unavailable",
+                "Waiting session state unavailable",
+            )
+            .with_source(source)
+        })
+        .map(|sessions| sessions.into_iter().collect())
 }

@@ -6,14 +6,14 @@ import { appShellTheme } from "@/app/utils.ts";
 import { useComposerStore } from "./composerStore";
 import { ContextUsagePopover } from "./ContextUsagePopover";
 import { contextModel, usageAuthMode } from "./usageAuthMode";
-import type { UsageLoader } from "./useConversationUsage";
+import type { QuotaLoader, UsageLoader } from "./useConversationUsage";
 
 /**
  * Composer context donut. Hover previews the context and usage popover; a
  * click (Enter/Space) pins it open until a second click, Esc or an outside
  * click. Details opens Settings > Usage.
  */
-export function ComposerContextControl({ load }: { load?: UsageLoader }) {
+export function ComposerContextControl({ load, loadQuota }: { load?: UsageLoader; loadQuota?: QuotaLoader }) {
   useAppLocale();
   const context = useComposerStore((store) => store.context);
   const models = useComposerStore((store) => store.models);
@@ -75,6 +75,7 @@ export function ComposerContextControl({ load }: { load?: UsageLoader }) {
         <ContextUsagePopover
           context={context}
           load={load}
+          loadQuota={loadQuota}
           mode={mode}
           sessionId={context.session_id ?? activeChatId}
           onDetails={() => {
