@@ -79,3 +79,10 @@ round-2 PR's report alongside the final warm measurement.
 | Slowest stub shard | 4m14s | 2m24s |
 | Slowest install selection | 3m25s | 2m16s |
 | Gate, including queue time | 6m38s | 6m26s |
+
+Warm PR measurements must use a `pull_request` run: GitHub scopes its caches to
+`refs/pull/<number>/merge`, and a `workflow_dispatch` on the source branch
+cannot restore that PR's cache. Keep cold and warm results separate and include
+runner queue/startup time in the gate critical path. The integration-output
+cache proof also confirmed identical complete nextest inventories after
+restoration (local binary discovery: 3.51s missing outputs, 0.46s restored).
