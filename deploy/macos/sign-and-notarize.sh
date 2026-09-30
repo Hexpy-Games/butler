@@ -66,9 +66,10 @@ setup() {
 # Separate process preserves errexit even when preview setup catches its failure.
 setup_certificate() {
   [ "${GITHUB_ACTIONS:-}" = true ] || die "setup runs only in GitHub Actions"
-  [ -n "${APPLE_DEVELOPER_ID_P12_BASE64:-}" ] &&
-    [ -n "${APPLE_DEVELOPER_ID_P12_PASSWORD:-}" ] &&
-    [ -n "${APPLE_TEAM_ID:-}" ] || die "certificate secrets missing or partial"
+  if [ -z "${APPLE_DEVELOPER_ID_P12_BASE64:-}" ] ||
+    [ -z "${APPLE_DEVELOPER_ID_P12_PASSWORD:-}" ] || [ -z "${APPLE_TEAM_ID:-}" ]; then
+    die "certificate secrets missing or partial"
+  fi
   local pw kc="$default_keychain" p12 g2 identity g2_note=""
   pw=$(openssl rand -base64 24)
   echo "::add-mask::$pw"
