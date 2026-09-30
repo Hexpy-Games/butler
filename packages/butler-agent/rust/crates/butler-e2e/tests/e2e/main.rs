@@ -52,6 +52,7 @@ mod setup_readiness;
 mod skills_disclosure;
 mod startup_port;
 mod steward_results;
+mod storage_resilience;
 mod streaming;
 mod subsession_legacy;
 mod tools;

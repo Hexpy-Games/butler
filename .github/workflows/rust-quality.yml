@@ -101,6 +101,10 @@ jobs:
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
           export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
           cargo run -j 8 --locked -p butler-source-check -- .
+          python3 - <<'PY_CHECK'
+          from pathlib import Path
+          assert not list(Path("crates/butler-e2e/tests").glob("*.rs")), "Add E2Es as modules in tests/e2e/main.rs"
+          PY_CHECK
       - name: Prove source-cache freshness
         run: |
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
