@@ -341,7 +341,6 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
         (Method::GET, "/provider-quota") => monitors::provider_quota(state, &uri).await,
         (Method::GET, "/runtime-readiness") => {
             let mut readiness = state.application.runtime_readiness()?;
-            readiness.authenticated_gateway_ready = true;
             readiness.raw_text_included = false;
             json(
                 StatusCode::OK,

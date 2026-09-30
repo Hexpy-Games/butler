@@ -111,6 +111,61 @@ async fn startup_dispatch_waits_for_initialized_owners() -> Result<(), HarnessEr
 }
 
 #[tokio::test]
+async fn runtime_readiness_waits_for_inbound_poll_loop() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut s = Setup::new("SVC-01-DISPATCH-READY")?
+        .env("BUTLER_E2E_TIER", "stub")
+        .env("BUTLER_E2E_HOLD_DISPATCH_READY", "1")
+        .start()
+        .await?;
+    let held = s.sandbox.data.join("e2e-dispatch-ready-held");
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !held.exists() {
+        assert!(s.agent.is_running(), "{}", s.agent.logs());
+        assert!(Instant::now() < deadline, "poll loop did not reach barrier");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+
+    let pending = s.gw.get("/runtime-readiness").await?;
+    assert_eq!(pending.status, 200);
+    assert!(
+        pending.data()["authenticated_gateway_ready"]
+            .as_bool()
+            .unwrap()
+    );
+    assert!(!pending.data()["btcc_executor_ready"].as_bool().unwrap());
+    assert!(!pending.data()["raw_text_included"].as_bool().unwrap());
+    assert_eq!(instance_record(&s.sandbox.data).unwrap()["state"], "ready");
+    let startup_log = std::fs::read_to_string(s.agent.launch.logs.join("agent-1.log"))?;
+    assert!(
+        startup_log.contains("[native-butler] ready"),
+        "{startup_log}"
+    );
+
+    tokio::fs::write(
+        s.sandbox.data.join("e2e-dispatch-ready-release"),
+        b"release",
+    )
+    .await?;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let ready = s.gw.get("/runtime-readiness").await?;
+        assert_eq!(ready.status, 200);
+        if ready.data()["btcc_executor_ready"].as_bool() == Some(true) {
+            assert!(
+                ready.data()["authenticated_gateway_ready"]
+                    .as_bool()
+                    .unwrap()
+            );
+            break;
+        }
+        assert!(Instant::now() < deadline, "poll loop did not become ready");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    s.finish().await
+}
+
+#[tokio::test]
 async fn stalled_startup_exits_at_agent_deadline() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = held_restart("SVC-01-STARTUP-DEADLINE").await?;

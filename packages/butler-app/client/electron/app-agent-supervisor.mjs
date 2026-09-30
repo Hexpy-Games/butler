@@ -665,11 +665,11 @@ export function createBundledAgentSupervisor({
       isProcessAlive,
     });
     if (!candidate) return false;
-    if (candidate.port !== getPort()) updatePort(candidate.port);
     // An external Agent authenticates with the DATA-owned auth file, never an
     // App-only in-memory token.
     localAuth = readAppLocalAuth({ butlerData }) ?? localAuth;
-    if (!(await checkGatewayReadiness()).ready || child) return false;
+    if (!(await checkGatewayReadiness(candidate.port)).ready || child) return false;
+    if (candidate.port !== getPort()) updatePort(candidate.port);
     markAttached(candidate);
     return true;
   }
@@ -861,18 +861,20 @@ export function createBundledAgentSupervisor({
     };
   }
 
-  async function checkGatewayReadiness() {
-    let health = await runBoundedProbe(() => healthCheck(localAuth));
+  async function checkGatewayReadiness(portOverride = null) {
+    let health = await runBoundedProbe(() => healthCheck(localAuth, portOverride));
     // A connection code rotated elsewhere (CLI, browser) leaves this token
     // stale; the data-folder token file holds the new one.
     if (!health.value && reloadLocalAuth()) {
-      health = await runBoundedProbe(() => healthCheck(localAuth));
+      health = await runBoundedProbe(() => healthCheck(localAuth, portOverride));
     }
     const healthy = health.value;
     if (!healthy) {
       return { healthy: false, ready: false, timedOut: health.timedOut };
     }
-    const readiness = await runBoundedProbe(() => readinessCheck(localAuth, activeGateway));
+    const readiness = await runBoundedProbe(() =>
+      readinessCheck(localAuth, activeGateway, portOverride),
+    );
     return {
       healthy: true,
       ready: readiness.value,

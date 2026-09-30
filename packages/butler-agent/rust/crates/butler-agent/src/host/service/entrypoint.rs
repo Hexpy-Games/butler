@@ -11,8 +11,7 @@ use crate::host::app::gateway_lifecycle::{
     ActiveAppEndpoint, AppGatewayLifecycle, ControlOwners, GatewayControlServer,
     local_auth_unconfigured,
 };
-use crate::host::service::foreground_lease::ForegroundLease;
-use crate::host::service::ingress::IngressDispatcher;
+use crate::host::service::{foreground_lease::ForegroundLease, ingress::IngressDispatcher};
 mod admission;
 mod maintenance;
 mod poll;
@@ -319,13 +318,13 @@ async fn serve(
         return Err(error);
     }
     let control = start_control(&gateway, &runtime, config, instance, &dispatcher, stop).await?;
-    logs.write(&format!("[native-butler] ready model={model}"));
     if let Err(error) = start_runtime(&runtime, instance, &app_endpoint, stop).await {
         let _ = control.close().await;
         let _ = dispatcher.close().await;
         let _ = gateway.close().await;
         return Err(error);
     }
+    logs.write(&format!("[native-butler] ready model={model}"));
     let _ = ready.send(());
     let subsessions = runtime.subsessions.repository();
     let result = poll_service(
@@ -337,6 +336,7 @@ async fn serve(
             subsessions: &subsessions,
             parent_client: &parent_client,
             app_endpoint: &app_endpoint,
+            readiness: &readiness,
             logs,
         },
         PollShutdown {
