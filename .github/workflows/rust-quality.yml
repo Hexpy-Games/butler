@@ -140,8 +140,6 @@ jobs:
       RUSTC_WRAPPER: sccache
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
-      CARGO_PROFILE_DEV_STRIP: symbols
-      CARGO_PROFILE_TEST_STRIP: symbols
     steps:
       - uses: actions/checkout@v4
       - name: Set up sccache
@@ -150,7 +148,7 @@ jobs:
         uses: ./.github/actions/rust-agent-setup
         with:
           native-deps: prebuilt-ort
-          cache-key: pr-linux-x64-e2e
+          cache-key: pr-linux-x64-tests
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
@@ -159,6 +157,13 @@ jobs:
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
           export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
           cargo build --locked --workspace --all-targets
+      - name: Strip archive binaries without invalidating dependency caches
+        run: |
+          export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
+          export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
+          cargo nextest list --locked --workspace --list-type binaries-only \
+            --message-format json > "$RUNNER_TEMP/nextest-binaries.json"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/strip-nextest-binaries.py" "$RUNNER_TEMP/nextest-binaries.json"
       - name: Build and archive workspace tests
         run: |
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"

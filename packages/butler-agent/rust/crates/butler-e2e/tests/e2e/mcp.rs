@@ -12,7 +12,9 @@ use butler_e2e::e2e::scenario::{Scenario, Setup};
 use butler_e2e::e2e::{HarnessError, nonce};
 use serde_json::{Value, json};
 
-const FIXTURE: &str = env!("CARGO_BIN_EXE_e2e-mcp-fixture");
+fn fixture() -> String {
+    butler_e2e::e2e::binary::mcp_fixture_binary(env!("CARGO_BIN_EXE_e2e-mcp-fixture"))
+}
 const PROMPT: &str =
     "Call the e2e_echo tool of the MCP server named e2e and tell me the token it returns.";
 
@@ -26,7 +28,7 @@ async fn add_server(s: &Scenario, env: Vec<Value>) -> Result<Value, HarnessError
         .post(
             "/mcp-servers",
             json!({"id": "e2e", "display_name": "E2E fixture", "enabled": true, "transport": "stdio",
-                   "command": FIXTURE, "args": [], "env": env}),
+                   "command": fixture(), "args": [], "env": env}),
         )
         .await?;
     assert!(reply.status < 300, "add server: {}", reply.text);
@@ -185,7 +187,7 @@ async fn mcp_03_misbehaving_server() -> Result<(), HarnessError> {
     let probed = probe(&s).await?;
     assert!(!healthy(&probed), "failing server probed healthy: {probed}");
     assert!(
-        !probed.to_string().contains(FIXTURE),
+        !probed.to_string().contains(&fixture()),
         "probe leaks the command path: {probed}"
     );
     s.finish().await

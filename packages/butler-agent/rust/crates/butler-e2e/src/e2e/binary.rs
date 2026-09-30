@@ -78,3 +78,9 @@ fn locate() -> Result<PathBuf, String> {
         ))
     }
 }
+
+/// Nextest remaps fixture executables when extracting an archive. Cargo test
+/// uses the compile-time path supplied by the integration test instead.
+pub fn mcp_fixture_binary(cargo_path: &str) -> String {
+    std::env::var("NEXTEST_BIN_EXE_e2e_mcp_fixture").unwrap_or_else(|_| cargo_path.to_owned())
+}

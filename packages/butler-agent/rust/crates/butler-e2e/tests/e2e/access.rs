@@ -209,7 +209,8 @@ async fn acc_04_mcp_tool_asks_in_ask_first() -> Result<(), HarnessError> {
         .placeholder("NONCE", &token)
         .start()
         .await?;
-    let fixture = env!("CARGO_BIN_EXE_e2e-mcp-fixture");
+    let fixture =
+        butler_e2e::e2e::binary::mcp_fixture_binary(env!("CARGO_BIN_EXE_e2e-mcp-fixture"));
     let added = s
         .gw
         .post(
