@@ -9,6 +9,7 @@ use std::sync::Arc;
 use axum::extract::DefaultBodyLimit;
 use axum::{Extension, Router, routing::any};
 use parking_lot::Mutex;
+use serde::Serialize;
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -45,12 +46,20 @@ pub(super) fn spawn(
     })
 }
 
+/// A LAN address that could not be bound, visible to the local admin.
+#[derive(Clone, Debug, Serialize)]
+pub(super) struct BindError {
+    address: SocketAddr,
+    error: String,
+}
+
 /// What remote access currently exposes.
 #[derive(Clone, Debug, Default)]
 pub(super) struct RemoteSnapshot {
     pub(super) exposure: GatewayExposure,
     /// The LAN listeners' addresses.
     pub(super) lan_listeners: Vec<SocketAddr>,
+    pub(super) bind_errors: Vec<BindError>,
     /// The LAN Host authorities answered: `ip:port`, `<name>.local:port`.
     pub(super) lan_authorities: Vec<String>,
 }
@@ -114,11 +123,13 @@ impl RemoteAccess {
             }
             current.snapshot.lan_listeners.clear();
             current.snapshot.lan_authorities.clear();
+            current.snapshot.bind_errors.clear();
         } else if !was_enabled && exposure.remote_access_enabled {
             let closed = state.shutdown.child_token();
-            let (listeners, authorities) = self.bind_lan(state, &closed);
-            current.snapshot.lan_listeners = listeners;
-            current.snapshot.lan_authorities = authorities;
+            let bound = self.bind_lan(state, &closed);
+            current.snapshot.lan_listeners = bound.lan_listeners;
+            current.snapshot.lan_authorities = bound.lan_authorities;
+            current.snapshot.bind_errors = bound.bind_errors;
             current.closed = Some(closed);
         }
         current.snapshot.exposure = exposure;
@@ -131,40 +142,43 @@ impl RemoteAccess {
 
     /// Binds `ip:port` for every LAN address (unless the loopback listener
     /// already listens on every interface) and names them.
-    fn bind_lan(
-        &self,
-        state: &Arc<HttpState>,
-        closed: &CancellationToken,
-    ) -> (Vec<SocketAddr>, Vec<String>) {
+    fn bind_lan(&self, state: &Arc<HttpState>, closed: &CancellationToken) -> RemoteSnapshot {
         let port = self.primary.port();
         let every_interface = self.primary.ip().is_unspecified();
-        let mut listeners = Vec::new();
-        let mut authorities = Vec::new();
+        let mut bound = RemoteSnapshot::default();
         for ip in lan::lan_addresses() {
             let address = SocketAddr::new(ip, port);
             if !every_interface {
-                let Some(listener) = bind(address) else {
-                    continue;
-                };
-                drop(spawn(listener, state.clone(), closed.clone()));
-                listeners.push(address);
+                match bind(address) {
+                    Ok(listener) => {
+                        drop(spawn(listener, state.clone(), closed.clone()));
+                        bound.lan_listeners.push(address);
+                    }
+                    Err(error) => {
+                        bound.bind_errors.push(BindError {
+                            address,
+                            error: error.to_string(),
+                        });
+                        continue;
+                    }
+                }
             }
-            authorities.push(authority(ip, port));
+            bound.lan_authorities.push(authority(ip, port));
         }
-        if !authorities.is_empty()
+        if !bound.lan_authorities.is_empty()
             && let Some(name) = lan::mdns_name()
         {
-            authorities.push(format!("{name}:{port}"));
+            bound.lan_authorities.push(format!("{name}:{port}"));
         }
-        (listeners, authorities)
+        bound
     }
 }
 
-/// A non-blocking listener on `address`, or `None` when it cannot bind.
-fn bind(address: SocketAddr) -> Option<TcpListener> {
-    let listener = std::net::TcpListener::bind(address).ok()?;
-    listener.set_nonblocking(true).ok()?;
-    TcpListener::from_std(listener).ok()
+/// A non-blocking listener on `address`, retaining its bind failure.
+fn bind(address: SocketAddr) -> std::io::Result<TcpListener> {
+    let listener = std::net::TcpListener::bind(address)?;
+    listener.set_nonblocking(true)?;
+    TcpListener::from_std(listener)
 }
 
 fn authority(ip: IpAddr, port: u16) -> String {
