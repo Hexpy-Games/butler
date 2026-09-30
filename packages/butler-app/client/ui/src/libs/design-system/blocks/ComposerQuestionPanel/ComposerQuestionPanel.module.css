@@ -1,0 +1,53 @@
+.surface {
+  display: grid;
+  min-width: 0;
+}
+.subject {
+  padding: var(--space-md) var(--space-lg);
+}
+.body {
+  padding: 0 var(--space-sm) var(--space-sm);
+  min-width: 0;
+}
+.option {
+  min-height: max(var(--menu-item-height), var(--control-hit-target));
+  border-radius: var(--radius-control);
+  padding-block: var(--menu-item-padding-block);
+}
+.option[data-highlighted="true"],
+.option[data-selected="true"] {
+  background: var(--selection);
+}
+.other {
+  padding: var(--space-xs) var(--space-sm);
+  padding-inline-start: calc(
+    var(--space-sm) + var(--icon-size-lg) + var(--space-sm)
+  );
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border-top: var(--border-hairline) solid var(--composer-glass-divider);
+}
+.actions button {
+  border-radius: var(--adaptive-composer-radius);
+}
+.hints {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--text-tertiary);
+}
+.error {
+  padding-inline: var(--space-lg);
+}
+@media (pointer: coarse), (width <= 640px) {
+  .hints {
+    display: none;
+  }
+}
