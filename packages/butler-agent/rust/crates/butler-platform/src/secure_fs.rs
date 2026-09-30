@@ -400,3 +400,9 @@ pub fn path_key(path: &Path) -> PathBuf {
 pub fn symlink(target: &Path, link: &Path) -> io::Result<()> {
     sys::symlink(target, link)
 }
+
+/// Whether a hard link error permits trying a no-clobber create instead.
+/// The fallback must still enforce destination permissions and collisions.
+pub fn hard_link_unsupported(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::Unsupported || sys::hard_link_unsupported(error)
+}

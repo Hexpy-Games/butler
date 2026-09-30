@@ -95,6 +95,7 @@ async fn batch_retains_first_commit_and_reports_second_external_change() {
 // test-category: race
 #[test]
 fn exclusive_create_race_keeps_external_bytes_and_cleans_temp() {
+    sync_failure_and_link_fallback();
     let root = std::env::temp_dir().join(format!("butler-k1b-create-race-{}", Uuid::new_v4()));
     std::fs::create_dir(&root).unwrap();
     let absolute = root.join("target.txt");
@@ -121,6 +122,23 @@ fn exclusive_create_race_keeps_external_bytes_and_cleans_temp() {
     assert_eq!(failure.error, "external_change_conflict");
     assert_eq!(std::fs::read(&absolute).unwrap(), b"external");
     assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
+    let snapshot = io::observe(
+        GuardedPath {
+            public: "target.txt".into(),
+            absolute: absolute.clone(),
+            real: absolute.clone(),
+        },
+        io::Parent::MustExist,
+    )
+    .unwrap();
+    let prepared =
+        io::prepare(snapshot, b"ours".to_vec(), None, io::Replacement::Unguarded).unwrap();
+    let external = At((Point::BeforeReplace, |path: &Path| {
+        std::fs::write(path, b"new-editor-save").unwrap();
+    }));
+    let failure = io::commit(prepared, &external).expect_err("late editor save must win");
+    assert_eq!(failure.error, "external_change_conflict");
+    assert_eq!(std::fs::read(&absolute).unwrap(), b"new-editor-save");
     std::fs::remove_dir_all(root).unwrap();
 }
 
@@ -197,5 +215,60 @@ async fn close_drains_running_and_queued_mutations_after_callers_drop() {
     assert_eq!(std::fs::read(root.join("second.txt")).unwrap(), b"four");
     assert_eq!(std::fs::read(root.join("queued.txt")).unwrap(), b"queued");
     assert!(!root.join("rejected.txt").exists());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+fn sync_failure_and_link_fallback() {
+    struct SyncFailure;
+    impl CommitObserver for SyncFailure {
+        fn sync_temporary(&self, _: &std::fs::File) -> std::io::Result<()> {
+            Err(std::io::ErrorKind::Other.into())
+        }
+    }
+    struct NoLinks(bool);
+    impl CommitObserver for NoLinks {
+        fn link(&self, _: &Path, target: &Path) -> std::io::Result<()> {
+            if self.0 {
+                std::fs::write(target, b"peer").unwrap();
+            }
+            Err(std::io::ErrorKind::Unsupported.into())
+        }
+    }
+    let root = std::env::temp_dir().join(format!("workspace-sync-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&root).unwrap();
+    let target = root.join("new.txt");
+    let prepare = || {
+        let before = io::observe(
+            GuardedPath {
+                public: "new.txt".into(),
+                absolute: target.clone(),
+                real: target.clone(),
+            },
+            io::Parent::MustExist,
+        )
+        .unwrap();
+        io::prepare(
+            before,
+            b"complete bytes".to_vec(),
+            None,
+            io::Replacement::Unguarded,
+        )
+        .unwrap()
+    };
+    assert!(
+        io::commit(prepare(), &SyncFailure).is_err(),
+        "sync failure must abort publication"
+    );
+    assert!(!target.exists());
+    let committed =
+        io::commit(prepare(), &NoLinks(false)).expect("unsupported links need create_new fallback");
+    assert!(committed.created);
+    assert_eq!(std::fs::read(&target).unwrap(), b"complete bytes");
+    assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
+    std::fs::remove_file(&target).unwrap();
+    let failure = io::commit(prepare(), &NoLinks(true)).unwrap_err();
+    assert_eq!(failure.error, "external_change_conflict");
+    assert_eq!(std::fs::read(&target).unwrap(), b"peer");
+    assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
     std::fs::remove_dir_all(root).unwrap();
 }

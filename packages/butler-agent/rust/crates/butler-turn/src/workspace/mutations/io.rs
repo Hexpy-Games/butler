@@ -222,6 +222,46 @@ pub(super) fn commit(
     prepared: Prepared,
     observer: &dyn CommitObserver,
 ) -> Result<CommittedFile, MutationFailure> {
+    verify_unchanged(&prepared)?;
+    observer.before_replace(&prepared.before.path.absolute);
+    let temporary = prepared.before.path.absolute.with_file_name(format!(
+        "{}.butler-{}-{}.tmp",
+        prepared
+            .before
+            .path
+            .absolute
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy(),
+        std::process::id(),
+        Uuid::new_v4()
+    ));
+    let result = atomic_replace(&prepared, &temporary, observer);
+    let cleanup_failed = match result {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = fs::remove_file(&temporary);
+            return Err(error);
+        }
+    };
+    let detail = diff::changed_file(
+        &prepared.before.path.public,
+        &prepared.before.bytes,
+        &prepared.data,
+        prepared.before.origin(),
+    );
+    Ok(CommittedFile {
+        path: prepared.before.path.public,
+        created: !prepared.before.exists,
+        bytes: prepared.data.len(),
+        before_sha256: prepared.before.sha256,
+        after_sha256: sha256(&prepared.data),
+        cleanup_failed,
+        changed_file: detail,
+    })
+}
+
+fn verify_unchanged(prepared: &Prepared) -> Result<(), MutationFailure> {
     let path = prepared.before.path.public.clone();
     let current = observe(
         GuardedPath {
@@ -249,58 +289,25 @@ pub(super) fn commit(
         conflict.current_sha256 = current.sha256;
         return Err(conflict);
     }
-    drop(current);
-    observer.before_replace(&prepared.before.path.absolute);
-    let temporary = prepared.before.path.absolute.with_file_name(format!(
-        "{}.butler-{}-{}.tmp",
-        prepared
-            .before
-            .path
-            .absolute
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy(),
-        std::process::id(),
-        Uuid::new_v4()
-    ));
-    let result = atomic_replace(&prepared, &temporary, observer);
-    let cleanup_failed = match result {
-        Ok(value) => value,
-        Err(error) => {
-            let _ = fs::remove_file(&temporary);
-            let code =
-                if !prepared.before.exists && error.kind() == std::io::ErrorKind::AlreadyExists {
-                    "external_change_conflict"
-                } else if error.kind() == std::io::ErrorKind::PermissionDenied {
-                    "permission_denied"
-                } else {
-                    "io_error"
-                };
-            return Err(failure::new(Some(prepared.before.path.public), code));
-        }
-    };
-    let detail = diff::changed_file(
-        &prepared.before.path.public,
-        &prepared.before.bytes,
-        &prepared.data,
-        prepared.before.origin(),
-    );
-    Ok(CommittedFile {
-        path: prepared.before.path.public,
-        created: !prepared.before.exists,
-        bytes: prepared.data.len(),
-        before_sha256: prepared.before.sha256,
-        after_sha256: sha256(&prepared.data),
-        cleanup_failed,
-        changed_file: detail,
-    })
+    Ok(())
 }
 
 fn atomic_replace(
     prepared: &Prepared,
     temporary: &Path,
     observer: &dyn CommitObserver,
-) -> std::io::Result<bool> {
+) -> Result<bool, MutationFailure> {
+    write_temporary(prepared, temporary, observer)
+        .map_err(|error| mutation_io(prepared, &error))?;
+    verify_unchanged(prepared)?;
+    publish_temporary(prepared, temporary, observer).map_err(|error| mutation_io(prepared, &error))
+}
+
+fn write_temporary(
+    prepared: &Prepared,
+    temporary: &Path,
+    observer: &dyn CommitObserver,
+) -> std::io::Result<()> {
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
     if let Some(mode) = prepared.before.mode {
@@ -308,15 +315,46 @@ fn atomic_replace(
     }
     let mut file = options.open(temporary)?;
     file.write_all(&prepared.data)?;
-    drop(file);
+    observer.sync_temporary(&file)
+}
+
+fn publish_temporary(
+    prepared: &Prepared,
+    temporary: &Path,
+    observer: &dyn CommitObserver,
+) -> std::io::Result<bool> {
     if prepared.before.exists {
         fs::rename(temporary, &prepared.before.path.absolute)?;
         Ok(false)
     } else {
-        fs::hard_link(temporary, &prepared.before.path.absolute)?;
+        match observer.link(temporary, &prepared.before.path.absolute) {
+            Ok(()) => {}
+            Err(error) if secure_fs::hard_link_unsupported(&error) => {
+                let mut options = OpenOptions::new();
+                options.write(true).create_new(true);
+                if let Some(mode) = prepared.before.mode {
+                    secure_fs::creation_mode(&mut options, mode);
+                }
+                let mut destination = options.open(&prepared.before.path.absolute)?;
+                destination.write_all(&prepared.data)?;
+                destination.sync_all()?;
+            }
+            Err(error) => return Err(error),
+        }
         observer.after_link(temporary);
         Ok(fs::remove_file(temporary).is_err())
     }
+}
+
+fn mutation_io(prepared: &Prepared, error: &std::io::Error) -> MutationFailure {
+    let code = if !prepared.before.exists && error.kind() == std::io::ErrorKind::AlreadyExists {
+        "external_change_conflict"
+    } else if error.kind() == std::io::ErrorKind::PermissionDenied {
+        "permission_denied"
+    } else {
+        "io_error"
+    };
+    failure::new(Some(prepared.before.path.public.clone()), code)
 }
 
 impl Snapshot {
