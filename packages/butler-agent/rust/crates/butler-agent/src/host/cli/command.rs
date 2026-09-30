@@ -22,6 +22,7 @@ pub enum Command {
     Settings,
     Observability,
     Schedule,
+    Remote,
     Update,
     Status,
     Open,
@@ -35,13 +36,14 @@ impl Command {
     /// Classifies command arguments (installation options already removed).
     pub fn classify(args: &[OsString]) -> Self {
         use crate::host::cli;
-        let families: [(Recognizer, Self); 10] = [
+        let families: [(Recognizer, Self); 11] = [
             (cli::public::recognizes, Self::Public),
             (cli::service::recognizes, Self::ServiceControl),
             (cli::doctor::recognizes, Self::Doctor),
             (cli::settings::recognizes, Self::Settings),
             (cli::observability::recognizes, Self::Observability),
             (cli::schedule::recognizes, Self::Schedule),
+            (cli::remote::recognizes, Self::Remote),
             (cli::update::recognizes, Self::Update),
             (cli::status::recognizes, Self::Status),
             (cli::open::recognizes, Self::Open),
@@ -78,6 +80,7 @@ impl Command {
             Self::Settings => cli::settings::run(installation, args).await,
             Self::Observability => cli::observability::run(installation, args).await,
             Self::Schedule => cli::schedule::run(&installation, &args).await,
+            Self::Remote => cli::remote::run(&installation, &args).await,
             Self::Update => Box::pin(cli::update::run(installation, args)).await,
             Self::Status => cli::status::run_native_status_cli(installation, args).await,
             Self::Open => cli::open::run(&installation, &args).await,

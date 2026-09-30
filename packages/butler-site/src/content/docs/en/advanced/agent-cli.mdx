@@ -1,0 +1,61 @@
+---
+title: "Butler Agent CLI"
+description: "Install and manage Butler without the desktop app."
+section: advanced
+order: 1
+status: published
+---
+
+The standalone CLI runs Butler without the desktop app on Apple Silicon macOS and Linux x64 or arm64 with glibc. Windows and musl Linux are not supported; use WSL on Windows.
+
+## Install
+
+```bash
+curl -fsSL https://github.com/Hexpy-Games/butler/releases/latest/download/install.sh | sh
+# Or with Node.js:
+npx @hexpygames/butler install
+```
+
+Use `butler --help` or `butler help remote` for terse Korean and English help. The installer verifies the release checksum, installs a versioned archive, and starts the service. Pass `--no-start` to install without starting.
+
+## Commands
+
+| Command | Purpose |
+| --- | --- |
+| `start`, `stop`, `restart` | Service lifecycle |
+| `status`, `open`, `doctor` | Status, browser, diagnostics |
+| `remote status [--json]` | Remote state, addresses, bind errors, hosts, masked code and creation date |
+| `remote enable`, `remote disable` | Enable or disable LAN access |
+| `remote code [--json]` | Reveal the full connection code locally |
+| `remote code --rotate [--yes]` | Confirm and issue a new code; invalidate the old code and sessions |
+| `remote hosts add HOST`, `remote hosts remove HOST` | Manage allowed hosts |
+| `auth login`, `auth logout`, `auth status` | Model account access |
+| `model list`, `model status`, `model set MODEL` | Model selection |
+| `schedule list`, `schedule show ID` | Schedules; see `butler help schedule` for writes |
+| `mcp list`, `skills list` | Extensions; see command help for management |
+| `config get KEY`, `config set KEY VALUE` | Configuration |
+| `logs`, `version`, `help` | Logs, version, help |
+| `update --check`, `update --apply --yes`, `rollback`, `uninstall --yes` | Installation management |
+| `startup enable`, `startup disable`, `startup status` | Start at login |
+
+## Headless / WSL / server
+
+On the server or inside WSL:
+
+```bash
+butler start
+butler remote enable
+butler remote code
+```
+
+From another computer, open `http://HOST:PORT` using the server or forwarded address and the port printed by `remote enable`. Enter the code. Remote access stays off by default, and remote commands never silently start the service. Keep code output private; do not save it in logs.
+
+When a port forwarder presents a different host, add it to `allowedHosts`, for example `butler remote hosts add WINDOWS_IP`. Configure Windows forwarding and firewalls separately. Use `butler remote status --json` to inspect exposure and `butler remote disable` to stop LAN access.
+
+The App port currently cannot be read with `butler config get app.port`: it is stored as `config.port` in `gateways/app.json`, and changes apply on restart. Do not edit the running service's configuration files directly.
+
+## Data and updates
+
+Data lives in `BUTLER_DATA` (default `~/.butler`). Use `--data PATH` to select another folder. Updates install a separate version and restart the service. The CLI uses the running service's HTTP API to change remote settings.
+
+See [Remote access](/en/help/advanced/remote-access/) for more details.

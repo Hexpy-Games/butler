@@ -38,6 +38,48 @@ pub(super) const ROUTES: &[Entry] = &[
         "core"
     ),
     route!(
+        "remote.status",
+        "butler remote status [--json]",
+        "원격 접근 상태를 봅니다. / Show remote access.",
+        "core",
+        true
+    ),
+    route!(
+        "remote.enable",
+        "butler remote enable",
+        "원격 접근을 켭니다. / Enable remote access.",
+        "core",
+        false
+    ),
+    route!(
+        "remote.disable",
+        "butler remote disable",
+        "원격 접근을 끕니다. / Disable remote access.",
+        "core",
+        false
+    ),
+    route!(
+        "remote.code",
+        "butler remote code [--json] [--rotate [--yes]]",
+        "연결 코드를 보거나 바꿉니다. / Reveal or rotate the connection code.",
+        "core",
+        true
+    ),
+    route!(
+        "remote.hosts.add",
+        "butler remote hosts add HOST",
+        "허용 호스트를 추가합니다. / Add an allowed host.",
+        "core",
+        false
+    ),
+    route!(
+        "remote.hosts.remove",
+        "butler remote hosts remove HOST",
+        "허용 호스트를 제거합니다. / Remove an allowed host.",
+        "core",
+        false
+    ),
+    route!(
         "doctor",
         "butler doctor [--check NAME] [--data PATH]",
         "설치와 서비스를 점검합니다. / Diagnose installation and service.",
