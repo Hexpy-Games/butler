@@ -1,0 +1,251 @@
+name: Post-merge CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: post-merge-ci-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    working-directory: packages/butler-agent/rust
+
+jobs:
+  platform-paths:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      macos: ${{ steps.paths.outputs.macos }}
+      windows: ${{ steps.paths.outputs.windows }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Detect platform-specific PR checks
+        id: paths
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            macos:
+              - 'packages/butler-agent/rust/crates/butler-platform/**'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/service/**'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/app.rs'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/app/gateway_lifecycle.rs'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/app/gateway_lifecycle/**'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/service.rs'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/service/**'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/update.rs'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/update/install_cmd.rs'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/update/uninstall_cmd.rs'
+              - 'packages/butler-agent/rust/Cargo.lock'
+              - 'packages/butler-app/client/electron/**'
+              - 'deploy/macos/**'
+              - 'deploy/install.sh'
+              - 'deploy/install-smoke.sh'
+              - 'deploy/app/**'
+              - 'packages/butler-agent/rust/scripts/package-standalone-agent.py'
+              - 'packages/butler-agent/rust/scripts/prepare-static-ort.py'
+              - 'packages/butler-agent/rust/scripts/release-standalone-agent.py'
+              - 'packages/butler-app/scripts/release/**'
+              - 'packages/butler-npm/**'
+              - '.github/actions/build-agent-archive/**'
+              - '.github/actions/e2e-stub/**'
+              - '.github/actions/rust-agent-setup/**'
+              - '.github/workflows/**'
+            windows:
+              - 'packages/butler-agent/rust/crates/butler-platform/**'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/service/**'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli.rs'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/**'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/main.rs'
+              - 'packages/butler-agent/rust/Cargo.lock'
+              - '.github/workflows/rust-quality.yml'
+              - '.github/workflows/windows.yml'
+
+  macos-arm64:
+    name: Rust checks (macOS arm64)
+    needs: platform-paths
+    if: >-
+      always() && (github.event_name != 'pull_request' || needs.platform-paths.outputs.macos == 'true')
+    runs-on: macos-15
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Rust and prebuilt ONNX Runtime
+        uses: ./.github/actions/rust-agent-setup
+        with:
+          components: clippy
+          native-deps: prebuilt-ort
+          cache-key: pr-macos-arm64
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: Clippy production targets
+        run: cargo clippy --workspace --lib --bins --locked --keep-going -- -D warnings
+      - name: Clippy all targets
+        run: cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
+      - name: Run tests
+        run: cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" run --workspace --locked --no-fail-fast
+      - name: Run doctests when present
+        run: |
+          if grep -rqE '^[[:space:]]*//[/!][[:space:]]*```' crates; then
+            cargo test --workspace --doc --locked
+          fi
+      - name: Build the agent binary under test
+        run: cargo build --locked -p butler-agent --bin butler-agent
+      - name: Run E2E stub tier
+        uses: ./.github/actions/e2e-stub
+        with:
+          partition: 1/1
+          run-idle-disk: "true"
+      - name: Assert runner home untouched
+        if: always()
+        shell: bash
+        run: test ! -e "$HOME/.butler"
+
+  linux-arm64:
+    name: Rust checks (Linux arm64)
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 180
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: sccache
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+      - uses: ./.github/actions/rust-agent-setup
+        with:
+          components: clippy
+          native-deps: prebuilt-ort
+          cache-key: full-linux-arm64
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: Clippy production targets
+        run: cargo clippy --workspace --lib --bins --locked --keep-going -- -D warnings
+      - name: Clippy all targets
+        run: cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
+      - name: Run tests
+        run: cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" run --workspace --locked --no-fail-fast
+      - name: Assert runner home untouched
+        if: always()
+        shell: bash
+        run: test ! -e "$HOME/.butler"
+
+  windows-check:
+    # Windows is not ported: the host and CLI are unix-only and main.rs prints
+    # "not yet available". This compile check only reports how far the
+    # workspace is from building; its failures never fail the workflow.
+    name: Windows compile check (x86_64-pc-windows-msvc)
+    needs: platform-paths
+    outputs:
+      compile: ${{ steps.check.outcome }}
+    if: >-
+      always() && (github.event_name != 'pull_request' || needs.platform-paths.outputs.windows == 'true')
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+        working-directory: packages/butler-agent/rust
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Rust and protoc
+        uses: ./.github/actions/rust-agent-setup
+        with:
+          native-deps: prebuilt-ort
+          cache-key: windows-check
+      - name: Check the workspace
+        id: check
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          cargo check --workspace --locked --keep-going --target x86_64-pc-windows-msvc \
+            --message-format short 2>&1 | tee "$RUNNER_TEMP/windows-check.log"
+      - name: Summarize
+        if: always()
+        env:
+          OUTCOME: ${{ steps.check.outcome }}
+        run: |
+          python - "$RUNNER_TEMP/windows-check.log" >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          import collections, os, re, sys
+          pattern = re.compile(r"^(?P<file>[^:\s][^:]*):\d+:\d+: (?P<kind>error|warning)(?:\[(?P<code>\w+)\])?: (?P<text>.*)$")
+          errors, files, crates, codes = 0, collections.Counter(), collections.Counter(), collections.Counter()
+          failed = []
+          try:
+              lines = open(sys.argv[1], encoding="utf-8", errors="replace").read().splitlines()
+          except OSError:
+              lines = []
+          for line in lines:
+              if line.startswith("error: could not compile"):
+                  failed.append(line.removeprefix("error: could not compile ").strip())
+              match = pattern.match(line)
+              if not match or match["kind"] != "error":
+                  continue
+              path = match["file"].replace("\\", "/")
+              errors += 1
+              files[path] += 1
+              parts = path.split("/")
+              crates[parts[1] if parts[0] == "crates" and len(parts) > 1 else parts[0]] += 1
+              codes[match["code"] or match["text"][:60]] += 1
+          print("### Windows compile check (x86_64-pc-windows-msvc)")
+          print(f"Outcome: **{os.environ.get('OUTCOME', 'unknown')}**, {errors} errors.")
+          if failed:
+              print("\nCould not compile (crates that depend on these were not checked):\n")
+              print("\n".join(f"- {item}" for item in failed))
+          for title, counter, limit in (("crate", crates, 20), ("file", files, 40), ("error", codes, 20)):
+              if counter:
+                  print(f"\n| Errors | By {title} |\n| ---: | --- |")
+                  print("\n".join(f"| {count} | `{name}` |" for name, count in counter.most_common(limit)))
+          PY
+
+  install-full:
+    name: Full install smoke
+    if: github.event_name != 'pull_request'
+    uses: ./.github/workflows/install-smoke.yml
+
+  nightly-issue:
+    name: Report main or nightly failure
+    if: >-
+      always() &&
+      (github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) &&
+      (contains(needs.*.result, 'failure') || needs.windows-check.outputs.compile == 'failure')
+    needs: [platform-paths, macos-arm64, linux-arm64, windows-check, install-full]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ci-failure-report-${{ github.ref }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update issue
+        working-directory: ${{ runner.temp }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EVENT_LABEL: ${{ github.event_name == 'schedule' && 'nightly' || 'main push' }}
+        run: |
+          title='Nightly Rust CI failure'
+          body="The $EVENT_LABEL Rust CI failed: $RUN_URL"
+          number="$(gh issue list --state open --limit 1000 --json number,title --jq '.[] | select(.title == "Nightly Rust CI failure") | .number' | head -1)"
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi

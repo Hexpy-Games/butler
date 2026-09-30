@@ -2,8 +2,16 @@ name: E2E stub tier
 description: Run the real agent binary against replay cassettes on the current Rust job.
 inputs:
   partition:
-    description: Nextest slice in m/n form.
+    description: Nextest partition in m/n form.
     required: true
+  archive-file:
+    description: Optional nextest archive to run without rebuilding test binaries.
+    required: false
+    default: ""
+  agent-binary:
+    description: Optional prebuilt butler-agent binary used by the E2E harness.
+    required: false
+    default: ""
   run-idle-disk:
     description: Run the separate IDLE-DISK check when its test file is present.
     required: false
@@ -66,17 +74,28 @@ runs:
       working-directory: packages/butler-agent/rust
       env:
         PARTITION: ${{ inputs.partition }}
+        ARCHIVE_FILE: ${{ inputs.archive-file }}
         BUTLER_E2E_EMBEDDING_ASSETS: ${{ runner.temp }}/e2e-models/bge-m3
         BUTLER_E2E_TIER: stub
         BUTLER_E2E_SKIP_BUILD: "1"
+        BUTLER_E2E_BIN: ${{ inputs.agent-binary }}
         BUTLER_E2E_SYSTEMD: ${{ steps.systemd.outputs.available }}
         BUTLER_E2E_REPORT: ${{ runner.temp }}/e2e-report.txt
       run: |
         set -o pipefail
-        cargo nextest run --locked --no-fail-fast -p butler-e2e \
-          --partition "slice:$PARTITION" \
-          -E 'not test(idle_disk_writes_and_cpu_stay_bounded)' \
-          2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
+        if [ -n "$ARCHIVE_FILE" ]; then
+          cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
+            run --no-fail-fast --archive-file "$ARCHIVE_FILE" \
+            --partition "count:$PARTITION" \
+            -E 'not test(idle_disk_writes_and_cpu_stay_bounded)' \
+            2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
+        else
+          cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
+            run --locked --no-fail-fast -p butler-e2e \
+            --partition "slice:$PARTITION" \
+            -E 'not test(idle_disk_writes_and_cpu_stay_bounded)' \
+            2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
+        fi
 
     - name: Report IDLE-DISK counters
       if: >-
@@ -99,7 +118,7 @@ runs:
       shell: bash
       run: |
         {
-          echo "### E2E stub tier ($RUNNER_OS $RUNNER_ARCH, slice $PARTITION)"
+          echo "### E2E stub tier ($RUNNER_OS $RUNNER_ARCH, partition $PARTITION)"
           if [ -f "$RUNNER_TEMP/e2e-stub.log" ]; then
             grep -E '^(PASS|FAIL|SKIP|CANCEL)' "$RUNNER_TEMP/e2e-stub.log" | sed 's/^/    /' || true
           fi
