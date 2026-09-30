@@ -94,7 +94,7 @@ runs:
           cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
             run --no-fail-fast --archive-file "$ARCHIVE_FILE" \
             --extract-to "$PWD" \
-            --partition "count:$PARTITION" \
+            --partition "slice:$PARTITION" \
             -E 'not test(idle_disk_writes_and_cpu_stay_bounded)' \
             2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
         else
