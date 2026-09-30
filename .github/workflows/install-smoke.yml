@@ -7,17 +7,6 @@ name: Install smoke
 # again. Nothing is published.
 
 on:
-  pull_request:
-    paths:
-      - ".github/workflows/install-smoke.yml"
-      - ".github/workflows/release.yml"
-      - ".github/workflows/linux-packages.yml"
-      - "packages/butler-app/scripts/release/**"
-      - ".github/actions/build-agent-archive/**"
-      - "deploy/**"
-      - "packages/butler-npm/**"
-      - "packages/butler-agent/rust/scripts/*standalone*"
-      - "packages/butler-app/client/electron/scripts/prepare-native-agent.mjs"
   workflow_call:
   workflow_dispatch:
 

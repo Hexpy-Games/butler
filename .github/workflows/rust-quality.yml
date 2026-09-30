@@ -32,6 +32,8 @@ jobs:
     name: Detect Rust gate changes
     runs-on: ubuntu-latest
     outputs:
+      packages: ${{ steps.extra-paths.outputs.packages }}
+      install: ${{ steps.extra-paths.outputs.install }}
       rust: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || steps.paths.outputs.rust }}
     steps:
       - uses: actions/checkout@v4
@@ -47,6 +49,34 @@ jobs:
               - '!docs/**'
               - '!**/docs/**'
               - '!**/*.md'
+
+      - uses: dorny/paths-filter@v3
+        id: extra-paths
+        with:
+          base: ${{ github.event.merge_group.base_sha || github.event.before || github.event.repository.default_branch }}
+          filters: |
+            packages:
+              - '.github/workflows/linux-packages.yml'
+              - '.github/actions/rust-agent-setup/**'
+              - 'packages/butler-agent/rust/Cargo.lock'
+              - 'packages/butler-agent/rust/crates/butler-agent/Cargo.toml'
+              - 'packages/butler-agent/rust/crates/butler-gateway/Cargo.toml'
+              - 'packages/butler-agent/rust/crates/butler-memory/Cargo.toml'
+              - 'packages/butler-agent/rust/scripts/prepare-static-ort.py'
+              - 'packages/butler-app/scripts/release/package-linux-app.ts'
+              - 'packages/butler-app/scripts/release/linux-package-smoke.sh'
+              - 'packages/butler-app/client/electron/scripts/prepare-native-agent.mjs'
+              - 'packages/butler-app/client/electron/bundled-native-agent.mjs'
+            install:
+              - '.github/workflows/install-smoke.yml'
+              - '.github/workflows/release.yml'
+              - '.github/workflows/linux-packages.yml'
+              - 'packages/butler-app/scripts/release/**'
+              - '.github/actions/build-agent-archive/**'
+              - 'deploy/**'
+              - 'packages/butler-npm/**'
+              - 'packages/butler-agent/rust/scripts/*standalone*'
+              - 'packages/butler-app/client/electron/scripts/prepare-native-agent.mjs'
 
   source:
     needs: changes
@@ -313,6 +343,34 @@ jobs:
           expected = "success" if jobs["changes"]["outputs"]["rust"] == "true" else "skipped"
           assert all(job["result"] == expected for name, job in jobs.items() if name != "changes"), jobs
           PY
+
+  # These checks keep their PR coverage, but release gate runners first.
+  platform-pr:
+    name: Platform checks after PR gate
+    needs: [changes, pr-gate]
+    if: always() && github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true'
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+    uses: ./.github/workflows/post-merge-ci.yml
+
+  packages-pr:
+    name: Packages after PR gate
+    needs: [changes, pr-gate]
+    if: always() && github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true' && needs.changes.outputs.packages == 'true'
+    permissions:
+      contents: read
+      issues: write
+    uses: ./.github/workflows/linux-packages.yml
+
+  install-pr:
+    name: Install smoke after PR gate
+    needs: [changes, pr-gate]
+    if: always() && github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true' && needs.changes.outputs.install == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/install-smoke.yml
 
   nightly-issue:
     name: Report nightly failure

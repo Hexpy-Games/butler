@@ -1,5 +1,11 @@
 # Rust PR gate
 
+Platform, Linux package, and full install PR checks run after the gate, with
+their existing path filters and test selections. They also run after a failed
+gate, so failures do not suppress coverage. Main/nightly/manual triggers keep
+their existing schedule. This prevents non-gate builds from occupying runners
+while gate shards wait.
+
 Require the **PR gate** check from `rust-quality.yml` for branch protection
 and the merge queue. The workflow runs on `pull_request` and `merge_group`.
 The summary accepts skipped Rust jobs only when the path detector confirms

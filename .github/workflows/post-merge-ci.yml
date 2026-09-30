@@ -3,7 +3,7 @@ name: Post-merge CI
 on:
   push:
     branches: [main]
-  pull_request:
+  workflow_call:
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
