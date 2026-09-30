@@ -22,8 +22,7 @@ use rusqlite::Connection;
 
 const NUMBERS: &str = "Write the numbers from one to twelve as English words, separated by single spaces, and nothing else.";
 
-#[path = "app_storage_scale/seed.rs"]
-mod seed;
+use super::app_storage_seed as seed;
 use seed::{SEEDED_AT, UNCOMPACTED, seed_owner_scale};
 
 fn database(s: &Scenario) -> Connection {

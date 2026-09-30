@@ -10,17 +10,17 @@ pub(super) fn initialize_empty(data: &std::path::Path) -> Result<PathBuf, Harnes
     std::fs::create_dir_all(&root)?;
     let graph = root.join("graph.sqlite");
     let db = Connection::open(&graph).unwrap();
-    db.execute_batch(include_str!("../../fixtures/F-memory-empty/graph.sql"))
+    db.execute_batch(include_str!("../../../fixtures/F-memory-empty/graph.sql"))
         .unwrap();
     db.pragma_update(None, "journal_mode", "WAL").unwrap();
     drop(db);
     std::fs::write(
         root.join("manifest.json"),
-        include_str!("../../fixtures/F-memory-empty/manifest.json"),
+        include_str!("../../../fixtures/F-memory-empty/manifest.json"),
     )?;
     std::fs::write(
         memory.join("active-generation.json"),
-        include_str!("../../fixtures/F-memory-empty/active-generation.json"),
+        include_str!("../../../fixtures/F-memory-empty/active-generation.json"),
     )?;
     initialize_coordinator(data)?;
     Ok(graph)

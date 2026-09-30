@@ -15,20 +15,7 @@ on:
     - cron: "17 3 * * *"
   workflow_dispatch:
   workflow_call:
-  pull_request:
-    paths:
-      - ".github/workflows/linux-packages.yml"
-      - ".github/workflows/release.yml"
-      - ".github/actions/rust-agent-setup/**"
-      - "packages/butler-agent/rust/Cargo.lock"
-      - "packages/butler-agent/rust/crates/butler-agent/Cargo.toml"
-      - "packages/butler-agent/rust/crates/butler-gateway/Cargo.toml"
-      - "packages/butler-agent/rust/crates/butler-memory/Cargo.toml"
-      - "packages/butler-agent/rust/scripts/prepare-static-ort.py"
-      - "packages/butler-app/scripts/release/package-linux-app.ts"
-      - "packages/butler-app/scripts/release/linux-package-smoke.sh"
-      - "packages/butler-app/client/electron/scripts/prepare-native-agent.mjs"
-      - "packages/butler-app/client/electron/bundled-native-agent.mjs"
+
 
 permissions:
   contents: read

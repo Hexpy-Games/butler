@@ -1,4 +1,10 @@
 //! Shared PERF-01 owner-scale App seed.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "test assertions"
+)]
 
 use rusqlite::Connection;
 

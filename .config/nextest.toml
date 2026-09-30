@@ -2,5 +2,28 @@
 slow-timeout = { period = "60s", terminate-after = 3 }
 
 [[profile.default.overrides]]
-filter = 'test(/^ins_/)'
+filter = 'test(/::ins_/)'
+success-output = 'final'
 slow-timeout = { period = "6m", terminate-after = 1 }
+
+# PERF-01 measures request latency at owner scale. Other test processes must
+# not compete for the same runner while it samples the unchanged budget.
+[[profile.default.overrides]]
+filter = 'binary(=e2e) and test(/^app_storage_scale::perf_01_/)'
+threads-required = 8
+priority = 100
+success-output = "final"
+
+# Keep each full idle/startup observation window, but start it before shorter
+# scenarios so it can overlap their work. PERF-01 still runs first with all eight slots.
+[[profile.default.overrides]]
+filter = 'binary(=e2e) and (test(/^memory_idle::mem_idle_/) or test(/^schedule_store::sched_06_/) or test(/^startup_readiness::stalled_startup_exits_at_agent_deadline$/))'
+priority = 10
+
+# The control-read shutdown test measures the unchanged two-second budget.
+# Reserve the runner while sampling, as PERF-01 does for request latency.
+[[profile.default.overrides]]
+filter = 'binary(=e2e) and test(/^shutdown_order::shutdown_interrupts_a_control_request_read$/)'
+threads-required = 8
+priority = 90
+success-output = "final"

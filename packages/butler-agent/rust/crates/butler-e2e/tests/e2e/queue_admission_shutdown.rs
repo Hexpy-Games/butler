@@ -8,7 +8,7 @@
 
 use butler_e2e::e2e::{
     HarnessError,
-    gateway::turn_state,
+    gateway::{TERMINAL, turn_state},
     provider::Pacing,
     scenario::{Setup, accepted_turn_id},
 };
@@ -55,8 +55,25 @@ async fn q_02_shutdown_finishes_an_in_flight_queue_admission() -> Result<(), Har
         )
         .await?;
     assert_eq!(queued.status, 202, "{}", queued.text);
-    s.gw.wait_terminal("general", &first, Duration::from_secs(10))
-        .await?;
+    // Observe the committed claim through a separate SQLite connection. An
+    // HTTP terminal read uses the same storage owner as the slow admission,
+    // so awaiting it here can wait until the transaction we must interrupt ends.
+    let first_deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let state: String = db
+            .query_row("SELECT state FROM turns WHERE id=?1", [&first], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        if TERMINAL.contains(&state.as_str()) {
+            break;
+        }
+        assert!(
+            Instant::now() < first_deadline,
+            "first turn did not settle: {state}"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
     let deadline = Instant::now() + Duration::from_secs(20);
     loop {
         let claimed: bool = db

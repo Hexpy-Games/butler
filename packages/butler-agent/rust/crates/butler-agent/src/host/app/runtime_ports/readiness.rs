@@ -6,7 +6,7 @@ use std::sync::{
 };
 
 use butler_gateway::gateway::{
-    AppExecutorReadiness, GatewayApplicationError, RuntimeReadinessView,
+    AppExecutorReadiness, ApplicationFuture, GatewayApplicationError, RuntimeReadinessView,
 };
 use butler_runtime::operations::ServiceReadiness;
 
@@ -25,6 +25,14 @@ impl AppReadiness {
 }
 
 impl AppExecutorReadiness for AppReadiness {
+    fn wait_ready(&self) -> ApplicationFuture<()> {
+        let receipt = self.receipt.clone();
+        Box::pin(async move {
+            receipt.wait_dispatch_ready().await;
+            Ok(())
+        })
+    }
+
     fn readiness(&self) -> Result<RuntimeReadinessView, GatewayApplicationError> {
         let published = self
             .receipt

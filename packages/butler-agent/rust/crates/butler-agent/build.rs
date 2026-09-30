@@ -12,6 +12,7 @@ const SCOPE: &[&str] = &[
 
 fn output(root: &Path, arguments: &[&str]) -> Option<String> {
     let result = Command::new("git")
+        .env("GIT_OPTIONAL_LOCKS", "0")
         .arg("-C")
         .arg(root)
         .args(arguments)
@@ -60,6 +61,7 @@ fn main() {
         }
     }
     let mut status = Command::new("git");
+    status.env("GIT_OPTIONAL_LOCKS", "0");
     status.arg("-C").arg(root).args([
         "status",
         "--porcelain=v1",

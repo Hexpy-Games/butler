@@ -6,8 +6,7 @@
     reason = "test assertions"
 )]
 
-#[path = "support/memory_fixture.rs"]
-mod memory_fixture;
+use super::memory_fixture;
 use memory_fixture::initialize_empty;
 
 use std::path::{Path, PathBuf};

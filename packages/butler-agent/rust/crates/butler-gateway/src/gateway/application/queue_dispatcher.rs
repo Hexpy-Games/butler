@@ -228,6 +228,12 @@ async fn recover_and_drain(
     if cancellation.is_cancelled() {
         return Err(GatewayApplicationError::internal());
     }
+    // Cancellation is safe here: no durable queue claim exists yet. Once
+    // admission begins, close still finishes the complete handoff (#377).
+    tokio::select! {
+        () = cancellation.cancelled() => return Err(GatewayApplicationError::internal()),
+        ready = app.dependencies.executor_readiness.wait_ready() => ready?,
+    }
     app.recover_expired().await?;
     let chats = if let Some(chat) = only_chat {
         vec![chat.to_owned()]

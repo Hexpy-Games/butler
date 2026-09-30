@@ -6,16 +6,14 @@
     reason = "test assertions"
 )]
 
-#[path = "support/memory_fixture.rs"]
-mod memory_fixture;
+use super::memory_fixture;
 
 use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use butler_platform::process_control::usage as process_usage;
 use rusqlite::Connection;
 use std::time::Duration;
 
-#[path = "app_storage_scale/seed.rs"]
-mod app_seed;
+use super::app_storage_seed as app_seed;
 #[path = "idle_resources/seed.rs"]
 mod seed;
 
