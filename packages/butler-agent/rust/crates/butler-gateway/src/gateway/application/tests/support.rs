@@ -289,6 +289,10 @@ impl AppNativeAssetResolver for Assets {
 pub(super) struct Ready;
 
 impl AppExecutorReadiness for Ready {
+    fn wait_ready(&self) -> crate::gateway::ApplicationFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
+
     fn readiness(&self) -> Result<RuntimeReadinessView, GatewayApplicationError> {
         Ok(RuntimeReadinessView {
             authenticated_gateway_ready: true,

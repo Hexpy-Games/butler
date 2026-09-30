@@ -74,7 +74,46 @@ async fn q_02_shutdown_interrupts_active_turn_and_resumes_queue() -> Result<(), 
     assert_eq!(queued.status, 202, "{}", queued.text);
     assert!(!TERMINAL.contains(&turn_state(&s.gw.turn("general", &running).await?.unwrap())));
     let started = Instant::now();
+    s.agent.launch.set_env("BUTLER_E2E_TIER", "stub");
+    s.agent
+        .launch
+        .set_env("BUTLER_E2E_HOLD_DISPATCH_READY", "1");
     s.restart().await?;
+    let held = s.sandbox.data.join("e2e-dispatch-ready-held");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !held.exists() {
+        assert!(s.agent.is_running(), "{}", s.agent.logs());
+        assert!(
+            Instant::now() < deadline,
+            "inbound poll did not reach barrier"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let readiness = s.gw.get("/runtime-readiness").await?;
+    assert_eq!(readiness.data()["btcc_executor_ready"], false);
+    // Recovered waiting input must remain queued until the native poll loop is
+    // ready. Hold that existing startup barrier while the App owners run.
+    let observation = Instant::now() + Duration::from_secs(1);
+    loop {
+        let view = s.gw.get("/session-queue?chat_id=general").await?;
+        let waiting = view.data()["queued_messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["text"] == "Reply with exactly the word: waiting")
+            .unwrap();
+        assert_eq!(waiting["state"], "queued", "{waiting}");
+        assert_eq!(s.provider()?.served(), 1);
+        if Instant::now() >= observation {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    tokio::fs::write(
+        s.sandbox.data.join("e2e-dispatch-ready-release"),
+        b"release",
+    )
+    .await?;
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         let view = s.gw.get("/session-queue?chat_id=general").await?;

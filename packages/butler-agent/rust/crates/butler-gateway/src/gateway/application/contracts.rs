@@ -60,6 +60,8 @@ pub trait AppNativeAssetResolver: Send + Sync + 'static {
     fn resolve(&self, snapshot: ClaimedNativeSnapshot) -> ApplicationFuture<ResolvedNativeAssets>;
 }
 pub trait AppExecutorReadiness: Send + Sync + 'static {
+    /// Await native admission readiness before claiming recovered queue input.
+    fn wait_ready(&self) -> ApplicationFuture<()>;
     fn readiness(&self) -> Result<RuntimeReadinessView, GatewayApplicationError>;
 }
 pub trait AppAdmissionAuthority: Send + Sync + 'static {

@@ -99,7 +99,12 @@ Main's #377 shutdown implementation stops App queue dispatch and completes any
 in-flight admission before closing the native consumer. Interrupted work settles
 with `turn_interrupted`; queued input resumes after restart. The earlier branch
 Q-02 fix is superseded by main's implementation. Both main regression scenarios
-are included in the single binary.
+are included in the single binary. Queue recovery now waits for the first native
+poll's readiness notification before claiming input (#383). Holding the existing
+startup barrier reproduced main's failure in 1.423s: waiting input became failed
+before the native poll was ready. The regression keeps it queued while held and
+verifies complete delivery after release. The wait is change-driven and cancellable
+before any durable claim; main's in-flight shutdown handoff remains unchanged.
 
 The in-flight admission fixture observes its committed claim through a separate
 SQLite connection. Awaiting an HTTP terminal read can queue behind the deliberately
