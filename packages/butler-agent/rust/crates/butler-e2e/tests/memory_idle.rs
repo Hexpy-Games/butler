@@ -241,3 +241,36 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
     assert!(leases <= 2, "too many idle leases: {leases}");
     s.finish().await
 }
+
+#[tokio::test]
+async fn mem_idle_catches_changed_source_without_restart() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("MEM-IDLE-CHANGE")?.start().await?;
+    let graph = initialize_empty(&s).await?;
+    // Operator maintenance completes a catch-up pass even on an empty source.
+    let cycle = s
+        .agent
+        .cli_async(&["cognition", "memory", "maintain", "--json"])
+        .await?
+        .json()?;
+    assert_eq!(cycle["ok"], true, "{cycle}");
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    assert_eq!(recovery_observations(&graph), 0);
+    seed_imported_message(&s.sandbox.data);
+    // The source revision changes without restarting or notifying the consumer.
+    let changed_at = tokio::time::Instant::now();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(75);
+    while catchup_message_cursor(&graph).as_deref() != Some("idle-recovery-message") {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "changed source was not caught up"
+        );
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+    assert_eq!(recovery_observations(&graph), 1);
+    eprintln!(
+        "MEM-IDLE-CHANGE catchup_ms={}",
+        changed_at.elapsed().as_millis()
+    );
+    s.finish().await
+}

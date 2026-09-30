@@ -23,7 +23,7 @@ use crate::host::memory_jobs::daily::{DailyCognitionJobs, DailyCognitionOwners};
 use crate::host::memory_jobs::recall_metrics::RecallMetrics;
 use crate::host::runtime::environment::ProcessEnvironment;
 use crate::host::runtime::stores::RuntimeStores;
-use boundary::{close_after_memory_sync_error, setup, validate_data_installation_boundary};
+use boundary::{setup, validate_data_installation_boundary};
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
 use butler_ledger::project_ledger::{ProjectLedger, ProjectWork};
@@ -64,8 +64,10 @@ impl AgentRuntime {
         environment: ProcessEnvironment,
         locale: &str,
         worker_profiles: Arc<dyn butler_turn::btcc::WorkerProfileReader>,
-        app_endpoint: Arc<ActiveAppEndpoint>,
+        app: (Arc<ActiveAppEndpoint>, &tokio_util::sync::CancellationToken),
     ) -> Result<Self, BtccError> {
+        let (app_endpoint, stop) = app;
+        stores::check_startup(stop)?;
         validate_data_installation_boundary(&paths.data_root, &paths.installation_root)?;
         // All fallible in-memory setup precedes the first store owner.
         let collation = Arc::new(LocaleCollation::new(locale).map_err(setup)?);
@@ -105,40 +107,28 @@ impl AgentRuntime {
         let commands = Commands::new();
         let mutations = WorkspaceMutations::new();
         let (skills, capabilities, catalog) = skills_owner::open(&paths, &files, &mutations)?;
-        let stores = RuntimeStores::open(&paths.data_root, collation.clone()).await?;
-        let work_streams = match super::WorkStreams::open(paths.data_root.clone()) {
-            Ok(owner) => Arc::new(owner),
-            Err(error) => {
-                let _ = stores.close().await;
-                return Err(error);
-            }
-        };
-        let observer = match ConversationObserver::new(
+        stores::check_startup(stop)?;
+        let stores = RuntimeStores::open(&paths.data_root, collation.clone(), stop).await?;
+        let (work_streams, observer) = boundary::open_observer(
             &paths.data_root,
             &environment.cognition_paths,
-            Arc::new(SystemIdentity),
             metric_files.clone(),
-        ) {
-            Ok(observer) => Arc::new(observer),
-            Err(error) => {
-                let _ = work_streams.close().await;
-                let _ = stores.close().await;
-                return Err(setup(error));
-            }
-        };
-        let memory_sync = close_after_memory_sync_error(
-            crate::host::memory_jobs::sync::MemorySync::open(
-                &paths.data_root,
-                &environment.cognition_paths,
-                coordinator.clone(),
-                models.provider.clone(),
-                paths.unclean_previous_exit,
-                embedding.clone(),
-                vectors.clone(),
-            ),
-            &observer,
-            &work_streams,
             &stores,
+        )
+        .await?;
+        let memory_sync = boundary::MemoryStartup {
+            observer: &observer,
+            work_streams: &work_streams,
+            stores: &stores,
+            stop,
+        }
+        .open(
+            &paths,
+            &environment.cognition_paths,
+            coordinator.clone(),
+            models.provider.clone(),
+            embedding.clone(),
+            vectors.clone(),
         )
         .await?;
         let cognition_root = environment.cognition_paths.cognition_root(&paths.data_root);

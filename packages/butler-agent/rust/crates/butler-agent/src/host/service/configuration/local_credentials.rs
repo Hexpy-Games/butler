@@ -7,11 +7,12 @@
 //!   project-folder selection tokens.
 //!
 //! A missing or unusable file is created (0600 in a 0700 directory, written
-//! to a temporary file and linked into place, so concurrent creators agree on
-//! the first one). `BUTLER_APP_LOCAL_AUTH_FILE` (a token file elsewhere) and
+//! to a temporary file and atomically published under a change lock, so
+//! concurrent creators agree on the first one). `BUTLER_APP_LOCAL_AUTH_FILE`
+//! (a token file elsewhere) and
 //! `BUTLER_PROJECT_FOLDER_TOKEN_SECRET` still win.
 
-use std::fs::{self, OpenOptions};
+use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
@@ -317,8 +318,8 @@ fn read_usable(
     }
 }
 
-/// Links a private temporary file into place. When another process created
-/// a usable file first, that one stays; an unusable one is replaced.
+/// Publishes under the sibling change lock, rechecking usability after
+/// acquisition so creators never replace a credential another one returned.
 fn publish(
     path: &Path,
     contents: &[u8],
@@ -335,32 +336,23 @@ fn publish(
             source,
         }
     })?;
-    let temporary = parent.join(format!(".credential-{}.tmp", uuid::Uuid::new_v4()));
-    let result =
-        write_private(&temporary, contents).and_then(|()| match fs::hard_link(&temporary, path) {
-            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
-                let current = fs::read(path).ok();
-                if current.as_deref().and_then(usable).is_some() {
-                    Ok(())
-                } else {
-                    fs::rename(&temporary, path)
-                }
-            }
-            other => other,
-        });
-    let _ = fs::remove_file(&temporary);
-    result.map_err(write_error)
-}
-
-/// Creates `path` (which must not exist), only the owner's, with
-/// `contents`.
-fn write_private(path: &Path, contents: &[u8]) -> io::Result<()> {
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    let _ = secure_fs::owner_only(&mut options);
-    let mut file = options.open(path)?;
-    file.write_all(contents)?;
-    file.sync_all()
+    #[cfg(test)]
+    tests::before_replace(path);
+    let _change = butler_core::configuration::lock_file(path).map_err(|source| {
+        LocalCredentialError::Write {
+            path: path.to_path_buf(),
+            source: io::Error::other(source),
+        }
+    })?;
+    if read_usable(path, usable)?.is_some() {
+        return Ok(());
+    }
+    secure_fs::replace_private(
+        path,
+        |file| file.write_all(contents),
+        std::convert::identity,
+    )
+    .map_err(write_error)
 }
 
 fn env_value(name: &str) -> Option<String> {
@@ -369,3 +361,6 @@ fn env_value(name: &str) -> Option<String> {
         (!value.is_empty()).then(|| value.to_owned())
     })
 }
+
+#[cfg(test)]
+mod tests;

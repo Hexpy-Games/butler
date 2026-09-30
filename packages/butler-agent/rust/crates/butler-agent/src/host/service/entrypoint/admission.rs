@@ -26,10 +26,13 @@ pub(super) async fn prepare(
     config: &ServiceConfiguration,
     writer: Arc<TranscriptWriter>,
     instance: &InstanceGuard,
+    stop: &super::StopSignal,
 ) -> Result<Admission, BtccError> {
+    stop.check_startup()?;
     let bootstrap = config
         .bootstrap_butler_session(&runtime.bindings, &runtime.collation)
         .await?;
+    stop.check_startup()?;
     let binding = bootstrap.binding;
     if bootstrap.newly_registered {
         writer
@@ -58,6 +61,7 @@ pub(super) async fn prepare(
         instance.restart_identity(),
     ));
     super::recover_inbound_queue(queue.clone()).await?;
+    stop.check_startup()?;
     let dispatcher = IngressDispatcher::new(
         queue.clone(),
         runtime.btcc.clone(),
@@ -69,6 +73,11 @@ pub(super) async fn prepare(
         runtime.subsessions.clone(),
         restart_handoff,
     );
+    dispatcher
+        .recover_interrupted(stop.cancellation())
+        .await
+        .map_err(|error| failure(error.code, error.message))?;
+    stop.check_startup()?;
     Ok(Admission {
         session_id: binding.session_id,
         model,

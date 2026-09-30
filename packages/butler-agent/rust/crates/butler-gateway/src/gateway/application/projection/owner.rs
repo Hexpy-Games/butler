@@ -44,6 +44,7 @@ enum Command {
     Transcript(String),
     Terminal,
     Refresh(String, oneshot::Sender<Result<(), GatewayApplicationError>>),
+    Drain(oneshot::Sender<Result<(), GatewayApplicationError>>),
     Close,
 }
 
@@ -122,6 +123,21 @@ impl ProjectionOwner {
         self.inner
             .sender
             .send(Command::Refresh(chat_id, sender))
+            .await
+            .map_err(GatewayApplicationError::internal_from)?;
+        receiver
+            .await
+            .map_err(GatewayApplicationError::internal_from)?
+    }
+
+    /// Finish terminal records before queue recovery can replace their claims.
+    pub(in crate::gateway::application) async fn drain(
+        &self,
+    ) -> Result<(), GatewayApplicationError> {
+        let (sender, receiver) = oneshot::channel();
+        self.inner
+            .sender
+            .send(Command::Drain(sender))
             .await
             .map_err(GatewayApplicationError::internal_from)?;
         receiver
@@ -326,6 +342,10 @@ impl Work {
                 let result = sync_requested(context, &chat).await;
                 let _ = completion.send(result);
             }
+            Some(Command::Drain(completion)) => {
+                let result = drain_open_turns(context).await;
+                let _ = completion.send(result);
+            }
             Some(Command::Close) | None => return true,
         }
         false
@@ -389,4 +409,15 @@ async fn sync_requested(
 }
 fn lock<T>(value: &Mutex<T>) -> parking_lot::MutexGuard<'_, T> {
     value.lock()
+}
+
+async fn drain_open_turns(context: &ProjectionContext) -> Result<(), GatewayApplicationError> {
+    // Existing checkpoints read only appended bytes, never whole transcripts.
+    for file in open_turn_transcripts(context).await? {
+        if let Some(chat) = resolve_chat_file(context, &file).await? {
+            sync_chat(context, &chat).await?;
+        }
+    }
+    while sync_deferred_once(context).await? {}
+    Ok(())
 }

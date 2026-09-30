@@ -18,15 +18,22 @@ pub(super) async fn read_json_object(path: &Path) -> Option<Map<String, Value>> 
 }
 
 /// Writes `bytes` to `path`, creating it as an owner-only file.
-pub(super) async fn write_mode_600(path: &Path, bytes: &[u8]) -> Result<(), AuthError> {
+pub(in crate::models::configuration) async fn write_mode_600(
+    path: &Path,
+    bytes: &[u8],
+) -> Result<(), AuthError> {
     let path = path.to_owned();
     let bytes = bytes.to_owned();
     tokio::task::spawn_blocking(move || {
-        let mut options = std::fs::OpenOptions::new();
-        options.write(true).create(true).truncate(true);
-        let _ = secure_fs::owner_only(&mut options);
-        let mut file = options.open(path)?;
-        file.write_all(&bytes)
+        secure_fs::replace_private(
+            &path,
+            |file| {
+                #[cfg(test)]
+                super::super::durability_tests::interrupt_write(&path, file)?;
+                file.write_all(&bytes)
+            },
+            std::convert::identity,
+        )
     })
     .await
     .map_err(|source| write_error().with_source(source))?

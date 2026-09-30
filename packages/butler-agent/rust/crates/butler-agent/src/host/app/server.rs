@@ -1,6 +1,7 @@
 //! One process-owned App HTTP listener and its App-only artifact file owner.
 
 mod security_store;
+mod startup;
 
 use std::net::SocketAddr;
 use std::sync::{
@@ -13,7 +14,7 @@ use tokio::net::TcpListener;
 use butler_gateway::gateway::{
     AppApplication, AppApplicationConfig, AppApplicationDependencies, AppIdentityClock,
     AppMessageFiles, GatewayApplicationError, GatewayConfig, GatewayServer, InboundQueue,
-    LocalAuthConfig, serve_gateway,
+    LocalAuthConfig,
 };
 use butler_runtime::operations::ServiceReadiness;
 use butler_turn::btcc::BtccError;
@@ -32,6 +33,8 @@ use crate::host::{
     SystemIdentity,
 };
 use security_store::AppSecurityStore;
+#[cfg(debug_assertions)]
+mod startup_hold;
 
 pub(crate) struct AppServer {
     listener: Option<GatewayServer>,
@@ -225,23 +228,15 @@ impl AppServer {
             .map_err(app_error)?,
         );
         let gateway_config = gateway_config(app_config, data_root, installation, owners.local_auth);
-        let server = match serve_gateway(listener, application.clone(), gateway_config) {
-            Ok(server) => server,
-            Err(error) => {
-                let _ = application.close().await;
-                return Err(BtccError::relayed(
-                    "app_listener_start_failed",
-                    error.to_string(),
-                ));
-            }
-        };
-        listener_ready.store(true, Ordering::Release);
-        if let Err(error) = application.start_dispatch().await {
-            listener_ready.store(false, Ordering::Release);
-            let _ = server.close().await;
-            let _ = application.close().await;
-            return Err(app_error(error));
-        }
+        let server = startup::activate(
+            listener,
+            application.clone(),
+            gateway_config,
+            &setup,
+            &listener_ready,
+            data_root,
+        )
+        .await?;
         Ok(Self {
             address: server.local_addr(),
             listener: Some(server),
@@ -250,6 +245,13 @@ impl AppServer {
             artifacts,
             setup,
         })
+    }
+
+    pub(crate) fn stop_accepting(&self) {
+        self.listener_ready.store(false, Ordering::Release);
+        if let Some(listener) = &self.listener {
+            listener.stop_accepting();
+        }
     }
 
     /// Stop HTTP admission before the process drains its native inbound queue.
@@ -263,8 +265,9 @@ impl AppServer {
             }),
             None => Ok(()),
         };
+        let projection = self.application.drain_projection().await.map_err(app_error);
         let dispatch = self.application.stop_dispatch().await.map_err(app_error);
-        listener.and(dispatch)
+        listener.and(projection).and(dispatch)
     }
 
     /// Drain the App projection and its file jobs before native runtime owners.
@@ -332,4 +335,13 @@ fn app_error(error: GatewayApplicationError) -> BtccError {
             BtccError::relayed("app_application_failed", "App application is unavailable")
         }
     }
+}
+
+async fn start_application(
+    application: &butler_gateway::gateway::AppApplication,
+) -> Result<(), butler_gateway::gateway::GatewayApplicationError> {
+    // Interruption transcripts precede FIFO lease recovery, so their exact
+    // old claims remain valid until terminal projection settles them.
+    application.drain_projection().await?;
+    application.start_dispatch().await
 }

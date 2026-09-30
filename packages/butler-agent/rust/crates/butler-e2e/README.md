@@ -179,3 +179,28 @@ the real manager, and login-start is registered with `--files-only`. Only INS-14
 turns the manager on, and only when `BUTLER_E2E_SYSTEMD=1` (the Linux CI job
 sets it after probing for a user manager). INS-15 needs Node and reports
 SKIPPED without it.
+
+## Idle resources at owner scale (PERF-IDLE)
+
+`idle_resources` uses the PERF-01 App seed with larger event bodies, 30,000
+native canonical messages, 30,000 completed memory windows and 888,000 metric
+records. It runs only in the opt-in `perf` tier, on Linux with a release agent.
+After two minutes of settling it takes three 60-second procfs samples, asserting
+RSS below 100 MB and both `rchar` and `read_bytes` below 1 MB per minute. Checking
+`rchar` catches scans even when the kernel serves every read from its page cache.
+Each window also checks that all seeded content and projections remain present.
+
+From `packages/butler-agent/rust`, with the build caches set before isolating HOME:
+
+```sh
+export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
+export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
+cargo build --release -p butler-agent -j 8
+BUTLER_E2E_TIER=perf BUTLER_E2E_BIN="$CARGO_TARGET_DIR/release/butler-agent" \
+  cargo test --release -p butler-e2e --test idle_resources -- --nocapture --test-threads=1
+```
+
+Use `cargo test` for this several-minute measurement, independently of the
+normal stub CI suite. The procfs boundary lives in `butler-platform`; other
+platforms report the measurement unavailable. Linux RSS is deliberately stricter
+than private heap size, but it is not macOS `phys_footprint`.
