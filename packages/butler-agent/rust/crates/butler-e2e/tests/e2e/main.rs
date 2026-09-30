@@ -38,6 +38,7 @@ mod projects;
 mod queue_pause;
 mod quota;
 mod recovery;
+mod schedule_calendar;
 mod schedule_store;
 mod schedules;
 mod service_stop;

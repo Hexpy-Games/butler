@@ -22,7 +22,6 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: short
-  CARGO_BUILD_JOBS: "8"
 
 defaults:
   run:
@@ -71,7 +70,7 @@ jobs:
         run: |
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
           export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
-          cargo run --locked -p butler-source-check -- .
+          cargo run -j 8 --locked -p butler-source-check -- .
 
   linux-clippy:
     needs: changes
@@ -80,6 +79,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
+      RUSTUP_TOOLCHAIN: 1.91.0
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: sccache
     steps:
@@ -96,12 +96,12 @@ jobs:
         run: |
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
           export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
-          cargo clippy --workspace --lib --bins --locked --keep-going -- -D warnings
+          cargo clippy -j 8 --workspace --lib --bins --locked --keep-going -- -D warnings
       - name: Clippy all targets
         run: |
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
           export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
-          cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
+          cargo clippy -j 8 --workspace --all-targets --locked --keep-going -- -D warnings
 
   linux-tests:
     name: Tests (Linux x64, archive)
@@ -110,9 +110,6 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.91.0
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
@@ -124,7 +121,7 @@ jobs:
         run: |
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
           export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
-          cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" run \
+          cargo-nextest nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" run \
             --archive-file "$RUNNER_TEMP/e2e-artifact/nextest-archive.tar.zst" \
             --workspace-remap "$PWD" --no-fail-fast --retries 0 --test-threads 8 \
             -E 'not binary(=e2e)'
@@ -136,10 +133,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
+      RUSTUP_TOOLCHAIN: 1.91.0
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: sccache
-      CARGO_PROFILE_DEV_DEBUG: "0"
-      CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
       - uses: actions/checkout@v4
       - name: Set up sccache
@@ -156,7 +152,7 @@ jobs:
         run: |
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
           export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
-          cargo build --locked --workspace --all-targets
+          cargo build --locked --workspace --all-targets -j 8
       - name: Strip archive binaries without invalidating dependency caches
         run: |
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
@@ -174,7 +170,7 @@ jobs:
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
           export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
           if grep -rqE '^[[:space:]]*//[/!][[:space:]]*```' crates; then
-            cargo test --workspace --doc --locked
+            cargo test -j 8 --workspace --doc --locked
           fi
       - name: Prepare the E2E artifact
         run: |
@@ -254,10 +250,6 @@ jobs:
             idle_disk: false
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.91.0
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest

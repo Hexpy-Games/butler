@@ -8,7 +8,8 @@ that every changed path is under `plans/`, a `docs/` directory, or ends in
 
 Linux builds all workspace targets in one Cargo invocation, including the real
 agent and test executables. Nextest then packages those binaries without
-recompiling a second dependency feature graph. The
+recompiling a second dependency feature graph. Archive consumers run the
+standalone nextest executable and do not install a compiler toolchain. The
 nextest archive contains unit/integration binaries and fixture executables.
 The Tests job runs every binary except the `e2e` integration binary; E2E jobs
 select that binary explicitly. Doctests remain in the build job.
@@ -31,12 +32,14 @@ jobs do not restore the embedding model because they never use it. INS-14
 requires the Linux runner's user manager and uses its config directory with
 a temporary HOME. It retains both 12-second stable-stop observations.
 
-Linux setup uses mold. The archive job disables debug information for both
-dev and test profiles and strips executable symbols after building, without
-changing assertions or test selection. Post-build stripping preserves
-dependency cache fingerprints; the job restores the former workspace Tests
-cache rather than the smaller E2E cache. The nextest archive is already zstd-compressed. The separate real
-agent is gzip-compressed, and upload-artifact's additional compression is
+Linux setup uses mold. The archive job strips debug information and executable
+symbols after building, without changing assertions or test selection. Compiler
+profiles stay unchanged to reuse existing dependency caches. The build and
+Clippy jobs explicitly pin their toolchain for cache fingerprinting, and use
+Cargo's `-j 8` option rather than changing dependency-cache environment inputs.
+Post-build stripping preserves dependency cache fingerprints; the job restores the former workspace Tests
+cache rather than the smaller E2E cache. The nextest archive is already
+zstd-compressed. The separate real agent is gzip-compressed, and upload-artifact's additional compression is
 turned off. macOS and Windows retain their linker settings and coverage in
 `post-merge-ci.yml`; duplicate platform jobs were removed from Rust quality.
 

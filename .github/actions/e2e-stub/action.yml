@@ -119,7 +119,7 @@ runs:
           nextest_partition_args=(--partition "hash:$PARTITION")
         fi
         if [ -n "$ARCHIVE_FILE" ]; then
-          cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
+          cargo-nextest nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
             run --no-fail-fast --retries 0 --test-threads 8 --archive-file "$ARCHIVE_FILE" \
             --workspace-remap "$PWD" \
             "${nextest_partition_args[@]}" \
@@ -150,7 +150,7 @@ runs:
         export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
         export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
         if [ -n "$ARCHIVE_FILE" ]; then
-          TMPDIR="$PWD/target/e2e-tmp" cargo nextest run --archive-file "$ARCHIVE_FILE" \
+          TMPDIR="$PWD/target/e2e-tmp" cargo-nextest nextest run --archive-file "$ARCHIVE_FILE" \
             --workspace-remap "$PWD" --no-fail-fast --retries 0 --test-threads 8 \
             -E 'binary(=e2e) and test(idle_disk_writes_and_cpu_stay_bounded)' --nocapture
         else
