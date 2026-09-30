@@ -267,7 +267,10 @@ impl Agent {
                 format!("http://127.0.0.1:{}", self.launch.port),
                 self.launch.token.clone(),
             );
-            if !self.launch.token.is_empty() && gateway.healthy().await {
+            if !self.launch.token.is_empty()
+                && gateway.healthy().await
+                && process::instance_ready(&self.launch.data, self.pid())
+            {
                 self.remember_instance();
                 return Ok(gateway);
             }

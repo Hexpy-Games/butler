@@ -117,6 +117,15 @@ pub(super) fn capture_to_files(
     Ok((stdout, stderr))
 }
 
+/// HTTP can be healthy before startup recovery publishes lifecycle readiness.
+pub(super) fn instance_ready(data: &Path, pid: Option<u32>) -> bool {
+    let Some(pid) = pid else {
+        return false;
+    };
+    crate::e2e::stop_intent::instance_record(data)
+        .is_some_and(|record| record["pid"] == pid && record["state"] == "ready")
+}
+
 /// The real listener's port, published by this child (never a stale instance).
 pub(super) fn bound_port(data: &Path, pid: Option<u32>) -> Option<u16> {
     let record = crate::e2e::stop_intent::instance_record(data)?;
