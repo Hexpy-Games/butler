@@ -145,10 +145,11 @@ impl AppGatewayLifecycle {
         }
     }
 
-    pub(crate) async fn stop_accepting(&self) {
+    pub(crate) async fn stop_accepting(&self) -> Result<(), BtccError> {
         if let Some(server) = self.current.lock().await.as_ref() {
-            server.stop_accepting();
+            server.stop_accepting().await?;
         }
+        Ok(())
     }
 
     pub(crate) async fn close(&self) -> Result<(), BtccError> {
