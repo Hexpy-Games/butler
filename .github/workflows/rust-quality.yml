@@ -57,6 +57,7 @@ jobs:
           filters: |
             packages:
               - '.github/workflows/linux-packages.yml'
+              - '.github/workflows/release.yml'
               - '.github/actions/rust-agent-setup/**'
               - 'packages/butler-agent/rust/Cargo.lock'
               - 'packages/butler-agent/rust/crates/butler-agent/Cargo.toml'

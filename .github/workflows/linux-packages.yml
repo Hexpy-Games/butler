@@ -5,17 +5,17 @@ name: Linux packages
 # releases, #261) as a DEB for x64 and arm64 and an Arch package for x64. Every
 # package is installed in a clean distribution container and its agent is run
 # headless (start, /health, stop).
-# Artifacts only: nothing is published to a GitHub Release.
+# Tagged releases call this workflow once from release.yml; publication waits
+# for all clean-container install and headless agent smoke checks.
 
 on:
   push:
     branches: [main]
-    tags:
-      - "v*"
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
   workflow_call:
+
 
 permissions:
   contents: read
