@@ -377,7 +377,7 @@ impl ModelConfiguration {
         auth::AuthOwner {
             data_root: &self.data_root,
             environment: &environment,
-            clock: self.clock.as_ref(),
+            clock: &self.clock,
             client: &self.client,
         }
         .resolve_openai()
@@ -427,7 +427,7 @@ impl ModelConfiguration {
         auth::AuthOwner {
             data_root: &self.data_root,
             environment: &self.environment,
-            clock: self.clock.as_ref(),
+            clock: &self.clock,
             client: &self.client,
         }
     }
@@ -441,3 +441,6 @@ mod mutations_tests;
 mod provider_tests;
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod durability_tests;

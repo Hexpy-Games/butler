@@ -59,6 +59,7 @@ impl Fixture {
 // test-category: race
 #[tokio::test]
 async fn concurrent_distinct_registrations_share_the_full_file_write_sequence() {
+    super::durability_tests::config_update_waits_for_other_process().await;
     let fixture = Fixture::new();
     let writes = Arc::new(butler_core::configuration::ConfigurationWrites::new());
     let first_owner = fixture.owner_with(Arc::clone(&writes));

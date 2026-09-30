@@ -5,7 +5,7 @@
 
 use std::{collections::HashMap, fs, io::Write, path::Path, sync::Arc};
 
-use butler_platform::secure_fs;
+use butler_platform::{secrets::ChangeLock, secure_fs};
 use tokio::sync::{Mutex, MutexGuard, OwnedMutexGuard};
 
 /// Failures reading or writing the shared user configuration files.
@@ -32,6 +32,12 @@ pub enum ConfigError {
     /// Writing, syncing or renaming the temporary configuration file failed.
     #[error("Config write failed.")]
     WriteFailed(#[source] std::io::Error),
+    /// Another writer could not be locked before reading its current file.
+    #[error("Configuration change lock failed.")]
+    LockFailed(#[source] std::io::Error),
+    /// The blocking lock acquisition failed.
+    #[error("Configuration change lock task failed.")]
+    LockTask(#[source] tokio::task::JoinError),
 }
 
 /// Serializes read/modify/write cycles of the configuration file within this process.
@@ -129,4 +135,21 @@ pub fn write_json_atomic(path: &Path, value: &serde_json::Value) -> Result<(), C
         std::convert::identity,
     )
     .map_err(ConfigError::WriteFailed)
+}
+
+/// Holds the sibling `<filename>.lock` for a full read-modify-write cycle.
+/// Blocking callers keep this guard until the atomic replacement finishes.
+pub fn lock_file(path: &Path) -> Result<ChangeLock, ConfigError> {
+    let mut name = path.as_os_str().to_owned();
+    name.push(".lock");
+    ChangeLock::acquire(Path::new(&name), std::time::Duration::from_secs(30))
+        .map_err(ConfigError::LockFailed)
+}
+
+/// Acquires the process-shared gate without blocking a Tokio worker.
+pub async fn lock_file_async(path: &Path) -> Result<ChangeLock, ConfigError> {
+    let path = path.to_owned();
+    tokio::task::spawn_blocking(move || lock_file(&path))
+        .await
+        .map_err(ConfigError::LockTask)?
 }

@@ -15,6 +15,7 @@ impl ModelConfiguration {
     ) -> Result<LocalModelConfig, ModelCatalogError> {
         let _write = self.configuration_writes.acquire().await;
         let root = root.unwrap_or(&self.data_root);
+        let _change = super::lock_config(root).await?;
         let mut config = read_object_sync(&root.join("butler.config.json"));
         let current = self.local_models(&config);
         let mut credentials = super::super::local_credentials::read_sync(
@@ -78,6 +79,7 @@ impl ModelConfiguration {
     ) -> Result<(LocalModelConfig, String), ModelCatalogError> {
         let _write = self.configuration_writes.acquire().await;
         let root = root.unwrap_or(&self.data_root);
+        let _change = super::lock_config(root).await?;
         let mut config = read_object_sync(&root.join("butler.config.json"));
         let current = self.local_models(&config);
         let mut credentials = super::super::local_credentials::read_sync(
@@ -136,6 +138,7 @@ impl ModelConfiguration {
     ) -> Result<LocalModelConfig, ModelCatalogError> {
         let _write = self.configuration_writes.acquire().await;
         let root = root.unwrap_or(&self.data_root);
+        let _change = super::lock_config(root).await?;
         let mut config = read_object_sync(&root.join("butler.config.json"));
         let current = self.local_models(&config);
         let mut credentials = super::super::local_credentials::read_sync(
