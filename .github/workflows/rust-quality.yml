@@ -352,7 +352,7 @@ jobs:
   platform-pr:
     name: Platform checks after PR gate
     needs: [changes, pr-gate]
-    if: always() && github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true'
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true' }}
     permissions:
       contents: read
       pull-requests: read
@@ -362,7 +362,7 @@ jobs:
   packages-pr:
     name: Packages after PR gate
     needs: [changes, pr-gate]
-    if: always() && github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true' && needs.changes.outputs.packages == 'true'
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true' && needs.changes.outputs.packages == 'true' }}
     permissions:
       contents: read
       issues: write
@@ -371,7 +371,7 @@ jobs:
   install-pr:
     name: Install smoke after PR gate
     needs: [changes, pr-gate]
-    if: always() && github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true' && needs.changes.outputs.install == 'true'
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true' && needs.changes.outputs.install == 'true' }}
     permissions:
       contents: read
     uses: ./.github/workflows/install-smoke.yml
