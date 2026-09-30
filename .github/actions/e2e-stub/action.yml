@@ -91,6 +91,7 @@ runs:
       run: |
         set -o pipefail
         if [ -n "$ARCHIVE_FILE" ]; then
+          mkdir -p "$PWD/target"
           cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
             run --no-fail-fast --archive-file "$ARCHIVE_FILE" \
             --extract-to "$PWD/target" \
