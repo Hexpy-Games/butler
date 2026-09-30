@@ -1,6 +1,7 @@
 //! One process-owned App HTTP listener and its App-only artifact file owner.
 
 mod security_store;
+mod startup;
 
 use std::net::SocketAddr;
 use std::sync::{
@@ -13,7 +14,7 @@ use tokio::net::TcpListener;
 use butler_gateway::gateway::{
     AppApplication, AppApplicationConfig, AppApplicationDependencies, AppIdentityClock,
     AppMessageFiles, GatewayApplicationError, GatewayConfig, GatewayServer, InboundQueue,
-    LocalAuthConfig, serve_gateway,
+    LocalAuthConfig,
 };
 use butler_runtime::operations::ServiceReadiness;
 use butler_turn::btcc::BtccError;
@@ -32,6 +33,8 @@ use crate::host::{
     SystemIdentity,
 };
 use security_store::AppSecurityStore;
+#[cfg(debug_assertions)]
+mod startup_hold;
 
 pub(crate) struct AppServer {
     listener: Option<GatewayServer>,
@@ -225,23 +228,15 @@ impl AppServer {
             .map_err(app_error)?,
         );
         let gateway_config = gateway_config(app_config, data_root, installation, owners.local_auth);
-        let server = match serve_gateway(listener, application.clone(), gateway_config) {
-            Ok(server) => server,
-            Err(error) => {
-                let _ = application.close().await;
-                return Err(BtccError::relayed(
-                    "app_listener_start_failed",
-                    error.to_string(),
-                ));
-            }
-        };
-        listener_ready.store(true, Ordering::Release);
-        if let Err(error) = application.start_dispatch().await {
-            listener_ready.store(false, Ordering::Release);
-            let _ = server.close().await;
-            let _ = application.close().await;
-            return Err(app_error(error));
-        }
+        let server = startup::activate(
+            listener,
+            application.clone(),
+            gateway_config,
+            &setup,
+            &listener_ready,
+            data_root,
+        )
+        .await?;
         Ok(Self {
             address: server.local_addr(),
             listener: Some(server),
