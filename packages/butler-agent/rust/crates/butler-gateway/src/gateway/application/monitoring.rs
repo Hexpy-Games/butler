@@ -1,6 +1,9 @@
 //! Read-only Desktop monitor contracts and projections over native App facts.
 
+pub(super) mod activity;
 mod conversation;
+pub(super) mod materialized;
+mod sessions;
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde_json::{Value, json};
@@ -108,19 +111,13 @@ pub(crate) async fn work_status(
 ) -> Result<Value, GatewayApplicationError> {
     let facts = application.work_status().await?;
     let mut view = project_work_status(facts);
-    let sessions = application.list_sessions(None, None).await?;
     if let Some(items) = view.get_mut("items").and_then(Value::as_array_mut) {
         for item in items {
             let Some(work_session_id) = item.get("session_id").and_then(Value::as_str) else {
                 continue;
             };
-            let Some(session) = sessions.iter().find(|session| {
-                session.id == work_session_id || session.session_hint == work_session_id
-            }) else {
-                continue;
-            };
             let conversation = application
-                .work_status_conversation(session.id.clone())
+                .work_status_conversation(work_session_id.to_owned())
                 .await?;
             if let Some(summary) = conversation.latest_report_summary {
                 item["latest_report_summary"] = json!(summary);
@@ -256,14 +253,17 @@ pub(crate) async fn worker_activity(
     application: &dyn GatewayApplication,
     query: AppWorkerActivityQuery,
 ) -> Result<Value, GatewayApplicationError> {
+    if let Some(page) = application.worker_activity_page(query.clone()).await? {
+        return Ok(page);
+    }
     let sessions = application.list_sessions(None, None).await?;
-    let requested_session = query
-        .session_id
-        .as_deref()
-        .filter(|value| !value.is_empty());
     let mut workers = Vec::new();
     for session in sessions.into_iter().filter(|session| {
-        requested_session.is_none_or(|id| id == session.id || id == session.session_hint)
+        query
+            .session_id
+            .as_deref()
+            .filter(|id| !id.is_empty())
+            .is_none_or(|id| id == session.id || id == session.session_hint)
     }) {
         // One session's unreadable children never hide the others' activity.
         let Ok(projection) = application
@@ -320,7 +320,7 @@ pub(crate) async fn worker_activity(
     Ok(json!({ "workers": page, "pagination": pagination }))
 }
 
-fn append_relation_workers(
+pub(super) fn append_relation_workers(
     workers: &mut Vec<Value>,
     projection: &Value,
     session: &AppSessionSummary,
@@ -429,7 +429,7 @@ fn bounded_page(value: Option<usize>, fallback: usize, minimum: usize, maximum: 
     value.map_or(fallback, |value| value.clamp(minimum, maximum))
 }
 
-fn encode_activity_cursor(worker_id: &str) -> String {
+pub(super) fn encode_activity_cursor(worker_id: &str) -> String {
     URL_SAFE_NO_PAD
         .encode(serde_json::to_vec(&json!({ "v": 1, "worker_id": worker_id })).unwrap_or_default())
 }
@@ -445,4 +445,15 @@ fn decode_activity_cursor(cursor: Option<&str>, workers: &[Value]) -> Option<usi
         .iter()
         .position(|worker| worker.get("worker_id").and_then(Value::as_str) == Some(worker_id))
         .map(|index| index + 1)
+}
+
+impl super::AppApplication {
+    pub(super) fn usage_monitor_query(
+        &self,
+        mut query: AppUsageMonitorQuery,
+    ) -> crate::gateway::ApplicationFuture<Value> {
+        // The runtime id is derived from the App id, without a catalog read.
+        query.runtime_session_id = query.session_id.as_deref().map(super::app_session_hint);
+        self.dependencies.monitoring.usage_monitor(query)
+    }
 }

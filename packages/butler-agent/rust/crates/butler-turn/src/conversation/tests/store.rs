@@ -1,5 +1,6 @@
 use super::*;
 
+// test-category: race
 #[tokio::test]
 async fn store_preserves_transactions_outcomes_and_summary_authority() {
     let path = test_path("store");
@@ -11,7 +12,9 @@ async fn store_preserves_transactions_outcomes_and_summary_authority() {
         })
         .await
         .unwrap();
-    assert_eq!(busy_timeout, 0);
+    assert_eq!(busy_timeout, 5000);
+    plain_open_under_writer(&path).await;
+    migration_errors_are_atomic();
     store.begin_turn(begin_input()).await.unwrap();
     let message = store
         .append_user_message(append_input("cm_request", "hello"))
@@ -336,4 +339,57 @@ async fn store_preserves_transactions_outcomes_and_summary_authority() {
     assert_eq!(retained, 1);
     reopened.close().await.unwrap();
     let _ignored_cleanup = std::fs::remove_file(path);
+}
+
+async fn plain_open_under_writer(path: &std::path::Path) {
+    let db = rusqlite::Connection::open(path).unwrap();
+    db.execute_batch("BEGIN IMMEDIATE").unwrap();
+    let (reopened, _, _) = open_at(path.to_path_buf()).await;
+    reopened.close().await.unwrap();
+    db.execute_batch("ROLLBACK").unwrap();
+}
+
+fn migration_errors_are_atomic() {
+    use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
+    let mut db = rusqlite::Connection::open_in_memory().unwrap();
+    let clock = TestClock::new();
+    schema::ensure(&mut db, &clock).unwrap();
+    for name in [
+        "origin_kind",
+        "origin_ref",
+        "origin_reason",
+        "origin_version",
+        "origin_evidence_json",
+    ] {
+        db.execute_batch(&format!(
+            "ALTER TABLE conversation_messages DROP COLUMN {name}"
+        ))
+        .unwrap();
+    }
+    db.execute_batch("DELETE FROM conversation_schema_migrations")
+        .unwrap();
+    db.authorizer(Some(|context: AuthContext<'_>| {
+        if matches!(context.action, AuthAction::AlterTable { .. }) {
+            Authorization::Deny
+        } else {
+            Authorization::Allow
+        }
+    }));
+    assert!(
+        schema::ensure(&mut db, &clock).is_err(),
+        "real ALTER errors must propagate"
+    );
+    let versions: u64 = db
+        .query_row(
+            "SELECT COUNT(*) FROM conversation_schema_migrations",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(versions, 0, "failed migration must not be recorded");
+    assert!(db.is_autocommit());
+    db.authorizer(None::<fn(AuthContext<'_>) -> Authorization>);
+    schema::ensure(&mut db, &clock).unwrap();
+    let columns: u64 = db.query_row("SELECT COUNT(*) FROM pragma_table_info('conversation_messages') WHERE name LIKE 'origin_%'", [], |row| row.get(0)).unwrap();
+    assert_eq!(columns, 5);
 }

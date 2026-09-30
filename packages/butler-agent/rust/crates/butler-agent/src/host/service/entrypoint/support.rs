@@ -3,7 +3,8 @@ use std::sync::Arc;
 use butler_models::models::ModelConfigurationClock;
 use butler_turn::btcc::BtccError;
 
-use super::{AppGatewayLifecycle, GatewayControlServer, IngressDispatcher};
+use crate::host::app::gateway_lifecycle::{AppGatewayLifecycle, GatewayControlServer};
+use crate::host::service::ingress::IngressDispatcher;
 use crate::host::{AgentRuntime, SystemIdentity};
 
 pub(super) async fn deliver_parent_results(

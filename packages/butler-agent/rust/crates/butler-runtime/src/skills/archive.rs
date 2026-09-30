@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use super::catalog::{load, project_dir, safe_name, summary, user_dir};
+use super::catalog::{project_dir, safe_name, summary, user_dir};
 use super::{SkillError, SkillImportResult};
 
 pub(super) fn import(
@@ -59,19 +59,11 @@ fn extract_and_install(
             .and_then(|value| value.to_str())
             .map(safe_name)
             .unwrap_or_default();
-        if name.is_empty() {
+        if name.is_empty() || name.starts_with('.') {
             skipped.push(source.to_string_lossy().into_owned());
             continue;
         }
-        let destination = target.join(&name);
-        if destination.exists() {
-            fs::remove_dir_all(&destination).map_err(SkillError::Io)?;
-        }
-        copy_tree(&source, &destination)?;
-        if let Some(skill) = load(&target)?
-            .into_iter()
-            .find(|skill| skill.file_path.starts_with(&destination))
-        {
+        if let Some(skill) = super::install::replace(&source, &target, &name)? {
             imported.push(summary(
                 skill,
                 if project.is_some() { "project" } else { "user" },
@@ -99,7 +91,7 @@ fn find_skill_dirs(root: &Path) -> Result<Vec<PathBuf>, SkillError> {
     Ok(found)
 }
 
-fn copy_tree(source: &Path, target: &Path) -> Result<(), SkillError> {
+pub(super) fn copy_tree(source: &Path, target: &Path) -> Result<(), SkillError> {
     fs::create_dir_all(target).map_err(SkillError::Io)?;
     for entry in fs::read_dir(source).map_err(SkillError::Io)? {
         let entry = entry.map_err(SkillError::Io)?;
@@ -108,6 +100,7 @@ fn copy_tree(source: &Path, target: &Path) -> Result<(), SkillError> {
             copy_tree(&entry.path(), &destination)?;
         } else {
             fs::copy(entry.path(), destination).map_err(SkillError::Io)?;
+            butler_platform::secure_fs::fault_checkpoint("skill_copy").map_err(SkillError::Io)?;
         }
     }
     Ok(())

@@ -99,6 +99,10 @@ impl Coordinator {
         result
     }
 
+    pub(crate) fn interrupt_turn(&self, turn_id: &str) {
+        self.facade.runtime.interrupt(turn_id);
+    }
+
     pub(super) async fn stop(self: &Arc<Self>, turn_id: &str) -> Result<TurnOutcome, BtccError> {
         let (generation, flight) = {
             let mut state = self.state.lock();

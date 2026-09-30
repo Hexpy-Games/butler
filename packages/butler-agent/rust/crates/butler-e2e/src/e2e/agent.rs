@@ -10,11 +10,14 @@ use std::time::{Duration, Instant};
 use super::executable;
 use super::gateway::Gateway;
 use super::sandbox::Sandbox;
+use super::stop_intent;
 use super::{HarnessError, harness_error};
 
 mod app_supervisor;
 mod environment;
+mod ports;
 mod process;
+pub use ports::free_port;
 pub use process::read_all;
 
 /// Environment and layout needed to (re)start the agent.
@@ -78,6 +81,12 @@ impl Launch {
             port: 0,
             token,
             env: vec![
+                // Child commands clear inherited environment. The product's
+                // fixed App/scheduler clock is enabled only on the stub tier.
+                (
+                    "BUTLER_E2E_TIER".into(),
+                    super::config::nonempty("BUTLER_E2E_TIER").unwrap_or_else(|| "stub".into()),
+                ),
                 ("BUTLER_APP_LOCAL_AUTH_REQUIRED".into(), "1".into()),
                 (
                     "BUTLER_APP_LOCAL_AUTH_FILE".into(),
@@ -267,10 +276,12 @@ impl Agent {
                 format!("http://127.0.0.1:{}", self.launch.port),
                 self.launch.token.clone(),
             );
-            if !self.launch.token.is_empty()
-                && gateway.healthy().await
-                && process::instance_ready(&self.launch.data, self.pid())
-            {
+            let instance_ready = self.pid().is_some_and(|pid| {
+                stop_intent::instance_record(&self.launch.data).is_some_and(|record| {
+                    stop_intent::instance_ready(&record) && record["pid"] == pid
+                })
+            });
+            if !self.launch.token.is_empty() && gateway.healthy().await && instance_ready {
                 self.remember_instance();
                 return Ok(gateway);
             }
@@ -281,13 +292,13 @@ impl Agent {
             {
                 let tail = process::log_tail(&log);
                 return Err(harness_error(format!(
-                    "agent exited ({status}) before its gateway was ready (port={}):\n{tail}",
+                    "agent exited ({status}) before its gateway and instance record were ready (port={}):\n{tail}",
                     self.launch.port
                 )));
             }
-            if Instant::now() > deadline {
+            if Instant::now() >= deadline {
                 return Err(harness_error(format!(
-                    "agent gateway not ready within 90s (pid={:?}, port={}):\n{}",
+                    "agent gateway and instance record not ready within 90s (pid={:?}, port={}):\n{}",
                     self.pid(),
                     self.launch.port,
                     process::log_tail(&log)
@@ -465,28 +476,4 @@ impl CliOutput {
             ))
         })
     }
-}
-
-/// An unused port for closed-endpoint fixtures. This probe does not reserve it.
-/// Agents bind port 0 themselves and publish the OS-assigned endpoint instead.
-pub fn free_port() -> Result<u16, HarnessError> {
-    use std::sync::atomic::{AtomicU32, Ordering};
-    const FIRST: u32 = 20_000;
-    const SPAN: u32 = 12_000;
-    static NEXT: AtomicU32 = AtomicU32::new(u32::MAX);
-    let _ = NEXT.compare_exchange(
-        u32::MAX,
-        (std::process::id() % 60) * 200,
-        Ordering::Relaxed,
-        Ordering::Relaxed,
-    );
-    for _ in 0..SPAN {
-        let offset = NEXT.fetch_add(1, Ordering::Relaxed) % SPAN;
-        let port =
-            u16::try_from(FIRST + offset).map_err(|_| harness_error("free port out of range"))?;
-        if std::net::TcpListener::bind(("127.0.0.1", port)).is_ok() {
-            return Ok(port);
-        }
-    }
-    Err(harness_error("no free port below the ephemeral range"))
 }

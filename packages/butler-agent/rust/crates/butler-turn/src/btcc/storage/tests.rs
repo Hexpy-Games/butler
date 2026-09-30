@@ -3,8 +3,10 @@ use rusqlite::Connection;
 use super::testing::Fixture;
 use super::*;
 
+// test-category: race
 #[tokio::test]
 async fn opener_cuts_over_an_r2_nonterminal_turn_without_reexecuting_it() {
+    bootstrap::publication_regression();
     let fixture = Fixture::activated();
     {
         let connection = Connection::open(&fixture.path).expect("legacy fixture connection");

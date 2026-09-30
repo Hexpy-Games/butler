@@ -9,6 +9,9 @@
 //! returns `None`. Renames that replace a file retry on Windows while
 //! another process briefly holds it ([`rename`]).
 
+mod fault;
+pub use fault::{checkpoint as fault_checkpoint, write as fault_write};
+
 use std::fs::{self, DirBuilder, File, Metadata, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -399,4 +402,10 @@ pub fn path_key(path: &Path) -> PathBuf {
 /// Creates a symbolic link at `link` that points to `target`.
 pub fn symlink(target: &Path, link: &Path) -> io::Result<()> {
     sys::symlink(target, link)
+}
+
+/// Whether a hard link error permits trying a no-clobber create instead.
+/// The fallback must still enforce destination permissions and collisions.
+pub fn hard_link_unsupported(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::Unsupported || sys::hard_link_unsupported(error)
 }

@@ -1,5 +1,5 @@
 //! The Agent package commands: `update` (check, dry run, apply), `install`,
-//! `rollback`, `versions` and `uninstall`. The App update check and dry run
+//! `rollback` and `uninstall`. The App update check and dry run
 //! live here too. None of them starts the App runtime.
 
 use std::{
@@ -43,8 +43,6 @@ struct Options {
     sha256: Option<String>,
     /// `rollback --to`: a version or version directory.
     to: Option<String>,
-    /// `update --list`: the installed versions.
-    list: bool,
     /// `uninstall --keep-data`: the default, spelled out.
     keep_data: bool,
     /// `uninstall --purge-data`: delete the data folder too.
@@ -58,7 +56,7 @@ struct Options {
 }
 
 /// The verbs this family dispatches.
-const VERBS: [&str; 5] = ["update", "install", "rollback", "versions", "uninstall"];
+const VERBS: [&str; 4] = ["update", "install", "rollback", "uninstall"];
 
 pub(crate) fn recognizes(args: &[OsString]) -> bool {
     let mut index = 0;
@@ -83,9 +81,7 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
     match options.positionals.as_slice() {
         [verb] if verb == "install" => install_cmd::run(installation, &options).await,
         [verb] if verb == "rollback" => rollback_cmd::run(installation, &options).await,
-        [verb] if verb == "versions" => rollback_cmd::list(installation, &options),
         [verb] if verb == "uninstall" => uninstall_cmd::run(installation, &options).await,
-        [verb] if verb == "update" && options.list => rollback_cmd::list(installation, &options),
         [verb] if verb == "update" => Box::pin(update(installation, options)).await,
         _ => failure(
             options.json,
@@ -238,7 +234,6 @@ fn parse(args: &[OsString]) -> Result<Options, crate::host::HostError> {
             "--home" => return Err("--home is unsupported; use --data".into()),
             "--apply" => options.apply = true,
             "--yes" => options.yes = true,
-            "--list" => options.list = true,
             "--keep-data" => options.keep_data = true,
             "--purge-data" => options.purge_data = true,
             "--no-restart" => options.no_restart = true,

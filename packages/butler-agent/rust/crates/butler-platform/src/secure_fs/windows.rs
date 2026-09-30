@@ -303,3 +303,8 @@ pub(super) fn symlink(target: &Path, link: &Path) -> io::Result<()> {
         std::os::windows::fs::symlink_file(target, link)
     }
 }
+
+pub(super) fn hard_link_unsupported(error: &io::Error) -> bool {
+    // ERROR_INVALID_FUNCTION / ERROR_NOT_SUPPORTED.
+    matches!(error.raw_os_error(), Some(1 | 50))
+}

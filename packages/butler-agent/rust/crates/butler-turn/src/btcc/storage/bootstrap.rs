@@ -43,8 +43,15 @@ pub fn bootstrap_fresh_storage(
         .parent()
         .ok_or_else(|| error(StorageCode::AgentBtccStoragePathInvalid))?;
     fs::create_dir_all(parent).map_err(io_error)?;
-    let temp = path.with_extension("sqlite.migration.tmp");
-    remove_temp(&temp)?;
+    let temp = path.with_extension(format!(
+        "sqlite.migration.{}.{}.tmp",
+        std::process::id(),
+        uuid::Uuid::new_v4()
+    ));
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    butler_platform::secure_fs::owner_only(&mut options);
+    drop(options.open(&temp).map_err(io_error)?);
     let id = manifest_id();
     let fresh = FreshStorage {
         path,
@@ -56,11 +63,11 @@ pub fn bootstrap_fresh_storage(
         now_iso,
     };
     let result = fresh.prepare().and_then(|()| fresh.publish_and_activate());
-    if result.is_err() {
-        // The published target is preserved, matching the source catch path.
-        let _ = remove_temp(&temp);
-    }
-    result.map(|()| id)
+    // Only this attempt's files are removed; a peer's preparation is untouched.
+    let cleanup = remove_temp(&temp);
+    result?;
+    cleanup?;
+    Ok(id)
 }
 
 /// A fresh storage target being prepared in a temporary file and published.
@@ -90,6 +97,20 @@ impl FreshStorage<'_> {
         )
         .map_err(StorageError::sqlite)?;
         validate::receipt(&db, self.id)?;
+        let marker = json!({
+            "schema": "butler.agent-btcc-storage-activation.v1",
+            "manifestId": self.id,
+            "storageContract": "split-v1",
+            "runtimeVersion": self.runtime_version,
+            "firstActivatedAt": self.now_iso,
+            "activatedAt": self.now_iso,
+        });
+        db.execute(
+            "INSERT INTO agent_storage_activation_marker (singleton,manifest_id,marker_json) VALUES (1,?1,?2)",
+            params![self.id, marker.to_string()],
+        )
+        .map_err(StorageError::sqlite)?;
+        validate::readiness(&db, self.id)?;
         db.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
             .map_err(StorageError::sqlite)?;
         db.close()
@@ -122,31 +143,16 @@ impl FreshStorage<'_> {
         })
     }
 
-    /// Renames the prepared file into place (never over an existing
-    /// target), then writes and validates the activation marker.
+    /// Publishes a fully activated, synced database without replacing a peer.
     fn publish_and_activate(&self) -> StorageResult<()> {
-        if self.path.exists() {
-            return Err(error(StorageCode::AgentBtccStoragePublishTargetExists));
-        }
-        fs::rename(self.temp, self.path).map_err(io_error)?;
-        butler_platform::secure_fs::sync_path(self.parent).map_err(io_error)?;
-        let db = Connection::open(self.path).map_err(StorageError::sqlite)?;
-        validate::receipt(&db, self.id)?;
-        let marker = json!({
-            "schema": "butler.agent-btcc-storage-activation.v1",
-            "manifestId": self.id,
-            "storageContract": "split-v1",
-            "runtimeVersion": self.runtime_version,
-            "firstActivatedAt": self.now_iso,
-            "activatedAt": self.now_iso,
-        });
-        db.execute(
-            "INSERT INTO agent_storage_activation_marker (singleton,manifest_id,marker_json) VALUES (1,?1,?2)",
-            params![self.id, marker.to_string()],
-        )
-        .map_err(StorageError::sqlite)?;
-        validate::readiness(&db, self.id)?;
-        db.close().map_err(|(_, error)| StorageError::sqlite(error))
+        publish(self.temp, self.path, || {}).map_err(|source| {
+            if source.kind() == std::io::ErrorKind::AlreadyExists {
+                error(StorageCode::AgentBtccStoragePublishTargetExists)
+            } else {
+                io_error(source)
+            }
+        })?;
+        butler_platform::secure_fs::sync_path(self.parent).map_err(io_error)
     }
 }
 
@@ -177,4 +183,36 @@ fn error(code: StorageCode) -> StorageError {
 
 fn io_error(error: std::io::Error) -> StorageError {
     StorageError::new(StorageCode::AgentBtccStorageIoError, error.to_string()).with_source(error)
+}
+
+fn publish(temp: &Path, path: &Path, before_publish: impl FnOnce()) -> std::io::Result<()> {
+    if path.exists() {
+        return Err(std::io::ErrorKind::AlreadyExists.into());
+    }
+    before_publish();
+    fs::hard_link(temp, path)
+}
+
+#[cfg(test)]
+pub(super) fn publication_regression() {
+    let root = std::env::temp_dir().join(format!("bootstrap-race-{}", uuid::Uuid::new_v4()));
+    fs::create_dir_all(&root).unwrap();
+    let temp = root.join("prepared");
+    let target = root.join("published");
+    fs::write(&temp, b"ours").unwrap();
+    let result = publish(&temp, &target, || {
+        fs::write(&target, b"peer").unwrap();
+    });
+    assert_eq!(
+        result.unwrap_err().kind(),
+        std::io::ErrorKind::AlreadyExists
+    );
+    assert_eq!(fs::read(&target).unwrap(), b"peer");
+    let peer_temp = root.join("fresh.sqlite.migration.tmp");
+    fs::write(&peer_temp, b"peer still preparing").unwrap();
+    let target = root.join("fresh.sqlite");
+    let id = bootstrap_fresh_storage(&target, "fence", "test", "2026-09-30T00:00:00Z").unwrap();
+    assert_eq!(read_activated_storage_manifest(&target).unwrap(), id);
+    assert_eq!(fs::read(&peer_temp).unwrap(), b"peer still preparing");
+    fs::remove_dir_all(root).unwrap();
 }

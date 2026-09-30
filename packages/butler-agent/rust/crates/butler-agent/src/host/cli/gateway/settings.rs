@@ -5,10 +5,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use crate::host::ResolvedInstallation;
-use crate::host::service::configuration::AppServiceConfiguration;
 
 pub(super) struct Settings {
     value: Value,
@@ -29,16 +28,6 @@ impl Settings {
         let value = butler_core::configuration::read_json_object(&path)
             .map_err(|message| format!("gateway_settings_read_failed: {message}"))?;
         Ok(Self { value })
-    }
-
-    pub(super) fn enabled(&self) -> bool {
-        self.value["enabled"].as_bool().unwrap_or(true)
-    }
-
-    pub(super) fn updated(&self) -> bool {
-        self.value["updatedAt"]
-            .as_str()
-            .is_some_and(|value| !value.is_empty())
     }
 
     pub(super) async fn patch(
@@ -85,50 +74,6 @@ impl Settings {
         self.value = next;
         Ok(())
     }
-}
-
-pub(super) fn local_view(
-    settings: &Settings,
-    app: &AppServiceConfiguration,
-    running: bool,
-    restart_required: bool,
-) -> Value {
-    let enabled = settings.enabled();
-    let status = if !enabled {
-        "disabled"
-    } else if running {
-        "online"
-    } else {
-        "offline"
-    };
-    let next_actions = if !enabled {
-        vec!["butler gateway enable app"]
-    } else if running {
-        vec!["butler gateway status app"]
-    } else {
-        vec!["butler gateway start app"]
-    };
-    json!({
-        "id":"app",
-        "title":"Butler App Gateway",
-        "lifecycle":"process",
-        "transport":"app",
-        "enabled":enabled,
-        "configured":app.server_url().is_some(),
-        "running":running,
-        "status":status,
-        "restartRequired":restart_required,
-        "credentials":{},
-        "config":{
-            "host":app.host,
-            "port":app.port,
-            "serverUrl":app.server_url(),
-            "dbConfigured":app.db_configured,
-            "remoteAccessEnabled":app.remote_access_enabled(),
-            "allowedHosts":app.allowed_hosts(),
-        },
-        "nextActions":next_actions,
-    })
 }
 
 fn write_settings(

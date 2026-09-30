@@ -172,6 +172,12 @@ async fn failed(
     if let Some(code) = rejected::safe_code(error) {
         return rejected::reject(item, queue, bindings, delivery, subsessions, code).await;
     }
+    if error.message == super::shutdown::INTERRUPTED
+        && let Some(poll) =
+            interrupted::settle(item, queue, bindings, delivery, "shutdown-interrupted").await
+    {
+        return poll;
+    }
     if replaced
         && let Some(poll) =
             interrupted::settle(item, queue, bindings, delivery, "replacement-interrupted").await

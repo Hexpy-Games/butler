@@ -120,7 +120,7 @@ impl Setup {
             fixture: Fixture::Ready,
             access: Access::FullAccess,
             source: Source::None,
-            env: Vec::new(),
+            env: vec![("BUTLER_E2E_APP_NOW".into(), fixtures::FIXTURE_TIME.into())],
             model: None,
             stub_credential: true,
             record_into: None,
@@ -243,6 +243,7 @@ impl Setup {
             extends,
             login_refresh,
         } = self;
+        let app_now = sources::fixture_app_now(&env);
         let mut launch = Launch::new(&sandbox)?;
         match launch_mode {
             LaunchMode::Harness => {}
@@ -293,10 +294,10 @@ impl Setup {
             launch.set_env(&key, value);
         }
         match fixture {
-            Fixture::Ready => fixtures::ready(&sandbox.data, &choice.model)?,
-            Fixture::Legacy => fixtures::legacy(&sandbox.data, &choice.model)?,
+            Fixture::Ready => fixtures::ready(&sandbox.data, &choice.model, &app_now)?,
+            Fixture::Legacy => fixtures::legacy(&sandbox.data, &choice.model, &app_now)?,
             Fixture::FirstConversation => {
-                fixtures::first_conversation(&sandbox.data, &choice.model)?;
+                fixtures::first_conversation(&sandbox.data, &choice.model, &app_now)?;
             }
             Fixture::Empty => {}
         }

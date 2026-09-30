@@ -260,6 +260,7 @@ async fn a_skipped_delivery_retires_its_staged_outbound_for_the_resend() {
         progress.safe_progress_rows[0]["safe_label"],
         "Reading source"
     );
+    super::projection_burst::assert_burst_projects_other_chat(&app, &native, &root).await;
     app.close().await.unwrap();
     let _ = std::fs::remove_dir_all(root);
 }

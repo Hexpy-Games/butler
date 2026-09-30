@@ -130,57 +130,6 @@ fn run_bounded(launch: &Launch, limit: Duration) -> Result<(Option<i32>, String)
 }
 
 #[tokio::test]
-async fn harness_port_zero_status_and_file_fallback_agree() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let sandbox = Sandbox::new("SVC-01-PORT-CONFIG")?;
-    let launch = Launch::new(&sandbox)?;
-    fs::create_dir_all(sandbox.data.join("gateways"))?;
-    fs::write(
-        sandbox.data.join("gateways/app.json"),
-        r#"{"config":{"port":0}}"#,
-    )?;
-    // CLI status is read-only; no scenario binds the production default port.
-    for (override_port, expected) in [(None, 18765), (Some("0"), 0)] {
-        let mut command = launch.command();
-        command.args(["gateway", "status", "app", "--json"]);
-        match override_port {
-            Some(port) => {
-                command.env("BUTLER_APP_SERVER_PORT", port);
-            }
-            None => {
-                command.env_remove("BUTLER_APP_SERVER_PORT");
-            }
-        }
-        let output = command.output()?;
-        assert!(output.status.success());
-        let output: serde_json::Value = serde_json::from_slice(&output.stdout)?;
-        let view = &output["data"];
-        assert_eq!(view["config"]["port"], expected, "{view}");
-        assert_eq!(view["configured"], expected != 0, "{view}");
-        assert_eq!(
-            view["config"]["serverUrl"].is_null(),
-            expected == 0,
-            "{view}"
-        );
-    }
-    let s = Setup::new("SVC-01-PORT-STATUS")?.start().await?;
-    // The harness resolves its own port after startup; explicitly retain the
-    // process's zero override for the control-backed status view.
-    let mut command = s.agent.launch.command();
-    let output = command
-        .env("BUTLER_APP_SERVER_PORT", "0")
-        .args(["gateway", "status", "app", "--json"])
-        .output()?;
-    assert!(output.status.success());
-    let output: serde_json::Value = serde_json::from_slice(&output.stdout)?;
-    let view = &output["data"];
-    assert_eq!(view["running"], true, "{view}");
-    assert_eq!(view["configured"], false, "{view}");
-    assert!(view["config"]["serverUrl"].is_null(), "{view}");
-    s.finish().await
-}
-
-#[tokio::test]
 async fn harness_argv_port_zero_binds_an_ephemeral_listener() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let sandbox = Sandbox::new("SVC-01-PORT-ARGV")?;

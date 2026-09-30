@@ -248,23 +248,11 @@ async fn ins_02_install_update_rollback_uninstall() -> Result<(), HarnessError> 
     let latest = ok(&world.butler(&["update", "--check", "--json"])?)?;
     assert_eq!(latest["data"]["update_available"], false, "{latest}");
 
-    // versions marks the active one.
-    let versions = ok(&world.butler(&["versions", "--json"])?)?;
-    let listed: Vec<_> = versions["data"]["versions"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|entry| {
-            (
-                entry["version"].as_str().unwrap().to_owned(),
-                entry["active"] == true,
-            )
-        })
-        .collect();
+    assert!(world.agent_home.join(&v1.dir).is_dir());
+    assert!(world.agent_home.join(&v2.dir).is_dir());
     assert_eq!(
-        listed,
-        [("0.0.2".to_owned(), true), ("0.0.1".to_owned(), false)],
-        "{versions}"
+        butler_platform::install_link::read(&world.agent_home, "current")?,
+        Some(v2.dir.clone())
     );
 
     // rollback: back on the first version, the service restarted onto it.
@@ -341,7 +329,7 @@ async fn ins_02_install_update_rollback_uninstall() -> Result<(), HarnessError> 
 /// `service install | status | uninstall` write, report and remove the
 /// login-start definition, and run nothing.
 fn login_start_registration(world: &World) -> Result<(), HarnessError> {
-    let installed = ok(&world.butler(&["service", "install", "--files-only", "--json"])?)?;
+    let installed = ok(&world.butler(&["startup", "enable", "--files-only", "--json"])?)?;
     let definition = PathBuf::from(installed["data"]["definition"].as_str().unwrap());
     assert!(
         definition.starts_with(&world.sandbox.home),
@@ -360,14 +348,16 @@ fn login_start_registration(world: &World) -> Result<(), HarnessError> {
         Manager::SystemdUser => assert!(text.contains("Restart=on-failure"), "{text}"),
         Manager::TaskScheduler => panic!("Windows is not supported yet"),
     }
-    let status = ok(&world.butler(&["service", "status", "--json"])?)?;
+    let status = ok(&world.butler(&["startup", "status", "--json"])?)?;
     assert_eq!(status["data"]["registered"], true, "{status}");
-    ok(&world.butler(&["service", "uninstall", "--files-only", "--json"])?)?;
+    let alias = ok(&world.butler(&["service", "status", "--json"])?)?;
+    assert_eq!(alias["data"], status["data"]);
+    ok(&world.butler(&["startup", "disable", "--files-only", "--json"])?)?;
     assert!(!definition.exists(), "the definition survived uninstall");
-    let status = ok(&world.butler(&["service", "status", "--json"])?)?;
+    let status = ok(&world.butler(&["startup", "status", "--json"])?)?;
     assert_eq!(status["data"]["registered"], false, "{status}");
     // Registered again, it is the installation's to remove at uninstall.
-    ok(&world.butler(&["service", "install", "--files-only", "--json"])?)?;
+    ok(&world.butler(&["startup", "enable", "--files-only", "--json"])?)?;
     assert!(definition.exists());
     Ok(())
 }

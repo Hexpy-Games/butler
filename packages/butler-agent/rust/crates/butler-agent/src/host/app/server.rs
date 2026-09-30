@@ -248,15 +248,21 @@ impl AppServer {
     }
 
     pub(crate) async fn stop_accepting(&self) -> Result<(), BtccError> {
-        self.listener_ready.store(false, Ordering::Release);
         if let Some(listener) = &self.listener {
             listener.stop_accepting();
         }
-        self.application.quiesce_queue().await.map_err(app_error)
+        let queue = self
+            .application
+            .stop_queue_dispatch()
+            .await
+            .map_err(app_error);
+        self.listener_ready.store(false, Ordering::Release);
+        queue
     }
 
     /// Stop HTTP admission before the process drains its native inbound queue.
     pub(crate) async fn stop_listener(&mut self) -> Result<(), BtccError> {
+        let queue = self.stop_accepting().await;
         self.listener_ready.store(false, Ordering::Release);
         self.application.cancel_updates();
         let listener = match self.listener.take() {
@@ -268,7 +274,7 @@ impl AppServer {
         };
         let projection = self.application.drain_projection().await.map_err(app_error);
         let dispatch = self.application.stop_dispatch().await.map_err(app_error);
-        listener.and(projection).and(dispatch)
+        queue.and(listener).and(projection).and(dispatch)
     }
 
     /// Drain the App projection and its file jobs before native runtime owners.

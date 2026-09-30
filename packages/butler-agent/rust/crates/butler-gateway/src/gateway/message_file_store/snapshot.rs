@@ -46,7 +46,8 @@ pub(super) fn write(
         created_at: clock.now_iso(),
     };
     fs::create_dir_all(root).map_err(GatewayApplicationError::internal_from)?;
-    fs::write(root.join(id), body.as_bytes()).map_err(GatewayApplicationError::internal_from)?;
+    replace_private(root.join(id), body.as_bytes(), "message_snapshot")
+        .map_err(GatewayApplicationError::internal_from)?;
     Ok(file)
 }
 
@@ -57,4 +58,12 @@ fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
         message: message.into(),
         source: None,
     }
+}
+
+fn replace_private(path: impl AsRef<Path>, bytes: &[u8], point: &str) -> std::io::Result<()> {
+    butler_platform::secure_fs::replace_private(
+        path.as_ref(),
+        |file| butler_platform::secure_fs::fault_write(file, bytes, point),
+        |error| error,
+    )
 }

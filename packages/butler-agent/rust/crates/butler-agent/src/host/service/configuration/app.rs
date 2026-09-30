@@ -192,12 +192,6 @@ impl AppServiceConfiguration {
         &self.gateway.allowed_hosts
     }
 
-    /// The local admin credential (`app/runtime/auth/local-admin.json`),
-    /// when it exists; Settings → Security requires it.
-    pub(crate) fn admin_credential(&self) -> Option<&str> {
-        self.gateway.admin_credential.as_deref()
-    }
-
     /// `config.remoteAccessEnabled`: also listen on the LAN.
     pub(crate) fn remote_access_enabled(&self) -> bool {
         self.gateway.remote_access_enabled

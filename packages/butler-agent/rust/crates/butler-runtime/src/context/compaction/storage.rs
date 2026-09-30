@@ -53,14 +53,15 @@ pub fn compaction_snapshot_path(data_root: &Path, session_id: &str) -> PathBuf {
         .join(format!("{safe_id}.jsonl"))
 }
 
-pub(super) struct CompactionLock {
-    path: PathBuf,
+pub(crate) struct CompactionLock {
+    _lock: butler_platform::instance::InstanceLock,
 }
 
 impl CompactionLock {
-    pub(super) async fn acquire(data_root: &Path, session_id: &str) -> ContextResult<Self> {
+    pub(crate) async fn acquire(data_root: &Path, session_id: &str) -> ContextResult<Self> {
         let snapshot = compaction_snapshot_path(data_root, session_id);
-        let lock_path = snapshot.with_extension("lock");
+        // Keep a stable lock inode. Old crash-left mkdir locks must not block recovery.
+        let lock_path = snapshot.with_extension("flock");
         if let Some(parent) = lock_path.parent() {
             tokio::fs::create_dir_all(parent)
                 .await
@@ -68,10 +69,22 @@ impl CompactionLock {
         }
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {
-            match tokio::fs::create_dir(&lock_path).await {
-                Ok(()) => return Ok(Self { path: lock_path }),
-                // Only a held lock is worth waiting for; other failures are final.
-                Err(error) if error.kind() != std::io::ErrorKind::AlreadyExists => {
+            let path = lock_path.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                let mut options = OpenOptions::new();
+                options.create(true).read(true).write(true);
+                butler_platform::secure_fs::owner_only(&mut options);
+                butler_platform::secure_fs::no_follow(&mut options);
+                let file = options
+                    .open(path)
+                    .map_err(butler_platform::instance::LockError::Failed)?;
+                butler_platform::instance::InstanceLock::try_exclusive(file)
+            })
+            .await
+            .map_err(|error| lock_io_error(std::io::Error::other(error)))?;
+            match result {
+                Ok(lock) => return Ok(Self { _lock: lock }),
+                Err(butler_platform::instance::LockError::Failed(error)) => {
                     return Err(lock_io_error(error));
                 }
                 Err(_) if Instant::now() >= deadline => {
@@ -83,12 +96,6 @@ impl CompactionLock {
                 Err(_) => tokio::time::sleep(Duration::from_millis(25)).await,
             }
         }
-    }
-}
-
-impl Drop for CompactionLock {
-    fn drop(&mut self) {
-        let _ignored_lock_cleanup = fs::remove_dir_all(&self.path);
     }
 }
 

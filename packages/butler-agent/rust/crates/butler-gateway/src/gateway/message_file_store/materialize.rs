@@ -3,7 +3,7 @@
 use std::{
     collections::HashSet,
     fs::{self, File},
-    io::{Read, Write},
+    io::Read,
     path::{Path, PathBuf},
 };
 
@@ -85,24 +85,9 @@ pub(super) fn run(
         if pending.len() >= MAX_FILES {
             continue;
         }
-        let staged = if let Some(bytes) = bytes {
-            let directory = match &staging.0 {
-                Some(directory) => directory,
-                None => {
-                    fs::create_dir_all(root).map_err(internal)?;
-                    let directory =
-                        root.join(format!(".artifact-staging-{}", uuid::Uuid::new_v4()));
-                    fs::create_dir(&directory).map_err(internal)?;
-                    staging.0.insert(directory)
-                }
-            };
-            let path = directory.join(pending.len().to_string());
-            let mut file = File::create(&path).map_err(internal)?;
-            file.write_all(&bytes).map_err(internal)?;
-            Some(path)
-        } else {
-            None // Oversize: source checks the 10 MiB limit when files are created.
-        };
+        let staged = bytes
+            .map(|bytes| stage(root, &mut staging, pending.len(), &bytes))
+            .transpose()?;
         pending.push(PendingFile {
             staged,
             name,
@@ -113,6 +98,41 @@ pub(super) fn run(
         });
     }
 
+    publish_files(root, clock, pending)
+}
+
+fn stage(
+    root: &Path,
+    staging: &mut Staging,
+    index: usize,
+    bytes: &[u8],
+) -> Result<PathBuf, GatewayApplicationError> {
+    let directory = match &staging.0 {
+        Some(directory) => directory,
+        None => {
+            butler_platform::secure_fs::create_private_dir_all(root).map_err(internal)?;
+            let directory = root.join(format!(".artifact-staging-{}", uuid::Uuid::new_v4()));
+            butler_platform::secure_fs::create_private_dir(&directory).map_err(internal)?;
+            staging.0.insert(directory)
+        }
+    };
+    let path = directory.join(index.to_string());
+    butler_platform::secure_fs::replace_private(
+        &path,
+        |file| {
+            butler_platform::secure_fs::fault_write(file, bytes, "message_materialize")
+                .map_err(internal)
+        },
+        internal,
+    )?;
+    Ok(path)
+}
+
+fn publish_files(
+    root: &Path,
+    clock: &dyn AppIdentityClock,
+    pending: Vec<PendingFile>,
+) -> Result<Vec<MaterializedResponderFile>, GatewayApplicationError> {
     let mut files = Vec::with_capacity(pending.len());
     for item in pending {
         if item.size > MAX_BYTES as u64 {
@@ -128,7 +148,12 @@ pub(super) fn run(
         }
         let created_at = clock.now_iso();
         let staged = item.staged.ok_or(GatewayApplicationError::internal())?;
-        fs::rename(staged, root.join(&id)).map_err(internal)?;
+        butler_platform::secure_fs::fault_checkpoint("message_materialize_publish")
+            .map_err(internal)?;
+        butler_platform::secure_fs::rename(&staged, &root.join(&id)).map_err(internal)?;
+        butler_platform::secure_fs::sync_directory(root)
+            .unwrap_or(Ok(()))
+            .map_err(internal)?;
         files.push(MaterializedResponderFile {
             id: id.clone(),
             kind: item.kind.into(),

@@ -54,8 +54,10 @@ fn files(root: &Path) -> Value {
     )
 }
 
+// test-category: format-pin
 #[test]
 fn observations_and_sync_requests_keep_their_bytes() {
+    one_append_contains_the_newline();
     let root = std::env::temp_dir().join(format!("butler-completion-pin-{}", uuid::Uuid::new_v4()));
     let publisher = CompletionPublisher::new(
         &root,
@@ -91,4 +93,23 @@ fn observations_and_sync_requests_keep_their_bytes() {
     }
     let expected = fs::read_to_string(&path).unwrap();
     assert_eq!(text, expected, "completion format changed");
+}
+
+fn one_append_contains_the_newline() {
+    struct Boundary(Vec<u8>);
+    impl std::io::Write for Boundary {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            if !self.0.is_empty() {
+                return Err(std::io::ErrorKind::BrokenPipe.into());
+            }
+            self.0.extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut writer = Boundary(Vec::new());
+    super::queue::write_entry(&mut writer, "{\"job_id\":\"one\"}").unwrap();
+    assert_eq!(writer.0, b"{\"job_id\":\"one\"}\n");
 }

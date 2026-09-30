@@ -109,7 +109,11 @@ impl AppStorage {
     {
         let (completion_tx, completion_rx) = oneshot::channel();
         let job = Box::new(move |connection: &mut Connection| {
-            let result = operation(connection);
+            let result = super::monitoring::materialized::refresh(connection)
+                .and_then(|()| operation(connection))
+                .and_then(|value| {
+                    super::monitoring::materialized::refresh(connection).map(|()| value)
+                });
             // Committed events reach subscribers before the caller sees the result.
             event_outbox::flush();
             let _cancelled_observer = completion_tx.send(result);
@@ -139,9 +143,9 @@ impl AppStorage {
         })?
     }
 
-    /// Folds the WAL into the database file and truncates it.
+    /// Copies available WAL pages without waiting for foreground readers.
     pub(super) async fn checkpoint(&self) -> StorageResult<()> {
-        self.execute(|connection| tuning::checkpoint(connection))
+        self.execute(|connection| tuning::passive_checkpoint(connection))
             .await
     }
 
@@ -221,6 +225,7 @@ fn run_connection_lane(
         schema::seed(&connection, initialized_at)?;
         schema::migrate_legacy_schedules(&mut connection, butler_data.map(PathBuf::as_path))?;
         tuning::analyze_at_open(&connection)?;
+        super::monitoring::materialized::refresh(&connection)?;
         event_outbox::install(&connection);
         Ok(connection)
     })();

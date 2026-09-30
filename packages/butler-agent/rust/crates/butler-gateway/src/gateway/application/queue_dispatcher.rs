@@ -20,19 +20,28 @@ const COMMAND_CAPACITY: usize = 64;
 const FIFO_WINDOW: usize = 20;
 
 #[derive(Clone)]
-pub(super) struct QueueWake(mpsc::Sender<Command>);
+pub(super) struct QueueWake {
+    sender: mpsc::Sender<Command>,
+    cancellation: CancellationToken,
+}
 
 impl QueueWake {
     pub(super) async fn chat(&self, chat_id: String) -> Result<(), GatewayApplicationError> {
-        self.0
-            .send(Command::Wake(Some(chat_id)))
-            .await
-            .map_err(GatewayApplicationError::internal_from)
+        // Terminal projection still settles claims after queue admission stops.
+        // Persisted waiting input will be dispatched by the next process.
+        if self.cancellation.is_cancelled() {
+            return Ok(());
+        }
+        match self.sender.send(Command::Wake(Some(chat_id))).await {
+            Ok(()) => Ok(()),
+            Err(_) if self.cancellation.is_cancelled() => Ok(()),
+            Err(error) => Err(GatewayApplicationError::internal_from(error)),
+        }
     }
 
     pub(super) async fn drain_chat(&self, chat_id: String) -> Result<(), GatewayApplicationError> {
         let (reply, result) = oneshot::channel();
-        self.0
+        self.sender
             .send(Command::Drain { chat_id, reply })
             .await
             .map_err(GatewayApplicationError::internal_from)?;
@@ -52,7 +61,6 @@ struct Inner {
     close: Mutex<CloseState>,
     closed: Notify,
     cancellation: CancellationToken,
-    admission: CancellationToken,
 }
 struct CloseState {
     started: bool,
@@ -65,7 +73,6 @@ enum Command {
         chat_id: String,
         reply: oneshot::Sender<Result<(), GatewayApplicationError>>,
     },
-    Quiesce(oneshot::Sender<()>),
     Close,
 }
 
@@ -73,8 +80,7 @@ impl QueueDispatcher {
     pub(super) fn start() -> (Self, QueueWake) {
         let (sender, receiver) = mpsc::channel(COMMAND_CAPACITY);
         let cancellation = CancellationToken::new();
-        let admission = CancellationToken::new();
-        let task = tokio::spawn(run(receiver, cancellation.clone(), admission.clone()));
+        let task = tokio::spawn(run(receiver, cancellation.clone()));
         let owner = Self {
             inner: Arc::new(Inner {
                 sender: sender.clone(),
@@ -84,11 +90,16 @@ impl QueueDispatcher {
                     result: None,
                 }),
                 closed: Notify::new(),
-                cancellation,
-                admission,
+                cancellation: cancellation.clone(),
             }),
         };
-        (owner, QueueWake(sender))
+        (
+            owner,
+            QueueWake {
+                sender,
+                cancellation,
+            },
+        )
     }
 
     pub(super) async fn initialize(
@@ -110,14 +121,6 @@ impl QueueDispatcher {
             .map_err(GatewayApplicationError::internal_from)
     }
 
-    pub(super) async fn quiesce(&self) -> Result<(), GatewayApplicationError> {
-        let closing = lock(&self.inner.close).started;
-        if closing {
-            return self.close().await;
-        }
-        quiesce_queue(&self.inner).await
-    }
-
     pub(super) async fn close(&self) -> Result<(), GatewayApplicationError> {
         let start = {
             let mut state = lock(&self.inner.close);
@@ -131,20 +134,21 @@ impl QueueDispatcher {
                 true
             }
         };
-        if start && let Some(task) = lock(&self.inner.task).take() {
-            let inner = Arc::clone(&self.inner);
-            // Completion remains owned if the first close caller is dropped.
-            tokio::spawn(async move {
-                let admission = quiesce_queue(&inner).await;
-                inner.cancellation.cancel();
-                let _ = inner.sender.send(Command::Close).await;
-                let result = task
-                    .await
-                    .map_err(GatewayApplicationError::internal_from)
-                    .and_then(|value| value);
-                lock(&inner.close).result = Some(admission.and(result));
-                inner.closed.notify_waiters();
-            });
+        if start {
+            self.inner.cancellation.cancel();
+            if let Some(task) = lock(&self.inner.task).take() {
+                let inner = Arc::clone(&self.inner);
+                // Completion remains owned if the first close caller is dropped.
+                tokio::spawn(async move {
+                    let _ = inner.sender.send(Command::Close).await;
+                    let result = task
+                        .await
+                        .map_err(GatewayApplicationError::internal_from)
+                        .and_then(|value| value);
+                    lock(&inner.close).result = Some(result);
+                    inner.closed.notify_waiters();
+                });
+            }
         }
         loop {
             // Register before inspecting the result so completion cannot be lost.
@@ -165,21 +169,9 @@ impl Drop for Inner {
     }
 }
 
-async fn quiesce_queue(inner: &Inner) -> Result<(), GatewayApplicationError> {
-    inner.admission.cancel();
-    let (reply, result) = oneshot::channel();
-    inner
-        .sender
-        .send(Command::Quiesce(reply))
-        .await
-        .map_err(GatewayApplicationError::internal_from)?;
-    result.await.map_err(GatewayApplicationError::internal_from)
-}
-
 async fn run(
     mut receiver: mpsc::Receiver<Command>,
     cancellation: CancellationToken,
-    admission: CancellationToken,
 ) -> Result<(), GatewayApplicationError> {
     let mut application: Option<AppApplication> = None;
     let mut deadline: Option<Duration> = None;
@@ -190,56 +182,42 @@ async fn run(
             command = receiver.recv() => match command {
                 Some(Command::Initialize(app)) => {
                     let app = application.insert(*app);
-                    if !cycle(&cancellation, &admission, app, None).await { return Ok(()); }
-                    deadline = next_deadline(&admission, app).await.ok().flatten();
+                    if !cycle(&cancellation, app, None).await { return Ok(()); }
+                    deadline = next_deadline(app).await.ok().flatten();
                 }
                 Some(Command::Wake(chat)) => {
                     if let Some(app) = application.as_ref() {
-                        if !cycle(&cancellation, &admission, app, chat.as_deref()).await { return Ok(()); }
-                        deadline = next_deadline(&admission, app).await.ok().flatten();
+                        if !cycle(&cancellation, app, chat.as_deref()).await { return Ok(()); }
+                        deadline = next_deadline(app).await.ok().flatten();
                     }
                 }
                 Some(Command::Drain { chat_id, reply }) => {
-                    let result = tokio::select! {
-                        () = cancellation.cancelled() => Err(GatewayApplicationError::internal()),
-                        result = async {
-                            match application.as_ref() {
-                                Some(app) => recover_and_drain(&admission, app, Some(&chat_id)).await,
-                                None => Err(GatewayApplicationError::internal()),
-                            }
-                        } => result,
+                    let result = match application.as_ref() {
+                        Some(app) => recover_and_drain(&cancellation, app, Some(&chat_id)).await,
+                        None => Err(GatewayApplicationError::internal()),
                     };
                     if let Some(app) = application.as_ref() {
-                        deadline = next_deadline(&admission, app).await.ok().flatten();
+                        deadline = next_deadline(app).await.ok().flatten();
                     }
                     let _ = reply.send(result);
-                }
-                Some(Command::Quiesce(reply)) => {
-                    deadline = None;
-                    let _ = reply.send(());
                 }
                 Some(Command::Close) | None => return Ok(()),
             },
             () = async { if let Some(delay) = delay { delay.await } }, if deadline.is_some() => {
                 if let Some(app) = application.as_ref() {
-                    if !cycle(&cancellation, &admission, app, None).await { return Ok(()); }
-                    deadline = next_deadline(&admission, app).await.ok().flatten();
+                    if !cycle(&cancellation, app, None).await { return Ok(()); }
+                    deadline = next_deadline(app).await.ok().flatten();
                 }
             }
         }
     }
 }
 
-async fn cycle(
-    cancellation: &CancellationToken,
-    admission: &CancellationToken,
-    app: &AppApplication,
-    chat: Option<&str>,
-) -> bool {
-    tokio::select! {
-        () = cancellation.cancelled() => false,
-        _ = recover_and_drain(admission, app, chat) => true,
-    }
+async fn cycle(cancellation: &CancellationToken, app: &AppApplication, chat: Option<&str>) -> bool {
+    // An admission owns a durable App claim before native enqueue. Dropping it
+    // on close can leave a thinking turn with no native record to recover.
+    let _ = recover_and_drain(cancellation, app, chat).await;
+    !cancellation.is_cancelled()
 }
 
 async fn recover_and_drain(
@@ -248,7 +226,7 @@ async fn recover_and_drain(
     only_chat: Option<&str>,
 ) -> Result<(), GatewayApplicationError> {
     if cancellation.is_cancelled() {
-        return Ok(());
+        return Err(GatewayApplicationError::internal());
     }
     app.recover_expired().await?;
     let chats = if let Some(chat) = only_chat {
@@ -263,7 +241,7 @@ async fn recover_and_drain(
 }
 
 async fn drain_chat(
-    admission: &CancellationToken,
+    cancellation: &CancellationToken,
     app: &AppApplication,
     chat_id: &str,
 ) -> Result<(), GatewayApplicationError> {
@@ -274,7 +252,7 @@ async fn drain_chat(
         .await
         .map_err(app_error)?;
     for row in rows {
-        if admission.is_cancelled() {
+        if cancellation.is_cancelled() {
             return Ok(());
         }
         let chat = chat_id.to_owned();
@@ -388,13 +366,7 @@ fn session_has_active_turn(db: &mut Connection, chat: &str) -> Result<bool, AppS
     db.query_row_cached("SELECT 1 FROM turns WHERE chat_id=?1 AND state IN ('accepted','thinking','streaming','waiting_for_form','waiting_for_tool','cancelling','retrying') LIMIT 1", [chat], |_| Ok(()))
         .optional().map(|row| row.is_some()).map_err(AppStorageError::sqlite)
 }
-async fn next_deadline(
-    admission: &CancellationToken,
-    app: &AppApplication,
-) -> Result<Option<Duration>, GatewayApplicationError> {
-    if admission.is_cancelled() {
-        return Ok(None);
-    }
+async fn next_deadline(app: &AppApplication) -> Result<Option<Duration>, GatewayApplicationError> {
     let owner = app.queue_owner.clone();
     let now = app.dependencies.identity_clock.now_iso();
     app.storage

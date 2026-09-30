@@ -19,19 +19,36 @@ use install_support::{error_code, ok, run, sandbox};
 type Listing = Vec<(String, bool, bool)>;
 
 fn installed(launch: &Launch) -> Result<Listing, HarnessError> {
-    let listed = ok(&run(launch.command().args(["versions", "--json"]))?)?;
-    Ok(listed["data"]["versions"]
-        .as_array()
-        .unwrap()
+    let home = launch
+        .env
         .iter()
-        .map(|entry| {
-            (
-                entry["version"].as_str().unwrap().to_owned(),
-                entry["active"] == true,
-                entry["previous"] == true,
-            )
-        })
-        .collect())
+        .find(|(key, _)| key == "BUTLER_AGENT_HOME")
+        .unwrap()
+        .1
+        .clone();
+    let home = std::path::Path::new(&home);
+    let active = butler_platform::install_link::read(home, "current")?.unwrap_or_default();
+    let previous = butler_platform::install_link::read(home, "previous")?.unwrap_or_default();
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(home)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+        let manifest = entry.path().join("native-agent-manifest.json");
+        if !manifest.is_file() {
+            continue;
+        }
+        let value: serde_json::Value = serde_json::from_slice(&fs::read(manifest)?)?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        entries.push((
+            value["version"].as_str().unwrap().to_owned(),
+            active.trim() == name,
+            previous.trim() == name,
+        ));
+    }
+    entries.sort_by(|a, b| b.0.cmp(&a.0));
+    Ok(entries)
 }
 
 fn entry(version: &str, active: bool, previous: bool) -> (String, bool, bool) {
