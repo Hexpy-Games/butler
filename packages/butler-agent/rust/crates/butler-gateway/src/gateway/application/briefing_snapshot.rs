@@ -99,7 +99,7 @@ fn read_projects(
     let mut titles = database
         .prepare(
             "SELECT title FROM chats WHERE project_id = ?1 AND archived = 0 \
-             ORDER BY updated_at DESC LIMIT 8",
+             ORDER BY updated_at DESC, id ASC LIMIT 8",
         )
         .map_err(AppNewChatBriefingReadError)?;
     let mut output = Vec::with_capacity(projects.len());

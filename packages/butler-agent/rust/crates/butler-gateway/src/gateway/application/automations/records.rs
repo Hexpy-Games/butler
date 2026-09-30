@@ -77,7 +77,7 @@ pub(super) fn list(
     if target_id.is_some() {
         sql.push_str(" AND a.target_session_id=?1");
     }
-    sql.push_str(" ORDER BY a.updated_at DESC LIMIT 200");
+    sql.push_str(" ORDER BY a.updated_at DESC,a.id ASC LIMIT 200");
     let mut statement = db.prepare(&sql).map_err(AppStorageError::sqlite)?;
     let rows = if let Some(id) = target_id {
         statement.query_map([id], row)

@@ -178,7 +178,17 @@ async fn close_drains_running_and_queued_mutations_after_callers_drop() {
     assert_eq!(owner.active_count(), 2);
     let closing = owner.clone();
     let join = tokio::spawn(async move { closing.close().await });
-    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    let close_deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(1);
+    loop {
+        if owner.inner.state.lock().closing {
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < close_deadline,
+            "close did not stop admission"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+    }
     let rejected = MutationCommand::Write(super::contracts::WriteMutation {
         context: context(),
         path: "rejected.txt".into(),

@@ -102,7 +102,7 @@ async fn cred_01_plaintext_keys_move_to_the_store_at_start() -> Result<(), Harne
         .env("BUTLER_KIMI_BASE_URL", format!("{}/v1", chat.base_url));
     let data = setup.sandbox.data.clone();
     fixtures::onboarding_complete(&data)?;
-    fixtures::scheduler_ran_today(&data)?;
+    fixtures::scheduler_ran_today(&data, fixtures::FIXTURE_TIME)?;
     fs::create_dir_all(data.join("auth"))?;
     let unusable = json!({"id": "codex", "provider_id": "openai", "auth_type": "codex_oauth"});
     fs::write(

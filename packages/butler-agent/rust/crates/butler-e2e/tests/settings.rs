@@ -91,8 +91,15 @@ async fn set_02_unavailable_and_malformed_settings_are_rejected() -> Result<(), 
     butler_e2e::gate!();
     let mut s = Setup::new("SET-02")?.cassette("SET-02").start().await?;
     let before = s.gw.get("/settings").await?.text;
+    let history = s.gw.events_since(0).await?;
+    let last_event_id = history.last().and_then(|event| event["id"].as_u64());
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
-    tokio::time::sleep(Duration::from_millis(300)).await;
+    if let Some(last_event_id) = last_event_id {
+        live.wait_for(Duration::from_secs(10), |event| {
+            event["id"].as_u64() == Some(last_event_id)
+        })
+        .await?;
+    }
     let baseline_updates = count_settings_updates(&live);
 
     for field in ["model", "consolidation_model"] {
@@ -123,6 +130,7 @@ async fn set_02_unavailable_and_malformed_settings_are_rejected() -> Result<(), 
         before,
         "rejected PATCHes changed settings"
     );
+    // Negative observation window: rejected PATCHes must emit no settings event.
     tokio::time::sleep(Duration::from_millis(300)).await;
     assert_eq!(
         count_settings_updates(&live),

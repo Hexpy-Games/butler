@@ -339,14 +339,22 @@ async fn q_01_queue_while_busy() -> Result<(), HarnessError> {
         );
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
-    tokio::time::sleep(Duration::from_millis(500)).await;
-    let users: Vec<String> =
-        s.gw.messages("general")
-            .await?
+    let users: Vec<String> = loop {
+        let messages = s.gw.messages("general").await?;
+        let users: Vec<String> = messages
             .iter()
-            .filter(|m| m["role"] == "user")
-            .filter_map(|m| m["text"].as_str().map(str::to_owned))
+            .filter(|message| message["role"] == "user")
+            .filter_map(|message| message["text"].as_str().map(str::to_owned))
             .collect();
+        if users.len() >= 3 {
+            break users;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "delivered turns were not persisted: {users:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    };
     assert_eq!(users.len(), 3, "{users:?}");
     assert!(
         users[1].contains("first") && users[2].contains("edited"),

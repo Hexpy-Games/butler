@@ -272,7 +272,7 @@ async fn acc_05_an_existing_install_keeps_full_access_until_it_saves_a_mode()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let setup = Setup::new("ACC-05")?.fixture(Fixture::Empty);
-    fixtures::scheduler_ran_today(&setup.sandbox.data)?;
+    fixtures::scheduler_ran_today(&setup.sandbox.data, fixtures::FIXTURE_TIME)?;
     let mut s = setup.start().await?;
     assert_eq!(
         s.gw.settings().await?["access_mode"],
