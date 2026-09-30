@@ -9,6 +9,7 @@
 
 use std::time::Duration;
 
+use super::cassette::Cassette;
 use serde_json::{Value, json};
 
 use super::agent::{Agent, Launch};
@@ -21,8 +22,9 @@ use super::sanitize::Placeholders;
 use super::{HarnessError, harness_error};
 
 mod sources;
+mod stub;
 
-use sources::{apply_credential, live_source, record_source, replay_source};
+use sources::{apply_credential, live_source, record_source, replay_source, stub_source};
 
 pub use sources::STUB_REFRESH_TOKEN;
 
@@ -61,6 +63,7 @@ impl Access {
 enum Source {
     None,
     Cassette(String),
+    Stub(Cassette),
     Live(LiveProvider),
 }
 
@@ -253,6 +256,15 @@ impl Setup {
         let (provider, choice, credential) = match source {
             Source::None => (None, model.unwrap_or(default_model), None),
             Source::Live(live_provider) => live_source(&live_provider, model, &mut launch),
+            Source::Stub(cassette) => {
+                stub_source(
+                    cassette,
+                    &placeholders,
+                    stub_credential.then(|| sandbox.codex_home()),
+                    &mut launch,
+                )
+                .await?
+            }
             Source::Cassette(name)
                 if (flag("BUTLER_E2E_RECORD") && !replay_only) || record_into.is_some() =>
             {

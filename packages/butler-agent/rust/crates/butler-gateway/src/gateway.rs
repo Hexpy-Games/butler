@@ -294,6 +294,7 @@ pub trait GatewayApplication:
     fn list_automations(
         &self,
         target_session_id: Option<String>,
+        include_deleted: bool,
     ) -> ApplicationFuture<AutomationListView>;
     fn get_automation(&self, id: String) -> ApplicationFuture<AutomationDetailView>;
     fn create_automation(

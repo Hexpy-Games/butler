@@ -241,6 +241,10 @@ const CORE_SCHEMA: &str = r"
       target_kind TEXT NOT NULL,
       target_session_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
       interval_seconds INTEGER NOT NULL,
+      schedule_type TEXT NOT NULL DEFAULT 'interval',
+      run_at TEXT,
+      start_at TEXT,
+      legacy_record_json TEXT,
       access_mode TEXT,
       state TEXT NOT NULL,
       next_run_at TEXT,
@@ -275,6 +279,18 @@ const CORE_SCHEMA: &str = r"
 
     CREATE INDEX IF NOT EXISTS app_automation_runs_automation_idx
     ON app_automation_runs(automation_id);
+
+    CREATE INDEX IF NOT EXISTS app_automation_runs_queued_idx
+    ON app_automation_runs(state) WHERE state='queued';
+
+    CREATE INDEX IF NOT EXISTS app_automations_due_idx
+    ON app_automations(next_run_at) WHERE state='enabled' AND next_run_at IS NOT NULL;
+
+    CREATE INDEX IF NOT EXISTS app_automations_active_updated_idx
+    ON app_automations(updated_at DESC) WHERE state!='deleted';
+
+    CREATE INDEX IF NOT EXISTS app_automations_updated_idx
+    ON app_automations(updated_at DESC);
 
     CREATE INDEX IF NOT EXISTS message_files_owner_idx
     ON message_files(owner_session_id, message_id);

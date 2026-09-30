@@ -4,6 +4,7 @@ mod core;
 mod migration;
 mod project_ledger_bindings;
 mod schedule_access;
+mod schedule_legacy;
 mod space;
 mod supporting;
 mod wallpapers;
@@ -93,6 +94,13 @@ pub(super) fn seed(connection: &Connection, now: &str) -> Result<(), AppStorageE
          AND NOT EXISTS(SELECT 1 FROM messages WHERE messages.chat_id=chats.id)", [now],
     ).map_err(AppStorageError::sqlite)?;
     Ok(())
+}
+
+pub(super) fn migrate_legacy_schedules(
+    connection: &mut Connection,
+    butler_data: Option<&Path>,
+) -> Result<(), AppStorageError> {
+    schedule_legacy::migrate(connection, butler_data)
 }
 
 #[cfg(test)]

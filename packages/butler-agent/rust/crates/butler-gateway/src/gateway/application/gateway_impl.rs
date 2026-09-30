@@ -184,9 +184,13 @@ impl GatewayApplication for AppApplication {
     fn list_automations(
         &self,
         target_session_id: Option<String>,
+        include_deleted: bool,
     ) -> ApplicationFuture<AutomationListView> {
         let this = self.clone_handle();
-        Box::pin(async move { this.list_automations_owned(target_session_id).await })
+        Box::pin(async move {
+            this.list_automations_owned(target_session_id, include_deleted)
+                .await
+        })
     }
     fn get_automation(&self, id: String) -> ApplicationFuture<AutomationDetailView> {
         let this = self.clone_handle();
