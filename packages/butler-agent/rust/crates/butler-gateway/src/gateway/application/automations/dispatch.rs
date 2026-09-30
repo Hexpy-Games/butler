@@ -247,6 +247,17 @@ impl AppApplication {
         let completed = self.dependencies.identity_clock.now_iso();
         let next = if row.schedule_type == "once" {
             None
+        } else if row.state == "enabled" && row.schedule.is_some() {
+            let rule = row.schedule.clone();
+            let now = completed.clone();
+            Some(
+                tokio::task::spawn_blocking(move || {
+                    super::timing::next(rule.as_ref().ok_or_else(super::timing::invalid)?, &now)
+                })
+                .await
+                .map_err(GatewayApplicationError::internal_from)?
+                .map_err(app_error)?,
+            )
         } else if row.state == "enabled" {
             Some(
                 self.dependencies

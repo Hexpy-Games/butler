@@ -39,6 +39,7 @@ const COLUMNS: &[(&str, &str, &str)] = &[
         "schedule_type",
         "TEXT NOT NULL DEFAULT 'interval'",
     ),
+    ("app_automations", "schedule_json", "TEXT"),
     ("app_automations", "run_at", "TEXT"),
     ("app_automations", "start_at", "TEXT"),
     ("app_automations", "legacy_record_json", "TEXT"),

@@ -15,9 +15,9 @@
 
 use std::time::{Duration, Instant};
 
-use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::gateway::turn_state;
 use butler_e2e::e2e::scenario::{Scenario, Setup, accepted_turn_id};
+use butler_e2e::e2e::{HarnessError, cassette::Cassette};
 use rusqlite::Connection;
 
 const NUMBERS: &str = "Write the numbers from one to twelve as English words, separated by single spaces, and nothing else.";
@@ -129,7 +129,7 @@ async fn wait_retention_settled(s: &Scenario) -> Duration {
 }
 
 /// Sends the numbers request and returns the time to a delivered turn.
-async fn delivered_in(s: &Scenario) -> Result<Duration, HarnessError> {
+async fn delivered_in(s: &Scenario) -> Result<(Duration, String), HarnessError> {
     let started = Instant::now();
     let accepted = s.gw.say("general", NUMBERS).await?;
     let turn_id = accepted_turn_id(&accepted)?;
@@ -137,15 +137,37 @@ async fn delivered_in(s: &Scenario) -> Result<Duration, HarnessError> {
         s.gw.wait_terminal("general", &turn_id, Duration::from_secs(120))
             .await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
-    Ok(started.elapsed())
+    Ok((started.elapsed(), turn_id))
 }
 
-async fn session_view_p95(s: &Scenario) -> Result<Duration, HarnessError> {
+async fn session_view_p95(s: &Scenario, latest_turn: &str) -> Result<Duration, HarnessError> {
+    let answer = Cassette::load("TURN-01")?.exchanges[0]
+        .response
+        .output_text();
     let mut samples = Vec::with_capacity(20);
     for _ in 0..20 {
         let started = Instant::now();
-        s.gw.get("/session-view?session_id=general").await?;
+        let reply = s.gw.get("/session-view?session_id=general").await?;
         samples.push(started.elapsed());
+        assert_eq!(reply.status, 200, "{}", reply.text);
+        let view = reply.data();
+        assert_eq!(view["session_id"], "general");
+        assert_eq!(view["latest_turn"]["id"], latest_turn);
+        assert_eq!(view["latest_turn"]["state"], "delivered");
+        assert!(view["active_turn"].is_null());
+        assert_eq!(view["message_window"]["complete"], true);
+        assert_eq!(view["message_window"]["has_more"], false);
+        let messages = view["messages"].as_array().unwrap();
+        assert_eq!(messages.len(), 4, "{view}");
+        for pair in messages.chunks_exact(2) {
+            assert_eq!(pair[0]["role"], "user");
+            assert_eq!(pair[0]["text"], NUMBERS);
+            assert_eq!(pair[1]["role"], "assistant");
+            assert_eq!(pair[1]["text"], answer.trim());
+        }
+        assert!(messages.windows(2).all(|pair| {
+            pair[0]["cursor"].as_u64().unwrap() < pair[1]["cursor"].as_u64().unwrap()
+        }));
     }
     samples.sort();
     Ok(samples[18])
@@ -171,7 +193,7 @@ fn projection_stamps(db: &Connection) -> Vec<String> {
 async fn perf_01_owner_scale_delivery_and_restart() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("PERF-01")?.cassette("TURN-01").start().await?;
-    let empty = delivered_in(&s).await?;
+    let (empty, _) = delivered_in(&s).await?;
     s.agent.terminate().await?;
     seed_owner_scale(&database(&s));
     {
@@ -186,8 +208,8 @@ async fn perf_01_owner_scale_delivery_and_restart() -> Result<(), HarnessError> 
     let started = Instant::now();
     s.gw = s.agent.start_again().await?;
     let first_ready = started.elapsed();
-    let at_scale = delivered_in(&s).await?;
-    let view_p95 = session_view_p95(&s).await?;
+    let (at_scale, latest_turn) = delivered_in(&s).await?;
+    let view_p95 = session_view_p95(&s, &latest_turn).await?;
     eprintln!(
         "PERF-01 empty turn {empty:?}; owner-scale start {first_ready:?}, turn {at_scale:?}, session-view p95 {view_p95:?}"
     );

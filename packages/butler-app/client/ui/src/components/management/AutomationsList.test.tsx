@@ -25,7 +25,7 @@ test("each schedule row shows its access mode with the composer's icon and label
   try {
     const row = (access_mode: AccessMode) => renderToStaticMarkup(
       <AutomationsList
-        automations={[{ id: "a1", title: "Morning brief", target_label: "A", state: "enabled", interval_label: "1 hour", access_mode }]}
+        automations={[{ id: "a1", title: "Morning brief", target_label: "A", state: "enabled", interval_seconds: 3600, schedule_type: "interval", access_mode }]}
         onSelectAutomation={() => undefined}
         onNewAutomation={() => undefined}
       />,

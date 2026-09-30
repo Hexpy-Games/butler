@@ -968,6 +968,14 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     readOnlyDesc: "파일 읽기만 가능",
   },
   automations: {
+
+    saved: "예약 작업 저장됨", frequency: "주기", time: "시간", weekday: "요일",
+    interval: "간격", daily: "매일", weekdays: "평일", weekly: "매주", once: "한 번",
+    on: "켜짐", off: "꺼짐", next: (time) => `다음: ${time}`,
+    everyMinutes: (count) => `${count}분마다`, everyHours: (count) => `${count}시간마다`,
+    everySeconds: (count) => `${count}초마다`, dailyAt: (time) => `매일 ${time}`,
+    weekdaysAt: (time) => `평일 ${time}`, weeklyAt: (days, time) => `매주 ${days} ${time}`,
+    startAtLogin: "로그인 시 시작", loginHint: "예약 작업을 위해 로그인 시 시작을 켜세요. 설정 → 일반.", loginFailed: "로그인 시 시작 변경 실패",
     title: "예약 작업",
     scheduledCount: (count) => `예약된 프롬프트 ${count}개`,
     empty: "아직 예약 작업이 없습니다",

@@ -6,6 +6,7 @@ mod owner;
 mod records;
 mod scheduler;
 mod store;
+mod timing;
 
 #[cfg(test)]
 pub(in crate::gateway::application) use records::queued_sql;

@@ -811,6 +811,27 @@ export interface AppCopy {
     readOnlyDesc: string;
   };
   automations: {
+    saved: string;
+    frequency: string;
+    time: string;
+    weekday: string;
+    interval: string;
+    daily: string;
+    weekdays: string;
+    weekly: string;
+    once: string;
+    on: string;
+    off: string;
+    next: (time: string) => string;
+    everyMinutes: (count: number) => string;
+    everyHours: (count: number) => string;
+    everySeconds: (count: number) => string;
+    dailyAt: (time: string) => string;
+    weekdaysAt: (time: string) => string;
+    weeklyAt: (days: string, time: string) => string;
+    startAtLogin: string;
+    loginHint: string;
+    loginFailed: string;
     title: string;
     scheduledCount: (count: number) => string;
     empty: string;

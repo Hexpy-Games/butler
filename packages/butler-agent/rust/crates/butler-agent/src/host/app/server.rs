@@ -75,7 +75,10 @@ impl AppServer {
         owners: AppServerOwners,
         listener: TcpListener,
     ) -> Result<Self, BtccError> {
-        let artifacts = Arc::new(AppMessageFiles::new(data_root, Arc::new(SystemIdentity)));
+        let artifacts = Arc::new(AppMessageFiles::new(
+            data_root,
+            super::schedule_clock::clock(),
+        ));
         let result = Self::open_with_artifacts(
             runtime,
             data_root,
@@ -102,7 +105,7 @@ impl AppServer {
         listener: TcpListener,
     ) -> Result<Self, BtccError> {
         let listener_ready = Arc::new(AtomicBool::new(false));
-        let identity_clock: Arc<dyn AppIdentityClock> = Arc::new(SystemIdentity);
+        let identity_clock: Arc<dyn AppIdentityClock> = super::schedule_clock::clock();
         let address = listener.local_addr().map_err(|error| {
             BtccError::relayed("app_listener_address_failed", error.to_string())
         })?;
