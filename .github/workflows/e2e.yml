@@ -102,7 +102,10 @@ jobs:
           BUTLER_E2E_TIER: live
           BUTLER_E2E_SKIP_BUILD: "1"
           BUTLER_E2E_REPORT: ${{ runner.temp }}/e2e-live-report.txt
-        run: cargo test --locked -p butler-e2e --test live -- --ignored --test-threads=1
+        run: |
+          export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
+          export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
+          cargo test --locked -p butler-e2e --test e2e live:: -- --ignored --test-threads=1
 
       - name: Summarize
         if: always() && steps.credential.outputs.available == 'true'

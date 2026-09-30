@@ -2,5 +2,6 @@
 slow-timeout = { period = "60s", terminate-after = 3 }
 
 [[profile.default.overrides]]
-filter = 'test(/^ins_/)'
+filter = 'test(/::ins_/)'
+success-output = 'final'
 slow-timeout = { period = "6m", terminate-after = 1 }

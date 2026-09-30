@@ -17,6 +17,12 @@ inputs:
     description: Optional prebuilt butler-agent binary used by the E2E harness.
     required: false
     default: ""
+  restore-embedding-model:
+    description: Restore the model only for scenarios that use embeddings.
+    default: "true"
+  run-systemd:
+    description: Probe the Linux user manager for the INS-14 shard.
+    default: "true"
   run-idle-disk:
     description: Run the separate IDLE-DISK check when its test file is present.
     required: false
@@ -25,6 +31,7 @@ runs:
   using: composite
   steps:
     - name: Restore embedding model cache
+      if: inputs.restore-embedding-model == 'true'
       id: embedding-cache
       uses: actions/cache@v4
       with:
@@ -32,7 +39,7 @@ runs:
         key: bge-m3-4de13258303883538bd53b696b452bf8099f0858
 
     - name: Fetch embedding model
-      if: steps.embedding-cache.outputs.cache-hit != 'true'
+      if: inputs.restore-embedding-model == 'true' && steps.embedding-cache.outputs.cache-hit != 'true'
       shell: bash
       working-directory: ${{ runner.temp }}
       run: |
@@ -55,7 +62,7 @@ runs:
         LIST
 
     - name: Probe the systemd user manager
-      if: runner.os == 'Linux'
+      if: runner.os == 'Linux' && inputs.run-systemd == 'true'
       id: systemd
       shell: bash
       run: |
@@ -64,6 +71,7 @@ runs:
         export XDG_RUNTIME_DIR="/run/user/$uid"
         for _ in $(seq 1 30); do
           if systemctl --user show-environment >/dev/null 2>&1; then
+            echo "BUTLER_E2E_SYSTEMD_CONFIG_HOME=$HOME/.config" >> "$GITHUB_ENV"
             echo "available=1" >> "$GITHUB_OUTPUT"
             echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
             echo "DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus" >> "$GITHUB_ENV"
@@ -71,15 +79,19 @@ runs:
           fi
           sleep 1
         done
-        echo "available=0" >> "$GITHUB_OUTPUT"
-        echo "::notice title=INS-14 SKIPPED::no systemd --user manager on this runner"
+        echo "::error::INS-14 requires a systemd --user manager on Linux CI"
+        exit 1
 
     - name: Restore agent binary permissions
       if: inputs.agent-binary != ''
       shell: bash
       env:
         AGENT_BINARY: ${{ inputs.agent-binary }}
-      run: chmod +x "$AGENT_BINARY"
+      run: |
+        if [ -f "$AGENT_BINARY.gz" ]; then
+          gzip -dc "$AGENT_BINARY.gz" > "$AGENT_BINARY"
+        fi
+        chmod +x "$AGENT_BINARY"
 
     - name: Run the stub tier
       shell: bash
@@ -96,28 +108,26 @@ runs:
         BUTLER_E2E_REPORT: ${{ runner.temp }}/e2e-report.txt
       run: |
         set -o pipefail
-        filterset='not test(idle_disk_writes_and_cpu_stay_bounded)'
+        export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
+        export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
+        filterset='binary(=e2e) and not test(idle_disk_writes_and_cpu_stay_bounded)'
         if [ -n "$TEST_FILTERSET" ]; then
           filterset="($TEST_FILTERSET) and $filterset"
         fi
         nextest_partition_args=()
         if [ -n "$PARTITION" ]; then
-          if [ -n "$ARCHIVE_FILE" ]; then
-            nextest_partition_args=(--partition "count:$PARTITION")
-          else
-            nextest_partition_args=(--partition "slice:$PARTITION")
-          fi
+          nextest_partition_args=(--partition "hash:$PARTITION")
         fi
         if [ -n "$ARCHIVE_FILE" ]; then
           cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
-            run --no-fail-fast --retries 0 --archive-file "$ARCHIVE_FILE" \
-            --extract-to "$PWD" \
+            run --no-fail-fast --retries 0 --test-threads 8 --archive-file "$ARCHIVE_FILE" \
+            --workspace-remap "$PWD" \
             "${nextest_partition_args[@]}" \
             -E "$filterset" \
             2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
         else
           cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
-            run --locked --no-fail-fast --retries 0 -p butler-e2e \
+            run --locked --no-fail-fast --retries 0 --test-threads 8 -p butler-e2e \
             "${nextest_partition_args[@]}" \
             -E "$filterset" \
             2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
@@ -126,16 +136,26 @@ runs:
     - name: Report IDLE-DISK counters
       if: >-
         always() && inputs.run-idle-disk == 'true' &&
-        hashFiles('packages/butler-agent/rust/crates/butler-e2e/tests/idle_disk.rs') != ''
+        hashFiles('packages/butler-agent/rust/crates/butler-e2e/tests/e2e/idle_disk.rs') != ''
       shell: bash
       working-directory: packages/butler-agent/rust
       env:
+        ARCHIVE_FILE: ${{ inputs.archive-file }}
+        BUTLER_E2E_BIN: ${{ inputs.agent-binary }}
         BUTLER_E2E_EMBEDDING_ASSETS: ${{ runner.temp }}/e2e-models/bge-m3
         BUTLER_E2E_TIER: stub
         BUTLER_E2E_SKIP_BUILD: "1"
       run: |
         mkdir -p target/e2e-tmp
-        TMPDIR="$PWD/target/e2e-tmp" cargo test --locked -p butler-e2e --test idle_disk -- --nocapture
+        export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
+        export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
+        if [ -n "$ARCHIVE_FILE" ]; then
+          TMPDIR="$PWD/target/e2e-tmp" cargo nextest run --archive-file "$ARCHIVE_FILE" \
+            --workspace-remap "$PWD" --no-fail-fast --retries 0 --test-threads 8 \
+            -E 'binary(=e2e) and test(idle_disk_writes_and_cpu_stay_bounded)' --nocapture
+        else
+          TMPDIR="$PWD/target/e2e-tmp" cargo test --locked -p butler-e2e --test e2e idle_disk:: -- --nocapture --test-threads=8
+        fi
 
     - name: Summarize
       if: always()

@@ -1,7 +1,7 @@
 //! LIVE tier (SCENARIOS.md LIVE-01..10): real provider, coarse invariants.
 //!
 //! Every test is `#[ignore]` so the stub tier lists them as ignored. Run:
-//! `BUTLER_E2E_TIER=live cargo test -p butler-e2e --test live -- --ignored --test-threads=1`.
+//! `BUTLER_E2E_TIER=live cargo test -p butler-e2e --test e2e live:: -- --ignored --test-threads=1`.
 //! Without credentials: tier `all` reports `SKIPPED (no credentials: ..)`,
 //! tier `live` fails.
 #![allow(

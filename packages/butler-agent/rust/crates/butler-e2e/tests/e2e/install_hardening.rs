@@ -10,7 +10,7 @@
     reason = "test assertions"
 )]
 
-mod install_support;
+use super::install_support;
 
 use std::fs;
 use std::path::Path;

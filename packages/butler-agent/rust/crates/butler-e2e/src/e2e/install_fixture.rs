@@ -82,8 +82,10 @@ fn write_archive(
     resources: &Path,
 ) -> Result<Archive, HarnessError> {
     fs::create_dir_all(out_dir)?;
+    let started = std::time::Instant::now();
     let binary_sha = file_sha256(binary)?;
     let resources_sha = tree_sha256(resources)?;
+    let hash_elapsed = started.elapsed();
     let (platform, architecture) = host_platform();
     let manifest = serde_json::json!({
         "schema": "butler.native-agent-install.v1",
@@ -122,8 +124,14 @@ fn write_archive(
         manifest.as_slice(),
     )?;
     builder.into_inner()?.finish()?.flush()?;
+    let sha256 = file_sha256(&path)?;
+    eprintln!(
+        "install fixture {version}: binary_bytes={} hash={hash_elapsed:?} total={:?}",
+        fs::metadata(binary)?.len(),
+        started.elapsed()
+    );
     Ok(Archive {
-        sha256: file_sha256(&path)?,
+        sha256,
         path,
         version: version.to_owned(),
         dir: format!("{version}-{}", &binary_sha[..8]),

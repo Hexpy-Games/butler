@@ -1,8 +1,8 @@
 //! INS-14 — a real `systemd --user` job (Linux CI with a user manager only).
 //!
 //! The service manager belongs to the user, not to the sandbox `HOME`, so
-//! this scenario runs with the real `HOME` (the unit lands in the runner's
-//! `~/.config/systemd/user` and is removed at the end) and keeps everything
+//! this scenario uses the runner manager's config directory (the unit is
+//! removed at the end) with a temporary `HOME`, and keeps everything
 //! else (Agent home, data folder, `butler` command) in the sandbox. It runs
 //! only when `BUTLER_E2E_SYSTEMD=1`, which the Linux CI job sets after probing
 //! for a user manager; elsewhere it reports SKIPPED. It shows that stop,
@@ -17,7 +17,7 @@
     reason = "test assertions"
 )]
 
-mod install_support;
+use super::install_support;
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -143,7 +143,10 @@ fn ins_14_a_systemd_user_job_stays_supervised() -> Result<(), HarnessError> {
     launch.use_data_folder_token();
     // The one scenario that uses the real manager says so.
     launch.set_env("BUTLER_SERVICE_MANAGER", "on");
-    launch.home = butler_platform::user_dirs::home_dir().expect("HOME");
+    launch.set_env(
+        "XDG_CONFIG_HOME",
+        std::env::var("BUTLER_E2E_SYSTEMD_CONFIG_HOME").expect("runner manager config directory"),
+    );
     // A data folder with a space and a non-ASCII letter reaches the unit's
     // ExecStart= and Environment= intact.
     launch.data = sandbox.root.join("d\u{e2}ta folder");

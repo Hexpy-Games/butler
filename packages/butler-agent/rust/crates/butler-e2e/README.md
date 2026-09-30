@@ -20,10 +20,10 @@ always runs.
 BUTLER_E2E_TIER=stub cargo test -p butler-e2e
 
 # live tier against the owner's test-only subscription login (~/.butler-e2e-auth)
-BUTLER_E2E_TIER=live cargo test -p butler-e2e --test live -- --ignored --test-threads=1
+BUTLER_E2E_TIER=live cargo test -p butler-e2e --test e2e live:: -- --ignored --test-threads=1
 
 # re-record cassettes for one test file (live provider, clean traffic)
-BUTLER_E2E_TIER=live BUTLER_E2E_RECORD=1 cargo test -p butler-e2e --test turn
+BUTLER_E2E_TIER=live BUTLER_E2E_RECORD=1 cargo test -p butler-e2e --test e2e turn::
 ```
 
 The harness builds `butler-agent` itself (`cargo build -p butler-agent`) unless
@@ -66,16 +66,16 @@ one profile cannot race.
 
 The harness starts the agent with `BUTLER_PROVIDER_QUOTA_POLLING=0`, so a
 recording holds only the requests its scenario makes. The quota scenarios
-(`tests/quota.rs`) turn polling on with `Setup::quota_polling()`:
+(`tests/e2e/quota.rs`) turn polling on with `Setup::quota_polling()`:
 
 ```sh
 # USE-02: Codex wham/usage through the test profile (~/.butler-e2e-auth)
-BUTLER_E2E_TIER=live BUTLER_E2E_RECORD=1 cargo test -p butler-e2e --test quota use_02
+BUTLER_E2E_TIER=live BUTLER_E2E_RECORD=1 cargo test -p butler-e2e --test e2e quota::use_02
 
 # USE-04: Z.AI Coding Plan quota/limit (quota endpoint only, no model calls);
 # the key is read from ZAI_API_KEY and never written to the cassette
 BUTLER_E2E_TIER=live BUTLER_E2E_RECORD=1 BUTLER_E2E_PROVIDER=zai \
-  cargo test -p butler-e2e --test quota use_04
+  cargo test -p butler-e2e --test e2e quota::use_04
 ```
 
 For `zai` the recorder's upstream is the origin `https://api.z.ai` and the
@@ -90,12 +90,12 @@ placeholder login.
 
 ## Owner-scale usage and updates
 
-USE-06 (`tests/usage_scale.rs`) writes an owner-sized data folder at test time
+USE-06 (`tests/e2e/usage_scale.rs`) writes an owner-sized data folder at test time
 (44,000 usage rows and about 320 MB of transcripts, nothing committed) and
 asserts that `/usage-monitor` answers a window or a session in milliseconds
 without reading the transcripts, that the all-time view is a cache hit on its
 second read, and that a session counts only its own usage. USE-07
-(`tests/updates.rs`) points `BUTLER_UPDATE_MANIFEST` at a local server that
+(`tests/e2e/updates.rs`) points `BUTLER_UPDATE_MANIFEST` at a local server that
 delays its answer and asserts that `GET /updates` never waits for it.
 
 Reset times in usage replies are recorded relative to the recording time and
@@ -108,7 +108,7 @@ cassettes are re-sanitized without new traffic:
 ## Record / replay
 
 - Cassettes: `cassettes/<scenario>/<n>.json` + `meta.json` (provenance,
-  per-file SHA-256, structural fingerprint). `tests/cassette_lint.rs` fails on
+  per-file SHA-256, structural fingerprint). `tests/e2e/cassette_lint.rs` fails on
   hash mismatches (hand edits) and on JWTs, keys, bearer strings, emails, home
   paths, account ids and canaries.
 - Match key: path, model, effort, the text between `User request:` and
@@ -133,7 +133,7 @@ cassettes are re-sanitized without new traffic:
 
 ## Loopback stand-ins (first-run setup)
 
-The first-run setup scenarios (`tests/setup_*.rs`, SETUP-01..13, #230) need
+The first-run setup scenarios (`tests/e2e/setup_*.rs`, SETUP-01..13, #230) need
 no cassette: the agent talks to loopback stand-ins in `src/e2e/fake_servers.rs`
 through the product's own address variables.
 
@@ -179,3 +179,10 @@ the real manager, and login-start is registered with `--files-only`. Only INS-14
 turns the manager on, and only when `BUTLER_E2E_SYSTEMD=1` (the Linux CI job
 sets it after probing for a user manager). INS-15 needs Node and reports
 SKIPPED without it.
+
+All scenarios link once in `tests/e2e/main.rs`, with one module per scenario
+file. Test functions retain their names and gain a module prefix (for example
+`install_lifecycle::ins_02_install_update_rollback_uninstall`). Select the
+integration binary with `binary(=e2e)` and scenarios with `test(/::ins_/)`.
+The source-check test ratchet excludes the entire `crates/butler-e2e` package;
+the layout does not change its counts.
