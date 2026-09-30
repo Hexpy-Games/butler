@@ -41,7 +41,7 @@ impl ActiveAppEndpoint {
             base_url: format!("http://{address}"),
             local_auth,
             configured_host: configuration.host.clone(),
-            configured_port: configuration.port,
+            configured_port: address.port(),
             database_path: configuration.db_path.clone(),
         };
         *self.current.write() = Some(snapshot);

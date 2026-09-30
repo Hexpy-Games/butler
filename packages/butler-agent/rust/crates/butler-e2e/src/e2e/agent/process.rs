@@ -4,6 +4,7 @@
 //! (`Restart=on-failure`) restart only an Agent that exits non-zero.
 
 use std::fs::{self, File};
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -114,6 +115,29 @@ pub(super) fn capture_to_files(
         .stdout(File::create(&stdout)?)
         .stderr(File::create(&stderr)?);
     Ok((stdout, stderr))
+}
+
+/// The real listener's port, published by this child (never a stale instance).
+pub(super) fn bound_port(data: &Path, pid: Option<u32>) -> Option<u16> {
+    let record = crate::e2e::stop_intent::instance_record(data)?;
+    if record["pid"] != pid? {
+        return None;
+    }
+    let endpoint = record["app_endpoint"].as_str()?;
+    reqwest::Url::parse(endpoint).ok()?.port()
+}
+
+/// Bounded stdout/stderr diagnostic, including an alive but unready agent.
+pub(super) fn log_tail(path: &Path) -> String {
+    let read = || -> std::io::Result<String> {
+        let mut file = File::open(path)?;
+        let length = file.metadata()?.len();
+        file.seek(SeekFrom::Start(length.saturating_sub(16 * 1024)))?;
+        let mut bytes = Vec::new();
+        file.take(16 * 1024).read_to_end(&mut bytes)?;
+        Ok(String::from_utf8_lossy(&bytes).into_owned())
+    };
+    read().unwrap_or_else(|error| format!("agent log unavailable: {error}"))
 }
 
 /// Every regular file under `dir`, concatenated (lossy UTF-8).

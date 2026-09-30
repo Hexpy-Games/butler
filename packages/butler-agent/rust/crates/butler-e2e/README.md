@@ -2,7 +2,7 @@
 
 Dev-only end-to-end harness. It runs the real `butler-agent` binary with an
 isolated data dir, `HOME`/`CODEX_HOME` sandbox, gateway auth token, `TZ=UTC`
-and free ports, and drives it only through gateway HTTP, `/events` and
+and an OS-assigned gateway port, and drives it only through gateway HTTP, `/events` and
 `/events/live`, the CLI and the data dir. Model traffic goes to a local
 record/replay provider reached through the product's own base-URL variables.
 
@@ -28,6 +28,15 @@ BUTLER_E2E_TIER=live BUTLER_E2E_RECORD=1 cargo test -p butler-e2e --test turn
 
 The harness builds `butler-agent` itself (`cargo build -p butler-agent`) unless
 `BUTLER_E2E_BIN` names a binary or `BUTLER_E2E_SKIP_BUILD=1`.
+
+Port 0 is test-harness-only, accepted through `BUTLER_APP_SERVER_PORT` or
+`--port=0`; a zero in `gateways/app.json` falls back to 18765. A zero override reports
+`configured: false` and a null `serverUrl`; the bound endpoint is published
+in the instance record.
+
+The agent binds port 0 and the harness reads its published instance endpoint;
+subsequent restarts keep that port. Readiness failures include the last 16 KiB
+of agent stdout/stderr. The readiness deadline remains 90 seconds.
 
 | Variable | Meaning |
 |----------|---------|

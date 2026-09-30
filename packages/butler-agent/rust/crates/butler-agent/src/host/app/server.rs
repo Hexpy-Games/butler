@@ -57,12 +57,23 @@ impl AppServer {
         self.address
     }
 
+    /// Reserve the address before any startup persistence or runtime DB opens.
+    pub(crate) async fn bind(host: &str, port: u16) -> Result<TcpListener, BtccError> {
+        TcpListener::bind((host, port)).await.map_err(|error| {
+            BtccError::relayed(
+                "app_listener_bind_failed",
+                format!("{host}:{port}: {error}"),
+            )
+        })
+    }
+
     pub(crate) async fn open(
         runtime: &AgentRuntime,
         data_root: &std::path::Path,
         installation: &ResolvedInstallation,
         app_config: &AppServiceConfiguration,
         owners: AppServerOwners,
+        listener: TcpListener,
     ) -> Result<Self, BtccError> {
         let artifacts = Arc::new(AppMessageFiles::new(data_root, Arc::new(SystemIdentity)));
         let result = Self::open_with_artifacts(
@@ -72,6 +83,7 @@ impl AppServer {
             app_config,
             owners,
             artifacts.clone(),
+            listener,
         )
         .await;
         if result.is_err() {
@@ -87,10 +99,14 @@ impl AppServer {
         app_config: &AppServiceConfiguration,
         owners: AppServerOwners,
         artifacts: Arc<AppMessageFiles>,
+        listener: TcpListener,
     ) -> Result<Self, BtccError> {
         let listener_ready = Arc::new(AtomicBool::new(false));
         let identity_clock: Arc<dyn AppIdentityClock> = Arc::new(SystemIdentity);
-        let settings = Arc::new(open_settings(runtime, data_root, app_config).await?);
+        let address = listener.local_addr().map_err(|error| {
+            BtccError::relayed("app_listener_address_failed", error.to_string())
+        })?;
+        let settings = Arc::new(open_settings(runtime, data_root, address).await?);
         let setup = AppSetup::start(AppSetupParts {
             configuration: runtime.models.configuration.clone(),
             settings: settings.clone(),
@@ -205,16 +221,6 @@ impl AppServer {
             .await
             .map_err(app_error)?,
         );
-        let listener = match TcpListener::bind((app_config.host.as_str(), app_config.port)).await {
-            Ok(listener) => listener,
-            Err(error) => {
-                let _ = application.close().await;
-                return Err(BtccError::relayed(
-                    "app_listener_bind_failed",
-                    error.to_string(),
-                ));
-            }
-        };
         let gateway_config = gateway_config(app_config, data_root, installation, owners.local_auth);
         let server = match serve_gateway(listener, application.clone(), gateway_config) {
             Ok(server) => server,
@@ -295,13 +301,13 @@ fn gateway_config(
 async fn open_settings(
     runtime: &AgentRuntime,
     data_root: &std::path::Path,
-    app_config: &AppServiceConfiguration,
+    address: SocketAddr,
 ) -> Result<AppSettingsFactsAdapter, BtccError> {
     AppSettingsFactsAdapter::open(
         runtime.models.configuration.clone(),
         runtime.profile.clone(),
         data_root.to_path_buf(),
-        format!("http://{}:{}", app_config.host, app_config.port),
+        format!("http://{address}"),
         "local".into(),
     )
     .await
