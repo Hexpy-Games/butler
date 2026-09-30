@@ -2,7 +2,7 @@
 
 Platform, Linux package, and full install PR checks run after the gate, with
 their existing path filters and test selections. They also run after a failed
-gate, so failures do not suppress coverage. Their callers use `!cancelled()`
+gate, so failures do not suppress coverage. Their callers and platform jobs use `!cancelled()`
 to let superseded PR runs stop: `always()` would keep their builds running and
 block the next run behind workflow concurrency. Main/nightly/manual triggers keep
 their existing schedule. This prevents non-gate builds from occupying runners
