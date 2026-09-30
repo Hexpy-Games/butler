@@ -27,6 +27,7 @@ pub(super) fn verify_rows(
     sessions: &[String],
     turns: &[String],
     deltas: usize,
+    request: &str,
     answer: &str,
 ) {
     let db = Connection::open(path).unwrap();
@@ -43,6 +44,7 @@ pub(super) fn verify_rows(
             .unwrap();
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].0, "user");
+        assert_eq!(rows[0].1, request);
         assert_eq!(rows[1], ("assistant".to_owned(), answer.to_owned()));
         let mut events = db.prepare("SELECT payload_json FROM events WHERE turn_id=?1 AND type='agent.turn_event' ORDER BY id").unwrap();
         let values = events

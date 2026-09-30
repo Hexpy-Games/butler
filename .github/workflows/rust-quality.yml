@@ -245,6 +245,49 @@ jobs:
               print(f"::warning::PERF-01 session-view p95 {p95_ms:.3f} ms exceeds the 50 ms target")
           PY
 
+      - name: Report storage concurrency p95
+        if: always()
+        env:
+          PERF_LOG: ${{ runner.temp }}/e2e-stub.log
+        shell: bash
+        run: |
+          python3 - "$PERF_LOG" <<'PY'
+          import os
+          import pathlib
+          import re
+          import sys
+
+          log_path = pathlib.Path(sys.argv[1])
+          text = log_path.read_text(errors="replace") if log_path.exists() else ""
+          values = re.findall(
+              r"STORAGE PERF N=8 x 200; persist p95=([0-9]+)us; session-view p95=([0-9]+)us",
+              text,
+          )
+          summary_path = pathlib.Path(os.environ["GITHUB_STEP_SUMMARY"])
+          if not values:
+              summary = (
+                  "### Storage concurrency perf (8 streams x 200 deltas)\n\n"
+                  "Persist p95: unavailable (budget under 10 ms). "
+                  "Session-view p95: unavailable (budget under 20 ms).\n"
+              )
+              with summary_path.open("a") as output:
+                  output.write(summary)
+              print("::error::Storage concurrency p95 measurements were not reported")
+              sys.exit(1)
+
+          persist_us, view_us = (float(value) for value in values[-1])
+          persist_ms = persist_us / 1_000
+          view_ms = view_us / 1_000
+          summary = (
+              "### Storage concurrency perf (8 streams x 200 deltas)\n\n"
+              f"Persist p95: **{persist_ms:.3f} ms** (budget under 10 ms). "
+              f"Session-view p95: **{view_ms:.3f} ms** (budget under 20 ms).\n"
+          )
+          with summary_path.open("a") as output:
+              output.write(summary)
+          print(summary, end="")
+          PY
+
   macos-arm64:
     name: Rust checks (macOS arm64)
     needs: source

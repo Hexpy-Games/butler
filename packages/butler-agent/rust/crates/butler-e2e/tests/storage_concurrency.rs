@@ -20,6 +20,16 @@ use storage_concurrency_support::{seed, verify_rows};
 const REQUEST: &str = "Write the numbers from one to twelve as English words, separated by single spaces, and nothing else.";
 const SESSIONS: usize = 8;
 const DELTAS: usize = 200;
+// Keeps a fixed margin over local batching while staying below one commit per delta.
+const MAX_COMMITS_PER_TURN: u64 = 100;
+const MAX_WAL_BYTES_PER_TURN: u64 = 16 * 1024 * 1024;
+
+struct ScenarioMetrics {
+    commits: u64,
+    wal_bytes: u64,
+    persist_p95_us: Option<u64>,
+    view_p95_us: Option<u64>,
+}
 
 fn answer() -> String {
     use std::fmt::Write as _;
@@ -101,6 +111,7 @@ async fn views(
     database: std::path::PathBuf,
     session: String,
     turn: String,
+    measure_latency: bool,
 ) -> Result<Vec<u64>, HarnessError> {
     let mut samples = Vec::new();
     let mut prior = String::new();
@@ -114,11 +125,13 @@ async fn views(
             let db = Connection::open_with_flags(db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
             db.query_row("SELECT text FROM messages WHERE turn_id=?1 AND role='assistant' ORDER BY rowid DESC LIMIT 1", [&db_turn], |row| row.get::<_, String>(0)).optional().unwrap()
         }).await.unwrap();
-        let start = Instant::now();
+        let start = measure_latency.then(Instant::now);
         let reply = gw
             .get(&format!("/session-view?session_id={session}"))
             .await?;
-        let elapsed = u64::try_from(start.elapsed().as_micros()).unwrap();
+        if let Some(start) = start {
+            samples.push(u64::try_from(start.elapsed().as_micros()).unwrap());
+        }
         assert_eq!(reply.status, 200, "{}", reply.text);
         let view = reply.data();
         assert_eq!(view["session_id"], session);
@@ -154,12 +167,42 @@ async fn views(
             assert_eq!(prior, answer());
             return Ok(samples);
         }
-        samples.push(elapsed);
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }
 
-async fn run(baseline: bool) -> Result<(u64, u64, u64, u64), HarnessError> {
+fn storage_metrics(
+    path: &std::path::Path,
+    measure_latency: bool,
+    mut view_samples: Vec<u64>,
+) -> Result<ScenarioMetrics, HarnessError> {
+    let metrics: Value =
+        serde_json::from_slice(&std::fs::read(path.with_extension("metrics.json"))?)?;
+    assert_eq!(metrics["busy"], 0, "SQLite BUSY/LOCKED");
+    let (persist_p95_us, view_p95_us) = if measure_latency {
+        assert!(
+            view_samples.len() >= SESSIONS,
+            "did not sample during streaming"
+        );
+        let mut operations = metrics["operation_us"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value.as_u64().unwrap())
+            .collect::<Vec<_>>();
+        (Some(p95(&mut operations)), Some(p95(&mut view_samples)))
+    } else {
+        (None, None)
+    };
+    Ok(ScenarioMetrics {
+        commits: metrics["commits"].as_u64().unwrap(),
+        wal_bytes: metrics["wal_bytes"].as_u64().unwrap(),
+        persist_p95_us,
+        view_p95_us,
+    })
+}
+
+async fn run(baseline: bool, measure_latency: bool) -> Result<ScenarioMetrics, HarnessError> {
     let mut setup = Setup::new(if baseline {
         "STORAGE-BEFORE"
     } else {
@@ -197,15 +240,20 @@ async fn run(baseline: bool) -> Result<(u64, u64, u64, u64), HarnessError> {
             .map(|session| async { accepted_turn_id(&s.gw.say(session, REQUEST).await?) }),
     )
     .await?;
-    let mut samples: Vec<u64> =
+    let view_samples: Vec<u64> =
         try_join_all(sessions.iter().zip(&turns).map(|(session, turn)| {
-            views(s.gw.clone(), path.clone(), session.clone(), turn.clone())
+            views(
+                s.gw.clone(),
+                path.clone(),
+                session.clone(),
+                turn.clone(),
+                measure_latency,
+            )
         }))
         .await?
         .into_iter()
         .flatten()
         .collect();
-    assert!(samples.len() >= SESSIONS, "did not sample during streaming");
     for (session, turn) in sessions.iter().zip(&turns) {
         let reply =
             s.gw.wait_terminal(session, turn, Duration::from_secs(10))
@@ -213,47 +261,50 @@ async fn run(baseline: bool) -> Result<(u64, u64, u64, u64), HarnessError> {
         assert_eq!(turn_state(&reply), "delivered");
     }
     s.agent.terminate().await?;
-    verify_rows(&path, &sessions, &turns, DELTAS, &answer());
-    let metrics: Value =
-        serde_json::from_slice(&std::fs::read(path.with_extension("metrics.json"))?)?;
-    assert_eq!(metrics["busy"], 0, "SQLite BUSY/LOCKED");
-    let mut operations = metrics["operation_us"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|v| v.as_u64().unwrap())
-        .collect::<Vec<_>>();
-    let result = (
-        metrics["commits"].as_u64().unwrap(),
-        metrics["wal_bytes"].as_u64().unwrap(),
-        p95(&mut operations),
-        p95(&mut samples),
-    );
+    verify_rows(&path, &sessions, &turns, DELTAS, REQUEST, &answer());
+    let result = storage_metrics(&path, measure_latency, view_samples)?;
     s.finish().await?;
     Ok(result)
 }
 
 #[tokio::test]
-async fn eight_streams_keep_exact_content_with_bounded_persistence_and_reads()
+async fn eight_streams_keep_exact_content_and_bounded_storage_work() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let before = run(true, false).await?;
+    let after = run(false, false).await?;
+    eprintln!(
+        "STORAGE N=8 x 200; before commits/turn={:.1} WAL bytes/turn={}; after commits/turn={:.1} WAL bytes/turn={}",
+        before.commits as f64 / SESSIONS as f64,
+        before.wal_bytes / u64::try_from(SESSIONS).unwrap(),
+        after.commits as f64 / SESSIONS as f64,
+        after.wal_bytes / u64::try_from(SESSIONS).unwrap()
+    );
+    let sessions = u64::try_from(SESSIONS).unwrap();
+    assert!(after.commits < before.commits, "commits did not decrease");
+    assert!(
+        after.commits.div_ceil(sessions) <= MAX_COMMITS_PER_TURN,
+        "commits per turn exceeded {MAX_COMMITS_PER_TURN}"
+    );
+    assert!(after.wal_bytes < before.wal_bytes, "WAL did not decrease");
+    assert!(
+        after.wal_bytes.div_ceil(sessions) <= MAX_WAL_BYTES_PER_TURN,
+        "WAL bytes per turn exceeded {MAX_WAL_BYTES_PER_TURN}"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn perf_storage_concurrency_eight_streams_keep_exact_content_with_bounded_persistence_and_reads()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let before = run(true).await?;
-    let after = run(false).await?;
+    let metrics = run(false, true).await?;
+    let persist_p95_us = metrics.persist_p95_us.unwrap();
+    let view_p95_us = metrics.view_p95_us.unwrap();
     eprintln!(
-        "STORAGE N=8 x 200; before commits/turn={} WAL bytes/turn={} persist p95={}us view p95={}us; after commits/turn={} WAL bytes/turn={} persist p95={}us view p95={}us",
-        before.0 as f64 / 8.0,
-        before.1 / 8,
-        before.2,
-        before.3,
-        after.0 as f64 / 8.0,
-        after.1 / 8,
-        after.2,
-        after.3
+        "STORAGE PERF N=8 x 200; persist p95={persist_p95_us}us; session-view p95={view_p95_us}us"
     );
-    assert!(after.0 < before.0, "commits did not decrease");
-    assert!(after.1 < before.1, "WAL did not decrease");
-    assert!(after.2 < 10_000, "persist p95 {}us", after.2);
-    assert!(after.3 < 20_000, "view p95 {}us", after.3);
+    assert!(persist_p95_us < 10_000, "persist p95 {persist_p95_us}us");
+    assert!(view_p95_us < 20_000, "view p95 {view_p95_us}us");
     Ok(())
 }
 
@@ -278,6 +329,7 @@ async fn final_stream_boundary_survives_an_immediate_crash() -> Result<(), Harne
         &["general".into()],
         std::slice::from_ref(&turn),
         DELTAS,
+        REQUEST,
         &answer(),
     );
     s.gw = s.agent.start_again().await?;
