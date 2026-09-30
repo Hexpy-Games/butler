@@ -106,6 +106,12 @@ impl TurnRuntime {
         Ok((project_terminal(&delivered)?, fresh))
     }
 
+    pub(super) fn interrupt(&self, turn_id: &str) {
+        // A process-local fence also covers preparation and session-tail waits.
+        // Keep durable state for the existing turn_interrupted retry path.
+        self.supervisor.install_stop(turn_id);
+    }
+
     pub(super) async fn stop(&self, turn_id: &str) -> Result<TurnOutcome, BtccError> {
         // The synchronous fence precedes the first repository await.
         let ticket = self.supervisor.install_stop(turn_id);

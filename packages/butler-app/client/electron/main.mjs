@@ -485,9 +485,12 @@ function isInsidePath(parent, child) {
   return diff === "" || (!diff.startsWith("..") && !isAbsolute(diff));
 }
 
-async function healthOk(localAuth = null) {
+async function healthOk(localAuth = null, portOverride = null) {
   try {
-    const response = await appServerProbeFetch(serverHealthUrl, localAuth);
+    const healthUrl = portOverride
+      ? new URL("/health", localServerUrlForPort(portOverride))
+      : serverHealthUrl;
+    const response = await appServerProbeFetch(healthUrl, localAuth);
     const body = await response.json().catch(() => null);
     return (
       response.ok &&
@@ -499,10 +502,11 @@ async function healthOk(localAuth = null) {
   }
 }
 
-async function gatewayReady(localAuth = null) {
+async function gatewayReady(localAuth = null, _gateway = null, portOverride = null) {
   try {
+    const baseUrl = portOverride ? localServerUrlForPort(portOverride) : serverUrl;
     const response = await appServerProbeFetch(
-      new URL("/runtime-readiness", serverUrl),
+      new URL("/runtime-readiness", baseUrl),
       localAuth,
     );
     const body = await response.json().catch(() => null);

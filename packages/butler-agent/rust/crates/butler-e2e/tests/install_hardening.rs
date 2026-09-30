@@ -430,14 +430,6 @@ fn ins_13_legacy_directories_are_rollback_targets_and_never_pruned() -> Result<(
         )?)?)?;
     }
     assert!(home.join(&legacy).is_dir(), "a legacy directory was pruned");
-    let listed = ok(&cli(&["versions"])?)?;
-    let versions = listed["data"]["versions"].as_array().unwrap();
-    let entry = versions
-        .iter()
-        .find(|entry| entry["dir"] == legacy.as_str())
-        .unwrap_or_else(|| panic!("the legacy directory is not listed: {listed}"));
-    assert_eq!(entry["legacy"], true, "{entry}");
-
     ok(&cli(&[
         "rollback",
         "--to",

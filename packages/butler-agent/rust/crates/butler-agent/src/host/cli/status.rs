@@ -27,7 +27,6 @@ struct Options {
 enum Command {
     Status,
     ModelStatus,
-    MetricsStatus,
 }
 
 impl Command {
@@ -35,7 +34,6 @@ impl Command {
         match self {
             Self::Status => "butler status",
             Self::ModelStatus => "butler model status",
-            Self::MetricsStatus => "butler metrics status",
         }
     }
 }
@@ -50,15 +48,12 @@ pub(crate) fn recognizes(args: &[OsString]) -> bool {
                 index += 1;
             }
             "--home" => {
-                return args.iter().any(|arg| {
-                    matches!(
-                        arg.to_string_lossy().as_ref(),
-                        "status" | "model" | "metrics"
-                    )
-                });
+                return args
+                    .iter()
+                    .any(|arg| matches!(arg.to_string_lossy().as_ref(), "status" | "model"));
             }
             value if value.starts_with('-') => return false,
-            "status" | "model" | "metrics" => return true,
+            "status" | "model" => return true,
             _ => return false,
         }
     }
@@ -93,7 +88,7 @@ pub(crate) async fn run_native_status_cli(
             let text = models.render_text(&telemetry, None);
             (data, text)
         }
-        Command::MetricsStatus | Command::Status => {
+        Command::Status => {
             let since_ts = options.since_hours.map(|hours| {
                 butler_models::models::ModelConfigurationClock::now_epoch_millis(
                     &crate::host::SystemIdentity,
@@ -107,20 +102,13 @@ pub(crate) async fn run_native_status_cli(
                 installation.resources(),
             )
             .await;
-            if command == Command::MetricsStatus {
-                (
-                    metrics.value.clone(),
-                    operations::render_metrics_status(&metrics),
-                )
-            } else {
-                let model = models.status_value(&metrics.model_telemetry());
-                let services = service_health(&data_root);
-                let text = operations::render_status_context(&metrics, &models, &services);
-                (
-                    json!({ "status": metrics.value, "services": services, "model": model }),
-                    text,
-                )
-            }
+            let model = models.status_value(&metrics.model_telemetry());
+            let services = service_health(&data_root);
+            let text = operations::render_status_context(&metrics, &models, &services);
+            (
+                json!({ "status": metrics.value, "services": services, "model": model }),
+                text,
+            )
         }
     };
 
@@ -192,12 +180,10 @@ fn parse(args: &[OsString]) -> Result<(Options, Command), (&'static str, String)
     let command = match options.positionals.as_slice() {
         [status] if status == "status" => Command::Status,
         [model, status] if model == "model" && status == "status" => Command::ModelStatus,
-        [metrics, status] if metrics == "metrics" && status == "status" => Command::MetricsStatus,
-        [metrics] if metrics == "metrics" => Command::MetricsStatus,
         _ => {
             return Err((
                 "butler status",
-                "supported commands: status, model status, metrics status".into(),
+                "supported commands: status, model status".into(),
             ));
         }
     };

@@ -88,13 +88,17 @@ impl AppWallpaperFiles {
     /// Reports module folder changes to `changed` until close, after sweeping
     /// what an interrupted install left. Best effort: without a watcher,
     /// listings still read the folders as they are.
-    pub(crate) fn watch_modules(&self, changed: ModulesChanged) {
-        let closing = self.0.closing.lock();
-        let mut slot = self.0.watcher.lock();
-        if !*closing && slot.is_none() {
-            import::sweep(&self.0.modules);
-            *slot = watch::watch(&self.0.modules, changed).ok();
-        }
+    pub(crate) fn watch_modules(&self, changed: ModulesChanged) -> ApplicationFuture<()> {
+        let lane = Arc::clone(&self.0);
+        self.run_module(true, move |root| {
+            let closing = lane.closing.lock();
+            let mut slot = lane.watcher.lock();
+            if !*closing && slot.is_none() {
+                import::sweep(root);
+                *slot = watch::watch(root, changed).ok();
+            }
+            Ok(())
+        })
     }
 
     /// Every user module folder, as its files are now.

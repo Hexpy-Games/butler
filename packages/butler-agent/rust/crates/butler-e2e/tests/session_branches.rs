@@ -33,7 +33,7 @@ async fn start(id: &str, server: &FakeServer) -> Result<Scenario, HarnessError> 
         .fixture(Fixture::Empty)
         .env("BUTLER_OLLAMA_BASE_URL", server.base_url.clone());
     fixtures::onboarding_complete(&setup.sandbox.data)?;
-    fixtures::scheduler_ran_today(&setup.sandbox.data)?;
+    fixtures::scheduler_ran_today(&setup.sandbox.data, fixtures::FIXTURE_TIME)?;
     let s = setup.start().await?;
     let model =
         s.gw.post(

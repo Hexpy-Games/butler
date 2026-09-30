@@ -42,11 +42,10 @@ src/gateway/application/snapshot_input.rs	claimed_snapshot	120
 src/gateway/application/space/commands.rs	execute	125
 src/gateway/application/space/owner.rs	commit_relocation	102
 src/gateway/application/storage/schema/project_ledger_bindings.rs	initialize	109
-src/gateway/http.rs	route	161
+src/gateway/http.rs	route	160
 src/gateway/http/dashboard.rs	route	214
 src/gateway/http/message_files/mime.rs	inferred_content_type	84
 src/gateway/http/model_catalog.rs	route	96
 src/gateway/http/monitors.rs	route	139
 src/gateway/http/project_session_mutations.rs	route	133
 src/gateway/http/subsessions.rs	route	95
-src/gateway/message_file_store/materialize.rs	run	106

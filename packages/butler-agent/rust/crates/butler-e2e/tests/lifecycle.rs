@@ -142,8 +142,8 @@ async fn svc_01_service_lifecycle() -> Result<(), HarnessError> {
     let mut s = Setup::new("SVC-01")?.start().await?;
     let status = s.agent.cli(&["status", "--json"])?;
     assert_eq!(status.code, Some(0), "{}", status.stderr);
-    let test = s.agent.cli(&["gateway", "test", "app", "--json"])?.json()?;
-    assert_eq!(test["data"]["status"], "online", "{test}");
+    let health = s.gw.get("/health").await?;
+    assert_eq!(health.status, 200, "{}", health.text);
     let doctor = s.agent.cli(&["doctor", "--json"])?;
     let doctor_json = doctor.json()?;
     assert_eq!(doctor_json["command"], "butler doctor");

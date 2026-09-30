@@ -375,8 +375,8 @@ async fn svc_06_undeliverable_stop_leaves_the_service_ready() -> Result<(), Harn
     let after = instance_record(&data).expect("the instance record is gone");
     assert_eq!(after["nonce"], record["nonce"], "{after}");
     assert_eq!(after["state"], "ready", "record left half stopped: {after}");
-    let test = s.agent.cli(&["gateway", "test", "app", "--json"])?.json()?;
-    assert_eq!(test["data"]["status"], "online", "{test}");
+    let health = s.gw.get("/health").await?;
+    assert_eq!(health.status, 200, "{}", health.text);
     let start = s.agent.cli(&["start", "--json"])?.json()?;
     assert_eq!(start["data"]["alreadyRunning"], true, "{start}");
 

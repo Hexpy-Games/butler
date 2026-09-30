@@ -6,8 +6,6 @@ use chrono::{DateTime, Utc};
 use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
 
-use butler_core::configuration::ConfigurationWrites;
-use butler_core::locale::LocaleCollation;
 use butler_gateway::gateway::{read_new_chat_briefing_projects, read_new_chat_briefing_settings};
 use butler_ledger::project_ledger::{ProjectBriefingTarget, ProjectLedger};
 use butler_memory::cognition::{
@@ -16,23 +14,16 @@ use butler_memory::cognition::{
     CognitionPathEnvironment,
 };
 use butler_memory::coordination::CognitionWriteCoordinator;
-use butler_memory::profile::{PersonaPresets, ProfileService, active_briefing_persona};
+use butler_memory::profile::{ProfileService, active_briefing_persona};
 use butler_models::models::{
     ModelConfiguration, ModelProvider, ProviderAuthMethod, ReasoningEffort,
 };
-use butler_turn::btcc::BtccError;
 
-use crate::host::{
-    DateParser, ProcessEnvironment, ProcessModels, ProfileConversationSources, SystemIdentity,
-};
+use crate::host::DateParser;
 use butler_memory::cognition::BriefingGenerationCode;
 
 pub(in crate::host) struct BriefingGeneration {
     generator: BriefingGenerationService,
-    profile: Arc<ProfileService>,
-    ledger: ProjectLedger,
-    _models: Option<ProcessModels>,
-    owns_profile_and_ledger: bool,
 }
 
 struct BriefingSource {
@@ -46,58 +37,6 @@ struct BriefingSource {
 }
 
 impl BriefingGeneration {
-    pub(in crate::host) fn open(
-        data_root: PathBuf,
-        resource_root: PathBuf,
-        environment: ProcessEnvironment,
-    ) -> Result<Self, BtccError> {
-        let date_parser = DateParser::from_process().map_err(setup)?;
-        let collation = Arc::new(LocaleCollation::new("en-US").map_err(setup)?);
-        let writes = Arc::new(ConfigurationWrites::new());
-        let models = ProcessModels::new(
-            data_root.clone(),
-            environment.model,
-            writes.clone(),
-            collation.clone(),
-        )?;
-        let coordinator =
-            Arc::new(CognitionWriteCoordinator::new(Arc::new(SystemIdentity)).map_err(setup)?);
-        let profile = Arc::new(ProfileService::new(
-            data_root.clone(),
-            environment.cognition_paths.cognition_root(&data_root),
-            Arc::new(PersonaPresets::new(resource_root)),
-            writes,
-            coordinator.clone(),
-            Arc::new(SystemIdentity),
-            Arc::new(ProfileConversationSources::new(
-                butler_turn::conversation::conversation_store_path(&data_root),
-            )),
-            models.provider.clone(),
-        ));
-        let ledger = ProjectLedger::with_collation(&data_root, 2, collation);
-        let app_database_path =
-            crate::host::service::configuration::AppServiceConfiguration::capture(&data_root)
-                .db_path;
-        let source = Arc::new(BriefingSource {
-            data_root: data_root.clone(),
-            app_database_path,
-            cognition_paths: environment.cognition_paths.clone(),
-            models: models.configuration.clone(),
-            profile: profile.clone(),
-            ledger: ledger.clone(),
-            date_parser: Arc::new(date_parser),
-        });
-        let generator =
-            BriefingGenerationService::new(data_root, coordinator, models.provider.clone(), source);
-        Ok(Self {
-            generator,
-            profile,
-            ledger,
-            _models: Some(models),
-            owns_profile_and_ledger: true,
-        })
-    }
-
     #[expect(
         clippy::too_many_arguments,
         reason = "runtime composition supplies eight required existing domain owners"
@@ -120,18 +59,12 @@ impl BriefingGeneration {
             app_database_path,
             cognition_paths,
             models: configuration,
-            profile: profile.clone(),
-            ledger: ledger.clone(),
+            profile,
+            ledger,
             date_parser,
         });
         let generator = BriefingGenerationService::new(data_root, coordinator, provider, source);
-        Self {
-            generator,
-            profile,
-            ledger,
-            _models: None,
-            owns_profile_and_ledger: false,
-        }
+        Self { generator }
     }
 
     pub(in crate::host) async fn generate(
@@ -141,17 +74,6 @@ impl BriefingGeneration {
         cancellation: &CancellationToken,
     ) -> Result<Map<String, Value>, BriefingGenerationError> {
         self.generator.generate(run_id, now, cancellation).await
-    }
-
-    pub(in crate::host) async fn close(&self) {
-        if self.owns_profile_and_ledger {
-            self.profile.close().await;
-            self.ledger.close().await;
-        }
-    }
-
-    pub(in crate::host) fn profile(&self) -> Arc<ProfileService> {
-        self.profile.clone()
     }
 }
 
@@ -401,8 +323,4 @@ fn is_default_model_sentinel(value: &Value) -> bool {
 
 fn unavailable(locale: String, reason: &'static str) -> BriefingSettings {
     BriefingSettings::Unavailable { locale, reason }
-}
-
-fn setup(error: impl std::error::Error + Send + Sync + 'static) -> BtccError {
-    BtccError::relayed("new_chat_briefing_setup_failed", error.to_string()).with_source(error)
 }

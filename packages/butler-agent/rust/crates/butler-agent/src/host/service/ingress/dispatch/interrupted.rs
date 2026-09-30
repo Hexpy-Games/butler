@@ -115,10 +115,14 @@ pub(super) async fn settle(
                 ..Default::default()
             })
         }
-        // Not an interruption of this process: the service keeps running and
-        // claims the record again once its backoff has passed.
         ReportFailure::Transient => {
-            let _ = queue.defer_async(item.clone(), error.code.to_owned()).await;
+            if status == "shutdown-interrupted" {
+                // Preserve interruption provenance if publication failed during
+                // close: the next process must report it, never rerun the turn.
+                let _ = queue.park_async(item.clone(), error.code.to_owned()).await;
+            } else {
+                let _ = queue.defer_async(item.clone(), error.code.to_owned()).await;
+            }
             Some(IngressPoll::default())
         }
     }

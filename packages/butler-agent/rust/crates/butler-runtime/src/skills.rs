@@ -3,6 +3,7 @@
 mod archive;
 mod catalog;
 mod contracts;
+mod install;
 mod projection;
 mod projection_index;
 

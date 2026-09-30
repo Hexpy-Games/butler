@@ -70,7 +70,7 @@ pub(super) fn write(
         created_at: clock.now_iso(),
     };
     fs::create_dir_all(root).map_err(internal)?;
-    fs::write(root.join(id), &bytes).map_err(internal)?;
+    replace_private(root.join(id), &bytes, "message_upload").map_err(internal)?;
     drop(bytes);
     Ok(file)
 }
@@ -92,7 +92,7 @@ pub(super) fn prepare(
     };
     let mut sidecar = path.as_os_str().to_os_string();
     sidecar.push(".txt");
-    fs::write(PathBuf::from(sidecar), text.as_bytes()).map_err(internal)
+    replace_private(PathBuf::from(sidecar), text.as_bytes(), "pdf_sidecar").map_err(internal)
 }
 
 pub(super) fn read(
@@ -143,4 +143,12 @@ fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
 
 fn internal(_: std::io::Error) -> GatewayApplicationError {
     GatewayApplicationError::internal()
+}
+
+fn replace_private(path: impl AsRef<Path>, bytes: &[u8], point: &str) -> std::io::Result<()> {
+    butler_platform::secure_fs::replace_private(
+        path.as_ref(),
+        |file| butler_platform::secure_fs::fault_write(file, bytes, point),
+        |error| error,
+    )
 }

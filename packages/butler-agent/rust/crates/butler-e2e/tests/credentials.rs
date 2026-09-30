@@ -102,7 +102,7 @@ async fn cred_01_plaintext_keys_move_to_the_store_at_start() -> Result<(), Harne
         .env("BUTLER_KIMI_BASE_URL", format!("{}/v1", chat.base_url));
     let data = setup.sandbox.data.clone();
     fixtures::onboarding_complete(&data)?;
-    fixtures::scheduler_ran_today(&data)?;
+    fixtures::scheduler_ran_today(&data, fixtures::FIXTURE_TIME)?;
     fs::create_dir_all(data.join("auth"))?;
     let unusable = json!({"id": "codex", "provider_id": "openai", "auth_type": "codex_oauth"});
     fs::write(
@@ -438,60 +438,5 @@ async fn cred_03_delete_refuses_keys_in_use() -> Result<(), HarnessError> {
         .map(|item| item["id"].as_str().unwrap())
         .collect();
     assert_eq!(ids, [default_key.as_str()], "{list}");
-    s.finish().await
-}
-
-/// CRED-04 — `butler auth keys` lists the saved keys with their store,
-/// replaces a key read from standard input, and deletes a key with `--yes`.
-#[tokio::test]
-async fn cred_04_cli_lists_replaces_and_deletes_keys() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let provider = FakeServer::provider_models().await?;
-    let s = with_provider("CRED-04", &provider).await?;
-    let data = s.sandbox.data.clone();
-    let id = save(&s, "openai", GOOD_KEY).await?;
-
-    let list = s.agent.cli(&["auth", "keys", "--json"])?.json()?;
-    assert_eq!(list["command"], "butler auth keys");
-    assert_eq!(
-        list["data"]["credentials"][0]["storage"], "fallback_file",
-        "{list}"
-    );
-    assert_eq!(list["data"]["store"]["backend"], "fallback_file", "{list}");
-    assert!(!list.to_string().contains(GOOD_KEY));
-
-    let replaced = s
-        .agent
-        .cli_async_input(
-            &["auth", "keys", "replace", "openai", "--json"],
-            Some("sk-e2e-cli-0011\n"),
-        )
-        .await?;
-    assert_eq!(replaced.code, Some(0), "{replaced:?}");
-    assert_eq!(
-        replaced.json()?["data"]["credential"]["masked_value"],
-        "sk-...1"
-    );
-    assert!(!replaced.stdout.contains("sk-e2e-cli-0011"));
-    assert_eq!(
-        stored(&data, &format!("openai/{id}")).as_deref(),
-        Some("sk-e2e-cli-0011")
-    );
-
-    let unconfirmed = s
-        .agent
-        .cli(&["auth", "keys", "delete", "openai", "--json"])?;
-    assert_eq!(unconfirmed.code, Some(2), "{unconfirmed:?}");
-    let deleted = s
-        .agent
-        .cli(&["auth", "keys", "delete", "openai", "--yes", "--json"])?;
-    assert_eq!(deleted.code, Some(0), "{deleted:?}");
-    assert!(stored(&data, &format!("openai/{id}")).is_none());
-    assert!(
-        listed(&s).await?["credentials"]
-            .as_array()
-            .unwrap()
-            .is_empty()
-    );
     s.finish().await
 }

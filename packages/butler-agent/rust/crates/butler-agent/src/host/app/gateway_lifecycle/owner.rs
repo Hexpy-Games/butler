@@ -145,10 +145,11 @@ impl AppGatewayLifecycle {
         }
     }
 
-    pub(crate) async fn stop_accepting(&self) {
+    pub(crate) async fn stop_accepting(&self) -> Result<(), BtccError> {
         if let Some(server) = self.current.lock().await.as_ref() {
-            server.stop_accepting();
+            server.stop_accepting().await?;
         }
+        Ok(())
     }
 
     pub(crate) async fn close(&self) -> Result<(), BtccError> {
@@ -337,16 +338,13 @@ pub(crate) fn local_auth_unconfigured(auth: &butler_gateway::gateway::LocalAuthC
 /// credential file, and a service restart reads that file again.
 fn view_status(enabled: bool, running: bool, refusing: bool) -> (&'static str, Vec<&'static str>) {
     if !enabled {
-        ("disabled", vec!["butler gateway enable app"])
+        ("disabled", vec!["Settings → Security"])
     } else if running {
-        ("online", vec!["butler gateway status app"])
+        ("online", vec!["butler status"])
     } else if refusing {
-        (
-            "unconfigured",
-            vec!["butler gateway logs app", "butler restart"],
-        )
+        ("unconfigured", vec!["butler logs", "butler restart"])
     } else {
-        ("offline", vec!["butler gateway start app"])
+        ("offline", vec!["butler start"])
     }
 }
 

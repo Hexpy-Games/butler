@@ -239,6 +239,13 @@ fn write_state(path: &std::path::Path, state: &Value) -> std::io::Result<()> {
 }
 
 fn current_epoch_millis() -> i64 {
+    // Daily jobs and App fixtures must share the same clock in stub E2E.
+    #[cfg(debug_assertions)]
+    if let Ok(now) =
+        chrono::DateTime::parse_from_rfc3339(&crate::host::app::schedule_clock::clock().now_iso())
+    {
+        return now.timestamp_millis();
+    }
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |time| {

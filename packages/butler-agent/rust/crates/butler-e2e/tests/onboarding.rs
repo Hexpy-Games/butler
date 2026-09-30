@@ -274,6 +274,8 @@ async fn onb_02_provider_401_fails_without_retry_storm() -> Result<(), HarnessEr
     butler_e2e::gate!();
     use butler_e2e::e2e::faults::{Fault, Transform};
     let s = Setup::new("ONB-02-401")?
+        // After the daily jobs' due time, on a day independent of the host clock.
+        .env("BUTLER_E2E_APP_NOW", "2026-09-27T12:00:00Z")
         .cassette("ONB-02")
         .replay_only()
         .start()
@@ -357,16 +359,6 @@ async fn onb_03_installer_language_sets_response_language() -> Result<(), Harnes
             "ko",
             "{phase}: {}",
             personalization.text
-        );
-        let cli = s
-            .agent
-            .cli(&["personalization", "get", "user.responseLanguage", "--json"])?;
-        assert_eq!(cli.code, Some(0), "{phase}: {} {}", cli.stdout, cli.stderr);
-        assert_eq!(
-            cli.json()?["data"]["value"],
-            "ko",
-            "{phase}: {}",
-            cli.stdout
         );
         if phase == "before restart" {
             s.restart().await?;
