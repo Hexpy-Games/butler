@@ -358,16 +358,6 @@ async fn onb_03_installer_language_sets_response_language() -> Result<(), Harnes
             "{phase}: {}",
             personalization.text
         );
-        let cli = s
-            .agent
-            .cli(&["personalization", "get", "user.responseLanguage", "--json"])?;
-        assert_eq!(cli.code, Some(0), "{phase}: {} {}", cli.stdout, cli.stderr);
-        assert_eq!(
-            cli.json()?["data"]["value"],
-            "ko",
-            "{phase}: {}",
-            cli.stdout
-        );
         if phase == "before restart" {
             s.restart().await?;
         }

@@ -12,7 +12,6 @@ mod inventory;
 #[derive(Clone, Copy)]
 enum Action {
     Help,
-    Commands,
     Version,
 }
 
@@ -20,7 +19,7 @@ pub(crate) fn recognizes(args: &[OsString]) -> bool {
     args.iter().any(|arg| arg == "--help" || arg == "-h")
         || first_positionals(args)
             .first()
-            .is_some_and(|value| matches!(value.as_str(), "help" | "commands" | "version"))
+            .is_some_and(|value| matches!(value.as_str(), "help" | "version"))
 }
 
 pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> ExitCode {
@@ -30,7 +29,6 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
     };
     let command = match parsed.action {
         Action::Help => "butler help",
-        Action::Commands => "butler commands",
         Action::Version => "butler version",
     };
     let data = match parsed.action {
@@ -41,7 +39,6 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
             }
             json!({"usage": inventory::render(&entries), "commands": inventory::values(&entries)})
         }
-        Action::Commands => json!({"commands": inventory::values(&inventory::all())}),
         Action::Version => {
             let data_root =
                 match settings_cli::resolve_data_root_override(parsed.data, installation) {
@@ -85,7 +82,6 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
     } else if !parsed.quiet {
         match parsed.action {
             Action::Help => println!("{}", data["usage"].as_str().unwrap_or("Butler native help")),
-            Action::Commands => println!("{}", inventory::render(&inventory::all())),
             Action::Version => println!(
                 "Butler native {}",
                 data["version"].as_str().unwrap_or("unavailable")
@@ -145,9 +141,8 @@ fn parse(args: &[OsString]) -> Result<Parsed, crate::host::HostError> {
     } else {
         match words.first().map(String::as_str) {
             Some("help") => (Action::Help, words[1..].to_vec()),
-            Some("commands") if words.len() == 1 => (Action::Commands, Vec::new()),
             Some("version") if words.len() == 1 => (Action::Version, Vec::new()),
-            _ => return Err("supported commands: help, commands, version".into()),
+            _ => return Err("Use butler help or version.".into()),
         }
     };
     Ok(Parsed {

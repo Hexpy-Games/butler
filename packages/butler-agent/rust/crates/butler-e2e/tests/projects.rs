@@ -247,28 +247,6 @@ async fn prj_02_requested_item_is_completed() -> Result<(), HarnessError> {
     s.finish().await
 }
 
-/// PRJ-02 — `butler work list` agrees with the project dashboard.
-#[tokio::test]
-#[ignore = "product gap: PRJ-02-CLI — `butler work list --json` reads legacy task records only: it returns no items while the project dashboard overview shows the session's managed Work"]
-async fn prj_02_cli_lists_dashboard_work() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let (s, project, _) =
-        prj_02_turn_with(Setup::new("PRJ-02-CLI")?.cassette("PRJ-02").replay_only()).await?;
-    let works = overview_works(&dashboard(&s, &project).await?);
-    let list = s
-        .agent
-        .cli_async(&["work", "list", "--json"])
-        .await?
-        .json()?;
-    for (id, _, _) in &works {
-        assert!(
-            list.to_string().contains(id.as_str()),
-            "{id} not listed: {list}"
-        );
-    }
-    s.finish().await
-}
-
 /// Polls the dashboard until the briefing leaves `generating`.
 async fn settled_briefing(s: &Scenario, project: &str) -> Result<Value, HarnessError> {
     let deadline = std::time::Instant::now()
@@ -345,7 +323,7 @@ async fn materials(s: &Scenario, project: &str) -> Result<Value, HarnessError> {
 /// recorded for it) leaves the dashboard working: the briefing settles as
 /// unavailable, a retry is accepted, and the new-chat briefing falls back.
 /// A malformed ledger record on disk does not break the dashboard, its
-/// materials or records, or the work CLI.
+/// materials or records.
 #[tokio::test]
 async fn prj_03_dashboard_survives_briefing_failure_and_broken_record() -> Result<(), HarnessError>
 {
@@ -393,14 +371,6 @@ async fn prj_03_dashboard_survives_briefing_failure_and_broken_record() -> Resul
             s.gw.get(&format!("/projects/{project}/dashboard/records?kind=plan"))
                 .await?;
         assert_eq!(records.status, 200, "{phase}: {}", records.text);
-        let work = s.agent.cli_async(&["work", "list", "--json"]).await?;
-        assert_eq!(
-            work.code,
-            Some(0),
-            "{phase}: {} {}",
-            work.stdout,
-            work.stderr
-        );
         if phase == "after damage" {
             s.restart().await?;
         }

@@ -1,9 +1,7 @@
 //! One-shot native metrics, logs and physical process inspection commands.
 
 mod logs;
-mod metrics;
 mod path;
-mod process;
 
 use std::{ffi::OsString, path::PathBuf, process::ExitCode};
 
@@ -19,41 +17,25 @@ pub(in crate::host) struct Options {
     pub(in crate::host) follow: bool,
     pub(in crate::host) lines: Option<usize>,
     pub(in crate::host) service: Option<String>,
-    pub(in crate::host) since_hours: Option<f64>,
     positionals: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Command {
-    MetricsEnable,
-    MetricsDisable,
-    MetricsTail,
     Logs,
-    Ps,
 }
 
 impl Command {
     fn parse(positionals: &[String]) -> Option<Self> {
         match positionals {
-            [metrics, action, ..] if metrics == "metrics" => match action.as_str() {
-                "enable" => Some(Self::MetricsEnable),
-                "disable" => Some(Self::MetricsDisable),
-                "tail" => Some(Self::MetricsTail),
-                _ => None,
-            },
             [logs, ..] if logs == "logs" => Some(Self::Logs),
-            [ps, ..] if ps == "ps" => Some(Self::Ps),
             _ => None,
         }
     }
 
     fn name(self) -> &'static str {
         match self {
-            Self::MetricsEnable => "butler metrics enable",
-            Self::MetricsDisable => "butler metrics disable",
-            Self::MetricsTail => "butler metrics tail",
             Self::Logs => "butler logs",
-            Self::Ps => "butler ps",
         }
     }
 }
@@ -71,7 +53,7 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
                 "butler observability",
                 json_requested,
                 "invalid_arguments",
-                "supported commands: metrics enable|disable|tail, logs, ps",
+                "Use butler logs.",
                 2,
             );
         }
@@ -98,12 +80,7 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
         }
     };
     match command {
-        Command::MetricsEnable | Command::MetricsDisable => {
-            metrics::set_enabled(&options, command, &data_root, &installation).await
-        }
-        Command::MetricsTail => metrics::tail(&options, &data_root, &installation),
         Command::Logs => logs::run(options, data_root, installation).await,
-        Command::Ps => process::run(&options, &data_root),
     }
 }
 
@@ -131,14 +108,6 @@ fn parse(args: &[OsString]) -> Result<(Options, Option<Command>), crate::host::H
                 );
                 index += 2;
             }
-            "--since-hours" => {
-                options.since_hours = required_value(args, index, "--since-hours")?
-                    .to_string_lossy()
-                    .parse::<f64>()
-                    .ok()
-                    .filter(|hours| hours.is_finite() && *hours > 0.0);
-                index += 2;
-            }
             "--home" => return Err("--home is unsupported; use --data for writable state".into()),
             "--json" => {
                 options.json = true;
@@ -163,20 +132,10 @@ fn parse(args: &[OsString]) -> Result<(Options, Option<Command>), crate::host::H
         }
     }
     let command = Command::parse(&options.positionals);
-    if let Some(command) = command
-        && options.positionals.len() != command_position_count(command)
-    {
+    if command.is_some() && options.positionals.len() != 1 {
         return Err("unexpected command argument".into());
     }
     Ok((options, command))
-}
-
-fn command_position_count(command: Command) -> usize {
-    if matches!(command, Command::Logs | Command::Ps) {
-        1
-    } else {
-        2
-    }
 }
 
 fn required_value<'a>(

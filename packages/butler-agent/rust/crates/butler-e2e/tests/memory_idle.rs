@@ -6,6 +6,10 @@
     reason = "test assertions"
 )]
 
+#[path = "support/memory_fixture.rs"]
+mod memory_fixture;
+use memory_fixture::initialize_empty;
+
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
@@ -16,17 +20,6 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 
 const COMPLETED_WINDOWS: usize = 30_000;
 const IDLE: Duration = Duration::from_secs(60);
-
-fn graph_path(data: &Path) -> Result<PathBuf, HarnessError> {
-    let root = data.join("cognition/memory");
-    let descriptor: serde_json::Value =
-        serde_json::from_slice(&std::fs::read(root.join("active-generation.json"))?)?;
-    let generation = descriptor["generation_id"].as_str().unwrap();
-    Ok(root
-        .join("generations")
-        .join(generation)
-        .join("graph.sqlite"))
-}
 
 /// Completed windows exercise the idle indexes without starting model work.
 fn seed_graph(path: &Path) {
@@ -59,24 +52,6 @@ fn signature(path: &Path) -> Option<(u64, SystemTime)> {
     std::fs::metadata(path)
         .ok()
         .map(|meta| (meta.len(), meta.modified().unwrap()))
-}
-
-async fn initialize_empty(
-    s: &butler_e2e::e2e::scenario::Scenario,
-) -> Result<PathBuf, HarnessError> {
-    let init = s
-        .agent
-        .cli_async(&[
-            "cognition",
-            "memory",
-            "rebuild",
-            "initialize-empty",
-            "--json",
-        ])
-        .await?
-        .json()?;
-    assert_eq!(init["ok"], true, "{init}");
-    graph_path(&s.sandbox.data)
 }
 
 fn seed_imported_message(data: &Path) {
@@ -140,18 +115,13 @@ async fn wait_for_catchup_message_cursor(graph: &Path, expected: &str) {
 async fn mem_idle_daily_cycle_and_crash_recovery() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("MEM-IDLE-RECOVERY")?.start().await?;
-    let graph = initialize_empty(&s).await?;
+    let graph = initialize_empty(&s)?;
     tokio::time::sleep(Duration::from_secs(3)).await;
     let graph_db = readonly(&graph);
     let before = data_version(&graph_db);
-    let cycle = s
-        .agent
-        .cli_async(&["cognition", "memory", "maintain", "--json"])
-        .await?
-        .json()?;
-    assert_eq!(cycle["ok"], true, "{cycle}");
+    tokio::time::sleep(Duration::from_secs(3)).await;
     let daily_writes = data_version(&graph_db) - before;
-    assert_eq!(daily_writes, 0, "daily graph writes: {cycle}");
+    assert_eq!(daily_writes, 0, "idle daily graph writes");
 
     seed_imported_message(&s.sandbox.data);
     s.restart().await?;
@@ -206,7 +176,7 @@ async fn mem_idle_daily_cycle_and_crash_recovery() -> Result<(), HarnessError> {
 async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("MEM-IDLE")?.start().await?;
-    let graph = initialize_empty(&s).await?;
+    let graph = initialize_empty(&s)?;
     seed_graph(&graph);
 
     // Give the service time to discover the generation and finish its first sweep.
@@ -246,14 +216,7 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
 async fn mem_idle_catches_changed_source_without_restart() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("MEM-IDLE-CHANGE")?.start().await?;
-    let graph = initialize_empty(&s).await?;
-    // Operator maintenance completes a catch-up pass even on an empty source.
-    let cycle = s
-        .agent
-        .cli_async(&["cognition", "memory", "maintain", "--json"])
-        .await?
-        .json()?;
-    assert_eq!(cycle["ok"], true, "{cycle}");
+    let graph = initialize_empty(&s)?;
     tokio::time::sleep(Duration::from_secs(3)).await;
     assert_eq!(recovery_observations(&graph), 0);
     seed_imported_message(&s.sandbox.data);

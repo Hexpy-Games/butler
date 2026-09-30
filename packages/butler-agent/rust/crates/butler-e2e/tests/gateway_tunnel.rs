@@ -1,5 +1,5 @@
 //! SEC. Tunnels the user runs (#229): their public host name is registered
-//! with `butler gateway configure app --allowed-host`, applied without a
+//! through Settings → Security, applied without a
 //! restart, and a tunneled request never reaches Settings → Security.
 #![allow(
     clippy::unwrap_used,
@@ -42,23 +42,37 @@ async fn through_tunnel(
     .await
 }
 
-fn configure(s: &Scenario, flag: &str, name: &str) -> Result<Value, HarnessError> {
-    let output = s
-        .agent
-        .cli(&["gateway", "configure", "app", flag, name, "--json"])?;
-    assert_eq!(output.code, Some(0), "{output:?}");
-    output.json()
+async fn configure(s: &Scenario, flag: &str, name: &str) -> Result<Value, HarnessError> {
+    let app = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
+    let mut hosts = app.view().await?["allowed_hosts"]
+        .as_array()
+        .unwrap()
+        .clone();
+    if flag == "--remove-allowed-host" {
+        hosts.retain(|host| !host.as_str().unwrap().eq_ignore_ascii_case(name));
+    } else {
+        hosts.push(json!(name));
+    }
+    let reply = app
+        .send(
+            Method::PATCH,
+            "/settings",
+            Some(json!({"security": {"allowed_hosts": hosts}})),
+            &[],
+        )
+        .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    app.view().await
 }
 
 /// SEC-11 — a tunnel the user built (`name` → proxy that rewrites Host to
 /// 127.0.0.1 and passes Origin through): its browser origin is refused until
-/// the name is registered with `butler gateway configure app
-/// --allowed-host`, which the running gateway applies without a restart and
+/// the name is registered through security settings, applied without a restart,
 /// which keeps the rest of `gateways/app.json`. Unregistered names stay
 /// refused, removing the name refuses it again, and the tunnel never
 /// reaches Settings → Security.
 #[tokio::test]
-async fn sec_11_tunnel_host_is_registered_with_the_cli() -> Result<(), HarnessError> {
+async fn sec_11_tunnel_host_is_registered_with_security_settings() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let settings_file = |s: &Scenario| s.sandbox.data.join("gateways/app.json");
     let s = Setup::new("SEC-11")?.data_folder_token().start().await?;
@@ -69,8 +83,8 @@ async fn sec_11_tunnel_host_is_registered_with_the_cli() -> Result<(), HarnessEr
     assert_eq!(refused.status, 403, "{}", refused.text);
     assert_eq!(refused.error_code(), Some("origin_not_allowed"));
 
-    // Without a settings file, the CLI creates a minimal valid one.
-    configure(&s, "--allowed-host", "first.example.info")?;
+    // Without a settings file, security settings create a minimal valid one.
+    configure(&s, "--allowed-host", "first.example.info").await?;
     let mut stored: Value = serde_json::from_slice(&std::fs::read(settings_file(&s))?)?;
     assert_eq!(stored["id"], "app", "{stored}");
     assert_eq!(
@@ -80,15 +94,10 @@ async fn sec_11_tunnel_host_is_registered_with_the_cli() -> Result<(), HarnessEr
     stored["note"] = json!("keep");
     stored["config"]["custom"] = json!("keep");
     std::fs::write(settings_file(&s), stored.to_string())?;
-    configure(&s, "--remove-allowed-host", "FIRST.example.info")?;
+    configure(&s, "--remove-allowed-host", "FIRST.example.info").await?;
 
-    let added = configure(&s, "--allowed-host", TUNNEL_HOST)?;
-    assert_eq!(
-        added["data"]["config"]["allowedHosts"],
-        json!([TUNNEL_HOST]),
-        "{added}"
-    );
-    assert_eq!(added["data"]["allowedHostsApplied"], true, "{added}");
+    let added = configure(&s, "--allowed-host", TUNNEL_HOST).await?;
+    assert_eq!(added["allowed_hosts"], json!([TUNNEL_HOST]), "{added}");
     let stored: Value = serde_json::from_slice(&std::fs::read(settings_file(&s))?)?;
     assert_eq!(stored["note"], "keep", "{stored}");
     assert_eq!(stored["config"]["custom"], "keep", "{stored}");
@@ -153,20 +162,11 @@ async fn sec_11_tunnel_host_is_registered_with_the_cli() -> Result<(), HarnessEr
         .await?;
     assert_eq!(other_host.error_code(), Some("host_not_allowed"));
 
-    let removed = configure(&s, "--remove-allowed-host", TUNNEL_HOST)?;
-    assert_eq!(removed["data"]["config"]["allowedHosts"], json!([]));
+    let removed = configure(&s, "--remove-allowed-host", TUNNEL_HOST).await?;
+    assert_eq!(removed["allowed_hosts"], json!([]));
     let refused = through_tunnel(&s, Method::GET, "/settings", &origin, None).await?;
     assert_eq!(refused.error_code(), Some("origin_not_allowed"));
 
-    let invalid = s.agent.cli(&[
-        "gateway",
-        "configure",
-        "app",
-        "--allowed-host",
-        "https://x.example/",
-        "--json",
-    ])?;
-    assert_ne!(invalid.code, Some(0), "{invalid:?}");
     // An invalid host in the API changes nothing, not even the other fields.
     let before = app.send(Method::GET, "/settings", None, &[]).await?;
     let rejected = app

@@ -4,7 +4,6 @@
 use std::io::{IsTerminal, Write};
 use std::process::ExitCode;
 
-use butler_runtime::operations::InstalledVersion;
 use serde_json::{Value, json};
 
 use super::context::Context;
@@ -82,64 +81,6 @@ async fn rollback(
     Ok((data, human))
 }
 
-/// `butler versions [--json]`: the installed versions, the active one marked.
-pub(super) fn list(installation: ResolvedInstallation, options: &Options) -> ExitCode {
-    let out = Output {
-        command: "butler versions",
-        json: options.json,
-        quiet: options.quiet,
-    };
-    let result = Context::open(installation, options).and_then(|context| {
-        context
-            .home
-            .versions()
-            .map_err(|error| install_error(&error))
-            .map(|versions| (context, versions))
-    });
-    match result {
-        Ok((context, versions)) => {
-            let data = json!({
-                "agentHome": context.home.root(),
-                "versions": versions.iter().map(version_json).collect::<Vec<_>>(),
-            });
-            out.ok(&data, &render(&versions))
-        }
-        Err(error) => out.fail(&error),
-    }
-}
-
-fn version_json(version: &InstalledVersion) -> Value {
-    json!({
-        "version": version.version,
-        "dir": version.dir,
-        "active": version.active,
-        "previous": version.previous,
-        "legacy": version.legacy,
-    })
-}
-
-fn render(versions: &[InstalledVersion]) -> String {
-    if versions.is_empty() {
-        return "No Butler Agent version is installed here.".into();
-    }
-    versions
-        .iter()
-        .map(|version| {
-            let mark = match (version.active, version.previous) {
-                (true, _) => "* ",
-                _ => "  ",
-            };
-            let role = match (version.active, version.previous) {
-                (true, _) => "  active",
-                (false, true) => "  previous",
-                _ => "",
-            };
-            format!("{mark}{}  ({}){role}", version.version, version.dir)
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 /// Asks on a terminal; anything else (a script, a pipe) must pass `--yes`.
 fn confirmed(question: &str) -> bool {
     if !std::io::stdin().is_terminal() {
@@ -150,4 +91,8 @@ fn confirmed(question: &str) -> bool {
     let mut answer = String::new();
     std::io::stdin().read_line(&mut answer).is_ok()
         && matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes")
+}
+
+fn version_json(version: &butler_runtime::operations::InstalledVersion) -> Value {
+    json!({"version":version.version,"dir":version.dir,"active":version.active,"previous":version.previous,"legacy":version.legacy})
 }
