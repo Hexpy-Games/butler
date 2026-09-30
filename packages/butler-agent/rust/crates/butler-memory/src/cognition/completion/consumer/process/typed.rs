@@ -19,7 +19,7 @@ pub(super) async fn process(
         Ok(processed) => Ok(processed),
         Err(_failure) if input.shutdown.is_cancelled() => Ok(false),
         Err(failure) => {
-            dead_letter(root, request, failure.code(), &(input.clock)())?;
+            dead_letter(root, request, failure.code(), &(input.clock)()).await?;
             Ok(false)
         }
     }
@@ -77,7 +77,7 @@ async fn process_current(
                 cancellation: input.shutdown.child_token(),
             })
             .await?;
-        return super::super::super::queue::ack(root, job_id);
+        return super::super::blocking::ack(root, job_id).await;
     }
     let owner = owner.ok_or_else(|| error(CognitionCode::MemorySourceChanged))?;
     let progress = input
@@ -99,7 +99,7 @@ async fn process_current(
     if !progress.source.is_complete() {
         return Ok(false);
     }
-    super::super::super::queue::ack(root, job_id)
+    super::super::blocking::ack(root, job_id).await
 }
 
 fn required(field: &Arg<String>) -> crate::cognition::CognitionResult<&str> {

@@ -46,23 +46,26 @@ impl AppApplication {
     /// Starts appending `wallpaper.modules.updated {ids}` for changes under
     /// the user module folder. The callback holds no application handle, so
     /// the watcher never keeps its owner alive.
-    pub(in crate::gateway::application) fn watch_wallpaper_modules(&self) {
+    pub(in crate::gateway::application) async fn watch_wallpaper_modules(&self) {
         let storage = self.storage.clone();
         let subscribers = self.subscribers.clone();
         let dependencies = self.dependencies.clone();
-        self.wallpapers.watch_modules(Arc::new(move |ids| {
-            let (storage, subscribers) = (storage.clone(), subscribers.clone());
-            let now = dependencies.identity_clock.now_iso();
-            Box::pin(async move {
-                let payload = Map::from_iter([("ids".to_owned(), json!(ids))]);
-                let _ = storage
-                    .execute(move |db| {
-                        events::append(db, &subscribers, MODULES_UPDATED, None, payload, &now)
-                            .map(|_| ())
-                    })
-                    .await;
-            })
-        }));
+        let _ = self
+            .wallpapers
+            .watch_modules(Arc::new(move |ids| {
+                let (storage, subscribers) = (storage.clone(), subscribers.clone());
+                let now = dependencies.identity_clock.now_iso();
+                Box::pin(async move {
+                    let payload = Map::from_iter([("ids".to_owned(), json!(ids))]);
+                    let _ = storage
+                        .execute(move |db| {
+                            events::append(db, &subscribers, MODULES_UPDATED, None, payload, &now)
+                                .map(|_| ())
+                        })
+                        .await;
+                })
+            }))
+            .await;
     }
 
     /// The user modules as their files are now, with the stored checks.

@@ -13,7 +13,9 @@ use butler_memory::cognition::{
 };
 use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_models::models::ModelProvider;
-use butler_turn::workspace::{SessionBindingStore, SessionLifecycleState, SessionRole};
+use butler_turn::workspace::{
+    SessionBindingStore, SessionLifecycleState, SessionRole, StoredSessionBinding,
+};
 
 use crate::host::EmbeddingOwner;
 use butler_memory::cognition::CognitionCode;
@@ -95,7 +97,7 @@ impl LegacySessionSync {
             .map_err(|source| {
                 crate::host::HostError::new("legacy_session_store_unavailable").with_source(source)
             })?;
-        sessions.sort_by(|a, b| a.updated_at.cmp(&b.updated_at));
+        sessions.sort_by(compare_sessions);
         let mut visited = 0usize;
         for session in sessions {
             if cancellation.is_cancelled() {
@@ -243,6 +245,15 @@ impl LegacySessionSync {
         println!("[session-sync] legacySessions={visited}");
         Ok(())
     }
+}
+
+fn compare_sessions(
+    left: &StoredSessionBinding,
+    right: &StoredSessionBinding,
+) -> std::cmp::Ordering {
+    left.updated_at
+        .cmp(&right.updated_at)
+        .then_with(|| left.session_id.cmp(&right.session_id))
 }
 
 async fn await_index<F>(future: F, cancellation: &CancellationToken) -> CognitionResult<()>

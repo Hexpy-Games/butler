@@ -3,7 +3,7 @@ use crate::host::SystemIdentity;
 use butler_gateway::gateway::AppIdentityClock;
 use std::sync::Arc;
 
-pub(super) fn clock() -> Arc<dyn AppIdentityClock> {
+pub(in crate::host) fn clock() -> Arc<dyn AppIdentityClock> {
     #[cfg(debug_assertions)]
     if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
         && let Ok(now) = std::env::var("BUTLER_E2E_APP_NOW")

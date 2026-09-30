@@ -12,6 +12,7 @@
 use std::fs;
 use std::time::{Duration, Instant};
 
+use butler_e2e::e2e::events::{LiveEvents, event_turn_id};
 use butler_e2e::e2e::faults::{Fault, Transform};
 use butler_e2e::e2e::gateway::{TERMINAL, turn_state};
 use butler_e2e::e2e::scenario::{Scenario, Setup, accepted_turn_id};
@@ -31,6 +32,20 @@ async fn wait_served(s: &Scenario, count: u32) {
         assert!(Instant::now() < deadline, "provider not reached");
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
+}
+
+async fn wait_stream_delta(live: &LiveEvents, turn_id: &str) -> Result<(), HarnessError> {
+    live.wait_for(Duration::from_secs(30), |event| {
+        event["type"] == "agent.turn_event"
+            && event_turn_id(event) == Some(turn_id)
+            && event["payload"]["event"]["kind"] == "model.stream.text_delta"
+            && event["payload"]["event"]["payload"]["target"] == "final_candidate"
+            && event["payload"]["event"]["payload"]["textDelta"]
+                .as_str()
+                .is_some_and(|text| !text.is_empty())
+    })
+    .await?;
+    Ok(())
 }
 
 /// Waits (bounded) until the turn is terminal after a restart, acting as the
@@ -76,13 +91,14 @@ async fn rec_02_crash_during_streaming_recovers_without_duplicates() -> Result<(
         s.turn("general", LONG).await?;
         return s.finish().await;
     }
+    let live = LiveEvents::subscribe(&s.gw, 0).await?;
     let exchange = s.provider()?.exchange_for("one to twelve", 0)?;
     s.provider()?
-        .inject(Fault::once(exchange, Transform::StallAfter(4)))?;
+        .inject(Fault::once(exchange, Transform::StallAfter(6)))?;
     let accepted = s.gw.say("general", LONG).await?;
     let turn_id = accepted_turn_id(&accepted)?;
     wait_served(&s, 1).await;
-    tokio::time::sleep(Duration::from_millis(300)).await;
+    wait_stream_delta(&live, &turn_id).await?;
     let before_crash = event_ids(&s.gw.events_since(0).await?);
     let last_seen = before_crash.last().copied().unwrap_or(0);
 
@@ -143,13 +159,14 @@ async fn rec_02_crash_interrupted_turn_is_failed_not_resumed() -> Result<(), Har
         .replay_only()
         .start()
         .await?;
+    let live = LiveEvents::subscribe(&s.gw, 0).await?;
     let exchange = s.provider()?.exchange_for("one to twelve", 0)?;
     s.provider()?
-        .inject(Fault::once(exchange, Transform::StallAfter(4)))?;
+        .inject(Fault::once(exchange, Transform::StallAfter(6)))?;
     let accepted = s.gw.say("general", LONG).await?;
     let turn_id = accepted_turn_id(&accepted)?;
     wait_served(&s, 1).await;
-    tokio::time::sleep(Duration::from_millis(300)).await;
+    wait_stream_delta(&live, &turn_id).await?;
     s.crash_and_restart().await?;
     let turn = settled(&mut s, &turn_id).await?;
     assert_eq!(

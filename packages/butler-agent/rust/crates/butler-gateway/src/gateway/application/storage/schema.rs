@@ -2,6 +2,7 @@
 
 mod core;
 mod migration;
+mod monitoring;
 mod project_ledger_bindings;
 mod schedule_access;
 mod schedule_legacy;
@@ -55,6 +56,7 @@ pub(super) fn migrate(
     project_ledger_bindings::initialize(connection, butler_data)?;
     space::migrate(connection)?;
     wallpapers::create(connection)?;
+    monitoring::migrate(connection)?;
     Ok(())
 }
 

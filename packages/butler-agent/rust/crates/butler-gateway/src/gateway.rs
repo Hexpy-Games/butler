@@ -71,10 +71,10 @@ pub use application::{
     AppSpaceMutationResult, AppSpaceOrigin, AppStartTopicConversationRequest, AppSubsessionPort,
     AppTurn, AppUsageMonitorQuery, AppWorkOperationalNoticeFact, AppWorkProgress,
     AppWorkStatusConversationFact, AppWorkStreamQuery, AppWorkStreamReader,
-    AppWorkStreamTurnOutcome, AppWorkerActivityQuery, AppWorkspaceMode, ArtifactFileCandidate,
-    ArtifactMaterializationRequest, ClaimedNativeSnapshot, EnqueueReceipt,
-    MaterializedResponderFile, OperationOutputChunk, OperationOutputView, ProjectSnapshot,
-    ResolvedNativeAssets, TranscriptExport, VisualAdmissionRequest,
+    AppWorkStreamTurnOutcome, AppWorkerActivityQuery, AppWorkerActivitySourcePage,
+    AppWorkspaceMode, ArtifactFileCandidate, ArtifactMaterializationRequest, ClaimedNativeSnapshot,
+    EnqueueReceipt, MaterializedResponderFile, OperationOutputChunk, OperationOutputView,
+    ProjectSnapshot, ResolvedNativeAssets, TranscriptExport, VisualAdmissionRequest,
 };
 pub use application::{
     AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
@@ -265,6 +265,12 @@ pub trait GatewayApplication:
     /// `GET /provider-quota`: the latest quota, polled first on `refresh`.
     fn get_provider_quota(&self, id: String, refresh: bool)
     -> ApplicationFuture<ProviderQuotaView>;
+    fn worker_activity_page(
+        &self,
+        _query: AppWorkerActivityQuery,
+    ) -> ApplicationFuture<Option<serde_json::Value>> {
+        Box::pin(async { Ok(None) })
+    }
     fn work_status(&self) -> ApplicationFuture<Vec<AppBoundWorkStatusFact>>;
     fn work_status_conversation(
         &self,

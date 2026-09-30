@@ -183,32 +183,9 @@ async fn live_05_cross_session_recall() -> Result<(), HarnessError> {
     live_turn(
         &s,
         "general",
-        &format!("Please remember: my locker combination is {n}."),
+        &format!("Please save an explicit durable memory: my locker combination is {n}."),
     )
     .await?;
-    // The CLI names sessions by their conversation id (the App's session hint).
-    let sessions = s.gw.get("/sessions").await?;
-    let hint = sessions.data()["sessions"]
-        .as_array()
-        .and_then(|list| list.iter().find(|session| session["id"] == "general"))
-        .and_then(|session| session["session_hint"].as_str())
-        .unwrap_or("general")
-        .to_owned();
-    let ingest = s.agent.cli(&[
-        "cognition",
-        "memory",
-        "ingest",
-        "--session",
-        &hint,
-        "--json",
-    ])?;
-    assert_eq!(
-        ingest.code,
-        Some(0),
-        "ingest failed: {} {}",
-        ingest.stdout,
-        ingest.stderr
-    );
     let chat =
         s.gw.post("/sessions", json!({"kind": "chat", "title": "recall"}))
             .await?;

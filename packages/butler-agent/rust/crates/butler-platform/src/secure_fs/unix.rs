@@ -198,3 +198,14 @@ pub(super) fn path_key(path: &Path) -> PathBuf {
 pub(super) fn symlink(target: &Path, link: &Path) -> io::Result<()> {
     std::os::unix::fs::symlink(target, link)
 }
+
+pub(super) fn hard_link_unsupported(error: &io::Error) -> bool {
+    // link(2) also reports EPERM on filesystems without hard links (FAT).
+    // The caller's create_new fallback still checks write permissions.
+    error.raw_os_error().is_some_and(|code| {
+        matches!(
+            Errno::from_raw(code),
+            Errno::EOPNOTSUPP | Errno::ENOSYS | Errno::EPERM
+        )
+    })
+}

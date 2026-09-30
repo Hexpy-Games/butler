@@ -1,5 +1,6 @@
 //! Bounded serving-generation consumer of durable completion notices.
 
+mod blocking;
 mod catchup;
 mod probe;
 mod process;
@@ -211,7 +212,8 @@ impl MemorySyncConsumer {
         tokio::spawn(async move {
             let _token = token;
             let _permit = permit;
-            let result = match paused(&input) {
+            let owned = input.clone();
+            let result = match blocking::run(move || paused(&owned)).await {
                 Err(error) => Err(error),
                 Ok(true) => Err(CognitionError::new(
                     CognitionCode::MemoryWriteBusy,
@@ -254,7 +256,9 @@ impl MemorySyncConsumer {
             }
         }
         self.tasks.wait().await;
-        self.probe.close();
+        if let Err(error) = self.probe.close().await {
+            eprintln!("[memory-sync-close] {}", error.code());
+        }
     }
 
     /// Bounds the backoff after a successful idle poll by the next catch-up.

@@ -18,7 +18,8 @@ use serde_json::json;
 use std::time::{Duration, Instant};
 
 #[tokio::test]
-async fn stop_cancels_a_thirty_second_stream_before_closing_storage() -> Result<(), HarnessError> {
+async fn stop_interrupts_a_thirty_second_stream_before_closing_storage() -> Result<(), HarnessError>
+{
     butler_e2e::gate!();
     let (mut s, turn_id) = streaming_scenario("SHUTDOWN-STREAM").await?;
     let record = instance_record(&s.sandbox.data).unwrap();
@@ -54,14 +55,15 @@ async fn stop_cancels_a_thirty_second_stream_before_closing_storage() -> Result<
     assert!(
         transcript
             .lines()
-            .any(|line| line.contains(&turn_id) && line.contains("turn_cancelled")),
-        "terminal cancellation was not flushed"
+            .any(|line| line.contains(&turn_id) && line.contains("turn_interrupted")),
+        "terminal interruption was not flushed"
     );
     s.gw = s.agent.start_again().await?;
     let turn =
         s.gw.wait_terminal("general", &turn_id, Duration::from_secs(10))
             .await?;
-    assert_eq!(turn_state(&turn), "cancelled", "{turn}");
+    assert_eq!(turn_state(&turn), "failed", "{turn}");
+    assert_eq!(turn["safe_error_code"], "turn_interrupted", "{turn}");
     assert_eq!(
         s.provider()?.served(),
         1,
@@ -284,12 +286,10 @@ async fn unannounced_sigterm_has_a_deadline_even_when_storage_is_blocked()
         s.gw.wait_terminal("general", &turn_id, Duration::from_secs(10))
             .await?;
     assert!(
-        matches!(turn_state(&turn), "cancelled" | "failed" | "runtime_fault"),
+        matches!(turn_state(&turn), "failed" | "runtime_fault"),
         "{turn}"
     );
-    if turn_state(&turn) != "cancelled" {
-        assert_eq!(turn["safe_error_code"], "turn_interrupted", "{turn}");
-    }
+    assert_eq!(turn["safe_error_code"], "turn_interrupted", "{turn}");
     assert_eq!(s.provider()?.served(), 1, "forced stop resumed model work");
     s.finish().await
 }

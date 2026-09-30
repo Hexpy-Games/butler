@@ -1,4 +1,5 @@
 mod authority;
+mod monitoring;
 mod subsession;
 
 use rusqlite::{Connection, TransactionBehavior, params};
@@ -24,6 +25,7 @@ pub(super) fn apply(connection: &mut Connection) -> rusqlite::Result<()> {
     migrate_guided_work_checkpoint_constraints(&transaction)?;
     migrate_guided_work_review_constraints(&transaction)?;
     restore_stable_work_objectives(&transaction)?;
+    monitoring::indexes(&transaction)?;
     transaction.commit()
 }
 

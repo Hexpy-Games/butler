@@ -212,6 +212,12 @@ impl Btcc {
     pub async fn stop_turn(&self, request: StopRequest) -> Result<TurnOutcome, BtccError> {
         self.inner.stop_turn(&request.turn_id).await
     }
+
+    /// Fences shutdown execution without cancelling the durable turn. Await the
+    /// active run before closing dependencies; its state remains retryable.
+    pub fn interrupt_turn(&self, turn_id: &str) {
+        self.inner.interrupt_turn(turn_id);
+    }
 }
 
 /// The shutdown handle of the turn coordinator.

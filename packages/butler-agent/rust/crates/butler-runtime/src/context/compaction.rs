@@ -18,7 +18,7 @@ use super::{
 };
 
 mod algorithm;
-mod storage;
+pub(crate) mod storage;
 
 use algorithm::{build_summary, compaction_window, estimate_tokens, joined_message_text};
 use storage::{CompactionLock, append_snapshot};

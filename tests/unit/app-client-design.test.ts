@@ -648,7 +648,10 @@ test("electron shell injects a minimal preload-only app API contract", () => {
   expect(electronMain).toContain('new URL("/health", serverUrl).toString()');
   expect(electronMain).toContain("body?.protocol_version === appProtocolVersion");
   expect(electronMain).toContain("body?.data?.ok === true");
-  expect(electronMain).toContain('new URL("/runtime-readiness", serverUrl)');
+  expect(electronMain).toContain(
+    "portOverride ? localServerUrlForPort(portOverride) : serverUrl",
+  );
+  expect(electronMain).toContain('new URL("/runtime-readiness", baseUrl)');
   expect(electronMain).toContain("body?.data?.authenticated_gateway_ready === true");
   expect(electronMain).toContain("body?.data?.btcc_executor_ready === true");
   expect(electronMain).toContain("createBundledAgentSupervisor");

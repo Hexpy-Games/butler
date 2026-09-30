@@ -3,6 +3,7 @@
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use butler_platform::secure_fs;
 use serde_json::{Value, json};
@@ -13,6 +14,7 @@ pub struct ServiceReadiness {
     path: PathBuf,
     pid: u32,
     ready_at: String,
+    dispatch_ready: AtomicBool,
 }
 
 impl ServiceReadiness {
@@ -44,7 +46,17 @@ impl ServiceReadiness {
             path,
             pid,
             ready_at: now_iso.into(),
+            dispatch_ready: AtomicBool::new(false),
         })
+    }
+
+    /// Mark the point when the inbound dispatcher can accept turns.
+    pub fn mark_dispatch_ready(&self) {
+        self.dispatch_ready.store(true, Ordering::Release);
+    }
+
+    pub fn dispatch_ready(&self) -> bool {
+        self.dispatch_ready.load(Ordering::Acquire)
     }
 
     pub fn published_identity(&self) -> io::Result<Option<(u32, String)>> {

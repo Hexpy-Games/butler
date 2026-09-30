@@ -9,6 +9,8 @@
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::scenario::{Scenario, Setup};
 use serde_json::{Value, json};
+#[path = "subsession_legacy/activity.rs"]
+mod activity;
 
 /// SUB-LEGACY-01 — a session whose delegations predate the typed packet
 /// (no `child_role`/`access_mode`, `routingHints.stewardId`, no envelope
@@ -85,6 +87,7 @@ async fn sub_legacy_01_pre_typed_delegations_are_read() -> Result<(), HarnessErr
         activity.text
     );
 
+    activity::assert_pages(&s, &chat, activity.data()).await?;
     s.agent.terminate().await?;
     assert_unreadable_pending_row_closed(&s);
     s.finish().await

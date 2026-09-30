@@ -295,7 +295,11 @@ impl Store {
                 records.push(record);
             }
         }
-        records.sort_by_key(|record| std::cmp::Reverse(string(record, "updated_at")));
+        records.sort_by(|left, right| {
+            string(right, "updated_at")
+                .cmp(&string(left, "updated_at"))
+                .then_with(|| string(left, "id").cmp(&string(right, "id")))
+        });
         Ok(records)
     }
 

@@ -61,9 +61,7 @@ pub(super) fn append(
         options.create(true).append(true);
         butler_platform::secure_fs::owner_only(&mut options);
         let mut file = options.open(&path).map_err(io_error)?;
-        file.write_all(request.to_string().as_bytes())
-            .map_err(io_error)?;
-        file.write_all(b"\n").map_err(io_error)?;
+        write_entry(&mut file, &request.to_string()).map_err(io_error)?;
         file.sync_all().map_err(io_error)?;
         if !existed {
             butler_platform::secure_fs::sync_path(parent).map_err(io_error)?;
@@ -163,8 +161,7 @@ fn append_idempotent(
         options.create(true).append(true);
         butler_platform::secure_fs::owner_only(&mut options);
         let mut file = options.open(&path).map_err(io_error)?;
-        file.write_all(entry.as_bytes()).map_err(io_error)?;
-        file.write_all(b"\n").map_err(io_error)?;
+        write_entry(&mut file, entry).map_err(io_error)?;
         file.sync_all().map_err(io_error)?;
         if !existed {
             butler_platform::secure_fs::sync_path(parent).map_err(io_error)?;
@@ -295,4 +292,11 @@ fn io_error(error: std::io::Error) -> CognitionError {
 }
 fn sqlite_error(error: rusqlite::Error) -> CognitionError {
     CognitionError::new(CognitionCode::MemoryQueueSqliteError, error.to_string()).with_source(error)
+}
+
+pub(super) fn write_entry(writer: &mut impl Write, entry: &str) -> std::io::Result<()> {
+    let mut line = Vec::with_capacity(entry.len() + 1);
+    line.extend_from_slice(entry.as_bytes());
+    line.push(b'\n');
+    writer.write_all(&line)
 }

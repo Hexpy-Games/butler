@@ -71,6 +71,15 @@ impl Manifest {
     fn hits(&self) -> u64 {
         self.hits.load(Ordering::SeqCst)
     }
+
+    async fn wait_for_hit(&self) -> Result<(), HarnessError> {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while self.hits() == 0 {
+            assert!(Instant::now() < deadline, "manifest was not requested");
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        Ok(())
+    }
 }
 
 impl Drop for Manifest {
@@ -135,7 +144,7 @@ async fn use_07_updates_read_never_waits_for_the_network() -> Result<(), Harness
     eprintln!("USE-07 GET /updates: {took:?} (manifest delay {DELAY:?})");
     assert_eq!(component["available_version"], "0.0.5", "{component}");
     // The stale status started one background check, and only one.
-    tokio::time::sleep(Duration::from_millis(300)).await;
+    manifest.wait_for_hit().await?;
     let (again, _) = get_updates(&s.gw).await?;
     assert!(again < INSTANT);
     assert_eq!(manifest.hits(), 1, "a stale status starts one check");

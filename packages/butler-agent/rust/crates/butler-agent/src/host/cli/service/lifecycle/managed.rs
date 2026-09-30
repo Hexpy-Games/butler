@@ -1,4 +1,4 @@
-//! A service instance a login job supervises (`butler service install`).
+//! A service instance a login job supervises (`butler startup enable`).
 //!
 //! The manager relaunches a job that dies from a signal, so a service it
 //! runs is stopped by SIGTERM (a clean exit, which it does not relaunch),

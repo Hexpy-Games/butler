@@ -6,6 +6,9 @@
     reason = "test assertions"
 )]
 
+#[path = "support/memory_fixture.rs"]
+mod memory_fixture;
+
 use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use butler_platform::process_control::usage as process_usage;
 use rusqlite::Connection;
@@ -32,18 +35,7 @@ async fn perf_idle_owner_scale_reads_and_footprint() -> Result<(), HarnessError>
         "process resource counters unavailable"
     );
     let mut s = Setup::new("PERF-IDLE")?.start().await?;
-    let initialized = s
-        .agent
-        .cli_async(&[
-            "cognition",
-            "memory",
-            "rebuild",
-            "initialize-empty",
-            "--json",
-        ])
-        .await?
-        .json()?;
-    assert_eq!(initialized["ok"], true, "{initialized}");
+    memory_fixture::initialize_empty(&s.sandbox.data)?;
     s.agent.terminate().await?;
     let app = s.sandbox.data.join("app-server/butler-client.sqlite");
     app_seed::seed_owner_scale(&Connection::open(&app).unwrap(), 3_000);

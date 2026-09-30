@@ -725,13 +725,15 @@ function createHarness(options: {
       }
       return child;
     },
-    healthCheck: (localAuth) => {
-      if (serving.has(port) && localAuth?.token) {
-        healthTokens.set(port, [...(healthTokens.get(port) ?? []), localAuth.token]);
+    healthCheck: (localAuth, portOverride) => {
+      const probePort = portOverride ?? port;
+      if (serving.has(probePort) && localAuth?.token) {
+        healthTokens.set(probePort, [...(healthTokens.get(probePort) ?? []), localAuth.token]);
       }
-      return serving.has(port);
+      return serving.has(probePort);
     },
-    readinessCheck: () => serving.has(port),
+    readinessCheck: (_localAuth, _gateway, portOverride) =>
+      serving.has(portOverride ?? port),
     isPortAvailable: (candidate) => !serving.has(candidate),
     findAvailablePort: (candidate) => candidate,
     updatePort: (next) => {

@@ -34,6 +34,11 @@ pub fn instance_record(data: &Path) -> Option<Value> {
     read_json(&data.join("state/butler-agent-native-service.json"))
 }
 
+/// Whether the service instance record reports a ready agent.
+pub fn instance_ready(record: &Value) -> bool {
+    record["state"] == "ready"
+}
+
 /// What a watcher of `D/state` sees while a restart runs.
 #[derive(Default)]
 pub struct RestartWatch {
@@ -52,7 +57,7 @@ impl RestartWatch {
         }
         if self.ready.is_none()
             && instance_record(data)
-                .is_some_and(|record| record["state"] == "ready" && &record["nonce"] != old_nonce)
+                .is_some_and(|record| instance_ready(&record) && &record["nonce"] != old_nonce)
         {
             self.ready = Some(started.elapsed());
         }

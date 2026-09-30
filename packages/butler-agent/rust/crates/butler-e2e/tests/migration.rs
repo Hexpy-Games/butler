@@ -24,7 +24,11 @@ async fn mig_01_pre_btcc_data_dir_is_refused_without_writes() -> Result<(), Harn
     let manifest = legacy_manifest()?;
     let setup = Setup::new("MIG-01")?;
     let data = setup.sandbox.data.clone();
-    butler_e2e::e2e::fixtures::legacy(&data, "openai/gpt-6-sol")?;
+    butler_e2e::e2e::fixtures::legacy(
+        &data,
+        "openai/gpt-6-sol",
+        butler_e2e::e2e::fixtures::FIXTURE_TIME,
+    )?;
     let before = tree(&data);
     let launch = butler_e2e::e2e::agent::Launch::new(&setup.sandbox)?;
     let output = launch

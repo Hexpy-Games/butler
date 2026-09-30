@@ -3,7 +3,7 @@
 mod contracts;
 mod mutations;
 mod owner;
-mod read;
+pub(super) mod read;
 mod write;
 
 #[cfg(test)]

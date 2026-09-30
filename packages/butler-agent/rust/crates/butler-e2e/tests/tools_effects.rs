@@ -141,20 +141,23 @@ async fn authority_requests(s: &Scenario) -> Result<Value, HarnessError> {
         .clone())
 }
 
-async fn wait_request(s: &Scenario) -> Result<Value, HarnessError> {
+async fn wait_request(s: &Scenario, turn_id: &str) -> Result<Value, HarnessError> {
     let deadline = Instant::now() + Duration::from_secs(butler_e2e::e2e::scenario::turn_timeout());
     loop {
         let page = authority_requests(s).await?;
         if let Some(request) = page["requests"]
             .as_array()
-            .and_then(|list| list.first())
+            .and_then(|list| {
+                list.iter()
+                    .find(|request| request["source_turn_id"] == turn_id)
+            })
             .cloned()
         {
             return Ok(request);
         }
         assert!(
             Instant::now() < deadline,
-            "no authority request appeared: {page}"
+            "no authority request appeared for turn {turn_id}: {page}"
         );
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
@@ -196,7 +199,7 @@ async fn pending_request(
     turn_id: &str,
     target: &Path,
 ) -> Result<String, HarnessError> {
-    let request = wait_request(s).await?;
+    let request = wait_request(s, turn_id).await?;
     let reference = request_ref(&request);
     assert!(!reference.is_empty(), "{request}");
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -277,14 +280,15 @@ async fn allow_and_settle(
 /// Revokes the conversation grant that Allow created; it is no longer listed.
 async fn revoke_conversation_grant(s: &Scenario) -> Result<(), HarnessError> {
     let permissions = authority_requests(s).await?["permissions"].clone();
-    let grant = permissions
-        .as_array()
-        .and_then(|list| list.first())
-        .and_then(|permission| {
-            permission["grant_ref"]
-                .as_str()
-                .or_else(|| permission["ref"].as_str())
-        })
+    let grants = permissions.as_array().cloned().unwrap_or_default();
+    assert_eq!(
+        grants.len(),
+        1,
+        "unexpected conversation grants: {permissions}"
+    );
+    let grant = grants[0]["grant_ref"]
+        .as_str()
+        .or_else(|| grants[0]["ref"].as_str())
         .unwrap_or_default()
         .to_owned();
     assert!(
@@ -371,7 +375,7 @@ async fn tool_07_authority_deny() -> Result<(), HarnessError> {
         "ask_first",
     )
     .await?;
-    let request = wait_request(&s).await?;
+    let request = wait_request(&s, &turn_id).await?;
     let reference = request_ref(&request);
     let deny =
         s.gw.post(

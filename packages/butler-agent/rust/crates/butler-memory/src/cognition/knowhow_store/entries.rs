@@ -41,7 +41,12 @@ pub(super) fn list_paths(root: &Path) -> CognitionResult<Vec<EntryPath>> {
         let updated_at = KnowHowDocument::required(&entry.updated_at)?.to_owned();
         entries.push(EntryPath { path, updated_at });
     }
-    entries.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
+    entries.sort_by(|left, right| {
+        right
+            .updated_at
+            .cmp(&left.updated_at)
+            .then_with(|| left.path.cmp(&right.path))
+    });
     Ok(entries)
 }
 

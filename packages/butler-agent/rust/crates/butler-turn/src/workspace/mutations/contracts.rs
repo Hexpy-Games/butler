@@ -41,7 +41,8 @@ pub struct EditMutation {
 /// Observes the commit points of one mutation lane, between the conflict
 /// check and the filesystem operations it guards. Production observes
 /// nothing; the points exist so concurrent external changes can be modelled
-/// exactly where they matter.
+/// exactly where they matter. I/O defaults use the real filesystem; tests can
+/// inject sync and link errors without requiring a special mounted filesystem.
 pub(crate) trait CommitObserver: Send + Sync {
     /// Before a batch target is committed (`index` is its first edit index).
     fn before_target(&self, _index: usize, _target: &std::path::Path) {}
@@ -49,6 +50,14 @@ pub(crate) trait CommitObserver: Send + Sync {
     fn before_replace(&self, _target: &std::path::Path) {}
     /// After a new file is linked into place, before its temporary is removed.
     fn after_link(&self, _temporary: &std::path::Path) {}
+    /// Flushes the prepared bytes before publication.
+    fn sync_temporary(&self, file: &std::fs::File) -> std::io::Result<()> {
+        file.sync_all()
+    }
+    /// Publishes a new file without replacing a peer.
+    fn link(&self, temporary: &std::path::Path, target: &std::path::Path) -> std::io::Result<()> {
+        std::fs::hard_link(temporary, target)
+    }
 }
 
 pub(crate) struct Unobserved;

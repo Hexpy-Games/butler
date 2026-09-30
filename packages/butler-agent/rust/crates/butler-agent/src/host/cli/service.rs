@@ -26,7 +26,7 @@ struct Options {
     detached: bool,
     /// `--if-absent`: `service run` exits 0 when an instance owns DATA already.
     if_absent: bool,
-    /// `--files-only`: `service install` and `uninstall` write or remove the
+    /// `--files-only`: `startup enable` and `disable` write or remove the
     /// definition without asking the service manager to act.
     files_only: bool,
     /// `--requested-by`: the controller recorded in the stop intent.
@@ -50,7 +50,7 @@ enum Action {
     Stop,
     Restart,
     RestartHandoff,
-    /// `service install`: register the service to start at login.
+    /// `startup enable`: register the service to start at login.
     RegisterLogin,
     /// `service uninstall`: remove that registration.
     UnregisterLogin,
@@ -66,9 +66,9 @@ impl Action {
             Self::Stop => "stop",
             Self::Restart => "restart",
             Self::RestartHandoff => "service restart-handoff",
-            Self::RegisterLogin => "service install",
-            Self::UnregisterLogin => "service uninstall",
-            Self::LoginStatus => "service status",
+            Self::RegisterLogin => "startup enable",
+            Self::UnregisterLogin => "startup disable",
+            Self::LoginStatus => "startup status",
         }
     }
 }
@@ -93,7 +93,7 @@ pub(crate) fn recognizes(args: &[OsString]) -> bool {
                 index += 1;
             }
             value if value.starts_with('-') => return false,
-            "service" | "start" | "stop" | "restart" => return true,
+            "startup" | "service" | "start" | "stop" | "restart" => return true,
             _ => return false,
         }
     }
@@ -174,18 +174,21 @@ pub(crate) async fn run_native_service_cli(
 fn misplaced_option(options: &Options, action: Action) -> Option<(&'static str, &'static str)> {
     let run = matches!(action, Action::Run);
     if options.dry_run && run {
-        Some(("service run", "--dry-run is not supported for service run"))
+        Some((
+            "service run",
+            "--dry-run is not supported for internal service execution",
+        ))
     } else if (options.detached || options.if_absent) && !run {
         Some((
             "service",
-            "--detached and --if-absent are only valid for service run",
+            "--detached and --if-absent are internal service flags",
         ))
     } else if options.files_only
         && !matches!(action, Action::RegisterLogin | Action::UnregisterLogin)
     {
         Some((
             "service",
-            "--files-only is only valid for service install and uninstall",
+            "--files-only is only valid for startup enable and disable",
         ))
     } else {
         None
@@ -313,16 +316,16 @@ fn parse(args: &[OsString]) -> Result<(Options, Action), crate::host::HostError>
         [service, command] if service == "service" && command == "restart-handoff" => {
             Action::RestartHandoff
         }
+        [family, action] if family == "startup" && action == "enable" => Action::RegisterLogin,
+        [family, action] if family == "startup" && action == "disable" => Action::UnregisterLogin,
+        [family, action] if family == "startup" && action == "status" => Action::LoginStatus,
         [service, command] if service == "service" && command == "install" => Action::RegisterLogin,
         [service, command] if service == "service" && command == "uninstall" => {
             Action::UnregisterLogin
         }
         [service, command] if service == "service" && command == "status" => Action::LoginStatus,
         [service] if service == "service" => {
-            return Err(
-                "supported commands: service run|install|uninstall|status, start, stop, restart"
-                    .into(),
-            );
+            return Err("Use butler startup enable|disable|status or start|stop|restart.".into());
         }
         [command] if command == "start" => Action::Start,
         [command] if command == "stop" => Action::Stop,

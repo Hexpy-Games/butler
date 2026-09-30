@@ -86,6 +86,18 @@ which installs the new version beside the old one and restarts a running
 Butler. `butler rollback` returns to the previous version, and the installer
 can be re-run at any time.
 
+The user CLI provides `install`, `start`, `stop`, `restart`, `status`, `open`,
+`doctor`, `update`, `rollback`, `uninstall`, `startup enable|disable|status`,
+`auth login|logout|status`, `model list|status|set`, `logs`, `schedule`, `mcp`,
+`skills list|import`, `config get|set`, `help`, and `version`.
+Run `butler --help` for Korean/English help. `startup` manages start at login;
+`schedule` manages scheduled tasks. Use the App for memory, personalization,
+and remote access settings. Internal service and integration entry points are
+not part of the user command guide.
+
+`npx @hexpygames/butler install` bootstraps an installation; after that,
+`butler install --from ARCHIVE|URL` installs a supplied Agent archive.
+
 ### Manual install
 
 If you cannot run the installer, extract a release archive yourself. Each
