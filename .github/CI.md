@@ -35,7 +35,9 @@ Six hash partitions cover the non-install scenarios. INS-02 and INS-14 have
 one dedicated job each, and a third install job covers every other `ins_`
 scenario. The selections are disjoint and exhaustive. Each run uses zero
 retries and at most eight test threads. PERF-01 reserves those slots while
-sampling its existing owner-scale latency budget. Only INS-14 probes systemd; install
+sampling its existing owner-scale latency budget. Full idle-calendar and
+memory observation windows run early in their shard, after PERF-01, so their
+unchanged durations overlap shorter scenarios rather than extend the tail. Only INS-14 probes systemd; install
 jobs do not restore the embedding model because they never use it. INS-14
 requires the Linux runner's user manager and uses its config directory with
 a temporary HOME. It retains both 12-second stable-stop observations.

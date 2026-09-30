@@ -13,3 +13,9 @@ filter = 'binary(=e2e) and test(/^app_storage_scale::perf_01_/)'
 threads-required = 8
 priority = 100
 success-output = "final"
+
+# Keep each full idle-observation window, but start it before shorter scenarios
+# so it can overlap their work. PERF-01 still runs first with all eight slots.
+[[profile.default.overrides]]
+filter = 'binary(=e2e) and (test(/^memory_idle::mem_idle_/) or test(/^schedule_store::sched_06_/))'
+priority = 10
