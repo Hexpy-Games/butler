@@ -1,6 +1,7 @@
 """Strip Linux archive executables after building, preserving Cargo cache keys."""
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -18,12 +19,23 @@ for binaries in build["non-test-binaries"].values():
         if path.suffix != ".rlib":
             paths.add(path)
 
+def needs_stripping(path):
+    sections = subprocess.check_output(
+        ["readelf", "--sections", "--wide", str(path)], text=True
+    )
+    names = re.findall(r"\]\s+(\S+)\s+", sections)
+    return any(name == ".symtab" or "debug" in name for name in names)
+
+
 before = sum(path.stat().st_size for path in paths)
+stripped = 0
 for path in sorted(paths):
     stat = path.stat()
-    subprocess.run(["strip", "--strip-all", str(path)], check=True)
+    if needs_stripping(path):
+        subprocess.run(["strip", "--strip-all", str(path)], check=True)
+        stripped += 1
     # Cargo checks dependency output mtimes, including lance-arrow's .so.
     # Stripping metadata must not make its consumers rebuild unstripped.
     os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
 after = sum(path.stat().st_size for path in paths)
-print(f"Stripped {len(paths)} archive binaries: {before} -> {after} bytes")
+print(f"Stripped {stripped} of {len(paths)} archive binaries: {before} -> {after} bytes")

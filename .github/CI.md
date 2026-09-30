@@ -170,3 +170,15 @@ passed the Rust gate in 6m03s, including 78s before its build jobs started;
 archive 2m11s, Clippy 1m23s. Its prior workflow's cancellation cleanup held
 startup. The next measurement includes the new head-scoped coordination and
 reports event-to-gate time, without subtracting queues.
+
+
+The startup-deadline scenario keeps its full product deadline and runs early
+in its stub shard, alongside the existing idle-window priority. In warm run
+36711329280 the Rust gate passed in 5m03s; its coordination job failed because
+it inherited a checkout directory without checking out. The corrected jobs
+run in runner.temp. Already-stripped cached ELF binaries are detected through
+section metadata and skipped; fresh binaries still use the same strip command.
+Local repeated stripping of ten cached binaries took 0.507s before and 0.023s
+after, with identical SHA256 hashes and mtimes. A freshly compiled debug ELF
+was stripped once, skipped on the second call, and retained its complete output.
+The next measurement includes both corrections and early startup scheduling.
