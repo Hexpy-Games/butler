@@ -24,6 +24,7 @@ mod graph;
 mod graph_consolidation;
 mod hot_cache;
 mod knowhow_store;
+mod lance_maintenance;
 mod lance_store;
 mod legacy;
 mod lexical;
@@ -69,7 +70,7 @@ pub use briefing::{
 };
 pub use completion::{
     CompletionNotice, CompletionPublisher, MemorySyncConsumer, MemorySyncPoll,
-    TypedMemorySourceNotice,
+    TypedMemorySourceNotice, signal_memory_work,
 };
 pub use configured_cycle::{
     ConfiguredCycleOptions, ConfiguredCycleResult, ConfiguredCycleService, ConfiguredPhase,

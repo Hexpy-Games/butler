@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
 
+use super::executable;
 use super::gateway::Gateway;
 use super::sandbox::Sandbox;
 use super::{HarnessError, harness_error};
@@ -236,18 +237,14 @@ impl Agent {
         let log = self.launch.logs.join(format!("agent-{}.log", self.starts));
         let stdout = File::create(&log)?;
         let stderr = stdout.try_clone()?;
-        let child = self
-            .launch
-            .service_command()
-            .stdout(stdout)
-            .stderr(stderr)
-            .spawn()
-            .map_err(|error| {
-                harness_error(format!(
-                    "cannot launch E2E agent {}: {error}",
-                    self.launch.binary.display()
-                ))
-            })?;
+        let mut command = self.launch.service_command();
+        command.stdout(stdout).stderr(stderr);
+        let child = executable::spawn(&mut command).map_err(|error| {
+            harness_error(format!(
+                "cannot launch E2E agent {}: {error}",
+                self.launch.binary.display()
+            ))
+        })?;
         self.child = Some(child);
         Ok(log)
     }
@@ -341,7 +338,7 @@ impl Agent {
     ) -> Result<CliOutput, HarnessError> {
         let (out, err) = process::capture_to_files(&mut command, &self.launch.tmp)?;
         let status = self
-            .while_reaping(move || command.status(), observe)
+            .while_reaping(move || executable::status(&mut command), observe)
             .await??;
         Ok(CliOutput {
             code: status.code(),
@@ -407,7 +404,7 @@ impl Agent {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
-        let mut child = command.spawn()?;
+        let mut child = executable::spawn_async(&mut command).await?;
         if let (Some(input), Some(mut stdin)) = (input, child.stdin.take()) {
             stdin.write_all(input.as_bytes()).await?;
         }
@@ -423,12 +420,9 @@ impl Agent {
     /// dir, blocking the calling thread. Only for commands that never reach
     /// the model provider; otherwise use [`Agent::cli_async`].
     pub fn cli(&self, args: &[&str]) -> Result<CliOutput, HarnessError> {
-        let output = self
-            .launch
-            .command()
-            .args(args)
-            .stdin(Stdio::null())
-            .output()?;
+        let mut command = self.launch.command();
+        command.args(args).stdin(Stdio::null());
+        let output = executable::output(&mut command)?;
         Ok(CliOutput {
             code: output.status.code(),
             stdout: String::from_utf8_lossy(&output.stdout).into_owned(),

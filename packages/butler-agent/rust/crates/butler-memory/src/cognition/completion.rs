@@ -6,9 +6,11 @@ mod format_pin;
 mod observation;
 mod queue;
 mod typed_notice;
+mod wake;
 
 pub use consumer::{MemorySyncConsumer, MemorySyncPoll};
 pub use typed_notice::TypedMemorySourceNotice;
+pub use wake::signal_memory_work;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -64,7 +66,9 @@ impl CompletionPublisher {
             &observation,
             &notice.completed_at,
             &(self.now_iso)(),
-        )
+        )?;
+        signal_memory_work();
+        Ok(())
     }
 
     pub(crate) fn now_iso(&self) -> String {
@@ -75,7 +79,9 @@ impl CompletionPublisher {
         &self,
         notice: &TypedMemorySourceNotice,
     ) -> CognitionResult<String> {
-        queue::append_typed(&self.memory_root, notice, &(self.now_iso)())
+        let job = queue::append_typed(&self.memory_root, notice, &(self.now_iso)())?;
+        signal_memory_work();
+        Ok(job)
     }
 
     pub(crate) fn publish_feedback_quality_exclusion(
@@ -84,12 +90,14 @@ impl CompletionPublisher {
         operation_id: &str,
         revision: &str,
     ) -> CognitionResult<String> {
-        queue::append_feedback_quality(
+        let job = queue::append_feedback_quality(
             &self.memory_root,
             feedback_id,
             operation_id,
             revision,
             &(self.now_iso)(),
-        )
+        )?;
+        signal_memory_work();
+        Ok(job)
     }
 }

@@ -55,6 +55,7 @@ pub struct ConsumeTypedLifecycleInput {
 const OPERATION_LIMIT: usize = 4;
 
 type Clock = Arc<dyn Fn() -> String + Send + Sync>;
+type GraphPool = Arc<Mutex<Option<(PathBuf, Vec<GraphRepository>)>>>;
 
 /// Registers conversation and typed sources in a memory generation and projects them into the
 /// graph.
@@ -68,6 +69,9 @@ pub struct CognitionRegistrationService {
     lifecycle: Mutex<Lifecycle>,
     projection: Option<Arc<projection::ProjectionDependencies>>,
     active_windows: Arc<Mutex<HashSet<(String, String, String)>>>,
+    /// Graph databases whose schema this process already ensured.
+    schema_ready: Arc<Mutex<HashSet<PathBuf>>>,
+    graph_pool: GraphPool,
 }
 
 struct Lifecycle {
@@ -80,6 +84,7 @@ struct OperationState {
     plan: CognitionSourcePlan,
     canonical: ConversationSourceReader,
     graph: GraphRepository,
+    graph_pool: GraphPool,
     extraction_model: String,
     reasoning_effort: String,
 }
@@ -100,6 +105,8 @@ impl CognitionRegistrationService {
             lifecycle: Mutex::new(Lifecycle { closing: false }),
             projection: None,
             active_windows: Arc::new(Mutex::new(HashSet::new())),
+            schema_ready: Arc::new(Mutex::new(HashSet::new())),
+            graph_pool: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -142,6 +149,8 @@ impl CognitionRegistrationService {
         let coordinator = self.coordinator.clone();
         let clock = self.clock.clone();
         let shutdown = self.shutdown.clone();
+        let schema_ready = self.schema_ready.clone();
+        let graph_pool = self.graph_pool.clone();
         let (sender, receiver) = oneshot::channel();
         // Detached on purpose: the operation token/guard moved into the task keeps the
         // owner's close waiting for it, and the result returns through the oneshot,
@@ -149,7 +158,16 @@ impl CognitionRegistrationService {
         tokio::spawn(async move {
             let _token = token;
             let _permit = permit;
-            let result = operation(environment, coordinator, clock, shutdown, input).await;
+            let result = operation(
+                environment,
+                coordinator,
+                clock,
+                shutdown,
+                schema_ready,
+                graph_pool,
+                input,
+            )
+            .await;
             let _ = sender.send(result);
         });
         receiver.await.map_err(|source| {
@@ -173,6 +191,7 @@ impl CognitionRegistrationService {
             }
         }
         self.operations.wait().await;
+        *self.graph_pool.lock() = None;
     }
 }
 
@@ -181,14 +200,17 @@ async fn operation(
     coordinator: Arc<CognitionWriteCoordinator>,
     clock: Clock,
     shutdown: CancellationToken,
+    schema_ready: Arc<Mutex<HashSet<PathBuf>>>,
+    graph_pool: GraphPool,
     input: RegisterConversationSourceInput,
 ) -> CognitionResult<ConversationRegistrationOutcome> {
     check_cancelled(&shutdown, input.cancellation.as_ref())?;
     let now = clock();
     let initial_environment = environment.clone();
-    let prepared = tokio::task::spawn_blocking(move || prepare(input, &initial_environment, &now))
-        .await
-        .map_err(join_error)??;
+    let prepared =
+        tokio::task::spawn_blocking(move || prepare(input, &initial_environment, &now, graph_pool))
+            .await
+            .map_err(join_error)??;
     let state = match prepared {
         InitialPreparation::Handoff(handoff) => {
             let SupersessionHandoff {
@@ -215,7 +237,15 @@ async fn operation(
         clock,
         shutdown,
     };
-    let state = stages.ensure_schema(state).await?;
+    // The schema check writes under the lease; once per graph database is enough.
+    let graph_path = state.handle.graph_path.clone();
+    let state = if schema_ready.lock().contains(&graph_path) {
+        state
+    } else {
+        let state = stages.ensure_schema(state).await?;
+        schema_ready.lock().insert(graph_path);
+        state
+    };
     match stages.replay(state).await? {
         ReplayStage::Complete(progress) => Ok(ConversationRegistrationOutcome::Replayed(*progress)),
         ReplayStage::Continue(state) => stages.register(state).await,
@@ -242,6 +272,7 @@ fn prepare(
     input: RegisterConversationSourceInput,
     environment: &CognitionPathEnvironment,
     now: &str,
+    graph_pool: GraphPool,
 ) -> CognitionResult<InitialPreparation> {
     let handle = resolve_generation(&input.data_root, environment, &input.target)?;
     let canonical_path = handle
@@ -263,13 +294,21 @@ fn prepare(
         PreparedConversationSource::Plan(plan) => *plan,
     };
     let model = crate::profile::read_profiling_extractor_model(&handle.source_root);
-    let graph = GraphRepository::open(&handle.graph_path)?;
+    let graph = {
+        let mut pool = graph_pool.lock();
+        match pool.as_mut() {
+            Some((path, graphs)) if path == &handle.graph_path => graphs.pop(),
+            _ => None,
+        }
+    }
+    .map_or_else(|| GraphRepository::open(&handle.graph_path), Ok)?;
     Ok(InitialPreparation::Ready(Box::new(OperationState {
         input,
         handle,
         plan,
         canonical,
         graph,
+        graph_pool,
         extraction_model: model.effective_model,
         reasoning_effort: model.reasoning_effort,
     })))
@@ -279,20 +318,39 @@ async fn close_after_failure<T>(
     state: Box<OperationState>,
     operation_error: CognitionError,
 ) -> CognitionResult<T> {
-    tokio::task::spawn_blocking(move || close_state(state))
+    tokio::task::spawn_blocking(move || close_with_error(state, operation_error))
         .await
-        .map_err(join_error)??;
-    Err(operation_error)
+        .map_err(join_error)
+        .and_then(Err)
 }
 
 fn close_state(state: Box<OperationState>) -> CognitionResult<()> {
-    let graph_close = state.graph.close();
-    let canonical_close = state.canonical.close().map_err(CognitionError::from);
-    canonical_close.and(graph_close)
+    let OperationState {
+        handle,
+        graph,
+        graph_pool,
+        canonical,
+        ..
+    } = *state;
+    canonical.close().map_err(CognitionError::from)?;
+    let mut pool = graph_pool.lock();
+    match pool.as_mut() {
+        Some((path, graphs)) if path == &handle.graph_path => graphs.push(graph),
+        _ => *pool = Some((handle.graph_path, vec![graph])),
+    }
+    Ok(())
 }
 
 fn close_with_error(state: Box<OperationState>, operation_error: CognitionError) -> CognitionError {
-    close_state(state).err().unwrap_or(operation_error)
+    let OperationState {
+        graph, canonical, ..
+    } = *state;
+    let graph_close = graph.close();
+    let canonical_close = canonical.close().map_err(CognitionError::from);
+    canonical_close
+        .and(graph_close)
+        .err()
+        .unwrap_or(operation_error)
 }
 
 async fn acquire(

@@ -10,7 +10,6 @@ src/host/app/runtime_ports/personalization.rs	AppPersonalization::update	97
 src/host/app/runtime_ports/session_workspaces.rs	<AppSessionWorkspaces as AppSessionWorkspaceProvisioner>::provision	90
 src/host/app/runtime_ports/settings.rs	load	83
 src/host/app/runtime_ports/settings_mutation.rs	AppSettingsMutation::apply_inner	91
-src/host/app/runtime_ports/topic_branch.rs	<AppBranchConversations as AppBranchConversationReader>::context	88
 src/host/app/runtime_ports/topic_branch.rs	<AppBranchSummarizerAdapter as AppBranchSummarizer>::summarize	89
 src/host/app/server.rs	AppServer::open_with_artifacts	162
 src/host/cli/cognition.rs	run	177
@@ -48,7 +47,7 @@ src/host/guided/command/effect.rs	<CommandEffectAdapter as EffectAdapter>::dispa
 src/host/guided/command/evidence.rs	capability_receipts	85
 src/host/guided/command/output.rs	from_streams	175
 src/host/guided/command/output/assemble.rs	assemble	149
-src/host/guided/factory.rs	<GuidedTurnFactoryAdapter as GuidedTurnFactory>::bind_pre_model	227
+src/host/guided/factory.rs	<GuidedTurnFactoryAdapter as GuidedTurnFactory>::bind_pre_model	226
 src/host/guided/file_effects/edit.rs	decode	115
 src/host/guided/file_effects/edit.rs	recover	149
 src/host/guided/file_effects/edit/legacy.rs	recover	90
@@ -58,7 +57,7 @@ src/host/guided/project_tools/evidence.rs	canonical_record	89
 src/host/guided/project_tools/lifecycle.rs	execute	86
 src/host/guided/project_tools/lifecycle/closeout.rs	closeout	97
 src/host/guided/project_tools/options.rs	command	144
-src/host/guided/prompt.rs	<GuidedPrompt as PromptPort>::render	190
+src/host/guided/prompt.rs	<GuidedPrompt as PromptPort>::render	186
 src/host/guided/prompt/documents.rs	read	113
 src/host/guided/prompt/prior_tool/semantic.rs	facts	93
 src/host/guided/prompt/work_context.rs	render	267
@@ -66,7 +65,7 @@ src/host/guided/tools.rs	GuidedTools::new	101
 src/host/guided/tools/discovery.rs	search	82
 src/host/guided/tools/discovery/invoke.rs	run	148
 src/host/guided/tools/discovery/invoke.rs	run_mcp	115
-src/host/guided/tools/dispatch.rs	execute	436
+src/host/guided/tools/dispatch.rs	execute	421
 src/host/guided/tools/effect.rs	execute	139
 src/host/guided/tools/effect/authority.rs	gate	124
 src/host/guided/tools/effect/ledger_input.rs	prepare	94
@@ -93,7 +92,7 @@ src/host/memory_jobs/recall_metrics.rs	<RecallMetrics as RecallMetricSink>::reco
 src/host/memory_jobs/transcript_sync.rs	LegacySessionSync::run	194
 src/host/memory_jobs/transcript_sync/hot.rs	LegacyHot::save	125
 src/host/memory_jobs/transcript_sync/hot.rs	commit	91
-src/host/runtime.rs	AgentRuntime::open	424
+src/host/runtime.rs	AgentRuntime::open	423
 src/host/runtime/environment.rs	ProcessEnvironment::capture	82
 src/host/service/entrypoint.rs	serve	159
 src/host/service/ingress.rs	IngressDispatcher::poll	86

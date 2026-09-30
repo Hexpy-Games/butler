@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 use super::binary::{agent_binary, resource_source};
 use super::config::flag;
+use super::executable;
 use super::{HarnessError, harness_error};
 
 pub struct Sandbox {
@@ -43,7 +44,7 @@ impl Sandbox {
         // the product's instance identity check then refuses the CLI's
         // gateway control requests (`gateway_control_identity_invalid`).
         let source = agent_binary()?;
-        fs::copy(&source, &binary).map_err(|error| {
+        executable::copy(&source, &binary).map_err(|error| {
             harness_error(format!(
                 "copy E2E agent {} to {}: {error}",
                 source.display(),
