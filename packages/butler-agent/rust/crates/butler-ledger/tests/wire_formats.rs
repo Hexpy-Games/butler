@@ -25,6 +25,13 @@ mod project_work;
 // test-category: format-pin
 #[tokio::test]
 async fn ledger_formats_match_their_goldens() {
+    let mut normalizer = golden::Normalizer::new(std::path::Path::new("/unused"));
+    for inode in ["1", "8354", "10000", "123456789"] {
+        assert_eq!(
+            normalizer.text(&format!("\"{inode}:8867\"")),
+            "\"<inode>:8867\""
+        );
+    }
     commands::ledger_commands_keep_their_files_and_envelopes().await;
     effects::record_effects_keep_their_journal_lock_shard_and_answers().await;
     project_work::project_work_keeps_its_records_and_projections().await;

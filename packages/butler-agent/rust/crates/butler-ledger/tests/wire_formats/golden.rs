@@ -33,7 +33,7 @@ impl Normalizer {
             )
             .unwrap(),
             epoch_ms: Regex::new(r"\b1[0-9]{12}(\.[0-9]+)?\b").unwrap(),
-            inode: Regex::new(r#""\d{5,}:"#).unwrap(),
+            inode: Regex::new(r#""\d+:"#).unwrap(),
             lock_shard: Regex::new(r"mutation-lock-\d{2}").unwrap(),
             uuid: Regex::new(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
                 .unwrap(),
