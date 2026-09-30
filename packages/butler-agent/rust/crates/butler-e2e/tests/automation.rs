@@ -53,7 +53,7 @@ async fn run_now(s: &Scenario, id: &str) -> Result<String, HarnessError> {
     let run =
         s.gw.post(&format!("/automations/{id}/run"), json!({}))
             .await?;
-    assert_eq!(run.status, 202, "{}", run.text);
+    assert_eq!(run.status, 202, "{}\n{}", run.text, s.agent.logs());
     Ok(run.data()["run"]["turn_id"].as_str().unwrap().to_owned())
 }
 
@@ -142,6 +142,33 @@ async fn auto_01_automation_runs_a_turn() -> Result<(), HarnessError> {
         "restart started a turn"
     );
     assert_eq!(s.gw.messages("general").await?.len(), messages);
+    s.finish().await
+}
+
+/// Internal schedule failures retain their cause in the server log only.
+#[tokio::test]
+async fn auto_02_internal_failure_is_logged_and_private() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("AUTO-02")?.start().await?;
+    let id = create(&s).await?;
+    let db = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))
+        .expect("open isolated App database");
+    db.execute_batch(
+        "CREATE TRIGGER fail_schedule_run BEFORE INSERT ON app_automation_runs
+         BEGIN SELECT RAISE(ABORT, 'schedule-run-diagnostic-sentinel'); END;",
+    )
+    .expect("inject schedule storage failure");
+    let reply =
+        s.gw.post(&format!("/automations/{id}/run"), json!({}))
+            .await?;
+    assert_eq!(reply.status, 500, "{}", reply.text);
+    assert_eq!(reply.error_code(), Some("internal_error"));
+    assert_eq!(reply.body["error"]["message"], "Request failed.");
+    assert!(!reply.text.contains("schedule-run-diagnostic-sentinel"));
+    let logs = s.agent.logs();
+    assert!(logs.contains("app_sqlite_error"), "{logs}");
+    assert!(logs.contains("schedule-run-diagnostic-sentinel"), "{logs}");
+    drop(db);
     s.finish().await
 }
 
