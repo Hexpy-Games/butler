@@ -35,6 +35,18 @@ pub(super) async fn set_enabled(
     };
     let writes = butler_core::configuration::ConfigurationWrites::new();
     let _guard = writes.acquire().await;
+    let _change = match butler_core::configuration::lock_file_async(&path).await {
+        Ok(lock) => lock,
+        Err(error) => {
+            return report_error(
+                command.name(),
+                options.json,
+                "config_lock_failed",
+                &error.to_string(),
+                1,
+            );
+        }
+    };
     let mut config = match butler_core::configuration::read_json_object(&path) {
         Ok(config) => config,
         Err(error) => {

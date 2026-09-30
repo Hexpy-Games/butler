@@ -106,7 +106,7 @@ impl ModelConfiguration {
         let owner = AuthOwner {
             data_root: &self.data_root,
             environment: &environment,
-            clock: self.clock.as_ref(),
+            clock: &self.clock,
             client: &self.client,
         };
         let codex_only = read.registered.iter().any(|config| {

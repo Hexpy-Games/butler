@@ -50,6 +50,14 @@ impl Settings {
     ) -> Result<(), crate::host::HostError> {
         let writes = butler_core::configuration::ConfigurationWrites::new();
         let _permit = writes.acquire().await;
+        installation
+            .validate_data_root(&settings_path(data_root))
+            .map_err(|source| {
+                crate::host::HostError::new("native_path_configuration_invalid").with_source(source)
+            })?;
+        let _change = butler_core::configuration::lock_file_async(&settings_path(data_root))
+            .await
+            .map_err(crate::host::HostError::from_error)?;
         let current = Self::read(data_root, installation)?;
         let existing_config = current.value["config"]
             .as_object()

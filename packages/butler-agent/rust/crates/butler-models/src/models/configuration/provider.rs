@@ -264,7 +264,7 @@ impl ModelConfiguration {
         let owner = AuthOwner {
             data_root: root,
             environment: &environment,
-            clock: self.clock.as_ref(),
+            clock: &self.clock,
             client: &self.client,
         };
         if registered.is_some_and(|value| value.auth_type == ProviderAuthMethod::CodexOauth) {

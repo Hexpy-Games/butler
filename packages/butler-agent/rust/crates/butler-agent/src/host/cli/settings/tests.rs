@@ -4,8 +4,10 @@ use serde_json::json;
 
 use super::config;
 
+// test-category: pure-logic
 #[test]
 fn config_paths_and_values_preserve_operator_rules() {
+    config_update_keeps_unrelated_values_and_validation_checks_whole_object();
     assert!(config::SAFE_CONFIG_PATHS.contains(&"system.defaultModel"));
     assert!(!config::SAFE_CONFIG_PATHS.contains(&"system.apiKey"));
     assert!(config::is_secret_path("provider.api-key"));
@@ -15,7 +17,6 @@ fn config_paths_and_values_preserve_operator_rules() {
     assert_eq!(config::parse_value(" 1e2 "), json!(" 1e2 "));
 }
 
-#[test]
 fn config_update_keeps_unrelated_values_and_validation_checks_whole_object() {
     let mut value = json!({
         "unknown": { "retained": true },
