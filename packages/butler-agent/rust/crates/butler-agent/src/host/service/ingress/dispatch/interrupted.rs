@@ -80,13 +80,15 @@ pub(super) async fn settle(
 ) -> Option<IngressPoll> {
     let error = match report(item, bindings, delivery, None).await {
         Ok(()) => {
-            let completed = queue.complete(
-                item,
-                json!({
-                    "source":"gateway/btcc/btcc-inbound-dispatcher.ts",
-                    "dispatchStatus":status,"handled":true,"delivered":1,
-                }),
-            );
+            let completed = queue
+                .complete_async(
+                    item.clone(),
+                    json!({
+                        "source":"gateway/btcc/btcc-inbound-dispatcher.ts",
+                        "dispatchStatus":status,"handled":true,"delivered":1,
+                    }),
+                )
+                .await;
             return Some(poll(matches!(completed, Ok(true)), 1));
         }
         Err(error) => error,
@@ -98,14 +100,16 @@ pub(super) async fn settle(
     match ReportFailure::of(error.code) {
         ReportFailure::NeverStarted => None,
         ReportFailure::Unreportable => {
-            let failed = queue.fail(
-                item,
-                error.code,
-                json!({
-                    "source":"gateway/btcc/btcc-inbound-dispatcher.ts",
-                    "dispatchStatus":format!("{status}-unreported"),"handled":false,
-                }),
-            );
+            let failed = queue
+                .fail_async(
+                    item.clone(),
+                    error.code.to_owned(),
+                    json!({
+                        "source":"gateway/btcc/btcc-inbound-dispatcher.ts",
+                        "dispatchStatus":format!("{status}-unreported"),"handled":false,
+                    }),
+                )
+                .await;
             Some(IngressPoll {
                 failed: usize::from(matches!(failed, Ok(true))),
                 ..Default::default()
@@ -114,7 +118,7 @@ pub(super) async fn settle(
         // Not an interruption of this process: the service keeps running and
         // claims the record again once its backoff has passed.
         ReportFailure::Transient => {
-            let _ = queue.defer(item, error.code);
+            let _ = queue.defer_async(item.clone(), error.code.to_owned()).await;
             Some(IngressPoll::default())
         }
     }

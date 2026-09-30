@@ -37,12 +37,7 @@ pub(super) async fn route(
     let method = request.method().clone();
     let path = request.uri().path().to_owned();
     let result = match (method, path.as_str()) {
-        (Method::GET, "/updates") => {
-            state
-                .application
-                .check_app_update(UpdateRequest::default())
-                .await?
-        }
+        (Method::GET, "/updates") => state.application.app_update_status().await?,
         (Method::POST, "/updates/check") => {
             let body = read_body_with_limit(request.into_body(), UPDATE_REQUEST_LIMIT).await?;
             let input: CheckBody = if body.is_empty() || body.as_ref() == b"null" {

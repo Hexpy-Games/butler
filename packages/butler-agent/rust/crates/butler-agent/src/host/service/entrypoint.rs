@@ -266,6 +266,7 @@ async fn serve(
         queue,
         dispatcher,
     } = admission::prepare(&runtime, config, writer, instance).await?;
+
     let parent_client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .build()
@@ -451,5 +452,15 @@ async fn mark_ready(
         .restart_effect_journal
         .finish_spawned_restart_handoffs()
         .await;
+    Ok(())
+}
+
+async fn recover_inbound_queue(
+    queue: Arc<butler_gateway::gateway::InboundQueue>,
+) -> Result<(), BtccError> {
+    tokio::task::spawn_blocking(move || queue.recover_runtime_interruptions())
+        .await
+        .map_err(|error| failure("inbound_queue_worker_failed", error.to_string()))?
+        .map_err(|error| failure(error.code(), error.message()))?;
     Ok(())
 }

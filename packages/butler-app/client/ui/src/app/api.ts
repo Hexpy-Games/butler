@@ -444,6 +444,11 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
         numericSearchParam(url.searchParams, "sinceHours"),
     });
   }
+  if (method === "GET" && url.pathname === "/provider-quota") {
+    return await callBridge<T>(bridge, "getProviderQuota", {
+      providerId: url.searchParams.get("provider_id") ?? "",
+    });
+  }
   if (method === "GET" && url.pathname === "/session-summary") {
     return await callBridge<T>(bridge, "getSessionSummary", {
       sessionId: url.searchParams.get("session_id") ?? url.searchParams.get("sessionId"),

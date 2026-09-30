@@ -16,10 +16,17 @@ import {
 } from "./UpdateComponentRow";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 
+/** The last status read, so reopening the page shows it at once. */
+let lastView: UpdateStatusView | null = null;
+
+export function resetUpdatesSettingsCache(): void {
+  lastView = null;
+}
+
 export function UpdatesSettings() {
   useAppLocale();
   const copy = appCopy.settings;
-  const [view, setView] = useState<UpdateStatusView | null>(null);
+  const [view, setView] = useState<UpdateStatusView | null>(lastView);
   const [loading, setLoading] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [applying, setApplying] = useState<UpdateComponentId | null>(null);
@@ -34,9 +41,9 @@ export function UpdatesSettings() {
     } finally {
       setLoading(false);
     }
-  }, [copy.errors.loadUpdates]);
+  }, []);
 
-  const check = useCallback(async () => {
+  const check = useCallback(async (silent = false) => {
     setLoading(true);
     try {
       setView(await api<UpdateStatusView>("/updates/check", {
@@ -44,7 +51,7 @@ export function UpdatesSettings() {
         body: JSON.stringify({ component: "app" }),
       }));
     } catch (error) {
-      notifyError(error, copy.errors.checkUpdates, { id: "settings-updates-check" });
+      if (!silent) notifyError(error, copy.errors.checkUpdates, { id: "settings-updates-check" });
     } finally {
       setLoading(false);
     }
@@ -68,6 +75,16 @@ export function UpdatesSettings() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    lastView = view;
+  }, [view]);
+
+  // A status that was never checked fills in by itself once the check runs.
+  const unchecked = view?.components.some((item) => item.check_state === "unchecked") ?? false;
+  useEffect(() => {
+    if (unchecked) void check(true);
+  }, [unchecked, check]);
 
   const rows = useMemo(
     () =>

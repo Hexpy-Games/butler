@@ -32,6 +32,59 @@ pub struct InboundQueue {
 pub(crate) type QueueResult<T> = Result<T, InboundQueueError>;
 
 impl InboundQueue {
+    async fn blocking<T: Send + 'static>(
+        &self,
+        operation: impl FnOnce(Self) -> QueueResult<T> + Send + 'static,
+    ) -> QueueResult<T> {
+        let queue = self.clone();
+        tokio::task::spawn_blocking(move || operation(queue))
+            .await
+            .map_err(|error| {
+                InboundQueueError::new(InboundQueueCode::InboundQueueIoFailed, error.to_string())
+            })?
+    }
+
+    pub async fn enqueue_async(&self, envelope: JsonDocument) -> QueueResult<QueuedInboundEvent> {
+        self.blocking(move |queue| queue.enqueue_idempotent(envelope))
+            .await
+    }
+
+    pub async fn find_async(
+        &self,
+        envelope: JsonDocument,
+    ) -> QueueResult<Option<QueuedInboundEvent>> {
+        self.blocking(move |queue| queue.find_idempotent(&envelope))
+            .await
+    }
+
+    pub async fn complete_async(
+        &self,
+        item: ClaimedInboundEvent,
+        metadata: Value,
+    ) -> QueueResult<bool> {
+        self.blocking(move |queue| queue.complete(&item, metadata))
+            .await
+    }
+
+    pub async fn fail_async(
+        &self,
+        item: ClaimedInboundEvent,
+        error: String,
+        metadata: Value,
+    ) -> QueueResult<bool> {
+        self.blocking(move |queue| queue.fail(&item, &error, metadata))
+            .await
+    }
+
+    pub async fn defer_async(&self, item: ClaimedInboundEvent, error: String) -> QueueResult<bool> {
+        self.blocking(move |queue| queue.defer(&item, &error)).await
+    }
+
+    pub async fn park_async(&self, item: ClaimedInboundEvent, error: String) -> QueueResult<bool> {
+        self.blocking(move |queue| queue.park_for_process_replacement(&item, &error))
+            .await
+    }
+
     pub fn new(butler_data: &Path) -> Self {
         Self {
             root: butler_data.join("runtime/inbound-events"),

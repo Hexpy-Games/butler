@@ -180,7 +180,7 @@ async fn failed(
         // The turn never started, so its report is unavailable: no second replacement.
         return rejected::reject(item, queue, bindings, delivery, subsessions, error.code).await;
     }
-    let _ = queue.park_for_process_replacement(item, error.code);
+    let _ = queue.park_async(item.clone(), error.code.to_owned()).await;
     IngressPoll {
         interrupted: 1,
         ..Default::default()
@@ -205,13 +205,15 @@ async fn handled(
     queue: &InboundQueue,
     restart_handoff: &RestartHandoff,
 ) -> IngressPoll {
-    let completed = queue.complete(
-        item,
-        json!({
-            "source":"gateway/btcc/btcc-inbound-dispatcher.ts","dispatchStatus":"handled",
-            "handled":true,"delivered":executed.delivered,
-        }),
-    );
+    let completed = queue
+        .complete_async(
+            item.clone(),
+            json!({
+                "source":"gateway/btcc/btcc-inbound-dispatcher.ts","dispatchStatus":"handled",
+                "handled":true,"delivered":executed.delivered,
+            }),
+        )
+        .await;
     if !matches!(completed, Ok(true)) {
         return IngressPoll {
             interrupted: 1,

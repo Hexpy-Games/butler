@@ -2,6 +2,9 @@
 
 mod source;
 
+#[cfg(test)]
+pub(in crate::gateway::application) use source::RUNTIME_FAULT_SQL;
+
 use rusqlite::{Connection, params};
 use serde_json::{Value, json};
 

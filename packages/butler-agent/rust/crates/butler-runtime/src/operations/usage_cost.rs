@@ -156,12 +156,16 @@ impl UsageTotals {
         match price(event, &tokens, pricing) {
             Ok(usd) => {
                 self.usd += usd;
-                self.priced.insert(event.model.clone());
+                if !self.priced.contains(&event.model) {
+                    self.priced.insert(event.model.clone());
+                }
                 let as_of = pricing.and_then(ModelPricing::as_of).map(str::to_owned);
                 self.as_of = self.as_of.clone().max(as_of);
             }
             Err(reason) => {
-                self.unpriced.insert(event.model.clone());
+                if !self.unpriced.contains(&event.model) {
+                    self.unpriced.insert(event.model.clone());
+                }
                 self.reason = self.reason.max(Some(reason));
             }
         }

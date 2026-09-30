@@ -83,6 +83,16 @@ it makes the test login expire, as LIVE-10 does, and the agent writes the
 refreshed login back to the same profile; replay runs with a refreshable
 placeholder login.
 
+## Owner-scale usage and updates
+
+USE-06 (`tests/usage_scale.rs`) writes an owner-sized data folder at test time
+(44,000 usage rows and about 320 MB of transcripts, nothing committed) and
+asserts that `/usage-monitor` answers a window or a session in milliseconds
+without reading the transcripts, that the all-time view is a cache hit on its
+second read, and that a session counts only its own usage. USE-07
+(`tests/updates.rs`) points `BUTLER_UPDATE_MANIFEST` at a local server that
+delays its answer and asserts that `GET /updates` never waits for it.
+
 Reset times in usage replies are recorded relative to the recording time and
 rounded to the hour (`{{EPOCH_MS+Δ}}`, `{{EPOCH_S+Δ}}`); replay turns them
 into times relative to the replay, so no cassette pins a subscription

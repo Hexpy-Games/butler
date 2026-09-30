@@ -57,9 +57,7 @@ pub(super) async fn prepare(
         config.data_root.clone(),
         instance.restart_identity(),
     ));
-    queue
-        .recover_runtime_interruptions()
-        .map_err(|e| failure(e.code(), e.message()))?;
+    super::recover_inbound_queue(queue.clone()).await?;
     let dispatcher = IngressDispatcher::new(
         queue.clone(),
         runtime.btcc.clone(),

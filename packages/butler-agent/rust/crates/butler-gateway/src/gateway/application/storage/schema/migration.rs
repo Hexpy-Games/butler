@@ -183,8 +183,21 @@ pub(super) fn create_post_backfill_indexes(connection: &Connection) -> Result<()
              CREATE UNIQUE INDEX IF NOT EXISTS session_queued_messages_client_idx \
                ON session_queued_messages(chat_id,client_message_id) WHERE client_message_id IS NOT NULL;\
              UPDATE chats SET kind='chat' WHERE kind='general';\
-             UPDATE messages SET updated_at=created_at WHERE updated_at IS NULL;",
+             CREATE INDEX IF NOT EXISTS messages_streaming_turn_idx \
+               ON messages(turn_id) WHERE role='assistant' AND status='streaming';",
         )
+        .map_err(AppStorageError::sqlite)
+}
+
+/// Messages written before `updated_at` existed take their creation time.
+/// New rows always carry it, so this runs once (see `schema::run_backfills_once`).
+pub(super) fn backfill_message_updated_at(connection: &Connection) -> Result<(), AppStorageError> {
+    connection
+        .execute(
+            "UPDATE messages SET updated_at=created_at WHERE updated_at IS NULL",
+            [],
+        )
+        .map(drop)
         .map_err(AppStorageError::sqlite)
 }
 
@@ -293,22 +306,24 @@ fn sha256_hex(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
+/// The `role`/`status` terms repeat the predicate of the partial
+/// `messages_streaming_turn_idx`, which makes it applicable.
+pub(super) const SETTLE_ENDED_SQL: &str = "UPDATE messages INDEXED BY messages_streaming_turn_idx SET \
+       status=CASE (SELECT t.state FROM turns t WHERE t.id=messages.turn_id) \
+         WHEN 'delivered' THEN 'delivered' WHEN 'cancelled' THEN 'cancelled' ELSE 'failed' END, \
+       safe_error_code=COALESCE(safe_error_code,(SELECT t.safe_error_code FROM turns t WHERE t.id=messages.turn_id)) \
+     WHERE role='assistant' AND status='streaming' AND EXISTS \
+       (SELECT 1 FROM turns t WHERE t.id=messages.turn_id \
+        AND t.state IN ('delivered','cancelled','failed','runtime_fault'))";
+
 /// Assistant messages left `streaming` by a turn that already ended (a
 /// suspended hand-off turn, or one that failed without an answer) take the
 /// turn's outcome, so every surface agrees. Idempotent: it matches nothing
-/// once settled.
+/// once settled, and `messages_streaming_turn_idx` holds only the messages it
+/// could match, so running it at every open reads no other message.
 pub(super) fn settle_ended_turn_messages(connection: &Connection) -> Result<(), AppStorageError> {
     connection
-        .execute(
-            "UPDATE messages SET \
-               status=CASE (SELECT t.state FROM turns t WHERE t.id=messages.turn_id) \
-                 WHEN 'delivered' THEN 'delivered' WHEN 'cancelled' THEN 'cancelled' ELSE 'failed' END, \
-               safe_error_code=COALESCE(safe_error_code,(SELECT t.safe_error_code FROM turns t WHERE t.id=messages.turn_id)) \
-             WHERE role='assistant' AND status='streaming' AND EXISTS \
-               (SELECT 1 FROM turns t WHERE t.id=messages.turn_id \
-                AND t.state IN ('delivered','cancelled','failed','runtime_fault'))",
-            [],
-        )
+        .execute(SETTLE_ENDED_SQL, [])
         .map_err(AppStorageError::sqlite)?;
     Ok(())
 }

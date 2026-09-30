@@ -7,7 +7,7 @@ This file is the status source. `HANDOFF.md` at the repo root covers what has al
 | [ ] | [01 SSD write hotfix: transcript projection](01-projection-hotfix.md) | **P0** | `claude/projection-quadratic-fix` (draft PR) |
 | [ ] | [02 Tests never touch `$HOME/.butler`](02-test-isolation-guard.md) | **P0** | `claude/tests-never-touch-home` (draft PR) |
 | [ ] | [03 CLI lifecycle (#303)](03-cli-lifecycle.md) | **P0** | #303 |
-| [ ] | [04 Usage and updates latency](04-usage-updates-latency.md) | P1 | `claude/usage-updates-latency` (draft PR) |
+| [x] | [04 Usage and updates latency](04-usage-updates-latency.md) | P1 | `claude/usage-updates-latency` (draft PR) |
 | [ ] | [05 Remove Telegram](05-remove-telegram.md) | P1 | `claude/remove-telegram` (draft PR) |
 | [ ] | [06 Branch actions and steward pill (#316)](06-branch-actions.md) | P1 | #316 |
 | [ ] | [07 Cheap read-path wins](07-read-path-quick-wins.md) | P1 | `origin/main` (reuse parts of `claude/perf-app-storage`) |

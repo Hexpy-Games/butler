@@ -21,6 +21,9 @@ pub struct AppMonitorPage {
 #[derive(Clone, Debug, Default)]
 pub struct AppUsageMonitorQuery {
     pub session_id: Option<String>,
+    /// The runtime session id of `session_id`, set by the application: the
+    /// usage rows of a conversation are keyed by it.
+    pub runtime_session_id: Option<String>,
     pub since_ts: Option<f64>,
 }
 
