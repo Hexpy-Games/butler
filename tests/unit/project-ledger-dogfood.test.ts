@@ -50,7 +50,7 @@ function testButlerData(project: string): string {
 }
 
 function tempLedgerRoot(project: string): string {
-  return join(testButlerData(project), "project-ledger", "projects", basename(project));
+  return join(testButlerData(project), "project-ledger", "projects", basename(project).toLocaleLowerCase("en-US"));
 }
 
 function runTempLedgerJson(project: string, args: string[], input?: string): any {

@@ -110,6 +110,7 @@ describe("legacy App service migration", () => {
     let running = true;
     const result = await migrateLegacyAppService({
       butlerData: data,
+      platform: "darwin",
       inspect: () => ({
         required: true,
         plists: [plist],
