@@ -166,6 +166,8 @@ struct Worker {
     settled_through: i64,
     /// Sweep or compaction progress the persisted position has not seen yet.
     position_stale: bool,
+    /// In-memory watermark scan; persisted only after its final page.
+    watermark_scan: Option<i64>,
     /// Events removed since the last checkpoint.
     deleted: usize,
 }
@@ -185,6 +187,7 @@ impl Worker {
             sweep_cursor: Some(settled_through),
             settled_through,
             position_stale: true,
+            watermark_scan: None,
             deleted: 0,
         }
     }
@@ -193,6 +196,7 @@ impl Worker {
         !self.semantic_pending.is_empty()
             || !self.maintenance_pending.is_empty()
             || self.sweep_cursor.is_some()
+            || self.watermark_scan.is_some()
     }
 
     /// Returns true when the owner should stop.
@@ -202,6 +206,8 @@ impl Worker {
             Some(Command::Sweep) => self.sweep_cursor = Some(self.settled_through),
             Some(Command::Close) | None => return true,
         }
+        self.watermark_scan = None;
+        self.position_stale = true;
         false
     }
 
@@ -274,8 +280,33 @@ impl Worker {
         }
     }
 
-    /// Once the sweep has no page left and nothing is being compacted: records
-    /// how far turns are settled, and folds a large WAL back after big deletes.
+    async fn scan_watermark_page(&mut self) {
+        let Some(from) = self.watermark_scan else {
+            return;
+        };
+        match self
+            .storage
+            .execute(move |db| sweep::scan_watermark_page(db, from))
+            .await
+        {
+            Ok((settled, true)) => self.watermark_scan = Some(settled),
+            Ok((settled, false)) => {
+                self.watermark_scan = None;
+                if self
+                    .storage
+                    .execute(move |db| sweep::write_watermark(db, settled))
+                    .await
+                    .is_ok()
+                {
+                    self.settled_through = settled;
+                }
+            }
+            Err(_) => self.watermark_scan = None,
+        }
+    }
+
+    /// Once the sweep has no page left and nothing is being compacted: start
+    /// watermark inspection and fold a large WAL back after big deletes.
     async fn settle(&mut self) {
         if self.sweep_cursor.is_some()
             || !self.semantic_pending.is_empty()
@@ -285,13 +316,8 @@ impl Worker {
         }
         if self.position_stale {
             self.position_stale = false;
-            if let Ok(settled) = self
-                .storage
-                .execute(|db| sweep::advance_watermark(db))
-                .await
-            {
-                self.settled_through = settled;
-            }
+            self.watermark_scan = Some(self.settled_through);
+            return;
         }
         if self.deleted >= CHECKPOINT_AFTER_DELETES {
             self.deleted = 0;
@@ -317,6 +343,9 @@ async fn run(
         worker.wake_ready(latest);
         if worker.cursor_waits.len() == PENDING_CAPACITY || !worker.has_work() {
             worker.settle().await;
+            if worker.has_work() && worker.cursor_waits.len() != PENDING_CAPACITY {
+                continue;
+            }
             // Parked turns wait for the event cursor; with none, only commands wake it.
             let watching_cursor = !worker.cursor_waits.is_empty();
             tokio::select! {
@@ -336,11 +365,13 @@ async fn run(
                     worker.compact_one(turn).await;
                 }
             }
-            _=maintenance_tick.tick(),if !worker.maintenance_pending.is_empty() || worker.sweep_cursor.is_some()=>{
+            _=maintenance_tick.tick(),if !worker.maintenance_pending.is_empty() || worker.sweep_cursor.is_some() || worker.watermark_scan.is_some()=>{
                 if let Some(turn)=worker.maintenance_pending.pop_front(){
                     worker.compact_one(turn).await;
-                }else{
+                }else if worker.sweep_cursor.is_some(){
                     worker.sweep_page().await;
+                }else{
+                    worker.scan_watermark_page().await;
                 }
             }
         }

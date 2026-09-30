@@ -47,14 +47,14 @@ macro_rules! needs_work {
     };
 }
 
-const PAGE: usize = 32;
+const PAGE: i64 = 32;
 
 const NEEDING_WORK_SQL: &str = concat!(
     "SELECT t.rowid,t.id FROM turns t WHERE t.rowid>?1 AND t.state IN (",
     terminal_states!(),
     ") AND ",
     needs_work!(),
-    "ORDER BY t.rowid LIMIT ?2"
+    "AND t.rowid<=?2 ORDER BY t.rowid"
 );
 
 /// The first turn, past `after`, that is running or still needs work; every
@@ -64,8 +64,20 @@ const FIRST_UNSETTLED_SQL: &str = concat!(
     terminal_states!(),
     ") OR ",
     needs_work!(),
-    ") ORDER BY t.rowid LIMIT 1"
+    ") AND t.rowid<=?2 ORDER BY t.rowid LIMIT 1"
 );
+
+/// Bound predicate evaluation even when almost every turn is already settled.
+/// SQL LIMIT on matching rows alone can scan the entire owner-scale table.
+fn page_end(db: &Connection, after: i64) -> Result<Option<i64>, AppStorageError> {
+    db.query_row_cached(
+        "SELECT rowid FROM turns WHERE rowid>?1 ORDER BY rowid LIMIT 1 OFFSET ?2",
+        params![after, PAGE - 1],
+        |row| row.get(0),
+    )
+    .optional()
+    .map_err(AppStorageError::sqlite)
+}
 
 /// Up to one page of terminal turns after `after` that need work, and where the
 /// next page starts (`None` when this was the last).
@@ -73,23 +85,18 @@ pub(super) fn needing_work_page(
     db: &Connection,
     after: i64,
 ) -> Result<(Vec<String>, Option<i64>), AppStorageError> {
+    let end = page_end(db, after)?;
     let mut statement = db
         .prepare_cached(NEEDING_WORK_SQL)
         .map_err(AppStorageError::sqlite)?;
     let rows = statement
-        .query_map(params![after, PAGE + 1], |row| {
+        .query_map(params![after, end.unwrap_or(i64::MAX)], |row| {
             Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
         })
         .map_err(AppStorageError::sqlite)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(AppStorageError::sqlite)?;
-    let more = rows.len() > PAGE;
-    let page = rows.into_iter().take(PAGE).collect::<Vec<_>>();
-    let next = page.last().map_or(after, |row| row.0);
-    Ok((
-        page.into_iter().map(|row| row.1).collect(),
-        more.then_some(next),
-    ))
+    Ok((rows.into_iter().map(|row| row.1).collect(), end))
 }
 
 /// The rowid up to which every turn was settled when last recorded. A turn
@@ -113,28 +120,42 @@ pub(super) fn read_watermark(db: &Connection) -> Result<i64, AppStorageError> {
     Ok(stored.min(newest))
 }
 
-/// Records how far settled turns reach and returns it. Turns that are still
-/// running, or still hold retention work, stay after it.
-pub(super) fn advance_watermark(db: &Connection) -> Result<i64, AppStorageError> {
-    let from = read_watermark(db)?;
+/// Checks at most one page toward the next durable watermark. Returns the
+/// settled cursor and whether another page is needed.
+pub(super) fn scan_watermark_page(
+    db: &Connection,
+    from: i64,
+) -> Result<(i64, bool), AppStorageError> {
+    let end = page_end(db, from)?;
     let first_unsettled: Option<i64> = db
-        .query_row_cached(FIRST_UNSETTLED_SQL, [from], |row| row.get(0))
+        .query_row_cached(
+            FIRST_UNSETTLED_SQL,
+            params![from, end.unwrap_or(i64::MAX)],
+            |row| row.get(0),
+        )
         .optional()
         .map_err(AppStorageError::sqlite)?;
-    let settled = match first_unsettled {
-        Some(rowid) => rowid - 1,
-        None => db
-            .query_row_cached("SELECT COALESCE(MAX(rowid),0) FROM turns", [], |row| {
-                row.get(0)
-            })
-            .map_err(AppStorageError::sqlite)?,
+    if let Some(rowid) = first_unsettled {
+        return Ok(((rowid - 1).max(from), false));
     }
-    .max(from);
+    if let Some(end) = end {
+        return Ok((end, true));
+    }
+    let newest: i64 = db
+        .query_row_cached("SELECT COALESCE(MAX(rowid),0) FROM turns", [], |row| {
+            row.get(0)
+        })
+        .map_err(AppStorageError::sqlite)?;
+    Ok((newest.max(from), false))
+}
+
+/// Persist only the completed scan, avoiding a disk write per page.
+pub(super) fn write_watermark(db: &Connection, settled: i64) -> Result<(), AppStorageError> {
     db.execute_cached(
         "INSERT INTO app_retention_sweep(id,turn_rowid) VALUES(1,?1) \
          ON CONFLICT(id) DO UPDATE SET turn_rowid=excluded.turn_rowid",
         [settled],
     )
     .map_err(AppStorageError::sqlite)?;
-    Ok(settled)
+    Ok(())
 }
