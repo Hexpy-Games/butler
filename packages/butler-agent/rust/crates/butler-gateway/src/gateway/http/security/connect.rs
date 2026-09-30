@@ -19,6 +19,7 @@ use axum::response::Response;
 use super::connect_page::ConnectPage;
 use super::keys::Keyed;
 use crate::gateway::crypto::constant_time_eq;
+use crate::gateway::http::HttpError;
 
 /// `GET /connect?code=..` and `POST /connect` (form): no credential needed.
 pub(in crate::gateway::http) const CONNECT_PATH: &str = "/connect";
@@ -28,17 +29,21 @@ pub(in crate::gateway::http) const MAX_FORM_BYTES: usize = 4 * 1024;
 /// `GET /connect[?code=..]`: the code page, or a session and a redirect.
 pub(super) fn from_query(keyed: &Keyed, uri: &Uri, now: SystemTime) -> Response {
     match code_in(uri.query().unwrap_or_default().as_bytes()) {
-        Some(code) => redeem(keyed, &code, now),
+        Some(code) => {
+            redeem(keyed, &code, now).unwrap_or_else(|_| ConnectPage::Rejected.response())
+        }
         None => ConnectPage::Ask.response(),
     }
 }
 
 /// `POST /connect` with `code=..` (`application/x-www-form-urlencoded`).
-pub(super) fn from_form(keyed: &Keyed, body: &[u8], now: SystemTime) -> Response {
-    match code_in(body) {
-        Some(code) => redeem(keyed, &code, now),
-        None => ConnectPage::Ask.response(),
-    }
+pub(super) fn from_form(
+    keyed: &Keyed,
+    body: &[u8],
+    now: SystemTime,
+) -> Result<Response, HttpError> {
+    let code = code_in(body).ok_or_else(invalid_code)?;
+    redeem(keyed, &code, now)
 }
 
 fn code_in(encoded: &[u8]) -> Option<String> {
@@ -50,10 +55,8 @@ fn code_in(encoded: &[u8]) -> Option<String> {
 
 /// A one-time code, or the connection code (compared in constant time),
 /// for a session cookie and a redirect to the App.
-fn redeem(keyed: &Keyed, code: &str, now: SystemTime) -> Response {
-    let Some(sessions) = keyed.sessions.as_ref() else {
-        return ConnectPage::Rejected.response();
-    };
+fn redeem(keyed: &Keyed, code: &str, now: SystemTime) -> Result<Response, HttpError> {
+    let sessions = keyed.sessions.as_ref().ok_or_else(invalid_code)?;
     let connection_code = keyed
         .token
         .as_deref()
@@ -61,9 +64,7 @@ fn redeem(keyed: &Keyed, code: &str, now: SystemTime) -> Response {
     let cookie = sessions
         .redeem(code, now)
         .or_else(|| connection_code.then(|| sessions.issue(now)).flatten());
-    let Some(cookie) = cookie else {
-        return ConnectPage::Rejected.response();
-    };
+    let cookie = cookie.ok_or_else(invalid_code)?;
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::SEE_OTHER;
     let headers = response.headers_mut();
@@ -74,5 +75,9 @@ fn redeem(keyed: &Keyed, code: &str, now: SystemTime) -> Response {
         header::REFERRER_POLICY,
         HeaderValue::from_static("no-referrer"),
     );
-    response
+    Ok(response)
+}
+
+fn invalid_code() -> HttpError {
+    HttpError::public(401, "invalid_connection_code", "That code is not valid.")
 }

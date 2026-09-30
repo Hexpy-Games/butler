@@ -136,19 +136,42 @@ struct Client {
 /// Host and Origin admission, CORS preflight before auth, then the
 /// authorized route; every answer to an admitted origin carries CORS headers.
 async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -> Response {
-    let origin = match state.security.admit(request.headers()) {
-        Ok(origin) => origin,
-        Err(error) => return error_response(&error),
-    };
+    let connect_form =
+        request.method() == Method::POST && request.uri().path() == security::CONNECT_PATH;
+    let html_connect_form = connect_form && static_ui::accepts_html(request.headers());
+    let origin =
+        match state
+            .security
+            .admit(request.method(), request.uri().path(), request.headers())
+        {
+            Ok(origin) => origin,
+            Err(error) => {
+                return if html_connect_form {
+                    security::GatewaySecurity::connect_error_response(&error)
+                } else {
+                    error_response(&error)
+                };
+            }
+        };
     if request.method() == Method::OPTIONS && origin.allowed().is_some() {
         return security::preflight(&origin);
     }
     let mut response = if declared_body_too_large(&request) {
-        payload_too_large_response()
+        if html_connect_form {
+            security::GatewaySecurity::connect_error_response(&HttpError::PayloadTooLarge)
+        } else {
+            payload_too_large_response()
+        }
     } else {
         match authorized_route(state, request, &origin).await {
             Ok(response) => response,
-            Err(error) => error_response(&error),
+            Err(error) => {
+                if html_connect_form {
+                    security::GatewaySecurity::connect_error_response(&error)
+                } else {
+                    error_response(&error)
+                }
+            }
         }
     };
     security::apply_cors(&mut response, &origin);
@@ -163,7 +186,7 @@ async fn authorized_route(
     if request.method() == Method::POST && request.uri().path() == security::CONNECT_PATH {
         let body =
             read_body_with_limit(request.into_body(), security::MAX_CONNECT_FORM_BYTES).await?;
-        return Ok(state.security.connect_form(&body));
+        return state.security.connect_form(&body);
     }
     let grant = match state.security.authorize(&request, origin)? {
         security::Admission::Respond(response) => return Ok(response),

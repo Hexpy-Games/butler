@@ -13,6 +13,8 @@
 
 use axum::http::{HeaderMap, Method};
 
+use super::super::HttpError;
+
 const SEC_FETCH_SITE: &str = "sec-fetch-site";
 
 /// A request's `Sec-Fetch-Site`, which pages cannot set themselves.
@@ -42,6 +44,19 @@ impl FetchSite {
             },
             (Some(_), Some(_)) => Self::Foreign,
         }
+    }
+}
+
+/// A form POST to `/connect` may omit Fetch Metadata on plain HTTP LAN
+/// pages, but browsers that send it must identify the page itself.
+pub(super) fn connect_post_site(headers: &HeaderMap) -> Result<(), HttpError> {
+    match FetchSite::of(headers) {
+        FetchSite::Absent | FetchSite::SameOrigin => Ok(()),
+        FetchSite::UserInitiated | FetchSite::Foreign => Err(HttpError::public(
+            403,
+            "origin_not_allowed",
+            "Requests from this origin are not allowed.",
+        )),
     }
 }
 
