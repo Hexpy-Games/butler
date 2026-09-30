@@ -35,8 +35,8 @@ a temporary HOME. It retains both 12-second stable-stop observations.
 Linux setup uses mold. The archive job strips debug information and executable
 symbols after building, without changing assertions or test selection. Compiler
 profiles stay unchanged to reuse existing dependency caches. The build and
-Clippy jobs explicitly pin their toolchain for cache fingerprinting, and use
-Cargo's `-j 8` option rather than changing dependency-cache environment inputs.
+Clippy jobs use Cargo's `-j 8` option rather than changing dependency-cache
+environment inputs.
 Post-build stripping preserves dependency cache fingerprints; the job restores the former workspace Tests
 cache rather than the smaller E2E cache. The nextest archive is already
 zstd-compressed. The separate real agent is gzip-compressed, and upload-artifact's additional compression is
