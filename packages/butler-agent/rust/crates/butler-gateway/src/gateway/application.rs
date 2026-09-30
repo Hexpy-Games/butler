@@ -52,6 +52,7 @@ mod session_views;
 mod sessions;
 mod settings;
 mod setup;
+mod turn_dispatch;
 pub use settings::diagnostics_enabled_readonly;
 mod shell;
 mod space;
@@ -224,7 +225,8 @@ impl AppApplication {
         let dependencies = Arc::new(dependencies);
         let subscribers = EventSubscribers::default();
         let retention_cursor = latest_event_cursor(&storage).await?;
-        let (queue_dispatcher, queue_wake) = queue_dispatcher::QueueDispatcher::start();
+        let (queue_dispatcher, queue_wake) =
+            queue_dispatcher::QueueDispatcher::start(dependencies.service_shutdown.child_token());
         let (automation_wake, automation_queued) = automations::signals();
         let automation_scheduler = automations::AutomationScheduler::start(automation_wake.clone());
         let automation_runs = automations::AutomationRunOwner::start();

@@ -86,8 +86,7 @@ impl AgentRuntime {
         )?;
         let models = self::models::with_moved_credentials(process_services.models).await;
         let web_access = process_services.web_access;
-        let prompt_clock = Arc::new(SystemPromptClock::new().map_err(setup)?);
-        let date_parser = Arc::new(super::DateParser::from_process().map_err(setup)?);
+        let (prompt_clock, date_parser) = process_clocks()?;
         let metric_files = Arc::new(MetricFiles::new(paths.data_root.clone()));
         let coordinator =
             Arc::new(CognitionWriteCoordinator::new(Arc::new(SystemIdentity)).map_err(setup)?);
@@ -440,6 +439,7 @@ impl AgentRuntime {
             host: owner,
         });
         Ok(Self {
+            service_shutdown: stop.clone(),
             btcc: assembly.btcc,
             host: assembly.host,
             bindings,
@@ -466,4 +466,12 @@ impl AgentRuntime {
             profile,
         })
     }
+}
+
+/// Capture both process time sources before opening any persistent store.
+fn process_clocks() -> Result<(Arc<SystemPromptClock>, Arc<super::DateParser>), BtccError> {
+    Ok((
+        Arc::new(SystemPromptClock::new().map_err(setup)?),
+        Arc::new(super::DateParser::from_process().map_err(setup)?),
+    ))
 }
