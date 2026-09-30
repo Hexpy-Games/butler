@@ -31,7 +31,7 @@ unchanged; qualified names now include the module, for example
 `install_lifecycle::ins_02_install_update_rollback_uninstall`. The source-check
 test-count ratchet excludes this package regardless of its test layout.
 
-Six hash partitions cover the non-install scenarios. INS-02 and INS-14 have
+Six hash partitions cover the non-install stub scenarios. PERF-01 retains its dedicated performance job and p95 report added on main; the opt-in release PERF-IDLE scenario keeps its existing tier. INS-02 and INS-14 have
 one dedicated job each, and a third install job covers every other `ins_`
 scenario. The selections are disjoint and exhaustive. Each run uses zero
 retries and at most eight test threads. PERF-01 reserves those slots while

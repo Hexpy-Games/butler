@@ -9,6 +9,14 @@ inputs:
     description: Nextest filterset expression applied to the stub tier.
     required: false
     default: ""
+  test-threads:
+    description: Optional nextest test thread count.
+    required: false
+    default: ""
+  success-output:
+    description: Optional nextest output mode for successful tests.
+    required: false
+    default: ""
   archive-file:
     description: Optional nextest archive to run without rebuilding test binaries.
     required: false
@@ -99,6 +107,8 @@ runs:
       env:
         PARTITION: ${{ inputs.partition }}
         TEST_FILTERSET: ${{ inputs.filterset }}
+        TEST_THREADS: ${{ inputs.test-threads }}
+        TEST_SUCCESS_OUTPUT: ${{ inputs.success-output }}
         ARCHIVE_FILE: ${{ inputs.archive-file }}
         BUTLER_E2E_EMBEDDING_ASSETS: ${{ runner.temp }}/e2e-models/bge-m3
         BUTLER_E2E_TIER: stub
@@ -118,17 +128,29 @@ runs:
         if [ -n "$PARTITION" ]; then
           nextest_partition_args=(--partition "hash:$PARTITION")
         fi
+        nextest_threads_args=(--test-threads=8)
+        if [ -n "$TEST_THREADS" ]; then
+          nextest_threads_args=(--test-threads="$TEST_THREADS")
+        fi
+        nextest_success_output_args=()
+        if [ -n "$TEST_SUCCESS_OUTPUT" ]; then
+          nextest_success_output_args=(--success-output="$TEST_SUCCESS_OUTPUT")
+        fi
         if [ -n "$ARCHIVE_FILE" ]; then
           cargo-nextest nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
-            run --no-fail-fast --retries 0 --test-threads 8 --archive-file "$ARCHIVE_FILE" \
+            run --no-fail-fast --retries 0 --archive-file "$ARCHIVE_FILE" \
             --workspace-remap "$PWD" \
             "${nextest_partition_args[@]}" \
+            "${nextest_threads_args[@]}" \
+            "${nextest_success_output_args[@]}" \
             -E "$filterset" \
             2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
         else
           cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
-            run --locked --no-fail-fast --retries 0 --test-threads 8 -p butler-e2e \
+            run --locked --no-fail-fast --retries 0 -p butler-e2e \
             "${nextest_partition_args[@]}" \
+            "${nextest_threads_args[@]}" \
+            "${nextest_success_output_args[@]}" \
             -E "$filterset" \
             2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
         fi

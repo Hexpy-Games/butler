@@ -64,40 +64,29 @@ pub(super) fn config_get(
     report_success(options, command.name(), &data, &human)
 }
 
-pub(super) fn config_set(
+pub(super) async fn config_set(
     options: &Options,
     command: Command,
     data_root: &Path,
     installation: &super::ResolvedInstallation,
 ) -> ExitCode {
-    let (Some(dotted_path), Some(raw_value)) =
-        (options.positionals.get(2), options.positionals.get(3))
-    else {
-        return report_error(
-            command.name(),
-            options.json,
-            &CliError::invalid("config set requires <path> <value>"),
-        );
+    let (dotted_path, raw_value) = match config_set_input(options) {
+        Ok(input) => input,
+        Err(error) => return report_error(command.name(), options.json, &error),
     };
-    if config::is_secret_path(dotted_path) {
-        return report_error(
-            command.name(),
-            options.json,
-            &CliError::invalid("secret config values must use domain-specific auth commands"),
-        );
-    }
-    if !config::SAFE_CONFIG_PATHS.contains(&dotted_path.as_str()) {
-        return report_error(
-            command.name(),
-            options.json,
-            &CliError::invalid(format!(
-                "config path is not writable through CLI: {dotted_path}"
-            )),
-        );
-    }
     let file = match safe_data_file(installation, data_root, &config_path(data_root)) {
         Ok(path) => path,
         Err(error) => return report_error(command.name(), options.json, &error),
+    };
+    let _change = match configuration::lock_file_async(&file).await {
+        Ok(lock) => lock,
+        Err(error) => {
+            return report_error(
+                command.name(),
+                options.json,
+                &CliError::failed("config_lock_failed", error.to_string()),
+            );
+        }
     };
     let mut current = match configuration::read_json_object(&file) {
         Ok(value) => value,
@@ -202,7 +191,7 @@ pub(super) fn config_validate(
     )
 }
 
-pub(super) fn config_edit(
+pub(super) async fn config_edit(
     options: &Options,
     command: Command,
     data_root: &Path,
@@ -219,7 +208,7 @@ pub(super) fn config_edit(
         Ok(path) => path,
         Err(error) => return report_error(command.name(), options.json, &error),
     };
-    if let Err(message) = ensure_config_exists(&file) {
+    if let Err(message) = ensure_config_exists(&file).await {
         return report_error(
             command.name(),
             options.json,
@@ -269,7 +258,10 @@ pub(super) fn config_edit(
     )
 }
 
-fn ensure_config_exists(path: &Path) -> Result<(), crate::host::HostError> {
+async fn ensure_config_exists(path: &Path) -> Result<(), crate::host::HostError> {
+    let _change = configuration::lock_file_async(path)
+        .await
+        .map_err(crate::host::HostError::from_error)?;
     match std::fs::symlink_metadata(path) {
         Ok(_) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -278,4 +270,21 @@ fn ensure_config_exists(path: &Path) -> Result<(), crate::host::HostError> {
         }
         Err(_) => Err("Config file could not be inspected.".into()),
     }
+}
+
+fn config_set_input(options: &Options) -> Result<(&str, &str), CliError> {
+    let (Some(path), Some(value)) = (options.positionals.get(2), options.positionals.get(3)) else {
+        return Err(CliError::invalid("config set requires <path> <value>"));
+    };
+    if config::is_secret_path(path) {
+        return Err(CliError::invalid(
+            "secret config values must use domain-specific auth commands",
+        ));
+    }
+    if !config::SAFE_CONFIG_PATHS.contains(&path.as_str()) {
+        return Err(CliError::invalid(format!(
+            "config path is not writable through CLI: {path}"
+        )));
+    }
+    Ok((path, value))
 }

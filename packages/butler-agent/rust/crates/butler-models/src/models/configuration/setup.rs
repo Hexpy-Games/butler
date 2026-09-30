@@ -94,7 +94,7 @@ impl ModelConfiguration {
         let profile = auth::AuthOwner {
             data_root: &self.data_root,
             environment: &self.environment,
-            clock: self.clock.as_ref(),
+            clock: &self.clock,
             client: &self.client,
         }
         .read_butler_profile()

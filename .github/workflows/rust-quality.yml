@@ -244,37 +244,37 @@ jobs:
         include:
           - job_name: "E2E stub (Linux x64 1/6)"
             partition: "1/6"
-            filterset: "not test(/::ins_/)"
+            filterset: "not test(/::ins_/) and not test(/::perf_/)"
             embedding_model: true
             systemd: false
             idle_disk: true
           - job_name: "E2E stub (Linux x64 2/6)"
             partition: "2/6"
-            filterset: "not test(/::ins_/)"
+            filterset: "not test(/::ins_/) and not test(/::perf_/)"
             embedding_model: true
             systemd: false
             idle_disk: false
           - job_name: "E2E stub (Linux x64 3/6)"
             partition: "3/6"
-            filterset: "not test(/::ins_/)"
+            filterset: "not test(/::ins_/) and not test(/::perf_/)"
             embedding_model: true
             systemd: false
             idle_disk: false
           - job_name: "E2E stub (Linux x64 4/6)"
             partition: "4/6"
-            filterset: "not test(/::ins_/)"
+            filterset: "not test(/::ins_/) and not test(/::perf_/)"
             embedding_model: true
             systemd: false
             idle_disk: false
           - job_name: "E2E stub (Linux x64 5/6)"
             partition: "5/6"
-            filterset: "not test(/::ins_/)"
+            filterset: "not test(/::ins_/) and not test(/::perf_/)"
             embedding_model: true
             systemd: false
             idle_disk: false
           - job_name: "E2E stub (Linux x64 6/6)"
             partition: "6/6"
-            filterset: "not test(/::ins_/)"
+            filterset: "not test(/::ins_/) and not test(/::perf_/)"
             embedding_model: true
             systemd: false
             idle_disk: false
@@ -319,10 +319,71 @@ jobs:
         if: always()
         uses: ./.github/actions/assert-home-untouched
 
+  linux-e2e-perf:
+    name: E2E perf (Linux x64)
+    needs: linux-e2e-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - uses: actions/download-artifact@v4
+        with:
+          name: e2e-linux-x64
+          path: ${{ runner.temp }}/e2e-artifact
+      - name: Run wall-clock performance tests
+        uses: ./.github/actions/e2e-stub
+        with:
+          filterset: "test(/::perf_/)"
+          test-threads: "1"
+          success-output: final
+          archive-file: ${{ runner.temp }}/e2e-artifact/nextest-archive.tar.zst
+          agent-binary: ${{ runner.temp }}/e2e-artifact/butler-agent
+      - name: Assert runner home untouched
+        if: always()
+        uses: ./.github/actions/assert-home-untouched
+      - name: Report session-view p95
+        if: always()
+        env:
+          PERF_LOG: ${{ runner.temp }}/e2e-stub.log
+        shell: bash
+        run: |
+          python3 - "$PERF_LOG" <<'PY'
+          import os
+          import pathlib
+          import re
+          import sys
+
+          log_path = pathlib.Path(sys.argv[1])
+          text = log_path.read_text(errors="replace") if log_path.exists() else ""
+          values = re.findall(r"session-view p95 ([0-9]+(?:\.[0-9]+)?)(ns|µs|μs|ms|s)", text)
+          summary_path = pathlib.Path(os.environ["GITHUB_STEP_SUMMARY"])
+          if not values:
+              summary = "### E2E perf (Linux x64)\n\nSession-view p95: unavailable. Target: 50 ms; hard gate: under 150 ms.\n"
+              with summary_path.open("a") as output:
+                  output.write(summary)
+              print("::error::PERF-01 did not report a session-view p95 measurement")
+              sys.exit(1)
+
+          value, unit = values[-1]
+          p95_ms = float(value) * {"ns": 1e-6, "µs": 1e-3, "μs": 1e-3, "ms": 1, "s": 1e3}[unit]
+          summary = (
+              "### E2E perf (Linux x64)\n\n"
+              f"Session-view p95: **{p95_ms:.3f} ms**. Target: **50 ms**; hard gate: **under 150 ms**.\n"
+          )
+          with summary_path.open("a") as output:
+              output.write(summary)
+          print(summary, end="")
+          if p95_ms > 50:
+              print(f"::warning::PERF-01 session-view p95 {p95_ms:.3f} ms exceeds the 50 ms target")
+          PY
+
   pr-gate:
     name: PR gate
     if: always()
-    needs: [changes, source, linux-clippy, linux-tests, linux-e2e-archive, linux-e2e]
+    needs: [changes, source, linux-clippy, linux-tests, linux-e2e-archive, linux-e2e, linux-e2e-perf]
     runs-on: ubuntu-latest
     steps:
       - name: Require all gated jobs or a docs-only change
@@ -372,7 +433,7 @@ jobs:
       always() &&
       (github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) &&
       (contains(needs.*.result, 'failure'))
-    needs: [source, linux-clippy, linux-tests, linux-e2e-archive, linux-e2e]
+    needs: [source, linux-clippy, linux-tests, linux-e2e-archive, linux-e2e, linux-e2e-perf]
     runs-on: ubuntu-latest
     concurrency:
       group: ci-failure-report-${{ github.ref }}

@@ -3,7 +3,6 @@
 # Entries may only shrink or disappear; new entries need review.
 src/mcp_client/catalog.rs	search	122
 src/mcp_client/session.rs	run_session_inner	83
-src/mcp_client/transport.rs	McpClient::with_server_timeout	96
 src/models/configuration/discovery.rs	discover	91
 src/models/configuration/environment.rs	merge_private_auth_environment	105
 src/models/configuration/provider.rs	ModelConfiguration::resolve_request	115

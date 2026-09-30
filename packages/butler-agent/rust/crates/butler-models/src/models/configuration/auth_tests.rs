@@ -81,8 +81,10 @@ fn jwt(payload: &Value) -> String {
     format!("header.{encoded}.signature")
 }
 
+// test-category: security
 #[tokio::test]
 async fn expiring_profile_refreshes_retains_unknown_fields_and_writes_private_file() {
+    super::durability_tests::profile_write_failure().await;
     let fixture = Fixture::new("refresh");
     let path = fixture.0.join("auth/openai-codex.json");
     fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -117,8 +119,10 @@ async fn expiring_profile_refreshes_retains_unknown_fields_and_writes_private_fi
     );
 }
 
+// test-category: race
 #[tokio::test]
 async fn refresh_http_failure_keeps_original_and_invalid_json_is_reported() {
+    super::durability_tests::refresh_waits_for_other_process().await;
     for (status, body, expected_error) in [
         ("401 Unauthorized", "{}", None),
         ("200 OK", "not-json", Some("provider_auth_refresh_invalid")),
@@ -149,7 +153,6 @@ async fn refresh_http_failure_keeps_original_and_invalid_json_is_reported() {
     }
 }
 
-#[tokio::test]
 async fn code_exchange_returns_profile_without_writing_it() {
     let fixture = Fixture::new("exchange");
     let access = jwt(&json!({"sub":"account","email":"person@example.com"}));
@@ -178,6 +181,7 @@ async fn code_exchange_returns_profile_without_writing_it() {
 
 #[tokio::test]
 async fn relative_profile_override_is_shared_by_oauth_write_and_model_auth_reader() {
+    code_exchange_returns_profile_without_writing_it().await;
     let fixture = Fixture::new("relative-profile");
     assert_ne!(std::env::current_dir().unwrap(), fixture.0);
     let access = jwt(&json!({"sub":"account","email":"person@example.com"}));
@@ -257,6 +261,7 @@ fn write_profile(fixture: &Fixture, access: &str, expires_at: i64) -> PathBuf {
 async fn a_login_is_refreshed_once_whoever_asks() {
     a_rejected_token_is_refreshed_only_while_it_is_stored().await;
     concurrent_refreshes_spend_the_refresh_token_once().await;
+    super::durability_tests::cancelled_refresh_still_publishes_before_the_next_reader().await;
 }
 
 async fn concurrent_refreshes_spend_the_refresh_token_once() {

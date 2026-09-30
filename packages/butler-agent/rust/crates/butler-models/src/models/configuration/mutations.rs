@@ -89,6 +89,7 @@ impl ModelConfiguration {
         if input.auth_type == ProviderAuthMethod::ApiKey {
             credential_id = Some(self.ensure_credential(input, root, credential_id).await?);
         }
+        let _change = lock_config(root).await?;
         let mut config = read_object_sync(&root.join("butler.config.json"));
         let now = self.clock.now_iso();
         let raw = json!({
@@ -128,6 +129,7 @@ impl ModelConfiguration {
     ) -> Result<RegisteredHostedModelConfig, ModelCatalogError> {
         let _write = self.configuration_writes.acquire().await;
         let root = root.unwrap_or(&self.data_root);
+        let _change = lock_config(root).await?;
         let mut config = read_object_sync(&root.join("butler.config.json"));
         let now = self.clock.now_iso();
         let mut current = normalized_registered(&config, self, &now);
@@ -310,4 +312,16 @@ fn json_error(source: serde_json::Error) -> ModelCatalogError {
         message: "Model configuration could not be serialized.",
         source: source.into(),
     }
+}
+
+/// The same sibling gate used by CLI and gateway configuration updates.
+pub(super) async fn lock_config(
+    root: &Path,
+) -> Result<butler_platform::secrets::ChangeLock, ModelCatalogError> {
+    butler_core::configuration::lock_file_async(&root.join("butler.config.json"))
+        .await
+        .map_err(|source| ModelCatalogError::Storage {
+            message: "Model configuration could not be locked.",
+            source: source.into(),
+        })
 }

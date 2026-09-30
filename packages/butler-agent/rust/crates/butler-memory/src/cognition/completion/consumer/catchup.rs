@@ -42,6 +42,8 @@ enum Schedule {
     Now,
 }
 
+pub(super) const INTERVAL: Duration = Duration::from_secs(60);
+
 /// Claims the catch-up slot; `false` when a pass ran within the last
 /// minute and this one is only due-based.
 fn claim_slot(input: &Input, schedule: Schedule) -> bool {
@@ -55,7 +57,7 @@ fn claim_slot(input: &Input, schedule: Schedule) -> bool {
         return true;
     }
     let mut last = input.catchup_at.lock();
-    if last.is_some_and(|time| time.elapsed() < Duration::from_secs(60)) {
+    if last.is_some_and(|time| time.elapsed() < INTERVAL) {
         return false;
     }
     *last = Some(Instant::now());
@@ -96,6 +98,15 @@ async fn run(input: &Input, schedule: Schedule) -> CognitionResult<CatchupReport
     let unclean = input
         .unclean_start
         .swap(false, std::sync::atomic::Ordering::AcqRel);
+    if inventory_unchanged(
+        &stored,
+        revision,
+        identity.as_deref(),
+        unclean || !cursors_valid,
+    ) {
+        canonical.close().map_err(CognitionError::from)?;
+        return Ok(unchanged_report(stored));
+    }
     let mut pass = Pass::begin(
         stored.clone(),
         revision,
@@ -125,6 +136,31 @@ async fn run(input: &Input, schedule: Schedule) -> CognitionResult<CatchupReport
         outcome_cursor: pass.state.outcome,
         recovered_message_cursor: pass.state.message,
     })
+}
+
+/// Native messages beyond the recovered cursor must not be rescanned every
+/// idle tick. Legacy stores without an identity retain reconciliation because
+/// they cannot prove that the inventory is unchanged.
+fn inventory_unchanged(
+    stored: &CatchupState,
+    revision: u64,
+    identity: Option<&str>,
+    invalidated: bool,
+) -> bool {
+    stored.sweep_done
+        && !invalidated
+        && identity.is_some()
+        && stored.source_identity.as_deref() == identity
+        && stored.sweep_revision == Some(revision)
+}
+
+fn unchanged_report(stored: CatchupState) -> CatchupReport {
+    CatchupReport {
+        available: true,
+        outcome_cursor: stored.outcome,
+        recovered_message_cursor: stored.message,
+        ..CatchupReport::default()
+    }
 }
 
 const OUTCOME_PAGE: usize = 255;
