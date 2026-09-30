@@ -130,7 +130,7 @@ impl SqliteSubsessionRepository {
         id: String,
     ) -> Result<Option<StoredSubsessionDelegation>, StorageError> {
         self.storage
-            .execute(move |db| read(db, "d.delegation_id=?1", &id))
+            .read(move |db| read(db, "d.delegation_id=?1", &id))
             .await
     }
 
@@ -139,7 +139,7 @@ impl SqliteSubsessionRepository {
         id: String,
     ) -> Result<Option<StoredSubsessionDelegation>, StorageError> {
         self.storage
-            .execute(move |db| read(db, "r.child_session_id=?1", &id))
+            .read(move |db| read(db, "r.child_session_id=?1", &id))
             .await
     }
 
@@ -148,7 +148,7 @@ impl SqliteSubsessionRepository {
         id: String,
     ) -> Result<Option<StoredSubsessionDelegation>, StorageError> {
         self.storage
-            .execute(move |db| read(db, "r.relation_id=?1", &id))
+            .read(move |db| read(db, "r.relation_id=?1", &id))
             .await
     }
 
@@ -158,7 +158,7 @@ impl SqliteSubsessionRepository {
         parent: String,
     ) -> Result<Vec<StoredSubsessionDelegation>, StorageError> {
         self.storage
-            .execute(move |db| {
+            .read(move |db| {
                 list(
                     db,
                     "WHERE r.parent_session_id=?1 ORDER BY r.ordinal",

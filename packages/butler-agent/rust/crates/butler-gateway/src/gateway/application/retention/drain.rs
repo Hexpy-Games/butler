@@ -1,6 +1,6 @@
 //! Bounded event drain after terminal projection finalization.
 
-use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use rusqlite::{Connection, OptionalExtension, Savepoint, params};
 
 use super::super::{CachedSql, internal_continuation, storage::AppStorageError};
 use super::compaction::{CompactResult, Step};
@@ -11,7 +11,7 @@ const REPLAY_TAIL: i64 = 200;
 /// Removes one batch of the events the projection retained, then clears what
 /// follows them: the replay-tail wait, continuation markers and identities.
 pub(super) fn drain(
-    tx: &Transaction<'_>,
+    tx: &Savepoint<'_>,
     turn: &str,
     high_water: i64,
 ) -> Result<Step, AppStorageError> {
@@ -43,7 +43,7 @@ pub(super) fn latest_event_id(db: &Connection) -> Result<i64, AppStorageError> {
 }
 
 fn delete_event_batch(
-    tx: &Transaction<'_>,
+    tx: &Savepoint<'_>,
     turn: &str,
     through: i64,
 ) -> Result<usize, AppStorageError> {
@@ -60,7 +60,7 @@ fn delete_event_batch(
 }
 
 fn retained_events_remain(
-    tx: &Transaction<'_>,
+    tx: &Savepoint<'_>,
     turn: &str,
     through: i64,
 ) -> Result<bool, AppStorageError> {
@@ -77,7 +77,7 @@ fn retained_events_remain(
 }
 
 fn replay_tail_cursor(
-    tx: &Transaction<'_>,
+    tx: &Savepoint<'_>,
     turn: &str,
     high_water: i64,
 ) -> Result<Option<i64>, AppStorageError> {
@@ -91,7 +91,7 @@ fn replay_tail_cursor(
     .map_err(AppStorageError::sqlite)
 }
 
-fn clear_identity_batch(tx: &Transaction<'_>, turn: &str) -> Result<(), AppStorageError> {
+fn clear_identity_batch(tx: &Savepoint<'_>, turn: &str) -> Result<(), AppStorageError> {
     tx.execute_cached(
         "DELETE FROM app_progress_row_identities WHERE turn_id=?1 AND row_json IN (\
             SELECT row_json FROM app_progress_row_identities WHERE turn_id=?1 LIMIT 64)",
@@ -101,7 +101,7 @@ fn clear_identity_batch(tx: &Transaction<'_>, turn: &str) -> Result<(), AppStora
     Ok(())
 }
 
-fn identities_remain(tx: &Transaction<'_>, turn: &str) -> Result<bool, AppStorageError> {
+fn identities_remain(tx: &Savepoint<'_>, turn: &str) -> Result<bool, AppStorageError> {
     tx.query_row_cached(
         "SELECT 1 FROM app_progress_row_identities WHERE turn_id=?1 LIMIT 1",
         [turn],

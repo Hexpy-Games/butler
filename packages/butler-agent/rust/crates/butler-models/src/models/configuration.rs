@@ -162,6 +162,17 @@ impl ModelConfiguration {
     pub async fn read_metadata(&self) -> Result<ModelMetadataRead, ModelCatalogError> {
         let config = read_object(&self.data_root.join("butler.config.json")).await;
         let local = self.local_models(&config);
+        // Config is read on every request. With no configured local models,
+        // the catalog input is exactly the immutable empty-input catalog
+        // built at open; keep every field and refresh its observation time.
+        if local.is_empty() {
+            return Ok(ModelMetadataRead {
+                config,
+                catalog: self
+                    .registration_catalog
+                    .with_generated_at(self.clock.now_iso()),
+            });
+        }
         let catalog = self.catalog.snapshot(
             ModelCatalogSnapshotInput {
                 configured_local: local.iter().map(ModelProviderMetadata::from).collect(),

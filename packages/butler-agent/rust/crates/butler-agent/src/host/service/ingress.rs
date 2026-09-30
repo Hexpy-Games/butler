@@ -172,7 +172,7 @@ impl IngressDispatcher {
             return Ok(summary);
         }
         recover_stale(self.queue.clone(), state.active_queue_ids.clone()).await?;
-        let capacity = 5usize.saturating_sub(state.tasks.len());
+        let capacity = dispatch_capacity().saturating_sub(state.tasks.len());
         let waiting_sessions = waiting_sessions(&self.authority).await?;
         let claimed = claim_pending(
             self.queue.clone(),
@@ -275,4 +275,16 @@ async fn waiting_sessions(authority: &PrincipalAuthority) -> Result<HashSet<Stri
             .with_source(source)
         })
         .map(|sessions| sessions.into_iter().collect())
+}
+
+fn dispatch_capacity() -> usize {
+    #[cfg(debug_assertions)]
+    if let Some(capacity) = std::env::var("BUTLER_E2E_INGRESS_CAPACITY")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| (1..=16).contains(value))
+    {
+        return capacity;
+    }
+    5
 }

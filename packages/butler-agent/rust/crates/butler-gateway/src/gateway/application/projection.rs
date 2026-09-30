@@ -1,8 +1,13 @@
 //! Owned transcript-to-App projection lifecycle.
 
 mod byte_window;
+mod stream_window;
+pub(super) use stream_window::TranscriptEvent;
+use stream_window::projected_work_outcome;
 mod checkpoint;
+mod coalescing;
 mod deferred;
+mod delivery;
 mod final_candidate;
 mod final_result;
 mod final_turn_events;
@@ -18,7 +23,6 @@ pub(in crate::gateway::application) use final_turn_events::HAS_KIND_SQL;
 
 use std::path::PathBuf;
 
-use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 pub(in crate::gateway::application) fn normalize_committed_turn_event(
@@ -41,6 +45,7 @@ pub(super) use transcript_file::sync_chat_once;
 #[derive(Clone)]
 pub(super) struct ProjectionContext {
     storage: AppStorage,
+    streaming: std::sync::Arc<coalescing::Buffer>,
     dependencies: std::sync::Arc<AppApplicationDependencies>,
     subscribers: EventSubscribers,
     butler_data: PathBuf,
@@ -78,6 +83,7 @@ impl ProjectionContext {
         ),
     ) -> Self {
         Self {
+            streaming: std::sync::Arc::default(),
             storage,
             dependencies,
             subscribers,
@@ -90,217 +96,81 @@ impl ProjectionContext {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct TranscriptEvent {
-    pub event_id: String,
-    pub session_id: String,
-    pub kind: String,
-    pub timestamp: String,
-    pub payload: Map<String, Value>,
-    #[serde(default)]
-    pub transport: Option<String>,
-    #[serde(default)]
-    pub metadata: Option<Map<String, Value>>,
+async fn project_event(
+    context: &ProjectionContext,
+    chat: &str,
+    event: TranscriptEvent,
+    cursor: Checkpoint,
+) -> Result<bool, GatewayApplicationError> {
+    if context
+        .streaming
+        .handle(context, chat, &event, &cursor)
+        .await?
+    {
+        return Ok(true);
+    }
+    context.streaming.flush(context, chat).await?;
+    project_boundary(context, chat, event, cursor).await
 }
 
-async fn project_event(
+async fn project_boundary(
     context: &ProjectionContext,
     chat_id: &str,
     event: TranscriptEvent,
     checkpoint: Checkpoint,
 ) -> Result<bool, GatewayApplicationError> {
+    let context = context.clone();
     if event.transport.as_deref() != Some("app") {
-        return save_checkpoint(context, checkpoint).await.map(|()| true);
+        return save_checkpoint(&context, checkpoint).await.map(|()| true);
     }
+    let Some(action) = delivery::action_id(&event) else {
+        return save_checkpoint(&context, checkpoint).await.map(|()| true);
+    };
     if event.kind == "outbound" {
-        let Some(action) = event
-            .payload
-            .get("actionId")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-            .map(str::to_owned)
-        else {
-            return save_checkpoint(context, checkpoint).await.map(|()| true);
-        };
-        let claim = staging::claim_id_from_event(&event);
-        let chat = chat_id.to_owned();
-        let now = context.dependencies.identity_clock.now_iso();
-        context
-            .storage
-            .execute(move |db| {
-                let tx = db
-                    .transaction()
-                    .map_err(super::storage::AppStorageError::sqlite)?;
-                if !staging::projected(&tx, &action)? {
-                    staging::stage(&tx, &action, &chat, &event, claim.as_deref(), &now)?;
-                }
-                checkpoint::save(&tx, &checkpoint, &now)?;
-                tx.commit().map_err(super::storage::AppStorageError::sqlite)
-            })
-            .await
-            .map_err(app_error)?;
-        return Ok(true);
+        return delivery::stage_event(&context, chat_id, event, action, checkpoint).await;
     }
     if event.kind != "delivery" {
-        return save_checkpoint(context, checkpoint).await.map(|()| true);
+        return save_checkpoint(&context, checkpoint).await.map(|()| true);
     }
-    let Some(action) = event
-        .payload
-        .get("actionId")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .map(str::to_owned)
-    else {
-        return save_checkpoint(context, checkpoint).await.map(|()| true);
-    };
+    let lookup = action.clone();
     let stored = context
         .storage
-        .execute({
-            let action = action.clone();
-            move |db| staging::load_awaiting(db, &action)
-        })
+        .inspect(move |db| staging::load_awaiting(db, &lookup))
         .await
         .map_err(app_error)?;
     let Some((stored_chat, outbound)) = stored else {
-        return save_checkpoint(context, checkpoint).await.map(|()| true);
+        return save_checkpoint(&context, checkpoint).await.map(|()| true);
     };
-    let work_outcome = projected_work_outcome(&stored_chat, &outbound);
+    let context = context.clone();
     if event.payload.get("ok") != Some(&Value::Bool(true)) {
-        let now = context.dependencies.identity_clock.now_iso();
-        return context
-            .storage
-            .execute(move |db| {
-                let tx = db
-                    .transaction()
-                    .map_err(super::storage::AppStorageError::sqlite)?;
-                staging::delete(&tx, &action)?;
-                checkpoint::save(&tx, &checkpoint, &now)?;
-                tx.commit().map_err(super::storage::AppStorageError::sqlite)
-            })
-            .await
-            .map_err(app_error)
-            .map(|()| true);
+        return delivery::discard(&context, action, checkpoint).await;
     }
-    let non_final_event = outbound.clone();
-    let non_final_action = action.clone();
-    let non_final_chat = stored_chat.clone();
-    let non_final_checkpoint = checkpoint.clone();
-    let non_final_now = context.dependencies.identity_clock.now_iso();
-    let non_final_ids = non_final::ProjectionIds {
-        event_id: format!(
-            "turn-event-{}",
-            context.dependencies.identity_clock.new_uuid()
-        ),
-        message_id: format!("message-{}", context.dependencies.identity_clock.new_uuid()),
-    };
-    let materialization_data = context.butler_data.clone();
-    let materialization_chat = stored_chat.clone();
-    let materialization_event = outbound.clone();
-    let worker_materialization = context
-        .storage
-        .execute(move |db| {
-            final_candidate::worker_materialization(
-                db,
-                &materialization_data,
-                &materialization_chat,
-                &materialization_event,
-            )
-        })
-        .await
-        .map_err(app_error)?;
-    let worker_files = match worker_materialization {
-        Some(request) => {
-            context
+    let work_outcome = projected_work_outcome(&stored_chat, &outbound);
+    let outcome = delivery::non_final(
+        &context,
+        stored_chat.clone(),
+        outbound.clone(),
+        action.clone(),
+        checkpoint.clone(),
+    )
+    .await?;
+    if !outcome.handled {
+        return delivery::terminal(&context, stored_chat, outbound, action, checkpoint).await;
+    }
+    if outcome.wake_queue {
+        context.queue_wake.chat(stored_chat).await?;
+    }
+    if let Some(turn) = outcome.terminal_turn {
+        if let Some(work_outcome) = work_outcome {
+            let _ = context
                 .dependencies
-                .artifact_materializer
-                .materialize(request)
-                .await?
+                .work_streams
+                .reconcile_turn(work_outcome)
+                .await;
         }
-        None => Vec::new(),
-    };
-    let non_final_subscribers = context.subscribers.clone();
-    let outcome = context
-        .storage
-        .execute(move |db| {
-            non_final::apply(
-                db,
-                non_final::ApplyInput {
-                    chat_id: &non_final_chat,
-                    action_id: &non_final_action,
-                    outbound: &non_final_event,
-                    cursor: &non_final_checkpoint,
-                    now: &non_final_now,
-                    subscribers: &non_final_subscribers,
-                    ids: non_final_ids,
-                    worker_files,
-                },
-            )
-        })
-        .await
-        .map_err(app_error)?;
-    if outcome.handled {
-        if outcome.wake_queue {
-            context.queue_wake.chat(stored_chat).await?;
-        }
-        if let Some(turn) = outcome.terminal_turn {
-            if let Some(work_outcome) = work_outcome {
-                let _ = context
-                    .dependencies
-                    .work_streams
-                    .reconcile_turn(work_outcome)
-                    .await;
-            }
-            context.finish_terminal_turn(turn).await?;
-        }
-        return Ok(true);
+        context.finish_terminal_turn(turn).await?;
     }
-    let terminal_root = context.butler_data.clone();
-    let terminal_event = outbound.clone();
-    let disposition = tokio::task::spawn_blocking(move || {
-        terminal_records::disposition(&terminal_root, &terminal_event)
-    })
-    .await
-    .map_err(GatewayApplicationError::internal_from)?;
-    match disposition {
-        terminal_records::Disposition::Accept => {}
-        terminal_records::Disposition::Defer => {
-            let now = context.dependencies.identity_clock.now_iso();
-            return context
-                .storage
-                .execute(move |db| {
-                    let tx = db
-                        .transaction()
-                        .map_err(super::storage::AppStorageError::sqlite)?;
-                    staging::defer(&tx, &action, &now)?;
-                    checkpoint::save(&tx, &checkpoint, &now)?;
-                    tx.commit().map_err(super::storage::AppStorageError::sqlite)
-                })
-                .await
-                .map_err(app_error)
-                .map(|()| true);
-        }
-        terminal_records::Disposition::Reject => {
-            let now = context.dependencies.identity_clock.now_iso();
-            return context
-                .storage
-                .execute(move |db| {
-                    let tx = db
-                        .transaction()
-                        .map_err(super::storage::AppStorageError::sqlite)?;
-                    staging::delete(&tx, &action)?;
-                    staging::mark(&tx, &action, &outbound.event_id, &stored_chat, &now)?;
-                    checkpoint::save(&tx, &checkpoint, &now)?;
-                    tx.commit().map_err(super::storage::AppStorageError::sqlite)
-                })
-                .await
-                .map_err(app_error)
-                .map(|()| true);
-        }
-    }
-    project_final(context, stored_chat, outbound, Some(checkpoint)).await
+    Ok(true)
 }
 
 async fn project_final(
@@ -344,7 +214,7 @@ async fn project_final(
                     .storage
                     .execute(move |db| {
                         let tx = db
-                            .transaction()
+                            .savepoint()
                             .map_err(super::storage::AppStorageError::sqlite)?;
                         staging::delete(&tx, &action)?;
                         checkpoint::save(&tx, &checkpoint, &now)?;
@@ -447,29 +317,13 @@ async fn project_final(
     Ok(projected)
 }
 
-fn projected_work_outcome(
-    chat_id: &str,
-    event: &TranscriptEvent,
-) -> Option<AppWorkStreamTurnOutcome> {
-    let metadata = event.payload.get("metadata")?.as_object()?;
-    let kind = metadata.get("kind")?.as_str()?;
-    let (outcome, status_note) = match kind {
-        "turn_failed" => ("failed", "Reconciled after failed turn replay."),
-        "turn_cancelled" => ("cancelled", "Reconciled after cancelled turn replay."),
-        _ => return None,
-    };
-    Some(AppWorkStreamTurnOutcome {
-        session_id: super::app_session_hint(chat_id),
-        turn_id: metadata.get("turnId")?.as_str()?.to_owned(),
-        outcome: outcome.into(),
-        status_note: status_note.into(),
-    })
-}
-
 async fn save_checkpoint(
     context: &ProjectionContext,
     value: Checkpoint,
 ) -> Result<(), GatewayApplicationError> {
+    if context.streaming.advance(&value) {
+        return Ok(());
+    }
     let now = context.dependencies.identity_clock.now_iso();
     context
         .storage

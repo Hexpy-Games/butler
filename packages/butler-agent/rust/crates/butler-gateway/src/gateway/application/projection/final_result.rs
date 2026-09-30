@@ -28,7 +28,7 @@ pub(super) fn apply(
     input: &FinalCandidate,
     apply: FinalApply<'_>,
 ) -> Result<bool, AppStorageError> {
-    let tx = db.transaction().map_err(AppStorageError::sqlite)?;
+    let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
     if staging::projected(&tx, &input.action_id)? {
         return Ok(false);
     }

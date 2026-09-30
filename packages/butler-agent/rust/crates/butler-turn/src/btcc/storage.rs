@@ -20,6 +20,7 @@ mod operation_results;
 mod progress;
 mod progress_publication;
 mod project_work_runtime;
+mod read_pool;
 mod readiness;
 mod repository;
 mod runtime_owner;
@@ -108,6 +109,7 @@ pub struct BtccStorage {
 
 struct StorageInner {
     lane: AsyncMutex<LaneState>,
+    readers: Option<Arc<read_pool::ReadPool>>,
 }
 
 struct LaneState {
@@ -123,6 +125,7 @@ impl BtccStorage {
         let (sender, receiver) = mpsc::channel(OPERATION_QUEUE_CAPACITY);
         let (initialized_tx, initialized_rx) = oneshot::channel();
         let path = config.path;
+        let read_path = path.clone();
         let profile = config.profile;
         let activation = config.activation;
         let identity = config.runtime_owner;
@@ -159,9 +162,18 @@ impl BtccStorage {
                 return Err(error);
             }
         };
+        let readers = match read_pool::open(read_path, profile).await {
+            Ok(readers) => readers,
+            Err(error) => {
+                drop(sender);
+                join_failed_initialization(thread).await;
+                return Err(error);
+            }
+        };
         let _ = owner;
         Ok(Self {
             inner: Arc::new(StorageInner {
+                readers,
                 lane: AsyncMutex::new(LaneState {
                     sender: Some(sender),
                     thread: Some(thread),
@@ -218,6 +230,9 @@ impl BtccStorage {
 
     /// Closes the store once; every caller receives the owner thread's result.
     pub async fn close(&self) -> StorageResult<()> {
+        if let Some(pool) = &self.inner.readers {
+            pool.close().await;
+        }
         let (waiter_tx, waiter_rx) = oneshot::channel();
         let mut lane = self.inner.lane.lock().await;
         if let Some(result) = &lane.close_result {

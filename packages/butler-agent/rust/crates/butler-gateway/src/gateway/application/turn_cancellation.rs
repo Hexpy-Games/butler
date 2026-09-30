@@ -75,7 +75,7 @@ impl AppApplication {
                         "Turn is not cancellable.",
                     ));
                 }
-                let tx = db.transaction().map_err(AppStorageError::sqlite)?;
+                let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
                 mark_cancelling(&tx, &row.0, &turn, &stored_at)?;
                 let queued = tx
                     .query_row(
@@ -153,7 +153,7 @@ impl AppApplication {
 /// session queue: a user's Stop holds queued messages until the user sends
 /// again.
 fn mark_cancelling(
-    tx: &rusqlite::Transaction<'_>,
+    tx: &rusqlite::Savepoint<'_>,
     chat_id: &str,
     turn_id: &str,
     now: &str,

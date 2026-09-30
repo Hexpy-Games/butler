@@ -39,7 +39,7 @@ impl ContextCompactionRepository {
     ) -> Result<Arc<[Arc<ContextCompactionRecord>]>, BtccError> {
         let turn_id = turn_id.to_owned();
         self.storage
-            .execute(move |connection| load(connection, &turn_id))
+            .read(move |connection| load(connection, &turn_id))
             .await
             .map(Arc::from)
             .map_err(BtccError::from)

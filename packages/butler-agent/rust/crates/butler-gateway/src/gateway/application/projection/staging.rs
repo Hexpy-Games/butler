@@ -1,5 +1,6 @@
 //! Durable outbound staging and legacy-compatible projection receipts.
 
+use crate::gateway::application::storage::CachedSql;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{super::storage::AppStorageError, TranscriptEvent};
@@ -20,14 +21,14 @@ pub(super) fn stage(
     if let Some(existing) = load(db, action_id)? {
         let existing_claim = claim_id_from_event(&existing.1);
         if existing_claim.is_some() && existing_claim.as_deref() != claim_id {
-            db.execute(
+            db.execute_cached(
                 "DELETE FROM app_transport_projection_staged_outbounds WHERE action_id=?1",
                 [action_id],
             )
             .map_err(AppStorageError::sqlite)?;
         }
     }
-    db.execute(
+    db.execute_cached(
         "INSERT OR IGNORE INTO app_transport_projection_staged_outbounds \
          (action_id,chat_id,event_json,state,created_at,updated_at) \
          VALUES(?1,?2,?3,'awaiting_delivery',?4,?4)",
@@ -58,7 +59,7 @@ pub(super) fn stage(
 /// first record was still staged (its delivery was read under a claim the
 /// restarted App had already recovered) into an identity conflict the
 /// projection retried forever, so the chat's turns never settled.
-fn same_action(stored: &TranscriptEvent, event: &TranscriptEvent) -> bool {
+pub(super) fn same_action(stored: &TranscriptEvent, event: &TranscriptEvent) -> bool {
     stored.kind == event.kind
         && stored.session_id == event.session_id
         && stored.transport == event.transport
@@ -69,7 +70,7 @@ pub(super) fn load(
     db: &Connection,
     action_id: &str,
 ) -> Result<Option<(String, TranscriptEvent)>, AppStorageError> {
-    db.query_row(
+    db.query_row_cached(
         "SELECT chat_id,event_json FROM app_transport_projection_staged_outbounds \
          WHERE action_id=?1",
         [action_id],
@@ -97,7 +98,7 @@ pub(super) fn load_awaiting(
         return Ok(None);
     };
     let awaiting = db
-        .query_row(
+        .query_row_cached(
             "SELECT state FROM app_transport_projection_staged_outbounds WHERE action_id=?1",
             [action_id],
             |row| row.get::<_, String>(0),
@@ -108,7 +109,7 @@ pub(super) fn load_awaiting(
 }
 
 pub(super) fn defer(db: &Connection, action_id: &str, now: &str) -> Result<(), AppStorageError> {
-    db.execute(
+    db.execute_cached(
         "UPDATE app_transport_projection_staged_outbounds SET state='deferred_final',updated_at=?1 \
          WHERE action_id=?2 AND state='awaiting_delivery'",
         params![now, action_id],
@@ -123,7 +124,7 @@ pub(super) fn deferred_batch(
     limit: usize,
 ) -> Result<Vec<(String, String, TranscriptEvent)>, AppStorageError> {
     let mut statement = db
-        .prepare(
+        .prepare_cached(
             "SELECT action_id,chat_id,event_json FROM app_transport_projection_staged_outbounds \
              WHERE state='deferred_final' AND action_id>?1 ORDER BY action_id LIMIT ?2",
         )
@@ -146,7 +147,7 @@ pub(super) fn deferred_batch(
 }
 
 pub(super) fn delete(db: &Connection, action_id: &str) -> Result<(), AppStorageError> {
-    db.execute(
+    db.execute_cached(
         "DELETE FROM app_transport_projection_staged_outbounds WHERE action_id=?1",
         [action_id],
     )
@@ -156,7 +157,7 @@ pub(super) fn delete(db: &Connection, action_id: &str) -> Result<(), AppStorageE
 
 pub(super) fn projected(db: &Connection, action_id: &str) -> Result<bool, AppStorageError> {
     let current = db
-        .query_row(
+        .query_row_cached(
             "SELECT 1 FROM app_transport_projection_receipts WHERE action_id=?1",
             [action_id],
             |_| Ok(()),
@@ -168,7 +169,7 @@ pub(super) fn projected(db: &Connection, action_id: &str) -> Result<bool, AppSto
         return Ok(true);
     }
     let migrated = db
-        .query_row(
+        .query_row_cached(
             "SELECT completed FROM app_transport_projection_migrations \
              WHERE name='projected_transport_events_to_app_receipts_v1'",
             [],
@@ -180,7 +181,7 @@ pub(super) fn projected(db: &Connection, action_id: &str) -> Result<bool, AppSto
     if migrated {
         return Ok(false);
     }
-    db.query_row(
+    db.query_row_cached(
         "SELECT 1 FROM projected_transport_events WHERE action_id=?1",
         [action_id],
         |_| Ok(()),
@@ -197,7 +198,7 @@ pub(super) fn mark(
     chat_id: &str,
     now: &str,
 ) -> Result<(), AppStorageError> {
-    db.execute(
+    db.execute_cached(
         "INSERT OR IGNORE INTO app_transport_projection_receipts \
          (action_id,event_id,chat_id,created_at) VALUES(?1,?2,?3,?4)",
         params![action_id, event_id, chat_id, now],

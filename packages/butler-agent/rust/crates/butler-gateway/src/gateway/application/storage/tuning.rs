@@ -69,3 +69,21 @@ pub(super) fn passive_checkpoint(connection: &Connection) -> StorageResult<()> {
         .execute_batch("PRAGMA wal_checkpoint(PASSIVE)")
         .map_err(AppStorageError::sqlite)
 }
+
+pub(super) fn configure_read(connection: &Connection) -> StorageResult<()> {
+    connection
+        .busy_timeout(Duration::from_secs(5))
+        .map_err(AppStorageError::sqlite)?;
+    connection.set_prepared_statement_cache_capacity(CACHED_STATEMENTS);
+    for (name, value) in [
+        ("query_only", "ON".to_owned()),
+        ("cache_size", PAGE_CACHE_KIB.to_string()),
+        ("mmap_size", MMAP_BYTES.to_string()),
+        ("temp_store", "MEMORY".to_owned()),
+    ] {
+        connection
+            .pragma_update(None, name, value)
+            .map_err(AppStorageError::sqlite)?;
+    }
+    Ok(())
+}

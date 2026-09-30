@@ -127,7 +127,7 @@ pub(in crate::gateway::application) fn session(
     Ok(summary)
 }
 
-pub(super) fn chats(db: &mut Connection) -> Result<Vec<AppChatSummary>, AppStorageError> {
+pub(super) fn chats(db: &Connection) -> Result<Vec<AppChatSummary>, AppStorageError> {
     let mut statement = db
         .prepare_cached(
             r"
@@ -167,7 +167,7 @@ ORDER BY updated_at DESC,created_at DESC
 }
 
 pub(super) fn sessions(
-    db: &mut Connection,
+    db: &Connection,
     kind: Option<&str>,
     project_id: Option<&str>,
 ) -> Result<Vec<AppSessionSummary>, AppStorageError> {
@@ -194,7 +194,7 @@ pub(super) fn sessions(
 }
 
 pub(super) fn archives(
-    db: &mut Connection,
+    db: &Connection,
 ) -> Result<Vec<(String, AppSessionSummary)>, AppStorageError> {
     let sql = format!(
         "{SESSION_SELECT} WHERE c.archived=1 AND NOT EXISTS(\

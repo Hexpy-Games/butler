@@ -55,7 +55,7 @@ pub(super) async fn get(
     let project_key = project.id.clone();
     let links = application
         .storage
-        .execute(move |db| ProjectSessionLinks::read(db, &project_key))
+        .read(move |db| ProjectSessionLinks::read(db, &project_key))
         .await
         .map_err(super::super::app_error)?;
     let mut cards = board_cards(&snapshot, &query.kind, &sessions, &links);

@@ -1,6 +1,6 @@
 //! App progress publication from committed BTCC facts through the native transcript.
 
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
@@ -39,9 +39,9 @@ impl ProgressPublisher {
     }
 
     /// Each page releases its hydrated events before the next SQLite read.
-    /// Failures remain pending; the keyset lets later events proceed this pass.
-    /// On return, every event committed before the call has been attempted:
-    /// published ones precede anything appended to the transcript afterwards.
+    /// A failed event holds its session's later events; other sessions proceed.
+    /// Session-first keysets keep concurrent inserts behind that session's cursor.
+    /// Published events precede anything appended after this pass returns.
     pub(crate) async fn reconcile(&self) -> Result<ProgressPublicationSummary, BtccError> {
         let _pass = self.pass.lock().await;
         let mut summary = ProgressPublicationSummary {
@@ -49,6 +49,7 @@ impl ProgressPublisher {
             published: 0,
         };
         let mut after = None;
+        let mut blocked = HashSet::new();
         loop {
             let page = self
                 .repository
@@ -60,7 +61,10 @@ impl ProgressPublisher {
             }
             let page_len = page.len();
             for event in page {
-                after = Some((event.session_sequence, event.event_id.clone()));
+                after = Some((event.session_id.clone(), event.session_sequence));
+                if blocked.contains(&event.session_id) {
+                    continue;
+                }
                 summary.attempted += 1;
                 if self.publish(&event).await.is_ok()
                     && self
@@ -70,6 +74,8 @@ impl ProgressPublisher {
                         .is_ok()
                 {
                     summary.published += 1;
+                } else {
+                    blocked.insert(event.session_id);
                 }
             }
             if page_len < PAGE_SIZE {

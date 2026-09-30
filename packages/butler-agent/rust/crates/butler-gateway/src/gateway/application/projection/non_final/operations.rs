@@ -309,7 +309,7 @@ pub(super) fn project_worker_result(
     if text.is_empty() && files.is_empty() {
         return Ok(not_handled());
     }
-    let tx = db.transaction().map_err(AppStorageError::sqlite)?;
+    let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
     if staging::projected(&tx, action)? {
         return Ok(ProjectionOutcome {
             handled: true,

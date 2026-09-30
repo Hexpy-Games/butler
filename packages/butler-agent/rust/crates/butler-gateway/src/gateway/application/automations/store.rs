@@ -211,14 +211,7 @@ impl AppApplication {
         session_id: String,
     ) -> Result<Value, GatewayApplicationError> {
         self.storage
-            .execute(move |db| {
-                let targets = records::list(db, Some(&session_id), false)?
-                    .into_iter()
-                    .map(records::summary)
-                    .map(target_summary)
-                    .collect::<Vec<_>>();
-                serde_json::to_value(targets).map_err(json_error)
-            })
+            .read(move |db| read_targets(db, &session_id))
             .await
             .map_err(app_error)
     }
@@ -390,4 +383,16 @@ async fn first_run(
         )
     };
     Ok(next)
+}
+
+pub(in crate::gateway::application) fn read_targets(
+    db: &rusqlite::Connection,
+    session: &str,
+) -> Result<Value, AppStorageError> {
+    let targets = records::list(db, Some(session), false)?
+        .into_iter()
+        .map(records::summary)
+        .map(target_summary)
+        .collect::<Vec<_>>();
+    serde_json::to_value(targets).map_err(json_error)
 }

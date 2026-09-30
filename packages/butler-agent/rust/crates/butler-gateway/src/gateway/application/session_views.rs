@@ -1,6 +1,7 @@
 //! Canonical App session reads composed with BTCC child projections.
 
 mod helpers;
+mod snapshot;
 mod steward_children;
 mod turn_projection;
 
@@ -12,7 +13,6 @@ use super::{
 };
 use crate::gateway::{TurnRecord, protocol::APP_PROTOCOL_VERSION};
 use helpers::*;
-use turn_projection::{project, read_latest};
 
 impl AppApplication {
     pub(super) async fn session_view_owned(
@@ -23,93 +23,55 @@ impl AppApplication {
         if is_child_session(&session_id) {
             return self.child_session_view(session_id, page).await;
         }
-        self.refresh_message_projection_owned(session_id.clone())
-            .await?;
-        let session = self.get_session(session_id.clone()).await?;
-        let project_workspace_path = self
-            .project_workspace_path(session.project_id.clone())
-            .await?;
-        let branch = self
-            .dependencies
-            .session_workspaces
-            .branch_info(
-                AppSessionBranchQuery {
-                    runtime_session_id: session.session_hint.clone(),
-                    project_workspace_path,
-                },
-                tokio_util::sync::CancellationToken::new(),
-            )
-            .await?;
-        let message_page = self
-            .message_window(session_id.clone(), page.clone())
-            .await?;
-        let messages = message_page.view;
-        let latest_with_progress = read_latest(self, session_id.clone()).await?;
-        let artifacts = self.artifact_page(session_id.clone()).await?;
-        let context = self.context_details_owned(session_id.clone()).await?;
-        let usage = serde_json::to_value(&context.usage).map_err(json_error)?;
-        let event_cursor = self.latest_event_cursor_owned().await?;
-        let subsessions = self.parent_subsessions(&session_id).await;
+        self.refresh_baseline_projection(session_id.clone()).await?;
+        let snapshot::Snapshot {
+            mut session,
+            message_page,
+            latest_with_progress,
+            artifacts,
+            context_records,
+            event_cursor,
+            automation_targets,
+        } = snapshot::read(self, session_id.clone(), page).await?;
+        let context_session = session.clone();
         let latest = latest_with_progress.as_ref().map(|(turn, _)| turn);
         let active = latest.filter(|turn| active_state(&turn.state));
-        let work_streams = self
-            .dependencies
-            .work_streams
-            .list_active(AppWorkStreamQuery {
-                app_session_id: session.id.clone(),
-                runtime_session_id: session.session_hint.clone(),
-                current_turn_id: active.map(|turn| turn.id.clone()),
-            })
-            .await?;
+        let ((), branch, context, subsessions, work_streams) = tokio::try_join!(
+            self.load_session_skills(&mut session),
+            self.session_branch(&context_session),
+            self.project_context(context_session.clone(), context_records),
+            async { Ok::<_, GatewayApplicationError>(self.parent_subsessions(&session_id).await) },
+            self.session_work_streams(&context_session, active.map(|turn| turn.id.clone())),
+        )?;
+        let messages = message_page.view;
+        let usage = serde_json::to_value(&context.usage).map_err(json_error)?;
         let latest_message = messages.messages.last();
-        let suppress_progress_rows = superseded_by_reply(latest, latest_message);
-        let latest_turn_view = latest_with_progress
-            .as_ref()
-            .map(|(turn, progress)| {
-                project(turn, progress.clone(), &session.id, suppress_progress_rows)
-            })
-            .transpose()?;
+        let latest_turn_view = turn_projection::project_latest(
+            latest_with_progress.as_ref(),
+            &session.id,
+            latest_message,
+        )?;
         let active_turn_view = active.and(latest_turn_view.as_ref()).cloned();
         let next_cursor = butler_core::json::saturating_u64(messages.next_cursor);
         let first_cursor = messages.messages.first().map(|message| message.cursor);
         let mut view = Map::new();
-        view.insert("protocol_version".into(), json!(APP_PROTOCOL_VERSION));
-        view.insert("session_id".into(), json!(session.id));
-        view.insert("kind".into(), json!(session.kind));
-        insert_some(
+        insert_session_identity(&mut view, &session, view_status(latest));
+        insert_turns(
             &mut view,
-            "project_id",
-            session.project_id.clone().map(Value::String),
-        );
-        insert_some(&mut view, "branch_seed", session.branch_seed);
-        view.insert("status".into(), json!(view_status(latest)));
-        view.insert(
-            "active_turn".into(),
-            serialize_option(active_turn_view.as_ref())?,
-        );
-        view.insert(
-            "latest_turn".into(),
-            serialize_option(latest_turn_view.as_ref())?,
-        );
+            active_turn_view.as_ref(),
+            latest_turn_view.as_ref(),
+        )?;
         view.insert(
             "messages".into(),
             serde_json::to_value(&messages.messages).map_err(json_error)?,
         );
-        view.insert(
-            "message_window".into(),
-            json!({
-                "next_cursor": next_cursor,
-                "complete": !message_page.has_more,
-                "has_more": message_page.has_more,
-                "previous_cursor": first_cursor,
-            }),
-        );
+        insert_message_window(&mut view, next_cursor, first_cursor, message_page.has_more);
         copy(&mut view, "workers", &subsessions);
         copy(&mut view, "steward_children", &subsessions);
         view.insert("work_streams".into(), work_streams);
         view.insert("branch".into(), branch);
         view.insert("skills_used".into(), json!(session.skills_used));
-        let automation_targets = self.automation_targets(session_id.clone()).await?;
+
         view.insert("automations".into(), automation_targets);
         view.insert(
             "artifacts".into(),
@@ -122,18 +84,12 @@ impl AppApplication {
             "cursors".into(),
             json!({"messages":next_cursor,"events":event_cursor}),
         );
-        view.insert(
-            "generated_at".into(),
-            json!(self.dependencies.identity_clock.now_iso()),
-        );
-        view.insert(
-            "updated_at".into(),
-            json!(
-                latest
-                    .map(|turn| turn.updated_at.as_str())
-                    .or_else(|| latest_message.map(|message| message.updated_at.as_str()))
-                    .unwrap_or(&session.updated_at)
-            ),
+        insert_timestamps(
+            &mut view,
+            &self.dependencies.identity_clock.now_iso(),
+            &session.updated_at,
+            latest,
+            latest_message,
         );
         Ok(Value::Object(view))
     }
@@ -145,23 +101,9 @@ impl AppApplication {
         if is_child_session(&session_id) {
             return self.child_session_summary(session_id).await;
         }
-        self.refresh_message_projection_owned(session_id.clone())
-            .await?;
+        self.refresh_baseline_projection(session_id.clone()).await?;
         let session = self.get_session(session_id.clone()).await?;
-        let project_workspace_path = self
-            .project_workspace_path(session.project_id.clone())
-            .await?;
-        let branch_info = self
-            .dependencies
-            .session_workspaces
-            .branch_info(
-                AppSessionBranchQuery {
-                    runtime_session_id: session.session_hint.clone(),
-                    project_workspace_path,
-                },
-                tokio_util::sync::CancellationToken::new(),
-            )
-            .await?;
+        let branch_info = self.session_branch(&session).await?;
         let messages = self.message_page(session_id.clone(), 0.0, 200).await?;
         let latest = self.latest_session_turn(session_id.clone()).await?;
         let artifacts = self.artifact_page(session_id.clone()).await?;
@@ -380,37 +322,55 @@ impl AppApplication {
         projection
     }
 
-    pub(super) async fn refresh_message_projection_owned(
+    /// The benchmark reference retains the pre-CQRS request-time replay.
+    pub(super) async fn refresh_baseline_projection(
         &self,
         session_id: String,
     ) -> Result<(), GatewayApplicationError> {
-        self.projection.refresh(session_id).await
+        if super::storage::metrics::baseline() {
+            self.projection.refresh(session_id).await?;
+        }
+        Ok(())
     }
 
     async fn latest_event_cursor_owned(&self) -> Result<u64, GatewayApplicationError> {
         self.storage
-            .execute(|db| super::events::latest(db))
+            .read(super::events::latest)
             .await
             .map_err(super::app_error)
     }
 
-    pub(super) async fn message_window(
+    async fn session_branch(
         &self,
-        session_id: String,
-        page: AppSessionViewPage,
-    ) -> Result<super::read_model::SessionMessagePage, GatewayApplicationError> {
-        self.storage
-            .execute(move |db| {
-                super::read_model::list_message_page(
-                    db,
-                    &session_id,
-                    page.after_cursor,
-                    page.before_cursor,
-                    page.limit,
-                )
+        session: &super::AppSessionSummary,
+    ) -> Result<Value, GatewayApplicationError> {
+        let project_workspace_path = self
+            .project_workspace_path(session.project_id.clone())
+            .await?;
+        self.dependencies
+            .session_workspaces
+            .branch_info(
+                AppSessionBranchQuery {
+                    runtime_session_id: session.session_hint.clone(),
+                    project_workspace_path,
+                },
+                tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+    }
+    async fn session_work_streams(
+        &self,
+        session: &super::AppSessionSummary,
+        current_turn_id: Option<String>,
+    ) -> Result<Value, GatewayApplicationError> {
+        self.dependencies
+            .work_streams
+            .list_active(AppWorkStreamQuery {
+                app_session_id: session.id.clone(),
+                runtime_session_id: session.session_hint.clone(),
+                current_turn_id,
             })
             .await
-            .map_err(super::app_error)
     }
 
     pub(super) async fn latest_session_turn(
@@ -418,7 +378,7 @@ impl AppApplication {
         session_id: String,
     ) -> Result<Option<TurnRecord>, GatewayApplicationError> {
         self.storage
-            .execute(move |db| super::read_model::latest_turn(db, &session_id))
+            .read(move |db| super::read_model::latest_turn(db, &session_id))
             .await
             .map_err(super::app_error)
     }

@@ -18,6 +18,9 @@ pub(crate) fn refresh(db: &Connection) -> Result<(), AppStorageError> {
     }
     // Source rows and their invalidation are read/settled under the same write
     // reservation. A concurrent writer cannot have its dirty mark erased.
+    if !db.is_autocommit() {
+        return refresh_dirty(db);
+    }
     let tx = rusqlite::Transaction::new_unchecked(db, rusqlite::TransactionBehavior::Immediate)
         .map_err(AppStorageError::sqlite)?;
     refresh_dirty(&tx)?;

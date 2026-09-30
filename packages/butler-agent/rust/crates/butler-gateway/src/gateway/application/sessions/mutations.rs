@@ -185,7 +185,7 @@ fn mutate_session(
     archived: Option<bool>,
     clock: &dyn crate::gateway::application::AppIdentityClock,
 ) -> Result<AppSessionActionResult, AppStorageError> {
-    let tx = db.transaction().map_err(AppStorageError::sqlite)?;
+    let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
     let current = read::session(&tx, session_id)?;
     if session_id == "general" && archived == Some(true) {
         return Err(AppStorageError::new(
@@ -220,7 +220,7 @@ fn delete_permanently(
     session_id: &str,
     clock: &dyn crate::gateway::application::AppIdentityClock,
 ) -> Result<AppSessionActionResult, AppStorageError> {
-    let tx = db.transaction().map_err(AppStorageError::sqlite)?;
+    let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
     let session = read::session(&tx, session_id)?;
     if session_id == "general" {
         return Err(AppStorageError::new(

@@ -135,3 +135,60 @@ pub(super) fn superseded_by_reply(
             })
     })
 }
+
+pub(super) fn insert_session_identity(
+    view: &mut Map<String, Value>,
+    session: &super::super::AppSessionSummary,
+    status: &str,
+) {
+    view.insert(
+        "protocol_version".into(),
+        json!(crate::gateway::protocol::APP_PROTOCOL_VERSION),
+    );
+    view.insert("session_id".into(), json!(session.id));
+    view.insert("kind".into(), json!(session.kind));
+    insert_some(
+        view,
+        "project_id",
+        session.project_id.clone().map(Value::String),
+    );
+    insert_some(view, "branch_seed", session.branch_seed.clone());
+    view.insert("status".into(), json!(status));
+}
+pub(super) fn insert_message_window(
+    view: &mut Map<String, Value>,
+    next: u64,
+    first: Option<u64>,
+    has_more: bool,
+) {
+    view.insert("message_window".into(), json!({"next_cursor":next,"complete":!has_more,"has_more":has_more,"previous_cursor":first}));
+}
+
+pub(super) fn insert_timestamps(
+    view: &mut Map<String, Value>,
+    now: &str,
+    fallback: &str,
+    latest: Option<&TurnRecord>,
+    message: Option<&MessageRecord>,
+) {
+    view.insert("generated_at".into(), json!(now));
+    view.insert(
+        "updated_at".into(),
+        json!(
+            latest
+                .map(|turn| turn.updated_at.as_str())
+                .or_else(|| message.map(|message| message.updated_at.as_str()))
+                .unwrap_or(fallback)
+        ),
+    );
+}
+
+pub(super) fn insert_turns<T: serde::Serialize>(
+    view: &mut Map<String, Value>,
+    active: Option<&T>,
+    latest: Option<&T>,
+) -> Result<(), GatewayApplicationError> {
+    view.insert("active_turn".into(), serialize_option(active)?);
+    view.insert("latest_turn".into(), serialize_option(latest)?);
+    Ok(())
+}

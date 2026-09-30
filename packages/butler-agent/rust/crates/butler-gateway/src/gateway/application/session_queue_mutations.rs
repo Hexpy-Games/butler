@@ -132,7 +132,7 @@ impl AppApplication {
         let (inserted, controls) = self
             .storage
             .execute(move |db| {
-                let transaction = db.transaction().map_err(AppStorageError::sqlite)?;
+                let transaction = db.savepoint().map_err(AppStorageError::sqlite)?;
                 service::assert_scope(
                     &transaction,
                     &reservation_base.chat_id,
@@ -362,7 +362,7 @@ impl AppApplication {
         let subscribers = self.subscribers.clone();
         self.storage
             .execute(move |db| {
-                let transaction = db.transaction().map_err(AppStorageError::sqlite)?;
+                let transaction = db.savepoint().map_err(AppStorageError::sqlite)?;
                 let row = queue_view::mutation_row(&transaction, &id)?
                     .ok_or_else(storage_not_found)?;
                 if has_authority(row.control_resolution_json.as_ref()) {
@@ -418,7 +418,7 @@ impl AppApplication {
         let chat_id = self
             .storage
             .execute(move |db| {
-                let transaction = db.transaction().map_err(AppStorageError::sqlite)?;
+                let transaction = db.savepoint().map_err(AppStorageError::sqlite)?;
                 let row = queue_view::mutation_row(&transaction, &id)?
                     .ok_or_else(storage_not_found)?;
                 if !matches!(row.state.as_str(), "queued" | "failed") {

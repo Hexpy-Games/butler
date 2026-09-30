@@ -132,7 +132,7 @@ impl AppApplication {
         let (inserted, resolved) = self
             .storage
             .execute(move |connection| {
-                let transaction = connection.transaction().map_err(AppStorageError::sqlite)?;
+                let transaction = connection.savepoint().map_err(AppStorageError::sqlite)?;
                 assert_scope(
                     &transaction,
                     &reservation_base.chat_id,
