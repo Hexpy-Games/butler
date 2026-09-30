@@ -170,8 +170,7 @@ jobs:
           run-idle-disk: ${{ matrix.idle_disk }}
       - name: Assert runner home untouched
         if: always()
-        shell: bash
-        run: test ! -e "$HOME/.butler"
+        uses: ./.github/actions/assert-home-untouched
 
   macos-arm64:
     name: Rust checks (macOS arm64)
@@ -211,8 +210,7 @@ jobs:
           run-idle-disk: "true"
       - name: Assert runner home untouched
         if: always()
-        shell: bash
-        run: test ! -e "$HOME/.butler"
+        uses: ./.github/actions/assert-home-untouched
 
   linux-arm64:
     name: Rust checks (Linux arm64)
@@ -242,8 +240,7 @@ jobs:
         run: cargo nextest run --workspace --locked --no-fail-fast
       - name: Assert runner home untouched
         if: always()
-        shell: bash
-        run: test ! -e "$HOME/.butler"
+        uses: ./.github/actions/assert-home-untouched
 
   windows-check:
     # Windows is not ported: the host and CLI are unix-only and main.rs prints

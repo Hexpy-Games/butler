@@ -1,2 +1,2 @@
 [test]
-preload = ["./tests/support/test-globals-preload.ts"]
+preload = ["./tests/support/isolated-user-data.ts", "./tests/support/test-globals-preload.ts"]
