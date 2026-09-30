@@ -160,8 +160,11 @@ pub(super) fn render_health(health: &Value) -> String {
     lines.join("\n")
 }
 
-pub(super) fn read_transcript_activity(data_root: &Path) -> TranscriptActivityProjection {
-    match context::read_status_transcript_activity(data_root) {
+/// The status and facts of a transcript activity scan.
+pub(super) fn activity_projection(
+    scan: Result<context::StatusTranscriptActivity, context::TranscriptScanError>,
+) -> TranscriptActivityProjection {
+    match scan {
         Ok(activity) => {
             let status =
                 json!({ "status": "degraded", "reason": "read_only_transcript_activity_fallback" });

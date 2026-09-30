@@ -36,7 +36,7 @@ pub(super) async fn start_with_config(
     serve_gateway(listener, application, config).unwrap()
 }
 
-type EventListener = Arc<dyn Fn(AppEventEnvelope) + Send + Sync>;
+type EventListener = Arc<dyn Fn(Arc<PublishedEvent>) + Send + Sync>;
 type Subscribers = Arc<Mutex<Vec<(u64, EventListener)>>>;
 
 #[derive(Default)]
@@ -398,7 +398,7 @@ impl GatewayApplication for TestApplication {
 
     fn subscribe_events(
         &self,
-        listener: Arc<dyn Fn(AppEventEnvelope) + Send + Sync>,
+        listener: Arc<dyn Fn(Arc<PublishedEvent>) + Send + Sync>,
     ) -> Result<Box<dyn EventSubscription>, GatewayApplicationError> {
         let id = self
             .next_subscriber
@@ -412,7 +412,7 @@ impl GatewayApplication for TestApplication {
             .load(std::sync::atomic::Ordering::SeqCst)
         {
             for event_id in 1..=201 {
-                listener(event(event_id));
+                listener(Arc::new(PublishedEvent::new(event(event_id))));
             }
         }
         Ok(Box::new(TestSubscription {

@@ -53,8 +53,16 @@ struct ExpiredClaim {
     claim_owner: Option<String>,
     lease_expires_at: Option<String>,
 }
+/// The `state IN` term repeats the predicate of the partial
+/// `session_queued_messages_active_idx`, which makes it applicable.
+pub(super) const DISPATCHING_SQL: &str = "SELECT id,claim_id,turn_id,chat_id,claim_owner,\
+    lease_expires_at FROM session_queued_messages \
+    WHERE state='dispatching' AND state IN ('queued','dispatching') ORDER BY rowid";
+
 fn dispatching_claims(db: &mut Connection) -> Result<Vec<ExpiredClaim>, AppStorageError> {
-    let mut statement=db.prepare("SELECT id,claim_id,turn_id,chat_id,claim_owner,lease_expires_at FROM session_queued_messages WHERE state='dispatching' ORDER BY rowid").map_err(AppStorageError::sqlite)?;
+    let mut statement = db
+        .prepare_cached(DISPATCHING_SQL)
+        .map_err(AppStorageError::sqlite)?;
     statement
         .query_map([], |row| {
             Ok(ExpiredClaim {
@@ -76,7 +84,7 @@ fn recover_one(
     now: &str,
     subscribers: &EventSubscribers,
 ) -> Result<(), AppStorageError> {
-    let changed=db.execute("UPDATE session_queued_messages SET state='queued',claim_id=NULL,claim_owner=NULL,claimed_at=NULL,lease_expires_at=NULL,updated_at=?1 WHERE id=?2 AND state='dispatching' AND claim_id IS ?3",params![now,row.id,row.claim_id]).map_err(AppStorageError::sqlite)?;
+    let changed=db.execute_cached("UPDATE session_queued_messages SET state='queued',claim_id=NULL,claim_owner=NULL,claimed_at=NULL,lease_expires_at=NULL,updated_at=?1 WHERE id=?2 AND state='dispatching' AND claim_id IS ?3",params![now,row.id,row.claim_id]).map_err(AppStorageError::sqlite)?;
     if changed == 1 {
         events::append(
             db,

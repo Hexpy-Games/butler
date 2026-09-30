@@ -1,7 +1,10 @@
 use super::*;
 
 impl GatewayApplication for AppApplication {
-    fn get_usage_monitor(&self, query: AppUsageMonitorQuery) -> ApplicationFuture<Value> {
+    fn get_usage_monitor(&self, mut query: AppUsageMonitorQuery) -> ApplicationFuture<Value> {
+        // A session's runtime id is derived from its id (`read::session`
+        // does the same), so no session lookup stands in the way.
+        query.runtime_session_id = query.session_id.as_deref().map(app_session_hint);
         self.dependencies.monitoring.usage_monitor(query)
     }
     fn get_provider_quota(
@@ -36,7 +39,16 @@ impl GatewayApplication for AppApplication {
         let updates = self.dependencies.updates.clone();
         Box::pin(async move {
             updates
-                .check(request)
+                .refresh(request)
+                .await
+                .map_err(|error| super::updates::update_error(&error))
+        })
+    }
+    fn app_update_status(&self) -> ApplicationFuture<serde_json::Value> {
+        let updates = self.dependencies.updates.clone();
+        Box::pin(async move {
+            updates
+                .current()
                 .await
                 .map_err(|error| super::updates::update_error(&error))
         })
@@ -474,7 +486,7 @@ impl GatewayApplication for AppApplication {
     }
     fn subscribe_events(
         &self,
-        listener: Arc<dyn Fn(AppEventEnvelope) + Send + Sync>,
+        listener: Arc<dyn Fn(Arc<PublishedEvent>) + Send + Sync>,
     ) -> Result<Box<dyn EventSubscription>, GatewayApplicationError> {
         Ok(self.subscribers.subscribe(listener))
     }

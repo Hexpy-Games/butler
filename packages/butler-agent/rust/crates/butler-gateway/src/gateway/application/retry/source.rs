@@ -318,15 +318,14 @@ fn ensure_fresh_retry_allowed(safe_error_code: Option<&str>) -> Result<(), AppSt
     }
 }
 
+/// `turn_id<>''` makes the partial `events_turn_id_idx` applicable.
+pub(in crate::gateway::application) const RUNTIME_FAULT_SQL: &str = "SELECT payload_json \
+    FROM events WHERE type='agent.turn_event' AND turn_id=?1 AND turn_id<>'' \
+    AND json_extract(payload_json,'$.event.kind')='runtime.fault' ORDER BY id DESC LIMIT 1";
+
 fn runtime_fault_retryable(db: &Connection, turn_id: &str) -> Result<bool, AppStorageError> {
     let payload_json = db
-        .query_row(
-            "SELECT payload_json FROM events WHERE type='agent.turn_event' AND turn_id=?1 \
-             AND json_extract(payload_json,'$.event.kind')='runtime.fault' \
-             ORDER BY id DESC LIMIT 1",
-            [turn_id],
-            |row| row.get::<_, String>(0),
-        )
+        .query_row(RUNTIME_FAULT_SQL, [turn_id], |row| row.get::<_, String>(0))
         .optional()
         .map_err(AppStorageError::sqlite)?;
     let Some(payload_json) = payload_json else {

@@ -1,15 +1,13 @@
 //! Read-only transcript activity fallback for status and usage projections.
 
-use super::status_conversation::TranscriptScanError;
-use std::{
-    collections::BTreeMap,
-    fs::{self, File},
-    io::{BufRead, BufReader},
-    path::Path,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::collections::BTreeMap;
 
 use serde_json::Value;
+
+mod cache;
+mod scan;
+
+pub(crate) use cache::TranscriptActivityCache;
 
 const MAX_TOOL_KEYS: usize = 512;
 const MAX_DELIVERY_FAILURES: usize = 4_096;
@@ -47,88 +45,6 @@ struct ActivityAccumulator {
 struct DeliveryFailure {
     timestamp_ms: i64,
     error: Option<String>,
-}
-
-pub(crate) fn read_status_transcript_activity(
-    data_root: &Path,
-) -> Result<StatusTranscriptActivity, TranscriptScanError> {
-    read_status_transcript_activity_at(data_root, unix_now_ms())
-}
-
-fn read_status_transcript_activity_at(
-    data_root: &Path,
-    now_ms: i64,
-) -> Result<StatusTranscriptActivity, TranscriptScanError> {
-    let directory = data_root.join("transcripts");
-    let entries = match fs::read_dir(&directory) {
-        Ok(entries) => entries,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(StatusTranscriptActivity::default());
-        }
-        Err(error) => return Err(TranscriptScanError::Directory(error)),
-    };
-    let mut paths = Vec::new();
-    for entry in entries {
-        let entry = entry.map_err(TranscriptScanError::Directory)?;
-        if entry.file_name().to_string_lossy().ends_with(".jsonl") {
-            paths.push(entry.path());
-        }
-    }
-
-    let mut activity = ActivityAccumulator::default();
-    for path in paths {
-        match fs::metadata(&path) {
-            Ok(metadata) if metadata.is_file() => {}
-            Ok(_) => continue,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(error) => return Err(TranscriptScanError::Metadata(error)),
-        }
-        scan_transcript(&path, &mut activity)?;
-    }
-    activity.prune(now_ms);
-    Ok(activity.summary)
-}
-
-fn scan_transcript(
-    path: &Path,
-    activity: &mut ActivityAccumulator,
-) -> Result<(), TranscriptScanError> {
-    let file = File::open(path).map_err(TranscriptScanError::read)?;
-    let mut reader = BufReader::new(file);
-    let mut line = Vec::new();
-    let mut oversized = false;
-    loop {
-        let available = reader.fill_buf().map_err(TranscriptScanError::read)?;
-        if available.is_empty() {
-            break;
-        }
-        if let Some(newline) = available.iter().position(|byte| *byte == b'\n') {
-            append_line(&mut line, &mut oversized, &available[..newline]);
-            reader.consume(newline + 1);
-            if !oversized {
-                apply_activity_line(activity, &line);
-            }
-            line.clear();
-            oversized = false;
-        } else {
-            append_line(&mut line, &mut oversized, available);
-            let consumed = available.len();
-            reader.consume(consumed);
-        }
-    }
-    Ok(())
-}
-
-fn append_line(line: &mut Vec<u8>, oversized: &mut bool, part: &[u8]) {
-    if *oversized {
-        return;
-    }
-    if line.len().saturating_add(part.len()) > MAX_JSONL_LINE_BYTES {
-        line.clear();
-        *oversized = true;
-        return;
-    }
-    line.extend_from_slice(part);
 }
 
 fn apply_activity_line(activity: &mut ActivityAccumulator, bytes: &[u8]) {
@@ -265,14 +181,6 @@ impl ActivityAccumulator {
 
 fn truncate_error(error: &str) -> String {
     error.chars().take(MAX_DELIVERY_ERROR_CHARS).collect()
-}
-
-fn unix_now_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |duration| {
-            i64::try_from(duration.as_millis().min(i64::MAX as u128)).unwrap_or(i64::MAX)
-        })
 }
 
 #[cfg(test)]
