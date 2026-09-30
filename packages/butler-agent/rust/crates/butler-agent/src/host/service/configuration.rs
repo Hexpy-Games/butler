@@ -94,14 +94,7 @@ impl ServiceConfiguration {
                 ))
             })
             .collect();
-        // The service (and the command that starts it) owns the data
-        // folder's credentials, except in a folder it will refuse to run on.
-        let files = if is_unsupported_legacy_data(&data_root) {
-            CredentialFiles::ReadOnly
-        } else {
-            CredentialFiles::CreateMissing
-        };
-        let app = AppServiceConfiguration::capture_with(&data_root, files);
+        let app = AppServiceConfiguration::capture(&data_root);
         Ok(Self {
             app,
             installation: installation.clone(),
@@ -111,6 +104,16 @@ impl ServiceConfiguration {
             user_home: user_home.to_path_buf(),
             projects,
         })
+    }
+
+    /// Create credentials only after the service has reserved its App listener.
+    pub(crate) fn initialize_app_credentials(&mut self) {
+        let files = if is_unsupported_legacy_data(&self.data_root) {
+            CredentialFiles::ReadOnly
+        } else {
+            CredentialFiles::CreateMissing
+        };
+        self.app.initialize_credentials(&self.data_root, files);
     }
 
     pub(in crate::host) fn validate_workspace(&self, workspace: &Path) -> Result<(), BtccError> {
