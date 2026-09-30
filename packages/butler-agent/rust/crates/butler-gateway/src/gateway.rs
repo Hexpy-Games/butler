@@ -13,6 +13,7 @@ mod live;
 mod message_validation;
 mod mutations;
 mod protocol;
+mod published_event;
 mod rate_limit;
 mod security_settings;
 mod server;
@@ -103,6 +104,7 @@ pub use protocol::{
     SessionControlState, SessionQueueUpdateRequest, SessionQueueView, TurnListView,
     TurnProgressSnapshotView, TurnRecord, TurnState,
 };
+pub use published_event::PublishedEvent;
 pub use security_settings::{
     ADMIN_CREDENTIAL_HEADER, AllowedHostError, GatewayExposure, GatewaySecurityStore,
     MAX_ALLOWED_HOSTS, RotatedConnectionCode, normalize_allowed_host,
@@ -445,7 +447,7 @@ pub trait GatewayApplication:
     ) -> ApplicationFuture<Vec<AppEventEnvelope>>;
     fn subscribe_events(
         &self,
-        listener: Arc<dyn Fn(AppEventEnvelope) + Send + Sync>,
+        listener: Arc<dyn Fn(Arc<PublishedEvent>) + Send + Sync>,
     ) -> Result<Box<dyn EventSubscription>, GatewayApplicationError>;
 }
 
