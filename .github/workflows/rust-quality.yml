@@ -71,6 +71,11 @@ jobs:
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
           export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
           cargo run -j 8 --locked -p butler-source-check -- .
+      - name: Prove source-cache freshness
+        run: |
+          export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
+          export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/test-source-cache.py"
 
   linux-clippy:
     needs: changes
@@ -94,6 +99,7 @@ jobs:
           components: clippy
           native-deps: prebuilt-ort
           cache-key: pr-linux-x64-clippy
+          cache-workspace-crates: "true"
       - name: Clippy production targets
         run: |
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
@@ -149,6 +155,7 @@ jobs:
         with:
           native-deps: prebuilt-ort
           cache-key: pr-linux-x64-tests
+          cache-workspace-crates: "true"
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest

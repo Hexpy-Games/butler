@@ -20,6 +20,11 @@ inputs:
     description: The rust-cache shared key; one per job so caches do not evict each other.
     required: true
 
+  cache-workspace-crates:
+    description: Cache verified workspace sources/artifacts for the Linux PR gate.
+    required: false
+    default: "false"
+
 runs:
   using: composite
   steps:
@@ -111,9 +116,29 @@ runs:
         key: ${{ steps.ort-cache.outputs.cache-primary-key }}
 
     - name: Cache Cargo build
+      id: cargo-cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: packages/butler-agent/rust
+        shared-key: ${{ inputs.cache-key }}-${{ inputs.native-deps }}${{ inputs.cache-workspace-crates == 'true' && '-workspace-v1' || '' }}
+        cache-workspace-crates: ${{ inputs.cache-workspace-crates }}
+        cache-directories: |
+          ${{ runner.temp }}/ort-download-cache
+          ${{ inputs.cache-workspace-crates == 'true' && format('{0}/ci-source-mtimes', runner.temp) || '' }}
+        cache-on-failure: ${{ inputs.cache-workspace-crates != 'true' }}
+
+    - name: Seed the workspace cache from existing dependencies
+      if: inputs.cache-workspace-crates == 'true' && steps.cargo-cache.outputs.cache-hit != 'true'
       uses: Swatinem/rust-cache@v2
       with:
         workspaces: packages/butler-agent/rust
         shared-key: ${{ inputs.cache-key }}-${{ inputs.native-deps }}
         cache-directories: ${{ runner.temp }}/ort-download-cache
-        cache-on-failure: true
+        save-if: false
+
+    - name: Restore timestamps for sources with matching contents
+      if: inputs.cache-workspace-crates == 'true'
+      shell: bash
+      run: |
+        python3 "$GITHUB_WORKSPACE/.github/scripts/restore-source-mtimes.py" \
+          "$GITHUB_WORKSPACE" "$RUNNER_TEMP/ci-source-mtimes/sources.json"

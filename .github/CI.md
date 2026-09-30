@@ -36,7 +36,12 @@ Linux setup uses mold. The archive job strips debug information and executable
 symbols after building, without changing assertions or test selection. Compiler
 profiles stay unchanged to reuse existing dependency caches. The build and
 Clippy jobs use Cargo's `-j 8` option rather than changing dependency-cache
-environment inputs.
+environment inputs. Workspace libraries are cached as well. Each tracked Rust
+workspace file is hashed in full: only matching contents reuse a cached source
+timestamp, and changed contents receive a fresh timestamp even when backdated.
+The source job proves both artifact reuse and rebuilding changed contents with
+an actual Cargo fixture. The new cache can seed itself from existing dependency
+caches and only saves after successful builds.
 The agent qualification build script reads Git with optional locks disabled,
 so checking a watched index cannot refresh it and trigger a second agent link.
 Post-build stripping preserves dependency cache fingerprints; the job restores the former workspace Tests
