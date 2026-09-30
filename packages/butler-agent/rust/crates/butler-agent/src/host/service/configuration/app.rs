@@ -227,7 +227,8 @@ fn number_value(value: Option<&Value>) -> Option<f64> {
 
 fn normalize_port(value: Option<f64>) -> u16 {
     match value {
-        Some(value) if value.is_finite() && (1.0..=65_535.0).contains(&value) => {
+        // Port zero asks the OS to bind an available port atomically.
+        Some(value) if value.is_finite() && (value == 0.0 || (1.0..=65_535.0).contains(&value)) => {
             butler_core::json::saturating_u16(value)
         }
         _ => 18_765,

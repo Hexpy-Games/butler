@@ -99,6 +99,20 @@ fn read(path: &Path) -> String {
     std::fs::read_to_string(path).unwrap_or_default()
 }
 
+/// A concurrent listing must see the old or new module throughout a save,
+/// including the interval between moving the old folder aside and publishing
+/// its replacement. The save still waits for the App's normal status check.
+async fn save_while_listed(gw: &Gateway, request: Value) -> Result<Reply, HarnessError> {
+    let saving = gw.post(SAVE, request);
+    tokio::pin!(saving);
+    loop {
+        tokio::select! {
+            reply = &mut saving => return reply,
+            listed = module(gw, "user.rain") => { listed?; }
+        }
+    }
+}
+
 /// WALL-05 — `wallpaper.changed` announces each change of an effective
 /// wallpaper once, with its scope and who made it: the settings screen
 /// (`user`) or the agent route (`agent`), globally and for one project.
@@ -246,7 +260,7 @@ async fn wall_06_module_saves_never_silently_replace_a_module() -> Result<(), Ha
     assert_eq!(read(&folder.join("shader.frag")), FRAGMENT);
 
     let (saved, checked) = tokio::join!(
-        s.gw.post(SAVE, save(Some(&before))),
+        save_while_listed(&s.gw, save(Some(&before))),
         app_checks(&s.gw, "user.rain", &before)
     );
     let saved = saved?;

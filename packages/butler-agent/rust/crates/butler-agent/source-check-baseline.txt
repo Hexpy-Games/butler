@@ -11,7 +11,7 @@ src/host/app/runtime_ports/session_workspaces.rs	<AppSessionWorkspaces as AppSes
 src/host/app/runtime_ports/settings.rs	load	83
 src/host/app/runtime_ports/settings_mutation.rs	AppSettingsMutation::apply_inner	91
 src/host/app/runtime_ports/topic_branch.rs	<AppBranchSummarizerAdapter as AppBranchSummarizer>::summarize	89
-src/host/app/server.rs	AppServer::open_with_artifacts	162
+src/host/app/server.rs	AppServer::open_with_artifacts	156
 src/host/cli/cognition.rs	run	177
 src/host/cli/cognition/box_cli.rs	run	112
 src/host/cli/cognition/feedback.rs	run	192
@@ -94,7 +94,6 @@ src/host/memory_jobs/transcript_sync/hot.rs	LegacyHot::save	125
 src/host/memory_jobs/transcript_sync/hot.rs	commit	91
 src/host/runtime.rs	AgentRuntime::open	423
 src/host/runtime/environment.rs	ProcessEnvironment::capture	82
-src/host/service/entrypoint.rs	serve	159
 src/host/service/ingress.rs	IngressDispatcher::poll	86
 src/host/service/ingress/bind.rs	bind_and_request	136
 src/host/service/ingress/bind.rs	control_request	81

@@ -50,6 +50,8 @@ struct Lane {
     jobs: TaskTracker,
     closing: Mutex<bool>,
     watcher: Mutex<Option<ModuleWatcher>>,
+    /// Readers must not observe the gap between the two replacement renames.
+    modules_gate: Arc<Mutex<()>>,
 }
 
 impl AppWallpaperFiles {
@@ -62,6 +64,7 @@ impl AppWallpaperFiles {
             jobs: TaskTracker::new(),
             closing: Mutex::new(false),
             watcher: Mutex::new(None),
+            modules_gate: Arc::new(Mutex::new(())),
         }))
     }
 
@@ -96,13 +99,11 @@ impl AppWallpaperFiles {
 
     /// Every user module folder, as its files are now.
     pub(crate) fn user_modules(&self) -> ApplicationFuture<Vec<UserModule>> {
-        self.run_in(self.0.modules.clone(), |root| {
-            user::scan(root).map_err(GatewayApplicationError::internal_from)
-        })
+        self.run_module(|root| user::scan(root).map_err(GatewayApplicationError::internal_from))
     }
 
     pub(crate) fn user_module(&self, id: String) -> ApplicationFuture<Option<UserModule>> {
-        self.run_in(self.0.modules.clone(), move |root| {
+        self.run_module(move |root| {
             user::read(root, &id).map_err(GatewayApplicationError::internal_from)
         })
     }
@@ -110,7 +111,7 @@ impl AppWallpaperFiles {
     /// The image `name` of user module `id`, which a save replacing the
     /// module keeps.
     pub(crate) fn existing_image(&self, id: String, name: String) -> ApplicationFuture<FileRead> {
-        self.run_in(self.0.modules.clone(), move |root| {
+        self.run_module(move |root| {
             user::existing_image(root, &id, &name).map_err(GatewayApplicationError::internal_from)
         })
     }
@@ -123,9 +124,7 @@ impl AppWallpaperFiles {
         unique: String,
         replace: bool,
     ) -> ApplicationFuture<UserModule> {
-        self.run_in(self.0.modules.clone(), move |root| {
-            installed(root, &import::unpack(&archive)?, &unique, replace)
-        })
+        self.run_module(move |root| installed(root, &import::unpack(&archive)?, &unique, replace))
     }
 
     /// Installs checked module files at once, replacing an older copy (the
@@ -135,16 +134,12 @@ impl AppWallpaperFiles {
         unpacked: Unpacked,
         unique: String,
     ) -> ApplicationFuture<UserModule> {
-        self.run_in(self.0.modules.clone(), move |root| {
-            installed(root, &unpacked, &unique, true)
-        })
+        self.run_module(move |root| installed(root, &unpacked, &unique, true))
     }
 
     /// Removes a user module folder; false when there is none.
     pub(crate) fn remove_module(&self, id: String, unique: String) -> ApplicationFuture<bool> {
-        self.run_in(self.0.modules.clone(), move |root| {
-            import::remove(root, &id, &unique)
-        })
+        self.run_module(move |root| import::remove(root, &id, &unique))
     }
 
     /// Validates, re-encodes and writes one asset's image and thumbnail.
@@ -197,6 +192,19 @@ impl AppWallpaperFiles {
         operation: impl FnOnce(&Path) -> Result<T, GatewayApplicationError> + Send + 'static,
     ) -> ApplicationFuture<T> {
         self.run_in(self.0.root.clone(), operation)
+    }
+
+    /// Serializes module file operations only, on the blocking lane. The
+    /// guard is gone before a save waits for the App's status report.
+    fn run_module<T: Send + 'static>(
+        &self,
+        operation: impl FnOnce(&Path) -> Result<T, GatewayApplicationError> + Send + 'static,
+    ) -> ApplicationFuture<T> {
+        let gate = self.0.modules_gate.clone();
+        self.run_in(self.0.modules.clone(), move |root| {
+            let _guard = gate.lock();
+            operation(root)
+        })
     }
 
     /// Runs `operation` on the blocking lane with `root`.

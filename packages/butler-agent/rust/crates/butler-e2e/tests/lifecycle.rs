@@ -184,7 +184,6 @@ async fn svc_01_service_lifecycle() -> Result<(), HarnessError> {
 
 /// SVC-01 (inject) — a port already in use is a clear start failure.
 #[tokio::test]
-#[ignore = "product gap: SVC-01-PORT — when the App port is in use the service logs `[native-app] unavailable code=app_listener_bind_failed` and keeps running without its gateway instead of exiting non-zero"]
 async fn svc_01_port_in_use_fails_start() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("SVC-01-PORT")?.start().await?;
