@@ -32,6 +32,8 @@ struct SecurityView {
     remote_access_enabled: bool,
     /// Every address the gateway listens on, loopback first.
     bind_addresses: Vec<String>,
+    /// Failed LAN binds, one entry per address; empty while access is off.
+    bind_errors: Vec<super::listeners::BindError>,
     /// URLs other computers on the LAN can open; empty while remote access
     /// is off.
     lan_urls: Vec<String>,
@@ -130,6 +132,7 @@ async fn view(state: &HttpState) -> Result<SecurityView, HttpError> {
     Ok(SecurityView {
         remote_access_enabled: remote.exposure.remote_access_enabled,
         bind_addresses,
+        bind_errors: remote.bind_errors,
         lan_urls: remote
             .lan_authorities
             .iter()

@@ -118,6 +118,8 @@ async fn sec_09_lan_access_binds_and_unbinds_without_restart() -> Result<(), Har
     assert_eq!(app.view().await?["remote_access_enabled"], false);
 
     let view = app.set_remote(true).await?;
+    assert_lan_port(&view, port);
+    assert_eq!(view["remote_access_enabled"], true, "{view}");
     assert_eq!(view["bind_addresses"][0], loopback, "{view}");
     let stored: Value =
         serde_json::from_slice(&std::fs::read(s.sandbox.data.join("gateways/app.json"))?)?;
@@ -150,6 +152,7 @@ async fn sec_09_lan_access_binds_and_unbinds_without_restart() -> Result<(), Har
     let app = AdminClient::new(s.gw.clone(), app.admin);
     let view = app.view().await?;
     assert_eq!(view["remote_access_enabled"], true, "{view}");
+    assert_lan_port(&view, port);
     if let Some(address) = lan_listeners(&view).first() {
         let lan = Gateway::new(format!("http://{address}"), s.gw.token.clone());
         let health = lan.get("/health").await?;
@@ -291,5 +294,143 @@ async fn sec_12_header_less_forwarder_needs_the_admin_credential() -> Result<(),
         ),
         "the code rotated"
     );
+    s.finish().await
+}
+
+/// Every discovered LAN address is accounted for at the App's actual port.
+fn assert_lan_port(view: &Value, port: u16) {
+    let bound = lan_listeners(view);
+    let errors = view["bind_errors"].as_array().unwrap();
+    for ip in lan_addresses() {
+        let address = std::net::SocketAddr::new(ip, port).to_string();
+        assert!(
+            bound.contains(&address) || errors.iter().any(|error| error["address"] == address),
+            "LAN address {address} missing from {view}"
+        );
+    }
+    for address in bound {
+        assert_eq!(
+            address.parse::<std::net::SocketAddr>().unwrap().port(),
+            port
+        );
+    }
+    for url in view["lan_urls"].as_array().unwrap() {
+        assert!(
+            url.as_str().unwrap().ends_with(&format!(":{port}")),
+            "{view}"
+        );
+    }
+}
+
+fn lan_addresses() -> Vec<std::net::IpAddr> {
+    butler_platform::network::external_addresses()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|ip| match ip.to_canonical() {
+            std::net::IpAddr::V4(ip) => ip.is_private() || ip.is_link_local(),
+            std::net::IpAddr::V6(ip) => ip.segments()[0] & 0xfe00 == 0xfc00,
+        })
+        .collect()
+}
+
+/// Fixed configured port, including saved exposure at initial admission and
+/// after restart. Never bind the owner's production port.
+#[tokio::test]
+async fn sec_09_fixed_port_lan_access_survives_restart() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let reserved = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let port = reserved.local_addr()?.port();
+    assert_ne!(port, 18765);
+    let setup = Setup::new("SEC-09-FIXED")?
+        .data_folder_token()
+        .env("BUTLER_APP_SERVER_PORT", port.to_string());
+    std::fs::create_dir_all(setup.sandbox.data.join("gateways"))?;
+    std::fs::write(
+        setup.sandbox.data.join("gateways/app.json"),
+        json!({"config": {"port": port, "remoteAccessEnabled": true}}).to_string(),
+    )?;
+    drop(reserved);
+    let mut s = setup.start().await?;
+    let app = admin(&s);
+    for start in 0..2 {
+        let view = app.view().await?;
+        assert_eq!(view["remote_access_enabled"], true, "{view}");
+        assert_eq!(view["bind_addresses"][0], format!("127.0.0.1:{port}"));
+        assert_lan_port(&view, port);
+        assert_eq!(view["bind_errors"], json!([]), "{view}");
+        let lan = lan_listeners(&view);
+        for address in &lan {
+            let remote = Gateway::new(format!("http://{address}"), s.gw.token.clone());
+            assert_eq!(remote.get("/health").await?.status, 200, "{address}");
+        }
+        let view = app.set_remote(false).await?;
+        assert_eq!(view["bind_addresses"], json!([format!("127.0.0.1:{port}")]));
+        assert_eq!(view["bind_errors"], json!([]));
+        for address in &lan {
+            wait_unbound(address).await;
+        }
+        let view = app.set_remote(true).await?;
+        assert_lan_port(&view, port);
+        assert_eq!(view["bind_errors"], json!([]), "{view}");
+        if start == 0 {
+            s.restart().await?;
+        }
+    }
+    app.set_remote(false).await?;
+    s.finish().await
+}
+
+/// An occupied LAN address is reported without claiming it is reachable.
+#[tokio::test]
+async fn sec_09_lan_bind_failure_reports_the_address() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let Some(ip) = lan_addresses().first().copied() else {
+        eprintln!("SEC-09 bind failure: this machine has no LAN address");
+        return Ok(());
+    };
+    let occupied = tokio::net::TcpListener::bind((ip, 0)).await?;
+    let address = occupied.local_addr()?;
+    assert_ne!(address.port(), 18765);
+    let s = Setup::new("SEC-09-BIND-FAILURE")?
+        .data_folder_token()
+        .env("BUTLER_APP_SERVER_PORT", address.port().to_string())
+        .start()
+        .await?;
+    let app = admin(&s);
+    let view = app.set_remote(true).await?;
+    assert_eq!(view["remote_access_enabled"], true, "{view}");
+    assert_lan_port(&view, address.port());
+    assert!(
+        !lan_listeners(&view).contains(&address.to_string()),
+        "{view}"
+    );
+    assert!(
+        !view["lan_urls"]
+            .as_array()
+            .unwrap()
+            .contains(&json!(format!("http://{address}")))
+    );
+    let error = view["bind_errors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|error| error["address"] == address.to_string())
+        .expect("bind error");
+    assert!(!error["error"].as_str().unwrap().is_empty(), "{view}");
+    let bound = lan_listeners(&view);
+    assert_eq!(app.set_remote(false).await?["bind_errors"], json!([]));
+    for address in &bound {
+        wait_unbound(address).await;
+    }
+    drop(occupied);
+    let view = app.set_remote(true).await?;
+    assert_eq!(view["bind_errors"], json!([]), "{view}");
+    assert!(
+        lan_listeners(&view).contains(&address.to_string()),
+        "{view}"
+    );
+    let remote = Gateway::new(format!("http://{address}"), s.gw.token.clone());
+    assert_eq!(remote.get("/health").await?.status, 200);
+    app.set_remote(false).await?;
     s.finish().await
 }

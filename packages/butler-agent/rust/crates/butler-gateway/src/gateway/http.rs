@@ -101,11 +101,12 @@ pub(super) fn serve(
         uploads: tokio::sync::Semaphore::new(2),
         static_ui_root: config.static_ui_root,
     });
-    let task = listeners::spawn(listener, state.clone(), shutdown);
+    // Publish the saved exposure before loopback admission: a successful
+    // health probe must not race initialization of Settings → Security.
     if exposure.remote_access_enabled {
         state.remote.apply(&state, exposure);
     }
-    task
+    listeners::spawn(listener, state, shutdown)
 }
 
 struct HttpState {
