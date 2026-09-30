@@ -30,15 +30,20 @@ async fn svc_01_port_in_use_fails_start_without_disk_changes() -> Result<(), Har
 #[tokio::test]
 async fn svc_01_fresh_port_conflict_creates_no_files() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let sandbox = Sandbox::new("SVC-01-PORT-FRESH")?;
-    let mut launch = Launch::new(&sandbox)?;
+    let s = Setup::new("SVC-01-PORT-FRESH")?.start().await?;
+    // Supervisor retries reuse the installed executable. Keep that identity
+    // while testing an entirely empty DATA, rather than timing the first
+    // execution of another 515 MB debug-binary copy under load.
+    let mut launch = s.agent.launch.clone();
+    launch.data = s.sandbox.root.join("fresh-data");
+    fs::create_dir(&launch.data)?;
     launch.use_data_folder_token();
     let blocker = std::net::TcpListener::bind(("127.0.0.1", 0))?;
     launch.port = blocker.local_addr()?.port();
     assert_eq!(snapshot(&launch.data)?.len(), 1);
     assert_failed_start(&launch)?;
     drop(blocker);
-    Ok(())
+    s.finish().await
 }
 
 fn assert_conflict_is_read_only(launch: &Launch) -> Result<(), HarnessError> {
