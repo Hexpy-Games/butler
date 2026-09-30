@@ -2,8 +2,6 @@
 //! log: each read parses only the rows appended since the previous one.
 
 use std::collections::{BTreeMap, HashMap};
-use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
 
 use serde::Serialize;
@@ -11,10 +9,9 @@ use serde::Serialize;
 use butler_models::models::{ModelPricing, UsageAuthMode};
 
 use super::{UsageCostView, UsageEvent, UsageTotals};
+use crate::operations::log_tail::LogTail;
 
 const USAGE_FILE: &str = "metrics/prompt-cache-usage.jsonl";
-/// Bytes compared to recognize a replaced (rotated or rewritten) log.
-const HEAD_BYTES: usize = 256;
 
 /// `SessionView.usage`: one conversation's tokens and estimated cost.
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -54,8 +51,7 @@ struct ScopeUsage {
 /// Usage per scope, kept current by reading the log's new rows.
 #[derive(Default)]
 pub struct SessionUsageIndex {
-    offset: u64,
-    head: Vec<u8>,
+    tail: LogTail,
     scopes: HashMap<String, ScopeUsage>,
     prices: HashMap<String, Option<ModelPricing>>,
 }
@@ -91,35 +87,15 @@ impl SessionUsageIndex {
     }
 
     fn refresh(&mut self, path: &Path, pricing: &dyn Fn(&str) -> Option<ModelPricing>) {
-        let Ok(mut file) = File::open(path) else {
-            *self = Self::default();
-            return;
-        };
-        let length = file.metadata().map_or(0, |metadata| metadata.len());
-        let head = read_head(&mut file);
-        if length < self.offset || head[..self.head.len().min(head.len())] != self.head[..] {
-            // The log was truncated or replaced: fold it again from the start.
-            let prices = std::mem::take(&mut self.prices);
-            *self = Self {
-                prices,
-                ..Self::default()
-            };
-        }
-        self.head = head;
-        if file.seek(SeekFrom::Start(self.offset)).is_err() {
-            return;
-        }
-        let mut reader = BufReader::new(file);
-        let mut line = Vec::new();
-        // Only complete lines are consumed; a row still being written waits.
-        while let Ok(read) = reader.read_until(b'\n', &mut line) {
-            if read == 0 || line.last() != Some(&b'\n') {
-                break;
-            }
-            self.offset += read as u64;
-            self.fold(&line, pricing);
-            line.clear();
-        }
+        let mut tail = std::mem::take(&mut self.tail);
+        // A replaced log is folded again from the start (prices are kept).
+        tail.advance(
+            path,
+            self,
+            |index| index.scopes.clear(),
+            |index, line| index.fold(line, pricing),
+        );
+        self.tail = tail;
     }
 
     fn fold(&mut self, line: &[u8], pricing: &dyn Fn(&str) -> Option<ModelPricing>) {
@@ -139,12 +115,6 @@ impl SessionUsageIndex {
             scope.auth_modes.insert(event.model.clone(), mode);
         }
     }
-}
-
-fn read_head(file: &mut File) -> Vec<u8> {
-    let mut head = Vec::with_capacity(HEAD_BYTES);
-    let _ = file.by_ref().take(HEAD_BYTES as u64).read_to_end(&mut head);
-    head
 }
 
 fn iso(epoch_ms: i64) -> Option<String> {

@@ -1617,6 +1617,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       updateComponent: "Update",
       upToDate: "Up to date",
       updateChecking: "Checking",
+      updateUnavailable: "Can't check",
       updateApplying: "Applying",
     },
     placeholders: {

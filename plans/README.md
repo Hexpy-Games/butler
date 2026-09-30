@@ -2,7 +2,7 @@
 
 > **Canonical copy:** Butler's Project Ledger, `butler` project (`~/.butler/project-ledger/projects/butler`). IDs: `SPEC-BUTLER-0-1-0`, `HANDOFF-CLAUDE-CODEX-20260929`, `PLAN-0-1-0-REMAINING`, `PLAN-0-1-0-01`…`13`, `PLAN-POST-0-1-0`, `PLAN-EMBEDDING-MODEL`. The files here are working mirrors. After changing a plan, publish it with `BUTLER_DATA=~/.butler packages/project-ledger/bin/project-ledger plan update --project . --id <ID> --from <file>`, or `record update --kind spec|handoff`.
 
-The owner writes plans with Claude Code, and Codex executes them. Each file is one unit of work. Work top to bottom inside a folder.
+The owner writes plans with Claude Code, and Codex executes them. Agents also follow [AGENTS.md](../AGENTS.md), which holds the working rules and a log of repeated mistakes. Each file is one unit of work. Work top to bottom inside a folder.
 
 ## How to execute a plan
 

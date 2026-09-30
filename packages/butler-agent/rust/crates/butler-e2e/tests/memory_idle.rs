@@ -12,7 +12,7 @@ use std::time::{Duration, SystemTime};
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::scenario::Setup;
 use butler_e2e::e2e::stop_intent::{instance_record, read_intent};
-use rusqlite::{Connection, OpenFlags, params};
+use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 
 const COMPLETED_WINDOWS: usize = 30_000;
 const IDLE: Duration = Duration::from_secs(60);
@@ -114,6 +114,28 @@ fn recovery_observations(graph: &Path) -> i64 {
     ).unwrap()
 }
 
+fn catchup_message_cursor(graph: &Path) -> Option<String> {
+    readonly(graph)
+        .query_row(
+            "SELECT value FROM memory_state WHERE key='canonical_catchup_message_cursor'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .unwrap()
+}
+
+async fn wait_for_catchup_message_cursor(graph: &Path, expected: &str) {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+    while catchup_message_cursor(graph).as_deref() != Some(expected) {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "catch-up message cursor did not reach {expected}"
+        );
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+}
+
 #[tokio::test]
 async fn mem_idle_daily_cycle_and_crash_recovery() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -142,6 +164,8 @@ async fn mem_idle_daily_cycle_and_crash_recovery() -> Result<(), HarnessError> {
         1,
         "initial registration missing"
     );
+    // Registration observations commit before the catch-up cursor is saved.
+    wait_for_catchup_message_cursor(&graph, "idle-recovery-message").await;
     hide_registered_message(&graph);
     assert_eq!(
         recovery_observations(&graph),
