@@ -59,6 +59,7 @@ impl ModelConfiguration {
 
         let _write = self.configuration_writes.acquire().await;
         let path = self.data_root.join("butler.config.json");
+        let _change = super::mutations::lock_config(&self.data_root).await?;
         let mut config = super::read_object_sync(&path);
         let canonical = parse_model_ref(trimmed).canonical_ref;
         let system = butler_core::json::object_field_mut(

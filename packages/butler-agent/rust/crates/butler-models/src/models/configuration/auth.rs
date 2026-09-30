@@ -8,9 +8,10 @@ use reqwest::{Client, Url};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
-mod io;
+pub(super) mod io;
 mod jwt;
 mod profile;
+mod refresh;
 mod url;
 use io::{read_json_object, response_json, write_mode_600};
 use jwt::{account_id_from_access_token, codex_account_id, email_from_access_token};
@@ -25,7 +26,7 @@ const CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
 pub(super) struct AuthOwner<'a> {
     pub(super) data_root: &'a Path,
     pub(super) environment: &'a ModelConfigurationEnvironment,
-    pub(super) clock: &'a dyn ModelConfigurationClock,
+    pub(super) clock: &'a Arc<dyn ModelConfigurationClock>,
     pub(super) client: &'a Client,
 }
 
@@ -179,7 +180,7 @@ impl AuthOwner<'_> {
         })
     }
 
-    /// Refreshes `profile` under the process-wide refresh lock, unless the
+    /// Refreshes `profile` under the process-shared profile lock, unless the
     /// stored login changed while this call waited for it (another refresh,
     /// from a model request or a quota poll, already renewed it). Refresh
     /// tokens rotate, so two refreshes of one login must never overlap.
@@ -187,14 +188,7 @@ impl AuthOwner<'_> {
         &self,
         profile: OpenAiAuthProfile,
     ) -> Result<OpenAiAuthProfile, AuthError> {
-        let _refreshing = refresh_lock().lock().await;
-        if let Some(current) = self.read_butler_profile().await
-            && !current.access_token.is_empty()
-            && current.access_token != profile.access_token
-        {
-            return Ok(current);
-        }
-        self.refresh(profile).await
+        refresh::once(self, profile).await
     }
 
     fn is_expiring(&self, profile: &OpenAiAuthProfile) -> bool {
@@ -413,12 +407,6 @@ impl AuthOwner<'_> {
                 )
             })
     }
-}
-
-/// The one Codex login refresh allowed at a time in this process.
-fn refresh_lock() -> &'static tokio::sync::Mutex<()> {
-    static LOCK: std::sync::OnceLock<tokio::sync::Mutex<()>> = std::sync::OnceLock::new();
-    LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
 }
 
 pub fn generate_pkce_verifier() -> String {

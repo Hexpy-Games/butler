@@ -150,10 +150,10 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
             config_commands::config_get(&options, command, &data_root, &installation)
         }
         Command::ConfigSet => {
-            config_commands::config_set(&options, command, &data_root, &installation)
+            config_commands::config_set(&options, command, &data_root, &installation).await
         }
         Command::ConfigEdit => {
-            config_commands::config_edit(&options, command, &data_root, &installation)
+            config_commands::config_edit(&options, command, &data_root, &installation).await
         }
         Command::ConfigValidate => {
             config_commands::config_validate(&options, command, &data_root, &installation)

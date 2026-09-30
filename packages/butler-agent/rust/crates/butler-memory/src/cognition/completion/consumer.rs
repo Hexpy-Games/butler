@@ -257,6 +257,15 @@ impl MemorySyncConsumer {
         self.probe.close();
     }
 
+    /// Bounds the backoff after a successful idle poll by the next catch-up.
+    /// Call only after polling an available generation: deferred work and absent
+    /// generations must keep their backoff even when catch-up is overdue.
+    pub fn idle_delay(&self, backoff: Duration) -> Duration {
+        self.catchup_at.lock().map_or(backoff, |last| {
+            backoff.min(catchup::INTERVAL.saturating_sub(last.elapsed()))
+        })
+    }
+
     /// Sleeps up to `delay`, ending early when in-process work is signalled,
     /// the queue changes (another process appended to it), or the consumer
     /// closes. An idle loop calls this instead of polling on a short timer.

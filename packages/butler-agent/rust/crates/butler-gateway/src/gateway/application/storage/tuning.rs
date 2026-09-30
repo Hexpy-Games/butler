@@ -9,10 +9,11 @@ use super::{AppStorageError, StorageResult};
 
 /// Compiled statements the lane keeps for `prepare_cached`.
 const CACHED_STATEMENTS: usize = 256;
-/// Page cache in KiB (negative `cache_size` units): 64 MiB.
-const PAGE_CACHE_KIB: i64 = -65_536;
-/// Read-only memory map over the database file: 256 MiB.
-const MMAP_BYTES: i64 = 268_435_456;
+/// Bound resident pages to 8 MiB; indexed foreground reads need no large cache.
+const PAGE_CACHE_KIB: i64 = -8_192;
+/// Startup sweeps otherwise leave mapped database pages resident indefinitely.
+/// Use the bounded page cache for reads instead.
+const MMAP_BYTES: i64 = 0;
 /// Largest WAL file kept after a checkpoint: 64 MiB.
 const WAL_LIMIT_BYTES: i64 = 67_108_864;
 /// Rows sampled per index when `optimize` refreshes statistics.

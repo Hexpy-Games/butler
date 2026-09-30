@@ -3,7 +3,9 @@
 //! session scoped to the calling Turn.
 
 mod catalog;
+mod children;
 mod client;
+pub use children::stop_mcp_children;
 mod image_capability;
 mod management;
 mod registry;

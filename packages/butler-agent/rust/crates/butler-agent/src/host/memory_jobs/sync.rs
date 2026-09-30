@@ -122,7 +122,9 @@ async fn poll(
         if shutdown.is_cancelled() {
             return;
         }
-        let result = match active_memory_descriptor_exists(&data_root, &paths) {
+        let generation = active_memory_descriptor_exists(&data_root, &paths);
+        let available = matches!(&generation, Ok(true));
+        let result = match generation {
             Ok(false) => Ok(MemorySyncPoll::Idle),
             Ok(true) => consumer.poll_once().await,
             Err(error) => Err(error),
@@ -134,7 +136,12 @@ async fn poll(
             }
             Ok(MemorySyncPoll::Idle) => {
                 idle_polls = idle_polls.saturating_add(1);
-                backoff(idle_polls, IDLE_CAP)
+                let delay = backoff(idle_polls, IDLE_CAP);
+                if available {
+                    consumer.idle_delay(delay)
+                } else {
+                    delay
+                }
             }
             Ok(MemorySyncPoll::Deferred) => {
                 idle_polls = idle_polls.saturating_add(1);
