@@ -91,12 +91,12 @@ src/host/memory_jobs/recall_metrics.rs	<RecallMetrics as RecallMetricSink>::reco
 src/host/memory_jobs/transcript_sync.rs	LegacySessionSync::run	194
 src/host/memory_jobs/transcript_sync/hot.rs	LegacyHot::save	125
 src/host/memory_jobs/transcript_sync/hot.rs	commit	91
-src/host/runtime.rs	AgentRuntime::open	419
+src/host/runtime.rs	AgentRuntime::open	409
 src/host/runtime/environment.rs	ProcessEnvironment::capture	82
 src/host/service/ingress/bind.rs	bind_and_request	136
 src/host/service/ingress/bind.rs	control_request	81
 src/host/service/ingress/bind/internal_subsession.rs	bind	87
 src/host/service/ingress/bind/policy.rs	upsert_app_binding	213
-src/host/service/ingress/dispatch.rs	execute	128
+src/host/service/ingress/dispatch.rs	execute	127
 src/host/service/progress_publisher.rs	ProgressPublisher::publish	89
 src/host/service/restart_handoff.rs	record_helper_terminal	105

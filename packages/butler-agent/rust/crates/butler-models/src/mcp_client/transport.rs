@@ -45,54 +45,7 @@ impl McpClient {
         let timeout = timeout.max(MIN_TIMEOUT);
         match server.transport {
             McpTransportKind::Stdio => {
-                let mut command = Command::new(server.command.as_deref().unwrap_or_default());
-                command
-                    .args(&server.args)
-                    .env_clear()
-                    .kill_on_drop(true)
-                    .stdin(Stdio::piped())
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::null());
-                if let Some(cwd) = &server.cwd {
-                    command.current_dir(cwd);
-                }
-                for (key, value) in default_stdio_environment(&self.environment) {
-                    command.env(key, value);
-                }
-                for (key, value) in &secrets.env {
-                    command.env(key, value);
-                }
-                let mut child = command.spawn().map_err(|source| {
-                    failure(
-                        "mcp_server_unavailable",
-                        "MCP server could not be started.",
-                        false,
-                    )
-                    .with_source(source)
-                })?;
-                let Some(stdout) = child.stdout.take() else {
-                    let _ = child.start_kill();
-                    let _ = child.wait().await;
-                    return Err(failure(
-                        "mcp_server_unavailable",
-                        "MCP server could not be started.",
-                        false,
-                    ));
-                };
-                let Some(stdin) = child.stdin.take() else {
-                    let _ = child.start_kill();
-                    let _ = child.wait().await;
-                    return Err(failure(
-                        "mcp_server_unavailable",
-                        "MCP server could not be started.",
-                        false,
-                    ));
-                };
-                let transport = AsyncRwTransport::<RoleClient, _, _>::new_client(stdout, stdin);
-                Box::pin(run_session_with_child(
-                    transport, operation, timeout, signal, child,
-                ))
-                .await
+                Box::pin(self.with_stdio(server, secrets, operation, timeout, signal)).await
             }
             McpTransportKind::Http => {
                 let url = parse_http_url(server.url.as_deref())?;
@@ -129,6 +82,73 @@ impl McpClient {
                 Box::pin(run_session(transport, operation, timeout, signal)).await
             }
         }
+    }
+
+    async fn with_stdio(
+        &self,
+        server: &McpServerConfig,
+        secrets: &ResolvedServerSecrets,
+        operation: Operation,
+        timeout: Duration,
+        signal: &CancellationToken,
+    ) -> Result<Value, McpClientError> {
+        let mut command = Command::new(server.command.as_deref().unwrap_or_default());
+        command
+            .args(&server.args)
+            .env_clear()
+            .kill_on_drop(true)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null());
+        butler_platform::process_control::isolate_group(command.as_std_mut());
+        if let Some(cwd) = &server.cwd {
+            command.current_dir(cwd);
+        }
+        for (key, value) in default_stdio_environment(&self.environment) {
+            command.env(key, value);
+        }
+        for (key, value) in &secrets.env {
+            command.env(key, value);
+        }
+        let mut child = command.spawn().map_err(|source| {
+            failure(
+                "mcp_server_unavailable",
+                "MCP server could not be started.",
+                false,
+            )
+            .with_source(source)
+        })?;
+        let _group = super::children::ChildGroup::register(&child).map_err(|source| {
+            failure(
+                "mcp_server_unavailable",
+                "MCP server could not be contained.",
+                false,
+            )
+            .with_source(source)
+        })?;
+        let Some(stdout) = child.stdout.take() else {
+            let _ = child.start_kill();
+            let _ = child.wait().await;
+            return Err(failure(
+                "mcp_server_unavailable",
+                "MCP server could not be started.",
+                false,
+            ));
+        };
+        let Some(stdin) = child.stdin.take() else {
+            let _ = child.start_kill();
+            let _ = child.wait().await;
+            return Err(failure(
+                "mcp_server_unavailable",
+                "MCP server could not be started.",
+                false,
+            ));
+        };
+        let transport = AsyncRwTransport::<RoleClient, _, _>::new_client(stdout, stdin);
+        Box::pin(run_session_with_child(
+            transport, operation, timeout, signal, child,
+        ))
+        .await
     }
 }
 

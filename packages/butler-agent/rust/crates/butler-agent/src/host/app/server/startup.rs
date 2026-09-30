@@ -31,7 +31,9 @@ pub(super) async fn activate(
     let initialization = async {
         #[cfg(debug_assertions)]
         super::startup_hold::wait(data_root).await?;
-        application.start_dispatch().await.map_err(super::app_error)
+        super::start_application(&application)
+            .await
+            .map_err(super::app_error)
     };
     let initialized = tokio::time::timeout(STARTUP_TIMEOUT, initialization)
         .await

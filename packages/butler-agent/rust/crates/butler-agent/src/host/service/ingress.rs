@@ -3,6 +3,8 @@
 mod action;
 mod bind;
 mod dispatch;
+mod recovery;
+mod shutdown;
 
 use std::{
     collections::{HashMap, HashSet},
@@ -97,6 +99,7 @@ pub(crate) struct IngressDispatcher {
     subsessions: Arc<butler_turn::btcc::SubsessionService>,
     restart_handoff: Arc<RestartHandoff>,
     lifecycle: Mutex<Lifecycle>,
+    shutdown: tokio_util::sync::CancellationToken,
 }
 
 impl IngressDispatcher {
@@ -125,6 +128,7 @@ impl IngressDispatcher {
             delivery,
             subsessions,
             restart_handoff,
+            shutdown: tokio_util::sync::CancellationToken::new(),
             lifecycle: Mutex::new(Lifecycle {
                 closing: false,
                 active_sessions: HashSet::new(),
@@ -185,6 +189,7 @@ impl IngressDispatcher {
             state.active_queue_ids.insert(queue_id.clone());
             let key = (session.clone(), queue_id.clone());
             let deps = dispatch::DispatchDependencies {
+                shutdown: self.shutdown.clone(),
                 queue: self.queue.clone(),
                 btcc: self.btcc.clone(),
                 bindings: self.bindings.clone(),
@@ -207,10 +212,11 @@ impl IngressDispatcher {
         Ok(summary)
     }
 
-    /// Stop admission and retain every task through completion.
+    /// Stop admission, fence active turns, and retain publication through completion.
     pub(crate) async fn close(&self) -> Result<(), IngressError> {
         let mut state = self.lifecycle.lock().await;
         state.closing = true;
+        self.shutdown.cancel();
         while let Some(done) = state.tasks.join_next_with_id().await {
             match done {
                 Ok((id, done)) => {

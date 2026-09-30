@@ -145,6 +145,12 @@ impl AppGatewayLifecycle {
         }
     }
 
+    pub(crate) async fn stop_accepting(&self) {
+        if let Some(server) = self.current.lock().await.as_ref() {
+            server.stop_accepting();
+        }
+    }
+
     pub(crate) async fn close(&self) -> Result<(), BtccError> {
         let mut current = self.current.lock().await;
         self.stop_locked(&mut current).await.map_err(|message| {

@@ -149,7 +149,12 @@ async fn run_until_stopped(
     .map_err(|message| {
         failure("native_service_instance_unavailable", message.to_string()).with_source(message)
     })?;
-    stop.attach(config.data_root.clone(), instance.nonce());
+    stop.attach(
+        config.data_root.clone(),
+        instance.nonce(),
+        config.installation.clone(),
+    );
+    stop.check_startup()?;
     repair_cli_launcher(&config, logs);
     let os_release = butler_platform::instance::os_release().map_err(io)?;
     let environment = ProcessEnvironment::capture(&config.data_root, &user_home, &os_release);
@@ -173,17 +178,16 @@ async fn run_until_stopped(
             environment,
             &process_locale(),
             worker_profiles,
-            app_endpoint.clone(),
+            (app_endpoint.clone(), stop.cancellation()),
         )
         .await?,
     );
-    let writer = match TranscriptWriter::new(config.data_root.clone(), Arc::new(SystemIdentity)) {
-        Ok(writer) => Arc::new(writer),
-        Err(error) => {
-            let _ = close_runtime(runtime).await;
-            return Err(io(error));
-        }
-    };
+    if stop.requested() {
+        let _ = close_runtime(runtime).await;
+        return Err(StopSignal::cancelled_startup());
+    }
+    let (runtime, writer) = support::open_writer(runtime, config.data_root.clone()).await?;
+    stop.attach_writer(writer.clone());
     let result = serve(
         runtime.clone(),
         (app_endpoint, listener, ready),
@@ -288,7 +292,7 @@ async fn serve(
         progress,
         queue,
         dispatcher,
-    } = admission::prepare(&runtime, config, writer, instance).await?;
+    } = admission::prepare(&runtime, config, writer, instance, stop).await?;
 
     let parent_client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
@@ -310,16 +314,16 @@ async fn serve(
         instance.nonce().to_owned(),
     ));
     if let Err(error) = start_app_gateway(&gateway, config, &app_endpoint, logs, listener).await {
-        let _ = gateway.close().await;
         let _ = dispatcher.close().await;
+        let _ = gateway.close().await;
         return Err(error);
     }
     let control = start_control(&gateway, &runtime, config, instance, &dispatcher, stop).await?;
     logs.write(&format!("[native-butler] ready model={model}"));
     if let Err(error) = start_runtime(&runtime, instance, &app_endpoint, stop).await {
         let _ = control.close().await;
-        let _ = gateway.close().await;
         let _ = dispatcher.close().await;
+        let _ = gateway.close().await;
         return Err(error);
     }
     let _ = ready.send(());
@@ -353,8 +357,10 @@ async fn start_runtime(
     app_endpoint: &ActiveAppEndpoint,
     stop: &StopSignal,
 ) -> Result<(), BtccError> {
+    stop.check_startup()?;
     runtime.context_maintenance.start();
     runtime.subsessions.recover_dispatches().await?;
+    stop.check_startup()?;
     mark_ready(instance, app_endpoint, runtime, stop).await
 }
 
@@ -376,16 +382,18 @@ async fn close_serving(
     dispatcher: &IngressDispatcher,
     progress: &crate::host::ProgressPublisher,
 ) -> Result<(), BtccError> {
-    let control_close = control.close().await.map_err(|message| {
-        failure("gateway_control_close_failed", message.to_string()).with_source(message)
-    });
-    let app_close = gateway.close().await;
-    let close = dispatcher
+    control.stop_accepting();
+    gateway.stop_accepting().await;
+    let turns = dispatcher
         .close()
         .await
         .map_err(|e| failure(e.code, e.message));
+    let control_close = control.close().await.map_err(|message| {
+        failure("gateway_control_close_failed", message.to_string()).with_source(message)
+    });
     let publication = progress.reconcile().await.map(|_| ());
-    control_close.and(app_close).and(close).and(publication)
+    let app_close = gateway.close().await;
+    turns.and(control_close).and(publication).and(app_close)
 }
 
 /// Rolls back the App and dispatcher if the private control plane cannot start.
@@ -407,8 +415,8 @@ async fn start_control(
     {
         Ok(control) => control,
         Err(message) => {
-            let _ = gateway.close().await;
             let _ = dispatcher.close().await;
+            let _ = gateway.close().await;
             return Err(failure("gateway_control_unavailable", message.to_string()));
         }
     };
@@ -416,8 +424,8 @@ async fn start_control(
         instance.publish_control(control.endpoint().to_owned(), control.token().to_owned())
     {
         let _ = control.close().await;
-        let _ = gateway.close().await;
         let _ = dispatcher.close().await;
+        let _ = gateway.close().await;
         return Err(failure(
             "native_service_instance_state_unavailable",
             message.to_string(),

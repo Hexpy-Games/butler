@@ -118,13 +118,17 @@ impl GatewayControlServer {
         &self.token
     }
 
+    pub(crate) fn stop_accepting(&self) {
+        self.shutdown.cancel();
+    }
+
     pub(crate) async fn close(mut self) -> Result<(), crate::host::HostError> {
         self.shutdown.cancel();
         let task = self
             .task
             .take()
             .ok_or_else(|| "gateway_control_task_missing".to_owned())?;
-        timeout(COMMAND_TIMEOUT + Duration::from_secs(4), task)
+        timeout(IO_TIMEOUT, task)
             .await
             .map_err(|source| {
                 crate::host::HostError::new("gateway_control_shutdown_timeout").with_source(source)
@@ -145,7 +149,11 @@ async fn accept(listener: TcpListener, context: Arc<ControlContext>, shutdown: C
         let Ok((mut stream, _peer)) = accepted else {
             continue;
         };
-        let _ = serve_one(&mut stream, &context).await;
+        tokio::select! {
+            biased;
+            _ = serve_one(&mut stream, &context) => {},
+            () = shutdown.cancelled() => break,
+        }
     }
 }
 

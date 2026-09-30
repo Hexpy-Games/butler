@@ -247,6 +247,13 @@ impl AppServer {
         })
     }
 
+    pub(crate) fn stop_accepting(&self) {
+        self.listener_ready.store(false, Ordering::Release);
+        if let Some(listener) = &self.listener {
+            listener.stop_accepting();
+        }
+    }
+
     /// Stop HTTP admission before the process drains its native inbound queue.
     pub(crate) async fn stop_listener(&mut self) -> Result<(), BtccError> {
         self.listener_ready.store(false, Ordering::Release);
@@ -258,8 +265,9 @@ impl AppServer {
             }),
             None => Ok(()),
         };
+        let projection = self.application.drain_projection().await.map_err(app_error);
         let dispatch = self.application.stop_dispatch().await.map_err(app_error);
-        listener.and(dispatch)
+        listener.and(projection).and(dispatch)
     }
 
     /// Drain the App projection and its file jobs before native runtime owners.
@@ -327,4 +335,13 @@ fn app_error(error: GatewayApplicationError) -> BtccError {
             BtccError::relayed("app_application_failed", "App application is unavailable")
         }
     }
+}
+
+async fn start_application(
+    application: &butler_gateway::gateway::AppApplication,
+) -> Result<(), butler_gateway::gateway::GatewayApplicationError> {
+    // Interruption transcripts precede FIFO lease recovery, so their exact
+    // old claims remain valid until terminal projection settles them.
+    application.drain_projection().await?;
+    application.start_dispatch().await
 }
