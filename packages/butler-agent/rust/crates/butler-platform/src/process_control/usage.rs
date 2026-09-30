@@ -8,14 +8,16 @@ pub struct ProcessUsage {
     /// Resident bytes, including shared mappings.
     pub resident_bytes: u64,
     /// Proportional resident bytes (shared mappings divided among users).
-    pub proportional_bytes: u64,
+    pub proportional_bytes: Option<u64>,
+    /// macOS physical footprint, excluding clean file-backed mappings.
+    pub footprint_bytes: Option<u64>,
     /// Bytes returned by reads, including reads satisfied by the OS cache.
-    pub read_chars: u64,
+    pub read_chars: Option<u64>,
     /// Bytes fetched from storage, excluding OS cache hits.
     pub read_bytes: u64,
 }
 
-/// Samples Linux procfs; returns `None` where these counters are unavailable.
+/// Samples native process counters; unavailable metrics remain `None`.
 pub fn sample(pid: u32) -> io::Result<Option<ProcessUsage>> {
     #[cfg(target_os = "linux")]
     {
@@ -23,12 +25,27 @@ pub fn sample(pid: u32) -> io::Result<Option<ProcessUsage>> {
         let io = std::fs::read_to_string(format!("/proc/{pid}/io"))?;
         Ok(Some(ProcessUsage {
             resident_bytes: counter(&memory, "Rss")? * 1024,
-            proportional_bytes: counter(&memory, "Pss")? * 1024,
-            read_chars: counter(&io, "rchar")?,
+            proportional_bytes: Some(counter(&memory, "Pss")? * 1024),
+            footprint_bytes: None,
+            read_chars: Some(counter(&io, "rchar")?),
             read_bytes: counter(&io, "read_bytes")?,
         }))
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
+    {
+        use libproc::pid_rusage::{RUsageInfoV2, pidrusage};
+        let pid = i32::try_from(pid)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
+        let usage = pidrusage::<RUsageInfoV2>(pid).map_err(io::Error::other)?;
+        Ok(Some(ProcessUsage {
+            resident_bytes: usage.ri_resident_size,
+            proportional_bytes: None,
+            footprint_bytes: Some(usage.ri_phys_footprint),
+            read_chars: None,
+            read_bytes: usage.ri_diskio_bytesread,
+        }))
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
         let _ = pid;
         Ok(None)

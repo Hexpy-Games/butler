@@ -258,6 +258,7 @@ async fn mem_idle_catches_changed_source_without_restart() -> Result<(), Harness
     assert_eq!(recovery_observations(&graph), 0);
     seed_imported_message(&s.sandbox.data);
     // The source revision changes without restarting or notifying the consumer.
+    let changed_at = tokio::time::Instant::now();
     let deadline = tokio::time::Instant::now() + Duration::from_secs(75);
     while catchup_message_cursor(&graph).as_deref() != Some("idle-recovery-message") {
         assert!(
@@ -267,5 +268,9 @@ async fn mem_idle_catches_changed_source_without_restart() -> Result<(), Harness
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
     assert_eq!(recovery_observations(&graph), 1);
+    eprintln!(
+        "MEM-IDLE-CHANGE catchup_ms={}",
+        changed_at.elapsed().as_millis()
+    );
     s.finish().await
 }

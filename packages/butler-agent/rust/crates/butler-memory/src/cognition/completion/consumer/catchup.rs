@@ -42,6 +42,8 @@ enum Schedule {
     Now,
 }
 
+pub(super) const INTERVAL: Duration = Duration::from_secs(60);
+
 /// Claims the catch-up slot; `false` when a pass ran within the last
 /// minute and this one is only due-based.
 fn claim_slot(input: &Input, schedule: Schedule) -> bool {
@@ -55,7 +57,7 @@ fn claim_slot(input: &Input, schedule: Schedule) -> bool {
         return true;
     }
     let mut last = input.catchup_at.lock();
-    if last.is_some_and(|time| time.elapsed() < Duration::from_secs(60)) {
+    if last.is_some_and(|time| time.elapsed() < INTERVAL) {
         return false;
     }
     *last = Some(Instant::now());
