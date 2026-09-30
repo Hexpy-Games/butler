@@ -74,13 +74,20 @@ impl AppApplication {
             "automation_prompt_required",
             "Schedule prompt is required.",
         )?;
-        let schedule_type = input.schedule_type.as_deref().unwrap_or("interval");
-        validate_timing(
-            schedule_type,
-            input.interval_seconds,
-            input.run_at.as_deref(),
-            input.start_at.as_deref(),
-        )?;
+        let schedule_type = input
+            .schedule
+            .as_ref()
+            .map(|rule| rule.kind.as_str())
+            .or(input.schedule_type.as_deref())
+            .unwrap_or("interval");
+        if input.schedule.is_none() {
+            validate_timing(
+                schedule_type,
+                input.interval_seconds,
+                input.run_at.as_deref(),
+                input.start_at.as_deref(),
+            )?;
+        }
         let id = input.id.clone().unwrap_or_else(|| {
             format!("automation-{}", self.dependencies.identity_clock.new_uuid())
         });
@@ -92,14 +99,13 @@ impl AppApplication {
             ));
         }
         let now = self.dependencies.identity_clock.now_iso();
-        let next = next_time(
+        let next = first_run(
+            &input,
             schedule_type,
-            input.run_at.as_deref(),
-            input.start_at.as_deref(),
-            input.interval_seconds,
             &now,
             &self.dependencies.identity_clock,
-        );
+        )
+        .await?;
         let schedule_type = schedule_type.to_owned();
         let subscribers = self.subscribers.clone();
         let result = self.storage.execute(move |db| {
@@ -110,8 +116,8 @@ impl AppApplication {
                 None => settings::conversation_access_mode(db, target)?,
             };
             db.execute(
-                "INSERT INTO app_automations(id,title,prompt_body,target_kind,target_session_id,interval_seconds,schedule_type,run_at,start_at,access_mode,state,next_run_at,last_run_at,last_run_state,last_safe_error_code,run_count,consecutive_failure_count,created_at,updated_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,'enabled',?11,NULL,'never_run',NULL,0,0,?12,?12)",
-                params![id,title,prompt,kind,target,input.interval_seconds,schedule_type,input.run_at,input.start_at,settings::access_mode_name(&access),next,now],
+                "INSERT INTO app_automations(id,title,prompt_body,target_kind,target_session_id,interval_seconds,schedule_type,run_at,start_at,access_mode,schedule_json,state,next_run_at,last_run_at,last_run_state,last_safe_error_code,run_count,consecutive_failure_count,created_at,updated_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?13,'enabled',?11,NULL,'never_run',NULL,0,0,?12,?12)",
+                params![id,title,prompt,kind,target,input.interval_seconds,schedule_type,input.run_at,input.start_at,settings::access_mode_name(&access),next,now,input.schedule.as_ref().map(serde_json::to_string).transpose().map_err(json_error)?],
             ).map_err(AppStorageError::sqlite)?;
             let automation = detail(records::active(db, &id)?);
             publish(db, &subscribers, "automation.created", &json!({"automation":automation.summary}), &now)?;
@@ -133,26 +139,28 @@ impl AppApplication {
         let subscribers = self.subscribers.clone();
         let result = self.storage.execute(move |db| {
             let old = records::active(db, &id)?;
-            let timing_changed = input.interval_seconds.is_some() || input.schedule_type.is_some() || input.run_at.is_some() || input.start_at.is_some();
+            let timing_changed = input.schedule.is_some() || input.interval_seconds.is_some() || input.schedule_type.is_some() || input.run_at.is_some() || input.start_at.is_some();
             let title = nonempty(input.title).unwrap_or(old.title);
             let prompt = nonempty(input.prompt_body).unwrap_or(old.prompt);
             let target_id = nonempty(input.target_session_id).unwrap_or(old.target_id);
             let (kind, _) = records::target(db, &target_id)?;
             let seconds = input.interval_seconds.unwrap_or(old.interval);
-            let schedule_type = input.schedule_type.unwrap_or(old.schedule_type);
+            let schedule = input.schedule.or_else(|| if input.schedule_type.is_some() { None } else { old.schedule });
+            let schedule_type = schedule.as_ref().map(|rule| rule.kind.clone()).unwrap_or_else(|| input.schedule_type.unwrap_or(old.schedule_type));
             let run_at = input.run_at.or(old.run_at);
             let start_at = input.start_at.or(old.start_at);
-            validate_timing_row(&schedule_type, seconds, run_at.as_deref(), start_at.as_deref())?;
+            let calendar_next = schedule.as_ref().map(|rule| super::timing::next(rule, &now)).transpose()?;
+            if schedule.is_none() { validate_timing_row(&schedule_type, seconds, run_at.as_deref(), start_at.as_deref())?; }
             let access = input.access_mode.unwrap_or(old.access);
             let state = input.state.unwrap_or_else(|| old.state.clone());
             if state != "enabled" && state != "paused" {
                 return Err(AppStorageError::new(AppStorageCode::AutomationStateInvalid, "Schedule state must be enabled or paused."));
             }
             let changed = timing_changed || old.state != state;
-            let next = if state == "enabled" && changed { Some(next_time(&schedule_type, run_at.as_deref(), start_at.as_deref(), seconds, &now, &clock)) } else { old.next };
+            let next = if state == "enabled" && changed { Some(calendar_next.unwrap_or_else(|| next_time(&schedule_type, run_at.as_deref(), start_at.as_deref(), seconds, &now, &clock))) } else { old.next };
             db.execute(
-                "UPDATE app_automations SET title=?1,prompt_body=?2,target_kind=?3,target_session_id=?4,interval_seconds=?5,state=?6,next_run_at=?7,updated_at=?8,access_mode=?9,schedule_type=?10,run_at=?11,start_at=?12 WHERE id=?13",
-                params![title,prompt,kind,target_id,seconds,state,next,now,settings::access_mode_name(&access),schedule_type,run_at,start_at,id],
+                "UPDATE app_automations SET title=?1,prompt_body=?2,target_kind=?3,target_session_id=?4,interval_seconds=?5,state=?6,next_run_at=?7,updated_at=?8,access_mode=?9,schedule_type=?10,run_at=?11,start_at=?12,schedule_json=?14 WHERE id=?13",
+                params![title,prompt,kind,target_id,seconds,state,next,now,settings::access_mode_name(&access),schedule_type,run_at,start_at,id,schedule.as_ref().map(serde_json::to_string).transpose().map_err(json_error)?],
             ).map_err(AppStorageError::sqlite)?;
             let automation = detail(records::active(db, &id)?);
             publish(db, &subscribers, "automation.updated", &json!({"automation":automation.summary}), &now)?;
@@ -259,7 +267,7 @@ fn detail(row: records::AutomationRow) -> AutomationDetail {
     reason = "map_err/iterator adapter taking owned values"
 )]
 fn target_summary(value: AutomationSummary) -> Value {
-    json!({"automation_id":value.id,"title":value.title,"state":value.state,"interval_label":value.interval_label,"access_mode":value.access_mode,"next_run_at":value.next_run_at,"last_run_state":value.last_run_state,"safe_error_code":value.last_safe_error_code})
+    json!({"automation_id":value.id,"title":value.title,"state":value.state,"interval_seconds":value.interval_seconds,"schedule_type":value.schedule_type,"schedule":value.schedule,"access_mode":value.access_mode,"next_run_at":value.next_run_at,"last_run_state":value.last_run_state,"safe_error_code":value.last_safe_error_code})
 }
 fn required(
     value: &str,
@@ -351,4 +359,35 @@ fn safe_id(id: &str) -> bool {
         && id
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || b"._:-".contains(&byte))
+}
+
+async fn first_run(
+    input: &CreateAutomationRequest,
+    schedule_type: &str,
+    now: &str,
+    clock: &Arc<dyn AppIdentityClock>,
+) -> Result<String, GatewayApplicationError> {
+    let next = if let Some(rule) = input.schedule.clone() {
+        let at = now.to_owned();
+        tokio::task::spawn_blocking(move || super::timing::next(&rule, &at))
+            .await
+            .map_err(GatewayApplicationError::internal_from)?
+            .map_err(|_| {
+                public(
+                    400,
+                    "automation_interval_invalid",
+                    "Schedule timing is invalid.",
+                )
+            })?
+    } else {
+        next_time(
+            schedule_type,
+            input.run_at.as_deref(),
+            input.start_at.as_deref(),
+            input.interval_seconds,
+            now,
+            clock,
+        )
+    };
+    Ok(next)
 }

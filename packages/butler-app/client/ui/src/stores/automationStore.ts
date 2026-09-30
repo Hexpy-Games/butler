@@ -1,9 +1,11 @@
+import { hintScheduleLogin } from "@/app/loginSettings";
 import { appCopy } from "@/app/copy.ts";
 import type { FormEvent } from "react";
 import { create } from "zustand";
 import { api } from "@/app/api.ts";
 import { notifyError } from "@/app/notifications.ts";
 import type {
+  CalendarSchedule,
   AccessMode,
   AutomationRunSummary,
   AutomationSummary,
@@ -27,6 +29,11 @@ interface AutomationStore {
   promptBody: string;
   targetSessionId: string;
   intervalSeconds: number;
+  schedule: CalendarSchedule | null;
+  setSchedule: (schedule: CalendarSchedule | null) => void;
+  scheduleType: string;
+  runAt?: string;
+  startAt?: string;
   /** The access the schedule's runs get, independent of the target conversation. */
   accessMode: AccessMode;
   /** True once the user picked a mode, so a new target no longer replaces it. */
@@ -90,6 +97,8 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
   promptBody: "",
   targetSessionId: "",
   intervalSeconds: 1800,
+  schedule: null,
+  scheduleType: "interval",
   accessMode: DEFAULT_SCHEDULE_ACCESS_MODE,
   accessModeChosen: false,
   state: "enabled",
@@ -99,6 +108,7 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
   sessionOptions: [],
 
   // Setters
+  setSchedule: (schedule) => set((current) => ({ schedule, scheduleType: schedule?.kind ?? "interval", saveError: withoutFieldError(current.saveError, "interval") })),
   setTitle: (title) =>
     set((current) => ({ title, saveError: withoutFieldError(current.saveError, "title") })),
   setPromptBody: (promptBody) =>
@@ -134,6 +144,10 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
         promptBody: "",
         targetSessionId,
         intervalSeconds: 1800,
+        schedule: null,
+        scheduleType: "interval",
+        runAt: undefined,
+        startAt: undefined,
         accessMode: DEFAULT_SCHEDULE_ACCESS_MODE,
         state: "enabled",
         runs: [],
@@ -159,6 +173,10 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
         promptBody: detail.automation.prompt_body,
         targetSessionId: detail.automation.target_session_id,
         intervalSeconds: detail.automation.interval_seconds,
+        schedule: detail.automation.schedule ?? null,
+        scheduleType: detail.automation.schedule_type ?? "interval",
+        runAt: (detail.automation as { run_at?: string }).run_at,
+        startAt: (detail.automation as { start_at?: string }).start_at,
         accessMode: isAccessMode(detail.automation.access_mode)
           ? detail.automation.access_mode
           : DEFAULT_SCHEDULE_ACCESS_MODE,
@@ -176,7 +194,7 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
   // Save automation
   save: async (event, onSaved, onStatus) => {
     event.preventDefault();
-    const { automationId, isNew, title, promptBody, targetSessionId, intervalSeconds, accessMode } = get();
+    const { automationId, isNew, title, promptBody, targetSessionId, intervalSeconds, accessMode, schedule, scheduleType, runAt, startAt } = get();
     set({ saving: true, saveError: null });
 
     try {
@@ -186,6 +204,10 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
         target_session_id: targetSessionId,
         interval_seconds: Number(intervalSeconds),
         access_mode: accessMode,
+        schedule,
+        schedule_type: scheduleType,
+        run_at: runAt,
+        start_at: startAt,
       });
 
       if (isNew) {
@@ -197,7 +219,8 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
         });
       }
       await onSaved();
-      onStatus({ label: "automation saved", tone: "ok" });
+      if (isNew) void hintScheduleLogin();
+      onStatus({ label: appCopy.automations.saved, tone: "ok" });
     } catch (error) {
       // A 400 is shown on its field; anything else stays a toast.
       const saveError = automationSaveError(error);
@@ -224,7 +247,7 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
         body: JSON.stringify({}),
       });
       await onSaved();
-      onStatus({ label: `automation ${action}`, tone: "ok" });
+      onStatus({ label: appCopy.automations.saved, tone: "ok" });
     } catch (error) {
       notifyError(error, `${action} failed`, {
         id: `automation-${action}-${automationId}`,

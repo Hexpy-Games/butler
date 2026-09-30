@@ -1,3 +1,4 @@
+import { scheduleFrequency } from "@/app/scheduleLabels";
 import { appCopy, type AppCopy } from "@/app/copy.ts";
 import type { CommandPaletteResult } from "@/app/types.ts";
 
@@ -17,6 +18,7 @@ export function commandResultSubtitle(
   result: CommandPaletteResult,
   labels: KindLabels = appCopy.commandPalette.kindLabels,
 ): string {
+  if (result.kind === "automation" && (result.schedule || result.interval_seconds)) return scheduleFrequency(result);
   const subtitle = result.subtitle?.trim();
   if (!subtitle || subtitle === SERVER_KIND_SUBTITLES[result.kind]) return labels[result.kind];
   return subtitle;

@@ -1,3 +1,4 @@
+import { scheduleFrequency } from "@/app/scheduleLabels";
 import { useAppLocale } from "@/app/copy.ts";
 import { Clock3 } from "@/butler-ds";
 import { EmptyPanelLine } from "@/components/common/Display.tsx";
@@ -30,7 +31,7 @@ export function AutomationTargetsPanel({
                 <ListRow
                   icon={<Clock3 size="md" />}
                   title={automation.title}
-                  meta={automation.interval_label}
+                  meta={scheduleFrequency(automation)}
                 />
               </Clickable>
             ))}

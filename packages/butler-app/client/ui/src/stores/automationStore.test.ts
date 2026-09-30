@@ -66,7 +66,7 @@ function existingSchedule(access_mode: AccessMode): Handler {
       target_session_id: "chat-a",
       target_label: "A",
       interval_seconds: 3600,
-      interval_label: "1 hour",
+      schedule_type: "interval",
       state: "enabled",
       access_mode,
     },

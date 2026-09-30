@@ -960,6 +960,14 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     readOnlyDesc: "Can only read files",
   },
   automations: {
+
+    saved: "Schedule saved", frequency: "Frequency", time: "Time", weekday: "Day",
+    interval: "Interval", daily: "Daily", weekdays: "Weekdays", weekly: "Weekly", once: "Once",
+    on: "On", off: "Off", next: (time) => `Next: ${time}`,
+    everyMinutes: (count) => `Every ${count} minutes`, everyHours: (count) => count === 1 ? "Every hour" : `Every ${count} hours`,
+    everySeconds: (count) => `Every ${count} seconds`, dailyAt: (time) => `Every day at ${time}`,
+    weekdaysAt: (time) => `Every weekday at ${time}`, weeklyAt: (days, time) => `Every ${days} at ${time}`,
+    startAtLogin: "Start at login", loginHint: "Start at login for your schedules. Settings → General.", loginFailed: "Could not change start at login",
     title: "Schedules",
     scheduledCount: (count) => `${count} scheduled prompts`,
     empty: "No schedules yet",

@@ -333,10 +333,13 @@ async fn scheduler_next_due_reads(s: &Scenario) -> Result<usize, HarnessError> {
 }
 
 #[tokio::test]
-async fn sched_06_idle_scheduler_reads_next_due_once_in_60_seconds() -> Result<(), HarnessError> {
+async fn sched_06_idle_calendar_scheduler_reads_only_on_change_in_60_seconds()
+-> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("SCHED-06")?
         .env("BUTLER_E2E_SCHEDULER_INSTRUMENTATION", "1")
+        .env("BUTLER_E2E_APP_NOW", "2026-03-07T00:00:00.000Z")
+        .env("BUTLER_E2E_TIER", "stub")
         .start()
         .await?;
     let schedules = s.gw.get("/automations").await?;
@@ -359,11 +362,34 @@ async fn sched_06_idle_scheduler_reads_next_due_once_in_60_seconds() -> Result<(
         reads, 1,
         "scheduler did not make exactly one initial due lookup"
     );
+    let created =
+        s.gw.post(
+            "/automations",
+            json!({"id":"idle-calendar","title":"Morning",
+        "target_session_id":"general","prompt_body":"Brief me",
+        "schedule":{"kind":"daily","time":"08:00","tz":"UTC"}}),
+        )
+        .await?;
+    assert_eq!(created.status, 201, "{}", created.text);
+    let before = s.gw.get("/automations").await?.data()["automations"].clone();
+    assert_eq!(before.as_array().unwrap().len(), 1);
+    assert_eq!(before[0]["id"], "idle-calendar");
+    assert_eq!(before[0]["next_run_at"], "2026-03-07T08:00:00.000Z");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while scheduler_next_due_reads(&s).await? < 2 && Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert_eq!(scheduler_next_due_reads(&s).await?, 2);
     tokio::time::sleep(Duration::from_secs(60)).await;
     assert_eq!(
         scheduler_next_due_reads(&s).await?,
-        1,
+        2,
         "scheduler repeated the due lookup during the idle window"
+    );
+    let after = s.gw.get("/automations").await?.data()["automations"].clone();
+    assert_eq!(
+        after, before,
+        "idle calendar row changed without a mutation"
     );
     s.finish().await
 }
