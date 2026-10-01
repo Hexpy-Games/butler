@@ -34,9 +34,9 @@ export function QuestionOptions({ model: m, labels }: { model: ReturnType<typeof
       const content = <Inline cross="start" wrap={false} grow>
         <IconSlot size="lg" minHeight="line" tone="tertiary"><Typo.Caption tone="tertiary">{index + 1}</Typo.Caption></IconSlot>
         <Stack grow minWidth="0" gap="none">
-          <Inline gap="xs">{editing ? <Input variant="underline" autoFocus aria-label={labels.other} placeholder={q.placeholder ?? labels.other}
+          <Inline gap="xs">{editing ? <Input variant="underline" textSize="label" autoFocus aria-label={labels.other} placeholder={q.placeholder ?? labels.other}
             disabled={m.busy} value={m.answer.other} onChange={(e) => m.update({ other: e.target.value, skipped: false })} />
-            : <Typo.Label wrap="anywhere">{other && m.answer.other ? m.answer.other : option.label}</Typo.Label>}
+            : <Typo.Label wrap={other ? "nowrap" : "anywhere"} truncate={other}>{other && m.answer.other ? m.answer.other : option.label}</Typo.Label>}
             {option.recommended && <Tag tone="accent">{labels.recommended}</Tag>}</Inline>
           {option.description && <Typo.Caption tone="secondary" wrap="anywhere">{option.description}</Typo.Caption>}
         </Stack>

@@ -32,7 +32,7 @@ export const guidance: ShowcaseGuidance = {
     { when: "A percentage with a slider", use: "PercentInputControl" },
   ],
   recipes: [
-    { name: "Underline in-place entry", description: "variant=underline removes the box and horizontal padding; use it where a row label becomes editable.", render: () => <InlineName /> },
+    { name: "Underline in-place entry", description: "variant=underline inherits text metrics and reserves only one line; textSize=label matches Typo.Label; use it where a row label becomes editable.", render: () => <InlineName /> },
     { name: "Settings text setting", description: "In settings, the Input is the control of a SettingsField.", render: () => <DisplayName /> },
     { name: "Compact number in a header", description: "compact makes a short inline field for a number in a toolbar; coarse pointers keep the touch target.", render: () => <MaxWorkers /> },
   ],
@@ -47,7 +47,7 @@ export const guidance: ShowcaseGuidance = {
   ],
   content: ["Placeholders show an example value (github, https://…), never instructions."],
   accessibility: [
-    "Underline uses an inset token outline for keyboard focus: the focus foundation permits inset rings in clipping containers. The accent bottom border also marks pointer focus.",
+    "Underline keyboard focus is the bottom line only (--focus-ring-width, --focus-ring-color), with no outline or shadow. The focus foundation allows a shape-specific indicator: retain token thickness and at least 3:1 contrast against the adjacent surface; reserve space inside clipping containers.",
     "Values use the default text color; placeholders are muted (--placeholder).",
     "aria-invalid=\"true\" draws the danger border; describe the error next to it.",
   ],

@@ -1,3 +1,4 @@
+import { auditQuestionSwap, underlineFocus } from "./question-input-geometry";
 import { resolve } from "node:path";
 import { chromium, type Locator } from "playwright";
 
@@ -13,6 +14,7 @@ let focused = 0;
 async function assertFocus(target: Locator) {
   await target.evaluate((element) => element.scrollIntoView({ block: "center" }));
   await target.focus();
+  if (await target.getAttribute("data-variant") === "underline") { await underlineFocus(target); focused++; return; }
   const problem = await target.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     const style = getComputedStyle(element);
@@ -55,6 +57,7 @@ try {
     const panels = page.locator('[data-ds-examples] [data-slot="composer-question-panel"]');
     await panels.first().waitFor();
     await page.keyboard.press("Tab");
+    await auditQuestionSwap(panels.first(), page, `${width} ${locale} ${theme}`);
     if (await panels.locator("kbd").count()) throw new Error("keyboard hints remain");
     for (const panel of await panels.all()) {
       await verifyActions(panel);
@@ -109,6 +112,11 @@ try {
     await single.focus();
     await page.keyboard.press("3");
     await page.getByText(locale === "ko" ? "답변 완료" : "Answered", { exact: true }).first().waitFor();
+    await page.goto(`http://127.0.0.1:${server.port}/?page=components/Input&width=${width}&locale=${locale}&theme=${theme}&motion=reduced`);
+    const underline = page.locator("[data-ds-examples] input[data-variant=underline]");
+    await underline.first().waitFor();
+    await page.keyboard.press("Tab");
+    for (const field of await underline.all()) { await field.focus(); await underlineFocus(field); }
     await page.close();
     console.log(`PASS ${width} ${locale} ${theme}`);
   }

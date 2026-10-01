@@ -44,14 +44,40 @@
   border-color: var(--color-danger-border);
 }
 
-/* Inset focus uses the foundation's clipping-container rule: the full ring
-   stays inside the control, including in scrollable question option rows. */
+/* The zero-width text peer anchors the native input to the inherited text
+   baseline. Negative reserved-line margin prevents its border leading the row. */
+.inlineField {
+  display: flex;
+  align-items: baseline;
+  width: 100%;
+  min-width: 0;
+  height: 1lh;
+  font: inherit;
+}
+.inlineField::before {
+  content: "\200b";
+}
+
+/* Reserve focus-line thickness below the inherited line box. Changing the
+   bottom border never moves text or changes the surrounding row geometry. */
 .input[data-variant="underline"] {
-  padding-inline: 0;
+  box-sizing: border-box;
+  min-height: 0;
+  height: calc(1lh + var(--focus-ring-width));
+  min-width: 0;
+  margin-block-start: calc(-1 * var(--focus-ring-width));
+  padding: 0 0 calc(var(--focus-ring-width) - var(--border-hairline));
   border: 0;
   border-bottom: var(--border-hairline) solid var(--line);
   border-radius: 0;
   background: transparent;
+}
+
+.inlineField[data-text-size="label"] {
+  font-size: var(--typo-label-size);
+  font-weight: var(--typo-label-weight);
+  line-height: var(--typo-label-line-height);
+  letter-spacing: var(--typo-label-letter-spacing);
 }
 
 .input[data-variant="underline"]:where(:hover):not(:disabled, [readonly]) {
@@ -64,11 +90,12 @@
 
 .input[data-variant="underline"]:focus-visible {
   box-shadow: none;
-  outline: var(--focus-ring-width) solid var(--focus-ring-color);
-  outline-offset: calc(-1 * var(--focus-ring-width));
+  outline: none;
+  padding-block-end: 0;
+  border-bottom: var(--focus-ring-width) solid var(--focus-ring-color);
 }
 
-.input[data-variant="underline"][aria-invalid="true"] {
+.input[data-variant="underline"][aria-invalid="true"]:not(:focus-visible) {
   border-bottom-color: var(--color-danger-border);
 }
 
@@ -82,8 +109,8 @@
 }
 
 @media (width <= 640px), (pointer: coarse) {
-  .input,
-  .input[data-compact] {
+  .input:not([data-variant="underline"]),
+  .input[data-compact]:not([data-variant="underline"]) {
     min-height: var(--control-hit-target);
   }
 }

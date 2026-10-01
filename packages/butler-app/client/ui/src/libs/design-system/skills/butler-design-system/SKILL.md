@@ -107,8 +107,9 @@ import { SettingsField, SettingsPage, SettingsSection, Switch } from "@/butler-d
 
 Use `Input` with `variant="default"` for boxed form fields and
 `variant="underline"` for in-place entry where a row label becomes editable.
-Underline has zero horizontal padding and an inset token keyboard-focus outline
-(the focus foundation's clipping-container rule); never suppress its ring.
+Underline inherits text metrics, has zero horizontal padding and a bottom-line token keyboard-focus indicator
+(the focus foundation's shape-specific indicator rule); retain 2px thickness,
+3:1 contrast and room inside clipping containers. `textSize="label"` matches Typo.Label.
 `compact` independently selects the short toolbar field size. Both variants
 support invalid, disabled and read-only states. See the Input viewer matrix.
 

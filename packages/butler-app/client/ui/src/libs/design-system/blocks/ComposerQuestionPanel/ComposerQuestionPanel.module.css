@@ -18,7 +18,7 @@
 .option {
   min-height: max(var(--menu-item-height), var(--control-hit-target));
   border-radius: var(--radius-control);
-  padding-block: var(--menu-item-padding-block);
+  padding: var(--menu-item-padding-block) var(--space-sm);
 }
 .option[data-highlighted="true"],
 .option[data-selected="true"] {
@@ -69,6 +69,7 @@
 }
 .editingOption {
   display: flex;
+  align-items: center;
   padding: var(--menu-item-padding-block) var(--space-sm);
   min-height: max(var(--menu-item-height), var(--control-hit-target));
   border-radius: var(--radius-control);

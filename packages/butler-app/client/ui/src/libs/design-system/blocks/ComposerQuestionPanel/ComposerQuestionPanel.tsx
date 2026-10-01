@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { Clickable } from "../../components/Clickable";
 import { IconButton } from "../../components/IconButton";
 import { IconSlot } from "../../components/IconSlot";
-import { Clock3, GitBranch, MessageSquare, Pencil } from "../../components/Icons";
+import { Clock3, ListChecks, MessageSquare, Pencil } from "../../components/Icons";
 import { Inline } from "../../components/Inline";
 import { PillButton } from "../../components/PillButton";
 import { Stack } from "../../components/Stack";
@@ -48,7 +48,7 @@ function QuestionPanelBody(props: ComposerQuestionPanelProps) {
   if (state === "collapsed") return <PillButton disabled={!onExpand} onClick={onExpand} icon={<MessageSquare size="md" aria-hidden="true" />}>{labels.pending}</PillButton>;
   const body = <>
     <Inline className={dsClass(styles.subject)} cross="start" wrap={false}>
-      <IconSlot className={dsClass(styles.questionIcon)} size="sm" minHeight="line" tone="secondary"><GitBranch size="sm" aria-hidden="true" /></IconSlot>
+      <IconSlot className={dsClass(styles.questionIcon)} size="sm" minHeight="line" tone="secondary"><ListChecks size="sm" aria-hidden="true" /></IconSlot>
       <Stack grow minWidth="0" gap="none">
         <Typo.Caption tone="tertiary">{m.review ? labels.review : m.question.header}</Typo.Caption>
         <Typo.Label weight="medium" wrap="anywhere">{m.review ? labels.send : m.question.text}</Typo.Label>
