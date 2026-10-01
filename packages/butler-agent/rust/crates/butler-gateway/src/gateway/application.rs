@@ -10,6 +10,7 @@ mod errors;
 mod event_outbox;
 mod events;
 use errors::app_error;
+mod devices;
 #[cfg(debug_assertions)]
 mod faults;
 mod gateway_dashboard_impl;
@@ -54,7 +55,7 @@ mod sessions;
 mod settings;
 mod setup;
 mod turn_dispatch;
-pub use settings::diagnostics_enabled_readonly;
+pub use settings::{diagnostics_enabled_readonly, stored_ui_language_readonly};
 mod shell;
 mod space;
 mod storage;

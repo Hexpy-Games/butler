@@ -6,7 +6,6 @@
     reason = "test assertions"
 )]
 use butler_e2e::e2e::{HarnessError, agent::Launch, scenario::Setup, security::AdminClient};
-use reqwest::Method;
 use serde_json::Value;
 
 fn data(agent: &butler_e2e::e2e::agent::Agent, args: &[&str]) -> Result<Value, HarnessError> {
@@ -29,7 +28,7 @@ async fn remote_cli_manages_live_security() -> Result<(), HarnessError> {
     assert_eq!(before["bind_addresses"].as_array().unwrap().len(), 1);
     let enabled = s.agent.cli(&["remote", "enable"])?;
     assert_eq!(enabled.code, Some(0));
-    assert!(enabled.stdout.contains("butler remote code"));
+    assert!(enabled.stdout.contains("butler remote pair"));
     let status = data(&s.agent, &["remote", "status", "--json"])?;
     assert_eq!(status, admin.view().await?);
     assert_eq!(status["remote_access_enabled"], true);
@@ -38,42 +37,9 @@ async fn remote_cli_manages_live_security() -> Result<(), HarnessError> {
     for url in status["lan_urls"].as_array().unwrap() {
         assert!(enabled.stdout.contains(url.as_str().unwrap()));
     }
-    let old = data(&s.agent, &["remote", "code", "--json"])?;
-    let reveal = admin
-        .send(Method::POST, "/security/connection-code/reveal", None, &[])
-        .await?;
-    assert!(old == *reveal.data(), "CLI code differs from reveal");
-    assert!(
-        old["code"].as_str().unwrap() == s.gw.token,
-        "CLI code differs from token"
-    );
-    assert!(!status.to_string().contains(old["code"].as_str().unwrap()));
-    let plain = s.agent.cli(&["remote", "code"])?;
-    assert!(plain.stdout.trim() == old["code"].as_str().unwrap());
-    assert!(plain.stderr.is_empty());
-    let refused = s.agent.cli(&["remote", "code", "--rotate"])?;
-    assert_ne!(refused.code, Some(0));
-    assert!(refused.stderr.contains("--yes"));
-    let rotated = data(&s.agent, &["remote", "code", "--rotate", "--yes", "--json"])?;
-    assert!(
-        rotated["code"] != old["code"],
-        "rotation did not change code"
-    );
-    assert_eq!(s.gw.get("/settings").await?.status, 401);
-    let browser = reqwest::Client::builder()
-        .no_proxy()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()?;
-    for (code, expected) in [(&old["code"], 401), (&rotated["code"], 303)] {
-        let response = browser
-            .post(format!("{}/connect", s.gw.base))
-            .form(&[("code", code.as_str().unwrap())])
-            .send()
-            .await?;
-        assert_eq!(response.status().as_u16(), expected);
-    }
-    // Each CLI process reloads the data-folder token after rotation.
-    assert!(data(&s.agent, &["remote", "code", "--json"])?["code"] == rotated["code"]);
+    let devices = data(&s.agent, &["remote", "devices", "--json"])?;
+    assert_eq!(devices, serde_json::json!([]));
+    assert!(!status.to_string().contains(&s.gw.token));
     for (action, present) in [("add", true), ("remove", false)] {
         assert_eq!(
             s.agent
@@ -103,18 +69,6 @@ async fn remote_cli_manages_live_security() -> Result<(), HarnessError> {
                 .is_err(),
             "LAN listener remains bound"
         );
-    }
-    for entry in std::fs::read_dir(&s.sandbox.logs)? {
-        let path = entry?.path();
-        if path.is_file() {
-            let logs = std::fs::read_to_string(path)?;
-            for code in [&old["code"], &rotated["code"]] {
-                assert!(
-                    !logs.contains(code.as_str().unwrap()),
-                    "code leaked to logs"
-                );
-            }
-        }
     }
     s.agent.terminate().await?;
     let stopped = s.agent.cli(&["remote", "status", "--json"])?;

@@ -1138,7 +1138,11 @@ const butlerApp = Object.freeze({
     }),
   // Envelopes keep the code and status of the gateway's local-only rule.
   getSecurity: () => requestSecurity("getSecurity"),
-  revealConnectionCode: () => requestSecurity("revealConnectionCode"),
+  issuePairingCode: () => requestSecurity("issuePairingCode"),
+  getPairingStatus: () => requestSecurity("getPairingStatus"),
+  listPairedDevices: () => requestSecurity("listPairedDevices"),
+  revokePairedDevice: ({ deviceId } = {}) => requestSecurity("revokePairedDevice", { deviceId }),
+  revokeAllPairedDevices: () => requestSecurity("revokeAllPairedDevices"),
   // Main re-reads the token after a rotation.
   rotateConnectionCode: () => requestSecurity("rotateConnectionCode"),
   listArchives: ({ limit, offset } = {}) => {

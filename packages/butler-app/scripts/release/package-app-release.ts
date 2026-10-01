@@ -337,13 +337,15 @@ export function prepareBundledAgentResource(
   return { resourceDir };
 }
 
-function createMacDmg(input: { appBundle: string; artifactPath: string }): void {
+export function createMacDmg(input: { appBundle: string; artifactPath: string }): void {
   const workDir = mkdtempSync(join(tmpdir(), "butler-app-dmg-"));
   try {
     const staging = join(workDir, "Butler");
     mkdirSync(staging, { recursive: true });
     cpSync(input.appBundle, join(staging, "Butler.app"), {
       dereference: false,
+      // Keep framework links relative when the source work directory is removed.
+      verbatimSymlinks: true,
       errorOnExist: false,
       force: true,
       recursive: true,

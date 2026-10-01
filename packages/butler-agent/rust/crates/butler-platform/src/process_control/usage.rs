@@ -15,6 +15,10 @@ pub struct ProcessUsage {
     pub read_chars: Option<u64>,
     /// Bytes fetched from storage, excluding OS cache hits.
     pub read_bytes: u64,
+    /// Bytes submitted to writes, including writes buffered by the OS.
+    pub write_chars: Option<u64>,
+    /// Bytes written to storage.
+    pub write_bytes: u64,
 }
 
 /// Samples native process counters; unavailable metrics remain `None`.
@@ -29,6 +33,8 @@ pub fn sample(pid: u32) -> io::Result<Option<ProcessUsage>> {
             footprint_bytes: None,
             read_chars: Some(counter(&io, "rchar")?),
             read_bytes: counter(&io, "read_bytes")?,
+            write_chars: Some(counter(&io, "wchar")?),
+            write_bytes: counter(&io, "write_bytes")?,
         }))
     }
     #[cfg(target_os = "macos")]
@@ -43,6 +49,8 @@ pub fn sample(pid: u32) -> io::Result<Option<ProcessUsage>> {
             footprint_bytes: Some(usage.ri_phys_footprint),
             read_chars: None,
             read_bytes: usage.ri_diskio_bytesread,
+            write_chars: None,
+            write_bytes: usage.ri_diskio_byteswritten,
         }))
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]

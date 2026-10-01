@@ -9,6 +9,7 @@ on:
   pull_request:
     paths:
       - "deploy/macos/**"
+      - "packages/butler-app/scripts/release/**"
       - ".github/workflows/macos-signing.yml"
   workflow_dispatch:
 
@@ -37,6 +38,7 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
       - run: |
           HOME=$(mktemp -d)
           BUTLER_DATA=$(mktemp -d)

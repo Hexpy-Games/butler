@@ -414,11 +414,19 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (method === "GET" && url.pathname === "/security") {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getSecurity"));
   }
-  if (method === "POST" && url.pathname === "/security/connection-code/reveal") {
-    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "revealConnectionCode"));
+  if (url.pathname === "/security/pairing" && (method === "GET" || method === "POST")) {
+    const action = method === "POST" ? "issuePairingCode" : "getPairingStatus";
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, action));
   }
-  if (method === "POST" && url.pathname === "/security/connection-code/rotate") {
-    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "rotateConnectionCode"));
+  if (url.pathname === "/security/devices" && (method === "GET" || method === "DELETE")) {
+    const action = method === "GET" ? "listPairedDevices" : "revokeAllPairedDevices";
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, action));
+  }
+  const deviceMatch = url.pathname.match(/^\/security\/devices\/([^/]+)$/u);
+  if (method === "DELETE" && deviceMatch) {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "revokePairedDevice", {
+      deviceId: decodeURIComponent(deviceMatch[1]!),
+    }));
   }
   if (method === "GET" && url.pathname === "/command-palette") {
     return await callBridge<T>(bridge, "searchCommandPalette", { query: url.searchParams.get("query") ?? "" });

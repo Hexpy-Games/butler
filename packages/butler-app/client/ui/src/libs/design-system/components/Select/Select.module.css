@@ -65,10 +65,10 @@
   white-space: nowrap;
 }
 
-/* A leading glyph (service logo) before the value or option text. */
+/* Flex boxes avoid inline baseline alignment between provider marks and labels. */
 .itemIcon,
 .valueIcon {
-  display: inline-flex;
+  display: flex;
   flex: none;
   width: var(--icon-size-md);
   height: var(--icon-size-md);
@@ -77,7 +77,7 @@
 }
 
 .valueWithIcon {
-  display: inline-flex;
+  display: flex;
   min-width: 0;
   max-width: 100%;
   align-items: center;

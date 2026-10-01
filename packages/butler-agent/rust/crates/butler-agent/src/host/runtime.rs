@@ -2,6 +2,8 @@
 
 mod boundary;
 mod contracts;
+mod defaults;
+pub(crate) use defaults::ensure_reply_language;
 pub(super) mod environment;
 mod mcp_owner;
 pub(super) mod models;
@@ -16,7 +18,7 @@ mod web_owner;
 use super::{AcceptedPlanProducer, ActiveAppEndpoint, CognitionPrompt, ConversationObserver};
 use super::{
     EmbeddingOwner, GuidedCatalog, GuidedPreparation, GuidedTurnFactoryAdapter,
-    ProfileConversationSources, ResolvedInstallation, SystemIdentity, SystemPromptClock,
+    ResolvedInstallation, SystemIdentity, SystemPromptClock,
 };
 use crate::host::memory_jobs::context_maintenance::ContextMaintenance;
 use crate::host::memory_jobs::daily::{DailyCognitionJobs, DailyCognitionOwners};
@@ -31,7 +33,7 @@ use butler_memory::cognition::GenerationVectorAdapter;
 use butler_memory::cognition::{CognitionPromptReader, CompletionPublisher, ExactMemoryQuery};
 use butler_memory::cognition::{MemoryRecall, ProjectCapsuleService};
 use butler_memory::coordination::CognitionWriteCoordinator;
-use butler_memory::profile::{PersonaPresets, ProfileService};
+use butler_memory::profile::ProfileService;
 use butler_models::models::ModelConfigurationClock;
 use butler_runtime::context::{
     ContextBudgetOwner, ContextConversation, ConversationSessionReference, ConversationTools,
@@ -47,7 +49,6 @@ use butler_turn::btcc::{
     StorageEffectJournal, StorageProgressPublication, ToolJournalRepository,
     TurnFacadeDependencies, TurnModelExecutionFactory,
 };
-use butler_turn::conversation::conversation_store_path;
 use butler_turn::workspace::{
     Commands, SessionWorkspaceRecovery, SessionWorktrees, WorkspaceFiles, WorkspaceMutations,
 };
@@ -108,6 +109,8 @@ impl AgentRuntime {
         let (skills, capabilities, catalog) = skills_owner::open(&paths, &files, &mutations)?;
         stores::check_startup(stop)?;
         let stores = RuntimeStores::open(&paths.data_root, collation.clone(), stop).await?;
+        let response_language =
+            defaults::initialize(&paths, &app_database_path, &installation).await?;
         let (work_streams, observer) = boundary::open_observer(
             &paths.data_root,
             &environment.cognition_paths,
@@ -141,18 +144,15 @@ impl AgentRuntime {
             environment.cognition_paths.clone(),
             2,
         ));
-        let profile = Arc::new(ProfileService::new(
-            paths.data_root.clone(),
+        let profile = defaults::open_profile(
+            &paths,
             cognition_root.clone(),
-            Arc::new(PersonaPresets::new(paths.resource_root.clone())),
             writes,
             coordinator.clone(),
-            Arc::new(SystemIdentity),
-            Arc::new(ProfileConversationSources::new(conversation_store_path(
-                &paths.data_root,
-            ))),
             models.provider.clone(),
-        ));
+            &response_language,
+        )
+        .await?;
         let project_ledger = ProjectLedger::with_collation(&paths.data_root, 2, collation.clone());
         let plans = AcceptedPlanProducer::from_ledger(project_ledger.clone());
         let project_tools = Arc::new(crate::host::guided::project_tools::GuidedProjectTools::new(

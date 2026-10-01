@@ -1,31 +1,27 @@
-//! Zero-friction local browser access: `butler open` asks for a one-time
+//! One-time browser links and foreground pairing: `butler open` asks for a one-time
 //! connection code (`POST /connection-codes`, bearer token only) and opens
 //! `/connect?code=<code>`, which trades the code for an HttpOnly,
-//! SameSite=Strict session cookie. The cookie is signed with the gateway
-//! signing key, so it survives an agent restart and dies with the token.
+//! SameSite=Strict per-device session cookie. Pairing codes live only in memory.
 
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 
-use axum::http::{HeaderMap, HeaderValue, header};
 use parking_lot::Mutex;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-use super::{SigningKey, unix_seconds};
+use super::unix_seconds;
+use crate::gateway::crypto::constant_time_eq;
 use crate::gateway::crypto::random_bytes;
 
 /// How long a connection code can be redeemed.
 const CODE_TTL: Duration = Duration::from_secs(300);
-/// How long a browser session lasts.
-const SESSION_TTL_SECONDS: u64 = 30 * 24 * 60 * 60;
 /// Unredeemed codes kept at once; the oldest is dropped past this.
 const MAX_PENDING_CODES: usize = 32;
 /// Crockford base32: no I, L, O or U to misread when typed.
 const CODE_ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const CODE_GROUPS: usize = 4;
 const CODE_GROUP_LENGTH: usize = 4;
-const SESSION_VERSION: &str = "v1";
 
 /// A minted one-time link, as `POST /connection-codes` returns it.
 #[derive(Debug, Serialize)]
@@ -40,20 +36,141 @@ pub(in crate::gateway::http) struct ConnectionLink {
 
 /// Pending one-time codes and the session cookie of one gateway listener.
 pub(in crate::gateway::http) struct BrowserSessions {
-    key: SigningKey,
-    cookie_name: String,
+    pairing: Mutex<Option<Pairing>>,
+    #[cfg(debug_assertions)]
+    clock_offset: std::sync::atomic::AtomicU64,
     pending: Mutex<HashMap<[u8; 32], SystemTime>>,
 }
 
 impl BrowserSessions {
-    /// The cookie name carries the port, so two gateways on one host keep
-    /// their own sessions. Browsers still send it to every port of the host,
-    /// which is why only the Butler page may use it (`fetch_metadata`).
-    pub(in crate::gateway::http) fn new(key: SigningKey, port: u16) -> Self {
+    pub(in crate::gateway::http) fn new() -> Self {
         Self {
-            key,
-            cookie_name: format!("butler_session_{port}"),
             pending: Mutex::new(HashMap::new()),
+            pairing: Mutex::new(None),
+            #[cfg(debug_assertions)]
+            clock_offset: std::sync::atomic::AtomicU64::new(0),
+        }
+    }
+
+    pub(in crate::gateway::http) fn now(&self) -> SystemTime {
+        let now = SystemTime::now();
+        #[cfg(debug_assertions)]
+        let now =
+            now + Duration::from_secs(self.clock_offset.load(std::sync::atomic::Ordering::Relaxed));
+        now
+    }
+
+    #[cfg(debug_assertions)]
+    pub(in crate::gateway::http) fn advance(&self, seconds: u64) {
+        self.clock_offset
+            .fetch_add(seconds, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub(in crate::gateway::http) fn issue_pairing(&self) -> PairingCode {
+        let mut slot = self.pairing.lock();
+        let mut code = new_digits();
+        while slot
+            .as_ref()
+            .is_some_and(|pin| constant_time_eq(&pin.digest, &code_digest(&code)))
+        {
+            code = new_digits();
+        }
+        let expires = self.now() + Duration::from_secs(60);
+        let id = uuid::Uuid::new_v4().to_string();
+        *slot = Some(Pairing {
+            digest: code_digest(&code),
+            failures: 0,
+            expires,
+            view: PairingStatus {
+                id: id.clone(),
+                expires_at: unix_seconds(expires),
+                expires_in: 60,
+                status: "active".into(),
+                invalidated_by: None,
+                device_id: None,
+            },
+        });
+        PairingCode {
+            id,
+            code,
+            expires_at: unix_seconds(expires),
+            expires_in: 60,
+        }
+    }
+
+    pub(in crate::gateway::http) fn pairing_status(&self) -> Option<PairingStatus> {
+        let now = self.now();
+        let mut slot = self.pairing.lock();
+        if let Some(pin) = slot.as_mut()
+            && pin.view.status == "active"
+            && pin.expires <= now
+        {
+            pin.view.status = "expired".into();
+        }
+        slot.as_ref().map(|pin| {
+            let mut view = pin.view.clone();
+            view.expires_in = if view.status == "active" {
+                pin.expires.duration_since(now).map_or(0, |duration| {
+                    duration
+                        .as_secs()
+                        .saturating_add(u64::from(duration.subsec_nanos() > 0))
+                })
+            } else {
+                0
+            };
+            view
+        })
+    }
+
+    /// Both code kinds are single-use. Pairing is only checked on POST.
+    pub(in crate::gateway::http) fn redeem(
+        &self,
+        code: &str,
+        form: bool,
+        ip: &str,
+    ) -> Option<Option<String>> {
+        let now = self.now();
+        let digest = code_digest(code);
+        if code.chars().filter(|c| !matches!(c, '-' | ' ')).count() == 16 {
+            let mut pending = self.pending.lock();
+            let key = pending
+                .keys()
+                .find(|key| constant_time_eq(&digest, key.as_slice()))
+                .copied();
+            if let Some(expiry) = key.and_then(|key| pending.remove(&key))
+                && expiry > now
+            {
+                return Some(None);
+            }
+        }
+        if !form {
+            return None;
+        }
+        let mut slot = self.pairing.lock();
+        let target = slot.as_ref().map_or([0; 32], |pin| pin.digest);
+        let matches = constant_time_eq(&digest, &target);
+        let pin = slot.as_mut()?;
+        if pin.view.status != "active" || pin.expires <= now {
+            return None;
+        }
+        if matches && code.len() == 8 && code.bytes().all(|b| b.is_ascii_digit()) {
+            pin.view.status = "paired".into();
+            return Some(Some(pin.view.id.clone()));
+        }
+        pin.failures += 1;
+        if pin.failures >= 3 {
+            pin.view.status = "invalidated".into();
+            pin.view.invalidated_by = Some(ip.into());
+        }
+        None
+    }
+
+    pub(in crate::gateway::http) fn paired(&self, pairing_id: &str, id: &str) {
+        if let Some(pin) = self.pairing.lock().as_mut()
+            && pin.view.status == "paired"
+            && pin.view.id == pairing_id
+        {
+            pin.view.device_id = Some(id.into());
         }
     }
 
@@ -85,68 +202,6 @@ impl BrowserSessions {
             code,
         }
     }
-
-    /// Redeems `code` once; the `Set-Cookie` value for a new session.
-    pub(in crate::gateway::http) fn redeem(
-        &self,
-        code: &str,
-        now: SystemTime,
-    ) -> Option<HeaderValue> {
-        let expiry = self.pending.lock().remove(&code_digest(code))?;
-        if expiry <= now {
-            return None;
-        }
-        self.issue(now)
-    }
-
-    /// The `Set-Cookie` value for a new session (a redeemed code, or the
-    /// session that rotated the connection code and needs the new key).
-    pub(in crate::gateway::http) fn issue(&self, now: SystemTime) -> Option<HeaderValue> {
-        let expires = unix_seconds(now).saturating_add(SESSION_TTL_SECONDS);
-        let nonce = base64_url(&random_bytes()[..16]);
-        let signature = self.key.mac(&session_message(expires, &nonce));
-        let cookie = format!(
-            "{}={SESSION_VERSION}.{expires}.{nonce}.{signature}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_TTL_SECONDS}",
-            self.cookie_name
-        );
-        HeaderValue::from_str(&cookie).ok()
-    }
-
-    /// Whether the request carries a valid, unexpired session cookie.
-    pub(in crate::gateway::http) fn has_session(
-        &self,
-        headers: &HeaderMap,
-        now: SystemTime,
-    ) -> bool {
-        headers
-            .get_all(header::COOKIE)
-            .iter()
-            .filter_map(|value| value.to_str().ok())
-            .flat_map(|value| value.split(';'))
-            .filter_map(|pair| pair.trim().split_once('='))
-            .filter(|(name, _)| *name == self.cookie_name)
-            .any(|(_, value)| self.session_valid(value, unix_seconds(now)))
-    }
-
-    fn session_valid(&self, value: &str, now: u64) -> bool {
-        let mut parts = value.split('.');
-        let (Some(SESSION_VERSION), Some(expires), Some(nonce), Some(signature), None) = (
-            parts.next(),
-            parts.next(),
-            parts.next(),
-            parts.next(),
-            parts.next(),
-        ) else {
-            return false;
-        };
-        expires.parse::<u64>().is_ok_and(|expires| {
-            expires > now && self.key.verify(&session_message(expires, nonce), signature)
-        })
-    }
-}
-
-fn session_message(expires: u64, nonce: &str) -> String {
-    format!("butler.browser-session.v1\n{expires}\n{nonce}")
 }
 
 /// `XXXX-XXXX-XXXX-XXXX`: 80 random bits, typeable.
@@ -173,62 +228,43 @@ fn code_digest(code: &str) -> [u8; 32] {
     Sha256::digest(canonical.as_bytes()).into()
 }
 
-fn base64_url(bytes: &[u8]) -> String {
-    use base64::Engine;
-    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+#[derive(Clone, Serialize)]
+pub(in crate::gateway::http) struct PairingStatus {
+    pub id: String,
+    pub expires_at: u64,
+    pub expires_in: u64,
+    pub status: String,
+    pub invalidated_by: Option<String>,
+    pub device_id: Option<String>,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+#[derive(Serialize)]
+pub(in crate::gateway::http) struct PairingCode {
+    pub id: String,
+    pub code: String,
+    pub expires_at: u64,
+    pub expires_in: u64,
+}
 
-    fn sessions() -> BrowserSessions {
-        BrowserSessions::new(SigningKey::derive("token-for-session-tests"), 18765)
+struct Pairing {
+    expires: SystemTime,
+    digest: [u8; 32],
+    failures: u8,
+    view: PairingStatus,
+}
+
+/// Rejection sampling avoids modulo bias in decimal digits.
+fn new_digits() -> String {
+    let mut code = String::with_capacity(8);
+    while code.len() < 8 {
+        for byte in random_bytes() {
+            if byte < 250 {
+                code.push(char::from(b'0' + byte % 10));
+                if code.len() == 8 {
+                    break;
+                }
+            }
+        }
     }
-
-    fn cookie_header(set_cookie: &HeaderValue) -> HeaderMap {
-        let pair = set_cookie
-            .to_str()
-            .unwrap()
-            .split(';')
-            .next()
-            .unwrap()
-            .to_owned();
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            header::COOKIE,
-            HeaderValue::from_str(&format!("other=1; {pair}")).unwrap(),
-        );
-        headers
-    }
-
-    /// Security boundary: a code works once, before it expires, for the
-    /// session it mints; the cookie is HttpOnly and SameSite=Strict.
-    #[test]
-    fn codes_are_single_use_and_mint_a_strict_http_only_cookie() {
-        let sessions = sessions();
-        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_800_000_000);
-        let link = sessions.mint("127.0.0.1:18765", now);
-        assert!(link.url.starts_with("http://127.0.0.1:18765/connect?code="));
-        assert_eq!(link.code.len(), 19);
-        let typed = link.code.to_ascii_lowercase().replace('-', " ");
-        let cookie = sessions.redeem(&typed, now).unwrap();
-        let text = cookie.to_str().unwrap();
-        assert!(text.starts_with("butler_session_18765=v1."), "{text}");
-        assert!(
-            text.contains("HttpOnly") && text.contains("SameSite=Strict"),
-            "{text}"
-        );
-        assert!(sessions.redeem(&link.code, now).is_none(), "code reused");
-        assert!(sessions.has_session(&cookie_header(&cookie), now));
-        let later = now + Duration::from_secs(SESSION_TTL_SECONDS + 1);
-        assert!(!sessions.has_session(&cookie_header(&cookie), later));
-        let other_port = BrowserSessions::new(SigningKey::derive("token-for-session-tests"), 1);
-        assert!(!other_port.has_session(&cookie_header(&cookie), now));
-        let rotated = BrowserSessions::new(SigningKey::derive("rotated-token"), 18765);
-        assert!(!rotated.has_session(&cookie_header(&cookie), now));
-
-        let expired = sessions.mint("127.0.0.1:18765", now);
-        assert!(sessions.redeem(&expired.code, now + CODE_TTL).is_none());
-    }
+    code
 }

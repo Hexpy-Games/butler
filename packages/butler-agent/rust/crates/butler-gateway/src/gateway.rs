@@ -7,6 +7,7 @@
 mod application;
 mod auth;
 mod crypto;
+mod devices;
 mod http;
 mod image_files;
 mod live;
@@ -16,6 +17,7 @@ mod protocol;
 mod published_event;
 mod rate_limit;
 mod security_settings;
+pub use devices::{GatewayDevices, PairedDevice};
 mod server;
 mod session_references;
 mod transcript;
@@ -90,6 +92,7 @@ pub(crate) use application::{
 pub(crate) use application::{TestProjectDashboardBriefing, TestProjectDashboardLedger};
 pub use application::{
     app_session_hint, diagnostics_enabled_readonly, normalize_committed_turn_event,
+    stored_ui_language_readonly,
 };
 pub(crate) use application::{app_work_status, app_worker_activity};
 pub use application::{read_new_chat_briefing_projects, read_new_chat_briefing_settings};
@@ -201,6 +204,7 @@ pub trait GatewayApplication:
     GatewayMutationCommands
     + GatewayProjectDashboard
     + GatewaySessionControls
+    + GatewayDevices
     + GatewayWallpapers
     + Send
     + Sync

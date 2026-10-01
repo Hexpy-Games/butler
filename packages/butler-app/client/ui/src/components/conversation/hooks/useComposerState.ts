@@ -1,4 +1,5 @@
 import { ACTIVE_TURN_STATES } from "@/app/constants.ts";
+import { useMemo } from "react";
 import {
   activeTurnProgressSnapshot,
   appThemeClasses,
@@ -17,6 +18,8 @@ import type {
 import type { ComposerAttachment } from "./useFileAttachments";
 import { blockedImageAttachmentIds, composerImagePolicy } from "../composerImagePolicy";
 
+const DEFAULT_REASONING = ["none"];
+
 export function useComposerState(
   summary: SessionSummaryView | null | undefined,
   turnProgress: Record<string, TurnProgressSnapshot>,
@@ -31,14 +34,14 @@ export function useComposerState(
 ) {
   const hasSendableDraft = text.trim().length > 0 || attachments.length > 0;
 
-  const workers = (summary?.worker_activity ?? []).filter(
+  const workers = useMemo(() => (summary?.worker_activity ?? []).filter(
     (worker): worker is WorkerActivitySummary =>
       Boolean(worker && isWorkerVisibleInComposer(worker)),
-  );
+  ), [summary?.worker_activity]);
   const activeProgress = activeTurnProgressSnapshot(summary, turnProgress);
-  const taskRows = (activeProgress?.safe_progress_rows ?? []).filter(
+  const taskRows = useMemo(() => (activeProgress?.safe_progress_rows ?? []).filter(
     (row) => row.kind === "todo" && row.bridge_phase === "btcc_work_ledger",
-  );
+  ), [activeProgress?.safe_progress_rows]);
 
   const parentActive = Boolean(
     activeProgress ||
@@ -52,7 +55,7 @@ export function useComposerState(
     isSending || parentActive || activeWorker,
   );
   const context = summary?.context_details;
-  const models = runtimeModels(modelCatalog);
+  const models = useMemo(() => runtimeModels(modelCatalog), [modelCatalog]);
 
   const activeModel =
     models.find((item) => item.model_ref === model);
@@ -67,7 +70,7 @@ export function useComposerState(
 
   const availableReasoning = activeModel?.reasoning_efforts?.length
     ? activeModel.reasoning_efforts
-    : ["none"];
+    : DEFAULT_REASONING;
 
   const popoverThemeClass = appThemeClasses(settings);
 

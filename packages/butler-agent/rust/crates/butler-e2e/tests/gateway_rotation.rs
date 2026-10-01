@@ -15,14 +15,12 @@
 use std::time::{Duration, Instant};
 
 use butler_e2e::e2e::HarnessError;
-use butler_e2e::e2e::agent::ADMIN_HEADER;
 use butler_e2e::e2e::events::LiveEvents;
 use butler_e2e::e2e::gateway::Gateway;
 use butler_e2e::e2e::media;
 use butler_e2e::e2e::scenario::{Scenario, Setup};
 use butler_e2e::e2e::security::AdminClient;
 use reqwest::Method;
-use serde_json::Value;
 
 const ROTATED: &str = "security.connection_code_rotated";
 
@@ -107,8 +105,7 @@ async fn sec_10_rotation_revokes_the_old_code_everywhere() -> Result<(), Harness
     let revealed = app
         .send(Method::POST, "/security/connection-code/reveal", None, &[])
         .await?;
-    assert_eq!(revealed.status, 200, "{}", revealed.text);
-    assert_eq!(revealed.data()["code"], old.as_str());
+    assert_eq!(revealed.status, 404);
 
     let upload =
         s.gw.upload(
@@ -135,7 +132,11 @@ async fn sec_10_rotation_revokes_the_old_code_everywhere() -> Result<(), Harness
     );
     let cookie = session_cookie(&s, &browser).await?;
     assert_eq!(page_read(&s.gw, &browser, &cookie).await?, 200);
-    let typed = connect_code_signs_in(&s.gw, &browser, &old).await?;
+    let pin = app
+        .send(Method::POST, "/security/pairing", None, &[])
+        .await?;
+    let typed =
+        connect_code_signs_in(&s.gw, &browser, pin.data()["code"].as_str().unwrap()).await?;
     let stream = LiveEvents::subscribe(&s.gw, 0).await?;
     tokio::time::sleep(Duration::from_millis(300)).await;
 
@@ -198,12 +199,11 @@ async fn sec_10_rotation_revokes_the_old_code_everywhere() -> Result<(), Harness
     s.agent.launch.token = new.clone();
     let app = AdminClient::new(s.gw.clone(), admin);
     let view = app.view().await?;
-    let masked = format!("{}…{}", &new[..4], &new[new.len() - 4..]);
-    assert_eq!(view["connection_code"]["masked"], masked, "{view}");
+    assert!(view["connection_code"].is_null());
     let open = s.agent.cli(&["open", "--no-browser", "--json"])?;
     assert_eq!(open.code, Some(0), "butler open after rotation: {open:?}");
 
-    let current = rotate_as_browser_page(&s, &app, &browser).await?;
+    let current = app.rotate().await?["code"].as_str().unwrap().to_owned();
     assert_eq!(s.agent.launch.data_folder_token(), Some(current.clone()));
     s.agent.launch.token = current.clone();
     s.restart().await?;
@@ -234,7 +234,7 @@ async fn connect_code_signs_in(
         .await?
         .text()
         .await?;
-    assert!(page.contains("Settings → Security"), "{page}");
+    assert!(page.contains("butler remote pair"), "{page}");
     assert!(page.contains(r#"method="post""#), "{page}");
     let wrong = connect_form(gw, browser, "not-the-code").await?;
     assert_eq!(wrong.status().as_u16(), 401);
@@ -244,40 +244,4 @@ async fn connect_code_signs_in(
     let cookie = cookie_pair(signed_in.headers());
     assert_eq!(page_read(gw, browser, &cookie).await?, 200);
     Ok(cookie)
-}
-
-/// The Butler page in the App rotates with its session cookie (and the
-/// admin credential the App adds) and keeps working with the cookie the
-/// reply sets; the old cookie does not. Returns the new code.
-async fn rotate_as_browser_page(
-    s: &Scenario,
-    app: &AdminClient,
-    browser: &reqwest::Client,
-) -> Result<String, HarnessError> {
-    let cookie = session_cookie(s, browser).await?;
-    let own_origin = s.gw.base.as_str();
-    let rotated = browser
-        .post(url(&s.gw, "/security/connection-code/rotate"))
-        .header("cookie", &cookie)
-        .header("sec-fetch-site", "same-origin")
-        .header("origin", own_origin)
-        .header(ADMIN_HEADER, app.admin.as_str())
-        .send()
-        .await?;
-    assert_eq!(rotated.status().as_u16(), 200);
-    let renewed = cookie_pair(rotated.headers());
-    let body: Value = rotated.json().await?;
-    let code = body["data"]["code"].as_str().unwrap().to_owned();
-    assert_eq!(
-        page_read(&s.gw, browser, &renewed).await?,
-        200,
-        "renewed session"
-    );
-    assert_eq!(
-        page_read(&s.gw, browser, &cookie).await?,
-        401,
-        "old session"
-    );
-    assert_eq!(status(&s.gw, "/settings", &code).await?, 200);
-    Ok(code)
 }
