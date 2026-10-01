@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { gunzipSync } from "node:zlib";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -81,6 +82,10 @@ const uiDistRoot = resolve(
     join(repositoryRoot, "packages", "butler-app", "client", "ui", "dist"),
 );
 requireFile(join(uiDistRoot, "index.html"));
+requireFile(join(uiDistRoot, "THIRD_PARTY_NOTICES.txt.gz"));
+if (!gunzipSync(readFileSync(join(uiDistRoot, "THIRD_PARTY_NOTICES.txt.gz"))).equals(readFileSync(join(repositoryRoot, "deploy/licenses/THIRD_PARTY_NOTICES.txt")))) {
+  throw new Error("Renderer notices are stale; rebuild the App renderer.");
+}
 cpSync(uiDistRoot, join(payloadRoot, "resources", "app-client", "dist"), { recursive: true });
 const version = readCargoVersion(join(rustRoot, "crates", "butler-agent", "Cargo.toml"));
 const appVersion = process.env.BUTLER_PACKAGED_APP_VERSION?.trim() ||

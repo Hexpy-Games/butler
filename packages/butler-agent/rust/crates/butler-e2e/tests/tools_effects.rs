@@ -406,3 +406,42 @@ fn interrupts(s: &Scenario) -> String {
         .collect::<Vec<_>>()
         .join(" | ")
 }
+
+/// #314: a long command reaches the public App approval API verbatim.
+#[tokio::test]
+async fn approval_long_command_is_complete() -> Result<(), HarnessError> {
+    use butler_e2e::e2e::faults::{ArgsMutation, Fault, Transform};
+    butler_e2e::gate!();
+    let s = Setup::new("APPROVAL-LONG")?
+        .cassette("TOOL-06")
+        .replay_only()
+        .start()
+        .await?;
+    let original = "sh -c 'sleep 300 & echo $! > pids.txt; echo $$ >> pids.txt; sleep 300'";
+    let command = format!("printf '%s' '{}'", "approval-detail-".repeat(40));
+    assert!(command.len() > 200);
+    s.provider
+        .as_ref()
+        .expect("replay provider")
+        .inject(Fault::first_call(
+            "Use run_command with timeout_ms 3000",
+            Transform::MutateToolArgs(ArgsMutation::OnlyTool {
+                tool: "run_command".into(),
+                mutation: Box::new(ArgsMutation::Replace {
+                    from: original.into(),
+                    to: command.clone(),
+                }),
+            }),
+        ))?;
+    let prompt = "Use run_command with timeout_ms 3000 to run exactly: sh -c 'sleep 300 & echo $! > pids.txt; echo $$ >> pids.txt; sleep 300'. Then tell me what happened.";
+    let turn_id = send(&s, prompt, "ask_first").await?;
+    let request = wait_request(&s, &turn_id).await?;
+    assert_eq!(request["approval"]["examples"], json!([command]));
+    assert!(request["approval"].get("examples_truncated").is_none());
+    let view = s.gw.get("/session-view?session_id=general").await?;
+    assert_eq!(view.status, 200, "{}", view.text);
+    assert_eq!(view.data()["authority_requests"], json!([request]));
+    assert_eq!(view.data()["pending_questions"], json!([]));
+    assert!(s.gw.healthy().await);
+    s.finish().await
+}

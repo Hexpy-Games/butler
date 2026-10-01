@@ -30,7 +30,7 @@ impl PrincipalAuthority {
             uuid,
         }
     }
-    async fn in_lane<T: Send + 'static>(
+    pub(super) async fn in_lane<T: Send + 'static>(
         &self,
         operation: impl FnOnce(&mut dyn AuthorityRepository) -> AuthorityResult<T> + Send + 'static,
     ) -> AuthorityResult<T> {

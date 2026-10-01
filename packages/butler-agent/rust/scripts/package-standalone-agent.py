@@ -70,7 +70,16 @@ def main() -> int:
         binary = stage / "butler-agent"
         shutil.copyfile(binary_source, binary)
         binary.chmod(0o555)
+        renderer_notices = resources_source / "app-client/dist/THIRD_PARTY_NOTICES.txt.gz"
+        expected = subprocess.check_output(["node", "--input-type=module", "-e",
+            f"import {{generate}} from '{Path(__file__).resolve().parents[4]}/deploy/licenses/generate.mjs'; process.stdout.write(generate());"])
+        if not renderer_notices.is_file() or gzip.decompress(renderer_notices.read_bytes()) != expected:
+            raise SystemExit("prepared payload renderer notices are missing or stale")
         shutil.copytree(resources_source, stage / "resources", symlinks=True)
+        (stage / "THIRD_PARTY_NOTICES.txt").write_text(
+            "Complete human-readable notices: resources/app-client/dist/THIRD_PARTY_NOTICES.txt.gz\n"
+            "Read with: gzip -dc resources/app-client/dist/THIRD_PARTY_NOTICES.txt.gz\n"
+            "Or open Settings > About > Open source licenses in the browser UI.\n", encoding="utf-8")
         make_read_only(stage / "resources")
         (stage / "butler").symlink_to("butler-agent")
         standalone_manifest = {

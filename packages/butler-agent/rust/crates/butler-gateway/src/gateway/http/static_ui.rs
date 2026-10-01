@@ -15,6 +15,7 @@ fn mime(path: &str) -> Option<&'static str> {
         Some("html") => Some("text/html; charset=utf-8"),
         Some("css") => Some("text/css; charset=utf-8"),
         Some("js") => Some("text/javascript; charset=utf-8"),
+        Some("gz") => Some("application/gzip"),
         Some("json") => Some("application/json; charset=utf-8"),
         Some("svg") => Some("image/svg+xml"),
         // Bundled UI fonts: @font-face requests carry no Authorization header.

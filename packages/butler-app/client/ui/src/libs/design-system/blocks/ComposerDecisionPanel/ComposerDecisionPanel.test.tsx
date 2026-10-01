@@ -5,7 +5,7 @@ import { JSDOM } from "jsdom";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ComposerDecisionPanel } from "./ComposerDecisionPanel";
 
-const css = readFileSync(new URL("./ComposerDecisionPanel.module.css", import.meta.url), "utf8");
+const css = readFileSync(new URL("../../lib/composerPanel.module.css", import.meta.url), "utf8");
 
 function rule(selector: string): string {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
@@ -24,7 +24,8 @@ function render(error?: string, details?: readonly string[]) {
 test("ComposerDecisionPanel shows every detail line in full: lines wrap and are never cut", () => {
   const command = `rm -rf ${"build/".repeat(40)}`;
   const panel = render(undefined, ["a.png", command, "+22 more"]).querySelector('[data-test-class="decision"]')!;
-  const [subject, details, actions] = [...panel.children];
+  const [subject, , actions] = [...panel.children];
+  const details = panel.querySelector('[data-slot="composer-decision-details"]')!;
   expect(subject!.getAttribute("data-has-details")).toBe("true");
   expect(details!.getAttribute("data-slot")).toBe("composer-decision-details");
   const lines = [...details!.querySelectorAll("p")];
@@ -36,6 +37,7 @@ test("ComposerDecisionPanel shows every detail line in full: lines wrap and are 
   expect(plain.querySelector('[data-slot="composer-decision-details"]')).toBeNull();
 });
 
+// test-category: format-pin
 test("ComposerDecisionPanel puts the icon, the clickable title and the aside on one subject row above the actions", () => {
   const document = render();
   const panel = document.querySelector('[data-test-class="decision"]')!;
@@ -50,14 +52,17 @@ test("ComposerDecisionPanel puts the icon, the clickable title and the aside on 
   expect(document.body.innerHTML).not.toContain("style=");
 });
 
+// test-category: format-pin
 test("ComposerDecisionPanel shows an error between the subject and the actions as an alert", () => {
   const panel = render("Could not send the decision.").querySelector('[data-test-class="decision"]')!;
   expect(panel.children).toHaveLength(3);
-  expect(panel.children[1]!.querySelector('[role="alert"]')?.textContent).toBe("Could not send the decision.");
+  expect(panel.children[1]!.getAttribute("role")).toBe("alert");
+  expect(panel.children[1]!.textContent).toBe("Could not send the decision.");
 });
 
+// test-category: format-pin
 test("ComposerDecisionPanel owns the icon tone and the composer-radius action buttons", () => {
-  expect(rule(".subject > svg")).toMatch(/color:\s*var\(--text-secondary\)/u);
+  expect(rule(".icon > svg")).toMatch(/width:\s*var\(--icon-size-sm\)/u);
   expect(rule(".actions button")).toMatch(/border-radius:\s*var\(--adaptive-composer-radius\)/u);
-  expect(rule(".subject")).toMatch(/padding:\s*var\(--space-md\) var\(--space-lg\)/u);
+  expect(rule(".subject")).toMatch(/padding:\s*var\(--space-lg\) var\(--space-lg\) var\(--space-xs\)/u);
 });

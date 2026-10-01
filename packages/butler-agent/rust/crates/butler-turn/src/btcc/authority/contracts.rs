@@ -130,7 +130,7 @@ pub enum AuthorityAdmissionResult {
     Granted,
     Pending {
         request_ref: String,
-        projection: AuthorityRequestProjection,
+        projection: Box<AuthorityRequestProjection>,
     },
     Allowed {
         request_ref: String,
@@ -161,7 +161,7 @@ pub struct AuthorityDecisionInput {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AuthorityDecisionResult {
     pub request_ref: String,
-    pub(crate) source_session_id: String,
+    pub owner_session_id: String,
     pub(crate) source_turn_id: String,
     pub(crate) source_work_id: String,
     pub(crate) schedule_client_message_id: String,
@@ -169,6 +169,7 @@ pub struct AuthorityDecisionResult {
     pub(crate) model_ref: String,
     pub(crate) reasoning_effort: String,
     pub decision: RequestDecision,
+    pub question_followup: Option<String>,
 }
 /// Claims execution of an allowed request.
 #[derive(Clone, Debug)]
@@ -247,6 +248,10 @@ pub struct AuthorityRequestProjection {
     /// language (#235).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval: Option<super::approval::AuthorityApproval>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub questions: Option<Box<super::questions::UserQuestions>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub question_state: Option<String>,
 }
 
 /// The title and description of the permission a request would grant.
@@ -445,9 +450,21 @@ pub(crate) trait AuthorityRepository {
     fn insert(&mut self, record: &AuthorityRecord) -> AuthorityResult<()>;
     fn find_ref(&mut self, request_ref: &str) -> AuthorityResult<Option<AuthorityRecord>>;
     fn list_pending(&mut self, owner: &str) -> AuthorityResult<Vec<AuthorityRecord>>;
+    fn question_history(
+        &mut self,
+        owner: &str,
+        turns: &[String],
+    ) -> AuthorityResult<Vec<AuthorityRecord>>;
     fn list_decided(&mut self) -> AuthorityResult<Vec<AuthorityRecord>>;
     fn source_work_eligible(&mut self, session: &str, work: &str) -> AuthorityResult<bool>;
     fn decide(&mut self, write: DecisionWrite) -> AuthorityResult<Option<AuthorityRecord>>;
+    fn settle_question_followup(&mut self, request_ref: &str) -> AuthorityResult<()>;
+    fn record_question_followup(
+        &mut self,
+        request_ref: &str,
+        response: &str,
+        now: &str,
+    ) -> AuthorityResult<()>;
     fn record_outcome(&mut self, write: OutcomeWrite) -> AuthorityResult<()>;
     fn close_self(&mut self, session: &str, reason: &str, now: &str) -> AuthorityResult<usize>;
 }

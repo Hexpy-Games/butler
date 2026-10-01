@@ -97,7 +97,7 @@ describe("legacy App service migration", () => {
     expect(existsSync(plist)).toBeTrue();
   });
 
-  test("confirmed migration stops verified groups and removes user artifacts", async () => {
+  test("confirmed Darwin migration stops verified groups and removes user artifacts", async () => {
     const root = mkdtempSync(join(tmpdir(), "butler-migration-"));
     roots.push(root);
     const data = join(root, "data");
@@ -110,6 +110,8 @@ describe("legacy App service migration", () => {
     let running = true;
     const result = await migrateLegacyAppService({
       butlerData: data,
+      platform: "darwin",
+      uid: 501,
       inspect: () => ({
         required: true,
         plists: [plist],
@@ -119,12 +121,15 @@ describe("legacy App service migration", () => {
       }),
       activeWorkSnapshot: async () => ({ classification: "active_work_unknown" }),
       confirm: async () => true,
-      runCommand: async (_command, args) => { commands.push(args.join(" ")); },
+      runCommand: async (command, args) => { commands.push([command, ...args].join(" ")); },
       isProcessRunning: () => running,
       killProcessGroup: (_pgid, signal) => { signals.push(signal); running = false; },
     });
     expect(result.status).toBe("complete");
-    expect(commands).toHaveLength(2);
+    expect(commands).toEqual([
+      "/bin/launchctl bootout gui/501/com.hexpy.butler",
+      "/bin/launchctl bootout gui/501/com.hexpy.butler.menubar-helper",
+    ]);
     expect(signals).toEqual(["SIGTERM"]);
     expect(existsSync(plist)).toBeFalse();
     expect(existsSync(statePath)).toBeFalse();

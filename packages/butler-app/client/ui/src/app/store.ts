@@ -818,6 +818,13 @@ function applySessionView(
   state: ButlerStore,
   view: SessionView,
 ): ButlerStore | Partial<ButlerStore> {
+  const previous = state.sessionViews[view.session_id];
+  const loaded = state.activeChatId === view.session_id ? state.messages : state.sessionMessageViews[view.session_id]?.messages ?? [];
+  const retained = [...loaded, ...view.messages];
+  const turns = new Set(retained.map(m => m.turn_id));
+  const messageIds = new Set(retained.map(m => m.id));
+  const answers = new Map([...previous?.question_answers ?? [], ...view.question_answers ?? []].map(a => [a.request_ref, a]));
+  view = { ...view, question_answers: [...answers.values()].filter(a => turns.has(a.source_turn_id) || messageIds.has(`question-followup-${a.request_ref}`)) };
   const sessionViews = upsertSessionView(state.sessionViews, view);
   view = sessionViews[view.session_id] ?? view;
   if (state.activeChatId !== view.session_id) {
@@ -893,6 +900,10 @@ function applySessionView(
       ? state.sessionView
       : view,
     sessionViews,
+    ...(Array.isArray(view.authority_requests) ? { authorityApprovals: { sessionId: view.session_id,
+      cards: normalizeAuthorityApprovals({ requests: view.authority_requests }),
+      permissions: state.authorityApprovals?.sessionId === view.session_id ? state.authorityApprovals.permissions : [],
+    } } : {}),
     sessionMessageViews,
     messageLoadPending: false,
   };

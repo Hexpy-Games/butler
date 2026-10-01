@@ -9,7 +9,9 @@
   },
   "files": [
     "bin",
-    "install.sh"
+    "install.sh",
+    "THIRD_PARTY_NOTICES.txt",
+    "THIRD_PARTY_NOTICES.txt.gz"
   ],
   "scripts": {
     "prepack": "node scripts/copy-install-script.js"

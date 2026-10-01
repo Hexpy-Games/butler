@@ -1,8 +1,10 @@
+import { gzipSync } from "node:zlib";
 import path from "node:path";
 import { homedir } from "node:os";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { execFileSync } from "node:child_process";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -24,7 +26,7 @@ function hugeiconsPureAnnotationPatch(): Plugin {
   };
 }
 
-// Bundled fonts are OFL 1.1: ship their license texts next to index.html.
+// Font OFL texts remain readable beside index.html; the full inventory stays compressed.
 function fontLicenseNotices(): Plugin {
   const require = createRequire(import.meta.url);
   const notices: Array<[name: string, file: string]> = [
@@ -46,13 +48,40 @@ function fontLicenseNotices(): Plugin {
   };
 }
 
+// Generate the union inventory at build time; also served by the headless Agent.
+function thirdPartyNotices(): Plugin {
+  const repositoryRoot = path.resolve(process.cwd(), "../../../..");
+  const noticesFile = path.join(repositoryRoot, "deploy/licenses/THIRD_PARTY_NOTICES.txt");
+  return {
+    name: "butler-third-party-notices",
+    apply: "build",
+    buildStart() {
+      execFileSync(process.execPath, [path.join(repositoryRoot, "deploy/licenses/generate.mjs")]);
+      execFileSync(process.execPath, [path.join(repositoryRoot, "deploy/licenses/verify-renderer.mjs")]);
+    },
+    generateBundle(_options, bundle) {
+      const modules = Object.values(bundle).flatMap((entry) =>
+        entry.type === "chunk" ? Object.keys(entry.modules) : [],
+      );
+      execFileSync(process.execPath, [path.join(repositoryRoot, "deploy/licenses/verify-renderer.mjs"), "--modules"], {
+        input: JSON.stringify(modules),
+      });
+      this.emitFile({
+        type: "asset",
+        fileName: "THIRD_PARTY_NOTICES.txt.gz",
+        source: gzipSync(readFileSync(noticesFile), { level: 9 }),
+      });
+    },
+  };
+}
+
 export default defineConfig({
   cacheDir: path.join(
     process.env.BUTLER_DATA || path.join(homedir(), ".butler"), "cache", "vite",
     createHash("sha256").update(srcRoot).digest("hex").slice(0, 12),
   ),
   base: "./",
-  plugins: [hugeiconsPureAnnotationPatch(), react(), fontLicenseNotices()],
+  plugins: [hugeiconsPureAnnotationPatch(), react(), fontLicenseNotices(), thirdPartyNotices()],
   // Font slices stay files so unicode-range fetches them lazily.
   build: { assetsInlineLimit: (file) => (file.endsWith(".woff2") ? false : undefined) },
   resolve: {

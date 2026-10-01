@@ -42,7 +42,8 @@ beforeAll(() => {
 }, 30_000);
 
 function tempProject(): string {
-  return mkdtempSync(join(tmpdir(), "project-ledger-sandy-dogfood-"));
+  // Keep uppercase letters deterministic so case-sensitive storage is exercised.
+  return mkdtempSync(join(tmpdir(), "project-ledger-Sandy-dogfood-"));
 }
 
 function testButlerData(project: string): string {
@@ -50,7 +51,8 @@ function testButlerData(project: string): string {
 }
 
 function tempLedgerRoot(project: string): string {
-  return join(testButlerData(project), "project-ledger", "projects", basename(project));
+  // Init chooses storage from the normalized directory name before writing --id.
+  return join(testButlerData(project), "project-ledger", "projects", basename(project).toLowerCase());
 }
 
 function runTempLedgerJson(project: string, args: string[], input?: string): any {

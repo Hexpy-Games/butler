@@ -62,6 +62,13 @@ impl AuthorityRepository for SqliteAuthorityRepository<'_> {
     fn list_pending(&mut self, owner: &str) -> AuthorityResult<Vec<AuthorityRecord>> {
         query::list_pending(self.db, owner)
     }
+    fn question_history(
+        &mut self,
+        owner: &str,
+        turns: &[String],
+    ) -> AuthorityResult<Vec<AuthorityRecord>> {
+        query::question_history(self.db, owner, turns)
+    }
     fn list_decided(&mut self) -> AuthorityResult<Vec<AuthorityRecord>> {
         query::list_decided(self.db)
     }
@@ -70,6 +77,17 @@ impl AuthorityRepository for SqliteAuthorityRepository<'_> {
     }
     fn decide(&mut self, write: DecisionWrite) -> AuthorityResult<Option<AuthorityRecord>> {
         write::decide(self.db, write)
+    }
+    fn settle_question_followup(&mut self, request_ref: &str) -> AuthorityResult<()> {
+        write::settle_question_followup(self.db, request_ref)
+    }
+    fn record_question_followup(
+        &mut self,
+        request_ref: &str,
+        response: &str,
+        now: &str,
+    ) -> AuthorityResult<()> {
+        write::record_question_followup(self.db, request_ref, response, now)
     }
     fn record_outcome(&mut self, write: OutcomeWrite) -> AuthorityResult<()> {
         write::record_outcome(self.db, &write)

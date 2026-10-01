@@ -89,9 +89,8 @@ jobs:
       - name: Install App client dependencies and build the renderer
         run: |
           set -euo pipefail
-          bun install --frozen-lockfile
-          npm --prefix packages/butler-app/client/electron ci
-          npm --prefix packages/butler-app/client/ui ci
+          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          bun install --frozen-lockfile --ignore-scripts
           npm --prefix packages/butler-app/client/ui run build
 
       # The payload producer accepts this binary and does not rebuild the agent.

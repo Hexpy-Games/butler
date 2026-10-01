@@ -126,7 +126,8 @@ pub async fn load_guided_turn_work(
             "authority_context_missing",
         ));
     }
-    if let Some(execution) = &stored {
+    let stored = stored.filter(|execution| execution.capability != "ask_user");
+    if let Some(execution) = stored.as_ref() {
         if execution.source_session_id != scope.session_id
             || execution.source_turn_id != scope.turn_id
             || execution.workspace_path != workspace_path
@@ -150,7 +151,7 @@ pub async fn load_guided_turn_work(
     } else {
         load_initial_guided_work(service, &scope).await?
     };
-    if let Some(execution) = &stored
+    if let Some(execution) = stored.as_ref()
         && (!initial.bound
             || initial
                 .context
