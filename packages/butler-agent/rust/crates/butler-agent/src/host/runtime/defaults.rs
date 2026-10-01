@@ -32,22 +32,32 @@ pub(super) async fn initialize(
                 ));
             }
         }
-        initialize_language(&root, &app_database)
+        let ui =
+            butler_gateway::gateway::stored_ui_language_readonly(&app_database).map_err(setup)?;
+        initialize_language(&root, ui.as_deref())
     })
     .await
     .map_err(setup)?
 }
 
-fn initialize_language(root: &Path, app_database: &Path) -> Result<String, BtccError> {
+/// Personalization reads may migrate an automatic fallback after UI language selection.
+pub(crate) async fn ensure_reply_language(root: &Path, ui: &str) -> Result<(), BtccError> {
+    let root = root.to_owned();
+    let ui = ui.to_owned();
+    tokio::task::spawn_blocking(move || initialize_language(&root, Some(&ui)).map(|_| ()))
+        .await
+        .map_err(setup)?
+}
+
+fn initialize_language(root: &Path, ui: Option<&str>) -> Result<String, BtccError> {
     let path = root.join("butler.config.json");
     let mut config = configuration::read_json_object(&path).map_err(setup)?;
-    let ui = butler_gateway::gateway::stored_ui_language_readonly(app_database).map_err(setup)?;
-    if let Some(selected) = stable_language(&config, ui.as_deref()) {
+    if let Some(selected) = stable_language(&config, ui) {
         return Ok(selected);
     }
     let _change = configuration::lock_file(&path).map_err(setup)?;
     config = configuration::read_json_object(&path).map_err(setup)?;
-    if let Some(selected) = stable_language(&config, ui.as_deref()) {
+    if let Some(selected) = stable_language(&config, ui) {
         return Ok(selected);
     }
     let user =
@@ -60,12 +70,12 @@ fn initialize_language(root: &Path, app_database: &Path) -> Result<String, BtccE
     // A stored App preference marks an existing install. Its implicit English
     // reply fallback must migrate even if the old installer stored English.
     let existing_korean_ui =
-        ui.as_deref().and_then(language) == Some("ko") && !user.contains_key("responseLanguage");
+        ui.and_then(language) == Some("ko") && !user.contains_key("responseLanguage");
     let (selected, source) = if existing_korean_ui {
         ("ko", "ui")
     } else if let Some(language) = installer {
         (language, "installer")
-    } else if let Some(language) = ui.as_deref().and_then(language) {
+    } else if let Some(language) = ui.and_then(language) {
         (language, "ui")
     } else {
         (os.as_deref().and_then(language).unwrap_or("en"), "fallback")

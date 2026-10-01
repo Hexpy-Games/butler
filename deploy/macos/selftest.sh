@@ -64,7 +64,7 @@ PYTEST
 # Exercise the release DMG path after its original app has been removed.
 root=$(cd "$(dirname "$script")/../.." && pwd)
 export BUTLER_DMG_TEST_APP=$app BUTLER_DMG_TEST_IMAGE=$work/Butler.dmg BUTLER_DMG_TEST_ROOT=$root
-"${BUTLER_BUN:-bun}" -e 'const { createMacDmg } = await import(`${process.env.BUTLER_DMG_TEST_ROOT}/packages/butler-app/scripts/release/package-app-release.ts`); createMacDmg({appBundle: process.env.BUTLER_DMG_TEST_APP, artifactPath: process.env.BUTLER_DMG_TEST_IMAGE});'
+"${BUTLER_BUN:-bun}" -e 'const { createMacDmg } = await import(process.env.BUTLER_DMG_TEST_ROOT + "/packages/butler-app/scripts/release/package-app-release.ts"); createMacDmg({appBundle: process.env.BUTLER_DMG_TEST_APP, artifactPath: process.env.BUTLER_DMG_TEST_IMAGE});'
 chmod -R u+w "$app"
 rm -rf "$app"
 mkdir "$mount"

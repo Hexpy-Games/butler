@@ -133,6 +133,9 @@ impl AppPersonalization {
 
     async fn read_view(&self, locale: &str) -> Result<Value, GatewayApplicationError> {
         self.validate_read_destinations()?;
+        crate::host::runtime::ensure_reply_language(&self.data_root, locale)
+            .await
+            .map_err(GatewayApplicationError::internal_from)?;
         let documents = self
             .profile
             .read_personalization_documents()

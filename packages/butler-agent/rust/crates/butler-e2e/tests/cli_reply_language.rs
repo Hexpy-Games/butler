@@ -13,6 +13,15 @@ fn config_reply_language_set_get_is_explicit_and_validated() -> Result<(), Harne
     butler_e2e::gate!();
     let setup = Setup::new("CLI-REPLY-LANGUAGE")?;
     let launch = Launch::new(&setup.sandbox)?;
+    let output = launch
+        .command()
+        .args(["config", "set", "user.language", "ko", "--json"])
+        .output()?;
+    assert!(output.status.success());
+    let config: Value = serde_json::from_slice(&std::fs::read(
+        setup.sandbox.data.join("butler.config.json"),
+    )?)?;
+    assert_eq!(config["user"], serde_json::json!({"language":"ko"}));
     for language in ["ko", "en"] {
         let output = launch
             .command()

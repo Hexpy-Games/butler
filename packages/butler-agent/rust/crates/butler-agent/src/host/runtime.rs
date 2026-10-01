@@ -3,6 +3,7 @@
 mod boundary;
 mod contracts;
 mod defaults;
+pub(crate) use defaults::ensure_reply_language;
 pub(super) mod environment;
 mod mcp_owner;
 pub(super) mod models;

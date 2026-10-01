@@ -46,6 +46,9 @@ async fn fresh_korean_defaults_and_user_edits_survive_restart() -> Result<(), Ha
             .contains("base_locale: ko")
     );
     assert_eq!(view.data()["response_language"], "ko");
+    let config: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(s.sandbox.data.join("butler.config.json"))?)?;
+    assert_eq!(config["user"]["responseLanguageDefaultSource"], "installer");
     s.gw.patch(
         "/settings",
         json!({"model":model, "reasoning_effort":effort}),
@@ -158,6 +161,8 @@ async fn stored_ui_language_and_explicit_english_are_distinct() -> Result<(), Ha
         s.gw.get("/personalization").await?.data()["response_language"],
         "ko"
     );
+    let persisted: serde_json::Value = serde_json::from_slice(&std::fs::read(&config)?)?;
+    assert_eq!(persisted["user"]["responseLanguageDefaultSource"], "ui");
     butler_e2e::e2e::fixtures::onboarding_complete(&s.sandbox.data)?;
     s.select_model(&s.model).await?;
     let (_, turn) = s.turn("general", &prompt).await?;
@@ -202,6 +207,15 @@ async fn os_locale_is_last_resort_and_defaults_write_once() -> Result<(), Harnes
             expected
         );
         let config = s.sandbox.data.join("butler.config.json");
+        let persisted: serde_json::Value = serde_json::from_slice(&std::fs::read(&config)?)?;
+        assert_eq!(
+            persisted["user"]["responseLanguageDefaultSource"],
+            if installer.is_some() {
+                "installer"
+            } else {
+                "fallback"
+            }
+        );
         let eol = s.sandbox.data.join("eol.md");
         let persona = s.sandbox.data.join("personas/active.md");
         let timestamps = [

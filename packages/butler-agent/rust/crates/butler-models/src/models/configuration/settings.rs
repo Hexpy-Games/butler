@@ -88,20 +88,8 @@ impl ModelConfiguration {
                     "responseLanguageDefaultSource".into(),
                     Value::from("explicit"),
                 );
-            } else if patch.get("language").and_then(Value::as_str) == Some("ko")
-                && (user.get("responseLanguage").is_none()
-                    || (user.get("responseLanguage").and_then(Value::as_str) == Some("en")
-                        && user
-                            .get("responseLanguageDefaultSource")
-                            .and_then(Value::as_str)
-                            == Some("fallback")))
-            {
-                user.insert("responseLanguage".into(), Value::from("ko"));
-                user.insert(
-                    "responseLanguageDefaultSource".into(),
-                    Value::from("installer"),
-                );
             }
+            // Derived defaults are persisted by runtime initialization, not settings patches.
             for (key, value) in patch {
                 user.insert(key, value);
             }
