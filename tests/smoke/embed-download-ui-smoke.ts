@@ -61,6 +61,10 @@ async function runCase(language: "ko" | "en", theme: "light" | "dark", width: nu
     if (next === "failed") {
       assert(!/\d+%|\d+ \/ \d+ MB/u.test(await row.innerText()), "failed has no stale progress");
       assert(await row.getByText(copy.memoryModel.reasons.embed_asset_download_failed, { exact: true }).count() === 1, "localized reason");
+      await page.locator("#first-run-start").focus();
+      await page.keyboard.press("Tab");
+      assert(await row.getByRole("button", { name: copy.memoryModel.retry, exact: true }).evaluate((node) =>
+        node === document.activeElement && getComputedStyle(node).boxShadow !== "none"), "Start then retry with visible keyboard focus");
     }
     await audit(page);
     if (width === 375 || width === 1280) await page.screenshot({ path: `${output}/status-${next}-${language}-${theme}-${width}.png` });

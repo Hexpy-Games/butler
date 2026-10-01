@@ -31,13 +31,15 @@ export function Notice({
     <Stack
       align="row"
       gap="sm"
-      cross="start"
+      cross="center"
       className={dsClass(styles.notice, styles[`tone-${tone}`], className)}
     >
-      {icon && <IconSlot size="md" minHeight="line" className={dsClass(styles.icon)} aria-hidden="true">{icon}</IconSlot>}
-      <Stack gap="xs" className={dsClass(styles.message)}>
-        {title && <Typo.Label as="span" className={dsClass(styles.title)}>{title}</Typo.Label>}
-        <Typo.Body>{message}</Typo.Body>
+      <Stack align="row" cross="start" gap="sm" grow minWidth="0">
+        {icon && <IconSlot size="md" minHeight="line" className={dsClass(styles.icon)} aria-hidden="true">{icon}</IconSlot>}
+        <Stack gap="xs" className={dsClass(styles.message)}>
+          {title && <Typo.Label as="span" className={dsClass(styles.title)}>{title}</Typo.Label>}
+          <Typo.Body>{message}</Typo.Body>
+        </Stack>
       </Stack>
       {action && <div className={styles.action}>{action}</div>}
     </Stack>

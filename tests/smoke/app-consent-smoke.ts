@@ -54,7 +54,12 @@ async function verifyWelcome(page: Page, copy: typeof firstRunCopy.en) {
   const label = page.locator('label[for="first-run-language"]');
   const original = await label.innerText();
   await label.evaluate((node) => { node.textContent = "L".repeat(40); });
-  const above = await label.evaluate((node) => node.getBoundingClientRect().bottom <= document.querySelector("#first-run-language")!.getBoundingClientRect().top);
+  const above = await label.evaluate((node) => {
+    const labelBox = node.getBoundingClientRect();
+    const controlBox = document.querySelector("#first-run-language")!.getBoundingClientRect();
+    return labelBox.bottom <= controlBox.top && labelBox.left >= controlBox.left - 1
+      && labelBox.right <= controlBox.right + 1 && node.scrollWidth <= node.clientWidth;
+  });
   assert(above, "40-character language label stays above control");
   await assertFirstRunLayout(page);
   await label.evaluate((node, text) => { node.textContent = text; }, original);

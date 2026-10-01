@@ -59,6 +59,12 @@ export const stories: ShowcaseStory[] = [
     ),
   },
   {
+    name: "Single-line with icon and action",
+    widths: ["375", "app"],
+    render: (context) => <Notice tone="info" icon={<AlertCircle size="md" />} message={text(context).saved}
+      action={<Button variant="outline" text={text(context).retry} />} />,
+  },
+  {
     name: "Multi-line warning (first-line icon)",
     widths: ["320", "375", "app"],
     render: (context) => <Notice tone="warning" icon={<CircleAlert size="md" />} message={text(context).missingHelp} />,
