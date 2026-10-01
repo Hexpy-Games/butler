@@ -82,8 +82,11 @@ Reference translation: `en/getting-started/install.mdx` against
 
 Prose terms. When the word is a label on screen, the bold form in
 `english-ui-labels.md` wins, even where `en.ts` is not consistent with the
-prose term (for example, the sidebar button is **New chat** while prose says
-"conversation").
+prose term (for example, the sidebar section is **Chats** while prose says
+"conversations"). A key that exists in `en.ts` is not proof the app shows
+it: `sidebar.newChat` ("New chat") is unused, and the sidebar button is
+**New conversation**. When two strings fit, check which one the component
+renders.
 
 | Korean | English | Note |
 | --- | --- | --- |
@@ -91,7 +94,7 @@ prose term (for example, the sidebar button is **New chat** while prose says
 | 앱 | the app | Lowercase. "Butler app" where the Korean says Butler 앱 |
 | Agent, Butler Agent | the Agent, Butler Agent | Capitalized, as the Korean pages write it |
 | Worker | Worker | Capitalized. Tab label: **Workers** |
-| 대화 | conversation | Labels vary: **New chat**, **Chats** (sidebar), **New conversation** (space), **Target chat**. Use the exact label in bold and "conversation" in prose |
+| 대화 | conversation | Labels vary: **New conversation** (the sidebar and space button), **Chats** (sidebar section), **Target chat**, **Project chats**. Use the exact label in bold and "conversation" in prose |
 | 컴포저 | composer | The message box. Label: **Message composer** |
 | 사이드바 | sidebar | **Sidebar**, **Show sidebar**, **Hide sidebar** |
 | 스페이스 | space | Label: **Space**. Lowercase in prose |
@@ -99,6 +102,7 @@ prose term (for example, the sidebar button is **New chat** while prose says
 | 아카이브 | archive | **Archive** in a space, **Archives** in Settings, **Archive** (보관하기), **Unarchive** (아카이브 취소) |
 | 프로젝트 | project | **Projects**, **New project**, **Project dashboard**, **Project chats** |
 | 예약 작업 | schedule, schedules | **Schedules** (section, tab), **Schedule** (palette kind), **New schedule**, **Runs** (실행 기록), **Run now**. Never "automation" or "scheduled task" |
+| 주기 | frequency | **Frequency**: **Interval**, **Daily**, **Weekdays**, **Weekly**; **Time**, **Day**. State: **On**, **Off**. Shown as `Every 30 minutes`, `Every day at 8:00 AM`, `Next: …` |
 | 명령 팔레트 | command palette | Label: **Command palette** |
 | 오른쪽 패널 | right panel | **Show right panel**, **Hide right panel**. Tabs: **Summary**, **Activity**, **Context**, **Artifacts**, **Schedules**, **Workers** |
 | 아티팩트 | artifact | **Artifacts** |
@@ -111,6 +115,7 @@ prose term (for example, the sidebar button is **New chat** while prose says
 | 클라우드 모델 | cloud model | Page title: Cloud models |
 | Custom 모델 | Custom model | **Custom**, capitalized |
 | 예비 모델 | backup model | **Backup models**, **Use backup models**, **Add backup model**. Not "fallback" or "secondary" |
+| 사용 안 함 | | **Not in use** for a saved API key no model uses; **Off** for backup models that are turned off |
 | 이 컴퓨터의 모델 | **Models on this computer** | |
 | 추론 | reasoning | **Reasoning**, **Reasoning effort** |
 | 컨텍스트 | context | **Context**, **Context window** |
@@ -121,19 +126,21 @@ prose term (for example, the sidebar button is **New chat** while prose says
 | MCP 서버 | MCP server | **MCP servers**, **Add MCP server** |
 | 개인화 | personalization | **Personalization**; **Profile**, **Response style**, **Persona**, **Learning** |
 | 인터페이스 언어 | interface language | **Interface language** |
-| 답변 언어 | response language | **Response language** |
+| 답변 언어 | response language | **Response language** in Settings. The first-run screen shows **Reply language** and **Start** (written in the component, not in `en.ts`); use "reply language" in prose on that page |
+| 메모리 모델 | memory model | **Memory model**; **Downloading memory model**, **Verifying memory model** |
+| 월페이퍼 | wallpaper | **Wallpaper**, **Motion**, **Pause on battery** |
 | 첫 실행 | first run | "first-run setup" as a modifier |
 | 원격 접근, 원격 접속 | remote access | **Remote access** |
 | 다른 컴퓨터에서 접속 허용 | **Allow access from other computers** | |
-| 연결 코드 | connection code | As in **Settings → Security** ("…enter the connection code to connect."). Not "pairing code" |
-| 기기 연결 | **Pair device** | **Paired devices** (연결된 기기), **Disconnect** (연결 끊기) |
+| 연결 코드, 코드 | code, connection code | The 8-digit one-time code. Settings says "connection code" in its descriptions and labels the field **Code**; the browser's connect form says "Connection code". Call it "the code" once the context is clear. `en.ts` says "pairing code" in one error message and the CLI prints `Pairing code:`; quote those only when you cite that exact text |
+| 기기 연결 | pair a device | **Pair device** (section and button), **Device paired**, **Paired devices** (연결된 기기), **Disconnect** (연결 끊기), **Disconnect all** (모두 끊기). Verb in prose: pair; CLI: revoke |
 | 접속 주소 | **Addresses** | **Copy address** |
 | 허용 호스트 | allowed hosts | **Allowed hosts**, **Host names** |
 | 데이터 폴더 | data folder | `~/.butler` |
 | 백그라운드 서비스 | background service | |
 | 개발자 모드 | developer mode | **Developer mode** |
 | 진단 | diagnostics | **Diagnostics** |
-| 기억 정리 | memory cleanup | **Memory cleanup**; system events say **Conversation memory consolidation** |
+| 기억 정리 | memory cleanup | **Memory cleanup** is the Settings area. The system events are **Conversation memory consolidation** and **Regular memory consolidation**; in prose about those events write "memory consolidation", "regular memory consolidation" |
 | 설정 | Settings | Capitalized when it names the screen: "Open **Settings → Models**" |
 | 설정 섹션 | | **General**, **Models**, **Appearance**, **Server**, **Updates**, **MCP**, **Skills**, **Usage**, **Logs**, **Personalization**, **Privacy**, **Security**, **System events**, **Archives**, **About** |
 | 프리뷰 | preview | "preview build", "preview release"; **Receive preview versions** |
@@ -209,30 +216,31 @@ Escape hatch for a verbatim quote, with a reason, as in the Korean lint:
 `src/site/links.test.ts` runs in `bun run site:check`:
 
 - Internal links in English pages are `/en/help/<slug>/` and must resolve,
-  anchors included. While English is in progress, a link to a page that is
-  published in Korean but not yet in English is allowed.
+  anchors included.
 - Every English page has a Korean page with the same slug, `section` and
   `order`.
-- **Translation report.** For each published Korean page it lists the English
-  page as missing or planned, or lists where its heading outline, component
-  counts, code blocks, internal links or external URLs differ from the Korean
-  page. It prints as a to-do list until `"en"` is added to `COMPLETE_LOCALES`
-  in `src/site/sections.ts`; from then on any line fails the check. A page is
-  done when it has no line in the report.
+- **Translation parity.** `"en"` is in `COMPLETE_LOCALES`
+  (`src/site/sections.ts`), so the check fails when a published Korean page
+  has no published English page, or when the English page's heading outline,
+  component counts, code blocks, internal links, anchors or external URLs
+  differ from the Korean page. Anchors are compared by the position of the
+  heading they point at: a link that drops its `#anchor`, or points at
+  another section than the Korean link does, fails. Change the Korean and
+  the English page in the same change.
 
 ## Workflow
 
-1. Open `ko/<slug>.mdx` and `en/<slug>.mdx` (a stub with frontmatter).
+1. Open `ko/<slug>.mdx` and `en/<slug>.mdx` side by side. For a new Korean
+   page, create the English file with the same slug, `section` and `order`.
 2. Translate section by section, keeping every tag, prop, list and code
    block in place. Look up each bold label; do not guess.
-3. Rewrite links to `/en/help/…` and fix anchors to the English headings of
-   the target page. If the target is not translated yet, agree its heading
-   text with whoever translates it, or link the page without an anchor and
-   add the anchor later.
+3. Rewrite links to `/en/help/…` and set each anchor to the English heading
+   id of the same section on the target page. Do not guess an anchor: open
+   the target page and read its heading.
 4. Set `status: published`.
-5. Run `bun run site:check`. The page must have no line in the translation
-   report, and `bun run --cwd packages/butler-site labels` must list no bold
-   label of yours except OS or third-party labels.
+5. Run `bun run site:check`. The parity test must pass, and
+   `bun run --cwd packages/butler-site labels` must list no bold label of
+   yours except OS labels, provider names and count templates.
 6. Run `bun run site:build` and read the page at `/en/help/<slug>/`, at
    desktop width and at 375 px.
 

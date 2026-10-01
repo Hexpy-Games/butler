@@ -7,9 +7,10 @@ export const DEFAULT_LOCALE: Locale = "ko";
  * Locales that must mirror every published page of the default locale. While
  * a locale is not listed, the content test (links.test.ts) prints its missing
  * and out-of-shape pages as a report; listing it turns that report into a
- * failure. Add "en" once the English manual is complete.
+ * failure. The English manual is complete: a new or changed Korean page
+ * needs its English page in the same change.
  */
-export const COMPLETE_LOCALES: readonly Locale[] = [];
+export const COMPLETE_LOCALES: readonly Locale[] = ["en"];
 
 export const SECTIONS = [
   { id: "getting-started", title: { ko: "시작하기", en: "Getting started" } },

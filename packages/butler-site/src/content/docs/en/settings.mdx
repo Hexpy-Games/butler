@@ -42,7 +42,9 @@ Set the defaults for language, time zone, conversation input, notifications and 
 | | **AI message notifications** | Notifies you when a new reply arrives. The notification shows only a safe preview. |
 | | **Task completion notifications** | Notifies you when a task completes, fails or is canceled. |
 | **Notification permission** | **OS notification status** | The operating system's notification permission status. Click **Test** to send a test notification. Where the operating system's notification settings can be opened, a button that opens them also appears. |
+| **Memory model** | Preparation status | The status of the memory model that Butler's memory features use. When it is ready, **Ready** appears. If the download failed, click **Retry** to download it again. See [First run](/en/help/getting-started/first-run/#memory-model). |
 | **App behavior** | **Show in tray and menu bar** | When on, the app stays in the tray or menu bar after you close the window, and you can open a new conversation or a recent one from its menu. |
+| | **Start at login** | When on, Butler opens when you log in to the computer. Shown only in the desktop app. |
 | | **Run setup again** | Click **Run again** to go through the welcome screen and the AI connection again. Your registered models and conversations stay as they are. See [First run](/en/help/getting-started/first-run/#run-setup-again). |
 | **Search provider** | **Search provider** | Where web search results come from. Choose **DuckDuckGo HTML**, **Auto**, **Brave Search**, **Tavily**, **OpenAI Web Search**, **Codex subscription search** or **Disabled**. If a provider needs a key and has none, Butler falls back to the default search. |
 | | **API key** | Appears when you choose a provider that needs a key. Enter the key and click **Save**. It is stored as a secret and is not shown again. |
@@ -56,12 +58,12 @@ Set the app's theme and how the screen is displayed.
 
 | Area | Item | Description |
 | --- | --- | --- |
-| **Theme** | **Theme** | Choose **System**, **Light** or **Dark**. |
+| **Theme** | **Theme** | Choose **System**, **Light** or **Dark**. You cannot change it while a real-time wallpaper sets the brightness. |
 | | **Translucent sidebar** | Shows the sidebar semi-transparent. |
 | **Sidebar** | **Smart groups** | Sorts new conversations into groups by topic automatically. Conversations you moved yourself stay where they are. |
-| **Home screen** | **Home screen theme** | The background of the first screen of a new conversation. Choose **None**, **Bloom** or **Silk**. |
-| | **Background colors** | Shown when the home screen theme is **Bloom**. Choose **Monochrome**, **Aurora**, **Bloom**, **Lavender**, **Morning** or **Custom**. |
-| | **Custom colors** | Shown when the background colors are set to **Custom**. Choose each background color one by one. |
+| **Home screen** | **Wallpaper** | The background of the new chat screen. Choose a wallpaper from the list, or choose **None**. Click **Add image** to upload a JPEG, PNG or WebP image of up to 25 MB and use it as the background. |
+| | **Motion** | Shown when a wallpaper is chosen. When on, the background moves slowly. |
+| | **Pause on battery** | Shown when **Motion** is on. When on, the motion stops while the computer is unplugged. |
 
 ## Personalization
 
@@ -111,16 +113,17 @@ On a new Butler installation, **Access** defaults to **Ask first**. A Butler you
 
 ## Updates
 
-Check for a new version of Butler and download it.
+Check for a new version of Butler and install it.
 
 | Item | Description |
 | --- | --- |
+| **Receive preview versions** | When on, you also get versions before their stable release as updates. It is off at first. |
 | **Check** | Checks whether a new version is available. It shows **Checking** while it checks. |
 | **Butler App** | Shows the current version and the version of Butler Agent included in the app. When a new version is available, it shows `current version -> new version`. |
-| **Update** | Click it when a new version is available. It downloads the new version's DMG, verifies the checksum, then opens it. It shows **Applying** while it works. When there is no new version, it shows **Up to date** and cannot be clicked. |
+| **Update** | Click it when a new version is available. It downloads the new version, verifies the checksum, replaces the app and the Butler Agent included in it, then opens Butler again. It shows **Applying** while it works. When there is no new version, it shows **Up to date** and cannot be clicked. |
 
-<Notice tone="info" title="On macOS, install it yourself">
-  **Update** does not install the new version automatically. Quit Butler, then drag `Butler.app` from the opened DMG into the Applications folder to replace the existing app.
+<Notice tone="info" title="Your data stays">
+  An update replaces only the app and leaves the data folder alone. On Linux, an app installed from the DEB package asks for administrator authentication when it applies an update.
 </Notice>
 
 ## Usage
@@ -153,13 +156,14 @@ Set whether diagnostic information is collected.
 
 ## Security
 
-Manage access from other devices and the connection code. This section works only on the host computer. If you open it from another computer, **Available only on the host computer.** appears. To connect, see [Remote access](/en/help/advanced/remote-access/).
+Manage access from other devices and the connection code. This section works only on the host computer. If you open it from another computer, **Available only on the host computer.** appears. For the pairing steps, see [Remote access](/en/help/advanced/remote-access/#pair-a-device-in-the-app).
 
 | Area | Item | Description |
 | --- | --- | --- |
 | **Remote access** | **Allow access from other computers** | When on, devices on the same network connect by entering the connection code. It is off at first. |
 | | **Addresses** | Appears when access is allowed. These are the addresses to open on another computer. Click **Copy address** to copy one. |
-| **Connection code** | **Code** | The masked connection code and the date it was issued. Use **Show**, **Copy** and **Regenerate**. Regenerating the code disconnects the other computers. |
+| **Pair device** | **Code** | Appears when access is allowed. Click **Pair device** to show an 8-digit code and the time left. A code works once, within 60 seconds, and a new one is issued when it expires. |
+| **Paired devices** | Device list | Appears when access is allowed. Shows each paired device's name, IP address and last-seen time. Click **Disconnect** to disconnect one device, or **Disconnect all** to disconnect every device. When no device is paired, **No paired devices** appears. |
 | **Advanced** | **Allowed hosts for tunnels and proxies** | Click it to expand **Allowed hosts**. Enter the name a tunnel or proxy uses in **Host names** and click **Add**. |
 
 ## System events

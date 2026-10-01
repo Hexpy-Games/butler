@@ -20,10 +20,10 @@ Butler Agent CLI is a command-line tool that installs and runs the Butler runtim
 
 ## Install
 
-To use Butler without the app, for example on a server or a remote PC, run the one-line install script.
+To use Butler without the app, for example on a server or a remote PC, run the one-line install script. The current version is the `0.1.0-preview.4` preview, so download the script from the preview release and pass the same version with `--version`.
 
 ```bash
-curl -fsSL https://github.com/Hexpy-Games/butler/releases/latest/download/install.sh | sh
+curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/install.sh | sh -s -- --version 0.1.0-preview.4
 ```
 
 If you have Node.js, you can run the same installation with npx.
@@ -46,7 +46,7 @@ It is safe to run the same command again. A version that is already installed is
 Add options after `sh -s --` (with npx, after `install`).
 
 ```bash
-curl -fsSL https://github.com/Hexpy-Games/butler/releases/latest/download/install.sh | sh -s -- --version X.Y.Z --no-start
+curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/install.sh | sh -s -- --version 0.1.0-preview.4 --no-start
 ```
 
 | Option | Description |
@@ -72,17 +72,18 @@ If you cannot use the install script, extract the archive yourself. The archive 
 
 <Steps>
   1. On [GitHub Releases](https://github.com/Hexpy-Games/butler/releases), find a version that has the native Agent archive.
-  2. Save the script below to a file (for example, `install-butler-agent.sh`) and change `VERSION` and `PLATFORM`.
-  3. Run it with `bash install-butler-agent.sh`. It downloads the archive and `butler-<version>-SHA256SUMS`, verifies the checksum, then extracts the archive into a new version folder.
+  2. Save the script below to a file (for example, `install-butler-agent.sh`) and change `VERSION`, `RELEASE` and `PLATFORM`.
+  3. Run it with `bash install-butler-agent.sh`. It downloads the archive and `butler-<release>-SHA256SUMS`, verifies the checksum, then extracts the archive into a new version folder.
   4. The installation is complete when the final `version` and `doctor` commands finish without errors.
 </Steps>
 
 ```bash
 set -euo pipefail
-VERSION=X.Y.Z # Replace with a release version that has the native Agent archive.
+VERSION=X.Y.Z # The Agent archive version. For a preview release, leave out "-preview.N" (for example, 0.1.0).
+RELEASE=X.Y.Z # The release tag without the "v" (for example, 0.1.0-preview.4). Same as VERSION for a stable release.
 PLATFORM=darwin-arm64 # One of darwin-arm64, linux-x64 or linux-arm64.
 ARCHIVE="butler-agent-${VERSION}-${PLATFORM}.tar.gz"
-RELEASE_URL="https://github.com/Hexpy-Games/butler/releases/download/v${VERSION}"
+RELEASE_URL="https://github.com/Hexpy-Games/butler/releases/download/v${RELEASE}"
 DOWNLOAD_DIR="$HOME/Downloads/butler-agent-${VERSION}"
 INSTALL_ROOT="$HOME/.local/opt/butler-agent"
 INSTALL_DIR="$INSTALL_ROOT/$VERSION"
@@ -91,7 +92,7 @@ export BUTLER_DATA="${BUTLER_DATA:-$HOME/.butler}"
 mkdir -p "$DOWNLOAD_DIR" "$INSTALL_ROOT" "$BUTLER_DATA"
 cd "$DOWNLOAD_DIR"
 curl -fL --retry 3 -o "$ARCHIVE" "$RELEASE_URL/$ARCHIVE"
-SUMS="butler-${VERSION}-SHA256SUMS"
+SUMS="butler-${RELEASE}-SHA256SUMS"
 curl -fL --retry 3 -o "$SUMS" "$RELEASE_URL/$SUMS"
 EXPECTED_SHA256="$(awk -v name="$ARCHIVE" '$2 == name { print $1 }' "$SUMS")"
 test "${#EXPECTED_SHA256}" -eq 64
@@ -129,7 +130,7 @@ Run `butler --help` or `butler help schedule` for help in Korean and English. `b
 | --- | --- |
 | `install --from ARCHIVE\|URL` | Installs a downloaded archive. For a first install, use the npx route above. |
 | `start`, `stop`, `restart` | Starts, stops or restarts the service. |
-| `remote status`, `remote enable`, `remote disable`, `remote code`, `remote hosts add\|remove HOST` | Manage remote access |
+| `remote status`, `remote enable`, `remote disable`, `remote pair`, `remote devices`, `remote hosts add\|remove HOST` | Manage remote access |
 | `status`, `open`, `doctor` | Check status, open the browser, check the installation |
 | `update --check`, `update --apply --yes` | Check for and install updates |
 | `rollback`, `uninstall --yes` | Restore the previous version, uninstall |
@@ -161,20 +162,21 @@ Manage personalization and memory in the app. The CLI has no maintenance command
 
 ## Headless / WSL / server
 
-In a terminal on the computer that runs the service, turn on remote access, then read the pairing code. Remote access is off by default.
+In a terminal on the computer that runs the service, turn on remote access, then pair a device. Remote access is off by default.
 
 ```bash
 butler start
 butler remote enable
-butler remote code
+butler remote pair
 ```
 
-On another computer, open `http://HOST:PORT` and enter the code. `HOST` is the address that reaches the server or WSL, and `PORT` is the port of the LAN URL that `remote enable` prints. The pairing code is printed only in the local terminal. Keep the code private and do not save it in logs.
+On another computer, open `http://HOST:PORT` and enter the 8-digit code that `remote pair` shows. `HOST` is the address that reaches the server or WSL, and `PORT` is the port of the LAN URL that `remote enable` prints. A code works once, within 60 seconds, and is printed only in the local terminal. Keep the code private and do not save it in logs.
 
 ```bash
 butler remote status --json
-butler remote code --rotate         # Issue after confirmation; invalidates the old code
-butler remote code --rotate --yes   # Skip the confirmation
+butler remote devices                      # List paired devices
+butler remote devices --revoke DEVICE_ID   # Revoke one device
+butler remote devices --revoke-all         # Revoke every device
 butler remote hosts add 192.0.2.10
 butler remote hosts remove 192.0.2.10
 butler remote disable
@@ -182,7 +184,7 @@ butler remote disable
 
 If WSL port forwarding or a proxy presents a different host, add that name or IP to `allowedHosts`. For example, if you forward through the Windows host IP, run `butler remote hosts add WINDOWS_IP`. Set up port forwarding and the firewall separately. If the service is off, the commands tell you to run `butler start` and do not start it for you.
 
-`remote status` shows the bind addresses, LAN URLs, bind errors for each address, allowed hosts, the masked code and its creation date. `code --json` includes the full code, so use it only on the local computer. Rotating the code invalidates the old code and the browser sessions.
+`remote status` shows whether remote access is on, the bind addresses, LAN URLs, bind errors for each address and allowed hosts. It does not show a code. `remote pair` runs until a device pairs or you press Ctrl-C, and issues a new code when the code expires. A device revoked with `remote devices` has to pair again. `remote code --rotate` and `remote code --json` no longer work. For the pairing steps, see [Remote access](/en/help/advanced/remote-access/).
 
 Currently `butler config get app.port` cannot read the App port. The setting is `config.port` in `gateways/app.json` in the data folder, and a change applies after a restart. Stop the running service before you edit the configuration file.
 

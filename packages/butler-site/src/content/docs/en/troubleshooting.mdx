@@ -46,7 +46,7 @@ The copied diagnostic information is JSON. `checks` lists the items the app chec
 
 `readiness` holds the steps the Agent prepares itself (`data_folder`, `model_config`, `agent_runtime`). A failed step carries an error `code` and a description in English (`detail`).
 
-If a `code` in `errors` is `bundled_agent_version_missing`, the app could not read the Agent version from the app package. Download the latest DMG that includes the native Agent from [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) and reinstall the app.
+If a `code` in `errors` is `bundled_agent_version_missing`, the app could not read the Agent version from the app package. Download the latest installer that includes the native Agent from [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) and reinstall the app.
 
 <Notice tone="info">
   The diagnostic information masks tokens, secrets and user paths, and leaves out stack traces and raw standard output.
@@ -101,13 +101,13 @@ If **Git is not installed** appears in the composer, you can keep using Butler, 
 
 ## Update problems
 
-On macOS, app updates are not installed automatically. Download the new version's DMG and install it yourself.
+Check for and install app updates in **Settings → Updates**. An update replaces only the app and leaves the data folder alone.
 
 <Steps>
   1. In **Settings → Updates**, click **Check**.
-  2. If a new version is available, the **Butler App** item shows the current version and the new version. Click **Update** to download the new version's DMG and open it.
-  3. Quit Butler, then drag `Butler.app` from the opened DMG into the Applications folder to replace the existing app.
-  4. If **Failed to check updates** or **Failed to apply update** keeps appearing, download the latest DMG from [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) and [reinstall](#app).
+  2. If a new version is available, the **Butler App** item shows the current version and the new version. Click **Update** to download and install the new version and open Butler again.
+  3. If no new version appears and you want a preview version, turn on **Receive preview versions** and click **Check** again.
+  4. If **Failed to check updates** or **Failed to apply update** keeps appearing, download the latest installer from [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) and [reinstall](#app).
 </Steps>
 
 Below the **Butler App** item, the version of the Agent included in the app is also shown (`Butler Agent <version>`).
@@ -180,6 +180,8 @@ These are common errors and how to fix them.
   3. Open the DMG and drag `Butler.app` into the Applications folder to replace the existing app.
 </Steps>
 
+On Linux, download the latest DEB or Arch package and install it again with the commands in [Install](/en/help/getting-started/install/#download).
+
 Conversations, memory and Agent settings are stored in the data folder (`~/.butler`), outside the app, so they remain after you reinstall the app.
 
 ### Standalone Agent
@@ -228,11 +230,15 @@ A Butler you have used since an earlier version keeps **Full access** if you hav
 
 ### I allowed access, but no address is shown.
 
-If you turned on **Allow access from other computers** in **Settings → Security** and **No network address** appears, first check that this computer is connected to a network. If the port is in use, the address may not appear. In that case, quit the other program that uses the port, then turn **Allow access from other computers** off and on again. This problem is tracked in [#312](https://github.com/Hexpy-Games/butler/issues/312). To connect, see [Remote access](/en/help/advanced/remote-access/).
+If you turned on **Allow access from other computers** in **Settings → Security** and **No network address** appears, first check that this computer is connected to a network. If the port is in use, the address may not appear. In that case, quit the other program that uses the port, then turn **Allow access from other computers** off and on again. This problem is tracked in [#312](https://github.com/Hexpy-Games/butler/issues/312). For the pairing steps, see [Remote access](/en/help/advanced/remote-access/).
+
+### The other computer does not connect when I enter the code.
+
+A code works once, within 60 seconds, and three wrong entries invalidate it. Enter the code that **Pair device** in **Settings → Security** shows now. If no code is shown, click **Pair device** to issue a new one. Without the app, use the code that `butler remote pair` shows. The long connection token of earlier versions and `butler remote code --rotate` no longer work. A device you disconnected has to pair again with a new code.
 
 ### Can I use Butler on Windows or Linux?
 
-The current release is packaged and verified only for Apple silicon Macs. Native Agent bundles for Windows and Linux are not supported yet.
+You can use it on Linux. Preview releases provide a DMG for Apple silicon Macs, DEB packages for Linux (x64, arm64) and an Arch package (x64). There is no Windows installer or native Agent bundle for Windows yet. To install, see [Install](/en/help/getting-started/install/).
 
 ### I installed an earlier version and preparation keeps failing.
 

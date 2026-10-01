@@ -19,7 +19,10 @@ Korean (`ko/`) is the source language; this file is its style guide. English
 pages (`en/`) are translations with the same slugs, served at `/en/help/`.
 Before you write or edit an English page, read
 **`references/english.md`**: voice, the Korean → English glossary, link and
-structure rules, the English lint and the translation report. Every bold
+structure rules, the English lint and the parity test. The English manual
+is complete, so every change to a Korean page changes its English page in
+the same commit: `bun run site:check` fails when the two differ in outline,
+components, code blocks, links or anchors. Every bold
 label comes from `packages/butler-i18n/src/locales/en.ts`;
 `references/english-ui-labels.md` maps each Korean label in the manual to
 it. Of the rules below, exact bold labels, untouched code and paths, unchanged

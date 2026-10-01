@@ -189,8 +189,26 @@ const COMPONENT_TAG = /<(Steps|Notice|Tabs|TabPanel|CardGrid|DocCard|Kbd)\b/gu;
 /** ASCII URL characters only, so a particle glued to a URL (https://example.com을) is not part of it. */
 const EXTERNAL_URL = /https?:\/\/[A-Za-z0-9\-._~:/?#@!$&*+,;=%]+/gu;
 
+/**
+ * Anchored links as "<slug> heading <n>": the position of the linked heading
+ * in its page. Heading text is translated, so positions are what two locales
+ * can compare; "heading 0" is an anchor that matches no heading.
+ */
+function anchorTargets(doc: DocSource, locale: Locale, pages: Map<string, DocSource>): string[] {
+  const prefix = docsRoot("/", locale);
+  return docLinks(doc.source, locale).flatMap(({ target }) => {
+    const [path, anchor] = target.split("#", 2) as [string, string | undefined];
+    if (anchor === undefined) return [];
+    const slug = path === "" ? docSlug(doc.id) : path.startsWith(prefix) ? path.slice(prefix.length).replace(/\/$/u, "") : path;
+    const page = pages.get(slug);
+    const position = page ? [...headingIds(page.source)].indexOf(decodeURIComponent(anchor)) + 1 : 0;
+    return [`${slug} heading ${position}`];
+  });
+}
+
 /** What a translation keeps from its source: outline, components, code blocks and link targets. */
-function pageShape(source: string, locale: Locale) {
+function pageShape(doc: DocSource, locale: Locale, pages: Map<string, DocSource>) {
+  const { source } = doc;
   const lines = source.split("\n");
   const body = lines.slice(frontmatterEnd(lines));
   const prose = proseLines(source);
@@ -209,6 +227,7 @@ function pageShape(source: string, locale: Locale) {
       const path = target.split("#", 1)[0];
       return path === "" ? [] : [path.startsWith(prefix) ? path.slice(prefix.length).replace(/\/$/u, "") : path];
     })),
+    anchors: unique(anchorTargets(doc, locale, pages)),
     urls: unique(body.flatMap((line) => line.match(EXTERNAL_URL) ?? []).map((url) => url.replace(/[.,;:!?]+$/u, ""))),
   };
 }
@@ -223,24 +242,27 @@ function listDifference(mine: string[], theirs: string[]): string {
 /**
  * What a locale still lacks against the default locale: published pages that
  * are missing or planned, and published translations whose heading outline,
- * components, code blocks or link targets differ from their source. Reported
+ * components, code blocks or link targets differ from their source. Anchors
+ * are compared by the position of the heading they point at, so a link that
+ * drops its #anchor, or points at another section, is reported. Reported
  * while the locale is in progress; a failure once it is in COMPLETE_LOCALES.
  */
 export function translationGaps(docs: DocSource[], locale: Locale): string[] {
   const translated = localeDocs(docs, locale);
+  const sources = localeDocs(docs, DEFAULT_LOCALE);
   const gaps: string[] = [];
-  for (const [slug, source] of [...localeDocs(docs, DEFAULT_LOCALE)].sort(([a], [b]) => a.localeCompare(b))) {
+  for (const [slug, source] of [...sources].sort(([a], [b]) => a.localeCompare(b))) {
     if (!isPublished(source)) continue;
     const doc = translated.get(slug);
     if (!doc || !isPublished(doc)) {
       gaps.push(`${locale}/${slug}: ${doc ? "planned, not translated yet" : "missing"}`);
       continue;
     }
-    const [mine, theirs] = [pageShape(doc.source, locale), pageShape(source.source, DEFAULT_LOCALE)];
+    const [mine, theirs] = [pageShape(doc, locale, translated), pageShape(source, DEFAULT_LOCALE, sources)];
     for (const key of ["outline", "components"] as const) {
       if (mine[key] !== theirs[key]) gaps.push(`${doc.id}: ${key} differ from ${source.id} (${locale}: ${mine[key] || "none"} | ${DEFAULT_LOCALE}: ${theirs[key] || "none"})`);
     }
-    for (const key of ["links", "urls"] as const) {
+    for (const key of ["links", "anchors", "urls"] as const) {
       const difference = listDifference(mine[key], theirs[key]);
       if (difference) gaps.push(`${doc.id}: ${key} differ from ${source.id} (${difference})`);
     }

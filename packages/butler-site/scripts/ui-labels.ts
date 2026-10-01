@@ -13,6 +13,7 @@
  *
  * Function-valued copy (templates with a count or a name) is rendered with
  * {0}, {1}, {2} placeholders; a label written with N or a number matches it.
+ * It is also rendered for the counts 0, 1 and 2, whose wording can differ.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -27,12 +28,17 @@ type Copy = Map<string, string>;
 function flatten(value: unknown, key: string, out: Copy): Copy {
   if (typeof value === "string") out.set(key, value);
   else if (typeof value === "function") {
-    try {
-      const rendered = (value as (...args: string[]) => unknown)("{0}", "{1}", "{2}");
-      if (typeof rendered === "string") out.set(`${key}()`, rendered);
-    } catch {
-      // A template that needs structured arguments: not a plain label.
-    }
+    const render = (name: string, ...args: Array<string | number>) => {
+      try {
+        const rendered = (value as (...args: Array<string | number>) => unknown)(...args);
+        if (typeof rendered === "string") out.set(name, rendered);
+      } catch {
+        // A template that needs structured arguments: not a plain label.
+      }
+    };
+    render(`${key}()`, "{0}", "{1}", "{2}");
+    // Count templates word small counts differently ("Not in use", "1 model", "2 models").
+    for (const count of [0, 1, 2]) render(`${key}(${count})`, count, count, count);
   } else if (Array.isArray(value)) value.forEach((item, index) => flatten(item, `${key}[${index}]`, out));
   else if (value && typeof value === "object") {
     for (const [name, item] of Object.entries(value)) flatten(item, key ? `${key}.${name}` : name, out);

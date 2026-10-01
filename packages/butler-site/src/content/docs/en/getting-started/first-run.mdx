@@ -15,7 +15,8 @@ The first time you open Butler, first-run setup appears instead of the main scre
   2. Read the consent screen and click **Agree and start**.
   3. On the **Which AI should Butler use?** screen, choose an AI.
   4. Sign in or paste an API key to connect to the AI you chose.
-  5. When the connection finishes, the new conversation screen opens.
+  5. When the connection finishes, choose the **Reply language** and click **Start**.
+  6. The new conversation screen opens.
 </Steps>
 
 Meanwhile, Butler gets ready in the background. You can move on to the next screen without waiting for it to finish.
@@ -62,7 +63,15 @@ If Butler cannot get ready, the reason it stopped appears under the **Butler cou
 - **Copy info for a bug report** — Copies the result of each preparation step and the error details to the clipboard. Paste them when you report a problem.
 - **Quit** — Quits the app.
 
-For an explanation of each reason, see [Troubleshooting](/en/help/troubleshooting/).
+For an explanation of each reason, see [Troubleshooting](/en/help/troubleshooting/#butler-agent-does-not-get-ready).
+
+### Memory model
+
+While Butler gets ready, it also downloads the memory model that its memory features use. During the download, **Downloading memory model** and the progress appear under the preparation status. When the download finishes, **Verifying memory model** appears, and then the line disappears. The same line appears on the **Which AI should Butler use?** screen.
+
+- You can continue setup while the memory model downloads.
+- If the download fails, **Couldn't download the memory model** and the reason appear. Click **Retry** to download it again.
+- After setup, check the status in **Memory model** under **Settings → General**.
 
 ## Choose an AI
 
@@ -148,6 +157,18 @@ The first response from a local model can be a little slow. The model you connec
 
 The model you connect is registered as a [Custom model](/en/help/models/custom/).
 
+## Reply language
+
+When the connection finishes, **Reply language** appears below the connection screen. It is the language Butler replies in, and you set it separately from the interface language.
+
+<Steps>
+  1. In **Reply language**, choose **한국어** or **English**.
+  2. Click **Start**. Setup finishes and the new conversation screen opens.
+</Steps>
+
+- You can change the reply language later in **Response language** under **Settings → Personalization**.
+- If you already chose a reply language, setup finishes without this step.
+
 ## Default model
 
 The model you connect becomes Butler's default model, and Worker profiles use the same model.
@@ -173,7 +194,7 @@ You can go through the welcome screen and the AI connection again later. The mod
   1. In **Settings → General → App behavior**, click **Run again** next to **Run setup again**.
   2. On the welcome screen, click **Get started**. To leave without changing anything, click **Cancel**.
   3. On the consent screen, click **Agree and start**.
-  4. Choose an AI and connect it. The AI you use now has the **In use** tag.
+  4. Choose an AI and connect it. The AI you use now has the **In use** tag. If you already chose a [reply language](#reply-language), setup finishes as soon as the connection does.
 </Steps>
 
 - If you choose the AI you use now again, and it is ChatGPT or a service that connects with an API key, Butler keeps the model, reasoning effort and Worker profile settings.

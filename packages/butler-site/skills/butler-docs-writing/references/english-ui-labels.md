@@ -51,6 +51,8 @@ regenerate after the app copy or the Korean pages change.
 | 그룹으로 묶기 | **Group together** | basics/sidebar-and-spaces |
 | 근거 기록 N개 보기 | **View {0} source records** | projects |
 | 글쓰기 | **Writing** | settings |
+| 기기 연결 | **Pair device** | advanced/remote-access, settings, troubleshooting |
+| 기기를 연결했어요 | **Device paired** | advanced/remote-access |
 | 기록 | **History** | projects |
 | 기본 | **Default** (`interfaceDetails.default`)<br />**basics** (`settings.sectionAliases.general[0]`)<br />**Basic** (`settings.options.profilingBasic`) | extensions/skills, personalization, settings |
 | 기본 검색 깊이 | **Default search depth** | settings |
@@ -62,6 +64,7 @@ regenerate after the app copy or the Korean pages change.
 | 기타 | **Other** | projects |
 | 기타 (OpenAI 호환) | **Other (OpenAI-compatible)** | getting-started/first-run, models/custom |
 | 깊게 | **Deep** | personalization, settings |
+| 꺼짐 | **Off** | scheduled-tasks |
 | 끄기 | **Off** | personalization |
 | 나를 부를 호칭 | **Preferred address** | getting-started/first-run, personalization, settings |
 | 나중에 결정하고 메시지 작성 | **Decide later and compose a message** | basics/conversation |
@@ -73,10 +76,10 @@ regenerate after the app copy or the Korean pages change.
 | 다른 서비스 | **Other services** | getting-started/first-run |
 | 다른 서비스 8개 | **{0} more services** | getting-started/first-run |
 | 다른 서비스 고르기 | **Pick another** | getting-started/first-run |
-| 다른 컴퓨터에서 접속 허용 | **Allow access from other computers** | settings, troubleshooting |
+| 다른 컴퓨터에서 접속 허용 | **Allow access from other computers** | advanced/remote-access, settings, troubleshooting |
 | 다른 Butler가 백그라운드 서비스를 쓰고 있습니다. | **Another Butler is using the background service.** | troubleshooting |
 | 다시 살펴볼 일 | **Work to revisit** | projects |
-| 다시 시도 | **Try again** (`firstRun.retry`)<br />**Retry** (`firstRun.memoryModel.retry`) | basics/command-palette, getting-started/first-run, projects, troubleshooting |
+| 다시 시도 | **Try again** (`firstRun.retry`)<br />**Retry** (`firstRun.memoryModel.retry`) | basics/command-palette, getting-started/first-run, projects, settings, troubleshooting |
 | 다시 실행 | **Run again** | getting-started/first-run, settings |
 | 다시 인증 | **Authenticate again** | models/cloud, troubleshooting |
 | 다시 작성 | **Retry message** | basics/conversation |
@@ -84,7 +87,7 @@ regenerate after the app copy or the Korean pages change.
 | 다크 | **Dark** | settings |
 | 닫기 | **Close** | basics/right-panel |
 | 답변 실패 | **Response failed** | basics/conversation |
-| 답변 언어 | **Response language** | personalization, settings |
+| 답변 언어 | **Response language** | getting-started/first-run, personalization, settings |
 | 답변 완료 | **Reply completed** (`projectStatistics.labels.delivered`)<br />**Response completed** (`interfaceDetails.answerDone`) | basics/conversation |
 | 답변 중지 | **Response stopped** | basics/conversation |
 | 대기 메시지 삭제 | **Delete queued message** | basics/conversation |
@@ -120,6 +123,7 @@ regenerate after the app copy or the Korean pages change.
 | 디버깅 | **Debug** | settings |
 | 라이트 | **Light** | settings |
 | 로그 | **Logs** | settings, troubleshooting |
+| 로그인 시 시작 | **Start at login** | scheduled-tasks, settings |
 | 로그인이 취소되었습니다 | **Sign-in was cancelled** | getting-started/first-run |
 | 로그인하지 못했습니다 | **Couldn't sign in** | getting-started/first-run |
 | 로컬 | **Local** | basics/conversation, basics/right-panel, projects |
@@ -129,15 +133,21 @@ regenerate after the app copy or the Korean pages change.
 | 링크 복사 | **Copy link** | models/cloud, troubleshooting |
 | 막힌 작업 | **Blocked work** | projects |
 | 만들기 | **Create** | basics/conversation, projects |
+| 매일 | **Daily** | scheduled-tasks |
+| 매주 | **Weekly** | scheduled-tasks |
 | 맥락 | **Context** | basics/right-panel, settings |
 | 먼저 확인 | **Ask first** | basics/conversation, extensions/mcp-servers, getting-started/first-run, scheduled-tasks, settings, troubleshooting |
 | 먼저 확인이면 자리를 비운 동안 승인을 기다립니다. | **With Ask first, runs wait for your approval while you're away.** | scheduled-tasks |
+| 메모리 모델 | **Memory model** | getting-started/first-run, settings |
+| 메모리 모델 받는 중 | **Downloading memory model** | getting-started/first-run |
+| 메모리 모델 확인 중 | **Verifying memory model** | getting-started/first-run |
+| 메모리 모델을 받지 못했습니다 | **Couldn't download the memory model** | getting-started/first-run |
 | 메시지 보내기 | **Message sending** | basics/conversation, settings |
 | 메시지 복사 | **Copy message** | basics/conversation |
 | 메타데이터 | **Metadata** | settings, troubleshooting |
 | 명령 | **Command** | extensions/mcp-servers |
 | 모델 | **Model** (`interfaceFeedback.model`)<br />**Models** (`settings.sections.models`) | basics/conversation, getting-started/first-run, models/backup, models/cloud, models/custom, settings, troubleshooting |
-| 모델 2개 | **{0} models** | models/cloud |
+| 모델 2개 | **2 models** | models/cloud |
 | 모델 검색... | **Search models...** | basics/conversation |
 | 모델 관리 | **Model management** (`settings.modelManagement.title`)<br />**Manage models** (`settings.modelManagement.manageButton`) | models/backup, models/cloud, models/custom, settings, troubleshooting |
 | 모델 기본값 | **Model default** | models/backup, personalization |
@@ -155,14 +165,17 @@ regenerate after the app copy or the Korean pages change.
 | 모델 API 정보 | **Model API information** | models/custom |
 | 모델 ID | **Model ID** | models/custom |
 | 모델별 토큰 | **Tokens by model** | settings |
+| 모두 끊기 | **Disconnect all** | advanced/remote-access, settings |
 | 모든 Work | **All Work** | projects |
 | 모양 | **Appearance** | basics/command-palette |
 | 무료 · 비공개 | **Free · Private** | getting-started/first-run |
 | 문서 상태 | **Document status** | projects |
 | 문서 종류 | **Document type** | projects |
 | 문제 보고용 정보 복사 | **Copy info for a bug report** | getting-started/first-run, troubleshooting |
+| 미리보기 버전 받기 | **Receive preview versions** | settings, troubleshooting |
 | 반갑습니다. 당신을 모시게 되어 기쁩니다. | **Pleased to meet you. It will be my honor to serve.** | getting-started/first-run |
 | 받은 모델이 없습니다 | **No models downloaded yet** | getting-started/first-run |
+| 배터리 사용 시 멈춤 | **Pause on battery** | settings |
 | 백그라운드 서비스 실행이 허용되지 않았습니다. | **The background service isn't allowed to run.** | troubleshooting |
 | 백그라운드 서비스가 멈췄습니다. | **The background service stopped.** | troubleshooting |
 | 백그라운드 서비스가 응답하지 않습니다. | **The background service didn't respond.** | troubleshooting |
@@ -179,8 +192,7 @@ regenerate after the app copy or the Korean pages change.
 | 변경사항 | **Changes** | basics/right-panel |
 | 보관 | **Archive** (`space.archive`)<br />**saved chats** (`settings.sectionAliases.archives[0]`) | basics/sidebar-and-spaces, projects |
 | 보관하기 | **Archive** | basics/sidebar-and-spaces |
-| 보안 | **Security** | troubleshooting |
-| 복사 | **Copy** | settings |
+| 보안 | **Security** | advanced/remote-access, troubleshooting |
 | 브라우저가 열리지 않았나요? 링크 복사 | **Browser didn't open? Copy link** | getting-started/first-run |
 | 브라우저에서 로그인하세요 | **Sign in with your browser** | getting-started/first-run |
 | 브라우저에서 열기 | **Open in browser** | models/cloud |
@@ -188,7 +200,7 @@ regenerate after the app copy or the Korean pages change.
 | 비활성화 | **Disabled** (`settings.options.searchProviderDisabled`)<br />**Disable** (`settings.actions.disableMcpServer`) | extensions/mcp-servers, settings |
 | 빠르게 | **Quick** | settings |
 | 사용 | **Enabled** | extensions/mcp-servers, settings |
-| 사용 안 함 | **Off** | models/backup, models/cloud |
+| 사용 안 함 | **Off** (`settings.backupModels.off`)<br />**Not in use** (`settings.savedKeys.usedBy(0)`) | models/backup, models/cloud |
 | 사용 중 | **In use** | getting-started/first-run |
 | 사용량 | **Usage** (`settings.sections.usage`)<br />**telemetry** (`settings.sectionAliases.usage[1]`) | basics/conversation, projects |
 | 사용자 정보 분석 | **Personal information analysis** | personalization, settings |
@@ -222,7 +234,7 @@ regenerate after the app copy or the Korean pages change.
 | 서버 ID | **Server ID** | extensions/mcp-servers |
 | 서버 URL | **Server URL** | settings |
 | 선택한 모델 사용 불가 | **Selected model unavailable** | basics/conversation, troubleshooting |
-| 설정 | **Settings** | basics/command-palette, basics/conversation, basics/right-panel, basics/sidebar-and-spaces, extensions/mcp-servers, extensions/skills, getting-started/first-run, models/backup, models/cloud, models/custom, personalization, projects, settings, troubleshooting |
+| 설정 | **Settings** | advanced/remote-access, basics/command-palette, basics/conversation, basics/right-panel, basics/sidebar-and-spaces, extensions/mcp-servers, extensions/skills, getting-started/first-run, models/backup, models/cloud, models/custom, personalization, projects, scheduled-tasks, settings, troubleshooting |
 | 설정 검색 | **Settings search** (`settings.searchLabel`)<br />**Search settings** (`settings.searchPlaceholder`) | settings |
 | 설정 다시 실행 | **Run setup again** | getting-started/first-run, settings |
 | 설정 더보기 | **Show advanced settings** | models/custom |
@@ -238,15 +250,18 @@ regenerate after the app copy or the Korean pages change.
 | 스페이스 | **Space** | basics/command-palette, basics/sidebar-and-spaces, projects, scheduled-tasks |
 | 스페이스 최상위 | **Space root** | basics/sidebar-and-spaces |
 | 스페이스 최상위로 이동 | **Move to space root** | basics/sidebar-and-spaces |
+| 시간 | **Time** | scheduled-tasks |
 | 시간대 | **Time zone** | settings |
 | 시스템 | **System** | settings |
 | 시스템 설정 | **System settings** | getting-started/install, troubleshooting |
 | 시스템 이벤트 | **System events** | basics/command-palette, personalization |
+| 시작 | **Start** | getting-started/first-run |
 | 시작하기 | **Get started** | getting-started/first-run |
 | 실시간 연결 복구 중 | **Reconnecting to live updates** | basics/conversation |
 | 실시간 연결이 끊겨 다시 연결하고 있습니다. 표시된 작업 상태는 최신이 아닐 수 있습니다. | **Live connection lost. Reconnecting automatically. The displayed work status may be out of date.** | troubleshooting |
 | 실패 | **Failed** (`projectStatistics.labels.failed`)<br />**Failures** (`interfaceDetails.failures`) | scheduled-tasks, settings |
 | 실패 메시지 삭제 | **Delete failed message** | basics/conversation |
+| 실패가 반복돼 새 코드를 발급했어요 | **Repeated failures issued a new code** | advanced/remote-access |
 | 실패한 모델 턴 | **Failed model turn** | settings, troubleshooting |
 | 실행 기록 | **Runs** | scheduled-tasks |
 | 실행 완료 | **Execution completed** | projects |
@@ -273,10 +288,12 @@ regenerate after the app copy or the Korean pages change.
 | 업데이트 확인 실패 | **Failed to check updates** | troubleshooting |
 | 없음 | **None** | settings |
 | 연결 | **Connect** (`firstRun.customConnect`)<br />**connection** (`settings.sectionAliases.server[0]`)<br />**Connection** (`settings.pageSections.connection`) | getting-started/first-run, settings |
+| 연결 끊기 | **Disconnect** | advanced/remote-access, settings |
 | 연결 방식 | **Transport** | extensions/mcp-servers |
-| 연결 코드 | **connection code** | settings |
 | 연결 확인 | **Test connection** | extensions/mcp-servers, settings |
 | 연결되었습니다 | **Connected** | getting-started/first-run |
+| 연결된 기기 | **Paired devices** | advanced/remote-access, settings |
+| 연결된 기기 없음 | **No paired devices** | settings |
 | 연결을 마치지 못했습니다. 다시 시도하세요. | **Couldn't finish connecting. Try again.** | getting-started/first-run, troubleshooting |
 | 열기 | **Open** | getting-started/install |
 | 영어 | **English** | personalization, settings |
@@ -294,13 +311,16 @@ regenerate after the app copy or the Korean pages change.
 | 외 N개 | **+{0} more** | basics/conversation |
 | 외부 AI 기억 가져오기 | **Import external AI memory** | personalization, settings |
 | 요약 | **Summary** | basics/right-panel |
+| 요일 | **Day** | scheduled-tasks |
 | 요청 | **Requests** (`interfaceDetails.requestsLabel`)<br />**Request** (`settings.developerLogViewer.tabs.request`) | settings, troubleshooting |
 | 요청 처리에 걸린 시간 | **Request elapsed time** | projects |
+| 움직임 | **Motion** | settings |
 | 워크트리 | **Worktree** | basics/conversation, basics/right-panel, projects |
 | 원격 접속 | **remote access** (`settings.sectionAliases.security[0]`)<br />**Remote access** (`settings.pageSections.remoteAccess`) | settings |
 | 원래 설정으로 다시 시도 | **Retry original settings** | basics/conversation, troubleshooting |
 | 원본 식별 정보 | **Source details** | projects |
 | 원본 위치 | **Source location** | projects |
+| 월페이퍼 | **Wallpaper** | settings |
 | 위험 낮음 | **Low risk** | basics/conversation |
 | 위험 높음 | **High risk** | basics/conversation |
 | 위험 보통 | **Medium risk** | basics/conversation |
@@ -323,6 +343,7 @@ regenerate after the app copy or the Korean pages change.
 | 이동할 위치 | **Move to** | basics/sidebar-and-spaces |
 | 이름 | **Name** | settings |
 | 이름 변경 | **Rename** | basics/sidebar-and-spaces, projects |
+| 이미지 추가 | **Add image** | settings |
 | 이번만 허용 | **Allow once** | basics/conversation |
 | 이전 | **Back** | getting-started/first-run |
 | 인자 | **Arguments** | extensions/mcp-servers |
@@ -330,7 +351,7 @@ regenerate after the app copy or the Korean pages change.
 | 인증 완료 확인 | **Check completion** | models/cloud, troubleshooting |
 | 인증 이름 | **Credential name** | models/cloud |
 | 인터페이스 언어 | **Interface language** | getting-started/first-run |
-| 일반 | **General** (`space.general`)<br />**Normal** (`composer.normal`) | basics/command-palette, basics/conversation, basics/sidebar-and-spaces, getting-started/first-run, troubleshooting |
+| 일반 | **General** (`space.general`)<br />**Normal** (`composer.normal`) | basics/command-palette, basics/conversation, basics/sidebar-and-spaces, getting-started/first-run, scheduled-tasks, troubleshooting |
 | 일시정지 | **Pause** | scheduled-tasks |
 | 읽기 전용 | **Read only** | basics/conversation, scheduled-tasks |
 | 자동 | **Auto** | settings |
@@ -366,15 +387,17 @@ regenerate after the app copy or the Korean pages change.
 | 전체보기 | **All** | basics/sidebar-and-spaces |
 | 접근 권한 | **Access** | basics/conversation, getting-started/first-run, settings, troubleshooting |
 | 접기 | **Show less** (`firstRun.showLess`)<br />**Collapse** (`space.collapse`) | basics/conversation, getting-started/first-run |
-| 접속 주소 | **Addresses** | settings |
+| 접속 주소 | **Addresses** | advanced/remote-access, settings |
 | 정기 기억 정리 | **Regular memory consolidation** | settings |
 | 정보 | **About** | basics/right-panel, settings, troubleshooting |
 | 제공자 | **Provider** | models/cloud, models/custom |
 | 제목 | **Title** | scheduled-tasks |
 | 종료 | **Quit** | getting-started/first-run, troubleshooting |
 | 종류별 | **By type** | projects |
+| 주기 | **Frequency** | scheduled-tasks |
 | 주소 복사 | **Copy address** | settings |
 | 주요 자료로 고정 | **Pin material** | projects |
+| 준비되었습니다 | **Ready** | settings |
 | 준비됨 | **Ready** | getting-started/first-run |
 | 중요한 자료 | **Important materials** | projects |
 | 중지 | **Stop** | basics/conversation |
@@ -385,7 +408,7 @@ regenerate after the app copy or the Korean pages change.
 | 즐겨찾기에 추가 | **Pin** | basics/sidebar-and-spaces, projects |
 | 지금 실행 | **Run now** | scheduled-tasks |
 | 직접 입력 | **Write feedback** | basics/conversation |
-| 직접 지정 | **Custom** | scheduled-tasks, settings |
+| 직접 지정 | **Custom** | scheduled-tasks |
 | 직접 편집 | **Custom** | personalization |
 | 직접값 | **Literal value** | extensions/mcp-servers |
 | 진단 | **diagnostics** (`settings.sectionAliases.privacy[0]`)<br />**Diagnostics** (`settings.pageSections.diagnostics`) | basics/command-palette, basics/right-panel, personalization, settings, troubleshooting |
@@ -402,7 +425,7 @@ regenerate after the app copy or the Korean pages change.
 | 최대 컨텍스트 | **Max context** | models/custom |
 | 최신 | **Recent** (`space.recent`)<br />**Up to date** (`settings.actions.upToDate`) | basics/sidebar-and-spaces, settings |
 | 최신으로 이동 | **Latest** | basics/conversation |
-| 추가 | **Add** | models/cloud, settings |
+| 추가 | **Add** | advanced/remote-access, models/cloud, settings |
 | 추가 기능 | **More options** | basics/conversation |
 | 추론 | **Reasoning** | basics/conversation, models/backup, models/cloud, personalization, settings |
 | 취소 | **Cancel** | getting-started/first-run, models/cloud |
@@ -413,14 +436,15 @@ regenerate after the app copy or the Korean pages change.
 | 컨텍스트 창 | **Context window** | basics/right-panel |
 | 컨텍스트 한도 | **Context limit** | models/cloud, settings |
 | 컨텍스트를 확인할 수 없습니다 | **Context is unavailable** | basics/right-panel |
-| 코드 | **Code** | settings |
+| 켜짐 | **On** | scheduled-tasks |
+| 코드 | **Code** | advanced/remote-access, settings |
 | 코드 복사 | **Copy code** | basics/conversation |
 | 코딩 | **Coding** | settings |
 | 코어 기본 스킬 | **Core skills** | extensions/skills |
 | 키 발급받기 | **Get a key** | getting-started/first-run |
 | 키 필요 없음 | **No key needed** | getting-started/first-run |
 | 키체인에 저장 | **Stored in Keychain** | models/cloud |
-| 터널·프록시용 허용 호스트 | **Allowed hosts for tunnels and proxies** | settings |
+| 터널·프록시용 허용 호스트 | **Allowed hosts for tunnels and proxies** | advanced/remote-access, settings |
 | 테마 | **theme** (`settings.sectionAliases.appearance[0]`)<br />**Theme** (`settings.pageSections.theme`) | settings |
 | 테스트 | **Test** | settings, troubleshooting |
 | 통계 | **Statistics** | projects |
@@ -434,6 +458,7 @@ regenerate after the app copy or the Korean pages change.
 | 페르소나 프리셋 | **Persona preset** | getting-started/first-run, personalization, settings |
 | 페이지 읽기 | **Page reader** | settings |
 | 편집 | **Edit** | models/backup, models/cloud, models/custom, settings, troubleshooting |
+| 평일 | **Weekdays** | scheduled-tasks |
 | 폴더 선택 | **Choose folder** | settings |
 | 표시 이름 | **Display name** | extensions/mcp-servers, models/custom |
 | 프로젝트 | **Project** (`briefing.projectMoment`)<br />**Projects** (`sidebar.projects`) | basics/command-palette, extensions/skills, settings |
@@ -465,8 +490,8 @@ regenerate after the app copy or the Korean pages change.
 | 헤더 추가 | **Add header** | extensions/mcp-servers |
 | 현재 설정으로 새로 시도 | **Retry as new with current settings** | basics/conversation, troubleshooting |
 | 현재 작업 방향 조정 | **Steer current turn** | settings |
-| 호스트 이름 | **Host names** | settings |
-| 호스트 컴퓨터에서만 사용할 수 있습니다. | **Available only on the host computer.** | settings |
+| 호스트 이름 | **Host names** | advanced/remote-access, settings |
+| 호스트 컴퓨터에서만 사용할 수 있습니다. | **Available only on the host computer.** | advanced/remote-access, settings |
 | 홈 화면 | **Home screen** | settings |
 | 확인 | **Confirm** (`common.confirm`)<br />**Check** (`settings.actions.checkUpdates`) | settings, troubleshooting |
 | 확인 중 | **Inspecting** (`interfaceFeedback.inspecting`)<br />**Checking** (`interfaceStatus.checking`) | models/cloud, settings |
@@ -552,26 +577,15 @@ same key from `en.ts`.
 | --- | --- |
 | 개인정보 보호 및 보안 | getting-started/install, troubleshooting |
 | 그래도 열기 | getting-started/install, troubleshooting |
-| 메인화면 테마 | settings |
-| 배경 색상 | settings |
-| 보기 | settings |
-| 사용자 지정 색상 | settings |
-| 재발급 | settings |
 | Anthropic | models/cloud |
-| Aurora | settings |
-| Bloom | settings |
 | ChatGPT에 연결했습니다 | getting-started/first-run |
 | Claude 연결 | getting-started/first-run |
 | English | getting-started/first-run |
 | Google | models/cloud |
-| Lavender | settings |
 | Medium | getting-started/first-run |
-| Monochrome | settings |
 | Moonshot / Kimi | models/cloud |
-| Morning | settings |
 | OpenAI | models/cloud |
 | OpenAI 키를 삭제할까요? 이 키를 쓰는 모델 2개도 함께 삭제됩니다. | models/cloud |
 | Qwen Cloud | models/cloud |
-| Silk | settings |
 | xAI / Grok | models/cloud |
 | Z.AI Coding Plan | models/cloud |

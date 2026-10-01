@@ -201,7 +201,38 @@ describe("translationGaps", () => {
       "en/install: outline differ from ko/install (en: 2 | ko: 2 3)",
       "en/install: components differ from ko/install (en: none | ko: code block×1, DocCard×1, Steps×1)",
       "en/install: links differ from ko/install (missing first-run)",
+      "en/install: anchors differ from ko/install (missing first-run heading 0)",
       "en/install: urls differ from ko/install (missing https://example.com/releases; extra https://example.com/download)",
+    ]);
+  });
+});
+
+describe("translationGaps anchors", () => {
+  const koTarget = page("ko/target", "## 준비\n\n## 연결\n");
+  const enTarget = page("en/target", "## Prepare\n\n## Connect\n");
+
+  test("accepts translated anchors that point at the same heading", () => {
+    const docs = [
+      koTarget,
+      enTarget,
+      page("ko/a", "## 시작\n\n[연결](/help/target/#연결)\n[여기](#시작)"),
+      page("en/a", "## Start\n\n[Connect](/en/help/target/#connect)\n[here](#start)"),
+    ];
+    expect(translationGaps(docs, "en")).toEqual([]);
+  });
+
+  test("reports a dropped anchor and an anchor that points at another section", () => {
+    const docs = [
+      koTarget,
+      enTarget,
+      page("ko/a", "[연결](/help/target/#연결)"),
+      page("en/a", "[Connect](/en/help/target/)"),
+      page("ko/b", "[연결](/help/target/#연결)"),
+      page("en/b", "[Connect](/en/help/target/#prepare)"),
+    ];
+    expect(translationGaps(docs, "en")).toEqual([
+      "en/a: anchors differ from ko/a (missing target heading 2)",
+      "en/b: anchors differ from ko/b (missing target heading 2; extra target heading 1)",
     ]);
   });
 });
