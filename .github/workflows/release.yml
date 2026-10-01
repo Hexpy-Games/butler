@@ -245,7 +245,7 @@ jobs:
     name: Build unsigned Windows x64 Agent preview
     if: contains(github.ref_name, '-preview.')
     runs-on: windows-latest
-    timeout-minutes: 100
+    timeout-minutes: 90
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/target/windows-release
     steps:

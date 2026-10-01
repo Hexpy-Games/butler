@@ -18,7 +18,7 @@
     "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "fd97e7279fef8e91a95c908d368c5eb4548c40cf5d9d3fa277a8d49f71901b53",
     "packages/butler-agent/rust/crates/butler-turn/Cargo.toml": "67226f9ea15df5cbe76ccf0f8f7ac75bbc553130ac07a77b256fb05d9c75d3aa",
     "packages/butler-agent/rust/rust-toolchain.toml": "57dc91c7ef18e7f2f5b5b52265f2eb79c240359fbdebdf3d2f9661de3143a2e6",
-    "packages/butler-agent/rust/scripts/prepare-static-ort.py": "304e728f7fabb4cfac5a59f96c1f2e575baf070dece3d337c828354da8ec4857",
+    "packages/butler-agent/rust/scripts/prepare-static-ort.py": "2af557c1b4be83892da20c8ac9f559de9455ea7fc3245e661ccfefb228c0690f",
     "packages/butler-agent/rust/scripts/static-ort.lock.json": "a1aee730fc0773ca02d23bad8da95c0efe56a07ded67dc36d251f475a90369b2",
     "packages/butler-agent/rust/tools/source-check/Cargo.toml": "3f172c1b0e2c9b29f791e762ad45c0c2abccdb8c033aef4cee3f4d697674fa48",
     "packages/butler-app/client/electron/package.json": "6e573e96a1191d3d606bd278d8258c60328ef87a2c6a8104c6d2233dec83cf52",

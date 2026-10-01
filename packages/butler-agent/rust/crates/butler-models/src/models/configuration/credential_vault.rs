@@ -13,7 +13,7 @@ use super::credentials::{
     self, CREDENTIALS_FILE, CredentialRecord, CredentialsFile, PendingRemoval, SecretHome,
 };
 use super::secret_store;
-use crate::models::CredentialView;
+use crate::models::{CredentialView, ModelCatalogError};
 
 impl ModelConfiguration {
     /// Stores `secret` for `draft` where the policy puts new keys, then
@@ -132,7 +132,9 @@ impl ModelConfiguration {
     ) -> Result<(butler_platform::secrets::ChangeLock, CredentialsFile), CredentialError> {
         let path = root.join(CREDENTIALS_FILE);
         let lock = CredentialsFile::lock(&path).await?;
-        let file = CredentialsFile::load(&path)?;
+        let file = tokio::task::spawn_blocking(move || CredentialsFile::load(&path))
+            .await
+            .map_err(|_| ModelCatalogError::rejected("The saved API keys could not be read."))??;
         Ok((lock, file))
     }
 }

@@ -290,7 +290,16 @@ pub(super) async fn acquire_admission(
 ) -> Result<AdmissionLock, crate::host::HostError> {
     let end = Instant::now() + Duration::from_secs(3);
     loop {
-        match AdmissionLock::acquire(data_root, installation) {
+        let data = data_root.to_path_buf();
+        let installation = installation.clone();
+        let admission =
+            tokio::task::spawn_blocking(move || AdmissionLock::acquire(&data, &installation))
+                .await
+                .map_err(|source| {
+                    crate::host::HostError::new("service_start_admission_failed")
+                        .with_source(source)
+                })?;
+        match admission {
             Ok(lock) => return Ok(lock),
             Err(error)
                 if error.message() == "service_start_admission_busy" && Instant::now() < end =>

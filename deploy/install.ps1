@@ -67,17 +67,21 @@ function Install-Butler {
         $name = "$baseVersion-$($manifest.binarySha256.Substring(0,8))"
         $target = Join-Path $agentHome $name
         if (Test-Path $target) {
+            $installed = Get-Content "$target/native-agent-manifest.json" -Raw | ConvertFrom-Json
+            if ($installed.binarySha256 -ne $manifest.binarySha256 -or $installed.resourcesSha256 -ne $manifest.resourcesSha256) {
+                throw 'Existing version differs from this archive; nothing activated'
+            }
             & "$target/butler-agent.exe" --installation-root $target --resource-root "$target/resources" doctor --check installation
             if ($LASTEXITCODE -ne 0) { throw 'Existing version is damaged; remove it before reinstalling' }
         } else { Move-Item $stage $target; $stage = $null }
         $current = Join-Path $agentHome 'current'
         if (Test-Path $current) {
             $old = (Get-Content $current -Raw).Trim()
-            if ($old -ne $name) { [IO.File]::WriteAllText((Join-Path $agentHome 'previous'), $old) }
+            if ($old -ne $name) { Write-ButlerFile (Join-Path $agentHome 'previous') $old }
         }
-        [IO.File]::WriteAllText($current, $name)
+        Write-ButlerFile $current $name
         $text = "@echo off`r`n$marker`r`n`"$target\butler-agent.exe`" --installation-root `"$target`" --resource-root `"$target\resources`" %*`r`n"
-        [IO.File]::WriteAllText($launcher, $text)
+        Write-ButlerFile $launcher $text
         $userPath = [string][Environment]::GetEnvironmentVariable('Path','User')
         if (@($userPath -split ';') -notcontains $bin) {
             [Environment]::SetEnvironmentVariable('Path', ($userPath.TrimEnd(';') + ';' + $bin).TrimStart(';'), 'User')
@@ -112,6 +116,16 @@ function Expand-ButlerZip {
             [IO.Compression.ZipFileExtensions]::ExtractToFile($entry,$path,$false)
         }
     } finally { $archive.Dispose() }
+}
+
+function Write-ButlerFile {
+    param([string]$Path, [string]$Text)
+    $temporary = "$Path.$([guid]::NewGuid()).tmp"
+    try {
+        [IO.File]::WriteAllText($temporary,$Text)
+        if (Test-Path $Path) { [IO.File]::Replace($temporary,$Path,$null) }
+        else { [IO.File]::Move($temporary,$Path) }
+    } finally { if (Test-Path $temporary) { Remove-Item $temporary -Force } }
 }
 
 Install-Butler -Options $args

@@ -15,7 +15,7 @@ runs:
         arch: x64
     - uses: ./.github/actions/rust-agent-setup
       with:
-        native-deps: prebuilt-ort
+        native-deps: static-ort
         cache-key: ${{ inputs.cache-key }}
     - uses: oven-sh/setup-bun@v2
     - uses: actions/setup-node@v4
@@ -42,7 +42,7 @@ runs:
         $env:BUTLER_DATA = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
         New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
         $env:RUSTFLAGS = '-C target-feature=+crt-static'
-        cargo build --locked --release --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent
+        cargo build --locked --release --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         $binary = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/butler-agent.exe"
         # A runner has development DLLs installed. Refuse a dependency they hide.

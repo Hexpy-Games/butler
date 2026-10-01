@@ -130,24 +130,22 @@ async fn run_until_stopped(
     let user_home = butler_platform::user_dirs::home_dir()
         .filter(|home| !home.as_os_str().is_empty())
         .ok_or_else(|| failure("native_home_unavailable", "User home is unavailable"))?;
-    let mut config = ServiceConfiguration::capture(explicit_data, &user_home, &installation)?;
+    let mut config =
+        support::capture_configuration(explicit_data, &user_home, &installation).await?;
     let listener = if config.app.enabled {
         Some(crate::host::AppServer::bind(&config.app.host, config.app.port).await?)
     } else {
         None
     };
-    config.initialize_app_credentials();
+    config = support::initialize_credentials(config).await?;
     report_credential_errors(&config, logs);
     let executable = std::env::current_exe().map_err(io)?;
-    let mut instance = crate::host::service::instance::InstanceGuard::acquire(
-        &config.data_root,
-        &executable,
-        &config.installation,
+    let mut instance = support::acquire_instance(
+        &config,
+        executable,
         holds_foreground_lease(foreground_lease),
     )
-    .map_err(|message| {
-        failure("native_service_instance_unavailable", message.to_string()).with_source(message)
-    })?;
+    .await?;
     stop.attach(
         config.data_root.clone(),
         instance.nonce(),
