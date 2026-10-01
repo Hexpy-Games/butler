@@ -63,7 +63,7 @@ export function FirstRunProviderList({ flow }: { flow: FirstRunFlow }) {
         ) : null}
       </Stack>
       <Inline>
-        <FirstRunBack label={copy.back} onClick={flow.backToWelcome} />
+        <FirstRunBack label={copy.back} onClick={flow.backToConsent} />
       </Inline>
     </SetupWizardContent>
   );
