@@ -21,7 +21,15 @@ runs:
       if: inputs.native-deps-artifact != ''
       with:
         name: ${{ inputs.native-deps-artifact }}
-        path: ${{ runner.temp }}/ort-cache/native-deps
+        path: ${{ runner.temp }}/ort-cache
+    - name: Restore verified native dependency archive
+      if: inputs.native-deps-artifact != ''
+      shell: bash
+      run: |
+        set -euo pipefail
+        export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+        cache_root="$(cygpath -u "$RUNNER_TEMP")/ort-cache"
+        tar -xzf "$cache_root/windows-native-deps.tar.gz" -C "$cache_root"
     - uses: ./.github/actions/rust-agent-setup
       with:
         native-deps: static-ort

@@ -12,6 +12,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 #[tokio::test]
 async fn process_roles_preserve_worker_protocol_and_executable_identity() -> Result<(), HarnessError>
 {
+    butler_e2e::gate!();
     let sandbox = Sandbox::new("PROC-01")?;
     let launch = Launch::new(&sandbox)?;
     for (role, full_name, linux_comm) in [
