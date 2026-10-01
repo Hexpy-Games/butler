@@ -197,7 +197,13 @@ verify_staging() {
     die "the downloaded agent failed its self-check; nothing was installed"
   }
   chmod u+w "$staging"
-  "$staging/butler-agent" --prepare-process-links || die "could not prepare process role links"
+  if "$staging/butler-agent" --prepare-process-links >"$tmp/process-links.out" 2>&1; then
+    :
+  else
+    status=$?
+    # Older Agents reject this private command (exit 2); keep their layout.
+    [ "$status" = 2 ] || die "could not prepare process role links"
+  fi
 }
 
 # --- place and activate --------------------------------------------------------

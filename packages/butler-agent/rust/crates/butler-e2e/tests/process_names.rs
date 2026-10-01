@@ -48,7 +48,7 @@ async fn process_roles_preserve_worker_protocol_and_executable_identity() -> Res
         let output = launch
             .env_command(std::path::Path::new("node"))
             .env("PATH", std::env::var_os("PATH").unwrap_or_default())
-            .arg(script)
+            .arg(&script)
             .arg(&sandbox.binary)
             .output()?;
         assert!(
@@ -57,6 +57,7 @@ async fn process_roles_preserve_worker_protocol_and_executable_identity() -> Res
             String::from_utf8_lossy(&output.stderr)
         );
         process_names::prepare(&sandbox.binary)?;
+        verify_legacy_layout(&sandbox, &launch, &script)?;
     }
     // A pre-existing foreign filename is never executed or overwritten.
     let alias = process_names::executable(&sandbox.binary, Role::Memory)?;
@@ -103,5 +104,34 @@ async fn verify_worker(sandbox: &Sandbox, launch: &Launch, role: Role) -> Result
     assert_eq!(response["status"], "closed");
     drop(stdin);
     assert!(child.wait().await?.success(), "worker {pid} failed");
+    Ok(())
+}
+
+fn verify_legacy_layout(
+    sandbox: &Sandbox,
+    launch: &Launch,
+    script: &std::path::Path,
+) -> Result<(), HarnessError> {
+    let root = sandbox.root.join("legacy");
+    std::fs::create_dir(&root)?;
+    let binary = root.join("butler-agent");
+    process_names::write_legacy_fixture(&binary)?;
+    process_names::prepare_installation(&binary)?;
+    let output = launch
+        .env_command(std::path::Path::new("node"))
+        .env("PATH", std::env::var_os("PATH").unwrap_or_default())
+        .arg(script)
+        .arg(&binary)
+        .output()?;
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        std::fs::read_dir(root)?.count(),
+        1,
+        "legacy binary gained aliases"
+    );
     Ok(())
 }

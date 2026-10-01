@@ -70,6 +70,25 @@ pub fn prepare(binary: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// Asks a verified installation to prepare its own aliases. Older Agents
+/// reject the private command with exit 2 and retain their original layout.
+/// Calling the target is essential: older code cannot normalize role aliases.
+///
+/// # Errors
+/// Returns spawn errors or a failure reported by a naming-capable Agent.
+pub fn prepare_installation(binary: &Path) -> io::Result<()> {
+    let status = Command::new(binary)
+        .arg("--prepare-process-links")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()?;
+    match status.code() {
+        Some(0 | 2) => Ok(()),
+        _ => Err(io::Error::other("process role preparation failed")),
+    }
+}
+
 /// The verified alias to execute, or the original binary in older layouts.
 /// Missing aliases preserve compatibility; a foreign alias fails closed.
 ///
@@ -200,5 +219,23 @@ pub fn observed_name(pid: u32, role: Role) -> io::Result<Option<(String, &'stati
     {
         let _ = (pid, role);
         Ok(None)
+    }
+}
+
+/// Writes an executable fixture with the older CLI's unknown-command exit code.
+///
+/// # Errors
+/// Returns fixture write errors; unsupported on Windows (no role aliases yet).
+#[cfg(feature = "test-support")]
+pub fn write_legacy_fixture(path: &Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        fs::write(path, "#!/bin/sh\nexit 2\n")?;
+        crate::launcher::mark_executable(path).unwrap_or(Ok(()))
+    }
+    #[cfg(windows)]
+    {
+        let _ = path;
+        Err(io::Error::new(io::ErrorKind::Unsupported, "Unix fixture"))
     }
 }

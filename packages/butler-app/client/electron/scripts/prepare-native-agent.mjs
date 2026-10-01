@@ -73,7 +73,7 @@ const binaryRoot = join(payloadRoot, "bin");
 mkdirSync(binaryRoot, { recursive: true });
 copyFileSync(sourceBinary, join(binaryRoot, "butler-agent"));
 const roleLinks = spawnSync(join(binaryRoot, "butler-agent"), ["--prepare-process-links"], { stdio: "inherit" });
-if (roleLinks.status !== 0) throw new Error("Could not prepare Agent process role links.");
+if (roleLinks.status !== 0 && roleLinks.status !== 2) throw new Error("Could not prepare Agent process role links.");
 cpSync(
   join(repositoryRoot, "packages", "butler-agent", "resources"),
   join(payloadRoot, "resources"),

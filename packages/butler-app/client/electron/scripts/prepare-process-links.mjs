@@ -14,7 +14,7 @@ try {
     rmSync(join(directory, `butler(${role})`), { force: true });
   }
   const result = spawnSync(binary, ["--prepare-process-links"], { stdio: "inherit" });
-  if (result.status !== 0) throw new Error("Could not prepare Agent process role links.");
+  if (result.status !== 0 && result.status !== 2) throw new Error("Could not prepare Agent process role links.");
 } finally {
   chmodSync(directory, mode);
 }

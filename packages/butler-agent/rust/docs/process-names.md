@@ -5,6 +5,7 @@ process. English role labels are lowercase. The service keeps `butler-agent`.
 
 | Process / caller | Launch | Monitor name | argv[0] |
 | --- | --- | --- | --- |
+| Layout preparation: installer/packager | `--prepare-process-links` before aliases exist | `butler-agent` | unchanged |
 | Main service: CLI, login manager, Electron | `service run --data D --detached`, or desktop stdio entrypoint with installation/resource roots | `butler-agent` | unchanged |
 | Embedding owner | `--private-embedding-worker`, `BUTLER_DATA=D`, piped stdin/stdout, kill on drop | `butler(memory)` | `butler-agent (memory)` |
 | MCP restart tool | `restart --data D --json --requested-by mcp`, installation/resource roots | `butler(restart)` | `butler-agent (restart)` |
@@ -51,7 +52,9 @@ single-instance admission, control, restart and PID ownership checks even when
 macOS reports the most recently looked-up hardlink path.
 
 Version-directory rollback and uninstall/prune naturally include the aliases.
-Old immutable installations without aliases continue to launch the original
+Older binaries rejecting the private preparation command (exit 2) keep their
+original layout; aliases are created by the target version, whose code owns
+identity normalization. Old immutable installations without aliases launch the original
 binary; Unix argv still carries the role. They gain GUI naming on installation
 of a new version. Service identity, manifests and binary digests stay unchanged.
 Alias work is bounded to three metadata checks at spawn/install, independent of
