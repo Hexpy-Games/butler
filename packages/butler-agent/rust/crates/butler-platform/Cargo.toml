@@ -30,6 +30,7 @@ libproc.workspace = true
 [target.'cfg(windows)'.dependencies]
 dunce.workspace = true
 iana-time-zone.workspace = true
+if-addrs.workspace = true
 sysinfo.workspace = true
 win32job.workspace = true
 

@@ -33,6 +33,8 @@ jobs:
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/target/windows-preview
       BUTLER_E2E_TIER: stub
+      CARGO_BUILD_JOBS: 8
+      RUST_TEST_THREADS: 8
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/build-windows-agent
@@ -70,12 +72,15 @@ jobs:
       CARGO_TARGET_DIR: ${{ github.workspace }}/target/windows-stub
       RUST_BACKTRACE: short
       BUTLER_E2E_TIER: stub
+      CARGO_BUILD_JOBS: 8
+      RUST_TEST_THREADS: 8
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/rust-agent-setup
         with:
           native-deps: prebuilt-ort
           cache-key: windows-preview-stub
+          components: clippy,rustfmt
       - name: Isolate runtime and check directories
         run: |
           $root = Join-Path $env:RUNNER_TEMP 'windows-stub'
@@ -84,6 +89,23 @@ jobs:
           "CARGO_HOME=$env:USERPROFILE/.cargo" >> $env:GITHUB_ENV
           "RUSTUP_HOME=$env:USERPROFILE/.rustup" >> $env:GITHUB_ENV
           "PREVIEW_ROOT=$root" >> $env:GITHUB_ENV
+      - name: Windows formatting, clippy and source policy
+        run: |
+          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          cargo fmt --all -- --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          cargo clippy --locked --target x86_64-pc-windows-msvc -p butler-platform -p butler-e2e --tests -- -D warnings
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          cargo run --locked -p butler-source-check -- .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Diagnose original ACL writer and checker
         run: ../../../deploy/windows-acl-diagnosis.ps1
       - name: Platform and portable crate tests
@@ -113,7 +135,8 @@ jobs:
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e `
-            --test turn --test cli_surface --test queue_shutdown --no-run 2>&1 |
+            --test turn --test cli_surface --test queue_shutdown `
+            --test gateway_remote --test gateway_pairing --test cli_remote --no-run 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/harness-compile.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build debug agent for the stub harness
@@ -146,6 +169,18 @@ jobs:
           $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
           cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test cli_surface -- --nocapture 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/cli-surface.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: LAN listener, bind failures and API pairing smoke
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
+        run: |
+          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
+          $env:BUTLER_E2E_REQUIRE_LAN = '1'
+          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e `
+            --test gateway_remote --test gateway_pairing --test cli_remote -- --nocapture --test-threads=8 2>&1 |
+            Tee-Object "$env:PREVIEW_ROOT/logs/lan-pairing.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Existing active plus queued shutdown recovery E2E
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
