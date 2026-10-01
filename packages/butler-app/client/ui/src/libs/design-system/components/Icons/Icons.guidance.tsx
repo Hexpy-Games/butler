@@ -11,7 +11,7 @@ function NewProjectButton() {
 // #endregion
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "The Hugeicons set mapped to Butler names, sized by the icon token scale.",
+  purpose: "The Hugeicons free set from hugeicons.com (MIT), mapped to Butler names and sized by the icon token scale.",
   whenToUse: ["Support a label with a glyph", "Mark row types in lists and navigation"],
   whenNotToUse: [
     { when: "An icon that is the whole control", use: "IconButton" },

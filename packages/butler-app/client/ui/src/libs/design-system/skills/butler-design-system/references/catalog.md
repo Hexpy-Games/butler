@@ -1146,7 +1146,7 @@ A rounded square that holds one glyph: a service logo, a point in a list, or the
 
 `import { Icons } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=components/Icons`
 
-The Hugeicons set mapped to Butler names, sized by the icon token scale.
+The Hugeicons free set from hugeicons.com (MIT), mapped to Butler names and sized by the icon token scale.
 
 - Use for: Support a label with a glyph
 - Use for: Mark row types in lists and navigation
