@@ -144,6 +144,14 @@ async fn run(root: PathBuf, state: watch::Sender<MemoryModelProgress>) {
         cleanup_complete_staging(&root, &root.join(MODEL_ROOT))
     } else {
         match reqwest::Client::builder()
+            // Fixture servers must never redirect a stub run onto a real model host.
+            .redirect(
+                if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub") {
+                    reqwest::redirect::Policy::none()
+                } else {
+                    reqwest::redirect::Policy::default()
+                },
+            )
             .connect_timeout(Duration::from_secs(15))
             .read_timeout(Duration::from_secs(30))
             .build()
