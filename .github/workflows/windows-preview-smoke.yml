@@ -63,12 +63,17 @@ jobs:
           $env:BUTLER_SERVICE_MANAGER = 'off'
           $env:BUTLER_SECRET_STORE = 'file'
           $env:BUTLER_PROVIDER_QUOTA_POLLING = '0'
-          $binary = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/butler-agent.exe"
-          $resources = "$env:GITHUB_WORKSPACE/packages/butler-agent/resources"
-          $common = @('--installation-root',(Split-Path $binary),'--resource-root',$resources)
+          # Immutable executable/resources must both be inside installation-root.
+          $install = Join-Path $env:PREVIEW_ROOT 'install'
+          New-Item -ItemType Directory $install | Out-Null
+          $binary = Join-Path $install 'butler-agent.exe'
+          $resources = Join-Path $install 'resources'
+          Copy-Item "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/butler-agent.exe" $binary
+          Copy-Item "$env:GITHUB_WORKSPACE/packages/butler-agent/resources" $resources -Recurse
+          $common = @('--installation-root',$install,'--resource-root',$resources)
           & $binary @common --version 2>&1 | Tee-Object "$env:PREVIEW_ROOT/logs/version.log"
           if ($LASTEXITCODE -ne 0) { throw 'Version failed' }
-          $agent = Start-Process $binary -ArgumentList @('--resource-root',"`"$resources`"") -PassThru `
+          $agent = Start-Process $binary -ArgumentList @('--installation-root',"`"$install`"",'--resource-root',"`"$resources`"") -PassThru `
             -RedirectStandardOutput "$env:PREVIEW_ROOT/logs/agent.stdout.log" `
             -RedirectStandardError "$env:PREVIEW_ROOT/logs/agent.stderr.log"
           try {
