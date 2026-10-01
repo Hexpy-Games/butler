@@ -1,7 +1,7 @@
 {
   "inputs": {
     "bun.lock": "6da68de704dbc47dea3ae850efa02a7e7ccf9691a5778c73fb77a8bb1687a84e",
-    "packages/butler-agent/rust/Cargo.lock": "7307ac59abcefa06812545c9e4270564c2a62b0a28e5f96fd21743fd2ce46dfb",
+    "packages/butler-agent/rust/Cargo.lock": "1daf911a874bea15eefa9b91afeb1f9ebc0603b48f727d98cb69fec1741f5af1",
     "packages/butler-agent/rust/Cargo.toml": "c7e1a63498d771a837005fef0b6a27772923ec746cd59a31a6400cbe94696eb9",
     "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "7dcc5a22480ff96f1c6460a16fcacc2a5407be321d3e0709e255fc05ef403718",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
@@ -13,7 +13,7 @@
     "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "0f8f2135454f2995bdb17e9eb72bf1e891ac3b862bbeffd03af75e2427525641",
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "95abb3064ab75a21c95efdb6fa5049c80c46abcfe62794330cab063d7d574820",
     "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "90781f4840f7705f2ac7a577abf1f4d8fdb90aaf8f7c6c25e7df9548ff6a9814",
-    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "f59ef08ce78b79081720dc0291379e041fc88bea2124889e06ae721b2a2559ec",
+    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "64da42f6f886ea7101d64301d15061435e92bdb1821c1c8d15a5e02581a84314",
     "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "01b6913903b7649fcc88e576ba0c821ac38d8fdb4ffe68d5d8b6c8699cd21d65",
     "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "fd97e7279fef8e91a95c908d368c5eb4548c40cf5d9d3fa277a8d49f71901b53",
     "packages/butler-agent/rust/crates/butler-turn/Cargo.toml": "67226f9ea15df5cbe76ccf0f8f7ac75bbc553130ac07a77b256fb05d9c75d3aa",

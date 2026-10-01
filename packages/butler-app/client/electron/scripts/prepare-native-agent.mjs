@@ -226,8 +226,9 @@ function requireFile(path) {
 }
 
 function setReadOnly(root) {
+  const executableDirectory = join(root, "bin");
   for (const path of walk(root).filter((path) => statSync(path).isFile())) {
-    chmodSync(path, (path.endsWith(join("bin", "butler-agent")) || /butler-agent \(.*\)$/.test(path) || /butler\(.*\)$/.test(path)) ? 0o555 : 0o444);
+    chmodSync(path, dirname(path) === executableDirectory ? 0o555 : 0o444);
   }
   for (const path of walk(root).filter((path) => statSync(path).isDirectory()).reverse()) {
     chmodSync(path, 0o555);

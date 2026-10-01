@@ -1,7 +1,7 @@
 //! Owner-facing child names without changing binary bytes or instance identity.
 //!
-//! macOS resolves symlinks before choosing the GUI name, so aliases are hard
-//! links. Linux uses a short basename/comm and the full name in argv[0].
+//! macOS and Windows use full-name hard links. Linux uses a short basename
+//! and comm, with the full name in argv[0].
 use std::{
     fs, io,
     path::{Path, PathBuf},
@@ -32,14 +32,25 @@ impl Role {
     /// Kernel name that fits Linux's 15-byte comm limit.
     pub fn short_name(self) -> &'static str {
         match self {
-            Self::Memory => "butler(memory)",
-            Self::Restart => "butler(restart)",
-            Self::Update => "butler(update)",
+            Self::Memory => "butler-memory",
+            Self::Restart => "butler-restart",
+            Self::Update => "butler-update",
         }
     }
 
-    fn file_name(self) -> &'static str {
-        self.short_name()
+    /// Executable hard-link filename for this host platform.
+    pub fn file_name(self) -> &'static str {
+        if cfg!(windows) {
+            match self {
+                Self::Memory => "butler-agent (memory).exe",
+                Self::Restart => "butler-agent (restart).exe",
+                Self::Update => "butler-agent (update).exe",
+            }
+        } else if cfg!(target_os = "macos") {
+            self.name()
+        } else {
+            self.short_name()
+        }
     }
 }
 
@@ -47,16 +58,12 @@ const ROLES: [Role; 3] = [Role::Memory, Role::Restart, Role::Update];
 
 /// Creates or verifies aliases before an installation becomes read-only.
 /// Existing foreign entries are refused, never replaced. No binary is copied.
-/// Windows keeps its original filename pending Task Manager integration.
 ///
 /// # Errors
 /// Returns filesystem errors or `InvalidData` for a foreign alias.
-// TODO(#260): Windows Task Manager needs per-role image names plus stable file
-// identity and Processes-tab verification; argv[0]/thread descriptions do not suffice.
+// TODO(#260): Verify ReFS file identity behavior and the Windows Processes-tab
+// presentation; Task Manager Details uses the role image filename.
 pub fn prepare(binary: &Path) -> io::Result<()> {
-    if cfg!(windows) {
-        return Ok(());
-    }
     let binary = canonical_executable(binary)?;
     for role in ROLES {
         let alias = binary.with_file_name(role.file_name());
@@ -96,9 +103,6 @@ pub fn prepare_installation(binary: &Path) -> io::Result<()> {
 /// Returns filesystem errors or `InvalidData` for a foreign alias.
 pub fn executable(binary: &Path, role: Role) -> io::Result<PathBuf> {
     let binary = canonical_executable(binary)?;
-    if cfg!(windows) {
-        return Ok(binary);
-    }
     let alias = binary.with_file_name(role.file_name());
     match fs::symlink_metadata(&alias) {
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(binary),
@@ -123,7 +127,17 @@ pub async fn executable_async(binary: &Path, role: Role) -> io::Result<PathBuf> 
 
 fn verify_alias(binary: &Path, alias: &Path) -> io::Result<()> {
     let metadata = fs::symlink_metadata(alias)?;
-    if !metadata.is_file() || !crate::secure_fs::same_file(&fs::metadata(binary)?, &metadata) {
+    if !metadata.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "foreign process role alias",
+        ));
+    }
+    #[cfg(windows)]
+    let same_file = same_file::is_same_file(binary, alias)?;
+    #[cfg(not(windows))]
+    let same_file = crate::secure_fs::same_file(&fs::metadata(binary)?, &metadata);
+    if !same_file {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "foreign process role alias",
@@ -138,12 +152,10 @@ fn verify_alias(binary: &Path, alias: &Path) -> io::Result<()> {
 /// # Errors
 /// Refuses a role filename that is not the same file as the original binary.
 pub(crate) fn canonical_identity(path: PathBuf) -> io::Result<PathBuf> {
-    if cfg!(windows)
-        || !ROLES.iter().any(|role| {
-            path.file_name()
-                .is_some_and(|name| name == role.file_name())
-        })
-    {
+    if !ROLES.iter().any(|role| {
+        path.file_name()
+            .is_some_and(|name| name == role.file_name())
+    }) {
         return Ok(path);
     }
     let binary = path.with_file_name(crate::launcher::AGENT_BINARY);
@@ -198,7 +210,7 @@ pub fn name_current() -> io::Result<()> {
 }
 
 /// Name exposed by the process monitor, and the expected role name, for E2E.
-/// Windows monitor qualification is tracked in #260.
+/// Windows GUI monitor qualification is tracked in #260.
 ///
 /// # Errors
 /// Returns process query errors on supported hosts.
@@ -208,7 +220,7 @@ pub fn observed_name(pid: u32, role: Role) -> io::Result<Option<(String, &'stati
     {
         let pid = i32::try_from(pid).map_err(io::Error::other)?;
         let name = libproc::proc_pid::name(pid).map_err(io::Error::other)?;
-        Ok(Some((name, role.short_name())))
+        Ok(Some((name, role.name())))
     }
     #[cfg(target_os = "linux")]
     {
@@ -222,10 +234,10 @@ pub fn observed_name(pid: u32, role: Role) -> io::Result<Option<(String, &'stati
     }
 }
 
-/// Writes an executable fixture with the older CLI's unknown-command exit code.
+/// Writes a Unix executable fixture with the older CLI's unknown-command exit code.
 ///
 /// # Errors
-/// Returns fixture write errors; unsupported on Windows (no role aliases yet).
+/// Returns fixture write errors; unsupported on Windows because this is a Unix fixture.
 #[cfg(feature = "test-support")]
 pub fn write_legacy_fixture(path: &Path) -> io::Result<()> {
     #[cfg(unix)]

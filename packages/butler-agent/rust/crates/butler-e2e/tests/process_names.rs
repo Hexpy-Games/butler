@@ -14,6 +14,14 @@ async fn process_roles_preserve_worker_protocol_and_executable_identity() -> Res
 {
     let sandbox = Sandbox::new("PROC-01")?;
     let launch = Launch::new(&sandbox)?;
+    for (role, full_name, linux_comm) in [
+        (Role::Memory, "butler-agent (memory)", "butler-memory"),
+        (Role::Restart, "butler-agent (restart)", "butler-restart"),
+        (Role::Update, "butler-agent (update)", "butler-update"),
+    ] {
+        assert_eq!(role.name(), full_name);
+        assert_eq!(role.short_name(), linux_comm);
+    }
     let output = launch
         .env_command(&sandbox.binary)
         .arg("--prepare-process-links")
@@ -25,6 +33,10 @@ async fn process_roles_preserve_worker_protocol_and_executable_identity() -> Res
     );
     for role in [Role::Memory, Role::Restart, Role::Update] {
         let alias = process_names::executable(&sandbox.binary, role)?;
+        assert_eq!(
+            alias.file_name().and_then(|name| name.to_str()),
+            Some(role.file_name())
+        );
         assert_eq!(
             process_names::canonical_executable(&alias)?,
             sandbox.binary.canonical()?
@@ -92,6 +104,18 @@ async fn verify_worker(sandbox: &Sandbox, launch: &Launch, role: Role) -> Result
     assert_eq!(response["status"], "error");
     if let Some((observed, expected)) = process_names::observed_name(pid, role)? {
         assert_eq!(observed, expected);
+        let args = std::process::Command::new("ps")
+            .args(["-ww", "-p"])
+            .arg(pid.to_string())
+            .args(["-o", "args="])
+            .output()?;
+        assert!(args.status.success(), "ps failed for worker {pid}");
+        let args = String::from_utf8_lossy(&args.stdout);
+        assert!(
+            args.trim_start().starts_with(role.name()),
+            "worker argv[0] did not show {}: {args}",
+            role.name()
+        );
     }
     let observed =
         butler_platform::instance::process_executable(pid).map_err(std::io::Error::other)?;
@@ -115,7 +139,11 @@ fn verify_legacy_layout(
     let root = sandbox.root.join("legacy");
     std::fs::create_dir(&root)?;
     let binary = root.join("butler-agent");
-    process_names::write_legacy_fixture(&binary)?;
+    match process_names::write_legacy_fixture(&binary) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::Unsupported => return Ok(()),
+        Err(error) => return Err(error.into()),
+    }
     process_names::prepare_installation(&binary)?;
     let output = launch
         .env_command(std::path::Path::new("node"))

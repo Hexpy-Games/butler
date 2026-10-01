@@ -89,9 +89,10 @@ run("touch", [appPath]);
 process.stdout.write(`macOS bundle metadata normalized: ${appPath}\n`);
 
 function setNativePayloadReadOnly(root) {
+  const executableDirectory = dirname(nativeAgentBinary);
   const entries = walk(root);
   for (const path of entries.filter((path) => statSync(path).isFile())) {
-    chmodSync(path, (path === nativeAgentBinary || /butler\(.*\)$/.test(path)) ? 0o555 : 0o444);
+    chmodSync(path, dirname(path) === executableDirectory ? 0o555 : 0o444);
   }
   for (const path of entries.filter((path) => statSync(path).isDirectory()).reverse()) {
     chmodSync(path, 0o555);
