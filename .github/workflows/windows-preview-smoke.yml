@@ -92,6 +92,16 @@ jobs:
           cargo test --locked --target x86_64-pc-windows-msvc -p butler-platform -p butler-core 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/crate-tests.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Keep ACL and contract evidence before the full build
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-windows-contract-logs
+          path: |
+            ${{ runner.temp }}/windows-stub/logs/acl*.log
+            ${{ runner.temp }}/windows-stub/logs/crate-tests.log
+          if-no-files-found: warn
+          retention-days: 14
       - name: Compile existing Windows E2E harness
         id: harness
         if: ${{ !cancelled() }}

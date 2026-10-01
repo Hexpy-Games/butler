@@ -60,6 +60,11 @@ async fn installed_release_delivers_one_stub_chat_turn() -> Result<(), HarnessEr
         setup.sandbox.install = root;
     }
     let s = setup.start().await?;
+    let stored = s.gw.post("/model-catalog/provider-credentials", json!({
+        "provider_id":"anthropic", "auth_type":"api_key", "api_key":"sk-e2e-preview-not-real"
+    })).await?;
+    assert_eq!(stored.status, 201);
+    assert_private_credentials(&s.sandbox.data);
     let sent =
         s.gw.post(
             "/messages",
@@ -88,6 +93,22 @@ async fn installed_release_delivers_one_stub_chat_turn() -> Result<(), HarnessEr
     s.finish().await?;
     server.abort();
     Ok(())
+}
+
+fn assert_private_credentials(data: &std::path::Path) {
+    for relative in [
+        "auth/model-provider-credentials.json",
+        "auth/credential-store.json",
+        "app/runtime/auth/local-agent-auth.json",
+        "app/runtime/auth/local-admin.json",
+        "state/app-gateway/project-folder-token-secret",
+    ] {
+        assert_eq!(
+            butler_platform::secure_fs::is_private(&data.join(relative)),
+            Some(true),
+            "private credential path: {relative}"
+        );
+    }
 }
 
 fn reply() -> Value {

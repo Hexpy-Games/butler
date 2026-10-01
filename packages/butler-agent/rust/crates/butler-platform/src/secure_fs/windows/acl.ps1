@@ -33,4 +33,7 @@ try {
         }
         $private -and $allowed
     }
-} catch { exit 1 }
+} catch {
+    [Console]::Error.WriteLine($_.Exception.Message)
+    exit 1
+}
