@@ -17,6 +17,19 @@ pub(super) async fn with_retries(
     baseline: u64,
     progress: &mut impl FnMut(&str, u64),
 ) -> Result<(), &'static str> {
+    if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
+        && !sources.iter().all(|source| {
+            reqwest::Url::parse(source)
+                .is_ok_and(|url| url.scheme() == "http" && url.host_str() == Some("127.0.0.1"))
+        })
+    {
+        eprintln!(
+            "embed_asset_real_download_forbidden_in_stub: BUTLER_E2E_TIER=stub requires \
+             local BUTLER_E2E_EMBED_SOURCES or BUTLER_E2E_EMBED_MANIFEST; \
+             supply cached assets with BUTLER_E2E_EMBEDDING_ASSETS"
+        );
+        return Err("embed_asset_real_download_forbidden_in_stub");
+    }
     let mut failure = "embed_asset_download_failed";
     for attempt in 0..3 {
         for (index, source) in sources.iter().enumerate() {
