@@ -343,7 +343,6 @@ async fn onb_03_installer_language_persists() -> Result<(), HarnessError> {
 
 /// ONB-03 — The installer language also sets the answer language.
 #[tokio::test]
-#[ignore = "product gap: ONB-03-LANG — `PATCH /settings {language:\"ko\"}` (what first-run setup sends) stores only user.language: GET /personalization keeps response_language \"en\", and `butler personalization get user.responseLanguage --json` ignores the key and prints the profile without any response language"]
 async fn onb_03_installer_language_sets_response_language() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("ONB-03")?

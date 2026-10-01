@@ -92,6 +92,7 @@ pub(crate) use application::{
 pub(crate) use application::{TestProjectDashboardBriefing, TestProjectDashboardLedger};
 pub use application::{
     app_session_hint, diagnostics_enabled_readonly, normalize_committed_turn_event,
+    stored_ui_language_readonly,
 };
 pub(crate) use application::{app_work_status, app_worker_activity};
 pub use application::{read_new_chat_briefing_projects, read_new_chat_briefing_settings};
