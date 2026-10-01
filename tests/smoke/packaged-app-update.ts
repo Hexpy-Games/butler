@@ -1,7 +1,7 @@
 /** Real packaged macOS .90 -> .91 update through Settings, with isolated DATA. */
 import { strict as assert } from "node:assert";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { chmodSync, cpSync, mkdirSync, readdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, mkdirSync, readdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { electronPage, type ElectronPage } from "../support/electron-page-cdp.ts";
@@ -91,6 +91,7 @@ async function proof(page: ElectronPage, version: string, sessionId?: string) {
   assert.equal(facts.updates.components[0].current_version, version);
   const payload = JSON.parse(readFileSync(join(dir, "installed/Butler.app/Contents/Resources/bundled-agent/native-agent-manifest.json"), "utf8"));
   assert.equal(payload.version, version);
+  assert.equal(statSync(join(dir, "installed/Butler.app/Contents/Resources/bundled-agent/bin/butler-agent")).mode & 0o777, 0o555);
   if (sessionId) assert.ok(facts.sessions.some(s => s.id === sessionId && s.title === "Update keeps this chat"));
   assert.equal(readFileSync(join(data, "update-sentinel.txt"), "utf8"), "preserved");
   console.log(`PROOF ${JSON.stringify({ version: facts.info.version, bundledAgent: facts.updates.components[0].current_version, health: facts.health, dataPreserved: true, sessionPreserved: Boolean(sessionId), previews: facts.settings.update_previews })}`);
@@ -138,6 +139,7 @@ async function smoke() {
   await page.waitForFunction(() => document.querySelector('[data-test-id="update-component-app"] button')?.hasAttribute("disabled"));
   const rowText = () => page.expression<string>(`document.querySelector('[data-test-id="update-component-app"]').innerText`);
   console.log(`OFF: ${await rowText()} (preview hidden)`);
+  await page.waitForFunction(() => !document.querySelector('[data-setting-id="update-previews"] [role="switch"]')?.hasAttribute("disabled"));
   await page.expression(`document.querySelector('[data-setting-id="update-previews"] [role="switch"]').click()`);
   await page.waitForFunction(() => !document.querySelector('[data-test-id="update-component-app"] button')?.hasAttribute("disabled"));
   assert.match(await rowText(), /0\.1\.0-preview\.91/);
@@ -174,4 +176,7 @@ function makeWritable(path: string) {
   }
 }
 
-try { await smoke(); } catch (error) { console.error(logs.join("").slice(-8000)); console.error(error); throw error; } finally { await cleanup(); }
+try { await smoke(); } catch (error) {
+  try { console.error(readFileSync(join(data, "updates/app-install.log"), "utf8")); } catch { /* Helper not started. */ }
+  console.error(logs.join("").slice(-8000)); console.error(error); throw error;
+} finally { await cleanup(); }

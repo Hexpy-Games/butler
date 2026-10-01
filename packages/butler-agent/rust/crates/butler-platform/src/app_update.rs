@@ -45,7 +45,7 @@ fn install_platform(
         .ok_or("Installed App bundle is unavailable.")?;
     let container = bundle.parent().ok_or("App directory is unavailable.")?;
     let staging = container.join(format!(".butler-update-{}", std::process::id()));
-    std::fs::create_dir(&staging).map_err(|e| e.to_string())?;
+    crate::secure_fs::create_private_dir(&staging).map_err(|e| e.to_string())?;
     let result = activate_mac(artifact, executable, bundle, &staging, parent, arguments);
     let _ = crate::secure_fs::remove_tree(&staging);
     result
@@ -90,9 +90,7 @@ fn activate_mac(
     }
     // Developer ID previews are signed but not notarized. Only a verified,
     // same-publisher candidate may have its download quarantine removed.
-    run(Command::new("xattr")
-        .args(["-dr", "com.apple.quarantine"])
-        .arg(&candidate))?;
+    remove_quarantine(&candidate)?;
     println!("app-update-ready");
     await_activation()?;
     wait_for_parent(parent)?;
@@ -111,6 +109,47 @@ fn activate_mac(
             Err(error.to_string())
         }
     }
+}
+
+#[cfg(target_os = "macos")]
+fn remove_quarantine(candidate: &Path) -> Result<(), String> {
+    let mut permissions = Vec::new();
+    let result = allow_attribute_writes(candidate, &mut permissions).and_then(|()| {
+        run(Command::new("xattr")
+            .args(["-dr", "com.apple.quarantine"])
+            .arg(candidate))
+    });
+    let mut restored = Ok(());
+    for (path, mode) in permissions.into_iter().rev() {
+        if let Err(error) = std::fs::set_permissions(path, mode) {
+            restored = Err(error.to_string());
+        }
+    }
+    result.and(restored)
+}
+
+#[cfg(target_os = "macos")]
+fn allow_attribute_writes(
+    path: &Path,
+    permissions: &mut Vec<(std::path::PathBuf, std::fs::Permissions)>,
+) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+    let metadata = std::fs::symlink_metadata(path).map_err(|e| e.to_string())?;
+    if metadata.is_symlink() {
+        return Ok(());
+    }
+    let mode = metadata.permissions();
+    if mode.mode() & 0o200 == 0 {
+        permissions.push((path.to_owned(), mode.clone()));
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode.mode() | 0o200))
+            .map_err(|e| e.to_string())?;
+    }
+    if metadata.is_dir() {
+        for entry in std::fs::read_dir(path).map_err(|e| e.to_string())? {
+            allow_attribute_writes(&entry.map_err(|e| e.to_string())?.path(), permissions)?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
@@ -157,7 +196,11 @@ fn run(command: &mut Command) -> Result<(), String> {
     if result.status.success() {
         Ok(())
     } else {
-        Err("App package verification or installation failed.".into())
+        Err(format!(
+            "App package command {} failed: {}",
+            command.get_program().display(),
+            String::from_utf8_lossy(&result.stderr).trim()
+        ))
     }
 }
 
