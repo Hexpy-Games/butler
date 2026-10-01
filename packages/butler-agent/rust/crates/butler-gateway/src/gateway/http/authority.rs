@@ -60,12 +60,13 @@ pub(super) async fn route(
     if method == Method::POST
         && let Some(rest) = path.strip_prefix("/authority-requests/")
         && let Some((reference, action)) = rest.rsplit_once('/')
-        && matches!(action, "allow" | "deny" | "modify")
+        && matches!(action, "allow" | "deny" | "modify" | "answer")
         && !reference.contains('/')
     {
         let request_ref = decode_component(reference)?;
         let (allow_scope, alternative_input) = match action {
             "allow" => (Some(allow_scope(request).await?), None),
+            "answer" => (None, Some(question_answer(request).await?)),
             "modify" => (None, Some(modify_input(request).await?)),
             _ => (None, None),
         };
@@ -158,4 +159,16 @@ fn hex(byte: u8) -> Option<u8> {
         b'A'..=b'F' => Some(byte - b'A' + 10),
         _ => None,
     }
+}
+
+async fn question_answer(request: Request<Body>) -> Result<String, HttpError> {
+    let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
+    let value: Value = serde_json::from_slice(&bytes).map_err(|_| {
+        HttpError::public(
+            400,
+            "question_answer_invalid",
+            "Choose an answer and try again.",
+        )
+    })?;
+    serde_json::to_string(&value).map_err(|_| HttpError::Internal)
 }

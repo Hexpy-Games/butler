@@ -1,6 +1,7 @@
 //! Canonical App session reads composed with BTCC child projections.
 
 mod helpers;
+mod questions;
 mod steward_children;
 mod turn_projection;
 
@@ -52,15 +53,7 @@ impl AppApplication {
         let subsessions = self.parent_subsessions(&session_id).await;
         let latest = latest_with_progress.as_ref().map(|(turn, _)| turn);
         let active = latest.filter(|turn| active_state(&turn.state));
-        let work_streams = self
-            .dependencies
-            .work_streams
-            .list_active(AppWorkStreamQuery {
-                app_session_id: session.id.clone(),
-                runtime_session_id: session.session_hint.clone(),
-                current_turn_id: active.map(|turn| turn.id.clone()),
-            })
-            .await?;
+        let work_streams = self.session_view_work_streams(&session, active).await?;
         let latest_message = messages.messages.last();
         let suppress_progress_rows = superseded_by_reply(latest, latest_message);
         let latest_turn_view = latest_with_progress
@@ -76,6 +69,14 @@ impl AppApplication {
         view.insert("protocol_version".into(), json!(APP_PROTOCOL_VERSION));
         view.insert("session_id".into(), json!(session.id));
         view.insert("kind".into(), json!(session.kind));
+        questions::insert(
+            self,
+            &mut view,
+            &session.session_hint,
+            &messages.messages,
+            active.map(|t| t.id.as_str()),
+        )
+        .await?;
         insert_some(
             &mut view,
             "project_id",
@@ -136,6 +137,21 @@ impl AppApplication {
             ),
         );
         Ok(Value::Object(view))
+    }
+
+    async fn session_view_work_streams(
+        &self,
+        session: &super::AppSessionSummary,
+        active: Option<&TurnRecord>,
+    ) -> Result<Value, GatewayApplicationError> {
+        self.dependencies
+            .work_streams
+            .list_active(AppWorkStreamQuery {
+                app_session_id: session.id.clone(),
+                runtime_session_id: session.session_hint.clone(),
+                current_turn_id: active.map(|turn| turn.id.clone()),
+            })
+            .await
     }
 
     pub(super) async fn session_summary_owned(

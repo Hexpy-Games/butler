@@ -10,7 +10,7 @@ import { ComposerDecisionPanel } from "./ComposerDecisionPanel";
 // #region recipe: Plan waiting for acceptance
 function PlanDecision() {
   return (
-    <ComposerDecisionPanel icon={<ListChecks aria-hidden="true" size="lg" />} title="Design system final cleanup plan" onOpen={() => undefined}
+    <ComposerDecisionPanel icon={<ListChecks aria-hidden="true" size="lg" />} eyebrow="Plan" title="Design system final cleanup plan" onOpen={() => undefined}
       actions={<ButtonContainer size="sm" justify="end">
         <Button size="sm" variant="secondary">Keep planning</Button>
         <Button size="sm">Accept plan</Button>
@@ -22,7 +22,7 @@ function PlanDecision() {
 // #region recipe: Approval request with examples and risk
 function ApprovalRequest() {
   return (
-    <ComposerDecisionPanel icon={<Folder aria-hidden="true" size="lg" />} title="Edit 24 files in 'Desktop'?" onOpen={() => undefined}
+    <ComposerDecisionPanel icon={<Folder aria-hidden="true" size="lg" />} eyebrow="Permission" title="Edit 24 files in 'Desktop'?" onOpen={() => undefined}
       details={["Screenshot 10.02.14.png", "Screenshot 10.05.31.png", "Screenshot 10.09.02.png", "+21 more"]}
       aside={<Tag tone="warning">Medium risk</Tag>}
       actions={<ButtonContainer size="sm" justify="end">
@@ -46,12 +46,12 @@ export const guidance: ShowcaseGuidance = {
   ],
   doDont: [
     {
-      do: { caption: "The panel owns the icon tone, title clamp and button radius.", render: () => <PlanDecision /> },
+      do: { caption: "The panel owns the icon tone, title wrapping and button radius.", render: () => <PlanDecision /> },
       dont: { caption: "A hand-built row drifts from the composer padding and radius.", render: () => <Stack align="row" gap="sm" cross="center"><ListChecks size="lg" /><Typo.Label>Design system final cleanup plan</Typo.Label><Button size="sm">Accept plan</Button></Stack> },
     },
     {
       do: { caption: "Examples go in details: each wraps in full, aligned to the title.", render: () => <ApprovalRequest /> },
-      dont: { caption: "Packing examples into the title clamps them away.", render: () => <ComposerDecisionPanel icon={<Folder aria-hidden="true" size="lg" />} title="Edit 24 files in 'Desktop'? Screenshot 10.02.14.png, Screenshot 10.05.31.png, Screenshot 10.09.02.png and 21 more" onOpen={() => undefined} actions={<Button size="sm">Allow once</Button>} /> },
+      dont: { caption: "Packing examples into the title wrappings them away.", render: () => <ComposerDecisionPanel icon={<Folder aria-hidden="true" size="lg" />} eyebrow="Permission" title="Edit 24 files in 'Desktop'? Screenshot 10.02.14.png, Screenshot 10.05.31.png, Screenshot 10.09.02.png and 21 more" onOpen={() => undefined} actions={<Button size="sm">Allow once</Button>} /> },
     },
   ],
   content: [
@@ -62,5 +62,5 @@ export const guidance: ShowcaseGuidance = {
     "Buttons are verbs (Accept plan, Deny, Allow once).",
   ],
   accessibility: ["The icon is decorative (aria-hidden); the title is a button that opens the source; details are plain text and the Show more button carries aria-expanded and aria-controls; errors are announced with role=\"alert\"."],
-  tokens: ["--adaptive-composer-radius", "--space-xs", "--space-sm", "--space-md", "--space-lg", "--icon-size-lg", "--text-secondary"],
+  tokens: ["--adaptive-composer-radius", "--space-xs", "--space-sm", "--space-md", "--space-lg", "--icon-size-sm", "--text-secondary"],
 };

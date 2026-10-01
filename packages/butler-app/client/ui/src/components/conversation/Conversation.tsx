@@ -6,6 +6,7 @@ import { useButlerStore } from "@/app/store.ts";
 import { useAppearanceTheme } from "@/stores/appearanceStore.ts";
 import { EmptyState } from "./EmptyState";
 import { BranchProjectContext } from "./AssistantBranchActions";
+import { withQuestionAnswers } from "./userQuestions";
 import { MessageList } from "./MessageList";
 import { Composer } from "./Composer";
 import {
@@ -30,7 +31,10 @@ export function Conversation() {
     return view?.project_id ?? null;
   });
   const navigation = useButlerStore((state) => state.navigation);
-  const messages = useButlerStore((state) => state.messages);
+  const storedMessages = useButlerStore((state) => state.messages);
+  const questionAnswers = useButlerStore(state => state.sessionViews[activeChatId]?.question_answers
+    ?? (state.sessionView?.session_id === activeChatId ? state.sessionView.question_answers : undefined));
+  const messages = useMemo(() => withQuestionAnswers(storedMessages, questionAnswers ?? []), [storedMessages, questionAnswers]);
   const summary = useButlerStore((state) => state.summary);
   const turnProgress = useButlerStore((state) => state.turnProgress);
   const messageLoadPending = useButlerStore(

@@ -431,6 +431,9 @@ export const enUsCopy: AppCopy = {
     approvalRequest: {
       editFiles: (count, workspace) =>
         `Edit ${count > 0 ? `${count} ${count === 1 ? "file" : "files"}` : "files"} ${inWorkspace(workspace)}?`,
+      editFilesOutside: count => `Edit ${count > 0 ? `${count} ${count === 1 ? "file" : "files"}` : "files"}, including outside the project folder?`,
+      runCommandOutside: "Run a command outside the project folder?",
+      networkCommandOutside: "Run a command that uses the internet outside the project folder?",
       runCommand: workspace => `Run a command ${inWorkspace(workspace)}?`,
       networkCommand: workspace => `Run a command that uses the internet ${inWorkspace(workspace)}?`,
       useConnector: (tool, server) => tool && server ? `Use ${tool} from ${server}?` : tool ? `Use ${tool}?` : "Use a connected tool?",
@@ -501,6 +504,8 @@ export const enUsCopy: AppCopy = {
     allowConversation: "Always allow in this conversation",
     allowDescription: "Run this request and apply the permission to this conversation's child tasks.",
     branchFailed: "Could not create a conversation. Try again.",
+    questionPanel: { review: "Review", send: "Send", next: "Next", back: "Back", skip: "Skip", skipped: "Skipped", later: "Answer later", pending: "Answer pending", other: "Other…", recommended: "Recommended", working: "Working", select: "Select" },
+    questionAnswer: { answered: "Answered", skipped: "Skipped", message: "Answered by message" },
     decisionFailed: "Could not submit the decision. Try again.",
     archivesEmpty: "No archived projects or conversations.",
     generalConversation: "General conversation",

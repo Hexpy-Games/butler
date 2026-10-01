@@ -3,6 +3,7 @@ import type { TimelineEvent } from "@/app/types.ts";
 const SESSION_VIEW_REFRESH_INTERVAL_MS = 1_000;
 
 const SESSION_VIEW_REFRESH_EVENT_TYPES = new Set([
+  "question.answered",
   "message.created",
   "message.updated",
   "message.deleted",

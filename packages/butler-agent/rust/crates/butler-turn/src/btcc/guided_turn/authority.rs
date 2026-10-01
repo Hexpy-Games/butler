@@ -41,6 +41,9 @@ pub async fn guided_authority_loop_decision(
             "authority_source_call_mismatch",
         ));
     }
+    if execution.capability == "ask_user" {
+        return Ok(Some(GuidedAuthorityDecision::Allow));
+    }
     Ok(Some(match execution.decision {
         crate::btcc::RequestDecision::Modified => {
             GuidedAuthorityDecision::Modify(execution.alternative_input.ok_or(

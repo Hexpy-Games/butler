@@ -71,11 +71,21 @@ export function rendererMimeType(filePath) {
   return mimeTypes.get(extname(filePath).toLowerCase()) ?? "application/octet-stream";
 }
 
-export function createAppRendererProtocolHandler({ distRoot }) {
+export function createAppRendererProtocolHandler({ distRoot, noticesFile = null }) {
   const root = resolve(distRoot);
   return async function handleAppRendererRequest(request) {
     const target = resolveRendererAsset(root, request.url, request.method);
     if (!target.ok) return new Response(null, { status: target.status });
+    const pathname = new URL(request.url).pathname;
+    const notice = pathname === "/THIRD_PARTY_NOTICES.txt.gz" ? noticesFile : null;
+    if (notice) {
+      try {
+        const body = await readFile(notice);
+        return new Response(request.method === "HEAD" ? null : body, {
+          headers: { "content-type": rendererMimeType(notice), "x-content-type-options": "nosniff" },
+        });
+      } catch { return new Response(null, { status: 404 }); }
+    }
     try {
       // Symlinks must not lead out of the renderer bundle.
       const [realRoot, realFile] = await Promise.all([

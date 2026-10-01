@@ -37,3 +37,11 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 
 ## Tags
 form, long-text, composer
+
+## Underline entry
+
+`variant="underline"` shares Input’s bottom-line focus and inherited typography.
+Use `textSize="label"` beside Typo.Label. It starts at one line, wraps long words,
+and grows to `--textarea-max-lines` (six), then scrolls vertically with DS edge fades.
+Native `field-sizing: content` is preferred; older engines measure scrollHeight
+on edits and width changes. The container owns Enter/Shift+Enter confirmation.
