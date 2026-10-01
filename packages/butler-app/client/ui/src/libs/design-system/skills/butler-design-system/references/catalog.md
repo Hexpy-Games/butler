@@ -1512,7 +1512,7 @@ The composer's decision state: what is being decided, optional detail lines, an 
 - Use for: A plan waiting for acceptance or an authority request that replaces the composer input
 - Not for: A notice inside the conversation → `Notice`
 - Not for: A modal confirmation → `Dialog`
-- Tokens: `--adaptive-composer-radius`, `--space-xs`, `--space-sm`, `--space-md`, `--space-lg`, `--icon-size-lg`, `--text-secondary`
+- Tokens: `--adaptive-composer-radius`, `--space-xs`, `--space-sm`, `--space-md`, `--space-lg`, `--icon-size-sm`, `--text-secondary`
 
 ### ComposerQuestionPanel
 

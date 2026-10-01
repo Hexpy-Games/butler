@@ -1,3 +1,4 @@
+import { ComposerPanelActions } from "../../lib/composerPanel";
 import { Button } from "../../components/Button";
 import { ButtonContainer } from "../../components/ButtonContainer";
 import { Typo } from "../../components/Typo";
@@ -12,7 +13,7 @@ export function QuestionActions({ model: m, props, labels }: { model: ReturnType
   const many = props.questions.length > 1;
   const canSend = m.review || Boolean(answerText(m.question, m.answer));
   const immediate = !many && m.question.type === "single" && !m.otherOpen && !m.answer.other;
-  return <div className={styles.actions}>
+  return <ComposerPanelActions>
     {props.state === "working" && <Typo.Caption className={dsClass(styles.working)} tone="tertiary">{labels.working}</Typo.Caption>}
     <ButtonContainer size="sm" justify="end">
       {many && <Button type="button" size="sm" variant="borderless" disabled={m.busy || m.step === 0} onClick={() => m.go(m.step - 1)}>{labels.back}</Button>}
@@ -22,5 +23,5 @@ export function QuestionActions({ model: m, props, labels }: { model: ReturnType
       {(!immediate || m.busy) && <Button type="button" size="sm" disabled={m.busy || !canSend} onClick={() => m.review ? m.send() : m.advance()}
         iconStart={props.state === "submitting" ? <Spinner size={14} /> : undefined}>{many && !m.review ? labels.next : labels.send}</Button>}
     </ButtonContainer>
-  </div>;
+  </ComposerPanelActions>;
 }

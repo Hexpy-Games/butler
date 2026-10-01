@@ -1,45 +1,8 @@
-/* ComposerDecisionPanel: the composer's decision state (a plan to accept, an
-   authority request). The subject row carries the icon in the secondary tone
-   and the actions take the composer radius so they echo the composer shape. */
-.surface {
-  display: grid;
-  min-width: 0;
-}
-
-.subject {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-md) var(--space-lg);
-  color: var(--text-primary);
-}
-
-.subject > svg {
-  flex: none;
-  color: var(--text-secondary);
-}
-
-/* Only the title shrinks; a status Tag and the count keep their width. */
-.aside {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-/* Details read as the title's next lines: tight under it, aligned to its text. */
-.subject[data-has-details="true"] {
-  padding-block-end: var(--space-xs);
-}
-
 .details {
   display: grid;
   min-width: 0;
-  padding: 0 var(--space-lg) var(--space-md);
-  padding-inline-start: calc(
-    var(--space-lg) + var(--icon-size-lg) + var(--space-sm)
-  );
+  padding: 0 var(--space-xs) var(--space-sm);
+  padding-inline-start: calc(var(--icon-size-sm) + var(--space-sm));
 }
 
 .detailLines {
@@ -53,18 +16,6 @@
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
-}
-
-.actions {
-  display: flex;
-  min-width: 0;
-  justify-content: flex-end;
-  padding: var(--space-sm);
-}
-
-.actions button {
-  flex-shrink: 0;
-  border-radius: var(--adaptive-composer-radius);
 }
 
 .error {
