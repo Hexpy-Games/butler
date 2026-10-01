@@ -37,13 +37,13 @@ export function FirstRunSignIn({ flow }: { flow: FirstRunFlow }) {
           <IconTile size="lg"><Globe2 size="xl" /></IconTile>
           <Typo.H4 align="center" as="h1">{copy.signInTitle}</Typo.H4>
           <Inline justify="center" role="status">
-            <Spinner size={14} />
-            <Typo.Body tone="secondary">{flow.commit.pending ? copy.connecting : copy.signInBody}</Typo.Body>
+            {!flow.commit.connected ? <Spinner size={14} /> : null}
+            <Typo.Body tone="secondary">{flow.commit.connected ? copy.keyValid : flow.commit.pending ? copy.connecting : copy.signInBody}</Typo.Body>
           </Inline>
-          <ButtonContainer size="default">
+          {!flow.commit.connected ? <ButtonContainer size="default">
             <Button type="button" variant="outline" onClick={() => void signIn.cancel()}>{copy.cancel}</Button>
-          </ButtonContainer>
-          {signIn.canCopyLink ? (
+          </ButtonContainer> : null}
+          {!flow.commit.connected && signIn.canCopyLink ? (
             <Button size="sm" type="button" variant="link" onClick={() => void signIn.copyLink()}>
               {signIn.copied ? copy.linkCopied : copy.signInCopyLink}
             </Button>

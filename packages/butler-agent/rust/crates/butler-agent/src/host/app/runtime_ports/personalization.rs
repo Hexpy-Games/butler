@@ -172,6 +172,9 @@ impl AppPersonalization {
             "eol": documents.eol,
             "updated_at": self.clock.now_iso(),
             "response_language": response_language,
+            "response_language_explicit": user.value.get("responseLanguage").is_some()
+                && user.value.get("responseLanguageDefaultSource").and_then(Value::as_str)
+                    .is_none_or(|source| source == "explicit"),
             "persona_presets": presets,
             "profile": {
                 "butler_nickname": profile.butler_nickname,

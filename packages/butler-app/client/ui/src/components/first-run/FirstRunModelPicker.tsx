@@ -47,6 +47,7 @@ export function FirstRunModelPicker({ cardId, flow, options, apiKey, title, body
             <ChoiceCard
               aria-checked={option.key === selected?.key}
               chevron={false}
+              state={flow.commit.connected ? "disabled" : "default"}
               data-model-key={option.key}
               icon={<ModelLogo logo={option.logo} />}
               key={option.key}
@@ -60,7 +61,7 @@ export function FirstRunModelPicker({ cardId, flow, options, apiKey, title, body
         </ChoiceCardList>
       )}
       <Stack gap="sm">
-        <Button
+        {!flow.commit.connected ? <Button
           disabled={!selected || busy}
           size="lg"
           stretch
@@ -68,7 +69,7 @@ export function FirstRunModelPicker({ cardId, flow, options, apiKey, title, body
           onClick={() => selected && flow.connectLocal(cardId, selected, apiKey)}
         >
           {busy ? copy.connecting : copy.localStart}
-        </Button>
+        </Button> : null}
         <Typo.Caption align="center" tone="tertiary">{copy.localNote}</Typo.Caption>
       </Stack>
     </SetupWizardContent>

@@ -573,6 +573,8 @@ async function main(): Promise<void> {
   await clickButton(cdp, "연결");
   await waitForText(cdp, stubModelId);
   await clickButton(cdp, "이 모델로 시작");
+  await waitForExpression(cdp, "document.querySelector('#first-run-reply-language')?.disabled === false", "reply language choice");
+  await clickButton(cdp, "시작");
   await waitForExpression(
     cdp,
     `document.querySelector(${JSON.stringify(firstRunSelector)}) === null && document.querySelector('[data-test-class="workspace"]') !== null`,
