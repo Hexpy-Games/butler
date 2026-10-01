@@ -215,6 +215,29 @@ fn valid_sha256(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
+fn validate_integrity(selected: &Value, sha256: Option<&str>) -> Result<(), UpdateError> {
+    if sha256.is_some_and(|digest| !valid_sha256(digest)) {
+        return Err(UpdateCode::UpdateManifestSha256Invalid.into());
+    }
+    if let Some(integrity) = selected.get("integrity") {
+        if string(integrity, "digestAlgorithm") != Some("sha256") {
+            return Err(UpdateCode::UpdateManifestIncompatible.into());
+        }
+        if string(integrity, "signature").is_some() {
+            return Err(UpdateCode::UpdateSignatureUnsupported.into());
+        }
+        if string(integrity, "digest")
+            .is_some_and(|digest| sha256.is_none_or(|sha| !digest.eq_ignore_ascii_case(sha)))
+        {
+            return Err(UpdateCode::UpdateManifestIncompatible.into());
+        }
+    }
+    if string(selected, "signature").is_some() {
+        return Err(UpdateCode::UpdateSignatureUnsupported.into());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -254,27 +277,4 @@ mod tests {
             );
         }
     }
-}
-
-fn validate_integrity(selected: &Value, sha256: Option<&str>) -> Result<(), UpdateError> {
-    if sha256.is_some_and(|digest| !valid_sha256(digest)) {
-        return Err(UpdateCode::UpdateManifestSha256Invalid.into());
-    }
-    if let Some(integrity) = selected.get("integrity") {
-        if string(integrity, "digestAlgorithm") != Some("sha256") {
-            return Err(UpdateCode::UpdateManifestIncompatible.into());
-        }
-        if string(integrity, "signature").is_some() {
-            return Err(UpdateCode::UpdateSignatureUnsupported.into());
-        }
-        if string(integrity, "digest")
-            .is_some_and(|digest| sha256.is_none_or(|sha| !digest.eq_ignore_ascii_case(sha)))
-        {
-            return Err(UpdateCode::UpdateManifestIncompatible.into());
-        }
-    }
-    if string(selected, "signature").is_some() {
-        return Err(UpdateCode::UpdateSignatureUnsupported.into());
-    }
-    Ok(())
 }
