@@ -21,7 +21,16 @@ runs:
       if: inputs.native-deps-artifact != ''
       with:
         name: ${{ inputs.native-deps-artifact }}
-        path: ${{ runner.temp }}/ort-cache/native-deps
+        path: ${{ runner.temp }}/windows-native-artifact
+    - name: Restore native tree with its verified library layout
+      if: inputs.native-deps-artifact != ''
+      shell: bash
+      run: |
+        set -euo pipefail
+        root="$(cygpath -u "$RUNNER_TEMP")"
+        mkdir -p "$root/ort-cache/native-deps"
+        tar -xf "$root/windows-native-artifact/windows-native-deps.tar.zst" \
+          -C "$root/ort-cache/native-deps" --use-compress-program unzstd
     - uses: ./.github/actions/rust-agent-setup
       with:
         native-deps: static-ort

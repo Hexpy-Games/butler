@@ -84,6 +84,8 @@ function Install-Butler {
 function Enable-ButlerInstallation {
     param([string]$AgentHome, [string]$Name, [string]$Target, [string]$Bin, [string]$Marker, [bool]$Start)
     $launcher = Join-Path $bin 'butler.cmd'
+    & "$target/butler-agent.exe" --prepare-process-links
+    if ($LASTEXITCODE -notin @(0,2)) { throw 'Could not prepare process role links' }
     $current = Join-Path $agentHome 'current'
     if (Test-Path $current) {
         $old = (Get-Content $current -Raw).Trim()
