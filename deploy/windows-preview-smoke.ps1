@@ -2,12 +2,19 @@ function Assert-PrivateAcl {
     param([string]$Path)
     $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
     $acl = Get-Acl -LiteralPath $Path
-    if ($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $sid) { throw 'Wrong private owner' }
+    # Match butler-platform's private ACL contract. Elevated Windows tokens can
+    # own inherited children as Administrators without granting that group access.
+    $owner = $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
+    if ($owner -notin @($sid,'S-1-5-32-544','S-1-5-18')) { throw 'Wrong private owner' }
     $rules = $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])
     if (!$rules.Count) { throw 'Empty private DACL' }
+    $readable = $false
     foreach ($rule in $rules) {
         if ($rule.AccessControlType -eq 'Allow' -and $rule.IdentityReference.Value -ne $sid) { throw 'Non-user ACE on private data' }
+        if ($rule.AccessControlType -eq 'Allow' -and $rule.IdentityReference.Value -eq $sid -and
+            ($rule.FileSystemRights -band [Security.AccessControl.FileSystemRights]::ReadData)) { $readable = $true }
     }
+    if (!$readable) { throw 'No user read access on private data' }
 }
 
 function Invoke-PreviewLauncher {
