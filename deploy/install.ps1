@@ -74,32 +74,38 @@ function Install-Butler {
             & "$target/butler-agent.exe" --installation-root $target --resource-root "$target/resources" doctor --check installation
             if ($LASTEXITCODE -ne 0) { throw 'Existing version is damaged; remove it before reinstalling' }
         } else { Move-Item $stage $target; $stage = $null }
-        $current = Join-Path $agentHome 'current'
-        if (Test-Path $current) {
-            $old = (Get-Content $current -Raw).Trim()
-            if ($old -ne $name) { Write-ButlerFile (Join-Path $agentHome 'previous') $old }
-        }
-        Write-ButlerFile $current $name
-        # UTF-8 paths work from legacy OEM consoles too; restore the caller's code page.
-        $batchTarget = $target.Replace('%','%%')
-        $text = "@echo off`r`n$marker`r`nsetlocal DisableDelayedExpansion`r`n" +
-            "for /f `"tokens=2 delims=:`" %%C in ('chcp') do set `"BUTLER_PREVIEW_CP=%%C`"`r`n" +
-            "chcp 65001 >nul`r`n`"$batchTarget\butler-agent.exe`" --installation-root `"$batchTarget`" --resource-root `"$batchTarget\resources`" %*`r`n" +
-            "set `"BUTLER_PREVIEW_EXIT=%ERRORLEVEL%`"`r`nchcp %BUTLER_PREVIEW_CP% >nul`r`nexit /b %BUTLER_PREVIEW_EXIT%`r`n"
-        Write-ButlerFile $launcher $text
-        $userPath = [string][Environment]::GetEnvironmentVariable('Path','User')
-        if (@($userPath -split ';') -notcontains $bin) {
-            [Environment]::SetEnvironmentVariable('Path', ($userPath.TrimEnd(';') + ';' + $bin).TrimStart(';'), 'User')
-        }
-        if (@($env:PATH -split ';') -notcontains $bin) { $env:PATH += ";$bin" }
-        if ($start) {
-            & $launcher start
-            if ($LASTEXITCODE -ne 0) { throw 'Installed; start failed. Run: butler start' }
-        }
+        Enable-ButlerInstallation $agentHome $name $target $bin $marker $start
         Write-Host 'Butler installed. Run: butler open'
     } finally {
         if ($stage -and (Test-Path $stage)) { Remove-Item $stage -Recurse -Force }
         Remove-Item $temp -Recurse -Force
+    }
+}
+
+function Enable-ButlerInstallation {
+    param([string]$AgentHome, [string]$Name, [string]$Target, [string]$Bin, [string]$Marker, [bool]$Start)
+    $launcher = Join-Path $bin 'butler.cmd'
+    $current = Join-Path $agentHome 'current'
+    if (Test-Path $current) {
+        $old = (Get-Content $current -Raw).Trim()
+        if ($old -ne $name) { Write-ButlerFile (Join-Path $agentHome 'previous') $old }
+    }
+    Write-ButlerFile $current $name
+    # UTF-8 paths work from legacy OEM consoles too; restore the caller's code page.
+    $batchTarget = $target.Replace('%','%%')
+    $text = "@echo off`r`n$marker`r`nsetlocal DisableDelayedExpansion`r`n" +
+        "for /f `"tokens=2 delims=:`" %%C in ('chcp') do set `"BUTLER_PREVIEW_CP=%%C`"`r`n" +
+        "chcp 65001 >nul`r`n`"$batchTarget\butler-agent.exe`" --installation-root `"$batchTarget`" --resource-root `"$batchTarget\resources`" %*`r`n" +
+        "set `"BUTLER_PREVIEW_EXIT=%ERRORLEVEL%`"`r`nchcp %BUTLER_PREVIEW_CP% >nul`r`nexit /b %BUTLER_PREVIEW_EXIT%`r`n"
+    Write-ButlerFile $launcher $text
+    $userPath = [string][Environment]::GetEnvironmentVariable('Path','User')
+    if (@($userPath -split ';') -notcontains $bin) {
+        [Environment]::SetEnvironmentVariable('Path', ($userPath.TrimEnd(';') + ';' + $bin).TrimStart(';'), 'User')
+    }
+    if (@($env:PATH -split ';') -notcontains $bin) { $env:PATH += ";$bin" }
+    if ($start) {
+        & $launcher start
+        if ($LASTEXITCODE -ne 0) { throw 'Installed; start failed. Run: butler start' }
     }
 }
 
