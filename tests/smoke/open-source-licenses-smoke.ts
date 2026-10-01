@@ -1,0 +1,51 @@
+import { resolve, sep } from "node:path";
+import { chromium } from "playwright";
+import { getAppCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
+
+// Existing App visual harness: real Settings navigation, no Agent or model calls.
+const root = resolve("packages/butler-app/client/ui/dist");
+const server = Bun.serve({
+  hostname: "127.0.0.1", port: 0,
+  async fetch(request) {
+    const path = resolve(root, `.${decodeURIComponent(new URL(request.url).pathname)}`);
+    if (path !== root && !path.startsWith(`${root}${sep}`)) return new Response(null, { status: 403 });
+    const file = Bun.file(path === root ? `${root}/index.html` : path);
+    if (await file.exists()) return new Response(file);
+    return Response.json({ error: "Offline smoke: no API" }, { status: 503 });
+  },
+});
+const browser = await chromium.launch({ headless: true });
+try {
+  for (const locale of ["en", "ko"]) {
+    const copy = getAppCopy(locale === "ko" ? "ko-KR" : "en-US");
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    await page.route("**/*", (route) => {
+      if (new URL(route.request().url()).origin === server.url.origin) return route.continue();
+      return route.abort();
+    });
+    await page.goto(`${server.url}?visual=components&surface=ss03&locale=${locale}`);
+    await page.locator('[data-test-class~="composer-card"]').waitFor();
+    // The ss03 fixture opens its session observer; dismiss it before navigation.
+    await page.getByRole("dialog").getByRole("button", { name: locale === "ko" ? "닫기" : "Close", exact: true }).click();
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+    const settings = page.getByRole("button", { name: copy.sidebar.settings, exact: true });
+    await settings.click();
+    await page.getByRole("button", { name: copy.settings.sections.about, exact: true }).click();
+    await page.getByRole("button", { name: locale === "ko" ? "오픈소스 라이선스" : "Open source licenses", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("textbox", { name: locale === "ko" ? "구성요소 검색" : "Search components" }).fill("tokio ");
+    const tokio = dialog.getByRole("button", { name: /^tokio [0-9]/ });
+    await tokio.click();
+    await dialog.getByText("Permission is hereby granted", { exact: false }).first().waitFor();
+    for (const width of [1440, 375, 320, 390, 430]) {
+      await page.setViewportSize({ width, height: 900 });
+      const box = await dialog.boundingBox();
+      if (!box || box.x < 0 || box.x + box.width > width + 1) throw new Error(`Dialog overflows ${width}px`);
+    }
+    await page.close();
+  }
+  console.log("Offline Settings → Open source licenses → tokio smoke passed (320–1440px)");
+} finally {
+  await browser.close();
+  await server.stop();
+}

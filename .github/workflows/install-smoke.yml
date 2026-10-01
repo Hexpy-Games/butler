@@ -52,7 +52,7 @@ jobs:
           npm publish --dry-run --access public
           files="$(tar -tzf "$RUNNER_TEMP"/hexpygames-butler-*.tgz | LC_ALL=C sort)"
           echo "$files"
-          test "$files" = "$(printf '%s\n' package/README.md package/bin/butler-install.js package/install.sh package/package.json | LC_ALL=C sort)"
+          test "$files" = "$(printf '%s\n' package/README.md package/THIRD_PARTY_NOTICES.txt package/bin/butler-install.js package/install.sh package/package.json | LC_ALL=C sort)"
 
       - name: Keep the tarball for the smoke
         uses: actions/upload-artifact@v4

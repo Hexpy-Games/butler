@@ -70,6 +70,13 @@ def main() -> int:
         binary = stage / "butler-agent"
         shutil.copyfile(binary_source, binary)
         binary.chmod(0o555)
+        notices = stage / "THIRD_PARTY_NOTICES.txt"
+        subprocess.run(["node", str(Path(__file__).resolve().parents[4] / "deploy/licenses/generate.mjs"),
+                        str(notices)], check=True)
+        notices.chmod(0o444)
+        renderer_notices = resources_source / "app-client/dist/THIRD_PARTY_NOTICES.txt"
+        if not renderer_notices.is_file() or renderer_notices.read_bytes() != notices.read_bytes():
+            raise SystemExit("prepared payload renderer notices are missing or stale")
         shutil.copytree(resources_source, stage / "resources", symlinks=True)
         make_read_only(stage / "resources")
         (stage / "butler").symlink_to("butler-agent")
