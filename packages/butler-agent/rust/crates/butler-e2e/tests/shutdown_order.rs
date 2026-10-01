@@ -214,6 +214,14 @@ async fn control_read_shutdown(order: &str) -> Result<(), HarnessError> {
         "blocked control shutdown ({order}): {:?}",
         started.elapsed()
     );
+    for line in s
+        .agent
+        .logs()
+        .lines()
+        .filter(|line| line.starts_with("[native-shutdown]"))
+    {
+        eprintln!("{line}");
+    }
     assert!(
         started.elapsed() < Duration::from_secs(2),
         "control shutdown exceeded 2s; {}",

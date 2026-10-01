@@ -65,13 +65,17 @@ pub(super) fn write_record(
             crate::host::HostError::new("native_service_instance_state_unavailable")
                 .with_source(source)
         })?;
-        file.sync_all().map_err(|source| {
-            crate::host::HostError::new("native_service_instance_state_unavailable")
-                .with_source(source)
-        })?;
+        super::super::shutdown_trace::measure_sync("instance_file_fsync", || file.sync_all())
+            .map_err(|source| {
+                crate::host::HostError::new("native_service_instance_state_unavailable")
+                    .with_source(source)
+            })?;
         #[cfg(debug_assertions)]
         hold_shutdown_write(record);
-        fs::rename(&temporary, path).map_err(|source| {
+        super::super::shutdown_trace::measure_sync("instance_file_rename", || {
+            fs::rename(&temporary, path)
+        })
+        .map_err(|source| {
             crate::host::HostError::new("native_service_instance_state_unavailable")
                 .with_source(source)
         })

@@ -233,7 +233,11 @@ impl AppGatewayLifecycle {
         }
         self.endpoint.clear();
         let config = AppServiceConfiguration::capture(&self.data_root);
-        self.persist(false, None, &config).await
+        crate::host::service::shutdown_trace::measure(
+            "app_endpoint_persist",
+            self.persist(false, None, &config),
+        )
+        .await
     }
 
     fn require_captured_dependencies(
