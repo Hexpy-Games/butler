@@ -77,6 +77,7 @@ pub(super) struct Buckets {
     priced: bool,
     prices: BTreeMap<String, Option<ModelPricing>>,
     cost: UsageTotals,
+    cost_by_work: BTreeMap<String, UsageTotals>,
 }
 
 impl Buckets {
@@ -94,6 +95,7 @@ impl Buckets {
             priced,
             prices: BTreeMap::new(),
             cost: UsageTotals::default(),
+            cost_by_work: BTreeMap::new(),
         }
     }
 
@@ -140,6 +142,11 @@ impl Buckets {
             .entry(event.model.clone())
             .or_insert_with(|| pricing(&event.model));
         self.cost.add(&event, price.as_ref());
+        let work = work_kind(&row.scope);
+        self.cost_by_work
+            .entry(work.into())
+            .or_default()
+            .add(&event, price.as_ref());
     }
 
     /// The monitor's `cost` object.
@@ -151,17 +158,20 @@ impl Buckets {
                 "reason": "No authoritative provider price table is configured for this runtime/model."
             });
         }
-        let cost = self.cost.cost();
-        json!({
-            "available": cost.available,
-            "estimatedUsd": cost.usd,
-            "reason": match cost.reason {
-                None => "estimated_from_catalog_prices",
-                Some(reason) => reason.code(),
-            },
-            "asOf": cost.as_of,
-            "pricedModelRefs": cost.priced_model_refs,
-        })
+        let mut value = cost_value(&self.cost);
+        // The total covers every request in the selected window. Fixed work
+        // buckets keep memory separate even when thousands of revision/session
+        // scopes overflow the token view's bounded byScope map.
+        butler_core::json::object_mut(&mut value).insert(
+            "byWork".into(),
+            Value::Object(
+                self.cost_by_work
+                    .iter()
+                    .map(|(work, totals)| (work.clone(), cost_value(totals)))
+                    .collect(),
+            ),
+        );
+        value
     }
 
     /// The `model` object and the per-provider buckets.
@@ -210,4 +220,35 @@ fn map_sections(values: &BTreeMap<String, (u64, f64, f64)>) -> Value {
             })
             .collect(),
     )
+}
+
+fn cost_value(totals: &UsageTotals) -> Value {
+    let cost = totals.cost();
+    json!({
+        "requestCount": totals.request_count,
+        "available": cost.available,
+        "estimatedUsd": cost.usd,
+        "reason": match cost.reason {
+            None => "estimated_from_catalog_prices",
+            Some(reason) => reason.code(),
+        },
+        "asOf": cost.as_of,
+        "pricedModelRefs": cost.priced_model_refs,
+    })
+}
+
+// Scopes come from the model-call owners; unrecognized work stays visible.
+fn work_kind(scope: &str) -> &'static str {
+    if scope.starts_with("memory-extract:")
+        || scope == "profile-extractor"
+        || (scope.starts_with("cognition:") && scope.ends_with(":profile-extractor"))
+    {
+        "memory"
+    } else if scope.starts_with("btcc-guided:")
+        || matches!(scope, "session-turn" | "btcc-agent-loop")
+    {
+        "conversation"
+    } else {
+        "other"
+    }
 }
