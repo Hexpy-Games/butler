@@ -11,7 +11,7 @@ mount=$work/mounted
 trap 'if [ -d "$mount/Butler.app" ]; then hdiutil detach "$mount"; fi; chmod -R u+w "$work"; rm -rf "$work"' EXIT
 
 out=$(env -u BUTLER_SIGN_IDENTITY "$script" sign-app "$work/none.app")
-printf '%s\n' "$out" | grep -q 'skipping sign-app' || { echo "no-identity mode did not skip" >&2; exit 1; }
+grep -q 'skipping sign-app' <<< "$out" || { echo "no-identity mode did not skip" >&2; exit 1; }
 
 app=$work/Fake.app
 fw=$app/Contents/Frameworks/Lib.framework
@@ -38,9 +38,10 @@ chmod 555 "$app/Contents/Resources/bundled-agent/bin/butler-agent" "$app/Content
 
 BUTLER_SIGN_IDENTITY=- "$script" sign-app "$app"
 codesign --verify --strict --deep "$app"
-codesign -d --verbose=2 "$app/Contents/Resources/bundled-agent/bin/butler-agent" 2>&1 |
-  grep -q 'Identifier=com.hexpy.butler.agent' || { echo "agent identifier missing" >&2; exit 1; }
-codesign -d --entitlements - "$app" 2>&1 | grep -q allow-jit || { echo "app entitlements missing" >&2; exit 1; }
+agent_signature=$(codesign -d --verbose=2 "$app/Contents/Resources/bundled-agent/bin/butler-agent" 2>&1)
+grep -q 'Identifier=com.hexpy.butler.agent' <<< "$agent_signature" || { echo "agent identifier missing" >&2; exit 1; }
+app_entitlements=$(codesign -d --entitlements - "$app" 2>&1)
+grep -q allow-jit <<< "$app_entitlements" || { echo "app entitlements missing" >&2; exit 1; }
 [ "$(stat -f %Lp "$app/Contents/Resources/bundled-agent/bin/butler-agent")" = 555 ] || { echo "agent mode not restored" >&2; exit 1; }
 # Unofficial previews still verify real signatures, without an online ticket.
 export GITHUB_REF_NAME=v0.1.0-preview.1 BUTLER_SIGN_IDENTITY=-
