@@ -7,6 +7,10 @@ inputs:
   cache-key:
     required: true
     description: Cargo cache key
+  cargo-target-dir:
+    required: false
+    default: "../../../target/windows-release"
+    description: Cargo target directory relative to the Rust workspace
   native-deps-artifact:
     required: false
     default: ""
@@ -34,7 +38,8 @@ runs:
     - uses: ./.github/actions/rust-agent-setup
       with:
         native-deps: static-ort
-        cache-key: ${{ inputs.cache-key }}
+        cache-key: ${{ inputs.cache-key }}-target-v1
+        cargo-target-dir: ${{ inputs.cargo-target-dir }}
         prepared-static-ort: ${{ inputs.native-deps-artifact != '' }}
     - uses: oven-sh/setup-bun@v2
     - uses: actions/setup-node@v4

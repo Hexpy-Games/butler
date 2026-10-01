@@ -128,12 +128,16 @@ function Set-ButlerCommand {
     $marker = Join-Path $Bin 'butler.exe.target'
     $temporary = "$command.$([guid]::NewGuid()).tmp"
     $old = if (Test-Path $marker) { [IO.File]::ReadAllText($marker) } else { $null }
+    if ($old -eq "$Target\butler-agent.exe" -and (Test-Path $command)) {
+        & $command doctor --check installation --json | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Existing command binding is damaged' }
+        return
+    }
     try {
         New-Item -ItemType HardLink -Path $temporary -Target "$Target/butler-agent.exe" | Out-Null
         Write-ButlerFile $marker "$Target\butler-agent.exe"
         try {
-            if (Test-Path $command) { [IO.File]::Replace($temporary,$command,$null) }
-            else { [IO.File]::Move($temporary,$command) }
+            Move-ButlerFile $temporary $command
         } catch {
             if ($null -ne $old) { Write-ButlerFile $marker $old }
             else { Remove-Item $marker -Force }
@@ -162,13 +166,23 @@ function Expand-ButlerZip {
     } finally { $archive.Dispose() }
 }
 
+function Move-ButlerFile {
+    param([string]$Source, [string]$Destination)
+    # Windows PowerShell 5.1 binds $null to an empty backup path. Use a real
+    # temporary backup so File.Replace stays atomic on both PowerShell versions.
+    $backup = "$Destination.$([guid]::NewGuid()).bak"
+    try {
+        if (Test-Path $Destination) { [IO.File]::Replace($Source,$Destination,$backup) }
+        else { [IO.File]::Move($Source,$Destination) }
+    } finally { if (Test-Path $backup) { Remove-Item $backup -Force } }
+}
+
 function Write-ButlerFile {
     param([string]$Path, [string]$Text)
     $temporary = "$Path.$([guid]::NewGuid()).tmp"
     try {
         [IO.File]::WriteAllText($temporary,$Text)
-        if (Test-Path $Path) { [IO.File]::Replace($temporary,$Path,$null) }
-        else { [IO.File]::Move($temporary,$Path) }
+        Move-ButlerFile $temporary $Path
     } finally { if (Test-Path $temporary) { Remove-Item $temporary -Force } }
 }
 

@@ -19,6 +19,10 @@ inputs:
   cache-key:
     description: The rust-cache shared key; one per job so caches do not evict each other.
     required: true
+  cargo-target-dir:
+    description: Cargo build directory relative to the Rust workspace for caching.
+    required: false
+    default: "target"
   prepared-static-ort:
     description: Require a restored static runtime instead of building one in this job.
     required: false
@@ -119,7 +123,7 @@ runs:
     - name: Cache Cargo build
       uses: Swatinem/rust-cache@v2
       with:
-        workspaces: packages/butler-agent/rust
+        workspaces: packages/butler-agent/rust -> ${{ inputs.cargo-target-dir }}
         shared-key: ${{ inputs.cache-key }}-${{ inputs.native-deps }}
         cache-directories: ${{ runner.temp }}/ort-download-cache
         cache-on-failure: true

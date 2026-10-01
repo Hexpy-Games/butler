@@ -44,6 +44,7 @@ jobs:
       - uses: ./.github/actions/build-windows-agent
         with:
           cache-key: windows-preview-release
+          cargo-target-dir: ../../../target/windows-preview
           native-deps-artifact: windows-native-deps
           artifact-base-url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
       - name: Install ZIP, authenticate browser UI and exercise lifecycle
@@ -82,7 +83,8 @@ jobs:
       - uses: ./.github/actions/rust-agent-setup
         with:
           native-deps: prebuilt-ort
-          cache-key: windows-preview-stub
+          cache-key: windows-preview-stub-target-v1
+          cargo-target-dir: ../../../target/windows-stub
       - name: Isolate runtime and check directories
         run: |
           $root = Join-Path $env:RUNNER_TEMP 'windows-stub'
@@ -169,6 +171,7 @@ jobs:
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
           cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e `
             --test migration --test durable_configuration -- --nocapture 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/data-durability.log"
