@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { normalizeMacBundle, signMacBundle, runMacSigning, verifyMacBundleIcon } from "./native-mac-signing.ts";
 import { isPreviewRelease } from "./preview-policy.ts";
+import { stageElectronPackageSource } from "./electron-package-source.ts";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
@@ -225,18 +226,10 @@ function runElectronPackager(
   bundledAgentResourceDir: string,
 ): void {
   const packagerOverride = process.env.BUTLER_APP_PACKAGER?.trim();
-  const packagerCli = join(
-    root,
-    ELECTRON_ROOT,
-    "node_modules",
-    "@electron",
-    "packager",
-    "bin",
-    "electron-packager.mjs",
-  );
+  const packagerCli = join(root, ELECTRON_ROOT, "node_modules", "@electron", "packager", "bin", "electron-packager.mjs");
   if (!packagerOverride && !existsSync(packagerCli)) {
     throw new Error(
-      "Electron packager is missing; run npm --prefix packages/butler-app/client/electron ci",
+      "Electron packager is missing; run bun install --frozen-lockfile --ignore-scripts",
     );
   }
   const iconPath = appReleaseIconPath(root);
@@ -257,11 +250,13 @@ function runElectronPackager(
   });
   const packagerIconPath = appReleasePackagerIconPath(outDir);
   copyFileSync(iconPath, packagerIconPath);
+  const electronVersion = JSON.parse(readFileSync(join(root, ELECTRON_ROOT, "package.json"), "utf8")).devDependencies.electron;
   const packagerArguments = [
-    join(root, ELECTRON_ROOT),
+    stageElectronPackageSource(root, join(outDir, "electron-source")),
     "Butler",
     "--platform=darwin",
     "--arch=arm64",
+    `--electron-version=${electronVersion}`,
     "--overwrite",
     `--out=${outDir}`,
     `--icon=${packagerIconPath}`,
