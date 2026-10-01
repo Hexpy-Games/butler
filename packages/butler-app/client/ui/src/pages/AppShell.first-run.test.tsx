@@ -342,6 +342,7 @@ async function renderAppShell(
     butlerApp: {
       startSetup: async () => ({ diagnostics_available: true, phase: "ready" }),
       getSettings: async () => ({ ...EMPTY_SETTINGS, language: "ko", ...agentSettings }),
+      getModelCatalog: async () => EMPTY_MODEL_CATALOG,
       getLocalModelServers: async () => ({ servers: [] }),
       updateSettings: async (patch: unknown) => {
         patches.push(patch);

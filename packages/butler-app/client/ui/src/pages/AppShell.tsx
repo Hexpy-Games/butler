@@ -9,6 +9,7 @@ import {
   AdaptiveShellSidebar,
   AdaptiveShellWorkspace,
   Stack,
+  Spinner,
 } from "@/butler-ds";
 import { WindowChromeLayer } from "@/components/layout/Chrome.tsx";
 import { RightPanelOverlayTitlebar } from "@/components/layout/RightPanelOverlayTitlebar.tsx";
@@ -63,6 +64,7 @@ export function AppShell() {
   const { gate, markComplete } = useOnboardingGate();
   const rerunOpen = useOnboardingStore((state) => state.rerunOpen);
   const closeRerun = useOnboardingStore((state) => state.closeRerun);
+  if (gate === "pending") return <AppBootState />;
   if (gate !== "workspace" || rerunOpen) {
     const mode = rerunOpen ? "rerun" : gate === "consent" ? "consent" : "first-run";
     return (
@@ -83,6 +85,19 @@ export function AppShell() {
     );
   }
   return <AppWorkspaceShell />;
+}
+
+/** No setup or workspace mounts until the authoritative onboarding snapshot arrives. */
+function AppBootState() {
+  const settings = useButlerStore((state) => state.settings);
+  const systemPrefersDark = useSystemThemePreference();
+  return (
+    <AdaptiveShell leftOpen={false} rightOpen={false}
+      theme={appShellTheme(settings, systemPrefersDark)} chromeEnvironment={chromeEnvironment()}
+      data-test-class="app-boot" aria-busy="true">
+      <AdaptiveShellWorkspace><Stack fill justify="center" cross="center"><Spinner /></Stack></AdaptiveShellWorkspace>
+    </AdaptiveShell>
+  );
 }
 
 /** After a first run, open a new chat and say which AI is connected (once). */
