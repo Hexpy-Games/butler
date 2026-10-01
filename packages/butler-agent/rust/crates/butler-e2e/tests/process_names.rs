@@ -60,6 +60,8 @@ async fn archived_process_roles_restore_only_identical_files() -> Result<(), Har
 #[tokio::test]
 async fn process_roles_preserve_worker_protocol_and_executable_identity() -> Result<(), HarnessError>
 {
+    // Like every Agent E2E, run only after the explicit tier has prepared its binary.
+    butler_e2e::gate!();
     let sandbox = Sandbox::new("PROC-01")?;
     let launch = Launch::new(&sandbox)?;
     for (role, full_name, linux_comm) in [
