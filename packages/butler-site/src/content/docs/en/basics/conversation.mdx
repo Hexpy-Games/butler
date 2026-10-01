@@ -3,7 +3,191 @@ title: "Conversations and the composer"
 description: "Open a new conversation and send messages."
 section: basics
 order: 1
-status: planned
+status: published
 ---
 
-{/* Stub: translate ko/basics/conversation.mdx here, check the title and description above, then set status: published. Rules: skills/butler-docs-writing/references/english.md */}
+On the conversation screen, you send requests to Butler and get the results. In the composer at the bottom of the screen, you write messages, attach files and choose the model and permission.
+
+## Start a new conversation
+
+- Click **New conversation** at the top of the sidebar.
+- To start inside a project, open the project's menu in the sidebar and choose **New conversation**, or click **New conversation** on the project dashboard.
+- Choose a project in the command palette to open a new conversation in that project.
+
+The new conversation screen shows suggestions you can start from. When you click a suggestion, its text is sent right away or fills the composer so you can keep writing. If the composer already has text, the suggestion does not fill it. When you send the first message, the conversation is created and added to the sidebar.
+
+## Send a message
+
+<Steps>
+  1. Write your request in the composer's input box.
+  2. If you need to, attach files and choose the model and permission.
+  3. Press <span data-mod-key><Kbd keys={["⌘", "Enter"]} label="Command Enter" /></span> or click the **Send** button.
+</Steps>
+
+During a conversation, the composer can collapse to one line. Click the composer to expand the input box and the toolbar. Click outside the composer to collapse it again.
+
+### Send keys
+
+- With the default setting, <span data-mod-key><Kbd keys={["⌘", "Enter"]} label="Command Enter" /></span> sends the message and <Kbd keys={["Enter"]} /> starts a new line.
+- If you change **Message sending** to **Enter sends, Shift Enter inserts newline** in **Conversation input** under **Settings → General**, <Kbd keys={["Enter"]} /> sends the message and <Kbd keys={["Shift", "Enter"]} label="Shift Enter" /> starts a new line.
+- <span data-mod-key><Kbd keys={["⌘", "Enter"]} label="Command Enter" /></span> sends the message with either setting.
+- An <Kbd keys={["Enter"]} /> pressed while you are composing Korean characters does not send the message.
+- When the model or permission menu is open, press <Kbd keys={["Esc"]} label="Escape" /> to close the menu.
+
+## Composer toolbar
+
+- **More options** (+) — Attach files and project documents, and choose the response mode.
+- **Permission** — Choose how much Butler can do in this conversation.
+- **Workspace** — Appears only in a new conversation of a project confirmed as a Git repository. Choose **Local** or **Worktree**.
+- **Plan** — Appears when plan mode is on.
+- Context usage — Hover over the circle to see context and model usage. Click it to keep the usage open until you close it. Click **Details** to open [**Settings → Usage**](/en/help/settings/#usage).
+- Model — Shows the current model and reasoning effort.
+- **Send** / **Stop** — Send a message or stop the work in progress.
+
+## Model and reasoning effort
+
+Click the model button in the composer to open the model menu.
+
+- Enter a model name, model ID or provider name in the search field (**Search models...**) to find a model.
+- Click **All** or a provider name to filter the list by provider.
+- The list is grouped by provider, and each model shows its context size.
+- Choose the reasoning effort in **Reasoning** at the bottom of the menu. The values you can choose differ by model.
+
+Your choice applies only to this conversation. A new conversation starts with the model set in **Butler model** under **Settings → Models**. When you change the model and the new model does not support the current reasoning effort, the effort changes to that model's default.
+
+If the model button shows **Checking model**, **Selected model unavailable** or **Model state error**, you cannot send messages. Check the model to use in **Settings → Models**. To register a model and choose the default model, see [Cloud models](/en/help/models/cloud/).
+
+## Permission
+
+In the **Permission** menu, choose the access for this conversation.
+
+- **Full access** — Butler can read and write files and run commands.
+- **Ask first** — Butler asks for approval before it edits files or runs commands.
+- **Read only** — Butler can only read files.
+
+Your choice applies only to this conversation. A new conversation starts with the permission chosen in **Access** under **Settings → Models → Permissions**.
+
+- On a newly installed Butler, the default is **Ask first**.
+- A Butler in use since an earlier version keeps **Full access** if **Access** has never been saved.
+- A saved **Access** setting does not change when you update.
+
+Even with **Ask first**, Butler does the following without asking for approval.
+
+- Saving your answers from the [first-conversation onboarding](/en/help/getting-started/first-run/#after-setup)
+- Saving memories
+- Analyzing images attached to a message
+
+MCP server tools are not part of this exception. Even for a tool that analyzes images, Butler asks for approval before it runs the tool.
+
+### Answer an approval request
+
+With **Ask first**, when Butler is about to edit a file or run a command, the status shows the **Waiting for approval.** text and an approval request appears in place of the composer.
+
+The approval request shows what Butler is about to do as a one-sentence question.
+
+- Question — Asks what Butler is about to do and where. For file edits and commands, it includes the name of the working folder.
+- Target — Shows up to three files to edit or commands to run, and the rest as **+N more**. Files appear as paths relative to the working folder, and commands appear exactly as they will run.
+- Risk — Appears as **Low risk**, **Medium risk** or **High risk**.
+
+If the targets take more than four lines, click **Show more** to expand them all and **Show less** to collapse them again. If a command is longer than 200 characters, only the first 200 appear, followed by `…`.
+
+These buttons answer the request.
+
+- **Allow once** — Runs this request only.
+- **Always allow in this conversation** — Click the arrow next to **Allow once** (**Choose permission scope**) to choose it. It runs the current request and also applies to this conversation's subtasks. The menu shows the scope that stays allowed.
+- **Deny** — Does not run the request.
+- **Decide later and compose a message** — Click the down arrow to the right of the request to put off the decision and write a message. **N pending approvals** stays above the input box, so you can return to the request.
+
+Items you always allow appear on the **Permission** button as **N allowed**. To revoke one, click it under **Allowed in this conversation** in the **Permission** menu.
+
+## Plan mode
+
+In plan mode, Butler makes a plan first and shows it in the conversation before it starts the work. Plan mode is available only in project conversations.
+
+<Steps>
+  1. Click **More options** (+) and choose **Plan** in **Response mode**. The **Plan** indicator appears in the composer.
+  2. Send your request. When Butler posts the plan in the conversation, the plan decision appears in place of the composer.
+  3. Review the plan and click **Accept**, **Reject** or **Write feedback**.
+</Steps>
+
+- **Accept** — Confirms the plan, turns off plan mode and continues the work as planned.
+- **Reject** — Rejects the plan and turns off plan mode.
+- **Write feedback** — Write what to change in the input box and send it. Plan mode stays on and Butler revises the plan.
+
+In the plan decision, click the plan title to go to the plan in the conversation. To turn off plan mode, click the X button on the **Plan** indicator or choose **Normal** in **Response mode**. To always start project conversations in plan mode, turn on **Use plan mode by default** in **Settings → Models**.
+
+## Attach files
+
+- In **More options** (+), click **Attach file** and choose a file. You can choose several files at once.
+- You can also attach files by dragging them onto the Butler window.
+- In a project conversation, you can find a project document by its title in **Project documents** under **More options** (+) and attach it.
+- Attached files appear under the input box. Remove a file with its remove button.
+
+To reference another conversation in a message, drag the conversation from the sidebar into the composer, or choose **Reference in message** from the conversation's menu.
+
+## Workspace
+
+In a project confirmed as a Git repository, you can choose the **Workspace** before you send the first message of a new conversation. You can also choose it in the input box at the bottom of the project dashboard. It does not appear in general conversations or in projects that are not Git repositories.
+
+- **Local** — This is the default.
+- **Worktree** — When the conversation is created, Butler prepares a Git worktree for this conversation only and works there.
+
+## View progress and stop
+
+While Butler works, a status such as **Generating response** or **Waiting for approval.** appears in the conversation. Expand the progress history to see the activity for each step and the tools used.
+
+To stop the work, leave the input box empty and click the **Stop** button that appears in place of the send button. A response you stopped shows **Stopped**.
+
+### Send a message while Butler is working
+
+Messages you send while work is in progress collect under **Queued messages** and are delivered in order.
+
+- A queued message shows **Queued** or its position, such as **Queued · 2 of 3**.
+- Click **Edit queued message** to bring the message back into the composer and remove it from the queue.
+- Click **Delete queued message** to remove the message from the queue.
+- A message that could not be sent shows **Send failed**. Choose **Retry message** or **Delete failed message**.
+
+## Message actions
+
+- **Copy message** — Appears under responses and under the messages you sent.
+- **Copy code** — Appears on each code block in a response.
+- Under a response, you see how long the work took (**Worked for N**), the completion time and one of **Response completed**, **Response stopped** or **Response failed**.
+- A response in which Butler changed files has a **File changes** list. If there are many files, click **Show more** to expand the rest.
+- Expand and collapse a long message with **Show more** and **Show less**.
+- If a request fails with an error that can be retried, choose **Retry original settings** or **Retry as new with current settings**. **Retry original settings** sends the request again with the settings it was first sent with. **Retry as new with current settings** sends it with the model and permission now selected in this conversation.
+- When you have scrolled up, the **Latest** button appears. It changes to **New messages** when a new message arrives.
+
+### Continue from a response in a new conversation
+
+In the sidebar's **General** conversations, a completed response has the **Start a new conversation** and **Start a new project** buttons under it. Butler summarizes the requests and decisions up to that response and continues in a new conversation or a new project. The original conversation stays as it is.
+
+<Steps>
+  1. Under the response, click **Start a new conversation** or **Start a new project**.
+  2. Enter the **Conversation title** or the **Project name**.
+  3. Click **Create**.
+</Steps>
+
+## Notes
+
+<Notice tone="warning">
+  With **Full access**, Butler edits files and runs commands without asking for approval. Where you keep important files, work with **Ask first** or **Read only**.
+</Notice>
+
+<Notice tone="info">
+  Attachments can be up to 10.0 MB per file. A larger file is not attached, and the notification **The file exceeds the attachment size limit.** appears. You cannot send a message while a file is uploading.
+</Notice>
+
+<Notice tone="info">
+  The **Stop** button does not appear during stretches that cannot be stopped, such as while Butler is finishing up the work. If the live connection drops, the send button changes to the **Reconnecting to live updates** state, and you cannot send until the connection returns.
+</Notice>
+
+## Related pages
+
+<CardGrid>
+  <DocCard slug="basics/command-palette" />
+  <DocCard slug="basics/sidebar-and-spaces" />
+  <DocCard slug="basics/right-panel" />
+  <DocCard slug="projects" />
+  <DocCard slug="models/cloud" />
+  <DocCard slug="settings" />
+</CardGrid>

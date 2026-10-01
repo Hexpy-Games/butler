@@ -3,7 +3,220 @@ title: "Settings reference"
 description: "What each item in Settings does."
 section: settings
 order: 1
-status: planned
+status: published
 ---
 
-{/* Stub: translate ko/settings.mdx here, check the title and description above, then set status: published. Rules: skills/butler-docs-writing/references/english.md */}
+Manage app behavior, models, extensions and system information in Settings. Sections and items follow the order the app shows them in. An item that has its own page links to that page.
+
+## Open Settings
+
+<Steps>
+  1. Click **Settings** in the sidebar. You can also find and open a settings item from the [command palette](/en/help/basics/command-palette/) (<span data-mod-key><Kbd keys={["⌘", "K"]} label="Command K" /></span>).
+  2. Choose a section from the list on the left.
+  3. Change the item.
+</Steps>
+
+- Type in **Search settings** to filter sections by name, description and alias. If only one section matches, it opens right away.
+- Most items are saved as soon as you change them, and a **Saved** notice appears. **Personalization** is saved only when you click **Apply**.
+- Click **Back** or press <Kbd keys={["Esc"]} label="Escape" /> to close Settings.
+
+Sections fall into three groups.
+
+| Group | Sections |
+| --- | --- |
+| **Preferences** | General, Appearance, Personalization, Models |
+| **App and system** | Updates, Usage, Logs, Privacy, Security, System events, Archives, About |
+| **Advanced** | MCP, Skills, Server |
+
+## General
+
+Set the defaults for language, time zone, conversation input, notifications and web search.
+
+| Area | Item | Description |
+| --- | --- | --- |
+| **Language & region** | **Language** | The app's interface language. Choose **English** or **Korean**. |
+| | **Time zone** | The time zone Butler uses to interpret the current time and schedule context. Search the list and choose one. |
+| **Conversation input** | **Follow-up handling** | How Butler handles a message you send while it is working. Choose **Queue while busy** or **Steer current turn**. |
+| | **Message sending** | Choose **Command/Ctrl Enter sends, Enter inserts newline** or **Enter sends, Shift Enter inserts newline**. See [Send keys](/en/help/basics/conversation/#send-keys). |
+| **Notifications** | **Desktop notifications** | Sends an operating system notification for a new reply or a finished task while the app is in the background. |
+| | **AI message notifications** | Notifies you when a new reply arrives. The notification shows only a safe preview. |
+| | **Task completion notifications** | Notifies you when a task completes, fails or is canceled. |
+| **Notification permission** | **OS notification status** | The operating system's notification permission status. Click **Test** to send a test notification. Where the operating system's notification settings can be opened, a button that opens them also appears. |
+| **App behavior** | **Show in tray and menu bar** | When on, the app stays in the tray or menu bar after you close the window, and you can open a new conversation or a recent one from its menu. |
+| | **Run setup again** | Click **Run again** to go through the welcome screen and the AI connection again. Your registered models and conversations stay as they are. See [First run](/en/help/getting-started/first-run/#run-setup-again). |
+| **Search provider** | **Search provider** | Where web search results come from. Choose **DuckDuckGo HTML**, **Auto**, **Brave Search**, **Tavily**, **OpenAI Web Search**, **Codex subscription search** or **Disabled**. If a provider needs a key and has none, Butler falls back to the default search. |
+| | **API key** | Appears when you choose a provider that needs a key. Enter the key and click **Save**. It is stored as a secret and is not shown again. |
+| **Search behavior** | **Page reader** | The reader that reads the full text of search results. Choose **Lightweight reader**, **Auto**, **Lightpanda**, **Jina Hosted** or **Disabled**. |
+| | **Use smart search planning** | When on, Butler calls the model once before a search to plan the intent, depth, need for verification and query batches. |
+| | **Default search depth** | Shown only when **Use smart search planning** is on. Choose **Quick**, **Balanced** or **Deep**. |
+
+## Appearance
+
+Set the app's theme and how the screen is displayed.
+
+| Area | Item | Description |
+| --- | --- | --- |
+| **Theme** | **Theme** | Choose **System**, **Light** or **Dark**. |
+| | **Translucent sidebar** | Shows the sidebar semi-transparent. |
+| **Sidebar** | **Smart groups** | Sorts new conversations into groups by topic automatically. Conversations you moved yourself stay where they are. |
+| **Home screen** | **Home screen theme** | The background of the first screen of a new conversation. Choose **None**, **Bloom** or **Silk**. |
+| | **Background colors** | Shown when the home screen theme is **Bloom**. Choose **Monochrome**, **Aurora**, **Bloom**, **Lavender**, **Morning** or **Custom**. |
+| | **Custom colors** | Shown when the background colors are set to **Custom**. Choose each background color one by one. |
+
+## Personalization
+
+Manage the name, tone and personal information Butler uses. Unlike the other sections, changes here are saved only after you click **Apply**. For each item, see [Personalization](/en/help/personalization/).
+
+| Area | Items |
+| --- | --- |
+| **Profile** | **Butler nickname**, **My name**, **Preferred address** |
+| **Response style** | **Response language**, **Persona preset**, **Persona**, **EOL** |
+| **Learning** | **Personal information analysis**, **Personal information analysis model**, **Reasoning** |
+| **Import** | **Import external AI memory** |
+| Bottom of the screen | **Delete profile data** |
+
+## Models
+
+Manage the models Butler and Workers use, backup models, saved API keys and permissions.
+
+| Area | Items | Details |
+| --- | --- | --- |
+| **Butler model** | **Model**, **Manage models**, **Reasoning**, **Context limit**, **Local reasoning budget** | [Cloud models](/en/help/models/cloud/#choose-the-default-model), [Custom models](/en/help/models/custom/#local-reasoning-budget) |
+| **Backup models** | Backup model summary, **Edit**, **Use backup models**, **Add backup model** | [Backup models](/en/help/models/backup/) |
+| **API keys** | List of saved keys, **Replace**, **Delete** | [Cloud models](/en/help/models/cloud/#manage-api-keys) |
+| **Permissions** | **Access**, **Use plan mode by default** | [Conversations and the composer](/en/help/basics/conversation/#permission) |
+| **Advanced** | **Memory cleanup model and worker profiles** | The table below |
+
+**Backup models** shows, on one line, the order in which backup models take over. Click **Edit** to expand the items for turning backup models on and choosing them.
+
+Under **Advanced**, **Memory cleanup model and worker profiles** starts collapsed. Click it to expand these two areas.
+
+| Area | Items | Details |
+| --- | --- | --- |
+| **Memory cleanup** | **Conversation memory model**, **Reasoning** | [Backup models](/en/help/models/backup/#conversation-memory-model) |
+| **Worker profiles** | **Max simultaneous Workers**, **Add Worker profile**, items for each profile | The table below |
+
+On a new Butler installation, **Access** defaults to **Ask first**. A Butler you have used since an earlier version keeps **Full access** if you have never saved **Access**. A saved value does not change when you update.
+
+**Worker profiles** defines the Workers Butler hands work to.
+
+| Item | Description |
+| --- | --- |
+| **Max simultaneous Workers** | The number of Workers that run at the same time. Enter a number from 1 to 10. |
+| **Add Worker profile** | Adds a profile. You can register up to 12. |
+| **Name**, **Enabled** | The profile's name and whether it is in use. The default profile cannot be turned off or deleted. |
+| **Job**, **Custom job** | Choose **Coding**, **Research**, **Debug**, **Review**, **Writing** or **Custom**. For **Custom**, enter the job yourself. |
+| **Domain**, **Worker prompt** | The field the profile covers and the instructions for the Worker. You can leave both empty. |
+| **Model**, **Reasoning** | The model and reasoning effort this profile uses. |
+
+## Updates
+
+Check for a new version of Butler and download it.
+
+| Item | Description |
+| --- | --- |
+| **Check** | Checks whether a new version is available. It shows **Checking** while it checks. |
+| **Butler App** | Shows the current version and the version of Butler Agent included in the app. When a new version is available, it shows `current version -> new version`. |
+| **Update** | Click it when a new version is available. It downloads the new version's DMG, verifies the checksum, then opens it. It shows **Applying** while it works. When there is no new version, it shows **Up to date** and cannot be clicked. |
+
+<Notice tone="info" title="On macOS, install it yourself">
+  **Update** does not install the new version automatically. Quit Butler, then drag `Butler.app` from the opened DMG into the Applications folder to replace the existing app.
+</Notice>
+
+## Usage
+
+Review model tokens, prompt cache, web search and tool calls. Usage is tracked separately from context window capacity.
+
+| Item | Description |
+| --- | --- |
+| **Overview** | A summary of total usage. Choose a period, **24 hours**, **7 days** or **All**, and click **Refresh** to reload. |
+| **API provider usage** | Usage and remaining amount by provider. |
+| **Tokens by scope** | Token usage by scope. |
+| **Tokens by model** | Token usage by model. |
+| **Estimates by context section** | Estimated tokens by prompt section. Shows up to 12, largest first. |
+| **Calls by tool** | Number of calls by tool. Shows up to 8, most called first. |
+
+## Logs
+
+Inspect model request and response logs in developer mode. The section appears in the section list only when both **Developer mode** in **About** and **Diagnostics** in **Privacy** are on.
+
+- Use the fields at the top to search models, sessions, sections and responses, and to filter by session ID.
+- In the kind selector, choose **All**, **Model turn** or **Failed model turn**. Click **Refresh** to reload.
+- Expand a log to read it in the **Context**, **Request**, **Response** and **Metadata** tabs.
+- Click **More** to load 30 more logs.
+
+## Privacy
+
+Set whether diagnostic information is collected.
+
+- **Diagnostics** — When on, model requests and responses are recorded as developer logs. The logs are saved to `~/.butler/app/developer-logs/model-turns.jsonl`. When off, the **Logs** section disappears. To read the logs, see [Troubleshooting](/en/help/troubleshooting/#check-the-logs).
+
+## Security
+
+Manage access from other devices and the connection code. This section works only on the host computer. If you open it from another computer, **Available only on the host computer.** appears. To connect, see [Remote access](/en/help/advanced/remote-access/).
+
+| Area | Item | Description |
+| --- | --- | --- |
+| **Remote access** | **Allow access from other computers** | When on, devices on the same network connect by entering the connection code. It is off at first. |
+| | **Addresses** | Appears when access is allowed. These are the addresses to open on another computer. Click **Copy address** to copy one. |
+| **Connection code** | **Code** | The masked connection code and the date it was issued. Use **Show**, **Copy** and **Regenerate**. Regenerating the code disconnects the other computers. |
+| **Advanced** | **Allowed hosts for tunnels and proxies** | Click it to expand **Allowed hosts**. Enter the name a tunnel or proxy uses in **Host names** and click **Add**. |
+
+## System events
+
+Review when and how regular consolidation, personal information analysis and maintenance work finished.
+
+- The event types are **Conversation memory consolidation**, **Personal information analysis**, **Conversation history sync**, **Context maintenance** and **Regular memory consolidation**.
+- The status is one of **OK**, **Completed**, **Failed**, **Running**, **Not run yet** and **Needs status check**.
+- Click **Refresh** to reload, and **More** to load 20 more.
+
+## Archives
+
+Restore or delete archived projects and conversations.
+
+- **Unarchive** — Takes the item out of the archive and returns it to its original list.
+- **Delete** — Click **Delete** in the confirmation dialog to delete the item permanently.
+- **More** — Loads 20 more.
+
+## About
+
+View the Butler version and app information.
+
+- **App info** — Shows **App name**, **Version**, **GitHub repository** and **Protocol**.
+- **Developer**
+  - **Developer mode** — When on, a DevTools window opens and you can use Chrome DevTools in this app window. When off, the default Electron menus and the DevTools shortcuts are blocked. Turning it on or off also changes **Diagnostics** in **Privacy**. When both developer mode and **Diagnostics** are on, the **Context** and **Workers** tabs appear in the [right panel](/en/help/basics/right-panel/).
+
+## MCP
+
+Manage external MCP servers and their connection settings. Click **Add MCP server** to register a server. Each server has **Test connection**, **Enable** / **Disable**, **Edit** and **Delete**. For each item, see [MCP servers](/en/help/extensions/mcp-servers/).
+
+## Skills
+
+Manage built-in skills and project skills. View the skill lists in the **Default** and **Project** tabs, and add a skill with **Import** or **Create with chat**.
+
+## Server
+
+Set the Butler server connection and the folder for new projects.
+
+| Area | Item | Description |
+| --- | --- | --- |
+| **Connection** | **Server URL** | The Butler server address. It is saved when you leave the field. |
+| **Projects** | **Default project folder** | The default folder for a [new project](/en/help/projects/#create-a-project). The current folder is shown. Click **Choose folder** to change it. |
+
+## Notes
+
+<Notice tone="warning">
+  - Projects and conversations deleted from **Archives** cannot be restored.
+  - While **Diagnostics** is on, model requests and responses keep being written to a local log file. Turn it on only when you need it.
+  - If you turn off developer mode or diagnostics while viewing the **Logs** section, Settings moves to the **About** section.
+  - Changes in **Personalization** are not saved until you click **Apply**.
+  - Turn on **Allow access from other computers** only on a network you trust.
+</Notice>
+
+## Related pages
+
+<CardGrid>
+  <DocCard slug="basics/command-palette" />
+  <DocCard slug="advanced/remote-access" />
+  <DocCard slug="troubleshooting" />
+</CardGrid>

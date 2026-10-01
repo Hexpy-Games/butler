@@ -3,7 +3,89 @@ title: "Right panel"
 description: "Check the summary, context, artifacts, schedules and Worker details beside the conversation."
 section: basics
 order: 4
-status: planned
+status: published
 ---
 
-{/* Stub: translate ko/basics/right-panel.mdx here, check the title and description above, then set status: published. Rules: skills/butler-docs-writing/references/english.md */}
+The right panel shows the progress, results and linked schedules of the open conversation, beside the conversation. It has three tabs: **Summary**, **Artifacts** and **Schedules**.
+
+The **Context** tab, which shows context usage, and the **Workers** tab, which shows Worker activity, appear only in developer mode. Both **Developer mode** in **Settings → About** and **Diagnostics** in **Settings → Privacy** must be on.
+
+## Open and close the panel
+
+The panel is closed at first.
+
+<Steps>
+  1. Open a conversation from the sidebar.
+  2. Click the **Show right panel** button on the right of the title bar.
+  3. Click a tab at the top of the panel to see the information you want.
+  4. To close the panel, click the **Hide right panel** button in the same place.
+</Steps>
+
+- When you click a result attached to a message, the panel opens on the **Artifacts** tab and shows a preview of that file.
+- Drag the left edge of the panel to change its width. With keyboard focus on the edge, you can also adjust it with <Kbd keys={["←"]} label="Left arrow" /> and <Kbd keys={["→"]} label="Right arrow" />.
+- When the window gets narrow, the panel closes automatically. When you widen the window again, it returns to its previous state.
+
+## Summary
+
+Shows how far the conversation has progressed.
+
+- **Progress** — Shows the steps of the latest request in order. Each step shows its state: in progress, done, failed or cancelled. If there is no record, **No session progress yet** appears.
+
+In developer mode, the workspace state and the skills used appear too.
+
+- **Branch details**
+  - **Gateway** — Shows the app's current processing state.
+  - **Git branch** — Shows the current branch of the workspace. If the workspace is not a Git repository, **Not a Git workspace** appears.
+  - **Workspace** — Shows the kind of workspace this conversation uses, with a value such as **Worktree**, **Local** or **Project folder**.
+  - **Changes** — Shows whether the workspace has uncommitted changes, as **Dirty** / **Clean**.
+  - **Context** — Shows the context used and the limit in short form.
+- **Skills** — Lists the skills used in this conversation.
+
+## Context
+
+Appears only in developer mode. Shows in detail how much of the context sent to the model is in use.
+
+- **Context window** — Shows the share of the limit in use, the tokens used and the limit.
+- **Working context** — Shows working context usage, how much is left before automatic compaction, and the point where automatic compaction happens. It appears only in conversations that have this information.
+- Bar chart and item list — Show the tokens and share of each item that takes up context. The items that use the most come first.
+
+If the information is not received, **Context is unavailable** appears.
+
+## Artifacts
+
+Collects the files created or delivered in the conversation. Each item shows its type, size and when it was created.
+
+<Steps>
+  1. Click an artifact in the list to preview it in the panel.
+  2. To save it as a file, click **Save**.
+  3. To go back to the list, click **Artifact list**.
+</Steps>
+
+The app can preview images, PDF, Markdown, text and code files. Other formats show **This artifact cannot be previewed in the app**, and you can save them to open them.
+
+## Schedules
+
+Lists the [schedules](/en/help/scheduled-tasks/) that target this conversation. Each item shows its title and run interval. Click an item to open the schedule's detail screen. If there are no schedules, **No schedules for this chat** appears.
+
+## Workers
+
+Appears only in developer mode. Shows the activity of the Workers that Butler delegated to in this conversation. A child Worker is indented under its parent Worker.
+
+- **Details** — Expands the work steps the Worker went through and the tools it used. Click **Close** to collapse them.
+- **Request resume**, **Request cancel** — Appear only when the Worker supports them, and ask that Worker to resume or cancel.
+
+If there is no Worker record, **No worker history yet** appears.
+
+## Notes
+
+<Notice tone="info">
+  The right panel is available only when a saved conversation is open. The **Show right panel** button does not appear in a new conversation before its first message, or on the project dashboard, schedules and Settings screens.
+</Notice>
+
+## Related pages
+
+<CardGrid>
+  <DocCard slug="basics/conversation" />
+  <DocCard slug="basics/sidebar-and-spaces" />
+  <DocCard slug="scheduled-tasks" />
+</CardGrid>

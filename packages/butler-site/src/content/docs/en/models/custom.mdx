@@ -3,7 +3,86 @@ title: "Custom models"
 description: "Connect OpenAI-compatible models such as llama.cpp, Ollama and LM Studio."
 section: models
 order: 2
-status: planned
+status: published
 ---
 
-{/* Stub: translate ko/models/custom.mdx here, check the title and description above, then set status: published. Rules: skills/butler-docs-writing/references/english.md */}
+A Custom model is a model you connect directly to a server that provides an OpenAI-compatible Chat Completions API. Register one to use a local server such as llama.cpp, Ollama or LM Studio, or an external provider that is not in the model catalog.
+
+## Connect
+
+<Steps>
+  1. Start your model server.
+  2. In the sidebar, open **Settings** and select **Models**.
+  3. In the **Butler model** section, click **Manage models**, then click **Add model**.
+  4. In **Provider**, choose **Custom**.
+  5. Under **Model API information**, enter the server address in **API base URL**. Example: `http://localhost:8080`
+  6. If the server needs authentication, enter the key in the **API key (optional)** field.
+  7. Click **Discover models**. The models found on the server appear in the **Discovered model** list, and the first model's details fill the fields below.
+  8. In **Discovered model**, choose the model to use and check **Model ID**, **Display name** and **Max context**.
+  9. Click **Register model**. When registration finishes, you return to the **Registered models** list.
+</Steps>
+
+You can choose a registered model in the **Model** list under **Butler model**. To choose the default model, see [Cloud models](/en/help/models/cloud/#choose-the-default-model).
+
+A model you connect during [first run](/en/help/getting-started/first-run/#connect) through **This computer** or **Other (OpenAI-compatible)** is also registered as a Custom model. A model connected through **This computer** has a **Max context** of 16384.
+
+### Enter a model ID yourself
+
+You can register a model even if the server provides no model list or **Discover models** fails. Enter the **API base URL**, fill in **Model ID**, **Display name** and **Max context** yourself, then click **Register model**. The default **Max context** is 16384.
+
+## API base URL rules
+
+- Only `http` and `https` addresses work. If you enter an address without a scheme, Butler connects with `http://`.
+- If you enter only a host with no path, Butler appends `/v1`. Example: `http://localhost:8080` → `http://localhost:8080/v1`
+- If you include a path, Butler uses that path as the API address as is.
+- The URL cannot contain a user name or password. If the server needs authentication, use the **API key (optional)** field.
+
+## How model discovery works
+
+- **Discover models** requests `/models` at the API address to get the model list. If you entered an API key, Butler sends it as a Bearer token.
+- If Butler cannot get the model list or the server returns no models, **Failed to discover Custom models** appears. In that case, enter the model ID yourself to register the model.
+- If the server reports a model's context length, Butler fills **Max context** with that value. If the length is unknown, it fills in 16384.
+
+## Show advanced settings
+
+Click **Show advanced settings** to see the following items.
+
+- **API type** — Fixed to `OpenAI-compatible`.
+- **Platform hint** — Choose llama.cpp, Ollama, LM Studio or **Custom OpenAI-compatible**. The default is **Custom OpenAI-compatible**. Butler prefers API standards and uses the platform only as a compatibility hint. If you choose llama.cpp, **Discover models** also reads the context size (`n_ctx`) from the server's runtime settings.
+
+## Servers that need authentication
+
+The key you enter in the **API key (optional)** field is stored separately for each model and sent as a Bearer token with each request.
+
+- The key is stored in `~/.butler/auth/custom-model-credentials.json`. The file permissions are set so that only the owner can read and write it.
+- When you edit a model, leave the key field empty to keep the existing key.
+- Click **Remove API key** and save to delete the key.
+- Deleting a model also deletes that model's key.
+
+## Edit and delete
+
+Manage models under **Registered models** in **Model management**.
+
+- **Edit** — Change the values, then click **Save model**. If you try to leave the screen without saving, a confirmation dialog appears.
+- **Delete** — Click **Delete** in the confirmation dialog to remove the model from the list of selectable models.
+
+### Local reasoning budget
+
+If you choose a Custom model that does not support reasoning effort levels as the Butler model, **Local reasoning budget** appears in the **Butler model** section. Set, as a percentage, how much of the selected local model's maximum output tokens to use for reasoning.
+
+## Notes
+
+<Notice tone="warning" title="Enter the key again when you change the API address">
+  If you change **API base URL** while editing and do not enter the key again, the existing key is not kept.
+</Notice>
+
+<Notice tone="info">
+  Custom models support only the OpenAI-compatible Chat Completions API. You cannot connect a server that provides an API in another format.
+</Notice>
+
+## Related pages
+
+<CardGrid>
+  <DocCard slug="models/cloud" />
+  <DocCard slug="models/backup" />
+</CardGrid>

@@ -3,7 +3,105 @@ title: "Schedules"
 description: "Create schedules that send a prompt to a conversation at a set interval."
 section: scheduled-tasks
 order: 1
-status: planned
+status: published
 ---
 
-{/* Stub: translate ko/scheduled-tasks.mdx here, check the title and description above, then set status: published. Rules: skills/butler-docs-writing/references/english.md */}
+A schedule sends a prompt to a conversation you choose at a set interval. The prompt goes into that conversation as a message, and Butler replies in the same conversation.
+
+## Open the Schedules screen
+
+- In the sidebar, open the menu (⋯) next to the **Space** heading and choose **Schedules**.
+- In the [command palette](/en/help/basics/command-palette/) (<span data-mod-key><Kbd keys={["⌘", "K"]} label="Command K" /></span>), search for a schedule by its title to open it directly.
+- On the **Schedules** tab of a conversation's [right panel](/en/help/basics/right-panel/#schedules), click a schedule that targets that conversation.
+
+The **Schedules** screen shows **N scheduled prompts** and the list of schedules. Each item shows a permission icon, the title and the target conversation, with its state, interval and permission (for example, `enabled / 30 minutes / Ask first`).
+
+## Create a schedule
+
+<Steps>
+  1. On the **Schedules** screen, click **New schedule**.
+  2. Enter a **Title** and a **Prompt**. Neither can be empty.
+  3. Under **Details**, choose the conversation to send the prompt to in **Target chat**. A project conversation appears as `Project name / Conversation title`.
+  4. In **Permission**, below **Target chat**, choose the permission the schedule uses when it runs.
+  5. Choose an **Interval**.
+  6. Click **Save**.
+</Steps>
+
+The saved schedule appears in the **Schedules** list. The first run comes one interval after you save. To go back to the list, click the left arrow button (**Back to schedules**) or **Schedules** in the path at the top of the screen.
+
+## Permission
+
+In **Permission**, choose the access that this schedule's runs use. The options are the same as in the composer's **Permission** menu: **Ask first**, **Full access** and **Read only**. For what each permission does, see [Conversations and the composer](/en/help/basics/conversation/#permission).
+
+- A new schedule starts with the current permission of the **Target chat**. Until you choose a **Permission** yourself, changing the **Target chat** also changes the permission to that conversation's permission.
+- If the target conversation's permission cannot be read, **Ask first** is selected.
+- When you edit a schedule, the saved permission is shown.
+- If you choose **Ask first**, the **With Ask first, runs wait for your approval while you're away.** hint appears.
+- The permission you choose applies only to this schedule's runs. The target conversation's permission does not change.
+
+## Interval
+
+Choose one of these from the **Interval** list. The default for a new schedule is `30 minutes`.
+
+- `10 minutes`
+- `30 minutes`
+- `1 hour`
+- `2 hours`
+- `24 hours`
+- **Custom**
+
+If you choose **Custom**, enter a number of minutes in the **Custom minutes** field. You can set from 5 to 1440 minutes (24 hours).
+
+## Edit a schedule
+
+<Steps>
+  1. In the **Schedules** list, click a schedule.
+  2. Change the **Title**, **Prompt**, **Target chat**, **Permission** or **Interval**.
+  3. Click **Save**.
+</Steps>
+
+When you save a schedule that is in the `enabled` state, the next run time is recalculated to one interval after you save.
+
+## Run now, pause and delete
+
+The top of the schedule detail screen has these buttons.
+
+- **Run now** — Runs the schedule once right away, regardless of its timing. You can run a paused schedule too. If the state is `enabled`, the next run time is also recalculated from this point.
+- **Pause** — Stops scheduled runs. **State** changes to `paused`.
+- **Resume** — Appears on a paused schedule. When you click it, **State** changes to `enabled`, and the next run comes one interval after you resume.
+- **Delete** — Deletes the schedule and returns to the list.
+
+## Runs
+
+**Runs** on the schedule detail screen shows the 6 most recent runs, each with its state and time.
+
+- **Queued** — The target conversation is handling another request, so the prompt has not been sent yet. It is sent when that conversation's request finishes.
+- **Running** — The prompt is being sent.
+- **Succeeded** — The prompt was delivered to the target conversation.
+- **Failed** — The prompt could not be delivered.
+- **Target unavailable** — The target conversation could no longer be found while the run was waiting, so the run was skipped.
+
+If there are no runs, **No runs yet** appears.
+
+## Notes
+
+<Notice tone="warning">
+  **Delete** applies immediately, without a confirmation dialog. **Succeeded** means the prompt was delivered to the conversation. It does not mean the requested work succeeded. Check the result in the target conversation.
+</Notice>
+
+<Notice tone="info">
+  When a schedule's **Permission** is **Ask first**, Butler asks in the target conversation before it edits a file or runs a command, and waits until you allow it. If you change the target conversation's permission after you save, the schedule's permission does not change.
+</Notice>
+
+<Notice tone="info">
+  Schedules work only while Butler Agent is running. If you use the Agent included in the app, Butler must be open. The schedule time is checked every 30 seconds, so a run can start a little late. Runs missed while Butler was off run only once when you turn it on again.
+</Notice>
+
+## Related pages
+
+<CardGrid>
+  <DocCard slug="basics/right-panel" />
+  <DocCard slug="basics/conversation" />
+  <DocCard slug="basics/command-palette" />
+  <DocCard slug="projects" />
+</CardGrid>

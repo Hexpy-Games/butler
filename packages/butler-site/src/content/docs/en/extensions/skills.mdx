@@ -3,7 +3,161 @@ title: "Skills"
 description: "Manage core, user and project skills."
 section: extensions
 order: 1
+# Hidden until Hexpy-Games/butler#222 (skill progressive disclosure) is merged; then set status: published.
 status: planned
 ---
 
-{/* Stub. ko/extensions/skills.mdx is itself planned: translate its draft, and keep status: planned until the Korean page is published. */}
+A skill is a `SKILL.md` file that describes how Butler handles a particular kind of request. Butler reads each skill's name and description and picks the skill that fits the request.
+
+## View the skill list
+
+<Steps>
+  1. In the sidebar, open **Settings** and select **Skills**.
+  2. On the **Default** tab, check the skills used in every conversation.
+  3. On the **Project** tab, choose a project in the list on the left to see that project's skills.
+</Steps>
+
+The **Default** tab has two lists, **Core skills** and **User skills**. Each item shows the skill's name and description. If there is no description, the path of the `SKILL.md` file appears instead.
+
+## Skill types
+
+- **Core skills** — Skills included in the app. They are used in every conversation.
+- **User skills** — Skills you added yourself. They are used in every conversation.
+- **Project skills** — Skills added to a specific project. They are used only in that project's conversations.
+
+Skills you add are stored as folders under the default data folder (`~/.butler`).
+
+```text
+~/.butler/skills/default/<skill folder>/SKILL.md
+~/.butler/skills/projects/<project ID>/<skill folder>/SKILL.md
+```
+
+## Add a skill
+
+### Import a zip file
+
+<Steps>
+  1. Open **Settings → Skills**.
+  2. For a skill to use in every conversation, open the **Default** tab. For a skill to use in one project only, choose that project on the **Project** tab.
+  3. Click **Import** and select a `.zip` file.
+  4. When the import finishes, the list refreshes and the skill you added appears.
+</Steps>
+
+The zip file follows these rules.
+
+- Give each skill one folder and put `SKILL.md` in that folder. A `SKILL.md` placed directly at the top level of the zip is not recognized.
+- One zip can contain several skill folders. Skill folders inside subfolders are found too.
+- Other files in the skill folder are copied with it.
+- The folder name becomes the name of the installed skill folder. Any character other than letters, digits, `.`, `_` and `-` becomes `-`.
+
+```text
+my-skills.zip
+├── weekly-report/
+│   └── SKILL.md
+└── release-notes/
+    ├── SKILL.md
+    └── template.md
+```
+
+### Create with chat
+
+<Steps>
+  1. In **Settings → Skills**, open the **Default** tab, or choose a project on the **Project** tab.
+  2. Click **Create with chat**.
+  3. Settings closes and a new conversation for creating the skill opens. If you clicked it on the Project tab, it opens as a conversation in that project.
+</Steps>
+
+## SKILL.md format
+
+`SKILL.md` consists of frontmatter and a body.
+
+```markdown
+---
+name: weekly-report
+description: Turns the week's work records into a weekly report.
+applicability: Use when the user asks for a weekly report or a summary of the week.
+allowed-tools: read_file, list_files
+dispatch: none
+review: recommended
+reporting: Reports the draft report together with any missing information.
+user-invocable: true
+---
+
+## Instructions
+1. Check the files and records that changed this week.
+2. Sort them into work done, work in progress and blocked work.
+```
+
+### Frontmatter fields
+
+- `name` — The skill's name. Without it, the file is not recognized as a skill.
+- `description` — The description shown in the list. Butler also reads this description when it picks a skill.
+- `applicability` — Describes when to use this skill.
+- `allowed-tools` — Lists the names of the tools the skill uses, separated by commas.
+- `dispatch` — The preferred way to proceed. It is one of `none`, `direct`, `planned` and `auto`, and any other value is treated as `none`.
+- `review` — How much review the result needs. It is one of `none`, `recommended` and `required`, and any other value is treated as `none`.
+- `reporting` — Describes how to report the result.
+- `user-invocable` — If `true`, the skill is marked as one the user asks for directly. Any other value is treated as internal.
+
+### Writing rules
+
+- The file starts with a `---` line, and the frontmatter closes with another `---` line.
+- Write one `key: value` per line. Values that span several lines are not read. Quotes around a value are removed.
+- Use LF line endings. The frontmatter of a file saved with CRLF cannot be read.
+- If any of `description`, `applicability`, `allowed-tools`, `reporting` or the body is empty, or two or more skills have the same `name`, it is recorded as a validation problem.
+
+## How Butler uses skills
+
+Butler reads only as much of a skill as it needs.
+
+1. Only the `name` and `description` of each skill go into the conversation.
+2. When Butler decides a skill fits the request, or you ask for a skill by name, it reads the whole body of `SKILL.md`.
+3. Other files you put in the skill folder are read only when the task needs them.
+
+- General conversations use core skills and user skills. Project conversations add that project's skills.
+- If skills with the same `name` exist in several places, only the first one is used, in this order: project skills, user skills, core skills.
+- After you add or delete a skill, check it in a new conversation.
+
+<Notice tone="info">
+  Write the skill's main purpose in `description`. Butler picks a skill by reading this description.
+</Notice>
+
+## Delete a skill
+
+The app has no button for deleting a skill. To delete a skill you added, delete its folder.
+
+<Steps>
+  1. In Finder or a terminal, open `~/.butler/skills/default/` (user skills) or `~/.butler/skills/projects/<project ID>/` (project skills).
+  2. Delete the whole folder of the skill you want to remove.
+  3. Open **Settings → Skills** again and check that the skill is gone from the list.
+</Steps>
+
+## Manage skills from the command line
+
+You can also manage skills with the `butler skills` command of the Butler Agent CLI. Files are validated when you import them.
+
+```bash
+butler skills list
+butler skills import <path to zip file>
+butler skills import <path to zip file> --project <project ID>
+```
+
+- Add `--project <project ID>` to work with that project's skills.
+- Add `--json` to print the result as JSON.
+
+## Notes
+
+<Notice tone="warning">
+  - There is no setting to turn individual skills on or off. Delete the folder of a skill you do not want to use.
+  - Core skills are included in the app, so you cannot delete or edit them.
+  - If you import a skill folder with the same name again, the existing folder is deleted and replaced with the new content.
+</Notice>
+
+## Related pages
+
+<CardGrid>
+  <DocCard slug="extensions/mcp-servers" />
+  <DocCard slug="projects" />
+  <DocCard slug="advanced/agent-cli" />
+  <DocCard slug="settings" />
+</CardGrid>

@@ -3,7 +3,76 @@ title: "Backup models"
 description: "Set the order of the models that take over when the default model is unavailable."
 section: models
 order: 3
-status: planned
+status: published
 ---
 
-{/* Stub: translate ko/models/backup.mdx here, check the title and description above, then set status: published. Rules: skills/butler-docs-writing/references/english.md */}
+A backup model takes over the same task when the current model is temporarily not responding. Choose up to 5 of your registered models and set the order in which they are tried.
+
+## Set up
+
+<Steps>
+  1. First register the models you want as backups in **Model management** ([Cloud models](/en/help/models/cloud/#register-a-model), [Custom models](/en/help/models/custom/#connect)). Only registered models can be chosen as backup models.
+  2. In the sidebar, open **Settings** and select **Models**.
+  3. In the **Backup models** section, click **Edit**.
+  4. Turn on **Use backup models**.
+  5. Click **Add backup model** and choose a model in the **Choose a backup model** dialog. You can narrow the list with the search field or the provider filter.
+  6. Add more models as needed.
+  7. Click **Done** to collapse the editing controls.
+</Steps>
+
+Changes are saved right away and apply from the next new task.
+
+The **Backup models** section shows the current state on one line.
+
+- When backup models are in use, the registered models appear in the order they are tried.
+- If **Use backup models** is off, **Off** appears.
+- If it is on but no model is chosen, the **No backup models are registered.** message appears.
+
+### Reorder and remove
+
+- Drag the handle on the left of a card to change the order. Models are tried from the top down.
+- Click the X button on the right of a card to remove it from the list.
+
+## When Butler moves to a backup model
+
+When a model request fails, Butler handles it according to the type of error.
+
+| Error | Handling |
+| --- | --- |
+| Provider usage limit exhausted, model not found, model retired, model unavailable, unsupported model | Moves to the next model right away. |
+| Network error, rate limit exceeded (HTTP 429), timeout (HTTP 408), server error (HTTP 5xx), interrupted response stream, empty response, protocol error | Retries the same model a set number of times, then moves to the next model if it still fails. |
+| Authentication error, permission error, invalid request, context limit exceeded, refusal under a safety policy | Does not move to another model and shows the error. |
+
+If the last backup model also fails, Butler shows the error.
+
+## How it works
+
+- Once a request moves to a backup model, the backup model handles the rest of that request. The next request starts from the current model again.
+- If the backup model supports the current reasoning effort, it uses the same effort. If it does not, it uses its own default reasoning effort.
+- A model that is the same as the current model (same provider, same model ID) does not appear in the backup model list.
+- A model you delete in **Model management** is also removed from the backup model list.
+- To prepare for an exhausted usage limit or a provider outage, use a model from a different provider as a backup model.
+
+### Conversation memory model
+
+**Conversation memory model** and **Reasoning** in the **Memory cleanup** section are separate from backup models. They set the model used to consolidate conversation memory. If you choose **Model default**, it follows the current Butler default model settings.
+
+The **Memory cleanup** section appears when you click **Memory cleanup model and worker profiles** under **Advanced** in **Settings → Models**.
+
+## Notes
+
+<Notice tone="warning" title="Requests with images do not move to a backup model">
+  A request with an attached image does not move to a backup model. Butler shows the error.
+</Notice>
+
+<Notice tone="info">
+  If **Use backup models** is off, Butler does not use backup models even when the list contains models. Temporary errors are still retried with the same model.
+</Notice>
+
+## Related pages
+
+<CardGrid>
+  <DocCard slug="models/cloud" />
+  <DocCard slug="models/custom" />
+  <DocCard slug="personalization" />
+</CardGrid>

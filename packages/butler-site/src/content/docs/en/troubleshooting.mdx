@@ -3,7 +3,245 @@ title: "Troubleshooting"
 description: "Startup failures, diagnostic information and the doctor check."
 section: troubleshooting
 order: 1
-status: planned
+status: published
 ---
 
-{/* Stub: translate ko/troubleshooting.mdx here, check the title and description above, then set status: published. Rules: skills/butler-docs-writing/references/english.md */}
+First find the step where the problem occurs. If you cannot fix it, collect the diagnostic information and report it.
+
+## Butler Agent does not get ready
+
+If **Butler couldn't start.** appears on the welcome screen during [first run](/en/help/getting-started/first-run/#getting-butler-ready), the reason preparation stopped appears below it. Try these steps in order.
+
+<Steps>
+  1. Click **Try again**. Preparation runs again.
+  2. If the same error repeats, click **Reset and restart** in **More**. Butler stops the Agent included in the app, starts it again, then checks its status.
+  3. If it still fails, click **Copy info for a bug report** in **More** to copy the diagnostic information to the clipboard. Paste it when you report the problem.
+  4. If you cannot fix it now, click **Quit** in **More** to close the app.
+</Steps>
+
+These are the reasons shown for each preparation step. If preparation stops on an error that is not in the table, **The background service didn't respond.** appears.
+
+| Preparation step | Reason |
+| --- | --- |
+| Butler Agent service | **The background service isn't allowed to run.** or **The background service stopped.** |
+| Check Agent version | **Part of Butler is missing. Reinstall Butler.** |
+| Check desktop connection | **Another Butler is using the background service.** |
+| Data folder | **Butler can't write to its data folder (~/.butler).** or **Checking the data folder took too long.** |
+| Model settings | **Butler can't read its model settings.** or **Reading the model settings took too long.** |
+| Start Butler Agent | **Butler didn't finish starting.** or **Butler took too long to start.** |
+
+The Data folder step checks that files can be written to the data folder. The Model settings step checks that the model settings and saved keys can be read.
+
+### Read the diagnostic information
+
+The copied diagnostic information is JSON. `checks` lists the items the app checks, in order. The first item whose status is `failed` is where preparation stopped.
+
+- Butler Agent service or Start Butler Agent
+- Connect to Butler Agent
+- Check Agent version
+- Check local sign-in
+- Check status
+- Check protocol
+- Check desktop connection
+
+`readiness` holds the steps the Agent prepares itself (`data_folder`, `model_config`, `agent_runtime`). A failed step carries an error `code` and a description in English (`detail`).
+
+If a `code` in `errors` is `bundled_agent_version_missing`, the app could not read the Agent version from the app package. Download the latest DMG that includes the native Agent from [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) and reinstall the app.
+
+<Notice tone="info">
+  The diagnostic information masks tokens, secrets and user paths, and leaves out stack traces and raw standard output.
+</Notice>
+
+## The app does not open
+
+The Butler app is not notarized by Apple, so macOS may block it the first time you open it. Choose **Open Anyway** in **System Settings → Privacy & Security**.
+
+## Model connection problems
+
+### The model list does not load
+
+- If **Couldn't finish connecting. Try again.** appears during first run, click **Try again**.
+- If **Model state error** appears in the composer's model picker, check the default model and the connection status in **Settings → Models**.
+- If **Selected model unavailable** appears, choose another model.
+
+### A response fails
+
+If **Butler could not complete the request.** appears in a conversation, try again with one of these buttons.
+
+- **Retry original settings**: Sends the failed request again with the original model and settings.
+- **Retry as new with current settings**: Sends it as a new request with the model and settings selected now. Use it after you change the model.
+
+If the same model often does not respond, open **Settings → Models** and click **Edit** under **Backup models**. Turn on **Use backup models**, then click **Add backup model** to register a model that takes over. See [Backup models](/en/help/models/backup/).
+
+### OAuth sign-in does not finish
+
+If sign-in does not finish when you [add a model with OAuth](/en/help/models/cloud/#register-a-model) in **Settings → Models → Model management**, check these in order.
+
+<Steps>
+  1. If the browser does not open, click **Copy link** and paste the link into your browser.
+  2. Finish authentication in the browser, return to Butler and click **Check completion**.
+  3. If **OAuth did not complete.** appears, click **Authenticate again**.
+</Steps>
+
+OAuth sign-in receives its result at `http://localhost:1455/auth/callback`. The ChatGPT sign-in during first run does the same. If another program is using port 1455, sign-in cannot finish. Quit that program and authenticate again.
+
+## The connection is shown as lost
+
+When **Live connection lost. Reconnecting automatically. The displayed work status may be out of date.** appears, Butler reconnects on its own. If it lasts a long time, quit Butler and open it again.
+
+The Agent included in the app runs only while Butler is open.
+
+## An error appears on screen
+
+If **Butler UI crashed.** appears, reload the window or open Butler again.
+
+## A Git notice appears
+
+If **Git is not installed** appears in the composer, you can keep using Butler, but the branch and commit features are unavailable. Click **Install Git** to install Git.
+
+## Update problems
+
+On macOS, app updates are not installed automatically. Download the new version's DMG and install it yourself.
+
+<Steps>
+  1. In **Settings → Updates**, click **Check**.
+  2. If a new version is available, the **Butler App** item shows the current version and the new version. Click **Update** to download the new version's DMG and open it.
+  3. Quit Butler, then drag `Butler.app` from the opened DMG into the Applications folder to replace the existing app.
+  4. If **Failed to check updates** or **Failed to apply update** keeps appearing, download the latest DMG from [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) and [reinstall](#app).
+</Steps>
+
+Below the **Butler App** item, the version of the Agent included in the app is also shown (`Butler Agent <version>`).
+
+For the standalone Agent, `butler update --check` checks for a new version. `butler update --apply --yes` installs the new version and restarts the service. See [Butler Agent CLI](/en/help/advanced/agent-cli/#data-and-updates) for the procedure.
+
+## Notifications do not arrive
+
+<Steps>
+  1. In **Settings → General → Notification permission**, check **OS notification status**.
+  2. Click **Test** to send a test notification.
+  3. If no notification appears, click **macOS notification settings** and allow Butler notifications in System Settings.
+</Steps>
+
+## Check the logs
+
+### Developer logs in the app
+
+Developer logs show the assembled model request context and the raw response for each model turn.
+
+<Steps>
+  1. In **Settings → About**, turn on **Developer mode** in the **Developer** area.
+  2. When **Logs** appears in the **App and system** group of the Settings list, open it.
+  3. Choose **Failed model turn** in the filter to see only failed requests.
+  4. Open an entry and check the **Context**, **Request**, **Response** and **Metadata** tabs.
+</Steps>
+
+Use the search field to find models, sessions, sections and response content, or filter by session ID. With developer mode on, you can also open Chrome DevTools in this app window.
+
+Developer logs are recorded only while **Diagnostics** in **Settings → Privacy** is on, and are saved to `app/developer-logs/model-turns.jsonl` in the data folder. If you turn **Diagnostics** off, the **Logs** item disappears too.
+
+<Notice tone="warning">
+  Developer logs can include raw requests and responses that contain your conversations. Check the content before you share it with anyone.
+</Notice>
+
+### Service logs of the standalone Agent
+
+Logs of the service started with `butler start` are written to `logs/butler-agent-service.stdout.log` and `logs/butler-agent-service.stderr.log` in the data folder (`~/.butler` by default).
+
+```bash
+butler logs --lines 200
+butler logs --follow
+```
+
+## Check the installation with doctor
+
+For the standalone Agent, `butler doctor` checks the installation. It is read-only and does not fix problems. For the commands, see [Butler Agent CLI](/en/help/advanced/agent-cli/#commands).
+
+```bash
+butler doctor
+butler doctor --check installation
+```
+
+If the result is `degraded`, look at the items marked `FAIL` or `WARN`. When the service is not running, the service item becomes `WARN`, so use `--check installation` to check only the installation.
+
+These are common errors and how to fix them.
+
+- `butler_data_overlaps_installation`: The data folder overlaps the installation folder. Set a different folder outside the installation folder with `--data`.
+- `--home is unsupported`: Use `--data` in place of `--home`.
+- `native_home_unavailable`: The `HOME` environment variable is empty. This often happens when Butler runs from an MCP client.
+- `update --apply requires --yes`: Add `--yes` when you apply an update.
+
+## Reinstall
+
+### App
+
+<Steps>
+  1. Quit Butler.
+  2. Download the latest `butler-app-<version>-darwin-arm64.dmg` from [GitHub Releases](https://github.com/Hexpy-Games/butler/releases).
+  3. Open the DMG and drag `Butler.app` into the Applications folder to replace the existing app.
+</Steps>
+
+Conversations, memory and Agent settings are stored in the data folder (`~/.butler`), outside the app, so they remain after you reinstall the app.
+
+### Standalone Agent
+
+Reinstall into a new version folder. Leave the existing installation folder unchanged. To check the new installation apart from your existing data, run it with `--data` set to a new, empty folder. The existing DATA folder stays as it is.
+
+## Report a problem
+
+Report a problem you cannot fix as a new issue in [GitHub Issues](https://github.com/Hexpy-Games/butler/issues). You can also open the Butler repository from **GitHub repository** in **Settings → About**. Include the following to make the cause easier to find.
+
+- **Version** from **Settings → About**
+- macOS version and Mac chip type
+- The steps that led to the problem
+- For a first-run preparation failure, the content copied with **Copy info for a bug report**
+- For the standalone Agent, the output of `butler version --json` and `butler doctor --json`
+
+<Notice tone="warning">
+  The copied diagnostic information and the `doctor` output mask secrets. If you attach logs or conversation content, check them yourself before you upload them.
+</Notice>
+
+## Frequently asked questions
+
+### Does the Agent stop when I close the window?
+
+The Agent included in the app runs only while Butler is open. If you turn on **Show in tray and menu bar** in **Settings → General**, the app stays in the menu bar after you close the window.
+
+### Where is my data stored?
+
+In the data folder, `~/.butler`. Settings are in `butler.config.json`, and other secrets such as web search API keys are in `.env`. Cloud model API keys are stored in `auth/credential-store.json`, and the list of keys is in `auth/model-provider-credentials.json`. Builds signed with a Developer ID store API keys in the macOS Keychain. For the exact locations, see [Cloud models](/en/help/models/cloud/#where-credentials-are-stored).
+
+### How do I replace or delete an API key?
+
+In the **API keys** section of **Settings → Models**, click **Replace** or **Delete** for the key. To delete the key the default model uses, first change the default model to another model. See [Cloud models](/en/help/models/cloud/#manage-api-keys).
+
+### Are my conversations sent outside my computer?
+
+If you use [cloud models](/en/help/models/cloud/) or turn on [personal information analysis](/en/help/personalization/#learning), the prompt, context and profile candidate text a request needs may be sent to the model provider you set up. To keep processing on your device, connect a local model as a [Custom model](/en/help/models/custom/).
+
+### Butler asks for approval every time it edits a file or runs a command.
+
+The conversation is using the **Ask first** permission. A new Butler installation starts with this permission. To answer an approval request, see [Conversations and the composer](/en/help/basics/conversation/#answer-an-approval-request). To let Butler proceed without asking, choose **Full access** in the composer's **Permission** menu. Change the default for new conversations in **Access** under **Settings → Models → Permissions**.
+
+### New conversations still start with full access after an update.
+
+A Butler you have used since an earlier version keeps **Full access** if you have never saved **Access**. A saved **Access** value does not change when you update. To start with **Ask first**, choose **Ask first** in **Access** under **Settings → Models → Permissions**.
+
+### I allowed access, but no address is shown.
+
+If you turned on **Allow access from other computers** in **Settings → Security** and **No network address** appears, first check that this computer is connected to a network. If the port is in use, the address may not appear. In that case, quit the other program that uses the port, then turn **Allow access from other computers** off and on again. This problem is tracked in [#312](https://github.com/Hexpy-Games/butler/issues/312). To connect, see [Remote access](/en/help/advanced/remote-access/).
+
+### Can I use Butler on Windows or Linux?
+
+The current release is packaged and verified only for Apple silicon Macs. Native Agent bundles for Windows and Linux are not supported yet.
+
+### I installed an earlier version and preparation keeps failing.
+
+Earlier releases may contain the TypeScript/Bun Agent, which is no longer used. Reinstall with the latest release, which includes the native Agent.
+
+## Related pages
+
+<CardGrid>
+  <DocCard slug="getting-started/install" />
+  <DocCard slug="advanced/agent-cli" />
+  <DocCard slug="models/backup" />
+</CardGrid>

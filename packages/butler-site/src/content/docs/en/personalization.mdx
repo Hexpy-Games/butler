@@ -3,7 +3,113 @@ title: "Personalization"
 description: "Set your profile, response style, learning scope and memory import."
 section: personalization
 order: 1
-status: planned
+status: published
 ---
 
-{/* Stub: translate ko/personalization.mdx here, check the title and description above, then set status: published. Rules: skills/butler-docs-writing/references/english.md */}
+Personalization sets Butler's name and tone, the response language, and how much Butler learns about you from conversations. Change it in **Settings → Personalization**.
+
+## Change the settings
+
+<Steps>
+  1. In the sidebar, open **Settings** and select **Personalization**.
+  2. Change the items in the **Profile**, **Response style** and **Learning** sections.
+  3. Click **Apply** at the bottom of the screen.
+</Steps>
+
+Personalization settings are saved only when you click **Apply**.
+
+## Profile
+
+- **Butler nickname** — Butler's name. Example: Butler, Alfred
+- **My name** — Your name.
+- **Preferred address** — What Butler calls you. Example: boss, captain
+
+## Response style
+
+- **Response language** — The language Butler uses in chat for final answers and progress updates. Choose **English** or **Korean**.
+- **Persona preset** — Choose Butler, Guardian, Demon Butler, Wolf Butler, Neko Servant, Think Tank, Operator, Archivist or Dry Wit. Choosing a preset changes only the **Persona** draft below, and nothing is saved until you click **Apply**.
+- **Persona** — How Butler expresses itself and collaborates with you. If you edit the text yourself, the preset changes to **Custom**.
+- **EOL** — Butler Operating Ethos. Write long-term preferences, boundaries and operating notes that should last. It is included in the settings Butler refers to when it answers.
+
+Persona and EOL are each saved up to 32,000 characters.
+
+## Learning
+
+**Personal information analysis** sets how much Butler learns about you from local conversations. The default is **Off**.
+
+- **Off** — Butler does not analyze personal information. It uses only the current settings the feature needs.
+- **Basic** — Butler uses your preferences for tone, explanation style and way of working in personalized replies.
+- **Deep** — Butler also uses recent interests, meaningful context and value judgments in personalized replies.
+
+If you choose **Basic** or **Deep** and click **Apply**, Butler records that you consented to the analysis.
+
+- **Personal information analysis model** — The model that extracts the information personalization needs. If you choose **Model default**, it follows the current Butler default model settings. To register a model, see [Cloud models](/en/help/models/cloud/).
+- **Reasoning** — The reasoning effort of the analysis model.
+
+To see when and how an analysis finished, check the **Personal information analysis** entries in [**Settings → System events**](/en/help/settings/#system-events).
+
+## Import external AI memory
+
+Move the memories another AI service has stored into your Butler profile.
+
+<Steps>
+  1. Set **Personal information analysis** to **Basic** or **Deep** and click **Apply**.
+  2. In the **Import** section, click **Import** for **Import external AI memory**.
+  3. Click **Copy prompt** under **Import prompt**, then send the copied prompt to the other AI service.
+  4. Paste what that service returns into **Imported profile content**.
+  5. Click **Import profile**. The import runs on this screen right away and the result appears.
+</Steps>
+
+- If any information was applied, the number of applied items appears, and Butler uses them from the next reply.
+- Information that is not certain yet is only stored. Butler applies it once it is certain enough.
+- The import prompt appears in the app's language.
+
+## What Butler stores
+
+Personalization data is stored in the data folder (`~/.butler` by default).
+
+- Profile: `~/.butler/personalization/profile.json`
+- Persona: `~/.butler/personas/active.md`
+- EOL: `~/.butler/eol.md`
+- Learned personal information: `~/.butler/cognition/profile/profile.sqlite`
+
+Learned personal information accumulates only when **Personal information analysis** is on.
+
+When you change the persona or the EOL, the previous text is backed up to `~/.butler/personalization/backups/`. Butler keeps the 20 most recent backups of each.
+
+While Butler is running, it runs regular memory consolidation once a day, after 4 a.m. in this Mac's time zone. Check the result in **Settings → System events**.
+
+## Delete learned information
+
+<Steps>
+  1. At the bottom of **Settings → Personalization**, click **Delete profile data**. The button changes to **Delete queued**.
+  2. Click **Apply**.
+</Steps>
+
+- The candidates collected by analysis, the stored profile and the summary used in replies are deleted.
+- The values in the **Profile** section, the persona and the EOL are not deleted. To clear them, empty the fields and click **Apply**.
+- Changing **Personal information analysis** to **Off** deletes the summary used in replies, but the candidates already collected and the stored profile remain. To delete everything, also run **Delete profile data**.
+
+## Notes
+
+<Notice tone="info" title="The app does not show learned information item by item">
+  Learned personal information is not shown as raw text in the app. To delete it, use **Delete profile data**, which deletes all of it at once.
+</Notice>
+
+<Notice tone="warning" title="Conversation content is sent to the analysis model">
+  Personal information analysis and memory import call the **Personal information analysis model**. If you choose a cloud model, the content to analyze is sent to that provider.
+</Notice>
+
+<Notice tone="info">
+  If **Personal information analysis** is off, imported memories are not applied to the profile.
+</Notice>
+
+Turn the collection of diagnostic information on or off under **Diagnostics** in [**Settings → Privacy**](/en/help/settings/#privacy).
+
+## Related pages
+
+<CardGrid>
+  <DocCard slug="settings" />
+  <DocCard slug="models/cloud" />
+  <DocCard slug="models/backup" />
+</CardGrid>
