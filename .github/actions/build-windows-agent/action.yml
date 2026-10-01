@@ -25,6 +25,9 @@ runs:
     - name: Restore verified native dependency archive
       if: inputs.native-deps-artifact != ''
       shell: bash
+      env:
+        # Git Bash otherwise extracts symlinks as copies, breaking ort-sys.
+        MSYS: winsymlinks:nativestrict
       run: |
         set -euo pipefail
         export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
