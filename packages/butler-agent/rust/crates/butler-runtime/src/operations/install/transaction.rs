@@ -166,6 +166,8 @@ impl HomeLock {
         let staging = Staging::create(self.home.root())?;
         extract(archive, staging.path())?;
         let manifest = verify_installation(staging.path())?;
+        butler_platform::process_names::prepare(&staging.path().join(super::layout::BINARY))
+            .map_err(|error| UpdateError::caused(UpdateCode::InstallWriteFailed, error))?;
         let dir = manifest.dir_name();
         let destination = self.home.version_path(&dir);
         let already_installed = destination.exists() && verify_installation(&destination).is_ok();

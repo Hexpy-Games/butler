@@ -54,6 +54,7 @@ pub mod instance;
 pub mod launcher;
 pub mod network;
 pub mod process_control;
+pub mod process_names;
 pub mod secrets;
 pub mod secure_fs;
 pub mod service_registration;

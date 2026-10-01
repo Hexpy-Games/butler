@@ -196,6 +196,8 @@ verify_staging() {
     cat "$tmp/doctor.out" >&2
     die "the downloaded agent failed its self-check; nothing was installed"
   }
+  chmod u+w "$staging"
+  "$staging/butler-agent" --prepare-process-links || die "could not prepare process role links"
 }
 
 # --- place and activate --------------------------------------------------------

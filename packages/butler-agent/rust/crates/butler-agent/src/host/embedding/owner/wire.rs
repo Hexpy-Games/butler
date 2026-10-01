@@ -24,11 +24,17 @@ pub(super) struct WorkerChild {
     pub(super) initialized: bool,
 }
 
-pub(super) fn spawn_worker(
+pub(super) async fn spawn_worker(
     executable: &std::path::Path,
     data_root: &std::path::Path,
 ) -> CognitionResult<WorkerChild> {
-    let mut child = Command::new(executable)
+    let role = butler_platform::process_names::Role::Memory;
+    let executable = butler_platform::process_names::executable_async(executable, role)
+        .await
+        .map_err(|source| error(CognitionCode::EmbedWorkerUnavailable).with_source(source))?;
+    let mut command = Command::new(executable);
+    butler_platform::process_names::name_command(command.as_std_mut(), role);
+    let mut child = command
         .arg("--private-embedding-worker")
         .env("BUTLER_DATA", data_root)
         .stdin(Stdio::piped())

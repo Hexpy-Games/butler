@@ -228,7 +228,17 @@ impl Context {
     /// comes up is that installation's.
     async fn run_service_command(&self, runner: &Runner, verb: &str) -> Result<Value, CliError> {
         let dir = runner.root.display().to_string();
-        let mut command = tokio::process::Command::new(&runner.executable);
+        let role = butler_platform::process_names::Role::Update;
+        let executable = butler_platform::process_names::executable_async(&runner.executable, role)
+            .await
+            .map_err(|_| {
+                CliError::failed(
+                    "service_restart_failed",
+                    "the service helper could not be started",
+                )
+            })?;
+        let mut command = tokio::process::Command::new(executable);
+        butler_platform::process_names::name_command(command.as_std_mut(), role);
         command
             .arg("--installation-root")
             .arg(&runner.root)

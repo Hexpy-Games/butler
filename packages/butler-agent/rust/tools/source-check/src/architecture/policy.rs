@@ -13,7 +13,11 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // Windows process table serves instance identity and liveness.
         "command_sandbox" | "cpu" | "desktop" | "launcher" | "network" | "process_table"
         | "secure_fs" | "stdio" | "time_zone" | "user_dirs" => &[],
-        "instance" | "process_control" => &["process_table"],
+        "process_control" => &["process_table"],
+        // Process naming owns verified executable aliases; instance queries
+        // consume that identity without coupling general filesystem paths to it.
+        "instance" => &["process_table", "process_names"],
+        "process_names" => &["launcher", "secure_fs"],
         // The credential store's owner-only fallback file is a secure_fs file.
         "secrets" => &["secure_fs"],
         // The `butler` command launcher is a runnable file under the user's

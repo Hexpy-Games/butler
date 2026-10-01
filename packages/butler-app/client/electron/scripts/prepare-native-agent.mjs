@@ -72,6 +72,8 @@ rmSync(payloadRoot, { recursive: true, force: true });
 const binaryRoot = join(payloadRoot, "bin");
 mkdirSync(binaryRoot, { recursive: true });
 copyFileSync(sourceBinary, join(binaryRoot, "butler-agent"));
+const roleLinks = spawnSync(join(binaryRoot, "butler-agent"), ["--prepare-process-links"], { stdio: "inherit" });
+if (roleLinks.status !== 0) throw new Error("Could not prepare Agent process role links.");
 cpSync(
   join(repositoryRoot, "packages", "butler-agent", "resources"),
   join(payloadRoot, "resources"),
@@ -225,7 +227,7 @@ function requireFile(path) {
 
 function setReadOnly(root) {
   for (const path of walk(root).filter((path) => statSync(path).isFile())) {
-    chmodSync(path, path.endsWith(join("bin", "butler-agent")) ? 0o555 : 0o444);
+    chmodSync(path, (path.endsWith(join("bin", "butler-agent")) || /butler-agent \(.*\)$/.test(path) || /butler\(.*\)$/.test(path)) ? 0o555 : 0o444);
   }
   for (const path of walk(root).filter((path) => statSync(path).isDirectory()).reverse()) {
     chmodSync(path, 0o555);

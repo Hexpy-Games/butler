@@ -74,6 +74,7 @@ if (!existsSync(nativeAgentResources) || !statSync(nativeAgentResources).isDirec
   throw new Error(`native Butler Agent resources not found: ${nativeAgentResources}`);
 }
 accessSync(nativeAgentBinary, constants.X_OK);
+run("node", [resolve(scriptDir, "prepare-process-links.mjs"), nativeAgentBinary]);
 setNativePayloadReadOnly(nativeAgentRoot);
 
 copyFileSync(iconPath, targetIconPath);
@@ -90,7 +91,7 @@ process.stdout.write(`macOS bundle metadata normalized: ${appPath}\n`);
 function setNativePayloadReadOnly(root) {
   const entries = walk(root);
   for (const path of entries.filter((path) => statSync(path).isFile())) {
-    chmodSync(path, path === nativeAgentBinary ? 0o555 : 0o444);
+    chmodSync(path, (path === nativeAgentBinary || /butler\(.*\)$/.test(path)) ? 0o555 : 0o444);
   }
   for (const path of entries.filter((path) => statSync(path).isDirectory()).reverse()) {
     chmodSync(path, 0o555);

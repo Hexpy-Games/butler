@@ -253,7 +253,7 @@ fn service_health(data_root: &Path) -> Value {
         ),
         (Ok(Some(record)), Ok(locked)) => {
             let matches = service_instance::process_matches(&record).unwrap_or(false);
-            let current_executable = std::env::current_exe()
+            let current_executable = butler_platform::process_names::current_exe()
                 .ok()
                 .and_then(|path| path.canonical().ok());
             let executable_matches = current_executable.as_ref().is_some_and(|path| {
