@@ -77,14 +77,35 @@ pub(super) struct Preparation {
     checks: Arc<ReadinessChecks>,
     state: watch::Sender<SetupReadinessView>,
     run: Mutex<Option<(CancellationToken, JoinHandle<()>)>>,
+    acquisition: Arc<crate::host::embedding::worker::assets::Acquisition>,
+    memory_relay: JoinHandle<()>,
 }
 
 impl Preparation {
     /// Starts the first run.
-    pub(super) fn start(checks: ReadinessChecks) -> Self {
+    pub(super) fn start(
+        checks: ReadinessChecks,
+        acquisition: Arc<crate::host::embedding::worker::assets::Acquisition>,
+    ) -> Self {
+        let mut initial = initial_view();
+        initial.memory_model = Some(acquisition.subscribe().borrow().clone());
+        let state = watch::channel(initial).0;
+        let mut progress = acquisition.subscribe();
+        let relay_state = state.clone();
+        let memory_relay = tokio::spawn(async move {
+            loop {
+                let model = progress.borrow_and_update().clone();
+                relay_state.send_modify(|view| view.memory_model = Some(model));
+                if progress.changed().await.is_err() {
+                    break;
+                }
+            }
+        });
         let preparation = Self {
             checks: Arc::new(checks),
-            state: watch::channel(initial_view()).0,
+            state,
+            acquisition,
+            memory_relay,
             run: Mutex::new(None),
         };
         preparation.begin();
@@ -99,10 +120,20 @@ impl Preparation {
     /// ends at its step timeout anyway); returns the view.
     pub(super) fn retry(&self) -> SetupReadinessView {
         self.begin();
+        self.retry_memory_model()
+    }
+
+    /// Optional model work never resets the setup's readiness steps.
+    pub(super) fn retry_memory_model(&self) -> SetupReadinessView {
+        self.acquisition.retry();
+        self.state.send_modify(|view| {
+            view.memory_model = Some(self.acquisition.subscribe().borrow().clone());
+        });
         self.state.borrow().clone()
     }
 
     pub(super) async fn close(&self) {
+        self.memory_relay.abort();
         let run = self.run.lock().take();
         if let Some((stop, task)) = run {
             stop.cancel();
@@ -117,7 +148,11 @@ impl Preparation {
         if let Some((previous, _)) = run_slot.take() {
             previous.cancel();
         }
-        self.state.send_replace(initial_view());
+        self.state.send_modify(|view| {
+            let memory_model = view.memory_model.take();
+            *view = initial_view();
+            view.memory_model = memory_model;
+        });
         let stop = CancellationToken::new();
         let task = tokio::spawn(run(self.checks.clone(), self.state.clone(), stop.clone()));
         *run_slot = Some((stop, task));
@@ -126,6 +161,7 @@ impl Preparation {
 
 impl Drop for Preparation {
     fn drop(&mut self) {
+        self.memory_relay.abort();
         if let Some((stop, _)) = self.run.get_mut().take() {
             stop.cancel();
         }
@@ -134,6 +170,7 @@ impl Drop for Preparation {
 
 fn initial_view() -> SetupReadinessView {
     SetupReadinessView {
+        memory_model: None,
         status: SetupReadinessStatus::Preparing,
         steps: Step::ALL
             .iter()

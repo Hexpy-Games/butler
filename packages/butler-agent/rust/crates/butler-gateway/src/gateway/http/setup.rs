@@ -43,7 +43,13 @@ pub(super) async fn route(
             envelope(StatusCode::OK, view)
         }
         (&Method::POST, "/setup/readiness/retry") => {
-            envelope(StatusCode::ACCEPTED, setup.retry_readiness())
+            let input: ReadinessRetry = optional_body(request).await?;
+            let view = if input.memory_model_only {
+                setup.retry_memory_model()
+            } else {
+                setup.retry_readiness()
+            };
+            envelope(StatusCode::ACCEPTED, view)
         }
         (&Method::GET, "/setup/local-model-servers") => {
             envelope(StatusCode::OK, setup.local_model_servers().await?)
@@ -72,6 +78,12 @@ pub(super) async fn route(
         }
         _ => oauth_flow_route(&setup, &method, uri.path()).await,
     }
+}
+
+#[derive(Default, serde::Deserialize)]
+struct ReadinessRetry {
+    #[serde(default)]
+    memory_model_only: bool,
 }
 
 /// `PATCH /credentials/{name}` and `DELETE /credentials/{name}` (#217).
