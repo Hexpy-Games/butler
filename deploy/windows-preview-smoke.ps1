@@ -136,7 +136,8 @@ try {
     Assert-PrivateAcl "$env:BUTLER_DATA/state/app-gateway/project-folder-token-secret"
     $startup = (& $launcher startup enable --json | ConvertFrom-Json)
     if ($startup.ok -or ($startup | ConvertTo-Json -Depth 10) -notmatch 'not supported on Windows yet') { throw 'Startup did not report the preview limitation' }
-    & $launcher restart --json | Out-Null
+    # Windows PowerShell 5.1 waits for descendants of piped native commands.
+    & $launcher restart
     if ($LASTEXITCODE -ne 0) { throw 'Restart failed' }
     $after = Get-Content "$env:BUTLER_DATA/state/butler-agent-native-service.json" -Raw | ConvertFrom-Json
     if ($after.pid -eq $pidBefore) { throw 'Restart did not replace instance' }
