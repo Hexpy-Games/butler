@@ -60,6 +60,9 @@ built-in `DecompressionStream` expands it only when the viewer is opened. Closin
 the viewer releases its parsed disclosures. Startup and idle perform no reads
 and hold no inventory data. The smoke asserts the complete 848-item list and
 measures opening time and retained browser heap, plus responsive search/expand.
+App and DS-site builds also emit `THIRD_PARTY_NOTICES.txt` with the bundled
+Pretendard and IBM Plex Mono OFL texts, preserving the readable font notices
+beside `index.html` without duplicating the full component inventory.
 
 | Artifact | Single disclosure data file |
 | --- | --- |
