@@ -11,6 +11,10 @@ name: Linux packages
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "README.md"
+      - "CONTRIBUTING.md"
+      - "assets/readme/**"
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
@@ -25,10 +29,11 @@ on:
       - "packages/butler-agent/rust/crates/butler-gateway/Cargo.toml"
       - "packages/butler-agent/rust/crates/butler-memory/Cargo.toml"
       - "packages/butler-agent/rust/scripts/prepare-static-ort.py"
-      - "packages/butler-app/scripts/release/package-linux-app.ts"
-      - "packages/butler-app/scripts/release/linux-package-smoke.sh"
-      - "packages/butler-app/client/electron/scripts/prepare-native-agent.mjs"
-      - "packages/butler-app/client/electron/bundled-native-agent.mjs"
+      - "packages/butler-app/scripts/release/**"
+      - "packages/butler-app/client/electron/**"
+      - "deploy/**"
+      - "bun.lock"
+      - "**/package.json"
 
 permissions:
   contents: read
@@ -89,9 +94,8 @@ jobs:
       - name: Install App client dependencies and build the renderer
         run: |
           set -euo pipefail
-          bun install --frozen-lockfile
-          npm --prefix packages/butler-app/client/electron ci
-          npm --prefix packages/butler-app/client/ui ci
+          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          bun install --frozen-lockfile --ignore-scripts
           npm --prefix packages/butler-app/client/ui run build
 
       # The payload producer accepts this binary and does not rebuild the agent.

@@ -5,6 +5,7 @@ use butler_turn::btcc::BtccError;
 
 use crate::host::app::gateway_lifecycle::{AppGatewayLifecycle, GatewayControlServer};
 use crate::host::service::ingress::IngressDispatcher;
+use crate::host::service::shutdown_trace::measure;
 use crate::host::{AgentRuntime, SystemIdentity};
 
 pub(super) async fn deliver_parent_results(
@@ -120,16 +121,19 @@ pub(super) async fn close_serving(
     progress: &crate::host::ProgressPublisher,
 ) -> Result<(), BtccError> {
     control.stop_accepting();
-    let admission = gateway.stop_accepting().await;
-    let turns = dispatcher
-        .close()
+    let admission = measure("app_admission", gateway.stop_accepting()).await;
+    let turns = measure("turn_drain", dispatcher.close())
         .await
         .map_err(|e| failure(e.code, e.message));
-    let control_close = control.close().await.map_err(|message| {
-        failure("gateway_control_close_failed", message.to_string()).with_source(message)
-    });
-    let publication = progress.reconcile().await.map(|_| ());
-    let app_close = gateway.close().await;
+    let control_close = measure("control_close", control.close())
+        .await
+        .map_err(|message| {
+            failure("gateway_control_close_failed", message.to_string()).with_source(message)
+        });
+    let publication = measure("progress_reconcile", progress.reconcile())
+        .await
+        .map(|_| ());
+    let app_close = measure("app_close", gateway.close()).await;
     admission
         .and(turns)
         .and(control_close)

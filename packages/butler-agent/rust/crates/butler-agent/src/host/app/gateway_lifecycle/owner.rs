@@ -199,7 +199,10 @@ impl AppGatewayLifecycle {
         // HTTP probe can time out under load even while that listener is healthy;
         // status queries still probe it, but startup must not tear it down for that.
         self.endpoint.publish(address, app_config, local_auth);
-        if let Err(error) = self.persist(true, Some(format!("http://{address}")), app_config) {
+        if let Err(error) = self
+            .persist(true, Some(format!("http://{address}")), app_config)
+            .await
+        {
             self.endpoint.clear();
             if let Err(close_error) = server.close_application().await {
                 *current = Some(server);
@@ -230,7 +233,11 @@ impl AppGatewayLifecycle {
         }
         self.endpoint.clear();
         let config = AppServiceConfiguration::capture(&self.data_root);
-        self.persist(false, None, &config)
+        crate::host::service::shutdown_trace::measure(
+            "app_endpoint_persist",
+            self.persist(false, None, &config),
+        )
+        .await
     }
 
     fn require_captured_dependencies(
@@ -256,20 +263,29 @@ impl AppGatewayLifecycle {
             .map_err(crate::host::HostError::from)
     }
 
-    fn persist(
+    async fn persist(
         &self,
         active: bool,
         address: Option<String>,
         config: &AppServiceConfiguration,
     ) -> Result<(), crate::host::HostError> {
-        mark_gateway_state(
-            &self.data_root,
-            &self.nonce,
-            &self.installation,
-            active,
-            address,
-            config.gateway_config().local_auth.required,
-        )
+        let data_root = self.data_root.clone();
+        let nonce = self.nonce.clone();
+        let installation = self.installation.clone();
+        let auth_required = config.gateway_config().local_auth.required;
+        // Record locking and fsync must not occupy a runtime worker at shutdown.
+        tokio::task::spawn_blocking(move || {
+            mark_gateway_state(
+                &data_root,
+                &nonce,
+                &installation,
+                active,
+                address,
+                auth_required,
+            )
+        })
+        .await
+        .map_err(crate::host::HostError::from_error)?
     }
 
     async fn view(&self, current: Option<&AppServer>) -> Result<Value, crate::host::HostError> {

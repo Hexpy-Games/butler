@@ -29,8 +29,6 @@ export interface ApprovalRequestView {
 }
 
 const MAX_EXAMPLES = 3;
-/** The gateway cuts a command example after this many characters (approval.rs). */
-const GATEWAY_COMMAND_CHARS = 200;
 /** Target kinds that say what a request without examples acts on. */
 const DETAIL_TARGET_KINDS: ReadonlySet<string> = new Set(["connector", "schedule", "other"]);
 const RISKS: readonly string[] = ["low", "medium", "high"];
@@ -51,12 +49,18 @@ export function normalizeApprovalSummary(value: unknown): ApprovalSummary | unde
   if (typeof actionKind !== "string" || !actionKind.trim()) return undefined;
   if (typeof count !== "number" || !Number.isSafeInteger(count) || count < 0) return undefined;
   const { targets, relative } = approvalTargetsFromTransport(value.targets);
-  const examples = (Array.isArray(value.examples) ? value.examples : [])
-    .filter((example): example is string => typeof example === "string" && example.trim() !== "")
-    .map((example) => COMMAND_KINDS.has(actionKind) || !isAbsolutePath(example) ? example : relative(example))
-    .filter(Boolean);
+  const examples: string[] = [];
+  const examplesTruncated: boolean[] = [];
+  (Array.isArray(value.examples) ? value.examples : []).forEach((example, index) => {
+    if (typeof example !== "string" || !example.trim()) return;
+    const text = COMMAND_KINDS.has(actionKind) || !isAbsolutePath(example) ? example : relative(example);
+    if (!text) return;
+    examples.push(text);
+    examplesTruncated.push(Array.isArray(value.examples_truncated) && value.examples_truncated[index] === true);
+  });
   return {
     actionKind, targets, count, examples,
+    ...(examplesTruncated.some(Boolean) ? { examplesTruncated } : {}),
     ...(typeof risk === "string" && RISKS.includes(risk) ? { risk: risk as ApprovalRisk } : {}),
   };
 }
@@ -88,7 +92,7 @@ export function approvalRequestView(
     title: sentence(actionKind, approval, workspace, copy),
     details: details(approval, actionKind, card, copy),
     risk: approval.risk ?? "high",
-    conversationScope: actionKind === "edit_files" ? copy.covers.editFiles(workspace)
+    conversationScope: approval.targets.some(target => target.kind === "outside") ? copy.covers.other : actionKind === "edit_files" ? copy.covers.editFiles(workspace)
       : COMMAND_KINDS.has(actionKind) ? copy.covers.command(workspace)
         : copy.covers.other,
     actionKind,
@@ -96,10 +100,11 @@ export function approvalRequestView(
 }
 
 function sentence(kind: ApprovalActionKind, approval: ApprovalSummary, workspace: string | null, copy: ApprovalRequestCopy): string {
+  const outside = approval.targets.some(target => target.kind === "outside");
   switch (kind) {
-    case "edit_files": return copy.editFiles(approval.count, workspace);
-    case "run_command": return copy.runCommand(workspace);
-    case "network_command": return copy.networkCommand(workspace);
+    case "edit_files": return outside ? copy.editFilesOutside(approval.count) : copy.editFiles(approval.count, workspace);
+    case "run_command": return outside ? copy.runCommandOutside : copy.runCommand(workspace);
+    case "network_command": return outside ? copy.networkCommandOutside : copy.networkCommand(workspace);
     case "use_connector": {
       const path = approval.targets.find((target) => target.kind === "connector")?.path.trim() ?? "";
       const slash = path.indexOf("/");
@@ -139,10 +144,8 @@ function details(
   card: Pick<AuthorityApprovalCard, "scope" | "reason">,
   copy: ApprovalRequestCopy,
 ): string[] {
-  const command = COMMAND_KINDS.has(kind);
-  const shown = approval.examples.slice(0, MAX_EXAMPLES).map((example) =>
-    // A command at the gateway's cut was truncated there: mark it.
-    command && [...example].length >= GATEWAY_COMMAND_CHARS ? `${example}…` : example);
+  const shown = approval.examples.slice(0, MAX_EXAMPLES).map((example, index) =>
+    approval.examplesTruncated?.[index] ? `${example}…` : example);
   if (shown.length) {
     const rest = approval.count - shown.length;
     return rest > 0 ? [...shown, copy.more(rest)] : shown;

@@ -45,8 +45,8 @@
 }
 
 @media (width <= 640px), (pointer: coarse) {
-  .input,
-  .input[data-compact] {
+  .input:not([data-variant="underline"]),
+  .input[data-compact]:not([data-variant="underline"]) {
     min-height: var(--control-hit-target);
   }
 }

@@ -148,3 +148,18 @@ pub(super) fn record_outcome(db: &Connection, write: &OutcomeWrite) -> Authority
     .map_err(query::sql)?;
     Ok(())
 }
+
+pub(super) fn record_question_followup(
+    db: &Connection,
+    request_ref: &str,
+    response: &str,
+    now: &str,
+) -> AuthorityResult<()> {
+    db.execute("UPDATE btcc_authority_requests SET outcome_receipt_json=?1, updated_at=?2 WHERE request_ref=?3 AND capability='ask_user' AND decision='modified' AND outcome_receipt_json IS NULL", params![response, now, request_ref]).map_err(query::sql)?;
+    Ok(())
+}
+
+pub(super) fn settle_question_followup(db: &Connection, request_ref: &str) -> AuthorityResult<()> {
+    db.execute("UPDATE btcc_authority_requests SET outcome='applied' WHERE request_ref=?1 AND capability='ask_user' AND outcome_receipt_json IS NOT NULL AND outcome='pending'", [request_ref]).map_err(query::sql)?;
+    Ok(())
+}

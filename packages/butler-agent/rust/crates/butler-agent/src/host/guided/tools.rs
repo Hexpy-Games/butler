@@ -10,6 +10,7 @@ mod memory_write;
 mod message;
 mod monitoring;
 mod occurrence;
+mod question;
 pub(in crate::host) use monitoring::MonitoringReaders;
 mod profile;
 mod project_source;
@@ -260,7 +261,8 @@ impl GuidedTools {
         matches!(
             ToolName::parse(name),
             Some(
-                ToolName::ReadFile
+                ToolName::AskUser
+                    | ToolName::ReadFile
                     | ToolName::RunCommand
                     | ToolName::WriteFile
                     | ToolName::EditFile

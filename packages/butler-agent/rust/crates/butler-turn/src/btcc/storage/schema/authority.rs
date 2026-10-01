@@ -54,6 +54,15 @@ CREATE TABLE IF NOT EXISTS btcc_authority_requests (
 CREATE INDEX IF NOT EXISTS idx_btcc_authority_requests_owner_pending
 ON btcc_authority_requests(owner_session_id, decision, created_at);
 
+CREATE INDEX IF NOT EXISTS idx_btcc_questions_owner_turn
+ON btcc_authority_requests(owner_session_id, capability, source_turn_id);
+
+CREATE INDEX IF NOT EXISTS idx_btcc_questions_deferred
+ON btcc_authority_requests(owner_session_id, created_at)
+WHERE capability='ask_user' AND decision='modified' AND close_reason IS NULL
+AND outcome_receipt_json IS NULL
+AND json_extract(CASE WHEN capability='ask_user' THEN private_alternative_input END,'$.status')='deferred';
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_btcc_authority_requests_slot_action
 ON btcc_authority_requests(source_work_id, plan_revision_id, action_key, capability, authority_generation);
 

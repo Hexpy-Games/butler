@@ -38,6 +38,7 @@
   --menu-group-label-line-height: var(--line-height-compact);
   --menu-group-label-padding: var(--space-sm) var(--space-2) var(--space-xs);
   --scroll-fade-size: 14px;
+  --textarea-max-lines: 6;
   --focus-ring-width: 2px;
   /* Layering scale: tooltips and popovers opened inside dialogs stay above them. */
   --z-sticky: 50;

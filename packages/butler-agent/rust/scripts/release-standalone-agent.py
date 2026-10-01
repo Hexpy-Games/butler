@@ -125,7 +125,7 @@ def _extract_archive(archive: Path, destination: Path) -> None:
     if not hasattr(tarfile, "data_filter"):
         raise SystemExit("Python 3.12 or newer is required for safe archive extraction")
     entries: dict[str, tarfile.TarInfo] = {}
-    allowed_roots = {"butler-agent", "butler", "resources", "native-agent-manifest.json"}
+    allowed_roots = {"butler-agent", "butler", "resources", "native-agent-manifest.json", "THIRD_PARTY_NOTICES.txt"}
     with tarfile.open(archive, "r:gz") as source:
         for member in source.getmembers():
             raw_name = member.name
@@ -140,7 +140,7 @@ def _extract_archive(archive: Path, destination: Path) -> None:
             name = "/".join(parts)
             if name in entries or member.islnk():
                 raise SystemExit("native archive contains a duplicate or hard-linked entry")
-            if name == "butler-agent" or name == "native-agent-manifest.json":
+            if name in {"butler-agent", "native-agent-manifest.json", "THIRD_PARTY_NOTICES.txt"}:
                 valid_type = member.isfile()
             elif name == "butler":
                 valid_type = member.issym() and member.linkname == "butler-agent"

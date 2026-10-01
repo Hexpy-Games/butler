@@ -1,0 +1,67 @@
+.surface {
+  display: grid;
+  min-width: 0;
+  border-radius: var(--adaptive-composer-radius);
+}
+.subject {
+  padding: var(--space-lg) var(--space-lg) var(--space-xs);
+}
+/* A title-only body needs the same footer gap as the scroll body. */
+.subject:has(+ .actions) {
+  padding-block-end: var(--space-sm);
+}
+.subject[data-tabbed="true"] {
+  padding-block: var(--space-md);
+}
+.icon {
+  font-size: var(--typo-caption-size);
+  line-height: var(--typo-caption-line-height);
+}
+.icon > svg {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+}
+.aside {
+  display: flex;
+  flex: none;
+  align-items: baseline;
+  gap: var(--space-sm);
+  font-size: var(--typo-caption-size);
+  line-height: var(--typo-caption-line-height);
+}
+.body {
+  padding: 0 var(--space-sm) var(--space-sm);
+  min-width: 0;
+}
+.singleContent {
+  padding-block-start: var(--space-xs);
+}
+.scrollContent {
+  padding: var(--space-xs);
+}
+.actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border-top: var(--border-hairline) solid var(--composer-glass-divider);
+}
+.actions button {
+  flex-shrink: 0;
+  border-radius: var(--adaptive-composer-radius);
+}
+.surface:focus-visible,
+.surface button:focus-visible,
+.surface [role="button"]:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+  box-shadow: none;
+}
+
+/* Panels remove an idle mask without changing shell scrollbar gutters. */
+.surface [data-scroll-fade][data-overflowing="false"] {
+  mask-image: none;
+}

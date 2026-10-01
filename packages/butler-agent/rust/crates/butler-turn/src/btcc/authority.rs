@@ -8,6 +8,7 @@ mod execution;
 mod identity;
 mod permission;
 mod projection;
+pub(super) mod questions;
 mod receipt;
 mod service;
 
@@ -17,5 +18,7 @@ pub(crate) use contracts::{
     AuthorityExecutionInput, AuthorityOutcomeInput, PrincipalAuthority,
 };
 
+#[cfg(test)]
+mod question_validation;
 #[cfg(test)]
 mod tests;

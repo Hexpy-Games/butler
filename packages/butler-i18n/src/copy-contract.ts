@@ -104,6 +104,9 @@ type CountFormatter = (count: number) => string;
  */
 export interface ApprovalRequestCopy {
   editFiles: (count: number, workspace: string | null) => string;
+  editFilesOutside: (count: number) => string;
+  runCommandOutside: string;
+  networkCommandOutside: string;
   runCommand: (workspace: string | null) => string;
   networkCommand: (workspace: string | null) => string;
   useConnector: (tool: string | null, server: string | null) => string;
@@ -431,6 +434,12 @@ export interface AppCopy {
     allowConversation: string;
     allowDescription: string;
     branchFailed: string;
+    questionPanel: {
+      review: string; send: string; next: string; back: string; skip: string;
+      skipped: string; later: string; pending: string; other: string;
+      recommended: string; working: string; select: string;
+    };
+    questionAnswer: { answered: string; skipped: string; message: string };
     decisionFailed: string;
     archivesEmpty: string;
     generalConversation: string;
