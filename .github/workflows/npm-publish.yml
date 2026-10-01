@@ -1,0 +1,53 @@
+name: Publish npm package for a release tag
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published release tag (for example v0.1.0-preview.3)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  npm-publish:
+    name: Publish the npm package
+    runs-on: ubuntu-latest
+    environment: deploy
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # Keep current publishing tools even when the release tag predates them.
+      - name: Check out publishing tools
+        uses: actions/checkout@v4
+        with:
+          path: publishing-tools
+
+      - name: Verify the published Agent release
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash publishing-tools/deploy/npm/verify-release.sh "$RELEASE_TAG"
+
+      - name: Check out the release tag
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          path: release-source
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.3
+          registry-url: https://registry.npmjs.org
+
+      # npm publish invokes the same prepack hook as the tag release workflow.
+      - name: Publish with provenance
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
+        run: bash publishing-tools/deploy/npm/publish.sh "$RELEASE_TAG" release-source/packages/butler-npm
