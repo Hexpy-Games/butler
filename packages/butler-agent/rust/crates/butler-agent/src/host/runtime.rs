@@ -91,12 +91,7 @@ impl AgentRuntime {
         let metric_files = Arc::new(MetricFiles::new(paths.data_root.clone()));
         let coordinator =
             Arc::new(CognitionWriteCoordinator::new(Arc::new(SystemIdentity)).map_err(setup)?);
-        let embedding = Arc::new(EmbeddingOwner::new(paths.data_root.clone()).map_err(setup)?);
-        let vectors = Arc::new(GenerationVectorAdapter::new(
-            paths.data_root.clone(),
-            environment.cognition_paths.clone(),
-            embedding.clone(),
-        ));
+        let (embedding, vectors) = open_embedding(&paths, &environment.cognition_paths)?;
         let files = WorkspaceFiles::new(4);
         let image_files = Arc::new(butler_gateway::gateway::AppImageFiles::new(
             &paths.data_root,
@@ -439,6 +434,9 @@ impl AgentRuntime {
             host: owner,
         });
         Ok(Self {
+            memory_acquisition: Arc::new(
+                crate::host::embedding::worker::assets::Acquisition::start(paths.data_root.clone()),
+            ),
             service_shutdown: stop.clone(),
             btcc: assembly.btcc,
             host: assembly.host,
@@ -474,4 +472,18 @@ fn process_clocks() -> Result<(Arc<SystemPromptClock>, Arc<super::DateParser>), 
         Arc::new(SystemPromptClock::new().map_err(setup)?),
         Arc::new(super::DateParser::from_process().map_err(setup)?),
     ))
+}
+
+/// The native inference owner and its generation adapter share one DATA binding.
+fn open_embedding(
+    paths: &RuntimePaths,
+    cognition_paths: &butler_memory::cognition::CognitionPathEnvironment,
+) -> Result<(Arc<EmbeddingOwner>, Arc<GenerationVectorAdapter>), BtccError> {
+    let embedding = Arc::new(EmbeddingOwner::new(paths.data_root.clone()).map_err(setup)?);
+    let vectors = Arc::new(GenerationVectorAdapter::new(
+        paths.data_root.clone(),
+        cognition_paths.clone(),
+        embedding.clone(),
+    ));
+    Ok((embedding, vectors))
 }

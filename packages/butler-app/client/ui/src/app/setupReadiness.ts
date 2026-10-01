@@ -17,7 +17,15 @@ export interface SetupReadinessStep {
   error?: { code: string; detail?: string };
 }
 
+export interface MemoryModelProgress {
+  state: "queued" | "downloading" | "verifying" | "ready" | "failed";
+  bytes_done: number;
+  bytes_total: number;
+  reason?: string;
+}
+
 export interface SetupReadinessView {
+  memory_model?: MemoryModelProgress;
   status: SetupReadinessStatus;
   steps: SetupReadinessStep[];
 }
@@ -54,7 +62,10 @@ export function normalizeReadiness(value: unknown): SetupReadinessView | null {
   const record = value as Record<string, unknown>;
   if (!STATUSES.includes(record.status as SetupReadinessStatus)) return null;
   const steps = Array.isArray(record.steps) ? record.steps.map(normalizeStep).filter((step) => step !== null) : [];
-  return { status: record.status as SetupReadinessStatus, steps };
+  const model = record.memory_model as MemoryModelProgress | undefined;
+  const validModel = model && ["queued", "downloading", "verifying", "ready", "failed"].includes(model.state)
+    && Number.isFinite(model.bytes_done) && Number.isFinite(model.bytes_total);
+  return { status: record.status as SetupReadinessStatus, steps, ...(validModel ? { memory_model: model } : {}) };
 }
 
 /** Readiness from a `setup.readiness_changed` event; its payload is the view. */

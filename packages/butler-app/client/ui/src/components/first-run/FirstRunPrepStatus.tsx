@@ -17,10 +17,18 @@ import {
 import { exportFirstRunSetupDiagnostics, localizeSetupDiagnostics } from "@/app/firstRunSetup.ts";
 import { notifyStatus } from "@/app/notifications.ts";
 import { readinessFailureCode, readinessProgress } from "@/app/setupReadiness.ts";
+import { MemoryModelStatus } from "./MemoryModelStatus";
 import type { FirstRunFlow } from "./useFirstRunFlow";
 
 /** Subtle background-preparation line; a failure turns into an inline notice with Try again. */
 export function FirstRunPrepStatus({ flow, align = "center" }: { flow: FirstRunFlow; align?: "center" | "start" }) {
+  return <Stack gap="sm" cross={align}>
+    <PreparationLine flow={flow} align={align} />
+    <MemoryModelStatus model={flow.readiness.memory_model} language={flow.language} retry={flow.retryPreparation} />
+  </Stack>;
+}
+
+function PreparationLine({ flow, align = "center" }: { flow: FirstRunFlow; align?: "center" | "start" }) {
   const { copy, readiness } = flow;
   if (readiness.status === "failed") return <FirstRunPrepFailure flow={flow} />;
   if (readiness.status === "ready") {

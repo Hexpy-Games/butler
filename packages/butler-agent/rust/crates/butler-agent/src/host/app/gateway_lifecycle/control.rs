@@ -319,7 +319,9 @@ pub(crate) async fn report_restart_handoff(
         "schema":CONTROL_SCHEMA,"nonce":record.nonce,"command":"restart_handoff_result",
         "intent_id":key,"outcome":outcome,
     });
-    send(record, request, "restart_handoff_result_failed").await
+    send(record, request, "restart_handoff_result_failed")
+        .await
+        .map(|_| ())
 }
 
 /// Sends `service_stop` to the instance `record` names, after the caller
@@ -331,7 +333,21 @@ pub(crate) async fn request_service_stop(
         "schema":CONTROL_SCHEMA,"nonce":record.nonce,"command":"service_stop",
         "intent_id":record.nonce,
     });
-    send(record, request, "service_stop_failed").await
+    send(record, request, "service_stop_failed")
+        .await
+        .map(|_| ())
+}
+
+pub(crate) async fn memory_status(
+    record: &crate::host::service::instance::InstanceRecord,
+) -> Result<Value, crate::host::HostError> {
+    let response = send(
+        record,
+        json!({"schema":CONTROL_SCHEMA, "nonce":record.nonce, "command":"status"}),
+        "memory_status_unavailable",
+    )
+    .await?;
+    Ok(response["data"]["memoryModel"].clone())
 }
 
 /// Sends `request` (without its token, which comes from `record`) to the
@@ -341,7 +357,7 @@ async fn send(
     record: &crate::host::service::instance::InstanceRecord,
     mut request: Value,
     failed: &str,
-) -> Result<(), crate::host::HostError> {
+) -> Result<Value, crate::host::HostError> {
     let endpoint = record
         .control_endpoint
         .as_deref()
@@ -383,7 +399,7 @@ async fn send(
             .to_owned()
             .into());
     }
-    Ok(())
+    Ok(response.result)
 }
 
 fn lifecycle_error_parts(message: &str) -> (&str, &str) {
