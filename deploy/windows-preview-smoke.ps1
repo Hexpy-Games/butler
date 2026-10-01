@@ -23,11 +23,23 @@ function Invoke-PreviewLauncher {
     # must survive cmd's parsing. All arguments here are fixed smoke commands.
     $env:BUTLER_E2E_LAUNCHER = $launcher
     $command = '""%BUTLER_E2E_LAUNCHER%" ' + ($Arguments -join ' ') + '"'
-    if ($CaptureFailure) {
-        # CLI failures are JSON on stderr; PS5 exposes them as ErrorRecords.
-        $ErrorActionPreference = 'Continue'
-        & $env:ComSpec /d /v:off /s /c $command 2>&1 | ForEach-Object { $_.ToString() }
-    } else { & $env:ComSpec /d /v:off /s /c $command }
+    # PS5's native pipeline waits for a detached replacement after restart.
+    # Redirect to files and wait only for our cmd PID, then read its complete output.
+    $output = Join-Path $env:BUTLER_DATA ([guid]::NewGuid().ToString('N') + '.stdout')
+    $errors = "$output.stderr"
+    $process = Start-Process $env:ComSpec -ArgumentList "/d /v:off /s /c $command" -PassThru -WindowStyle Hidden -RedirectStandardOutput $output -RedirectStandardError $errors
+    try {
+        # Keep the process handle: PS5 otherwise loses ExitCode after it exits.
+        [void]$process.Handle
+        $process.WaitForExit()
+        $global:LASTEXITCODE = $process.ExitCode
+        Get-Content -LiteralPath $output -Encoding UTF8
+        $failure = Get-Content -LiteralPath $errors -Encoding UTF8
+        if ($CaptureFailure) { $failure } elseif ($failure) { Write-Error ($failure -join "`n") }
+    } finally {
+        $process.Dispose()
+        Remove-Item -LiteralPath $output,$errors -Force -ErrorAction SilentlyContinue
+    }
 }
 
 # Public installer/CLI/browser smoke. Never emit connection codes or credentials.
