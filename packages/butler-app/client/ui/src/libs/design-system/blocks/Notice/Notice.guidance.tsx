@@ -27,7 +27,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Red text alone is easy to miss and has no action.", render: () => <Typo.Body tone="danger">Error</Typo.Body> },
     },
   ],
-  content: ["Titles are statements (Could not load the dashboard / 대시보드를 불러오지 못했습니다)."],
+  content: ["Multi-line messages use a body-sized IconSlot aligned to the first line; single-line messages retain their alignment.", "Titles are statements (Could not load the dashboard / 대시보드를 불러오지 못했습니다)."],
   accessibility: ["Tone is also conveyed by the title and icon, never by color alone."],
-  tokens: ["--color-danger-bg", "--color-warning-bg", "--color-info-bg", "--color-success-bg", "--radius-panel"],
+  tokens: ["--color-danger-bg", "--color-warning-bg", "--color-info-bg", "--color-success-bg", "--radius-control", "--icon-size-md", "--typo-body-line-height"],
 };

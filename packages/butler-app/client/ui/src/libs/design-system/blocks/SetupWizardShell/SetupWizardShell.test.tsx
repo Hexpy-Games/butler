@@ -20,6 +20,7 @@ function render(tone?: "light" | "dark") {
   )).window.document;
 }
 
+// test-category: format-pin
 test("SetupWizardShell renders inside a narrow PageContainer and themes the backdrop", () => {
   const document = render("dark");
   const screen = document.querySelector("main")!;
@@ -28,6 +29,7 @@ test("SetupWizardShell renders inside a narrow PageContainer and themes the back
   expect(render().querySelector("main")!.getAttribute("data-tone")).toBe("light");
 });
 
+// test-category: format-pin
 test("the title shares the body's inline inset and the scroll area reaches the body bottom", () => {
   // The glass body has no padding; its scroll content carries the inset.
   expect(render().querySelector('[data-slot="tinted-glass"]')!.getAttribute("data-padding")).toBe("none");
@@ -44,6 +46,7 @@ function renderFocus(width?: "default" | "wide") {
   )).window.document;
 }
 
+// test-category: format-pin
 test("the focus variant drops the title, stepper and glass body for one centered column", () => {
   const document = renderFocus();
   const screen = document.querySelector("main")!;
@@ -60,10 +63,11 @@ test("the focus variant drops the title, stepper and glass body for one centered
   expect(render().querySelector("main")!.getAttribute("data-variant")).toBe("wizard");
 });
 
-test("focus content is a 420px column, 520px when wide, top-aligned below the titlebar", () => {
+// test-category: format-pin
+test("focus content is a 420px column, 520px when wide, centered below the titlebar", () => {
   expect(renderFocus("wide").querySelector('[data-width="wide"]')).not.toBeNull();
   expect(css).toMatch(/\.screen\[data-variant="focus"\] \.content\s*\{[^}]*max-width: 420px/u);
   expect(css).toMatch(/\.screen\[data-variant="focus"\] \.content\[data-width="wide"\]\s*\{[^}]*max-width: 520px/u);
-  expect(rule(".focusScrollContent")).toMatch(/align-content:\s*start/u);
-  expect(rule(".focusScrollContent")).toMatch(/padding-top:\s*max\(calc\(var\(--titlebar-height\) \+ var\(--space-md\)\), 10vh\)/u);
+  expect(rule(".focusScrollContent")).toMatch(/align-content:\s*center/u);
+  expect(rule(".focusScrollContent")).toMatch(/padding-top:\s*calc\(var\(--titlebar-height\) \+ var\(--space-lg\)\)/u);
 });

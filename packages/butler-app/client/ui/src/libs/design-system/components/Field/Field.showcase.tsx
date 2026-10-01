@@ -47,6 +47,11 @@ function text({ locale }: ShowcaseRenderContext) {
 
 export const stories: ShowcaseStory[] = [
   {
+    name: "Long label above control",
+    widths: ["320", "375", "app"],
+    render: () => <Field><FieldLabel htmlFor="ds-long-label">{"L".repeat(40)}</FieldLabel><Input id="ds-long-label" defaultValue="Butler" /></Field>,
+  },
+  {
     name: "MCP server form",
     widths: ["375", "app"],
     render: (context) => {

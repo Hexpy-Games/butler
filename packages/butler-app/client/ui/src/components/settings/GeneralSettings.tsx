@@ -112,6 +112,9 @@ export function GeneralSettings() {
       >
         <NativeNotificationStatusPanel />
       </SettingsSection>
+      <SettingsSection id="memory-model" kind="status" title={appCopy.firstRun.memoryModel.label}>
+        <MemoryModelPreparation />
+      </SettingsSection>
       <SettingsSection id="app-behavior" kind="form" title={sections.appBehavior}>
         <SettingsSwitch
           settingId="desktop-tray"
@@ -122,7 +125,6 @@ export function GeneralSettings() {
         />
         <StartAtLoginField />
         <RerunSetupField />
-        <MemoryModelPreparation />
       </SettingsSection>
       <SettingsSection
         id="search-provider"

@@ -272,3 +272,9 @@
 .typo[data-numeric="tabular"] {
   font-variant-numeric: tabular-nums;
 }
+
+/* Static headings receive screen-reader focus without becoming controls. */
+.typo:is(h1, h2, h3, h4, h5, h6)[tabindex="-1"]:focus {
+  outline: none;
+  box-shadow: none;
+}
