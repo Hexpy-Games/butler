@@ -5,6 +5,12 @@
 .subject {
   padding: var(--space-md) var(--space-lg);
 }
+.surface[data-tabbed="false"] .subject {
+  padding-block: var(--space-lg) var(--space-xs);
+}
+.singleContent {
+  padding-block-start: var(--space-xs);
+}
 .body {
   padding: 0 var(--space-sm) var(--space-sm);
   min-width: 0;

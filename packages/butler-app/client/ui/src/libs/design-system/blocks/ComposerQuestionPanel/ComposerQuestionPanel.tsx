@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { Clickable } from "../../components/Clickable";
 import { IconButton } from "../../components/IconButton";
 import { IconSlot } from "../../components/IconSlot";
-import { ChevronDown, GitBranch, MessageSquare, Pencil } from "../../components/Icons";
+import { Clock3, GitBranch, MessageSquare, Pencil } from "../../components/Icons";
 import { Inline } from "../../components/Inline";
 import { PillButton } from "../../components/PillButton";
 import { Stack } from "../../components/Stack";
@@ -12,6 +12,7 @@ import { ScrollArea } from "../ScrollArea";
 import { dsClass } from "../../lib/internal";
 import { QuestionOptions } from "./QuestionOptions";
 import { QuestionActions } from "./QuestionActions";
+import { useQuestionDeferral } from "./useQuestionDeferral";
 import { useQuestionPanel } from "./useQuestionPanel";
 import { answerText, questionPanelLabels } from "./types";
 import type { ComposerQuestionPanelProps } from "./types";
@@ -23,8 +24,9 @@ export function ComposerQuestionPanel(props: ComposerQuestionPanelProps) {
   return <QuestionPanelBody {...props} />;
 }
 function QuestionPanelBody(props: ComposerQuestionPanelProps) {
-  const m = useQuestionPanel(props);
   const panel = useRef<HTMLDivElement>(null);
+  const { defer, deferring } = useQuestionDeferral(panel, props.onCollapse);
+  const m = useQuestionPanel({ ...props, onCollapse: defer, state: deferring ? "working" : props.state });
   const previousStep = useRef(m.step);
   useEffect(() => {
     const tab = panel.current?.querySelector<HTMLElement>('[role="tab"][data-state="active"]');
@@ -42,7 +44,7 @@ function QuestionPanelBody(props: ComposerQuestionPanelProps) {
     (input ?? panel.current)?.focus({ preventScroll: true });
   }, [m.step]);
   const labels = props.labels ?? questionPanelLabels;
-  const { className, style, state = "open", error, questions, onCollapse, onExpand } = props;
+  const { className, style, state = "open", error, questions, onExpand } = props;
   if (state === "collapsed") return <PillButton disabled={!onExpand} onClick={onExpand} icon={<MessageSquare size="md" aria-hidden="true" />}>{labels.pending}</PillButton>;
   const body = <>
     <Inline className={dsClass(styles.subject)} cross="start" wrap={false}>
@@ -51,9 +53,9 @@ function QuestionPanelBody(props: ComposerQuestionPanelProps) {
         <Typo.Caption tone="tertiary">{m.review ? labels.review : m.question.header}</Typo.Caption>
         <Typo.Label weight="medium" wrap="anywhere">{m.review ? labels.send : m.question.text}</Typo.Label>
       </Stack>
-      <IconButton label={labels.later} disabled={m.busy} onClick={onCollapse}><ChevronDown size="md" /></IconButton>
+      <IconButton label={labels.later} disabled={m.busy} onClick={defer}><Clock3 size="md" /></IconButton>
     </Inline>
-    <div className={styles.body}><ScrollArea maxHeight="xs" dataSlot="question-options-scroll"><div className={styles.scrollContent}>
+    <div className={styles.body}><ScrollArea maxHeight="xs" contentClassName={questions.length === 1 ? dsClass(styles.singleContent) : undefined} dataSlot="question-options-scroll"><div className={styles.scrollContent}>
       {m.review ? <Stack gap="xs">{questions.map((q, i) => <Clickable key={q.id} disabled={m.busy} stretch className={dsClass(styles.option)} onClick={() => m.go(i)}>
         <Inline cross="start" wrap={false} grow><Stack grow minWidth="0" gap="none"><Typo.Caption tone="tertiary">{q.header}</Typo.Caption>
           <Typo.Label wrap="anywhere">{answerText(q, m.answers[i]) || labels.skipped}</Typo.Label></Stack>
@@ -64,7 +66,7 @@ function QuestionPanelBody(props: ComposerQuestionPanelProps) {
     <QuestionActions model={m} props={props} labels={labels} />
   </>;
   return <div ref={panel} className={dsClass(styles.surface, className)} style={style} tabIndex={m.busy ? -1 : 0} onKeyDownCapture={m.keyDown}
-    aria-label={m.review ? labels.review : m.question.text} aria-busy={state === "submitting"} data-state={state} data-slot="composer-question-panel">
+    aria-label={m.review ? labels.review : m.question.text} aria-busy={state === "submitting"} data-state={state} data-tabbed={questions.length > 1} data-slot="composer-question-panel">
     {questions.length > 1 ? <Tabs value={String(m.step)} onValueChange={(value) => m.go(Number(value))}>
       <div className={styles.tabInset}><TabsList className={dsClass(styles.tabs)} variant="line" aria-label={labels.select}>{questions.map((q, i) => <TabsTrigger className={dsClass(styles.tab)} key={q.id} value={String(i)} disabled={m.busy}>{q.header}</TabsTrigger>)}
         <TabsTrigger className={dsClass(styles.tab)} value={String(questions.length)} disabled={m.busy}>{labels.review}</TabsTrigger></TabsList></div>

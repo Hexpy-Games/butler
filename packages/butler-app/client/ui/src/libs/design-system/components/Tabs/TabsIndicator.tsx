@@ -23,7 +23,9 @@ export function TabsIndicator() {
         return;
       }
       indicator.style.opacity = "";
-      indicator.style.transform = `translateX(${active.offsetLeft}px) scaleX(${active.offsetWidth})`;
+      const target = active.getBoundingClientRect();
+      const frame = list.getBoundingClientRect();
+      indicator.style.transform = `translateX(${target.left - frame.left + list.scrollLeft}px) scaleX(${target.width})`;
       if (!list.hasAttribute("data-indicator-ready")) {
         // First placement lands without sliding in from the start edge.
         indicator.getBoundingClientRect();
@@ -33,7 +35,11 @@ export function TabsIndicator() {
     place();
     const mutations = new MutationObserver(place);
     mutations.observe(list, { subtree: true, attributes: true, attributeFilter: ["data-state"], childList: true });
-    const resize = typeof ResizeObserver === "function" ? new ResizeObserver(place) : null;
+    // Resize/locale changes land directly; only tab selection should slide.
+    const resize = typeof ResizeObserver === "function" ? new ResizeObserver(() => {
+      list.removeAttribute("data-indicator-ready");
+      place();
+    }) : null;
     resize?.observe(list);
     for (const trigger of list.querySelectorAll('[data-slot="tabs-trigger"]')) resize?.observe(trigger);
     return () => {

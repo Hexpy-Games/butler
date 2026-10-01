@@ -46,7 +46,7 @@ export function observeScrollEdges(
   axis: ScrollEdgeAxis,
 ): () => void {
   let frame = 0;
-  let observedChild: Element | null = null;
+  const observedChildren = new Set<Element>();
   const update = () => {
     frame = 0;
     writeScrollEdges(element, readScrollEdges(element, axis));
@@ -56,31 +56,42 @@ export function observeScrollEdges(
   };
   const resizeObserver =
     typeof ResizeObserver === "undefined" ? null : new ResizeObserver(schedule);
-  const observeFirstChild = () => {
-    const child = element.firstElementChild;
-    if (child === observedChild) return;
-    if (observedChild) resizeObserver?.unobserve?.(observedChild);
-    observedChild = child;
-    if (child) resizeObserver?.observe(child);
+  const observeChildren = () => {
+    const children = new Set(element.children);
+    for (const child of observedChildren) {
+      if (!children.has(child)) {
+        resizeObserver?.unobserve(child);
+        observedChildren.delete(child);
+      }
+    }
+    for (const child of children) {
+      if (!observedChildren.has(child)) {
+        resizeObserver?.observe(child);
+        observedChildren.add(child);
+      }
+    }
   };
   const mutationObserver =
     typeof MutationObserver === "undefined"
       ? null
       : new MutationObserver(() => {
-        observeFirstChild();
+        observeChildren();
         schedule();
       });
 
   update();
   element.addEventListener("scroll", schedule, { passive: true });
+  element.addEventListener("transitionend", schedule);
   resizeObserver?.observe(element);
-  observeFirstChild();
-  mutationObserver?.observe(element, { childList: true });
+  observeChildren();
+  mutationObserver?.observe(element, { childList: true, subtree: true, characterData: true,
+    attributes: true, attributeFilter: ["style", "class", "hidden", "dir"] });
 
   return () => {
     if (frame !== 0) cancelAnimationFrame(frame);
     frame = 0;
     element.removeEventListener("scroll", schedule);
+    element.removeEventListener("transitionend", schedule);
     resizeObserver?.disconnect();
     mutationObserver?.disconnect();
   };
