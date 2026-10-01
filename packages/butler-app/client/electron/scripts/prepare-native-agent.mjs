@@ -111,7 +111,9 @@ writeFileSync(
     resources: "resources",
   }, null, 2)}\n`,
 );
-if (process.env.BUTLER_NATIVE_PAYLOAD_WRITABLE !== "1") setReadOnly(payloadRoot);
+// Windows portable extraction must allow role hardlink restoration. POSIX
+// payload permissions remain unchanged.
+if (requestedPlatform !== "win32" && process.env.BUTLER_NATIVE_PAYLOAD_WRITABLE !== "1") setReadOnly(payloadRoot);
 process.stdout.write(`Native Butler Agent payload prepared: ${payloadRoot}\n`);
 
 /**
