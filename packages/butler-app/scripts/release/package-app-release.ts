@@ -288,6 +288,11 @@ function runElectronPackager(
       }`,
     );
   }
+  const notices = spawnSync(process.env.BUTLER_NODE || "node", [
+    join(root, "deploy/licenses/package-app.mjs"),
+    join(outDir, "Butler-darwin-arm64/Butler.app"),
+  ], { cwd: root, stdio: "inherit" });
+  if (notices.status !== 0) throw new Error("App notices packaging failed");
 }
 
 export function prepareBundledAgentResource(

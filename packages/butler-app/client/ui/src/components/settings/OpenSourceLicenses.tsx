@@ -15,32 +15,29 @@ export function OpenSourceLicenses() {
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [notices, setNotices] = useState<Notice[] | null>(null);
-  const [licenseTexts, setLicenseTexts] = useState<Map<string, string>>(new Map());
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (!open || notices) return;
+    if (!open) { setNotices(null); setQuery(""); setExpanded(null); return; }
+    if (notices) return;
     const controller = new AbortController();
     setFailed(false);
     // Same-origin build asset: available in both the bundled and remote renderer.
-    fetch(new URL("THIRD_PARTY_NOTICES.txt", document.baseURI), { signal: controller.signal })
+    fetch(new URL("THIRD_PARTY_NOTICES.txt.gz", document.baseURI), { signal: controller.signal })
       .then((response) => {
         if (!response.ok) throw new Error(String(response.status));
-        return response.text();
+        if (!response.body) throw new Error("Missing notices body");
+        return new Response(response.body.pipeThrough(new DecompressionStream("gzip"))).text();
       })
       .then((text) => {
-        const [inventory, appendix] = text.split("\n===== LICENSE TEXTS =====\n");
-        const chunks = appendix.split(/\n===== LICENSE TEXT ([a-f0-9]{64}) =====\n/);
-        const texts = new Map<string, string>();
-        for (let index = 1; index < chunks.length; index += 2) texts.set(chunks[index], chunks[index + 1]);
-        const entries = inventory.split("\n===== COMPONENT =====\n").slice(1).map((section) => {
+        const entries = text.split("\n===== COMPONENT =====\n").slice(1).map((section) => {
           const [name, license] = section.split("\n", 2);
           const body = section.slice(name.length + license.length + 2);
           return { title: name, license, text: body, search: `${name}\n${license}\n${body}`.toLowerCase() };
         });
         if (!entries.length) throw new Error("Empty notices");
-        if (!controller.signal.aborted) { setLicenseTexts(texts); setNotices(entries); }
+        if (!controller.signal.aborted) { setNotices(entries); }
       })
       .catch(() => { if (!controller.signal.aborted) setFailed(true); });
     return () => controller.abort();
@@ -67,7 +64,7 @@ export function OpenSourceLicenses() {
                 <DisclosureRow key={notice.title} title={notice.title} meta={notice.license}
                   open={expanded === notice.title} onToggle={() => setExpanded(expanded === notice.title ? null : notice.title)}>
                   {expanded === notice.title ? <Typo.Code as="pre" wrap="pre">
-                    {notice.text.replace(/License text: ([a-f0-9]{64})/g, (_match, key: string) => licenseTexts.get(key) ?? key)}
+                    {notice.text}
                   </Typo.Code> : null}
                 </DisclosureRow>
               ))}

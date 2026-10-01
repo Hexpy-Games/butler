@@ -4,6 +4,8 @@
 No installed license tool is needed: Python 3.11+, Node and the repo's Cargo
 toolchain suffice. Release builds use generate.mjs and never fetch evidence.
 """
+from disclosure import disclose
+
 import concurrent.futures
 import hashlib
 import json
@@ -24,7 +26,6 @@ TARGETS = {
     "x86_64-unknown-linux-gnu": "Linux x64 DEB/Arch/Agent",
     "aarch64-unknown-linux-gnu": "Linux arm64 DEB/Agent",
 }
-TEXTS = {}
 SIBLING_LICENSES = {}
 
 
@@ -73,13 +74,12 @@ def record(kind, name, version, license_id, source, artifacts, files, **extra):
     for label, text in files:
         evidence = f"{text.strip()}\n"
         key = digest(evidence.encode())
-        TEXTS[key] = evidence
         keys.append(key)
     if not keys:
         raise ValueError(f"Missing full license text: {name} {version}")
-    return dict(id=f"{kind}:{name}@{version}", name=name, version=version,
+    return disclose(dict(id=f"{kind}:{name}@{version}", name=name, version=version,
                 license=license_id, source=source, artifacts=artifacts,
-                texts=keys, files=[label for label, _ in files], **extra)
+                evidenceSha256=keys, files=[label for label, _ in files], **extra), [text for _, text in files])
 
 
 def crate_evidence(package):
@@ -305,8 +305,8 @@ def runtime_components():
 
 
 def model_components():
-    model = json.loads(fetch("https://huggingface.co/api/models/Xenova/bge-m3"))
-    revision = model["sha"]
+    assets = (RUST / "crates/butler-agent/src/host/embedding/worker/assets.rs").read_text()
+    revision = re.search(r'const REVISION: &str = "([a-f0-9]+)";', assets).group(1)
     base = f"https://huggingface.co/Xenova/bge-m3/resolve/{revision}"
     license_source = "https://raw.githubusercontent.com/FlagOpen/FlagEmbedding/fd1a2bdf69488ffebe0327999d4400d8c8058a0b/LICENSE"
     return [record("model", "Xenova/bge-m3 (BAAI/bge-m3)", revision, "MIT", base,
@@ -348,7 +348,7 @@ def main():
     asset_digests = json.loads(run("node", "--input-type=module", "-e", code, json.dumps(assets)))
     catalog = dict(inputs=fingerprints,
                    assets=asset_digests,
-                   components=sorted(components, key=lambda c: c["id"]), texts=dict(sorted(TEXTS.items())))
+                   components=sorted(components, key=lambda c: c["id"]))
     (ROOT / "deploy/licenses/catalog.json").write_text(json.dumps(catalog, ensure_ascii=False, indent=2) + "\n")
     print(f"Collected {len(components)} components; run generate.mjs to validate license policy")
 

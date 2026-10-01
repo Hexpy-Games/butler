@@ -1,3 +1,4 @@
+import { gzipSync } from "node:zlib";
 import { createHash } from "node:crypto";
 import { readFileSync, mkdirSync, writeFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -139,19 +140,21 @@ export function generate(catalog = JSON.parse(readFileSync(join(root, "deploy/li
     const component = catalog.components.find((entry) => entry.id === `npm:${identity}`);
     if (!component || component.integrity !== integrity) throw new Error(`Missing locked license evidence: ${identity}`);
   }
+  const model = catalog.components.find((entry) => entry.id.startsWith("model:Xenova/bge-m3"));
+  const assets = readFileSync(join(root, "packages/butler-agent/rust/crates/butler-agent/src/host/embedding/worker/assets.rs"), "utf8");
+  if (!assets.includes(`const REVISION: &str = "${model.version}";`)) throw new Error("Embedding download revision differs from disclosed model");
   const sections = catalog.components.map((component) => {
     validateLicense(component);
-    if (!component.texts?.length) throw new Error(`Missing notice text: ${component.id}`);
-    const texts = component.texts.map((key, index) => {
-      const text = catalog.texts[key];
-      if (!text?.trim() || sha256(text) !== key) throw new Error(`Invalid license evidence: ${component.id}`);
-      return `Evidence: ${component.files[index]}\nLicense text: ${key}`;
-    });
-    return `\n===== COMPONENT =====\n${component.name} ${component.version}\n${component.license}\nArtifacts: ${component.artifacts.join(", ")}\nSource: ${component.source}\n\n${texts.join("\n\n")}`;
+    if (!component.links?.length || component.links.some((link) => {
+      try { const url = new URL(link); return url.protocol !== "https:" || !url.hostname || /\s/.test(link); }
+      catch { return true; }
+    })) {
+      throw new Error(`Missing or invalid license link: ${component.id}`);
+    }
+    const attribution = (component.copyright ?? []).join("\n");
+    return `\n===== COMPONENT =====\n${component.name} ${component.version}\n${component.license}\n${component.links.map((link) => `License: ${link}`).join("\n")}\n${attribution}`;
   });
-  const appendix = Object.entries(catalog.texts).sort(([a], [b]) => a.localeCompare(b, "en"))
-    .map(([key, text]) => `\n===== LICENSE TEXT ${key} =====\n${text}`).join("\n");
-  return `Butler third-party notices\n\nUnion of macOS App, Linux DEB/Arch App, and headless Agent archive/npm.\nThe Agent also ships the browser renderer. npm wraps the archive installer; Node is supplied by the user.\nElectron includes Node/Chromium and retains LICENSE and LICENSES.chromium.html in the App runtime.\nEach component references full, unmodified license texts in the appendix by SHA-256. Shared texts are included once.\nMPL components and bundled native upstream notices require release-owner review; see deploy/licenses/README.md.\n${sections.join("\n")}\n===== LICENSE TEXTS =====\n${appendix}\n`;
+  return `Butler third-party disclosures\n\nComponent names, shipped versions, SPDX licenses, upstream links and available copyright lines.\nSupplier collections are disclosed as supplied; their individual versions and SPDX IDs are not consistently available.\nElectron retains its own LICENSE and LICENSES.chromium.html in its runtime.\n\n${sections.join("\n")}\n`;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -162,7 +165,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   } else {
     const destination = resolve(process.argv[2] ?? join(root, "deploy/licenses/THIRD_PARTY_NOTICES.txt"));
     mkdirSync(dirname(destination), { recursive: true });
-    writeFileSync(destination, document);
+    writeFileSync(destination, destination.endsWith(".gz") ? gzipSync(document, { level: 9 }) : document);
   }
   console.log(`Third-party notices: ${Buffer.byteLength(document)} bytes`);
 }

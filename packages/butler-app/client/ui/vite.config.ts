@@ -1,3 +1,4 @@
+import { gzipSync } from "node:zlib";
 import path from "node:path";
 import { homedir } from "node:os";
 import { createHash } from "node:crypto";
@@ -38,8 +39,8 @@ function thirdPartyNotices(): Plugin {
     generateBundle() {
       this.emitFile({
         type: "asset",
-        fileName: "THIRD_PARTY_NOTICES.txt",
-        source: readFileSync(noticesFile, "utf8"),
+        fileName: "THIRD_PARTY_NOTICES.txt.gz",
+        source: gzipSync(readFileSync(noticesFile), { level: 9 }),
       });
     },
   };

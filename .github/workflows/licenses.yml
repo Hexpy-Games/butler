@@ -19,3 +19,4 @@ jobs:
           export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
           node deploy/licenses/generate.mjs --check
           node deploy/licenses/check.mjs
+          python3 deploy/licenses/check-disclosure.py

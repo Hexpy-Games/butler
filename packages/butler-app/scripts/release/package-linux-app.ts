@@ -137,6 +137,7 @@ function packageElectronApp(root: string, workDir: string, platform: LinuxAppPla
   if (!existsSync(join(packagedDir, "Butler")) || !existsSync(agentBinary)) {
     throw new Error(`electron package is incomplete: ${packagedDir}`);
   }
+  run(process.env.BUTLER_NODE || "node", [join(root, "deploy/licenses/package-app.mjs"), packagedDir], { cwd: root });
   return { root, platform, version: versions.app, packagedDir, agentBinary, appBinary: join(packagedDir, "Butler"), epoch };
 }
 

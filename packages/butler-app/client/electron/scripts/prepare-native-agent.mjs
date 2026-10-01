@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { gunzipSync } from "node:zlib";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -71,8 +72,6 @@ rmSync(payloadRoot, { recursive: true, force: true });
 const binaryRoot = join(payloadRoot, "bin");
 mkdirSync(binaryRoot, { recursive: true });
 copyFileSync(sourceBinary, join(binaryRoot, "butler-agent"));
-const noticesResult = spawnSync(process.execPath, [join(repositoryRoot, "deploy", "licenses", "generate.mjs"), join(binaryRoot, "THIRD_PARTY_NOTICES.txt")], { stdio: "inherit" });
-if (noticesResult.status !== 0) throw new Error("Third-party notices generation failed.");
 cpSync(
   join(repositoryRoot, "packages", "butler-agent", "resources"),
   join(payloadRoot, "resources"),
@@ -83,8 +82,8 @@ const uiDistRoot = resolve(
     join(repositoryRoot, "packages", "butler-app", "client", "ui", "dist"),
 );
 requireFile(join(uiDistRoot, "index.html"));
-requireFile(join(uiDistRoot, "THIRD_PARTY_NOTICES.txt"));
-if (!readFileSync(join(uiDistRoot, "THIRD_PARTY_NOTICES.txt")).equals(readFileSync(join(binaryRoot, "THIRD_PARTY_NOTICES.txt")))) {
+requireFile(join(uiDistRoot, "THIRD_PARTY_NOTICES.txt.gz"));
+if (!gunzipSync(readFileSync(join(uiDistRoot, "THIRD_PARTY_NOTICES.txt.gz"))).equals(readFileSync(join(repositoryRoot, "deploy/licenses/THIRD_PARTY_NOTICES.txt")))) {
   throw new Error("Renderer notices are stale; rebuild the App renderer.");
 }
 cpSync(uiDistRoot, join(payloadRoot, "resources", "app-client", "dist"), { recursive: true });
