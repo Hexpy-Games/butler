@@ -16,7 +16,7 @@
   For macOS (Apple silicon) and Linux, with hosted or local models.
 </p>
 
-Current version: `0.1.0-preview.4` (preview; stable 0.1.0 is coming).
+0.1.0 is in preview. The current build is [`0.1.0-preview.4`](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.4).
 
 <p align="center">
   <a href="https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.4"><strong>Download</strong></a>
@@ -37,13 +37,12 @@ Current version: `0.1.0-preview.4` (preview; stable 0.1.0 is coming).
 
 Use Butler through the App, on desktop or in a browser. The Agent is a native Rust service; the TypeScript/Bun Agent is retired.
 
-- **Works on your computer, with permission.** Butler reads and edits files and runs commands. By default, new conversations start in *Ask first*, so it asks before it changes a file or runs a command. You can switch a conversation to *Read only* or *Full access*. [Conversations](https://butler.hexpy.games/help/basics/conversation/)
+- **Works on your computer, with permission.** Butler reads and edits files and runs commands. By default, new conversations start in *Ask first*, so it asks before it changes a file or runs a command. Approvals show the full command, and Butler treats commands it doesn't recognize as high risk. When it needs a decision from you, it asks in the chat. You can switch a conversation to *Read only* or *Full access*. [Conversations](https://butler.hexpy.games/help/basics/conversation/)
 - **Projects.** A project gives its conversations a shared folder. Butler records plans and progress for the project, and the dashboard summarizes them. [Projects](https://butler.hexpy.games/help/projects/)
-- **Schedules.** Butler sends a prompt to a conversation at the interval you set. [Schedules](https://butler.hexpy.games/help/scheduled-tasks/)
+- **Schedules.** Butler sends a prompt to a conversation at a fixed interval, or daily, on weekdays or weekly at a set time. [Schedules](https://butler.hexpy.games/help/scheduled-tasks/)
 - **Memory and personalization.** Give Butler a name and a persona, and choose how much it learns about you. Learning is off by default. [Personalization](https://butler.hexpy.games/help/personalization/)
-- **Your choice of model.** Use OpenAI, Anthropic, Google and other hosted providers, or an OpenAI-compatible server such as Ollama, LM Studio or llama.cpp. When enabled, backup models handle eligible provider failures. [Models](https://butler.hexpy.games/help/models/cloud/)
+- **Your choice of model.** Use OpenAI, Anthropic, Google and other hosted providers, or an OpenAI-compatible server such as Ollama, LM Studio or llama.cpp. Manage saved API keys in **Settings → Models**. When enabled, backup models handle eligible provider failures. [Models](https://butler.hexpy.games/help/models/cloud/)
 - **CLI and MCP.** Run the Agent without the desktop App and connect MCP servers for extra tools. Use `butler --help` for service, model, schedule and extension commands. [MCP servers](https://butler.hexpy.games/help/extensions/mcp-servers/), [Agent CLI](https://butler.hexpy.games/help/advanced/agent-cli/)
-- **Preview.4.** Ask questions in chat; approvals show stricter risk classifications and full command text; open-source licenses appear in Settings.
 
 ## Install
 
@@ -55,6 +54,9 @@ Download Butler from the [0.1.0 preview.4 release](https://github.com/Hexpy-Game
 | Linux (x64) | [DEB](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-linux-x64.deb) |
 | Linux (arm64) | [DEB](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-linux-arm64.deb) |
 | Arch Linux (x64) | [Package](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-archlinux-x64.pkg.tar.zst) |
+| Windows | No installer yet |
+
+Each file has a `.sha256` checksum, and `butler-0.1.0-preview.4-SHA256SUMS` lists them all.
 
 On first launch, choose the interface language on the welcome screen, accept the safety notice and connect an AI. Choose Butler's reply language at the end of the AI connection step; you can change it later in **Settings → Personalization**. See [Install](https://butler.hexpy.games/help/getting-started/install/) and [First run](https://butler.hexpy.games/help/getting-started/first-run/).
 
@@ -74,7 +76,7 @@ Use `butler open` to open the App in your browser. For another computer on a tru
 
 ## Where your data lives
 
-Conversations, memory and settings stay in a local data folder, `~/.butler` by default. When you use a hosted model, that provider receives the prompt and context for each request. Use a local model to keep inference on your machine too.
+Conversations, memory and settings stay in a local data folder, `~/.butler` by default. Saved API keys go to the system credential store on Developer ID-signed macOS builds, and otherwise to an owner-only file in that folder. When you use a hosted model, that provider receives the prompt and context for each request. Use a local model to keep inference on your machine too.
 
 ## Documentation
 

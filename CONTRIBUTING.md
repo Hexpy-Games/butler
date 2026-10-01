@@ -63,6 +63,8 @@ node packages/butler-app/client/electron/scripts/prepare-native-agent.mjs darwin
 
 `prepare-native-agent.mjs` builds a pinned static ONNX Runtime and a release build of `butler-agent`, then stages the binary and its resources in `packages/butler-app/client/electron/.native-agent-payload/bundled-agent`. The first run is slow. Later runs reuse the cache in `${CARGO_TARGET_DIR:-packages/butler-agent/rust/target}/native-deps`. Run it again after you change the agent or its resources.
 
+If you already have a `butler-agent` binary, set `BUTLER_NATIVE_AGENT_EXECUTABLE` to it before you run `prepare-native-agent.mjs`. The script then skips the ONNX Runtime and `cargo` builds and stages that binary with the current resources and UI. It fails if the path is missing, not executable, or inside the payload it replaces.
+
 The development app doesn't build the agent. It starts the executable named by `BUTLER_NATIVE_AGENT_EXECUTABLE`, which must be an absolute path with a `resources` folder next to its `bin` folder:
 
 ```sh
@@ -72,7 +74,7 @@ export BUTLER_APP_SERVER_PORT=28765
 bun run app:client:dev
 ```
 
-`app:client:dev` starts Vite for the UI with hot reload and opens Electron against it. `bun run app:client` builds the UI and starts Electron without Vite. Both need `BUTLER_NATIVE_AGENT_EXECUTABLE`. Use a separate development port as above; leave the installed Butler service running.
+`app:client:dev` starts Vite for the UI with hot reload and opens Electron against it. `bun run app:client` builds the UI and starts Electron without Vite. Both need `BUTLER_NATIVE_AGENT_EXECUTABLE`. Use a separate development port as above; leave the installed Butler service running. Unset `BUTLER_NATIVE_AGENT_EXECUTABLE` before you rebuild the payload, since it points inside it.
 
 ## Checks
 
@@ -87,7 +89,8 @@ bun run check
 | Command | What it runs |
 | --- | --- |
 | `bun run check` | `lint`, `typecheck` and the fast unit tests |
-| `bun run lint` | ESLint, the design-system and motion lints, and Prettier and Stylelint for CSS |
+| `bun run lint` | ESLint, the design-system and motion lints, Prettier and Stylelint for CSS, and `lint:repo` |
+| `bun run lint:repo` | Rejects tracked symlinks that are absolute, leave the repository or point into `.claude/worktrees` |
 | `bun run typecheck` | `tsc` for the repository and for the UI |
 | `bun run test:unit` | Every test in `tests/unit` |
 | `bun run check:full` | `check` plus the packaging tests |
@@ -95,7 +98,7 @@ bun run check
 | `bun run site:check` | The manual's style and prose lints, tests, token sync check and `astro check` |
 | `bun run site:build` | The whole site in `packages/butler-site/dist`: the manual, the DS Viewer at `/ds/`, and a check of the output |
 
-The pre-commit hook runs `lint` and `typecheck`. Scripts in `tests/smoke` drive the built UI, for example `bun run app:layout:smoke` and `bun run app:design-system:smoke`.
+The pre-commit hook runs `lint` and `typecheck`. When you change dependencies, regenerate the third-party notices with `node deploy/licenses/generate.mjs`; CI checks them with `--check`. Scripts in `tests/smoke` drive the built UI, for example `bun run app:layout:smoke` and `bun run app:design-system:smoke`.
 
 ### Rust
 
@@ -123,7 +126,7 @@ cargo clippy -p butler-agent --all-targets --locked --no-default-features --feat
 
 Run Clippy on the crates you changed; the example selects the Agent's static build. For default prebuilt builds, omit those feature flags. CI also runs the workspace with `cargo nextest run --workspace --locked`.
 
-Test changed behavior E2E first: `BUTLER_E2E_TIER=stub cargo test --locked -p butler-e2e`. Use stub or replay only. Non-E2E tests require `// test-category: race`, `security`, `pure-logic` or `format-pin`; source-check ratchets the counts in `source-check-tests.txt`, which may only decrease. Live cassette recording, when explicitly required, uses only `openai/gpt-6-luna`. The [harness README](packages/butler-agent/rust/crates/butler-e2e/README.md) covers tiers and recording.
+Test changed behavior E2E first: `BUTLER_E2E_TIER=stub cargo test --locked -p butler-e2e`. Use stub or replay only. Non-E2E tests require a `// test-category: race`, `security`, `pure-logic` or `format-pin` marker directly above the test function; source-check ratchets the counts in `source-check-tests.txt`, which may only decrease. Live cassette recording, when explicitly required, uses only `openai/gpt-6-luna`. The [harness README](packages/butler-agent/rust/crates/butler-e2e/README.md) covers tiers and recording.
 
 Keep source files at most 500 lines and production functions at most 80 lines. OS-specific code belongs only in `butler-platform`; unsafe code is forbidden. Performance checks must verify complete, current results at owner scale (600+ chats, about 300k events and multi-GB stores). Follow the detailed request-path and idle-work rules in [plans/README.md](plans/README.md).
 
@@ -157,7 +160,7 @@ A release is a `vX.Y.Z` tag pushed from `main`.
    - `packages/butler-npm/package.json`: the installer package version (the publish job sets it from the tag)
    - `packages/butler-agent/rust/crates/butler-agent/Cargo.toml`
 2. Refresh the lockfiles: `bun install`, `npm --prefix packages/butler-app/client/electron install`, and `cargo update --workspace` in `packages/butler-agent/rust`.
-3. Write the release notes in `.github/releases/vX.Y.Z.md`.
+3. Write the release notes in `.github/releases/vX.Y.Z.md`. Preview tags (`vX.Y.Z-preview.N`) use `.github/releases/vX.Y.Z-preview.md`, and their macOS builds are not notarized.
 4. Merge, then push the tag. `.github/workflows/release.yml` builds the macOS arm64 App and Agent, Linux x64 / arm64 Agent archives and DEBs, and an Arch x64 App package. It runs release gates and smoke checks, attaches the installer and consolidated checksums, then publishes the release after the required assets exist. Hyphenated tags are prereleases; stable tags feed `releases/latest`. The npm job then publishes `@hexpygames/butler` (`latest` for stable, `next` for previews).
 
 The app release gate fails when the bundled agent version changes and the app version doesn't. The gates are also available locally as the `release:*` scripts in `package.json`.
