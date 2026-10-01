@@ -152,7 +152,10 @@ async fn accept(listener: TcpListener, context: Arc<ControlContext>, shutdown: C
         tokio::select! {
             biased;
             _ = serve_one(&mut stream, &context) => {},
-            () = shutdown.cancelled() => break,
+            () = shutdown.cancelled() => {
+                crate::host::service::shutdown_trace::event("control_connection_cancelled");
+                break;
+            },
         }
     }
 }

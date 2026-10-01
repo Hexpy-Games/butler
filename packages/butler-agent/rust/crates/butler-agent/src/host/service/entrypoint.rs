@@ -207,9 +207,9 @@ async fn close_after_serve(
     writer: &TranscriptWriter,
     result: Result<String, BtccError>,
 ) -> Result<String, BtccError> {
-    let runtime_close = close_runtime(runtime).await;
-    let transcript_close = writer
-        .close()
+    let runtime_close =
+        super::shutdown_trace::measure("runtime_close", close_runtime(runtime)).await;
+    let transcript_close = super::shutdown_trace::measure("transcript_close", writer.close())
         .await
         .map_err(|e| failure(e.code(), e.message()));
     match result {

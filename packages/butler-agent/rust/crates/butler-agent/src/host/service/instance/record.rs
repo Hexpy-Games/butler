@@ -37,6 +37,7 @@ pub(super) fn write_record(
     path: &Path,
     record: &InstanceRecord,
 ) -> Result<(), crate::host::HostError> {
+    super::super::shutdown_trace::event("instance_write:begin");
     let parent = path
         .parent()
         .ok_or_else(|| "native_service_instance_record_path_invalid".to_owned())?;
@@ -77,6 +78,11 @@ pub(super) fn write_record(
     if result.is_err() {
         let _ = fs::remove_file(temporary);
     }
+    super::super::shutdown_trace::event(if result.is_ok() {
+        "instance_write:end"
+    } else {
+        "instance_write:failed"
+    });
     result
 }
 

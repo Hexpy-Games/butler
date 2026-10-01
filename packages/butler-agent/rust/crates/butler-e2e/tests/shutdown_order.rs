@@ -17,6 +17,9 @@ use butler_e2e::e2e::{
 use serde_json::json;
 use std::time::{Duration, Instant};
 
+#[path = "shutdown_order/diagnostics.rs"]
+mod diagnostics;
+
 #[tokio::test]
 async fn stop_interrupts_a_thirty_second_stream_before_closing_storage() -> Result<(), HarnessError>
 {
@@ -186,10 +189,20 @@ async fn shutdown_interrupts_a_control_request_read() -> Result<(), HarnessError
     stream.write_all(&[0, 0]).await?; // An unfinished frame holds serve_one.
     tokio::time::sleep(Duration::from_millis(50)).await;
     let started = Instant::now();
-    s.agent.terminate().await?;
+    s.agent.terminate().await.map_err(|error| {
+        HarnessError(format!("{error}; {}", diagnostics::snapshot(&s, started)))
+    })?;
     eprintln!("blocked control shutdown: {:?}", started.elapsed());
-    assert!(started.elapsed() < Duration::from_secs(2));
-    assert!(instance_record(&s.sandbox.data).is_none());
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "control shutdown exceeded 2s; {}",
+        diagnostics::snapshot(&s, started)
+    );
+    assert!(
+        instance_record(&s.sandbox.data).is_none(),
+        "control shutdown left its record; {}",
+        diagnostics::snapshot(&s, started)
+    );
     s.finish().await
 }
 
@@ -259,18 +272,27 @@ async fn unannounced_sigterm_has_a_deadline_even_when_storage_is_blocked()
     while s.agent.is_running() {
         assert!(
             started.elapsed() < Duration::from_secs(8),
-            "unannounced stop missed deadline"
+            "unannounced stop missed deadline; {}",
+            diagnostics::snapshot(&s, started)
         );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    assert!(s.agent.reap().unwrap().success());
+    let exit_observed = started.elapsed();
+    let status = s.agent.reap().unwrap();
+    eprintln!(
+        "forced shutdown: exit_observed={exit_observed:?} reaped={:?} status={status}",
+        started.elapsed()
+    );
+    assert!(status.success(), "{}", diagnostics::snapshot(&s, started));
     assert!(
         s.agent.logs().contains("stop deadline reached"),
-        "lock did not exercise forced cleanup"
+        "lock did not exercise forced cleanup; {}",
+        diagnostics::snapshot(&s, started)
     );
     assert!(
         instance_record(&s.sandbox.data).is_none(),
-        "forced exit left its record"
+        "forced exit left its record; {}",
+        diagnostics::snapshot(&s, started)
     );
     let transcript = butler_e2e::e2e::agent::read_all(&s.sandbox.data.join("transcripts"));
     assert!(transcript.contains(&turn_id));
