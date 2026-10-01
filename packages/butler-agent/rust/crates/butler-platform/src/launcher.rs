@@ -79,3 +79,8 @@ pub fn release_platform() -> String {
     };
     format!("{}-{arch}", sys::RELEASE_OS)
 }
+
+/// Resolves the installed command alias to its verified original executable.
+pub(crate) fn canonical_command_executable(path: PathBuf) -> io::Result<PathBuf> {
+    sys::canonical_command_executable(path)
+}

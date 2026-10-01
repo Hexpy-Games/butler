@@ -41,3 +41,33 @@ pub(super) fn is_runnable_by_all(_metadata: &Metadata) -> bool {
 pub(super) fn system_program_dirs() -> Vec<PathBuf> {
     Vec::new()
 }
+
+// The installer creates a hardlink, so command invocation never goes through
+// cmd.exe (which expands literal percent signs in profile paths).
+pub(super) fn canonical_command_executable(path: PathBuf) -> io::Result<PathBuf> {
+    if !path
+        .file_name()
+        .is_some_and(|name| name.eq_ignore_ascii_case("butler.exe"))
+    {
+        return Ok(path);
+    }
+    let marker = path.with_file_name("butler.exe.target");
+    let metadata = std::fs::symlink_metadata(&marker)?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() || metadata.len() > 32768 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Invalid command binding",
+        ));
+    }
+    let target = PathBuf::from(std::fs::read_to_string(marker)?);
+    if !target.is_absolute()
+        || target.file_name() != Some(std::ffi::OsStr::new(AGENT_BINARY))
+        || !same_file::is_same_file(&path, &target)?
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Foreign command binding",
+        ));
+    }
+    dunce::canonicalize(&target)
+}

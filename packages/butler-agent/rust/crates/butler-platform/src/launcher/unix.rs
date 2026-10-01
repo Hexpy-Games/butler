@@ -46,3 +46,7 @@ pub(super) fn system_program_dirs() -> Vec<PathBuf> {
         .map(PathBuf::from)
         .collect()
 }
+
+pub(super) fn canonical_command_executable(path: PathBuf) -> io::Result<PathBuf> {
+    Ok(path)
+}

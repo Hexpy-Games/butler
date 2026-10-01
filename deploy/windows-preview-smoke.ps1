@@ -29,6 +29,24 @@ function Assert-InstalledBinding {
     }
 }
 
+function Assert-CommandBinding {
+    param([string]$Command)
+    & $Command doctor --check installation --json | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Native command lost its installation binding' }
+    $marker = "$Command.target"
+    $original = [IO.File]::ReadAllBytes($marker)
+    $preference = $ErrorActionPreference
+    try {
+        [IO.File]::WriteAllText($marker,"$env:SystemRoot\System32\cmd.exe")
+        $ErrorActionPreference = 'Continue'
+        & $Command doctor --check installation --json 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) { throw 'Native command accepted a foreign binding' }
+    } finally {
+        $ErrorActionPreference = $preference
+        [IO.File]::WriteAllBytes($marker,$original)
+    }
+}
+
 # Public installer/CLI/browser smoke. Never emit connection codes or credentials.
 $ErrorActionPreference = 'Stop'
 $root = Join-Path $env:RUNNER_TEMP ('installed-preview-' + [guid]::NewGuid())
@@ -53,7 +71,7 @@ New-Item -ItemType Directory $files | Out-Null
 Copy-Item 'dist/release/agent/*' $files
 Copy-Item "$PSScriptRoot/install.ps1" "$files/install.ps1"
 $server = Start-Process python -ArgumentList @('-m','http.server',"$port",'--bind','127.0.0.1','--directory',"`"$files`"") -PassThru -WindowStyle Hidden
-$launcher = "$env:LOCALAPPDATA/Butler/bin/butler.cmd"
+$launcher = "$env:LOCALAPPDATA/Butler/bin/butler.exe"
 try {
     $env:BUTLER_VERSION = (Get-Content "$files/agent-release-manifest.json" -Raw | ConvertFrom-Json).version
     $env:BUTLER_INSTALL_BASE_URL = "http://127.0.0.1:$port"
@@ -66,6 +84,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Installer failed' }
     $current = (Get-Content "$env:LOCALAPPDATA/Butler/agent/current" -Raw).Trim()
     Assert-InstalledBinding "$env:LOCALAPPDATA/Butler/agent/$current"
+    Assert-CommandBinding $launcher
     # Exercise the packed npm entry point as well as the PowerShell one-liner path.
     Push-Location packages/butler-npm
     try {

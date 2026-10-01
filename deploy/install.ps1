@@ -34,6 +34,7 @@ function Install-Butler {
     $data = [IO.Path]::GetFullPath($data).TrimEnd('\')
     if ($agentHome.StartsWith("$data\",[StringComparison]::OrdinalIgnoreCase) -or
         $data.StartsWith("$agentHome\",[StringComparison]::OrdinalIgnoreCase) -or $data -eq $agentHome) { throw 'Installation and DATA must be separate' }
+    Assert-ButlerCommand $bin $agentHome
     $launcher = Join-Path $bin 'butler.cmd'
     $marker = 'REM butler-native-launcher v1'
     if ((Test-Path $launcher) -and !(Get-Content $launcher -Raw).Contains($marker)) { throw 'Refusing to replace an unmanaged butler.cmd' }
@@ -73,7 +74,7 @@ function Install-Butler {
             & "$target/butler-agent.exe" --installation-root $target --resource-root "$target/resources" doctor --check installation
             if ($LASTEXITCODE -ne 0) { throw 'Existing version is damaged; remove it before reinstalling' }
         } else { Move-Item $stage $target; $stage = $null }
-        Enable-ButlerInstallation $agentHome $name $target $bin $marker $start
+        Enable-ButlerInstallation $agentHome $name $target $bin $start
         Write-Host 'Butler installed. Run: butler open'
     } finally {
         if ($stage -and (Test-Path $stage)) { Remove-Item $stage -Recurse -Force }
@@ -82,23 +83,19 @@ function Install-Butler {
 }
 
 function Enable-ButlerInstallation {
-    param([string]$AgentHome, [string]$Name, [string]$Target, [string]$Bin, [string]$Marker, [bool]$Start)
-    $launcher = Join-Path $bin 'butler.cmd'
+    param([string]$AgentHome, [string]$Name, [string]$Target, [string]$Bin, [bool]$Start)
+    $launcher = Join-Path $bin 'butler.exe'
     & "$target/butler-agent.exe" --prepare-process-links
     if ($LASTEXITCODE -notin @(0,2)) { throw 'Could not prepare process role links' }
+    Set-ButlerCommand $bin $target
     $current = Join-Path $agentHome 'current'
     if (Test-Path $current) {
         $old = (Get-Content $current -Raw).Trim()
         if ($old -ne $name) { Write-ButlerFile (Join-Path $agentHome 'previous') $old }
     }
     Write-ButlerFile $current $name
-    # UTF-8 paths work from legacy OEM consoles too; restore the caller's code page.
-    $batchTarget = $target.Replace('%','%%')
-    $text = "@echo off`r`n$marker`r`nsetlocal DisableDelayedExpansion`r`n" +
-        "for /f `"tokens=2 delims=:`" %%C in ('chcp') do set `"BUTLER_PREVIEW_CP=%%C`"`r`n" +
-        "chcp 65001 >nul`r`n`"$batchTarget\butler-agent.exe`" --installation-root `"$batchTarget`" --resource-root `"$batchTarget\resources`" %*`r`n" +
-        "set `"BUTLER_PREVIEW_EXIT=%ERRORLEVEL%`"`r`nchcp %BUTLER_PREVIEW_CP% >nul`r`nexit /b %BUTLER_PREVIEW_EXIT%`r`n"
-    Write-ButlerFile $launcher $text
+    $legacy = Join-Path $bin 'butler.cmd'
+    if (Test-Path $legacy) { Remove-Item $legacy -Force }
     $userPath = [string][Environment]::GetEnvironmentVariable('Path','User')
     if (@($userPath -split ';') -notcontains $bin) {
         [Environment]::SetEnvironmentVariable('Path', ($userPath.TrimEnd(';') + ';' + $bin).TrimStart(';'), 'User')
@@ -108,6 +105,41 @@ function Enable-ButlerInstallation {
         & $launcher start
         if ($LASTEXITCODE -ne 0) { throw 'Installed; start failed. Run: butler start' }
     }
+}
+
+function Assert-ButlerCommand {
+    param([string]$Bin, [string]$AgentHome)
+    $command = Join-Path $Bin 'butler.exe'
+    $marker = Join-Path $Bin 'butler.exe.target'
+    if (!(Test-Path $command)) { return }
+    if (!(Test-Path $marker)) { throw 'Refusing to replace an unmanaged butler.exe' }
+    $target = [IO.File]::ReadAllText($marker)
+    if (![IO.Path]::IsPathRooted($target) -or
+        !$target.StartsWith("$AgentHome\",[StringComparison]::OrdinalIgnoreCase) -or
+        [IO.Path]::GetFileName($target) -ne 'butler-agent.exe' -or !(Test-Path $target) -or
+        (Get-FileHash $command -Algorithm SHA256).Hash -ne (Get-FileHash $target -Algorithm SHA256).Hash) {
+        throw 'Refusing to replace an unmanaged butler.exe'
+    }
+}
+
+function Set-ButlerCommand {
+    param([string]$Bin, [string]$Target)
+    $command = Join-Path $Bin 'butler.exe'
+    $marker = Join-Path $Bin 'butler.exe.target'
+    $temporary = "$command.$([guid]::NewGuid()).tmp"
+    $old = if (Test-Path $marker) { [IO.File]::ReadAllText($marker) } else { $null }
+    try {
+        New-Item -ItemType HardLink -Path $temporary -Target "$Target/butler-agent.exe" | Out-Null
+        Write-ButlerFile $marker "$Target\butler-agent.exe"
+        try {
+            if (Test-Path $command) { [IO.File]::Replace($temporary,$command,$null) }
+            else { [IO.File]::Move($temporary,$command) }
+        } catch {
+            if ($null -ne $old) { Write-ButlerFile $marker $old }
+            else { Remove-Item $marker -Force }
+            throw
+        }
+    } finally { if (Test-Path $temporary) { Remove-Item $temporary -Force } }
 }
 
 function Expand-ButlerZip {
