@@ -384,3 +384,53 @@ async fn rec_05_stale_instance_and_second_start() -> Result<(), HarnessError> {
     assert_eq!(settings["model"], "openai/gpt-6-sol");
     s.finish().await
 }
+
+/// A retry arriving after recovery but before dispatch readiness keeps its claim unreserved.
+#[tokio::test]
+async fn rec_03_retry_waits_for_dispatch_readiness() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        butler_platform::command_sandbox::POSIX_SHELL,
+        "replays a command recorded for a POSIX shell"
+    );
+    let (mut s, turn_id, marker) =
+        crash_after_effect("REC-03-READY", "REC-03-OWNER", CrashPoint::ResultJournaled).await?;
+    assert_eq!(turn_state(&settled(&mut s, &turn_id).await?), "failed");
+    s.agent.terminate().await?;
+    s.agent
+        .launch
+        .set_env("BUTLER_E2E_HOLD_DISPATCH_READY", "1");
+    s.gw = s.agent.start_again().await?;
+    let held = s.sandbox.data.join("e2e-dispatch-ready-held");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !held.exists() {
+        assert!(Instant::now() < deadline, "dispatcher hold missing");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    {
+        let path = format!("/turns/{turn_id}/retry");
+        let retry = s.gw.post(&path, json!({}));
+        tokio::pin!(retry);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(150), retry.as_mut())
+                .await
+                .is_err(),
+            "retry returned while dispatch was held"
+        );
+        let turn = s.gw.turn("general", &turn_id).await?.unwrap();
+        assert_eq!(
+            turn_state(&turn),
+            "failed",
+            "retry reserved work before readiness"
+        );
+        fs::write(
+            s.sandbox.data.join("e2e-dispatch-ready-release"),
+            b"release",
+        )?;
+        let reply = retry.await?;
+        assert_eq!(reply.status, 202, "{}", reply.text);
+    }
+    assert_eq!(turn_state(&settled(&mut s, &turn_id).await?), "delivered");
+    assert_eq!(effect_count(&s, &marker)?, 1, "retry repeated tool effect");
+    s.finish().await
+}

@@ -226,7 +226,7 @@ impl PromptAssembler {
             &mut live,
             "rules",
             "Active Rules",
-            build_rules_content(&self.paths.cognition_root.join("rules"))?,
+            build_rules_content(&self.paths.memory_rules_root)?,
             "live_configuration",
             "mandatory_hot_cache",
             "user",

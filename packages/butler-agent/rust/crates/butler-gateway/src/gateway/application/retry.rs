@@ -30,6 +30,9 @@ impl AppApplication {
         &self,
         turn_id: String,
     ) -> Result<Value, GatewayApplicationError> {
+        // Recovery publishes terminal turns before the dispatcher's first poll.
+        // Wait before reserving a retry so startup cannot strand its claim.
+        self.wait_retry_ready().await?;
         self.recover_expired().await?;
 
         let now = self.dependencies.identity_clock.now_iso();
@@ -121,6 +124,21 @@ impl AppApplication {
                 .map_err(map_retry_error)?;
 
         self.start_turn(claim, prepared).await?;
+        self.retry_view(turn_id).await
+    }
+
+    async fn wait_retry_ready(&self) -> Result<(), GatewayApplicationError> {
+        tokio::select! {
+            biased;
+            () = self.dependencies.service_shutdown.cancelled() => {
+                return Err(public(503, "app_transport_executor_unavailable", "The Butler runtime is unavailable."));
+            }
+            ready = self.dependencies.executor_readiness.wait_ready() => ready?,
+        }
+        Ok(())
+    }
+
+    async fn retry_view(&self, turn_id: String) -> Result<Value, GatewayApplicationError> {
         let turn = self
             .storage
             .execute(move |db| read_model::exact_turn(db, &turn_id))

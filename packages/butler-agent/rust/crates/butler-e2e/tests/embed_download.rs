@@ -13,6 +13,42 @@ use butler_e2e::e2e::{
 use embed_download_support::{Server, model_until, snapshot};
 use std::{sync::atomic::Ordering, time::Duration};
 
+#[tokio::test]
+async fn stub_rejects_real_model_sources_before_network_or_retry() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    for source in [
+        "",
+        "https://huggingface.co/Xenova/bge-m3/resolve/main",
+        "https://github.com/Hexpy-Games/butler/releases/download/models-bge-m3-4de13258",
+    ] {
+        let s = Setup::new("EMBED-STUB-GUARD")?
+            .fixture(Fixture::Empty)
+            .env("BUTLER_E2E_EMBED_SOURCES", source)
+            .start()
+            .await?;
+        let started = std::time::Instant::now();
+        let failed = model_until(&s.gw, "failed").await?;
+        assert_eq!(
+            failed["reason"],
+            "embed_asset_real_download_forbidden_in_stub"
+        );
+        assert_eq!(failed["bytes_done"], 0);
+        eprintln!(
+            "EMBED-STUB-GUARD failed_after_ms={} bytes_done=0",
+            started.elapsed().as_millis()
+        );
+        assert!(s.agent.logs().contains("BUTLER_E2E_TIER=stub requires"));
+        let root = s.sandbox.data.join("cache/models/Xenova/bge-m3");
+        assert!(
+            snapshot(&root)?
+                .iter()
+                .all(|(path, _, _)| !path.ends_with(".part"))
+        );
+        s.finish().await?;
+    }
+    Ok(())
+}
+
 #[test]
 fn offline_status_reads_partial_progress_without_model_writes() -> Result<(), HarnessError> {
     butler_e2e::gate!();

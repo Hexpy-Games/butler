@@ -289,7 +289,7 @@ pub(super) async fn fixture(
         PromptPaths {
             resource_root: root.join("resources"),
             data_root: root.join("data"),
-            cognition_root: root.join("data/cognition/memory"),
+            memory_rules_root: root.join("data/cognition/memory/rules"),
         },
         PromptEnvironment {
             response_language_override: None,
