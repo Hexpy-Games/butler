@@ -55,11 +55,6 @@
   --scroll-fade-end-guard: var(--scroll-fade-guard);
 }
 
-/* No stale mask while a resize/content change removes overflow. */
-[data-scroll-fade][data-overflowing="false"] {
-  mask-image: none;
-}
-
 [data-scroll-fade="y"] {
   --scroll-fade-direction: to bottom;
 

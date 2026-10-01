@@ -1,4 +1,4 @@
-import { auditGrowth, auditQuestionSwap, underlineFocus } from "./question-input-geometry";
+import { assertFieldTones, auditGrowth, auditQuestionSwap, underlineFocus } from "./question-input-geometry";
 import { resolve } from "node:path";
 import { chromium, type Locator } from "playwright";
 
@@ -122,11 +122,14 @@ try {
     await page.goto(`http://127.0.0.1:${server.port}/?page=components/Input&width=${width}&locale=${locale}&theme=${theme}&motion=reduced`);
     const underline = page.locator("[data-ds-examples] input[data-variant=underline]");
     await underline.first().waitFor();
+    await assertFieldTones(page.locator("[data-ds-examples] input[placeholder]"));
     await page.keyboard.press("Tab");
     for (const field of await underline.all()) { await field.focus(); await underlineFocus(field); }
     await page.goto(`http://127.0.0.1:${server.port}/?page=components/Textarea&width=${width}&locale=${locale}&theme=${theme}&motion=reduced`);
     const textarea = page.locator("[data-ds-examples] textarea[data-variant=underline]").first();
-    await textarea.waitFor(); await textarea.focus(); await underlineFocus(textarea);
+    await textarea.waitFor();
+    await assertFieldTones(page.locator("[data-ds-examples] textarea[placeholder]"));
+    await textarea.focus(); await underlineFocus(textarea);
     await auditGrowth(textarea.locator(".."), textarea, 0, `${width} ${locale} ${theme} Textarea`);
     await page.close();
     console.log(`PASS ${width} ${locale} ${theme}`);

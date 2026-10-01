@@ -83,3 +83,7 @@
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
+
+.field[data-variant="underline"][data-overflowing="false"] {
+  mask-image: none;
+}
