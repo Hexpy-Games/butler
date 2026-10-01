@@ -20,6 +20,9 @@ import {
   AGENT_RECOVERY_BUDGET,
 } from "../../packages/butler-app/client/electron/app-foreground-lifecycle.mjs";
 
+// Darwin plans address the executing user, whose UID is not always 501.
+const launchdDomain = `gui/${process.getuid?.()}`;
+
 function createAppAgentNativeServiceBridge(input: {
   butlerData: string;
   platform: string;
@@ -297,12 +300,12 @@ test("App Agent native service bridge starts macOS menu bar helper with Agent se
     expect(writes[1]?.body).toContain("<string>http://127.0.0.1:19125/</string>");
     expect(writes[1]?.body).not.toContain("<key>KeepAlive</key>");
     expect(commands).toEqual([
-      "launchctl bootout gui/501/com.hexpy.butler.test.local",
-      "launchctl bootstrap gui/501 /Users/alice/Library/LaunchAgents/com.hexpy.butler.test.local.plist",
-      "launchctl kickstart -k gui/501/com.hexpy.butler.test.local",
-      "launchctl bootout gui/501/com.hexpy.butler.test.local.menubar-helper",
-      "launchctl bootstrap gui/501 /Users/alice/Library/LaunchAgents/com.hexpy.butler.test.local.menubar-helper.plist",
-      "launchctl kickstart -k gui/501/com.hexpy.butler.test.local.menubar-helper",
+      `launchctl bootout ${launchdDomain}/com.hexpy.butler.test.local`,
+      `launchctl bootstrap ${launchdDomain} /Users/alice/Library/LaunchAgents/com.hexpy.butler.test.local.plist`,
+      `launchctl kickstart -k ${launchdDomain}/com.hexpy.butler.test.local`,
+      `launchctl bootout ${launchdDomain}/com.hexpy.butler.test.local.menubar-helper`,
+      `launchctl bootstrap ${launchdDomain} /Users/alice/Library/LaunchAgents/com.hexpy.butler.test.local.menubar-helper.plist`,
+      `launchctl kickstart -k ${launchdDomain}/com.hexpy.butler.test.local.menubar-helper`,
     ]);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
@@ -350,9 +353,9 @@ test("App Agent native service bridge does not restart menu bar helper on Agent 
       "/Users/alice/Library/LaunchAgents/com.hexpy.butler.test.local.menubar-helper.plist",
     );
     expect(commands).toEqual([
-      "launchctl bootout gui/501/com.hexpy.butler.test.local",
-      "launchctl bootstrap gui/501 /Users/alice/Library/LaunchAgents/com.hexpy.butler.test.local.plist",
-      "launchctl kickstart -k gui/501/com.hexpy.butler.test.local",
+      `launchctl bootout ${launchdDomain}/com.hexpy.butler.test.local`,
+      `launchctl bootstrap ${launchdDomain} /Users/alice/Library/LaunchAgents/com.hexpy.butler.test.local.plist`,
+      `launchctl kickstart -k ${launchdDomain}/com.hexpy.butler.test.local`,
     ]);
     expect(commands.join("\n")).not.toContain("menubar-helper");
   } finally {
@@ -392,17 +395,17 @@ test("App Agent native service bridge ensures missing menu bar helper on Agent s
 
     expect(writes).toHaveLength(2);
     expect(commands).toEqual([
-      "launchctl bootout gui/501/com.hexpy.butler.test.local",
-      "launchctl bootstrap gui/501 /Users/alice/Library/LaunchAgents/com.hexpy.butler.test.local.plist",
-      "launchctl kickstart -k gui/501/com.hexpy.butler.test.local",
-      "launchctl bootstrap gui/501 /Users/alice/Library/LaunchAgents/com.hexpy.butler.test.local.menubar-helper.plist",
-      "launchctl kickstart gui/501/com.hexpy.butler.test.local.menubar-helper",
+      `launchctl bootout ${launchdDomain}/com.hexpy.butler.test.local`,
+      `launchctl bootstrap ${launchdDomain} /Users/alice/Library/LaunchAgents/com.hexpy.butler.test.local.plist`,
+      `launchctl kickstart -k ${launchdDomain}/com.hexpy.butler.test.local`,
+      `launchctl bootstrap ${launchdDomain} /Users/alice/Library/LaunchAgents/com.hexpy.butler.test.local.menubar-helper.plist`,
+      `launchctl kickstart ${launchdDomain}/com.hexpy.butler.test.local.menubar-helper`,
     ]);
     expect(commands.join("\n")).not.toContain(
-      "launchctl bootout gui/501/com.hexpy.butler.test.local.menubar-helper",
+      `launchctl bootout ${launchdDomain}/com.hexpy.butler.test.local.menubar-helper`,
     );
     expect(commands.join("\n")).not.toContain(
-      "launchctl kickstart -k gui/501/com.hexpy.butler.test.local.menubar-helper",
+      `launchctl kickstart -k ${launchdDomain}/com.hexpy.butler.test.local.menubar-helper`,
     );
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
@@ -440,10 +443,10 @@ test("App Agent native service bridge does not fail Agent install when menu bar 
 
     await expect(bridge.registration.install()).resolves.toBeUndefined();
     expect(commands).toContain(
-      "launchctl kickstart -k gui/501/com.hexpy.butler.test.local",
+      `launchctl kickstart -k ${launchdDomain}/com.hexpy.butler.test.local`,
     );
     expect(commands).toContain(
-      "launchctl bootstrap gui/501 /Users/alice/Library/LaunchAgents/com.hexpy.butler.test.local.menubar-helper.plist",
+      `launchctl bootstrap ${launchdDomain} /Users/alice/Library/LaunchAgents/com.hexpy.butler.test.local.menubar-helper.plist`,
     );
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
@@ -529,12 +532,12 @@ test("App Agent native service bridge waits for process groups and gateway port 
     await bridge.nativeServices.start();
 
     expect(events).toEqual([
-      "launchctl bootout gui/501/com.hexpy.butler",
+      `launchctl bootout ${launchdDomain}/com.hexpy.butler`,
       "kill:-52002",
       "port:19125:0",
       "port:19125:1",
-      "launchctl bootstrap gui/501 /Users/alice/Library/LaunchAgents/com.hexpy.butler.plist",
-      "launchctl kickstart -k gui/501/com.hexpy.butler",
+      `launchctl bootstrap ${launchdDomain} /Users/alice/Library/LaunchAgents/com.hexpy.butler.plist`,
+      `launchctl kickstart -k ${launchdDomain}/com.hexpy.butler`,
     ]);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
