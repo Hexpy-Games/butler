@@ -132,14 +132,23 @@ impl GatewayControlServer {
             .task
             .take()
             .ok_or_else(|| "gateway_control_task_missing".to_owned())?;
+        // Cancellation is orderly; abort bounds the pending read independently
+        // of its IO timeout if the accept task has not observed cancellation.
+        task.abort();
+        crate::host::service::shutdown_trace::event("control_abort_requested");
         timeout(IO_TIMEOUT, task)
             .await
             .map_err(|source| {
                 crate::host::service::shutdown_trace::event("control_join_timeout");
                 crate::host::HostError::new("gateway_control_shutdown_timeout").with_source(source)
             })?
-            .map_err(|source| {
-                crate::host::HostError::new("gateway_control_task_failed").with_source(source)
+            .or_else(|source| {
+                if source.is_cancelled() {
+                    Ok(())
+                } else {
+                    Err(crate::host::HostError::new("gateway_control_task_failed")
+                        .with_source(source))
+                }
             })
     }
 }

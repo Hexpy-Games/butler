@@ -197,7 +197,7 @@ async fn run_until_stopped(
         stop,
     )
     .await;
-    close_after_serve(runtime, &writer, result).await
+    close_after_serve(runtime, &writer, result, instance).await
 }
 
 /// Admission and dispatcher tasks have ended before BTCC closes its services.
@@ -206,16 +206,22 @@ async fn close_after_serve(
     runtime: Arc<AgentRuntime>,
     writer: &TranscriptWriter,
     result: Result<String, BtccError>,
+    instance: crate::host::service::instance::InstanceGuard,
 ) -> Result<String, BtccError> {
     let runtime_close =
         super::shutdown_trace::measure("runtime_close", close_runtime(runtime)).await;
     let transcript_close = super::shutdown_trace::measure("transcript_close", writer.close())
         .await
         .map_err(|e| failure(e.code(), e.message()));
-    match result {
+    let result = match result {
         Err(error) => Err(error),
         Ok(session) => runtime_close.and(transcript_close).map(|()| session),
-    }
+    };
+    // Guard release waits for the record lock; keep that wait off Tokio workers.
+    tokio::task::spawn_blocking(move || drop(instance))
+        .await
+        .map_err(|error| failure("native_service_instance_release_failed", error.to_string()))?;
+    result
 }
 
 /// Without its token the App gateway refuses every client

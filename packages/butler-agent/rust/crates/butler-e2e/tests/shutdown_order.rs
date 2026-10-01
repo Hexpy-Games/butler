@@ -340,3 +340,33 @@ async fn unannounced_sigterm_has_a_deadline_even_when_storage_is_blocked()
     assert_eq!(s.provider()?.served(), 1, "forced stop resumed model work");
     s.finish().await
 }
+
+#[tokio::test]
+async fn deadline_waits_for_an_in_progress_record_write() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    if !butler_platform::process_control::SIGNALS {
+        return Ok(());
+    }
+    let mut s = Setup::new("SHUTDOWN-RECORD-RACE")?
+        .env("BUTLER_E2E_RECORD_WRITE_HOLD_MS", "6500")
+        .start()
+        .await?;
+    let started = Instant::now();
+    s.agent.terminate().await?;
+    let logs = s.agent.logs();
+    eprintln!("record race shutdown: {:?}; {logs}", started.elapsed());
+    assert!(started.elapsed() < Duration::from_secs(8));
+    assert!(logs.contains("record_write_hold:begin"));
+    assert!(logs.contains("stop deadline reached"));
+    assert!(
+        instance_record(&s.sandbox.data).is_none(),
+        "forced exit left its record; {}",
+        diagnostics::snapshot(&s, started)
+    );
+    let release = logs.find("deadline_instance_release:begin").unwrap();
+    let written = logs.find("record_write_hold:end").unwrap();
+    let removed = logs.find("instance_release:removed").unwrap();
+    assert!(release < written && written < removed, "{logs}");
+    assert!(!logs.contains("record_lock_unavailable"), "{logs}");
+    s.finish().await
+}

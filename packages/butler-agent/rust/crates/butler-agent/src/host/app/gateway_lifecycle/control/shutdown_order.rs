@@ -19,7 +19,12 @@ pub(super) async fn before_wait(data_root: &Path, shutdown: &CancellationToken) 
     {
         return;
     }
+    let mut held = HeldBeforeWait {
+        shutdown,
+        observed: false,
+    };
     shutdown.cancelled().await;
+    held.observed = true;
     crate::host::service::shutdown_trace::event("control_cancelled_before_wait");
 }
 
@@ -38,4 +43,21 @@ pub(super) async fn read_started<T>(data_root: &Path, read: impl Future<Output =
     }
     let _ = tokio::fs::write(data_root.join("e2e-control-accepted"), b"read pending").await;
     read.await
+}
+
+/// Aborting accept drops its held connection even if this future never wakes.
+/// Keep diagnostics for that real cancellation, independently of polling.
+struct HeldBeforeWait<'a> {
+    shutdown: &'a CancellationToken,
+    observed: bool,
+}
+
+impl Drop for HeldBeforeWait<'_> {
+    fn drop(&mut self) {
+        if !self.observed && self.shutdown.is_cancelled() {
+            crate::host::service::shutdown_trace::event("control_aborted_before_wait");
+            crate::host::service::shutdown_trace::event("control_cancelled_before_wait");
+            crate::host::service::shutdown_trace::event("control_connection_cancelled");
+        }
+    }
 }

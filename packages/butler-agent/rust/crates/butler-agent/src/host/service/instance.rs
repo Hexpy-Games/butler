@@ -304,11 +304,21 @@ fn release_record_at(
     let lock = if wait {
         acquire_record_update_lock(&lock_path).ok()
     } else {
-        open_lock(&lock_path, false)
-            .ok()
-            .and_then(|file| InstanceLock::try_exclusive(file).ok())
+        match record::acquire_record_update_lock_until(
+            &lock_path,
+            std::time::Duration::from_secs(1),
+        ) {
+            Ok(lock) => lock,
+            Err(_) => {
+                super::shutdown_trace::event("instance_release:record_lock_failed");
+                return;
+            }
+        }
     };
     let Some(_record_update_lock) = lock else {
+        if !wait {
+            eprintln!("[native-butler] record_lock_unavailable: deadline release budget expired");
+        }
         super::shutdown_trace::event("instance_release:record_lock_unavailable");
         return;
     };

@@ -69,6 +69,8 @@ pub(super) fn write_record(
             crate::host::HostError::new("native_service_instance_state_unavailable")
                 .with_source(source)
         })?;
+        #[cfg(debug_assertions)]
+        hold_shutdown_write(record);
         fs::rename(&temporary, path).map_err(|source| {
             crate::host::HostError::new("native_service_instance_state_unavailable")
                 .with_source(source)
@@ -103,4 +105,46 @@ pub(super) fn record_update_lock_path(data_root: &Path) -> PathBuf {
 
 pub(super) fn instance_record_path(data_root: &Path) -> PathBuf {
     data_root.join("state/butler-agent-native-service.json")
+}
+
+/// Stub-only reproduction of a slow fsync while the record lock is held.
+#[cfg(debug_assertions)]
+fn hold_shutdown_write(record: &InstanceRecord) {
+    if std::env::var("BUTLER_E2E_TIER").as_deref() != Ok("stub")
+        || record.state != "ready"
+        || record.app_enabled
+    {
+        return;
+    }
+    let Some(ms) = std::env::var("BUTLER_E2E_RECORD_WRITE_HOLD_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+    else {
+        return;
+    };
+    super::super::shutdown_trace::event("record_write_hold:begin");
+    std::thread::sleep(std::time::Duration::from_millis(ms));
+    super::super::shutdown_trace::event("record_write_hold:end");
+}
+
+/// The grace thread must leave room for the controller's eight-second kill.
+pub(super) fn acquire_record_update_lock_until(
+    path: &Path,
+    budget: std::time::Duration,
+) -> Result<Option<InstanceLock>, crate::host::HostError> {
+    let deadline = std::time::Instant::now() + budget;
+    loop {
+        let file = open_lock(path, false)?;
+        match InstanceLock::try_exclusive(file) {
+            Ok(lock) => return Ok(Some(lock)),
+            Err(butler_platform::instance::LockError::Busy) => {}
+            Err(butler_platform::instance::LockError::Failed(error)) => {
+                return Err(format!("native_service_record_lock_failed: {error}").into());
+            }
+        }
+        let Some(remaining) = deadline.checked_duration_since(std::time::Instant::now()) else {
+            return Ok(None);
+        };
+        std::thread::sleep(remaining.min(std::time::Duration::from_millis(10)));
+    }
 }
