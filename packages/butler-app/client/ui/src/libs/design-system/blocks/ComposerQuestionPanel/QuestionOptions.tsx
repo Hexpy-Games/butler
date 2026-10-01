@@ -30,24 +30,25 @@ export function QuestionOptions({ model: m, labels }: { model: ReturnType<typeof
     {options.map((option, index) => {
       const other = index === q.options.length;
       const selected = other ? Boolean(m.answer.other.trim()) : m.answer.selected.includes(index);
+      const editing = other && m.otherOpen;
+      const content = <Inline cross="start" wrap={false} grow>
+        <IconSlot size="lg" minHeight="line" tone="tertiary"><Typo.Caption tone="tertiary">{index + 1}</Typo.Caption></IconSlot>
+        <Stack grow minWidth="0" gap="none">
+          <Inline gap="xs">{editing ? <Input autoFocus aria-label={labels.other} placeholder={q.placeholder ?? labels.other}
+            disabled={m.busy} value={m.answer.other} onChange={(e) => m.update({ other: e.target.value, skipped: false })} />
+            : <Typo.Label wrap="anywhere">{other && m.answer.other ? m.answer.other : option.label}</Typo.Label>}
+            {option.recommended && <Tag tone="accent">{labels.recommended}</Tag>}</Inline>
+          {option.description && <Typo.Caption tone="secondary" wrap="anywhere">{option.description}</Typo.Caption>}
+        </Stack>
+        <IconSlot minHeight="line" tone="secondary">{other ? <Pencil size="md" aria-hidden="true" /> : q.type === "multi"
+          ? selected ? <CheckCircle2 size="md" aria-hidden="true" /> : <Square size="md" aria-hidden="true" />
+          : selected ? <CheckIcon size="md" aria-hidden="true" /> : null}</IconSlot>
+      </Inline>;
       return <div key={index} ref={m.highlight === index ? active : undefined}>
-        <Clickable role={q.type === "multi" ? "checkbox" : "radio"} aria-checked={selected} disabled={m.busy} stretch
-          tabIndex={m.highlight === index && !m.busy ? 0 : -1} className={dsClass(styles.option)}
-          data-highlighted={m.highlight === index} data-selected={selected} onClick={() => m.choose(index)}>
-          <Inline cross="start" wrap={false} grow>
-            <IconSlot size="lg" minHeight="line" tone="tertiary"><Typo.Caption tone="tertiary">{index + 1}</Typo.Caption></IconSlot>
-            <Stack grow minWidth="0" gap="none">
-              <Inline gap="xs"><Typo.Label wrap="anywhere">{other && m.answer.other ? m.answer.other : option.label}</Typo.Label>
-                {option.recommended && <Tag tone="accent">{labels.recommended}</Tag>}</Inline>
-              {option.description && <Typo.Caption tone="secondary" wrap="anywhere">{option.description}</Typo.Caption>}
-            </Stack>
-            <IconSlot minHeight="line" tone="secondary">{other ? <Pencil size="md" aria-hidden="true" /> : q.type === "multi"
-              ? selected ? <CheckCircle2 size="md" aria-hidden="true" /> : <Square size="md" aria-hidden="true" />
-              : selected ? <CheckIcon size="md" aria-hidden="true" /> : null}</IconSlot>
-          </Inline>
-        </Clickable>
-        {other && m.otherOpen && <div className={styles.other}><Input autoFocus aria-label={labels.other} placeholder={q.placeholder ?? labels.other}
-          disabled={m.busy} value={m.answer.other} onChange={(e) => m.update({ other: e.target.value, skipped: false })} /></div>}
+        {editing ? <div className={styles.editingOption} data-question-option tabIndex={-1}>{content}</div> :
+          <Clickable role={q.type === "multi" ? "checkbox" : "radio"} aria-checked={selected} disabled={m.busy} stretch
+            data-question-option tabIndex={m.highlight === index && !m.busy ? 0 : -1} className={dsClass(styles.option)}
+            data-highlighted={m.highlight === index} data-selected={selected} onClick={() => m.choose(index)}>{content}</Clickable>}
       </div>;
     })}
   </Stack>;

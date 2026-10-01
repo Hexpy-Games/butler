@@ -61,7 +61,7 @@ export function useQuestionPanel(props: ComposerQuestionPanelProps) {
       event.preventDefault();
       const next = Math.max(0, Math.min(question.options.length - 1 + Number(Boolean(question.allowOther)), highlight + (key === "ArrowDown" ? 1 : -1)));
       setHighlight(next);
-      event.currentTarget.querySelectorAll<HTMLElement>('[role="radio"], [role="checkbox"]')[next]?.focus({ preventScroll: true });
+      event.currentTarget.querySelectorAll<HTMLElement>("[data-question-option]")[next]?.focus({ preventScroll: true });
       return;
     }
     if (key === " " && question.type === "multi") { event.preventDefault(); choose(highlight); }

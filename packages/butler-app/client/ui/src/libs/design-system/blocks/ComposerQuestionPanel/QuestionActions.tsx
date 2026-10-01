@@ -1,8 +1,8 @@
 import { Button } from "../../components/Button";
 import { ButtonContainer } from "../../components/ButtonContainer";
-import { Kbd } from "../../components/Kbd";
-import { Spinner } from "../../components/Spinner";
 import { Typo } from "../../components/Typo";
+import { dsClass } from "../../lib/internal";
+import { Spinner } from "../../components/Spinner";
 import { answerText } from "./types";
 import type { ComposerQuestionPanelProps, QuestionPanelLabels } from "./types";
 import type { useQuestionPanel } from "./useQuestionPanel";
@@ -13,12 +13,7 @@ export function QuestionActions({ model: m, props, labels }: { model: ReturnType
   const canSend = m.review || Boolean(answerText(m.question, m.answer));
   const immediate = !many && m.question.type === "single" && !m.otherOpen && !m.answer.other;
   return <div className={styles.actions}>
-    <div className={styles.hints} aria-hidden="true">
-      {props.state === "working" ? <Typo.Caption>{labels.working}</Typo.Caption> : <>
-        {!m.review && m.question.type !== "text" && <><Kbd keys={["1–9"]} size="sm" /><Typo.Caption>{labels.select}</Typo.Caption><Kbd keys={["↑", "↓", "Space"]} size="sm" /></>}
-        {many && <Kbd keys={["←", "→"]} size="sm" />}<Kbd keys={["Enter", "Esc"]} size="sm" />
-      </>}
-    </div>
+    {props.state === "working" && <Typo.Caption className={dsClass(styles.working)} tone="tertiary">{labels.working}</Typo.Caption>}
     <ButtonContainer size="sm" justify="end">
       {many && <Button type="button" size="sm" variant="borderless" disabled={m.busy || m.step === 0} onClick={() => m.go(m.step - 1)}>{labels.back}</Button>}
       {!m.review && <Button type="button" size="sm" variant="secondary" disabled={m.busy} onClick={() => {

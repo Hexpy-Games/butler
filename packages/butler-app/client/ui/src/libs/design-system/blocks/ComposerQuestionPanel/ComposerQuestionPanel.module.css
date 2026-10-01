@@ -18,17 +18,11 @@
 .option[data-selected="true"] {
   background: var(--selection);
 }
-.other {
-  padding: var(--space-xs) var(--space-sm);
-  padding-inline-start: calc(
-    var(--space-sm) + var(--icon-size-lg) + var(--space-sm)
-  );
-}
 .actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: var(--space-sm);
   padding: var(--space-sm);
   border-top: var(--border-hairline) solid var(--composer-glass-divider);
@@ -36,18 +30,45 @@
 .actions button {
   border-radius: var(--adaptive-composer-radius);
 }
-.hints {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-xs);
-  color: var(--text-tertiary);
-}
 .error {
   padding-inline: var(--space-lg);
 }
-@media (pointer: coarse), (width <= 640px) {
-  .hints {
-    display: none;
-  }
+
+/* The focus foundation reserves ring space inside clipping scroll containers. */
+.scrollContent {
+  padding: var(--space-xs);
+}
+.surface:focus-visible,
+.option:focus-visible,
+.editingOption:focus-visible,
+.tabs .tab:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+.surface:focus-visible {
+  border-radius: var(--adaptive-composer-radius);
+}
+.tabInset {
+  padding: var(--space-sm) var(--space-lg) 0;
+  min-width: 0;
+}
+.option:focus-visible,
+.editingOption:focus-visible,
+.tabs .tab:focus-visible {
+  box-shadow: none;
+}
+.questionIcon {
+  font-size: var(--typo-caption-size);
+  line-height: var(--typo-caption-line-height);
+}
+.editingOption {
+  display: flex;
+  padding: var(--menu-item-padding-block) var(--space-sm);
+  min-height: max(var(--menu-item-height), var(--control-hit-target));
+  border-radius: var(--radius-control);
+  background: var(--selection);
+}
+
+.working {
+  margin-inline-end: auto;
 }
