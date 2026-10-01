@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { useAppLocale } from "@/app/copy.ts";
+import { Typo } from "@/butler-ds";
+import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { fetchSetupReadiness, retrySetupReadiness } from "@/app/setupConnection.ts";
 import type { SetupReadinessView } from "@/app/setupReadiness.ts";
 import { MemoryModelStatus } from "../first-run/MemoryModelStatus";
@@ -19,6 +20,7 @@ export function MemoryModelPreparation() {
     void poll();
     return () => { cancelled = true; clearTimeout(timer); };
   }, [settled]);
+  if (view?.memory_model?.state === "ready") return <Typo.Caption role="status" tone="success">{appCopy.firstRun.memoryModel.ready}</Typo.Caption>;
   return <MemoryModelStatus model={view?.memory_model} language={language} retry={() => {
     void retrySetupReadiness(true).then(setView).catch(() => setView(null));
   }} />;

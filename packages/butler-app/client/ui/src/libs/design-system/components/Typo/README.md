@@ -48,6 +48,12 @@ the type scale (NavRow labels, message footers, pill buttons):
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.
 
+## Programmatic heading focus
+
+Headings with `tabIndex={-1}` may receive focus to announce a screen change.
+They show no outline or focus ring, like the Dialog content focus target.
+Interactive controls retain the keyboard focus ring from the Focus foundation.
+
 ## Best practice
 - Compose it with other `@/butler-ds` components before adding bespoke CSS.
 - Typo owns size, weight, line-height, letter spacing, and margin reset. Color is inherited from the parent unless a `tone` prop asks for a semantic text color.

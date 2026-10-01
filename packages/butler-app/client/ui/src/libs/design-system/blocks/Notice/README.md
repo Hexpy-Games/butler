@@ -45,6 +45,7 @@ import { Notice } from "@/butler-ds";
 ## Responsive behavior
 
 - Full-width by default
+- Icon uses `IconSlot size="md" minHeight="line"`, matching Body text. It centers in the first line box, never in the whole multi-line message. A title uses the Label line box; single-line notices keep the same alignment.
 - Icon and action remain visible
 - Message wraps if needed
 

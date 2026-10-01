@@ -38,6 +38,8 @@ interface SetupWizardContentProps {
   children: ReactNode;
   /** Wizard: `default` 52ch, `wide` the full body. Focus: `default` 420px, `wide` 520px. */
   width?: "default" | "wide";
+  /** Opaque content card over the wallpaper, with one shared token inset. */
+  surface?: "solid";
 }
 
 export function SetupWizardShell({
@@ -130,9 +132,10 @@ export function SetupWizardShell({
 export function SetupWizardContent({
   children,
   width = "default",
+  surface,
 }: SetupWizardContentProps) {
   return (
-    <Stack className={dsClass(styles.content)} data-width={width} gap="lg">
+    <Stack className={dsClass(styles.content)} data-width={width} data-surface={surface} data-test-class="setup-wizard-content" gap="lg">
       {children}
     </Stack>
   );
