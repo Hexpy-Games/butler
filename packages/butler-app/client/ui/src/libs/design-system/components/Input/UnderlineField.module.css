@@ -1,0 +1,85 @@
+/* The zero-width text peer anchors the native input to the inherited text
+   baseline. Negative reserved-line margin prevents its border leading the row. */
+.inlineField {
+  display: flex;
+  align-items: baseline;
+  width: 100%;
+  min-width: 0;
+  height: 1lh;
+  font: inherit;
+}
+.inlineField::before {
+  content: "\200b";
+}
+
+/* Reserve focus-line thickness below the inherited line box. Changing the
+   bottom border never moves text or changes the surrounding row geometry. */
+.field[data-variant="underline"] {
+  box-sizing: border-box;
+  min-height: 0;
+  height: calc(1lh + var(--focus-ring-width));
+  min-width: 0;
+  margin-block-start: calc(-1 * var(--focus-ring-width));
+  padding: 0 0 calc(var(--focus-ring-width) - var(--border-hairline));
+  border: 0;
+  border-bottom: var(--border-hairline) solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.inlineField[data-text-size="label"] {
+  font-size: var(--typo-label-size);
+  font-weight: var(--typo-label-weight);
+  line-height: var(--typo-label-line-height);
+  letter-spacing: var(--typo-label-letter-spacing);
+}
+
+.field[data-variant="underline"]:where(:hover):not(:disabled, [readonly]) {
+  border-bottom-color: var(--line-strong);
+}
+
+.field[data-variant="underline"]:focus {
+  border-bottom-color: var(--focus-ring-color);
+}
+
+.field[data-variant="underline"]:focus-visible {
+  box-shadow: none;
+  outline: none;
+  padding-block-end: 0;
+  border-bottom: var(--focus-ring-width) solid var(--focus-ring-color);
+}
+
+.field[data-variant="underline"][aria-invalid="true"]:not(:focus-visible) {
+  border-bottom-color: var(--color-danger-border);
+}
+
+.field[data-variant="underline"][readonly] {
+  color: var(--text-secondary);
+}
+
+.field[data-variant="underline"]:disabled {
+  border-bottom-color: var(--line);
+  color: var(--interactive-disabled-fg);
+}
+
+.multiline {
+  display: grid;
+  height: auto;
+  align-items: start;
+}
+.multiline::before {
+  grid-area: 1 / 1;
+  width: 0;
+}
+.multiline .field[data-variant="underline"] {
+  height: auto;
+  grid-area: 1 / 1;
+  margin-block: 0 calc(-1 * var(--focus-ring-width));
+  min-height: calc(1lh + var(--focus-ring-width));
+  max-height: calc(var(--textarea-max-lines) * 1lh + var(--focus-ring-width));
+  field-sizing: content;
+  resize: none;
+  overflow: hidden auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}

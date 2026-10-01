@@ -503,7 +503,7 @@ export const koKrCopy: AppCopy = {
     allowConversation: "이 대화에서 계속 허용",
     allowDescription: "현재 요청을 실행하고, 이 대화의 하위 작업에도 적용합니다.",
     branchFailed: "새 대화를 만들지 못했습니다. 다시 시도해 주세요.",
-    decisionFailed: "결정을 전달하지 못했습니다. 다시 시도해 주세요.",
+    decisionFailed: "결정을 전달하지 못했습니다.",
     archivesEmpty: "보관된 프로젝트나 대화가 없습니다.",
     generalConversation: "일반 대화",
     unknownProject: "알 수 없는 프로젝트",

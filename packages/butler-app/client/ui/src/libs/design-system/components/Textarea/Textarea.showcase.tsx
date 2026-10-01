@@ -37,6 +37,11 @@ function text({ locale }: ShowcaseRenderContext) {
 
 export const stories: ShowcaseStory[] = [
   {
+    name: "Underline · wrapping in-place entry",
+    widths: ["375", "app"],
+    render: (context) => <Textarea variant="underline" textSize="label" aria-label={text(context).description} placeholder={text(context).description} />,
+  },
+  {
     name: "Personalization field",
     render: (context) => (
       <Field>
@@ -81,9 +86,12 @@ export const stories: ShowcaseStory[] = [
 ];
 
 export const stateMatrix: ShowcaseStateMatrix = {
-  states: ["default", "hover", "focus-visible", "disabled", "invalid"],
+  states: ["default", "hover", "focus-visible", "disabled", "invalid", "read-only"],
+  variants: ["default", "underline"],
   render: (context) => (
     <Textarea
+      variant={context.variant === "underline" ? "underline" : "default"}
+      readOnly={context.state === "read-only"}
       aria-invalid={context.state === "invalid" ? "true" : undefined}
       aria-label={text(context).args}
       defaultValue={text(context).argsValue}

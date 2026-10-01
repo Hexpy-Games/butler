@@ -141,7 +141,9 @@ Tags: interaction, motion, animation, active, hover
 
 Use `Field` to group a label, control, description, validation, or help text.
 
-Use `Input` for short free text.
+Use `Input` for short free text. `variant="default"` is boxed;
+`variant="underline"` replaces an in-place row label with a bottom-border field
+and zero horizontal padding. `compact` selects the short toolbar size.
 
 Use `Textarea` for multi-line user text, prompts, notes, or descriptions.
 

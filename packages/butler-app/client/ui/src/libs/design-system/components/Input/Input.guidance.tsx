@@ -16,8 +16,14 @@ function MaxWorkers() {
 }
 // #endregion
 
+// #region recipe: Underline in-place entry
+function InlineName() {
+  return <Input variant="underline" aria-label="Display name" placeholder="Butler" />;
+}
+// #endregion
+
 export const guidance: ShowcaseGuidance = {
-  purpose: "A single-line text box for names, IDs, URLs, numbers and secrets.",
+  purpose: "A single-line field for names, IDs, URLs, numbers and secrets. Use variant=default for a box, variant=underline for in-place entry, and compact for a short toolbar field.",
   whenToUse: ["Enter a short value such as a name, ID or URL", "Show a masked or read-only value that people can select"],
   whenNotToUse: [
     { when: "Several lines of text", use: "Textarea" },
@@ -26,6 +32,7 @@ export const guidance: ShowcaseGuidance = {
     { when: "A percentage with a slider", use: "PercentInputControl" },
   ],
   recipes: [
+    { name: "Underline in-place entry", description: "variant=underline inherits text metrics and reserves only one line; textSize=label matches Typo.Label; use it where a row label becomes editable.", render: () => <InlineName /> },
     { name: "Settings text setting", description: "In settings, the Input is the control of a SettingsField.", render: () => <DisplayName /> },
     { name: "Compact number in a header", description: "compact makes a short inline field for a number in a toolbar; coarse pointers keep the touch target.", render: () => <MaxWorkers /> },
   ],
@@ -40,8 +47,9 @@ export const guidance: ShowcaseGuidance = {
   ],
   content: ["Placeholders show an example value (github, https://…), never instructions."],
   accessibility: [
+    "Underline keyboard focus is the bottom line only (--focus-ring-width, --focus-ring-color), with no outline or shadow. The focus foundation allows a shape-specific indicator: retain token thickness and at least 3:1 contrast against the adjacent surface; reserve space inside clipping containers.",
     "Values use the default text color; placeholders are muted (--placeholder).",
     "aria-invalid=\"true\" draws the danger border; describe the error next to it.",
   ],
-  tokens: ["--line", "--radius-control", "--placeholder", "--focus-ring", "--color-disabled-bg", "--color-danger-border"],
+  tokens: ["--line-strong", "--border-hairline", "--focus-ring-width", "--focus-ring-color", "--line", "--radius-control", "--placeholder", "--focus-ring", "--color-disabled-bg", "--color-danger-border"],
 };

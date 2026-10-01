@@ -1,0 +1,37 @@
+.option {
+  min-height: max(var(--menu-item-height), var(--control-hit-target));
+  border-radius: var(--radius-control);
+  padding: var(--menu-item-padding-block) var(--space-sm);
+}
+.option[data-highlighted="true"],
+.option[data-selected="true"] {
+  background: var(--selection);
+}
+.error {
+  padding-inline: var(--space-lg);
+}
+
+/* The focus foundation reserves ring space inside clipping scroll containers. */
+.option:focus-visible,
+.editingOption:focus-visible,
+.tabs .tab:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+  box-shadow: none;
+}
+.tabInset {
+  padding: var(--space-sm) var(--space-lg) 0;
+  min-width: 0;
+}
+.editingOption {
+  display: flex;
+  align-items: center;
+  padding: var(--menu-item-padding-block) var(--space-sm);
+  min-height: max(var(--menu-item-height), var(--control-hit-target));
+  border-radius: var(--radius-control);
+  background: var(--selection);
+}
+
+.working {
+  margin-inline-end: auto;
+}
