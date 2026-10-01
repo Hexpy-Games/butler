@@ -89,6 +89,11 @@ impl FileSecrets {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
             Err(error) => return Err(SecretError::File(error)),
         };
+        if !secure_fs::OWNER_ONLY {
+            secure_fs::restrict_file(&self.path)
+                .transpose()
+                .map_err(SecretError::File)?;
+        }
         let mut bytes = Zeroizing::new(Vec::new());
         file.read_to_end(&mut bytes).map_err(SecretError::File)?;
         // Parsed as a plain value: its syntax errors name a position, never
@@ -104,6 +109,9 @@ impl FileSecrets {
             .filter(|parent| !parent.as_os_str().is_empty())
         {
             secure_fs::create_private_dir_all(parent).map_err(SecretError::File)?;
+            secure_fs::protect_folder(parent)
+                .transpose()
+                .map_err(SecretError::File)?;
         }
         let secrets: Vec<Value> = entries
             .iter()

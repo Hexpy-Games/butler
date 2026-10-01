@@ -92,7 +92,7 @@ jobs:
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          cargo test --locked --target x86_64-pc-windows-msvc -p butler-platform -p butler-core 2>&1 |
+          cargo test --locked --target x86_64-pc-windows-msvc -p butler-platform -p butler-core -p butler-models 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/crate-tests.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Keep ACL and contract evidence before the full build
