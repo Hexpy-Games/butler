@@ -347,6 +347,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [native-release, app-linux]
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download the Linux App packages
         uses: actions/download-artifact@v4
         with:
@@ -360,9 +362,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          # Like the Agent archives, preview tags use the base component version.
+          # Archive names retain the exact release tag version.
           version="${GITHUB_REF_NAME#v}"
-          version="${version%%-*}"
           cd dist/release/app-linux
           files=(
             "butler-app-${version}-linux-x64.deb"
@@ -374,6 +375,22 @@ jobs:
             sha256sum -c "$file.sha256"
           done
           gh release upload "$GITHUB_REF_NAME" "${files[@]}" "${files[@]/%/.sha256}" --clobber
+
+      - name: Publish the App updater manifest for all released platforms
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
+          gh release download "$GITHUB_REF_NAME" --pattern app-update-manifest.json --dir "$BUTLER_DATA"
+          python3 deploy/app/merge-update-manifest.py \
+            --mac-manifest "$BUTLER_DATA/app-update-manifest.json" \
+            --linux-dir dist/release/app-linux --version "${GITHUB_REF_NAME#v}" \
+            --base-url "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME" \
+            --output "$HOME/app-update-manifest.json"
+          gh release upload "$GITHUB_REF_NAME" "$HOME/app-update-manifest.json" --clobber
 
   release-checksums:
     name: Publish consolidated release checksums

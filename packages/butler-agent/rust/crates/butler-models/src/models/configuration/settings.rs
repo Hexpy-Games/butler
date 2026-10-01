@@ -101,6 +101,28 @@ impl ModelConfiguration {
         .map_err(SettingsError::WriteTask)?
     }
 
+    /// Persist the update channel in the shared Agent configuration.
+    pub async fn set_update_previews(
+        &self,
+        enabled: bool,
+        root: &Path,
+    ) -> Result<(), SettingsError> {
+        let guard = self.configuration_writes.acquire_owned().await;
+        let path = root.join("butler.config.json");
+        tokio::task::spawn_blocking(move || {
+            let _guard = guard;
+            let _change = configuration::lock_file(&path)?;
+            let mut config = configuration::read_json_object(&path)?;
+            let object = butler_core::json::object_mut(&mut config);
+            butler_core::json::object_field_mut(object, "update")
+                .insert("previews".into(), Value::Bool(enabled));
+            configuration::write_json_atomic(&path, &config)?;
+            Ok(())
+        })
+        .await
+        .map_err(SettingsError::WriteTask)?
+    }
+
     /// Merge the App-owned web-search fields while retaining unrelated config
     /// and provider-specific settings.
     pub async fn update_web_search_settings(
