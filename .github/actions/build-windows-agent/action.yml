@@ -7,16 +7,26 @@ inputs:
   cache-key:
     required: true
     description: Cargo cache key
+  native-deps-artifact:
+    required: false
+    default: ""
+    description: Verified static runtime prepared separately in this workflow
 runs:
   using: composite
   steps:
     - uses: ilammy/msvc-dev-cmd@v1
       with:
         arch: x64
+    - uses: actions/download-artifact@v4
+      if: inputs.native-deps-artifact != ''
+      with:
+        name: ${{ inputs.native-deps-artifact }}
+        path: ${{ runner.temp }}/ort-cache/native-deps
     - uses: ./.github/actions/rust-agent-setup
       with:
         native-deps: static-ort
         cache-key: ${{ inputs.cache-key }}
+        prepared-static-ort: ${{ inputs.native-deps-artifact != '' }}
     - uses: oven-sh/setup-bun@v2
     - uses: actions/setup-node@v4
       with:

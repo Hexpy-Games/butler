@@ -242,8 +242,13 @@ jobs:
           path: dist/release/agent/*
           if-no-files-found: error
 
+  windows-native:
+    if: contains(github.ref_name, '-preview.')
+    uses: ./.github/workflows/windows-native-deps.yml
+
   agent-windows:
     name: Build unsigned Windows x64 Agent preview
+    needs: windows-native
     if: contains(github.ref_name, '-preview.')
     runs-on: windows-latest
     timeout-minutes: 90
@@ -254,6 +259,7 @@ jobs:
       - uses: ./.github/actions/build-windows-agent
         with:
           cache-key: package-windows-x64
+          native-deps-artifact: windows-native-deps
           artifact-base-url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
       - name: Smoke the installed archive
         shell: pwsh

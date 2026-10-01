@@ -19,6 +19,10 @@ inputs:
   cache-key:
     description: The rust-cache shared key; one per job so caches do not evict each other.
     required: true
+  prepared-static-ort:
+    description: Require a restored static runtime instead of building one in this job.
+    required: false
+    default: "false"
 
 runs:
   using: composite
@@ -88,8 +92,14 @@ runs:
       working-directory: packages/butler-agent/rust
       env:
         ORT_CACHE_TARGET: ${{ runner.temp }}/ort-cache
+        PREPARED_STATIC_ORT: ${{ inputs.prepared-static-ort }}
+        ORT_FINGERPRINT: ${{ steps.ort.outputs.fingerprint }}
       run: |
         set -euo pipefail
+        if [ "$PREPARED_STATIC_ORT" = "true" ] && [ ! -f "$ORT_CACHE_TARGET/native-deps/ort-$ORT_FINGERPRINT/complete.json" ]; then
+          echo 'Prepared static runtime does not match this runner toolchain/compiler image.' >&2
+          exit 1
+        fi
         prepared="$(CARGO_TARGET_DIR="$ORT_CACHE_TARGET" python scripts/prepare-static-ort.py)"
         echo "$prepared"
         {

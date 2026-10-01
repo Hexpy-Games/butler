@@ -4,7 +4,9 @@ on:
   pull_request:
     paths:
       - .github/workflows/windows-preview-smoke.yml
+      - .github/workflows/windows-native-deps.yml
       - .github/actions/build-windows-agent/**
+      - .github/actions/rust-agent-setup/**
       - packages/butler-agent/**
       - packages/butler-npm/**
       - deploy/install.ps1
@@ -22,8 +24,12 @@ defaults:
     working-directory: packages/butler-agent/rust
 
 jobs:
+  native:
+    uses: ./.github/workflows/windows-native-deps.yml
+
   release:
     name: Installed unsigned Windows preview
+    needs: native
     # Keep the expensive static-ORT build/cache alive during contract fixes.
     concurrency:
       group: windows-preview-release-${{ github.ref }}
@@ -38,6 +44,7 @@ jobs:
       - uses: ./.github/actions/build-windows-agent
         with:
           cache-key: windows-preview-release
+          native-deps-artifact: windows-native-deps
           artifact-base-url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
       - name: Install ZIP, authenticate browser UI and exercise lifecycle
         working-directory: .
