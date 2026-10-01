@@ -7,6 +7,8 @@
 
 <h1 align="center">Butler</h1>
 
+Current version: `0.1.0-preview.3` — a preview; stable 0.1.0 is coming.
+
 <p align="center">
   <strong>At your service, on your machine.</strong>
 </p>
@@ -16,8 +18,10 @@
   For macOS (Apple silicon) and Linux, with hosted or local models.
 </p>
 
+Current version: `0.1.0-preview.3` (preview; stable 0.1.0 is coming).
+
 <p align="center">
-  <a href="https://github.com/Hexpy-Games/butler/releases/latest"><strong>Download</strong></a>
+  <a href="https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.3"><strong>Download</strong></a>
   &nbsp;·&nbsp;
   <a href="https://butler.hexpy.games/help/"><strong>Manual</strong></a>
   &nbsp;·&nbsp;
@@ -44,27 +48,30 @@ Use Butler through the App, on desktop or in a browser. The Agent is a native Ru
 
 ## Install
 
-Download Butler from the [latest release](https://github.com/Hexpy-Games/butler/releases/latest).
+Download Butler from the [0.1.0 preview.3 release](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.3).
 
 | Platform | Download |
 | --- | --- |
-| macOS (Apple silicon) | `.dmg` |
-| Linux (x64 / arm64) | `.deb` |
-| Arch Linux (x64) | `.pkg.tar.zst` |
+| macOS (Apple silicon) | [DMG](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.3/butler-app-0.1.0-darwin-arm64.dmg) |
+| Linux (x64) | [DEB](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.3/butler-app-0.1.0-linux-x64.deb) |
+| Linux (arm64) | [DEB](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.3/butler-app-0.1.0-linux-arm64.deb) |
+| Arch Linux (x64) | [Package](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.3/butler-app-0.1.0-archlinux-x64.pkg.tar.zst) |
 
-On first launch, choose the interface language on the welcome screen, accept the safety notice and connect an AI. Set Butler's reply language in **Settings → Personalization**. See [Install](https://butler.hexpy.games/help/getting-started/install/) and [First run](https://butler.hexpy.games/help/getting-started/first-run/).
+On first launch, choose the interface language on the welcome screen, accept the safety notice and connect an AI. Choose Butler's reply language at the end of the AI connection step; you can change it later in **Settings → Personalization**. See [Install](https://butler.hexpy.games/help/getting-started/install/) and [First run](https://butler.hexpy.games/help/getting-started/first-run/).
+
+macOS preview builds are signed but not notarized, so Gatekeeper shows a prompt on first open. Right-click **Butler → Open**, or choose **System Settings → Privacy & Security → Open Anyway** after trying to open it.
 
 ### Headless Agent
 
 On Apple silicon macOS or Linux x64 / arm64 with glibc:
 
 ```sh
-curl -fsSL https://github.com/Hexpy-Games/butler/releases/latest/download/install.sh | sh
+curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.3/install.sh | sh -s -- --version 0.1.0-preview.3
 # Or, with Node.js:
-npx @hexpygames/butler install
+npx @hexpygames/butler@next install
 ```
 
-Use `butler open` to open the App in your browser. For another computer on a trusted network, enable access in **Settings → Security**, or use `butler remote enable` and `butler remote code` on the host. Open the displayed address on the other computer and enter the connection code. Remote access is off by default. [Remote access](https://butler.hexpy.games/help/advanced/remote-access/)
+Use `butler open` to open the App in your browser. For another computer on a trusted network, enable access in **Settings → Security**, or use `butler remote enable` and `butler remote pair` on the host. Open the displayed address on the other computer and enter the 8-digit one-time pairing code. Remote access is off by default. [Remote access](https://butler.hexpy.games/help/advanced/remote-access/)
 
 ## Where your data lives
 
@@ -72,7 +79,7 @@ Conversations, memory and settings stay in a local data folder, `~/.butler` by d
 
 ## Documentation
 
-The [Butler manual](https://butler.hexpy.games/help/) covers setup, conversations, projects, schedules, models, MCP, settings and troubleshooting. Most pages are in Korean; English guides cover the [Agent CLI](https://butler.hexpy.games/en/help/advanced/agent-cli/) and [remote access](https://butler.hexpy.games/en/help/advanced/remote-access/).
+The [Butler manual](https://butler.hexpy.games/help/) covers setup, conversations, projects, schedules, models, MCP, settings and troubleshooting. Most pages are in Korean; English guides cover [installation](https://butler.hexpy.games/en/help/getting-started/install/), the [Agent CLI](https://butler.hexpy.games/en/help/advanced/agent-cli/) and [remote access](https://butler.hexpy.games/en/help/advanced/remote-access/).
 
 ## Status
 
