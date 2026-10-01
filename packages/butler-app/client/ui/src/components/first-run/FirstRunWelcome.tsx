@@ -47,9 +47,6 @@ export function FirstRunWelcome({ flow }: { flow: FirstRunFlow }) {
           <NativeSelectOption value="ko">한국어</NativeSelectOption>
           <NativeSelectOption value="en">English</NativeSelectOption>
         </NativeSelect>
-        <Button asChild size="sm" variant="link">
-          <a href={FIRST_RUN_GUIDE_URL} rel="noreferrer" target="_blank">{copy.learnMore}</a>
-        </Button>
       </Field>
       <Stack gap="sm">
         <ButtonContainer size="lg">
@@ -67,6 +64,11 @@ export function FirstRunWelcome({ flow }: { flow: FirstRunFlow }) {
           {flow.mode === "rerun" ? <FirstRunCancel flow={flow} /> : null}
         </ButtonContainer>
         <FirstRunPrepStatus flow={flow} />
+      </Stack>
+      <Stack cross="center">
+        <Button asChild size="sm" variant="link">
+          <a href={FIRST_RUN_GUIDE_URL} rel="noreferrer" target="_blank">{copy.learnMore}</a>
+        </Button>
       </Stack>
     </SetupWizardContent>
   );

@@ -1656,6 +1656,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       importSkill: "가져오기",
       createSkillWithChat: "대화해서 만들기",
       checkUpdates: "확인",
+      receivePreviewVersions: "미리보기 버전 받기",
+      receivePreviewVersionsDescription: "정식 출시 전 버전을 업데이트로 받습니다.",
       updateComponent: "업데이트",
       upToDate: "최신",
       updateChecking: "확인 중",

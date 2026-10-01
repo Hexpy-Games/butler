@@ -1418,6 +1418,8 @@ export interface AppCopy {
       importSkill: string;
       createSkillWithChat: string;
       checkUpdates: string;
+      receivePreviewVersions: string;
+      receivePreviewVersionsDescription: string;
       updateComponent: string;
       upToDate: string;
       updateChecking: string;

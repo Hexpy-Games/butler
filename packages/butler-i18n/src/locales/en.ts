@@ -1648,6 +1648,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       importSkill: "Import",
       createSkillWithChat: "Create with chat",
       checkUpdates: "Check",
+      receivePreviewVersions: "Receive preview versions",
+      receivePreviewVersionsDescription: "Get versions before their stable release.",
       updateComponent: "Update",
       upToDate: "Up to date",
       updateChecking: "Checking",

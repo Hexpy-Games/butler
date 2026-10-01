@@ -30,7 +30,12 @@ async function verifyConsent(page: Page, language: "ko" | "en", label: string) {
   assert(await page.evaluate(() => document.activeElement?.id) === "first-run-consent-title", "heading receives focus");
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "no horizontal overflow");
   const scroll = page.locator('[data-test-class="setup-wizard-scroll"]');
-  assert(await scroll.evaluate((node) => node.scrollTop) === 0, "consent starts at top");
+  const scrollTop = await scroll.evaluate((node) => node.scrollTop);
+  assert(scrollTop === 0, `consent starts at top (${label}: ${scrollTop})`);
+  assert(await page.locator("#first-run-consent-title").evaluate((node) => {
+    const style = getComputedStyle(node);
+    return style.outlineStyle === "none" && style.boxShadow === "none";
+  }), "programmatic heading focus has no ring");
   await page.screenshot({ path: resolve(screenshots, `${label}-consent.png`) });
   await page.keyboard.press("Tab");
   assert(await page.getByRole("link", { name: copy.consentProviderLink }).evaluate((node) => node === document.activeElement), "provider link follows heading");
@@ -65,10 +70,17 @@ async function verifyWelcome(page: Page, copy: typeof firstRunCopy.en) {
   await label.evaluate((node, text) => { node.textContent = text; }, original);
   await page.locator("#first-run-language").focus();
   await page.keyboard.press("Tab");
-  assert(await page.getByRole("link", { name: copy.learnMore, exact: true }).evaluate((node) => node === document.activeElement), "language then help");
-  await page.keyboard.press("Tab");
-  assert(await page.evaluate(() => document.activeElement?.id) === "first-run-start", "help then Start");
+  assert(await page.evaluate(() => document.activeElement?.id) === "first-run-start", "language then Start");
   assert(await page.locator("#first-run-start").evaluate((node) => getComputedStyle(node).boxShadow !== "none"), "keyboard focus ring visible");
+  await page.keyboard.press("Tab");
+  const help = page.getByRole("link", { name: copy.learnMore, exact: true });
+  if (!await help.evaluate((node) => node === document.activeElement)) {
+    const retry = page.getByRole("button", { name: copy.memoryModel.retry, exact: true });
+    assert(await retry.evaluate((node) => node === document.activeElement), "memory retry follows Start when present");
+    await page.keyboard.press("Tab");
+  }
+  assert(await help.evaluate((node) => node === document.activeElement), "footer help follows actions and status");
+  assert(await help.evaluate((node) => node.scrollWidth <= node.clientWidth), "footer help is not clipped");
 }
 
 async function verifyIcons(page: Page) {
@@ -100,9 +112,13 @@ async function runCase(width: number, language: "ko" | "en", theme: "light" | "d
   if (!renewal) {
     await screen(page, "welcome");
     await audit(page);
-    await verifyWelcome(page, copy);
+    assert(await page.locator("#first-run-start").evaluate((node) =>
+      node !== document.activeElement && !node.matches(":focus-visible")), "fresh Start is not focused");
     await page.screenshot({ path: resolve(screenshots, `${label}-welcome.png`) });
-    await page.getByRole("button", { name: copy.start, exact: true }).click();
+    await verifyWelcome(page, copy);
+    await page.locator("#first-run-start").focus();
+    await page.keyboard.press("Enter");
+
   }
   await verifyConsent(page, language, label);
   await page.getByRole("button", { name: copy.decline, exact: true }).click();

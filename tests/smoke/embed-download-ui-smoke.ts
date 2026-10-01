@@ -105,6 +105,18 @@ async function verifySettings(page: Page, language: "ko" | "en", row: ReturnType
   ready();
   await row.waitFor({ state: "hidden" });
   assert(await section.getByText(copy.firstRun.memoryModel.ready, { exact: true }).count() === 1, "ready status stays labeled");
+  await page.route("**/updates", route => route.fulfill({ json: { data: { components: [] } } }));
+  const back = page.locator('[data-test-class="settings-view settings-view-active"] main')
+    .getByRole("button", { name: copy.settings.back, exact: true });
+  if (await back.isVisible()) await back.click();
+  await page.getByRole("button", { name: copy.settings.sections.updates, exact: true }).click();
+  const preview = page.getByRole("switch", { name: copy.settings.actions.receivePreviewVersions, exact: true });
+  await preview.waitFor();
+  const description = copy.settings.actions.receivePreviewVersionsDescription;
+  assert(await page.getByText(description, { exact: true }).count() === 1, "localized preview description");
+  assert(await preview.evaluate((node, text) =>
+    document.getElementById(node.getAttribute("aria-describedby")!)?.textContent === text, description),
+  "preview switch is described by its explanation");
 }
 
 try {
