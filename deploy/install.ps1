@@ -56,7 +56,7 @@ function Install-Butler {
         Expand-ButlerZip $zip $stage
         $manifest = Get-Content (Join-Path $stage 'native-agent-manifest.json') -Raw | ConvertFrom-Json
         if ($manifest.schema -ne 'butler.native-agent-install.v1' -or $manifest.version -ne $version -or
-            $manifest.platform -ne 'windows' -or $manifest.architecture -ne 'x64' -or
+            $manifest.platform -ne 'win32' -or $manifest.architecture -ne 'x64' -or
             $manifest.binary -ne 'butler-agent.exe' -or $manifest.resources -ne 'resources' -or
             $manifest.binarySha256 -notmatch '^[a-f0-9]{64}$') { throw 'Invalid Agent manifest' }
         $program = Join-Path $stage 'butler-agent.exe'

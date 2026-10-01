@@ -10,6 +10,25 @@ function Assert-PrivateAcl {
     }
 }
 
+function Assert-InstalledBinding {
+    param([string]$Root)
+    $manifestPath = Join-Path $Root 'native-agent-manifest.json'
+    $foreign = Get-Content $manifestPath -Raw | ConvertFrom-Json
+    $foreign.platform = 'linux'
+    $launcher = Join-Path $Root 'butler.cmd'
+    foreach ($case in @(
+        @{ Path = $launcher; Text = ([IO.File]::ReadAllText($launcher).Replace('butler-agent.exe','foreign-tool.exe')) },
+        @{ Path = $manifestPath; Text = ($foreign | ConvertTo-Json -Depth 10) }
+    )) {
+        $original = [IO.File]::ReadAllBytes($case.Path)
+        try {
+            [IO.File]::WriteAllText($case.Path,$case.Text)
+            & "$Root/butler-agent.exe" --installation-root $Root --resource-root "$Root/resources" doctor --check installation --json | Out-Null
+            if ($LASTEXITCODE -eq 0) { throw 'Doctor accepted a tampered installation binding' }
+        } finally { [IO.File]::WriteAllBytes($case.Path,$original) }
+    }
+}
+
 # Public installer/CLI/browser smoke. Never emit connection codes or credentials.
 $ErrorActionPreference = 'Stop'
 $root = Join-Path $env:RUNNER_TEMP ('installed-preview-' + [guid]::NewGuid())
@@ -45,6 +64,8 @@ try {
     if (!$ready) { throw 'Archive server did not start' }
     Invoke-RestMethod "$env:BUTLER_INSTALL_BASE_URL/install.ps1" | Invoke-Expression
     if ($LASTEXITCODE -ne 0) { throw 'Installer failed' }
+    $current = (Get-Content "$env:LOCALAPPDATA/Butler/agent/current" -Raw).Trim()
+    Assert-InstalledBinding "$env:LOCALAPPDATA/Butler/agent/$current"
     # Exercise the packed npm entry point as well as the PowerShell one-liner path.
     Push-Location packages/butler-npm
     try {

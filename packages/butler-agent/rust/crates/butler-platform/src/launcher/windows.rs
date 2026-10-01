@@ -5,6 +5,17 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 pub(super) const AGENT_BINARY: &str = "butler-agent.exe";
+pub(super) const STANDALONE_LAUNCHER: &str = "butler.cmd";
+const PORTABLE_LAUNCHER: &[u8] = b"@echo off\r\nREM butler-native-launcher v1\r\n\"%~dp0butler-agent.exe\" --installation-root \"%~dp0.\" --resource-root \"%~dp0resources\" %*\r\n";
+
+pub(super) fn standalone_launcher_is_expected(root: &Path) -> bool {
+    let launcher = root.join(STANDALONE_LAUNCHER);
+    std::fs::symlink_metadata(&launcher).is_ok_and(|metadata| {
+        metadata.is_file()
+            && !metadata.file_type().is_symlink()
+            && metadata.len() == PORTABLE_LAUNCHER.len() as u64
+    }) && std::fs::read(launcher).is_ok_and(|bytes| bytes == PORTABLE_LAUNCHER)
+}
 
 pub(super) const RELEASE_OS: &str = "windows";
 
