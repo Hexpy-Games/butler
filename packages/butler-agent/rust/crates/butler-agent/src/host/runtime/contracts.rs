@@ -25,6 +25,7 @@ pub(crate) struct RuntimePaths {
 
 /// Ingress holds this owner, admits via BTCC, then awaits close before process exit.
 pub(crate) struct AgentRuntime {
+    pub memory_acquisition: Arc<crate::host::embedding::worker::assets::Acquisition>,
     pub service_shutdown: tokio_util::sync::CancellationToken,
     pub btcc: Btcc,
     pub bindings: SessionBindingStore,
@@ -54,6 +55,7 @@ pub(crate) struct AgentRuntime {
 
 impl AgentRuntime {
     pub(crate) async fn close(self) -> Result<(), BtccError> {
+        self.memory_acquisition.close().await;
         self.host.close().await
     }
 }

@@ -12,7 +12,40 @@ test("English and Korean catalogs have complete recursive key and formatter pari
   expect(shape(getAppCopy("en-US"))).toEqual(shape(getAppCopy("ko-KR")));
   expect(getAppCopy("en-US").conversation.work.collapsedSummary("Read file", 2)).toBe("Read file and 1 more activities");
   expect(getAppCopy("ko-KR").space.general).toBe("일반");
-  expect(getAppCopy("en-US").briefing.general.suggestions[0].title).toBe("Summarize a document");
+  expect(getAppCopy("en-US").briefing.general.suggestions[0].title).toBe("Downloads folder cleanup");
+});
+
+// test-category: pure-logic
+test("general briefing cards keep the same everyday tasks in both locales", () => {
+  const ko = getAppCopy("ko-KR").briefing.general.suggestions;
+  const en = getAppCopy("en-US").briefing.general.suggestions;
+  expect(ko.map(({ id }) => id)).toEqual([
+    "organize-download-folder",
+    "summarize-document",
+    "draft-reply",
+    "morning-briefing",
+  ]);
+  expect(en.map(({ id }) => id)).toEqual(ko.map(({ id }) => id));
+  expect(ko.map(({ title, description, text }) => [title, description, text])).toEqual([
+    ["다운로드 폴더 정리하기", "이 컴퓨터의 파일을 살펴보고 옮기기 전에 묻습니다.", "다운로드 폴더를 종류별로 정리해줘. 옮기기 전에 계획부터 보여줘."],
+    ["문서 요약하기", "첨부하거나 붙여 넣은 문서의 핵심을 정리합니다.", "이 내용을 핵심만 요약해줘: "],
+    ["답장 초안 쓰기", "짧은 메모를 바탕으로 답장 초안을 씁니다.", "이 메모로 답장 초안을 써줘: "],
+    ["매일 아침 브리핑 받기", "날씨·뉴스·일정을 8시에 전하는 예약 작업을 만듭니다.", "매일 아침 8시에 날씨와 뉴스, 오늘 일정을 알려주는 예약 작업을 만들어줘."],
+  ]);
+  expect(en.map(({ title, description, text }) => [title, description, text])).toEqual([
+    ["Downloads folder cleanup", "Butler checks files on this computer and asks before moving them.", "Sort my Downloads folder by type. Show me the plan before moving anything."],
+    ["Document summary", "Attach or paste a document to get the key points.", "Summarize this in a few key points: "],
+    ["Reply draft", "Turn a short note into a clear reply.", "Draft a reply from this note: "],
+    ["Morning briefing", "Create a daily 8 AM schedule for weather, news, and today's plans.", "Create a daily 8 AM schedule with weather, news, and today's plans."],
+  ]);
+  expect(ko.filter(({ template }) => template).map(({ id }) => id)).toEqual([
+    "summarize-document",
+    "draft-reply",
+  ]);
+  expect(en.filter(({ template }) => template).map(({ id }) => id)).toEqual([
+    "summarize-document",
+    "draft-reply",
+  ]);
 });
 
 test("Korean catalog uses Korean for generic UI words", () => {

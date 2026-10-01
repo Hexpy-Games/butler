@@ -307,6 +307,7 @@ finish() {
     die "the butler command failed its self-check"
   fi
   info "installed $dir at $AGENT_HOME"
+  info "Memory model downloads in the background when Butler starts."
   if [ "$start" = 1 ]; then
     "$launcher" start </dev/null || die "installed, but Butler did not start; try: butler start"
     [ -z "$old" ] || [ "$old" = "$dir" ] || info "if Butler was already running, apply the update with: butler restart"

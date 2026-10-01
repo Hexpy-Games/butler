@@ -87,6 +87,11 @@ impl Launch {
                     "BUTLER_E2E_TIER".into(),
                     super::config::nonempty("BUTLER_E2E_TIER").unwrap_or_else(|| "stub".into()),
                 ),
+                // Stub tests never fetch the production 587 MB model. Acquisition tests supply their server.
+                (
+                    "BUTLER_E2E_EMBED_SOURCES".into(),
+                    "http://127.0.0.1:9".into(),
+                ),
                 ("BUTLER_APP_LOCAL_AUTH_REQUIRED".into(), "1".into()),
                 (
                     "BUTLER_APP_LOCAL_AUTH_FILE".into(),

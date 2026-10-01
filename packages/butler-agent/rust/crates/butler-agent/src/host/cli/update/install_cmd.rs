@@ -80,7 +80,7 @@ async fn install(
     data["launchers"] = launchers;
     data["service"] = service;
     let human = format!(
-        "Butler Agent {} installed{}.",
+        "Butler Agent {} installed{}.\nMemory model downloads in the background when Butler starts.",
         activated.installed.version,
         super::agent::restart_note(&data["service"])
     );

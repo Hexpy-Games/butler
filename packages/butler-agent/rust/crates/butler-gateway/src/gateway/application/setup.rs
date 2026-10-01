@@ -26,6 +26,18 @@ pub const SETUP_READINESS_EVENT: &str = "setup.readiness_changed";
 pub struct SetupReadinessView {
     pub status: SetupReadinessStatus,
     pub steps: Vec<SetupReadinessStep>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_model: Option<MemoryModelProgress>,
+}
+
+/// In-memory acquisition status; never gates setup or chat.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct MemoryModelProgress {
+    pub state: String,
+    pub bytes_done: u64,
+    pub bytes_total: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -162,6 +174,10 @@ pub trait AppSetupPort: Send + Sync + 'static {
     fn readiness(&self) -> watch::Receiver<SetupReadinessView>;
     /// Runs the preparation again (after a failure) and returns its view.
     fn retry_readiness(&self) -> SetupReadinessView;
+    /// Retries optional acquisition without changing setup eligibility.
+    fn retry_memory_model(&self) -> SetupReadinessView {
+        self.readiness().borrow().clone()
+    }
     fn local_model_servers(&self) -> ApplicationFuture<LocalModelServersView>;
     /// Checks a key with the provider; nothing is stored.
     fn verify_provider_key(
@@ -213,14 +229,21 @@ impl ReadinessRelay {
         let stopped = stop.clone();
         // The view at start is what `GET /setup/readiness` answers; only
         // later changes become events.
-        readiness.borrow_and_update();
+        // Memory progress is read from the live view, never from persisted timeline events.
+        let mut previous = readiness.borrow_and_update().clone();
+        previous.memory_model = None;
         let task = tokio::spawn(async move {
             loop {
                 tokio::select! {
                     changed = readiness.changed() => if changed.is_err() { break },
                     () = stopped.cancelled() => break,
                 }
-                let view = readiness.borrow_and_update().clone();
+                let mut view = readiness.borrow_and_update().clone();
+                view.memory_model = None;
+                if view == previous {
+                    continue;
+                }
+                previous = view.clone();
                 append(&storage, &subscribers, clock.as_ref(), &view).await;
             }
         });
@@ -311,6 +334,7 @@ pub(crate) fn test_setup_port() -> Arc<dyn AppSetupPort> {
         }
     }
     let ready = SetupReadinessView {
+        memory_model: None,
         status: SetupReadinessStatus::Ready,
         steps: Vec::new(),
     };

@@ -335,6 +335,8 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
         BUTLER_APP_SERVER_HOST: "127.0.0.1",
         BUTLER_APP_SERVER_PORT: String(port),
         BUTLER_METRICS_ENABLED: "0",
+        BUTLER_E2E_TIER: "stub",
+        BUTLER_E2E_EMBED_SOURCES: "http://127.0.0.1:9",
         ...(options.devOrigins?.length ? { BUTLER_APP_DEV_ORIGIN: options.devOrigins.join(",") } : {}),
         ...options.env,
       },

@@ -104,9 +104,14 @@ pub(crate) async fn run_native_status_cli(
             .await;
             let model = models.status_value(&metrics.model_telemetry());
             let services = service_health(&data_root);
-            let text = operations::render_status_context(&metrics, &models, &services);
+            let memory_model = super::status_memory::read(&data_root, &installation).await;
+            let text = format!(
+                "{}\n{}",
+                operations::render_status_context(&metrics, &models, &services),
+                super::status_memory::line(&memory_model)
+            );
             (
-                json!({ "status": metrics.value, "services": services, "model": model }),
+                json!({ "status": metrics.value, "services": services, "model": model, "memoryModel": memory_model }),
                 text,
             )
         }
