@@ -138,7 +138,7 @@ async fn run_until_stopped(
     };
     config.initialize_app_credentials();
     report_credential_errors(&config, logs);
-    let executable = std::env::current_exe().map_err(io)?;
+    let executable = butler_platform::process_names::current_exe().map_err(io)?;
     let mut instance = crate::host::service::instance::InstanceGuard::acquire(
         &config.data_root,
         &executable,

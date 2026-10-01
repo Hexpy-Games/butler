@@ -139,6 +139,7 @@ function packageElectronApp(root: string, workDir: string, platform: LinuxAppPla
   if (!existsSync(join(packagedDir, "Butler")) || !existsSync(agentBinary)) {
     throw new Error(`electron package is incomplete: ${packagedDir}`);
   }
+  run(process.env.BUTLER_NODE || "node", [join(root, ELECTRON_ROOT, "scripts", "prepare-process-links.mjs"), agentBinary], { cwd: root });
   run(process.env.BUTLER_NODE || "node", [join(root, "deploy/licenses/package-app.mjs"), packagedDir], { cwd: root });
   return { root, platform, version: versions.app, packagedDir, agentBinary, appBinary: join(packagedDir, "Butler"), epoch };
 }
@@ -150,6 +151,10 @@ function stagePackageRoot(staged: StagedApp, packageRoot: string, format: LinuxP
   mkdirSync(join(target, ".."), { recursive: true });
   cpSync(staged.packagedDir, target, { recursive: true, dereference: false });
   normalizeModes(target);
+  run(process.env.BUTLER_NODE || "node", [
+    join(staged.root, ELECTRON_ROOT, "scripts", "prepare-process-links.mjs"),
+    join(target, "resources", "bundled-agent", "bin", "butler-agent"),
+  ], { cwd: staged.root });
   // Electron's sandbox helper must be setuid root; both formats install as root.
   chmodSync(join(target, "chrome-sandbox"), 0o4755);
   const binDir = join(packageRoot, "usr", "bin");

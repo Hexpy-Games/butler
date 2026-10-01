@@ -6,6 +6,7 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use butler_platform::process_names::Role;
 use butler_platform::secure_fs::{self, FileMode};
 use flate2::Compression;
 use flate2::write::GzEncoder;
@@ -64,9 +65,17 @@ fn stub(out_dir: &Path, version: &str, tag: &str, status: u8) -> Result<Archive,
     let stage = out_dir.join(format!("stub-{version}-{tag}"));
     fs::create_dir_all(stage.join("resources/nested"))?;
     let binary = stage.join("butler-agent");
+    let aliases = [Role::Memory, Role::Restart, Role::Update].map(Role::file_name);
+    let prepare_links = aliases
+        .iter()
+        .map(|name| format!("  ln \"$0\" \"${{0%/*}}/{name}\""))
+        .collect::<Vec<_>>()
+        .join("\n");
     executable::write_script(
         &binary,
-        &format!("#!/bin/sh\n# {version} {tag}\nexit {status}\n"),
+        &format!(
+            "#!/bin/sh\nif [ \"$1\" = \"--prepare-process-links\" ]; then\n  set -e\n{prepare_links}\n  exit 0\nfi\n# {version} {tag}\nexit {status}\n"
+        ),
     )?;
     fs::write(stage.join("resources/a.txt"), "a")?;
     fs::write(stage.join("resources/nested/b.txt"), "b")?;

@@ -12,11 +12,19 @@ pub(super) async fn restart(
     installation: &ResolvedInstallation,
     data_root: &std::path::Path,
 ) -> CallToolResult {
-    let executable = match std::env::current_exe() {
+    let executable = match butler_platform::process_names::current_exe() {
         Ok(path) => path,
         Err(error) => return failure(format!("native_service_executable_unavailable: {error}")),
     };
-    let output = Command::new(executable)
+    let role = butler_platform::process_names::Role::Restart;
+    let executable = match butler_platform::process_names::executable_async(&executable, role).await
+    {
+        Ok(path) => path,
+        Err(error) => return failure(format!("native_service_restart_failed: {error}")),
+    };
+    let mut command = Command::new(executable);
+    butler_platform::process_names::name_command(command.as_std_mut(), role);
+    let output = command
         .kill_on_drop(true)
         .args(["--installation-root"])
         .arg(installation.root())
