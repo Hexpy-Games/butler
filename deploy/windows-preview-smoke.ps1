@@ -29,7 +29,10 @@ $env:BUTLER_PROVIDER_QUOTA_POLLING = '0'
 New-Item -ItemType Directory -Force $env:HOME,$env:LOCALAPPDATA,$env:BUTLER_DATA | Out-Null
 $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0)
 $listener.Start(); $port = $listener.LocalEndpoint.Port; $listener.Stop()
-$files = [IO.Path]::GetFullPath('dist/release/agent')
+$files = Join-Path $root 'downloads'
+New-Item -ItemType Directory $files | Out-Null
+Copy-Item 'dist/release/agent/*' $files
+Copy-Item "$PSScriptRoot/install.ps1" "$files/install.ps1"
 $server = Start-Process python -ArgumentList @('-m','http.server',"$port",'--bind','127.0.0.1','--directory',"`"$files`"") -PassThru -WindowStyle Hidden
 $launcher = "$env:LOCALAPPDATA/Butler/bin/butler.cmd"
 try {
@@ -40,7 +43,7 @@ try {
         try { Invoke-WebRequest $env:BUTLER_INSTALL_BASE_URL -UseBasicParsing | Out-Null; $ready=$true; break } catch { Start-Sleep -Milliseconds 100 }
     }
     if (!$ready) { throw 'Archive server did not start' }
-    & "$PSScriptRoot/install.ps1"
+    Invoke-RestMethod "$env:BUTLER_INSTALL_BASE_URL/install.ps1" | Invoke-Expression
     if ($LASTEXITCODE -ne 0) { throw 'Installer failed' }
     # Exercise the packed npm entry point as well as the PowerShell one-liner path.
     Push-Location packages/butler-npm
