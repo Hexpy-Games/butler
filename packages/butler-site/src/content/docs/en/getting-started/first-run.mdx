@@ -1,0 +1,29 @@
+---
+title: "First run"
+description: "Start Butler, agree to the consent notice and connect an AI."
+section: getting-started
+order: 2
+status: published
+---
+
+The first-run setup opens before the workspace. Choose your interface language on Welcome and select **Get started**. Read the consent notice, then select **Agree and start** to save the consent version and acceptance time and open the AI connection screen.
+
+**Decline** returns to Welcome without saving agreement. Butler cannot be used without agreeing. **Back** from the AI list returns to the consent screen. When the consent notice changes, existing users see the consent screen again once.
+
+<h2 id="ai-providers">AI providers and your data</h2>
+
+When you use an AI provider, the conversation and context needed to process each request are sent to that provider. Context can include file contents, memories and tool results included in the request. Each provider's terms and privacy policy apply to that data. Butler is not responsible for the provider's handling of it.
+
+| Provider | Official policies |
+| --- | --- |
+| OpenAI | [Privacy policy](https://openai.com/policies/privacy-policy/) · [Terms of use](https://openai.com/policies/terms-of-use/) |
+| Anthropic | [Privacy policy](https://www.anthropic.com/legal/privacy) · [Terms of service](https://www.anthropic.com/legal/consumer-terms) |
+| Google | [Privacy policy](https://policies.google.com/privacy) · [Terms of service](https://policies.google.com/terms) |
+
+Local models running on this computer keep model requests on this computer. Butler itself stores conversations, memory and settings only in `~/.butler`. With the remote App, this means the computer running Butler Agent, rather than the computer running your browser.
+
+## Connect an AI
+
+Choose ChatGPT to sign in, Claude or Gemini to enter an API key, or **This computer** to select a model from Ollama or LM Studio. Expand the other services to choose another provider or an OpenAI-compatible server.
+
+Butler prepares in the background. If preparation fails, retry before continuing. Once connected, confirm the reply language to finish setup. You can run setup again from Settings.
