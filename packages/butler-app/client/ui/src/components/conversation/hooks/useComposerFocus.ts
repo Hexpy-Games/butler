@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import type { PointerEvent, RefObject } from "react";
+import { focusComposer } from "../editor/focusComposer";
 
 interface UseComposerFocusProps {
   textAreaRef: RefObject<HTMLElement | null>;
@@ -18,7 +19,7 @@ export function useComposerFocus({ textAreaRef }: UseComposerFocusProps) {
         return;
       }
       event.preventDefault();
-      textAreaRef.current?.focus({ preventScroll: true });
+      focusComposer(textAreaRef.current, "restore");
     },
     [textAreaRef],
   );

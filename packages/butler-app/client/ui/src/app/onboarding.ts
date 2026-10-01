@@ -12,7 +12,7 @@ export const FIRST_RUN_CONSENT_VERSION = 2;
 export const LEGACY_FIRST_RUN_STORAGE_KEY = "butler:first-run-setup:v1";
 
 /** `first-run`: welcome and pick an AI. `consent`: consent renewal. `workspace`: no setup. */
-export type OnboardingGate = "first-run" | "consent" | "workspace";
+export type OnboardingGate = "pending" | "first-run" | "consent" | "workspace";
 
 type OnboardingPatch = { onboarding: OnboardingSettingsView };
 
@@ -42,9 +42,8 @@ export function consentIsCurrent(
 }
 
 /**
- * Which setup to show (or none). Before the agent answers, a legacy completion
- * flag keeps existing installs in the workspace; after it answers, the agent
- * is the source of truth (a legacy flag still counts until it is migrated).
+ * Unknown is a neutral boot state, including installs with a legacy flag.
+ * Once loaded, the agent decides (a legacy flag counts until migrated).
  */
 export function resolveOnboardingGate({
   onboarding,
@@ -57,7 +56,8 @@ export function resolveOnboardingGate({
   legacyCompletedAt: string | null;
   consentVersion?: number;
 }): OnboardingGate {
-  if (!agentLoaded) return legacyCompletedAt ? "workspace" : "first-run";
+  if (!agentLoaded) return "pending";
+  if (!onboarding) return legacyCompletedAt ? "workspace" : "first-run";
   if (!onboarding?.completed_at && !legacyCompletedAt) return "first-run";
   return consentIsCurrent(onboarding, consentVersion) ? "workspace" : "consent";
 }
