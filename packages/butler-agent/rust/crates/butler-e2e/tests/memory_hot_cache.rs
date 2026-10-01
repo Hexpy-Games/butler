@@ -6,9 +6,6 @@
     reason = "test assertions"
 )]
 
-#[path = "support/memory_fixture.rs"]
-mod memory_fixture;
-
 use butler_e2e::e2e::fake_servers::{ChatBehavior, FakeServer, LOCAL_MODEL};
 use butler_e2e::e2e::scenario::{Fixture, Setup};
 use butler_e2e::e2e::{HarnessError, fixtures};
@@ -67,12 +64,25 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
         );
     fixtures::onboarding_complete(&setup.sandbox.data)?;
     fixtures::scheduler_ran_today(&setup.sandbox.data, NOW)?;
-    let graph = memory_fixture::initialize_empty(&setup.sandbox.data)?;
-    let cache = graph.parent().unwrap().join("hot/cache.md");
-    std::fs::create_dir_all(cache.parent().unwrap())?;
-    std::fs::write(&cache, "# Hot cache\n")?;
-    let before = std::fs::read(&cache)?;
     let mut s = setup.start().await?;
+    let descriptor = s
+        .sandbox
+        .data
+        .join("cognition/memory/active-generation.json");
+    until(|| descriptor.exists()).await;
+    let active: Value = serde_json::from_slice(&std::fs::read(&descriptor)?)?;
+    let generation = s
+        .sandbox
+        .data
+        .join("cognition/memory/generations")
+        .join(active["generation_id"].as_str().unwrap());
+    let graph = generation.join("graph.sqlite");
+    let cache = generation.join("hot/cache.md");
+    let before = match std::fs::read(&cache) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(error) => return Err(error.into()),
+    };
     let reply =
         s.gw.post(
             "/model-catalog/local-models",
@@ -123,6 +133,7 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
     for job in ["session-sync", "consolidation-cycle"] {
         std::fs::remove_file(s.sandbox.data.join(format!("state/scheduler/{job}.json")))?;
     }
+    let calls_before_refresh = server.chat_requests().len();
     s.gw = s.agent.start_again().await?;
     until(|| {
         ["session-sync", "consolidation-cycle"].iter().all(|job| {
@@ -134,6 +145,11 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
     })
     .await;
     until(|| cache_complete(&graph, &turn_id)).await;
+    assert_eq!(
+        server.chat_requests().len(),
+        calls_before_refresh,
+        "cache-only refresh made a model call"
+    );
     assert_eq!(
         String::from_utf8_lossy(&refreshed),
         std::fs::read_to_string(&cache)?,
