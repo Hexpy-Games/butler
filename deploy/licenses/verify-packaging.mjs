@@ -37,9 +37,14 @@ try {
   const payload = join(temporary, "payload");
   put(join(payload, "resources/app-client/dist/THIRD_PARTY_NOTICES.txt.gz"), data);
   mkdirSync(join(payload, "bin"));
-  put(join(payload, "bin/butler-agent"), readFileSync("/usr/bin/true"));
+  const fixtureBinary = join(payload, "bin/butler-agent");
+  const fixtureSource = join(temporary, "fixture.c");
+  put(fixtureSource, "int main(void) { return 0; }\n");
+  // Build a real native fixture instead of copying a system binary whose
+  // architecture can be universal/arm64e on macOS. Keep all writer checks.
+  execFileSync("cc", [fixtureSource, "-o", fixtureBinary]);
   put(join(payload, "native-agent-manifest.json"), JSON.stringify({ schema: "butler.native-agent-payload.v1",
-    version: "0.0.21", platform: "linux", architecture: "x64", binary: "bin/butler-agent", resources: "resources" }));
+    version: "0.0.21", platform: process.platform, architecture: process.arch, binary: "bin/butler-agent", resources: "resources" }));
   const archive = join(temporary, "agent.tar.gz");
   execFileSync("python3", [join(root, "packages/butler-agent/rust/scripts/package-standalone-agent.py"), "--payload", payload, "--output", archive]);
   const member = "resources/app-client/dist/THIRD_PARTY_NOTICES.txt.gz";
@@ -63,7 +68,7 @@ module=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 module.write_deterministic_archive(Path(sys.argv[2]),Path(sys.argv[3]))`,
   join(root, "packages/butler-agent/rust/scripts/package-standalone-agent.py"), archiveStage, oldArchive]);
-  console.log(`Agent fixture tarball (same ELF binary): ${readFileSync(oldArchive).length} -> ${readFileSync(archive).length} bytes`);
+  console.log(`Agent fixture tarball (same native binary): ${readFileSync(oldArchive).length} -> ${readFileSync(archive).length} bytes`);
   const npm = join(temporary, "npm");
   cpSync(join(root, "packages/butler-npm"), npm, { recursive: true });
   // Prepack uses the repository generator; npm packs only the installer closure.
