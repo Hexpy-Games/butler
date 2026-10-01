@@ -29,10 +29,11 @@ on:
       - "packages/butler-agent/rust/crates/butler-gateway/Cargo.toml"
       - "packages/butler-agent/rust/crates/butler-memory/Cargo.toml"
       - "packages/butler-agent/rust/scripts/prepare-static-ort.py"
-      - "packages/butler-app/scripts/release/package-linux-app.ts"
-      - "packages/butler-app/scripts/release/linux-package-smoke.sh"
-      - "packages/butler-app/client/electron/scripts/prepare-native-agent.mjs"
-      - "packages/butler-app/client/electron/bundled-native-agent.mjs"
+      - "packages/butler-app/scripts/release/**"
+      - "packages/butler-app/client/electron/**"
+      - "deploy/**"
+      - "bun.lock"
+      - "**/package.json"
 
 permissions:
   contents: read

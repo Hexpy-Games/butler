@@ -1,0 +1,73 @@
+name: macOS App package
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/macos-app-package.yml"
+      - ".github/workflows/release.yml"
+      - ".github/actions/rust-agent-setup/**"
+      - "packages/butler-app/client/electron/**"
+      - "packages/butler-app/scripts/release/**"
+      - "deploy/**"
+      - "bun.lock"
+      - "**/package.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-app-package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Package and smoke unsigned darwin-arm64 App
+    runs-on: macos-15
+    timeout-minutes: 150
+    env:
+      BUTLER_APP_RELEASE_SMOKE_MODE: ad-hoc
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify the native runner
+        run: test "$(uname -m)" = arm64
+
+      - name: Set up Rust and static ONNX Runtime
+        uses: ./.github/actions/rust-agent-setup
+        with:
+          native-deps: static-ort
+          cache-key: macos-app-package
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install App dependencies and build the renderer
+        run: |
+          set -euo pipefail
+          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          bun install --frozen-lockfile --ignore-scripts
+          npm --prefix packages/butler-app/client/ui run build
+
+      - name: Build the native Agent payload binary
+        working-directory: packages/butler-agent/rust
+        run: |
+          set -euo pipefail
+          export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
+          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
+          echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$PWD/target/release/butler-agent" >> "$GITHUB_ENV"
+
+      - name: Package and smoke the native App release
+        run: |
+          set -euo pipefail
+          export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
+          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          bun run release:app:package -- \
+            --platform=darwin-arm64 --out dist/release/app \
+            --artifact-base-url "https://example.invalid/butler/pr-${{ github.event.number }}"
+          bun run release:app:smoke -- --platform=darwin-arm64 --out dist/release/app
