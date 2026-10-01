@@ -82,15 +82,20 @@ try {
     if (!$open.ok -or $open.data.browserOpened) { throw 'Open failed' }
     try { Invoke-WebRequest "$($record.app_endpoint)/sessions" -UseBasicParsing | Out-Null; throw 'Unauthenticated API allowed' }
     catch { if (!$_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 401) { throw } }
-    $ui = Invoke-WebRequest $open.data.url -SessionVariable browser -UseBasicParsing
+    $ui = Invoke-WebRequest $open.data.url -Headers @{'Sec-Fetch-Site'='none'} -SessionVariable browser -UseBasicParsing
     if ($ui.StatusCode -ne 200 -or $ui.Content -notmatch '<div id="root">') { throw 'Renderer not served' }
-    $sessions = Invoke-RestMethod "$($record.app_endpoint)/sessions" -WebSession $browser
+    $pageHeaders = @{'Sec-Fetch-Site'='same-origin'}
+    $sessions = Invoke-RestMethod "$($record.app_endpoint)/sessions" -Headers $pageHeaders -WebSession $browser
     if ($sessions.protocol_version -ne 'butler.app.v1') { throw 'Browser authentication failed' }
+    try {
+        Invoke-WebRequest "$($record.app_endpoint)/sessions" -Headers @{'Sec-Fetch-Site'='same-site'} -WebSession $browser -UseBasicParsing | Out-Null
+        throw 'Foreign-site cookie access allowed'
+    } catch { if (!$_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 403) { throw } }
     $assets = [regex]::Matches($ui.Content,'(?:src|href)="((?:\./|/)?assets/[^\"]+)"')
     if (!$assets.Count) { throw 'Renderer has no bundled asset references' }
     foreach ($match in $assets) {
         $uri = [Uri]::new([Uri]"$($record.app_endpoint)/", $match.Groups[1].Value)
-        $asset = Invoke-WebRequest $uri -WebSession $browser -UseBasicParsing
+        $asset = Invoke-WebRequest $uri -Headers $pageHeaders -WebSession $browser -UseBasicParsing
         if ($asset.StatusCode -ne 200) { throw 'Renderer asset missing' }
     }
     Assert-PrivateAcl $env:BUTLER_DATA
