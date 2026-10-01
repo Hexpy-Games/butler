@@ -2,11 +2,15 @@ import type { DsBaseProps } from "../../lib/dsProps";
 import type { HTMLAttributes } from "react";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
-import { MessageRow } from "../MessageRow";
+import { MessageRow, type MessageRowProps } from "../MessageRow";
 import { answerText, questionPanelLabels } from "../ComposerQuestionPanel/types";
 import type { ComposerQuestion, QuestionAnswer } from "../ComposerQuestionPanel";
 
 export interface QuestionAnswerCardProps extends Omit<DsBaseProps<HTMLAttributes<HTMLElement>>, "children" | "role"> {
+  index?: MessageRowProps["index"];
+  rowRef?: MessageRowProps["rowRef"];
+  offsetY?: MessageRowProps["offsetY"];
+  entering?: MessageRowProps["entering"];
   questions: readonly ComposerQuestion[];
   answers?: readonly QuestionAnswer[];
   variant?: "answered" | "skipped" | "message";

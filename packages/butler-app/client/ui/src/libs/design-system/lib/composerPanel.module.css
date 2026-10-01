@@ -60,3 +60,8 @@
   outline-offset: calc(-1 * var(--focus-ring-width));
   box-shadow: none;
 }
+
+/* Panels remove an idle mask without changing shell scrollbar gutters. */
+.surface [data-scroll-fade][data-overflowing="false"] {
+  mask-image: none;
+}

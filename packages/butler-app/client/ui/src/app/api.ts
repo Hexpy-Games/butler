@@ -66,6 +66,7 @@ interface ButlerAppBridge {
   allowAuthorityRequest?: (input?: unknown) => Promise<unknown>;
   revokeConversationPermission?: (input?: unknown) => Promise<unknown>;
   denyAuthorityRequest?: (input?: unknown) => Promise<unknown>;
+  answerUserQuestions?: (input?: unknown) => Promise<unknown>;
   modifyAuthorityRequest?: (input?: unknown) => Promise<unknown>;
   openNativeNotificationSettings?: () => Promise<unknown>;
   setNativeShellPreferences?: (input?: unknown) => Promise<unknown>;
@@ -662,6 +663,14 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     return await callBridge<T>(bridge, "denyAuthorityRequest", {
       sessionId: url.searchParams.get("session_id") ?? undefined,
       requestRef: decodeURIComponent(authorityDenyMatch[1] ?? ""),
+    });
+  }
+  const questionAnswerMatch = url.pathname.match(/^\/authority-requests\/([^/]+)\/answer$/u);
+  if (method === "POST" && questionAnswerMatch) {
+    return await callBridge<T>(bridge, "answerUserQuestions", {
+      sessionId: url.searchParams.get("session_id") ?? undefined,
+      requestRef: decodeURIComponent(questionAnswerMatch[1] ?? ""),
+      response: parseBody(options.body),
     });
   }
   const authorityModifyMatch = url.pathname.match(

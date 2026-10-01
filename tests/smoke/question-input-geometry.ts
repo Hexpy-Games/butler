@@ -146,3 +146,16 @@ export async function auditGrowth(row: Locator, input: Locator, height: number, 
     console.log(`GROWTH ${context}: lines=${lines} field=${metrics.height}px row=${metrics.rowHeight ?? "standalone"} horizontal=0`);
   }
 }
+
+/** Placeholder and entered text remain distinguishable in both field variants. */
+export async function assertFieldTones(fields: Locator) {
+  for (const field of await fields.all()) {
+    const tones = await field.evaluate((element) => ({
+      value: getComputedStyle(element).color,
+      placeholder: getComputedStyle(element, "::placeholder").color,
+      opacity: getComputedStyle(element, "::placeholder").opacity,
+    }));
+    assert.notEqual(tones.placeholder, tones.value, "placeholder must differ from value text");
+    assert.equal(tones.opacity, "1", "placeholder uses the muted token at full opacity");
+  }
+}

@@ -503,6 +503,8 @@ export const koKrCopy: AppCopy = {
     allowConversation: "이 대화에서 계속 허용",
     allowDescription: "현재 요청을 실행하고, 이 대화의 하위 작업에도 적용합니다.",
     branchFailed: "새 대화를 만들지 못했습니다. 다시 시도해 주세요.",
+    questionPanel: { review: "검토", send: "보내기", next: "다음", back: "이전", skip: "건너뛰기", skipped: "건너뜀", later: "나중에 답하기", pending: "답변 대기", other: "직접 입력…", recommended: "추천", working: "진행 중", select: "선택" },
+    questionAnswer: { answered: "답변함", skipped: "건너뜀", message: "메시지로 답변함" },
     decisionFailed: "결정을 전달하지 못했습니다.",
     archivesEmpty: "보관된 프로젝트나 대화가 없습니다.",
     generalConversation: "일반 대화",

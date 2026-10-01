@@ -504,6 +504,8 @@ export const enUsCopy: AppCopy = {
     allowConversation: "Always allow in this conversation",
     allowDescription: "Run this request and apply the permission to this conversation's child tasks.",
     branchFailed: "Could not create a conversation. Try again.",
+    questionPanel: { review: "Review", send: "Send", next: "Next", back: "Back", skip: "Skip", skipped: "Skipped", later: "Answer later", pending: "Answer pending", other: "Other…", recommended: "Recommended", working: "Working", select: "Select" },
+    questionAnswer: { answered: "Answered", skipped: "Skipped", message: "Answered by message" },
     decisionFailed: "Could not submit the decision. Try again.",
     archivesEmpty: "No archived projects or conversations.",
     generalConversation: "General conversation",

@@ -32,16 +32,6 @@ function text({ locale }: ShowcaseRenderContext) {
 
 export const stories: ShowcaseStory[] = [
   {
-    name: "Underline · in-place entry",
-    widths: ["375", "app"],
-    render: (context) => (
-      <Field>
-        <FieldLabel htmlFor="ds-input-underline">{text(context).serverName}</FieldLabel>
-        <Input id="ds-input-underline" variant="underline" placeholder={text(context).serverName} />
-      </Field>
-    ),
-  },
-  {
     // Value vs placeholder: values use the default text color, placeholders stay muted.
     name: "Value and placeholder",
     render: (context) => (
@@ -111,6 +101,16 @@ export const stories: ShowcaseStory[] = [
         <FieldLabel htmlFor="ds-input-max-workers">{text(context).maxWorkers}</FieldLabel>
         <Input id="ds-input-max-workers" compact type="number" inputMode="numeric" min={1} max={8} defaultValue="3" />
       </Stack>
+    ),
+  },
+  {
+    name: "Underline · in-place entry",
+    widths: ["375", "app"],
+    render: (context) => (
+      <Field>
+        <FieldLabel htmlFor="ds-input-underline">{text(context).serverName}</FieldLabel>
+        <Input id="ds-input-underline" variant="underline" placeholder={text(context).serverName} />
+      </Field>
     ),
   },
 ];

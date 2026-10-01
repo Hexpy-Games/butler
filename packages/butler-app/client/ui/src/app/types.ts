@@ -872,6 +872,7 @@ export interface PlanDocumentRecord {
 }
 
 export interface MessageRecord {
+  question_answer?: AnsweredUserQuestions;
   system_event_kind?: "context.compaction.started" | "context.compaction.completed";
   content_parts?: import("./messageContent").MessageContent;
   id: string;
@@ -1158,6 +1159,9 @@ export interface StewardSessionSummaryView {
 }
 
 export interface SessionView {
+  authority_requests?: unknown[];
+  pending_questions?: PendingUserQuestions[];
+  question_answers?: AnsweredUserQuestions[];
   branch_seed?: import("../../../shared/app-contracts.ts").SessionBranchSeed;
   protocol_version?: string;
   session_id: string;
@@ -1823,4 +1827,20 @@ export interface CalendarSchedule {
   time: string;
   weekdays: number[];
   tz: string;
+}
+
+export interface UserQuestion {
+  id: string; eyebrow: string; title: string; kind: "single" | "multi"; allow_custom: boolean;
+  options: { id: string; label: string; description?: string; recommended?: boolean }[];
+}
+export interface PendingUserQuestions {
+  request_ref: string; source_turn_id: string; source_session_id: string;
+  question_state: "pending" | "deferred";
+  category: "ask_user"; questions: { questions: UserQuestion[] };
+}
+export interface UserQuestionAnswer { id: string; selected: string[]; custom: string | null; skipped: boolean }
+export type UserQuestionResponse = { status: "answered"; answers: UserQuestionAnswer[] } | { status: "deferred" };
+export interface AnsweredUserQuestions {
+  request_ref: string; source_turn_id: string; updated_at: string;
+  questions: { questions: UserQuestion[] }; response: UserQuestionResponse;
 }
