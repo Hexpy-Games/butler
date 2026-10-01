@@ -11,6 +11,7 @@ on:
     paths:
       - ".github/workflows/install-smoke.yml"
       - ".github/workflows/release.yml"
+      - ".github/workflows/npm-publish.yml"
       - ".github/workflows/linux-packages.yml"
       - "packages/butler-app/scripts/release/**"
       - ".github/actions/build-agent-archive/**"
@@ -38,6 +39,14 @@ jobs:
 
       - name: Lint the shell scripts
         run: shellcheck -s sh deploy/install.sh deploy/install-smoke.sh
+
+      - name: Test and lint npm publish decisions
+        run: |
+          HOME="$(mktemp -d)"
+          BUTLER_DATA="$(mktemp -d)"
+          export HOME BUTLER_DATA
+          shellcheck deploy/npm/*.sh
+          bash deploy/npm/publish.test.sh
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

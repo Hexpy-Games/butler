@@ -435,21 +435,13 @@ jobs:
           node-version: 22.23.3
           registry-url: https://registry.npmjs.org
 
-      # The first publish of a package always becomes `latest`, whatever --tag
-      # says, so a preview must not be the first one.
+      - name: Verify the published Agent release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash deploy/npm/verify-release.sh "$GITHUB_REF_NAME"
+
       - name: Publish with provenance
-        working-directory: packages/butler-npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
-        run: |
-          set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
-          dist_tag=latest
-          case "$version" in *-*) dist_tag=next ;; esac
-          name="$(node -p 'require("./package.json").name')"
-          if [ "$dist_tag" = next ] && ! npm view "$name" dist-tags.latest >/dev/null 2>&1; then
-            printf '%s has no stable release yet; publish a stable version first so latest is not a preview.\n' "$name" >&2
-            exit 1
-          fi
-          npm version "$version" --no-git-tag-version --allow-same-version
-          npm publish --access public --provenance --tag "$dist_tag"
+        run: bash deploy/npm/publish.sh "$GITHUB_REF_NAME"
