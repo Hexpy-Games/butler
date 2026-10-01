@@ -16,10 +16,10 @@
   For macOS (Apple silicon) and Linux, with hosted or local models.
 </p>
 
-Current version: `0.1.0-preview.3` (preview; stable 0.1.0 is coming).
+Current version: `0.1.0-preview.4` (preview; stable 0.1.0 is coming).
 
 <p align="center">
-  <a href="https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.3"><strong>Download</strong></a>
+  <a href="https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.4"><strong>Download</strong></a>
   &nbsp;·&nbsp;
   <a href="https://butler.hexpy.games/help/"><strong>Manual</strong></a>
   &nbsp;·&nbsp;
@@ -43,17 +43,18 @@ Use Butler through the App, on desktop or in a browser. The Agent is a native Ru
 - **Memory and personalization.** Give Butler a name and a persona, and choose how much it learns about you. Learning is off by default. [Personalization](https://butler.hexpy.games/help/personalization/)
 - **Your choice of model.** Use OpenAI, Anthropic, Google and other hosted providers, or an OpenAI-compatible server such as Ollama, LM Studio or llama.cpp. When enabled, backup models handle eligible provider failures. [Models](https://butler.hexpy.games/help/models/cloud/)
 - **CLI and MCP.** Run the Agent without the desktop App and connect MCP servers for extra tools. Use `butler --help` for service, model, schedule and extension commands. [MCP servers](https://butler.hexpy.games/help/extensions/mcp-servers/), [Agent CLI](https://butler.hexpy.games/help/advanced/agent-cli/)
+- **Preview.4.** Ask questions in chat; approvals show stricter risk classifications and full command text; open-source licenses appear in Settings.
 
 ## Install
 
-Download Butler from the [0.1.0 preview.3 release](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.3).
+Download Butler from the [0.1.0 preview.4 release](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.4).
 
 | Platform | Download |
 | --- | --- |
-| macOS (Apple silicon) | [DMG](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.3/butler-app-0.1.0-darwin-arm64.dmg) |
-| Linux (x64) | [DEB](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.3/butler-app-0.1.0-linux-x64.deb) |
-| Linux (arm64) | [DEB](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.3/butler-app-0.1.0-linux-arm64.deb) |
-| Arch Linux (x64) | [Package](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.3/butler-app-0.1.0-archlinux-x64.pkg.tar.zst) |
+| macOS (Apple silicon) | [DMG](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-darwin-arm64.dmg) |
+| Linux (x64) | [DEB](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-linux-x64.deb) |
+| Linux (arm64) | [DEB](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-linux-arm64.deb) |
+| Arch Linux (x64) | [Package](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-archlinux-x64.pkg.tar.zst) |
 
 On first launch, choose the interface language on the welcome screen, accept the safety notice and connect an AI. Choose Butler's reply language at the end of the AI connection step; you can change it later in **Settings → Personalization**. See [Install](https://butler.hexpy.games/help/getting-started/install/) and [First run](https://butler.hexpy.games/help/getting-started/first-run/).
 
@@ -64,9 +65,9 @@ macOS preview builds are signed but not notarized, so Gatekeeper shows a prompt 
 On Apple silicon macOS or Linux x64 / arm64 with glibc:
 
 ```sh
-curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.3/install.sh | sh -s -- --version 0.1.0-preview.3
+curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/install.sh | sh -s -- --version 0.1.0-preview.4
 # Or, with Node.js:
-npx @hexpygames/butler@next install
+npx @hexpygames/butler install
 ```
 
 Use `butler open` to open the App in your browser. For another computer on a trusted network, enable access and generate a pairing code in **Settings → Security**, or use `butler remote enable` and `butler remote pair` on the host. Open the displayed address on the other computer and enter the 8-digit one-time pairing code. Remote access is off by default. [Remote access](https://butler.hexpy.games/help/advanced/remote-access/)

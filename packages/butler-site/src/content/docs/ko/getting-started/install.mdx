@@ -8,7 +8,7 @@ status: published
 
 ## 지원 환경
 
-현재 버전은 `0.1.0-preview.3` 프리뷰이며, 정식 0.1.0은 출시 예정입니다.
+현재 버전은 `0.1.0-preview.4` 프리뷰이며, 정식 0.1.0은 출시 예정입니다.
 
 - Apple Silicon(M 시리즈 칩) Mac, macOS 12 이상
 - Linux x64 / arm64: DEB 패키지
@@ -30,8 +30,8 @@ status: published
 >
   <TabPanel value="macos">
     <Steps>
-      1. [0.1.0 preview.3 릴리스](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.3)를 엽니다.
-      2. [macOS DMG](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.3/butler-app-0.1.0-darwin-arm64.dmg)를 내려받습니다.
+      1. [0.1.0 preview.4 릴리스](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.4)를 엽니다.
+      2. [macOS DMG](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-darwin-arm64.dmg)를 내려받습니다.
       3. DMG를 열고 `Butler.app`을 응용 프로그램 폴더로 끌어다 놓습니다.
     </Steps>
   </TabPanel>
@@ -42,7 +42,7 @@ status: published
   </TabPanel>
   <TabPanel value="linux">
     <Steps>
-      1. [DEB x64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.3/butler-app-0.1.0-linux-x64.deb), [DEB arm64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.3/butler-app-0.1.0-linux-arm64.deb) 또는 [Arch x64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.3/butler-app-0.1.0-archlinux-x64.pkg.tar.zst)를 내려받습니다.
+      1. [DEB x64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-linux-x64.deb), [DEB arm64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-linux-arm64.deb) 또는 [Arch x64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-archlinux-x64.pkg.tar.zst)를 내려받습니다.
       2. 내려받은 폴더에서 배포판에 맞는 명령으로 설치합니다.
       3. 앱 목록에서 Butler를 엽니다.
     </Steps>
@@ -91,9 +91,9 @@ macOS 프리뷰 빌드는 서명되어 있지만 Apple 공증(notarization)을 �
 헤드리스 Agent는 Apple Silicon macOS와 glibc 기반 Linux x64 / arm64를 지원합니다.
 
 ```bash
-curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.3/install.sh | sh -s -- --version 0.1.0-preview.3
+curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/install.sh | sh -s -- --version 0.1.0-preview.4
 # Node.js 사용 시
-npx @hexpygames/butler@next install
+npx @hexpygames/butler install
 ```
 
 자세한 관리 명령은 [Butler Agent CLI](/help/advanced/agent-cli/)를 참고합니다.
