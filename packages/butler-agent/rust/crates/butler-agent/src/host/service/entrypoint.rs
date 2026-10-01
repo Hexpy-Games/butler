@@ -293,7 +293,6 @@ async fn serve(
     let (app_endpoint, listener, ready) = app;
     let admission::Admission {
         session_id,
-        model,
         progress,
         queue,
         dispatcher,
@@ -330,7 +329,7 @@ async fn serve(
         let _ = gateway.close().await;
         return Err(error);
     }
-    logs.write(&format!("[native-butler] ready model={model}"));
+    log_effective_model(&gateway, logs).await?;
     let _ = ready.send(());
     let subsessions = runtime.subsessions.repository();
     let result = poll_service(
@@ -480,5 +479,17 @@ async fn recover_inbound_queue(
         .await
         .map_err(|error| failure("inbound_queue_worker_failed", error.to_string()))?
         .map_err(|error| failure(error.code(), error.message()))?;
+    Ok(())
+}
+
+async fn log_effective_model(
+    gateway: &AppGatewayLifecycle,
+    logs: ServiceLogMode,
+) -> Result<(), BtccError> {
+    let model = gateway.effective_default_model().await?;
+    let provider = butler_models::models::parse_model_ref(&model).provider_id;
+    logs.write(&format!(
+        "[native-butler] ready model={model} provider={provider}"
+    ));
     Ok(())
 }

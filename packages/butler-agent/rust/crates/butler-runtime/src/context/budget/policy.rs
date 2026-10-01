@@ -25,11 +25,11 @@ fn positive_integer(value: Option<&Value>) -> Option<f64> {
     }
 }
 
-fn canonical_model_ref(value: Option<&str>) -> String {
+fn canonical_model_ref(value: Option<&str>, default: &str) -> String {
     let raw = value
         .map(butler_core::public_text::trim_js_whitespace)
         .filter(|v| !v.is_empty())
-        .unwrap_or("openai/gpt-5.5-codex");
+        .unwrap_or(default);
     parse_model_ref(raw).canonical_ref
 }
 
@@ -60,7 +60,7 @@ impl ContextBudgetSnapshot<'_> {
         model_ref: Option<&str>,
         overrides: &ContextBudgetOverrides,
     ) -> ContextBudgetConfig {
-        let canonical = canonical_model_ref(model_ref);
+        let canonical = canonical_model_ref(model_ref, &self.models.view().default_model_ref);
         let system = self.config.pointer("/system");
         let override_by_model = overrides
             .model_windows
@@ -122,7 +122,7 @@ impl ContextBudgetSnapshot<'_> {
         input_tokens: f64,
         overrides: &ContextBudgetOverrides,
     ) -> ContextBudgetEvaluation {
-        let model_ref = canonical_model_ref(model_ref);
+        let model_ref = canonical_model_ref(model_ref, &self.models.view().default_model_ref);
         let parsed = parse_model_ref(&model_ref);
         let config = self.resolve(Some(&model_ref), overrides);
         let input_tokens = input_tokens.trunc().max(0.0);
@@ -174,7 +174,10 @@ impl ContextBudgetSnapshot<'_> {
         &self,
         input: &WorkingContextBudgetInput,
     ) -> WorkingContextBudgetEvaluation {
-        let model_ref = canonical_model_ref(input.model_ref.as_deref());
+        let model_ref = canonical_model_ref(
+            input.model_ref.as_deref(),
+            &self.models.view().default_model_ref,
+        );
         let parsed = parse_model_ref(&model_ref);
         let config = self.resolve(Some(&model_ref), &input.overrides);
         let nonnegative = |v: f64| v.trunc().max(0.0);

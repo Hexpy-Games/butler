@@ -479,16 +479,10 @@ async fn budget_precedence_numeric_strings_metadata_and_thresholds_match_source(
     drop(snapshot);
     std::fs::write(root.join("butler.config.json"),r#"{"models":{"local":[{"model_id":"sample","server_url":"http://localhost:8000","context_window_tokens":15555}]}}"#).unwrap();
     let metadata = configured_owner.snapshot().await.unwrap();
+    assert_eq!(metadata.models.view().default_model_ref, "local/sample");
     assert_eq!(
         metadata
-            .models
-            .resolve_model_metadata(Some("local/sample"))
-            .context_window_tokens,
-        Some(15555.0)
-    );
-    assert_eq!(
-        metadata
-            .resolve(Some("local/sample"), &ContextBudgetOverrides::default())
+            .resolve(None, &ContextBudgetOverrides::default())
             .context_window_tokens,
         15555.0
     );

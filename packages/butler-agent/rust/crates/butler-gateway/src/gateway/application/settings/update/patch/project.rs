@@ -18,7 +18,7 @@ pub(super) fn project(
     let previous_model = current
         .get("model")
         .and_then(Value::as_str)
-        .unwrap_or("openai/gpt-5.5");
+        .unwrap_or(default_model(facts));
     let requested_model = patch
         .get("model")
         .and_then(Value::as_str)
@@ -73,7 +73,7 @@ pub(super) fn project(
     worker_profiles::canonicalize(
         &mut stored,
         facts,
-        output["model"].as_str().unwrap_or("openai/gpt-5.5"),
+        output["model"].as_str().unwrap_or(previous_model),
         output["reasoning_effort"]
             .as_str()
             .and_then(reasoning)
@@ -258,4 +258,10 @@ fn project_simple_fields(
             output.insert(key.into(), value.clone());
         }
     }
+}
+
+fn default_model(facts: &AppSettingsFacts) -> &str {
+    facts.native_settings["routine_default"]["model"]
+        .as_str()
+        .unwrap_or(butler_models::models::LEGACY_DEFAULT_MODEL)
 }

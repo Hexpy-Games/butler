@@ -117,9 +117,20 @@ pub(super) async fn auth_logout(
 }
 
 pub(super) fn model_list(options: &Options, command: Command) -> ExitCode {
-    let refs = models::CLI_FALLBACK_OPENAI_MODELS
-        .iter()
-        .map(|model| format!("openai/{model}"))
+    let catalog = match models::ModelCatalog::new() {
+        Ok(catalog) => catalog,
+        Err(error) => {
+            return report_error(
+                command.name(),
+                options.json,
+                &CliError::invalid(error.to_string()),
+            );
+        }
+    };
+    let refs = catalog
+        .model_refs()
+        .into_iter()
+        .filter(|model| model.starts_with("openai/"))
         .collect::<Vec<_>>();
     let data = json!({ "source": "bundled-catalog", "models": refs });
     report_success(options, command.name(), &data, &refs.join("\n"))

@@ -288,11 +288,11 @@ impl McpServer {
 
     #[tool(
         name = "model_set",
-        description = "Set or get the worker/butler model. Valid: gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5-codex, gpt-5.5, gpt-5.4, gpt-5.4-mini, auto:codex-latest. Use target to specify worker or butler."
+        description = "Set or get the worker/butler model. Use action=list for catalog model ids and target to specify worker or butler."
     )]
     async fn model_set(&self, Parameters(args): Parameters<ModelSetArgs>) -> CallToolResult {
         if matches!(args.action, Some(ModelAction::List)) {
-            return model::list();
+            return model::list(&self.data_root).await;
         }
         let target = args.target.as_ref().map(|target| match target {
             ModelTarget::Worker => "worker",
@@ -337,6 +337,25 @@ impl McpServer {
 
 #[tool_handler]
 impl ServerHandler for McpServer {
+    async fn list_tools(
+        &self,
+        _request: Option<rmcp::model::PaginatedRequestParams>,
+        _context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<rmcp::model::ListToolsResult, rmcp::ErrorData> {
+        let mut tools = Self::tool_router().list_all();
+        let catalog = butler_models::models::ModelCatalog::new()
+            .map_err(|error| rmcp::ErrorData::internal_error(error.to_string(), None))?;
+        for tool in &mut tools {
+            if tool.name == "model_set" {
+                tool.description = Some(format!("Set or get the worker/butler model. Valid: {}, auto:codex-latest. Use action=list for connected custom models.", catalog.model_refs().join(", ")).into());
+            }
+        }
+        Ok(rmcp::model::ListToolsResult {
+            tools,
+            ..Default::default()
+        })
+    }
+
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(Implementation::new(self.name.as_str(), "1.0.0"))
