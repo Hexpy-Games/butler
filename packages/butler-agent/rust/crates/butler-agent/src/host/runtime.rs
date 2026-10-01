@@ -70,8 +70,6 @@ impl AgentRuntime {
         let (app_endpoint, stop) = app;
         stores::check_startup(stop)?;
         validate_data_installation_boundary(&paths.data_root, &paths.installation_root)?;
-        let response_language =
-            defaults::initialize(&paths, &app_database_path, &installation).await?;
         // All fallible in-memory setup precedes the first store owner.
         let collation = Arc::new(LocaleCollation::new(locale).map_err(setup)?);
         let writes = Arc::new(ConfigurationWrites::new());
@@ -111,6 +109,8 @@ impl AgentRuntime {
         let (skills, capabilities, catalog) = skills_owner::open(&paths, &files, &mutations)?;
         stores::check_startup(stop)?;
         let stores = RuntimeStores::open(&paths.data_root, collation.clone(), stop).await?;
+        let response_language =
+            defaults::initialize(&paths, &app_database_path, &installation).await?;
         let (work_streams, observer) = boundary::open_observer(
             &paths.data_root,
             &environment.cognition_paths,
