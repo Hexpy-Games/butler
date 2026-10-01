@@ -29,7 +29,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/readme/hero-demo-dark.svg">
-    <img src="assets/readme/hero-demo-light.svg" alt="Butler working on a task and asking before it acts" width="100%">
+    <img src="assets/readme/hero-demo-light.svg" alt="Butler handing a task to the background, answering another question meanwhile, then delivering the summary" width="100%">
   </picture>
 </p>
 

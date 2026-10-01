@@ -4,6 +4,7 @@ import { useButlerStore } from "@/app/store.ts";
 import { resolveAppearanceTheme } from "@/app/utils.ts";
 import { WindowControls } from "@/components/layout/WindowControls";
 import { useSystemThemePreference } from "@/hooks/useSystemThemePreference.ts";
+import { FirstRunConsent } from "./FirstRunConsent";
 import { FirstRunConnect } from "./FirstRunConnect";
 import { FirstRunWelcome } from "./FirstRunWelcome";
 import { useFirstRunFlow, type FirstRunMode, type FirstRunResult } from "./useFirstRunFlow";
@@ -18,8 +19,8 @@ interface FirstRunSetupProps {
 }
 
 /**
- * First run: a welcome with consent, then "Pick an AI". The agent prepares in
- * the background; a newer consent version shows the welcome alone.
+ * First run: welcome, consent, then "Pick an AI". The agent prepares in
+ * the background; a newer consent version opens the consent step.
  */
 export function FirstRunSetup({ mode, onComplete, onCancel }: FirstRunSetupProps) {
   useAppLocale();
@@ -35,7 +36,7 @@ export function FirstRunSetup({ mode, onComplete, onCancel }: FirstRunSetupProps
       variant="focus"
       windowControls={<WindowControls />}
     >
-      {flow.screen === "welcome" ? <FirstRunWelcome flow={flow} /> : <FirstRunConnect flow={flow} />}
+      {flow.screen === "welcome" ? <FirstRunWelcome flow={flow} /> : flow.screen === "consent" ? <FirstRunConsent flow={flow} /> : <FirstRunConnect flow={flow} />}
     </SetupWizardShell>
   );
 }

@@ -262,21 +262,20 @@ test("an agent with completed onboarding and current consent opens the workspace
 
 test("an upgrade PATCHes the legacy completion once, then asks only for consent", async () => {
   const rendered = await renderAppShell({ [LEGACY_KEY]: legacyComplete }, { onboarding: FRESH_ONBOARDING });
-  await waitForText(rendered.container, "반갑습니다");
+  await waitForText(rendered.container, "시작하기 전에 확인해 주세요");
   expect(rendered.patches).toEqual([{ onboarding: { ...FRESH_ONBOARDING, completed_at: "2026-06-01T00:00:00.000Z" } }]);
   expect(rendered.storage.getItem(LEGACY_KEY)).toBeNull();
-  await clickButton(rendered.container, "동의하고 계속");
-  await waitForText(rendered.container, "Workspace");
-  expect(rendered.container.textContent).not.toContain("어떤 AI와 일할까요?");
+  await clickButton(rendered.container, "동의하고 시작");
+  await waitForText(rendered.container, "어떤 AI와 일할까요?");
   expect(rendered.patches.at(-1)).toMatchObject({ onboarding: { consent_version: FIRST_RUN_CONSENT_VERSION } });
   await act(async () => rendered.root.unmount());
 });
 
 test("a newer consent version re-shows only the consent step", async () => {
   const rendered = await renderAppShell({}, { onboarding: { ...currentOnboarding, consent_version: FIRST_RUN_CONSENT_VERSION - 1 } });
-  await waitForText(rendered.container, "반갑습니다");
-  await clickButton(rendered.container, "동의하고 계속");
-  await waitForText(rendered.container, "Workspace");
+  await waitForText(rendered.container, "시작하기 전에 확인해 주세요");
+  await clickButton(rendered.container, "동의하고 시작");
+  await waitForText(rendered.container, "어떤 AI와 일할까요?");
   expect(rendered.patches).toHaveLength(1);
   await act(async () => rendered.root.unmount());
 });

@@ -7,7 +7,12 @@ interface FirstRunCopy {
   product: string;
   welcomeTitle: string;
   welcomeLede: string;
-  consent: Array<{ title: string; body: string }>;
+  start: string;
+  consentTitle: string;
+  consentItems: Array<{ body: string; caption?: string }>;
+  consentProviderLink: string;
+  consentClause: string;
+  decline: string;
   agree: string;
   agreeBlocked: string;
   prepWorking: string;
