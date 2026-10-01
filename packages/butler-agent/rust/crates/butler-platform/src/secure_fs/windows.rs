@@ -56,14 +56,17 @@ pub(super) fn protect_folder(path: &Path) -> Option<io::Result<()>> {
 /// disappear too. SID-based inspection avoids localized icacls display text.
 fn acl(path: &Path, operation: &str) -> io::Result<String> {
     let root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
-    let output =
-        Command::new(PathBuf::from(root).join("System32/WindowsPowerShell/v1.0/powershell.exe"))
-            .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command"])
-            .arg(include_str!("windows/acl.ps1"))
-            .env("BUTLER_ACL_PATH", path)
-            .env("BUTLER_ACL_OPERATION", operation)
-            .creation_flags(0x0800_0000)
-            .output()?;
+    let powershell = PathBuf::from(root).join("System32/WindowsPowerShell/v1.0");
+    let output = Command::new(powershell.join("powershell.exe"))
+        .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command"])
+        .arg(include_str!("windows/acl.ps1"))
+        .env("BUTLER_ACL_PATH", path)
+        .env("BUTLER_ACL_OPERATION", operation)
+        // A pwsh parent exports modules incompatible with Windows PowerShell.
+        // Only load this host's trusted, built-in ACL cmdlets.
+        .env("PSModulePath", powershell.join("Modules"))
+        .creation_flags(0x0800_0000)
+        .output()?;
     if !output.status.success() {
         // The script only inspects ACL metadata, never file contents or tokens.
         return Err(io::Error::other(format!(

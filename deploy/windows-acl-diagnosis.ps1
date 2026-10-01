@@ -33,3 +33,11 @@ $script = Get-Content "$PSScriptRoot/../packages/butler-agent/rust/crates/butler
 & "$env:SystemRoot/System32/WindowsPowerShell/v1.0/powershell.exe" -NoLogo -NoProfile -NonInteractive -Command $script 2>&1 |
     Tee-Object "$env:PREVIEW_ROOT/logs/acl-apply-diagnosis.log"
 if ($LASTEXITCODE -ne 0) { throw 'Private ACL application failed; see acl-apply-diagnosis.log' }
+$child = Join-Path $env:BUTLER_ACL_PATH 'inherited'
+New-Item -ItemType File $child | Out-Null
+$acl = Get-Acl -LiteralPath $child
+$rules = $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])
+$unexpected = @($rules | Where-Object { $_.AccessControlType -eq 'Allow' -and $_.IdentityReference.Value -ne $sid })
+"Protected child: ownerMatches=$($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -eq $sid), nonUserAllowACEs=$($unexpected.Count), SDDL=$($acl.Sddl)" |
+    Tee-Object -Append "$env:PREVIEW_ROOT/logs/acl-diagnosis.log"
+if ($unexpected.Count) { throw 'Protected child inherited a non-user Allow ACE' }

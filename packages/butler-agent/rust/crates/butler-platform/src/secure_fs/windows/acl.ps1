@@ -20,7 +20,9 @@ try {
     } else {
         $acl = Get-Acl -LiteralPath $path
         $rules = $acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
-        $private = $acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value -eq $sid.Value
+        # Elevated tokens may default new inherited children to Administrators
+        # ownership. Ownership is not a file-data read grant; inspect every ACE.
+        $private = $true
         $allowed = $false
         foreach ($rule in $rules) {
             if ($rule.AccessControlType -eq 'Allow') {
