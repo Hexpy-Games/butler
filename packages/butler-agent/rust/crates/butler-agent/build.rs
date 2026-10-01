@@ -3,6 +3,9 @@
 
 use std::{env, path::Path, process::Command};
 
+#[path = "../butler-platform/build_support.rs"]
+mod build_support;
+
 const SCOPE: &[&str] = &[
     "packages/butler-agent/rust",
     "packages/butler-agent/resources",
@@ -24,6 +27,10 @@ fn output(root: &Path, arguments: &[&str]) -> Option<String> {
 }
 
 fn main() {
+    if let Err(error) = build_support::embed_application_manifest() {
+        eprintln!("cannot embed agent application manifest: {error}");
+        std::process::exit(1);
+    }
     println!("cargo:rerun-if-env-changed=BUTLER_MEMORY_IMPLEMENTATION_COMMIT");
     for path in [
         "src",
