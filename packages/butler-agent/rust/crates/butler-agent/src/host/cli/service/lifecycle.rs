@@ -351,7 +351,7 @@ fn spawn_service(
     data_root: &Path,
 ) -> Result<Child, crate::host::HostError> {
     validate_write_destinations(data_root, installation)?;
-    let executable = std::env::current_exe()
+    let executable = butler_platform::process_names::current_exe()
         .map_err(|source| {
             crate::host::HostError::new("native_service_executable_unavailable").with_source(source)
         })?

@@ -256,16 +256,24 @@ pub(super) async fn stop_running(
     .await
 }
 
-pub(crate) fn spawn_restart_handoff(
+pub(crate) async fn spawn_restart_handoff(
     installation: &ResolvedInstallation,
     data_root: &Path,
     expected: &RestartIdentity,
     intent_id: &str,
 ) -> Result<(), crate::host::HostError> {
-    if lifecycle::asked_of_manager(data_root, expected) {
-        return Ok(());
-    }
-    lifecycle::spawn_restart_handoff(installation, data_root, expected, intent_id)
+    let installation = installation.clone();
+    let data_root = data_root.to_path_buf();
+    let expected = expected.clone();
+    let intent_id = intent_id.to_owned();
+    tokio::task::spawn_blocking(move || {
+        if lifecycle::asked_of_manager(&data_root, &expected) {
+            return Ok(());
+        }
+        lifecycle::spawn_restart_handoff(&installation, &data_root, &expected, &intent_id)
+    })
+    .await
+    .map_err(crate::host::HostError::from_error)?
 }
 
 fn parse(args: &[OsString]) -> Result<(Options, Action), crate::host::HostError> {

@@ -32,7 +32,7 @@ fn test_installation(executable: &PathBuf) -> ResolvedInstallation {
 }
 
 pub(crate) fn state_and_log_symlinks_into_installation_are_rejected_before_writes() {
-    let executable = std::env::current_exe()
+    let executable = butler_platform::process_names::current_exe()
         .expect("test executable is available")
         .canonical()
         .expect("test executable is canonical");

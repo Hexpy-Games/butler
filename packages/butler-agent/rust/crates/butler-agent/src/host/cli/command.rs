@@ -129,6 +129,17 @@ impl Command {
 /// The executable entry: the private embedding worker, or installation
 /// resolution followed by one classified command.
 pub async fn main(args: Vec<OsString>) -> ExitCode {
+    if args.len() == 1 && args[0] == "--prepare-process-links" {
+        let result = butler_platform::process_names::current_exe()
+            .and_then(|binary| butler_platform::process_names::prepare(&binary));
+        return match result {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("process_links_unavailable: {error}");
+                ExitCode::FAILURE
+            }
+        };
+    }
     // Internal child mode. It must not resolve installation resources or start
     // the service before the first private embedding request.
     if args.len() == 1 && args[0] == "--private-embedding-worker" {
@@ -202,7 +213,8 @@ fn installation(
     let installation = match (root, resources) {
         (None, None) => ResolvedInstallation::standalone()?,
         (Some(root), Some(resources)) => ResolvedInstallation::desktop(
-            std::env::current_exe().map_err(crate::host::HostError::from_error)?,
+            butler_platform::process_names::current_exe()
+                .map_err(crate::host::HostError::from_error)?,
             root,
             resources,
         )?,

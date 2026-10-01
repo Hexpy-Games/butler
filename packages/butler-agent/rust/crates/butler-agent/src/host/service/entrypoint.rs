@@ -139,7 +139,7 @@ async fn run_until_stopped(
     };
     config = support::initialize_credentials(config).await?;
     report_credential_errors(&config, logs);
-    let executable = std::env::current_exe().map_err(io)?;
+    let executable = butler_platform::process_names::current_exe().map_err(io)?;
     let mut instance = support::acquire_instance(
         &config,
         executable,

@@ -26,7 +26,10 @@ use butler_e2e::e2e::install_fixture::{
 };
 use butler_e2e::e2e::sandbox::Sandbox;
 use butler_e2e::e2e::stop_intent::{StopOnDrop, instance_record, read_intent};
-use butler_platform::service_registration::{Manager, manager};
+use butler_platform::{
+    process_names::{self, Role},
+    service_registration::{Manager, manager},
+};
 use serde_json::Value;
 
 /// A sandboxed user: their home, Agent home and data folder, plus the dev
@@ -44,7 +47,7 @@ impl World {
         let mut launch = Launch::new(&sandbox)?;
         // Started from the command line, the service keeps its own token.
         launch.use_data_folder_token();
-        let agent_home = sandbox.root.join("agent-home");
+        let agent_home = sandbox.root.join("agent home (test)");
         launch.set_env("BUTLER_AGENT_HOME", agent_home.display().to_string());
         let path = std::env::join_paths([
             sandbox.home.join(".local/bin").as_path(),
@@ -169,6 +172,15 @@ fn runs_from(record: &Value, dir: &str) -> bool {
         .is_some_and(|executable| executable.contains(&format!("/{dir}/butler-agent")))
 }
 
+fn assert_role_links(home: &Path, dir: &str) -> Result<(), HarnessError> {
+    let binary = home.join(dir).join(butler_platform::launcher::AGENT_BINARY);
+    for role in [Role::Memory, Role::Restart, Role::Update] {
+        let alias = process_names::executable(&binary, role)?;
+        assert_ne!(alias, binary, "{} alias missing from {dir}", role.name());
+    }
+    Ok(())
+}
+
 /// INS-02 — install, run, update, roll back, register login-start, uninstall.
 #[tokio::test]
 async fn ins_02_install_update_rollback_uninstall() -> Result<(), HarnessError> {
@@ -189,6 +201,7 @@ async fn ins_02_install_update_rollback_uninstall() -> Result<(), HarnessError> 
     ])?)?;
     assert_eq!(installed["data"]["dir"], v1.dir.as_str(), "{installed}");
     assert_eq!(world.pointer("current").as_deref(), Some(v1.dir.as_str()));
+    assert_role_links(&world.agent_home, &v1.dir)?;
     let launcher = fs::read_to_string(world.launcher())?;
     assert_eq!(launcher.lines().nth(1), Some("# butler-native-launcher v1"));
     assert!(launcher.contains(&format!(
@@ -222,6 +235,7 @@ async fn ins_02_install_update_rollback_uninstall() -> Result<(), HarnessError> 
     assert_eq!(updated["data"]["service"]["restarted"], true, "{updated}");
     assert_eq!(world.pointer("current").as_deref(), Some(v2.dir.as_str()));
     assert_eq!(world.pointer("previous").as_deref(), Some(v1.dir.as_str()));
+    assert_role_links(&world.agent_home, &v2.dir)?;
     let second = ready_record(&world);
     assert!(runs_from(&second, &v2.dir), "{second}");
     assert_ne!(
@@ -263,6 +277,7 @@ async fn ins_02_install_update_rollback_uninstall() -> Result<(), HarnessError> 
     let rolled = ok(&world.butler(&["rollback", "--yes", "--json"])?)?;
     assert_eq!(rolled["data"]["service"]["restarted"], true, "{rolled}");
     assert_eq!(world.pointer("current").as_deref(), Some(v1.dir.as_str()));
+    assert_role_links(&world.agent_home, &v1.dir)?;
     let third = ready_record(&world);
     assert!(runs_from(&third, &v1.dir), "{third}");
     let version = ok(&world.butler(&["version", "--json"])?)?;

@@ -60,7 +60,7 @@ struct AdmissionGuard {
 
 impl EmbeddingOwner {
     pub(crate) fn new(data_root: PathBuf) -> CognitionResult<Self> {
-        let executable = std::env::current_exe()
+        let executable = butler_platform::process_names::current_exe()
             .map_err(|source| error(CognitionCode::EmbedWorkerUnavailable).with_source(source))?;
         let inner = Arc::new(Inner {
             data_root,
@@ -320,7 +320,7 @@ async fn run_item(
         *child = None;
     }
     if child.is_none() {
-        *child = Some(spawn_worker(&inner.executable, &inner.data_root)?);
+        *child = Some(spawn_worker(&inner.executable, &inner.data_root).await?);
     }
     if let Some(process) = child.as_mut().filter(|process| !process.initialized) {
         let initialized = tokio::select! {

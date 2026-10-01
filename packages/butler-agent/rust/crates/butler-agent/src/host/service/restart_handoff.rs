@@ -219,6 +219,7 @@ impl RestartHandoff {
                 &self.identity,
                 key,
             )
+            .await
             .is_ok()
             {
                 "spawned"

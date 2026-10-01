@@ -33,7 +33,7 @@ export const guidance: ShowcaseGuidance = {
       },
     },
   ],
-  content: ["Labels are nouns (Server ID); descriptions are one sentence; errors say how to fix it."],
+  content: ["Vertical labels sit above the control and wrap inside the column, including long unbroken labels.", "Labels are nouns (Server ID); descriptions are one sentence; errors say how to fix it."],
   accessibility: ["Connect help with aria-describedby when it explains the value; FieldError renders role=\"alert\"."],
   tokens: ["--space-sm", "--space-xs", "--text-secondary", "--danger"],
 };
