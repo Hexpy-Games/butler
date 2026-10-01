@@ -42,9 +42,10 @@ test("the legacy renderer flag counts only for a completed first run", () => {
   expect(readLegacyFirstRunCompletedAt(new MemoryStorage())).toBeNull();
 });
 
-test("before the agent answers, only a legacy completion skips first run", () => {
-  expect(resolveOnboardingGate({ onboarding: null, agentLoaded: false, legacyCompletedAt: null })).toBe("first-run");
-  expect(resolveOnboardingGate({ onboarding: null, agentLoaded: false, legacyCompletedAt: "2026-06-01" })).toBe("workspace");
+// test-category: pure-logic
+test("before the agent answers, every install stays in the neutral boot state", () => {
+  expect(resolveOnboardingGate({ onboarding: null, agentLoaded: false, legacyCompletedAt: null })).toBe("pending");
+  expect(resolveOnboardingGate({ onboarding: null, agentLoaded: false, legacyCompletedAt: "2026-06-01" })).toBe("pending");
 });
 
 test("the agent's completed_at skips first run; an older consent version re-shows only the consent step", () => {
