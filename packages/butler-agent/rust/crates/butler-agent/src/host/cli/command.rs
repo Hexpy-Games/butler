@@ -15,6 +15,7 @@ type Recognizer = fn(&[OsString]) -> bool;
 /// Every command family the `butler-agent` executable accepts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Command {
+    AppUpdate,
     Public,
     ServiceControl,
     Doctor,
@@ -36,6 +37,9 @@ impl Command {
     /// Classifies command arguments (installation options already removed).
     pub fn classify(args: &[OsString]) -> Self {
         use crate::host::cli;
+        if args.first().is_some_and(|arg| arg == "app-update-install") {
+            return Self::AppUpdate;
+        }
         let families: [(Recognizer, Self); 11] = [
             (cli::public::recognizes, Self::Public),
             (cli::service::recognizes, Self::ServiceControl),
@@ -73,6 +77,7 @@ impl Command {
     ) -> ExitCode {
         use crate::host::cli;
         match self {
+            Self::AppUpdate => cli::app_update::run(&args),
             Self::Public => cli::public::run(&installation, &args),
             Self::ServiceControl => cli::service::run_native_service_cli(installation, args).await,
             Self::Doctor => cli::doctor::run(&installation, &args),

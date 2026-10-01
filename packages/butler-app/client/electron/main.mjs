@@ -12,6 +12,7 @@ import {
   protocol,
   shell,
 } from "electron";
+import { prepareAppPackageUpdate } from "./app-package-update.mjs";
 import { getDesktopCopy } from "./i18n/desktop-copy.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import { createHmac, randomUUID } from "node:crypto";
@@ -1143,7 +1144,7 @@ function appInfoView() {
   const pkg = readPackageJson(packagePath);
   return {
     name: safeString(pkg.productName) || appDisplayName,
-    version: safeString(pkg.version) || "0.0.0",
+    version: app.isPackaged ? safeString(pkg.version) || "0.1.0-dev" : `${safeString(pkg.version)?.split("-")[0] || "0.1.0"}-dev`,
     repository_url: appRepositoryUrl,
     protocol_version: appProtocolVersion,
     developer_mode_available: true,
@@ -1177,7 +1178,7 @@ function configureAppIdentity() {
   }
   app.setAboutPanelOptions({
     applicationName: appDisplayName,
-    applicationVersion: safeString(pkg.version) || "0.0.0",
+    applicationVersion: appInfoView().version,
   });
 }
 
@@ -2579,9 +2580,21 @@ ipcMain.handle("butler:open-update-artifact", async (_event, input = {}) => {
       },
     };
   }
-  const error = await shell.openPath(artifactPath);
-  if (error) throw new Error(error);
-  return { opened: true };
+  const helper = await prepareAppPackageUpdate({ artifactPath, dataRoot: butlerDataRoot,
+    installation: currentNativeAgentInstallation(), executable: process.execPath, parent: process.pid, arguments: process.argv.slice(1) });
+  let update;
+  try {
+    update = await runAppUpdateQuit(() => {
+      helper.activate();
+      finalQuitAllowed = true;
+      app.quit();
+    });
+  } catch (error) {
+    helper.cancel();
+    throw error;
+  }
+  if (!update.update_started) helper.cancel();
+  return { opened: update.update_started, update };
 });
 
 function safeUpdateArtifactPath(value) {

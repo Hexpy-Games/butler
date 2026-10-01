@@ -1,6 +1,7 @@
 //! One module per `butler-agent` command family; [`command`] classifies argv
 //! and dispatches to them.
 
+pub(crate) mod app_update;
 pub(crate) mod command;
 pub(super) mod doctor;
 pub(crate) mod error;

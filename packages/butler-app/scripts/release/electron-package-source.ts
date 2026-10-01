@@ -1,4 +1,5 @@
-import { cpSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readAppComponentVersions } from "./manifest.ts";
 import { join, relative } from "node:path";
 
 /** Stage the Electron shell without development-only package-manager trees. */
@@ -16,5 +17,7 @@ export function stageElectronPackageSource(root: string, destination: string): s
     recursive: true,
     filter: (path) => !excluded.has(relative(source, path).split(/[\\/]/u)[0]),
   });
+  manifest.version = readAppComponentVersions(root).app;
+  writeFileSync(join(destination, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   return destination;
 }

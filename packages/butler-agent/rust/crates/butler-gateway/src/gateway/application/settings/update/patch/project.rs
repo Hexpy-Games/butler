@@ -14,28 +14,7 @@ pub(super) fn project(
 ) -> Value {
     let mut output = current.as_object().cloned().unwrap_or_default();
     let patch = patch.as_object().cloned().unwrap_or_default();
-    for key in [
-        "server_url",
-        "language",
-        "timezone",
-        "access_mode",
-        "plan_mode_default",
-        "follow_up_behavior",
-        "multiline_send_behavior",
-        "appearance_theme",
-        "main_screen_theme",
-        "main_screen_theme_preset",
-        "main_screen_theme_custom_colors",
-        "translucent_sidebar",
-        "smart_grouping_enabled",
-        "diagnostics_enabled",
-        "desktop_tray_enabled",
-        "max_simultaneous_workers",
-    ] {
-        if let Some(value) = patch.get(key) {
-            output.insert(key.into(), value.clone());
-        }
-    }
+    project_simple_fields(&mut output, &patch);
     let previous_model = current
         .get("model")
         .and_then(Value::as_str)
@@ -250,4 +229,33 @@ fn workspace_label(path: &Path) -> String {
         .filter(|value| !value.is_empty())
         .unwrap_or("Project")
         .to_owned()
+}
+
+fn project_simple_fields(
+    output: &mut serde_json::Map<String, Value>,
+    patch: &serde_json::Map<String, Value>,
+) {
+    for key in [
+        "update_previews",
+        "server_url",
+        "language",
+        "timezone",
+        "access_mode",
+        "plan_mode_default",
+        "follow_up_behavior",
+        "multiline_send_behavior",
+        "appearance_theme",
+        "main_screen_theme",
+        "main_screen_theme_preset",
+        "main_screen_theme_custom_colors",
+        "translucent_sidebar",
+        "smart_grouping_enabled",
+        "diagnostics_enabled",
+        "desktop_tray_enabled",
+        "max_simultaneous_workers",
+    ] {
+        if let Some(value) = patch.get(key) {
+            output.insert(key.into(), value.clone());
+        }
+    }
 }

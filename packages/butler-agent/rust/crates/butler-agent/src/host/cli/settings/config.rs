@@ -25,6 +25,7 @@ pub(super) const SAFE_CONFIG_PATHS: &[&str] = &[
     "webSearch.tavilyApiBase",
     "webSearch.planning.enabled",
     "webSearch.planning.defaultDepth",
+    "update.previews",
     "metrics.enabled",
     "metrics.retentionDays",
     "secrets.store",
@@ -281,6 +282,12 @@ fn validate_remaining(config: &Value, mut result: Validation) -> Validation {
                     .into(),
             );
         }
+    }
+    if config
+        .pointer("/update/previews")
+        .is_some_and(|value| !value.is_boolean())
+    {
+        result.errors.push("update.previews must be boolean".into());
     }
     if config
         .pointer("/metrics/enabled")

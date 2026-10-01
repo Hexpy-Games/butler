@@ -24,7 +24,20 @@ impl AppUpdateService {
             .version
             .as_deref()
             .ok_or(UpdateCode::AppVersionUnavailable)?;
-        let saved = self.saved().await;
+        let previews = super::channel::previews(&self.data, None).await;
+        let saved = self.saved().await.filter(|view| {
+            view.get("receive_previews")
+                .and_then(Value::as_bool)
+                .map(|prior| prior == previews)
+                .unwrap_or_else(|| {
+                    previews
+                        || view["components"][0]["update_available"] != true
+                        || view["components"][0]["available_version"]
+                            .as_str()
+                            .and_then(|version| semver::Version::parse(version).ok())
+                            .is_some_and(|version| version.pre.is_empty())
+                })
+        });
         if saved.as_ref().is_none_or(is_stale) {
             self.refresh_in_background();
         }
@@ -86,8 +99,15 @@ impl AppUpdateService {
             .ok_or(UpdateCode::AppVersionUnavailable)?;
         let saved = self.saved().await;
         let mut status = match saved.and_then(|view| view["components"][0].as_object().cloned()) {
-            Some(prior) => Value::Object(prior),
-            None => {
+            Some(prior)
+                if super::channel::eligible(
+                    &json!({"version": prior.get("available_version")}),
+                    super::channel::previews(&self.data, request.channel.as_deref()).await,
+                ) =>
+            {
+                Value::Object(prior)
+            }
+            _ => {
                 self.status(
                     request,
                     &self.unchecked_artifact(request, version),

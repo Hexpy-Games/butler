@@ -104,9 +104,14 @@ pub(crate) async fn run_native_status_cli(
             .await;
             let model = models.status_value(&metrics.model_telemetry());
             let services = service_health(&data_root);
-            let text = operations::render_status_context(&metrics, &models, &services);
+            let previews = update_previews(&models.configuration).await;
+            let version = env!("BUTLER_RELEASE_VERSION");
+            let text = format!(
+                "Butler {version}\nupdate.previews: {previews}\n{}",
+                operations::render_status_context(&metrics, &models, &services)
+            );
             (
-                json!({ "status": metrics.value, "services": services, "model": model }),
+                json!({ "version": version, "update": {"previews": previews}, "status": metrics.value, "services": services, "model": model }),
                 text,
             )
         }
@@ -323,4 +328,15 @@ fn report_error(command: &str, json_output: bool, message: &str) -> ExitCode {
         eprintln!("{message}");
     }
     ExitCode::from(1)
+}
+
+async fn update_previews(configuration: &butler_models::models::ModelConfiguration) -> bool {
+    configuration
+        .read()
+        .await
+        .map(|read| read.config)
+        .unwrap_or_default()
+        .pointer("/update/previews")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
 }
