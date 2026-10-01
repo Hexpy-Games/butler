@@ -685,6 +685,7 @@ export interface AppCopy {
     rename: string;
     archive: string;
     openSessionFolder: string;
+    fileManager: string;
     vsCode: string;
     terminal: string;
     loadingFolderTargets: string;

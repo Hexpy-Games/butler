@@ -1,4 +1,11 @@
-export type SessionFolderLaunchTarget = "vscode" | "terminal";
+export type SessionFolderLaunchTarget = "vscode" | "terminal" | "fileManager";
+
+export interface SessionFolderLaunchSpec {
+  command: string;
+  args: string[];
+  application?: string;
+  options?: { cwd?: string };
+}
 
 export type SessionFolderLaunchTargetsResult =
   | { ok: true; targets: SessionFolderLaunchTarget[] }
@@ -27,13 +34,22 @@ export interface SessionFolderLauncherOptions {
   ) => string | null | Promise<string | null>;
   isDirectory?: (workspacePath: string) => boolean | Promise<boolean>;
   isApplicationAvailable?: (application: string) => boolean;
+  resolveCommand?: (command: string) => string | null;
   launchApplication?: (
     command: string,
     args: string[],
-  ) => { ok?: boolean } | null | undefined;
+    options?: { cwd?: string },
+  ) => { ok?: boolean } | null | undefined | Promise<{ ok?: boolean } | null | undefined>;
 }
 
 export const SESSION_FOLDER_TARGET_KEYS: readonly SessionFolderLaunchTarget[];
+
+export function buildSessionFolderLaunchSpec(
+  platform: string,
+  target: SessionFolderLaunchTarget,
+  workspacePath: string,
+  resolveCommand?: (command: string) => string | null,
+): SessionFolderLaunchSpec | null;
 
 export function createSessionFolderLauncher(
   options?: SessionFolderLauncherOptions,
