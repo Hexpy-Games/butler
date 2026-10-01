@@ -1,5 +1,5 @@
 //! The connection-code screen a browser sees without a session: one field
-//! for the connection code from Settings → Security (or a one-time code
+//! for the short code from `butler remote pair` (or a one-time code
 //! `butler open` prints), and no username/password prompt (no
 //! `WWW-Authenticate` challenge).
 
@@ -32,7 +32,7 @@ button { margin-top: 12px; width: 100%; padding: 10px 12px; border: 0; border-ra
 <body>
 <main>
 <h1>Connect to Butler</h1>
-<p>Enter the connection code. Copy it from Settings → Security in the Butler app.</p>
+<p>Enter the pairing code shown by <code>butler remote pair</code> on the computer running Butler.</p>
 "#;
 
 const PAGE_FORM: &str = r#"<form method="post" action="/connect">

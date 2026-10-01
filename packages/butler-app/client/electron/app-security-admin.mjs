@@ -25,7 +25,11 @@ const HEADER_VALUE = /^[\x21-\x7e]+$/u;
 /** The only calls that carry the admin credential, by bridge route. */
 const SECURITY_ROUTES = Object.freeze({
   getSecurity: { method: "GET", path: "/security" },
-  revealConnectionCode: { method: "POST", path: "/security/connection-code/reveal" },
+  issuePairingCode: { method: "POST", path: "/security/pairing" },
+  getPairingStatus: { method: "GET", path: "/security/pairing" },
+  listPairedDevices: { method: "GET", path: "/security/devices" },
+  revokePairedDevice: { method: "DELETE", path: "/security/devices", device: true },
+  revokeAllPairedDevices: { method: "DELETE", path: "/security/devices" },
   rotateConnectionCode: { method: "POST", path: "/security/connection-code/rotate" },
   // PATCH /settings only when it carries `security`; other settings go
   // through the preload as before.
@@ -80,6 +84,11 @@ export async function requestSecurityRoute(
   const route = typeof input?.route === "string" && Object.hasOwn(SECURITY_ROUTES, input.route)
     ? SECURITY_ROUTES[input.route]
     : null;
+  const deviceId = input?.body?.deviceId;
+  if (route?.device && (typeof deviceId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(deviceId))) {
+    return failure("invalid_request");
+  }
+  const path = route?.device ? `${route.path}/${encodeURIComponent(deviceId)}` : route?.path;
   const security = input?.body?.security;
   const needsBody = input?.route === "updateSecuritySettings";
   if (!route || (needsBody && (typeof security !== "object" || security === null))) {
@@ -88,7 +97,7 @@ export async function requestSecurityRoute(
   try {
     await ensureReady();
     const bearer = await authHeaders();
-    const response = await fetch(new URL(route.path, serverUrl), {
+    const response = await fetch(new URL(path, serverUrl), {
       method: route.method,
       headers: {
         ...(needsBody ? { "content-type": "application/json" } : {}),

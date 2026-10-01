@@ -8,6 +8,7 @@ import {
   Stack,
   Typo,
 } from "@/butler-ds";
+import { FirstRunReplyLanguage } from "./FirstRunReplyLanguage";
 import { FirstRunCustomServer } from "./FirstRunCustomServer";
 import { FirstRunKeyForm } from "./FirstRunKeyForm";
 import { FirstRunModelPicker } from "./FirstRunModelPicker";
@@ -39,6 +40,7 @@ export function FirstRunConnect({ flow }: { flow: FirstRunFlow }) {
               <FirstRunModelPicker body={copy.localBody} cardId="local" flow={flow} options={flow.local.options} title={copy.localTitle} />
             ) : view.kind === "custom" ? <FirstRunCustomServer flow={flow} />
               : <FirstRunModelPicker apiKey={view.apiKey} cardId="other" flow={flow} options={view.options} title={copy.customTitle} />}
+      {commit.connected ? <FirstRunReplyLanguage flow={flow} /> : null}
       {failure ? <SetupWizardContent width="wide">{failure}</SetupWizardContent> : null}
     </>
   );

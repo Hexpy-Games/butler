@@ -193,19 +193,19 @@ test("preload sends the security routes to main and never fetches them itself", 
     allowed_hosts: ["butler.example.com"], connection_code: { masked: "abcd…wxyz", created_at: "2026-09-28T00:00:00Z" } };
   const run = runPreload({ "/settings": { status: 200, body: envelope({ language: "en" }) } }, `
     results.push(await bridge.getSecurity());
-    results.push(await bridge.revealConnectionCode());
+    results.push(await bridge.issuePairingCode());
     results.push(await bridge.rotateConnectionCode());
     results.push(await bridge.updateSettings({ security: { allowed_hosts: [] } }));
     results.push(await bridge.updateSettings({ language: "en" }));
   `, {
     getSecurity: { ok: true, data: view },
-    revealConnectionCode: { ok: true, data: { code: "c".repeat(43) } },
+    issuePairingCode: { ok: true, data: { code: "12345678" } },
     rotateConnectionCode: { ok: true, data: { code: "d".repeat(43), created_at: "2026-09-29T00:00:00Z" } },
     updateSecuritySettings: { ok: true, data: {} },
   });
   expect(run.securityCalls).toEqual([
     { route: "getSecurity" },
-    { route: "revealConnectionCode" },
+    { route: "issuePairingCode" },
     { route: "rotateConnectionCode" },
     { route: "updateSecuritySettings", body: { security: { allowed_hosts: [] } } },
   ]);
@@ -213,7 +213,7 @@ test("preload sends the security routes to main and never fetches them itself", 
   expect(run.requests.map(({ path, method }) => `${method} ${path}`)).toEqual(["PATCH /settings"]);
   expect(run.results).toEqual([
     { ok: true, data: view },
-    { ok: true, data: { code: "c".repeat(43) } },
+    { ok: true, data: { code: "12345678" } },
     { ok: true, data: { code: "d".repeat(43), created_at: "2026-09-29T00:00:00Z" } },
     { ok: true, data: {} },
     { ok: true, data: { language: "en" } },

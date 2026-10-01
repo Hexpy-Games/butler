@@ -90,9 +90,13 @@ test("the admin credential file is read from the data folder; a missing or inval
 test("the security routes carry the admin header next to the bearer token", async () => {
   const routes: Array<[unknown, string, string]> = [
     [{ route: "getSecurity" }, "GET", "/security"],
-    [{ route: "revealConnectionCode" }, "POST", "/security/connection-code/reveal"],
+    [{ route: "issuePairingCode" }, "POST", "/security/pairing"],
     [{ route: "rotateConnectionCode" }, "POST", "/security/connection-code/rotate"],
     [{ route: "updateSecuritySettings", body: { security: { allowed_hosts: ["a.example"] } } }, "PATCH", "/settings"],
+    [{ route: "getPairingStatus" }, "GET", "/security/pairing"],
+    [{ route: "listPairedDevices" }, "GET", "/security/devices"],
+    [{ route: "revokeAllPairedDevices" }, "DELETE", "/security/devices"],
+    [{ route: "revokePairedDevice", body: { deviceId: "00000000-0000-0000-0000-000000000000" } }, "DELETE", "/security/devices/00000000-0000-0000-0000-000000000000"],
   ];
   for (const [input, method, path] of routes) {
     const { result, sent } = await send(input);

@@ -169,6 +169,11 @@ fn source_instructions(stable: &str, documents: &documents::DocumentProjection) 
         instructions.push_str(persona);
     }
     let language = butler_core::public_text::trim_js_whitespace(&documents.response_language);
+    let language = match language {
+        "ko" => "Korean",
+        "en" => "English",
+        other => other,
+    };
     if !language.is_empty() {
         instructions.push_str(&format!("\nUse {language} for every user-facing message by default. Follow the user's explicit request to answer or translate into another language instead. Interface language controls app labels only and must not change the answer language."));
     }

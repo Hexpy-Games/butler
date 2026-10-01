@@ -19,15 +19,32 @@ async function updateSecurity(security: { remote_access_enabled?: boolean; allow
   await api("/settings", { method: "PATCH", body: JSON.stringify({ security }) });
 }
 
-export async function revealConnectionCode(): Promise<string> {
-  const { code } = await api<{ code: string }>("/security/connection-code/reveal", { method: "POST" });
-  return code;
+/** All timestamps are Unix seconds; status reads never return a code. */
+export interface PairingCode {
+  id: string;
+  code: string;
+  expires_at: number;
+  expires_in: number;
 }
-
-/** Disconnects remote sessions; the desktop bridge re-reads its own token. */
-export async function rotateConnectionCode(): Promise<void> {
-  await api<{ code: string; created_at: string | null }>("/security/connection-code/rotate", { method: "POST" });
+export interface PairingStatus extends Omit<PairingCode, "code"> {
+  status: "active" | "expired" | "invalidated" | "paired";
+  invalidated_by: string | null;
+  device_id: string | null;
 }
+export interface PairedDevice {
+  id: string;
+  name: string;
+  ip: string;
+  created_at: number;
+  last_seen_at: number;
+}
+export const issuePairingCode = () => api<PairingCode>("/security/pairing", { method: "POST" });
+export const getPairingStatus = () => api<PairingStatus | null>("/security/pairing");
+export const listPairedDevices = () => api<PairedDevice[]>("/security/devices");
+export const revokePairedDevice = (deviceId?: string) => api(
+  deviceId ? `/security/devices/${encodeURIComponent(deviceId)}` : "/security/devices",
+  { method: "DELETE" },
+);
 
 /** The gateway answers security calls only to clients on this computer. */
 export function isHostOnlyError(error: unknown): boolean {

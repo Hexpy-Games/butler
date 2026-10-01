@@ -59,9 +59,16 @@ pub(super) const ROUTES: &[Entry] = &[
         false
     ),
     route!(
-        "remote.code",
-        "butler remote code [--json] [--rotate [--yes]]",
-        "연결 코드를 보거나 바꿉니다. / Reveal or rotate the connection code.",
+        "remote.pair",
+        "butler remote pair",
+        "기기를 연결합니다. / Pair a device.",
+        "core",
+        false
+    ),
+    route!(
+        "remote.devices",
+        "butler remote devices [--json] [--revoke ID|--revoke-all]",
+        "연결된 기기를 관리합니다. / Manage paired devices.",
         "core",
         true
     ),

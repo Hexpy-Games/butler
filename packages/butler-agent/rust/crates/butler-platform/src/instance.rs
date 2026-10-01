@@ -42,6 +42,9 @@
 //!    whose start time was compared through it, stays open, so the id cannot
 //!    name another process in between.
 
+mod locale;
+pub use locale::system_locale;
+
 use std::fs::{File, TryLockError};
 use std::io;
 

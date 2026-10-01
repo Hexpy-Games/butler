@@ -1,4 +1,4 @@
-import { useRef, useState, type MouseEvent } from "react";
+import { memo, useRef, useState, type MouseEvent } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { ContextDonutButton, Popover, PopoverContent, PopoverTrigger } from "@/butler-ds";
 import { useButlerStore } from "@/app/store.ts";
@@ -13,7 +13,7 @@ import type { QuotaLoader, UsageLoader } from "./useConversationUsage";
  * click (Enter/Space) pins it open until a second click, Esc or an outside
  * click. Details opens Settings > Usage.
  */
-export function ComposerContextControl({ load, loadQuota }: { load?: UsageLoader; loadQuota?: QuotaLoader }) {
+export const ComposerContextControl = memo(function ComposerContextControl({ load, loadQuota }: { load?: UsageLoader; loadQuota?: QuotaLoader }) {
   useAppLocale();
   const context = useComposerStore((store) => store.context);
   const models = useComposerStore((store) => store.models);
@@ -86,4 +86,4 @@ export function ComposerContextControl({ load, loadQuota }: { load?: UsageLoader
       </PopoverContent>
     </Popover>
   );
-}
+});
