@@ -80,7 +80,17 @@ async fn completed(s: &Scenario, turn: &str) -> Result<(), HarnessError> {
 async fn ask_user_answer_continues_same_turn() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, turn, q) = pending("ASK-USER").await?;
-    scale::assert_projection(&s, &q).await?;
+    scale::seed_history(&s, &q).await?;
+    for _ in 0..20 {
+        let view = s.gw.get("/session-view?session_id=general").await?;
+        assert_eq!(view.status, 200, "{}", view.text);
+        assert_eq!(view.data()["pending_questions"], json!([q]));
+        assert_eq!(view.data()["question_answers"], json!([]));
+        assert_eq!(view.data()["authority_requests"], json!([]));
+        assert_eq!(view.data()["active_turn"]["id"], turn);
+        assert_eq!(view.data()["latest_turn"]["id"], turn);
+        assert_eq!(view.data()["latest_turn"]["state"], "waiting_for_form");
+    }
     measure_idle(&s, &q).await?;
     let invalid =
         s.gw.post(
