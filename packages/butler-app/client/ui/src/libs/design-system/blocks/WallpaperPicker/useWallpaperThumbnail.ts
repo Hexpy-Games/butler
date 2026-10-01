@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 /** A thumbnail to show: its content key and how to get its encoded bytes. */
 export interface WallpaperThumbnailRequest {
   key: string;
+  /** Pre-generated still: used directly, with no runtime GPU draw, encoding or FileReader. */
+  url?: string;
   load: () => Promise<Blob>;
 }
 
@@ -32,12 +34,17 @@ export function useWallpaperThumbnail(request: WallpaperThumbnailRequest | null)
   const [url, setUrl] = useState<string | null>(null);
   const loadRef = useRef(request?.load);
   const key = request?.key ?? null;
+  const poster = request?.url;
 
   useEffect(() => {
     loadRef.current = request?.load;
   });
 
   useEffect(() => {
+    if (poster) {
+      setUrl(poster);
+      return;
+    }
     const load = loadRef.current;
     if (key === null || !load) {
       setUrl(null);
@@ -52,7 +59,7 @@ export function useWallpaperThumbnail(request: WallpaperThumbnailRequest | null)
     return () => {
       live = false;
     };
-  }, [key]);
+  }, [key, poster]);
 
-  return url;
+  return poster ?? url;
 }

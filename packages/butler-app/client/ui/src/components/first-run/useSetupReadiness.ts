@@ -47,7 +47,7 @@ export function useSetupReadiness(): SetupReadinessController {
     };
   }, [attempt]);
 
-  const settled = agent === "unsupported" || agent?.status === "ready" || agent?.status === "failed";
+  const settled = agent === "unsupported" || ((agent?.status === "ready" || agent?.status === "failed") && (!agent.memory_model || agent.memory_model.state === "ready" || agent.memory_model.state === "failed"));
   useEffect(() => {
     if (local.phase !== "ready" || settled) return undefined;
     let cancelled = false;
@@ -64,7 +64,7 @@ export function useSetupReadiness(): SetupReadinessController {
     void poll();
     const unsubscribe = subscribeLiveEvents(0, (event) => {
       const next = readinessFromEvent(event);
-      if (next && !cancelled) setAgent(next);
+      if (next && !cancelled) setAgent((previous) => ({ ...next, memory_model: previous && previous !== "unsupported" ? previous.memory_model : undefined }));
     }, () => undefined);
     return () => {
       cancelled = true;
@@ -74,6 +74,10 @@ export function useSetupReadiness(): SetupReadinessController {
   }, [local.phase, settled]);
 
   function retry(): void {
+    if (local.phase === "ready" && agent && agent !== "unsupported" && agent.status === "ready" && agent.memory_model?.state === "failed") {
+      retrySetupReadiness(true).then(setAgent).catch(() => setAttempt({ mode: "check" }));
+      return;
+    }
     if (local.phase === "failed" || agent === null || agent === "unsupported" || agent.status !== "failed") {
       setAttempt({ mode: "check" });
       return;

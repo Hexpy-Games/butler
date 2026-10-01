@@ -18,7 +18,7 @@ declare global {
   }
 }
 
-export type SessionFolderLaunchTarget = "vscode" | "terminal";
+export type SessionFolderLaunchTarget = "vscode" | "terminal" | "fileManager";
 
 export type SessionFolderBridgeCode =
   | "bridge_unavailable"

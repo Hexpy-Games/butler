@@ -824,6 +824,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     rename: "Rename",
     archive: "Archive",
     openSessionFolder: "Open work folder",
+    fileManager: "File manager",
     vsCode: "VS Code",
     terminal: "Terminal",
     loadingFolderTargets: "Checking available apps...",

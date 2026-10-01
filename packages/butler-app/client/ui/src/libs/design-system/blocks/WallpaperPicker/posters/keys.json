@@ -1,0 +1,22 @@
+{
+  "butler.bloom|light": "butler.bloom.light.png",
+  "butler.silk|light": "butler.silk.light.png",
+  "butler.riso-flow|light": "butler.riso-flow.light.png",
+  "butler.lamina|light": "butler.lamina.light.png",
+  "butler.diatom|light": "butler.diatom.light.png",
+  "butler.dusk|light": "butler.dusk.light.png",
+  "butler.shoreline|light": "butler.shoreline.light.png",
+  "butler.photo-clouds|light": "butler.photo-clouds.light.png",
+  "butler.photo-daisies|light": "butler.photo-daisies.light.png",
+  "butler.stipple|light": "butler.stipple.light.png",
+  "butler.bloom|dark": "butler.bloom.dark.png",
+  "butler.silk|dark": "butler.silk.dark.png",
+  "butler.riso-flow|dark": "butler.riso-flow.dark.png",
+  "butler.lamina|dark": "butler.lamina.dark.png",
+  "butler.diatom|dark": "butler.diatom.dark.png",
+  "butler.dusk|dark": "butler.dusk.dark.png",
+  "butler.shoreline|dark": "butler.shoreline.dark.png",
+  "butler.photo-clouds|dark": "butler.photo-clouds.dark.png",
+  "butler.photo-daisies|dark": "butler.photo-daisies.dark.png",
+  "butler.stipple|dark": "butler.stipple.dark.png"
+}
