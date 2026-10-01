@@ -288,8 +288,9 @@ function methods(harness: Harness, method: string) {
 }
 
 async function agree(harness: Harness): Promise<void> {
-  await waitFor(() => !buttonByText(harness.container, "동의하고 계속")?.disabled, "agree enabled");
-  await click(harness, "동의하고 계속");
+  if (buttonByText(harness.container, "시작하기")) await click(harness, "시작하기");
+  await waitFor(() => Boolean(buttonByText(harness.container, "동의하고 시작")) && !buttonByText(harness.container, "동의하고 시작")?.disabled, "agree enabled");
+  await click(harness, "동의하고 시작");
 }
 
 function card(harness: Harness, cardId: string): HTMLButtonElement {
@@ -298,12 +299,12 @@ function card(harness: Harness, cardId: string): HTMLButtonElement {
   return element;
 }
 
-test("welcome shows three consent lines and one button while Butler prepares in the background", async () => {
+test("welcome shows an introduction and start button while Butler prepares in the background", async () => {
   let release!: (value: { phase: string }) => void;
   const harness = await renderFirstRun({ setup: [new Promise((resolve) => { release = resolve; })] });
   expect(text(harness)).toContain("반갑습니다");
-  expect(harness.container.querySelectorAll('[role="listitem"]')).toHaveLength(3);
-  expect(text(harness)).toContain("바꾸기 전에 먼저 묻습니다");
+  expect(harness.container.querySelectorAll('[role="listitem"]')).toHaveLength(0);
+  expect(text(harness)).toContain("시작하기");
   expect(text(harness)).not.toMatch(/OAuth|credential|provider|endpoint|자동화/u);
   expect(harness.container.querySelector('[data-test-class="first-run-prep"]')?.textContent).toContain("Butler 준비 중");
   expect(harness.container.querySelector("ol")).toBeNull();
@@ -318,12 +319,12 @@ test("a failed preparation shows a plain reason inline, blocks consent and retri
   await waitFor(() => Boolean(harness.container.querySelector('[data-test-class="first-run-prep-failed"]')), "failure notice");
   expect(text(harness)).toContain("Butler를 시작하지 못했습니다.");
   expect(text(harness)).toContain("백그라운드 서비스가 멈췄습니다.");
-  expect(buttonByText(harness.container, "동의하고 계속")?.disabled).toBe(true);
-  expect(buttonByText(harness.container, "동의하고 계속")?.getAttribute("title")).toBe("Butler를 시작해야 계속할 수 있습니다");
+  expect(buttonByText(harness.container, "시작하기")?.disabled).toBe(true);
+  expect(buttonByText(harness.container, "시작하기")?.getAttribute("title")).toBe("Butler를 시작해야 계속할 수 있습니다");
   await click(harness, "다시 시도");
   await waitFor(() => text(harness).includes("준비됨"), "ready after retry");
   expect(methods(harness, "startSetup").map((call) => (call.input as { mode: string }).mode)).toEqual(["check", "check"]);
-  expect(buttonByText(harness.container, "동의하고 계속")?.disabled).toBe(false);
+  expect(buttonByText(harness.container, "시작하기")?.disabled).toBe(false);
   await unmount(harness);
 });
 
@@ -402,7 +403,7 @@ test("This computer joins the top cards when a local server answers, and its mod
   expect(methods(harness, "registerLocalModel")[0]!.input).toMatchObject({
     platform: "ollama", server_url: "http://127.0.0.1:11434", model_id: "gemma3:12b", provider_id: "local",
   });
-  const patch = methods(harness, "updateSettings")[0]!.input as Record<string, unknown>;
+  const patch = methods(harness, "updateSettings")[1]!.input as Record<string, unknown>;
   expect(patch).toMatchObject({ model: "local/gemma3:12b", language: "ko" });
   expect(patch.onboarding).toMatchObject({ consent_version: FIRST_RUN_CONSENT_VERSION });
   expect(harness.results[0]).toEqual({ cardId: "local" });
@@ -431,7 +432,7 @@ test("an API key is checked once after the paste debounce, saved, and connects t
   expect(methods(harness, "registerHostedModel")[0]!.input).toEqual({
     provider_id: "anthropic", model_id: "claude-sonnet-5", auth_type: "api_key", credential_id: "cred-new",
   });
-  const patch = methods(harness, "updateSettings")[0]!.input as SettingsView;
+  const patch = methods(harness, "updateSettings")[1]!.input as SettingsView;
   expect(patch).toMatchObject({ model: "anthropic/claude-sonnet-5", reasoning_effort: "medium" });
   expect(patch.worker_profiles.every((profile) => profile.reasoning_effort === "medium")).toBe(true);
   expect(typeof (methods(harness, "updateSettings").at(-1)!.input as SettingsView).onboarding?.completed_at).toBe("string");
@@ -540,7 +541,7 @@ test("a finished sign-in registers ChatGPT with its routine preset", async () =>
   await click(harness, card(harness, "chatgpt"));
   await waitFor(() => harness.results.length === 1, "completion", 5000);
   expect(methods(harness, "registerHostedModel")[0]!.input).toEqual({ provider_id: "openai", model_id: "gpt-6-sol", auth_type: "codex_oauth" });
-  expect(methods(harness, "updateSettings")[0]!.input).toMatchObject({ model: "openai/gpt-6-sol", reasoning_effort: "medium" });
+  expect(methods(harness, "updateSettings")[1]!.input).toMatchObject({ model: "openai/gpt-6-sol", reasoning_effort: "medium" });
   await unmount(harness);
 });
 
@@ -592,12 +593,11 @@ test("no local server: This computer waits in the grid and Check again probes ag
   await unmount(harness);
 });
 
-test("a newer consent version shows only the welcome and records consent", async () => {
+test("a newer consent version opens consent and records it before connecting", async () => {
   const harness = await renderFirstRun({ mode: "consent", settings: { language: "ko", onboarding: { consent_version: 0, completed_at: "2026-06-01" } } });
   await agree(harness);
-  await waitFor(() => harness.results.length === 1, "consent saved");
-  expect(harness.results[0]).toBeNull();
-  expect(text(harness)).not.toContain("어떤 AI와 일할까요?");
+  await waitFor(() => text(harness).includes("어떤 AI와 일할까요?"), "consent saved before connect");
+  expect(harness.results).toEqual([]);
   const patch = methods(harness, "updateSettings").at(-1)!.input as SettingsView;
   expect(patch.onboarding).toMatchObject({ consent_version: FIRST_RUN_CONSENT_VERSION, completed_at: "2026-06-01" });
   expect(typeof patch.onboarding?.accepted_at).toBe("string");
@@ -742,7 +742,7 @@ test("Run setup again with the same AI keeps the existing model defaults", async
   await waitFor(() => harness.results.length === 1, "completion");
   // The new key goes to the model already in use; the chat default, effort and Workers stay.
   expect(methods(harness, "registerHostedModel")[0]!.input).toMatchObject({ model_id: "claude-opus-5-5", credential_id: "cred-new" });
-  const patch = methods(harness, "updateSettings")[0]!.input as Record<string, unknown>;
+  const patch = methods(harness, "updateSettings")[1]!.input as Record<string, unknown>;
   expect(patch).not.toHaveProperty("model");
   expect(patch).not.toHaveProperty("reasoning_effort");
   expect(patch).not.toHaveProperty("worker_profiles");
@@ -762,7 +762,7 @@ test("Run setup again with a new AI applies that service's routine preset", asyn
   await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="chatgpt"]')), "chatgpt card");
   await click(harness, card(harness, "chatgpt"));
   await waitFor(() => harness.results.length === 1, "completion");
-  expect(methods(harness, "updateSettings")[0]!.input).toMatchObject({ model: "openai/gpt-6-sol", reasoning_effort: "medium" });
+  expect(methods(harness, "updateSettings")[1]!.input).toMatchObject({ model: "openai/gpt-6-sol", reasoning_effort: "medium" });
   await unmount(harness);
 });
 
