@@ -1,5 +1,6 @@
 import { appCopy } from "@/app/copy.ts";
 import { useComposerStore } from "./composerStore.ts";
+import { focusComposer } from "./editor/focusComposer";
 
 export function generalFallbackSuggestions() { return appCopy.briefing.general.suggestions; }
 export function projectFallbackSuggestions(name: string) { return appCopy.briefing.projectSuggestions(name); }
@@ -10,5 +11,5 @@ export function fillComposerWithTemplate(text: string) {
   const empty = !composer.text.trim() && !composer.contentParts;
   if (empty && composer.appendDraftText) return composer.appendDraftText(text);
   if (empty) composer.setText(text);
-  composer.textAreaRef?.current?.focus();
+  focusComposer(composer.textAreaRef?.current);
 }

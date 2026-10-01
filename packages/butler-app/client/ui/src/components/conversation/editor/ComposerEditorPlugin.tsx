@@ -8,12 +8,17 @@ import { $createSessionReferenceNode } from "./SessionReferenceNode";
 import { $readComposerContent, $replaceComposerContent } from "./serialization";
 import { registerComposerClipboard } from "./clipboard";
 import { $selectDropPoint } from "./drop-selection";
+import { registerComposerFocus } from "./composerFocus";
+import { focusComposer } from "./focusComposer";
+import { useHotkey } from "@/butler-ds";
 
 export function ComposerEditorPlugin() {
   const [editor] = useLexicalComposerContext();
   const text = useComposerStore(state => state.text);
   const parts = useComposerStore(state => state.contentParts);
   const savedSelection = useRef<BaseSelection | null>(null);
+  useHotkey("mod+shift+e", () => focusComposer(editor.getRootElement()), { enabled: true });
+  useEffect(() => registerComposerFocus(editor, savedSelection), [editor]);
   useEffect(() => {
     const desired = parts ?? { version: 1 as const, parts: text ? [{ type: "text" as const, text }] : [] };
     const current = editor.getEditorState().read($readComposerContent);
