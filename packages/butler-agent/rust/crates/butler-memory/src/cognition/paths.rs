@@ -44,6 +44,11 @@ impl CognitionPathEnvironment {
             .unwrap_or_else(|| self.cognition_root(data_root).join("memory"))
     }
 
+    /// Explicit rule files and their prompt index share this memory-root binding.
+    pub fn explicit_rules_root(&self, data_root: &Path) -> PathBuf {
+        explicit_memory_rules_root(&self.memory_root(data_root))
+    }
+
     /// The consolidation lock file every memory writer takes.
     pub fn consolidation_lock(&self, data_root: &Path) -> PathBuf {
         self.cognition_root(data_root)
@@ -55,4 +60,9 @@ fn trimmed(value: Option<&String>) -> Option<&str> {
     value
         .map(|value| butler_core::public_text::trim_js_whitespace(value))
         .filter(|value| !value.is_empty())
+}
+
+/// Explicit rule files and INDEX.md beneath a resolved memory root.
+pub fn explicit_memory_rules_root(memory_root: &Path) -> PathBuf {
+    memory_root.join("rules")
 }

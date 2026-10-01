@@ -49,12 +49,13 @@ pub(super) struct MemoryStartup<'a> {
     pub observer: &'a Arc<ConversationObserver>,
     pub work_streams: &'a Arc<WorkStreams>,
     pub stores: &'a RuntimeStores,
+    pub fresh: Option<butler_memory::cognition::FreshMemoryGeneration>,
     pub stop: &'a tokio_util::sync::CancellationToken,
 }
 
 impl MemoryStartup<'_> {
     pub(super) async fn open(
-        &self,
+        self,
         paths: &super::RuntimePaths,
         cognition_paths: &butler_memory::cognition::CognitionPathEnvironment,
         coordinator: Arc<butler_memory::coordination::CognitionWriteCoordinator>,
@@ -64,11 +65,14 @@ impl MemoryStartup<'_> {
     ) -> Result<MemorySync, BtccError> {
         let opened = super::stores::check_startup(self.stop).and_then(|()| {
             MemorySync::open(
-                &paths.data_root,
-                cognition_paths,
+                crate::host::memory_jobs::sync::MemorySyncStartup {
+                    data_root: &paths.data_root,
+                    paths: cognition_paths,
+                    unclean_previous_exit: paths.unclean_previous_exit,
+                    fresh: self.fresh,
+                },
                 coordinator,
                 provider,
-                paths.unclean_previous_exit,
                 embedding,
                 vector,
             )
@@ -133,4 +137,16 @@ pub(super) async fn open_observer(
         }
     };
     Ok((work_streams, observer))
+}
+
+/// Prompt rule binding uses the same resolved memory path as explicit writes.
+pub(super) fn prompt_paths(
+    paths: &super::RuntimePaths,
+    cognition: &butler_memory::cognition::CognitionPathEnvironment,
+) -> butler_runtime::context::PromptPaths {
+    butler_runtime::context::PromptPaths {
+        resource_root: paths.resource_root.clone(),
+        data_root: paths.data_root.clone(),
+        memory_rules_root: cognition.explicit_rules_root(&paths.data_root),
+    }
 }

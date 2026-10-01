@@ -160,7 +160,28 @@ async fn use_01_subscription_turn_reports_quota_usage_and_cost() -> Result<(), H
     let again = s.gw.get("/session-view?session_id=general").await?;
     assert_eq!(again.data()["usage"], usage);
 
-    let monitor = s.gw.get("/usage-monitor?since_hours=1").await?;
+    // A delivered chat precedes background extraction. Wait for its completed
+    // usage row, rather than racing it or guessing a delay. The empty meaning
+    // stub performs exactly one request and requires no further binding stages.
+    let monitor = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let monitor = s.gw.get("/usage-monitor?since_hours=1").await?;
+            if monitor.data()["model"]["byScopeUsage"]
+                .as_object()
+                .is_some_and(|scopes| {
+                    scopes.iter().any(|(scope, tokens)| {
+                        scope.starts_with("memory-extract:") && tokens["requestCount"] == 1
+                    })
+                })
+            {
+                return Ok::<_, HarnessError>(monitor);
+            }
+        }
+    })
+    .await
+    .map_err(|_| {
+        butler_e2e::e2e::harness_error("background extraction usage did not complete")
+    })??;
     assert_eq!(monitor.status, 200, "{}", monitor.text);
     let cost = &monitor.data()["cost"];
     assert_eq!(cost["available"], true, "{cost}");
@@ -175,8 +196,18 @@ async fn use_01_subscription_turn_reports_quota_usage_and_cost() -> Result<(), H
     assert_quota(&openai["remaining"], recorded.as_ref());
     if let Some(recorded) = &recorded {
         assert_session_usage(&usage, recorded);
-        let usd = cost["estimatedUsd"].as_f64().unwrap();
-        assert!((usd - recorded_cost(recorded)).abs() < 1e-15, "{cost}");
+        assert_monitor_cost(monitor.data(), recorded);
+        let session =
+            s.gw.get("/usage-monitor?session_id=general&since_hours=1")
+                .await?;
+        let session_cost = &session.data()["cost"];
+        assert_eq!(session.data()["model"]["requestCount"], 1);
+        assert_eq!(session_cost["byWork"].as_object().unwrap().len(), 1);
+        assert!(
+            (session_cost["estimatedUsd"].as_f64().unwrap() - recorded_cost(recorded)).abs()
+                < 1e-15,
+            "{session_cost}"
+        );
     }
 
     s.restart().await?;
@@ -187,4 +218,45 @@ async fn use_01_subscription_turn_reports_quota_usage_and_cost() -> Result<(), H
     assert_eq!(view.data()["usage"], usage, "usage changed across restart");
     assert_eq!(view.data()["context"]["auth_mode"], "subscription");
     s.finish().await
+}
+
+/// The install total includes real background spend, itemized separately from conversation work.
+fn assert_monitor_cost(monitor: &Value, recorded: &Recorded) {
+    let work = monitor["cost"]["byWork"].as_object().unwrap();
+    assert_eq!(work.len(), 2, "{monitor}");
+    let conversation = &work["conversation"];
+    assert_eq!(conversation["requestCount"], 1);
+    assert_eq!(
+        conversation["pricedModelRefs"],
+        json!(["openai/gpt-6-luna"])
+    );
+    assert!(
+        (conversation["estimatedUsd"].as_f64().unwrap() - recorded_cost(recorded)).abs() < 1e-15,
+        "{conversation}"
+    );
+    let memory = &work["memory"];
+    assert_eq!(memory["requestCount"], 1);
+    let scopes = monitor["model"]["byScopeUsage"].as_object().unwrap();
+    let (_, tokens) = scopes
+        .iter()
+        .find(|(scope, _)| scope.starts_with("memory-extract:"))
+        .expect("background memory tokens");
+    assert_eq!(tokens["requestCount"], 1, "{tokens}");
+    assert_eq!(tokens["promptTokens"], 100.0, "{tokens}");
+    assert_eq!(tokens["outputTokens"], 20.0, "{tokens}");
+    assert_eq!(memory["pricedModelRefs"], json!(["gpt-6-luna"]));
+    let background_usd = (100.0 * 0.10 + 20.0 * 0.50) / 1e6;
+    assert!(
+        (memory["estimatedUsd"].as_f64().unwrap() - background_usd).abs() < 1e-15,
+        "{memory}"
+    );
+    assert_eq!(monitor["model"]["requestCount"], 2);
+    assert!(
+        (monitor["cost"]["estimatedUsd"].as_f64().unwrap()
+            - recorded_cost(recorded)
+            - background_usd)
+            .abs()
+            < 1e-15,
+        "{monitor}"
+    );
 }

@@ -85,6 +85,8 @@ fn usage_row(index: u64, scope: &str, ts: i64) -> String {
 /// What the generated data adds up to.
 struct Expected {
     recent_rows: u64,
+    memory_rows: u64,
+    other_rows: u64,
     tool_calls: u64,
     tool_failures: u64,
 }
@@ -95,13 +97,22 @@ fn write_usage_log(data: &Path, now_ms: i64) -> Result<Expected, HarnessError> {
         data.join("metrics/prompt-cache-usage.jsonl"),
     )?);
     let mut recent_rows = 0;
+    let mut memory_rows = 0;
+    let mut other_rows = 0;
     for index in 0..ROWS {
         let age_index = i64::try_from(index).expect("usage row count fits i64");
         let scope = match index {
-            i if i < SESSION_ROWS => "btcc-guided:butler/app-general",
-            i if i < SESSION_ROWS + OTHER_SESSION_ROWS => "btcc-guided:butler/app-other",
-            i if i % 3 == 0 => "worker",
-            _ => "session-turn",
+            i if i < SESSION_ROWS => "btcc-guided:butler/app-general".to_owned(),
+            i if i < SESSION_ROWS + OTHER_SESSION_ROWS => "btcc-guided:butler/app-other".to_owned(),
+            i if i % 3 == 0 => {
+                memory_rows += 1;
+                format!("memory-extract:revision-{i}:meaning")
+            }
+            i if i % 5 == 0 => {
+                other_rows += 1;
+                "worker".to_owned()
+            }
+            _ => "session-turn".to_owned(),
         };
         // Old rows are 40 to 60 days old; every 20th row is under a day old.
         let recent = index % RECENT_EVERY == 0;
@@ -111,11 +122,13 @@ fn write_usage_log(data: &Path, now_ms: i64) -> Result<Expected, HarnessError> {
             40 * 86_400_000 + 1_000 * age_index
         };
         recent_rows += u64::from(recent);
-        writeln!(log, "{}", usage_row(index, scope, now_ms - age_ms))?;
+        writeln!(log, "{}", usage_row(index, &scope, now_ms - age_ms))?;
     }
     log.flush()?;
     Ok(Expected {
         recent_rows,
+        memory_rows,
+        other_rows,
         tool_calls: 0,
         tool_failures: 0,
     })
@@ -240,6 +253,7 @@ async fn use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), HarnessErro
     let (cold, all) = timed(&s.gw, "/usage-monitor").await?;
     assert!(cold < COLD, "all-time cold {cold:?}");
     assert_eq!(all["model"]["requestCount"], ROWS, "{all}");
+    assert_work_costs(&all, &expected);
     assert_eq!(
         all["tools"]["calls"],
         expected.tool_calls + 40 * 3,
@@ -255,6 +269,7 @@ async fn use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), HarnessErro
     assert!(warm < WARM, "all-time second read {warm:?} (cold {cold:?})");
     assert_eq!(again["tools"], all["tools"]);
     assert_eq!(again["model"], all["model"]);
+    assert_eq!(again["cost"], all["cost"]);
 
     let mut grown = fs::OpenOptions::new()
         .append(true)
@@ -293,6 +308,11 @@ async fn use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), HarnessErro
     let (took, session) = timed(&s.gw, "/usage-monitor?session_id=general").await?;
     assert!(took < WARM, "session after an appended row {took:?}");
     assert_eq!(session["model"]["requestCount"], SESSION_ROWS + 1);
+    assert_eq!(
+        session["cost"]["byWork"]["conversation"]["requestCount"],
+        SESSION_ROWS + 1
+    );
+    assert_eq!(session["cost"]["byWork"].as_object().unwrap().len(), 1);
     eprintln!(
         "USE-06 timings: 24h warm and session warm under {WARM:?}; all-time cold {cold:?}, warm {warm:?}"
     );
@@ -301,4 +321,29 @@ async fn use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), HarnessErro
 
 fn chrono_now() -> i64 {
     chrono::Utc::now().timestamp_millis()
+}
+
+/// More than 512 distinct memory revisions must retain all three work totals.
+fn assert_work_costs(view: &Value, expected: &Expected) {
+    let work = view["cost"]["byWork"].as_object().unwrap();
+    assert_eq!(work.len(), 3);
+    assert!(expected.memory_rows > 512);
+    let unit_usd = (600.0 * 0.10 + 400.0 * 0.01 + 200.0 * 0.50) / 1e6;
+    for (kind, count) in [
+        ("memory", expected.memory_rows),
+        ("other", expected.other_rows),
+        (
+            "conversation",
+            ROWS - expected.memory_rows - expected.other_rows,
+        ),
+    ] {
+        let bucket = &work[kind];
+        assert_eq!(bucket["requestCount"], count, "{bucket}");
+        assert_eq!(bucket["available"], true, "{bucket}");
+        assert!(
+            (bucket["estimatedUsd"].as_f64().unwrap() - count as f64 * unit_usd).abs() < 1e-8,
+            "{bucket}"
+        );
+    }
+    assert!((view["cost"]["estimatedUsd"].as_f64().unwrap() - ROWS as f64 * unit_usd).abs() < 1e-8);
 }

@@ -22,7 +22,7 @@ pub struct PromptEnvironment {
 pub struct PromptPaths {
     pub resource_root: PathBuf,
     pub data_root: PathBuf,
-    pub cognition_root: PathBuf,
+    pub memory_rules_root: PathBuf,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

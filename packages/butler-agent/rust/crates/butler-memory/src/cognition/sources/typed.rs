@@ -1,5 +1,6 @@
 //! Read-only explicit-rule source owner; task reports come from Work Records.
 
+use crate::cognition::explicit_memory_rules_root as rule_root;
 use std::{fs, path::Path};
 
 mod write;
@@ -317,10 +318,6 @@ fn read_binding(
         return Ok(None);
     }
     Ok(Some(binding))
-}
-
-fn rule_root(memory_root: &Path) -> std::path::PathBuf {
-    memory_root.join("rules")
 }
 
 fn unavailable(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
