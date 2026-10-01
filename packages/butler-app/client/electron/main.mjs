@@ -1192,6 +1192,10 @@ function configureWindowsProtocolRegistration() {
     isPackaged: app.isPackaged,
     execPath: process.execPath,
   });
+  // A portable App has no Squirrel stub; registering that missing executable
+  // would replace the user's protocol association with a temporary path.
+  if (!existsSync(settings.path) ||
+      !existsSync(join(dirname(settings.path), "Update.exe"))) return false;
   return app.setAsDefaultProtocolClient(
     WINDOWS_APP_PROTOCOL,
     settings.path,

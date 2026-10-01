@@ -58,6 +58,7 @@ $env:BUTLER_DATA = "$root/data/미리 보기 %USERPROFILE% !"
 $env:BUTLER_APP_SERVER_HOST = '127.0.0.1'
 $env:BUTLER_APP_SERVER_PORT = '0'
 $env:BUTLER_SECRET_STORE = 'file'
+$env:BUTLER_E2E_TIER = 'stub'
 $env:BUTLER_PROVIDER_QUOTA_POLLING = '0'
 # Do not turn the service-manager capability off: the real Windows path must work.
 New-Item -ItemType Directory -Force $env:HOME,$env:LOCALAPPDATA,$env:APPDATA,$env:BUTLER_DATA | Out-Null

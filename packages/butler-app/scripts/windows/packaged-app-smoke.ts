@@ -12,6 +12,7 @@ const data = join(root, "data");
 const pidFile = join(root, "app.pid");
 const exitFile = join(root, "app.exit");
 const owned = new Set<number>();
+const priorProtocol = protocolRegistration();
 const answer = "Windows Electron ready.";
 let calls = 0;
 const stub = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
@@ -36,6 +37,7 @@ const launcher = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Fil
   ...process.env, HOME: join(root, "home"), USERPROFILE: join(root, "home"),
   LOCALAPPDATA: join(root, "local"), APPDATA: join(root, "roaming"), BUTLER_DATA: data,
   BUTLER_APP_SERVER_PORT: String(serverPort), BUTLER_SECRET_STORE: "file",
+  BUTLER_E2E_TIER: "stub",
   OPENAI_API_KEY: "e2e-not-real", OPENAI_BASE_URL: `http://127.0.0.1:${stub.port}/v1`,
   BUTLER_PROVIDER_QUOTA_POLLING: "0", BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
 } });
@@ -89,9 +91,10 @@ try {
   assert(await portAvailable(serverPort), "Agent port remains open");
   assert(readJson("app/runtime/foreground/last-exit.json")?.graceful === true &&
     readJson("app/runtime/foreground/instance.json")?.clean_exit === true, "Unclean foreground shutdown");
+  assert(protocolRegistration() === priorProtocol, "Portable App changed the protocol registration");
   console.log(JSON.stringify({ ok: true, windowCreated: true, agentChild: true, authenticatedHealth: 200,
     stubTurns: 1, providerCalls: calls, messages: messages.length, processesChecked: owned.size,
-    quitExit: 0, leftoverProcesses: 0, portReleased: true, rawTextIncluded: false }));
+    quitExit: 0, leftoverProcesses: 0, portReleased: true, protocolUnchanged: true, rawTextIncluded: false }));
 } finally {
   cdp?.close();
   if (existsSync(pidFile)) {
@@ -122,6 +125,19 @@ function prepareData() {
 }
 function readJson(path: string): Record<string, any> | null {
   try { return JSON.parse(readFileSync(join(data, path), "utf8")); } catch { return null; }
+}
+function protocolRegistration(): string {
+  const script = `$key = Get-Item 'Registry::HKEY_CURRENT_USER\\Software\\Classes\\butler' -ErrorAction SilentlyContinue
+if (!$key) { 'absent'; exit 0 }
+@($key) + @(Get-ChildItem $key.PSPath -Recurse) | Sort-Object Name | ForEach-Object {
+  $item = $_
+  [ordered]@{ key = $item.Name; values = @($item.GetValueNames() | Sort-Object | ForEach-Object {
+    [ordered]@{ name = $_; kind = [string]$item.GetValueKind($_); value = $item.GetValue($_) }
+  }) }
+} | ConvertTo-Json -Depth 6 -Compress`;
+  const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8" });
+  assert(result.status === 0, "Could not inspect protocol registration");
+  return result.stdout.trim();
 }
 function alive(pid: number): boolean {
   try { process.kill(pid, 0); return true; } catch { return false; }
