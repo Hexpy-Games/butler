@@ -29,10 +29,19 @@ if (args[0] === "install") {
   const windows = process.platform === "win32";
   const installer = join(root, windows ? "install.ps1" : "install.sh");
   if (!existsSync(installer)) fail("install.sh is missing; run `npm pack` (its prepack step bundles it)");
+  const installerEnv = { BUTLER_VERSION: version, ...process.env };
+  if (windows) {
+    // A pwsh -> Node -> Windows PowerShell chain retains incompatible pwsh modules.
+    for (const key of Object.keys(installerEnv)) {
+      if (key.toLowerCase() === "psmodulepath") delete installerEnv[key];
+    }
+    installerEnv.PSModulePath = join(process.env.SystemRoot || "C:\\Windows",
+      "System32", "WindowsPowerShell", "v1.0", "Modules");
+  }
   run(windows ? "powershell.exe" : "sh", [
     ...(windows ? ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File"] : []),
     installer, ...args.slice(1),
-  ], { BUTLER_VERSION: version, ...process.env });
+  ], installerEnv);
 }
 
 if (process.platform === "win32") {
