@@ -24,6 +24,7 @@ fn capabilities_match_the_host() {
     assert_eq!(DIRECTORY_SYNC, unix);
 }
 
+// test-category: security
 #[test]
 fn replace_private_swaps_in_a_complete_owner_only_file() {
     let directory = scratch("replace");
@@ -35,11 +36,20 @@ fn replace_private_swaps_in_a_complete_owner_only_file() {
 
     replace_private(
         &path,
-        |file| file.write_all(b"after"),
+        |file| {
+            let staged = fs::read_dir(&directory)
+                .unwrap()
+                .map(|entry| entry.unwrap().path())
+                .find(|entry| *entry != path && *entry != neighbor)
+                .unwrap();
+            assert_eq!(is_private(&staged), Some(true));
+            file.write_all(b"after")
+        },
         std::convert::identity,
     )
     .unwrap();
     assert_eq!(fs::read_to_string(&path).unwrap(), "after");
+    assert_eq!(is_private(&path), Some(true));
     let after = fs::metadata(&path).unwrap();
     assert_eq!(is_owner_only(&after), OWNER_ONLY.then_some(true));
     // A replaced file is a new file, which readers can tell apart.
