@@ -70,6 +70,8 @@ fn supersede(
     }
 
     if changed > 0 {
+        transaction.execute("UPDATE memory_projection_jobs SET hot_cache_state=?1,hot_cache_next_attempt_at=NULL,hot_cache_attempt_count=0 WHERE episode_id=?2", params![super::StageWrite::pending().json()?,input.episode_id]).map_err(db_error)?;
+
         transaction
             .execute(
                 "UPDATE memory_state SET value=CAST(value AS INTEGER)+1 WHERE key='graph_revision'",

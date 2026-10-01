@@ -1,4 +1,4 @@
-//! MEM-HOT-ACTIVE: regression reproduction; pending an approved refresh design.
+//! MEM-HOT-ACTIVE: live refresh without embeddings and migrated-cache retention.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -33,6 +33,10 @@ async fn until(mut ready: impl FnMut() -> bool) {
     })
     .await
     .expect("memory job did not reach its durable completion barrier");
+}
+
+fn cache_complete(graph: &Path, turn: &str) -> bool {
+    readonly(graph).query_row("SELECT COUNT(*) FROM memory_projection_jobs j JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id WHERE c.source_key=?1 AND json_extract(j.semantic_graph_state,'$.state')='complete' AND json_extract(j.hot_cache_state,'$.state')='complete'", [format!("conversation_turn:{turn}")], |row| row.get::<_, i64>(0)).unwrap() == 1
 }
 
 fn hot_documents(data: &Path) -> Vec<String> {
@@ -98,11 +102,24 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
     until(|| readonly(&graph).query_row(
         "SELECT COUNT(*) FROM memory_chunks WHERE source_key=?1 AND summary_status='complete' AND summary LIKE '%blue iris%'",
         [format!("conversation_turn:{turn_id}")], |row| row.get::<_, i64>(0)).unwrap() == 1).await;
+    until(|| cache_complete(&graph, &turn_id)).await;
+    let refreshed = std::fs::read(&cache)?;
+    let refreshed_modified = std::fs::metadata(&cache)?.modified()?;
+    assert_ne!(before, refreshed, "cache must refresh before restart");
+    assert!(String::from_utf8_lossy(&refreshed).contains("blue iris"));
     let first_documents = hot_documents(&s.sandbox.data);
 
     // Restart drives the first maintenance tick immediately after readiness.
     // Clear only our fixture's daily markers, with a fixed clock after 04:00.
     s.agent.terminate().await?;
+    // Migration retains physical entries without outcome rows. Re-run the real
+    // stage with no new window summary; it must keep the valid installed fact.
+    let db = Connection::open(&graph).unwrap();
+    db.execute("DELETE FROM memory_hot_cache_outcomes", [])
+        .unwrap();
+    db.execute("UPDATE memory_projection_windows SET output_json=json_remove(output_json,'$.summary') WHERE job_id IN (SELECT j.job_id FROM memory_projection_jobs j JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id WHERE c.source_key=?1)", [format!("conversation_turn:{turn_id}")]).unwrap();
+    db.execute("UPDATE memory_projection_jobs SET hot_cache_state='{\"state\":\"pending\"}' WHERE episode_id IN (SELECT memory_chunk_id FROM memory_chunks WHERE source_key=?1)", [format!("conversation_turn:{turn_id}")]).unwrap();
+    db.close().unwrap();
     for job in ["session-sync", "consolidation-cycle"] {
         std::fs::remove_file(s.sandbox.data.join(format!("state/scheduler/{job}.json")))?;
     }
@@ -116,6 +133,17 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
         })
     })
     .await;
+    until(|| cache_complete(&graph, &turn_id)).await;
+    assert_eq!(
+        String::from_utf8_lossy(&refreshed),
+        std::fs::read_to_string(&cache)?,
+        "valid migrated cache entry was lost during an empty refresh"
+    );
+    assert_eq!(
+        refreshed_modified,
+        std::fs::metadata(&cache)?.modified()?,
+        "unchanged refresh replaced cache"
+    );
     let sync: Value = serde_json::from_slice(&std::fs::read(
         s.sandbox.data.join("state/scheduler/session-sync.json"),
     )?)?;
@@ -134,8 +162,10 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
         .await?;
     assert_eq!(reply.status, 201, "{}", reply.text);
     let chat = reply.data()["session"]["id"].as_str().unwrap();
-    let (_, turn) = s.turn(chat, "What flower do I prefer?").await?;
+    let (later_turn_id, turn) = s.turn(chat, "What flower do I prefer?").await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
+    until(|| cache_complete(&graph, &later_turn_id)).await;
+    until(|| readonly(&graph).query_row("SELECT COUNT(*) FROM memory_projection_jobs WHERE json_extract(hot_cache_state,'$.state')='pending'", [], |row| row.get::<_, i64>(0)).unwrap() == 0).await;
     let after = std::fs::read(&cache)?;
     let later_documents = hot_documents(&s.sandbox.data);
     let db = readonly(&graph);
@@ -151,7 +181,7 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
     );
     drop(db);
     s.finish().await?;
-    // Keep the expected behavior assertion red until the owner approves a design.
+    assert_eq!(pending, 0, "all pending cache jobs must drain");
     assert!(
         before != after
             && later_documents
