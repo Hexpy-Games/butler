@@ -83,11 +83,10 @@ test("starter suggestions keep locale parity", () => {
 test("starter suggestions cover the everyday tasks Butler can do", () => {
   const { general, project } = suggestionCopy(getAppCopy("en-US"), "Garden");
   expect(general.map((suggestion) => suggestion.id)).toEqual([
+    "organize-download-folder",
     "summarize-document",
     "draft-reply",
     "morning-briefing",
-    "plan-week",
-    "explain-simply",
   ]);
   expect(project.map((suggestion) => suggestion.id)).toEqual([
     "folder-tour",
@@ -105,8 +104,6 @@ test("starter suggestions cover the everyday tasks Butler can do", () => {
   expect(general.filter((suggestion) => suggestion.template).map((suggestion) => suggestion.id)).toEqual([
     "summarize-document",
     "draft-reply",
-    "morning-briefing",
-    "explain-simply",
   ]);
   expect(project.filter((suggestion) => suggestion.template).map((suggestion) => suggestion.id)).toEqual([
     "organize-files",
