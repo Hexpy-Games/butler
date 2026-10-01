@@ -10,6 +10,14 @@ function Assert-PrivateAcl {
     }
 }
 
+function Invoke-PreviewLauncher {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+    # Expand the path once; literal percent/exclamation characters in its value
+    # must survive cmd's parsing. All arguments here are fixed smoke commands.
+    $env:BUTLER_E2E_LAUNCHER = $launcher
+    & $env:ComSpec /d /v:off /s /c ('""%BUTLER_E2E_LAUNCHER%" ' + ($Arguments -join ' ') + '"')
+}
+
 # Public installer/CLI/browser smoke. Never emit connection codes or credentials.
 $ErrorActionPreference = 'Stop'
 $root = Join-Path $env:RUNNER_TEMP ('installed-preview-' + [guid]::NewGuid())
@@ -27,7 +35,7 @@ $env:BUTLER_APP_SERVER_PORT = '0'
 $env:BUTLER_SECRET_STORE = 'file'
 $env:BUTLER_PROVIDER_QUOTA_POLLING = '0'
 # Do not turn the service-manager capability off: the real Windows path must work.
-New-Item -ItemType Directory -Force $env:HOME,$env:LOCALAPPDATA,$env:BUTLER_DATA | Out-Null
+New-Item -ItemType Directory -Force $env:HOME,$env:LOCALAPPDATA,$env:APPDATA,$env:BUTLER_DATA | Out-Null
 $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0)
 $listener.Start(); $port = $listener.LocalEndpoint.Port; $listener.Stop()
 $files = Join-Path $root 'downloads'
@@ -59,17 +67,17 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'npm Windows install failed' }
     node "$root/package/bin/butler-install.js" --version
     if ($LASTEXITCODE -ne 0) { throw 'npm installed-command forwarding failed' }
-    & $launcher --version
+    Invoke-PreviewLauncher --version
     if ($LASTEXITCODE -ne 0) { throw '--version failed' }
-    $status = (& $launcher status --json | ConvertFrom-Json)
+    $status = (Invoke-PreviewLauncher status --json | ConvertFrom-Json)
     if (!$status.ok -or $status.data.services.summary.online -ne 1) { throw 'Status did not report one online service' }
     $record = Get-Content "$env:BUTLER_DATA/state/butler-agent-native-service.json" -Raw | ConvertFrom-Json
     $pidBefore = $record.pid
-    & $launcher start --json | Out-Null
+    Invoke-PreviewLauncher start --json | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Idempotent start failed' }
     $record = Get-Content "$env:BUTLER_DATA/state/butler-agent-native-service.json" -Raw | ConvertFrom-Json
     if ($record.pid -ne $pidBefore) { throw 'Start created a second instance' }
-    $open = (& $launcher open --no-browser --json | ConvertFrom-Json)
+    $open = (Invoke-PreviewLauncher open --no-browser --json | ConvertFrom-Json)
     if (!$open.ok -or $open.data.browserOpened) { throw 'Open failed' }
     try { Invoke-WebRequest "$($record.app_endpoint)/sessions" -UseBasicParsing | Out-Null; throw 'Unauthenticated API allowed' }
     catch { if (!$_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 401) { throw } }
@@ -88,20 +96,20 @@ try {
     Assert-PrivateAcl "$env:BUTLER_DATA/app/runtime/auth/local-agent-auth.json"
     Assert-PrivateAcl "$env:BUTLER_DATA/app/runtime/auth/local-admin.json"
     Assert-PrivateAcl "$env:BUTLER_DATA/state/app-gateway/project-folder-token-secret"
-    $startup = (& $launcher startup enable --json | ConvertFrom-Json)
+    $startup = (Invoke-PreviewLauncher startup enable --json | ConvertFrom-Json)
     if ($startup.ok -or ($startup | ConvertTo-Json -Depth 10) -notmatch 'not supported on Windows yet') { throw 'Startup did not report the preview limitation' }
-    & $launcher restart --json | Out-Null
+    Invoke-PreviewLauncher restart --json | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Restart failed' }
     $after = Get-Content "$env:BUTLER_DATA/state/butler-agent-native-service.json" -Raw | ConvertFrom-Json
     if ($after.pid -eq $pidBefore) { throw 'Restart did not replace instance' }
-    & $launcher stop --json | Out-Null
+    Invoke-PreviewLauncher stop --json | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Stop failed' }
-    $status = (& $launcher status --json | ConvertFrom-Json)
+    $status = (Invoke-PreviewLauncher status --json | ConvertFrom-Json)
     if (!$status.ok -or $status.data.services.summary.online -ne 0) { throw 'Service remained online' }
     $current = (Get-Content "$env:LOCALAPPDATA/Butler/agent/current" -Raw).Trim()
     "BUTLER_E2E_INSTALLED_ROOT=$env:LOCALAPPDATA/Butler/agent/$current" >> $env:GITHUB_ENV
     'PASS installed ZIP: version, start, single instance, status, browser UI/assets, cookie auth, private DATA/tokens, restart, stop'
 } finally {
-    if (Test-Path $launcher) { & $launcher stop --json | Out-Null }
+    if (Test-Path $launcher) { Invoke-PreviewLauncher stop --json | Out-Null }
     Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
 }

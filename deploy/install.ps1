@@ -103,7 +103,9 @@ function Enable-ButlerInstallation {
     }
     if (@($env:PATH -split ';') -notcontains $bin) { $env:PATH += ";$bin" }
     if ($start) {
-        & $launcher start
+        # PowerShell routes .cmd paths through cmd, which expands literal % in
+        # the filename. Start the installed native executable without that shell.
+        & "$target/butler-agent.exe" --installation-root $target --resource-root "$target/resources" start
         if ($LASTEXITCODE -ne 0) { throw 'Installed; start failed. Run: butler start' }
     }
 }
