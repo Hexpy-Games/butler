@@ -3,11 +3,20 @@ export const LOCALES = ["ko", "en"] as const;
 export type Locale = (typeof LOCALES)[number];
 export const DEFAULT_LOCALE: Locale = "ko";
 
+/**
+ * Locales that must mirror every published page of the default locale. While
+ * a locale is not listed, the content test (links.test.ts) prints its missing
+ * and out-of-shape pages as a report; listing it turns that report into a
+ * failure. The English manual is complete: a new or changed Korean page
+ * needs its English page in the same change.
+ */
+export const COMPLETE_LOCALES: readonly Locale[] = ["en"];
+
 export const SECTIONS = [
   { id: "getting-started", title: { ko: "시작하기", en: "Getting started" } },
   { id: "basics", title: { ko: "기본 사용", en: "Basics" } },
   { id: "projects", title: { ko: "프로젝트", en: "Projects" } },
-  { id: "scheduled-tasks", title: { ko: "예약 작업", en: "Scheduled tasks" } },
+  { id: "scheduled-tasks", title: { ko: "예약 작업", en: "Schedules" } },
   { id: "models", title: { ko: "모델", en: "Models" } },
   { id: "extensions", title: { ko: "확장", en: "Extensions" } },
   { id: "personalization", title: { ko: "개인화", en: "Personalization" } },

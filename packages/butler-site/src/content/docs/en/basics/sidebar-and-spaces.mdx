@@ -1,0 +1,128 @@
+---
+title: "Sidebar and spaces"
+description: "Organize conversations and projects into spaces."
+section: basics
+order: 2
+status: published
+---
+
+The sidebar is where you find and organize conversations and projects. The list of conversations, projects and groups in the sidebar is called the **Space**. Create groups to arrange it the way you want.
+
+## Sidebar layout
+
+The sidebar has these items, from the top.
+
+- **New conversation** — Starts a new conversation.
+- **Search** — Opens the [command palette](/en/help/basics/command-palette/). You can also press <span data-mod-key><Kbd keys={["⌘", "K"]} label="Command K" /></span>.
+- **Favorites** — Shows up to two pinned conversations and projects. If there are more, click **Show all favorites**.
+- **All**, **Recent**, **Running** — Tabs that change how the list is shown.
+- **Space** — Shows conversations, projects and groups as a tree.
+- **Settings** — Sits at the bottom of the sidebar.
+
+**General**, at the top of the **All** tab, is the default conversation and is always there. You cannot move, rename, archive or pin it.
+
+### Switch list views
+
+- **All** — Shows the group and project structure as a tree. Dragging to organize works only on this tab.
+- **Recent** — Lists every conversation by last activity. Each conversation shows its location and the time of its last activity.
+- **Running** — Shows only conversations that are working now or need your attention. A **Work status** list follows below, where you can check each work stage and the number of steps done.
+
+When the list is long, a **More** item appears at the end. The number in parentheses is how many items are not shown yet.
+
+## Create a group
+
+A group is a folder that holds conversations and projects.
+
+<Steps>
+  1. On the **All** tab, click the **Create group** button (+) next to the **Space** heading.
+  2. Enter a **Group name**.
+  3. Click **Save**.
+</Steps>
+
+To create a group inside a group or project, choose **Create subgroup** from that row's menu.
+
+When you drag a conversation onto another conversation, **Group together** appears. Drop it there and enter a group name to create a group that holds both conversations. You can group only conversations in the same project, or conversations that are both outside a project.
+
+## Move and reorder items
+
+### Drag to move
+
+<Steps>
+  1. Open the **All** tab.
+  2. Drag a conversation, project or group row and drop it where you want it.
+     - Drop it above or below another row to change the order.
+     - Drop it on a group or project to move it inside.
+     - Drop it on the **Move to space root** area at the end of the list to move it to the top level.
+</Steps>
+
+While you drag, move the pointer to the top or bottom edge of the list and the list scrolls automatically.
+
+### Move from the menu
+
+<Steps>
+  1. From the row's menu, choose **Move…**.
+  2. In the **Move to** dialog, choose a group or project. Enter a name in the field to find a location, or choose **Space root**.
+</Steps>
+
+### Moves that change the project
+
+When you move a conversation to another project or out of a project, the **Change this conversation's workspace?** dialog opens. Click **Move** to keep the conversation history and existing files as they are. From then on, work uses the work folder and project knowledge of the new location.
+
+## Row menu
+
+Hover over a row to show the menu button (⋯). You can also right-click the row or press and hold it to open the same menu.
+
+- **Reference in message** — Adds this conversation to the composer as a reference. You can also drag the conversation row into the composer.
+- **Project dashboard**, **New conversation** — Only on project rows.
+- **Rename** — Renames the conversation, project or group.
+- **Move…** — Opens the dialog for choosing a location.
+- **Create subgroup** — On group and project rows.
+- **Pin** / **Unpin** — On conversation and project rows.
+- **Archive** — Hides the conversation or project from the list and sends it to the archive. Groups do not have it.
+- **Delete project** — Only on project rows.
+- **Dissolve group** — Removes only the group and moves the items inside it to where the group was.
+
+## Favorites
+
+Pin the conversations and projects you open often to **Favorites** at the top of the sidebar.
+
+- From the row menu, choose **Pin**.
+- For a conversation, you can also hover over the icon on the left of the row and click it to pin or unpin.
+
+You cannot pin groups to favorites.
+
+## Archive and restore
+
+<Steps>
+  1. From the row menu, choose **Archive**. For an open conversation, you can also choose **Archive** from the menu (⋯) on the right of the title bar.
+  2. To see archived items, choose **Archive** from the menu (⋯) next to the **Space** heading. The [**Archives**](/en/help/settings/#archives) screen in Settings opens.
+  3. Click **Unarchive** to return an item to the sidebar list, or click **Delete** to delete it permanently after you confirm.
+</Steps>
+
+When you archive a project, its conversations are hidden from the list too.
+
+## Hide and resize the sidebar
+
+- Use the **Hide sidebar** / **Show sidebar** button to collapse and expand the sidebar.
+- Drag the right edge of the sidebar to change its width. If you drag it narrower than the minimum width, the sidebar hides.
+- With keyboard focus on the edge, you can also adjust the width with <Kbd keys={["←"]} label="Left arrow" /> and <Kbd keys={["→"]} label="Right arrow" />.
+- When the window gets narrow, the sidebar and the right panel close automatically. When you widen the window again, they return to their previous state.
+
+## Notes
+
+<Notice tone="warning">
+  **Dissolve group** and moves that do not change the project apply immediately, without confirmation. Conversations and projects removed with **Delete** in the archive cannot be restored. Deleting a project does not delete its local folder.
+</Notice>
+
+<Notice tone="info">
+  You cannot move a group or project into another project. You cannot put other items inside a conversation. A conversation with work in progress can move to another project after the work finishes.
+</Notice>
+
+## Related pages
+
+<CardGrid>
+  <DocCard slug="basics/command-palette" />
+  <DocCard slug="basics/conversation" />
+  <DocCard slug="basics/right-panel" />
+  <DocCard slug="projects" />
+</CardGrid>
