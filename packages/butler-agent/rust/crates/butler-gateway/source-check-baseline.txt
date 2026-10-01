@@ -29,7 +29,7 @@ src/gateway/application/projects/dashboard/source.rs	get	153
 src/gateway/application/projects/dashboard/statistics.rs	get	84
 src/gateway/application/projects/dashboard/statistics/app.rs	read_turns	120
 src/gateway/application/projects/dashboard/statistics/ledger.rs	apply_history	135
-src/gateway/application/retry.rs	AppApplication::retry_turn_owned	104
+src/gateway/application/retry.rs	AppApplication::retry_turn_owned	100
 src/gateway/application/retry/source.rs	retry_snapshot	112
 src/gateway/application/send.rs	AppApplication::send_with_attachment_source	170
 src/gateway/application/session_branches/reservation.rs	AppApplication::reserve_branch	128

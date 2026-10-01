@@ -3,7 +3,8 @@ use super::{RuntimePaths, setup};
 use crate::host::{EmbeddingOwner, SystemIdentity};
 use butler_core::locale::LocaleCollation;
 use butler_memory::cognition::{
-    CognitionPathEnvironment, GenerationVectorAdapter, initialize_fresh_memory_generation,
+    CognitionPathEnvironment, FreshMemoryGeneration, GenerationVectorAdapter,
+    prepare_fresh_memory_generation,
 };
 use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_models::models::ModelConfigurationClock;
@@ -18,6 +19,7 @@ pub(super) async fn open(
         Arc<CognitionWriteCoordinator>,
         Arc<EmbeddingOwner>,
         Arc<GenerationVectorAdapter>,
+        Option<FreshMemoryGeneration>,
     ),
     BtccError,
 > {
@@ -30,9 +32,9 @@ pub(super) async fn open(
     .await
     .map_err(setup)?;
     // Preserve the existing storage bootstrap's no-write refusal for old App data.
-    if supported {
+    let fresh = if supported {
         let (major, minor, patch) = unicode_normalization::UNICODE_VERSION;
-        initialize_fresh_memory_generation(
+        prepare_fresh_memory_generation(
             paths.data_root.clone(),
             cognition_paths.clone(),
             coordinator.clone(),
@@ -41,13 +43,15 @@ pub(super) async fn open(
             LocaleCollation::implementation_version().into(),
         )
         .await
-        .map_err(setup)?;
-    }
+        .map_err(setup)?
+    } else {
+        None
+    };
     let embedding = Arc::new(EmbeddingOwner::new(paths.data_root.clone()).map_err(setup)?);
     let vectors = Arc::new(GenerationVectorAdapter::new(
         paths.data_root.clone(),
         cognition_paths.clone(),
         embedding.clone(),
     ));
-    Ok((coordinator, embedding, vectors))
+    Ok((coordinator, embedding, vectors, fresh))
 }

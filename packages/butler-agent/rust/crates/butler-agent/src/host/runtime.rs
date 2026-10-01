@@ -88,7 +88,7 @@ impl AgentRuntime {
         let web_access = process_services.web_access;
         let (prompt_clock, date_parser) = process_clocks()?;
         let metric_files = Arc::new(MetricFiles::new(paths.data_root.clone()));
-        let (coordinator, embedding, vectors) =
+        let (coordinator, embedding, vectors, fresh_memory) =
             memory_bootstrap::open(&paths, &environment.cognition_paths).await?;
         let files = WorkspaceFiles::new(4);
         let image_files = Arc::new(butler_gateway::gateway::AppImageFiles::new(
@@ -115,6 +115,7 @@ impl AgentRuntime {
             observer: &observer,
             work_streams: &work_streams,
             stores: &stores,
+            fresh: fresh_memory,
             stop,
         }
         .open(
@@ -126,7 +127,6 @@ impl AgentRuntime {
             vectors.clone(),
         )
         .await?;
-        let cognition_root = environment.cognition_paths.cognition_root(&paths.data_root);
         let capsule_service = Arc::new(ProjectCapsuleService::new(
             paths.data_root.clone(),
             environment.cognition_paths.clone(),
@@ -139,7 +139,7 @@ impl AgentRuntime {
         ));
         let profile = defaults::open_profile(
             &paths,
-            cognition_root.clone(),
+            environment.cognition_paths.cognition_root(&paths.data_root),
             writes,
             coordinator.clone(),
             models.provider.clone(),

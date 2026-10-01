@@ -4,7 +4,9 @@
 //! - Replay: strict. Each request's match key must equal a recorded key; the
 //!   n-th identical request gets the n-th recording (the last one repeats for
 //!   retried identical requests). A miss answers 501 and is reported as a
-//!   `HARNESS_ERROR` by [`Provider::finish`] — never a fallback reply.
+//!   `HARNESS_ERROR` by [`Provider::finish`]. Background meaning extraction
+//!   has an explicit synthetic stub matched against its full prompt contract;
+//!   recorded extraction exchanges take precedence over that stub.
 //! - Record: forwards to the live upstream, streams the reply back unchanged,
 //!   and keeps a sanitized copy (one chunk per SSE event, with arrival delay).
 
@@ -23,6 +25,7 @@ use super::matching;
 use super::sanitize::Placeholders;
 use super::{HarnessError, harness_error};
 
+mod memory;
 mod record;
 mod replay;
 
@@ -72,6 +75,7 @@ struct State {
     inflight: std::sync::atomic::AtomicUsize,
     library: Mutex<Vec<(String, ResponseRecord)>>,
     requests: Mutex<Vec<Value>>,
+    memory_requests: Mutex<Vec<Value>>,
 }
 
 pub struct Provider {
@@ -144,6 +148,7 @@ impl Provider {
             inflight: std::sync::atomic::AtomicUsize::new(0),
             library: Mutex::new(Vec::new()),
             requests: Mutex::new(Vec::new()),
+            memory_requests: Mutex::new(Vec::new()),
         });
         let shared = state.clone();
         let app = axum::Router::new().fallback(move |request: Request<Body>| {
@@ -223,14 +228,20 @@ impl Provider {
         lock(&self.state.misses).clone()
     }
 
-    /// Number of provider requests answered so far (harness bookkeeping).
+    /// Number of interactive provider requests answered so far.
     pub fn served(&self) -> u32 {
         *lock(&self.state.served)
     }
 
-    /// In-memory request snapshots for public-path E2E assertions.
+    /// Interactive request snapshots for public-path E2E assertions.
+    /// Background extraction is available through `memory_requests`.
     pub fn requests(&self) -> Vec<Value> {
         lock(&self.state.requests).clone()
+    }
+
+    /// Background meaning calls have their own strict stub contract and trace.
+    pub fn memory_requests(&self) -> Vec<Value> {
+        lock(&self.state.memory_requests).clone()
     }
 
     /// Replay: fails on unmatched requests. Record: waits for in-flight
@@ -326,14 +337,19 @@ fn replay_recorded(
 }
 
 async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
-    *lock(&state.served) += 1;
     let (parts, body) = request.into_parts();
     let path = parts.uri.path().to_owned();
     let bytes = axum::body::to_bytes(body, 64 * 1024 * 1024)
         .await
         .unwrap_or_default();
     let json: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
-    if matches!(&state.mode, Mode::Replay(_)) {
+    let memory = memory::matches(&json);
+    if memory && matches!(&state.mode, Mode::Replay(_)) {
+        lock(&state.memory_requests).push(json.clone());
+    } else {
+        *lock(&state.served) += 1;
+    }
+    if !memory && matches!(&state.mode, Mode::Replay(_)) {
         lock(&state.requests).push(json.clone());
     }
     learn_echo_ids(&state, &String::from_utf8_lossy(&bytes));
@@ -342,6 +358,9 @@ async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
         Mode::Replay(cassette) => {
             if let Some(response) = replay_recorded(&state, cassette, &key) {
                 return response;
+            }
+            if memory {
+                return replay(&state, &memory::response(), None);
             }
             // A declared stall may target a request whose live round was
             // cut off by a crash during recording: hold it open, answer nothing.

@@ -28,7 +28,9 @@ pub use cutover::{
     CutoverStamp, RollbackOutcome, RollbackStep, activate as activate_memory_rebuild,
     rollback as rollback_memory_rebuild,
 };
-pub use initialize::{initialize_empty_memory_generation, initialize_fresh_memory_generation};
+pub use initialize::{
+    FreshMemoryGeneration, initialize_empty_memory_generation, prepare_fresh_memory_generation,
+};
 pub use manifest::{
     AcceptanceBinding, ActiveDescriptor, CanonicalSnapshot, EmbeddingSlot, GenerationFormat,
     GenerationManifest, GenerationReadiness, GenerationState, InitializationOrigin, ProjectionMode,

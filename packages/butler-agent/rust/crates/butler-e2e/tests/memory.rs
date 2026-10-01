@@ -175,6 +175,10 @@ async fn mem_02_fresh_memory_is_usable_in_another_chat_after_restart() -> Result
         std::fs::read(descriptor).ok(),
         "restart changed generation"
     );
+    assert!(
+        !s.provider()?.memory_requests().is_empty(),
+        "fresh generation did not enable background extraction"
+    );
     s.finish().await
 }
 
@@ -209,4 +213,68 @@ fn memory_response(item: &Value) -> butler_e2e::e2e::cassette::ResponseRecord {
             })
             .collect(),
     }
+}
+
+/// Fresh generation publication is owned by memory maintenance, not readiness.
+#[tokio::test]
+async fn mem_03_bootstrap_does_not_hold_service_readiness() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("MEM-03")?
+        .env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1")
+        .start()
+        .await?;
+    let descriptor = s
+        .sandbox
+        .data
+        .join("cognition/memory/active-generation.json");
+    assert!(!descriptor.exists(), "bootstrap ran despite hold");
+    assert!(s.gw.healthy().await, "bootstrap blocked readiness");
+    std::fs::write(
+        s.sandbox.data.join("state/e2e-memory-bootstrap-release"),
+        b"",
+    )?;
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
+    while !descriptor.exists() {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "fresh generation missing"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    let active: Value = serde_json::from_slice(&std::fs::read(&descriptor)?)?;
+    assert!(active["generation_id"].is_string(), "{active}");
+    s.finish().await
+}
+
+/// Existing partial memory and typed sources retain the rebuild path untouched.
+#[tokio::test]
+async fn mem_04_bootstrap_preserves_nonfresh_memory() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    for relative in [
+        "cognition/memory/partial",
+        "tasks/previous/report.txt",
+        "cognition/box/previous.md",
+    ] {
+        let setup = Setup::new("MEM-04")?;
+        let source = setup.sandbox.data.join(relative);
+        std::fs::create_dir_all(source.parent().unwrap())?;
+        std::fs::write(&source, b"existing source")?;
+        let mut s = setup.start().await?;
+        s.restart().await?;
+        assert_eq!(std::fs::read(&source)?, b"existing source");
+        assert!(
+            !s.sandbox
+                .data
+                .join("cognition/memory/active-generation.json")
+                .exists()
+        );
+        assert!(
+            !s.sandbox
+                .data
+                .join("cognition/consolidation/locks/consolidation.lock.coord.sqlite")
+                .exists()
+        );
+        s.finish().await?;
+    }
+    Ok(())
 }
