@@ -23,7 +23,6 @@ function Install-Butler {
         $version = $release.tag_name -replace '^v', ''
     }
     if ($version -notmatch '^[A-Za-z0-9][A-Za-z0-9._+\-]{0,63}$' -or $version.Contains('..')) { throw 'Invalid version' }
-    $baseVersion = $version.Split('-')[0]
     $base = if ($env:BUTLER_INSTALL_BASE_URL) { $env:BUTLER_INSTALL_BASE_URL.TrimEnd('/') } else { "https://github.com/Hexpy-Games/butler/releases/download/v$version" }
     $agentHome = if ($env:BUTLER_AGENT_HOME) { $env:BUTLER_AGENT_HOME } else { Join-Path $env:LOCALAPPDATA 'Butler/agent' }
     $bin = if ($env:BUTLER_BIN_DIR) { $env:BUTLER_BIN_DIR } else { Join-Path $env:LOCALAPPDATA 'Butler/bin' }
@@ -42,7 +41,7 @@ function Install-Butler {
     New-Item -ItemType Directory $temp | Out-Null
     $stage = $null
     try {
-        $archive = "butler-agent-$baseVersion-windows-x64.zip"
+        $archive = "butler-agent-$version-windows-x64.zip"
         $sums = (Invoke-WebRequest "$base/butler-$version-SHA256SUMS" -UseBasicParsing).Content
         if ($sums -is [byte[]]) { $sums = [Text.Encoding]::UTF8.GetString($sums) }
         $matching = @($sums -split '\r?\n' | Where-Object { $_ -match ('^[a-fA-F0-9]{64}\s+\*?' + [regex]::Escape($archive) + '$') })
@@ -56,7 +55,7 @@ function Install-Butler {
         New-Item -ItemType Directory $stage | Out-Null
         Expand-ButlerZip $zip $stage
         $manifest = Get-Content (Join-Path $stage 'native-agent-manifest.json') -Raw | ConvertFrom-Json
-        if ($manifest.schema -ne 'butler.native-agent-install.v1' -or $manifest.version -ne $baseVersion -or
+        if ($manifest.schema -ne 'butler.native-agent-install.v1' -or $manifest.version -ne $version -or
             $manifest.platform -ne 'windows' -or $manifest.architecture -ne 'x64' -or
             $manifest.binary -ne 'butler-agent.exe' -or $manifest.resources -ne 'resources' -or
             $manifest.binarySha256 -notmatch '^[a-f0-9]{64}$') { throw 'Invalid Agent manifest' }
@@ -64,7 +63,7 @@ function Install-Butler {
         if ((Get-FileHash $program -Algorithm SHA256).Hash -ne $manifest.binarySha256) { throw 'Binary checksum mismatch' }
         & $program --installation-root $stage --resource-root "$stage/resources" doctor --check installation
         if ($LASTEXITCODE -ne 0) { throw 'Agent installation check failed' }
-        $name = "$baseVersion-$($manifest.binarySha256.Substring(0,8))"
+        $name = "$version-$($manifest.binarySha256.Substring(0,8))"
         $target = Join-Path $agentHome $name
         if (Test-Path $target) {
             $installed = Get-Content "$target/native-agent-manifest.json" -Raw | ConvertFrom-Json

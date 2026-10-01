@@ -5,8 +5,10 @@ import gzip
 import importlib.util
 import json
 from pathlib import Path
+import re
 import shutil
 import struct
+import subprocess
 import tempfile
 import zipfile
 
@@ -24,6 +26,14 @@ def verify_pe(binary):
         raise SystemExit('Not a Windows x64 executable')
 
 
+def binary_version(binary):
+    output = subprocess.check_output([str(binary.resolve()), '--version'], text=True).strip()
+    match = re.fullmatch(r'butler (\S+) \([0-9a-f]{8}\)', output)
+    if not match:
+        raise SystemExit('Agent release version unavailable')
+    return match.group(1)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--binary', required=True, type=Path)
@@ -34,8 +44,7 @@ def main():
     parser.add_argument('--channel', default='preview')
     args = parser.parse_args()
     verify_pe(args.binary)
-    cargo = Path(__file__).parents[1] / 'crates/butler-agent/Cargo.toml'
-    version = next(line.split('"')[1] for line in cargo.read_text().splitlines() if line.startswith('version ='))
+    version = binary_version(args.binary)
     args.output.mkdir(parents=True, exist_ok=True)
     archive = args.output / f'butler-agent-{version}-windows-x64.zip'
     with tempfile.TemporaryDirectory() as temp:
