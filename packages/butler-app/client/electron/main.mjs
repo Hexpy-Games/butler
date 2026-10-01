@@ -1053,6 +1053,9 @@ function resolveStaticRendererDist() {
     explicitRendererDist,
     process.resourcesPath ? join(process.resourcesPath, "app-client") : null,
     process.resourcesPath ? join(process.resourcesPath, "dist") : null,
+    isWindows && process.resourcesPath
+      ? join(process.resourcesPath, "bundled-agent", "resources", "app-client", "dist")
+      : null,
     process.resourcesPath
       ? join(
           process.resourcesPath,
