@@ -50,7 +50,7 @@ export function WallpaperPickerTile({
       onKeyDown={onKeyDown}
     >
       <span className={styles.thumbnail}>
-        {url ? <img alt="" className={styles.image} draggable={false} src={url} /> : placeholder}
+        {url ? <img alt="" className={styles.image} decoding="async" draggable={false} height={200} src={url} width={320} /> : placeholder}
       </span>
       <span className={styles.caption}>
         <Typo.Caption tone={disabled ? "disabled" : selected ? "primary" : "secondary"} truncate>{label}</Typo.Caption>
