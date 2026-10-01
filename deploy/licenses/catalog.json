@@ -1,8 +1,8 @@
 {
   "inputs": {
     "bun.lock": "6da68de704dbc47dea3ae850efa02a7e7ccf9691a5778c73fb77a8bb1687a84e",
-    "packages/butler-agent/rust/Cargo.lock": "7307ac59abcefa06812545c9e4270564c2a62b0a28e5f96fd21743fd2ce46dfb",
-    "packages/butler-agent/rust/Cargo.toml": "c7e1a63498d771a837005fef0b6a27772923ec746cd59a31a6400cbe94696eb9",
+    "packages/butler-agent/rust/Cargo.lock": "8c8f25818bb1e311bcda23645048fd1dfaf653834188a5d085c0bfe97b15fe76",
+    "packages/butler-agent/rust/Cargo.toml": "164bfc8dedf4e33c819d1a438d5d5cc0b0373900e598cce457230824b442c7c2",
     "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "7dcc5a22480ff96f1c6460a16fcacc2a5407be321d3e0709e255fc05ef403718",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
     "packages/butler-agent/rust/crates/butler-core/Cargo.toml": "736517adc6731fe7bef9a81897979400c1d9cf40d8fea399cf35c830471689d7",
@@ -13,7 +13,7 @@
     "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "0f8f2135454f2995bdb17e9eb72bf1e891ac3b862bbeffd03af75e2427525641",
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "95abb3064ab75a21c95efdb6fa5049c80c46abcfe62794330cab063d7d574820",
     "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "90781f4840f7705f2ac7a577abf1f4d8fdb90aaf8f7c6c25e7df9548ff6a9814",
-    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "f59ef08ce78b79081720dc0291379e041fc88bea2124889e06ae721b2a2559ec",
+    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "691aeb6e2092ea72d0ef99bb927f9e4a5293c6f817e08330f14f1bb7ac6e209a",
     "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "01b6913903b7649fcc88e576ba0c821ac38d8fdb4ffe68d5d8b6c8699cd21d65",
     "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "fd97e7279fef8e91a95c908d368c5eb4548c40cf5d9d3fa277a8d49f71901b53",
     "packages/butler-agent/rust/crates/butler-turn/Cargo.toml": "67226f9ea15df5cbe76ccf0f8f7ac75bbc553130ac07a77b256fb05d9c75d3aa",
@@ -18202,6 +18202,32 @@
       "evidenceSha256": [
         "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
         "8b43ce8accd61e9d370b5ca9e9c4f953279b5c239926c62315b40e24df51b726"
+      ]
+    },
+    {
+      "id": "rust:if-addrs@0.15.0",
+      "name": "if-addrs",
+      "version": "0.15.0",
+      "license": "MIT OR BSD-3-Clause",
+      "source": "https://github.com/messense/if-addrs/tree/3cdbc8b7cfc70a328102bd8b1efdd3408c5d75b2",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "588713c78138d7d6985b87275724f7047949a71a007b16b352d7745499976f7f",
+        "3990ddb78a5a2cfd64a5ffe5cebc3306f3298f6880c644afdf15043ef7d702d9"
+      ],
+      "files": [
+        "LICENSE-BSD",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/messense/if-addrs/blob/3cdbc8b7cfc70a328102bd8b1efdd3408c5d75b2/LICENSE-BSD",
+        "https://github.com/messense/if-addrs/blob/3cdbc8b7cfc70a328102bd8b1efdd3408c5d75b2/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright 2018 MaidSafe.net limited.",
+        "Copyright 2020 messense"
       ]
     },
     {
