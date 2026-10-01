@@ -133,11 +133,17 @@ function Expand-ButlerZip {
 function Write-ButlerFile {
     param([string]$Path, [string]$Text)
     $temporary = "$Path.$([guid]::NewGuid()).tmp"
+    $backup = "$Path.$([guid]::NewGuid()).backup"
     try {
         [IO.File]::WriteAllText($temporary,$Text)
-        if (Test-Path $Path) { [IO.File]::Replace($temporary,$Path,$null) }
+        # Windows PowerShell 5 binds a null backup name as an invalid empty path.
+        if (Test-Path $Path) { [IO.File]::Replace($temporary,$Path,$backup) }
         else { [IO.File]::Move($temporary,$Path) }
-    } finally { if (Test-Path $temporary) { Remove-Item $temporary -Force } }
+    } finally {
+        foreach ($scratch in @($temporary,$backup)) {
+            if (Test-Path $scratch) { Remove-Item $scratch -Force }
+        }
+    }
 }
 
 Install-Butler -Options $args

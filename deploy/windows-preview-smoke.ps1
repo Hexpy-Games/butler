@@ -29,6 +29,7 @@ $env:USERPROFILE = $env:HOME
 $env:LOCALAPPDATA = "$root/local/미리 보기 %USERPROFILE% !"
 $env:APPDATA = "$root/roaming"
 $env:BUTLER_INSTALL_MODIFY_PATH = '0'
+$env:npm_config_cache = Join-Path $env:RUNNER_TEMP ('npm-preview-' + [guid]::NewGuid().ToString('N').Substring(0,8))
 $env:BUTLER_DATA = "$root/data/미리 보기 %USERPROFILE% !"
 $env:BUTLER_APP_SERVER_HOST = '127.0.0.1'
 $env:BUTLER_APP_SERVER_PORT = '0'
@@ -112,4 +113,5 @@ try {
 } finally {
     if (Test-Path $launcher) { Invoke-PreviewLauncher stop --json | Out-Null }
     Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+    if (Test-Path $env:npm_config_cache) { Remove-Item $env:npm_config_cache -Recurse -Force }
 }
