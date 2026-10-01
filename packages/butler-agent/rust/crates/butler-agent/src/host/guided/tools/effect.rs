@@ -122,7 +122,7 @@ pub(super) async fn execute(
     } else {
         None
     };
-    let outcome = owner
+    let outcome = match owner
         .effects
         .execute(ExecuteEffect {
             work,
@@ -134,38 +134,19 @@ pub(super) async fn execute(
             adapter,
         })
         .await
-        .map_err(|error| ToolExecutionError::Integrity(error.into()))?;
+    {
+        Ok(outcome) => outcome,
+        Err(error) if super::feedback::solvable(error.code()) => {
+            return ordinary(error.code(), error.message(), Some("rejected"));
+        }
+        Err(error) => return Err(ToolExecutionError::Integrity(error.into())),
+    };
     if let Some(approved) = approved
         && let Some(feedback) = authority::settle(owner, approved, &outcome).await?
     {
         return Ok(feedback);
     }
-    match outcome {
-        EffectOutcome::Applied {
-            result,
-            receipt,
-            replayed,
-        } => {
-            let mut public = json!({
-                "receipt_id":receipt.receipt_id, "capability":receipt.capability,
-                "target":receipt.sanitized_target, "applied_at":receipt.applied_at,
-                "replayed":replayed,
-            });
-            if let Some(line) = result
-                .field("start_line")
-                .map_err(wire_error)?
-                .and_then(|raw| serde_json::from_str::<serde_json::Number>(raw).ok())
-            {
-                public["start_line"] = Value::Number(line);
-            }
-            receipt_result(&result, &public)
-        }
-        EffectOutcome::Rejected(error) => ordinary(&error.code, &error.message, Some("rejected")),
-        EffectOutcome::Failed(error) => ordinary(&error.code, &error.message, Some("failed")),
-        EffectOutcome::Uncertain { error, .. } => {
-            ordinary(&error.code, &error.message, Some("uncertain"))
-        }
-    }
+    outcome_result(outcome)
 }
 
 /// The target, input and adapter of the persistent effect `call` asks for.
@@ -268,4 +249,33 @@ fn wire_error(error: butler_core::json::JsonError) -> ToolExecutionError {
     ToolExecutionError::Integrity(
         BtccError::relayed("guided_tool_result_json", error.to_string()).with_source(error),
     )
+}
+
+fn outcome_result(outcome: EffectOutcome) -> Result<JsonDocument, ToolExecutionError> {
+    match outcome {
+        EffectOutcome::Applied {
+            result,
+            receipt,
+            replayed,
+        } => {
+            let mut public = json!({
+                "receipt_id":receipt.receipt_id, "capability":receipt.capability,
+                "target":receipt.sanitized_target, "applied_at":receipt.applied_at,
+                "replayed":replayed,
+            });
+            if let Some(line) = result
+                .field("start_line")
+                .map_err(wire_error)?
+                .and_then(|raw| serde_json::from_str::<serde_json::Number>(raw).ok())
+            {
+                public["start_line"] = Value::Number(line);
+            }
+            receipt_result(&result, &public)
+        }
+        EffectOutcome::Rejected(error) => ordinary(&error.code, &error.message, Some("rejected")),
+        EffectOutcome::Failed(error) => ordinary(&error.code, &error.message, Some("failed")),
+        EffectOutcome::Uncertain { error, .. } => {
+            ordinary(&error.code, &error.message, Some("uncertain"))
+        }
+    }
 }

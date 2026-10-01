@@ -5,7 +5,7 @@ use serde_json::Value;
 use super::ModelConfiguration;
 use crate::models::{ModelCatalogError, ParsedModelRef, parse_model_ref};
 
-const DEFAULT_MODEL: &str = "openai/gpt-5.5-codex";
+use crate::models::DEFAULT_RUNTIME_MODEL_REF as DEFAULT_MODEL;
 const VALID_MODELS: &[&str] = &[
     "gpt-6-astra",
     "gpt-6.1-sol",
@@ -171,7 +171,7 @@ mod tests {
             );
             assert_eq!(
                 details(&json!({}), McpModelTarget::Worker).raw,
-                "openai/gpt-5.5-codex"
+                "openai/gpt-6.1-sol"
             );
         }
         // config reads reject raw ids and apply source fallbacks
@@ -185,11 +185,11 @@ mod tests {
             });
             assert_eq!(
                 details(&config, McpModelTarget::Worker).raw,
-                "openai/gpt-5.5-codex"
+                "openai/gpt-6.1-sol"
             );
             assert_eq!(
                 details(&config, McpModelTarget::Butler).raw,
-                "openai/gpt-5.5-codex"
+                "openai/gpt-6.1-sol"
             );
         }
         // accepts source aliases namespaced refs and supported raw ids

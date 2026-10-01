@@ -80,7 +80,16 @@ impl Command {
             Self::AppUpdate => cli::app_update::run(&args),
             Self::Public => cli::public::run(&installation, &args),
             Self::ServiceControl => cli::service::run_native_service_cli(installation, args).await,
-            Self::Doctor => cli::doctor::run(&installation, &args),
+            Self::Doctor => {
+                tokio::task::spawn_blocking(move || cli::doctor::run(&installation, &args))
+                    .await
+                    .unwrap_or_else(|_| {
+                        butler_core::diagnostic!(
+                            "[native-doctor] code=doctor_worker_failed Diagnostic worker failed."
+                        );
+                        ExitCode::FAILURE
+                    })
+            }
             Self::Mcp => Box::pin(crate::host::mcp::run(installation, args)).await,
             Self::Settings => cli::settings::run(installation, args).await,
             Self::Observability => cli::observability::run(installation, args).await,
@@ -108,12 +117,14 @@ impl Command {
                 match crate::host::service::entrypoint::run_native_service(installation).await {
                     Ok(session) => {
                         if let Some(session) = session {
-                            println!("{session}");
+                            butler_core::diagnostic!(
+                                "[native-butler] stopped session_id={session}"
+                            );
                         }
                         ExitCode::SUCCESS
                     }
                     Err(error) => {
-                        eprintln!("{error}");
+                        butler_core::diagnostic!("[native-service] failed: {error}");
                         ExitCode::FAILURE
                     }
                 }

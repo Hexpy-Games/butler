@@ -208,7 +208,7 @@ async fn emit(progress: &dyn AgentLoopProgress, frames: Vec<Frame>) {
         event.payload = Some(payload);
         // Streamed text is display only: the final answer is delivered anyway.
         if let Err(error) = progress.emit(event).await {
-            eprintln!(
+            butler_core::diagnostic!(
                 "[native-btcc] stream relay publish failed code={}",
                 error.code()
             );

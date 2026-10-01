@@ -40,11 +40,28 @@ pub(super) fn render(definition: &Definition) -> String {
         String::new(),
         "[Service]".to_owned(),
         "Type=simple".to_owned(),
+        format!(
+            "StandardOutput={}",
+            environment_quoted(&format!(
+                "append:{}",
+                definition
+                    .working_dir
+                    .join("logs/butler-agent-service.stdout.log")
+                    .display()
+            ))
+        ),
+        format!(
+            "StandardError={}",
+            environment_quoted(&format!(
+                "append:{}",
+                definition
+                    .working_dir
+                    .join("logs/butler-agent-service.stderr.log")
+                    .display()
+            ))
+        ),
         format!("{environment}ExecStart={command}"),
         "Restart=on-failure".to_owned(),
-        // A SIGKILL is a forced stop (`butler stop` after its grace period),
-        // not a crash to recover from.
-        "RestartPreventExitStatus=SIGKILL".to_owned(),
         "RestartSec=5".to_owned(),
         // How long systemd waits for the process to exit before it kills it.
         format!("TimeoutStopSec={STOP_GRACE_SECONDS}"),

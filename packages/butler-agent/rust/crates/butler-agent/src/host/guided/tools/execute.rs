@@ -120,7 +120,7 @@ pub(super) async fn execute(
     if record.is_none() {
         start(owner, call, &call_id, &effective_name, &presentation_args).await?;
     }
-    let result = Box::pin(super::question::dispatch(owner, invocation, call, &call_id)).await?;
+    let result = dispatch_result(owner, invocation, call, &call_id).await?;
     super::discovery::remember_described(owner, call, &result)?;
     if result.field("authority_pending").ok().flatten() == Some("true") {
         // Authority admission atomically moved this call to awaiting_authority.
@@ -151,6 +151,45 @@ pub(super) async fn execute(
     .await?;
     super::dispatch::publish_work_result(owner, invocation, &call.name, &call_id, &result).await?;
     Ok(result)
+}
+
+async fn dispatch_result(
+    owner: &GuidedTools,
+    invocation: GuidedInvocation<'_>,
+    call: &ModelRoundToolCall,
+    call_id: &str,
+) -> Result<JsonDocument, ToolExecutionError> {
+    #[cfg(debug_assertions)]
+    if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
+        && std::env::var("BUTLER_E2E_INTERRUPT_TOOL").as_deref() == Ok(call.name.as_str())
+        && tokio::fs::remove_file(owner.binding.butler_data.join("e2e-interrupt-tool"))
+            .await
+            .is_ok()
+    {
+        butler_core::diagnostic!(
+            "[native-tool] interrupted turn_id={} session_id={} capability={} code=e2e_tool_integrity_failure Injected tool integrity failure.",
+            owner.binding.turn_id,
+            owner.binding.source_session_id,
+            call.name
+        );
+        return Err(integrity("e2e_tool_integrity_failure"));
+    }
+    match Box::pin(super::question::dispatch(owner, invocation, call, call_id)).await {
+        Ok(result) => Ok(result),
+        Err(ToolExecutionError::Integrity(error)) if super::feedback::solvable(error.code()) => {
+            super::feedback::result(&error)
+        }
+        Err(ToolExecutionError::Integrity(error)) => {
+            butler_core::diagnostic!(
+                "[native-tool] interrupted turn_id={} session_id={} capability={} code={} Tool execution could not safely continue.",
+                owner.binding.turn_id,
+                owner.binding.source_session_id,
+                call.name,
+                error.code()
+            );
+            Err(ToolExecutionError::Integrity(error))
+        }
+    }
 }
 
 pub(super) async fn record_unexecuted(

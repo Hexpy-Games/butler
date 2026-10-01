@@ -10,7 +10,6 @@ use super::{
 use crate::models::{ModelConfigurationEnvironment, ParsedModelRefSource, parse_model_ref};
 
 pub(super) const AUTO_CODEX_LATEST: &str = "auto:codex-latest";
-const DEFAULT_OPENAI_MODEL: &str = "gpt-5.5-codex";
 
 pub(super) fn configured_model(
     environment: &ModelConfigurationEnvironment,
@@ -48,7 +47,7 @@ pub(super) fn configured_model(
             model.to_owned()
         };
     }
-    DEFAULT_OPENAI_MODEL.to_owned()
+    parse_model_ref(crate::models::DEFAULT_RUNTIME_MODEL_REF).model_id
 }
 
 pub(super) fn configured_reasoning(

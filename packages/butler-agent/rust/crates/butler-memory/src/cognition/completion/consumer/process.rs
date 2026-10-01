@@ -143,7 +143,7 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
         Ok(caught_up) => caught_up,
         Err(catchup_error) => match queue_error {
             Some(queue_error) => {
-                eprintln!("[native-memory-sync-catchup] {}", catchup_error.code());
+                butler_core::diagnostic!("[native-memory-sync-catchup] {}", catchup_error.code());
                 return Err(queue_error);
             }
             None => return Err(catchup_error),

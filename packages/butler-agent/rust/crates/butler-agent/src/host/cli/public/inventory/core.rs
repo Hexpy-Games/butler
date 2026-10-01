@@ -88,7 +88,7 @@ pub(super) const ROUTES: &[Entry] = &[
     ),
     route!(
         "doctor",
-        "butler doctor [--check NAME] [--data PATH]",
+        "butler doctor [--check NAME|--collect-logs] [--data PATH]",
         "설치와 서비스를 점검합니다. / Diagnose installation and service.",
         "core"
     ),

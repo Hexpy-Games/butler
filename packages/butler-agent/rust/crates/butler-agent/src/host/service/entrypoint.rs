@@ -59,42 +59,8 @@ pub(crate) async fn run_native_service_with_options(
     .map_err(crate::host::HostError::from)
 }
 
-#[derive(Clone, Copy)]
-struct ServiceLogMode {
-    stderr: bool,
-    quiet: bool,
-}
-
-impl ServiceLogMode {
-    fn desktop() -> Self {
-        Self {
-            stderr: false,
-            quiet: false,
-        }
-    }
-
-    fn cli(quiet: bool) -> Self {
-        Self {
-            stderr: true,
-            quiet,
-        }
-    }
-
-    fn write(self, message: &str) {
-        if !self.quiet {
-            self.problem(message);
-        }
-    }
-
-    /// Writes even in quiet mode: a problem the operator must see.
-    fn problem(self, message: &str) {
-        if self.stderr {
-            eprintln!("{message}");
-        } else {
-            println!("{message}");
-        }
-    }
-}
+mod logs;
+use logs::ServiceLogMode;
 
 async fn run(
     installation: ResolvedInstallation,
@@ -105,7 +71,18 @@ async fn run(
     // Before the instance record exists: a stop can only target this process
     // once the record is published, and it must never find the signal's
     // default action (death by SIGTERM) in place.
-    let stop = StopSignal::listen().map_err(io)?;
+    let version = super::diagnostics::version(&installation);
+    super::diagnostics::lifecycle(&version, "start", "service_start", "Service is starting.");
+    let stop = StopSignal::listen(version.clone()).map_err(|source| {
+        let error = io(source);
+        super::diagnostics::lifecycle(
+            &version,
+            "exit",
+            error.code(),
+            "Service could not install shutdown handling.",
+        );
+        error
+    })?;
     let (ready, initialized) = tokio::sync::oneshot::channel();
     let service = Box::pin(run_until_stopped(
         installation,
@@ -116,7 +93,22 @@ async fn run(
         ready,
     ));
     let result = startup::until_ready(service, initialized, &stop).await;
-    stop.settle(result, |line| logs.problem(line))
+    let result = stop.settle(result, |line| logs.problem(line));
+    let code = result
+        .as_ref()
+        .err()
+        .map_or("requested_stop", BtccError::code);
+    super::diagnostics::lifecycle(
+        &version,
+        "exit",
+        code,
+        if result.is_ok() {
+            "Service stopped on request."
+        } else {
+            "Service exited unexpectedly; its supervisor must restart it."
+        },
+    );
+    result
 }
 
 async fn run_until_stopped(

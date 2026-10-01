@@ -76,7 +76,9 @@ impl ServiceConfiguration {
                 format!("provider_adapter_not_registered:{provider_id}"),
             ));
         }
-        let fallback_model = source_model(&config).unwrap_or("openai/gpt-5.5-codex");
+        let fallback_model = source_model(&config)
+            .filter(|model| !model.trim().is_empty())
+            .unwrap_or(butler_models::models::DEFAULT_RUNTIME_MODEL_REF);
         let default_binding_model_ref = if fallback_model.contains('/') {
             fallback_model.to_owned()
         } else {

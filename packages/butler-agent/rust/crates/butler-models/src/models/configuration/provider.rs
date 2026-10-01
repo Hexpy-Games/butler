@@ -20,7 +20,7 @@ use crate::models::{
 };
 use butler_turn::btcc::{BtccError, ModelRoundError, ProviderRequestError};
 
-const DEFAULT_MODEL_REF: &str = "openai/gpt-5.5-codex";
+use crate::models::DEFAULT_RUNTIME_MODEL_REF as DEFAULT_MODEL_REF;
 
 impl ProviderRequestConfigPort for ModelConfiguration {
     fn effective_prompt_model(&self, requested: Option<&str>) -> Result<String, ModelRoundError> {

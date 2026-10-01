@@ -94,7 +94,7 @@ pub(super) async fn wait_until_registered(
             return Err("native_service_start_failed: child exited before ownership record".into());
         }
         match active_service(data_root) {
-            Ok(Some(record)) if record.pid == child.id() => return Ok(record),
+            Ok(Some(record)) if record.cli_supervisor_pid == Some(child.id()) => return Ok(record),
             Ok(Some(_)) => return Err("native_service_start_identity_changed".into()),
             Ok(None) => {}
             Err(error) if error.message() == LOCK_WITHOUT_RECORD => {}

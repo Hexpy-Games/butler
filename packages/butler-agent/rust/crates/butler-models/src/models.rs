@@ -95,6 +95,8 @@ pub use configuration::{
 pub use status::{StatusModels, auth_status_with_environment, open_status_models};
 
 pub const DEFAULT_MODEL_REF: &str = "openai/gpt-5.5";
+/// Native runtime fallback follows the App's fresh-install routine preset.
+pub const DEFAULT_RUNTIME_MODEL_REF: &str = "openai/gpt-6.1-sol";
 
 pub const CLI_FALLBACK_OPENAI_MODELS: &[&str] = &[
     "gpt-5.5-codex",

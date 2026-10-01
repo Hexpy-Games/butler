@@ -134,21 +134,7 @@ pub(super) async fn run(
             ))
         })?
     } else {
-        match Box::pin(super::super::dispatch::execute(
-            owner,
-            invocation,
-            &inner,
-            outer_call_id,
-        ))
-        .await
-        {
-            Ok(value) => value,
-            Err(error) => {
-                let ToolExecutionError::Integrity(ref error) = error;
-                let code = error.code();
-                return encoded(&underlying(id, code));
-            }
-        }
+        native_result(owner, invocation, &inner, outer_call_id).await?
     };
     attach_bridge_invocation(
         &result,
@@ -312,4 +298,28 @@ fn underlying(id: &str, message: &str) -> Value {
         "Treat this as an operational tool failure, not an app failure. Choose another enabled tool, adjust the request if applicable, or continue with available evidence.".into(),
     );
     error
+}
+
+async fn native_result(
+    owner: &GuidedTools,
+    invocation: GuidedInvocation<'_>,
+    inner: &ModelRoundToolCall,
+    outer_call_id: &str,
+) -> Result<JsonDocument, ToolExecutionError> {
+    match Box::pin(super::super::dispatch::execute(
+        owner,
+        invocation,
+        inner,
+        outer_call_id,
+    ))
+    .await
+    {
+        Ok(value) => Ok(value),
+        Err(ToolExecutionError::Integrity(error))
+            if super::super::feedback::solvable(error.code()) =>
+        {
+            super::super::feedback::result(&error)
+        }
+        Err(error) => Err(error),
+    }
 }
