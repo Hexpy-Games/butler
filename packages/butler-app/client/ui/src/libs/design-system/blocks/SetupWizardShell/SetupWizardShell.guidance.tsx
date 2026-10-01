@@ -24,7 +24,7 @@ function FirstRunStep() {
 function FocusScreen() {
   return (
     <SetupWizardShell embedded title="Butler" variant="focus">
-      <SetupWizardContent width="wide">
+      <SetupWizardContent width="wide" surface="solid">
         <Typo.H3 as="h1">Which AI should Butler use?</Typo.H3>
         <Button variant="outline" text="ChatGPT" />
       </SetupWizardContent>
@@ -42,7 +42,7 @@ export const guidance: ShowcaseGuidance = {
   ],
   recipes: [
     { name: "First-run step", description: "embedded renders it inside a page; the app shows it full-window.", render: () => <FirstRunStep /> },
-    { name: "Focus screen", description: "variant=\"focus\": no title or stepper, one centered column (420px, wide 520px).", render: () => <FocusScreen /> },
+    { name: "Focus screen", description: "variant=\"focus\": no title or stepper, one opaque card with a shared inset (420px, wide 520px).", render: () => <FocusScreen /> },
   ],
   doDont: [
     {
@@ -52,5 +52,5 @@ export const guidance: ShowcaseGuidance = {
   ],
   content: ["Titles are questions or instructions; buttons are the answers."],
   accessibility: ["The step progress is labelled (progressLabel) and announces the current step."],
-  tokens: ["--typo-new-chat-title-size-md", "--page-max-width-narrow", "--space-2xl"],
+  tokens: ["--typo-new-chat-title-size-md", "--page-max-width-narrow", "--space-2xl", "--space-lg", "--color-surface-raised-opaque"],
 };

@@ -29,6 +29,17 @@ interface FirstRunCopy {
   reportCopied: string;
   reportUnavailable: string;
   quit: string;
+  interfaceLanguage: string;
+  memoryModel: {
+    label: string;
+    downloading: string;
+    verifying: string;
+    failed: string;
+    ready: string;
+    retry: string;
+    progress: (percent: number, doneMB: number, totalMB: number) => string;
+    reasons: Record<string, string>;
+  };
   languageLabel: string;
   learnMore: string;
   cancel: string;

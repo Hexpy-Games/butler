@@ -1,5 +1,6 @@
 import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import type { ReactNode } from "react";
+import { IconSlot } from "../../components/IconSlot";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import styles from "./Notice.module.css";
@@ -30,12 +31,12 @@ export function Notice({
     <Stack
       align="row"
       gap="sm"
-      cross="center"
+      cross="start"
       className={dsClass(styles.notice, styles[`tone-${tone}`], className)}
     >
-      {icon && <span className={styles.icon} aria-hidden="true">{icon}</span>}
+      {icon && <IconSlot size="md" minHeight="line" className={dsClass(styles.icon)} aria-hidden="true">{icon}</IconSlot>}
       <Stack gap="xs" className={dsClass(styles.message)}>
-        {title && <Typo.Label as="span">{title}</Typo.Label>}
+        {title && <Typo.Label as="span" className={dsClass(styles.title)}>{title}</Typo.Label>}
         <Typo.Body>{message}</Typo.Body>
       </Stack>
       {action && <div className={styles.action}>{action}</div>}

@@ -59,6 +59,11 @@ export const stories: ShowcaseStory[] = [
     ),
   },
   {
+    name: "Multi-line warning (first-line icon)",
+    widths: ["320", "375", "app"],
+    render: (context) => <Notice tone="warning" icon={<CircleAlert size="md" />} message={text(context).missingHelp} />,
+  },
+  {
     // SettingsDetailHeader: a compact result line after saving.
     name: "Inline save result",
     render: (context) => <Notice tone="success" message={text(context).saved} />,

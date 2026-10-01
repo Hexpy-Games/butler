@@ -2,9 +2,12 @@ import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { chromium, type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
+import { assertFirstRunContrast, assertFirstRunLayout } from "../support/first-run-visual.ts";
 import { firstRunCopy } from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
 
-const screenshots = resolve(".tmp/consent-smoke");
+const screenshots = resolve(".tmp/firstrun-ds");
+let textNodes = 0;
+let minimumContrast = Infinity;
 mkdirSync(screenshots, { recursive: true });
 const server = await createNativeAppServer({ onboardingComplete: false });
 const browser = await chromium.launch({ headless: true });
@@ -21,6 +24,8 @@ async function screen(page: Page, name: string) {
 async function verifyConsent(page: Page, language: "ko" | "en", label: string) {
   const copy = firstRunCopy[language];
   await screen(page, "consent");
+  await audit(page);
+  await verifyIcons(page);
   assert(await page.locator('[role="listitem"]').count() === 4, "all four consent items");
   assert(await page.evaluate(() => document.activeElement?.id) === "first-run-consent-title", "heading receives focus");
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "no horizontal overflow");
@@ -38,6 +43,46 @@ async function verifyConsent(page: Page, language: "ko" | "en", label: string) {
   for (const item of copy.consentItems) assert(await page.getByText(item.body, { exact: true }).count() === 1, "complete consent copy");
 }
 
+async function audit(page: Page) {
+  await assertFirstRunLayout(page);
+  const result = await assertFirstRunContrast(page);
+  textNodes += result.nodes;
+  minimumContrast = Math.min(minimumContrast, result.minimum);
+}
+
+async function verifyWelcome(page: Page, copy: typeof firstRunCopy.en) {
+  const label = page.locator('label[for="first-run-language"]');
+  const original = await label.innerText();
+  await label.evaluate((node) => { node.textContent = "L".repeat(40); });
+  const above = await label.evaluate((node) => node.getBoundingClientRect().bottom <= document.querySelector('#first-run-language')!.getBoundingClientRect().top);
+  assert(above, "40-character language label stays above control");
+  await assertFirstRunLayout(page);
+  await label.evaluate((node, text) => { node.textContent = text; }, original);
+  await page.locator('#first-run-language').focus();
+  await page.keyboard.press("Tab");
+  assert(await page.getByRole("link", { name: copy.learnMore, exact: true }).evaluate((node) => node === document.activeElement), "language then help");
+  await page.keyboard.press("Tab");
+  assert(await page.evaluate(() => document.activeElement?.id) === "first-run-start", "help then Start");
+  assert(await page.locator('#first-run-start').evaluate((node) => getComputedStyle(node).boxShadow !== "none"), "keyboard focus ring visible");
+}
+
+async function verifyIcons(page: Page) {
+  const valid = await page.locator('[role="listitem"]').evaluateAll((items) => items.every((item) => {
+    const slot = item.querySelector('[data-slot="icon-slot"]')!.getBoundingClientRect();
+    const text = item.querySelector('p')!;
+    const style = getComputedStyle(text);
+    return Math.abs(slot.top - text.getBoundingClientRect().top) < 1 && Math.abs(slot.height - parseFloat(style.lineHeight)) < 1;
+  }));
+  assert(valid, "consent icons align to first body line");
+  const firstLine = await page.locator('[data-first-run-screen="consent"] [data-slot="icon-slot"]').last().evaluate((slot) => {
+    const text = slot.nextElementSibling!.querySelector('p')!;
+    const glyph = slot.querySelector('svg')!.getBoundingClientRect();
+    const lineCenter = text.getBoundingClientRect().top + parseFloat(getComputedStyle(text).lineHeight) / 2;
+    return Math.abs(glyph.top + glyph.height / 2 - lineCenter) < 1;
+  });
+  assert(firstLine, "Notice icon centers in first line, including multi-line clauses");
+}
+
 async function runCase(width: number, language: "ko" | "en", theme: "light" | "dark", renewal: boolean) {
   const completed = "2026-06-01T00:00:00Z";
   await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language, appearance_theme: theme, onboarding: renewal ? { consent_version: 1, accepted_at: completed, completed_at: completed } : fresh }) });
@@ -49,6 +94,8 @@ async function runCase(width: number, language: "ko" | "en", theme: "light" | "d
   await page.goto(server.url);
   if (!renewal) {
     await screen(page, "welcome");
+    await audit(page);
+    await verifyWelcome(page, copy);
     await page.screenshot({ path: resolve(screenshots, `${label}-welcome.png`) });
     await page.getByRole("button", { name: copy.start, exact: true }).click();
   }
@@ -71,7 +118,7 @@ async function runCase(width: number, language: "ko" | "en", theme: "light" | "d
 
 try {
   let cases = 0;
-  for (const width of [320, 375, 1280]) {
+  for (const width of [320, 375, 768, 1280, 1440]) {
     for (const language of ["ko", "en"] as const) {
       for (const theme of ["light", "dark"] as const) {
         for (const renewal of [false, true]) {
@@ -81,7 +128,7 @@ try {
       }
     }
   }
-  console.log(JSON.stringify({ ok: true, cases, screenshots, transport: "browser/native-app", modelCalls: server.stubModelCalls.length }));
+  console.log(JSON.stringify({ ok: true, cases, textNodes, minimumContrast, screenshots, transport: "browser/native-app", modelCalls: server.stubModelCalls.length }));
 } finally {
   await browser.close();
   await server.stop();
