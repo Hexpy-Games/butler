@@ -25,6 +25,13 @@ fn output(root: &Path, arguments: &[&str]) -> Option<String> {
 
 fn main() {
     println!("cargo:rerun-if-env-changed=BUTLER_MEMORY_IMPLEMENTATION_COMMIT");
+    println!("cargo:rerun-if-env-changed=GITHUB_REF_NAME");
+    let package_version = env::var("CARGO_PKG_VERSION").unwrap_or_else(|_| "0.1.0".into());
+    let release_version = env::var("GITHUB_REF_NAME")
+        .ok()
+        .and_then(|tag| version_from_tag(&tag, &package_version))
+        .unwrap_or_else(|| format!("{package_version}-dev"));
+    println!("cargo:rustc-env=BUTLER_RELEASE_VERSION={release_version}");
     for path in [
         "src",
         "build.rs",
@@ -87,4 +94,22 @@ fn main() {
         return;
     }
     println!("cargo:rustc-env=BUTLER_MEMORY_VERIFIED_COMMIT={head}");
+}
+
+fn version_from_tag(tag: &str, package_version: &str) -> Option<String> {
+    let version = tag.strip_prefix('v')?;
+    let suffix = version.strip_prefix(package_version)?;
+    if !suffix.is_empty()
+        && (!suffix
+            .as_bytes()
+            .first()
+            .is_some_and(|byte| *byte == b'-' || *byte == b'+')
+            || suffix.len() == 1
+            || !suffix
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'+')))
+    {
+        return None;
+    }
+    Some(version.to_owned())
 }

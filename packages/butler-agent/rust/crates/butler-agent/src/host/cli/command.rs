@@ -129,6 +129,9 @@ pub async fn main(args: Vec<OsString>) -> ExitCode {
     if args.len() == 1 && args[0] == "--private-embedding-worker" {
         return crate::host::embedding::worker::run().await;
     }
+    if matches!(args.as_slice(), [flag] if flag == "--version" || flag == "-V") {
+        return print_version();
+    }
     let (installation, command_args) = match installation(&args) {
         Ok(value) => value,
         Err(error) => {
@@ -139,6 +142,23 @@ pub async fn main(args: Vec<OsString>) -> ExitCode {
     Command::classify(&command_args)
         .run(installation, command_args)
         .await
+}
+
+fn print_version() -> ExitCode {
+    let Ok(executable) = std::env::current_exe().and_then(std::fs::canonicalize) else {
+        eprintln!("Could not read Butler build ID.");
+        return ExitCode::FAILURE;
+    };
+    let Ok(digest) = butler_runtime::operations::sha256_file(&executable) else {
+        eprintln!("Could not read Butler build ID.");
+        return ExitCode::FAILURE;
+    };
+    let Some(build_id) = digest.get(..8) else {
+        eprintln!("Could not read Butler build ID.");
+        return ExitCode::FAILURE;
+    };
+    println!("butler {} ({build_id})", env!("BUTLER_RELEASE_VERSION"));
+    ExitCode::SUCCESS
 }
 
 fn printed(stdout: &str, stderr: &str, exit_code: u8) -> ExitCode {
