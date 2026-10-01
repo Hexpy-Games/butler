@@ -44,6 +44,11 @@ After dependency changes, install the locked packages (including Electron's
 runtime for evidence collection), run `python3 deploy/licenses/refresh.py`, review
 the updated inventory, then run `node deploy/licenses/generate.mjs`. Refresh
 fetches upstream evidence; generation and checks are offline and deterministic.
+The renderer inventory is derived only from `bun.lock`, including the union of
+platform-specific optional dependencies. Build jobs use frozen Bun installs;
+legacy workspace npm locks must not replace that graph. The Vite emission check
+also rejects any actual bundled package/version outside the locked inventory.
+
 Missing/unknown licenses, missing/invalid HTTPS links, stale inventory, and a
 model revision mismatch fail CI. Existing SPDX allowlist and version-scoped MPL
 exceptions remain enforced; the owner accepted those exceptions.

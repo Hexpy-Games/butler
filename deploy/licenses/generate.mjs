@@ -54,6 +54,7 @@ export function readLock() {
 
 export function productionPackages(lock = readLock()) {
   const seen = new Map();
+  const visited = new Set();
   const visit = (name, parent = "") => {
     if (name.startsWith("@types/")) return;
     let scope = parent;
@@ -68,9 +69,13 @@ export function productionPackages(lock = readLock()) {
     const record = lock.packages[key];
     if (!record) throw new Error(`Missing locked production dependency: ${name}`);
     const identity = record[0];
-    if (seen.has(identity)) return;
+    if (visited.has(key)) return;
+    visited.add(key);
     seen.set(identity, { key, identity, integrity: record.at(-1) });
-    for (const child of Object.keys(record[2]?.dependencies ?? {})) visit(child, key);
+    // Inventory the union of optional packages for every supported platform,
+    // irrespective of what the current host installed.
+    const dependencies = { ...record[2]?.dependencies, ...record[2]?.optionalDependencies };
+    for (const child of Object.keys(dependencies)) visit(child, key);
     for (const child of Object.keys(record[2]?.peerDependencies ?? {})) {
       if (!record[2]?.optionalPeers?.includes(child)) visit(child, key);
     }
@@ -78,13 +83,25 @@ export function productionPackages(lock = readLock()) {
   const ui = lock.workspaces["packages/butler-app/client/ui"];
   // These are build tools listed in dependencies, not shipped renderer code.
   const tooling = new Set(["vite", "typescript", "@vitejs/plugin-react"]);
-  for (const name of Object.keys(ui.dependencies)) if (!tooling.has(name)) visit(name);
+  for (const name of Object.keys(ui.dependencies)) if (!tooling.has(name)) visit(name, ui.name);
   const electron = lock.workspaces["packages/butler-app/client/electron"];
-  for (const name of Object.keys(electron.dependencies ?? {})) visit(name);
+  for (const name of Object.keys(electron.dependencies ?? {})) visit(name, electron.name);
   // npm Electron dependencies download the runtime; they are not in the App.
   const runtime = lock.packages.electron;
   seen.set(runtime[0], { key: "electron", identity: runtime[0], integrity: runtime.at(-1) });
   return [...seen.values()].sort((a, b) => a.identity.localeCompare(b.identity, "en"));
+}
+
+export function verifyProductionInventory(catalog, lock = readLock()) {
+  const components = new Map(catalog.components.map((entry) => [entry.id, entry]));
+  const packages = productionPackages(lock);
+  for (const { identity, integrity } of packages) {
+    const component = components.get(`npm:${identity}`);
+    if (!component || component.integrity !== integrity) {
+      throw new Error(`Missing locked license evidence: ${identity}`);
+    }
+  }
+  return packages.length;
 }
 
 export function validateLicense(component) {
@@ -136,10 +153,7 @@ export function generate(catalog = JSON.parse(readFileSync(join(root, "deploy/li
   }
   const wrapper = JSON.parse(readFileSync(join(root, "packages/butler-npm/package.json"), "utf8"));
   if (Object.keys(wrapper.dependencies ?? {}).length) throw new Error("npm wrapper dependencies must be added to bun.lock and inventoried before packaging");
-  for (const { identity, integrity } of productionPackages()) {
-    const component = catalog.components.find((entry) => entry.id === `npm:${identity}`);
-    if (!component || component.integrity !== integrity) throw new Error(`Missing locked license evidence: ${identity}`);
-  }
+  verifyProductionInventory(catalog);
   const model = catalog.components.find((entry) => entry.id.startsWith("model:Xenova/bge-m3"));
   const assets = readFileSync(join(root, "packages/butler-agent/rust/crates/butler-agent/src/host/embedding/worker/assets.rs"), "utf8");
   if (!assets.includes(`const REVISION: &str = "${model.version}";`)) throw new Error("Embedding download revision differs from disclosed model");

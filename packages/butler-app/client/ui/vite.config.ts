@@ -36,7 +36,13 @@ function thirdPartyNotices(): Plugin {
       execFileSync(process.execPath, [path.join(repositoryRoot, "deploy/licenses/generate.mjs")]);
       execFileSync(process.execPath, [path.join(repositoryRoot, "deploy/licenses/verify-renderer.mjs")]);
     },
-    generateBundle() {
+    generateBundle(_options, bundle) {
+      const modules = Object.values(bundle).flatMap((entry) =>
+        entry.type === "chunk" ? Object.keys(entry.modules) : [],
+      );
+      execFileSync(process.execPath, [path.join(repositoryRoot, "deploy/licenses/verify-renderer.mjs"), "--modules"], {
+        input: JSON.stringify(modules),
+      });
       this.emitFile({
         type: "asset",
         fileName: "THIRD_PARTY_NOTICES.txt.gz",

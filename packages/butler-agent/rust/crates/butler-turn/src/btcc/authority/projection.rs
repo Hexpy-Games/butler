@@ -33,7 +33,7 @@ pub(super) fn admission(
         }),
         RequestDecision::Pending => Ok(AuthorityAdmissionResult::Pending {
             request_ref: record.request_ref.clone(),
-            projection: request(record, collation)?,
+            projection: Box::new(request(record, collation)?),
         }),
     }
 }

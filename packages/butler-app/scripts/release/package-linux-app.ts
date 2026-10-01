@@ -12,6 +12,7 @@
  * A prebuilt agent passed in BUTLER_NATIVE_AGENT_EXECUTABLE skips the cargo
  * build (see prepare-native-agent.mjs).
  */
+import { stageElectronPackageSource } from "./electron-package-source.ts";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
@@ -123,12 +124,13 @@ function packageElectronApp(root: string, workDir: string, platform: LinuxAppPla
   cpSync(rendererDist, rendererDir, { recursive: true });
   const packagerCli = join(root, ELECTRON_ROOT, "node_modules", "@electron", "packager", "bin", "electron-packager.mjs");
   if (!existsSync(packagerCli)) {
-    throw new Error("Electron packager is missing; run npm --prefix packages/butler-app/client/electron ci");
+    throw new Error("Electron packager is missing; run bun install --frozen-lockfile --ignore-scripts");
   }
+  const electronVersion = JSON.parse(readFileSync(join(root, ELECTRON_ROOT, "package.json"), "utf8")).devDependencies.electron;
   const packageOut = join(workDir, "electron");
   run(process.env.BUTLER_NODE || "node", [
-    packagerCli, join(root, ELECTRON_ROOT), "Butler", "--platform=linux", `--arch=${arch}`, "--overwrite",
-    `--out=${packageOut}`, `--icon=${join(root, ELECTRON_ROOT, "assets", "icon.png")}`,
+    packagerCli, stageElectronPackageSource(root, join(workDir, "electron-source")), "Butler", "--platform=linux", `--arch=${arch}`, "--overwrite",
+    `--out=${packageOut}`, `--electron-version=${electronVersion}`, `--icon=${join(root, ELECTRON_ROOT, "assets", "icon.png")}`,
     `--extra-resource=${agentDir}`, `--extra-resource=${rendererDir}`,
     "--ignore=^/(dist|.native-agent-payload)($|/)", "--quiet",
   ], { cwd: root });
