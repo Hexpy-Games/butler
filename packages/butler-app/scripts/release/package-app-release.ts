@@ -288,6 +288,11 @@ function runElectronPackager(
       }`,
     );
   }
+  const notices = spawnSync(process.env.BUTLER_NODE || "node", [
+    join(root, "deploy/licenses/package-app.mjs"),
+    join(outDir, "Butler-darwin-arm64/Butler.app"),
+  ], { cwd: root, stdio: "inherit" });
+  if (notices.status !== 0) throw new Error("App notices packaging failed");
 }
 
 export function prepareBundledAgentResource(
@@ -337,13 +342,15 @@ export function prepareBundledAgentResource(
   return { resourceDir };
 }
 
-function createMacDmg(input: { appBundle: string; artifactPath: string }): void {
+export function createMacDmg(input: { appBundle: string; artifactPath: string }): void {
   const workDir = mkdtempSync(join(tmpdir(), "butler-app-dmg-"));
   try {
     const staging = join(workDir, "Butler");
     mkdirSync(staging, { recursive: true });
     cpSync(input.appBundle, join(staging, "Butler.app"), {
       dereference: false,
+      // Keep framework links relative when the source work directory is removed.
+      verbatimSymlinks: true,
       errorOnExist: false,
       force: true,
       recursive: true,

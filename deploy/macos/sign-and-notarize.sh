@@ -49,7 +49,7 @@ setup() {
   "$here/sign-and-notarize.sh" setup-certificate
   local key
   key=$key_dir/AuthKey.p8
-  if printf '%s' "$APPLE_API_KEY_P8" | grep -q -- '-----BEGIN'; then
+  if grep -q -- '-----BEGIN' <<< "$APPLE_API_KEY_P8"; then
     printf '%s\n' "$APPLE_API_KEY_P8" > "$key"
   else
     printf '%s' "$APPLE_API_KEY_P8" | base64 --decode > "$key"
@@ -164,11 +164,11 @@ assert_signed() {
   if adhoc; then return 0; fi
   info=$(codesign -dv --verbose=4 "$path" 2>&1)
   if [ -n "${BUTLER_SIGN_TEAM_ID:-}" ]; then
-    printf '%s\n' "$info" | grep -q "^TeamIdentifier=$BUTLER_SIGN_TEAM_ID\$" || die "wrong team: $path"
+    grep -q "^TeamIdentifier=$BUTLER_SIGN_TEAM_ID\$" <<< "$info" || die "wrong team: $path"
   fi
-  printf '%s\n' "$info" | grep -q '^Timestamp=' || die "no secure timestamp: $path"
+  grep -q '^Timestamp=' <<< "$info" || die "no secure timestamp: $path"
   if [ "${BUTLER_SIGN_NO_RUNTIME:-}" != 1 ]; then
-    printf '%s\n' "$info" | grep -Eq '^CodeDirectory .*flags=0x[0-9a-f]+\(.*runtime' || die "no hardened runtime: $path"
+    grep -Eq '^CodeDirectory .*flags=0x[0-9a-f]+\(.*runtime' <<< "$info" || die "no hardened runtime: $path"
   fi
 }
 
@@ -287,8 +287,8 @@ gatekeeper() {
     printf '%s\n' "$out" >&2
     return 1
   fi
-  if printf '%s\n' "$out" | grep -q '^source=Notarized Developer ID$'; then return 0; fi
-  if printf '%s\n' "$out" | grep -q '^override=security disabled$'; then
+  if grep -q '^source=Notarized Developer ID$' <<< "$out"; then return 0; fi
+  if grep -q '^override=security disabled$' <<< "$out"; then
     log "warning: Gatekeeper assessments are disabled on this host"
     return 0
   fi

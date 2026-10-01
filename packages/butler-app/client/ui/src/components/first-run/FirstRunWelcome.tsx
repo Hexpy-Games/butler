@@ -38,6 +38,23 @@ export function FirstRunWelcome({ flow }: { flow: FirstRunFlow }) {
         <Typo.H3 align="center" as="h1">{copy.welcomeTitle}</Typo.H3>
         <Typo.Body align="center" tone="secondary">{copy.welcomeLede}</Typo.Body>
       </Stack>
+      <Inline justify="between">
+        <Inline gap="sm" wrap={false}>
+          <Typo.Caption as="label" htmlFor="first-run-language" tone="tertiary">{flow.language === "ko" ? "인터페이스 언어" : "Interface language"}</Typo.Caption>
+          <NativeSelect
+            id="first-run-language"
+            size="sm"
+            value={flow.language}
+            onChange={(event) => flow.setLanguage(event.target.value as FirstRunLanguage)}
+          >
+            <NativeSelectOption value="ko">한국어</NativeSelectOption>
+            <NativeSelectOption value="en">English</NativeSelectOption>
+          </NativeSelect>
+        </Inline>
+        <Button asChild size="sm" variant="link">
+          <a href={FIRST_RUN_GUIDE_URL} rel="noreferrer" target="_blank">{copy.learnMore}</a>
+        </Button>
+      </Inline>
       <TintedGlass padding="sm" radius="panel">
         <Stack aria-label={copy.welcomeTitle} gap="sm" role="list">
           {copy.consent.map((item, index) => (
@@ -70,23 +87,6 @@ export function FirstRunWelcome({ flow }: { flow: FirstRunFlow }) {
         </ButtonContainer>
         <FirstRunPrepStatus flow={flow} />
       </Stack>
-      <Inline justify="between">
-        <Inline gap="sm" wrap={false}>
-          <Typo.Caption as="label" htmlFor="first-run-language" tone="tertiary">{copy.languageLabel}</Typo.Caption>
-          <NativeSelect
-            id="first-run-language"
-            size="sm"
-            value={flow.language}
-            onChange={(event) => flow.setLanguage(event.target.value as FirstRunLanguage)}
-          >
-            <NativeSelectOption value="ko">한국어</NativeSelectOption>
-            <NativeSelectOption value="en">English</NativeSelectOption>
-          </NativeSelect>
-        </Inline>
-        <Button asChild size="sm" variant="link">
-          <a href={FIRST_RUN_GUIDE_URL} rel="noreferrer" target="_blank">{copy.learnMore}</a>
-        </Button>
-      </Inline>
     </SetupWizardContent>
   );
 }

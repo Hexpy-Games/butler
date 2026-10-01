@@ -42,6 +42,7 @@ export type ShowcaseForcedState = (typeof SHOWCASE_FORCED_STATES)[number];
 export type ShowcaseState =
   | "default"
   | ShowcaseForcedState
+  | "read-only"
   | "disabled"
   | "loading"
   | "selected"

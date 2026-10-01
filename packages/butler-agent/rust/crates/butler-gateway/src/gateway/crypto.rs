@@ -34,10 +34,11 @@ pub(crate) fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
     left.len() == right.len() && bool::from(left.ct_eq(right))
 }
 
-/// 32 bytes from the operating system's random source (two v4 UUIDs, 244
+/// 32 bytes from the operating system's random source (three v4 UUIDs, 366
 /// random bits, condensed by SHA-256 so every output bit is uniform).
 pub(crate) fn random_bytes() -> [u8; 32] {
     let mut digest = Sha256::new();
+    digest.update(uuid::Uuid::new_v4().as_bytes());
     digest.update(uuid::Uuid::new_v4().as_bytes());
     digest.update(uuid::Uuid::new_v4().as_bytes());
     digest.finalize().into()

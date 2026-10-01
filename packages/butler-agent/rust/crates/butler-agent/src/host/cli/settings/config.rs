@@ -6,6 +6,7 @@ use butler_models::models::{ParsedModelRefSource, parse_model_ref};
 
 pub(super) const SAFE_CONFIG_PATHS: &[&str] = &[
     "user.language",
+    "user.responseLanguage",
     "user.techLanguage",
     "user.timezone",
     "system.defaultModel",
@@ -95,6 +96,13 @@ pub(super) fn value_at_path<'a>(config: &'a Value, dotted_path: &str) -> Option<
 }
 
 pub(super) fn set_path(config: &mut Value, dotted_path: &str, value: Value) {
+    if dotted_path == "user.responseLanguage" {
+        set_path(
+            config,
+            "user.responseLanguageDefaultSource",
+            Value::from("explicit"),
+        );
+    }
     let mut parts = dotted_path.split('.').peekable();
     let Some(mut current) = config.as_object_mut() else {
         return;
@@ -230,6 +238,14 @@ pub(super) fn validate(config: &Value) -> Validation {
 }
 
 fn validate_remaining(config: &Value, mut result: Validation) -> Validation {
+    if config
+        .pointer("/user/responseLanguage")
+        .is_some_and(|value| !matches!(value.as_str(), Some("en" | "ko")))
+    {
+        result
+            .errors
+            .push("user.responseLanguage must be en or ko".into());
+    }
     let system = config.get("system");
     let model = ["defaultModel", "butlerModel", "workerModel"]
         .into_iter()

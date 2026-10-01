@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
-import { api } from "@/app/api.ts";
 import { setAppCopyLanguage } from "@/app/copy.ts";
 import { detectFirstRunLanguage, firstRunCopy, type FirstRunLanguage } from "@/app/firstRunSetup.ts";
-import { notifyError } from "@/app/notifications.ts";
-import { consentAcceptedPatch } from "@/app/onboarding.ts";
 import { PROVIDER_CARDS, connectionCardId, type FirstRunProviderCardId, type LocalModelOption } from "@/app/setupProviders.ts";
 import { useButlerStore } from "@/app/store.ts";
-import type { ModelCatalogView, SettingsView } from "@/app/types.ts";
+import type { ModelCatalogView } from "@/app/types.ts";
+import { useWelcomeConsent } from "./useWelcomeConsent";
+import { useReplyLanguage } from "./useReplyLanguage";
 import { useConnectionCommit } from "./useConnectionCommit";
 import { useLocalModelServers } from "./useLocalModelServers";
 import { useOnlineStatus } from "./useOnlineStatus";
@@ -48,9 +47,8 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
   const [language, setLanguage] = useState<FirstRunLanguage>(() => initialLanguage(mode));
   const [screen, setScreen] = useState<"welcome" | "connect">("welcome");
   const [view, setView] = useState<ConnectView>({ kind: "list" });
-  const [acceptedAt, setAcceptedAt] = useState<string | null>(null);
-  const [savingConsent, setSavingConsent] = useState(false);
   const copy = firstRunCopy[language];
+  const { acceptedAt, savingConsent, agree } = useWelcomeConsent({ mode, language, onComplete, onAgree: () => setScreen("connect") });
   const setup = useSetupReadiness();
   const online = useOnlineStatus();
   const current = useButlerStore((state) => currentCardId(mode, state.settings.model, state.modelCatalog));
@@ -59,8 +57,15 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
     readinessStatus: setup.readiness.status,
     acceptedAt,
     language,
-    onDone: (connection) => onComplete({ cardId: connection.cardId }),
+    resume: mode === "first-run",
   });
+  const reply = useReplyLanguage({ connected: commit.connected, language, onComplete });
+  useEffect(() => {
+    if (commit.connected) {
+      setLanguage(commit.connected.settings.language);
+      setScreen("connect");
+    }
+  }, [commit.connected]);
   const signIn = useSignIn({
     onSignedIn: () => commit.submit({
       kind: "hosted", cardId: "chatgpt", providerId: "openai", authType: "codex_oauth", keepDefaults: current === "chatgpt",
@@ -70,31 +75,6 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
   useEffect(() => {
     setAppCopyLanguage(language);
   }, [language]);
-
-  async function saveConsent(now: string): Promise<void> {
-    setSavingConsent(true);
-    try {
-      const current = await api<SettingsView>("/settings");
-      const patch = { language, ...consentAcceptedPatch(current.onboarding, now) };
-      const saved = await api<Partial<SettingsView>>("/settings", { method: "PATCH", body: JSON.stringify(patch) });
-      useButlerStore.getState().setSettings({ ...current, ...patch, ...saved, language });
-      onComplete(null);
-    } catch (error) {
-      notifyError(error, copy.finishFailed, { id: "first-run-consent" });
-    } finally {
-      setSavingConsent(false);
-    }
-  }
-
-  function agree(): void {
-    const now = new Date().toISOString();
-    if (mode === "consent") {
-      void saveConsent(now);
-      return;
-    }
-    setAcceptedAt(now);
-    setScreen("connect");
-  }
 
   function pick(cardId: FirstRunProviderCardId): void {
     const kind = PROVIDER_CARDS[cardId].kind;
@@ -107,8 +87,8 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
   }
 
   return {
-    mode, copy, language, setLanguage, online, screen, view, savingConsent, local, signIn, commit,
-    currentCardId: current,
+    mode, copy, language, setLanguage, online, screen, view, savingConsent, local, signIn, commit, reply,
+    currentCardId: commit.connected?.cardId ?? current,
     readiness: setup.readiness,
     retryPreparation: setup.retry,
     repairPreparation: setup.repair,

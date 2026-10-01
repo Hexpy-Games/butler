@@ -3,12 +3,13 @@ import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { DisclosureRow } from "@/butler-ds";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 import { SecurityAllowedHostsField } from "./SecurityAllowedHostsField";
-import { SecurityConnectionCodeField } from "./SecurityConnectionCodeField";
+import { SecurityPairingSection } from "./SecurityPairingSection";
+import { SecurityDevicesSection } from "./SecurityDevicesSection";
 import { SecurityRemoteAccessFields } from "./SecurityRemoteAccessFields";
 import { useSecuritySettings } from "./useSecuritySettings";
 
 /**
- * Settings → Security: LAN access and the connection code (clients on this
+ * Settings → Security: LAN access and remote pairing (clients on this
  * computer only). Allowed hosts sit in a collapsed Advanced disclosure.
  */
 export function SecuritySettings() {
@@ -36,7 +37,6 @@ export function SecuritySettings() {
   }
 
   const state = view ? "ready" : "loading";
-  const connectionCode = view ? view.connection_code : undefined;
   return (
     <SettingsPage>
       <SettingsSection id="remote-access" kind="form" title={sections.remoteAccess} state={state}>
@@ -48,19 +48,11 @@ export function SecuritySettings() {
           />
         )}
       </SettingsSection>
-      {connectionCode !== null && (
-        <SettingsSection id="connection-code" kind="form" title={sections.connectionCode} state={state}>
-          {connectionCode && (
-            <SecurityConnectionCodeField
-              code={connectionCode}
-              revealed={security.revealed}
-              disabled={busy !== null}
-              onReveal={() => void security.toggleReveal()}
-              onCopy={() => void security.copyCode()}
-              onRotate={() => void security.rotate()}
-            />
-          )}
-        </SettingsSection>
+      {view?.remote_access_enabled && (
+        <>
+          <SecurityPairingSection disabled={busy !== null} />
+          <SecurityDevicesSection disabled={busy !== null} />
+        </>
       )}
       {view && (
         <SettingsSection id="security-advanced" kind="form" title={settingsCopy.security.advanced}>

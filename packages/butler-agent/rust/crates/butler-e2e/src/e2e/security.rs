@@ -72,10 +72,18 @@ impl AdminClient {
 }
 
 /// Every security route, each with a request that would change something.
-pub fn security_calls() -> [(Method, &'static str, Option<Value>); 4] {
+pub fn security_calls() -> [(Method, &'static str, Option<Value>); 8] {
     [
         (Method::GET, "/security", None),
-        (Method::POST, "/security/connection-code/reveal", None),
+        (Method::POST, "/security/pairing", None),
+        (Method::GET, "/security/pairing", None),
+        (Method::GET, "/security/devices", None),
+        (Method::DELETE, "/security/devices", None),
+        (
+            Method::DELETE,
+            "/security/devices/00000000-0000-0000-0000-000000000000",
+            None,
+        ),
         (Method::POST, "/security/connection-code/rotate", None),
         (
             Method::PATCH,

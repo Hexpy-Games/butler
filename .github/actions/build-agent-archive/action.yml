@@ -56,8 +56,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        bun install --frozen-lockfile
-        npm --prefix packages/butler-app/client/ui ci
+        bun install --frozen-lockfile --ignore-scripts
         npm --prefix packages/butler-app/client/ui run build
 
     - name: Build the native Agent

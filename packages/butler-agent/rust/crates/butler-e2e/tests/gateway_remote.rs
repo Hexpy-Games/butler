@@ -97,10 +97,8 @@ async fn sec_09_lan_access_binds_and_unbinds_without_restart() -> Result<(), Har
     assert_eq!(view["remote_access_enabled"], false, "{view}");
     assert_eq!(view["bind_addresses"], json!([loopback]), "{view}");
     assert_eq!(view["lan_urls"], json!([]), "{view}");
-    let token = s.gw.token.clone();
-    let masked = format!("{}…{}", &token[..4], &token[token.len() - 4..]);
-    assert_eq!(view["connection_code"]["masked"], masked, "{view}");
-    assert!(view["connection_code"]["created_at"].is_string(), "{view}");
+    assert!(view["connection_code"].is_null(), "token metadata exposed");
+    assert!(!view.to_string().contains(&s.gw.token));
     let settings = app.send(Method::GET, "/settings", None, &[]).await?;
     assert_eq!(
         settings.data()["security"],
@@ -287,14 +285,10 @@ async fn sec_12_header_less_forwarder_needs_the_admin_credential() -> Result<(),
         false,
         "state changed"
     );
+    assert!(app.view().await?["connection_code"].is_null());
     assert_eq!(
-        app.view().await?["connection_code"]["masked"],
-        format!(
-            "{}…{}",
-            &s.gw.token[..4],
-            &s.gw.token[s.gw.token.len() - 4..]
-        ),
-        "the code rotated"
+        s.agent.launch.data_folder_token().as_deref(),
+        Some(s.gw.token.as_str())
     );
     s.finish().await
 }

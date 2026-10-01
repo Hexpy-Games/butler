@@ -1,6 +1,6 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
-import { useCallback } from "react";
+import { memo, useCallback, type KeyboardEvent } from "react";
 import { PlainTextPlugin } from "@lexical/react/LexicalPlainTextPlugin";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
@@ -14,11 +14,12 @@ import { ComposerEditorPlugin } from "./editor/ComposerEditorPlugin";
 
 export const COMPOSER_MAX_AUTO_ROWS = 8;
 
-export function ComposerTextArea({ placeholder }: { placeholder?: string }) {
+export const ComposerTextArea = memo(function ComposerTextArea({ placeholder }: { placeholder?: string }) {
   useAppLocale();
   const sessionId = useComposerStore(state => state.draftSessionId);
   const setIsComposing = useComposerStore(state => state.setIsComposing);
-  const handleKeyDown = useComposerStore(state => state.handleKeyDown);
+  const handleKeyDown = useCallback((event: KeyboardEvent<HTMLElement>) =>
+    useComposerStore.getState().handleKeyDown(event), []);
   const large = useComposerStore(state => state.large);
   const textAreaRef = useComposerStore(state => state.textAreaRef);
   const attachEditor = useCallback((element: HTMLDivElement | null) => {
@@ -48,4 +49,4 @@ export function ComposerTextArea({ placeholder }: { placeholder?: string }) {
       <ComposerEditorPlugin />
     </LexicalComposer>
   );
-}
+});

@@ -127,6 +127,10 @@ impl PersonaPresets {
         None
     }
 
+    pub(crate) fn eol_template(&self) -> PathBuf {
+        self.resource_root.join("templates/eol.template.md")
+    }
+
     fn root(&self) -> PathBuf {
         self.resource_root.join("personas/templates")
     }

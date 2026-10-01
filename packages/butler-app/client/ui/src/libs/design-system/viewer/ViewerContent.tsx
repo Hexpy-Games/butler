@@ -47,7 +47,7 @@ export function ViewerContent({ page, anchor, entries, state, themes, onOpen, on
     case "item":
       return <ItemPage entries={entries} entry={page.entry} key={page.entry.id} onOpen={onOpen} state={state} themes={themes} />;
     case "icons":
-      return <IconsPage />;
+      return <IconsPage locale={state.locale} />;
     case "not-found":
       return <NotFoundPage id={page.id} onOpen={onOpen} />;
   }

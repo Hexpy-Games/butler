@@ -5,8 +5,10 @@
 //! read): a loopback connection alone may be a forwarder.
 //!
 //! - `GET /security`: exposure, listen addresses, LAN URLs, allowed hosts
-//!   and the masked connection code.
-//! - `POST /security/connection-code/reveal`: the full connection code.
+//!   with no connection token metadata.
+//! - `POST /security/pairing`: issue an eight-digit one-time pairing code.
+//! - `GET /security/pairing`: status for foreground issuers.
+//! - `GET`/`DELETE /security/devices[/{id}]`: list and revoke devices.
 //! - `POST /security/connection-code/rotate`: a new code; the old one, its
 //!   signed URLs, browser sessions and live streams stop working at once.
 //! - the `security` object of `GET`/`PATCH /settings`.
@@ -14,12 +16,12 @@
 use std::sync::Arc;
 
 use axum::body::Body;
-use axum::http::{Method, Request, StatusCode, header};
+use axum::http::{Method, Request, StatusCode};
 use axum::response::Response;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use super::{Client, HttpError, HttpState, json, security::Access};
+use super::{Client, HttpError, HttpState, json};
 use crate::gateway::protocol::{APP_PROTOCOL_VERSION, ApiEnvelope};
 use crate::gateway::{MAX_ALLOWED_HOSTS, normalize_allowed_host};
 
@@ -39,7 +41,7 @@ struct SecurityView {
     lan_urls: Vec<String>,
     /// Extra host names the gateway answers (tunnels, reverse proxies).
     allowed_hosts: Vec<String>,
-    /// The connection code, masked; `null` when local auth is off.
+    /// Compatibility with the existing UI: always null; no token metadata.
     connection_code: Option<ConnectionCodeView>,
 }
 
@@ -49,11 +51,6 @@ struct ConnectionCodeView {
     masked: String,
     /// When the code was created (RFC 3339), when the token file says.
     created_at: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct RevealedCode {
-    code: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -84,12 +81,62 @@ pub(super) async fn route(
 ) -> Result<Response, HttpError> {
     let client = local_client(request.extensions().get::<Client>())?.clone();
     match (request.method().clone(), request.uri().path()) {
-        (Method::GET, "/security") => ok(view(&state).await?),
-        (Method::POST, "/security/connection-code/reveal") => {
-            let code = state.security.token().ok_or_else(code_unavailable)?;
-            ok(RevealedCode {
-                code: code.to_string(),
-            })
+        (Method::GET, "/security") => ok(view(&state)?),
+        (Method::POST, "/security/pairing") => {
+            let keyed = state.security.sessions().ok_or_else(code_unavailable)?;
+            ok(keyed
+                .sessions
+                .as_ref()
+                .ok_or_else(code_unavailable)?
+                .issue_pairing())
+        }
+        (Method::GET, "/security/pairing") => {
+            let keyed = state.security.sessions().ok_or_else(code_unavailable)?;
+            ok(keyed
+                .sessions
+                .as_ref()
+                .ok_or_else(code_unavailable)?
+                .pairing_status())
+        }
+        (Method::GET, "/security/devices") => ok(state.devices.list()),
+        (Method::GET, path) if path.starts_with("/security/devices/") => {
+            let device = state
+                .devices
+                .get(path.trim_start_matches("/security/devices/"))
+                .ok_or_else(|| HttpError::public(404, "device_not_found", "Device not found."))?;
+            ok(device)
+        }
+        (Method::DELETE, "/security/devices") => {
+            state.devices.revoke(None).await?;
+            ok(serde_json::json!({"revoked": true}))
+        }
+        (Method::DELETE, path) if path.starts_with("/security/devices/") => {
+            let id = path.trim_start_matches("/security/devices/");
+            if uuid::Uuid::parse_str(id).is_err() {
+                return Err(HttpError::public(
+                    400,
+                    "invalid_device_id",
+                    "Invalid device ID.",
+                ));
+            }
+            state.devices.revoke(Some(id.into())).await?;
+            ok(serde_json::json!({"revoked": true}))
+        }
+        #[cfg(debug_assertions)]
+        (Method::POST, "/security/pairing/clock") => {
+            let seconds = super::query(request.uri())
+                .get("seconds")
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(0)
+                .min(3600);
+            let keyed = state.security.sessions().ok_or_else(code_unavailable)?;
+            keyed
+                .sessions
+                .as_ref()
+                .ok_or_else(code_unavailable)?
+                .advance(seconds);
+            state.devices.advance(seconds);
+            ok(serde_json::json!({"advanced": seconds}))
         }
         (Method::POST, "/security/connection-code/rotate") => rotate(&state, client).await,
         _ => Err(HttpError::public(404, "not_found", "Route not found.")),
@@ -115,20 +162,11 @@ pub(super) fn local_client(client: Option<&Client>) -> Result<&Client, HttpError
     }
 }
 
-async fn view(state: &HttpState) -> Result<SecurityView, HttpError> {
+fn view(state: &HttpState) -> Result<SecurityView, HttpError> {
     let remote = state.remote.snapshot();
     let mut bind_addresses = vec![state.remote.primary().to_string()];
     bind_addresses.extend(remote.lan_listeners.iter().map(ToString::to_string));
-    let connection_code = match state.security.token() {
-        Some(token) => Some(ConnectionCodeView {
-            masked: mask(&token),
-            created_at: match &state.security_store {
-                Some(store) => store.connection_code_created_at().await?,
-                None => None,
-            },
-        }),
-        None => None,
-    };
+    let connection_code = None;
     Ok(SecurityView {
         remote_access_enabled: remote.exposure.remote_access_enabled,
         bind_addresses,
@@ -144,9 +182,16 @@ async fn view(state: &HttpState) -> Result<SecurityView, HttpError> {
 }
 
 /// Stores a new code, makes it the only credential, tells open streams,
-/// then closes the ones opened with the old code. A browser session that
-/// rotated gets a cookie under the new key, so its own page keeps working.
+/// then closes the ones opened with the old code. This internal reset
+/// requires bearer authentication and revokes every device.
 async fn rotate(state: &Arc<HttpState>, client: Client) -> Result<Response, HttpError> {
+    if client.access != super::security::Access::Bearer {
+        return Err(HttpError::public(
+            403,
+            "bearer_token_required",
+            "Reset requires the local service credential.",
+        ));
+    }
     let store = state.security_store.clone().ok_or_else(|| {
         HttpError::public(
             503,
@@ -158,6 +203,7 @@ async fn rotate(state: &Arc<HttpState>, client: Client) -> Result<Response, Http
         return Err(code_unavailable());
     }
     let _change = state.remote.changes.lock().await;
+    state.devices.revoke(None).await?;
     let rotated = store.rotate_connection_code().await?;
     let old_streams = state
         .security
@@ -178,15 +224,10 @@ async fn rotate(state: &Arc<HttpState>, client: Client) -> Result<Response, Http
         .publish_gateway_event(ROTATED_EVENT, payload)
         .await;
     old_streams.cancel();
-    let mut response = ok(RotatedCode {
+    let response = ok(RotatedCode {
         code: rotated.code,
         created_at: rotated.created_at,
     })?;
-    if client.access == Access::BrowserSession
-        && let Some(cookie) = state.security.issue_session()
-    {
-        response.headers_mut().insert(header::SET_COOKIE, cookie);
-    }
     Ok(response)
 }
 
@@ -248,17 +289,6 @@ fn normalized_hosts(hosts: &[String]) -> Result<Vec<String>, HttpError> {
         return Err(invalid_security("Too many allowed hosts."));
     }
     Ok(normalized)
-}
-
-/// `abcd…wxyz`: enough to recognize a code, not to use it.
-fn mask(code: &str) -> String {
-    let characters: Vec<char> = code.chars().collect();
-    if characters.len() < 12 {
-        return "…".to_owned();
-    }
-    let head: String = characters[..4].iter().collect();
-    let tail: String = characters[characters.len() - 4..].iter().collect();
-    format!("{head}…{tail}")
 }
 
 fn ok<T: Serialize>(data: T) -> Result<Response, HttpError> {

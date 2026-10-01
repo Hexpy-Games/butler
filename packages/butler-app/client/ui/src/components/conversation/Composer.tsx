@@ -127,7 +127,7 @@ export function Composer({ large, onReserveChange, scope }: ComposerProps) {
     <ComposerCard
       {...fileDrop}
       large={large}
-      expanded={Boolean(scope || decision.plan || decision.authority) || presentation.expanded}
+      expanded={Boolean(scope || decision.plan || decision.authority || decision.question) || presentation.expanded}
       floating
       notice={<ComposerNotices summary={session.summary} />}
       adjunct={
@@ -151,6 +151,7 @@ export function Composer({ large, onReserveChange, scope }: ComposerProps) {
         onFiles={(nextFiles) => void files.addFiles(nextFiles)}
         planDecision={decision.plan}
         authorityDecision={decision.authority}
+        question={decision.question}
       />
     </ComposerCard>
   );

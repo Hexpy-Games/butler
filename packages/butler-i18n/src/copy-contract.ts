@@ -104,6 +104,9 @@ type CountFormatter = (count: number) => string;
  */
 export interface ApprovalRequestCopy {
   editFiles: (count: number, workspace: string | null) => string;
+  editFilesOutside: (count: number) => string;
+  runCommandOutside: string;
+  networkCommandOutside: string;
   runCommand: (workspace: string | null) => string;
   networkCommand: (workspace: string | null) => string;
   useConnector: (tool: string | null, server: string | null) => string;
@@ -431,6 +434,12 @@ export interface AppCopy {
     allowConversation: string;
     allowDescription: string;
     branchFailed: string;
+    questionPanel: {
+      review: string; send: string; next: string; back: string; skip: string;
+      skipped: string; later: string; pending: string; other: string;
+      recommended: string; working: string; select: string;
+    };
+    questionAnswer: { answered: string; skipped: string; message: string };
     decisionFailed: string;
     archivesEmpty: string;
     generalConversation: string;
@@ -988,7 +997,7 @@ export interface AppCopy {
     };
     sectionState: { loading: string; error: string; retry: string; empty: string };
     updateComponents: { app: string; service: string };
-    pageSections: Record<"languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "connectionCode" | "allowedHosts", string>;
+    pageSections: Record<"languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts", string>;
     pageSectionDescriptions: Record<"notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     modelsAdvanced: { title: string; contents: string };
@@ -1305,19 +1314,23 @@ export interface AppCopy {
       copyAddress: string;
       copied: string;
       code: string;
-      createdAt: (date: string) => string;
-      reveal: string;
-      hide: string;
-      copy: string;
-      rotate: string;
-      rotateTitle: string;
-      rotateConfirm: string;
-      rotated: string;
+      pairDevice: string;
+      expiresIn: (seconds: number) => string;
+      invalidated: string;
+      paired: string;
+      pairingFailed: string;
+      working: string;
+      devices: string;
+      noDevices: string;
+      revoke: string;
+      revokeDevice: (name: string) => string;
+      revokeAll: string;
+      revokeAllTitle: string;
+      revokeAllConfirm: string;
+      revokeFailed: string;
       hostOnly: string;
       /** 403 admin_credential_required: this computer, but the app's admin credential is missing. */
       adminRequired: string;
-      revealFailed: string;
-      rotateFailed: string;
       /** The Advanced section header and the disclosure row that reveals allowed hosts. */
       advanced: string;
       advancedContents: string;

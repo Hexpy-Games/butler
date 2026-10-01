@@ -10,6 +10,7 @@ mod errors;
 mod event_outbox;
 mod events;
 use errors::app_error;
+mod devices;
 #[cfg(debug_assertions)]
 mod faults;
 mod gateway_dashboard_impl;
@@ -33,6 +34,7 @@ mod progress_view;
 mod project_sources;
 mod projection;
 mod projects;
+mod question_followup;
 mod queue;
 mod queue_dispatcher;
 mod queue_view;
@@ -53,7 +55,7 @@ mod sessions;
 mod settings;
 mod setup;
 mod turn_dispatch;
-pub use settings::diagnostics_enabled_readonly;
+pub use settings::{diagnostics_enabled_readonly, stored_ui_language_readonly};
 mod shell;
 mod space;
 mod storage;
@@ -315,7 +317,12 @@ impl AppApplication {
         self.recover_turn_cancellations().await?;
         self.watch_wallpaper_modules().await;
         // Failed authority retries remain durable for the next startup.
-        let _ = self.dependencies.authority_handoff.retry_decided().await;
+        if let Ok(followups) = self.dependencies.authority_handoff.retry_decided().await {
+            for (owner, request_ref, input) in followups {
+                let session = owner.strip_prefix("butler/app-").unwrap_or(&owner);
+                let _ = question_followup::send(self, session, &request_ref, &input).await;
+            }
+        }
         self.setup_readiness.start(
             self.dependencies.setup.readiness(),
             self.storage.clone(),

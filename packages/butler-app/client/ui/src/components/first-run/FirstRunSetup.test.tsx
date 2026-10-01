@@ -120,6 +120,7 @@ async function renderFirstRun(options: HarnessOptions = {}): Promise<Harness> {
   const clipboard: string[] = [];
   const opened: string[] = [];
   Object.assign(dom.window, { open: (url: string) => void opened.push(url) });
+  let settings: SettingsView = { ...EMPTY_SETTINGS, onboarding: {}, ...options.settings };
   const listeners = new Set<(event: TimelineEvent) => void>();
   const setup = [...(options.setup ?? [{ phase: "ready" }])];
   const readiness = [...(options.readiness ?? [])];
@@ -173,7 +174,8 @@ async function renderFirstRun(options: HarnessOptions = {}): Promise<Harness> {
       record("discoverLocalModels", input);
       return { server_url: "http://127.0.0.1:8080/v1", platform: "custom", models: options.discovered ?? [] };
     },
-    getSettings: async () => ({ ...EMPTY_SETTINGS, onboarding: {}, ...options.settings }),
+    getPersonalization: async () => ({ response_language: "ko", response_language_explicit: true }),
+    getSettings: async () => settings,
     registerHostedModel: async (input: { model_id: string }) => {
       record("registerHostedModel", input);
       const attempts = calls.filter((call) => call.method === "registerHostedModel").length;
@@ -186,9 +188,10 @@ async function renderFirstRun(options: HarnessOptions = {}): Promise<Harness> {
       const model = { ...FIRST_RUN_TEST_MODEL, provider_id: "local", model_id: input.model_id, model_ref: `local/${input.model_id}`, default_reasoning_effort: "medium" as const };
       return { model, catalog: catalog([model]) };
     },
-    updateSettings: async (patch: unknown) => {
+    updateSettings: async (patch: Partial<SettingsView>) => {
       record("updateSettings", patch);
-      return { ok: true, data: {} };
+      settings = { ...settings, ...patch };
+      return { ok: true, data: settings };
     },
     quitApp: async () => record("quitApp"),
   };
@@ -399,7 +402,7 @@ test("This computer joins the top cards when a local server answers, and its mod
   expect(methods(harness, "registerLocalModel")[0]!.input).toMatchObject({
     platform: "ollama", server_url: "http://127.0.0.1:11434", model_id: "gemma3:12b", provider_id: "local",
   });
-  const patch = methods(harness, "updateSettings").at(-1)!.input as Record<string, unknown>;
+  const patch = methods(harness, "updateSettings")[0]!.input as Record<string, unknown>;
   expect(patch).toMatchObject({ model: "local/gemma3:12b", language: "ko" });
   expect(patch.onboarding).toMatchObject({ consent_version: FIRST_RUN_CONSENT_VERSION });
   expect(harness.results[0]).toEqual({ cardId: "local" });
@@ -428,10 +431,10 @@ test("an API key is checked once after the paste debounce, saved, and connects t
   expect(methods(harness, "registerHostedModel")[0]!.input).toEqual({
     provider_id: "anthropic", model_id: "claude-sonnet-5", auth_type: "api_key", credential_id: "cred-new",
   });
-  const patch = methods(harness, "updateSettings").at(-1)!.input as SettingsView;
+  const patch = methods(harness, "updateSettings")[0]!.input as SettingsView;
   expect(patch).toMatchObject({ model: "anthropic/claude-sonnet-5", reasoning_effort: "medium" });
   expect(patch.worker_profiles.every((profile) => profile.reasoning_effort === "medium")).toBe(true);
-  expect(typeof patch.onboarding?.completed_at).toBe("string");
+  expect(typeof (methods(harness, "updateSettings").at(-1)!.input as SettingsView).onboarding?.completed_at).toBe("string");
   expect(harness.results[0]).toEqual({ cardId: "claude" });
   await unmount(harness);
 });
@@ -537,7 +540,7 @@ test("a finished sign-in registers ChatGPT with its routine preset", async () =>
   await click(harness, card(harness, "chatgpt"));
   await waitFor(() => harness.results.length === 1, "completion", 5000);
   expect(methods(harness, "registerHostedModel")[0]!.input).toEqual({ provider_id: "openai", model_id: "gpt-6-sol", auth_type: "codex_oauth" });
-  expect(methods(harness, "updateSettings").at(-1)!.input).toMatchObject({ model: "openai/gpt-6-sol", reasoning_effort: "medium" });
+  expect(methods(harness, "updateSettings")[0]!.input).toMatchObject({ model: "openai/gpt-6-sol", reasoning_effort: "medium" });
   await unmount(harness);
 });
 
@@ -739,7 +742,7 @@ test("Run setup again with the same AI keeps the existing model defaults", async
   await waitFor(() => harness.results.length === 1, "completion");
   // The new key goes to the model already in use; the chat default, effort and Workers stay.
   expect(methods(harness, "registerHostedModel")[0]!.input).toMatchObject({ model_id: "claude-opus-5-5", credential_id: "cred-new" });
-  const patch = methods(harness, "updateSettings").at(-1)!.input as Record<string, unknown>;
+  const patch = methods(harness, "updateSettings")[0]!.input as Record<string, unknown>;
   expect(patch).not.toHaveProperty("model");
   expect(patch).not.toHaveProperty("reasoning_effort");
   expect(patch).not.toHaveProperty("worker_profiles");
@@ -759,7 +762,7 @@ test("Run setup again with a new AI applies that service's routine preset", asyn
   await waitFor(() => Boolean(harness.container.querySelector('[data-card-id="chatgpt"]')), "chatgpt card");
   await click(harness, card(harness, "chatgpt"));
   await waitFor(() => harness.results.length === 1, "completion");
-  expect(methods(harness, "updateSettings").at(-1)!.input).toMatchObject({ model: "openai/gpt-6-sol", reasoning_effort: "medium" });
+  expect(methods(harness, "updateSettings")[0]!.input).toMatchObject({ model: "openai/gpt-6-sol", reasoning_effort: "medium" });
   await unmount(harness);
 });
 

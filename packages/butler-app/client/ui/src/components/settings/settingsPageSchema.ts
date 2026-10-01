@@ -76,7 +76,8 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   // `loopback_required`). Allowed hosts show when Advanced is open.
   security: [
     { id: "remote-access", kind: "form", fields: ["remote-access-enabled", "lan-urls"] },
-    { id: "connection-code", kind: "form", fields: ["connection-code"], optional: true },
+    { id: "device-pairing", kind: "form", fields: ["pairing-code"], optional: true },
+    { id: "paired-devices", kind: "list", fields: [], optional: true },
     { id: "security-advanced", kind: "form", fields: [], optional: true },
     { id: "allowed-hosts", kind: "form", fields: ["allowed-hosts"], optional: true },
   ],

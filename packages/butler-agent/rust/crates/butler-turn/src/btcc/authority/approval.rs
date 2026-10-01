@@ -7,6 +7,7 @@
 
 mod command_risk;
 
+use std::collections::HashSet;
 use std::path::{Component, Path};
 
 use serde::{Deserialize, Serialize};
@@ -15,11 +16,10 @@ use serde_json::Value;
 use butler_core::tool_protocol::ToolName;
 use command_risk::command_risk;
 
-/// Most targets and examples one approval lists.
-const MAX_TARGETS: usize = 20;
+/// Most examples one approval lists; all targets remain visible.
 const MAX_EXAMPLES: usize = 3;
-/// A command example is cut after this many characters.
-const MAX_EXAMPLE_CHARS: usize = 200;
+/// Safety cap per example, measured in UTF-8 bytes.
+const MAX_EXAMPLE_BYTES: usize = 16 * 1024;
 /// A folder label is cut after this many characters.
 const MAX_LABEL_CHARS: usize = 80;
 /// The label of a workspace whose folder has no usable name.
@@ -35,6 +35,9 @@ pub struct AuthorityApproval {
     pub count: u32,
     /// Up to three concrete items: file paths or the command line.
     pub examples: Vec<String>,
+    /// One flag per example; old stored approvals default to no flags.
+    #[serde(default, skip_serializing_if = "no_truncation")]
+    pub examples_truncated: Vec<bool>,
     pub risk: ApprovalRisk,
 }
 
@@ -79,6 +82,8 @@ pub struct ApprovalTarget {
 pub enum ApprovalTargetKind {
     Folder,
     File,
+    /// A target outside the workspace; path contains only its file name.
+    Outside,
     Connector,
     Schedule,
     Project,
@@ -169,7 +174,7 @@ fn by_tool(facts: ApprovalFacts<'_>, tool: Option<ToolName>) -> AuthorityApprova
         _ => (
             ApprovalActionKind::Other,
             ApprovalTargetKind::Other,
-            ApprovalRisk::Medium,
+            ApprovalRisk::High,
         ),
     };
     single(kind, target, facts.target, risk)
@@ -178,30 +183,50 @@ fn by_tool(facts: ApprovalFacts<'_>, tool: Option<ToolName>) -> AuthorityApprova
 /// `write_file` (`path`) or `edit_file` (`path`, or `edits[].path`): the
 /// folder, then each distinct file.
 fn file_edits(facts: ApprovalFacts<'_>) -> AuthorityApproval {
-    let mut files: Vec<String> = Vec::new();
+    let mut files = Vec::new();
+    let mut identities = HashSet::new();
     let entries = match facts.input.get("edits").and_then(Value::as_array) {
         Some(edits) => edits.iter().collect(),
         None => vec![facts.input],
     };
     for entry in entries {
         if let Some(path) = entry.get("path").and_then(Value::as_str) {
-            let path = inside_workspace(path, facts.workspace);
-            if !path.is_empty() && !files.contains(&path) {
-                files.push(path);
+            let relative = inside_workspace(path, facts.workspace);
+            let identity = relative.clone().unwrap_or_else(|| path.to_owned());
+            if !identity.is_empty() && identities.insert(identity) {
+                files.push(ApprovalTarget {
+                    kind: if relative.is_some() {
+                        ApprovalTargetKind::File
+                    } else {
+                        ApprovalTargetKind::Outside
+                    },
+                    path: relative.unwrap_or_else(|| file_name(Path::new(path))),
+                });
             }
         }
     }
+    let outside = files
+        .iter()
+        .any(|file| file.kind == ApprovalTargetKind::Outside);
+    let count = saturating_count(files.len());
+    let (examples, examples_truncated) = files
+        .iter()
+        .take(MAX_EXAMPLES)
+        .map(|file| cap_example(&file.path))
+        .unzip();
     let mut targets = vec![folder(workspace_label(facts.workspace))];
-    targets.extend(files.iter().take(MAX_TARGETS).map(|path| ApprovalTarget {
-        kind: ApprovalTargetKind::File,
-        path: path.clone(),
-    }));
+    targets.extend(files);
     AuthorityApproval {
         action_kind: ApprovalActionKind::EditFiles,
         targets,
-        count: saturating_count(files.len()),
-        examples: files.into_iter().take(MAX_EXAMPLES).collect(),
-        risk: ApprovalRisk::Medium,
+        count,
+        examples,
+        examples_truncated,
+        risk: if outside {
+            ApprovalRisk::High
+        } else {
+            ApprovalRisk::Medium
+        },
     }
 }
 
@@ -212,30 +237,53 @@ fn command(facts: ApprovalFacts<'_>, kind: ApprovalActionKind) -> AuthorityAppro
         .input
         .get("command")
         .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim();
+        .unwrap_or_default();
     let label = workspace_label(facts.workspace);
     let cwd = facts
         .input
         .get("cwd")
         .and_then(Value::as_str)
-        .map(|cwd| inside_workspace(cwd, facts.workspace))
         .unwrap_or_default();
-    let folder_path = if cwd.is_empty() {
-        label
-    } else {
-        format!("{label}/{cwd}")
+    let target = match inside_workspace(cwd, facts.workspace) {
+        Some(relative) => folder(if relative.is_empty() {
+            label
+        } else {
+            format!("{label}/{relative}")
+        }),
+        None => ApprovalTarget {
+            kind: ApprovalTargetKind::Outside,
+            path: file_name(Path::new(cwd)),
+        },
     };
+    let risk = if target.kind == ApprovalTargetKind::Outside {
+        ApprovalRisk::High
+    } else {
+        command_risk(line)
+    };
+    let (examples, examples_truncated) = (!line.is_empty())
+        .then(|| cap_example(line))
+        .into_iter()
+        .unzip();
     AuthorityApproval {
         action_kind: kind,
-        targets: vec![folder(folder_path)],
+        targets: vec![target],
         count: 1,
-        examples: (!line.is_empty())
-            .then(|| line.chars().take(MAX_EXAMPLE_CHARS).collect())
-            .into_iter()
-            .collect(),
-        risk: command_risk(line),
+        examples,
+        examples_truncated,
+        risk,
     }
+}
+
+fn no_truncation(flags: &[bool]) -> bool {
+    !flags.iter().any(|flag| *flag)
+}
+
+fn cap_example(text: &str) -> (String, bool) {
+    let mut end = text.len().min(MAX_EXAMPLE_BYTES);
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    (text[..end].to_owned(), end < text.len())
 }
 
 fn single(
@@ -252,6 +300,7 @@ fn single(
         }],
         count: 1,
         examples: Vec::new(),
+        examples_truncated: Vec::new(),
         risk,
     }
 }
@@ -282,14 +331,13 @@ fn workspace_label(workspace: &str) -> String {
 }
 
 /// `path` relative to the workspace, normalized (no `.` or `..`). A path
-/// that is absolute outside the workspace, or climbs out of it, is named by
-/// its file name only.
-fn inside_workspace(path: &str, workspace: &str) -> String {
+/// that is absolute outside the workspace, or climbs out of it, returns None.
+fn inside_workspace(path: &str, workspace: &str) -> Option<String> {
     let path = Path::new(path);
     let relative = if path.is_absolute() {
         match path.strip_prefix(workspace) {
             Ok(inner) => inner,
-            Err(_) => return file_name(path),
+            Err(_) => return None,
         }
     } else {
         path
@@ -299,14 +347,12 @@ fn inside_workspace(path: &str, workspace: &str) -> String {
         match component {
             Component::Normal(part) => parts.push(part.to_string_lossy().into_owned()),
             Component::ParentDir => {
-                if parts.pop().is_none() {
-                    return file_name(path);
-                }
+                parts.pop()?;
             }
             _ => {}
         }
     }
-    parts.join("/")
+    Some(parts.join("/"))
 }
 
 fn file_name(path: &Path) -> String {
@@ -319,113 +365,5 @@ fn saturating_count(count: usize) -> u32 {
     u32::try_from(count).unwrap_or(u32::MAX)
 }
 
-/// Pins one summary per action kind and the command-risk table (called by
-/// the authority projection test, `authority/tests/bun_oracle.rs`).
 #[cfg(test)]
-pub(super) mod pinned {
-    use serde_json::json;
-
-    use super::*;
-
-    const WORKSPACE: &str = "/Users/someone/work/garden";
-
-    fn summary(capability: &str, target: &str, input: &Value) -> Value {
-        serde_json::to_value(summarize(ApprovalFacts {
-            capability,
-            target,
-            input,
-            workspace: WORKSPACE,
-        }))
-        .unwrap()
-    }
-
-    /// One summary per action kind, as the App reads them, with no absolute
-    /// path; then the command-risk table.
-    pub(in crate::btcc::authority) fn assert_approval_summaries() {
-        let edits = json!({"edits": [
-            {"path": "/Users/someone/work/garden/a.txt"}, {"path": "b.txt"}, {"path": "./a.txt"},
-            {"path": "notes/../c.txt"}, {"path": "/etc/passwd"}]});
-        let cases = [
-            (
-                summary("write_file", "notes.txt", &json!({"path": "notes.txt"})),
-                json!({"action_kind": "edit_files", "count": 1, "examples": ["notes.txt"], "risk": "medium",
-                    "targets": [{"kind": "folder", "path": "garden"}, {"kind": "file", "path": "notes.txt"}]}),
-            ),
-            (
-                summary("edit_file", "batch", &edits),
-                json!({"action_kind": "edit_files", "count": 4, "examples": ["a.txt", "b.txt", "c.txt"], "risk": "medium",
-                    "targets": [{"kind": "folder", "path": "garden"}, {"kind": "file", "path": "a.txt"},
-                                {"kind": "file", "path": "b.txt"}, {"kind": "file", "path": "c.txt"},
-                                {"kind": "file", "path": "passwd"}]}),
-            ),
-            (
-                summary(
-                    "run_command",
-                    "workspace-command:app",
-                    &json!({"command": "npm test", "cwd": "app/./src/..", "state_effect": "mutation"}),
-                ),
-                json!({"action_kind": "run_command", "count": 1, "examples": ["npm test"], "risk": "medium",
-                    "targets": [{"kind": "folder", "path": "garden/app"}]}),
-            ),
-            (
-                summary(
-                    "run_command",
-                    "workspace-command:..",
-                    &json!({"command": "rm -rf build", "cwd": "../..", "state_effect": "mutation"}),
-                ),
-                json!({"action_kind": "run_command", "count": 1, "examples": ["rm -rf build"], "risk": "high",
-                    "targets": [{"kind": "folder", "path": "garden"}]}),
-            ),
-            (
-                summary(
-                    "run_command_remote_observation",
-                    "remote-observation-command:.",
-                    &json!({"command": "curl https://example.com", "cwd": "."}),
-                ),
-                json!({"action_kind": "network_command", "count": 1, "examples": ["curl https://example.com"],
-                    "risk": "medium", "targets": [{"kind": "folder", "path": "garden"}]}),
-            ),
-            (
-                summary("call_mcp_tool", "mcp:e2e/e2e_echo", &json!({})),
-                json!({"action_kind": "use_connector", "count": 1, "examples": [], "risk": "high",
-                    "targets": [{"kind": "connector", "path": "e2e/e2e_echo"}]}),
-            ),
-            (
-                summary("delete_automation", "automation-1", &json!({})),
-                json!({"action_kind": "manage_schedule", "count": 1, "examples": [], "risk": "high",
-                    "targets": [{"kind": "schedule", "path": "automation-1"}]}),
-            ),
-            (
-                summary("project_ledger_attempt_start", "ledger:work", &json!({})),
-                json!({"action_kind": "update_project", "count": 1, "examples": [], "risk": "low",
-                    "targets": [{"kind": "project", "path": "ledger:work"}]}),
-            ),
-            (
-                summary("request_service_restart", "service", &json!({})),
-                json!({"action_kind": "restart_service", "count": 1, "examples": [], "risk": "medium",
-                    "targets": [{"kind": "service", "path": "butler"}]}),
-            ),
-            (
-                summary("bind_session_git_worktree", "worktree", &json!({})),
-                json!({"action_kind": "create_worktree", "count": 1, "examples": [], "risk": "low",
-                    "targets": [{"kind": "folder", "path": "garden"}]}),
-            ),
-            (
-                summary("something_new", "thing", &json!({})),
-                json!({"action_kind": "other", "count": 1, "examples": [], "risk": "medium",
-                    "targets": [{"kind": "other", "path": "thing"}]}),
-            ),
-        ];
-        for (actual, expected) in cases {
-            assert_eq!(actual, expected);
-        }
-        for tool in ["project_ledger_work_complete", "complete_project_work"] {
-            assert_eq!(
-                summary(tool, "x", &json!({}))["action_kind"],
-                "update_project",
-                "{tool}"
-            );
-        }
-        super::command_risk::pinned::assert_command_risks();
-    }
-}
+pub(super) mod pinned;

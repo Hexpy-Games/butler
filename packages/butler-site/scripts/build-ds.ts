@@ -5,10 +5,10 @@
  * ds-site/README.md there) and copies its output as-is to dist/ds/. That build
  * has no CNAME or 404.html: the site owns both, and its 404.html loads the
  * build's ds-404-redirect.js. Run after the manual build (astro empties dist/).
- * The client/ui dependencies come from `npm ci` there, as in CI.
+ * The client/ui dependencies come from the frozen root Bun lock, as in CI.
  */
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, readFileSync, rmSync } from "node:fs";
+import { writeFileSync, cpSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { designSystemRoot } from "../src/site/nav";
 import { SITE_ROOT } from "./check-token-sync";
@@ -47,6 +47,7 @@ if (import.meta.main) {
   rmSync(target, { recursive: true, force: true });
   cpSync(DS_OUT, target, { recursive: true });
   // The manual pages use the same bundled fonts: their OFL notices ship at the site root too.
-  cpSync(join(DS_OUT, "THIRD_PARTY_NOTICES.txt"), join(SITE_DIST, "THIRD_PARTY_NOTICES.txt"));
+  writeFileSync(join(SITE_DIST, "THIRD_PARTY_NOTICES.txt"),
+    "Complete human-readable notices: ds/THIRD_PARTY_NOTICES.txt.gz\nRead with: gzip -dc ds/THIRD_PARTY_NOTICES.txt.gz\n");
   console.log(`DS Viewer copied to dist/ds/ (base ${dsBase}).`);
 }
