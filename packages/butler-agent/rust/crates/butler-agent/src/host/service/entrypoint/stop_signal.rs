@@ -92,6 +92,7 @@ impl StopSignal {
     /// Records a stop request.
     pub(super) fn request(&self) {
         if !self.inner.requested.send_replace(true) {
+            super::super::shutdown_trace::event("stop_requested");
             self.inner.cancellation.cancel();
             exit_after_grace(self.inner.clone());
         }
@@ -124,6 +125,7 @@ impl StopSignal {
         log: impl FnOnce(&str),
     ) -> Result<Option<String>, BtccError> {
         self.inner.completed.store(true, Ordering::Release);
+        super::super::shutdown_trace::event("stop_settled");
         match result {
             Ok(session) => Ok(Some(session)),
             Err(error) if self.requested() || error.code() == START_CANCELLED => {
@@ -187,13 +189,19 @@ fn exit_after_grace(inner: Arc<Inner>) {
                 return;
             }
             eprintln!("[native-butler] stop deadline reached; cleaning up before exit");
+            super::super::shutdown_trace::event("deadline_cleanup:begin");
+            super::super::shutdown_trace::event("deadline_mcp:begin");
             butler_models::mcp_client::stop_mcp_children();
+            super::super::shutdown_trace::event("deadline_mcp:end");
             if let Some(writer) = inner.writer.get().cloned() {
+                super::super::shutdown_trace::event("deadline_transcript:begin");
                 let _ = writer.close_on_deadline(Duration::from_millis(500));
+                super::super::shutdown_trace::event("deadline_transcript:end");
             }
             if let Some((data_root, nonce, installation)) = inner.instance.get() {
                 crate::host::service::instance::release_record(data_root, installation, nonce);
             }
+            super::super::shutdown_trace::event("deadline_exit");
             std::process::exit(0);
         });
     if spawned.is_err() {

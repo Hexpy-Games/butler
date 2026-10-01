@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use rusqlite::Connection;
+use rusqlite::{Connection, config::DbConfig};
 
 use super::{AppStorageError, StorageResult};
 
@@ -26,6 +26,7 @@ pub(super) fn configure(connection: &Connection) -> StorageResult<()> {
     connection.set_prepared_statement_cache_capacity(CACHED_STATEMENTS);
     for (pragma, value) in [
         ("journal_mode", "WAL".to_owned()),
+        ("wal_autocheckpoint", "0".to_owned()),
         ("foreign_keys", "ON".to_owned()),
         ("synchronous", "NORMAL".to_owned()),
         ("cache_size", PAGE_CACHE_KIB.to_string()),
@@ -56,16 +57,52 @@ pub(super) fn optimize(connection: &Connection) -> StorageResult<()> {
         .map_err(AppStorageError::sqlite)
 }
 
-/// Folds the WAL into the database file and truncates it.
-pub(super) fn checkpoint(connection: &Connection) -> StorageResult<()> {
-    connection
-        .execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
-        .map_err(AppStorageError::sqlite)
-}
-
 /// Retention must never wait for foreground readers to release the WAL.
 pub(super) fn passive_checkpoint(connection: &Connection) -> StorageResult<()> {
     connection
         .execute_batch("PRAGMA wal_checkpoint(PASSIVE)")
         .map_err(AppStorageError::sqlite)
+}
+
+/// NORMAL commits need a WAL sync before a completed close promises durability.
+/// Keep the WAL for recovery; checkpointing also writes and syncs the database.
+pub(super) fn sync_wal(connection: &Connection) -> StorageResult<()> {
+    let Some(path) = connection.path().filter(|path| !path.is_empty()) else {
+        return Ok(());
+    };
+    let wal = std::path::PathBuf::from(format!("{path}-wal"));
+    let result = crate::gateway::shutdown_trace::measure_sync("app_sqlite_wal_fsync", || {
+        butler_platform::secure_fs::sync_path(&wal)
+    });
+    if let Err(error) = result {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            return Ok(());
+        }
+        return Err(wal_sync_error(error));
+    }
+    if let Some(parent) = wal.parent() {
+        crate::gateway::shutdown_trace::measure_sync("app_sqlite_directory_fsync", || {
+            butler_platform::secure_fs::sync_directory(parent).unwrap_or(Ok(()))
+        })
+        .map_err(wal_sync_error)?;
+    }
+    Ok(())
+}
+
+fn wal_sync_error(error: std::io::Error) -> AppStorageError {
+    AppStorageError::new(
+        super::AppStorageCode::AppSqliteWalSyncFailed,
+        error.to_string(),
+    )
+    .with_source(error)
+}
+
+/// Disable SQLite's implicit checkpoint only after the WAL is durable. Failed
+/// initialization and unexpected drops retain SQLite's normal cleanup behavior.
+pub(super) fn prepare_close(connection: &Connection) -> StorageResult<()> {
+    sync_wal(connection)?;
+    connection
+        .set_db_config(DbConfig::SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE, true)
+        .map_err(AppStorageError::sqlite)?;
+    Ok(())
 }
