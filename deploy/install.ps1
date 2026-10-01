@@ -97,7 +97,7 @@ function Enable-ButlerInstallation {
     $legacy = Join-Path $bin 'butler.cmd'
     if (Test-Path $legacy) { Remove-Item $legacy -Force }
     $userPath = [string][Environment]::GetEnvironmentVariable('Path','User')
-    if (@($userPath -split ';') -notcontains $bin) {
+    if ($env:BUTLER_INSTALL_SKIP_USER_PATH -ne '1' -and @($userPath -split ';') -notcontains $bin) {
         [Environment]::SetEnvironmentVariable('Path', ($userPath.TrimEnd(';') + ';' + $bin).TrimStart(';'), 'User')
     }
     if (@($env:PATH -split ';') -notcontains $bin) { $env:PATH += ";$bin" }

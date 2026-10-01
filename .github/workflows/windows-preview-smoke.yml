@@ -25,6 +25,8 @@ defaults:
 
 jobs:
   native:
+    # Draft pushes feed the owner's native loop; dispatch once it is green.
+    if: github.event_name == 'workflow_dispatch' || !github.event.pull_request.draft
     uses: ./.github/workflows/windows-native-deps.yml
 
   release:
@@ -64,10 +66,17 @@ jobs:
           name: agent-windows-x64
           path: dist/release/agent/*
           if-no-files-found: error
+      - name: Remove temporary installation profile
+        if: always()
+        run: |
+          if ($env:WINDOWS_PREVIEW_TEMP_ROOT -and (Test-Path $env:WINDOWS_PREVIEW_TEMP_ROOT)) {
+            Remove-Item $env:WINDOWS_PREVIEW_TEMP_ROOT -Recurse -Force
+          }
 
   # Fixed stub clocks/test hooks are intentionally absent from release builds.
   stub:
     name: Platform contracts and debug stub chat
+    if: github.event_name == 'workflow_dispatch' || !github.event.pull_request.draft
     concurrency:
       group: windows-preview-contracts-${{ github.ref }}
       cancel-in-progress: true

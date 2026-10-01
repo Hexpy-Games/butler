@@ -53,17 +53,20 @@ $root = Join-Path $env:RUNNER_TEMP ('installed-preview-' + [guid]::NewGuid())
 $originalProfile = $env:USERPROFILE
 $env:CARGO_HOME = "$originalProfile/.cargo"
 $env:RUSTUP_HOME = "$originalProfile/.rustup"
-$oldPath = [Environment]::GetEnvironmentVariable('Path','User')
+$env:BUTLER_INSTALL_SKIP_USER_PATH = '1'
 $env:HOME = "$root/home/미리 보기 %USERPROFILE% !"
 $env:USERPROFILE = $env:HOME
 $env:LOCALAPPDATA = "$root/local/미리 보기 %USERPROFILE% !"
+$env:APPDATA = "$root/roaming"
 $env:BUTLER_DATA = "$root/data/미리 보기 %USERPROFILE% !"
 $env:BUTLER_APP_SERVER_HOST = '127.0.0.1'
 $env:BUTLER_APP_SERVER_PORT = '0'
 $env:BUTLER_SECRET_STORE = 'file'
 $env:BUTLER_PROVIDER_QUOTA_POLLING = '0'
 # Do not turn the service-manager capability off: the real Windows path must work.
-New-Item -ItemType Directory -Force $env:HOME,$env:LOCALAPPDATA,$env:BUTLER_DATA | Out-Null
+New-Item -ItemType Directory -Force $env:HOME,$env:LOCALAPPDATA,$env:APPDATA,$env:BUTLER_DATA | Out-Null
+"WINDOWS_PREVIEW_TEMP_ROOT=$root" >> $env:GITHUB_ENV
+$env:WINDOWS_PREVIEW_TEMP_ROOT = $root
 $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0)
 $listener.Start(); $port = $listener.LocalEndpoint.Port; $listener.Stop()
 $files = Join-Path $root 'downloads'
@@ -143,5 +146,4 @@ try {
 } finally {
     if (Test-Path $launcher) { & $launcher stop --json | Out-Null }
     Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
-    [Environment]::SetEnvironmentVariable('Path',$oldPath,'User')
 }

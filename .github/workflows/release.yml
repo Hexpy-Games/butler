@@ -263,7 +263,13 @@ jobs:
           artifact-base-url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
       - name: Smoke the installed archive
         shell: pwsh
-        run: ./deploy/windows-preview-smoke.ps1
+        run: |
+          try { ./deploy/windows-preview-smoke.ps1 }
+          finally {
+            if ($env:WINDOWS_PREVIEW_TEMP_ROOT -and (Test-Path $env:WINDOWS_PREVIEW_TEMP_ROOT)) {
+              Remove-Item $env:WINDOWS_PREVIEW_TEMP_ROOT -Recurse -Force
+            }
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: agent-windows-x64
