@@ -832,6 +832,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     rename: "이름 바꾸기",
     archive: "보관하기",
     openSessionFolder: "작업 폴더 열기",
+    fileManager: "파일 관리자",
     vsCode: "VS Code",
     terminal: "터미널",
     loadingFolderTargets: "사용 가능한 앱 확인 중...",

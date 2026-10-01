@@ -75,10 +75,18 @@ export function SessionFolderMenu({
               key={target}
               onSelect={() => void launch(target)}
             >
-              {target === "vscode" ? <Monitor size="sm" /> : <Terminal size="sm" />}
+              {target === "vscode" ? (
+                <Monitor size="sm" />
+              ) : target === "terminal" ? (
+                <Terminal size="sm" />
+              ) : (
+                <FolderOpen size="sm" />
+              )}
               {target === "vscode"
                 ? appCopy.sessionActions.vsCode
-                : appCopy.sessionActions.terminal}
+                : target === "terminal"
+                  ? appCopy.sessionActions.terminal
+                  : appCopy.sessionActions.fileManager}
             </DropdownMenuItem>
           ))
         ) : (
