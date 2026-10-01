@@ -15,15 +15,22 @@ function redirect(to: string): string {
   return `<meta content="0;url=${to}" http-equiv="refresh"><a href="${to}">`;
 }
 
+function page(locale: string): string {
+  return `<!doctype html><html lang="${locale}">`;
+}
+
 function completeSite(): void {
   put("CNAME", "butler.hexpy.games\n");
   put("index.html", redirect("/help/"));
   put("404.html", '<script src="/ds/ds-404-redirect.js"></script>');
-  put("help/index.html");
-  put("help/models/cloud/index.html");
+  put("help/index.html", page("ko"));
+  put("help/models/cloud/index.html", page("ko"));
+  put("en/help/index.html", page("en"));
+  put("en/help/models/cloud/index.html", page("en"));
   put("docs/index.html", redirect("/help/"));
   put("docs/models/cloud/index.html", redirect("/help/models/cloud/"));
   put("pagefind/pagefind.js", "");
+  put("pagefind/pagefind-entry.json", JSON.stringify({ languages: { ko: {}, en: {} } }));
   put("ds/index.html");
   put("ds/ds-404-redirect.js", "");
 }
@@ -54,7 +61,7 @@ describe("checkDist", () => {
     completeSite();
     put("index.html", "<h1>intro</h1>");
     rmSync(join(dir, "docs/models/cloud"), { recursive: true });
-    put("help/projects/index.html");
+    put("help/projects/index.html", page("ko"));
     put("docs/projects/index.html", redirect("/help/"));
     expect(checkDist(dir, { base: "/", domain: "butler.hexpy.games" })).toEqual([
       "index.html: does not redirect to /help/",
@@ -81,11 +88,34 @@ describe("checkDist", () => {
     put("ds/CNAME", "butler-design.hexpy.games\n");
     put("ds/404.html");
     expect(checkDist(dir, { base: "/", domain: "butler.hexpy.games" })).toEqual([
+      "pagefind: no ko search index",
+      "pagefind: no en search index",
       "404.html: does not load /ds/ds-404-redirect.js",
       "pagefind/pagefind.js: missing",
       "ds/index.html: missing (run build:ds)",
       "ds/CNAME: only the site root may have one",
       "ds/404.html: only the site root may have one",
     ]);
+  });
+
+  test("each locale has its landing page, its <html lang> and its own search index", () => {
+    completeSite();
+    rmSync(join(dir, "en/help/index.html"));
+    put("en/help/models/cloud/index.html", page("ko"));
+    put("pagefind/pagefind-entry.json", JSON.stringify({ languages: { ko: {} } }));
+    expect(checkDist(dir, { base: "/", domain: "butler.hexpy.games" })).toEqual([
+      "en/help/index.html: missing (the en manual)",
+      'en/help/models/cloud/index.html: is not <html lang="en">',
+    ]);
+    put("en/help/index.html", page("en"));
+    put("en/help/models/cloud/index.html", page("en"));
+    expect(checkDist(dir, { base: "/", domain: "butler.hexpy.games" })).toEqual(["pagefind: no en search index"]);
+  });
+
+  test("a locale with only its landing page needs no search index yet", () => {
+    completeSite();
+    rmSync(join(dir, "en/help/models"), { recursive: true });
+    put("pagefind/pagefind-entry.json", JSON.stringify({ languages: { ko: {} } }));
+    expect(checkDist(dir, { base: "/", domain: "butler.hexpy.games" })).toEqual([]);
   });
 });

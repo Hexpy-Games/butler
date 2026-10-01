@@ -1,5 +1,7 @@
 ---
+import { switchHref } from "../../../site/nav";
 import { LOCALES, type Locale } from "../../../site/sections";
+import { ui } from "../../../site/ui";
 import styles from "./LanguageSwitch.module.css";
 
 interface Props {
@@ -9,20 +11,25 @@ interface Props {
 }
 
 const { locale, alternates } = Astro.props;
-const names: Record<Locale, { short: string; full: string }> = {
-  ko: { short: "KO", full: "한국어" },
-  en: { short: "EN", full: "English" },
-};
+const base = import.meta.env.BASE_URL;
 ---
-<nav class={styles.group} aria-label="언어">
+<nav class={styles.group} aria-label={ui(locale).language}>
   {LOCALES.map((code) => {
-    const href = alternates[code];
+    const { languageCode, languageName } = ui(code);
     if (code === locale) {
-      return <span aria-current="true" class:list={[styles.option, styles.current]} lang={code} title={names[code].full}>{names[code].short}</span>;
+      return <span aria-current="true" class:list={[styles.option, styles.current]} lang={code} title={languageName}>{languageCode}</span>;
     }
-    if (href) {
-      return <a class={styles.option} href={href} hreflang={code} lang={code} title={names[code].full}>{names[code].short}</a>;
-    }
-    return <span aria-disabled="true" class:list={[styles.option, styles.unavailable]} lang={code} title={`${names[code].full} · 준비 중`}>{names[code].short}</span>;
+    // The same page in the other language; its landing page when there is no translation yet.
+    return (
+      <a
+        aria-label={languageName}
+        class={styles.option}
+        data-language-switch={alternates[code] ? "page" : "home"}
+        href={switchHref(alternates, base, code)}
+        hreflang={code}
+        lang={code}
+        title={languageName}
+      >{languageCode}</a>
+    );
   })}
 </nav>

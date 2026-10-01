@@ -1,5 +1,7 @@
 /**
  * Docs search on the Pagefind index (built by `pagefind --site dist`).
+ * Pagefind keeps one index per <html lang> and searches the one for the
+ * current page's language, so each locale finds only its own pages.
  * Opens from any [data-search-open] control or Cmd/Ctrl+K; the header mark
  * thinks while results load.
  */
@@ -19,7 +21,6 @@ interface Pagefind {
 }
 
 const MAX_RESULTS = 8;
-const COPY = { loading: "찾는 중…", empty: "결과 없음", unavailable: "검색 색인 없음 · 빌드 후 사용 가능" };
 
 let pagefind: Promise<Pagefind | null> | undefined;
 
@@ -58,6 +59,12 @@ export function enhanceSearch() {
   const template = dialog?.querySelector<HTMLTemplateElement>("[data-search-item]");
   if (!dialog || !input || !status || !list || !template) return;
   const base = dialog.dataset.base ?? "/";
+  // Status copy in the page's language (SearchDialog.astro, from site/ui.ts).
+  const COPY = {
+    loading: dialog.dataset.copyLoading ?? "",
+    empty: dialog.dataset.copyEmpty ?? "",
+    unavailable: dialog.dataset.copyUnavailable ?? "",
+  };
   let active = -1;
 
   const links = () => [...list.querySelectorAll<HTMLAnchorElement>("a")];

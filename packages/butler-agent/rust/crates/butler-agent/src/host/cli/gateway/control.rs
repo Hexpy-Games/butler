@@ -32,7 +32,7 @@ pub(super) fn verified_instance(
                         .into(),
                 );
             }
-            let executable = std::env::current_exe()
+            let executable = butler_platform::process_names::current_exe()
                 .map_err(|source| {
                     crate::host::HostError::new("native_service_executable_unavailable")
                         .with_source(source)

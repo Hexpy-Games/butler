@@ -46,7 +46,7 @@ status: published
 
 `readiness`에는 Agent가 직접 준비하는 단계(`data_folder`, `model_config`, `agent_runtime`)가 들어 있습니다. 실패한 단계에는 오류 `code`와 영문 설명(`detail`)이 붙습니다.
 
-`errors`의 `code`가 `bundled_agent_version_missing`이면 앱 패키지에서 Agent 버전을 읽지 못했다는 뜻입니다. [GitHub Releases](https://github.com/Hexpy-Games/butler/releases)에서 네이티브 Agent가 포함된 최신 DMG를 받아 앱을 다시 설치합니다.
+`errors`의 `code`가 `bundled_agent_version_missing`이면 앱 패키지에서 Agent 버전을 읽지 못했다는 뜻입니다. [GitHub Releases](https://github.com/Hexpy-Games/butler/releases)에서 네이티브 Agent가 포함된 최신 설치 파일을 받아 앱을 다시 설치합니다.
 
 <Notice tone="info">
   진단 정보에서는 토큰, 비밀값, 사용자 경로가 가려지고 스택 트레이스와 표준 출력 원문은 빠집니다.
@@ -101,13 +101,13 @@ OAuth 로그인은 `http://localhost:1455/auth/callback`으로 결과를 받습�
 
 ## 업데이트 문제
 
-macOS에서는 앱 업데이트가 자동으로 설치되지 않습니다. 새 버전의 DMG를 받아 직접 설치합니다.
+앱 업데이트는 **설정 → 업데이트**에서 확인하고 설치합니다. 업데이트는 앱만 바꾸고 데이터 폴더는 그대로 둡니다.
 
 <Steps>
   1. **설정 → 업데이트**에서 **확인**을 누릅니다.
-  2. 새 버전이 있으면 **버틀러** 항목에 현재 버전과 새 버전이 표시됩니다. **업데이트**를 누르면 새 버전의 DMG를 내려받아 엽니다.
-  3. Butler를 종료하고, 열린 DMG에서 `Butler.app`을 응용 프로그램 폴더로 끌어다 놓아 기존 앱을 바꿉니다.
-  4. **업데이트 확인 실패**나 **업데이트 적용 실패**가 반복되면 [GitHub Releases](https://github.com/Hexpy-Games/butler/releases)에서 최신 DMG를 받아 [다시 설치](#앱)합니다.
+  2. 새 버전이 있으면 **버틀러** 항목에 현재 버전과 새 버전이 표시됩니다. **업데이트**를 누르면 새 버전을 내려받아 설치하고 Butler를 다시 엽니다.
+  3. 새 버전이 보이지 않는데 프리뷰 버전을 받으려면 **미리보기 버전 받기**를 켜고 다시 **확인**을 누릅니다.
+  4. **업데이트 확인 실패**나 **업데이트 적용 실패**가 반복되면 [GitHub Releases](https://github.com/Hexpy-Games/butler/releases)에서 최신 설치 파일을 받아 [다시 설치](#앱)합니다.
 </Steps>
 
 **버틀러** 항목 아래에는 앱에 포함된 Agent 버전(`Butler Agent <버전>`)도 표시됩니다.
@@ -180,6 +180,8 @@ butler doctor --check installation
   3. DMG를 열고 `Butler.app`을 응용 프로그램 폴더로 끌어다 놓아 기존 앱을 바꿉니다.
 </Steps>
 
+Linux에서는 최신 DEB 또는 Arch 패키지를 받아 [설치](/help/getting-started/install/#내려받기)의 명령으로 다시 설치합니다.
+
 대화와 기억, Agent 설정은 앱이 아니라 데이터 폴더(`~/.butler`)에 저장되므로 앱을 다시 설치해도 유지됩니다.
 
 ### standalone Agent
@@ -228,11 +230,15 @@ butler doctor --check installation
 
 ### 접속을 허용했는데 주소가 표시되지 않습니다.
 
-**설정 → 보안**에서 **다른 컴퓨터에서 접속 허용**을 켰는데 **네트워크 주소 없음**이 표시되면 먼저 이 컴퓨터가 네트워크에 연결되어 있는지 확인합니다. 포트가 사용 중이면 주소가 표시되지 않을 수 있습니다. 이때는 그 포트를 쓰는 다른 프로그램을 종료하고 **다른 컴퓨터에서 접속 허용**을 껐다가 다시 켭니다. 이 문제는 [#312](https://github.com/Hexpy-Games/butler/issues/312)에서 추적합니다. 접속 방법은 [다른 컴퓨터에서 접속](/help/advanced/remote-access/)을 참고합니다.
+**설정 → 보안**에서 **다른 컴퓨터에서 접속 허용**을 켰는데 **네트워크 주소 없음**이 표시되면 먼저 이 컴퓨터가 네트워크에 연결되어 있는지 확인합니다. 포트가 사용 중이면 주소가 표시되지 않을 수 있습니다. 이때는 그 포트를 쓰는 다른 프로그램을 종료하고 **다른 컴퓨터에서 접속 허용**을 껐다가 다시 켭니다. 이 문제는 [#312](https://github.com/Hexpy-Games/butler/issues/312)에서 추적합니다. 연결 절차는 [원격 접근](/help/advanced/remote-access/)을 참고합니다.
+
+### 다른 컴퓨터에서 코드를 입력해도 연결되지 않습니다.
+
+코드는 60초 동안 한 번만 쓸 수 있고, 세 번 잘못 입력하면 무효화됩니다. **설정 → 보안**의 **기기 연결**에 지금 표시된 코드를 다시 입력합니다. 코드가 보이지 않으면 **기기 연결**을 눌러 새로 발급합니다. 앱 없이 쓸 때는 `butler remote pair`가 표시하는 코드를 씁니다. 이전 버전의 긴 연결 토큰과 `butler remote code --rotate`는 더 이상 쓸 수 없습니다. 연결을 끊은 기기는 새 코드로 다시 연결합니다.
 
 ### Windows나 Linux에서 쓸 수 있나요?
 
-현재 릴리스는 Apple Silicon Mac용으로만 패키징하고 검증합니다. Windows와 Linux용 네이티브 Agent 번들은 아직 지원하지 않습니다.
+Linux에서는 쓸 수 있습니다. 프리뷰 릴리스는 Apple Silicon Mac용 DMG와 Linux용 DEB(x64, arm64), Arch(x64) 패키지를 제공합니다. Windows용 설치 파일과 네이티브 Agent 번들은 아직 제공하지 않습니다. 설치 방법은 [설치](/help/getting-started/install/)를 참고합니다.
 
 ### 이전 버전을 설치했는데 준비가 계속 실패합니다.
 

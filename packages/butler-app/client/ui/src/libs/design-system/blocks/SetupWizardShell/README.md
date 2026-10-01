@@ -21,8 +21,9 @@ Pass a title, ordered steps, active index, and setup content.
 `variant="focus"` drops the visible title, the stepper and the glass body.
 A narrow `PageContainer` holds one centered column on the backdrop
 (`SetupWizardContent` 420px, `width="wide"` 520px). The column is
-top-aligned below the titlebar, so moving between screens never shifts it,
-and it scrolls with the window. The first run (welcome, then "Pick an AI")
+centered below the titlebar when it fits, and it scrolls with the window when taller.
+Use `SetupWizardContent surface="solid"` for an opaque raised card over wallpaper: one `--space-lg` inline inset contains the title, description, fields, actions and status.
+Page content stays opaque (Tinted glass pattern); wallpaper appears only around the card. The first run (welcome, then "Pick an AI")
 uses it. `title` still names the region for assistive tech.
 
 ## Who can use this component

@@ -1299,7 +1299,7 @@ The first-run setup frame: step progress, a large title and centered content, or
 - Use for: A short onboarding of one or two screens with no stepper
 - Not for: A settings page → `SettingsShell`
 - Not for: A short task in the app → `DialogForm`
-- Tokens: `--typo-new-chat-title-size-md`, `--page-max-width-narrow`, `--space-2xl`
+- Tokens: `--typo-new-chat-title-size-md`, `--page-max-width-narrow`, `--space-2xl`, `--space-lg`, `--color-surface-raised-opaque`
 
 ### SidebarShell
 
@@ -1727,7 +1727,7 @@ An inline status message (info, success, warning, error) with an optional title 
 - Not for: A transient confirmation → `Toaster`
 - Not for: An empty list → `EmptyLine`
 - Not for: A field error → `FieldError`
-- Tokens: `--color-danger-bg`, `--color-warning-bg`, `--color-info-bg`, `--color-success-bg`, `--radius-panel`
+- Tokens: `--color-danger-bg`, `--color-warning-bg`, `--color-info-bg`, `--color-success-bg`, `--radius-control`, `--icon-size-md`, `--typo-body-line-height`
 
 ## Blocks · Inspector
 

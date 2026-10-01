@@ -35,5 +35,11 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 - Do not import from `@/butler-ds/shadcn/ui` in app code; import from `@/butler-ds` so the public API remains stable.
 - Do not lock dimensions to pixel-perfect desktop-only widths. Use responsive containers, intrinsic sizing, and tokens.
 
+## Responsive labels
+
+Vertical Field places its label above the control. FieldLabel stays within the
+content width and wraps even long unbroken labels rather than clipping them or
+shrinking the control beside them.
+
 ## Tags
 form, layout, validation

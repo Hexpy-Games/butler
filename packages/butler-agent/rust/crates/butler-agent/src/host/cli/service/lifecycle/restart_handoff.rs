@@ -50,7 +50,7 @@ pub(in crate::host::cli::service) fn spawn_restart_handoff(
         crate::host::HostError::new("native_path_configuration_invalid").with_source(source)
     })?;
     crate::host::service::instance::validate_write_destinations(&data_root, installation)?;
-    let current = std::env::current_exe()
+    let current = butler_platform::process_names::current_exe()
         .map_err(|source| {
             crate::host::HostError::new("native_service_executable_unavailable").with_source(source)
         })?
@@ -68,21 +68,13 @@ pub(in crate::host::cli::service) fn spawn_restart_handoff(
     })?;
     let stdout = log_file(&logs.join("butler-agent-service.stdout.log"), installation)?;
     let stderr = log_file(&logs.join("butler-agent-service.stderr.log"), installation)?;
-    let (reaper, receiver) = mpsc::sync_channel::<Child>(1);
-    let reaper_thread = thread::Builder::new()
-        .name("butler-service-restart-reaper".into())
-        .spawn(move || {
-            if let Ok(mut child) = receiver.recv() {
-                let _ = child.wait();
-            }
-        })
-        .map_err(|source| {
-            crate::host::HostError::new("native_service_restart_handoff_reaper_unavailable")
-                .with_source(source)
-        })?;
-    drop(reaper_thread);
+    let reaper = start_reaper()?;
 
-    let mut command = Command::new(&current);
+    let role = butler_platform::process_names::Role::Restart;
+    let executable = butler_platform::process_names::executable(&current, role)
+        .map_err(crate::host::HostError::from_error)?;
+    let mut command = Command::new(executable);
+    butler_platform::process_names::name_command(&mut command, role);
     command
         .arg("--installation-root")
         .arg(installation.root())
@@ -118,6 +110,23 @@ pub(in crate::host::cli::service) fn spawn_restart_handoff(
         return Err("native_service_restart_handoff_reaper_unavailable".into());
     }
     Ok(())
+}
+
+fn start_reaper() -> Result<mpsc::SyncSender<Child>, crate::host::HostError> {
+    let (reaper, receiver) = mpsc::sync_channel::<Child>(1);
+    let reaper_thread = thread::Builder::new()
+        .name("butler-service-restart-reaper".into())
+        .spawn(move || {
+            if let Ok(mut child) = receiver.recv() {
+                let _ = child.wait();
+            }
+        })
+        .map_err(|source| {
+            crate::host::HostError::new("native_service_restart_handoff_reaper_unavailable")
+                .with_source(source)
+        })?;
+    drop(reaper_thread);
+    Ok(reaper)
 }
 
 /// A restart the service asks of itself while a login job runs it goes to the

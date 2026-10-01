@@ -124,16 +124,15 @@
   height: 100%;
 }
 
-/* Top-aligned so moving between screens never shifts the column; the top
-   inset grows with tall windows. */
+/* Center short screens; tall content expands the single scrolling region. */
 .focusScrollContent {
   display: grid;
   box-sizing: border-box;
   min-height: 100%;
-  align-content: start;
+  align-content: center;
   justify-items: center;
-  padding-top: max(calc(var(--titlebar-height) + var(--space-md)), 10vh);
-  padding-bottom: var(--space-3xl);
+  padding-top: calc(var(--titlebar-height) + var(--space-lg));
+  padding-bottom: calc(var(--titlebar-height) + var(--space-lg));
   padding-inline: var(--space-2xl);
 }
 
@@ -147,6 +146,15 @@
 .screen[data-variant="focus"] .content {
   width: 100%;
   max-width: 420px;
+}
+
+.content[data-surface="solid"] {
+  box-sizing: border-box;
+  padding: var(--space-lg);
+  border: var(--border-hairline) solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface-raised-opaque);
+  box-shadow: var(--shadow-card);
 }
 
 .screen[data-variant="focus"] .content[data-width="wide"] {

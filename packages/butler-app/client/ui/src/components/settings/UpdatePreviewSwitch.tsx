@@ -11,7 +11,7 @@ export function UpdatePreviewSwitch({ disabled, onChanged }: {
   disabled: boolean;
   onChanged: () => Promise<void>;
 }) {
-  const locale = useAppLocale();
+  useAppLocale();
   const settings = useButlerStore(state => state.settings);
   const setSettings = useButlerStore(state => state.setSettings);
   const [saving, setSaving] = useState(false);
@@ -32,7 +32,8 @@ export function UpdatePreviewSwitch({ disabled, onChanged }: {
   return (
     <SettingsSection id="update-channel" kind="form">
       <SettingsSwitch settingId="update-previews"
-        label={locale === "ko-KR" ? "미리보기 버전 받기" : "Receive preview versions"}
+        label={appCopy.settings.actions.receivePreviewVersions}
+        description={appCopy.settings.actions.receivePreviewVersionsDescription}
         checked={settings?.update_previews ?? false} disabled={disabled || saving}
         onChange={enabled => void change(enabled)} />
     </SettingsSection>

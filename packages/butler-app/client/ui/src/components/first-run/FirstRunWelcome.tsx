@@ -4,7 +4,8 @@ import {
   ButtonContainer,
   ButlerThinkingMark,
   IconTile,
-  Inline,
+  Field,
+  FieldLabel,
   NativeSelect,
   NativeSelectOption,
   SetupWizardContent,
@@ -26,7 +27,7 @@ export function FirstRunWelcome({ flow }: { flow: FirstRunFlow }) {
   }, [flow.focusStart]);
   const blocked = readiness.status === "failed";
   return (
-    <SetupWizardContent>
+    <SetupWizardContent surface="solid">
       <Stack cross="center" gap="md">
         <IconTile size="xl" tone="plain">
           <ButlerThinkingMark state={readiness.status === "preparing" ? "working" : "idle"} />
@@ -34,23 +35,19 @@ export function FirstRunWelcome({ flow }: { flow: FirstRunFlow }) {
         <Typo.H3 align="center" as="h1">{copy.welcomeTitle}</Typo.H3>
         <Typo.Body align="center" tone="secondary">{copy.welcomeLede}</Typo.Body>
       </Stack>
-      <Inline justify="between">
-        <Inline gap="sm" wrap={false}>
-          <Typo.Caption as="label" htmlFor="first-run-language" tone="tertiary">{flow.language === "ko" ? "인터페이스 언어" : "Interface language"}</Typo.Caption>
-          <NativeSelect
-            id="first-run-language"
-            size="sm"
-            value={flow.language}
-            onChange={(event) => flow.setLanguage(event.target.value as FirstRunLanguage)}
-          >
-            <NativeSelectOption value="ko">한국어</NativeSelectOption>
-            <NativeSelectOption value="en">English</NativeSelectOption>
-          </NativeSelect>
-        </Inline>
-        <Button asChild size="sm" variant="link">
-          <a href={FIRST_RUN_GUIDE_URL} rel="noreferrer" target="_blank">{copy.learnMore}</a>
-        </Button>
-      </Inline>
+      <Field>
+        <FieldLabel htmlFor="first-run-language">{copy.interfaceLanguage}</FieldLabel>
+        <NativeSelect
+          id="first-run-language"
+          size="sm"
+          stretch
+          value={flow.language}
+          onChange={(event) => flow.setLanguage(event.target.value as FirstRunLanguage)}
+        >
+          <NativeSelectOption value="ko">한국어</NativeSelectOption>
+          <NativeSelectOption value="en">English</NativeSelectOption>
+        </NativeSelect>
+      </Field>
       <Stack gap="sm">
         <ButtonContainer size="lg">
           <Button
@@ -67,6 +64,11 @@ export function FirstRunWelcome({ flow }: { flow: FirstRunFlow }) {
           {flow.mode === "rerun" ? <FirstRunCancel flow={flow} /> : null}
         </ButtonContainer>
         <FirstRunPrepStatus flow={flow} />
+      </Stack>
+      <Stack cross="center">
+        <Button asChild size="sm" variant="link">
+          <a href={FIRST_RUN_GUIDE_URL} rel="noreferrer" target="_blank">{copy.learnMore}</a>
+        </Button>
       </Stack>
     </SetupWizardContent>
   );

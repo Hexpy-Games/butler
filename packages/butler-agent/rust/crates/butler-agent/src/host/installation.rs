@@ -26,7 +26,7 @@ pub(crate) struct PayloadProvenance {
 
 impl ResolvedInstallation {
     pub(crate) fn standalone() -> Result<Self, crate::host::HostError> {
-        let executable = std::env::current_exe()
+        let executable = butler_platform::process_names::current_exe()
             .map_err(|error| format!("installation_executable_unavailable: {error}"))?;
         let executable = executable
             .canonical()
@@ -403,7 +403,10 @@ pub(crate) mod tests {
     use butler_platform::secure_fs::Canonical as _;
 
     pub(crate) fn data_and_workspace_cannot_overlap_the_installation() {
-        let executable = std::env::current_exe().unwrap().canonical().unwrap();
+        let executable = butler_platform::process_names::current_exe()
+            .unwrap()
+            .canonical()
+            .unwrap();
         let root = executable.parent().unwrap().to_path_buf();
         let installation = ResolvedInstallation::desktop(&executable, &root, &root).unwrap();
         assert_eq!(

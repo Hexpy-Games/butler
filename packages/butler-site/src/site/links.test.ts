@@ -1,8 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import { checkDocLinks, docLinks, findTerms, headingIds, slugifyHeading, type DocSource } from "./links";
-import { SECTIONS } from "./sections";
+import {
+  checkDocLinks,
+  checkTranslationSources,
+  docLinks,
+  findTerms,
+  headingIds,
+  slugifyHeading,
+  translationGaps,
+  type DocSource,
+} from "./links";
+import { COMPLETE_LOCALES, DEFAULT_LOCALE, LOCALES, SECTIONS } from "./sections";
+import { UI } from "./ui";
 
 const CONTENT_ROOT = join(import.meta.dir, "../content/docs");
 
@@ -86,12 +96,177 @@ describe("checkDocLinks", () => {
   });
 });
 
+describe("English pages", () => {
+  test("link under /en/help/ and resolve cards in their own locale", () => {
+    const docs = [
+      page("ko/a", "## 연결하기"),
+      page("ko/b", ""),
+      page("en/a", "## Connect\n\n[b](/en/help/b/)\n<DocCard slug=\"b\" />\n[here](#connect)"),
+      page("en/b", "[a](/en/help/a/#connect)\n[Korean page](/help/a/)\n[Korean anchor](/en/help/a/#연결하기)"),
+    ];
+    expect(docLinks(docs[2].source, "en").map((link) => link.target)).toEqual(["/en/help/b/", "/en/help/b/", "#connect"]);
+    expect(checkDocLinks(docs)).toEqual([
+      "en/b:10 /help/a/: internal links are /en/help/<slug>/",
+      "en/b:11 /en/help/a/#연결하기: no heading #연결하기",
+    ]);
+  });
+
+  test("a locale in progress may link to pages it has not translated yet", () => {
+    const docs = [
+      page("ko/a", ""),
+      page("ko/b", ""),
+      page("ko/c", "", "planned"),
+      page("en/a", "[b](/en/help/b/#later)\n<DocCard slug=\"b\" />\n[c](/en/help/c/)\n[nope](/en/help/nope/)"),
+      page("en/b", "", "planned"),
+    ];
+    expect(checkDocLinks(docs, ["en"])).toEqual([
+      "en/a:11 /en/help/c/: no docs page",
+      "en/a:12 /en/help/nope/: no docs page",
+    ]);
+    expect(checkDocLinks(docs)).toEqual([
+      "en/a:9 /en/help/b/#later: page is planned",
+      "en/a:10 /en/help/b/: page is planned",
+      "en/a:11 /en/help/c/: no docs page",
+      "en/a:12 /en/help/nope/: no docs page",
+    ]);
+  });
+});
+
+describe("checkTranslationSources", () => {
+  test("a translation mirrors a Korean page: slug, section, order, and not published first", () => {
+    const docs = [
+      page("ko/a", ""),
+      page("ko/b", "", "planned"),
+      page("en/a", ""),
+      page("en/b", ""),
+      page("en/extra", ""),
+      { id: "en/a2", source: page("en/a2", "").source.replace("order: 1", "order: 2") },
+      page("ko/a2", ""),
+    ];
+    expect(checkTranslationSources(docs, "en")).toEqual([
+      "en/b: published, but ko/b is planned",
+      "en/extra: no ko/extra page to translate; slugs mirror the ko pages",
+      "en/a2: order is 2, ko/a2 has 1",
+    ]);
+  });
+});
+
+describe("translationGaps", () => {
+  const source = [
+    "## 설치",
+    "",
+    "<Steps>",
+    "  1. [릴리스](https://example.com/releases)를 엽니다.",
+    "</Steps>",
+    "",
+    "```bash",
+    "butler doctor",
+    "```",
+    "",
+    "### 확인",
+    "",
+    "[첫 실행](/help/first-run/#준비)을 참고합니다.",
+    "<DocCard slug=\"models\" />",
+  ].join("\n");
+
+  test("accepts a translation with the same outline, components, code blocks and links", () => {
+    const translated = [
+      "## Install",
+      "",
+      "<Steps>",
+      "  1. Open the [release](https://example.com/releases).",
+      "</Steps>",
+      "",
+      "```bash",
+      "butler doctor",
+      "```",
+      "",
+      "### Verify",
+      "",
+      "See [First run](/en/help/first-run/#before-you-start).",
+      "<DocCard slug=\"models\" />",
+    ].join("\n");
+    expect(translationGaps([page("ko/install", source), page("en/install", translated)], "en")).toEqual([]);
+  });
+
+  test("lists missing and planned pages, and skips planned Korean pages", () => {
+    const docs = [page("ko/a", ""), page("ko/b", ""), page("ko/draft", "", "planned"), page("en/b", "", "planned")];
+    expect(translationGaps(docs, "en")).toEqual(["en/a: missing", "en/b: planned, not translated yet"]);
+  });
+
+  test("reports a translation that drops a heading, a component, a code block or a link", () => {
+    const translated = "## Install\n\n1. Open the [release](https://example.com/download).\n\nSee [Models](/en/help/models/).";
+    const gaps = translationGaps([page("ko/install", source), page("en/install", translated)], "en");
+    expect(gaps).toEqual([
+      "en/install: outline differ from ko/install (en: 2 | ko: 2 3)",
+      "en/install: components differ from ko/install (en: none | ko: code block×1, DocCard×1, Steps×1)",
+      "en/install: links differ from ko/install (missing first-run)",
+      "en/install: anchors differ from ko/install (missing first-run heading 0)",
+      "en/install: urls differ from ko/install (missing https://example.com/releases; extra https://example.com/download)",
+    ]);
+  });
+});
+
+describe("translationGaps anchors", () => {
+  const koTarget = page("ko/target", "## 준비\n\n## 연결\n");
+  const enTarget = page("en/target", "## Prepare\n\n## Connect\n");
+
+  test("accepts translated anchors that point at the same heading", () => {
+    const docs = [
+      koTarget,
+      enTarget,
+      page("ko/a", "## 시작\n\n[연결](/help/target/#연결)\n[여기](#시작)"),
+      page("en/a", "## Start\n\n[Connect](/en/help/target/#connect)\n[here](#start)"),
+    ];
+    expect(translationGaps(docs, "en")).toEqual([]);
+  });
+
+  test("reports a dropped anchor and an anchor that points at another section", () => {
+    const docs = [
+      koTarget,
+      enTarget,
+      page("ko/a", "[연결](/help/target/#연결)"),
+      page("en/a", "[Connect](/en/help/target/)"),
+      page("ko/b", "[연결](/help/target/#연결)"),
+      page("en/b", "[Connect](/en/help/target/#prepare)"),
+    ];
+    expect(translationGaps(docs, "en")).toEqual([
+      "en/a: anchors differ from ko/a (missing target heading 2)",
+      "en/b: anchors differ from ko/b (missing target heading 2; extra target heading 1)",
+    ]);
+  });
+});
+
 describe("docs content", () => {
   const docs = contentDocs();
+  const translations = LOCALES.filter((locale) => locale !== DEFAULT_LOCALE);
+  const inProgress = translations.filter((locale) => !COMPLETE_LOCALES.includes(locale));
 
   test("every internal link in published pages resolves", () => {
     expect(docs.length).toBeGreaterThan(0);
-    expect(checkDocLinks(docs)).toEqual([]);
+    expect(docs.some((doc) => doc.id.startsWith("en/"))).toBe(true);
+    expect(checkDocLinks(docs, inProgress)).toEqual([]);
+  });
+
+  test("translated pages mirror a Korean page's slug, section and order", () => {
+    for (const locale of translations) expect(checkTranslationSources(docs, locale)).toEqual([]);
+  });
+
+  // Until a locale is listed in COMPLETE_LOCALES (sections.ts), its gaps are
+  // printed as a to-do list for translators; after that they fail the check.
+  test("complete locales translate every published Korean page with the same structure", () => {
+    for (const locale of translations) {
+      const gaps = translationGaps(docs, locale);
+      if (COMPLETE_LOCALES.includes(locale)) expect(gaps).toEqual([]);
+      else if (gaps.length > 0) console.info(`Translation report (${locale}, in progress, ${gaps.length} open):\n${gaps.map((gap) => `  ${gap}`).join("\n")}`);
+    }
+  });
+
+  test("English pages and labels say Schedules, never automation, and never Steward", () => {
+    const banned = [/\bautomations?\b/iu, /\bstewards?\b/iu];
+    expect(findTerms(docs.filter((doc) => doc.id.startsWith("en/")), banned)).toEqual([]);
+    expect(SECTIONS.map((section) => section.title.en).filter((title) => banned.some((term) => term.test(title)))).toEqual([]);
+    expect(banned.filter((term) => term.test(JSON.stringify(UI.en)))).toEqual([]);
   });
 
   test("the remote access page is published under 고급 and linked from settings and troubleshooting", () => {

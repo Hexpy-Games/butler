@@ -2,6 +2,8 @@
   padding: var(--space-sm) var(--space-md);
   border-radius: var(--radius-control);
   border: 1px solid;
+  font-size: var(--typo-body-size);
+  line-height: var(--typo-body-line-height);
 }
 
 .tone-info {
@@ -29,8 +31,12 @@
 }
 
 .icon {
-  display: inline-flex;
-  flex-shrink: 0;
+  align-self: start;
+}
+
+.notice:has(.title) .icon {
+  font-size: var(--typo-label-size);
+  line-height: var(--typo-label-line-height);
 }
 
 .message {
@@ -41,4 +47,5 @@
 
 .action {
   flex-shrink: 0;
+  align-self: center;
 }
