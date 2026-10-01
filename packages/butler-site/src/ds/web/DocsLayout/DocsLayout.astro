@@ -3,7 +3,8 @@ import "../../base.css";
 import { THEME_STORAGE_KEY } from "../client/theme";
 import { designSystemRoot, type NavSectionItem } from "../../../site/nav";
 import { BUTLER_VERSION, REPOSITORY_URL } from "../../../site/meta";
-import type { Locale } from "../../../site/sections";
+import { DEFAULT_LOCALE, LOCALES, type Locale } from "../../../site/sections";
+import { ui } from "../../../site/ui";
 import SearchDialog from "../SearchDialog/SearchDialog.astro";
 import SiteFooter from "../SiteFooter/SiteFooter.astro";
 import SiteSidebar from "../SiteSidebar/SiteSidebar.astro";
@@ -16,14 +17,27 @@ interface Props {
   locale: Locale;
   nav: NavSectionItem[];
   homeHref: string;
+  /** This page in each locale; null where that translation is not published. */
   alternates: Partial<Record<Locale, string | null>>;
-  /** Pages that are not a URL of their own (404): no canonical, not indexed. */
+  /** Pages that are not a URL of their own (404): no canonical, no hreflang, not indexed. */
   noindex?: boolean;
 }
 
 const { title, description, locale, nav, homeHref, alternates, noindex = false } = Astro.props;
 const base = import.meta.env.BASE_URL;
-const canonical = Astro.site && !noindex ? new URL(Astro.url.pathname, Astro.site).href : undefined;
+const copy = ui(locale);
+const site = Astro.site;
+const canonical = site && !noindex ? new URL(Astro.url.pathname, site).href : undefined;
+// hreflang: one link per published translation (this page included), plus
+// x-default for the default locale. Search engines need absolute URLs.
+const translations = site && !noindex
+  ? LOCALES.flatMap((code) => {
+      const href = alternates[code];
+      return href ? [{ code: code as string, href: new URL(href, site).href }] : [];
+    })
+  : [];
+const fallback = translations.find((translation) => translation.code === DEFAULT_LOCALE);
+const hreflangs = translations.length > 1 && fallback ? [...translations, { code: "x-default", href: fallback.href }] : [];
 ---
 <!doctype html>
 <html lang={locale}>
@@ -33,6 +47,7 @@ const canonical = Astro.site && !noindex ? new URL(Astro.url.pathname, Astro.sit
     <title>{title} · Butler</title>
     <meta content={description} name="description" />
     {canonical && <link href={canonical} rel="canonical" />}
+    {hreflangs.map(({ code, href }) => <link href={href} hreflang={code} rel="alternate" />)}
     {noindex && <meta content="noindex" name="robots" />}
     <slot name="head" />
     <link href={`${base.replace(/\/?$/u, "/")}favicon.svg`} rel="icon" type="image/svg+xml" />
@@ -46,7 +61,7 @@ const canonical = Astro.site && !noindex ? new URL(Astro.url.pathname, Astro.sit
     </script>
   </head>
   <body>
-    <a class={styles.skip} href="#content">본문으로 건너뛰기</a>
+    <a class={styles.skip} href="#content">{copy.skipToContent}</a>
     <div class={styles.shell}>
       <SiteSidebar alternates={alternates} homeHref={homeHref} locale={locale} nav={nav} />
       <div class={styles.column} data-drawer-inert>
@@ -54,7 +69,7 @@ const canonical = Astro.site && !noindex ? new URL(Astro.url.pathname, Astro.sit
         <div class={styles.page}>
           <main class={styles.main} id="content">
             <slot />
-            <SiteFooter designSystemHref={designSystemRoot(base)} repositoryUrl={REPOSITORY_URL} version={BUTLER_VERSION} />
+            <SiteFooter designSystemHref={designSystemRoot(base)} locale={locale} repositoryUrl={REPOSITORY_URL} version={BUTLER_VERSION} />
           </main>
           <aside class={styles.toc} data-pagefind-ignore>
             <slot name="toc" />
@@ -62,7 +77,7 @@ const canonical = Astro.site && !noindex ? new URL(Astro.url.pathname, Astro.sit
         </div>
       </div>
     </div>
-    <SearchDialog base={base.replace(/\/?$/u, "/")} />
+    <SearchDialog base={base.replace(/\/?$/u, "/")} locale={locale} />
     <script>
       import "../client/enhance";
     </script>

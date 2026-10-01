@@ -2,6 +2,7 @@
 import type { MarkdownHeading } from "astro";
 import { pageContext, docsRoot, type NavSectionItem } from "../../../site/nav";
 import type { Locale } from "../../../site/sections";
+import { ui } from "../../../site/ui";
 import { Breadcrumb } from "../../components/Breadcrumb";
 import { Typo } from "../../components/Typo";
 import DocContent from "../DocContent/DocContent.astro";
@@ -21,23 +22,23 @@ interface Props {
 }
 
 const { title, description, slug, locale, nav, headings, alternates } = Astro.props;
+const copy = ui(locale);
 const homeHref = docsRoot(import.meta.env.BASE_URL, locale);
 const context = pageContext(nav, slug);
-const trail = [{ label: "문서", href: homeHref }, ...(context.section && !context.section.flat ? [{ label: context.section.title }] : []), { label: title }];
-const tocTitle = "이 페이지";
+const trail = [{ label: copy.docs, href: homeHref }, ...(context.section && !context.section.flat ? [{ label: context.section.title }] : []), { label: title }];
 ---
 <DocsLayout alternates={alternates} description={description} homeHref={homeHref} locale={locale} nav={nav} title={title}>
   <article class={styles.article} data-pagefind-body>
     <header class={styles.header}>
-      <div data-pagefind-ignore><Breadcrumb items={trail} /></div>
+      <div data-pagefind-ignore><Breadcrumb items={trail} label={copy.breadcrumb} /></div>
       <Typo.H1>{title}</Typo.H1>
       <p class={styles.lead}>{description}</p>
-      <div class={styles.inlineToc} data-pagefind-ignore><PageToc headings={headings} title={tocTitle} variant="disclosure" /></div>
+      <div class={styles.inlineToc} data-pagefind-ignore><PageToc headings={headings} title={copy.page.toc} variant="disclosure" /></div>
     </header>
     <DocContent><slot /></DocContent>
   </article>
   <div data-pagefind-ignore>
-    <PrevNextLinks labels={{ prev: "이전", next: "다음", nav: "이전 및 다음 문서" }} next={context.next} prev={context.prev} />
+    <PrevNextLinks labels={{ prev: copy.page.previous, next: copy.page.next, nav: copy.page.pager }} next={context.next} prev={context.prev} />
   </div>
-  <PageToc headings={headings} slot="toc" title={tocTitle} variant="rail" />
+  <PageToc headings={headings} slot="toc" title={copy.page.toc} variant="rail" />
 </DocsLayout>

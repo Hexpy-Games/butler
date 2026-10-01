@@ -1,75 +1,111 @@
 ---
 title: "Install"
-description: "Download Butler for macOS or Linux and complete first-run setup."
+description: "Download the Butler app from GitHub Releases, install it and open it for the first time."
 section: getting-started
 order: 1
 status: published
 ---
 
-Current version: `0.1.0-preview.4`, a preview; stable 0.1.0 is coming.
-
 ## Supported platforms
 
-- Apple silicon Mac, macOS 12 or later
-- Linux x64 / arm64: DEB packages
+The current version is `0.1.0-preview.4`, a preview. The stable 0.1.0 release is still to come.
+
+- Apple silicon (M-series) Mac, macOS 12 or later
+- Linux x64 / arm64: DEB package
 - Arch Linux x64: Arch package
 
-The App includes the native Butler Agent. Its bundled Agent runs while the App is open. Windows native bundles are not supported yet.
+<Notice tone="info">
+  Butler Agent is included in the app, so you do not install it separately. The bundled Agent runs only while Butler is open.
+</Notice>
 
 ## Download
 
-Use the [0.1.0 preview.4 release](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.4).
+<Tabs
+  label="Operating system"
+  items={[
+    { value: "macos", label: "macOS" },
+    { value: "windows", label: "Windows" },
+    { value: "linux", label: "Linux" },
+  ]}
+>
+  <TabPanel value="macos">
+    <Steps>
+      1. Open the [0.1.0 preview.4 release](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.4).
+      2. Download the [macOS DMG](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-preview.4-darwin-arm64.dmg).
+      3. Open the DMG and drag `Butler.app` into the Applications folder.
+    </Steps>
+  </TabPanel>
+  <TabPanel value="windows">
+    <Notice tone="warning" title="Not supported yet">
+      Native Agent bundles for Windows are not supported or verified yet.
+    </Notice>
+  </TabPanel>
+  <TabPanel value="linux">
+    <Steps>
+      1. Download the [DEB x64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-preview.4-linux-x64.deb), [DEB arm64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-preview.4-linux-arm64.deb) or [Arch x64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-preview.4-archlinux-x64.pkg.tar.zst) package.
+      2. In the download folder, install it with the command for your distribution.
+      3. Open Butler from your app list.
+    </Steps>
 
-### macOS
+    ```bash
+    # Debian / Ubuntu (x64; change the file name for arm64)
+    sudo apt install ./butler-app-0.1.0-preview.4-linux-x64.deb
+    # Arch Linux (x64)
+    sudo pacman -U ./butler-app-0.1.0-preview.4-archlinux-x64.pkg.tar.zst
+    ```
+  </TabPanel>
+</Tabs>
 
-1. Download the [macOS DMG](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-preview.4-darwin-arm64.dmg).
-2. Open the DMG and drag `Butler.app` into Applications.
-
-### Linux
-
-Download the [DEB x64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-preview.4-linux-x64.deb), [DEB arm64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-preview.4-linux-arm64.deb), or [Arch x64 package](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-preview.4-archlinux-x64.pkg.tar.zst).
-
-From the download folder, install the package for your distribution:
-
-```bash
-# Debian / Ubuntu (x64; substitute the arm64 filename when needed)
-sudo apt install ./butler-app-0.1.0-preview.4-linux-x64.deb
-# Arch Linux (x64)
-sudo pacman -U ./butler-app-0.1.0-preview.4-archlinux-x64.pkg.tar.zst
-```
-
-Open Butler from your application menu.
+<Notice tone="warning">
+  Earlier releases may contain the TypeScript/Bun Agent, which is no longer used. Download a release that includes the native Agent.
+</Notice>
 
 ### Verify the download (optional)
 
-Each release file has a SHA-256 checksum (`.sha256`). Download both files into the same folder, then verify the DMG:
+Each release file comes with a SHA-256 checksum (`.sha256`). Download the DMG and its checksum file into the same folder, then verify the DMG.
 
 ```bash
 cd ~/Downloads
-shasum -a 256 -c butler-app-0.1.0-preview.4-darwin-arm64.dmg.sha256
+shasum -a 256 -c butler-app-*-darwin-arm64.dmg.sha256
 ```
 
-`OK` means the download matches the published file. On Linux, use `sha256sum -c` with the package's checksum file.
+`OK` means the file you downloaded matches the published file.
 
-## First open on macOS
+## First open
 
-Preview builds are signed but not notarized by Apple. Gatekeeper shows a prompt on first open.
+macOS preview builds are signed but not notarized by Apple. Gatekeeper shows a prompt the first time you open the app.
 
-1. In Applications, right-click Butler and choose **Open**.
-2. If it is still blocked, choose **System Settings → Privacy & Security → Open Anyway** after trying to open it.
+<Steps>
+  1. In the Applications folder, right-click Butler and choose **Open**.
+  2. If the app does not open, choose **Open Anyway** in **System Settings → Privacy & Security**.
+</Steps>
 
 ## First-run setup
 
-Choose the interface language on the welcome screen, accept the safety notice, and connect an AI. Choose Butler's reply language at the end of the AI connection step. You can change it later in **Settings → Personalization**.
+The first time you run Butler, first-run setup starts in the app. On the welcome screen, choose the interface language, agree, then connect an AI. In the last step of the AI connection, choose the response language. For each step, see [First run](/en/help/getting-started/first-run/).
 
-## Headless Agent
+After setup, press <span data-mod-key><Kbd keys={["⌘", "K"]} label="Command K" /></span> to open the [command palette](/en/help/basics/command-palette/) and find conversations, projects, schedules and settings.
 
-The headless Agent supports Apple silicon macOS and Linux x64 / arm64 with glibc.
+## Use the Agent without the app
+
+The headless Agent supports Apple silicon macOS and glibc-based Linux x64 / arm64.
 
 ```bash
 curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/install.sh | sh -s -- --version 0.1.0-preview.4
-# Or, with Node.js:
+# With Node.js
 npx @hexpygames/butler install
 ```
 
-See the [Agent CLI guide](/en/help/advanced/agent-cli/) for service management.
+For the management commands, see [Butler Agent CLI](/en/help/advanced/agent-cli/).
+
+## Related pages
+
+<CardGrid>
+  <DocCard slug="getting-started/first-run" />
+  <DocCard slug="models/cloud" />
+  <DocCard
+    href="https://github.com/Hexpy-Games/butler/releases"
+    title="Releases"
+    description="Check the changes and release files for each version."
+  />
+</CardGrid>
