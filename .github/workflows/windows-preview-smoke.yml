@@ -16,10 +16,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: windows-preview-${{ github.ref }}
-  cancel-in-progress: true
-
 defaults:
   run:
     shell: pwsh
@@ -28,6 +24,10 @@ defaults:
 jobs:
   release:
     name: Installed unsigned Windows preview
+    # Keep the expensive static-ORT build/cache alive during contract fixes.
+    concurrency:
+      group: windows-preview-release-${{ github.ref }}
+      cancel-in-progress: false
     runs-on: windows-latest
     timeout-minutes: 90
     env:
@@ -60,6 +60,9 @@ jobs:
   # Fixed stub clocks/test hooks are intentionally absent from release builds.
   stub:
     name: Platform contracts and debug stub chat
+    concurrency:
+      group: windows-preview-contracts-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: windows-latest
     timeout-minutes: 90
     env:

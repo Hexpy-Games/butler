@@ -65,7 +65,11 @@ fn acl(path: &Path, operation: &str) -> io::Result<String> {
             .creation_flags(0x0800_0000)
             .output()?;
     if !output.status.success() {
-        return Err(io::Error::other("Windows private ACL operation failed"));
+        // The script only inspects ACL metadata, never file contents or tokens.
+        return Err(io::Error::other(format!(
+            "Windows private ACL operation failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
     }
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
