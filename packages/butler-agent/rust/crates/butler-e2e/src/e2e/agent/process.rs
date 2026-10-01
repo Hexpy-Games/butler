@@ -47,6 +47,11 @@ impl Agent {
         let Some(mut child) = self.child.take() else {
             return Ok(());
         };
+        let started = Instant::now();
+        let unix_us = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |time| time.as_micros());
+        eprintln!("harness stop: pid={} unix_us={unix_us}", child.id());
         if let Err(StopError::Unsupported) = request_stop(child.id()) {
             let stop = self.cli(&["stop", "--json"])?;
             if stop.code != Some(0) {
@@ -59,8 +64,20 @@ impl Agent {
             }
         }
         let deadline = Instant::now() + Duration::from_secs(30);
+        let mut polls = 0;
+        let mut previous_poll = started;
+        let mut max_poll_gap = Duration::ZERO;
         loop {
+            let now = Instant::now();
+            max_poll_gap = max_poll_gap.max(now.duration_since(previous_poll));
+            previous_poll = now;
+            polls += 1;
             if let Some(status) = child.try_wait()? {
+                eprintln!(
+                    "harness exit: pid={} elapsed={:?} polls={polls} max_poll_gap={max_poll_gap:?} status={status}",
+                    child.id(),
+                    started.elapsed()
+                );
                 self.exits.push((child.id(), status));
                 if status.code() != Some(0) {
                     return Err(harness_error(format!(

@@ -31,6 +31,7 @@ wire_codes! {
         AppSqliteParentCreateFailed = "app_sqlite_parent_create_failed",
         AppSqliteThreadPanicked = "app_sqlite_thread_panicked",
         AppSqliteThreadSpawnFailed = "app_sqlite_thread_spawn_failed",
+        AppSqliteWalSyncFailed = "app_sqlite_wal_sync_failed",
         AppSqliteTransactionOpenAtClose = "app_sqlite_transaction_open_at_close",
         AppStagedOutboundIdentityConflict = "app_staged_outbound_identity_conflict",
         AppStagedOutboundMissing = "app_staged_outbound_missing",

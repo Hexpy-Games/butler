@@ -20,6 +20,7 @@ mod security_settings;
 pub use devices::{GatewayDevices, PairedDevice};
 mod server;
 mod session_references;
+mod shutdown_trace;
 mod transcript;
 mod ui_language;
 

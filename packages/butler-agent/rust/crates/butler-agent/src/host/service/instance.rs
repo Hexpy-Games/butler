@@ -292,21 +292,39 @@ fn release_record_at(
     nonce: &str,
     wait: bool,
 ) {
+    super::shutdown_trace::event(if wait {
+        "instance_release:begin"
+    } else {
+        "deadline_instance_release:begin"
+    });
     let Some(data_root) = record_path.parent().and_then(Path::parent) else {
+        super::shutdown_trace::event("instance_release:invalid_path");
         return;
     };
     if validate_write_destinations(data_root, installation).is_err() {
+        super::shutdown_trace::event("instance_release:invalid_destination");
         return;
     }
     let lock_path = record_update_lock_path(data_root);
     let lock = if wait {
         acquire_record_update_lock(&lock_path).ok()
     } else {
-        open_lock(&lock_path, false)
-            .ok()
-            .and_then(|file| InstanceLock::try_exclusive(file).ok())
+        match record::acquire_record_update_lock_until(
+            &lock_path,
+            std::time::Duration::from_secs(1),
+        ) {
+            Ok(lock) => lock,
+            Err(_) => {
+                super::shutdown_trace::event("instance_release:record_lock_failed");
+                return;
+            }
+        }
     };
     let Some(_record_update_lock) = lock else {
+        if !wait {
+            eprintln!("[native-butler] record_lock_unavailable: deadline release budget expired");
+        }
+        super::shutdown_trace::event("instance_release:record_lock_unavailable");
         return;
     };
     if read_record_at(record_path)
@@ -314,7 +332,15 @@ fn release_record_at(
         .flatten()
         .is_some_and(|current| current.nonce == nonce)
     {
-        let _ = fs::remove_file(record_path);
+        match fs::remove_file(record_path) {
+            Ok(()) => super::shutdown_trace::event("instance_release:removed"),
+            Err(error) => super::shutdown_trace::event(&format!(
+                "instance_release:remove_failed:{:?}",
+                error.kind()
+            )),
+        }
+    } else {
+        super::shutdown_trace::event("instance_release:record_missing_changed_or_unreadable");
     }
 }
 
