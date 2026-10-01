@@ -81,7 +81,7 @@ fn many(
     sql_text: &str,
     parameters: &[&dyn ToSql],
 ) -> AuthorityResult<Vec<AuthorityRecord>> {
-    let mut statement = db.prepare(sql_text).map_err(sql)?;
+    let mut statement = db.prepare_cached(sql_text).map_err(sql)?;
     statement
         .query_map(parameters, hydrate)
         .map_err(sql)?

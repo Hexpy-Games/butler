@@ -169,11 +169,11 @@ pub struct AppAuthorityDecisionInput {
 }
 
 pub trait AppAuthorityHandoff: Send + Sync + 'static {
-    fn question_history(
+    fn session_requests(
         &self,
         owner_session_id: String,
         turns: Vec<String>,
-    ) -> ApplicationFuture<Vec<Value>>;
+    ) -> ApplicationFuture<(Vec<Value>, Vec<Value>)>;
     fn list(&self, owner_session_id: String) -> ApplicationFuture<AppAuthorityPage>;
     fn revoke(&self, owner_session_id: String, grant_ref: String) -> ApplicationFuture<()>;
     fn decide(&self, input: AppAuthorityDecisionInput) -> ApplicationFuture<AppAuthorityDecision>;

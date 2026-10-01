@@ -130,7 +130,7 @@ pub enum AuthorityAdmissionResult {
     Granted,
     Pending {
         request_ref: String,
-        projection: AuthorityRequestProjection,
+        projection: Box<AuthorityRequestProjection>,
     },
     Allowed {
         request_ref: String,

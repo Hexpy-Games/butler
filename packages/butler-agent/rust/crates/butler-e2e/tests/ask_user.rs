@@ -5,6 +5,8 @@
     clippy::panic,
     reason = "test assertions"
 )]
+#[path = "ask_user/scale.rs"]
+mod scale;
 #[path = "ask_user/stub.rs"]
 mod stub;
 use butler_e2e::e2e::{
@@ -78,6 +80,7 @@ async fn completed(s: &Scenario, turn: &str) -> Result<(), HarnessError> {
 async fn ask_user_answer_continues_same_turn() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, turn, q) = pending("ASK-USER").await?;
+    scale::assert_projection(&s, &q).await?;
     measure_idle(&s, &q).await?;
     let invalid =
         s.gw.post(

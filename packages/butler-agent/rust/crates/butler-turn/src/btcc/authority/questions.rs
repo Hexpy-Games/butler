@@ -240,35 +240,46 @@ pub struct AnsweredQuestion {
     pub response: UserQuestionResponse,
 }
 impl PrincipalAuthority {
-    pub async fn question_history(
+    /// A fresh session projection, read in one SQLite lane operation. Only pending
+    /// requests and answers belonging to visible turns are hydrated and decoded.
+    pub async fn session_requests(
         &self,
         owner: String,
         turns: Vec<String>,
-    ) -> AuthorityResult<Vec<AnsweredQuestion>> {
+    ) -> AuthorityResult<(Vec<AuthorityRequestProjection>, Vec<AnsweredQuestion>)> {
+        let collation = self.collation.clone();
         self.in_lane(move |repo| {
-            repo.question_history(&owner, &turns)?
+            let pending = repo
+                .list_pending(&owner)?
+                .iter()
+                .map(|record| projection::request(record, &collation))
+                .collect::<AuthorityResult<Vec<_>>>()?;
+            let answers = repo
+                .question_history(&owner, &turns)?
                 .into_iter()
-                .map(|r| {
-                    let corrupt = || AuthorityError::policy("authority_request_corrupt");
-                    Ok(AnsweredQuestion {
-                        request_ref: r.request_ref,
-                        source_turn_id: r.source_turn_id,
-                        updated_at: r.updated_at,
-                        questions: serde_json::from_str(&r.normalized_input_json)
-                            .map_err(|_| corrupt())?,
-                        response: serde_json::from_str(
-                            r.outcome_receipt_json
-                                .as_deref()
-                                .or(r.private_alternative_input.as_deref())
-                                .unwrap_or(""),
-                        )
-                        .map_err(|_| corrupt())?,
-                    })
-                })
-                .collect()
+                .map(answered_question)
+                .collect::<AuthorityResult<Vec<_>>>()?;
+            Ok((pending, answers))
         })
         .await
     }
+}
+
+fn answered_question(r: AuthorityRecord) -> AuthorityResult<AnsweredQuestion> {
+    let corrupt = || AuthorityError::policy("authority_request_corrupt");
+    Ok(AnsweredQuestion {
+        request_ref: r.request_ref,
+        source_turn_id: r.source_turn_id,
+        updated_at: r.updated_at,
+        questions: serde_json::from_str(&r.normalized_input_json).map_err(|_| corrupt())?,
+        response: serde_json::from_str(
+            r.outcome_receipt_json
+                .as_deref()
+                .or(r.private_alternative_input.as_deref())
+                .unwrap_or(""),
+        )
+        .map_err(|_| corrupt())?,
+    })
 }
 
 pub(super) fn answer_deferred(

@@ -87,21 +87,18 @@ impl AuthorityHandoff {
 }
 
 impl AppAuthorityHandoff for AuthorityHandoff {
-    fn question_history(
+    fn session_requests(
         &self,
         owner_session_id: String,
         turns: Vec<String>,
-    ) -> ApplicationFuture<Vec<serde_json::Value>> {
+    ) -> ApplicationFuture<(Vec<serde_json::Value>, Vec<serde_json::Value>)> {
         let authority = self.authority.clone();
         Box::pin(async move {
-            authority
-                .question_history(owner_session_id, turns)
+            let (requests, answers) = authority
+                .session_requests(owner_session_id, turns)
                 .await
-                .map_err(authority_error)?
-                .iter()
-                .map(serde_json::to_value)
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(GatewayApplicationError::internal_from)
+                .map_err(authority_error)?;
+            Ok((public_values(requests)?, public_values(answers)?))
         })
     }
 
@@ -216,6 +213,16 @@ impl AppAuthorityHandoff for AuthorityHandoff {
                 .map_err(authority_error)
         })
     }
+}
+
+fn public_values<T: serde::Serialize>(
+    values: Vec<T>,
+) -> Result<Vec<serde_json::Value>, GatewayApplicationError> {
+    values
+        .into_iter()
+        .map(serde_json::to_value)
+        .collect::<Result<_, _>>()
+        .map_err(GatewayApplicationError::internal_from)
 }
 
 #[expect(

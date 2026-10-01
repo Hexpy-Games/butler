@@ -438,6 +438,10 @@ async fn approval_long_command_is_complete() -> Result<(), HarnessError> {
     let request = wait_request(&s, &turn_id).await?;
     assert_eq!(request["approval"]["examples"], json!([command]));
     assert!(request["approval"].get("examples_truncated").is_none());
+    let view = s.gw.get("/session-view?session_id=general").await?;
+    assert_eq!(view.status, 200, "{}", view.text);
+    assert_eq!(view.data()["authority_requests"], json!([request]));
+    assert_eq!(view.data()["pending_questions"], json!([]));
     assert!(s.gw.healthy().await);
     s.finish().await
 }

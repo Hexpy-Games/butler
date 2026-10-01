@@ -195,12 +195,12 @@ impl AppSubsessionPort for UnprovidedSessions {
 pub(super) struct Authority;
 
 impl AppAuthorityHandoff for Authority {
-    fn question_history(
+    fn session_requests(
         &self,
         _: String,
         _: Vec<String>,
-    ) -> ApplicationFuture<Vec<serde_json::Value>> {
-        Box::pin(async { Ok(vec![]) })
+    ) -> ApplicationFuture<(Vec<serde_json::Value>, Vec<serde_json::Value>)> {
+        Box::pin(async { Ok((vec![], vec![])) })
     }
 
     fn close_self_session(&self, _: String, _: String) -> ApplicationFuture<()> {

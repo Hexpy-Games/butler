@@ -8,22 +8,6 @@ pub(super) async fn read(
     messages: &[MessageRecord],
     active: Option<&str>,
 ) -> Result<(Value, Value, Value), GatewayApplicationError> {
-    let page = app
-        .dependencies
-        .authority_handoff
-        .list(owner.into())
-        .await?;
-    let approvals: Vec<_> = page
-        .requests
-        .iter()
-        .filter(|r| r["category"] != "ask_user")
-        .cloned()
-        .collect();
-    let pending: Vec<_> = page
-        .requests
-        .into_iter()
-        .filter(|r| r["category"] == "ask_user")
-        .collect();
     let mut turns: Vec<String> = messages.iter().filter_map(|m| m.turn_id.clone()).collect();
     turns.extend(active.map(str::to_owned));
     turns.extend(
@@ -33,11 +17,14 @@ pub(super) async fn read(
     );
     turns.sort();
     turns.dedup();
-    let answers = app
+    let (requests, answers) = app
         .dependencies
         .authority_handoff
-        .question_history(owner.into(), turns)
+        .session_requests(owner.into(), turns)
         .await?;
+    let (pending, approvals): (Vec<_>, Vec<_>) = requests
+        .into_iter()
+        .partition(|request| request["category"] == "ask_user");
     Ok((json!(pending), json!(answers), json!(approvals)))
 }
 
