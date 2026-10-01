@@ -7,10 +7,11 @@ set -euo pipefail
 
 script=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/sign-and-notarize.sh
 work=$(mktemp -d)
-trap 'chmod -R u+w "$work"; rm -rf "$work"' EXIT
+mount=$work/mounted
+trap 'if [ -d "$mount/Butler.app" ]; then hdiutil detach "$mount"; fi; chmod -R u+w "$work"; rm -rf "$work"' EXIT
 
 out=$(env -u BUTLER_SIGN_IDENTITY "$script" sign-app "$work/none.app")
-printf '%s\n' "$out" | grep -q 'skipping sign-app' || { echo "no-identity mode did not skip" >&2; exit 1; }
+grep -q 'skipping sign-app' <<< "$out" || { echo "no-identity mode did not skip" >&2; exit 1; }
 
 app=$work/Fake.app
 fw=$app/Contents/Frameworks/Lib.framework
@@ -37,9 +38,10 @@ chmod 555 "$app/Contents/Resources/bundled-agent/bin/butler-agent" "$app/Content
 
 BUTLER_SIGN_IDENTITY=- "$script" sign-app "$app"
 codesign --verify --strict --deep "$app"
-codesign -d --verbose=2 "$app/Contents/Resources/bundled-agent/bin/butler-agent" 2>&1 |
-  grep -q 'Identifier=com.hexpy.butler.agent' || { echo "agent identifier missing" >&2; exit 1; }
-codesign -d --entitlements - "$app" 2>&1 | grep -q allow-jit || { echo "app entitlements missing" >&2; exit 1; }
+agent_signature=$(codesign -d --verbose=2 "$app/Contents/Resources/bundled-agent/bin/butler-agent" 2>&1)
+grep -q 'Identifier=com.hexpy.butler.agent' <<< "$agent_signature" || { echo "agent identifier missing" >&2; exit 1; }
+app_entitlements=$(codesign -d --entitlements - "$app" 2>&1)
+grep -q allow-jit <<< "$app_entitlements" || { echo "app entitlements missing" >&2; exit 1; }
 [ "$(stat -f %Lp "$app/Contents/Resources/bundled-agent/bin/butler-agent")" = 555 ] || { echo "agent mode not restored" >&2; exit 1; }
 # Unofficial previews still verify real signatures, without an online ticket.
 export GITHUB_REF_NAME=v0.1.0-preview.1 BUTLER_SIGN_IDENTITY=-
@@ -58,4 +60,18 @@ assert module.binary_signing(Path(sys.argv[2])) == {"teamId": "", "notarized": F
 os.environ["GITHUB_REF_NAME"] = "v0.1.0"
 assert module.binary_signing(Path(sys.argv[2])) is None
 PYTEST
+
+# Exercise the release DMG path after its original app has been removed.
+root=$(cd "$(dirname "$script")/../.." && pwd)
+export BUTLER_DMG_TEST_APP=$app BUTLER_DMG_TEST_IMAGE=$work/Butler.dmg BUTLER_DMG_TEST_ROOT=$root
+"${BUTLER_BUN:-bun}" -e 'const { createMacDmg } = await import(`${process.env.BUTLER_DMG_TEST_ROOT}/packages/butler-app/scripts/release/package-app-release.ts`); createMacDmg({appBundle: process.env.BUTLER_DMG_TEST_APP, artifactPath: process.env.BUTLER_DMG_TEST_IMAGE});'
+chmod -R u+w "$app"
+rm -rf "$app"
+mkdir "$mount"
+hdiutil attach "$BUTLER_DMG_TEST_IMAGE" -nobrowse -readonly -mountpoint "$mount"
+[ "$(readlink "$mount/Butler.app/Contents/Frameworks/Lib.framework/Versions/Current")" = A ] || { echo "framework version link changed" >&2; exit 1; }
+[ "$(readlink "$mount/Butler.app/Contents/Frameworks/Lib.framework/Lib")" = Versions/Current/Lib ] || { echo "framework executable link changed" >&2; exit 1; }
+[ "$(readlink "$mount/Butler.app/Contents/Frameworks/Lib.framework/Resources")" = Versions/Current/Resources ] || { echo "framework resource link changed" >&2; exit 1; }
+codesign --verify --strict --deep "$mount/Butler.app"
+hdiutil detach "$mount"
 echo "selftest: ok"
