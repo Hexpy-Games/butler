@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readlinkSync, realpathSync, readdirSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { processRoleFileNames } from "../../packages/butler-app/client/electron/scripts/process-role-names.mjs";
 
 export function verifyMacPackageMetadata(app: string, exactVersion: string, hardLinks: boolean): void {
+  verifyMacFrameworkLinks(app);
   const resources = join(app, "Contents/Resources");
   // Use packager's own ASAR dependency, without relying on transitive hoisting.
   const electronRequire = createRequire(new URL("../../packages/butler-app/client/electron/package.json", import.meta.url));
@@ -35,10 +36,35 @@ export function verifyMacPackageMetadata(app: string, exactVersion: string, hard
     const alias = join(payload, "bin", role);
     const mode = statSync(alias);
     if (!(mode.mode & 0o111) || hash(alias) !== expectedHash ||
-        (hardLinks && mode.ino !== statSync(binary).ino)) {
+        (hardLinks && (mode.dev !== statSync(binary).dev || mode.ino !== statSync(binary).ino))) {
       throw new Error(`Invalid packaged process role: ${role}`);
     }
   }
+}
+
+/** Framework links must stay relative and resolve inside the relocated App. */
+export function verifyMacFrameworkLinks(app: string): { frameworkLinks: number; icuBytes: number } {
+  const frameworks = join(app, "Contents/Frameworks");
+  let frameworkLinks = 0;
+  for (const name of readdirSync(frameworks).filter(name => name.endsWith(".framework"))) {
+    const framework = join(frameworks, name);
+    const binary = name.slice(0, -".framework".length);
+    const links = ["Versions/Current", "Resources", binary];
+    if (binary === "Electron Framework") links.push("Helpers", "Libraries");
+    for (const link of links) {
+      const path = join(framework, link);
+      const target = link === "Versions/Current" ? "A" : `Versions/Current/${link}`;
+      if (!lstatSync(path).isSymbolicLink() || readlinkSync(path) !== target ||
+          realpathSync(path) !== realpathSync(join(framework, "Versions/A", link === "Versions/Current" ? "" : link))) {
+        throw new Error(`Invalid relocated framework link: ${path}`);
+      }
+      frameworkLinks++;
+    }
+  }
+  const icu = join(frameworks, "Electron Framework.framework/Resources/icudtl.dat");
+  const metadata = statSync(icu);
+  if (!metadata.isFile() || metadata.size === 0) throw new Error("Electron ICU data is missing");
+  return { frameworkLinks, icuBytes: metadata.size };
 }
 
 function walk(root: string): string[] {

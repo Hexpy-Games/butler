@@ -368,7 +368,7 @@ export function createMacDmg(input: { appBundle: string; artifactPath: string })
   }
 }
 
-function createMacZip(appBundle: string, artifactPath: string): void {
+export function createMacZip(appBundle: string, artifactPath: string): void {
   rmSync(artifactPath, { force: true });
   const result = spawnSync("ditto", [
     "-c",
