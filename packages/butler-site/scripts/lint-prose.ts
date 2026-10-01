@@ -20,12 +20,15 @@
  *   {/* prose-lint-disable-next-line <rule-id>[ <rule-id>] -- <reason> *\/}
  *   ... {/* prose-lint-disable-line <rule-id> -- <reason> *\/}
  * A single phrase is disabled with banned-phrase/<phrase-id>.
+ *
+ * Only ko pages are read. English pages have their own, smaller check
+ * (lint-prose-en.ts), which reuses the masking and the escape hatch from here.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const SITE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+export const SITE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const PHRASES_PATH = join(SITE_ROOT, "scripts", "prose-lint-phrases.json");
 export const SKILL_PHRASES_REFERENCE = join(SITE_ROOT, "skills", "butler-docs-writing", "references", "banned-phrases.md");
 export const KO_DOCS_ROOT = join(SITE_ROOT, "src", "content", "docs", "ko");
@@ -37,6 +40,8 @@ export type ProseRule =
   | "emoji"
   | "mixed-list"
   | "bold-flanking"
+  /** English pages only (lint-prose-en.ts); never disableable. */
+  | "product-term"
   | "disable-syntax"
   | "unused-disable";
 
@@ -76,7 +81,7 @@ const PLACEHOLDERS = /[-]/gu;
 const erase = (text: string) => text.replace(/[^\n]/gu, GONE);
 const token = (text: string, placeholder: string) => placeholder + erase(text).slice(1);
 
-interface Directive {
+export interface Directive {
   line: number;
   target: number;
   rules: string[];
@@ -147,7 +152,7 @@ function eraseJsx(source: string): string {
   return out;
 }
 
-interface Masked {
+export interface Masked {
   /** Bold labels and quotes are placeholders: input for phrase, sentence and list rules. */
   prose: string[];
   /** Lines that held only markup (JSX tags, fences, comments): block boundaries. */
@@ -193,7 +198,7 @@ function parseDirectives(source: string, phraseIds: Set<string>): Directive[] {
   return directives;
 }
 
-function mask(source: string, phraseIds: Set<string>): Masked {
+export function mask(source: string, phraseIds: Set<string>): Masked {
   let text = source.replace(/^---\n[\s\S]*?\n---(?=\n|$)/u, erase);
   text = eraseFences(text);
   const directives = parseDirectives(text, phraseIds);
@@ -398,7 +403,27 @@ function itemStyle(item: Item): "sentence" | "noun" | "label" {
 
 // ---------------------------------------------------------------- rules
 
-const EMOJI = /\p{Emoji_Presentation}|\p{Extended_Pictographic}️/u;
+export const EMOJI = /\p{Emoji_Presentation}|\p{Extended_Pictographic}️/u;
+
+/** Drops findings a valid directive covers; adds findings for malformed and unused directives. */
+export function applyDirectives(path: string, findings: ProseFinding[], directives: Directive[]): ProseFinding[] {
+  const kept = findings.filter((finding) => {
+    const directive = directives.find((candidate) =>
+      candidate.valid &&
+      candidate.target === finding.line &&
+      candidate.rules.some((rule) => rule === finding.rule || rule === `${finding.rule}/${finding.id}`));
+    if (directive) directive.used = true;
+    return !directive;
+  });
+  for (const directive of directives) {
+    if (!directive.valid) {
+      kept.push({ path, line: directive.line, rule: "disable-syntax", message: `${path}:${directive.line} prose-lint directive ${directive.problem}` });
+    } else if (!directive.used) {
+      kept.push({ path, line: directive.line, rule: "unused-disable", message: `${path}:${directive.line} prose-lint directive suppresses nothing; remove it` });
+    }
+  }
+  return kept.sort((a, b) => a.line - b.line || a.rule.localeCompare(b.rule));
+}
 
 export function lintProse(path: string, source: string, phrases = loadBannedPhrases()): ProseFinding[] {
   const patterns = phrases.map((phrase) => ({ ...phrase, regex: new RegExp(phrase.pattern, "gu") }));
@@ -479,27 +504,12 @@ export function lintProse(path: string, source: string, phrases = loadBannedPhra
     }
   }
 
-  const kept = findings.filter((finding) => {
-    const directive = masked.directives.find((candidate) =>
-      candidate.valid &&
-      candidate.target === finding.line &&
-      candidate.rules.some((rule) => rule === finding.rule || rule === `${finding.rule}/${finding.id}`));
-    if (directive) directive.used = true;
-    return !directive;
-  });
-  for (const directive of masked.directives) {
-    if (!directive.valid) {
-      kept.push({ path, line: directive.line, rule: "disable-syntax", message: `${path}:${directive.line} prose-lint directive ${directive.problem}` });
-    } else if (!directive.used) {
-      kept.push({ path, line: directive.line, rule: "unused-disable", message: `${path}:${directive.line} prose-lint directive suppresses nothing; remove it` });
-    }
-  }
-  return kept.sort((a, b) => a.line - b.line || a.rule.localeCompare(b.rule));
+  return applyDirectives(path, findings, masked.directives);
 }
 
 // ---------------------------------------------------------------- CLI
 
-function walk(dir: string): string[] {
+export function walk(dir: string): string[] {
   if (!existsSync(dir)) return [];
   return readdirSync(dir).flatMap((entry) => {
     const path = join(dir, entry);

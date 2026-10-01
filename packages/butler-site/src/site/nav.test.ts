@@ -1,5 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import { buildNav, designSystemRoot, docHref, docsRoot, docSlug, pageContext, withBase, type DocEntryLike } from "./nav";
+import {
+  buildNav,
+  designSystemRoot,
+  docHref,
+  docsRoot,
+  docSlug,
+  localeAlternates,
+  pageContext,
+  switchHref,
+  withBase,
+  type DocEntryLike,
+} from "./nav";
 
 function entry(id: string, section: string, order: number, status: "published" | "planned" = "published"): DocEntryLike {
   return { id, data: { title: id.split("/").at(-1) ?? id, description: "", section, order, status } } as DocEntryLike;
@@ -35,6 +46,28 @@ describe("paths", () => {
   test("serves the DS Viewer under /ds/", () => {
     expect(designSystemRoot("/")).toBe("/ds/");
     expect(designSystemRoot("/preview/")).toBe("/preview/ds/");
+  });
+});
+
+describe("language switching", () => {
+  test("a page's alternates are its published translations", () => {
+    expect(localeAlternates(entries, "/", "getting-started/install")).toEqual({
+      ko: "/help/getting-started/install/",
+      en: "/en/help/getting-started/install/",
+    });
+    expect(localeAlternates(entries, "/", "models/cloud")).toEqual({ ko: "/help/models/cloud/", en: null });
+    expect(localeAlternates(entries, "/", "getting-started/first-run")).toEqual({ ko: null, en: null });
+  });
+
+  test("every locale has the landing page", () => {
+    expect(localeAlternates([], "/preview/", null)).toEqual({ ko: "/preview/help/", en: "/preview/en/help/" });
+  });
+
+  test("the switcher keeps the page, or falls back to the other locale's landing page", () => {
+    const alternates = localeAlternates(entries, "/", "models/cloud");
+    expect(switchHref(alternates, "/", "ko")).toBe("/help/models/cloud/");
+    expect(switchHref(alternates, "/", "en")).toBe("/en/help/");
+    expect(switchHref(localeAlternates(entries, "/", "getting-started/install"), "/", "en")).toBe("/en/help/getting-started/install/");
   });
 });
 

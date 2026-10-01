@@ -1,0 +1,75 @@
+---
+title: "Command palette"
+description: "Find conversations, projects, schedules and settings in one place."
+section: basics
+order: 3
+status: published
+---
+
+The command palette is a search window that finds conversations, projects, space groups, schedules and settings by name and opens them.
+
+## Open and close
+
+- Press <span data-mod-key><Kbd keys={["⌘", "K"]} label="Command K" /></span>. It opens even while you are typing in the composer.
+- Click **Search** at the top of the sidebar.
+
+To close the palette, press <Kbd keys={["Esc"]} label="Escape" /> or <span data-mod-key><Kbd keys={["⌘", "K"]} label="Command K" /></span>, or click the close button on the right or anywhere outside the palette.
+
+## Find and open
+
+<Steps>
+  1. Press <span data-mod-key><Kbd keys={["⌘", "K"]} label="Command K" /></span> to open the palette.
+  2. Enter a search term.
+  3. Choose an item with <Kbd keys={["↑"]} label="Up arrow" /> and <Kbd keys={["↓"]} label="Down arrow" />, then press <Kbd keys={["Enter"]} />. You can also click the item.
+</Steps>
+
+## What you can search
+
+Each result shows its kind or location. When you choose an item, what opens depends on its kind.
+
+- **Chat**, **Project chat** — Opens that conversation.
+- **Project** — Opens a new conversation in that project.
+- **Space** — Opens the sidebar and expands that group to show it.
+- **Schedule** — Opens the [schedule](/en/help/scheduled-tasks/) detail screen. The result also shows how often the schedule runs.
+- **Settings** — Opens that [Settings](/en/help/settings/) screen. You can find **General**, **Appearance**, **Server**, **Models and access**, **Privacy and data**, **Diagnostics**, **System events** and **Archived**.
+
+An item inside a group or project shows a location such as `Group › Project` in place of its kind.
+
+## Search rules
+
+- Search ignores case.
+- If you enter several words separated by spaces, only items that contain every word appear.
+- Conversations, projects and groups match on their title and on the names of the groups and projects that contain them. If you enter a project name, that project's conversations appear too.
+- Items whose title equals the search term come first, then items that start with it, then the rest. Within the same rank, conversations and projects with recent activity come first.
+- The palette shows up to 30 results.
+- The part of a title that matches the search term is highlighted.
+- If you open the palette without a search term, conversations and projects with recent activity come first.
+- Archived conversations and projects, and conversations in archived projects, do not appear.
+
+## Keyboard
+
+- <Kbd keys={["↑"]} label="Up arrow" /> <Kbd keys={["↓"]} label="Down arrow" /> — Moves the selection.
+- <Kbd keys={["Enter"]} /> — Opens the selected item.
+- <Kbd keys={["Esc"]} label="Escape" /> — Closes the palette.
+- <span data-mod-key><Kbd keys={["⌘", "K"]} label="Command K" /></span> — Opens or closes the palette.
+
+## Notes
+
+<Notice tone="info">
+  Settings results appear when the search term matches the English section name. For example, `Appearance` finds **Appearance** and `Models` finds **Models and access**.
+</Notice>
+
+<Notice tone="info">
+  While you are composing a Korean character, <span data-mod-key><Kbd keys={["⌘", "K"]} label="Command K" /></span> does not work. Finish typing the character, then press it again.
+</Notice>
+
+If the search fails, the **Could not search. Check your connection and try again.** message appears. Check your connection and click **Try again**.
+
+## Related pages
+
+<CardGrid>
+  <DocCard slug="basics/sidebar-and-spaces" />
+  <DocCard slug="basics/conversation" />
+  <DocCard slug="scheduled-tasks" />
+  <DocCard slug="settings" />
+</CardGrid>

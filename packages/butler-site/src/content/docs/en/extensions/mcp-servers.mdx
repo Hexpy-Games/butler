@@ -1,0 +1,123 @@
+---
+title: "MCP servers"
+description: "Connect external MCP servers and check them."
+section: extensions
+order: 2
+status: published
+---
+
+When you register an external MCP server, Butler can call that server's tools and read its resources during a conversation. This page covers Butler connecting to other servers. To connect Butler to another MCP client, see [Use Butler as an MCP server](/en/help/advanced/mcp-server/).
+
+## Add an MCP server
+
+<Steps>
+  1. In the sidebar, open **Settings** and select **MCP**.
+  2. Click **Add MCP server**.
+  3. Enter the **Server ID** and the **Display name**.
+  4. In **Transport**, choose **stdio**, **Streamable HTTP** or **SSE**.
+  5. Fill in the fields for that transport.
+  6. Click **Save**.
+  7. In the list, click **Test connection** (the refresh icon) for the server you added to check that it connects.
+</Steps>
+
+The form for a new server opens with **Enabled** turned on. If you save with it turned off, the server is added in a disabled state.
+
+## Common fields
+
+- **Server ID** — The ID Butler uses to tell servers apart. It is required. It is converted to lowercase, and any character other than letters, digits, `.`, `_` and `-` becomes `-`. The maximum is 80 characters.
+- **Display name** — The name shown in the list. If you leave it empty, the server ID is used.
+- **Transport** — One of **stdio**, **Streamable HTTP** and **SSE**.
+- **Enabled** — If you turn it off, Butler does not use this server during conversations.
+
+## Fields by transport
+
+### stdio
+
+Butler runs a command locally and communicates over standard input and output.
+
+- **Command** — The program to run. It is required.
+- **Arguments** — The arguments to pass to the command, one per line. Empty lines are ignored.
+- **Working folder** — The folder to run the command in.
+- **Environment variables** — The environment variables to pass to the server process.
+
+### Streamable HTTP and SSE
+
+Butler connects over HTTP to a server that is already running. Choose the transport the server supports. Use **SSE** for a server that supports only the older HTTP+SSE transport.
+
+- **URL** — The server address. It is required and must start with `http://` or `https://`.
+- **Headers** — The HTTP headers to send with each request. Pass an authentication token in a header such as `Authorization`.
+
+## Enter environment variables and headers
+
+Enter **Environment variables** and **Headers** row by row. Each row has a source, a key and a value.
+
+<Steps>
+  1. Click **Add environment variable** or **Add header**.
+  2. Choose the row's source and enter the key and the value.
+  3. To change the source of several rows at once, choose a source in the source selector at the top and click **Apply source to all**.
+</Steps>
+
+There are three sources.
+
+- **Literal value** — Butler stores the value as you entered it. After you save, the value is not shown again on screen or in API responses.
+- **Environment reference** — Enter the name of an environment variable in the value field. When Butler connects, it reads the value from Butler Agent's environment variables.
+- **File** — Enter a file path in the value field. When Butler connects, it reads the file's contents and removes trailing whitespace and line breaks.
+
+The source selector at the top also sets the default source for rows you add. In a key, only letters, digits, `_`, `.` and `-` are kept, and other characters become `_`. Rows with an empty key or value are not saved.
+
+When you edit a server, the value field of a literal value row is empty. Leave it empty to keep the saved value, or enter a new value to replace it. If you remove a row and save, its value is deleted too.
+
+## Manage servers
+
+Each server in the list shows its display name with the transport, the command or URL, and the number of registered environment variables and headers.
+
+- **Test connection** (the refresh icon) — Connects to the server and gets its lists of tools and resources. You can also test a disabled server.
+- **Enable** / **Disable** — Changes whether the server is used. An enabled server shows **Disable**, and a disabled server shows **Enable**.
+- **Edit** (the pencil icon) — Opens the edit form below.
+- **Delete** (the trash icon) — Removes the server from the list.
+
+The server settings you register are stored in `~/.butler/config/mcp-servers.json`.
+
+## How Butler uses MCP servers
+
+- During a conversation, Butler looks up the lists of tools and resources on the enabled servers, then calls the tools or reads the resources it needs.
+- Disabled servers are left out of the list and cannot be called.
+- If the conversation's permission is **Ask first**, Butler asks for your approval before it calls a tool. For permissions, see [Conversations and the composer](/en/help/basics/conversation/#permission).
+- Butler opens a new connection to the server for each task and closes it when the task ends. A stdio server's process starts again for each task, so no server state remains between calls.
+
+## Check the connection and fix problems
+
+When you click **Test connection**, the result appears above the list.
+
+- Success — Shown as `<server ID>: tools <tool count>, resources <resource count>`.
+- Failure — Shown as `<server ID>: <error message>`.
+
+Check the following for each error message.
+
+- `MCP server could not be started.` — Butler could not run the stdio command. Check the **Command** and **Working folder** paths, and write the command as an absolute path.
+- `MCP server connection failed.` — Butler could not open an MCP connection to the server. For a stdio server, run the same command in a terminal and check that it does not exit right away. For an HTTP server, check that you chose the transport the server supports, **Streamable HTTP** or **SSE**.
+- `MCP server connection timed out.` — Butler could not connect within 10 seconds. Check that the server is running and that the URL is correct.
+- `MCP operation timed out.` — Butler connected, but getting the lists did not finish within 10 seconds.
+- `MCP server request failed.` — After connecting, the server answered a request with an error. Check the authentication value in the headers.
+- `MCP server URL is invalid.` — Check that the URL starts with `http://` or `https://`.
+- `MCP server headers are invalid.` — Check whether a header name or value contains characters that are not allowed.
+- `MCP server credentials are unavailable.` — Butler could not read the file of a **File** source. Check the file permissions.
+
+## Notes
+
+<Notice tone="warning">
+  - Of Butler Agent's environment variables, only `HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM` and `USER` are passed to a stdio server. Add any other variable the server needs under **Environment variables**. If you add one of the same keys, it overrides the value that is passed.
+  - Butler does not show a stdio server's error output (stderr). To find the cause, run the same command in a terminal.
+  - An environment reference looks up its value in the environment variables Butler Agent received when it started. A variable that is not found or a file that does not exist becomes an empty value, and that key is not passed.
+  - Changing **Server ID** in the edit form has no effect. To change the ID, add a new server and then delete the old one.
+  - Deletion takes effect right away, with no confirmation.
+  - OAuth sign-in is not supported. For a server that needs authentication, pass a token in a header.
+</Notice>
+
+## Related pages
+
+<CardGrid>
+  <DocCard slug="advanced/mcp-server" />
+  <DocCard slug="settings" />
+  <DocCard slug="troubleshooting" />
+</CardGrid>

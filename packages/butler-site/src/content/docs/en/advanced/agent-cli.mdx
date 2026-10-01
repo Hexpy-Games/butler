@@ -1,62 +1,206 @@
 ---
 title: "Butler Agent CLI"
-description: "Install and manage Butler without the desktop app."
+description: "Install the headless runtime without the app and manage it from the command line."
 section: advanced
 order: 1
 status: published
 ---
 
-The standalone CLI runs Butler without the desktop app on Apple Silicon macOS and Linux x64 or arm64 with glibc. Windows and musl Linux are not supported; use WSL on Windows.
+Butler Agent CLI is a command-line tool that installs and runs the Butler runtime without the desktop app. Install it with the install script or the standalone Agent archive. Its commands start and stop the service, check the installation, manage models and settings, and run the MCP server.
+
+<Notice tone="info">
+  If you use the Butler app, you do not need to install the CLI separately. The app manages its bundled Agent itself.
+</Notice>
+
+## Supported platforms
+
+- Apple silicon Mac (`darwin-arm64`) and Linux x64 and arm64 (glibc) are supported.
+- Intel Macs and musl-based Linux such as Alpine do not run it. Windows support is in preparation.
+- You need a release that publishes the native Agent archive (`butler-agent-<version>-<platform>.tar.gz`).
 
 ## Install
 
+To use Butler without the app, for example on a server or a remote PC, run the one-line install script. The current version is the `0.1.0-preview.4` preview, so download the script from the preview release and pass the same version with `--version`.
+
 ```bash
-curl -fsSL https://github.com/Hexpy-Games/butler/releases/latest/download/install.sh | sh
-# Or with Node.js:
+curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/install.sh | sh -s -- --version 0.1.0-preview.4
+```
+
+If you have Node.js, you can run the same installation with npx.
+
+```bash
 npx @hexpygames/butler install
 ```
 
-Use `butler --help` or `butler help remote` for terse Korean and English help. `butler --version` (or `-V`) prints the release version and build ID without starting the service or using a data folder. The installer verifies the release checksum, installs a versioned archive, and starts the service. Pass `--no-start` to install without starting.
+The install script works in this order.
+
+<Steps>
+  1. It checks the operating system and CPU, then downloads the archive and `butler-<version>-SHA256SUMS` for the latest release (or the version you specify).
+  2. It verifies the checksum, then extracts the archive into a new version folder. The existing installation does not change until verification finishes.
+  3. It points the `current` link to the new version and creates the `~/.local/bin/butler` executable.
+  4. It checks the installation with `butler doctor --check installation`, then starts Butler.
+</Steps>
+
+It is safe to run the same command again. A version that is already installed is not extracted again, and the data folder is not touched. If Butler is already running, apply the new version with `butler restart`.
+
+Add options after `sh -s --` (with npx, after `install`).
+
+```bash
+curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/install.sh | sh -s -- --version 0.1.0-preview.4 --no-start
+```
+
+| Option | Description |
+| --- | --- |
+| `--version X.Y.Z` | Installs this version instead of the latest release. You can also set it with the `BUTLER_VERSION` environment variable. |
+| `--no-start` | Installs Butler without starting it. |
+| `--modify-path` | Adds `~/.local/bin` to your shell configuration file when it is not in `PATH`. Without this option, the script only shows the line to add. |
+
+Change the install folder with `BUTLER_AGENT_HOME` and the location of the `butler` executable with `BUTLER_BIN_DIR`. Both values must be absolute paths. The script does not run as root (set `BUTLER_ALLOW_ROOT=1` to allow it), and it stops if `~/.local/bin/butler` is a file other than Butler's executable. An older, pre-native executable is moved to `butler.previous`.
+
+### Install locations
+
+| Item | macOS | Linux |
+| --- | --- | --- |
+| Install folder | `~/Applications/ButlerAgent` | `~/.local/share/butler/agent` |
+| `butler` command | `~/.local/bin/butler` | `~/.local/bin/butler` |
+
+Inside the install folder, each version gets a `<version>-<8-character hash>` folder. `current` points to the version in use and `previous` to the one before it. Only the 3 most recent old versions are kept (the version in use, the previous version and the running version are always kept), and `butler update` or `butler install` removes the rest. Data is stored in the data folder (default `~/.butler`), outside the install folder. The desktop app and the CLI use the same install layout.
+
+### Manual install
+
+If you cannot use the install script, extract the archive yourself. The archive is an install package that you extract into a new folder for each version.
+
+<Steps>
+  1. On [GitHub Releases](https://github.com/Hexpy-Games/butler/releases), find a version that has the native Agent archive.
+  2. Save the script below to a file (for example, `install-butler-agent.sh`) and change `VERSION`, `RELEASE` and `PLATFORM`.
+  3. Run it with `bash install-butler-agent.sh`. It downloads the archive and `butler-<release>-SHA256SUMS`, verifies the checksum, then extracts the archive into a new version folder.
+  4. The installation is complete when the final `version` and `doctor` commands finish without errors.
+</Steps>
+
+```bash
+set -euo pipefail
+VERSION=X.Y.Z # The Agent archive version. For a preview release, leave out "-preview.N" (for example, 0.1.0).
+RELEASE=X.Y.Z # The release tag without the "v" (for example, 0.1.0-preview.4). Same as VERSION for a stable release.
+PLATFORM=darwin-arm64 # One of darwin-arm64, linux-x64 or linux-arm64.
+ARCHIVE="butler-agent-${VERSION}-${PLATFORM}.tar.gz"
+RELEASE_URL="https://github.com/Hexpy-Games/butler/releases/download/v${RELEASE}"
+DOWNLOAD_DIR="$HOME/Downloads/butler-agent-${VERSION}"
+INSTALL_ROOT="$HOME/.local/opt/butler-agent"
+INSTALL_DIR="$INSTALL_ROOT/$VERSION"
+export BUTLER_DATA="${BUTLER_DATA:-$HOME/.butler}"
+
+mkdir -p "$DOWNLOAD_DIR" "$INSTALL_ROOT" "$BUTLER_DATA"
+cd "$DOWNLOAD_DIR"
+curl -fL --retry 3 -o "$ARCHIVE" "$RELEASE_URL/$ARCHIVE"
+SUMS="butler-${RELEASE}-SHA256SUMS"
+curl -fL --retry 3 -o "$SUMS" "$RELEASE_URL/$SUMS"
+EXPECTED_SHA256="$(awk -v name="$ARCHIVE" '$2 == name { print $1 }' "$SUMS")"
+test "${#EXPECTED_SHA256}" -eq 64
+printf '%s  %s\n' "$EXPECTED_SHA256" "$ARCHIVE" | shasum -a 256 -c -
+
+if [ -e "$INSTALL_DIR" ]; then
+  printf 'Installation already exists; choose a new version directory: %s\n' "$INSTALL_DIR" >&2
+  exit 1
+fi
+mkdir "$INSTALL_DIR"
+tar -xzf "$ARCHIVE" -C "$INSTALL_DIR"
+"$INSTALL_DIR/butler" --data "$BUTLER_DATA" version --json
+"$INSTALL_DIR/butler" --data "$BUTLER_DATA" doctor --check installation --json
+```
+
+The archive contains these files.
+
+- `butler-agent`: The executable.
+- `butler`: A link to `butler-agent`. The commands on this page use `butler`.
+- `resources/`: The resources needed to run.
+- `native-agent-manifest.json`: The install manifest, with the version and SHA-256 information.
+
+After a manual install, add the install folder to `PATH` so you can run `butler` without the full path. Put the line in your shell configuration file (such as `~/.zshrc`) to apply it in new terminals too.
+
+```bash
+export PATH="$HOME/.local/opt/butler-agent/X.Y.Z:$PATH"
+butler version
+```
 
 ## Commands
 
+Run `butler --help` or `butler help schedule` for help in Korean and English. `butler --version` or `-V` shows the release version and build ID without a service or a data folder.
+
 | Command | Purpose |
 | --- | --- |
-| `start`, `stop`, `restart` | Service lifecycle |
-| `status`, `open`, `doctor` | Status, browser, diagnostics |
-| `remote status [--json]` | Remote state, addresses, bind errors, hosts, masked code and creation date |
-| `remote enable`, `remote disable` | Enable or disable LAN access |
-| `remote code [--json]` | Reveal the full connection code locally |
-| `remote code --rotate [--yes]` | Confirm and issue a new code; invalidate the old code and sessions |
-| `remote hosts add HOST`, `remote hosts remove HOST` | Manage allowed hosts |
-| `auth login`, `auth logout`, `auth status` | Model account access |
-| `model list`, `model status`, `model set MODEL` | Model selection |
-| `schedule list`, `schedule show ID` | Schedules; see `butler help schedule` for writes |
-| `mcp list`, `skills list` | Extensions; see command help for management |
-| `config get KEY`, `config set KEY VALUE` | Configuration |
-| `--version`, `-V` | Print the release version and build ID |
-| `logs`, `version`, `help` | Logs, version, help |
-| `update --check`, `update --apply --yes`, `rollback`, `uninstall --yes` | Installation management |
-| `startup enable`, `startup disable`, `startup status` | Start at login |
+| `install --from ARCHIVE\|URL` | Installs a downloaded archive. For a first install, use the npx route above. |
+| `start`, `stop`, `restart` | Starts, stops or restarts the service. |
+| `remote status`, `remote enable`, `remote disable`, `remote pair`, `remote devices`, `remote hosts add\|remove HOST` | Manage remote access |
+| `status`, `open`, `doctor` | Check status, open the browser, check the installation |
+| `update --check`, `update --apply --yes` | Check for and install updates |
+| `rollback`, `uninstall --yes` | Restore the previous version, uninstall |
+| `startup enable\|disable\|status` | Manage start at login |
+| `auth login\|logout\|status` | Manage model account connections |
+| `model list\|status\|set MODEL` | View and choose models |
+| `logs [--follow]` | Service logs |
+| `schedule list\|show\|create\|update\|run\|delete` | Manage schedules |
+| `mcp list\|add\|enable\|disable\|delete\|test` | Manage MCP server connections |
+| `skills list`, `skills import PATH` | List and import skills |
+| `config get KEY`, `config set KEY VALUE` | Read and change settings |
+| `--version`, `-V` | Shows the release version and build ID. |
+| `help`, `version` | Help, version |
+
+Schedules run while the service is running. For the options of `schedule create` and `update`, see `butler help schedule`. `schedule list --status STATUS` filters by status, and `--include-deleted` also shows deleted schedules.
+
+```bash
+butler startup enable
+butler auth login
+butler model list
+butler model set openai/gpt-6-luna
+butler schedule list
+butler mcp add --id docs --transport http --url https://example.com/mcp
+butler skills import ./skill.zip
+butler config set system.defaultModel openai/gpt-6-luna
+```
+
+Manage personalization and memory in the app. The CLI has no maintenance commands that edit the conversation, personalization or memory databases directly.
 
 ## Headless / WSL / server
 
-On the server or inside WSL:
+In a terminal on the computer that runs the service, turn on remote access, then pair a device. Remote access is off by default.
 
 ```bash
 butler start
 butler remote enable
-butler remote code
+butler remote pair
 ```
 
-From another computer, open `http://HOST:PORT` using the server or forwarded address and the port printed by `remote enable`. Enter the code. Remote access stays off by default, and remote commands never silently start the service. Keep code output private; do not save it in logs.
+On another computer, open `http://HOST:PORT` and enter the 8-digit code that `remote pair` shows. `HOST` is the address that reaches the server or WSL, and `PORT` is the port of the LAN URL that `remote enable` prints. A code works once, within 60 seconds, and is printed only in the local terminal. Keep the code private and do not save it in logs.
 
-When a port forwarder presents a different host, add it to `allowedHosts`, for example `butler remote hosts add WINDOWS_IP`. Configure Windows forwarding and firewalls separately. Use `butler remote status --json` to inspect exposure and `butler remote disable` to stop LAN access.
+```bash
+butler remote status --json
+butler remote devices                      # List paired devices
+butler remote devices --revoke DEVICE_ID   # Revoke one device
+butler remote devices --revoke-all         # Revoke every device
+butler remote hosts add 192.0.2.10
+butler remote hosts remove 192.0.2.10
+butler remote disable
+```
 
-The App port currently cannot be read with `butler config get app.port`: it is stored as `config.port` in `gateways/app.json`, and changes apply on restart. Do not edit the running service's configuration files directly.
+If WSL port forwarding or a proxy presents a different host, add that name or IP to `allowedHosts`. For example, if you forward through the Windows host IP, run `butler remote hosts add WINDOWS_IP`. Set up port forwarding and the firewall separately. If the service is off, the commands tell you to run `butler start` and do not start it for you.
+
+`remote status` shows whether remote access is on, the bind addresses, LAN URLs, bind errors for each address and allowed hosts. It does not show a code. `remote pair` runs until a device pairs or you press Ctrl-C, and issues a new code when the code expires. A device revoked with `remote devices` has to pair again. `remote code --rotate` and `remote code --json` no longer work. For the pairing steps, see [Remote access](/en/help/advanced/remote-access/).
+
+Currently `butler config get app.port` cannot read the App port. The setting is `config.port` in `gateways/app.json` in the data folder, and a change applies after a restart. Stop the running service before you edit the configuration file.
 
 ## Data and updates
 
-Data lives in `BUTLER_DATA` (default `~/.butler`). Use `--data PATH` to select another folder. Updates install a separate version and restart the service. The CLI uses the running service's HTTP API to change remote settings.
+Data is stored in `BUTLER_DATA` (default `~/.butler`). To use another folder, add `--data PATH`. The install folder and the data folder cannot overlap.
 
-See [Remote access](/en/help/advanced/remote-access/) for more details.
+```bash
+butler update --check
+butler update --apply --yes
+butler rollback --yes
+```
+
+An update installs the new version in a separate folder and restarts the running service. `rollback` returns to the previous version. `uninstall --keep-data --yes` removes only the installation, and `--purge-data` also deletes the data.
+
+## Related pages
+
+- [MCP server](/en/help/advanced/mcp-server/)
+- [Remote access](/en/help/advanced/remote-access/)

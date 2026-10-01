@@ -1,12 +1,28 @@
 ---
 title: "Remote access"
-description: "Pair a browser with Butler on WSL, a server, or another computer."
+description: "Connect a browser to Butler on WSL, a server or another computer."
 section: advanced
-order: 2
+order: 3
 status: published
 ---
 
-Remote access is off by default. Enable it on the computer running Butler. Settings → Security still controls access and allowed hosts; device pairing and revocation currently use the CLI. Security administration requires a local client and the local admin credential.
+Remote access is off by default. Turn it on from the computer that runs Butler, then pair a browser on another computer with a one-time code. In the app, manage it in **Settings → Security**. Without the app, use the CLI. Security management needs a local client and the local admin credential. On a screen opened from another computer, **Settings → Security** shows the **Available only on the host computer.** message.
+
+## Pair a device in the app
+
+<Steps>
+  1. On the computer that runs Butler, open **Settings → Security**.
+  2. Turn on **Allow access from other computers**. **Addresses** shows the address to open on the other computer.
+  3. Click **Pair device**. **Code** shows an 8-digit code and the time left.
+  4. In a browser on the other computer, open the address and enter the code in the connect form.
+  5. When the device pairs, **Device paired** appears and the device shows up in the **Paired devices** list.
+</Steps>
+
+- A code works once, within 60 seconds. When it expires, a new code is issued automatically.
+- Three failed entries invalidate the code. A new code appears with **Repeated failures issued a new code**.
+- **Paired devices** shows each device's name, IP address and last-seen time. **Disconnect** disconnects that device, and **Disconnect all** disconnects every device after a confirmation dialog.
+
+For each item, see the [Settings reference](/en/help/settings/#security).
 
 ## Headless / WSL / server
 
@@ -16,9 +32,9 @@ butler remote enable
 butler remote pair
 ```
 
-On another computer, open a LAN URL shown by `butler remote enable` and enter the eight-digit pairing code into the connect form. Use the server address or an address forwarded to WSL. Configure any firewall or port forwarding separately. Use a trusted network.
+On another computer, open the LAN URL that `butler remote enable` shows and enter the 8-digit code in the connect form. Use the server address or an address forwarded to WSL. Set up the firewall and port forwarding separately. Use a network you trust.
 
-`pair` stays in the foreground without opening a browser. The code lasts 60 seconds and works once. Three failed attempts invalidate it. The terminal shows a countdown and automatically issues a new code on expiry or invalidation, until a device pairs or you press Ctrl-C. Issuing a new code invalidates the previous code. Pairing codes work only in the form POST, never in a URL. Keep terminal output private; avoid capturing it in logs.
+`pair` keeps running in the terminal and does not open a browser. A code works once, within 60 seconds. Three failed entries invalidate it. The terminal shows the time left, and a new code is issued automatically when the code expires or is invalidated. `pair` exits when a device pairs or you press Ctrl-C. Issuing a new code invalidates the previous one. The short code can be submitted only by form POST, never in a URL. Keep the terminal output private and do not save it in logs.
 
 ```bash
 butler remote status --json
@@ -29,27 +45,31 @@ butler remote devices --revoke-all
 butler remote disable
 ```
 
-Devices survive restarts. Revoking a device immediately rejects its cookie and closes its live event stream. Revoking all devices leaves local bearer authentication available. `butler open` still opens a one-time link for this computer and creates a revocable device named “This computer · browser”. Previous v1 cookies require pairing again. The long connection token is no longer shown or accepted in the connect form. `remote code` is a hidden preview alias for `remote pair`.
+The device list survives restarts. When you revoke a device, its cookie is rejected immediately and its live event stream closes. Revoking every device leaves local bearer authentication in place. `butler open` opens a one-time link for this computer and creates a revocable device named "This computer · browser". Devices with an existing v1 cookie must pair again. The long connection token is no longer shown and no longer works in the connect form. `remote code` stays as a hidden alias of `remote pair` for one preview release. `remote code --rotate` and `remote code --json` no longer work.
 
-The browser cookie is HttpOnly and SameSite=Strict. Plain HTTP on LAN host names cannot use a Secure cookie; the connection and cookie are not encrypted. Use a trusted network or provide HTTPS through your own proxy. Browser Origin and Fetch Metadata checks remain enforced. Last-seen timestamps update in memory on requests and persist at most once per 15 minutes; idle devices cause no writes.
+The browser cookie is HttpOnly and SameSite=Strict. Plain HTTP on a LAN host name cannot use a Secure cookie, and the connection and the cookie are not encrypted. Use a network you trust, or serve HTTPS from a proxy you manage. Origin and Fetch Metadata checks stay in place. The last-seen time is updated in memory on each request and saved at most once every 15 minutes. Idle devices cause no writes.
 
-Status shows enabled state, bind addresses, LAN URLs, bind errors, and allowed hosts. Commands require the running service and never start it automatically; if unavailable, run `butler start`.
+Status shows whether remote access is on, the bind addresses, LAN URLs, bind errors and allowed hosts. It does not show a code. The commands need a running service and do not start it for you. If a command cannot connect, run `butler start`.
 
-## Forwarders and allowed hosts
+## Port forwarding and allowed hosts
 
-When a WSL forwarder, tunnel, or reverse proxy presents a different Host, register its name or IP:
+If WSL port forwarding, a tunnel or a reverse proxy uses a different Host, register its name or IP. In the app, expand **Allowed hosts for tunnels and proxies** in **Settings → Security**, enter the name in **Host names** and click **Add**.
 
 ```bash
 butler remote hosts add 192.0.2.10
 butler remote hosts remove 192.0.2.10
 ```
 
-Allowed hosts still require pairing. Forwarding does not grant Security administration. You manage the forwarder and its security yourself.
+A device still has to pair when it connects through an allowed host. Port forwarding alone does not grant security management rights. You manage the forwarding tool and its security yourself.
 
 ## App port
 
-Currently `butler config get app.port` reports missing. The App port lives in `gateways/app.json` under `config.port` in the data folder; a change takes effect on restart. Do not edit the running service's configuration files directly.
+Currently `butler config get app.port` reports that the value is missing. The App port is `config.port` in `gateways/app.json` in the data folder, and a change applies after a restart. Do not edit the configuration files of a running service directly.
 
-## Related
+## Related pages
 
-- [Agent CLI](/en/help/advanced/agent-cli/)
+<CardGrid>
+  <DocCard slug="advanced/agent-cli" />
+  <DocCard slug="settings" />
+  <DocCard slug="troubleshooting" />
+</CardGrid>
