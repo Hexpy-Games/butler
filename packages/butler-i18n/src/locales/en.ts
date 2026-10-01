@@ -431,6 +431,9 @@ export const enUsCopy: AppCopy = {
     approvalRequest: {
       editFiles: (count, workspace) =>
         `Edit ${count > 0 ? `${count} ${count === 1 ? "file" : "files"}` : "files"} ${inWorkspace(workspace)}?`,
+      editFilesOutside: count => `Edit ${count > 0 ? `${count} ${count === 1 ? "file" : "files"}` : "files"}, including outside the project folder?`,
+      runCommandOutside: "Run a command outside the project folder?",
+      networkCommandOutside: "Run a command that uses the internet outside the project folder?",
       runCommand: workspace => `Run a command ${inWorkspace(workspace)}?`,
       networkCommand: workspace => `Run a command that uses the internet ${inWorkspace(workspace)}?`,
       useConnector: (tool, server) => tool && server ? `Use ${tool} from ${server}?` : tool ? `Use ${tool}?` : "Use a connected tool?",

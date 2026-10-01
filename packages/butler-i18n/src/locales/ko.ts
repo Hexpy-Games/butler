@@ -430,6 +430,9 @@ export const koKrCopy: AppCopy = {
     pendingApprovals: count => `허용 대기 ${count}개`, allowedCount: count => `허용 ${count}개`, revoke: title => `${title} — 해제`,
     approvalRequest: {
       editFiles: (count, workspace) => `${workspaceName(workspace)}의 ${count > 0 ? `파일 ${count}개를` : "파일을"} 수정할까요?`,
+      editFilesOutside: count => `작업 폴더 밖을 포함한 ${count > 0 ? `파일 ${count}개를` : "파일을"} 수정할까요?`,
+      runCommandOutside: "작업 폴더 밖에서 명령을 실행할까요?",
+      networkCommandOutside: "작업 폴더 밖에서 인터넷을 쓰는 명령을 실행할까요?",
       runCommand: workspace => `${workspaceName(workspace)}에서 명령을 실행할까요?`,
       networkCommand: workspace => `${workspaceName(workspace)}에서 인터넷을 쓰는 명령을 실행할까요?`,
       useConnector: (tool, server) => tool && server ? `${server}의 ${tool} 도구를 사용할까요?` : tool ? `${tool} 도구를 사용할까요?` : "연결된 도구를 사용할까요?",
