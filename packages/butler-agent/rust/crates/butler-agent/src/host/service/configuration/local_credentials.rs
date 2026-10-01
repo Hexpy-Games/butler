@@ -293,7 +293,7 @@ pub(super) fn load_file(
     usable: fn(&[u8]) -> Option<String>,
     create: fn() -> Result<Vec<u8>, LocalCredentialError>,
 ) -> Result<String, LocalCredentialError> {
-    if files == CredentialFiles::CreateMissing && path.exists() {
+    if !secure_fs::OWNER_ONLY && files == CredentialFiles::CreateMissing && path.exists() {
         secure_fs::restrict_file(path)
             .transpose()
             .map_err(|source| LocalCredentialError::Write {

@@ -17,10 +17,10 @@ $originalProfile = $env:USERPROFILE
 $env:CARGO_HOME = "$originalProfile/.cargo"
 $env:RUSTUP_HOME = "$originalProfile/.rustup"
 $oldPath = [Environment]::GetEnvironmentVariable('Path','User')
-$env:HOME = "$root/home"
+$env:HOME = "$root/home/미리 보기 %USERPROFILE% !"
 $env:USERPROFILE = $env:HOME
-$env:LOCALAPPDATA = "$root/local"
-$env:BUTLER_DATA = "$root/data"
+$env:LOCALAPPDATA = "$root/local/미리 보기 %USERPROFILE% !"
+$env:BUTLER_DATA = "$root/data/미리 보기 %USERPROFILE% !"
 $env:BUTLER_APP_SERVER_HOST = '127.0.0.1'
 $env:BUTLER_APP_SERVER_PORT = '0'
 $env:BUTLER_SECRET_STORE = 'file'
@@ -76,8 +76,11 @@ try {
     if ($ui.StatusCode -ne 200 -or $ui.Content -notmatch '<div id="root">') { throw 'Renderer not served' }
     $sessions = Invoke-RestMethod "$($record.app_endpoint)/sessions" -WebSession $browser
     if ($sessions.protocol_version -ne 'butler.app.v1') { throw 'Browser authentication failed' }
-    foreach ($match in [regex]::Matches($ui.Content,'(?:src|href)="(/assets/[^\"]+)"')) {
-        $asset = Invoke-WebRequest ($record.app_endpoint + $match.Groups[1].Value) -WebSession $browser -UseBasicParsing
+    $assets = [regex]::Matches($ui.Content,'(?:src|href)="((?:\./|/)?assets/[^\"]+)"')
+    if (!$assets.Count) { throw 'Renderer has no bundled asset references' }
+    foreach ($match in $assets) {
+        $uri = [Uri]::new([Uri]"$($record.app_endpoint)/", $match.Groups[1].Value)
+        $asset = Invoke-WebRequest $uri -WebSession $browser -UseBasicParsing
         if ($asset.StatusCode -ne 200) { throw 'Renderer asset missing' }
     }
     Assert-PrivateAcl $env:BUTLER_DATA

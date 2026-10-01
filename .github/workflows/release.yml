@@ -104,12 +104,13 @@ jobs:
             --artifact-url "$artifact_url"
           bun run release:agent:smoke -- --artifact-url "$artifact_url"
 
-      # The darwin-arm64 entries of the multi-platform Agent manifests.
-      - name: Keep the darwin-arm64 Agent manifests for the merge
+      # Preserve the validated Agent payload even if later App steps fail.
+      - name: Keep the darwin-arm64 Agent archive and manifests for the merge
         uses: actions/upload-artifact@v4
         with:
           name: agent-darwin-arm64
           path: |
+            dist/release/agent/butler-agent-*-darwin-arm64.tar.gz
             dist/release/agent/agent-release-manifest.json
             dist/release/agent/agent-update-manifest.json
           if-no-files-found: error

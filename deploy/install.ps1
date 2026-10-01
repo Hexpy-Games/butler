@@ -29,7 +29,7 @@ function Install-Butler {
     $bin = if ($env:BUTLER_BIN_DIR) { $env:BUTLER_BIN_DIR } else { Join-Path $env:LOCALAPPDATA 'Butler/bin' }
     $data = if ($env:BUTLER_DATA) { $env:BUTLER_DATA } else { Join-Path $env:USERPROFILE '.butler' }
     foreach ($path in @($agentHome,$bin,$data)) {
-        if (![IO.Path]::IsPathRooted($path) -or $path -match '[%"\r\n]') { throw 'Invalid installation path' }
+        if (![IO.Path]::IsPathRooted($path) -or $path -match '["\r\n]') { throw 'Invalid installation path' }
     }
     $agentHome = [IO.Path]::GetFullPath($agentHome).TrimEnd('\')
     $data = [IO.Path]::GetFullPath($data).TrimEnd('\')
@@ -80,7 +80,12 @@ function Install-Butler {
             if ($old -ne $name) { Write-ButlerFile (Join-Path $agentHome 'previous') $old }
         }
         Write-ButlerFile $current $name
-        $text = "@echo off`r`n$marker`r`n`"$target\butler-agent.exe`" --installation-root `"$target`" --resource-root `"$target\resources`" %*`r`n"
+        # UTF-8 paths work from legacy OEM consoles too; restore the caller's code page.
+        $batchTarget = $target.Replace('%','%%')
+        $text = "@echo off`r`n$marker`r`nsetlocal DisableDelayedExpansion`r`n" +
+            "for /f `"tokens=2 delims=:`" %%C in ('chcp') do set `"BUTLER_PREVIEW_CP=%%C`"`r`n" +
+            "chcp 65001 >nul`r`n`"$batchTarget\butler-agent.exe`" --installation-root `"$batchTarget`" --resource-root `"$batchTarget\resources`" %*`r`n" +
+            "set `"BUTLER_PREVIEW_EXIT=%ERRORLEVEL%`"`r`nchcp %BUTLER_PREVIEW_CP% >nul`r`nexit /b %BUTLER_PREVIEW_EXIT%`r`n"
         Write-ButlerFile $launcher $text
         $userPath = [string][Environment]::GetEnvironmentVariable('Path','User')
         if (@($userPath -split ';') -notcontains $bin) {

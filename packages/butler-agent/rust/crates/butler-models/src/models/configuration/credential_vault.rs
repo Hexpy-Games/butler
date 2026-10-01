@@ -132,9 +132,15 @@ impl ModelConfiguration {
     ) -> Result<(butler_platform::secrets::ChangeLock, CredentialsFile), CredentialError> {
         let path = root.join(CREDENTIALS_FILE);
         let lock = CredentialsFile::lock(&path).await?;
-        let file = tokio::task::spawn_blocking(move || CredentialsFile::load(&path))
-            .await
-            .map_err(|_| ModelCatalogError::rejected("The saved API keys could not be read."))??;
+        let file = if butler_platform::secure_fs::OWNER_ONLY {
+            CredentialsFile::load(&path)?
+        } else {
+            tokio::task::spawn_blocking(move || CredentialsFile::load(&path))
+                .await
+                .map_err(|_| {
+                    ModelCatalogError::rejected("The saved API keys could not be read.")
+                })??
+        };
         Ok((lock, file))
     }
 }

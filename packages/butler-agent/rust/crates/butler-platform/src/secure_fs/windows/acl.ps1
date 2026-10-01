@@ -21,8 +21,10 @@ try {
         $acl = Get-Acl -LiteralPath $path
         $rules = $acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
         # Elevated tokens may default new inherited children to Administrators
-        # ownership. Ownership is not a file-data read grant; inspect every ACE.
-        $private = $true
+        # ownership. Built-in privileged owners grant no data access here;
+        # an unrelated ordinary owner could change the DACL and is not private.
+        $owner = $acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value
+        $private = $owner -in @($sid.Value, 'S-1-5-32-544', 'S-1-5-18')
         $allowed = $false
         foreach ($rule in $rules) {
             if ($rule.AccessControlType -eq 'Allow') {
