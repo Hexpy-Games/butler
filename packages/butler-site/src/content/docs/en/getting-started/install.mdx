@@ -14,7 +14,7 @@ Current version: `0.1.0-preview.4`, a preview; stable 0.1.0 is coming.
 - Linux x64 / arm64: DEB packages
 - Arch Linux x64: Arch package
 
-The App includes the native Butler Agent. Its bundled Agent runs while the App is open. Windows native bundles are not supported yet.
+The App includes the native Butler Agent. Its bundled Agent runs while the App is open. Windows previews ship the Agent with a browser UI.
 
 ## Download
 
@@ -73,3 +73,19 @@ npx @hexpygames/butler install
 ```
 
 See the [Agent CLI guide](/en/help/advanced/agent-cli/) for service management.
+
+## Windows x64 Agent preview
+
+Windows previews are unsigned and agent-only. Use the Windows ZIP and `install.ps1` from the same preview release that lists `windows-x64` in its Agent manifest. In PowerShell, replace `0.1.0-preview.N` with that release version:
+
+```powershell
+$env:BUTLER_VERSION = '0.1.0-preview.N'; irm "https://github.com/Hexpy-Games/butler/releases/download/v$env:BUTLER_VERSION/install.ps1" | iex
+butler open
+```
+
+The installer verifies SHA-256 checksums, installs under `%LOCALAPPDATA%\Butler`, adds `butler` to your user PATH, and starts the Agent. Open a new terminal if `butler` is not found. The UI runs in your browser. Use `butler start`, `stop`, `restart`, and `status` to manage the background process.
+
+- No autostart; run `butler start` after signing in.
+- No LAN remote access.
+- No command write sandbox; commands still require approval.
+- SmartScreen may warn about the unsigned preview. Choose **More info → Run anyway**.

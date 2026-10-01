@@ -293,6 +293,14 @@ pub(super) fn load_file(
     usable: fn(&[u8]) -> Option<String>,
     create: fn() -> Result<Vec<u8>, LocalCredentialError>,
 ) -> Result<String, LocalCredentialError> {
+    if files == CredentialFiles::CreateMissing && path.exists() {
+        secure_fs::restrict_file(path)
+            .transpose()
+            .map_err(|source| LocalCredentialError::Write {
+                path: path.to_path_buf(),
+                source,
+            })?;
+    }
     if let Some(value) = read_usable(path, usable)? {
         return Ok(value);
     }
@@ -336,6 +344,9 @@ fn publish(
             source,
         }
     })?;
+    secure_fs::protect_folder(parent)
+        .transpose()
+        .map_err(write_error)?;
     #[cfg(test)]
     tests::before_replace(path);
     let _change = butler_core::configuration::lock_file(path).map_err(|source| {

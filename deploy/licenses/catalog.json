@@ -25,7 +25,7 @@
     "packages/butler-app/client/ui/package.json": "8de8e3279db1471ff1277c48cf9de373a9e1d8b13a9751941435c07f7820b178",
     "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos/NOTICE": "3d1d0a9fe82fdc1492422398bfac65d2205a9326eebf619e238b84e9b6376d36",
     "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-mono/LICENSE.txt": "37784b44044a4ffd9256702b7c0982c37e5c8887ba90c6dca0479aea93dc898d",
-    "packages/butler-npm/package.json": "905edceb3e310332385b290d53d7fbf19ad41a24747f40b82e501757511310b8"
+    "packages/butler-npm/package.json": "5436bca586a3f28ad67b715bc34fd2d66a4dfac9577d7415442b88f1f085fdb4"
   },
   "assets": {
     "packages/butler-app/client/ui/src/libs/design-system/fonts": "71fae061660781b956cc1c6ec7c0acb45294c65e39a757d73b4fc22a585edef3",
@@ -69,7 +69,8 @@
       "artifacts": [
         "macOS App/Agent",
         "Linux x64 DEB/Arch/Agent",
-        "Linux arm64 DEB/Agent"
+        "Linux arm64 DEB/Agent",
+        "Unsigned Windows x64 Agent preview"
       ],
       "files": [
         "https://gitlab.com/libeigen/eigen/-/raw/1d8b82b0740839c0de7f1242a3585e3390ff5f33/COPYING.MPL2"
@@ -91,7 +92,8 @@
       "artifacts": [
         "macOS App/Agent",
         "Linux x64 DEB/Arch/Agent",
-        "Linux arm64 DEB/Agent"
+        "Linux arm64 DEB/Agent",
+        "Unsigned Windows x64 Agent preview"
       ],
       "files": [
         "https://raw.githubusercontent.com/rust-lang/rust/1.91.0/COPYRIGHT",
@@ -121,7 +123,8 @@
       "artifacts": [
         "macOS App/Agent",
         "Linux x64 DEB/Arch/Agent",
-        "Linux arm64 DEB/Agent"
+        "Linux arm64 DEB/Agent",
+        "Unsigned Windows x64 Agent preview"
       ],
       "files": [
         "SQLite copyright disclaimer and blessing"
@@ -143,7 +146,8 @@
       "artifacts": [
         "macOS App/Agent",
         "Linux x64 DEB/Arch/Agent",
-        "Linux arm64 DEB/Agent"
+        "Linux arm64 DEB/Agent",
+        "Unsigned Windows x64 Agent preview"
       ],
       "files": [
         "https://raw.githubusercontent.com/onnx/onnx/b8baa8446686496da4cc8fda09f2b6fe65c2a02c/LICENSE"
@@ -165,7 +169,8 @@
       "artifacts": [
         "macOS App/Agent",
         "Linux x64 DEB/Arch/Agent",
-        "Linux arm64 DEB/Agent"
+        "Linux arm64 DEB/Agent",
+        "Unsigned Windows x64 Agent preview"
       ],
       "files": [
         "https://raw.githubusercontent.com/microsoft/onnxruntime/e0b66cad282043d4377cea5269083f17771b6dfc/LICENSE",
@@ -10923,6 +10928,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -10953,6 +10959,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -10981,6 +10988,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11008,6 +11016,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11035,6 +11044,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11059,6 +11069,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11083,6 +11094,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11108,6 +11120,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11159,6 +11172,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11186,6 +11200,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11210,6 +11225,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11237,6 +11253,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11278,6 +11295,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11319,6 +11337,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11360,6 +11379,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11401,6 +11421,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11442,6 +11463,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11483,6 +11505,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11524,6 +11547,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11565,6 +11589,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11606,6 +11631,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11647,6 +11673,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11688,6 +11715,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11729,6 +11757,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11770,6 +11799,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11838,6 +11868,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11863,6 +11894,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11938,6 +11970,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -11987,6 +12020,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12060,6 +12094,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12085,6 +12120,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12109,6 +12145,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12133,6 +12170,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12164,6 +12202,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12188,6 +12227,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12212,6 +12252,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12239,6 +12280,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12266,6 +12308,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12293,6 +12336,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12321,6 +12365,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12348,6 +12393,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12375,6 +12421,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12402,6 +12449,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12426,6 +12474,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12450,6 +12499,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12478,6 +12528,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12508,6 +12559,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12535,6 +12587,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12562,6 +12615,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12613,6 +12667,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12640,6 +12695,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12667,6 +12723,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12691,6 +12748,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12719,6 +12777,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12749,6 +12808,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12776,6 +12836,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12806,6 +12867,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12830,6 +12892,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12857,6 +12920,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12881,6 +12945,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12905,6 +12970,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12933,6 +12999,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12957,6 +13024,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -12984,6 +13052,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13011,6 +13080,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13039,6 +13109,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13064,6 +13135,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13117,6 +13189,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13141,6 +13214,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13165,6 +13239,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13189,6 +13264,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13216,6 +13292,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13243,6 +13320,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13268,6 +13346,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13295,6 +13374,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13371,7 +13451,8 @@
       "license": "MIT OR Apache-2.0",
       "source": "https://github.com/thomcc/core_detect/tree/a0f957776563806e7d20978471676e0db72892ba",
       "artifacts": [
-        "Linux x64 DEB/Arch/Agent"
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview"
       ],
       "files": [
         "LICENSE-APACHE",
@@ -13398,6 +13479,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13425,6 +13507,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13452,6 +13535,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13479,6 +13563,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13506,6 +13591,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13538,6 +13624,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13565,6 +13652,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13592,6 +13680,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13619,6 +13708,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13646,6 +13736,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13673,6 +13764,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13697,6 +13789,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13724,6 +13817,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13751,6 +13845,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13773,6 +13868,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13795,6 +13891,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13822,6 +13919,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13875,6 +13973,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13899,6 +13998,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13923,6 +14023,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13947,6 +14048,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13971,6 +14073,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -13995,6 +14098,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14019,6 +14123,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14044,6 +14149,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14068,6 +14174,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14095,6 +14202,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14122,6 +14230,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14149,6 +14258,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14176,6 +14286,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14203,6 +14314,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14230,6 +14342,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14257,6 +14370,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14284,6 +14398,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14311,6 +14426,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14338,6 +14454,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14365,6 +14482,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14392,6 +14510,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14419,6 +14538,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14446,6 +14566,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14473,6 +14594,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14500,6 +14622,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14527,6 +14650,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14554,6 +14678,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14581,6 +14706,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14608,6 +14734,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14635,6 +14762,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14662,6 +14790,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14689,6 +14818,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14716,6 +14846,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14743,6 +14874,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14770,6 +14902,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14797,6 +14930,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14824,6 +14958,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14851,6 +14986,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14878,6 +15014,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14902,6 +15039,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14926,6 +15064,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14954,6 +15093,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -14981,6 +15121,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15008,6 +15149,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15035,6 +15177,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15059,6 +15202,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15083,6 +15227,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15110,6 +15255,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15138,6 +15284,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15165,6 +15312,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15192,6 +15340,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15217,6 +15366,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15241,6 +15391,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15265,6 +15416,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15292,6 +15444,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15314,6 +15467,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15337,6 +15491,7 @@
       "license": "CC0-1.0 OR MIT-0 OR Apache-2.0",
       "source": "https://gitlab.com/kornelski/dunce",
       "artifacts": [
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15359,6 +15514,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15384,6 +15540,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15411,6 +15568,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15438,6 +15596,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15547,6 +15706,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15601,6 +15761,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15623,6 +15784,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15650,6 +15812,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15675,6 +15838,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15700,6 +15864,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15727,6 +15892,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15753,6 +15919,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15777,6 +15944,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15804,6 +15972,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15828,6 +15997,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15853,6 +16023,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15878,6 +16049,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15905,6 +16077,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15932,6 +16105,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15954,6 +16128,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -15976,6 +16151,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16003,6 +16179,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16030,6 +16207,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16054,6 +16232,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16078,6 +16257,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16105,6 +16285,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16153,6 +16334,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16175,6 +16357,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16202,6 +16385,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16226,6 +16410,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16254,6 +16439,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16282,6 +16468,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16310,6 +16497,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16368,6 +16556,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16396,6 +16585,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16424,6 +16614,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16452,6 +16643,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16480,6 +16672,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16508,6 +16701,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16532,6 +16726,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16560,6 +16755,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16588,6 +16784,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16616,6 +16813,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16643,6 +16841,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16667,6 +16866,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16694,6 +16894,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16718,6 +16919,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16743,6 +16945,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16770,6 +16973,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16797,6 +17001,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16824,6 +17029,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16851,6 +17057,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16879,6 +17086,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16906,6 +17114,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -16961,6 +17170,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17014,6 +17224,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17038,6 +17249,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17065,6 +17277,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17089,6 +17302,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17113,6 +17327,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17137,6 +17352,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17165,6 +17381,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17192,6 +17409,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17219,6 +17437,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17248,6 +17467,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17275,6 +17495,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17306,6 +17527,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17330,6 +17552,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17354,6 +17577,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17378,6 +17602,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17406,6 +17631,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17431,6 +17657,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17456,6 +17683,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17490,6 +17718,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17515,6 +17744,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17540,6 +17770,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17565,6 +17796,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17590,6 +17822,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17615,6 +17848,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17640,6 +17874,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17665,6 +17900,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17690,6 +17926,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17715,6 +17952,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17740,6 +17978,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17765,6 +18004,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17790,6 +18030,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17815,6 +18056,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17840,6 +18082,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17865,6 +18108,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17890,6 +18134,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17912,6 +18157,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17939,6 +18185,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17966,6 +18213,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -17991,6 +18239,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18016,6 +18265,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18089,6 +18339,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18117,6 +18368,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18144,6 +18396,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18171,6 +18424,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18198,6 +18452,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18223,6 +18478,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18242,6 +18498,56 @@
       ]
     },
     {
+      "id": "rust:jiff-tzdb-platform@0.1.3",
+      "name": "jiff-tzdb-platform",
+      "version": "0.1.3",
+      "license": "Unlicense OR MIT",
+      "source": "https://github.com/BurntSushi/jiff/tree/939549520e6004b051b02c8b5f74973b833f3670",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f",
+        "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f"
+      ],
+      "files": [
+        "COPYING",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/BurntSushi/jiff/blob/939549520e6004b051b02c8b5f74973b833f3670/crates/jiff-tzdb-platform/COPYING",
+        "https://github.com/BurntSushi/jiff/blob/939549520e6004b051b02c8b5f74973b833f3670/crates/jiff-tzdb-platform/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2015 Andrew Gallant"
+      ]
+    },
+    {
+      "id": "rust:jiff-tzdb@0.1.8",
+      "name": "jiff-tzdb",
+      "version": "0.1.8",
+      "license": "Unlicense OR MIT",
+      "source": "https://github.com/BurntSushi/jiff/tree/bc70277861e54973e8a9be91bc92c44de56719b5",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f",
+        "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f"
+      ],
+      "files": [
+        "COPYING",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/BurntSushi/jiff/blob/bc70277861e54973e8a9be91bc92c44de56719b5/crates/jiff-tzdb/COPYING",
+        "https://github.com/BurntSushi/jiff/blob/bc70277861e54973e8a9be91bc92c44de56719b5/crates/jiff-tzdb/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2015 Andrew Gallant"
+      ]
+    },
+    {
       "id": "rust:jiff@0.2.37",
       "name": "jiff",
       "version": "0.2.37",
@@ -18250,6 +18556,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18277,6 +18584,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18299,6 +18607,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18327,6 +18636,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18349,6 +18659,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18371,6 +18682,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18393,6 +18705,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18415,6 +18728,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18437,6 +18751,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18459,6 +18774,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18481,6 +18797,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18503,6 +18820,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18525,6 +18843,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18547,6 +18866,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18569,6 +18889,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18593,6 +18914,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18615,6 +18937,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18637,6 +18960,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18659,6 +18983,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18681,6 +19006,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18703,6 +19029,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18730,6 +19057,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18754,6 +19082,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18786,6 +19115,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18818,6 +19148,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18850,6 +19181,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18875,6 +19207,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18907,6 +19240,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18939,6 +19273,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -18966,6 +19301,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19019,6 +19355,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19047,6 +19384,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19131,6 +19469,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19156,6 +19495,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19181,6 +19521,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19208,6 +19549,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19235,6 +19577,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19259,6 +19602,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19283,6 +19627,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19332,6 +19677,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19356,6 +19702,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19380,6 +19727,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19404,6 +19752,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19435,6 +19784,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19466,6 +19816,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19493,6 +19844,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19521,6 +19873,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19549,6 +19902,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19578,6 +19932,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19608,6 +19963,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19632,6 +19988,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19659,6 +20016,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19712,6 +20070,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19739,6 +20098,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19763,6 +20123,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19793,6 +20154,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19830,6 +20192,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19867,6 +20230,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19891,6 +20255,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19915,6 +20280,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19948,6 +20314,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19973,6 +20340,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -19998,6 +20366,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20026,6 +20395,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20048,7 +20418,8 @@
       "license": "MIT OR Apache-2.0",
       "source": "https://github.com/calebzulawski/multiversion/tree/357638046dd3834815b34df80403d1050c30e1c7",
       "artifacts": [
-        "Linux x64 DEB/Arch/Agent"
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview"
       ],
       "files": [
         "LICENSE-APACHE",
@@ -20073,7 +20444,8 @@
       "license": "MIT OR Apache-2.0",
       "source": "https://github.com/calebzulawski/multiversion/tree/357638046dd3834815b34df80403d1050c30e1c7",
       "artifacts": [
-        "Linux x64 DEB/Arch/Agent"
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview"
       ],
       "files": [
         "LICENSE-APACHE",
@@ -20100,6 +20472,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20130,6 +20503,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20154,6 +20528,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20183,6 +20558,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20231,6 +20607,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20255,6 +20632,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20279,6 +20657,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20307,6 +20686,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20321,6 +20701,29 @@
       ]
     },
     {
+      "id": "rust:ntapi@0.4.3",
+      "name": "ntapi",
+      "version": "0.4.3",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/MSxDOS/ntapi/tree/3f8ac79fdfea53d8fbe1282237173cee8c4f198c",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "50e6751797c50dedd75ef1b8a0d9e42f5f8472e9fbce91f34718e9f97b0c780a",
+        "11a7964ccc0dd115d16720ab1d826c5d03e52838748ffaba3d21bae8bcacd82a"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/MSxDOS/ntapi/blob/3f8ac79fdfea53d8fbe1282237173cee8c4f198c/LICENSE-APACHE",
+        "https://github.com/MSxDOS/ntapi/blob/3f8ac79fdfea53d8fbe1282237173cee8c4f198c/LICENSE-MIT"
+      ],
+      "copyright": []
+    },
+    {
       "id": "rust:num-bigint@0.4.8",
       "name": "num-bigint",
       "version": "0.4.8",
@@ -20329,6 +20732,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20356,6 +20760,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20383,6 +20788,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20410,6 +20816,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20489,6 +20896,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20542,6 +20950,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20569,6 +20978,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20595,6 +21005,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20620,6 +21031,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20645,6 +21057,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20669,6 +21082,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20723,6 +21137,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20745,6 +21160,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20793,6 +21209,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20821,6 +21238,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20849,6 +21267,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20873,6 +21292,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20903,6 +21323,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20930,6 +21351,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20957,6 +21379,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -20982,6 +21405,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21007,6 +21431,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21035,6 +21460,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21062,6 +21488,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21093,6 +21520,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21123,6 +21551,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21147,6 +21576,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21171,6 +21601,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21195,6 +21626,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21219,6 +21651,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21243,6 +21676,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21267,6 +21701,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21292,6 +21727,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21317,6 +21753,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21366,6 +21803,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21417,6 +21855,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21442,6 +21881,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21467,6 +21907,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21495,6 +21936,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21523,6 +21965,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21547,6 +21990,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21596,6 +22040,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21621,6 +22066,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21643,6 +22089,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21665,6 +22112,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21687,6 +22135,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21715,6 +22164,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21741,6 +22191,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21766,6 +22217,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21790,6 +22242,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21821,6 +22274,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21852,6 +22306,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21883,6 +22338,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21914,6 +22370,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21945,6 +22402,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -21975,6 +22433,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22006,6 +22465,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22037,6 +22497,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22067,6 +22528,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22097,6 +22559,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22127,6 +22590,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22155,6 +22619,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22183,6 +22648,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22210,6 +22676,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22237,6 +22704,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22264,6 +22732,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22291,6 +22760,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22316,6 +22786,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22341,6 +22812,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22368,6 +22840,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22399,6 +22872,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22426,6 +22900,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22454,6 +22929,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22482,6 +22958,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22510,6 +22987,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22552,6 +23030,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22576,6 +23055,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22600,6 +23080,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22627,6 +23108,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22649,6 +23131,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22671,6 +23154,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22695,6 +23179,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22731,6 +23216,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22818,6 +23304,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22852,6 +23339,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22880,6 +23368,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22904,6 +23393,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22935,6 +23425,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22960,6 +23451,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -22985,6 +23477,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23010,6 +23503,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23029,6 +23523,28 @@
       ]
     },
     {
+      "id": "rust:schannel@0.1.29",
+      "name": "schannel",
+      "version": "0.1.29",
+      "license": "MIT",
+      "source": "https://github.com/steffengy/schannel-rs/tree/ff7ffd306152f039cff49f42801a63519068ce0b",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "aa72991ac35b4de0034da0afe943e62b48c4092fc2ba13ae47806d8e9a4ad551"
+      ],
+      "files": [
+        "LICENSE.md"
+      ],
+      "links": [
+        "https://github.com/steffengy/schannel-rs/blob/ff7ffd306152f039cff49f42801a63519068ce0b/LICENSE.md"
+      ],
+      "copyright": [
+        "Copyright (c) 2015 steffengy"
+      ]
+    },
+    {
       "id": "rust:schemars@1.2.2",
       "name": "schemars",
       "version": "1.2.2",
@@ -23037,6 +23553,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23061,6 +23578,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23085,6 +23603,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23188,6 +23707,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23212,6 +23732,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23237,6 +23758,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23262,6 +23784,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23287,6 +23810,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23312,6 +23836,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23337,6 +23862,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23362,6 +23888,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23387,6 +23914,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23412,6 +23940,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23437,6 +23966,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23464,6 +23994,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23491,6 +24022,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23518,6 +24050,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23543,6 +24076,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23572,6 +24106,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23601,6 +24136,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23658,6 +24194,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23682,6 +24219,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23707,6 +24245,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23732,6 +24271,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23756,6 +24296,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23780,6 +24321,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23807,6 +24349,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23835,6 +24378,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23863,6 +24407,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23891,6 +24436,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23919,6 +24465,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23946,6 +24493,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23970,6 +24518,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -23992,6 +24541,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24014,6 +24564,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24036,6 +24587,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24063,6 +24615,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24090,6 +24643,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24117,6 +24671,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24141,6 +24696,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24169,6 +24725,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24196,6 +24753,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24223,6 +24781,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24249,6 +24808,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24273,6 +24833,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24297,6 +24858,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24322,6 +24884,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24347,6 +24910,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24372,6 +24936,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24397,6 +24962,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24419,6 +24985,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24435,6 +25002,28 @@
       ]
     },
     {
+      "id": "rust:sysinfo@0.37.2",
+      "name": "sysinfo",
+      "version": "0.37.2",
+      "license": "MIT",
+      "source": "https://github.com/GuillaumeGomez/sysinfo/tree/067dd61372205880dda017c942fec0042421e45e",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "666ccdb468b5fe0f408f90ebb563c95e4d453e89bd1660e93aa7463f2807ae36"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "links": [
+        "https://github.com/GuillaumeGomez/sysinfo/blob/067dd61372205880dda017c942fec0042421e45e/LICENSE"
+      ],
+      "copyright": [
+        "Copyright (c) 2015 Guillaume Gomez"
+      ]
+    },
+    {
       "id": "rust:tagptr@0.2.0",
       "name": "tagptr",
       "version": "0.2.0",
@@ -24443,6 +25032,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24471,6 +25061,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24495,6 +25086,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24519,6 +25111,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24543,6 +25136,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24571,6 +25165,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24595,6 +25190,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24619,6 +25215,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24643,6 +25240,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24667,6 +25265,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24691,6 +25290,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24715,6 +25315,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24742,6 +25343,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24769,6 +25371,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24788,6 +25391,29 @@
       ]
     },
     {
+      "id": "rust:thiserror-impl@1.0.69",
+      "name": "thiserror-impl",
+      "version": "1.0.69",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/dtolnay/thiserror/tree/41938bd3a03a70d34ed8e53d99c89c770c7c9c41",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "b30df9a48463d1c99c6a66cdee623b1b0832c3811d58a80b338268d71cea190e",
+        "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/dtolnay/thiserror/blob/41938bd3a03a70d34ed8e53d99c89c770c7c9c41/impl/LICENSE-APACHE",
+        "https://github.com/dtolnay/thiserror/blob/41938bd3a03a70d34ed8e53d99c89c770c7c9c41/impl/LICENSE-MIT"
+      ],
+      "copyright": []
+    },
+    {
       "id": "rust:thiserror-impl@2.0.20",
       "name": "thiserror-impl",
       "version": "2.0.20",
@@ -24796,6 +25422,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24813,6 +25440,29 @@
       ]
     },
     {
+      "id": "rust:thiserror@1.0.69",
+      "name": "thiserror",
+      "version": "1.0.69",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/dtolnay/thiserror/tree/41938bd3a03a70d34ed8e53d99c89c770c7c9c41",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "b30df9a48463d1c99c6a66cdee623b1b0832c3811d58a80b338268d71cea190e",
+        "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/dtolnay/thiserror/blob/41938bd3a03a70d34ed8e53d99c89c770c7c9c41/LICENSE-APACHE",
+        "https://github.com/dtolnay/thiserror/blob/41938bd3a03a70d34ed8e53d99c89c770c7c9c41/LICENSE-MIT"
+      ],
+      "copyright": []
+    },
+    {
       "id": "rust:thiserror@2.0.20",
       "name": "thiserror",
       "version": "2.0.20",
@@ -24821,6 +25471,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24846,6 +25497,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24873,6 +25525,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24897,6 +25550,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24924,6 +25578,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24951,6 +25606,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -24976,6 +25632,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25001,6 +25658,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25031,6 +25689,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25053,6 +25712,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25078,6 +25738,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25106,6 +25767,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25130,6 +25792,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25154,6 +25817,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25256,6 +25920,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25280,6 +25945,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25304,6 +25970,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25328,6 +25995,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25352,6 +26020,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25376,6 +26045,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25404,6 +26074,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25428,6 +26099,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25453,6 +26125,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25477,6 +26150,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25508,6 +26182,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25535,6 +26210,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25562,6 +26238,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25593,6 +26270,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25623,6 +26301,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25653,6 +26332,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25683,6 +26363,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25713,6 +26394,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25743,6 +26425,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25773,6 +26456,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25799,6 +26483,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25823,6 +26508,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25850,6 +26536,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25880,6 +26567,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25907,6 +26595,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25937,6 +26626,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25965,6 +26655,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -25992,6 +26683,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26016,6 +26708,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26043,6 +26736,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26074,6 +26768,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26101,6 +26796,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26117,6 +26813,655 @@
       "evidenceSha256": [
         "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
         "776aa6f89099bf24a9bceac4b7d9ad8946c017161de770698b5a5cc8de0254a6"
+      ]
+    },
+    {
+      "id": "rust:win32job@2.0.3",
+      "name": "win32job",
+      "version": "2.0.3",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/ohadravid/win32job-rs/tree/29913d5f6acd47a491f73819ff6d54b63fb851b2",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
+        "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/ohadravid/win32job-rs/blob/29913d5f6acd47a491f73819ff6d54b63fb851b2/LICENSE-APACHE",
+        "https://github.com/ohadravid/win32job-rs/blob/29913d5f6acd47a491f73819ff6d54b63fb851b2/LICENSE-MIT"
+      ],
+      "copyright": []
+    },
+    {
+      "id": "rust:winapi-util@0.1.11",
+      "name": "winapi-util",
+      "version": "0.1.11",
+      "license": "Unlicense OR MIT",
+      "source": "https://github.com/BurntSushi/winapi-util/tree/803874c57dc1f10ecd42f7c86d9de72f53818432",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f",
+        "cb3c929a05e6cbc9de9ab06a4c57eeb60ca8c724bef6c138c87d3a577e27aa14"
+      ],
+      "files": [
+        "COPYING",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/BurntSushi/winapi-util/blob/803874c57dc1f10ecd42f7c86d9de72f53818432/COPYING",
+        "https://github.com/BurntSushi/winapi-util/blob/803874c57dc1f10ecd42f7c86d9de72f53818432/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2017 Andrew Gallant"
+      ]
+    },
+    {
+      "id": "rust:winapi@0.3.9",
+      "name": "winapi",
+      "version": "0.3.9",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/retep998/winapi-rs/tree/796a8e6c2971dc2ff1bcff166e6671284f9b5b6b",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "a8ad31b1c3f40dca5a84119351b8fa8ddc868edd77fad8a8ebf6d8f2d16fa4ae",
+        "ce7bc3499fee93d5022ef430d5e4201e79a6d9154f3974e42f41349f0569e09b"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/retep998/winapi-rs/blob/796a8e6c2971dc2ff1bcff166e6671284f9b5b6b/LICENSE-APACHE",
+        "https://github.com/retep998/winapi-rs/blob/796a8e6c2971dc2ff1bcff166e6671284f9b5b6b/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2015-2018 The winapi-rs Developers"
+      ]
+    },
+    {
+      "id": "rust:windows-collections@0.2.0",
+      "name": "windows-collections",
+      "version": "0.2.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/50009500b686f542530515aedba8334dc5b617b0",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/50009500b686f542530515aedba8334dc5b617b0/crates/libs/collections/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/50009500b686f542530515aedba8334dc5b617b0/crates/libs/collections/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows-core@0.61.2",
+      "name": "windows-core",
+      "version": "0.61.2",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/49e5d37ef31838d027c41ee28d696e046d04c27f",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/49e5d37ef31838d027c41ee28d696e046d04c27f/crates/libs/core/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/49e5d37ef31838d027c41ee28d696e046d04c27f/crates/libs/core/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows-core@0.62.2",
+      "name": "windows-core",
+      "version": "0.62.2",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/32c3144490c016fe496a0aed769bce60987a2e9d",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/core/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/core/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows-future@0.2.1",
+      "name": "windows-future",
+      "version": "0.2.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/c65ac17e5c714104dff156578ca54b3c4f92d76c",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/c65ac17e5c714104dff156578ca54b3c4f92d76c/crates/libs/future/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/c65ac17e5c714104dff156578ca54b3c4f92d76c/crates/libs/future/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows-implement@0.60.2",
+      "name": "windows-implement",
+      "version": "0.60.2",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/32c3144490c016fe496a0aed769bce60987a2e9d",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/implement/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/implement/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows-interface@0.59.3",
+      "name": "windows-interface",
+      "version": "0.59.3",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/32c3144490c016fe496a0aed769bce60987a2e9d",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/interface/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/interface/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows-link@0.1.3",
+      "name": "windows-link",
+      "version": "0.1.3",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/4b8893b307719ec23cce698269ca572ef301dc5c",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/4b8893b307719ec23cce698269ca572ef301dc5c/crates/libs/link/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/4b8893b307719ec23cce698269ca572ef301dc5c/crates/libs/link/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows-link@0.2.1",
+      "name": "windows-link",
+      "version": "0.2.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/d468916ac27a36fb8a12bafc1bf5c0ec2fe92238",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/d468916ac27a36fb8a12bafc1bf5c0ec2fe92238/crates/libs/link/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/d468916ac27a36fb8a12bafc1bf5c0ec2fe92238/crates/libs/link/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows-native-keyring-store@1.1.0",
+      "name": "windows-native-keyring-store",
+      "version": "1.1.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/open-source-cooperative/windows-native-keyring-store/tree/65bf68219cab395e7b508f57df1aa0899d20face",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "6a6ff4df3d4017230d479693f39f48950a78cab32b9a4236fe98d25045d40115",
+        "157cc607717b1b372a69f6b4526f6ad18c1279af9f3267835cca2943f37bc07d"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/open-source-cooperative/windows-native-keyring-store/blob/65bf68219cab395e7b508f57df1aa0899d20face/LICENSE-APACHE",
+        "https://github.com/open-source-cooperative/windows-native-keyring-store/blob/65bf68219cab395e7b508f57df1aa0899d20face/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright [2017] [keyring developers]",
+        "Copyright (c) 2016 keyring Developers"
+      ]
+    },
+    {
+      "id": "rust:windows-numerics@0.2.0",
+      "name": "windows-numerics",
+      "version": "0.2.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/79c2c3917cac805aeb0d000ae9e32e719b514ff4",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/79c2c3917cac805aeb0d000ae9e32e719b514ff4/crates/libs/numerics/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/79c2c3917cac805aeb0d000ae9e32e719b514ff4/crates/libs/numerics/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows-result@0.3.4",
+      "name": "windows-result",
+      "version": "0.3.4",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/49e5d37ef31838d027c41ee28d696e046d04c27f",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/49e5d37ef31838d027c41ee28d696e046d04c27f/crates/libs/result/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/49e5d37ef31838d027c41ee28d696e046d04c27f/crates/libs/result/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows-result@0.4.1",
+      "name": "windows-result",
+      "version": "0.4.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/32c3144490c016fe496a0aed769bce60987a2e9d",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/result/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/result/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows-strings@0.4.2",
+      "name": "windows-strings",
+      "version": "0.4.2",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/49e5d37ef31838d027c41ee28d696e046d04c27f",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/49e5d37ef31838d027c41ee28d696e046d04c27f/crates/libs/strings/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/49e5d37ef31838d027c41ee28d696e046d04c27f/crates/libs/strings/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows-strings@0.5.1",
+      "name": "windows-strings",
+      "version": "0.5.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/32c3144490c016fe496a0aed769bce60987a2e9d",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/strings/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/strings/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows-sys@0.52.0",
+      "name": "windows-sys",
+      "version": "0.52.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/3a605cba064b26f2a198ac58085f8c8836f47c38",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/3a605cba064b26f2a198ac58085f8c8836f47c38/crates/libs/sys/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/3a605cba064b26f2a198ac58085f8c8836f47c38/crates/libs/sys/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows-sys@0.60.2",
+      "name": "windows-sys",
+      "version": "0.60.2",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/4b8893b307719ec23cce698269ca572ef301dc5c",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/4b8893b307719ec23cce698269ca572ef301dc5c/crates/libs/sys/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/4b8893b307719ec23cce698269ca572ef301dc5c/crates/libs/sys/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows-sys@0.61.2",
+      "name": "windows-sys",
+      "version": "0.61.2",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/32c3144490c016fe496a0aed769bce60987a2e9d",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/sys/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/sys/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows-targets@0.52.6",
+      "name": "windows-targets",
+      "version": "0.52.6",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/db06b51c2ebb743efb544d40e3064efa49f28d38",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/db06b51c2ebb743efb544d40e3064efa49f28d38/crates/libs/targets/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/db06b51c2ebb743efb544d40e3064efa49f28d38/crates/libs/targets/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows-targets@0.53.5",
+      "name": "windows-targets",
+      "version": "0.53.5",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/32c3144490c016fe496a0aed769bce60987a2e9d",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/targets/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/targets/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows-threading@0.1.0",
+      "name": "windows-threading",
+      "version": "0.1.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/c65ac17e5c714104dff156578ca54b3c4f92d76c",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/c65ac17e5c714104dff156578ca54b3c4f92d76c/crates/libs/threading/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/c65ac17e5c714104dff156578ca54b3c4f92d76c/crates/libs/threading/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows@0.61.3",
+      "name": "windows",
+      "version": "0.61.3",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/4b8893b307719ec23cce698269ca572ef301dc5c",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/4b8893b307719ec23cce698269ca572ef301dc5c/crates/libs/windows/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/4b8893b307719ec23cce698269ca572ef301dc5c/crates/libs/windows/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows_x86_64_msvc@0.52.6",
+      "name": "windows_x86_64_msvc",
+      "version": "0.52.6",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/db06b51c2ebb743efb544d40e3064efa49f28d38",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/db06b51c2ebb743efb544d40e3064efa49f28d38/crates/targets/x86_64_msvc/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/db06b51c2ebb743efb544d40e3064efa49f28d38/crates/targets/x86_64_msvc/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows_x86_64_msvc@0.53.1",
+      "name": "windows_x86_64_msvc",
+      "version": "0.53.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/d468916ac27a36fb8a12bafc1bf5c0ec2fe92238",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/d468916ac27a36fb8a12bafc1bf5c0ec2fe92238/crates/targets/x86_64_msvc/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/d468916ac27a36fb8a12bafc1bf5c0ec2fe92238/crates/targets/x86_64_msvc/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
       ]
     },
     {
@@ -26149,6 +27494,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26179,6 +27525,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26204,6 +27551,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26229,6 +27577,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26253,6 +27602,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26275,6 +27625,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26300,6 +27651,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26325,6 +27677,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26350,6 +27703,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26494,6 +27848,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26525,6 +27880,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26556,6 +27912,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26581,6 +27938,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26606,6 +27964,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26633,6 +27992,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26658,6 +28018,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26683,6 +28044,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26708,6 +28070,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26733,6 +28096,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26758,6 +28122,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26782,6 +28147,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26804,6 +28170,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26826,6 +28193,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26850,6 +28218,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26874,6 +28243,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26912,6 +28282,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26936,6 +28307,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -26966,6 +28338,7 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
         "macOS App/Agent"
       ],
       "files": [
@@ -27063,7 +28436,8 @@
       "artifacts": [
         "macOS App/Agent",
         "Linux x64 DEB/Arch/Agent",
-        "Linux arm64 DEB/Agent"
+        "Linux arm64 DEB/Agent",
+        "Unsigned Windows x64 Agent preview"
       ],
       "files": [
         "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-mono/LICENSE.txt"
@@ -27087,7 +28461,8 @@
       "artifacts": [
         "macOS App/Agent",
         "Linux x64 DEB/Arch/Agent",
-        "Linux arm64 DEB/Agent"
+        "Linux arm64 DEB/Agent",
+        "Unsigned Windows x64 Agent preview"
       ],
       "files": [
         "packages/butler-agent/rust/crates/butler-core/src/js_date/parse/LICENSE.txt"
@@ -27112,7 +28487,8 @@
       "artifacts": [
         "macOS App/Agent",
         "Linux x64 DEB/Arch/Agent",
-        "Linux arm64 DEB/Agent"
+        "Linux arm64 DEB/Agent",
+        "Unsigned Windows x64 Agent preview"
       ],
       "files": [
         "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos/NOTICE"
@@ -27136,7 +28512,8 @@
       "artifacts": [
         "macOS App/Agent",
         "Linux x64 DEB/Arch/Agent",
-        "Linux arm64 DEB/Agent"
+        "Linux arm64 DEB/Agent",
+        "Unsigned Windows x64 Agent preview"
       ],
       "files": [
         "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt"

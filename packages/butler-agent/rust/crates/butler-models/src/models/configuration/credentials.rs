@@ -224,6 +224,9 @@ impl CredentialsFile {
             }
             Err(error) => return Err(storage("The saved API keys could not be read.", error)),
         };
+        secure_fs::restrict_file(path)
+            .transpose()
+            .map_err(|error| storage("The saved API keys could not be protected.", error))?;
         let mut bytes = Vec::new();
         file.read_to_end(&mut bytes)
             .map_err(|error| storage("The saved API keys could not be read.", error))?;

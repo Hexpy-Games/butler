@@ -25,14 +25,25 @@ function run(command, commandArgs, env = process.env) {
   process.exit(result.status ?? 1);
 }
 
-if (process.platform === "win32") {
-  fail("Windows is not supported yet; a PowerShell installer is planned.");
+if (args[0] === "install") {
+  const windows = process.platform === "win32";
+  const installer = join(root, windows ? "install.ps1" : "install.sh");
+  if (!existsSync(installer)) fail("install.sh is missing; run `npm pack` (its prepack step bundles it)");
+  run(windows ? "powershell.exe" : "sh", [
+    ...(windows ? ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File"] : []),
+    installer, ...args.slice(1),
+  ], { BUTLER_VERSION: version, ...process.env });
 }
 
-if (args[0] === "install") {
-  const installer = join(root, "install.sh");
-  if (!existsSync(installer)) fail("install.sh is missing; run `npm pack` (its prepack step bundles it)");
-  run("sh", [installer, ...args.slice(1)], { BUTLER_VERSION: version, ...process.env });
+if (process.platform === "win32") {
+  const home = process.env.BUTLER_AGENT_HOME || join(process.env.LOCALAPPDATA, "Butler", "agent");
+  const current = join(home, "current");
+  if (!existsSync(current)) fail(`Butler is not installed. Run: npx ${name} install`);
+  const target = readFileSync(current, "utf8").trim();
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._+-]*$/.test(target) || target.includes("..")) fail("Invalid installation pointer");
+  const install = join(home, target);
+  run(join(install, "butler-agent.exe"), ["--installation-root", install,
+    "--resource-root", join(install, "resources"), ...args]);
 }
 
 // Not `butler` from PATH: that could be an npm shim of this very package.
