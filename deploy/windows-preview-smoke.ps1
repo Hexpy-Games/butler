@@ -59,6 +59,7 @@ $env:HOME = "$root/home/미리 보기 %USERPROFILE% !"
 $env:USERPROFILE = $env:HOME
 $env:LOCALAPPDATA = "$root/local/미리 보기 %USERPROFILE% !"
 $env:APPDATA = "$root/roaming"
+$env:npm_config_cache = Join-Path $env:RUNNER_TEMP 'npm-cache'
 $env:BUTLER_DATA = "$root/data/미리 보기 %USERPROFILE% !"
 $env:BUTLER_APP_SERVER_HOST = '127.0.0.1'
 $env:BUTLER_APP_SERVER_PORT = '0'
@@ -116,15 +117,17 @@ try {
     if (!$open.ok -or $open.data.browserOpened) { throw 'Open failed' }
     try { Invoke-WebRequest "$($record.app_endpoint)/sessions" -UseBasicParsing | Out-Null; throw 'Unauthenticated API allowed' }
     catch { if (!$_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 401) { throw } }
-    $ui = Invoke-WebRequest $open.data.url -SessionVariable browser -UseBasicParsing
+    $navigation = @{ 'Sec-Fetch-Site' = 'none'; 'Sec-Fetch-Mode' = 'navigate'; Accept = 'text/html' }
+    $page = @{ 'Sec-Fetch-Site' = 'same-origin'; Origin = $record.app_endpoint }
+    $ui = Invoke-WebRequest $open.data.url -Headers $navigation -SessionVariable browser -UseBasicParsing
     if ($ui.StatusCode -ne 200 -or $ui.Content -notmatch '<div id="root">') { throw 'Renderer not served' }
-    $sessions = Invoke-RestMethod "$($record.app_endpoint)/sessions" -WebSession $browser
+    $sessions = Invoke-RestMethod "$($record.app_endpoint)/sessions" -Headers $page -WebSession $browser
     if ($sessions.protocol_version -ne 'butler.app.v1') { throw 'Browser authentication failed' }
     $assets = [regex]::Matches($ui.Content,'(?:src|href)="((?:\./|/)?assets/[^\"]+)"')
     if (!$assets.Count) { throw 'Renderer has no bundled asset references' }
     foreach ($match in $assets) {
         $uri = [Uri]::new([Uri]"$($record.app_endpoint)/", $match.Groups[1].Value)
-        $asset = Invoke-WebRequest $uri -WebSession $browser -UseBasicParsing
+        $asset = Invoke-WebRequest $uri -Headers $page -WebSession $browser -UseBasicParsing
         if ($asset.StatusCode -ne 200) { throw 'Renderer asset missing' }
     }
     Assert-PrivateAcl $env:BUTLER_DATA
