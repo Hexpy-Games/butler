@@ -6,6 +6,7 @@ mod defaults;
 pub(crate) use defaults::ensure_reply_language;
 pub(super) mod environment;
 mod mcp_owner;
+mod memory_bootstrap;
 pub(super) mod models;
 mod monitoring;
 mod owners;
@@ -17,8 +18,8 @@ mod subsession_queue;
 mod web_owner;
 use super::{AcceptedPlanProducer, ActiveAppEndpoint, CognitionPrompt, ConversationObserver};
 use super::{
-    EmbeddingOwner, GuidedCatalog, GuidedPreparation, GuidedTurnFactoryAdapter,
-    ResolvedInstallation, SystemIdentity, SystemPromptClock,
+    GuidedCatalog, GuidedPreparation, GuidedTurnFactoryAdapter, ResolvedInstallation,
+    SystemIdentity, SystemPromptClock,
 };
 use crate::host::memory_jobs::context_maintenance::ContextMaintenance;
 use crate::host::memory_jobs::daily::{DailyCognitionJobs, DailyCognitionOwners};
@@ -29,15 +30,13 @@ use boundary::{setup, validate_data_installation_boundary};
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
 use butler_ledger::project_ledger::{ProjectLedger, ProjectWork};
-use butler_memory::cognition::GenerationVectorAdapter;
 use butler_memory::cognition::{CognitionPromptReader, CompletionPublisher, ExactMemoryQuery};
 use butler_memory::cognition::{MemoryRecall, ProjectCapsuleService};
-use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_memory::profile::ProfileService;
 use butler_models::models::ModelConfigurationClock;
 use butler_runtime::context::{
     ContextBudgetOwner, ContextConversation, ConversationSessionReference, ConversationTools,
-    PromptAssembler, PromptDependencies, PromptPaths, ToolOutput,
+    PromptAssembler, PromptDependencies, ToolOutput,
 };
 use butler_runtime::operations::MetricFiles;
 use butler_turn::btcc;
@@ -89,9 +88,8 @@ impl AgentRuntime {
         let web_access = process_services.web_access;
         let (prompt_clock, date_parser) = process_clocks()?;
         let metric_files = Arc::new(MetricFiles::new(paths.data_root.clone()));
-        let coordinator =
-            Arc::new(CognitionWriteCoordinator::new(Arc::new(SystemIdentity)).map_err(setup)?);
-        let (embedding, vectors) = open_embedding(&paths, &environment.cognition_paths)?;
+        let (coordinator, embedding, vectors) =
+            memory_bootstrap::open(&paths, &environment.cognition_paths).await?;
         let files = WorkspaceFiles::new(4);
         let image_files = Arc::new(butler_gateway::gateway::AppImageFiles::new(
             &paths.data_root,
@@ -230,11 +228,7 @@ impl AgentRuntime {
             2,
         ));
         let prompt = Arc::new(PromptAssembler::new(
-            PromptPaths {
-                resource_root: paths.resource_root.clone(),
-                data_root: paths.data_root.clone(),
-                cognition_root,
-            },
+            boundary::prompt_paths(&paths, &environment.cognition_paths),
             environment.prompt,
             PromptDependencies {
                 profile: profile.clone(),
@@ -472,18 +466,4 @@ fn process_clocks() -> Result<(Arc<SystemPromptClock>, Arc<super::DateParser>), 
         Arc::new(SystemPromptClock::new().map_err(setup)?),
         Arc::new(super::DateParser::from_process().map_err(setup)?),
     ))
-}
-
-/// The native inference owner and its generation adapter share one DATA binding.
-fn open_embedding(
-    paths: &RuntimePaths,
-    cognition_paths: &butler_memory::cognition::CognitionPathEnvironment,
-) -> Result<(Arc<EmbeddingOwner>, Arc<GenerationVectorAdapter>), BtccError> {
-    let embedding = Arc::new(EmbeddingOwner::new(paths.data_root.clone()).map_err(setup)?);
-    let vectors = Arc::new(GenerationVectorAdapter::new(
-        paths.data_root.clone(),
-        cognition_paths.clone(),
-        embedding.clone(),
-    ));
-    Ok((embedding, vectors))
 }

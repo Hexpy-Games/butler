@@ -20,8 +20,8 @@ use crate::{
     coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator},
 };
 
-/// Called only for a new isolated data root. Existing descriptors are resolved,
-/// never reinitialized; partial roots require a real rebuild.
+/// Strict empty-root cutover; existing descriptors and partial sources require
+/// rebuild. Service bootstrap uses `initialize_fresh_memory_generation`.
 pub async fn initialize_empty_memory_generation(
     data_root: PathBuf,
     environment: CognitionPathEnvironment,
@@ -42,18 +42,25 @@ pub async fn initialize_empty_memory_generation(
         .await
         .map_err(CognitionError::from)?
         .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
-    let result = initialize_locked(
-        &data_root,
-        &environment,
-        &now_iso(),
-        &unicode_version,
-        &icu_version,
-    );
-    let released = lease.release(result.is_ok()).map_err(CognitionError::from);
-    match (result, released) {
-        (Err(error), _) | (Ok(()), Err(error)) => Err(error),
-        (Ok(()), Ok(())) => resolve_active_generation(&data_root, &environment),
-    }
+    // The worker owns the lease until durable writes finish, even if its
+    // awaiting startup future is cancelled.
+    tokio::task::spawn_blocking(move || {
+        let result = initialize_locked(
+            &data_root,
+            &environment,
+            &now_iso(),
+            &unicode_version,
+            &icu_version,
+        )
+        .and_then(|()| resolve_active_generation(&data_root, &environment));
+        let released = lease.release(result.is_ok()).map_err(CognitionError::from);
+        match (result, released) {
+            (Err(error), _) | (Ok(_), Err(error)) => Err(error),
+            (Ok(handle), Ok(())) => Ok(handle),
+        }
+    })
+    .await
+    .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?
 }
 
 fn initialize_locked(
@@ -96,4 +103,50 @@ fn initialize_locked(
 
 fn error(code: CognitionCode) -> CognitionError {
     CognitionError::new(code, code.as_str())
+}
+
+/// Service bootstrap only: existing/partial memory roots and source-bearing
+/// folders retain their migration path. The preflight never takes a write lease.
+pub async fn initialize_fresh_memory_generation(
+    data_root: PathBuf,
+    environment: CognitionPathEnvironment,
+    coordinator: Arc<CognitionWriteCoordinator>,
+    now_iso: Arc<dyn Fn() -> String + Send + Sync>,
+    unicode_version: String,
+    icu_version: String,
+) -> CognitionResult<()> {
+    let root = data_root.clone();
+    let paths = environment.clone();
+    let fresh = tokio::task::spawn_blocking(move || {
+        if empty::has_entries(&paths.memory_root(&root))? {
+            return Ok(false);
+        }
+        match empty::assert_truly_empty(
+            &root,
+            &paths.cognition_root(&root),
+            &paths.memory_root(&root),
+        ) {
+            Ok(()) => Ok(true),
+            Err(error)
+                if error.code() == CognitionCode::MemoryInitializationRequiresRebuild.as_str() =>
+            {
+                Ok(false)
+            }
+            Err(error) => Err(error),
+        }
+    })
+    .await
+    .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))??;
+    if fresh {
+        initialize_empty_memory_generation(
+            data_root,
+            environment,
+            coordinator,
+            now_iso,
+            unicode_version,
+            icu_version,
+        )
+        .await?;
+    }
+    Ok(())
 }

@@ -134,3 +134,15 @@ pub(super) async fn open_observer(
     };
     Ok((work_streams, observer))
 }
+
+/// Prompt rule binding uses the same resolved memory path as explicit writes.
+pub(super) fn prompt_paths(
+    paths: &super::RuntimePaths,
+    cognition: &butler_memory::cognition::CognitionPathEnvironment,
+) -> butler_runtime::context::PromptPaths {
+    butler_runtime::context::PromptPaths {
+        resource_root: paths.resource_root.clone(),
+        data_root: paths.data_root.clone(),
+        memory_rules_root: cognition.explicit_rules_root(&paths.data_root),
+    }
+}

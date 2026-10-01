@@ -124,7 +124,7 @@ fn nonempty_text(path: &Path) -> CognitionResult<bool> {
     }
 }
 
-fn has_entries(path: &Path) -> CognitionResult<bool> {
+pub(super) fn has_entries(path: &Path) -> CognitionResult<bool> {
     match fs::read_dir(path) {
         Ok(mut entries) => entries
             .next()
