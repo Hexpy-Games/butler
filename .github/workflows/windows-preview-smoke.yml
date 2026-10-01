@@ -52,7 +52,7 @@ jobs:
           cargo build --locked --release --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/build.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Version, HTTP readiness, status and stop
+      - name: Requested version flag
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
@@ -72,7 +72,26 @@ jobs:
           Copy-Item "$env:GITHUB_WORKSPACE/packages/butler-agent/resources" $resources -Recurse
           $common = @('--installation-root',$install,'--resource-root',$resources)
           & $binary @common --version 2>&1 | Tee-Object "$env:PREVIEW_ROOT/logs/version.log"
-          if ($LASTEXITCODE -ne 0) { throw 'Version failed' }
+          $versionExit = $LASTEXITCODE
+          & $binary @common version --json 2>&1 | Tee-Object "$env:PREVIEW_ROOT/logs/version-command.log"
+          # Preserve the requested flag failure; do not prevent independent diagnostics.
+          if ($versionExit -ne 0) { exit $versionExit }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: HTTP readiness, status and stop
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          $env:BUTLER_APP_SERVER_HOST = '127.0.0.1'
+          $env:BUTLER_APP_SERVER_PORT = '0'
+          $env:BUTLER_SERVICE_MANAGER = 'off'
+          $env:BUTLER_SECRET_STORE = 'file'
+          $env:BUTLER_PROVIDER_QUOTA_POLLING = '0'
+          $install = Join-Path $env:PREVIEW_ROOT 'install'
+          $binary = Join-Path $install 'butler-agent.exe'
+          $resources = Join-Path $install 'resources'
+          $common = @('--installation-root',$install,'--resource-root',$resources)
           $agent = Start-Process $binary -ArgumentList @('--installation-root',"`"$install`"",'--resource-root',"`"$resources`"") -PassThru `
             -RedirectStandardOutput "$env:PREVIEW_ROOT/logs/agent.stdout.log" `
             -RedirectStandardError "$env:PREVIEW_ROOT/logs/agent.stderr.log"
