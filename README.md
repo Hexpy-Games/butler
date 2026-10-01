@@ -42,7 +42,7 @@ Use Butler through the App, on desktop or in a browser.
 - **It checks the bag against the list.** Send someone shopping and the careful ones compare the bag to your list before coming home. Butler does that with your request and its own result.
 - **Memory that carries over.** Past conversations and decisions stay available. To have Butler pick up your preferences too, turn that on during setup.
 - **Work gets written down.** Butler keeps a record of what it planned and what it finished, so it can pick up where it stopped. In a project, a new conversation starts from that record.
-- **It lives on your computer.** Butler stores everything on your machine. The one thing that leaves is what gets sent to the model you chose.
+- **It lives on your computer.** Butler stores everything on your machine. Data leaves only when it goes to the model you chose or to a tool that reaches the internet, like web search or a server you connected.
 
 ## Features
 
