@@ -156,6 +156,7 @@ pub struct AppAuthorityDecision {
     pub request_ref: String,
     pub decision: String,
     pub admitted: bool,
+    pub question_followup: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -168,10 +169,16 @@ pub struct AppAuthorityDecisionInput {
 }
 
 pub trait AppAuthorityHandoff: Send + Sync + 'static {
+    fn question_history(
+        &self,
+        owner_session_id: String,
+        turns: Vec<String>,
+    ) -> ApplicationFuture<Vec<Value>>;
     fn list(&self, owner_session_id: String) -> ApplicationFuture<AppAuthorityPage>;
     fn revoke(&self, owner_session_id: String, grant_ref: String) -> ApplicationFuture<()>;
     fn decide(&self, input: AppAuthorityDecisionInput) -> ApplicationFuture<AppAuthorityDecision>;
-    fn retry_decided(&self) -> ApplicationFuture<()>;
+    fn retry_decided(&self) -> ApplicationFuture<Vec<(String, String, String)>>;
+    fn settle_question_followup(&self, request_ref: String) -> ApplicationFuture<()>;
     fn close_self_session(
         &self,
         runtime_session_id: String,

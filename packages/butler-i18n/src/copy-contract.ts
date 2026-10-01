@@ -431,6 +431,12 @@ export interface AppCopy {
     allowConversation: string;
     allowDescription: string;
     branchFailed: string;
+    questionPanel: {
+      review: string; send: string; next: string; back: string; skip: string;
+      skipped: string; later: string; pending: string; other: string;
+      recommended: string; working: string; select: string;
+    };
+    questionAnswer: { answered: string; skipped: string; message: string };
     decisionFailed: string;
     archivesEmpty: string;
     generalConversation: string;

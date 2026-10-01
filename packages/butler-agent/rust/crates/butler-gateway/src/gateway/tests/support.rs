@@ -307,6 +307,7 @@ impl GatewayApplication for TestApplication {
                 request_ref: input.request_ref,
                 decision: "allowed".into(),
                 admitted: true,
+                question_followup: None,
             })
         })
     }

@@ -896,6 +896,12 @@ const butlerApp = Object.freeze({
       { method: "POST" },
     );
   },
+  answerUserQuestions: ({ response, sessionId, requestRef } = {}) => {
+    const params = new URLSearchParams({ session_id: sessionId ?? "general" });
+    return requestJson(`/authority-requests/${encodeURIComponent(requestRef ?? "")}/answer?${params.toString()}`, {
+      method: "POST", body: JSON.stringify(response),
+    });
+  },
   modifyAuthorityRequest: ({ alternative, sessionId, requestRef } = {}) => {
     const params = new URLSearchParams({ session_id: sessionId ?? "general" });
     return requestJson(

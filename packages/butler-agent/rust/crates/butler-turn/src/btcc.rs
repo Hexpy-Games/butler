@@ -6,6 +6,10 @@
 mod access;
 pub mod agent_loop;
 mod authority;
+pub use authority::questions::{
+    AnsweredQuestion, QuestionBinding, QuestionKind, QuestionOption, UserQuestion,
+    UserQuestionAnswer, UserQuestionResponse, UserQuestions,
+};
 mod continuation_budget;
 mod contracts;
 pub mod effects;

@@ -41,6 +41,35 @@ pub(super) fn request(
     record: &AuthorityRecord,
     collation: &butler_core::locale::LocaleCollation,
 ) -> AuthorityResult<AuthorityRequestProjection> {
+    if record.capability == "ask_user" {
+        return Ok(AuthorityRequestProjection {
+            request_ref: record.request_ref.clone(),
+            category: "ask_user".into(),
+            reason: record.reason.clone(),
+            executable: record.executable.clone(),
+            command_count: 1,
+            scope: AuthorityScopeProjection {
+                title: String::new(),
+                description: String::new(),
+            },
+            source_turn_id: record.source_turn_id.clone(),
+            source_session_id: record.source_session_id.clone(),
+            source_call_id: record.source_call_id.clone(),
+            approval: None,
+            question_state: Some(
+                if record.decision == RequestDecision::Pending {
+                    "pending"
+                } else {
+                    "deferred"
+                }
+                .into(),
+            ),
+            questions: Some(
+                serde_json::from_str(&record.normalized_input_json)
+                    .map_err(|_| AuthorityError::policy("authority_request_corrupt"))?,
+            ),
+        });
+    }
     let scope = permission::for_record(record, collation)?;
     let input: serde_json::Value =
         serde_json::from_str(&record.normalized_input_json).map_err(|source| {
@@ -69,6 +98,8 @@ pub(super) fn request(
             .clone()
             .filter(|value| !value.is_empty()),
         approval: Some(approval),
+        questions: None,
+        question_state: None,
     })
 }
 pub(super) fn decision(record: &AuthorityRecord) -> AuthorityResult<AuthorityDecisionResult> {
@@ -77,7 +108,7 @@ pub(super) fn decision(record: &AuthorityRecord) -> AuthorityResult<AuthorityDec
     }
     Ok(AuthorityDecisionResult {
         request_ref: record.request_ref.clone(),
-        source_session_id: record.source_session_id.clone(),
+        owner_session_id: record.owner_session_id.clone(),
         source_turn_id: record.source_turn_id.clone(),
         source_work_id: record.source_work_id.clone(),
         schedule_client_message_id: record.schedule_client_message_id.clone(),
@@ -85,5 +116,13 @@ pub(super) fn decision(record: &AuthorityRecord) -> AuthorityResult<AuthorityDec
         model_ref: record.model_ref.clone(),
         reasoning_effort: record.reasoning_effort.clone(),
         decision: record.decision,
+        question_followup: (record.capability == "ask_user")
+            .then(|| {
+                record
+                    .outcome_receipt_json
+                    .as_ref()
+                    .map(|response| format!("{}\n{response}", record.normalized_input_json))
+            })
+            .flatten(),
     })
 }
