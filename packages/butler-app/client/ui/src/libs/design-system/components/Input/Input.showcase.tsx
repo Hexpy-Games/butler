@@ -32,6 +32,16 @@ function text({ locale }: ShowcaseRenderContext) {
 
 export const stories: ShowcaseStory[] = [
   {
+    name: "Underline · in-place entry",
+    widths: ["375", "app"],
+    render: (context) => (
+      <Field>
+        <FieldLabel htmlFor="ds-input-underline">{text(context).serverName}</FieldLabel>
+        <Input id="ds-input-underline" variant="underline" placeholder={text(context).serverName} />
+      </Field>
+    ),
+  },
+  {
     // Value vs placeholder: values use the default text color, placeholders stay muted.
     name: "Value and placeholder",
     render: (context) => (
@@ -106,13 +116,15 @@ export const stories: ShowcaseStory[] = [
 ];
 
 export const stateMatrix: ShowcaseStateMatrix = {
-  states: ["default", "hover", "focus-visible", "disabled", "invalid"],
-  variants: ["value", "placeholder"],
+  states: ["default", "hover", "focus-visible", "disabled", "invalid", "read-only"],
+  variants: ["value", "placeholder", "underline value", "underline placeholder"],
   render: (context) => (
     <Input
+      variant={context.variant?.startsWith("underline") ? "underline" : "default"}
+      readOnly={context.state === "read-only"}
       aria-invalid={context.state === "invalid" ? "true" : undefined}
       aria-label={text(context).modelId}
-      defaultValue={context.variant === "value" ? text(context).values.model : undefined}
+      defaultValue={context.variant?.endsWith("value") ? text(context).values.model : undefined}
       disabled={context.state === "disabled"}
       placeholder={text(context).modelId}
     />

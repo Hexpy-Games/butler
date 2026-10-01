@@ -25,6 +25,19 @@ Prefer token-backed spacing and responsive composition. Check its showcase and u
 touch target still applies on coarse pointers) for a number in a toolbar,
 such as the Worker profiles header's max simultaneous Workers.
 
+`variant="default"` is the boxed field. `variant="underline"` is an in-place
+field with a single token bottom border, transparent background, no radius and
+zero horizontal padding. Typography and touch targets match the default.
+Hover uses `--line-strong`; focus uses `--focus-ring-color`; invalid uses
+`--color-danger-border`. Disabled keeps a quiet line and disabled text;
+read-only uses secondary text and remains selectable and keyboard focusable.
+There is no transition, so reduced motion is respected without an override.
+
+Keyboard focus follows the focus foundation's clipping-container rule: use an
+inset `--focus-ring-width` / `--focus-ring-color` outline rather than an outer
+shadow. The full ring stays inside the field in scroll containers. It appears
+only for `:focus-visible`; the resting field has only the bottom border.
+
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.
 

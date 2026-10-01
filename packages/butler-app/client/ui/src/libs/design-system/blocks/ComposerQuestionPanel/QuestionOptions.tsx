@@ -21,7 +21,7 @@ export function QuestionOptions({ model: m, labels }: { model: ReturnType<typeof
       const frame = scroll.getBoundingClientRect();
       if (rect.top < frame.top) scroll.scrollTop -= frame.top - rect.top;
       else if (rect.bottom > frame.bottom) scroll.scrollTop += rect.bottom - frame.bottom;
-    } }, [m.highlight]);
+    } }, [m.highlight, m.otherOpen]);
   const q = m.question;
   if (q.type === "text") return <Input aria-label={q.text} placeholder={q.placeholder} value={m.answer.text} disabled={m.busy}
     onChange={(e) => m.update({ text: e.target.value, skipped: false })} />;
@@ -34,7 +34,7 @@ export function QuestionOptions({ model: m, labels }: { model: ReturnType<typeof
       const content = <Inline cross="start" wrap={false} grow>
         <IconSlot size="lg" minHeight="line" tone="tertiary"><Typo.Caption tone="tertiary">{index + 1}</Typo.Caption></IconSlot>
         <Stack grow minWidth="0" gap="none">
-          <Inline gap="xs">{editing ? <Input autoFocus aria-label={labels.other} placeholder={q.placeholder ?? labels.other}
+          <Inline gap="xs">{editing ? <Input variant="underline" autoFocus aria-label={labels.other} placeholder={q.placeholder ?? labels.other}
             disabled={m.busy} value={m.answer.other} onChange={(e) => m.update({ other: e.target.value, skipped: false })} />
             : <Typo.Label wrap="anywhere">{other && m.answer.other ? m.answer.other : option.label}</Typo.Label>}
             {option.recommended && <Tag tone="accent">{labels.recommended}</Tag>}</Inline>

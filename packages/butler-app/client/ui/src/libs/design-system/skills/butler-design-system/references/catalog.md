@@ -628,7 +628,7 @@ Groups a label, a control, help and errors so forms keep one vertical rhythm.
 
 `import { Input } from "@/butler-ds";` · stable · viewer: `?visual=design-system&page=components/Input`
 
-A single-line text box for names, IDs, URLs, numbers and secrets.
+A single-line field for names, IDs, URLs, numbers and secrets. Use variant=default for a box, variant=underline for in-place entry, and compact for a short toolbar field.
 
 - Use for: Enter a short value such as a name, ID or URL
 - Use for: Show a masked or read-only value that people can select
@@ -636,7 +636,7 @@ A single-line text box for names, IDs, URLs, numbers and secrets.
 - Not for: Choosing from a fixed list → `Select`
 - Not for: A token budget with a slider → `TokenInputControl`
 - Not for: A percentage with a slider → `PercentInputControl`
-- Tokens: `--line`, `--radius-control`, `--placeholder`, `--focus-ring`, `--color-disabled-bg`, `--color-danger-border`
+- Tokens: `--line-strong`, `--border-hairline`, `--focus-ring-width`, `--focus-ring-color`, `--line`, `--radius-control`, `--placeholder`, `--focus-ring`, `--color-disabled-bg`, `--color-danger-border`
 
 ### Label
 

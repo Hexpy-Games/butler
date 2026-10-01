@@ -44,6 +44,43 @@
   border-color: var(--color-danger-border);
 }
 
+/* Inset focus uses the foundation's clipping-container rule: the full ring
+   stays inside the control, including in scrollable question option rows. */
+.input[data-variant="underline"] {
+  padding-inline: 0;
+  border: 0;
+  border-bottom: var(--border-hairline) solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.input[data-variant="underline"]:where(:hover):not(:disabled, [readonly]) {
+  border-bottom-color: var(--line-strong);
+}
+
+.input[data-variant="underline"]:focus {
+  border-bottom-color: var(--focus-ring-color);
+}
+
+.input[data-variant="underline"]:focus-visible {
+  box-shadow: none;
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+.input[data-variant="underline"][aria-invalid="true"] {
+  border-bottom-color: var(--color-danger-border);
+}
+
+.input[data-variant="underline"][readonly] {
+  color: var(--text-secondary);
+}
+
+.input[data-variant="underline"]:disabled {
+  border-bottom-color: var(--line);
+  color: var(--interactive-disabled-fg);
+}
+
 @media (width <= 640px), (pointer: coarse) {
   .input,
   .input[data-compact] {
