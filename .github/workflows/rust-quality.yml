@@ -5,7 +5,15 @@ name: Rust quality
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "README.md"
+      - "CONTRIBUTING.md"
+      - "assets/readme/**"
   pull_request:
+    paths-ignore:
+      - "README.md"
+      - "CONTRIBUTING.md"
+      - "assets/readme/**"
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:

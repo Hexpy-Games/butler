@@ -11,6 +11,10 @@ name: Linux packages
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "README.md"
+      - "CONTRIBUTING.md"
+      - "assets/readme/**"
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
