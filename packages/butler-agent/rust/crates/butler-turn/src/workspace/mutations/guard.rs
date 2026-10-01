@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use butler_platform::secure_fs;
+
 use super::super::path_guard::{Leaf, MutationGuardInput, resolve_workspace_mutation_guard};
 use super::contracts::{
     BatchResult, EditFailure, EditFailureData, EditMutation, GuardedCommand, GuardedEdit,
@@ -71,7 +73,7 @@ fn batch(mut edit: EditMutation) -> std::io::Result<Result<GuardedCommand, Mutat
         match path(&edit.context, &item.path, Leaf::MustExist)? {
             Ok(mut path) => {
                 let safe_path = path.public.clone();
-                let key = target_key(&path.real);
+                let key = secure_fs::path_key(&path.real);
                 path.public = targets.entry(key).or_insert(path.public).clone();
                 safe.push(Some(safe_path.clone()));
                 guarded.push(GuardedEdit {
@@ -151,15 +153,4 @@ fn path(
         absolute,
         real,
     }))
-}
-
-fn target_key(path: &std::path::Path) -> PathBuf {
-    #[cfg(windows)]
-    {
-        PathBuf::from(path.to_string_lossy().replace('\\', "/").to_lowercase())
-    }
-    #[cfg(not(windows))]
-    {
-        path.to_path_buf()
-    }
 }

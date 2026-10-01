@@ -1,3 +1,5 @@
+//! Running profile extraction work: the blocking pool, the writer gate and model batches.
+
 use tokio_util::sync::CancellationToken;
 
 use super::super::contracts::*;
@@ -168,6 +170,16 @@ where
             .with_source(source)
         })?
 }
+/// The canonical form of the caller's model, or the configured model when
+/// the caller named none.
+pub(super) fn chosen_model(requested: Option<&str>, configured: &str) -> String {
+    requested
+        .map(butler_core::public_text::trim_js_whitespace)
+        .filter(|value| !value.is_empty())
+        .map(|value| butler_models::models::parse_model_ref(value).canonical_ref)
+        .unwrap_or_else(|| configured.to_owned())
+}
+
 pub(super) fn reasoning(value: &str) -> ReasoningEffort {
     match value {
         "none" => ReasoningEffort::None,

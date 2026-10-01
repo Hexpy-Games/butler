@@ -1,3 +1,5 @@
+//! The graph schema and its migrations.
+
 mod base;
 mod migration;
 

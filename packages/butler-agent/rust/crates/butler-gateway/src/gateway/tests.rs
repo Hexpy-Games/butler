@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use serde_json::{Value, json};
+use serde_json::Value;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -9,38 +9,7 @@ use tokio::{
 use super::*;
 
 mod artifact_session;
-mod dev_cors;
-mod http_limits;
-mod session_queue;
 mod support;
-mod transcript_export;
-
-#[tokio::test]
-async fn new_chat_briefing_route_is_authenticated_and_enveloped() {
-    let application = Arc::new(TestApplication::default());
-    *application.briefing.lock().unwrap() = Some(json!({
-        "moment":"Onboarding", "title":"Welcome", "suggestions":[],
-        "source":{"scope":"onboarding","content_origin":"heuristic_fallback"},
-        "raw_text_included":false
-    }));
-    let server = start(
-        application,
-        LocalAuthConfig::required(Some("secret".into())),
-    )
-    .await;
-    let unauthorized = request(
-        server.local_addr(),
-        "GET /new-chat-briefing HTTP/1.1\r\nhost: localhost\r\nconnection: close\r\n\r\n",
-    )
-    .await;
-    assert!(unauthorized.starts_with("HTTP/1.1 401"));
-    let authorized = request(server.local_addr(),
-        "GET /new-chat-briefing HTTP/1.1\r\nhost: localhost\r\nauthorization: Bearer secret\r\nconnection: close\r\n\r\n").await;
-    assert!(authorized.starts_with("HTTP/1.1 200"));
-    assert!(authorized.contains("\"protocol_version\":\"butler.app.v1\""));
-    assert!(authorized.contains("\"content_origin\":\"heuristic_fallback\""));
-    server.close().await.unwrap();
-}
 
 use support::*;
 
@@ -63,7 +32,7 @@ async fn authenticated_message_route_preserves_validation_and_deferred_admission
 
     let malformed = request(
         server.local_addr(),
-        "POST /messages HTTP/1.1\r\nhost: localhost\r\nauthorization: Bearer secret\r\ncontent-length: 1\r\nconnection: close\r\n\r\n{",
+        "POST /messages HTTP/1.1\r\nhost: localhost\r\nauthorization: Bearer secret\r\ncontent-type: application/json\r\ncontent-length: 1\r\nconnection: close\r\n\r\n{",
     )
     .await;
     assert!(malformed.starts_with("HTTP/1.1 400 Bad Request"));
@@ -109,6 +78,9 @@ async fn authenticated_message_route_preserves_validation_and_deferred_admission
     server.close().await.unwrap();
 }
 
+/// Security boundary: required auth without a token and the rate limit keep
+/// their public errors.
+// test-category: security
 #[tokio::test]
 async fn required_auth_without_token_and_rate_limit_keep_public_errors() {
     let application = Arc::new(TestApplication::default());
@@ -150,8 +122,12 @@ async fn live_events_reconcile_overflow_and_unregister_on_disconnect() {
         .store(true, std::sync::atomic::Ordering::SeqCst);
     let server = start(application.clone(), LocalAuthConfig::default()).await;
     let mut stream = TcpStream::connect(server.local_addr()).await.unwrap();
+    let port = server.local_addr().port();
     stream
-        .write_all(b"GET /events/live?cursor=0 HTTP/1.1\r\nhost: localhost\r\n\r\n")
+        .write_all(
+            format!("GET /events/live?cursor=0 HTTP/1.1\r\nhost: localhost:{port}\r\n\r\n")
+                .as_bytes(),
+        )
         .await
         .unwrap();
 

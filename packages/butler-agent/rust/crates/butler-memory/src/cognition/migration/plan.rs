@@ -1,3 +1,5 @@
+//! Planning and applying a cognition namespace migration.
+
 use std::{
     collections::HashSet,
     fs::{self, OpenOptions},
@@ -84,11 +86,7 @@ pub(super) fn apply_locked(
     }
     let mut lock_options = OpenOptions::new();
     lock_options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        lock_options.mode(0o600);
-    }
+    butler_platform::secure_fs::owner_only(&mut lock_options);
     let lock = match lock_options.open(&lock_path) {
         Ok(lock) => lock,
         Err(error) => {
@@ -228,7 +226,7 @@ fn visit(
         Err(_) => return Err(failure(CognitionCode::CognitionMigrationReadFailed)),
     };
     if metadata.is_dir() {
-        let canonical = fs::canonicalize(path).map_err(|source| {
+        let canonical = butler_platform::secure_fs::canonicalize(path).map_err(|source| {
             failure(CognitionCode::CognitionMigrationReadFailed).with_source(source)
         })?;
         if !visited.insert(canonical) {
@@ -280,11 +278,7 @@ fn write_manifest(
     bytes.push(b'\n');
     let mut options = OpenOptions::new();
     options.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
+    butler_platform::secure_fs::owner_only(&mut options);
     let mut file = options.open(path).map_err(|source| {
         failure(CognitionCode::CognitionMigrationWriteFailed).with_source(source)
     })?;
@@ -354,11 +348,7 @@ fn remove_path(path: &Path) -> Result<(), std::io::Error> {
 fn create_private_dir(path: &Path) -> CognitionResult<()> {
     let mut builder = fs::DirBuilder::new();
     builder.recursive(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        builder.mode(0o700);
-    }
+    butler_platform::secure_fs::owner_only_dirs(&mut builder);
     builder
         .create(path)
         .or_else(|error| {

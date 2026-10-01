@@ -1,0 +1,30 @@
+{
+  "scenario": "PRJ-03",
+  "provider": "openai-subscription",
+  "model": "openai/gpt-6-luna",
+  "effort": "max",
+  "wire_shape": "openai_responses",
+  "butler_git_sha": "cfe88f09a4f7",
+  "recorded_at": "2026-09-27T12:13:10Z",
+  "recorder": "butler-e2e record proxy",
+  "sanitization": [
+    "per-run values -> {{W}}, {{D}}, {{SANDBOX}}, scenario nonces",
+    "JWT/sk-key/bearer/email/home path/host name -> fixed placeholders",
+    "response.instructions -> {{REDACTED_ECHO}}, response.tools -> []",
+    "response headers reduced to content-type, retry-after",
+    "chunks re-cut at SSE event boundaries (event bytes unchanged)"
+  ],
+  "files": [
+    {
+      "file": "000.json",
+      "sha256": "a9591176ad0b0db14166ef21cd90cab53eb57b5fb740ead927292d3e10fb60de"
+    }
+  ],
+  "fingerprint": [
+    [
+      "status:400",
+      "json{detail}"
+    ]
+  ],
+  "base": "PRJ-02"
+}

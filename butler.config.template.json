@@ -54,6 +54,10 @@
     "enabled": true,
     "retentionDays": 30
   },
+  "providerQuota": {
+    "openai": { "polling": true },
+    "zai": { "polling": true }
+  },
   "memory": {
     "hotCacheMaxBytes": 10240,
     "taskTtlMs": 3600000,

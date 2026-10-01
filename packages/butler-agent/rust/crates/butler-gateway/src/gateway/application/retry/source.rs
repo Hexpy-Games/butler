@@ -6,7 +6,9 @@ use serde_json::Value;
 use super::{AppStorageError, execution_controls_error, not_retryable_error, queue_snapshot_error};
 use crate::gateway::application::storage::AppStorageCode;
 use butler_core::public_text::sanitize_public_text;
-use butler_turn::btcc::{ControlResolution, ExecutionControls, VerifiedExecutionControls};
+use butler_turn::btcc::{
+    ControlResolution, ExecutionControls, SubsessionResultContext, VerifiedExecutionControls,
+};
 
 pub(super) struct RetrySnapshot {
     pub turn_id: String,
@@ -54,6 +56,9 @@ pub(super) struct CurrentControlsRetrySource {
     pub user_message_id: String,
     pub text: String,
     pub attachment_ids: Vec<String>,
+    /// Set when the source turn reports a steward result: the fresh turn is
+    /// model input too and must stay off the chat.
+    pub subsession_result: Option<SubsessionResultContext>,
 }
 
 pub(super) fn retry_snapshot(
@@ -257,7 +262,27 @@ pub(super) fn current_controls_retry_source(
         user_message_id,
         text,
         attachment_ids,
+        subsession_result: source_subsession_result(db, turn_id)?,
     })
+}
+
+fn source_subsession_result(
+    db: &Connection,
+    turn_id: &str,
+) -> Result<Option<SubsessionResultContext>, AppStorageError> {
+    let marker: Option<String> = db
+        .query_row(
+            "SELECT CASE WHEN json_valid(execution_controls_json) \
+             THEN json_extract(execution_controls_json,'$.subsession_result') END \
+             FROM turns WHERE id=?1",
+            [turn_id],
+            |row| row.get(0),
+        )
+        .map_err(AppStorageError::sqlite)?;
+    marker
+        .map(|json| serde_json::from_str(&json))
+        .transpose()
+        .map_err(|source| execution_controls_error().with_source(source))
 }
 
 /// Refuses all but a retryable runtime fault or a turn interrupted by a
@@ -293,15 +318,14 @@ fn ensure_fresh_retry_allowed(safe_error_code: Option<&str>) -> Result<(), AppSt
     }
 }
 
+/// `turn_id<>''` makes the partial `events_turn_id_idx` applicable.
+pub(in crate::gateway::application) const RUNTIME_FAULT_SQL: &str = "SELECT payload_json \
+    FROM events WHERE type='agent.turn_event' AND turn_id=?1 AND turn_id<>'' \
+    AND json_extract(payload_json,'$.event.kind')='runtime.fault' ORDER BY id DESC LIMIT 1";
+
 fn runtime_fault_retryable(db: &Connection, turn_id: &str) -> Result<bool, AppStorageError> {
     let payload_json = db
-        .query_row(
-            "SELECT payload_json FROM events WHERE type='agent.turn_event' AND turn_id=?1 \
-             AND json_extract(payload_json,'$.event.kind')='runtime.fault' \
-             ORDER BY id DESC LIMIT 1",
-            [turn_id],
-            |row| row.get::<_, String>(0),
-        )
+        .query_row(RUNTIME_FAULT_SQL, [turn_id], |row| row.get::<_, String>(0))
         .optional()
         .map_err(AppStorageError::sqlite)?;
     let Some(payload_json) = payload_json else {

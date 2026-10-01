@@ -8,13 +8,14 @@ use reqwest::{Client, Url};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
-mod io;
+pub(super) mod io;
 mod jwt;
 mod profile;
+mod refresh;
 mod url;
 use io::{read_json_object, response_json, write_mode_600};
 use jwt::{account_id_from_access_token, codex_account_id, email_from_access_token};
-pub(crate) use profile::OpenAiAuthProfile;
+pub use profile::OpenAiAuthProfile;
 use profile::{copy_string, update_claim, update_number, update_string};
 
 use super::{ModelConfigurationClock, ModelConfigurationEnvironment};
@@ -25,7 +26,7 @@ const CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
 pub(super) struct AuthOwner<'a> {
     pub(super) data_root: &'a Path,
     pub(super) environment: &'a ModelConfigurationEnvironment,
-    pub(super) clock: &'a dyn ModelConfigurationClock,
+    pub(super) clock: &'a Arc<dyn ModelConfigurationClock>,
     pub(super) client: &'a Client,
 }
 
@@ -64,18 +65,41 @@ impl std::fmt::Debug for AuthError {
 
 impl AuthOwner<'_> {
     pub(super) async fn resolve_openai(&self) -> Result<ProviderAuth, AuthError> {
+        self.resolve_openai_after(None).await
+    }
+
+    /// Like [`Self::resolve_openai`]. `rejected` is a bearer authorization
+    /// the provider just rejected (HTTP 401): the Butler login is refreshed
+    /// unless its stored token has changed since.
+    pub(super) async fn resolve_openai_after(
+        &self,
+        rejected: Option<&str>,
+    ) -> Result<ProviderAuth, AuthError> {
         if let Some(key) = trimmed(self.environment.openai_api_key.as_deref()) {
-            return Ok(ProviderAuth::ApiKey(key.to_owned()));
+            return Ok(ProviderAuth::ApiKey(zeroize::Zeroizing::new(
+                key.to_owned(),
+            )));
         }
-        self.resolve_codex().await
+        self.resolve_codex_after(rejected).await
     }
 
     pub(super) async fn resolve_codex(&self) -> Result<ProviderAuth, AuthError> {
+        self.resolve_codex_after(None).await
+    }
+
+    /// Like [`Self::resolve_codex`], with `rejected` as for
+    /// [`Self::resolve_openai_after`].
+    pub(super) async fn resolve_codex_after(
+        &self,
+        rejected: Option<&str>,
+    ) -> Result<ProviderAuth, AuthError> {
         if let Some(mut profile) = self.read_butler_profile().await
             && !profile.access_token.is_empty()
         {
-            if self.is_expiring(&profile) {
-                profile = self.refresh(profile).await?;
+            let rejected_now =
+                rejected.is_some_and(|value| value == format!("Bearer {}", profile.access_token));
+            if rejected_now || self.is_expiring(&profile) {
+                profile = self.refresh_once(profile).await?;
             }
             let account_id =
                 account_id_from_access_token(&profile.access_token).unwrap_or_default();
@@ -154,6 +178,17 @@ impl AuthOwner<'_> {
             access_token,
             raw,
         })
+    }
+
+    /// Refreshes `profile` under the process-shared profile lock, unless the
+    /// stored login changed while this call waited for it (another refresh,
+    /// from a model request or a quota poll, already renewed it). Refresh
+    /// tokens rotate, so two refreshes of one login must never overlap.
+    async fn refresh_once(
+        &self,
+        profile: OpenAiAuthProfile,
+    ) -> Result<OpenAiAuthProfile, AuthError> {
+        refresh::once(self, profile).await
     }
 
     fn is_expiring(&self, profile: &OpenAiAuthProfile) -> bool {

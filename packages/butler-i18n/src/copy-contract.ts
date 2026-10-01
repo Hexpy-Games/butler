@@ -1,40 +1,125 @@
+/** Provider cards on the first-run "Pick an AI" screen. */
+export type FirstRunProviderCardId =
+  | "chatgpt" | "claude" | "gemini" | "local" | "openai" | "grok" | "qwen"
+  | "kimi" | "zaiCoding" | "zaiApi" | "opencodeGo" | "other";
+
 interface FirstRunCopy {
-product: string;
-steps: string[];
-languageTitle: string;
-continue: string;
-back: string;
-safetyTitle: string;
-safetyBody: string;
-safetyItems: string[];
-accept: string;
-installTitle: string;
-installReady: string;
-installChecking: string;
-installFailed: string;
-retry: string;
-repair: string;
-diagnostics: string;
-diagnosticsCopied: string;
-diagnosticsUnavailable: string;
-quit: string;
-modelTitle: string;
-modelBody: string;
-modelSelectLabel: string;
-modelLoading: string;
-modelLoadFailed: string;
-modelRetry: string;
-modelSave: string;
-modelSaving: string;
-modelSaved: string;
-modelSaveFailed: string;
-modelUnavailable: string;
+  product: string;
+  welcomeTitle: string;
+  welcomeLede: string;
+  consent: Array<{ title: string; body: string }>;
+  agree: string;
+  agreeBlocked: string;
+  prepWorking: string;
+  prepReady: string;
+  prepFailed: string;
+  /** Plain failure reasons keyed by readiness error code; `default` covers the rest. */
+  prepReasons: Record<string, string>;
+  /** Preparation step names keyed by step id (bug-report info). */
+  prepSteps: Record<string, string>;
+  retry: string;
+  moreActions: string;
+  repair: string;
+  copyReport: string;
+  reportCopied: string;
+  reportUnavailable: string;
+  quit: string;
+  languageLabel: string;
+  learnMore: string;
+  cancel: string;
+  connectTitle: string;
+  connectLede: string;
+  prepWaitConnect: string;
+  providerNames: Record<FirstRunProviderCardId, string>;
+  providerDescriptions: Record<FirstRunProviderCardId, string>;
+  tagNoKey: string;
+  tagLocal: string;
+  /** Tag on the connected AI when setup runs again. */
+  tagCurrent: string;
+  localModelCount: (count: number) => string;
+  moreProviders: (count: number) => string;
+  showLess: string;
+  localOff: string;
+  localMissing: string;
+  rescan: string;
+  checking: string;
+  connecting: string;
+  offline: string;
+  offlineShort: string;
+  offlineTile: string;
+  noModels: string;
+  noUsable: string;
+  back: string;
+  backToList: string;
+  signInTitle: string;
+  signInBody: string;
+  signInCopyLink: string;
+  linkCopied: string;
+  signInCancelled: string;
+  signInCancelledBody: string;
+  signInFailed: string;
+  chooseOther: string;
+  keyTitle: (name: string) => string;
+  keyLabel: string;
+  keyHint: string;
+  keyValid: string;
+  /** Key check failures by #279 error code group. */
+  keyErrors: Record<"invalid" | "noaccess" | "network" | "ratelimited" | "unavailable" | "unsupported" | "badrequest" | "savefailed", string>;
+  /** Saved, but the service has no model list to check it against. */
+  keySaved: string;
+  keyFailedShort: string;
+  getKey: string;
+  keyStored: string;
+  finishing: string;
+  finishFailed: string;
+  localTitle: string;
+  localBody: string;
+  localStart: string;
+  localNote: string;
+  customTitle: string;
+  customUrl: string;
+  customKey: string;
+  customConnect: string;
+  connectedToast: (name: string) => string;
+  rerunTitle: string;
+  rerunDescription: string;
+  rerunAction: string;
 }
-export interface NewChatBriefingSuggestion { id: string; title: string; description: string; text: string; }
+export interface NewChatBriefingSuggestion {
+  id: string;
+  title: string;
+  description: string;
+  text: string;
+  /** A template the user finishes: it fills the composer instead of sending. */
+  template?: boolean;
+}
 
 export interface BriefingFallbackCopy { title: string; description: string; suggestions: NewChatBriefingSuggestion[]; }
 
 type CountFormatter = (count: number) => string;
+
+/**
+ * An approval request as one plain question, per `approval.action_kind`
+ * (#235). `workspace` is the workspace label; `null` reads as "this workspace".
+ */
+export interface ApprovalRequestCopy {
+  editFiles: (count: number, workspace: string | null) => string;
+  runCommand: (workspace: string | null) => string;
+  networkCommand: (workspace: string | null) => string;
+  useConnector: (tool: string | null, server: string | null) => string;
+  manageSchedule: { create: string; delete: string; run: string; change: string };
+  updateProject: string;
+  startConversation: string;
+  restartService: string;
+  createWorktree: string;
+  /** Any kind this App does not know yet. */
+  generic: string;
+  /** The line after the examples. */
+  more: CountFormatter;
+  risk: { low: string; medium: string; high: string };
+  /** What "Always allow in this conversation" covers. */
+  covers: { editFiles: (workspace: string | null) => string; command: (workspace: string | null) => string; other: string };
+}
 
 export type AppLocale = "en-US" | "ko-KR";
 
@@ -129,6 +214,8 @@ export interface AppCopy {
     abandoned: string; unknown: string; registered: string; noWork: string; unbound: string;
     unavailable: string; noRemaining: string; tasks: string; recorded: string; loadMore: string;
     description: string; editDescription: string; pin: string; unpin: string;
+    /** Header menu item and dialog title for the project's wallpaper. */
+    wallpaper: string;
     created: string; updated: string; recordedCompletion: string; noHistory: string;
   };
   projectStatistics: {
@@ -265,7 +352,7 @@ export interface AppCopy {
     skills: string;
   };
   progress: { operations: Record<string, string>; fallback: string; storageRecovery: string; reconnecting: string; stopping: string; };
-  briefing: { general: BriefingFallbackCopy; onboarding: BriefingFallbackCopy; projectSuggestions: (name: string) => NewChatBriefingSuggestion[]; skillSuggestions: (name: string) => NewChatBriefingSuggestion[]; onboardingMoment: string; projectMoment: string; projectTitle: (name: string) => string; projectDescription: (name: string) => string; };
+  briefing: { general: BriefingFallbackCopy; onboarding: BriefingFallbackCopy; projectSuggestions: (name: string) => NewChatBriefingSuggestion[]; onboardingMoment: string; projectMoment: string; projectTitle: (name: string) => string; projectDescription: (name: string) => string; };
   interfaceTemplates: {
     relativeAge: (seconds: number) => string;
     workedFor: (duration: string) => string;
@@ -274,6 +361,7 @@ export interface AppCopy {
     contextMetric: (kind: "full" | "used" | "budget" | "available" | "compact", value: string | number) => string;
     activityHistory: (live: boolean, label: string, count: number) => string;
     pendingApprovals: (count: number) => string;
+    approvalRequest: ApprovalRequestCopy;
     allowedCount: (count: number) => string;
     revoke: (title: string) => string;
     skillTitle: (name: string) => string;
@@ -531,6 +619,9 @@ export interface AppCopy {
     quotaFailure: string;
     quotaTemporary: string;
     quotaUnsupported: string;
+    quotaPending: string;
+    quotaFetchFailed: string;
+    quotaApiPlan: string;
     quotaUnknown: string;
     partialOutput: string;
     noDetailSupport: string;
@@ -681,6 +772,19 @@ export interface AppCopy {
     deleteFailedMessage: string;
     queuedPosition: (position: number, total: number) => string;
     contextDetails: string;
+    usage: {
+      details: string;
+      input: string;
+      cached: string;
+      output: string;
+      reasoning: string;
+      cost: string;
+      estimate: string;
+      left: (percent: string) => string;
+      unavailable: string;
+      loading: string;
+      updated: (time: string) => string;
+    };
     approval: {
       title: string;
       titleEffect: string;
@@ -707,6 +811,27 @@ export interface AppCopy {
     readOnlyDesc: string;
   };
   automations: {
+    saved: string;
+    frequency: string;
+    time: string;
+    weekday: string;
+    interval: string;
+    daily: string;
+    weekdays: string;
+    weekly: string;
+    once: string;
+    on: string;
+    off: string;
+    next: (time: string) => string;
+    everyMinutes: (count: number) => string;
+    everyHours: (count: number) => string;
+    everySeconds: (count: number) => string;
+    dailyAt: (time: string) => string;
+    weekdaysAt: (time: string) => string;
+    weeklyAt: (days: string, time: string) => string;
+    startAtLogin: string;
+    loginHint: string;
+    loginFailed: string;
     title: string;
     scheduledCount: (count: number) => string;
     empty: string;
@@ -729,6 +854,17 @@ export interface AppCopy {
     placeholders: {
       title: string;
       prompt: string;
+    };
+    /** One line under the access selector while Ask first is selected. */
+    accessHint: string;
+    saveFailed: string;
+    /** Inline messages for a save the gateway refused (400). */
+    errors: {
+      title: string;
+      prompt: string;
+      interval: string;
+      accessMode: string;
+      invalid: string;
     };
     runs: {
       empty: string;
@@ -796,8 +932,8 @@ export interface AppCopy {
     searchEmpty: (query: string) => string;
     groups: {
       preferences: string;
-      modelsAndExtensions: string;
       appAndSystem: string;
+      advanced: string;
     };
     sections: {
       general: string;
@@ -811,6 +947,7 @@ export interface AppCopy {
       logs: string;
       personalization: string;
       privacy: string;
+      security: string;
       system: string;
       archives: string;
       about: string;
@@ -827,6 +964,7 @@ export interface AppCopy {
       logs: string;
       personalization: string;
       privacy: string;
+      security: string;
       system: string;
       archives: string;
       about: string;
@@ -843,14 +981,17 @@ export interface AppCopy {
       logs: string[];
       personalization: string[];
       privacy: string[];
+      security: string[];
       system: string[];
       archives: string[];
       about: string[];
     };
     sectionState: { loading: string; error: string; retry: string; empty: string };
     updateComponents: { app: string; service: string };
-    pageSections: Record<"languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "fallbackConsolidation" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview", string>;
-    pageSectionDescriptions: Record<"notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning" | "fallbackConsolidation", string>;
+    pageSections: Record<"languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "connectionCode" | "allowedHosts", string>;
+    pageSectionDescriptions: Record<"notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning", string>;
+    /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
+    modelsAdvanced: { title: string; contents: string };
     panels: {
       butlerModel: string;
       workerProfiles: string;
@@ -885,11 +1026,63 @@ export interface AppCopy {
       empty: string;
       noCandidates: string;
       limitReached: string;
+      /** One-line summary on the Models page. */
+      summaryDescription: string;
+      off: string;
+      edit: string;
+      editLabel: string;
+      done: string;
     };
     workerProfilesPanel: {
       add: string;
       addLimitReached: string;
       maxSimultaneousWorkers: string;
+    };
+    /** Wallpaper picker copy and its brief toasts. */
+    wallpaper: {
+      options: string;
+      none: string;
+      image: (index: number) => string;
+      addImage: string;
+      deleteImage: string;
+      fit: string;
+      fill: string;
+      fitWhole: string;
+      dim: string;
+      blur: string;
+      filter: string;
+      noFilter: string;
+      unsupportedType: string;
+      tooLarge: string;
+      unreadable: string;
+      inUse: string;
+      uploadFailed: string;
+      deleteFailed: string;
+      /** The project picker's first tile: follow the global wallpaper. */
+      inherit: string;
+      saveFailed: string;
+      /** Toast after the agent changes a wallpaper; `undo` restores the previous one. */
+      changed: string;
+      undo: string;
+      undoFailed: string;
+      /** Picker marker on the user's own wallpaper modules. */
+      mine: string;
+      /** Toast when a shown user module stops working and the default wallpaper shows instead. */
+      moduleFailed: (name: string) => string;
+      /** The import-module tile's caption and accessible name. */
+      importModule: string;
+      /** Accessible name of a user module's delete button. */
+      deleteModule: string;
+      /** Fallback toast when the gateway's own import error has no message. */
+      moduleImportFailed: string;
+      moduleTooLarge: string;
+      /** Toast deleting a module a setting or project still draws with (409 `wallpaper_module_in_use`). */
+      moduleInUse: string;
+      moduleDeleteFailed: string;
+      /** Toast importing a module whose id is installed (409 `wallpaper_module_exists`); offers `replaceModule`. */
+      moduleExists: string;
+      /** That toast's action: import again, replacing the installed module. */
+      replaceModule: string;
     };
     fields: {
       language: string;
@@ -919,10 +1112,9 @@ export interface AppCopy {
       model: string;
       reasoning: string;
       theme: string;
-      mainScreenTheme: string;
-      mainScreenThemePreset: string;
-      mainScreenThemeColors: string;
-      mainScreenThemeColor: (index: number) => string;
+      wallpaper: string;
+      wallpaperMotion: string;
+      wallpaperPauseOnBattery: string;
       translucentSidebar: string;
       desktopNotifications: string;
       desktopNotificationAssistantMessages: string;
@@ -969,15 +1161,6 @@ export interface AppCopy {
       system: string;
       light: string;
       dark: string;
-      mainScreenThemeNone: string;
-      mainScreenThemeBloom: string;
-      mainScreenThemeSilk: string;
-      paletteMonochrome: string;
-      paletteAurora: string;
-      paletteBloom: string;
-      paletteLavender: string;
-      paletteMorning: string;
-      paletteCustom: string;
       local: string;
       external: string;
       customPersona: string;
@@ -1016,9 +1199,11 @@ export interface AppCopy {
       consolidationModel: string;
       consolidationModelDefault: string;
       localReasoningBudget: string;
-      mainScreenTheme: string;
-      mainScreenThemePreset: string;
-      mainScreenThemeColors: string;
+      wallpaper: string;
+      wallpaperMotion: string;
+      wallpaperPauseOnBattery: string;
+      /** Tooltip on the theme control while a real-time wallpaper sets light/dark. */
+      themeFollowsWallpaper: string;
       contextLimit: (maxLabel: string) => string;
       contextLimitClamped: (value: string) => string;
       responseLanguage: string;
@@ -1112,6 +1297,38 @@ export interface AppCopy {
         fallback: string;
       };
     };
+    security: {
+      remoteAccess: string;
+      remoteAccessDescription: string;
+      addresses: string;
+      noAddresses: string;
+      copyAddress: string;
+      copied: string;
+      code: string;
+      createdAt: (date: string) => string;
+      reveal: string;
+      hide: string;
+      copy: string;
+      rotate: string;
+      rotateTitle: string;
+      rotateConfirm: string;
+      rotated: string;
+      hostOnly: string;
+      /** 403 admin_credential_required: this computer, but the app's admin credential is missing. */
+      adminRequired: string;
+      revealFailed: string;
+      rotateFailed: string;
+      /** The Advanced section header and the disclosure row that reveals allowed hosts. */
+      advanced: string;
+      advancedContents: string;
+      hosts: string;
+      hostsDescription: string;
+      noHosts: string;
+      hostPlaceholder: string;
+      addHost: string;
+      removeHost: (host: string) => string;
+      invalidHost: string;
+    };
     workStatus: {
       title: string;
       description: string;
@@ -1174,6 +1391,7 @@ export interface AppCopy {
       updateComponent: string;
       upToDate: string;
       updateChecking: string;
+      updateUnavailable: string;
       updateApplying: string;
     };
     placeholders: {
@@ -1297,6 +1515,30 @@ export interface AppCopy {
         oauthLogin: string;
       };
     };
+    /** Settings > Models saved API keys (#217). */
+    savedKeys: {
+      empty: string;
+      /** Registered models that use the key; 0 reads as not in use. */
+      usedBy: (count: number) => string;
+      /** Where the key is kept: this computer's data folder, or the system store. */
+      storage: { local: string; keychain: string; secretService: string; credentialManager: string };
+      replace: string;
+      replaceLabel: (name: string) => string;
+      newKey: string;
+      save: string;
+      cancel: string;
+      checking: string;
+      replacedStatus: (name: string) => string;
+      delete: string;
+      deleteLabel: (name: string) => string;
+      /** Tooltip on Delete for the default model's key. */
+      deleteDefaultHint: string;
+      deleteConfirm: (name: string) => string;
+      /** Deleting also removes the models that use the key. */
+      deleteConfirmModels: (name: string, count: number) => string;
+      deletedStatus: (name: string) => string;
+      errors: { delete: string };
+    };
   };
   titlebar: {
     hideLeftPanel: string;
@@ -1331,6 +1573,11 @@ export interface AppCopy {
     attachmentSizeLimit: (names: string, limit: string) => string;
     reconnecting: string;
     reconnectingShort: string;
+    agentStopped: string;
+    agentRestarting: string;
+    agentRestartFailed: string;
+    agentStart: string;
+    agentStartFailed: string;
     dashboardLoading: string;
     dashboardFailed: string;
     dashboardRetry: string;

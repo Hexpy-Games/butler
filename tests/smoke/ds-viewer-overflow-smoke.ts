@@ -12,9 +12,10 @@ import { createNativeAppServer } from "../support/native-app-server.ts";
 // Portaled overlays render outside the cell and are not checked here. A Grid
 // (`[data-columns]`) must never be wider than itself: its tracks shrink with
 // the container whatever the content. A keyboard-focused NativeSelect rings
-// its control box only, never the chevron. Foundations chapters are audited
-// the same way (specimens, theme panes) plus page-level sideways scroll, at
-// the run width and at 375.
+// its control box only, never the chevron. No item page scrolls sideways (a
+// positioned part escaping a scrolling cell widens the page scroller).
+// Foundations chapters are audited the same way (specimens, theme panes) plus
+// page-level sideways scroll, at the run width and at 375.
 // `bun tests/smoke/ds-viewer-overflow-smoke.ts [ItemName|foundations/<chapter>...]` narrows the run.
 
 const uiRoot = resolve(process.cwd(), "packages", "butler-app", "client", "ui", "dist");
@@ -181,13 +182,14 @@ try {
   for (const run of runs) {
     const runLabel = `${run.width} ${run.colorScheme} chrome`;
     const page = await browser.newPage({ viewport: { width: run.width, height: 1000 }, colorScheme: run.colorScheme, deviceScaleFactor: 1 });
+    await server.signIn(page);
     const items = await itemIds(page, server.url);
     for (const [name, id] of items) {
       if (only.size && !only.has(name)) continue;
       await page.goto(viewerUrl(server.url, { page: id, theme: "side-by-side", motion: "reduced" }), { waitUntil: "networkidle" });
       await page.locator(`[data-ds-detail="${name}"] [data-ds-examples]`).waitFor({ state: "visible" });
       await waitForLayout(page);
-      for (const found of await page.evaluate(auditPage, { tolerance: TOLERANCE, pageScroll: false })) offenders.push({ item: name, run: runLabel, ...found });
+      for (const found of await page.evaluate(auditPage, { tolerance: TOLERANCE, pageScroll: true })) offenders.push({ item: name, run: runLabel, ...found });
       if (name === "NativeSelect") {
         for (const found of await auditNativeSelectFocus(page)) offenders.push({ item: name, run: runLabel, ...found });
       }

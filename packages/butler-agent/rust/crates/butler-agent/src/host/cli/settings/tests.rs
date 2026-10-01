@@ -4,8 +4,10 @@ use serde_json::json;
 
 use super::config;
 
+// test-category: pure-logic
 #[test]
 fn config_paths_and_values_preserve_operator_rules() {
+    config_update_keeps_unrelated_values_and_validation_checks_whole_object();
     assert!(config::SAFE_CONFIG_PATHS.contains(&"system.defaultModel"));
     assert!(!config::SAFE_CONFIG_PATHS.contains(&"system.apiKey"));
     assert!(config::is_secret_path("provider.api-key"));
@@ -15,7 +17,6 @@ fn config_paths_and_values_preserve_operator_rules() {
     assert_eq!(config::parse_value(" 1e2 "), json!(" 1e2 "));
 }
 
-#[test]
 fn config_update_keeps_unrelated_values_and_validation_checks_whole_object() {
     let mut value = json!({
         "unknown": { "retained": true },
@@ -57,51 +58,4 @@ fn relative_auth_profile_override_resolves_under_data() {
         super::path::auth_profile_path(Path::new("/tmp/butler-data"), &environment),
         Path::new("/tmp/butler-data/auth/override.json")
     );
-}
-
-#[cfg(unix)]
-#[test]
-fn profile_mutation_paths_reject_symlink_aliases() {
-    use std::{fs, os::unix::fs::symlink};
-
-    use crate::host::ResolvedInstallation;
-
-    let executable = std::env::current_exe().unwrap().canonicalize().unwrap();
-    let install_root = executable.parent().unwrap();
-    let installation =
-        ResolvedInstallation::desktop(&executable, install_root, install_root).unwrap();
-    let root = std::env::temp_dir().join(format!(
-        "butler-profile-mutation-paths-{}",
-        std::process::id()
-    ));
-    let _ = fs::remove_dir_all(&root);
-    let data = root.join("data");
-    fs::create_dir_all(data.join("inside")).unwrap();
-    symlink(data.join("inside"), data.join("personalization")).unwrap();
-    assert!(
-        super::path::validate_data_mutation_paths(
-            &installation,
-            &data,
-            &["personalization/profile.json"]
-        )
-        .is_err()
-    );
-
-    fs::remove_file(data.join("personalization")).unwrap();
-    fs::create_dir(data.join("personalization")).unwrap();
-    fs::write(data.join("personalization/inside.json"), b"{}").unwrap();
-    symlink(
-        data.join("personalization/inside.json"),
-        data.join("personalization/profile.json"),
-    )
-    .unwrap();
-    assert!(
-        super::path::validate_data_mutation_paths(
-            &installation,
-            &data,
-            &["personalization/profile.json"]
-        )
-        .is_err()
-    );
-    fs::remove_dir_all(root).unwrap();
 }

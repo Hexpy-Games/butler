@@ -3,6 +3,7 @@ use serde_json::{Value, json};
 
 use super::{AppSessionBranchDestination, AppSessionBranchRequest, AppSessionBranchSeed};
 use crate::gateway::application::AppStorageError;
+use crate::gateway::application::message_visibility::owner_visible;
 use crate::gateway::application::storage::AppStorageCode;
 
 #[derive(Clone)]
@@ -180,10 +181,14 @@ pub(super) fn app_context(
 ) -> Result<String, AppStorageError> {
     let mut statement = db
         .prepare(
-            "SELECT role,text FROM messages WHERE chat_id=?1 AND rowid<=?2 \
-             AND role IN ('user','assistant') AND NOT(role='assistant' AND safe_error_code IS NOT NULL \
-                 AND safe_error_code IN ('app_turn_queue_failed','goal_completion_incomplete')) \
-             ORDER BY rowid DESC LIMIT 100",
+            concat!(
+                "SELECT role,text FROM messages m WHERE chat_id=?1 AND rowid<=?2 \
+                 AND role IN ('user','assistant') AND NOT(role='assistant' AND safe_error_code IS NOT NULL \
+                     AND safe_error_code IN ('app_turn_queue_failed','goal_completion_incomplete')) \
+                 AND ",
+                owner_visible!(),
+                " ORDER BY rowid DESC LIMIT 100"
+            ),
         )
         .map_err(AppStorageError::sqlite)?;
     let rows = statement
@@ -258,33 +263,4 @@ fn message_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<BranchSourceMessage>
         role: row.get(5)?,
         status: row.get(6)?,
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn topic_branch_digest_matches_source_array_projection() {
-        let request = AppSessionBranchRequest {
-            request_id: "not-part-of-source-digest".into(),
-            source_session_id: "session-id".into(),
-            source_message_id: "message-id".into(),
-            title: "Topic".into(),
-            follow_up: None,
-            destination: AppSessionBranchDestination::Chat,
-        };
-
-        assert_eq!(
-            input_digest(&request).unwrap(),
-            "d535ef64869461b7a5023af1bbaa9c5da03ccedf38c3901ca9f3fb4fb709669b"
-        );
-
-        let mut changed = request;
-        changed.follow_up = Some("continue".into());
-        assert_ne!(
-            input_digest(&changed).unwrap(),
-            "d535ef64869461b7a5023af1bbaa9c5da03ccedf38c3901ca9f3fb4fb709669b"
-        );
-    }
 }

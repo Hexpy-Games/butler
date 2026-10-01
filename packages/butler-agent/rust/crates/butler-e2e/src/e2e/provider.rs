@@ -54,6 +54,9 @@ enum Mode {
         meta: Meta,
         client: reqwest::Client,
         out_dir: std::path::PathBuf,
+        /// The extended cassette: requests it has a recording for are
+        /// replayed from it instead of reaching the upstream.
+        base: Option<Box<Cassette>>,
     },
 }
 
@@ -68,6 +71,7 @@ struct State {
     served: Mutex<u32>,
     inflight: std::sync::atomic::AtomicUsize,
     library: Mutex<Vec<(String, ResponseRecord)>>,
+    requests: Mutex<Vec<Value>>,
 }
 
 pub struct Provider {
@@ -93,26 +97,30 @@ impl Provider {
     }
 
     /// Record mode; the cassette is written to `out_dir` (default: the
-    /// committed cassette root).
+    /// committed cassette root). With `base`, requests the base cassette has
+    /// a recording for are replayed from it and only the rest is recorded.
     pub async fn record(
         upstream: String,
         meta: Meta,
         placeholders: Placeholders,
         out_dir: Option<std::path::PathBuf>,
+        base: Option<Cassette>,
     ) -> Result<Self, HarnessError> {
         let out_dir = out_dir.unwrap_or_else(|| cassette::root().join(&meta.scenario));
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(600))
             .build()?;
+        let count = base.as_ref().map_or(0, |base| base.exchanges.len());
         Self::serve(
             Mode::Record {
                 upstream,
                 meta,
                 client,
                 out_dir,
+                base: base.map(Box::new),
             },
             placeholders,
-            0,
+            count,
         )
         .await
     }
@@ -135,6 +143,7 @@ impl Provider {
             served: Mutex::new(0),
             inflight: std::sync::atomic::AtomicUsize::new(0),
             library: Mutex::new(Vec::new()),
+            requests: Mutex::new(Vec::new()),
         });
         let shared = state.clone();
         let app = axum::Router::new().fallback(move |request: Request<Body>| {
@@ -219,6 +228,11 @@ impl Provider {
         *lock(&self.state.served)
     }
 
+    /// In-memory request snapshots for public-path E2E assertions.
+    pub fn requests(&self) -> Vec<Value> {
+        lock(&self.state.requests).clone()
+    }
+
     /// Replay: fails on unmatched requests. Record: waits for in-flight
     /// exchanges (bounded) and writes the cassette.
     pub async fn finish(mut self) -> Result<(), HarnessError> {
@@ -279,6 +293,38 @@ impl Drop for Provider {
     }
 }
 
+/// Serves the recording for `key` from `cassette` (the n-th identical request
+/// gets the n-th recording; the last one repeats with re-minted ids), or
+/// `None` when the cassette has no recording for it.
+fn replay_recorded(
+    state: &State,
+    cassette: &Cassette,
+    key: &cassette::MatchKey,
+) -> Option<Response<Body>> {
+    let candidates: Vec<usize> = cassette
+        .exchanges
+        .iter()
+        .enumerate()
+        .filter(|(_, exchange)| exchange.request.key == *key)
+        .map(|(index, _)| index)
+        .collect();
+    let first = *candidates.first()?;
+    let hit = {
+        let mut hits = lock(&state.hits);
+        let seen = hits[first];
+        hits[first] += 1;
+        seen as usize
+    };
+    let index = candidates[hit.min(candidates.len() - 1)];
+    let fault = take_fault(state, Some(index), key);
+    let reserve = (hit + 1).saturating_sub(candidates.len());
+    let mut response = cassette.exchanges[index].response.clone();
+    if reserve > 0 {
+        remint_ids(&mut response, reserve);
+    }
+    Some(replay(state, &response, fault))
+}
+
 async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
     *lock(&state.served) += 1;
     let (parts, body) = request.into_parts();
@@ -287,48 +333,41 @@ async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
         .await
         .unwrap_or_default();
     let json: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    if matches!(&state.mode, Mode::Replay(_)) {
+        lock(&state.requests).push(json.clone());
+    }
     learn_echo_ids(&state, &String::from_utf8_lossy(&bytes));
     let key = matching::key(&path, &json, &lock(&state.placeholders));
     match &state.mode {
         Mode::Replay(cassette) => {
-            let candidates: Vec<usize> = cassette
-                .exchanges
-                .iter()
-                .enumerate()
-                .filter(|(_, exchange)| exchange.request.key == key)
-                .map(|(index, _)| index)
-                .collect();
-            let Some(&first) = candidates.first() else {
-                // A declared stall may target a request whose live round was
-                // cut off by a crash during recording: hold it open, answer nothing.
-                if let Some((_, Transform::StallAfter(0))) = take_fault(&state, None, &key) {
-                    return replay(
-                        &state,
-                        &ResponseRecord {
-                            status: 200,
-                            headers: Vec::new(),
-                            chunks: Vec::new(),
-                        },
-                        Some((usize::MAX, Transform::StallAfter(0))),
-                    );
-                }
-                lock(&state.misses).push(serde_json::to_string(&key).unwrap_or_default());
-                return plain(501, "HARNESS_ERROR: no recording matches this request");
-            };
-            let hit = {
-                let mut hits = lock(&state.hits);
-                let seen = hits[first];
-                hits[first] += 1;
-                seen as usize
-            };
-            let index = candidates[hit.min(candidates.len() - 1)];
-            let fault = take_fault(&state, Some(index), &key);
-            let reserve = (hit + 1).saturating_sub(candidates.len());
-            let mut response = cassette.exchanges[index].response.clone();
-            if reserve > 0 {
-                remint_ids(&mut response, reserve);
+            if let Some(response) = replay_recorded(&state, cassette, &key) {
+                return response;
             }
-            replay(&state, &response, fault)
+            // A declared stall may target a request whose live round was
+            // cut off by a crash during recording: hold it open, answer nothing.
+            if let Some((_, Transform::StallAfter(0))) = take_fault(&state, None, &key) {
+                return replay(
+                    &state,
+                    &ResponseRecord {
+                        status: 200,
+                        headers: Vec::new(),
+                        chunks: Vec::new(),
+                    },
+                    Some((usize::MAX, Transform::StallAfter(0))),
+                );
+            }
+            lock(&state.misses).push(serde_json::to_string(&key).unwrap_or_default());
+            plain(501, "HARNESS_ERROR: no recording matches this request")
+        }
+        Mode::Record {
+            base: Some(base), ..
+        } if base
+            .exchanges
+            .iter()
+            .any(|exchange| exchange.request.key == key) =>
+        {
+            replay_recorded(&state, base, &key)
+                .unwrap_or_else(|| plain(501, "HARNESS_ERROR: base recording lost"))
         }
         Mode::Record {
             upstream, client, ..

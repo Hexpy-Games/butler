@@ -4,8 +4,8 @@ use butler_core::tool_protocol::ToolName;
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
+use crate::host::automation::client::ScheduleClient;
 use butler_core::json::JsonDocument;
-use butler_runtime::operations::AutomationService;
 use butler_turn::btcc::{
     AdapterOutcome, BtccError, EffectAdapter, EffectAdapterError, EffectFailure, EffectFuture,
     PlanBinding,
@@ -16,7 +16,12 @@ use super::super::GuidedTools;
 pub(super) fn supports(name: &str) -> bool {
     matches!(
         ToolName::parse(name),
-        Some(ToolName::CreateAutomation | ToolName::DeleteAutomation | ToolName::RunDueAutomations)
+        Some(
+            ToolName::CreateAutomation
+                | ToolName::UpdateAutomation
+                | ToolName::DeleteAutomation
+                | ToolName::RunDueAutomations
+        )
     )
 }
 
@@ -34,8 +39,9 @@ pub(super) fn prepare(
                 .filter(|value| !value.trim().is_empty())
                 .unwrap_or(occurrence)
         ),
-        "delete_automation" => format!(
-            "automation:delete:{}",
+        "update_automation" | "delete_automation" => format!(
+            "automation:{}:{}",
+            call.name,
             call.arguments
                 .get("id")
                 .and_then(Value::as_str)
@@ -58,8 +64,12 @@ pub(super) fn prepare(
     };
     let input = Value::Object(call.arguments.clone());
     let adapter = AutomationEffect {
-        service: owner.automations.clone(),
-        session_id: owner.binding.source_session_id.clone(),
+        endpoint: owner.app_endpoint.clone(),
+        session_id: owner
+            .binding
+            .app_session_id
+            .clone()
+            .unwrap_or_else(|| owner.binding.source_session_id.clone()),
         name: call.name.clone(),
         target: target.clone(),
     };
@@ -67,7 +77,7 @@ pub(super) fn prepare(
 }
 
 struct AutomationEffect {
-    service: Arc<AutomationService>,
+    endpoint: Arc<crate::host::ActiveAppEndpoint>,
     session_id: String,
     name: String,
     target: String,
@@ -93,7 +103,7 @@ impl EffectAdapter for AutomationEffect {
     fn sanitize_target(&self, target: &str) -> Result<String, EffectFailure> {
         self.normalize_target(target)?;
         Ok(match self.name.as_str() {
-            "delete_automation" => self.target.clone(),
+            "update_automation" | "delete_automation" => self.target.clone(),
             "run_due_automations" => "automations:due".into(),
             _ => "automations".into(),
         })
@@ -126,11 +136,11 @@ impl EffectAdapter for AutomationEffect {
                 .as_object()
                 .cloned()
                 .ok_or_else(|| policy("automation_input_invalid"))?;
-            match self
-                .service
-                .execute(&self.name, args, &self.session_id)
-                .await
-            {
+            let result = match ScheduleClient::active(&self.endpoint) {
+                Ok(client) => client.tool(&self.name, args, &self.session_id).await,
+                Err(error) => Err(error),
+            };
+            match result {
                 Ok(result) => JsonDocument::from_value(&result)
                     .map(AdapterOutcome::Applied)
                     .map_err(|error| EffectFailure::adapter(error.to_string()).with_source(error)),

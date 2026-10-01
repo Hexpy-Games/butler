@@ -1,0 +1,224 @@
+/* 01 Color hero: the swatch field (stickers on the page, the whole frame in
+   the other theme behind a wipe window), the topic groups and the poster's
+   product grid. Canvas px (see ../shared/grid.ts). */
+
+/* ---- The swatch field: stickers straight on the page ---- */
+
+/* Wide: the field is as wide as its names need (the finale packs it by
+   that width), so no token name ever wraps. */
+.field {
+  position: relative;
+  display: grid;
+  justify-self: start;
+  align-content: center;
+  inline-size: max-content;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, max-content);
+  gap: var(--space-2xl) var(--space-2xl);
+  align-content: space-evenly;
+}
+
+.cell {
+  display: grid;
+  justify-items: center;
+  row-gap: var(--space-xs);
+  min-width: 0;
+}
+
+/* A sticker in two halves; the right half turns about the centre line
+   (curled up while it comes down) and flattens as it presses on. */
+.sticker {
+  position: relative;
+  display: block;
+  inline-size: var(--space-4xl);
+  block-size: var(--space-4xl);
+  perspective: calc(var(--space-4xl) * 3);
+}
+
+.half {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  overflow: hidden;
+  inline-size: 50%;
+}
+
+.half[data-half="l"] {
+  left: 0;
+}
+
+.half[data-half="r"] {
+  left: 50%;
+  transform-origin: 0 50%;
+}
+
+.disc {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  inline-size: 200%;
+  block-size: 100%;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--c);
+}
+
+.half[data-half="r"] .disc {
+  left: -100%;
+}
+
+.flat {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--c);
+}
+
+.curl {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--text-primary) 32%, transparent),
+    transparent 85%
+  );
+  opacity: 0;
+}
+
+/* A token name is one unbroken line; a narrow grid sets all its names
+   smaller together (--label-fit, shared/fitLabels.ts). */
+.name {
+  display: block;
+  max-inline-size: 100%;
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: calc(var(--font-size-1) * var(--label-fit, 1));
+  line-height: var(--line-height-tight);
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* The whole frame in the other theme, through a window as large as the largest
+   frame around the field; a line rides the window's leading edge (there and
+   back). The still poster is the page's own theme (window closed). */
+.wipe {
+  position: absolute;
+  inset: calc(var(--canvas-h) * -1.5) calc(var(--canvas-w) * -1.5);
+  overflow: hidden;
+  transform: translateX(-100%);
+}
+
+.wipeIn {
+  position: absolute;
+  inset: 0;
+  transform: translateX(100%);
+}
+
+.other {
+  position: absolute;
+  inset: 0;
+  background: var(--color-surface-base);
+  color: var(--text-primary);
+}
+
+.otherField {
+  position: absolute;
+  inset: calc(var(--canvas-h) * 1.5) calc(var(--canvas-w) * 1.5);
+  display: grid;
+  align-content: center;
+}
+
+.wipeLine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  inline-size: 2px;
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 var(--space-md)
+    color-mix(in srgb, var(--accent) 45%, transparent);
+  opacity: 0;
+}
+
+.wipeLine[data-edge="r"] {
+  right: 0;
+}
+
+.wipeLine[data-edge="l"] {
+  left: 0;
+}
+
+/* ---- Topic groups ---- */
+
+.row,
+.switchRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.switchRow {
+  flex-wrap: nowrap;
+}
+
+.column {
+  display: grid;
+  row-gap: var(--space-sm);
+}
+
+/* Wide: the four topics in one column as wide as its widest component
+   (the finale sets it right of the swatch field, pack.ts). */
+.product {
+  grid-template-areas:
+    "contrast"
+    "action"
+    "status"
+    "states";
+  grid-template-columns: max-content;
+  align-content: start;
+  gap: var(--space-2xl);
+}
+
+/* Tall: the field fills the portrait column, two swatches to a row, each
+   sticker beside its name. */
+[data-layout="tall"] .field {
+  justify-self: stretch;
+  inline-size: auto;
+}
+
+[data-layout="tall"] .grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-xl) var(--space-md);
+}
+
+[data-layout="tall"] .cell {
+  grid-template-columns: auto minmax(0, 1fr);
+  place-items: center start;
+  column-gap: var(--space-sm);
+}
+
+[data-layout="tall"] .sticker {
+  inline-size: var(--space-2xl);
+  block-size: var(--space-2xl);
+}
+
+[data-layout="tall"] .name {
+  text-align: start;
+}
+
+[data-layout="tall"] .product {
+  grid-template-areas:
+    "contrast"
+    "action"
+    "status"
+    "states";
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  row-gap: var(--space-lg);
+}

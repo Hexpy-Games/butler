@@ -7,7 +7,7 @@ use std::sync::Arc;
 use axum::{
     body::Body,
     extract::{FromRequest, Multipart, multipart::MultipartError},
-    http::{Method, Request, StatusCode, header},
+    http::{HeaderValue, Method, Request, StatusCode, header},
     response::Response,
 };
 use bytes::BytesMut;
@@ -21,6 +21,14 @@ use butler_core::public_text::trim_js_whitespace;
 // Retain one extra byte to preserve App's size-error ordering after owner checks.
 // The rest of the multipart body is still parsed, but never retained as a file.
 const UPLOAD_RETAIN_BYTES: usize = 10 * 1024 * 1024 + 1;
+
+pub(super) fn handles(method: &Method, path: &str) -> bool {
+    (method == Method::POST && path == "/message-files")
+        || (method == Method::GET
+            && path
+                .strip_prefix("/message-files/")
+                .is_some_and(|id| !id.is_empty() && !id.contains('/')))
+}
 
 pub(super) async fn route(
     state: Arc<HttpState>,
@@ -51,9 +59,10 @@ pub(super) async fn route(
     let id = decode_file_id(encoded)?;
     let download = state.application.download_message_file(id).await?;
     let size = download.bytes.len();
+    let rendering = FileRendering::of(&download.file.mime_type);
     let mut response = Response::new(Body::from(download.bytes));
     for (name, value) in [
-        (header::CONTENT_TYPE, download.file.mime_type),
+        (header::CONTENT_TYPE, rendering.content_type().to_owned()),
         (header::CONTENT_LENGTH, size.to_string()),
         (
             header::CONTENT_DISPOSITION,
@@ -66,7 +75,50 @@ pub(super) async fn route(
             .headers_mut()
             .insert(name, value.parse().map_err(|_| HttpError::Internal)?);
     }
+    if let FileRendering::Sandboxed(_) = rendering {
+        response.headers_mut().insert(
+            header::CONTENT_SECURITY_POLICY,
+            HeaderValue::from_static(SANDBOXED_FILE_POLICY),
+        );
+    }
     Ok(response)
+}
+
+/// Opened in a browser, a message file must never run as a page of the
+/// gateway origin, where its script would carry the browser-session cookie
+/// and pass the Origin allowlist. `sandbox` gives the document an opaque
+/// origin with scripts, forms and plugins off; `default-src 'none'` blocks
+/// every subresource. Images still display and HTML renders inert.
+const SANDBOXED_FILE_POLICY: &str = "sandbox; default-src 'none'";
+const PDF_MIME: &str = "application/pdf";
+
+/// How a browser may render a stored message file.
+#[derive(Debug, PartialEq, Eq)]
+enum FileRendering<'a> {
+    /// Exactly `application/pdf`, served under that canonical type: the
+    /// browser's PDF viewer never runs the file as a page of the gateway
+    /// origin, and the sandbox policy would disable it (it is a plugin).
+    Pdf,
+    /// Every other stored type (an upload keeps the client's Content-Type),
+    /// served as stored under [`SANDBOXED_FILE_POLICY`].
+    Sandboxed(&'a str),
+}
+
+impl<'a> FileRendering<'a> {
+    fn of(stored_mime: &'a str) -> Self {
+        if stored_mime.trim().eq_ignore_ascii_case(PDF_MIME) {
+            Self::Pdf
+        } else {
+            Self::Sandboxed(stored_mime)
+        }
+    }
+
+    fn content_type(&self) -> &'a str {
+        match self {
+            Self::Pdf => PDF_MIME,
+            Self::Sandboxed(stored) => stored,
+        }
+    }
 }
 
 async fn parse_upload(request: Request<Body>) -> Result<AppFileUpload, HttpError> {
@@ -203,21 +255,21 @@ fn decode_file_id(encoded: &str) -> Result<String, HttpError> {
     clippy::needless_pass_by_value,
     reason = "map_err/iterator adapter taking owned values"
 )]
-fn multipart_error(error: MultipartError) -> HttpError {
+pub(super) fn multipart_error(error: MultipartError) -> HttpError {
     if error.status() == StatusCode::PAYLOAD_TOO_LARGE {
         HttpError::PayloadTooLarge
     } else {
         invalid_multipart()
     }
 }
-fn invalid_multipart() -> HttpError {
+pub(super) fn invalid_multipart() -> HttpError {
     HttpError::public(
         400,
         "invalid_multipart",
         "File upload must be multipart form data.",
     )
 }
-fn file_required() -> HttpError {
+pub(super) fn file_required() -> HttpError {
     HttpError::public(400, "file_required", "A file field is required.")
 }
 fn not_found() -> HttpError {

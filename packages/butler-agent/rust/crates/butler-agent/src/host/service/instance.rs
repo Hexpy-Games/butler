@@ -1,14 +1,12 @@
 //! DATA-scoped native service ownership, process identity, and legacy fencing.
 
+use butler_platform::secure_fs::Canonical as _;
 use std::fs::{self, File, OpenOptions};
 use std::io;
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
-use nix::errno::Errno;
-use nix::fcntl::{Flock, FlockArg};
-use nix::sys::signal::{Signal, kill};
-use nix::unistd::Pid;
+use butler_platform::instance::{InstanceLock, LockError};
+use butler_platform::secure_fs;
 use serde::{Deserialize, Serialize};
 
 use crate::host::installation::ResolvedInstallation;
@@ -18,10 +16,16 @@ use crate::host::service::instance_identity::{
 
 const INSTANCE_SCHEMA: &str = "butler.native-agent-service-instance.v1";
 
+mod delivery;
 mod gateway_state;
 mod probe;
 mod record;
 mod restart;
+mod stop_intent;
+mod stopping;
+pub(crate) use delivery::{
+    StopDelivery, force_stop, remove_shutdown_flag, request_stop, shutdown_flag_path,
+};
 pub(crate) use gateway_state::mark_gateway_state;
 pub(crate) use probe::instance_lock_is_held_read_only;
 use record::{
@@ -29,6 +33,11 @@ use record::{
     write_record,
 };
 pub(crate) use restart::RestartIdentity;
+pub(crate) use stop_intent::{
+    StopIntent, StopReason, StopRequest, StopRequester, clear_stop_intent, stop_announced_for,
+    withdraw_stop_intent, write_stop_intent,
+};
+pub(crate) use stopping::{StoppingFrom, mark_stopping, revert_stopping};
 
 #[derive(Clone, Deserialize, Serialize)]
 pub(crate) struct InstanceRecord {
@@ -46,18 +55,30 @@ pub(crate) struct InstanceRecord {
     pub(crate) control_endpoint: Option<String>,
     #[serde(default)]
     pub(crate) control_token: Option<String>,
+    /// The Butler App supervises this instance through its foreground lease.
+    /// On a restart the App, not the controller, starts the replacement, with
+    /// the App's environment (gateway port, local auth, folder-selection
+    /// secret, lease). Absent in records written before this field existed.
+    #[serde(default)]
+    pub(crate) app_supervised: bool,
 }
 
+/// This process's ownership of DATA: the exclusive instance lock, held until
+/// the guard is dropped (the lock is unlocked explicitly then, and released
+/// by the host if the process dies first), and the record it published.
 pub(crate) struct InstanceGuard {
-    _lock: Flock<File>,
+    _lock: InstanceLock,
     record_path: PathBuf,
     record_update_lock_path: PathBuf,
     installation: ResolvedInstallation,
     record: InstanceRecord,
+    unclean_previous_exit: bool,
 }
 
+/// The start admission lock: one controller at a time starts, stops or
+/// restarts the instance of a DATA folder.
 pub(crate) struct AdmissionLock {
-    _lock: Flock<File>,
+    _lock: InstanceLock,
 }
 
 impl AdmissionLock {
@@ -68,42 +89,55 @@ impl AdmissionLock {
         validate_write_destinations(data_root, installation)?;
         let path = admission_lock_path(data_root);
         let file = open_lock(&path, true)?;
-        match Flock::lock(file, FlockArg::LockExclusiveNonblock) {
+        match InstanceLock::try_exclusive(file) {
             Ok(lock) => Ok(Self { _lock: lock }),
-            Err((_, Errno::EAGAIN)) => Err("service_start_admission_busy".into()),
-            Err((_, error)) => Err(format!("service_start_admission_failed: {error}").into()),
+            Err(LockError::Busy) => Err("service_start_admission_busy".into()),
+            Err(LockError::Failed(error)) => {
+                Err(format!("service_start_admission_failed: {error}").into())
+            }
         }
     }
 }
 
 impl InstanceGuard {
+    /// Takes the DATA lock and publishes a `starting` record for this process;
+    /// `app_supervised` says whether the App holds its foreground lease.
     pub(crate) fn acquire(
         data_root: &Path,
         executable: &Path,
         installation: &ResolvedInstallation,
+        app_supervised: bool,
     ) -> Result<Self, crate::host::HostError> {
         validate_write_destinations(data_root, installation)?;
+        // Where files have no owner-only mode (Windows), the DATA folder's
+        // access list keeps its secrets from other users.
+        if secure_fs::is_private(data_root) == Some(false) {
+            let _ = secure_fs::protect_folder(data_root);
+        }
         let lock_path = instance_lock_path(data_root);
         let file = open_lock(&lock_path, true)?;
-        let lock = Flock::lock(file, FlockArg::LockExclusiveNonblock).map_err(|(_, error)| {
-            if error == Errno::EAGAIN {
+        let lock = InstanceLock::try_exclusive(file).map_err(|error| match error {
+            LockError::Busy => {
                 "native_service_duplicate_writer: a service instance already owns this DATA".into()
-            } else {
-                format!("native_service_lock_failed: {error}")
             }
+            LockError::Failed(error) => format!("native_service_lock_failed: {error}"),
         })?;
 
         refuse_live_legacy_process(data_root)?;
         let record_path = instance_record_path(data_root);
-        if let Some(previous) = read_record_at(&record_path)?
-            && process_matches(&previous)?
+        let previous = read_record_at(&record_path)?;
+        if let Some(previous) = &previous
+            && process_matches(previous)?
         {
             return Err(
                 "native_service_instance_ambiguous: a recorded service process is alive without the DATA lock".into(),
             );
         }
+        let unclean_previous_exit = previous
+            .as_ref()
+            .is_some_and(|previous| !stop_announced_for(data_root, previous.pid, &previous.nonce));
 
-        let executable = executable.canonicalize().map_err(|source| {
+        let executable = executable.canonical().map_err(|source| {
             crate::host::HostError::new("native_service_executable_unavailable").with_source(source)
         })?;
         let pid = std::process::id();
@@ -127,6 +161,7 @@ impl InstanceGuard {
             ready_at: None,
             control_endpoint: None,
             control_token: None,
+            app_supervised,
         };
         let record_update_lock_path = record_update_lock_path(data_root);
         let _record_update_lock = acquire_record_update_lock(&record_update_lock_path)?;
@@ -137,6 +172,7 @@ impl InstanceGuard {
             record_update_lock_path,
             installation: installation.clone(),
             record,
+            unclean_previous_exit,
         })
     }
 
@@ -166,6 +202,11 @@ impl InstanceGuard {
         if current.state != "starting" {
             return Err("native_service_instance_ambiguous: invalid startup transition".into());
         }
+        // A new instance reaching ready ends any earlier stop or restart intent.
+        clear_stop_intent(data_root).map_err(|source| {
+            crate::host::HostError::new("native_service_instance_state_unavailable")
+                .with_source(source)
+        })?;
         current.state = "ready".into();
         current.app_enabled = app_enabled;
         current.app_endpoint = app_endpoint;
@@ -205,6 +246,15 @@ impl InstanceGuard {
         &self.record.nonce
     }
 
+    pub(crate) fn unclean_previous_exit(&self) -> bool {
+        self.unclean_previous_exit
+    }
+
+    /// Whether the App supervises this instance through its foreground lease.
+    pub(crate) fn app_supervised(&self) -> bool {
+        self.record.app_supervised
+    }
+
     pub(crate) fn restart_identity(&self) -> RestartIdentity {
         RestartIdentity {
             pid: self.record.pid,
@@ -217,23 +267,49 @@ impl InstanceGuard {
 
 impl Drop for InstanceGuard {
     fn drop(&mut self) {
-        let Some(data_root) = self.record_path.parent().and_then(Path::parent) else {
-            return;
-        };
-        if validate_write_destinations(data_root, &self.installation).is_err() {
-            return;
-        }
-        let Ok(_record_update_lock) = acquire_record_update_lock(&self.record_update_lock_path)
-        else {
-            return;
-        };
-        if read_record_at(&self.record_path)
+        release_record_at(
+            &self.record_path,
+            &self.installation,
+            &self.record.nonce,
+            true,
+        );
+    }
+}
+
+/// Release only this instance's record; the OS releases its process lock at exit.
+pub(crate) fn release_record(data_root: &Path, installation: &ResolvedInstallation, nonce: &str) {
+    release_record_at(&instance_record_path(data_root), installation, nonce, false);
+}
+
+fn release_record_at(
+    record_path: &Path,
+    installation: &ResolvedInstallation,
+    nonce: &str,
+    wait: bool,
+) {
+    let Some(data_root) = record_path.parent().and_then(Path::parent) else {
+        return;
+    };
+    if validate_write_destinations(data_root, installation).is_err() {
+        return;
+    }
+    let lock_path = record_update_lock_path(data_root);
+    let lock = if wait {
+        acquire_record_update_lock(&lock_path).ok()
+    } else {
+        open_lock(&lock_path, false)
             .ok()
-            .flatten()
-            .is_some_and(|current| current.nonce == self.record.nonce)
-        {
-            let _ = fs::remove_file(&self.record_path);
-        }
+            .and_then(|file| InstanceLock::try_exclusive(file).ok())
+    };
+    let Some(_record_update_lock) = lock else {
+        return;
+    };
+    if read_record_at(record_path)
+        .ok()
+        .flatten()
+        .is_some_and(|current| current.nonce == nonce)
+    {
+        let _ = fs::remove_file(record_path);
     }
 }
 
@@ -250,11 +326,17 @@ pub(crate) fn instance_is_locked(data_root: &Path) -> Result<bool, crate::host::
         Err(error) if error.message() == "service_lock_missing" => return Ok(false),
         Err(error) => return Err(error),
     };
-    match Flock::lock(file, FlockArg::LockExclusiveNonblock) {
+    match InstanceLock::try_exclusive(file) {
         Ok(_) => Ok(false),
-        Err((_, Errno::EAGAIN)) => Ok(true),
-        Err((_, error)) => Err(format!("service_lock_probe_failed: {error}").into()),
+        Err(LockError::Busy) => Ok(true),
+        Err(LockError::Failed(error)) => Err(format!("service_lock_probe_failed: {error}").into()),
     }
+}
+
+/// Whether the process `record` names has ended: no process has its PID, or
+/// the one that has it started at another time (the PID was reused).
+pub(crate) fn record_process_gone(record: &InstanceRecord) -> Result<bool, crate::host::HostError> {
+    Ok(process_start_identity(record.pid)?.is_none_or(|start| start != record.process_start))
 }
 
 /// Returns true only when the current process still matches the persisted OS identity.
@@ -271,30 +353,6 @@ pub(crate) fn process_matches(record: &InstanceRecord) -> Result<bool, crate::ho
     Ok(start == record.process_start && executable_matches(&record.executable, &executable))
 }
 
-pub(crate) fn mark_stopping(
-    data_root: &Path,
-    nonce: &str,
-    installation: &ResolvedInstallation,
-) -> Result<(), crate::host::HostError> {
-    validate_write_destinations(data_root, installation)?;
-    let path = instance_record_path(data_root);
-    let _record_update_lock = acquire_record_update_lock(&record_update_lock_path(data_root))?;
-    let mut record = read_record_at(&path)?.ok_or_else(|| {
-        "native_service_instance_ambiguous: instance record is missing".to_owned()
-    })?;
-    if record.nonce != nonce {
-        return Err("native_service_instance_changed".into());
-    }
-    if record.state == "stopping" {
-        return Ok(());
-    }
-    if !matches!(record.state.as_str(), "starting" | "ready") {
-        return Err("native_service_instance_ambiguous: invalid stop transition".into());
-    }
-    record.state = "stopping".into();
-    write_record(&path, &record)
-}
-
 pub(crate) fn validate_write_destinations(
     data_root: &Path,
     installation: &ResolvedInstallation,
@@ -307,25 +365,6 @@ pub(crate) fn validate_write_destinations(
             })?;
     }
     Ok(())
-}
-
-pub(crate) fn send_signal(
-    record: &InstanceRecord,
-    signal: Signal,
-) -> Result<(), crate::host::HostError> {
-    let pid = i32::try_from(record.pid)
-        .ok()
-        .filter(|pid| *pid > 0)
-        .ok_or_else(|| "native_service_instance_ambiguous: invalid process id".to_owned())?;
-    kill(Pid::from_raw(pid), signal)
-        .map_err(|error| {
-            if error == Errno::ESRCH {
-                "native_service_process_exited".into()
-            } else {
-                format!("native_service_signal_failed: {error}")
-            }
-        })
-        .map_err(crate::host::HostError::from)
 }
 
 pub(crate) fn refuse_live_legacy_process(data_root: &Path) -> Result<(), crate::host::HostError> {
@@ -341,11 +380,12 @@ pub(crate) fn refuse_live_legacy_process(data_root: &Path) -> Result<(), crate::
         let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|source| {
             crate::host::HostError::new("native_service_legacy_state_ambiguous").with_source(source)
         })?;
+        // Positive and within the host's signed process ids.
         let pid = value
             .get("pid")
             .and_then(serde_json::Value::as_u64)
-            .filter(|pid| *pid > 0)
-            .and_then(|pid| i32::try_from(pid).ok())
+            .filter(|pid| *pid > 0 && i32::try_from(*pid).is_ok())
+            .and_then(|pid| u32::try_from(pid).ok())
             .ok_or_else(|| "native_service_legacy_state_ambiguous".to_owned())?;
         if process_is_alive(pid)? {
             return Err(format!(
@@ -364,17 +404,13 @@ fn open_lock(path: &Path, create: bool) -> Result<File, crate::host::HostError> 
         .parent()
         .ok_or_else(|| "service_lock_path_invalid".to_owned())?;
     if create {
-        fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(parent)
-            .map_err(|source| {
-                crate::host::HostError::new("service_lock_directory_unavailable")
-                    .with_source(source)
-            })?;
+        secure_fs::create_private_dir_all(parent).map_err(|source| {
+            crate::host::HostError::new("service_lock_directory_unavailable").with_source(source)
+        })?;
     }
     let mut options = OpenOptions::new();
-    options.read(true).write(true).mode(0o600);
+    options.read(true).write(true);
+    let _ = secure_fs::owner_only(&mut options);
     if create {
         options.create(true);
     }
@@ -406,4 +442,4 @@ fn admission_lock_path(data_root: &Path) -> PathBuf {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

@@ -7,15 +7,14 @@ use axum::{
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use std::sync::Arc;
-use subtle::ConstantTimeEq;
 
 use super::{
     HttpError, HttpState, MAX_REQUEST_BODY_SIZE, json as response_json, query, read_body_with_limit,
 };
 use crate::gateway::{
     AppSessionViewPage, app_session_hint,
+    crypto::{constant_time_eq, hmac_sha256_base64},
     protocol::{APP_PROTOCOL_VERSION, ApiEnvelope},
 };
 
@@ -240,7 +239,7 @@ fn encode_cursor(session_id: &str, cursor: u64, secret: &str) -> Result<String, 
             )
         })?,
     );
-    let signature = URL_SAFE_NO_PAD.encode(hmac_sha256(secret.as_bytes(), payload.as_bytes()));
+    let signature = hmac_sha256_base64(secret.as_bytes(), payload.as_bytes());
     Ok(format!("{payload}.{signature}"))
 }
 
@@ -249,10 +248,8 @@ fn decode_cursor(token: &str, session_id: &str, secret: &str) -> Result<u64, Htt
     let (Some(payload), Some(signature), None) = (parts.next(), parts.next(), parts.next()) else {
         return Err(resync());
     };
-    let expected = URL_SAFE_NO_PAD.encode(hmac_sha256(secret.as_bytes(), payload.as_bytes()));
-    if expected.len() != signature.len()
-        || !bool::from(expected.as_bytes().ct_eq(signature.as_bytes()))
-    {
+    let expected = hmac_sha256_base64(secret.as_bytes(), payload.as_bytes());
+    if !constant_time_eq(expected.as_bytes(), signature.as_bytes()) {
         return Err(resync());
     }
     let decoded = URL_SAFE_NO_PAD.decode(payload).map_err(|_| resync())?;
@@ -266,22 +263,6 @@ fn decode_cursor(token: &str, session_id: &str, secret: &str) -> Result<u64, Htt
         return Err(resync());
     }
     Ok(cursor)
-}
-
-fn hmac_sha256(secret: &[u8], payload: &[u8]) -> [u8; 32] {
-    let mut key = [0u8; 64];
-    if secret.len() > key.len() {
-        key[..32].copy_from_slice(&Sha256::digest(secret));
-    } else {
-        key[..secret.len()].copy_from_slice(secret);
-    }
-    let mut inner = Sha256::new();
-    let mut outer = Sha256::new();
-    inner.update(key.map(|byte| byte ^ 0x36));
-    inner.update(payload);
-    outer.update(key.map(|byte| byte ^ 0x5c));
-    outer.update(inner.finalize());
-    outer.finalize().into()
 }
 
 fn current_ms() -> u64 {
@@ -304,6 +285,9 @@ fn resync() -> HttpError {
 mod tests {
     use super::*;
 
+    /// Security boundary: session cursors are signed and bound to their session;
+    /// tampered or cross-session cursors are refused.
+    // test-category: security
     #[test]
     fn session_cursor_is_signed_and_bound_to_session() {
         let Ok(token) = encode_cursor("session-a", 42, "secret") else {

@@ -1,3 +1,5 @@
+//! Generation vector rows and the LanceDB store they are written to.
+
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -5,7 +7,8 @@ use std::{
 
 use crate::cognition::CognitionCode;
 use arrow_array::{
-    Array, ArrayRef, FixedSizeListArray, RecordBatch, StringArray, types::Float32Type,
+    Array, ArrayRef, FixedSizeListArray, RecordBatch, RecordBatchIterator, StringArray,
+    types::Float32Type,
 };
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use futures_util::TryStreamExt;
@@ -19,13 +22,17 @@ use sha2::{Digest, Sha256};
 use crate::{
     cognition::{
         CognitionError, CognitionPathEnvironment, CognitionResult, MemoryGenerationHandle,
-        MemoryGenerationTarget, assert_mutation_authority, ensure_data_authority, lance_store,
+        MemoryGenerationTarget, assert_mutation_authority, ensure_data_authority,
+        lance_maintenance, lance_store,
     },
     coordination::CognitionWriteLease,
 };
 
 const TABLE: &str = "butler_memory";
 const DIMENSION: usize = 1024;
+/// Rows one upsert may carry. A rebuild writes hundreds at a time; a live
+/// write is a handful.
+pub(crate) const MAX_ROWS: usize = 1024;
 
 #[derive(Clone)]
 pub(crate) struct GenerationVectorRow {
@@ -55,22 +62,28 @@ impl GenerationVectorRow {
         text: &str,
         version: &str,
     ) -> (String, String) {
-        let chunk = digest(&json!(["embedding-chunk", revision, 0, text]));
-        let key = digest(&json!([
-            "memory-vector",
-            generation,
-            kind,
-            owner,
-            revision,
-            chunk,
-            version
-        ]));
+        let chunk = digest(&json!(["embedding-chunk", revision, 0, text]).to_string());
+        let key = digest(
+            &json!([
+                "memory-vector",
+                generation,
+                kind,
+                owner,
+                revision,
+                chunk,
+                version
+            ])
+            .to_string(),
+        );
         (chunk, key)
     }
 }
 
-fn digest(value: &serde_json::Value) -> String {
-    format!("{:x}", Sha256::digest(value.to_string().as_bytes()))
+/// SHA-256 of an identity's compact JSON array. The array is encoded with
+/// `Value`'s `Display`, which cannot fail, so the hash always covers every
+/// part.
+fn digest(json: &str) -> String {
+    format!("{:x}", Sha256::digest(json.as_bytes()))
 }
 
 pub(crate) struct GenerationVectorStore {
@@ -97,16 +110,7 @@ impl GenerationVectorStore {
             .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
         async move {
             lease_check?;
-            if rows.is_empty()
-                || rows.len() > 4
-                || rows.iter().any(|row| {
-                    row.generation != generation.generation_id
-                        || row.vector.len() != DIMENSION
-                        || row.vector.iter().any(|value| !value.is_finite())
-                        || row.vector_key.len() != 64
-                        || row.embedding_chunk_id.len() != 64
-                })
-            {
+            if !valid_rows(rows, generation) {
                 return Err(error(CognitionCode::MemoryVectorRowsInvalid));
             }
             assert_mutation_authority(&self.data_root, &self.paths, target, generation)?;
@@ -125,36 +129,20 @@ impl GenerationVectorStore {
                     &table_root.join("_deletions"),
                 ],
             )?;
-            let connection = lance_store::connect(&root).await.map_err(|source| {
-                error(CognitionCode::MemoryVectorStoreUnavailable).with_source(source)
-            })?;
             let schema = schema();
-            let table = match lance_store::open(&connection, TABLE).await {
-                Ok(table) => table,
-                Err(lancedb::Error::TableNotFound { .. }) => connection
-                    .create_empty_table(TABLE, schema.clone())
-                    .execute()
-                    .await
-                    .map_err(|source| {
-                        error(CognitionCode::MemoryVectorStoreUnavailable).with_source(source)
-                    })?,
-                Err(_) => return Err(error(CognitionCode::MemoryVectorStoreUnavailable)),
-            };
+            let table = open_or_create(&root, &schema).await?;
             check_schema(&table, &schema).await?;
-            let predicate = format!(
-                "vector_key IN ({})",
-                rows.iter()
-                    .map(|row| format!("'{}'", row.vector_key))
-                    .collect::<Vec<_>>()
-                    .join(",")
-            );
+            // One versioned write replaces the rows of any key already stored.
             // Started SDK writes are awaited to completion while the caller holds the lease.
-            table.delete(&predicate).await.map_err(|source| {
-                error(CognitionCode::MemoryVectorStoreUnavailable).with_source(source)
-            })?;
-            table
-                .add(batch(rows, schema)?)
-                .execute()
+            let mut upsert = table.merge_insert(&["vector_key"]);
+            upsert
+                .when_matched_update_all(None)
+                .when_not_matched_insert_all();
+            upsert
+                .execute(Box::new(RecordBatchIterator::new(
+                    [Ok(batch(rows, schema.clone())?)],
+                    schema,
+                )))
                 .await
                 .map_err(|source| {
                     error(CognitionCode::MemoryVectorStoreUnavailable).with_source(source)
@@ -162,9 +150,24 @@ impl GenerationVectorStore {
             let receipt = persisted_receipt_in_table(&table, generation, rows)
                 .await?
                 .ok_or_else(|| error(CognitionCode::MemoryVectorReceiptMismatch))?;
+            // A maintenance failure never fails a write that already landed.
+            let _ = lance_maintenance::compact_if_fragmented(&table).await;
             Ok(receipt)
         }
     }
+}
+
+/// One to [`MAX_ROWS`] rows of this generation, each with a finite vector of
+/// the model dimension and full-length keys.
+fn valid_rows(rows: &[GenerationVectorRow], generation: &MemoryGenerationHandle) -> bool {
+    (1..=MAX_ROWS).contains(&rows.len())
+        && rows.iter().all(|row| {
+            row.generation == generation.generation_id
+                && row.vector.len() == DIMENSION
+                && row.vector.iter().all(|value| value.is_finite())
+                && row.vector_key.len() == 64
+                && row.embedding_chunk_id.len() == 64
+        })
 }
 
 pub(crate) async fn persisted_receipt(
@@ -183,10 +186,7 @@ pub(crate) async fn persisted_receipt(
     if !root.exists() {
         return Ok(None);
     }
-    let connection = lance_store::connect(&root)
-        .await
-        .map_err(|source| error(CognitionCode::MemoryVectorStoreUnavailable).with_source(source))?;
-    let table = match lance_store::open(&connection, TABLE).await {
+    let table = match lance_store::shared(&root, TABLE).await {
         Ok(table) => table,
         Err(lancedb::Error::TableNotFound { .. }) => return Ok(None),
         Err(_) => return Err(error(CognitionCode::MemoryVectorStoreUnavailable)),
@@ -255,7 +255,9 @@ async fn persisted_receipt_in_table(
         return Ok(None);
     }
     seen.sort();
-    let version = &rows[0].embedding_version;
+    let Some(version) = rows.first().map(|row| &row.embedding_version) else {
+        return Ok(None);
+    };
     if rows.iter().any(|row| row.embedding_version != *version) {
         return Ok(None);
     }
@@ -299,6 +301,26 @@ fn schema() -> SchemaRef {
         false,
     ));
     Arc::new(Schema::new(fields))
+}
+
+/// The generation's table, created empty on first use.
+async fn open_or_create(root: &Path, schema: &SchemaRef) -> CognitionResult<Table> {
+    let unavailable =
+        |source| error(CognitionCode::MemoryVectorStoreUnavailable).with_source(source);
+    match lance_store::shared(root, TABLE).await {
+        Ok(table) => Ok(table),
+        Err(lancedb::Error::TableNotFound { .. }) => {
+            lance_store::connect(root)
+                .await
+                .map_err(unavailable)?
+                .create_empty_table(TABLE, schema.clone())
+                .execute()
+                .await
+                .map_err(unavailable)?;
+            lance_store::shared(root, TABLE).await.map_err(unavailable)
+        }
+        Err(_) => Err(error(CognitionCode::MemoryVectorStoreUnavailable)),
+    }
 }
 
 async fn check_schema(table: &Table, expected: &SchemaRef) -> CognitionResult<()> {

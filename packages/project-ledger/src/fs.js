@@ -24,8 +24,13 @@ function safeProjectSegment(value) {
   return safe ? safe.slice(0, 96) : "project";
 }
 
+// HOME first, as every Butler host reads it, so a caller that sets HOME decides the home.
+function userHome() {
+  return process.env.HOME || process.env.USERPROFILE || homedir();
+}
+
 function butlerDataCandidates() {
-  const fallback = join(homedir(), ".butler");
+  const fallback = join(userHome(), ".butler");
   const configured = typeof process.env.BUTLER_DATA === "string" && process.env.BUTLER_DATA.trim()
     ? process.env.BUTLER_DATA.trim()
     : null;

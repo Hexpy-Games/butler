@@ -5,8 +5,11 @@ use std::{path::Path, sync::Arc};
 use rusqlite::{Connection, OpenFlags};
 use serde_json::{Value, json};
 
+mod access;
 mod controls;
+mod default_model;
 mod model;
+mod onboarding;
 mod persistence;
 mod plan_continuation;
 mod session;
@@ -14,10 +17,12 @@ mod storage_helpers;
 mod update;
 mod validation;
 mod view;
+mod wallpaper;
 mod worker_profiles;
 
+use super::wallpapers::{self, WallpaperOrigin};
 use super::{AppSettingsFacts, EventSubscribers, events, storage::AppStorageError};
-use crate::gateway::MessageSendRequest;
+use crate::gateway::{AppWallpaperScope, MessageSendRequest};
 use butler_core::public_text::trim_js_whitespace;
 use butler_turn::btcc::{ControlResolution, ControlSource};
 use controls::{
@@ -51,9 +56,25 @@ pub(super) struct ResolvedControls {
     pub resolution: ControlResolution,
     pub persisted: Value,
 }
+pub(super) use access::{
+    access_mode_name, conversation_access_mode, default_access_mode, record_default_access_mode,
+};
+pub(super) use default_model::record_default_model_policy;
 pub(super) use plan_continuation::{
     PlanContinuation, PlanInstruction, create_plan_continuation, create_plan_instruction,
 };
+pub(super) use wallpaper::{
+    check_agent_source as check_agent_wallpaper_source, check_project as check_project_wallpaper,
+    project_unknown_asset as unknown_project_wallpaper, project_view as project_wallpaper_view,
+    source_image_asset,
+};
+
+/// The stored global `wallpaper.source`, if a settings write stored one.
+pub(super) fn stored_wallpaper_source(db: &Connection) -> Result<Option<Value>, AppStorageError> {
+    Ok(read_json(db, SETTINGS_KEY)?
+        .and_then(|settings| settings.get(wallpaper::KEY)?.get("source").cloned()))
+}
+
 pub(super) use session::{
     session_context_settings, session_controls_view, session_workspace_settings,
     update_session_controls,
@@ -99,13 +120,18 @@ pub(super) fn resolve_for_message_send(
         ControlSource::GlobalDefault
     };
     let fallback = normalized_fallback(facts, &settings.model);
-    let persisted = json!({
+    let mut persisted = json!({
         "controls": controls_json(&controls),
         "model_fallback": {"enabled":fallback.enabled,"models":fallback.models},
         "source": source,
         "sessionControlRevision": revision,
         "catalogGeneration": facts.catalog_generation,
     });
+    // A queued or replayed delegated result must keep its marker (the only
+    // thing that hides it from the chat) when the turn is rebuilt from here.
+    if let Some(result) = &request.subsession_result {
+        persisted["subsession_result"] = json!(result);
+    }
     Ok(ResolvedControls {
         resolution: ControlResolution {
             model: controls.model,
@@ -221,6 +247,19 @@ impl super::AppApplication {
         &self,
         input: Value,
     ) -> Result<Value, crate::gateway::GatewayApplicationError> {
+        self.update_settings_from(input, WallpaperOrigin::User)
+            .await
+            .map(|(_, projection)| projection)
+    }
+
+    /// Applies a settings PATCH from `origin`. Returns the effective
+    /// `wallpaper.source` before the write and the new projection; a changed
+    /// source also appends `wallpaper.changed`.
+    pub(super) async fn update_settings_from(
+        &self,
+        input: Value,
+        origin: WallpaperOrigin,
+    ) -> Result<(Value, Value), crate::gateway::GatewayApplicationError> {
         let _update = self.settings_update_lock.lock().await;
         self.dependencies.settings_facts.refresh().await?;
         let facts = self.dependencies.settings_facts.snapshot()?;
@@ -238,6 +277,11 @@ impl super::AppApplication {
         let prepared = update::prepare(&input, &current, &facts, &current_root, |token| {
             self.project_creation.resolve_workspace_selection(token)
         })?;
+        if let Some(asset) = wallpaper::patched_image_asset(&prepared.patch)
+            && !self.wallpaper_asset_exists(asset.to_owned()).await?
+        {
+            return Err(wallpaper::unknown_asset());
+        }
         self.dependencies
             .settings_mutations
             .apply(prepared.patch.clone(), prepared.projection)
@@ -249,6 +293,14 @@ impl super::AppApplication {
             update::project_after_refresh(&current, &prepared.patch, &refreshed, &workspace_root);
         let stored_projection = update::persistence_projection(&projection);
         let event_payload = update::event_payload(&projection);
+        let previous = wallpaper::source(&current);
+        let wallpaper_event = wallpapers::change_payload(
+            AppWallpaperScope::Global,
+            None,
+            &previous,
+            &wallpaper::source(&projection),
+            origin,
+        );
         let root_changed = workspace_root != self.project_creation.workspace_root();
         let persisted_root = workspace_root.clone();
         let now = self.dependencies.identity_clock.now_iso();
@@ -264,6 +316,9 @@ impl super::AppApplication {
                     event_payload,
                     &now,
                 )?;
+                if let Some(payload) = wallpaper_event {
+                    events::append(db, &subscribers, wallpapers::CHANGED, None, payload, &now)?;
+                }
                 if root_changed {
                     write_json(
                         db,
@@ -277,6 +332,6 @@ impl super::AppApplication {
             .await
             .map_err(super::app_error)?;
         self.project_creation.set_workspace_root(workspace_root);
-        Ok(projection)
+        Ok((previous, projection))
     }
 }

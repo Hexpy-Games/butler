@@ -8,7 +8,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 use butler_memory::cognition::CognitionPathEnvironment;
-use butler_models::models::ModelConfigurationEnvironment;
+use butler_models::models::{ModelConfigurationEnvironment, SecretStoreFacts};
 use butler_runtime::context::{ContextBudgetEnvironment, PromptEnvironment};
 
 pub(crate) struct ProcessEnvironment {
@@ -24,23 +24,7 @@ pub(crate) struct ProcessEnvironment {
 impl ProcessEnvironment {
     /// Capture once at process composition. Paths and OS release are host facts,
     /// supplied by the caller rather than rediscovered by each domain owner.
-    pub(crate) fn capture(_data_root: &Path, user_home: &Path, os_release: &str) -> Self {
-        let mut hosted_provider_base_urls = HashMap::new();
-        for (provider, key) in [
-            ("anthropic", "BUTLER_ANTHROPIC_BASE_URL"),
-            ("google", "BUTLER_GOOGLE_BASE_URL"),
-            ("xai", "BUTLER_XAI_BASE_URL"),
-            ("qwen", "BUTLER_QWEN_BASE_URL"),
-            ("kimi", "BUTLER_KIMI_BASE_URL"),
-            ("zai", "BUTLER_ZAI_BASE_URL"),
-            ("zai-api", "BUTLER_ZAI_API_BASE_URL"),
-            ("opencode-go", "BUTLER_OPENCODE_GO_BASE_URL"),
-        ] {
-            if let Some(value) = trimmed(key) {
-                hosted_provider_base_urls.insert(provider.to_owned(), value);
-            }
-        }
-
+    pub(crate) fn capture(data_root: &Path, user_home: &Path, os_release: &str) -> Self {
         let model = ModelConfigurationEnvironment {
             openai_model: optional("BUTLER_OPENAI_MODEL"),
             openai_reasoning_effort: optional("BUTLER_OPENAI_REASONING_EFFORT"),
@@ -77,11 +61,7 @@ impl ProcessEnvironment {
                 "BUTLER_OPENAI_OAUTH_ORIGINATOR",
             ]),
             codex_user_agent: trimmed("BUTLER_CODEX_USER_AGENT"),
-            os_platform: Some(match env::consts::OS {
-                "macos" => "darwin".to_owned(),
-                "windows" => "win32".to_owned(),
-                other => other.to_owned(),
-            }),
+            os_platform: Some(butler_platform::launcher::node_platform().to_owned()),
             os_release: Some(os_release.to_owned()),
             os_arch: Some(match env::consts::ARCH {
                 "x86_64" => "x64".to_owned(),
@@ -89,7 +69,9 @@ impl ProcessEnvironment {
                 "x86" => "ia32".to_owned(),
                 other => other.to_owned(),
             }),
-            hosted_provider_base_urls,
+            hosted_provider_base_urls: hosted_provider_base_urls(),
+            // Owner-only file unless Developer ID signed or configured (#217).
+            secret_store: SecretStoreFacts::capture(data_root, Some(&user_home.join(".butler"))),
         };
         let retry = model
             .provider_retry_base_delay_ms
@@ -124,6 +106,26 @@ impl ProcessEnvironment {
             },
         }
     }
+}
+
+/// Per-provider API base URL overrides (`BUTLER_<PROVIDER>_BASE_URL`).
+fn hosted_provider_base_urls() -> HashMap<String, String> {
+    let mut urls = HashMap::new();
+    for (provider, key) in [
+        ("anthropic", "BUTLER_ANTHROPIC_BASE_URL"),
+        ("google", "BUTLER_GOOGLE_BASE_URL"),
+        ("xai", "BUTLER_XAI_BASE_URL"),
+        ("qwen", "BUTLER_QWEN_BASE_URL"),
+        ("kimi", "BUTLER_KIMI_BASE_URL"),
+        ("zai", "BUTLER_ZAI_BASE_URL"),
+        ("zai-api", "BUTLER_ZAI_API_BASE_URL"),
+        ("opencode-go", "BUTLER_OPENCODE_GO_BASE_URL"),
+    ] {
+        if let Some(value) = trimmed(key) {
+            urls.insert(provider.to_owned(), value);
+        }
+    }
+    urls
 }
 
 fn optional(name: &str) -> Option<String> {

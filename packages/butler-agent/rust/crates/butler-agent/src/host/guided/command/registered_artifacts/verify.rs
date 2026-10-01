@@ -1,3 +1,4 @@
+use butler_platform::secure_fs::Canonical as _;
 use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
 
@@ -13,7 +14,7 @@ pub(super) fn unique(artifacts: &mut Vec<Artifact>) {
 }
 
 fn canonical_if_exists(path: &Path) -> PathBuf {
-    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+    path.canonical().unwrap_or_else(|_| path.to_path_buf())
 }
 
 fn inside(path: &Path, root: &Path) -> bool {

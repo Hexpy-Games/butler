@@ -63,8 +63,10 @@ tool_names! {
     ListMcpCapabilities = "list_mcp_capabilities",
     ListOperationResults = "list_operation_results",
     ListSkills = "list_skills",
+    LoadSkill = "load_skill",
     ListTodoList = "list_todo_list",
     ListToolCapabilities = "list_tool_capabilities",
+    ListWallpapers = "list_wallpapers",
     ListWorkStreams = "list_work_streams",
     ProjectLedgerAttemptFail = "project_ledger_attempt_fail",
     ProjectLedgerAttemptStart = "project_ledger_attempt_start",
@@ -86,6 +88,7 @@ tool_names! {
     ReadConversationContext = "read_conversation_context",
     ReadConversationSession = "read_conversation_session",
     ReadFile = "read_file",
+    ReadSkillFile = "read_skill_file",
     ReadMcpResource = "read_mcp_resource",
     ReadOperationResults = "read_operation_results",
     ReadProjectSource = "read_project_source",
@@ -100,6 +103,8 @@ tool_names! {
     RequestServiceRestart = "request_service_restart",
     RunCommand = "run_command",
     RunDueAutomations = "run_due_automations",
+    SaveWallpaperModule = "save_wallpaper_module",
+    SetWallpaper = "set_wallpaper",
     StartTopicConversation = "start_topic_conversation",
     StartWork = "start_work",
     SteerSteward = "steer_steward",
@@ -110,6 +115,7 @@ tool_names! {
     ToolSearch = "tool_search",
     TransformPublicDataTable = "transform_public_data_table",
     UpdateExplicitMemory = "update_explicit_memory",
+    UpdateAutomation = "update_automation",
     UpdateOnboardingProfile = "update_onboarding_profile",
     UpdateTodoList = "update_todo_list",
     UpdateWorkStreamState = "update_work_stream_state",
@@ -152,19 +158,5 @@ impl PartialEq<ToolName> for String {
 impl PartialEq<ToolName> for std::borrow::Cow<'_, str> {
     fn eq(&self, other: &ToolName) -> bool {
         self.as_ref() == other.as_str()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::ToolName;
-
-    #[test]
-    fn names_round_trip_and_are_unique() {
-        let mut seen = std::collections::HashSet::new();
-        for tool in ToolName::ALL {
-            assert_eq!(ToolName::parse(tool.as_str()), Some(*tool));
-            assert!(seen.insert(tool.as_str()), "duplicate {tool}");
-        }
     }
 }

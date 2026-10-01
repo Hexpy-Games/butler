@@ -15,6 +15,8 @@ use tokio::{
 };
 
 mod files;
+mod notifications;
+use notifications::Pending;
 
 use super::{ProjectionContext, sync_chat_once, sync_deferred_once, sync_deferred_step};
 use crate::gateway::GatewayApplicationError;
@@ -30,6 +32,8 @@ pub(in crate::gateway::application) struct ProjectionOwner {
 }
 struct Inner {
     sender: mpsc::Sender<Command>,
+    #[cfg(test)]
+    pending: Arc<Mutex<Pending>>,
     watcher: Mutex<Option<RecommendedWatcher>>,
     task: Mutex<Option<JoinHandle<Result<(), GatewayApplicationError>>>>,
     close: Mutex<CloseState>,
@@ -41,10 +45,13 @@ struct CloseState {
 }
 enum Command {
     Wake,
-    Transcript(String),
+    Events,
     Terminal,
     Refresh(String, oneshot::Sender<Result<(), GatewayApplicationError>>),
+    Drain(oneshot::Sender<Result<(), GatewayApplicationError>>),
     Close,
+    #[cfg(test)]
+    Pause(oneshot::Sender<()>, oneshot::Receiver<()>),
 }
 
 impl ProjectionOwner {
@@ -57,7 +64,7 @@ impl ProjectionOwner {
         let watched_root = |relative: &str| {
             let path = context.butler_data.join(relative);
             std::fs::create_dir_all(&path)
-                .and_then(|()| std::fs::canonicalize(&path))
+                .and_then(|()| butler_platform::secure_fs::canonicalize(&path))
                 .map_err(GatewayApplicationError::internal_from)
         };
         let transcript_root = watched_root("transcripts")?;
@@ -69,6 +76,8 @@ impl ProjectionOwner {
             failed_root.clone(),
         ];
         let (sender, receiver) = mpsc::channel(NOTIFICATION_CAPACITY);
+        let pending = Arc::new(Mutex::new(Pending::default()));
+        let observed = pending.clone();
         let callback = sender.clone();
         let mut watcher =
             notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
@@ -78,14 +87,16 @@ impl ProjectionOwner {
                             if path.extension().is_some_and(|value| value == "jsonl")
                                 && let Some(file) = path.file_name().and_then(|v| v.to_str())
                             {
-                                let _ = callback.try_send(Command::Transcript(file.to_owned()));
+                                notifications::transcript(&observed, &callback, file.to_owned());
                             }
-                        } else if path == processed_root
-                            || path == failed_root
-                            || path.parent() == Some(processed_root.as_path())
-                            || path.parent() == Some(failed_root.as_path())
+                        } else if path.extension().is_none_or(|value| value != "tmp")
+                            && (path == processed_root
+                                || path == failed_root
+                                || path.parent() == Some(processed_root.as_path())
+                                || path.parent() == Some(failed_root.as_path()))
                         {
-                            let _ = callback.try_send(Command::Terminal);
+                            observed.lock().terminal = true;
+                            let _ = callback.try_send(Command::Events);
                         }
                     }
                 }
@@ -96,10 +107,12 @@ impl ProjectionOwner {
                 .watch(path, RecursiveMode::NonRecursive)
                 .map_err(GatewayApplicationError::internal_from)?;
         }
-        let task = tokio::spawn(run(context, receiver));
+        let task = tokio::spawn(run(context, receiver, pending.clone()));
         let owner = Self {
             inner: Arc::new(Inner {
                 sender,
+                #[cfg(test)]
+                pending,
                 watcher: Mutex::new(Some(watcher)),
                 task: Mutex::new(Some(task)),
                 close: Mutex::new(CloseState {
@@ -113,6 +126,25 @@ impl ProjectionOwner {
         Ok(owner)
     }
 
+    #[cfg(test)]
+    pub(in crate::gateway::application) async fn pause_for_burst(&self) -> oneshot::Sender<()> {
+        lock(&self.inner.watcher).take();
+        let (entered, ready) = oneshot::channel();
+        let (release, resumed) = oneshot::channel();
+        self.inner
+            .sender
+            .send(Command::Pause(entered, resumed))
+            .await
+            .unwrap();
+        ready.await.unwrap();
+        release
+    }
+
+    #[cfg(test)]
+    pub(in crate::gateway::application) fn transcript_event(&self, file: String) {
+        notifications::transcript(&self.inner.pending, &self.inner.sender, file);
+    }
+
     pub(in crate::gateway::application) async fn refresh(
         &self,
         chat_id: String,
@@ -121,6 +153,21 @@ impl ProjectionOwner {
         self.inner
             .sender
             .send(Command::Refresh(chat_id, sender))
+            .await
+            .map_err(GatewayApplicationError::internal_from)?;
+        receiver
+            .await
+            .map_err(GatewayApplicationError::internal_from)?
+    }
+
+    /// Finish terminal records before queue recovery can replace their claims.
+    pub(in crate::gateway::application) async fn drain(
+        &self,
+    ) -> Result<(), GatewayApplicationError> {
+        let (sender, receiver) = oneshot::channel();
+        self.inner
+            .sender
+            .send(Command::Drain(sender))
             .await
             .map_err(GatewayApplicationError::internal_from)?;
         receiver
@@ -182,14 +229,23 @@ impl Drop for Inner {
 async fn run(
     context: ProjectionContext,
     mut receiver: mpsc::Receiver<Command>,
+    pending: Arc<Mutex<Pending>>,
 ) -> Result<(), GatewayApplicationError> {
     let mut work = Work::default();
     for file in open_turn_transcripts(&context).await? {
-        if work.changed_set.insert(file.clone()) {
-            work.changed.push_back(file);
-        }
+        work.enqueue(file);
     }
     loop {
+        let events = std::mem::take(&mut *pending.lock());
+        for file in events.paths {
+            work.enqueue(file);
+        }
+        if events.overflow {
+            work.command(Some(Command::Wake), &context).await;
+        }
+        if events.terminal || events.overflow {
+            work.command(Some(Command::Terminal), &context).await;
+        }
         match receiver.try_recv() {
             Ok(command) => {
                 if work.command(Some(command), &context).await {
@@ -200,43 +256,7 @@ async fn run(
             Err(mpsc::error::TryRecvError::Disconnected) => return Ok(()),
             Err(mpsc::error::TryRecvError::Empty) => {}
         }
-        if let Some(file) = work.changed.pop_front() {
-            let result = match resolve_chat_file(&context, &file).await {
-                Ok(Some(chat)) => sync_chat_once(&context, &chat).await,
-                Ok(None) => Ok(false),
-                Err(error) => Err(error),
-            };
-            match result {
-                Ok(true) => work.changed.push_back(file),
-                Ok(false) => {
-                    work.changed_set.remove(&file);
-                }
-                Err(_) => {
-                    work.changed.push_back(file);
-                    work.retry = (work.retry.max(SETTLE_DELAY) * 2).min(MAX_RETRY_DELAY);
-                    tokio::time::sleep(work.retry).await;
-                }
-            }
-            tokio::task::yield_now().await;
-            continue;
-        }
-        if work.terminal {
-            match sync_deferred_step(&context, &mut work.terminal_after).await {
-                Ok(true) => {}
-                Ok(false) if work.terminal_resweep => {
-                    work.terminal_after.clear();
-                    work.terminal_resweep = false;
-                }
-                Ok(false) => {
-                    work.terminal = false;
-                    work.terminal_after.clear();
-                }
-                Err(_) => {
-                    work.retry = (work.retry.max(SETTLE_DELAY) * 2).min(MAX_RETRY_DELAY);
-                    tokio::time::sleep(work.retry).await;
-                }
-            }
-            tokio::task::yield_now().await;
+        if work.project_ready(&context).await {
             continue;
         }
         if work.pending {
@@ -291,6 +311,55 @@ struct Work {
 }
 
 impl Work {
+    async fn project_ready(&mut self, context: &ProjectionContext) -> bool {
+        if let Some(file) = self.changed.pop_front() {
+            let result = match resolve_chat_file(context, &file).await {
+                Ok(Some(chat)) => sync_chat_once(context, &chat).await,
+                Ok(None) => Ok(false),
+                Err(error) => Err(error),
+            };
+            match result {
+                Ok(true) => self.changed.push_back(file),
+                Ok(false) => {
+                    self.changed_set.remove(&file);
+                }
+                Err(_) => {
+                    self.changed.push_back(file);
+                    self.retry = (self.retry.max(SETTLE_DELAY) * 2).min(MAX_RETRY_DELAY);
+                    tokio::time::sleep(self.retry).await;
+                }
+            }
+            tokio::task::yield_now().await;
+            return true;
+        }
+        if self.terminal {
+            match sync_deferred_step(context, &mut self.terminal_after).await {
+                Ok(true) => {}
+                Ok(false) if self.terminal_resweep => {
+                    self.terminal_after.clear();
+                    self.terminal_resweep = false;
+                }
+                Ok(false) => {
+                    self.terminal = false;
+                    self.terminal_after.clear();
+                }
+                Err(_) => {
+                    self.retry = (self.retry.max(SETTLE_DELAY) * 2).min(MAX_RETRY_DELAY);
+                    tokio::time::sleep(self.retry).await;
+                }
+            }
+            tokio::task::yield_now().await;
+            return true;
+        }
+        false
+    }
+
+    fn enqueue(&mut self, file: String) {
+        if self.changed_set.insert(file.clone()) {
+            self.changed.push_back(file);
+        }
+    }
+
     async fn command(&mut self, command: Option<Command>, context: &ProjectionContext) -> bool {
         match command {
             Some(Command::Wake) => {
@@ -301,26 +370,34 @@ impl Work {
                     self.retry = SETTLE_DELAY;
                 }
             }
-            Some(Command::Transcript(file)) => {
-                if self.changed_set.insert(file.clone()) {
-                    self.changed.push_back(file);
-                }
-            }
+            Some(Command::Events) => {}
             Some(Command::Terminal) => {
                 if self.terminal {
                     self.terminal_resweep = true;
                 } else {
                     self.terminal = true;
                 }
-                if self.pending {
-                    self.resweep = true;
-                } else {
-                    self.pending = true;
+                // Only chats with an open turn or a staged outbound can be
+                // waiting on a terminal record; the staged finals themselves
+                // are replayed by the deferred sweep.
+                match open_turn_transcripts(context).await {
+                    Ok(files) => files.into_iter().for_each(|file| self.enqueue(file)),
+                    Err(_) if self.pending => self.resweep = true,
+                    Err(_) => self.pending = true,
                 }
             }
             Some(Command::Refresh(chat, completion)) => {
                 let result = sync_requested(context, &chat).await;
                 let _ = completion.send(result);
+            }
+            Some(Command::Drain(completion)) => {
+                let result = drain_open_turns(context).await;
+                let _ = completion.send(result);
+            }
+            #[cfg(test)]
+            Some(Command::Pause(entered, release)) => {
+                let _ = entered.send(());
+                let _ = release.await;
             }
             Some(Command::Close) | None => return true,
         }
@@ -385,4 +462,15 @@ async fn sync_requested(
 }
 fn lock<T>(value: &Mutex<T>) -> parking_lot::MutexGuard<'_, T> {
     value.lock()
+}
+
+async fn drain_open_turns(context: &ProjectionContext) -> Result<(), GatewayApplicationError> {
+    // Existing checkpoints read only appended bytes, never whole transcripts.
+    for file in open_turn_transcripts(context).await? {
+        if let Some(chat) = resolve_chat_file(context, &file).await? {
+            sync_chat(context, &chat).await?;
+        }
+    }
+    while sync_deferred_once(context).await? {}
+    Ok(())
 }

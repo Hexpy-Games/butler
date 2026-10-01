@@ -14,10 +14,20 @@ use super::sandbox::copy_tree;
 
 pub const FIXTURE_TIME: &str = "2026-09-27T00:00:00Z";
 
+/// A third-party assistant export as an owner would paste it into profile
+/// import (PRO-02, MIG-03): input text, not a provider response. Synthetic.
+pub const PROFILE_EXPORT: &str = "## Identity\n[unknown] - Name: Sam Rivera; prefers to be called Sam.\n[unknown] - Lives in Lisbon.\n\n## Career\n[2024-03-01] - Works as a landscape architect.\n\n## Preferences\n[unknown] - Prefers short, direct answers.\n";
+
 /// `F1-ready`: onboarding complete, `model` as the default, language `en`.
-pub fn ready(data: &Path, model: &str) -> Result<(), HarnessError> {
+pub fn ready(data: &Path, model: &str, app_now: &str) -> Result<(), HarnessError> {
     onboarding_complete(data)?;
-    scheduler_ran_today(data)?;
+    first_conversation(data, model, app_now)
+}
+
+/// `F2-first-conversation`: `F1-ready` before the first-conversation
+/// onboarding (no onboarding record), so the first chat runs onboarding.
+pub fn first_conversation(data: &Path, model: &str, app_now: &str) -> Result<(), HarnessError> {
+    scheduler_ran_today(data, app_now)?;
     fs::write(
         data.join("butler.config.json"),
         serde_json::to_vec_pretty(&json!({
@@ -30,19 +40,23 @@ pub fn ready(data: &Path, model: &str) -> Result<(), HarnessError> {
 }
 
 /// Marks the two daily 04:00 jobs (session sync, consolidation cycle) as
-/// already run today (UTC; the harness runs the agent with `TZ=UTC`), as on
-/// an installation that has been running. Otherwise the consolidation cycle
-/// starts a background briefing model call whose prompt embeds the current
-/// time, which no recording can match.
-pub fn scheduler_ran_today(data: &Path) -> Result<(), HarnessError> {
+/// already run on the supplied App clock date, as on an installation that
+/// has been running. Otherwise the consolidation cycle starts a background
+/// briefing model call whose prompt embeds the current time, which no
+/// recording can match.
+pub fn scheduler_ran_today(data: &Path, app_now: &str) -> Result<(), HarnessError> {
     let dir = data.join("state/scheduler");
     fs::create_dir_all(&dir)?;
-    let now = chrono::Utc::now();
+    let now = chrono::DateTime::parse_from_rfc3339(app_now)
+        .map_err(|error| super::harness_error(format!("invalid E2E app clock: {error}")))?
+        .with_timezone(&chrono::Utc);
     let day = now.format("%Y-%m-%d").to_string();
+    let last_run_at = now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     for id in ["session-sync", "consolidation-cycle"] {
         fs::write(
             dir.join(format!("{id}.json")),
-            json!({"lastRunDate": day, "lastRunAt": now.to_rfc3339(), "status": "ok"}).to_string(),
+            json!({"lastRunDate": day, "lastRunAt": last_run_at.clone(), "status": "ok"})
+                .to_string(),
         )?;
     }
     Ok(())
@@ -89,8 +103,8 @@ pub fn stub_codex_auth(codex_home: &Path) -> Result<(), HarnessError> {
 /// `F3-legacy`: a synthetic previous-generation data dir (see
 /// `fixtures/F3-legacy`): the legacy App DB built from `app-server.sql`,
 /// an unknown legacy file, onboarding and a model config.
-pub fn legacy(data: &Path, model: &str) -> Result<(), HarnessError> {
-    ready(data, model)?;
+pub fn legacy(data: &Path, model: &str, app_now: &str) -> Result<(), HarnessError> {
+    ready(data, model, app_now)?;
     install_tree("F3-legacy/data", data)?;
     let sql = fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/F3-legacy/app-server.sql"),

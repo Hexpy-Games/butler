@@ -1,5 +1,6 @@
 //! Source-compatible provider deadline, retry, and prompt-cache normalization.
 
+use butler_platform::secure_fs::Canonical as _;
 use std::time::Duration;
 
 use crate::models::PromptCacheRetention;
@@ -45,7 +46,7 @@ pub(super) fn cache_retention(value: &str) -> Option<PromptCacheRetention> {
 }
 pub(super) fn cache_prefix(data: &std::path::Path) -> String {
     use sha2::{Digest, Sha256};
-    let data = data.canonicalize().unwrap_or_else(|_| data.to_path_buf());
+    let data = data.canonical().unwrap_or_else(|_| data.to_path_buf());
     let stable = format!("butler|{}", data.display());
     // Hex of the first 6 digest bytes.
     let mut prefix = format!("{:x}", Sha256::digest(stable.as_bytes()));
@@ -73,7 +74,17 @@ fn duration(milliseconds: f64) -> Duration {
 mod tests {
     use super::*;
 
+    /// Pure-logic table: provider retry and deadline numbers. The number grammar
+    /// keeps the deadline and retry policy, and the retry environment keeps the
+    /// source's number and clamp rules.
+    // test-category: pure-logic
     #[test]
+    fn retry_and_deadline_number_rules() {
+        number_grammar_preserves_deadline_and_retry_policy();
+        crate::models::configuration::tests::retry_environment_keeps_source_number_and_clamp_rules(
+        );
+    }
+
     fn number_grammar_preserves_deadline_and_retry_policy() {
         assert_eq!(total(Some("0b1000")), Duration::from_millis(8));
         assert_eq!(idle(Some("0o10")), Duration::from_millis(8));

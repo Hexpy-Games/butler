@@ -9,33 +9,43 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use lancedb::{Table, table::OptimizeAction};
+use lancedb::Table;
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 
 use super::{
     CognitionError, CognitionPathEnvironment, CognitionResult, MemoryGenerationHandle,
-    MemoryGenerationTarget, assert_mutation_authority, graph::GraphRepository, lance_store,
-    mutable_paths, resolve_active_generation,
+    MemoryGenerationTarget, assert_mutation_authority, graph::GraphRepository, lance_maintenance,
+    lance_store, mutable_paths, resolve_active_generation,
 };
 use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator};
 
 const DELETE_BATCH: usize = 100;
 
+/// What a vector optimize run did.
 #[derive(Debug, PartialEq, Eq)]
 pub enum VectorOptimizeOutcome {
+    /// The vector store could not be opened.
     Unavailable {
+        /// Why.
         reason: &'static str,
+        /// Vectors pruned before the store became unavailable.
         vectors_pruned: usize,
     },
+    /// The run finished.
     Metrics {
+        /// Caches compacted (always 0; kept for the legacy report).
         caches_compacted: usize,
+        /// Summaries re-embedded (always 0; kept for the legacy report).
         summaries_re_embedded: usize,
+        /// Vectors of removed units deleted.
         vectors_pruned: usize,
+        /// Whether the table files were compacted.
         lancedb_compacted: bool,
     },
 }
 
+/// Prunes vectors of removed units from the active generation and compacts the table.
 pub struct VectorOptimizeService {
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
@@ -44,6 +54,7 @@ pub struct VectorOptimizeService {
 }
 
 impl VectorOptimizeService {
+    /// An optimize service over `data_root`.
     pub fn new(
         data_root: PathBuf,
         paths: CognitionPathEnvironment,
@@ -57,6 +68,7 @@ impl VectorOptimizeService {
         }
     }
 
+    /// Runs one optimize pass within the deadline.
     pub async fn run(
         &self,
         cancellation: &CancellationToken,
@@ -94,6 +106,55 @@ impl VectorOptimizeService {
             .collect();
         check_entry(cancellation, deadline_at_epoch_ms)?;
         let lease = self
+            .acquire(lock_path, cancellation, deadline_at_epoch_ms)
+            .await?;
+        let target = MemoryGenerationTarget::Active {
+            expected_generation: generation.generation_id.clone(),
+        };
+        assert_mutation_authority(&self.data_root, &self.paths, &target, &generation)?;
+        check_entry(cancellation, deadline_at_epoch_ms)?;
+        let mut ordered: Vec<_> = read_removable_keys(generation.graph_path.clone())
+            .await?
+            .into_iter()
+            .filter(|key| candidates.contains(key))
+            .collect();
+        ordered.sort();
+        let vectors_pruned = prune(&table, &ordered, cancellation, deadline_at_epoch_ms).await?;
+        // Maintenance is best effort: a failure leaves the table as it was.
+        // Old versions beyond the newest few are pruned, so a rollback reaches
+        // back a bounded number of writes, not to the table's creation.
+        let lancedb_compacted = if check_entry(cancellation, deadline_at_epoch_ms).is_err() {
+            false
+        } else {
+            match lance_maintenance::maintain(&table).await {
+                Ok(maintained) => maintained.compacted,
+                Err(_) => {
+                    lance_store::forget(&generation.root.join("butler.lance"), "butler_memory");
+                    false
+                }
+            }
+        };
+        lease
+            .release(true)
+            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
+        Ok(VectorOptimizeOutcome::Metrics {
+            caches_compacted: 0,
+            summaries_re_embedded: 0,
+            vectors_pruned,
+            lancedb_compacted,
+        })
+    }
+}
+
+impl VectorOptimizeService {
+    /// The consolidation lease for the optimize run.
+    async fn acquire(
+        &self,
+        lock_path: PathBuf,
+        cancellation: &CancellationToken,
+        deadline_at_epoch_ms: i64,
+    ) -> CognitionResult<crate::coordination::CognitionWriteLease> {
+        let lease = self
             .coordinator
             .acquire(
                 CognitionWriteAcquire {
@@ -110,59 +171,36 @@ impl VectorOptimizeService {
         lease
             .assert_for_path(&lock_path)
             .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
-        let target = MemoryGenerationTarget::Active {
-            expected_generation: generation.generation_id.clone(),
-        };
-        assert_mutation_authority(&self.data_root, &self.paths, &target, &generation)?;
-        check_entry(cancellation, deadline_at_epoch_ms)?;
-        let mut ordered: Vec<_> = read_removable_keys(generation.graph_path.clone())
-            .await?
-            .into_iter()
-            .filter(|key| candidates.contains(key))
-            .collect();
-        ordered.sort();
-        let mut vectors_pruned = 0;
-        for batch in ordered.chunks(DELETE_BATCH) {
-            check_entry(cancellation, deadline_at_epoch_ms)?;
-            let predicate = format!(
-                "vector_key IN ({})",
-                batch
-                    .iter()
-                    .map(|key| format!("'{}'", key.replace('\'', "''")))
-                    .collect::<Vec<_>>()
-                    .join(",")
-            );
-            let deleted = table.delete(&predicate).await.map_err(|source| {
-                error(CognitionCode::VectorStoreUnavailable).with_source(source)
-            })?;
-            vectors_pruned += usize::try_from(deleted.num_deleted_rows).map_err(|source| {
-                error(CognitionCode::VectorStoreUnavailable).with_source(source)
-            })?;
-        }
-        // A compaction failure is optional in the legacy path. Compact files
-        // only: pruning old Lance versions would erase retained rollback data.
-        let lancedb_compacted =
-            if ordered.is_empty() || check_entry(cancellation, deadline_at_epoch_ms).is_err() {
-                false
-            } else {
-                table
-                    .optimize(OptimizeAction::Compact {
-                        options: Default::default(),
-                        remap_options: None,
-                    })
-                    .await
-                    .is_ok()
-            };
-        lease
-            .release(true)
-            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
-        Ok(VectorOptimizeOutcome::Metrics {
-            caches_compacted: 0,
-            summaries_re_embedded: 0,
-            vectors_pruned,
-            lancedb_compacted,
-        })
+        Ok(lease)
     }
+}
+
+/// Deletes the vectors in batches; the number of rows deleted.
+async fn prune(
+    table: &Table,
+    ordered: &[String],
+    cancellation: &CancellationToken,
+    deadline_at_epoch_ms: i64,
+) -> CognitionResult<usize> {
+    let mut vectors_pruned = 0;
+    for batch in ordered.chunks(DELETE_BATCH) {
+        check_entry(cancellation, deadline_at_epoch_ms)?;
+        let predicate = format!(
+            "vector_key IN ({})",
+            batch
+                .iter()
+                .map(|key| format!("'{}'", key.replace('\'', "''")))
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+        let deleted = table
+            .delete(&predicate)
+            .await
+            .map_err(|source| error(CognitionCode::VectorStoreUnavailable).with_source(source))?;
+        vectors_pruned += usize::try_from(deleted.num_deleted_rows)
+            .map_err(|source| error(CognitionCode::VectorStoreUnavailable).with_source(source))?;
+    }
+    Ok(vectors_pruned)
 }
 
 struct LanceStore {
@@ -181,10 +219,7 @@ impl LanceStore {
         if !uri.exists() {
             return Ok(None);
         }
-        let connection = lance_store::connect(&uri)
-            .await
-            .map_err(|source| error(CognitionCode::VectorStoreUnavailable).with_source(source))?;
-        match lance_store::open(&connection, "butler_memory").await {
+        match lance_store::shared(&uri, "butler_memory").await {
             Ok(table) => Ok(Some(table)),
             Err(_) => Ok(None),
         }

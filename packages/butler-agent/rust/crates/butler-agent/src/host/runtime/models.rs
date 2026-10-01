@@ -13,7 +13,7 @@ use butler_models::models::{
     ModelCatalog, ModelConfiguration, ModelConfigurationEnvironment, ModelProvider,
     ProviderObservation, ProviderObservationSink, provider_http_client,
 };
-use butler_runtime::operations::PromptUsageMetrics;
+use butler_runtime::operations::{PromptUsageMetrics, ProviderQuotaStore};
 use butler_turn::btcc::BtccError;
 
 use crate::host::SystemIdentity;
@@ -22,9 +22,12 @@ pub(crate) struct ProcessModels {
     pub catalog: Arc<ModelCatalog>,
     pub configuration: Arc<ModelConfiguration>,
     pub provider: Arc<ModelProvider>,
+    /// Latest subscription quota per provider, fed by the provider client.
+    pub quota: Arc<ProviderQuotaStore>,
 }
 
 impl ProcessModels {
+    #[cfg(test)]
     pub(crate) fn new(
         data_root: PathBuf,
         environment: ModelConfigurationEnvironment,
@@ -78,6 +81,10 @@ impl ProcessModels {
                     .with_source(error)
             })?,
         );
+        let quota = Arc::new(ProviderQuotaStore::open(
+            &data_root,
+            Arc::new(SystemIdentity),
+        ));
         let provider = ModelProvider::new(
             client,
             configuration.clone(),
@@ -85,7 +92,8 @@ impl ProcessModels {
             catalog.clone(),
             Arc::new(SystemIdentity),
             Arc::new(PromptUsageMetrics::new(data_root, Arc::new(SystemIdentity))),
-        );
+        )
+        .with_quota_sink(quota.clone());
         let provider = Arc::new(match visual_capability {
             Some(capability) => provider.with_visual_capability(capability),
             None => provider,
@@ -94,8 +102,25 @@ impl ProcessModels {
             catalog,
             configuration,
             provider,
+            quota,
         })
     }
+}
+
+/// The service's models after saved API keys still in plain text moved into
+/// the credential store (#217); logs what happened (never a key). An entry
+/// that cannot move keeps its key where it was; the move is retried at the
+/// next start.
+pub(crate) async fn with_moved_credentials(models: ProcessModels) -> ProcessModels {
+    match models.configuration.migrate_provider_credentials().await {
+        Ok(report) => {
+            if let Some(line) = report.log_line() {
+                eprintln!("{line}");
+            }
+        }
+        Err(error) => eprintln!("[native-credentials] migration failed: {error}"),
+    }
+    models
 }
 
 /// Passive diagnostics retain counters only, never prompt text, auth or result bytes.

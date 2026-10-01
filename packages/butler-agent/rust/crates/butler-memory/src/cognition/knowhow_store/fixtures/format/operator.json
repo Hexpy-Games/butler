@@ -1,0 +1,710 @@
+{
+  "rebuild": {
+    "indexed_count": 4,
+    "source_quality_count": 3
+  },
+  "retrieve": {
+    "query": "how do I run the deploy pipeline helper",
+    "selected": {
+      "schema": "butler.cognition.knowhow.v1",
+      "knowhow_id": "kh_low_source",
+      "name": "weather lookup",
+      "aliases": [
+        "helper"
+      ],
+      "status": "active",
+      "scope": "global",
+      "created_at": "<now>",
+      "updated_at": "2024-01-03T00:00:00.000Z",
+      "summary": "A test procedure.",
+      "intent_match": {
+        "topics": [
+          "topic"
+        ],
+        "examples": [
+          "example"
+        ]
+      },
+      "preconditions": [],
+      "strategy": {
+        "steps": [
+          "step"
+        ],
+        "preferred_sources": [
+          "weak-source"
+        ]
+      },
+      "freshness": {
+        "max_age_minutes": 60,
+        "requires_source_timestamp": true,
+        "fallback_when_stale": "try_next_source"
+      },
+      "fallback": {
+        "when_unavailable": "generic_tool_routing",
+        "when_negative_feedback": "suppress_and_review"
+      },
+      "quality": {
+        "score": 0.8,
+        "confidence": 0.7,
+        "success_count": 1,
+        "failure_count": 0,
+        "negative_feedback_count": 0,
+        "last_used_at": null,
+        "last_validated_at": null,
+        "custom_quality": "keep"
+      },
+      "refs": {
+        "box_item_ids": [],
+        "memory_chunk_ids": [],
+        "feedback_ids": [],
+        "consolidation_run_ids": [],
+        "custom_refs": [
+          "keep"
+        ]
+      },
+      "revision_history": [],
+      "custom_metadata": {
+        "keep": true
+      }
+    },
+    "candidates": [
+      {
+        "entry": {
+          "schema": "butler.cognition.knowhow.v1",
+          "knowhow_id": "kh_low_source",
+          "name": "weather lookup",
+          "aliases": [
+            "helper"
+          ],
+          "status": "active",
+          "scope": "global",
+          "created_at": "<now>",
+          "updated_at": "2024-01-03T00:00:00.000Z",
+          "summary": "A test procedure.",
+          "intent_match": {
+            "topics": [
+              "topic"
+            ],
+            "examples": [
+              "example"
+            ]
+          },
+          "preconditions": [],
+          "strategy": {
+            "steps": [
+              "step"
+            ],
+            "preferred_sources": [
+              "weak-source"
+            ]
+          },
+          "freshness": {
+            "max_age_minutes": 60,
+            "requires_source_timestamp": true,
+            "fallback_when_stale": "try_next_source"
+          },
+          "fallback": {
+            "when_unavailable": "generic_tool_routing",
+            "when_negative_feedback": "suppress_and_review"
+          },
+          "quality": {
+            "score": 0.8,
+            "confidence": 0.7,
+            "success_count": 1,
+            "failure_count": 0,
+            "negative_feedback_count": 0,
+            "last_used_at": null,
+            "last_validated_at": null,
+            "custom_quality": "keep"
+          },
+          "refs": {
+            "box_item_ids": [],
+            "memory_chunk_ids": [],
+            "feedback_ids": [],
+            "consolidation_run_ids": [],
+            "custom_refs": [
+              "keep"
+            ]
+          },
+          "revision_history": [],
+          "custom_metadata": {
+            "keep": true
+          }
+        },
+        "match_score": 0.95,
+        "quality_score": 0.8,
+        "final_score": 0.898,
+        "suppressed_by_feedback_ids": []
+      },
+      {
+        "entry": {
+          "schema": "butler.cognition.knowhow.v1",
+          "knowhow_id": "kh_review",
+          "name": "kh_review",
+          "aliases": [
+            "helper"
+          ],
+          "status": "active",
+          "scope": "global",
+          "created_at": "<now>",
+          "updated_at": "2024-01-02T00:00:00.000Z",
+          "summary": "A test procedure.",
+          "intent_match": {
+            "topics": [
+              "deploy pipeline"
+            ],
+            "examples": [
+              "example"
+            ]
+          },
+          "preconditions": [],
+          "strategy": {
+            "steps": [
+              "step"
+            ],
+            "preferred_sources": [
+              "middling-source"
+            ]
+          },
+          "freshness": {
+            "max_age_minutes": 60,
+            "requires_source_timestamp": true,
+            "fallback_when_stale": "try_next_source"
+          },
+          "fallback": {
+            "when_unavailable": "generic_tool_routing",
+            "when_negative_feedback": "suppress_and_review"
+          },
+          "quality": {
+            "score": 0.8,
+            "confidence": 0.7,
+            "success_count": 1,
+            "failure_count": 0,
+            "negative_feedback_count": 0,
+            "last_used_at": null,
+            "last_validated_at": null,
+            "custom_quality": "keep"
+          },
+          "refs": {
+            "box_item_ids": [],
+            "memory_chunk_ids": [],
+            "feedback_ids": [],
+            "consolidation_run_ids": [],
+            "custom_refs": [
+              "keep"
+            ]
+          },
+          "revision_history": [],
+          "custom_metadata": {
+            "keep": true
+          }
+        },
+        "match_score": 0.95,
+        "quality_score": 0.8,
+        "final_score": 0.898,
+        "suppressed_by_feedback_ids": []
+      },
+      {
+        "entry": {
+          "schema": "butler.cognition.knowhow.v1",
+          "knowhow_id": "kh_feedback",
+          "name": "kh_feedback",
+          "aliases": [
+            "helper"
+          ],
+          "status": "candidate",
+          "scope": "global",
+          "created_at": "<now>",
+          "updated_at": "2024-01-01T00:00:00.000Z",
+          "summary": "A test procedure.",
+          "intent_match": {
+            "topics": [
+              "topic"
+            ],
+            "examples": [
+              "example"
+            ]
+          },
+          "preconditions": [],
+          "strategy": {
+            "steps": [
+              "step"
+            ],
+            "preferred_sources": [
+              "shared-source"
+            ]
+          },
+          "freshness": {
+            "max_age_minutes": 60,
+            "requires_source_timestamp": true,
+            "fallback_when_stale": "try_next_source"
+          },
+          "fallback": {
+            "when_unavailable": "generic_tool_routing",
+            "when_negative_feedback": "suppress_and_review"
+          },
+          "quality": {
+            "score": 0.8,
+            "confidence": 0.7,
+            "success_count": 1,
+            "failure_count": 0,
+            "negative_feedback_count": 0,
+            "last_used_at": null,
+            "last_validated_at": null,
+            "custom_quality": "keep"
+          },
+          "refs": {
+            "box_item_ids": [],
+            "memory_chunk_ids": [],
+            "feedback_ids": [],
+            "consolidation_run_ids": [],
+            "custom_refs": [
+              "keep"
+            ]
+          },
+          "revision_history": [],
+          "custom_metadata": {
+            "keep": true
+          }
+        },
+        "match_score": 0.95,
+        "quality_score": 0.8,
+        "final_score": 0.0,
+        "suppressed_by_feedback_ids": [
+          "fb_entry",
+          "fb_policy"
+        ]
+      }
+    ]
+  },
+  "quality": [
+    {
+      "source_id": "shared-source",
+      "tool_name": "search",
+      "event_count": 1,
+      "success_count": 1,
+      "failure_count": 0,
+      "negative_feedback_count": 0,
+      "average_freshness_score": 1.0,
+      "average_latency_ms": 10.0,
+      "score": 1.0,
+      "last_observed_at": "2024-01-04T00:00:00.000Z"
+    },
+    {
+      "source_id": "middling-source",
+      "tool_name": "fetch",
+      "event_count": 2,
+      "success_count": 1,
+      "failure_count": 1,
+      "negative_feedback_count": 0,
+      "average_freshness_score": 0.45,
+      "average_latency_ms": 400.0,
+      "score": 0.706,
+      "last_observed_at": "2024-01-03T00:00:00.000Z"
+    },
+    {
+      "source_id": "weak-source",
+      "tool_name": "search",
+      "event_count": 1,
+      "success_count": 0,
+      "failure_count": 1,
+      "negative_feedback_count": 1,
+      "average_freshness_score": 0.1,
+      "average_latency_ms": 900.0,
+      "score": 0.271,
+      "last_observed_at": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "list": [
+    {
+      "schema": "butler.cognition.knowhow.v1",
+      "knowhow_id": "kh_low_source",
+      "name": "weather lookup",
+      "aliases": [
+        "helper"
+      ],
+      "status": "active",
+      "scope": "global",
+      "created_at": "<now>",
+      "updated_at": "2024-01-03T00:00:00.000Z",
+      "summary": "A test procedure.",
+      "intent_match": {
+        "topics": [
+          "topic"
+        ],
+        "examples": [
+          "example"
+        ]
+      },
+      "preconditions": [],
+      "strategy": {
+        "steps": [
+          "step"
+        ],
+        "preferred_sources": [
+          "weak-source"
+        ]
+      },
+      "freshness": {
+        "max_age_minutes": 60,
+        "requires_source_timestamp": true,
+        "fallback_when_stale": "try_next_source"
+      },
+      "fallback": {
+        "when_unavailable": "generic_tool_routing",
+        "when_negative_feedback": "suppress_and_review"
+      },
+      "quality": {
+        "score": 0.8,
+        "confidence": 0.7,
+        "success_count": 1,
+        "failure_count": 0,
+        "negative_feedback_count": 0,
+        "last_used_at": null,
+        "last_validated_at": null,
+        "custom_quality": "keep"
+      },
+      "refs": {
+        "box_item_ids": [],
+        "memory_chunk_ids": [],
+        "feedback_ids": [],
+        "consolidation_run_ids": [],
+        "custom_refs": [
+          "keep"
+        ]
+      },
+      "revision_history": [],
+      "custom_metadata": {
+        "keep": true
+      }
+    },
+    {
+      "schema": "butler.cognition.knowhow.v1",
+      "knowhow_id": "kh_review",
+      "name": "kh_review",
+      "aliases": [
+        "helper"
+      ],
+      "status": "active",
+      "scope": "global",
+      "created_at": "<now>",
+      "updated_at": "2024-01-02T00:00:00.000Z",
+      "summary": "A test procedure.",
+      "intent_match": {
+        "topics": [
+          "deploy pipeline"
+        ],
+        "examples": [
+          "example"
+        ]
+      },
+      "preconditions": [],
+      "strategy": {
+        "steps": [
+          "step"
+        ],
+        "preferred_sources": [
+          "middling-source"
+        ]
+      },
+      "freshness": {
+        "max_age_minutes": 60,
+        "requires_source_timestamp": true,
+        "fallback_when_stale": "try_next_source"
+      },
+      "fallback": {
+        "when_unavailable": "generic_tool_routing",
+        "when_negative_feedback": "suppress_and_review"
+      },
+      "quality": {
+        "score": 0.8,
+        "confidence": 0.7,
+        "success_count": 1,
+        "failure_count": 0,
+        "negative_feedback_count": 0,
+        "last_used_at": null,
+        "last_validated_at": null,
+        "custom_quality": "keep"
+      },
+      "refs": {
+        "box_item_ids": [],
+        "memory_chunk_ids": [],
+        "feedback_ids": [],
+        "consolidation_run_ids": [],
+        "custom_refs": [
+          "keep"
+        ]
+      },
+      "revision_history": [],
+      "custom_metadata": {
+        "keep": true
+      }
+    },
+    {
+      "schema": "butler.cognition.knowhow.v1",
+      "knowhow_id": "kh_feedback",
+      "name": "kh_feedback",
+      "aliases": [
+        "helper"
+      ],
+      "status": "candidate",
+      "scope": "global",
+      "created_at": "<now>",
+      "updated_at": "2024-01-01T00:00:00.000Z",
+      "summary": "A test procedure.",
+      "intent_match": {
+        "topics": [
+          "topic"
+        ],
+        "examples": [
+          "example"
+        ]
+      },
+      "preconditions": [],
+      "strategy": {
+        "steps": [
+          "step"
+        ],
+        "preferred_sources": [
+          "shared-source"
+        ]
+      },
+      "freshness": {
+        "max_age_minutes": 60,
+        "requires_source_timestamp": true,
+        "fallback_when_stale": "try_next_source"
+      },
+      "fallback": {
+        "when_unavailable": "generic_tool_routing",
+        "when_negative_feedback": "suppress_and_review"
+      },
+      "quality": {
+        "score": 0.8,
+        "confidence": 0.7,
+        "success_count": 1,
+        "failure_count": 0,
+        "negative_feedback_count": 0,
+        "last_used_at": null,
+        "last_validated_at": null,
+        "custom_quality": "keep"
+      },
+      "refs": {
+        "box_item_ids": [],
+        "memory_chunk_ids": [],
+        "feedback_ids": [],
+        "consolidation_run_ids": [],
+        "custom_refs": [
+          "keep"
+        ]
+      },
+      "revision_history": [],
+      "custom_metadata": {
+        "keep": true
+      }
+    },
+    {
+      "schema": "butler.cognition.knowhow.v1",
+      "knowhow_id": "kh_disabled",
+      "name": "kh_disabled",
+      "aliases": [
+        "helper"
+      ],
+      "status": "disabled",
+      "scope": "global",
+      "created_at": "<now>",
+      "updated_at": "2023-12-31T00:00:00.000Z",
+      "summary": "A test procedure.",
+      "intent_match": {
+        "topics": [
+          "topic"
+        ],
+        "examples": [
+          "example"
+        ]
+      },
+      "preconditions": [],
+      "strategy": {
+        "steps": [
+          "step"
+        ],
+        "preferred_sources": [
+          "shared-source"
+        ]
+      },
+      "freshness": {
+        "max_age_minutes": 60,
+        "requires_source_timestamp": true,
+        "fallback_when_stale": "try_next_source"
+      },
+      "fallback": {
+        "when_unavailable": "generic_tool_routing",
+        "when_negative_feedback": "suppress_and_review"
+      },
+      "quality": {
+        "score": 0.8,
+        "confidence": 0.7,
+        "success_count": 1,
+        "failure_count": 0,
+        "negative_feedback_count": 0,
+        "last_used_at": null,
+        "last_validated_at": null,
+        "custom_quality": "keep"
+      },
+      "refs": {
+        "box_item_ids": [],
+        "memory_chunk_ids": [],
+        "feedback_ids": [],
+        "consolidation_run_ids": [],
+        "custom_refs": [
+          "keep"
+        ]
+      },
+      "revision_history": [],
+      "custom_metadata": {
+        "keep": true
+      }
+    }
+  ],
+  "shown": {
+    "schema": "butler.cognition.knowhow.v1",
+    "knowhow_id": "kh_review",
+    "name": "kh_review",
+    "aliases": [
+      "helper"
+    ],
+    "status": "active",
+    "scope": "global",
+    "created_at": "<now>",
+    "updated_at": "2024-01-02T00:00:00.000Z",
+    "summary": "A test procedure.",
+    "intent_match": {
+      "topics": [
+        "deploy pipeline"
+      ],
+      "examples": [
+        "example"
+      ]
+    },
+    "preconditions": [],
+    "strategy": {
+      "steps": [
+        "step"
+      ],
+      "preferred_sources": [
+        "middling-source"
+      ]
+    },
+    "freshness": {
+      "max_age_minutes": 60,
+      "requires_source_timestamp": true,
+      "fallback_when_stale": "try_next_source"
+    },
+    "fallback": {
+      "when_unavailable": "generic_tool_routing",
+      "when_negative_feedback": "suppress_and_review"
+    },
+    "quality": {
+      "score": 0.8,
+      "confidence": 0.7,
+      "success_count": 1,
+      "failure_count": 0,
+      "negative_feedback_count": 0,
+      "last_used_at": null,
+      "last_validated_at": null,
+      "custom_quality": "keep"
+    },
+    "refs": {
+      "box_item_ids": [],
+      "memory_chunk_ids": [],
+      "feedback_ids": [],
+      "consolidation_run_ids": [],
+      "custom_refs": [
+        "keep"
+      ]
+    },
+    "revision_history": [],
+    "custom_metadata": {
+      "keep": true
+    }
+  },
+  "missing": null,
+  "revised": [
+    3,
+    1,
+    3
+  ],
+  "disabled": {
+    "schema": "butler.cognition.knowhow.v1",
+    "knowhow_id": "kh_review",
+    "name": "kh_review",
+    "aliases": [
+      "helper"
+    ],
+    "status": "disabled",
+    "scope": "global",
+    "created_at": "<now>",
+    "updated_at": "<now>",
+    "summary": "A test procedure.",
+    "intent_match": {
+      "topics": [
+        "deploy pipeline"
+      ],
+      "examples": [
+        "example"
+      ]
+    },
+    "preconditions": [],
+    "strategy": {
+      "steps": [
+        "step"
+      ],
+      "preferred_sources": [
+        "middling-source"
+      ]
+    },
+    "freshness": {
+      "max_age_minutes": 60,
+      "requires_source_timestamp": true,
+      "fallback_when_stale": "try_next_source"
+    },
+    "fallback": {
+      "when_unavailable": "generic_tool_routing",
+      "when_negative_feedback": "suppress_and_review"
+    },
+    "quality": {
+      "score": 0.8,
+      "confidence": 0.7,
+      "success_count": 1,
+      "failure_count": 0,
+      "negative_feedback_count": 0,
+      "last_used_at": null,
+      "last_validated_at": null,
+      "custom_quality": "keep"
+    },
+    "refs": {
+      "box_item_ids": [],
+      "memory_chunk_ids": [],
+      "feedback_ids": [],
+      "consolidation_run_ids": [],
+      "custom_refs": [
+        "keep"
+      ]
+    },
+    "revision_history": [
+      {
+        "at": "<now>",
+        "kind": "operator_disable",
+        "previous_status": "active"
+      }
+    ],
+    "custom_metadata": {
+      "keep": true
+    }
+  },
+  "files": {
+    "kh_disabled.json": "{\n  \"schema\": \"butler.cognition.knowhow.v1\",\n  \"knowhow_id\": \"kh_disabled\",\n  \"name\": \"kh_disabled\",\n  \"aliases\": [\n    \"helper\"\n  ],\n  \"status\": \"disabled\",\n  \"scope\": \"global\",\n  \"created_at\": \"<now>\",\n  \"updated_at\": \"<now>\",\n  \"summary\": \"A test procedure.\",\n  \"intent_match\": {\n    \"topics\": [\n      \"topic\"\n    ],\n    \"examples\": [\n      \"example\"\n    ]\n  },\n  \"preconditions\": [],\n  \"strategy\": {\n    \"steps\": [\n      \"step\"\n    ],\n    \"preferred_sources\": [\n      \"shared-source\"\n    ]\n  },\n  \"freshness\": {\n    \"max_age_minutes\": 60,\n    \"requires_source_timestamp\": true,\n    \"fallback_when_stale\": \"try_next_source\"\n  },\n  \"fallback\": {\n    \"when_unavailable\": \"generic_tool_routing\",\n    \"when_negative_feedback\": \"suppress_and_review\"\n  },\n  \"quality\": {\n    \"score\": 0.55,\n    \"confidence\": 0.7,\n    \"success_count\": 1,\n    \"failure_count\": 0,\n    \"negative_feedback_count\": 1,\n    \"last_used_at\": null,\n    \"last_validated_at\": null,\n    \"custom_quality\": \"keep\"\n  },\n  \"refs\": {\n    \"box_item_ids\": [],\n    \"memory_chunk_ids\": [],\n    \"feedback_ids\": [\n      \"fb_policy\"\n    ],\n    \"consolidation_run_ids\": [],\n    \"custom_refs\": [\n      \"keep\"\n    ]\n  },\n  \"revision_history\": [\n    {\n      \"at\": \"<now>\",\n      \"kind\": \"feedback_revision\",\n      \"feedback_ids\": [\n        \"fb_policy\"\n      ],\n      \"previous_status\": \"disabled\"\n    }\n  ],\n  \"custom_metadata\": {\n    \"keep\": true\n  }\n}\n",
+    "kh_feedback.json": "{\n  \"schema\": \"butler.cognition.knowhow.v1\",\n  \"knowhow_id\": \"kh_feedback\",\n  \"name\": \"kh_feedback\",\n  \"aliases\": [\n    \"helper\"\n  ],\n  \"status\": \"disabled\",\n  \"scope\": \"global\",\n  \"created_at\": \"<now>\",\n  \"updated_at\": \"<now>\",\n  \"summary\": \"A test procedure.\",\n  \"intent_match\": {\n    \"topics\": [\n      \"topic\"\n    ],\n    \"examples\": [\n      \"example\"\n    ]\n  },\n  \"preconditions\": [],\n  \"strategy\": {\n    \"steps\": [\n      \"step\"\n    ],\n    \"preferred_sources\": [\n      \"shared-source\"\n    ]\n  },\n  \"freshness\": {\n    \"max_age_minutes\": 60,\n    \"requires_source_timestamp\": true,\n    \"fallback_when_stale\": \"try_next_source\"\n  },\n  \"fallback\": {\n    \"when_unavailable\": \"generic_tool_routing\",\n    \"when_negative_feedback\": \"suppress_and_review\"\n  },\n  \"quality\": {\n    \"score\": 0.55,\n    \"confidence\": 0.7,\n    \"success_count\": 1,\n    \"failure_count\": 0,\n    \"negative_feedback_count\": 2,\n    \"last_used_at\": null,\n    \"last_validated_at\": null,\n    \"custom_quality\": \"keep\"\n  },\n  \"refs\": {\n    \"box_item_ids\": [],\n    \"memory_chunk_ids\": [],\n    \"feedback_ids\": [\n      \"fb_entry\",\n      \"fb_policy\"\n    ],\n    \"consolidation_run_ids\": [],\n    \"custom_refs\": [\n      \"keep\"\n    ]\n  },\n  \"revision_history\": [\n    {\n      \"at\": \"<now>\",\n      \"kind\": \"feedback_revision\",\n      \"feedback_ids\": [\n        \"fb_entry\",\n        \"fb_policy\"\n      ],\n      \"previous_status\": \"candidate\"\n    }\n  ],\n  \"custom_metadata\": {\n    \"keep\": true\n  }\n}\n",
+    "kh_low_source.json": "{\n  \"schema\": \"butler.cognition.knowhow.v1\",\n  \"knowhow_id\": \"kh_low_source\",\n  \"name\": \"weather lookup\",\n  \"aliases\": [\n    \"helper\"\n  ],\n  \"status\": \"disabled\",\n  \"scope\": \"global\",\n  \"created_at\": \"<now>\",\n  \"updated_at\": \"<now>\",\n  \"summary\": \"A test procedure.\",\n  \"intent_match\": {\n    \"topics\": [\n      \"topic\"\n    ],\n    \"examples\": [\n      \"example\"\n    ]\n  },\n  \"preconditions\": [],\n  \"strategy\": {\n    \"steps\": [\n      \"step\"\n    ],\n    \"preferred_sources\": [\n      \"weak-source\"\n    ]\n  },\n  \"freshness\": {\n    \"max_age_minutes\": 60,\n    \"requires_source_timestamp\": true,\n    \"fallback_when_stale\": \"try_next_source\"\n  },\n  \"fallback\": {\n    \"when_unavailable\": \"generic_tool_routing\",\n    \"when_negative_feedback\": \"suppress_and_review\"\n  },\n  \"quality\": {\n    \"score\": 0.8,\n    \"confidence\": 0.7,\n    \"success_count\": 1,\n    \"failure_count\": 0,\n    \"negative_feedback_count\": 0,\n    \"last_used_at\": null,\n    \"last_validated_at\": null,\n    \"custom_quality\": \"keep\"\n  },\n  \"refs\": {\n    \"box_item_ids\": [],\n    \"memory_chunk_ids\": [],\n    \"feedback_ids\": [],\n    \"consolidation_run_ids\": [],\n    \"custom_refs\": [\n      \"keep\"\n    ]\n  },\n  \"revision_history\": [],\n  \"custom_metadata\": {\n    \"keep\": true\n  }\n}\n",
+    "kh_review.json": "{\n  \"schema\": \"butler.cognition.knowhow.v1\",\n  \"knowhow_id\": \"kh_review\",\n  \"name\": \"kh_review\",\n  \"aliases\": [\n    \"helper\"\n  ],\n  \"status\": \"disabled\",\n  \"scope\": \"global\",\n  \"created_at\": \"<now>\",\n  \"updated_at\": \"<now>\",\n  \"summary\": \"A test procedure.\",\n  \"intent_match\": {\n    \"topics\": [\n      \"deploy pipeline\"\n    ],\n    \"examples\": [\n      \"example\"\n    ]\n  },\n  \"preconditions\": [],\n  \"strategy\": {\n    \"steps\": [\n      \"step\"\n    ],\n    \"preferred_sources\": [\n      \"middling-source\"\n    ]\n  },\n  \"freshness\": {\n    \"max_age_minutes\": 60,\n    \"requires_source_timestamp\": true,\n    \"fallback_when_stale\": \"try_next_source\"\n  },\n  \"fallback\": {\n    \"when_unavailable\": \"generic_tool_routing\",\n    \"when_negative_feedback\": \"suppress_and_review\"\n  },\n  \"quality\": {\n    \"score\": 0.8,\n    \"confidence\": 0.7,\n    \"success_count\": 1,\n    \"failure_count\": 0,\n    \"negative_feedback_count\": 0,\n    \"last_used_at\": null,\n    \"last_validated_at\": null,\n    \"custom_quality\": \"keep\"\n  },\n  \"refs\": {\n    \"box_item_ids\": [],\n    \"memory_chunk_ids\": [],\n    \"feedback_ids\": [],\n    \"consolidation_run_ids\": [],\n    \"custom_refs\": [\n      \"keep\"\n    ]\n  },\n  \"revision_history\": [\n    {\n      \"at\": \"<now>\",\n      \"kind\": \"operator_disable\",\n      \"previous_status\": \"active\"\n    }\n  ],\n  \"custom_metadata\": {\n    \"keep\": true\n  }\n}\n"
+  }
+}

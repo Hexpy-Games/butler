@@ -1,0 +1,97 @@
+/* Forked from the app DS NavRow.module.css (link rows, no hover actions). */
+.row {
+  display: grid;
+  width: 100%;
+  min-height: var(--sidebar-row-height, 32px);
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sidebar-row-gap, var(--space-sm));
+  padding: 0 var(--sidebar-row-padding-inline, var(--space-sm));
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  text-decoration: none;
+  transition:
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    color var(--motion-fast) var(--motion-ease-standard);
+}
+
+a.row:hover {
+  background: color-mix(in srgb, var(--selection) 60%, transparent);
+}
+
+a.row:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* Active navigation is a flat background: no outline, shadow or glow. */
+.active,
+a.active:hover {
+  background: var(--selection-strong);
+  color: var(--text-primary);
+}
+
+.active .label {
+  font-weight: var(--font-weight-medium);
+}
+
+.disabled {
+  color: var(--interactive-disabled-fg);
+  cursor: var(--interactive-disabled-cursor);
+}
+
+.labelRegion {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--sidebar-row-gap, var(--space-sm));
+}
+
+.icon {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  color: currentcolor;
+  opacity: 0.82;
+}
+
+.icon svg {
+  width: var(--sidebar-icon-size, var(--icon-size-md));
+  height: var(--sidebar-icon-size, var(--icon-size-md));
+}
+
+.label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-regular);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  flex: none;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-regular);
+  text-align: right;
+}
+
+.disabled .badge {
+  color: var(--interactive-disabled-fg);
+}
+
+@media (width <= 640px) {
+  .label {
+    font-size: var(--font-size-4);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row {
+    transition: none;
+  }
+}

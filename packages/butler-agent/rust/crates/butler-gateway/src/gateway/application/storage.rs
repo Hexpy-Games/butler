@@ -1,15 +1,31 @@
 //! Single-owner SQLite lane for the App database.
 
+mod cached;
 mod error;
 mod schema;
+mod tuning;
 
+pub(super) use cached::CachedSql;
 pub(super) use error::{AppStorageCode, AppStorageError};
-use std::{path::PathBuf, sync::Arc, thread::JoinHandle, time::Duration};
+use std::{
+    panic::{AssertUnwindSafe, catch_unwind},
+    path::PathBuf,
+    sync::{Arc, Weak},
+    thread::JoinHandle,
+    time::Duration,
+};
 
+use parking_lot::Mutex as SyncMutex;
 use rusqlite::Connection;
 use tokio::sync::{Mutex, mpsc, oneshot};
 
+use super::event_outbox;
+
 const OPERATION_QUEUE_CAPACITY: usize = 64;
+/// Planner statistics are refreshed this often while the process runs.
+const OPTIMIZE_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+/// A refresh waits this long for the lane to go idle.
+const OPTIMIZE_RETRY: Duration = Duration::from_secs(60);
 
 type StorageResult<T> = Result<T, AppStorageError>;
 type DatabaseOperation = Box<dyn FnOnce(&mut Connection) + Send + 'static>;
@@ -21,6 +37,7 @@ pub(super) struct AppStorage {
 
 struct StorageInner {
     lane: Mutex<LaneState>,
+    optimizer: SyncMutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 struct LaneState {
@@ -57,16 +74,20 @@ impl AppStorage {
                 .with_source(error)
             })?;
         match initialized_rx.await {
-            Ok(Ok(())) => Ok(Self {
-                inner: Arc::new(StorageInner {
+            Ok(Ok(())) => {
+                let inner = Arc::new(StorageInner {
                     lane: Mutex::new(LaneState {
                         sender: Some(sender),
                         thread: Some(thread),
                         close_result: None,
                         close_waiters: Vec::new(),
                     }),
-                }),
-            }),
+                    optimizer: SyncMutex::new(None),
+                });
+                *inner.optimizer.lock() =
+                    Some(tokio::spawn(optimize_periodically(Arc::downgrade(&inner))));
+                Ok(Self { inner })
+            }
             Ok(Err(error)) => {
                 join_failed_initialization(thread).await;
                 Err(error)
@@ -88,7 +109,14 @@ impl AppStorage {
     {
         let (completion_tx, completion_rx) = oneshot::channel();
         let job = Box::new(move |connection: &mut Connection| {
-            let _cancelled_observer = completion_tx.send(operation(connection));
+            let result = super::monitoring::materialized::refresh(connection)
+                .and_then(|()| operation(connection))
+                .and_then(|value| {
+                    super::monitoring::materialized::refresh(connection).map(|()| value)
+                });
+            // Committed events reach subscribers before the caller sees the result.
+            event_outbox::flush();
+            let _cancelled_observer = completion_tx.send(result);
         });
         let lane = self.inner.lane.lock().await;
         let sender = lane.sender.as_ref().ok_or_else(|| {
@@ -115,7 +143,16 @@ impl AppStorage {
         })?
     }
 
+    /// Copies available WAL pages without waiting for foreground readers.
+    pub(super) async fn checkpoint(&self) -> StorageResult<()> {
+        self.execute(|connection| tuning::passive_checkpoint(connection))
+            .await
+    }
+
     pub(super) async fn close(&self) -> StorageResult<()> {
+        if let Some(optimizer) = self.inner.optimizer.lock().take() {
+            optimizer.abort();
+        }
         let (waiter_tx, waiter_rx) = oneshot::channel();
         let mut lane = self.inner.lane.lock().await;
         if let Some(result) = &lane.close_result {
@@ -155,6 +192,9 @@ impl AppStorage {
 
 impl Drop for StorageInner {
     fn drop(&mut self) {
+        if let Some(optimizer) = self.optimizer.lock().take() {
+            optimizer.abort();
+        }
         if let Ok(mut lane) = self.lane.try_lock() {
             lane.sender.take();
             lane.thread.take();
@@ -180,9 +220,13 @@ fn run_connection_lane(
             })?;
         }
         let mut connection = Connection::open(path).map_err(AppStorageError::sqlite)?;
-        configure(&connection)?;
+        tuning::configure(&connection)?;
         schema::migrate(&mut connection, butler_data.map(PathBuf::as_path))?;
         schema::seed(&connection, initialized_at)?;
+        schema::migrate_legacy_schedules(&mut connection, butler_data.map(PathBuf::as_path))?;
+        tuning::analyze_at_open(&connection)?;
+        super::monitoring::materialized::refresh(&connection)?;
+        event_outbox::install(&connection);
         Ok(connection)
     })();
     let mut connection = match setup {
@@ -196,27 +240,21 @@ fn run_connection_lane(
         return close_connection(connection);
     }
     while let Some(operation) = receiver.blocking_recv() {
-        operation(&mut connection);
+        if let Err(payload) = catch_unwind(AssertUnwindSafe(|| operation(&mut connection))) {
+            super::panic_isolation::report("app-sqlite", payload.as_ref());
+            // RAII transactions roll back while unwinding. Raw BEGINs must
+            // also be cleared before another operation uses this connection.
+            if !connection.is_autocommit()
+                && let Err(error) = connection.execute_batch("ROLLBACK")
+            {
+                eprintln!("[app-sqlite] panic rollback failed: {error}");
+            }
+        }
     }
-    connection
-        .execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
-        .map_err(AppStorageError::sqlite)?;
+    // Statistics are an optimization: a failure must not fail the close.
+    let _best_effort = tuning::optimize(&connection);
+    tuning::checkpoint(&connection)?;
     close_connection(connection)
-}
-
-fn configure(connection: &Connection) -> StorageResult<()> {
-    connection
-        .busy_timeout(Duration::from_millis(5_000))
-        .map_err(AppStorageError::sqlite)?;
-    connection
-        .pragma_update(None, "journal_mode", "WAL")
-        .map_err(AppStorageError::sqlite)?;
-    connection
-        .pragma_update(None, "foreign_keys", "ON")
-        .map_err(AppStorageError::sqlite)?;
-    connection
-        .pragma_update(None, "synchronous", "NORMAL")
-        .map_err(AppStorageError::sqlite)
 }
 
 fn close_connection(connection: Connection) -> StorageResult<()> {
@@ -248,4 +286,41 @@ async fn join_owner(thread: JoinHandle<StorageResult<()>>) -> StorageResult<()> 
                 "App SQLite owner panicked",
             )
         })?
+}
+
+/// Refreshes planner statistics every `OPTIMIZE_INTERVAL`, waiting for a moment
+/// when no other operation is queued.
+async fn optimize_periodically(inner: Weak<StorageInner>) {
+    let mut interval = tokio::time::interval_at(
+        tokio::time::Instant::now() + OPTIMIZE_INTERVAL,
+        OPTIMIZE_INTERVAL,
+    );
+    loop {
+        interval.tick().await;
+        loop {
+            let Some(inner) = inner.upgrade() else {
+                return;
+            };
+            let idle = inner
+                .lane
+                .lock()
+                .await
+                .sender
+                .as_ref()
+                .is_some_and(|sender| sender.capacity() == OPERATION_QUEUE_CAPACITY);
+            if idle {
+                let storage = AppStorage { inner };
+                if storage
+                    .execute(|connection| tuning::optimize(connection))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+                break;
+            }
+            drop(inner);
+            tokio::time::sleep(OPTIMIZE_RETRY).await;
+        }
+    }
 }

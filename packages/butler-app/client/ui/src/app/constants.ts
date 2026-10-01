@@ -38,7 +38,7 @@ export const EMPTY_SETTINGS: SettingsView = {
   context_window_tokens: 258_000,
   worker_profiles: [],
   max_simultaneous_workers: 10,
-  access_mode: "full_access",
+  access_mode: "ask_first",
   plan_mode_default: false,
   follow_up_behavior: "queue",
   multiline_send_behavior: "modifier_enter_send_enter_newline",
@@ -53,6 +53,16 @@ export const EMPTY_SETTINGS: SettingsView = {
     "#53708d",
     "#434d70",
   ],
+  // Matches the gateway default (the legacy defaults above, migrated).
+  wallpaper: {
+    source: {
+      kind: "live",
+      module: "butler.bloom",
+      params: { colors: "monochrome" },
+    },
+    motion: "auto",
+    pauseOnBattery: false,
+  },
   translucent_sidebar: true,
   smart_grouping_enabled: true,
   diagnostics_enabled: false,

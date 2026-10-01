@@ -133,7 +133,10 @@ async fn same_operation_semantic_apply_reopens_without_live_nonce() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(first.semantic_graph["state"], "partial");
+    assert_eq!(
+        first.semantic_graph.state,
+        Some(crate::cognition::StageStatus::Partial)
+    );
     service
         .project_semantic_window(input.clone())
         .await
@@ -147,6 +150,11 @@ async fn same_operation_semantic_apply_reopens_without_live_nonce() {
             .is_none()
     );
     service.close().await;
+    assert_both_windows_applied_once(&fixture);
+}
+
+/// Both windows committed with no live owner nonce; the vector stages wait.
+fn assert_both_windows_applied_once(fixture: &Fixture) {
     let graph = Connection::open(fixture.graph_path()).unwrap();
     let states: Vec<(String, Option<String>)> = graph
         .prepare("SELECT state,owner_nonce FROM memory_projection_windows ORDER BY ordinal")
@@ -172,12 +180,12 @@ async fn same_operation_semantic_apply_reopens_without_live_nonce() {
     assert!(counts.2 > 0);
     assert!(counts.3 > 0, "vector stages: {stage:?}");
     assert_eq!(
-        serde_json::from_str::<Value>(&stage.0).unwrap()["state"],
-        "pending"
+        crate::cognition::StageState::parse(&stage.0).state,
+        Some(crate::cognition::StageStatus::Pending)
     );
     assert_eq!(
-        serde_json::from_str::<Value>(&stage.1).unwrap()["state"],
-        "pending"
+        crate::cognition::StageState::parse(&stage.1).state,
+        Some(crate::cognition::StageStatus::Pending)
     );
 }
 

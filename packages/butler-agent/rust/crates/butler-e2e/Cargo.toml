@@ -9,9 +9,13 @@ publish.workspace = true
 
 # The harness never links product crates: the system under test is the built
 # `butler-agent` executable, driven through gateway HTTP, CLI and the data dir.
+# butler-platform is not product code: it is the OS boundary every crate uses.
 [dependencies]
+butler-platform = { path = "../butler-platform", features = ["test-support"] }
 axum.workspace = true
+base64.workspace = true
 bytes.workspace = true
+flate2.workspace = true
 chrono.workspace = true
 futures-util.workspace = true
 regex.workspace = true
@@ -20,11 +24,10 @@ rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+tar.workspace = true
 tokio.workspace = true
 uuid.workspace = true
-
-[target.'cfg(unix)'.dependencies]
-nix.workspace = true
+zip.workspace = true
 
 [lints]
 workspace = true

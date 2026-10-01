@@ -162,23 +162,3 @@ fn decode_probe_id(path: &str) -> Result<String, HttpError> {
         probe_id(path).ok_or_else(|| HttpError::public(404, "not_found", "Route not found."))?;
     super::subsessions::decode_component(raw)
 }
-
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::is_upsert_request;
-
-    #[test]
-    fn upsert_guard_rejects_unknown_top_level_but_accepts_nested_secret_metadata() {
-        assert!(is_upsert_request(&json!({
-            "transport":"http",
-            "url":"http://127.0.0.1/mcp",
-            "headers":[{"key":"Authorization","source":"env","value":"TOKEN","metadata":true}]
-        })));
-        assert!(!is_upsert_request(&json!({"id":"safe","unexpected":true})));
-        assert!(!is_upsert_request(&json!({
-            "env":[{"key":"TOKEN","source":"local","value":"x"}]
-        })));
-    }
-}

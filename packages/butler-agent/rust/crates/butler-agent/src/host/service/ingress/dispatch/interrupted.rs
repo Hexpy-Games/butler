@@ -25,9 +25,10 @@ pub(super) fn by_crash(record: &QueuedInboundEvent) -> bool {
         && plain_turn(record)
 }
 
-/// A turn already parked once for process replacement after an interruption.
+/// An item already parked once for process replacement after an
+/// interruption: whatever its kind, it is replaced at most once.
 pub(super) fn replaced_once(record: &QueuedInboundEvent) -> bool {
-    metadata_flag(record, "recoveredFromRuntimeInterruption") && plain_turn(record)
+    metadata_flag(record, "recoveredFromRuntimeInterruption")
 }
 
 fn metadata_flag(record: &QueuedInboundEvent, key: &str) -> bool {
@@ -77,15 +78,17 @@ pub(super) async fn settle(
     delivery: &dyn IngressDelivery,
     status: &str,
 ) -> Option<IngressPoll> {
-    let error = match report(item, bindings, delivery).await {
+    let error = match report(item, bindings, delivery, None).await {
         Ok(()) => {
-            let completed = queue.complete(
-                item,
-                json!({
-                    "source":"gateway/btcc/btcc-inbound-dispatcher.ts",
-                    "dispatchStatus":status,"handled":true,"delivered":1,
-                }),
-            );
+            let completed = queue
+                .complete_async(
+                    item.clone(),
+                    json!({
+                        "source":"gateway/btcc/btcc-inbound-dispatcher.ts",
+                        "dispatchStatus":status,"handled":true,"delivered":1,
+                    }),
+                )
+                .await;
             return Some(poll(matches!(completed, Ok(true)), 1));
         }
         Err(error) => error,
@@ -97,36 +100,47 @@ pub(super) async fn settle(
     match ReportFailure::of(error.code) {
         ReportFailure::NeverStarted => None,
         ReportFailure::Unreportable => {
-            let failed = queue.fail(
-                item,
-                error.code,
-                json!({
-                    "source":"gateway/btcc/btcc-inbound-dispatcher.ts",
-                    "dispatchStatus":format!("{status}-unreported"),"handled":false,
-                }),
-            );
+            let failed = queue
+                .fail_async(
+                    item.clone(),
+                    error.code.to_owned(),
+                    json!({
+                        "source":"gateway/btcc/btcc-inbound-dispatcher.ts",
+                        "dispatchStatus":format!("{status}-unreported"),"handled":false,
+                    }),
+                )
+                .await;
             Some(IngressPoll {
                 failed: usize::from(matches!(failed, Ok(true))),
                 ..Default::default()
             })
         }
-        // Not an interruption of this process: the service keeps running and
-        // claims the record again once its backoff has passed.
         ReportFailure::Transient => {
-            let _ = queue.defer(item, error.code);
+            if status == "shutdown-interrupted" {
+                // Preserve interruption provenance if publication failed during
+                // close: the next process must report it, never rerun the turn.
+                let _ = queue.park_async(item.clone(), error.code.to_owned()).await;
+            } else {
+                let _ = queue.defer_async(item.clone(), error.code.to_owned()).await;
+            }
             Some(IngressPoll::default())
         }
     }
 }
 
-async fn report(
+/// Tells the App the turn failed: interrupted, or `rejected` with that code.
+pub(super) async fn report(
     item: &ClaimedInboundEvent,
     bindings: &SessionBindingStore,
     delivery: &dyn IngressDelivery,
+    rejected: Option<&str>,
 ) -> Result<(), IngressError> {
     let envelope = bind::Envelope::from_record(&item.record)?;
     let binding = bind::existing_control_binding(&envelope, bindings).await?;
-    let report = action::crash_interrupted(item, &envelope, &binding)?;
+    let report = match rejected {
+        Some(code) => action::rejected(item, &envelope, &binding, code)?,
+        None => action::crash_interrupted(item, &envelope, &binding)?,
+    };
     if delivery.deliver(binding.session_id.clone(), report).await? {
         Ok(())
     } else {

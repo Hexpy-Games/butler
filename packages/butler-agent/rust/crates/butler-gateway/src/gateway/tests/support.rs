@@ -3,18 +3,18 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use serde_json::{Map, Value, json};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream},
-};
+use serde_json::{Value, json};
+use tokio::net::TcpListener;
 
 use super::*;
 
 mod dashboard;
+mod fixtures;
+use fixtures::{event, message_result};
 mod http;
 mod session_controls;
-pub(super) use http::authorized_json;
+mod wallpapers;
+pub(super) use http::{authorized_json, request};
 
 pub(super) async fn start(
     application: Arc<TestApplication>,
@@ -38,15 +38,7 @@ pub(super) async fn start_with_config(
     serve_gateway(listener, application, config).unwrap()
 }
 
-pub(super) async fn request(address: std::net::SocketAddr, request: &str) -> String {
-    let mut stream = TcpStream::connect(address).await.unwrap();
-    stream.write_all(request.as_bytes()).await.unwrap();
-    let mut response = Vec::new();
-    stream.read_to_end(&mut response).await.unwrap();
-    String::from_utf8(response).unwrap()
-}
-
-type EventListener = Arc<dyn Fn(AppEventEnvelope) + Send + Sync>;
+type EventListener = Arc<dyn Fn(Arc<PublishedEvent>) + Send + Sync>;
 type Subscribers = Arc<Mutex<Vec<(u64, EventListener)>>>;
 
 #[derive(Default)]
@@ -134,6 +126,17 @@ impl GatewayApplication for TestApplication {
     fn retry_turn_with_current_controls(&self, _: String) -> ApplicationFuture<MessageSendResult> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
+    fn get_provider_quota(
+        &self,
+        provider_id: String,
+        _refresh: bool,
+    ) -> ApplicationFuture<butler_runtime::operations::ProviderQuotaView> {
+        Box::pin(async move {
+            Ok(butler_runtime::operations::unavailable_quota_view(
+                &provider_id,
+            ))
+        })
+    }
     fn get_usage_monitor(&self, _: AppUsageMonitorQuery) -> ApplicationFuture<Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
@@ -220,7 +223,11 @@ impl GatewayApplication for TestApplication {
     ) -> ApplicationFuture<Vec<AppSessionSummary>> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
-    fn list_automations(&self, _: Option<String>) -> ApplicationFuture<AutomationListView> {
+    fn list_automations(
+        &self,
+        _: Option<String>,
+        _: bool,
+    ) -> ApplicationFuture<AutomationListView> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn get_automation(&self, _: String) -> ApplicationFuture<AutomationDetailView> {
@@ -332,8 +339,8 @@ impl GatewayApplication for TestApplication {
     ) -> ApplicationFuture<Vec<SessionArtifactSummary>> {
         Box::pin(async { Ok(Vec::new()) })
     }
-    fn export_transcript(&self, session_id: String) -> ApplicationFuture<TranscriptExport> {
-        super::transcript_export::empty_export(session_id)
+    fn export_transcript(&self, _: String) -> ApplicationFuture<TranscriptExport> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn list_session_queue(&self, session_id: String) -> ApplicationFuture<SessionQueueView> {
         Box::pin(async move {
@@ -397,7 +404,7 @@ impl GatewayApplication for TestApplication {
 
     fn subscribe_events(
         &self,
-        listener: Arc<dyn Fn(AppEventEnvelope) + Send + Sync>,
+        listener: Arc<dyn Fn(Arc<PublishedEvent>) + Send + Sync>,
     ) -> Result<Box<dyn EventSubscription>, GatewayApplicationError> {
         let id = self
             .next_subscriber
@@ -411,7 +418,7 @@ impl GatewayApplication for TestApplication {
             .load(std::sync::atomic::Ordering::SeqCst)
         {
             for event_id in 1..=201 {
-                listener(event(event_id));
+                listener(Arc::new(PublishedEvent::new(event(event_id))));
             }
         }
         Ok(Box::new(TestSubscription {
@@ -434,66 +441,5 @@ impl Drop for TestSubscription {
             .lock()
             .unwrap()
             .retain(|(id, _)| *id != self.id);
-    }
-}
-
-fn event(id: u64) -> AppEventEnvelope {
-    AppEventEnvelope {
-        protocol_version: "butler.app.v1".into(),
-        id,
-        event_type: "message.created".into(),
-        created_at: "2026-09-14T00:00:00.000Z".into(),
-        payload: Map::new(),
-    }
-}
-
-fn message_result() -> MessageSendResult {
-    MessageSendResult {
-        accepted: Some(MessageRecord {
-            content_parts: None,
-            id: "message-1".into(),
-            chat_id: "general".into(),
-            turn_id: Some("turn-1".into()),
-            conversation_session_id: None,
-            conversation_turn_id: None,
-            conversation_message_id: None,
-            role: MessageRole::User,
-            text: "hello".into(),
-            status: MessageStatus::Sent,
-            created_at: "2026-09-14T00:00:00.000Z".into(),
-            updated_at: "2026-09-14T00:00:00.000Z".into(),
-            safe_error_code: None,
-            delivery_state: None,
-            limitation_codes: None,
-            limitations: None,
-            retryable: false,
-            cursor: 1,
-            attachments: None,
-            artifacts: None,
-            changed_files: None,
-            plan_document: None,
-            work_blocks: None,
-            turn_activity_rows: None,
-        }),
-        queued: None,
-        reply: None,
-        replies: vec![],
-        turn: Some(TurnRecord {
-            id: "turn-1".into(),
-            chat_id: "general".into(),
-            user_message_id: Some("message-1".into()),
-            state: TurnState::Thinking,
-            safe_status_label: "Thinking".into(),
-            safe_error_code: None,
-            retryable: false,
-            cancellable: true,
-            attempt: 1,
-            created_at: "2026-09-14T00:00:00.000Z".into(),
-            updated_at: "2026-09-14T00:00:00.000Z".into(),
-            cursor: 1,
-            execution_controls: None,
-            execution_model: None,
-        }),
-        next_cursor: 1,
     }
 }

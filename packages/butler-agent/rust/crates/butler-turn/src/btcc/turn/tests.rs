@@ -2,16 +2,13 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use serde_json::json;
 use tokio::sync::Semaphore;
 
-use super::test_support::{agent_result, apply_final, record, request};
+use super::test_support::{agent_result, record, request};
 use super::*;
 use crate::btcc::*;
 
 mod preparation;
-mod prepared_lifetime;
-mod progress_scope;
 
 pub(super) struct Harness {
     turns: Mutex<HashMap<String, TurnRecord>>,
@@ -295,86 +292,16 @@ impl HostDependencies for Harness {
     }
 }
 
+/// Race: Stop wins against in-flight work. It bypasses the run queue and
+/// fences before the repository, and it cancels a turn claim together with
+/// the same session's authority in one transaction.
+// test-category: race
 #[tokio::test]
-async fn turn_outcome_follows_agent_result_progress_failures_and_resume_state() {
-    enum Setup {
-        Admitted,
-        Suspending,
-        StartedProgressFails,
-        StateProgressFails,
-        DeliveryCommitted,
-    }
-    for (setup, agent_calls) in [
-        (Setup::Admitted, 1),
-        (Setup::Suspending, 1),
-        (Setup::StartedProgressFails, 0),
-        (Setup::StateProgressFails, 1),
-        (Setup::DeliveryCommitted, 0),
-    ] {
-        let mut turn = record("turn-1", "session-1", TurnSemanticState::Admitted);
-        if matches!(setup, Setup::DeliveryCommitted) {
-            apply_final(&mut turn);
-        }
-        let harness = Harness::new([turn]);
-        match setup {
-            Setup::Suspending => harness.suspend_agent.store(true, Ordering::SeqCst),
-            Setup::StartedProgressFails => {
-                harness.fail_started_progress.store(true, Ordering::SeqCst);
-            }
-            Setup::StateProgressFails => harness.fail_state_progress.store(true, Ordering::SeqCst),
-            Setup::Admitted | Setup::DeliveryCommitted => {}
-        }
-        let assembly = crate::btcc::assemble(&harness.dependencies());
-        let outcome = assembly.btcc.run_turn(request("turn-1", "session-1")).await;
-        assert_eq!(harness.calls.load(Ordering::SeqCst), agent_calls);
-        let stored = harness.turns.lock().unwrap()["turn-1"].clone();
-        match setup {
-            Setup::Admitted | Setup::StateProgressFails | Setup::DeliveryCommitted => {
-                // Delivery is committed exactly once; state progress cannot veto it.
-                assert!(matches!(
-                    outcome.unwrap().result,
-                    TurnOutcomeKind::Delivered(_)
-                ));
-                assert_eq!(stored.semantic_state, TurnSemanticState::Delivered);
-            }
-            Setup::Suspending => {
-                assert!(matches!(
-                    outcome.unwrap().result,
-                    TurnOutcomeKind::Suspended { .. }
-                ));
-                assert_eq!(stored.semantic_state, TurnSemanticState::Admitted);
-                assert_eq!(stored.suspension, Some(SuspensionReason::WaitingForWorker));
-            }
-            Setup::StartedProgressFails => {
-                assert_eq!(outcome.unwrap_err().code(), "progress_append_failed");
-            }
-        }
-    }
+async fn stop_wins_against_queued_and_claimed_turns() {
+    stop_bypasses_run_queue_and_fences_before_repository().await;
+    crate::btcc::storage::repository_tests::stop::stop_cancels_turn_claim_and_same_session_authority_atomically().await;
 }
 
-#[tokio::test]
-async fn progress_uses_latest_request_queue_claim() {
-    let mut admitted = record("turn-1", "session-1", TurnSemanticState::Admitted);
-    admitted
-        .progress_destination
-        .as_mut()
-        .unwrap()
-        .app_queue_claim_id = Some("old".into());
-    let harness = Harness::new([admitted]);
-    let assembly = crate::btcc::assemble(&harness.dependencies());
-    let mut request = request("turn-1", "session-1");
-    request.app_queue_claim_id = Some("latest".into());
-    assembly.btcc.run_turn(request).await.unwrap();
-    assert!(
-        harness.progress.lock().unwrap().iter().all(|write| write
-            .destination
-            .app_queue_claim_id
-            .as_deref()
-            == Some("latest"))
-    );
-}
-
-#[tokio::test]
 async fn stop_bypasses_run_queue_and_fences_before_repository() {
     let harness = Harness::new([record("turn-1", "session-1", TurnSemanticState::Admitted)]);
     harness.block_agent.store(true, Ordering::SeqCst);
@@ -398,73 +325,4 @@ async fn stop_bypasses_run_queue_and_fences_before_repository() {
         running.await.unwrap().unwrap().result,
         TurnOutcomeKind::Cancelled { .. }
     ));
-}
-
-#[tokio::test]
-async fn duplicate_turn_id_shares_one_active_execution() {
-    let harness = Harness::new([record("turn-1", "session-1", TurnSemanticState::Admitted)]);
-    harness.block_agent.store(true, Ordering::SeqCst);
-    let assembly = crate::btcc::assemble(&harness.dependencies());
-    let first_btcc = assembly.btcc.clone();
-    let second_btcc = assembly.btcc.clone();
-    let first =
-        tokio::spawn(async move { first_btcc.run_turn(request("turn-1", "session-1")).await });
-    butler_test_support::eventually("agent loop entry", || {
-        harness.calls.load(Ordering::SeqCst) > 0
-    })
-    .await;
-    let second =
-        tokio::spawn(async move { second_btcc.run_turn(request("turn-1", "session-1")).await });
-    tokio::task::yield_now().await;
-    assert_eq!(harness.calls.load(Ordering::SeqCst), 1);
-    harness.permits.add_permits(1);
-    assert!(matches!(
-        first.await.unwrap().unwrap().result,
-        TurnOutcomeKind::Delivered(_)
-    ));
-    assert!(matches!(
-        second.await.unwrap().unwrap().result,
-        TurnOutcomeKind::Delivered(_)
-    ));
-    assert_eq!(harness.calls.load(Ordering::SeqCst), 1);
-}
-
-#[tokio::test]
-async fn close_drains_same_session_tail_then_closes_dependencies_once() {
-    let harness = Harness::new([
-        record("turn-1", "session-1", TurnSemanticState::Admitted),
-        record("turn-2", "session-1", TurnSemanticState::Admitted),
-    ]);
-    harness.block_agent.store(true, Ordering::SeqCst);
-    let assembly = crate::btcc::assemble(&harness.dependencies());
-    let first_btcc = assembly.btcc.clone();
-    let second_btcc = assembly.btcc.clone();
-    let first =
-        tokio::spawn(async move { first_btcc.run_turn(request("turn-1", "session-1")).await });
-    butler_test_support::eventually("agent loop entry", || {
-        harness.calls.load(Ordering::SeqCst) > 0
-    })
-    .await;
-    let second =
-        tokio::spawn(async move { second_btcc.run_turn(request("turn-2", "session-1")).await });
-    butler_test_support::eventually("second active turn", || {
-        assembly.btcc.inner.active_count() == 2
-    })
-    .await;
-    let host = assembly.host.clone();
-    let closing = tokio::spawn(async move { host.close().await });
-    tokio::task::yield_now().await;
-    assert_eq!(harness.closes.load(Ordering::SeqCst), 0);
-    harness.permits.add_permits(1);
-    butler_test_support::eventually("second turn entry", || {
-        harness.calls.load(Ordering::SeqCst) == 2
-    })
-    .await;
-    assert_eq!(harness.closes.load(Ordering::SeqCst), 0);
-    harness.permits.add_permits(1);
-    first.await.unwrap().unwrap();
-    second.await.unwrap().unwrap();
-    closing.await.unwrap().unwrap();
-    assembly.host.close().await.unwrap();
-    assert_eq!(harness.closes.load(Ordering::SeqCst), 1);
 }

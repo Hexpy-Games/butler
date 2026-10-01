@@ -140,7 +140,19 @@ describe("motion lint rules", () => {
   test("the thinking-mark engine allowlists only its simulation constants, each with a reason", () => {
     const mark = CANVAS_MOTION_ENGINES.find((engine) => engine.prefix.endsWith("ButlerThinkingMark/"));
     expect(mark).toBeDefined();
-    expect(Object.keys(mark!.constants).sort()).toEqual(["FRAME_INTERVAL_MS", "MAX_STEP_S", "MORPH_SPRING", "RISO_MOTION", "SPRING_SUBSTEP_S"]);
+    expect(Object.keys(mark!.constants).sort()).toEqual(["FRAME_INTERVAL_MS", "MAX_STEP_S", "MORPH_SPRING", "MOTION_FULL_SPEED_AT", "RISO_MOTION", "SPRING_SUBSTEP_S"]);
     for (const reason of Object.values(mark!.constants)) expect(reason.length).toBeGreaterThan(20);
+  });
+
+  test("the wallpaper engine is the only WebGL wallpaper path and justifies each policy constant", () => {
+    const wallpaper = CANVAS_MOTION_ENGINES.find((engine) => engine.prefix === "libs/design-system/blocks/Wallpaper/");
+    expect(wallpaper).toBeDefined();
+    expect(CANVAS_MOTION_ENGINES.some((engine) => engine.prefix.includes("PromptSuggestionList"))).toBe(false);
+    expect(Object.keys(wallpaper!.constants).sort()).toEqual([
+      "SECONDS_PER_DAY", "WALLPAPER_ANIMATED_FPS", "WALLPAPER_DAY_PHASE_REFRESH_MS", "WALLPAPER_MAX_CLOCK_STEP_MS",
+      "WALLPAPER_SCENE_TONE_CHECK_MS", "WALLPAPER_TIME_PERIOD_SECONDS", "WALLPAPER_WATCHDOG_RETRY_MAX_MS",
+      "WALLPAPER_WATCHDOG_RETRY_MS", "WALLPAPER_WATCHDOG_SLOW_RENDER_MS",
+    ]);
+    for (const reason of Object.values(wallpaper!.constants)) expect(reason.length).toBeGreaterThan(20);
   });
 });

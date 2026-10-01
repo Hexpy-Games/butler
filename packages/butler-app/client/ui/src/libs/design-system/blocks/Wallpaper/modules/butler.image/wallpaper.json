@@ -1,0 +1,9 @@
+{
+  "id": "butler.image",
+  "name": { "en": "Image", "ko": "이미지" },
+  "version": "1.0.0",
+  "engine": 1,
+  "motion": "static",
+  "image": "required",
+  "params": []
+}

@@ -33,9 +33,8 @@ export function adaptiveDrawerQuery(environment: ChromeEnvironment): string {
   return environment === "electron" ? ADAPTIVE_MEDIA.compact : `(max-width: ${ADAPTIVE_BREAKPOINTS.mediumMax}px)`;
 }
 
-/** CSS shell and product panel state share the same environment-aware breakpoint. */
-export function useAdaptiveDrawer(environment: ChromeEnvironment): boolean {
-  const query = adaptiveDrawerQuery(environment);
+/** Whether a media query matches, live (false during server render). */
+export function useMediaMatch(query: string): boolean {
   const subscribe = useCallback((notify: () => void) => {
     const media = window.matchMedia(query);
     media.addEventListener("change", notify);
@@ -43,6 +42,11 @@ export function useAdaptiveDrawer(environment: ChromeEnvironment): boolean {
   }, [query]);
   const read = useCallback(() => window.matchMedia(query).matches, [query]);
   return useSyncExternalStore(subscribe, read, () => false);
+}
+
+/** CSS shell and product panel state share the same environment-aware breakpoint. */
+export function useAdaptiveDrawer(environment: ChromeEnvironment): boolean {
+  return useMediaMatch(adaptiveDrawerQuery(environment));
 }
 
 export function normalizeAdaptivePanelState({

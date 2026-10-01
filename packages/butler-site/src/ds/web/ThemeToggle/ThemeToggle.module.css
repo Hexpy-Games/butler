@@ -1,0 +1,40 @@
+/* Segmented system / light / dark control (DS SegmentedControl look). */
+.group {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: var(--border-hairline) solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--control-bg);
+}
+
+.option {
+  display: inline-grid;
+  width: var(--control-height-xs);
+  height: var(--control-height-xs);
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-tertiary);
+  transition:
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    color var(--motion-fast) var(--motion-ease-standard);
+}
+
+.option:hover {
+  color: var(--text-primary);
+}
+
+.option[aria-pressed="true"] {
+  background: var(--selection-strong);
+  color: var(--text-primary);
+}
+
+.option:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}

@@ -22,7 +22,6 @@ use butler_turn::workspace::{
 
 mod integration;
 mod support;
-mod unit;
 use support::{ids, temp};
 
 struct Clock(AtomicU64);
@@ -437,6 +436,7 @@ pub(super) fn request() -> TurnRequest {
         authority_request_ref: None,
         authority_client_message_id: None,
         app_queue_claim_id: None,
+        resume: false,
         preparation_cancellation: tokio_util::sync::CancellationToken::new(),
     }
 }

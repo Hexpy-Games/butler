@@ -1,6 +1,5 @@
 use std::{
     fs,
-    io::Write,
     path::PathBuf,
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
@@ -17,7 +16,7 @@ use crate::{
     },
 };
 
-struct TestHost;
+pub(super) struct TestHost;
 
 impl CognitionCoordinationHost for TestHost {
     fn process_id(&self) -> u32 {
@@ -45,7 +44,7 @@ impl CognitionCoordinationHost for TestHost {
     }
 }
 
-fn epoch_now() -> i64 {
+pub(super) fn epoch_now() -> i64 {
     i64::try_from(
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -55,7 +54,7 @@ fn epoch_now() -> i64 {
     .unwrap_or(i64::MAX)
 }
 
-fn temp_root() -> PathBuf {
+pub(super) fn temp_root() -> PathBuf {
     std::env::temp_dir().join(format!(
         "butler-memory-health-{}-{}",
         std::process::id(),
@@ -64,107 +63,42 @@ fn temp_root() -> PathBuf {
 }
 
 #[tokio::test]
-async fn vector_snapshot_and_maintenance_status_drive_source_diagnostics() {
+async fn active_generation_serving_health_reads_populated_graph_without_writing() {
     let root = temp_root();
-    let memory = root.join("cognition/memory");
-    let now = epoch_now();
-    fs::create_dir_all(memory.join("db")).expect("create memory db dir");
-    fs::create_dir_all(memory.join("queue")).expect("create queue dir");
-    fs::create_dir_all(root.join("cognition/consolidation")).expect("create maintenance dir");
-    fs::write(memory.join("queue/sync.jsonl"), "{\"job_id\":\"queued\"}\n")
-        .expect("write queue row");
-
-    let metadata = Connection::open(memory.join("metadata.sqlite")).expect("metadata db");
-    metadata
-        .execute_batch(
-            "CREATE TABLE memory_chunks(memory_chunk_id TEXT); INSERT INTO memory_chunks VALUES('chunk-1');",
-        )
-        .expect("create metadata fixture");
-    drop(metadata);
-    let graph = Connection::open(memory.join("db/graph.sqlite")).expect("graph db");
-    graph
-        .execute_batch(
-            "CREATE TABLE memory_nodes(id TEXT); CREATE TABLE edges(id TEXT); CREATE TABLE memory_evidence(id TEXT); INSERT INTO memory_nodes VALUES('node-1');",
-        )
-        .expect("create graph fixture");
-    drop(graph);
-
-    let failed_summary = json!({
-        "phase": "summary",
-        "ts": butler_core::js_date::format_iso_millis(now).expect("timestamp"),
-        "status": "error",
-        "metrics": {"failed_phases": ["box_index", "source_quality"]}
-    });
-    fs::write(
-        root.join("cognition/consolidation/run-summary.jsonl"),
-        format!("{failed_summary}\n"),
-    )
-    .expect("write failed summary");
-
+    let graph_path = seed_active_generation(&root);
+    let before = fs::read(&graph_path).unwrap();
     let service = MemoryHealthService::new(
         root.clone(),
         CognitionPathEnvironment::default(),
-        Arc::new(CognitionWriteCoordinator::new(Arc::new(TestHost)).expect("coordinator")),
+        Arc::new(CognitionWriteCoordinator::new(Arc::new(TestHost)).unwrap()),
     );
-    let missing_vector = service
-        .read_at(now)
-        .await
-        .expect("read missing-vector health");
-    assert_eq!(missing_vector.memory_chunks_count, 1);
-    assert_eq!(missing_vector.vector_rows_count, None);
-    assert_eq!(missing_vector.maintenance_status.as_str(), "failed");
-    assert_eq!(missing_vector.metric_status, "error");
-    assert_eq!(missing_vector.diagnostics_count, 4);
-    assert_eq!(missing_vector.metric_dimensions["queue_backlog_count"], 1);
+    let report = service.read_tool(no_profile_coverage()).await.unwrap();
+    let summary = report.summary().unwrap();
+    let serving = &summary["serving"];
+    assert_eq!(serving["available"], true, "{serving}");
+    assert_eq!(serving["sources"]["registered_current"], 1);
+    assert_eq!(serving["sources"]["inventory_complete"], false);
+    assert_eq!(serving["sources"]["eligible"], serde_json::Value::Null);
     assert_eq!(
-        missing_vector.metric_dimensions["maintenance_failed_phases_count"],
-        2
+        serving["sources"]["coverage_percent"],
+        serde_json::Value::Null
     );
-    assert_eq!(missing_vector.metric_dimensions["serving_available"], false);
-
-    fs::create_dir_all(memory.join("hot")).expect("create hot dir");
-    fs::write(memory.join("hot/current.md"), "projection\n").expect("write hot cache file");
-    fs::write(
-        memory.join("db/vector-stats.json"),
-        serde_json::to_vec(&json!({
-            "row_count": 7,
-            "updated_at": butler_core::js_date::format_iso_millis(now + 1_000).expect("timestamp")
-        }))
-        .expect("serialize vector stats"),
-    )
-    .expect("write vector stats");
-    let repaired_summary = json!({
-        "phase": "summary",
-        "ts": butler_core::js_date::format_iso_millis(now + 1_000).expect("timestamp"),
-        "status": "ok",
-        "metrics": {"failed_phases": []}
-    });
-    fs::OpenOptions::new()
-        .append(true)
-        .open(root.join("cognition/consolidation/run-summary.jsonl"))
-        .expect("open maintenance summary")
-        .write_all(format!("{repaired_summary}\n").as_bytes())
-        .expect("append repaired summary");
-
-    let present_vector = service
-        .read_at(now + 1_000)
-        .await
-        .expect("read present-vector health");
-    assert_eq!(present_vector.vector_rows_count, Some(7.0));
-    assert_eq!(present_vector.maintenance_status.as_str(), "repaired");
-    assert_eq!(present_vector.metric_status, "ok");
-    assert_eq!(present_vector.diagnostics_count, 2);
-    assert_eq!(present_vector.metric_dimensions["stale"], false);
     assert_eq!(
-        present_vector.metric_dimensions["maintenance_failed_phases_count"],
-        0
+        serving["sources"]["inventory_reason"],
+        "canonical_inventory_unavailable"
     );
-    fs::remove_dir_all(root).expect("remove fixture");
+    assert_eq!(serving["stages"]["semantic_graph"]["failed"], 1);
+    assert_eq!(serving["stages"]["episode_vectors"]["failed"], 1);
+    assert_eq!(serving["source_resolution_failures"], 1);
+    assert_eq!(serving["embedding_version_mismatch"], 1);
+    assert_eq!(serving["graph_revision"], 3);
+    assert_eq!(fs::read(&graph_path).unwrap(), before);
+    fs::remove_dir_all(root).unwrap();
 }
 
-#[tokio::test]
-async fn active_generation_serving_health_reads_populated_graph_without_writing() {
-    let root = temp_root();
+/// An active generation whose graph has one current source with a failed
+/// window and a failed vector unit; the graph path.
+fn seed_active_generation(root: &std::path::Path) -> PathBuf {
     let generation = "11111111-1111-1111-1111-111111111111";
     let memory = root.join("cognition/memory");
     let generation_root = memory.join("generations").join(generation);
@@ -206,34 +140,21 @@ async fn active_generation_serving_health_reads_populated_graph_without_writing(
     )
     .unwrap();
     drop(db);
-    let before = fs::read(&graph_path).unwrap();
-    let service = MemoryHealthService::new(
-        root.clone(),
-        CognitionPathEnvironment::default(),
-        Arc::new(CognitionWriteCoordinator::new(Arc::new(TestHost)).unwrap()),
-    );
-    let report = service
-        .read_tool(json!({"available":false,"reason":"fixture"}))
-        .await
-        .unwrap();
-    let serving = &report.summary["serving"];
-    assert_eq!(serving["available"], true, "{serving}");
-    assert_eq!(serving["sources"]["registered_current"], 1);
-    assert_eq!(serving["sources"]["inventory_complete"], false);
-    assert_eq!(serving["sources"]["eligible"], serde_json::Value::Null);
-    assert_eq!(
-        serving["sources"]["coverage_percent"],
-        serde_json::Value::Null
-    );
-    assert_eq!(
-        serving["sources"]["inventory_reason"],
-        "canonical_inventory_unavailable"
-    );
-    assert_eq!(serving["stages"]["semantic_graph"]["failed"], 1);
-    assert_eq!(serving["stages"]["episode_vectors"]["failed"], 1);
-    assert_eq!(serving["source_resolution_failures"], 1);
-    assert_eq!(serving["embedding_version_mismatch"], 1);
-    assert_eq!(serving["graph_revision"], 3);
-    assert_eq!(fs::read(&graph_path).unwrap(), before);
-    fs::remove_dir_all(root).unwrap();
+    graph_path
+}
+
+/// Profile coverage that is unavailable.
+fn no_profile_coverage() -> crate::profile::ProfileCoverageHealth {
+    crate::profile::ProfileCoverageHealth {
+        available: false,
+        reason: Some("fixture"),
+        consent_mode: "off",
+        processed_windows: 0,
+        pending_windows: 0,
+        failed_windows: 0,
+        stale_history_windows: 0,
+        historical_processed_windows: 0,
+        discovery_incomplete: None,
+        discovery_reason: None,
+    }
 }

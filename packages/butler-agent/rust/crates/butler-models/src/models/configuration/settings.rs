@@ -3,9 +3,7 @@
 use std::path::Path;
 use std::{fs, io::Write};
 
-#[cfg(unix)]
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
-
+use butler_platform::secure_fs;
 use serde_json::Value;
 
 use super::ModelConfiguration;
@@ -78,6 +76,7 @@ impl ModelConfiguration {
         let _write = self.configuration_writes.acquire().await;
         let root = root.unwrap_or(&self.data_root);
         let path = root.join("butler.config.json");
+        let _change = configuration::lock_file_async(&path).await?;
         let mut config = configuration::read_json_object(&path)?;
         let object = butler_core::json::object_mut(&mut config);
         let user = butler_core::json::object_field_mut(object, "user");
@@ -103,6 +102,7 @@ impl ModelConfiguration {
         };
         let _write = self.configuration_writes.acquire().await;
         let path = root.join("butler.config.json");
+        let _change = configuration::lock_file_async(&path).await?;
         let mut config = configuration::read_json_object(&path)?;
         let object = butler_core::json::object_mut(&mut config);
         let web_search = butler_core::json::object_field_mut(object, "webSearch");
@@ -161,6 +161,7 @@ impl ModelConfiguration {
 
         let _write = self.configuration_writes.acquire().await;
         let path = self.data_root.join("butler.config.json");
+        let _change = configuration::lock_file_async(&path).await?;
         let mut config = configuration::read_json_object(&path)?;
         let previous = config
             .pointer("/system/defaultModel")
@@ -207,6 +208,7 @@ impl ModelConfiguration {
 
 /// Replaces or appends `key` in the private `.env` file with owner-only permissions.
 fn write_private_environment(path: &Path, key: &str, value: &str) -> Result<(), SettingsError> {
+    let _change = configuration::lock_file(path)?;
     let original = match fs::read_to_string(path) {
         Ok(contents) => contents,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
@@ -235,37 +237,17 @@ fn write_private_environment(path: &Path, key: &str, value: &str) -> Result<(), 
     let parent = path.parent().ok_or(SettingsError::Rejected(
         "Private environment path is invalid.",
     ))?;
-    #[cfg(unix)]
-    {
-        let mut builder = fs::DirBuilder::new();
-        builder.recursive(true).mode(0o700);
-        builder
-            .create(parent)
-            .or_else(|error| {
-                if error.kind() == std::io::ErrorKind::AlreadyExists && parent.is_dir() {
-                    Ok(())
-                } else {
-                    Err(error)
-                }
-            })
-            .map_err(io("Private environment directory could not be created."))?;
-    }
-    #[cfg(not(unix))]
-    fs::create_dir_all(parent)
+    secure_fs::create_private_dir_all(parent)
         .map_err(io("Private environment directory could not be created."))?;
-    let mut options = fs::OpenOptions::new();
-    options.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    options.mode(0o600);
-    let mut file = options
-        .open(path)
-        .map_err(io("Private environment file could not be written."))?;
-    file.write_all(format!("{}\n", lines.join("\n")).as_bytes())
-        .map_err(io("Private environment file could not be written."))?;
-    file.sync_all()
-        .map_err(io("Private environment file could not be written."))?;
-    #[cfg(unix)]
-    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
-        .map_err(io("Private environment file permissions could not be set."))?;
-    Ok(())
+    let content = format!("{}\n", lines.join("\n"));
+    secure_fs::replace_private(
+        path,
+        |file| {
+            #[cfg(test)]
+            super::durability_tests::interrupt_write(path, file)?;
+            file.write_all(content.as_bytes())
+        },
+        std::convert::identity,
+    )
+    .map_err(io("Private environment file could not be written."))
 }

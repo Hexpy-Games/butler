@@ -1,6 +1,6 @@
 use super::*;
 use crate::gateway::SessionControlState;
-use butler_turn::btcc::{AccessMode, ReasoningEffort};
+use butler_turn::btcc::ReasoningEffort;
 use rusqlite::OptionalExtension;
 
 use super::super::AppSessionControlUpdate;
@@ -47,7 +47,7 @@ pub(in crate::gateway::application) fn session_context_settings(
     Ok(SessionWorkspaceSettings {
         model: controls.model,
         reasoning_effort: reasoning_name(&controls.reasoning).into(),
-        access_mode: access_name(&controls.access).into(),
+        access_mode: access_mode_name(&controls.access).into(),
         plan_mode: controls.plan_mode,
         language: settings.language,
         context_window_tokens,
@@ -88,7 +88,10 @@ pub(in crate::gateway::application) fn update_session_controls(
     let mut controls = Controls {
         model: current.model,
         reasoning: parse_reasoning(&current.reasoning_effort).unwrap_or(ReasoningEffort::Medium),
-        access: parse_access(&current.access_mode).unwrap_or(AccessMode::FullAccess),
+        access: match parse_access(&current.access_mode) {
+            Some(access) => access,
+            None => super::default_access_mode(db)?,
+        },
         plan_mode: current.plan_mode,
     };
     if let Some(model) = update.model.as_ref() {
@@ -115,7 +118,7 @@ pub(in crate::gateway::application) fn update_session_controls(
         SessionControlState {
             model: controls.model,
             reasoning_effort: reasoning_name(&controls.reasoning).into(),
-            access_mode: access_name(&controls.access).into(),
+            access_mode: access_mode_name(&controls.access).into(),
             plan_mode: controls.plan_mode,
         },
         revision,
@@ -156,7 +159,7 @@ pub(in crate::gateway::application) fn session_workspace_settings(
     Ok(SessionWorkspaceSettings {
         model: settings.model,
         reasoning_effort: reasoning_name(&settings.reasoning).into(),
-        access_mode: access_name(&settings.access).into(),
+        access_mode: access_mode_name(&settings.access).into(),
         plan_mode: settings.plan_mode,
         language: settings.language,
         context_window_tokens: settings.context_window_tokens,
@@ -171,13 +174,5 @@ fn reasoning_name(value: &ReasoningEffort) -> &'static str {
         ReasoningEffort::High => "high",
         ReasoningEffort::Xhigh => "xhigh",
         ReasoningEffort::Max => "max",
-    }
-}
-
-fn access_name(value: &AccessMode) -> &'static str {
-    match value {
-        AccessMode::FullAccess => "full_access",
-        AccessMode::AskFirst => "ask_first",
-        AccessMode::ReadOnly => "read_only",
     }
 }

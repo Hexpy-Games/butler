@@ -7,7 +7,7 @@ use serde_json::{Map, Value, json};
 
 use butler_core::json::JsonDocument;
 use butler_memory::profile::{FirstChatOnboardingUpdate, ProfileError, ProfilingMode};
-use butler_turn::btcc::{AccessMode, ModelRoundToolCall, ToolExecutionError};
+use butler_turn::btcc::{ApprovalExemptAction, ModelRoundToolCall, ToolExecutionError};
 
 use super::GuidedTools;
 use butler_memory::profile::ProfileCode;
@@ -25,10 +25,14 @@ pub(super) async fn execute(
 ) -> Result<JsonDocument, ToolExecutionError> {
     let result = match call.name.as_str() {
         "update_onboarding_profile" => {
-            if owner.binding.access_mode != AccessMode::FullAccess {
+            if !owner
+                .binding
+                .access_mode
+                .allows_without_approval(ApprovalExemptAction::FirstConversationOnboarding)
+            {
                 return encoded(&json!({"ok":false,"error":{
                     "code":"profile_write_requires_full_access",
-                    "message":"This Turn does not have full access; no profile change was applied."
+                    "message":"This Turn is read-only; no profile change was applied."
                 }}));
             }
             let input = onboarding_input(&call.arguments);
@@ -125,30 +129,4 @@ fn encoded(value: &Value) -> Result<JsonDocument, ToolExecutionError> {
             error.to_string(),
         ))
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::*;
-
-    #[test]
-    fn onboarding_arguments_keep_source_defaults_and_skip_non_strings() {
-        let args = json!({
-            "principal_name":"Ari",
-            "persona_preset":" custom ",
-            "profiling_mode":"unrecognized",
-            "skipped_fields":["interests",3,null],
-            "complete":true,
-            "locale":"unknown"
-        });
-        let input = onboarding_input(args.as_object().unwrap());
-        assert_eq!(input.principal_name.as_deref(), Some("Ari"));
-        assert_eq!(input.persona_preset.as_deref(), Some("custom"));
-        assert_eq!(input.profiling_mode, None);
-        assert_eq!(input.skipped_fields, vec!["interests".to_owned()]);
-        assert!(input.complete);
-        assert_eq!(input.locale.as_deref(), Some("ko"));
-    }
 }

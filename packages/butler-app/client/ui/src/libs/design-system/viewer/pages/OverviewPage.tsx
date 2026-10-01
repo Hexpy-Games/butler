@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { MetricCard } from "../../blocks/MetricCard";
 import { MetricGrid } from "../../blocks/MetricGrid";
 import { Notice } from "../../blocks/Notice";
-import { PromptFluidBackground } from "../../blocks/PromptSuggestionList";
+import { Wallpaper, type WallpaperSource } from "../../blocks/Wallpaper";
 import type { SidebarDensity } from "../../blocks/SidebarShell";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
@@ -28,6 +28,7 @@ import type { ViewerState } from "../viewerState";
 import styles from "../DesignSystemViewer.module.css";
 
 const STAGES: AssembleStage[] = ["screen", "tokens", "components", "blocks"];
+const HERO_WALLPAPER: WallpaperSource = { kind: "live", module: "butler.bloom" };
 
 /** Plays the x-ray once (tokens → components → blocks → screen) until someone takes over. */
 function useAssemble(): [AssembleStage, (stage: AssembleStage) => void, number, () => void] {
@@ -79,7 +80,7 @@ export function OverviewPage({ entries, state, themes, onOpen, onChange }: {
     <Stack gap="2xl" data-ds-overview>
       <section className={styles.hero} data-ds-hero>
         {/* No tone: the hero sits in the chrome theme, which side-by-side frames[0] is not. */}
-        <div className={styles.heroFluid}><PromptFluidBackground /></div>
+        <div className={styles.heroFluid}><Wallpaper source={HERO_WALLPAPER} /></div>
         <div className={styles.heroGrid}>
           <Stack gap="lg">
             <Stack align="row"><Tag tone="accent" size="md">Butler Design System</Tag></Stack>

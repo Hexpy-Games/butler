@@ -13,12 +13,13 @@ mod pdf;
 mod prompt;
 mod recent;
 mod round_projection;
-#[cfg(unix)]
 mod status;
 mod status_conversation;
 mod status_transcript_activity;
 mod tool_artifact_slice;
 mod tool_output;
+#[cfg(test)]
+pub(crate) use tool_output::tests::reader_cases::reader_enforces_scan_limit_and_realpath_boundary;
 
 pub use attachment::AttachmentContext;
 pub use budget::*;
@@ -42,14 +43,14 @@ pub use pdf::{PdfTextError, extract_pdf_text, pdf_sidecar_text};
 pub use prompt::*;
 pub(crate) use recent::{RecentConversationInput, include_recent_context};
 pub use round_projection::ContextPortAdapter;
-#[cfg(unix)]
 pub(crate) use status::evaluate_status_budget;
+pub(crate) use status_conversation::TranscriptScanError;
 pub use status_conversation::{
     StatusConversationSummary, StatusFact, StatusTranscriptSummary, read_status_conversation_facts,
     read_status_transcript_summary,
 };
 pub(crate) use status_transcript_activity::{
-    StatusTranscriptToolUsageBucket, read_status_transcript_activity,
+    StatusTranscriptActivity, StatusTranscriptToolUsageBucket, TranscriptActivityCache,
 };
 pub(crate) use tool_artifact_slice::{ExactText, ToolArtifactTextSlice};
 pub use tool_output::{

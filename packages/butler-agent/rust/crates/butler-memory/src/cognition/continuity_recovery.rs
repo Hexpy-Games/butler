@@ -24,18 +24,30 @@ use self::manifest::{
 
 const SCHEMA: &str = "butler.continuity-recovery-manifest.v1";
 
+/// A continuity recovery manifest, as shown to the operator.
 #[derive(Clone, Debug, Serialize)]
 pub struct ContinuityRecoveryManifestView {
+    /// Manifest id.
     pub manifest_id: String,
+    /// Project the recovery is for.
     pub project_id: String,
+    /// Manifest state (`planned`, `approved`, `applied`, …).
     pub status: String,
+    /// Recoverable turns found per project.
     pub inventory_by_project: std::collections::BTreeMap<String, usize>,
+    /// Candidates in the manifest.
     pub candidate_count: usize,
+    /// Candidates approved for apply.
     pub approved_count: usize,
+    /// Turns quarantined instead of offered.
     pub quarantine_count: usize,
+    /// The hot cache before applying.
     pub before: RecoveryBeforeView,
+    /// The hot cache after applying, once applied.
     pub after: Option<RecoveryAfter>,
+    /// Recoverable turns.
     pub candidates: Vec<RecoveryCandidateView>,
+    /// Quarantined turns and why.
     pub quarantine: Vec<RecoveryQuarantine>,
 }
 
@@ -59,12 +71,23 @@ pub struct RecoveryCandidateView {
     pub body_sha256: String,
 }
 
+/// Whether a manifest is applied or rolled back.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Direction {
+    Apply,
+    Rollback,
+}
+
+/// The manifest after an apply or rollback.
 #[derive(Clone, Debug, Serialize)]
 pub struct ContinuityRecoveryAction {
+    /// The manifest.
     pub manifest: ContinuityRecoveryManifestView,
+    /// The action had already been done.
     pub replayed: bool,
 }
 
+/// Recovers conversation continuity into project hot caches, with operator review.
 pub struct ContinuityRecoveryService {
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
@@ -72,6 +95,7 @@ pub struct ContinuityRecoveryService {
 }
 
 impl ContinuityRecoveryService {
+    /// A recovery service over `data_root`.
     pub fn new(
         data_root: PathBuf,
         paths: CognitionPathEnvironment,
@@ -84,6 +108,7 @@ impl ContinuityRecoveryService {
         }
     }
 
+    /// Plans a recovery of `project_id` from the conversations in `workspace`.
     pub async fn plan(
         &self,
         project_id: &str,
@@ -95,7 +120,7 @@ impl ContinuityRecoveryService {
         let workspace = workspace.to_owned();
         tokio::task::spawn_blocking(move || {
             let manifest = candidates::plan(&data_root, &paths, &project_id, &workspace)?;
-            view(manifest)
+            Ok(view(manifest))
         })
         .await
         .map_err(|source| {
@@ -103,6 +128,7 @@ impl ContinuityRecoveryService {
         })?
     }
 
+    /// The manifest with `manifest_id`, when it exists.
     pub async fn inspect(
         &self,
         manifest_id: &str,
@@ -111,9 +137,7 @@ impl ContinuityRecoveryService {
         let paths = self.paths.clone();
         let manifest_id = manifest_id.to_owned();
         tokio::task::spawn_blocking(move || {
-            manifest::read(&data_root, &paths, &manifest_id)?
-                .map(view)
-                .transpose()
+            Ok(manifest::read(&data_root, &paths, &manifest_id)?.map(view))
         })
         .await
         .map_err(|source| {
@@ -121,6 +145,7 @@ impl ContinuityRecoveryService {
         })?
     }
 
+    /// Approves the manifest, or only `candidate_ids` of it.
     pub async fn approve(
         &self,
         manifest_id: &str,
@@ -146,7 +171,7 @@ impl ContinuityRecoveryService {
                     .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
                 let current = manifest::required(&data_root, &paths, &manifest_id)?;
                 let updated = manifest::approve(&data_root, &paths, current, candidate_ids)?;
-                view(updated)
+                Ok(view(updated))
             })();
             let released = lease.release(result.is_ok()).map_err(CognitionError::from);
             match (result, released) {
@@ -160,27 +185,30 @@ impl ContinuityRecoveryService {
         })?
     }
 
+    /// Applies an approved manifest to the hot cache.
     pub async fn apply(
         &self,
         manifest_id: &str,
         workspace: &Path,
     ) -> CognitionResult<ContinuityRecoveryAction> {
-        self.mutate(manifest_id, workspace, false).await
+        self.mutate(manifest_id, workspace, Direction::Apply).await
     }
 
+    /// Restores the hot cache to its state before the manifest was applied.
     pub async fn rollback(
         &self,
         manifest_id: &str,
         workspace: &Path,
     ) -> CognitionResult<ContinuityRecoveryAction> {
-        self.mutate(manifest_id, workspace, true).await
+        self.mutate(manifest_id, workspace, Direction::Rollback)
+            .await
     }
 
     async fn mutate(
         &self,
         manifest_id: &str,
         workspace: &Path,
-        rollback: bool,
+        direction: Direction,
     ) -> CognitionResult<ContinuityRecoveryAction> {
         let data_root = self.data_root.clone();
         let paths = self.paths.clone();
@@ -191,7 +219,9 @@ impl ContinuityRecoveryService {
             let paths = paths.clone();
             let manifest_id = manifest_id.clone();
             let workspace = workspace.clone();
-            move || hot_cache::replay_result(&data_root, &paths, &manifest_id, &workspace, rollback)
+            move || {
+                hot_cache::replay_result(&data_root, &paths, &manifest_id, &workspace, direction)
+            }
         })
         .await
         .map_err(|source| {
@@ -212,7 +242,7 @@ impl ContinuityRecoveryService {
             .map_err(CognitionError::from)?
             .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
         tokio::task::spawn_blocking(move || {
-            let result = if rollback {
+            let result = if direction == Direction::Rollback {
                 hot_cache::rollback(
                     &data_root,
                     &paths,
@@ -244,7 +274,7 @@ impl ContinuityRecoveryService {
     }
 }
 
-fn view(manifest: ContinuityRecoveryManifest) -> CognitionResult<ContinuityRecoveryManifestView> {
+fn view(manifest: ContinuityRecoveryManifest) -> ContinuityRecoveryManifestView {
     let before = RecoveryBeforeView {
         path: manifest.before.path.clone(),
         bytes: manifest.before.bytes,
@@ -265,7 +295,7 @@ fn view(manifest: ContinuityRecoveryManifest) -> CognitionResult<ContinuityRecov
             body_sha256: candidate.body_sha256.clone(),
         })
         .collect::<Vec<_>>();
-    Ok(ContinuityRecoveryManifestView {
+    ContinuityRecoveryManifestView {
         manifest_id: manifest.manifest_id,
         project_id: manifest.project_id,
         status: manifest.status,
@@ -277,7 +307,7 @@ fn view(manifest: ContinuityRecoveryManifest) -> CognitionResult<ContinuityRecov
         after: manifest.after,
         candidates,
         quarantine: manifest.quarantine,
-    })
+    }
 }
 
 fn error(code: CognitionCode) -> CognitionError {

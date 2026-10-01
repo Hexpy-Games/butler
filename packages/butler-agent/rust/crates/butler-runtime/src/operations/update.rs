@@ -1,14 +1,23 @@
-//! App-package update checks and DATA-only staging. Installation stays immutable.
+//! App-package update checks and DATA-only staging, and the Agent archive
+//! update that stages, installs and activates a new Agent version.
 
 mod agent;
 mod error;
 mod manifest;
+mod source;
 mod stage;
+mod status;
+mod version;
 
-pub use agent::{AgentArchiveUpdateService, AgentUpdateRequest};
+pub use agent::{AgentArchiveUpdateService, AgentUpdateRequest, KEEP_VERSIONS};
 pub(crate) use error::UpdateCode;
 pub use error::UpdateError;
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    path::PathBuf,
+    sync::{Arc, atomic::AtomicBool},
+    time::Duration,
+};
+pub use version::version_newer;
 
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
@@ -34,10 +43,21 @@ pub struct AppUpdateService {
     installation: PathBuf,
     version: Option<String>,
     manifest: String,
+    /// Downloads packages.
     client: reqwest::Client,
+    /// Fetches the manifest: a short connect timeout and a small total, so a
+    /// dead network fails the check quickly.
+    manifest_client: reqwest::Client,
     writes: Arc<Mutex<()>>,
     shutdown: CancellationToken,
+    /// Whether a background check is running.
+    refreshing: Arc<AtomicBool>,
 }
+
+/// Connecting to the manifest host.
+const MANIFEST_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+/// A whole manifest fetch.
+const MANIFEST_TIMEOUT: Duration = Duration::from_secs(15);
 
 impl AppUpdateService {
     pub fn new(
@@ -50,6 +70,11 @@ impl AppUpdateService {
         }
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(60))
+            .build()
+            .map_err(|source| UpdateError::caused(UpdateCode::UpdateHttpUnavailable, source))?;
+        let manifest_client = reqwest::Client::builder()
+            .connect_timeout(MANIFEST_CONNECT_TIMEOUT)
+            .timeout(MANIFEST_TIMEOUT)
             .build()
             .map_err(|source| UpdateError::caused(UpdateCode::UpdateHttpUnavailable, source))?;
         let manifest = std::env::var("BUTLER_APP_UPDATE_MANIFEST")
@@ -67,8 +92,10 @@ impl AppUpdateService {
             version,
             manifest,
             client,
+            manifest_client,
             writes: Arc::new(Mutex::new(())),
             shutdown: CancellationToken::new(),
+            refreshing: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -79,7 +106,7 @@ impl AppUpdateService {
     pub async fn check(&self, request: UpdateRequest) -> Result<Value, UpdateError> {
         validate_request(&request)?;
         let artifact = self.artifact(&request).await?;
-        let status = self.status(&request, &artifact).await?;
+        let status = self.status(&request, &artifact, "ok", None).await?;
         let view = self.persist_status(&request, status).await?;
         Ok(view)
     }
@@ -87,7 +114,7 @@ impl AppUpdateService {
     pub async fn apply(&self, request: UpdateRequest) -> Result<Value, UpdateError> {
         validate_request(&request)?;
         let artifact = self.artifact(&request).await?;
-        let status = self.status(&request, &artifact).await?;
+        let status = self.status(&request, &artifact, "ok", None).await?;
         let view = self.persist_status(&request, status).await?;
         let mut status = view["components"][0].clone();
         let actions = if status["update_available"] == true {
@@ -148,22 +175,29 @@ impl AppUpdateService {
         request: &UpdateRequest,
         status: Value,
     ) -> Result<Value, UpdateError> {
-        let view = json!({
+        let view = self.view(request, &status);
+        let _write = self.writes.lock().await;
+        stage::write_json(&self.data, &self.installation, status::STATUS_LABEL, &view).await?;
+        Ok(view)
+    }
+
+    /// The `UpdateStatusView` around one component status.
+    fn view(&self, request: &UpdateRequest, status: &Value) -> Value {
+        json!({
             "generated_at": status["checked_at"],
             "components": [status],
             "storage_label": "updates",
             "manifest_source": manifest::public_source(request.manifest.as_deref().unwrap_or(&self.manifest)),
             "raw_text_included": false,
-        });
-        let _write = self.writes.lock().await;
-        stage::write_json(&self.data, &self.installation, "updates/status.json", &view).await?;
-        Ok(view)
+        })
     }
 
     async fn status(
         &self,
         request: &UpdateRequest,
         artifact: &AppArtifact,
+        check_state: &str,
+        check_error: Option<&str>,
     ) -> Result<Value, UpdateError> {
         let current = self
             .version
@@ -198,6 +232,8 @@ impl AppUpdateService {
             "activation_policy": "user-installs-app-package",
             "rollback_policy": "not-managed-by-butler",
             "checked_at": now,
+            "check_state": check_state,
+            "check_error": check_error,
             "staged": prior.is_some(),
             "stage_path": "updates/staged/app.json",
             "stage_status": prior.as_ref().and_then(|value| value.get("stage_status")).unwrap_or(&json!("up_to_date")),
@@ -216,7 +252,7 @@ impl AppUpdateService {
         }
         let source = request.manifest.as_deref().unwrap_or(&self.manifest);
         load_artifact(
-            &self.client,
+            &self.manifest_client,
             &self.shutdown,
             source,
             request.channel.as_deref(),
@@ -238,30 +274,4 @@ fn validate_request(request: &UpdateRequest) -> Result<(), UpdateError> {
         return Err(UpdateCode::UnsupportedComponent.into());
     }
     Ok(())
-}
-
-fn version_newer(available: &str, current: &str) -> bool {
-    let parse = |version: &str| -> Vec<u64> {
-        version
-            .split(['.', '-'])
-            .map(|part| {
-                part.chars()
-                    .take_while(char::is_ascii_digit)
-                    .collect::<String>()
-                    .parse()
-                    .unwrap_or(0)
-            })
-            .collect()
-    };
-    let left = parse(available);
-    let right = parse(current);
-    (0..left.len().max(right.len()).max(3))
-        .map(|index| {
-            (
-                left.get(index).copied().unwrap_or(0),
-                right.get(index).copied().unwrap_or(0),
-            )
-        })
-        .find(|(left, right)| left != right)
-        .is_some_and(|(left, right)| left > right)
 }

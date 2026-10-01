@@ -31,6 +31,8 @@ export interface NativeMacReleaseManifest {
     updaterArtifactName: string | null;
     updaterSha256: string | null;
     dependencyClosure: NativeMacDependencyClosure | null;
+    /** Developer ID Team ID and notarization; null for ad-hoc builds. */
+    signing: { teamId: string; notarized: boolean } | null;
     payloadFormat: "platform-app-package";
     restartPolicy: "restart-app";
     updatePolicy: "app-user-action";
@@ -65,6 +67,7 @@ export function createNativeMacReleaseManifest(root: string): NativeMacReleaseMa
       updaterArtifactName: null,
       updaterSha256: null,
       dependencyClosure: null,
+      signing: null,
       payloadFormat: "platform-app-package",
       restartPolicy: "restart-app",
       updatePolicy: "app-user-action",
@@ -89,7 +92,7 @@ export function validateNativeMacReleaseManifest(
   if (manifest.artifacts.length !== 1) issues.push("native mac release requires one App artifact");
   const artifact = manifest.artifacts[0];
   if (!artifact || artifact.platform !== NATIVE_MAC_PLATFORM || artifact.product !== "butler-app" || artifact.component !== "app" || artifact.version !== manifest.version || artifact.registersUserService !== false || artifact.artifactName !== `butler-app-${manifest.version}-darwin-arm64.dmg` || artifact.payloadFormat !== "platform-app-package" || artifact.restartPolicy !== "restart-app" || artifact.updatePolicy !== "app-user-action" || artifact.stagingPolicy !== "butler-data-updates" || artifact.activationPolicy !== "user-installs-app-package" || artifact.rollbackPolicy !== "not-managed-by-butler") issues.push("native mac App artifact contract is invalid");
-  for (const path of ["packages/butler-app/client/electron/main.mjs", "packages/butler-app/client/electron/scripts/prepare-native-agent.mjs", "packages/butler-app/client/electron/scripts/normalize-mac-bundle.mjs", "packages/butler-app/client/ui/package.json", "packages/butler-agent/rust/crates/butler-agent/Cargo.toml", "packages/butler-agent/resources"]) {
+  for (const path of ["packages/butler-app/client/electron/main.mjs", "packages/butler-app/client/electron/scripts/prepare-native-agent.mjs", "packages/butler-app/client/electron/scripts/normalize-mac-bundle.mjs", "packages/butler-app/client/ui/package.json", "packages/butler-agent/rust/crates/butler-agent/Cargo.toml", "packages/butler-agent/resources", "deploy/macos/sign-and-notarize.sh", "deploy/macos/electron.entitlements.plist"]) {
     if (!existsSync(join(root, path))) issues.push(`native mac release input missing: ${path}`);
   }
   return issues;

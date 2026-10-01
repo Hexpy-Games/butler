@@ -1,6 +1,7 @@
 //! Canonical App session reads composed with BTCC child projections.
 
 mod helpers;
+mod steward_children;
 mod turn_projection;
 
 use serde_json::{Map, Value, json};
@@ -9,7 +10,7 @@ use super::{
     AppApplication, AppSessionBranchQuery, AppSessionViewPage, AppWorkStreamQuery,
     GatewayApplicationError, app_session_hint,
 };
-use crate::gateway::{TurnRecord, TurnState, protocol::APP_PROTOCOL_VERSION};
+use crate::gateway::{TurnRecord, protocol::APP_PROTOCOL_VERSION};
 use helpers::*;
 use turn_projection::{project, read_latest};
 
@@ -46,12 +47,9 @@ impl AppApplication {
         let latest_with_progress = read_latest(self, session_id.clone()).await?;
         let artifacts = self.artifact_page(session_id.clone()).await?;
         let context = self.context_details_owned(session_id.clone()).await?;
+        let usage = serde_json::to_value(&context.usage).map_err(json_error)?;
         let event_cursor = self.latest_event_cursor_owned().await?;
-        let subsessions = self
-            .dependencies
-            .subsessions
-            .projection(app_session_hint(&session_id), None)
-            .await?;
+        let subsessions = self.parent_subsessions(&session_id).await;
         let latest = latest_with_progress.as_ref().map(|(turn, _)| turn);
         let active = latest.filter(|turn| active_state(&turn.state));
         let work_streams = self
@@ -64,15 +62,7 @@ impl AppApplication {
             })
             .await?;
         let latest_message = messages.messages.last();
-        let suppress_progress_rows = latest.is_some_and(|turn| {
-            turn.user_message_id.is_none()
-                && matches!(&turn.state, &TurnState::Delivered)
-                && latest_message.is_some_and(|message| {
-                    matches!(&message.role, &crate::gateway::MessageRole::Assistant)
-                        && message.turn_id.is_none()
-                        && message.created_at.as_str() >= turn.created_at.as_str()
-                })
-        });
+        let suppress_progress_rows = superseded_by_reply(latest, latest_message);
         let latest_turn_view = latest_with_progress
             .as_ref()
             .map(|(turn, progress)| {
@@ -125,7 +115,8 @@ impl AppApplication {
             "artifacts".into(),
             serde_json::to_value(artifacts).map_err(json_error)?,
         );
-        view.insert("context".into(), context);
+        view.insert("context".into(), context.view);
+        view.insert("usage".into(), usage);
         view.insert("errors".into(), json!(safe_errors(&messages.messages)));
         view.insert(
             "cursors".into(),
@@ -174,12 +165,8 @@ impl AppApplication {
         let messages = self.message_page(session_id.clone(), 0.0, 200).await?;
         let latest = self.latest_session_turn(session_id.clone()).await?;
         let artifacts = self.artifact_page(session_id.clone()).await?;
-        let context_details = self.context_details_owned(session_id.clone()).await?;
-        let subsessions = self
-            .dependencies
-            .subsessions
-            .projection(app_session_hint(&session_id), None)
-            .await?;
+        let context_details = self.context_details_owned(session_id.clone()).await?.view;
+        let subsessions = self.parent_subsessions(&session_id).await;
         let latest = latest.as_ref();
         let work_streams = self
             .dependencies
@@ -289,6 +276,7 @@ impl AppApplication {
         ] {
             copy(&mut view, key, &projection);
         }
+        steward_children::complete_view_turns(&mut view);
         view.insert(
             "message_window".into(),
             json!({"next_cursor":next_cursor,"previous_cursor":previous_cursor,"complete":!has_more,"has_more":has_more}),
@@ -328,10 +316,11 @@ impl AppApplication {
             )
             .await?;
         require_relation(&projection)?;
-        let latest = projection
+        let mut latest = projection
             .get("latest_turn")
             .cloned()
             .unwrap_or(Value::Null);
+        steward_children::complete_turn_value(&mut latest);
         let updated = child_updated_at(&projection).ok_or(GatewayApplicationError::internal())?;
         let mut view = Map::new();
         view.insert("session_id".into(), json!(session_id));
@@ -367,6 +356,28 @@ impl AppApplication {
             json!({"state":"fresh","updated_at":updated,"source":"btcc-native"}),
         );
         Ok(Value::Object(view))
+    }
+
+    /// The session's steward and worker children; empty (with a diagnostic)
+    /// when they cannot be read, so the rest of the view still renders.
+    async fn parent_subsessions(&self, session_id: &str) -> Value {
+        let projection = self
+            .dependencies
+            .subsessions
+            .projection(app_session_hint(session_id), None)
+            .await;
+        let mut projection = projection.unwrap_or_else(|error| {
+            eprintln!(
+                "[gateway] session view without subsessions: {error} cause={:?}",
+                std::error::Error::source(&error).map(ToString::to_string)
+            );
+            json!({"workers": [], "steward_children": []})
+        });
+        let now =
+            butler_core::js_date::parse_iso_millis(&self.dependencies.identity_clock.now_iso())
+                .unwrap_or_default();
+        steward_children::complete(&mut projection, now);
+        projection
     }
 
     pub(super) async fn refresh_message_projection_owned(

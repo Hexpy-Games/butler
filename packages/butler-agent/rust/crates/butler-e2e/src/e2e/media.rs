@@ -56,6 +56,20 @@ pub fn digits_png(text: &str, scale: usize) -> Vec<u8> {
     png
 }
 
+/// A PNG whose header claims `width` x `height` pixels over a tiny, unrelated
+/// body: an image that is only harmful once decoded.
+pub fn png_claiming(width: u32, height: u32) -> Vec<u8> {
+    let mut png = b"\x89PNG\r\n\x1a\n".to_vec();
+    let mut header = Vec::new();
+    header.extend_from_slice(&width.to_be_bytes());
+    header.extend_from_slice(&height.to_be_bytes());
+    header.extend_from_slice(&[8, 2, 0, 0, 0]);
+    chunk(&mut png, *b"IHDR", &header);
+    chunk(&mut png, *b"IDAT", &zlib_stored(&[0; 16]));
+    chunk(&mut png, *b"IEND", &[]);
+    png
+}
+
 fn chunk(out: &mut Vec<u8>, kind: [u8; 4], data: &[u8]) {
     out.extend_from_slice(&u32::try_from(data.len()).unwrap_or(0).to_be_bytes());
     let mut crc_input = kind.to_vec();
@@ -102,6 +116,34 @@ pub fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
+/// `(content-type, body)` of a multipart upload: `file`, optional `session_id`.
+pub fn multipart_file(
+    name: &str,
+    mime: &str,
+    bytes: &[u8],
+    session_id: Option<&str>,
+) -> (String, Vec<u8>) {
+    let boundary = format!("e2e{}", uuid::Uuid::new_v4().simple());
+    let mut body = Vec::new();
+    if let Some(session) = session_id {
+        body.extend_from_slice(
+            format!(
+                "--{boundary}\r\nContent-Disposition: form-data; name=\"session_id\"\r\n\r\n{session}\r\n"
+            )
+            .as_bytes(),
+        );
+    }
+    body.extend_from_slice(
+        format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{name}\"\r\nContent-Type: {mime}\r\n\r\n"
+        )
+        .as_bytes(),
+    );
+    body.extend_from_slice(bytes);
+    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+    (format!("multipart/form-data; boundary={boundary}"), body)
+}
+
 impl Gateway {
     /// `POST /message-files` as multipart (`file`, optional `session_id`).
     pub async fn upload(
@@ -111,31 +153,34 @@ impl Gateway {
         bytes: &[u8],
         session_id: Option<&str>,
     ) -> Result<Reply, HarnessError> {
-        let boundary = format!("e2e{}", uuid::Uuid::new_v4().simple());
-        let mut body = Vec::new();
-        if let Some(session) = session_id {
-            body.extend_from_slice(
-                format!(
-                    "--{boundary}\r\nContent-Disposition: form-data; name=\"session_id\"\r\n\r\n{session}\r\n"
-                )
-                .as_bytes(),
-            );
-        }
-        body.extend_from_slice(
-            format!(
-                "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{name}\"\r\nContent-Type: {mime}\r\n\r\n"
-            )
-            .as_bytes(),
-        );
-        body.extend_from_slice(bytes);
-        body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+        let (content_type, body) = multipart_file(name, mime, bytes, session_id);
+        self.post_multipart("/message-files", content_type, body)
+            .await
+    }
+
+    /// `POST <path>` with one multipart `file` field (wallpaper uploads,
+    /// module archives).
+    pub async fn upload_file(
+        &self,
+        path: &str,
+        name: &str,
+        mime: &str,
+        bytes: &[u8],
+    ) -> Result<Reply, HarnessError> {
+        let (content_type, body) = multipart_file(name, mime, bytes, None);
+        self.post_multipart(path, content_type, body).await
+    }
+
+    async fn post_multipart(
+        &self,
+        path: &str,
+        content_type: String,
+        body: Vec<u8>,
+    ) -> Result<Reply, HarnessError> {
         let response = reqwest::Client::new()
-            .post(format!("{}/message-files", self.base))
+            .post(format!("{}{path}", self.base))
             .bearer_auth(&self.token)
-            .header(
-                "content-type",
-                format!("multipart/form-data; boundary={boundary}"),
-            )
+            .header("content-type", content_type)
             .body(body)
             .send()
             .await?;

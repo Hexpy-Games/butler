@@ -1,3 +1,5 @@
+//! Snapshotting the typed memory source tree for a rebuild, refusing links out of it.
+
 use std::{
     fs::{self, File, Metadata, OpenOptions},
     io,
@@ -243,52 +245,24 @@ fn create_private_file(data_root: &Path, path: &Path) -> CognitionResult<File> {
     ensure_data_authority(data_root, &[path])?;
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
+    butler_platform::secure_fs::owner_only(&mut options);
     options.open(path).map_err(io_error)
 }
 
 fn create_private_directory(data_root: &Path, path: &Path) -> CognitionResult<()> {
     ensure_data_authority(data_root, &[path])?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        let mut builder = fs::DirBuilder::new();
-        builder.recursive(false).mode(0o700);
-        builder.create(path).map_err(io_error)?;
-    }
-    #[cfg(not(unix))]
-    fs::create_dir(path).map_err(io_error)?;
+    butler_platform::secure_fs::create_private_dir(path).map_err(io_error)?;
     Ok(())
 }
 
 fn same_file(left: &Metadata, right: &Metadata) -> bool {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        left.dev() == right.dev() && left.ino() == right.ino()
-    }
-    #[cfg(not(unix))]
-    {
-        left.len() == right.len() && left.modified().ok() == right.modified().ok()
-    }
+    butler_platform::secure_fs::same_file(left, right)
 }
 
 fn sync_directory(path: &Path) -> CognitionResult<()> {
-    #[cfg(unix)]
-    {
-        File::open(path)
-            .and_then(|directory| directory.sync_all())
-            .map_err(io_error)
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = path;
-        Ok(())
-    }
+    butler_platform::secure_fs::sync_directory(path)
+        .unwrap_or(Ok(()))
+        .map_err(io_error)
 }
 
 fn snapshot_changed() -> CognitionError {

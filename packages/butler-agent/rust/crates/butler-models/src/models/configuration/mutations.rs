@@ -6,6 +6,8 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
 
+use super::super::catalog::{hosted_provider, normalize_display_label};
+use super::credential_admin::{CredentialDraft, CredentialError};
 use super::{ModelConfiguration, array, read_object_sync};
 use crate::models::{
     CredentialView, LocalModelPlatform, LocalModelSource, ModelCatalogError, ProviderAuthMethod,
@@ -52,16 +54,7 @@ impl ModelConfiguration {
     ) -> Result<CredentialView, ModelCatalogError> {
         let _write = self.configuration_writes.acquire().await;
         let root = root.unwrap_or(&self.data_root);
-        let path = root.join("auth/model-provider-credentials.json");
-        super::credentials::upsert(
-            &path,
-            &input.provider_id,
-            &input.api_key,
-            input.label.as_deref(),
-            input.credential_id.as_deref(),
-            &self.registration_catalog,
-            self.clock.as_ref(),
-        )
+        self.upsert_credential_locked(input, root).await
     }
 
     pub async fn register_hosted_model(
@@ -94,8 +87,9 @@ impl ModelConfiguration {
             .and_then(clean)
             .map(str::to_owned);
         if input.auth_type == ProviderAuthMethod::ApiKey {
-            credential_id = Some(self.ensure_credential(input, root, credential_id)?);
+            credential_id = Some(self.ensure_credential(input, root, credential_id).await?);
         }
+        let _change = lock_config(root).await?;
         let mut config = read_object_sync(&root.join("butler.config.json"));
         let now = self.clock.now_iso();
         let raw = json!({
@@ -135,6 +129,7 @@ impl ModelConfiguration {
     ) -> Result<RegisteredHostedModelConfig, ModelCatalogError> {
         let _write = self.configuration_writes.acquire().await;
         let root = root.unwrap_or(&self.data_root);
+        let _change = lock_config(root).await?;
         let mut config = read_object_sync(&root.join("butler.config.json"));
         let now = self.clock.now_iso();
         let mut current = normalized_registered(&config, self, &now);
@@ -154,26 +149,75 @@ impl ModelConfiguration {
         Ok(previous)
     }
 
-    fn ensure_credential(
+    /// Saves `input.api_key`: under `input.credential_id` when that is a
+    /// saved key of the same provider (its name and dates kept unless a
+    /// label is given), else as a new key. Runs under the write lock.
+    pub(super) async fn upsert_credential_locked(
+        &self,
+        input: &ProviderCredentialMutation,
+        root: &Path,
+    ) -> Result<CredentialView, ModelCatalogError> {
+        let provider_id =
+            hosted_provider(&input.provider_id).ok_or_else(|| error("Unsupported provider."))?;
+        let secret = clean(&input.api_key).ok_or_else(|| error("Provider API key is required."))?;
+        let (_lock, mut file) = self.open_credentials(root).await.map_err(catalog_error)?;
+        let records = file.records(&self.registration_catalog, self.clock.as_ref());
+        let previous = input
+            .credential_id
+            .as_deref()
+            .and_then(clean)
+            .and_then(|id| records.iter().find(|record| record.id == id));
+        if previous.is_some_and(|record| record.provider_id != provider_id) {
+            return Err(error(
+                "Credential provider does not match the selected provider.",
+            ));
+        }
+        let provider_label = self
+            .registration_catalog
+            .view()
+            .models
+            .iter()
+            .find(|model| model.provider_id == provider_id)
+            .map_or_else(|| provider_id.clone(), |model| model.provider_label.clone());
+        let label = normalize_display_label(
+            input.label.clone().map(Value::String).as_ref(),
+            previous.map_or(provider_label.as_str(), |record| record.label.as_str()),
+        );
+        let draft = CredentialDraft {
+            id: previous.map_or_else(
+                || format!("cred_{}", uuid::Uuid::new_v4()),
+                |record| record.id.clone(),
+            ),
+            provider_id,
+            label,
+            created_at: previous
+                .map_or_else(|| self.clock.now_iso(), |record| record.created_at.clone()),
+        };
+        self.write_credential(
+            root,
+            &mut file,
+            draft,
+            secret,
+            previous.map(|record| &record.home),
+        )
+        .await
+        .map_err(catalog_error)
+    }
+
+    /// The credential a hosted model registration names, or a new one
+    /// saved from its API key.
+    async fn ensure_credential(
         &self,
         input: &HostedModelMutation,
         root: &Path,
         credential_id: Option<String>,
     ) -> Result<String, ModelCatalogError> {
-        let path = root.join("auth/model-provider-credentials.json");
-        let mut file = read_object_sync(&path);
-        let mut records = array(file.get("credentials")).to_vec();
+        let (_lock, mut file) = self.open_credentials(root).await.map_err(catalog_error)?;
         if let Some(id) = credential_id {
-            let valid = records.iter().any(|record| {
-                record.get("id").and_then(Value::as_str).and_then(clean) == Some(id.as_str())
-                    && record.get("provider_id").and_then(Value::as_str) == Some(&input.provider_id)
-                    && record.get("auth_type").and_then(Value::as_str) == Some("api_key")
-                    && record
-                        .get("secret")
-                        .and_then(Value::as_str)
-                        .and_then(clean)
-                        .is_some()
-            });
+            let records = file.records(&self.registration_catalog, self.clock.as_ref());
+            let valid = records
+                .iter()
+                .any(|record| record.id == id && record.provider_id == input.provider_id);
             if valid {
                 return Ok(id);
             }
@@ -184,20 +228,26 @@ impl ModelConfiguration {
             .as_deref()
             .and_then(clean)
             .ok_or_else(|| error("Provider API key is required."))?;
-        let id = format!("cred_{}", uuid::Uuid::new_v4());
-        records.push(json!({
-            "id":id, "provider_id":input.provider_id, "auth_type":"api_key",
-            "label":input.credential_label.as_deref().and_then(clean).unwrap_or(&input.provider_id),
-            "secret":secret, "created_at":self.clock.now_iso(), "updated_at":self.clock.now_iso()
-        }));
-        butler_core::json::object_mut(&mut file)
-            .insert("credentials".into(), Value::Array(records));
-        write_json(&path, &file)?;
-        Ok(id)
+        let draft = CredentialDraft {
+            id: format!("cred_{}", uuid::Uuid::new_v4()),
+            provider_id: input.provider_id.clone(),
+            label: input
+                .credential_label
+                .as_deref()
+                .and_then(clean)
+                .unwrap_or(&input.provider_id)
+                .to_owned(),
+            created_at: self.clock.now_iso(),
+        };
+        let view = self
+            .write_credential(root, &mut file, draft, secret, None)
+            .await
+            .map_err(catalog_error)?;
+        Ok(view.id)
     }
 }
 
-fn normalized_registered(
+pub(super) fn normalized_registered(
     config: &Value,
     owner: &ModelConfiguration,
     now: &str,
@@ -212,7 +262,7 @@ fn normalized_registered(
         .collect()
 }
 
-fn set_models_array(config: &mut Value, key: &str, value: Value) {
+pub(super) fn set_models_array(config: &mut Value, key: &str, value: Value) {
     let root = butler_core::json::object_mut(config);
     butler_core::json::object_field_mut(root, "models").insert(key.into(), value);
 }
@@ -230,6 +280,18 @@ pub(super) fn write_json(path: &Path, value: &Value) -> Result<(), ModelCatalogE
         return Err(io_error(failure));
     }
     Ok(())
+}
+
+/// A key operation's failure as the model catalog reports it.
+pub(super) fn catalog_error(failure: CredentialError) -> ModelCatalogError {
+    match failure {
+        CredentialError::File(inner) => inner,
+        CredentialError::Store(source) => ModelCatalogError::Storage {
+            message: "The API key could not be kept in the credential store.",
+            source: source.into(),
+        },
+        other => ModelCatalogError::rejected(other.to_string()),
+    }
 }
 
 fn clean(value: &str) -> Option<&str> {
@@ -250,4 +312,16 @@ fn json_error(source: serde_json::Error) -> ModelCatalogError {
         message: "Model configuration could not be serialized.",
         source: source.into(),
     }
+}
+
+/// The same sibling gate used by CLI and gateway configuration updates.
+pub(super) async fn lock_config(
+    root: &Path,
+) -> Result<butler_platform::secrets::ChangeLock, ModelCatalogError> {
+    butler_core::configuration::lock_file_async(&root.join("butler.config.json"))
+        .await
+        .map_err(|source| ModelCatalogError::Storage {
+            message: "Model configuration could not be locked.",
+            source: source.into(),
+        })
 }

@@ -7,6 +7,8 @@ pub(in crate::cognition) use readiness::{CacheReadinessRow, StageReadiness, Vect
 mod candidates;
 mod consolidate;
 mod failure;
+mod identity_decision;
+pub(in crate::cognition) use failure::{ProviderCall, RepairBudget};
 pub(in crate::cognition) mod index;
 mod input;
 mod internal_supersession;
@@ -14,6 +16,7 @@ mod invalidation;
 mod jobs;
 mod operator_repair;
 mod plan;
+mod probe;
 mod progress_adapters;
 mod projection;
 mod recall;
@@ -21,6 +24,7 @@ mod recall_index;
 mod registration;
 mod retry_failed;
 mod schema;
+mod stage_state;
 mod stages;
 mod typed_lifecycle;
 mod typed_registration;
@@ -38,14 +42,20 @@ use rusqlite::{Connection, OpenFlags};
 use super::{CognitionError, CognitionResult};
 
 use crate::cognition::CognitionCode;
-pub(in crate::cognition) use cache_quantum::ClaimedCacheJob;
+pub(in crate::cognition) use cache_quantum::{CacheWindow, ClaimedCacheJob};
 pub(in crate::cognition) use candidates::VectorHit;
 pub(in crate::cognition) use consolidate::GraphConsolidateMetrics;
 pub(in crate::cognition) use internal_supersession::InternalSupersessionInput;
-pub use jobs::GraphProgress;
-pub(in crate::cognition) use jobs::{CatchupCursors, PendingSemanticJob};
+pub use jobs::{GraphProgress, JobOutcome};
+pub(in crate::cognition) use stage_state::StageWrite;
+pub use stage_state::{StageState, StageStatus};
+
+pub(in crate::cognition) use jobs::{CatchupState, PendingSemanticJob};
 pub(in crate::cognition) use operator_repair::CandidateInputRepairRequest;
-pub use operator_repair::ProjectionModelPolicyInput;
+pub use operator_repair::{
+    CandidateInputRepairResult, ProjectionModelPolicy, ProjectionModelPolicyInput,
+    ProjectionModelSlot, RepairMode, RepairReceipt,
+};
 pub(in crate::cognition) use plan::NormalizedPlan;
 pub(in crate::cognition) use projection::{
     ClaimProjectionWindowInput, ClaimedProjectionWindow, PreviousWindowState,
@@ -55,7 +65,8 @@ pub(in crate::cognition) use recall::{
     RecallEpisodeRow, RecallMention, RelationshipState, TemporalSelection,
 };
 pub(super) use registration::{GraphRegistration, RegistrationInput};
-pub(in crate::cognition) use retry_failed::{RetryFailedCounts, VectorRepairRequest};
+pub use retry_failed::RetryFailedCounts;
+pub(in crate::cognition) use retry_failed::VectorRepairRequest;
 pub(in crate::cognition) use stages::ExtractionStageResult;
 pub(super) use typed_registration::TypedRegistrationInput;
 pub(in crate::cognition) use vector_quantum::ClaimedVectorUnit;
@@ -185,7 +196,7 @@ impl GraphRepository {
         disposition: &str,
         revised: Option<&crate::cognition::extraction::ExtractInput>,
         now: &str,
-        provider_invoked: bool,
+        provider: ProviderCall,
     ) -> CognitionResult<()> {
         failure::disposition(
             self.connection_mut()?,
@@ -193,7 +204,7 @@ impl GraphRepository {
             disposition,
             revised,
             now,
-            provider_invoked,
+            provider,
         )
     }
     pub(in crate::cognition) fn source_window_candidates(
@@ -229,17 +240,10 @@ impl GraphRepository {
         owner: ProjectionWindowOwner<'_>,
         code: &str,
         now: &str,
-        provider_invoked: bool,
-        repair_exhausted: bool,
+        provider: ProviderCall,
+        repair: RepairBudget,
     ) -> CognitionResult<()> {
-        failure::settle(
-            self.connection_mut()?,
-            owner,
-            code,
-            now,
-            provider_invoked,
-            repair_exhausted,
-        )
+        failure::settle(self.connection_mut()?, owner, code, now, provider, repair)
     }
     pub(in crate::cognition) fn commit_meaning(
         &mut self,
@@ -379,7 +383,7 @@ impl GraphRepository {
         &self,
         window_ref: &str,
         owner_nonce: &str,
-        input: &serde_json::Value,
+        input: &crate::cognition::extraction::ExtractInput,
         migration_note: Option<&str>,
     ) -> CognitionResult<()> {
         projection::pin_input(
@@ -429,8 +433,8 @@ impl GraphRepository {
         &mut self,
         window: &str,
         nonce: &str,
-        output: &serde_json::Value,
-        evidence: &serde_json::Value,
+        output: &crate::cognition::extraction::ExtractOutput,
+        evidence: &crate::cognition::extraction::RunEvidence,
         now: &str,
     ) -> CognitionResult<()> {
         stages::save_result(self.connection_mut()?, window, nonce, output, evidence, now)
@@ -440,8 +444,8 @@ impl GraphRepository {
         job: &str,
         window: &str,
         nonce: &str,
-        output: &serde_json::Value,
-        plan: &serde_json::Value,
+        output: &crate::cognition::extraction::ExtractOutput,
+        plan: &NormalizedPlan,
     ) -> CognitionResult<()> {
         stages::save_plan(self.connection()?, job, window, nonce, output, plan)
     }

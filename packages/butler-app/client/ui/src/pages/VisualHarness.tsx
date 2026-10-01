@@ -30,11 +30,12 @@ import {
   HARNESS_PROJECT_DASHBOARD,
   HARNESS_SS03_NAVIGATION,
   HARNESS_SS03_OBSERVER_VIEW,
+  HARNESS_SS03_STEWARD_STATES,
   HARNESS_SS03_SUMMARY,
   HARNESS_SUMMARY,
 } from "@/app/fixtures.ts";
 import { appShellTheme, isDraftChatId, projectDraftId } from "@/app/utils.ts";
-import type { WorkerProfile } from "@/app/types.ts";
+import type { ModelCatalogView, WorkerProfile } from "@/app/types.ts";
 import { useButlerStore } from "@/app/store.ts";
 import {
   LEFT_PANEL_MAX_WIDTH,
@@ -44,6 +45,22 @@ import {
 import { useNarrowRightPanelAutoCollapse } from "@/hooks/useNarrowRightPanelAutoCollapse.ts";
 import { usePortalThemeClasses } from "@/hooks/usePortalThemeClasses.ts";
 import { useSystemThemePreference } from "@/hooks/useSystemThemePreference.ts";
+
+/** `?auth=subscription|api_key|local` bills the harness model that way (context usage popover). */
+function harnessModelCatalog(auth: string | null): ModelCatalogView {
+  const billing = auth === "subscription" ? { auth_type: "codex_oauth" as const }
+    : auth === "api_key" ? { auth_type: "api_key" as const }
+      : auth === "local" ? { platform: "llama_cpp" as const }
+        : null;
+  if (!billing) return HARNESS_MODEL_CATALOG;
+  const bill = <Model extends { model_ref: string }>(model: Model): Model =>
+    model.model_ref === HARNESS_PRIMARY_MODEL.model_ref ? { ...model, ...billing } : model;
+  return {
+    ...HARNESS_MODEL_CATALOG,
+    models: HARNESS_MODEL_CATALOG.models.map(bill),
+    providers: HARNESS_MODEL_CATALOG.providers.map((provider) => ({ ...provider, models: provider.models.map(bill) })),
+  };
+}
 
 export function VisualHarness() {
   const leftOpen = useButlerStore((state) => state.leftOpen);
@@ -72,14 +89,23 @@ export function VisualHarness() {
       : EMPTY_SETTINGS.appearance_theme;
   const ss03Surface =
     new URLSearchParams(window.location.search).get("surface") === "ss03";
+  const harnessCatalog = useMemo(
+    () => harnessModelCatalog(new URLSearchParams(window.location.search).get("auth")),
+    [],
+  );
   const worktreeSurface =
     new URLSearchParams(window.location.search).get("surface") === "worktree";
+  // `developer=1` turns on developer mode (context and worker tabs, Git details).
+  const developerMode =
+    new URLSearchParams(window.location.search).get("developer") === "1";
   const harnessNavigation = ss03Surface
     ? HARNESS_SS03_NAVIGATION
     : HARNESS_NAVIGATION;
   const harnessSummary = useMemo(
     () => ss03Surface
-      ? HARNESS_SS03_SUMMARY
+      // `steward=finalizing|delivered` swaps in that #307 Steward child state.
+      ? HARNESS_SS03_STEWARD_STATES[new URLSearchParams(window.location.search).get("steward") ?? ""] ??
+        HARNESS_SS03_SUMMARY
       : worktreeSurface
         ? {
             ...HARNESS_SUMMARY,
@@ -108,14 +134,18 @@ export function VisualHarness() {
         reasoning_effort: HARNESS_PRIMARY_MODEL.default_reasoning_effort,
       },
     ];
+    // `?locale=ko` renders the harness in Korean.
+    const language = new URLSearchParams(window.location.search).get("locale") === "ko" ? "ko" : EMPTY_SETTINGS.language;
     return visualTheme === EMPTY_SETTINGS.appearance_theme
-      ? { ...EMPTY_SETTINGS, worker_profiles: workerProfiles }
+      ? { ...EMPTY_SETTINGS, language, diagnostics_enabled: developerMode, worker_profiles: workerProfiles }
       : {
           ...EMPTY_SETTINGS,
           appearance_theme: visualTheme,
+          language,
+          diagnostics_enabled: developerMode,
           worker_profiles: workerProfiles,
         };
-  }, [visualTheme]);
+  }, [developerMode, visualTheme]);
   const systemPrefersDark = useSystemThemePreference();
   usePortalThemeClasses(harnessSettings, systemPrefersDark);
   const rightAvailable =
@@ -158,7 +188,7 @@ export function VisualHarness() {
     setNavigation(harnessNavigation);
     setMessages(HARNESS_MESSAGES);
     setSettings(harnessSettings);
-    setModelCatalog(HARNESS_MODEL_CATALOG);
+    setModelCatalog(harnessCatalog);
     setSummary(harnessSummary);
     if (ss03Surface) {
       setSessionView(HARNESS_SS03_OBSERVER_VIEW);
@@ -177,6 +207,7 @@ export function VisualHarness() {
     setStatus({ label: "ready", tone: "ok" });
   }, [
     harnessSettings,
+    harnessCatalog,
     setActiveChatId,
     setLeftOpen,
     setModelCatalog,

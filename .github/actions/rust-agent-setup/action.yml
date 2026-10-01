@@ -1,8 +1,10 @@
 name: Rust agent setup
 description: >-
-  Pinned Rust toolchain, the native dependencies a job needs (only protoc to
-  check, or the static ONNX Runtime to link), and a Cargo cache keyed per job.
+  Pinned Rust toolchain, protoc, a prebuilt or custom static ONNX Runtime as
+  needed, and a Cargo cache keyed per job.
   Every Rust agent job (and future E2E jobs that build the binary) starts here.
+  The custom static recipe runs for release targets; CI/dev builds download
+  prebuilt binaries, including for the Windows compile check.
 
 inputs:
   components:
@@ -11,9 +13,8 @@ inputs:
     default: ""
   native-deps:
     description: >-
-      "protoc" for check/clippy (build scripts only need protoc) or "ort" for
-      anything that links the agent (tests, E2E): the pinned static ONNX
-      Runtime plus protoc, restored from and saved to the ORT cache.
+      "protoc" for checks that do not link ORT, "prebuilt-ort" for CI/dev
+      builds, or "static-ort" for release builds.
     required: true
   cache-key:
     description: The rust-cache shared key; one per job so caches do not evict each other.
@@ -33,30 +34,47 @@ runs:
       with:
         python-version: "3.12"
 
-    # Checking never links ORT; the Lance build scripts only need protoc.
+    # The Lance build scripts need protoc. CI uses the pinned compiler tool
+    # without compiling ONNX Runtime from source.
     - name: Prepare pinned protoc
-      if: inputs.native-deps == 'protoc'
+      if: inputs.native-deps == 'protoc' || inputs.native-deps == 'prebuilt-ort'
       shell: bash
       working-directory: packages/butler-agent/rust
       env:
         CARGO_TARGET_DIR: ${{ runner.temp }}/ort-cache
       run: |
         set -euo pipefail
-        prepared="$(python scripts/prepare-static-ort-macos-arm64.py --protoc-only)"
+        prepared="$(python scripts/prepare-static-ort.py --protoc-only)"
         echo "PROTOC=$(jq -r .protoc <<<"$prepared")" >> "$GITHUB_ENV"
 
-    # The recipe's own fingerprint (lock, script, toolchain, SDK, clang,
-    # Python) is the cache key, so a runner image update that changes none
-    # of them still hits the cache.
+    - name: Configure downloaded ONNX Runtime cache
+      if: inputs.native-deps == 'prebuilt-ort'
+      shell: bash
+      env:
+        ORT_BINARY_CACHE: ${{ runner.temp }}/ort-download-cache
+      run: |
+        mkdir -p "$ORT_BINARY_CACHE"
+        echo "ORT_CACHE_DIR=$ORT_BINARY_CACHE" >> "$GITHUB_ENV"
+
+    - name: Create downloaded ONNX Runtime cache directory
+      if: inputs.native-deps != 'prebuilt-ort'
+      shell: bash
+      env:
+        ORT_BINARY_CACHE: ${{ runner.temp }}/ort-download-cache
+      run: mkdir -p "$ORT_BINARY_CACHE"
+
+    # The recipe's own fingerprint (target lock inputs, script, toolchain,
+    # compiler/SDK, Python) is the cache key, one per target, so a runner
+    # image update that changes none of them still hits the cache.
     - name: Fingerprint static ONNX Runtime
-      if: inputs.native-deps == 'ort'
+      if: inputs.native-deps == 'static-ort'
       id: ort
       shell: bash
       working-directory: packages/butler-agent/rust
-      run: echo "fingerprint=$(python scripts/prepare-static-ort-macos-arm64.py --fingerprint)" >> "$GITHUB_OUTPUT"
+      run: echo "fingerprint=$(python scripts/prepare-static-ort.py --fingerprint)" >> "$GITHUB_OUTPUT"
 
     - name: Restore static ONNX Runtime cache
-      if: inputs.native-deps == 'ort'
+      if: inputs.native-deps == 'static-ort'
       id: ort-cache
       uses: actions/cache/restore@v4
       with:
@@ -65,14 +83,14 @@ runs:
         key: static-ort-${{ runner.os }}-${{ runner.arch }}-${{ steps.ort.outputs.fingerprint }}
 
     - name: Prepare pinned static ONNX Runtime and protoc
-      if: inputs.native-deps == 'ort'
+      if: inputs.native-deps == 'static-ort'
       shell: bash
       working-directory: packages/butler-agent/rust
       env:
         ORT_CACHE_TARGET: ${{ runner.temp }}/ort-cache
       run: |
         set -euo pipefail
-        prepared="$(CARGO_TARGET_DIR="$ORT_CACHE_TARGET" python scripts/prepare-static-ort-macos-arm64.py)"
+        prepared="$(CARGO_TARGET_DIR="$ORT_CACHE_TARGET" python scripts/prepare-static-ort.py)"
         echo "$prepared"
         {
           echo "ORT_LIB_PATH=$(jq -r .ort_lib_path <<<"$prepared")"
@@ -82,7 +100,7 @@ runs:
         } >> "$GITHUB_ENV"
 
     - name: Save static ONNX Runtime cache
-      if: inputs.native-deps == 'ort' && steps.ort-cache.outputs.cache-hit != 'true'
+      if: inputs.native-deps == 'static-ort' && steps.ort-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
         path: ${{ runner.temp }}/ort-cache/native-deps
@@ -92,5 +110,6 @@ runs:
       uses: Swatinem/rust-cache@v2
       with:
         workspaces: packages/butler-agent/rust
-        shared-key: ${{ inputs.cache-key }}
+        shared-key: ${{ inputs.cache-key }}-${{ inputs.native-deps }}
+        cache-directories: ${{ runner.temp }}/ort-download-cache
         cache-on-failure: true

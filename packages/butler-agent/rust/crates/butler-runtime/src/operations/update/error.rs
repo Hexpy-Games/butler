@@ -8,6 +8,20 @@ wire_codes! {
         AgentVersionUnavailable = "agent_version_unavailable",
         AppVersionUnavailable = "app_version_unavailable",
         ButlerDataOverlapsInstallation = "butler_data_overlaps_installation",
+        InstallArchiveFormatUnsupported = "install_archive_format_unsupported",
+        InstallArchiveTooLarge = "install_archive_too_large",
+        InstallArchiveUnsafe = "install_archive_unsafe",
+        InstallBusy = "install_busy",
+        InstallHomeUnavailable = "install_home_unavailable",
+        InstallManifestInvalid = "install_manifest_invalid",
+        InstallNothingToRollBack = "install_nothing_to_roll_back",
+        InstallPlatformMismatch = "install_platform_mismatch",
+        InstallSha256Required = "install_sha256_required",
+        InstallSwitchFailed = "install_switch_failed",
+        InstallVerificationFailed = "install_verification_failed",
+        InstallVersionAmbiguous = "install_version_ambiguous",
+        InstallVersionNotFound = "install_version_not_found",
+        InstallWriteFailed = "install_write_failed",
         UnsupportedComponent = "unsupported_component",
         UpdateArtifactNameInvalid = "update_artifact_name_invalid",
         UpdateArtifactSha256Mismatch = "update_artifact_sha256_mismatch",
@@ -72,11 +86,36 @@ impl From<UpdateCode> for UpdateError {
 #[cfg(test)]
 mod tests {
     use super::UpdateCode;
+    use crate::context::ContextCode;
+    use crate::web_access::WebAccessCode;
 
+    fn spelled<T: Copy>(all: &[T], as_str: fn(T) -> &'static str) -> Vec<&'static str> {
+        all.iter().map(|code| as_str(*code)).collect()
+    }
+
+    /// Format pin: active runtime wire code tables keep their pinned spelling and order.
+    // test-category: format-pin
     #[test]
     fn wire_codes_are_stable() {
-        let codes: Vec<&str> = UpdateCode::ALL.iter().map(|code| code.as_str()).collect();
-        let expected: Vec<&str> = include_str!("wire_codes.txt").lines().collect();
-        assert_eq!(codes, expected);
+        for (domain, codes, pinned) in [
+            (
+                "update",
+                spelled(UpdateCode::ALL, UpdateCode::as_str),
+                include_str!("wire_codes.txt"),
+            ),
+            (
+                "context",
+                spelled(ContextCode::ALL, ContextCode::as_str),
+                include_str!("../../context/wire_codes.txt"),
+            ),
+            (
+                "web access",
+                spelled(WebAccessCode::ALL, WebAccessCode::as_str),
+                include_str!("../../web_access/wire_codes.txt"),
+            ),
+        ] {
+            let expected: Vec<&str> = pinned.lines().collect();
+            assert_eq!(codes, expected, "{domain}");
+        }
     }
 }

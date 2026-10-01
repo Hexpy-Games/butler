@@ -13,7 +13,9 @@ export { bundledAgentVersionLabel, UPDATE_COMPONENTS };
 
 export interface UpdateActionLabels {
   updateApplying: string;
+  updateChecking: string;
   updateComponent: string;
+  updateUnavailable: string;
   upToDate: string;
 }
 
@@ -125,6 +127,8 @@ function buttonLabel(
 ): string {
   if (applying === status.component) return labels.updateApplying;
   if (status.update_available) return labels.updateComponent;
+  if (status.check_state === "unavailable") return labels.updateUnavailable;
+  if (status.check_state === "unchecked") return labels.updateChecking;
   return labels.upToDate;
 }
 

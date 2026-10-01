@@ -19,9 +19,6 @@ use crate::gateway::application::{
     storage::AppStorageError,
 };
 
-#[cfg(test)]
-mod tests;
-
 #[derive(Clone, Copy)]
 pub(super) struct FailedProjection<'a> {
     pub metadata: &'a Map<String, Value>,
@@ -160,6 +157,7 @@ pub(super) fn project_suspended(
     if authority_pending {
         return Ok((false, false));
     }
+    super::stream_message::settle_suspended(db, subscribers, chat, turn, now)?;
     if queue::claim_status(db, chat, turn, claim)? == QueuedTurnClaimStatus::Unlinked {
         return Ok((true, false));
     }

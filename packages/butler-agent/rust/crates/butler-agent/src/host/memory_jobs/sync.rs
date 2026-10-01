@@ -11,16 +11,8 @@ use std::{
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
-#[cfg(unix)]
 use crate::host::EmbeddingOwner;
-#[cfg(not(unix))]
-use butler_memory::cognition::CandidateSearchInput;
-#[cfg(not(unix))]
-use butler_memory::cognition::CognitionVectorSearch;
-#[cfg(unix)]
 use butler_memory::cognition::GenerationVectorAdapter;
-#[cfg(not(unix))]
-use butler_memory::cognition::VectorSearchFuture;
 use butler_memory::cognition::{
     CognitionError, CognitionPathEnvironment, CognitionRegistrationService,
 };
@@ -49,8 +41,9 @@ impl MemorySync {
         paths: &CognitionPathEnvironment,
         coordinator: Arc<CognitionWriteCoordinator>,
         provider: Arc<ModelProvider>,
-        #[cfg(unix)] embedding: Arc<EmbeddingOwner>,
-        #[cfg(unix)] vector: Arc<GenerationVectorAdapter>,
+        unclean_previous_exit: bool,
+        embedding: Arc<EmbeddingOwner>,
+        vector: Arc<GenerationVectorAdapter>,
     ) -> Result<Self, BtccError> {
         let clock: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
         if active_memory_descriptor_exists(data_root, paths).map_err(error)? {
@@ -61,16 +54,7 @@ impl MemorySync {
             coordinator.clone(),
             clock.clone(),
             provider,
-            {
-                #[cfg(unix)]
-                {
-                    vector
-                }
-                #[cfg(not(unix))]
-                {
-                    Arc::new(UnavailableNativeVector)
-                }
-            },
+            vector,
             Arc::new(SystemIdentity),
         ));
         let consumer = MemorySyncConsumer::new(
@@ -79,8 +63,8 @@ impl MemorySync {
             registration.clone(),
             coordinator,
             clock,
-        );
-        #[cfg(unix)]
+        )
+        .with_unclean_start(unclean_previous_exit);
         let consumer = consumer.with_embedding(embedding);
         let consumer = Arc::new(consumer);
         let shutdown = CancellationToken::new();
@@ -114,52 +98,72 @@ impl MemorySync {
     }
 }
 
+/// The longest an idle loop sleeps between polls. In-process work and queue
+/// appends end the sleep early; the cap bounds everything else.
+const IDLE_CAP: Duration = Duration::from_secs(30);
+/// The longest a loop with waiting-but-blocked work sleeps.
+const DEFERRED_CAP: Duration = Duration::from_secs(5);
+
+/// The sleep after `idle_polls` consecutive polls that found nothing to do:
+/// 1 s, 2 s, 4 s, ... up to `cap`.
+fn backoff(idle_polls: u32, cap: Duration) -> Duration {
+    let steps = idle_polls.saturating_sub(1).min(16);
+    Duration::from_secs(1u64 << steps).min(cap)
+}
+
 async fn poll(
     consumer: Arc<MemorySyncConsumer>,
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
     shutdown: CancellationToken,
 ) {
+    let mut idle_polls = 0_u32;
     loop {
         if shutdown.is_cancelled() {
             return;
         }
-        let result = match active_memory_descriptor_exists(&data_root, &paths) {
+        let generation = active_memory_descriptor_exists(&data_root, &paths);
+        let available = matches!(&generation, Ok(true));
+        let result = match generation {
             Ok(false) => Ok(MemorySyncPoll::Idle),
             Ok(true) => consumer.poll_once().await,
             Err(error) => Err(error),
         };
         let delay = match result {
-            Ok(MemorySyncPoll::Processed) => Duration::from_millis(1500),
-            Ok(MemorySyncPoll::Idle | MemorySyncPoll::Deferred) => Duration::from_millis(1000),
+            Ok(MemorySyncPoll::Processed) => {
+                idle_polls = 0;
+                Duration::from_millis(1500)
+            }
+            Ok(MemorySyncPoll::Idle) => {
+                idle_polls = idle_polls.saturating_add(1);
+                let delay = backoff(idle_polls, IDLE_CAP);
+                if available {
+                    consumer.idle_delay(delay)
+                } else {
+                    delay
+                }
+            }
+            Ok(MemorySyncPoll::Deferred) => {
+                idle_polls = idle_polls.saturating_add(1);
+                backoff(idle_polls, DEFERRED_CAP)
+            }
             Err(_) if shutdown.is_cancelled() => return,
             Err(error) => {
                 // Diagnostic codes only. The durable queue retains failed work;
                 // paths, prompts, credentials and raw provider errors stay private.
                 eprintln!("[native-memory-sync] {}", error.code());
-                Duration::from_millis(1000)
+                idle_polls = idle_polls.saturating_add(1);
+                backoff(idle_polls, DEFERRED_CAP)
             }
         };
         tokio::select! {
             () = shutdown.cancelled() => return,
-            () = tokio::time::sleep(delay) => {},
+            woken = consumer.wait_for_work(delay) => {
+                if woken {
+                    idle_polls = 0;
+                }
+            }
         }
-    }
-}
-
-/// A configured embedding generation must not receive fabricated empty hits.
-/// The extraction policy skips this port when the manifest has embedding:null.
-#[cfg(not(unix))]
-pub(in crate::host) struct UnavailableNativeVector;
-#[cfg(not(unix))]
-impl CognitionVectorSearch for UnavailableNativeVector {
-    fn search<'a>(&'a self, _: CandidateSearchInput<'a>) -> VectorSearchFuture<'a> {
-        Box::pin(async {
-            Err(CognitionError::new(
-                "native_vector_unavailable",
-                "native_vector_unavailable",
-            ))
-        })
     }
 }
 

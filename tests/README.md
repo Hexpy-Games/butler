@@ -20,6 +20,12 @@ Tests should assert real product contracts, not only mocks. Prefer isolated
 `BUTLER_HOME` and `BUTLER_DATA` fixtures for stateful behavior, and avoid
 storing raw private data in fixtures or snapshots.
 
+Tests never touch the owner's real `~/.butler`. The Bun preload
+`support/isolated-user-data.ts` gives every test process a private `HOME`,
+`BUTLER_DATA` and XDG dirs (and passes them to spawned children); the Rust
+E2E harness does the same for the agent it starts, and CI fails a run that
+leaves anything under the runner's `~/.butler`.
+
 ## Related Specs
 
 - `SPEC-BUTLER-CLI` - Butler CLI

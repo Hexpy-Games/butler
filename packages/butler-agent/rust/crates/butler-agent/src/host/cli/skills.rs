@@ -5,10 +5,9 @@ mod output;
 use std::{ffi::OsString, path::PathBuf};
 
 use serde::Serialize;
-use serde_json::json;
 
 use crate::host::ResolvedInstallation;
-use butler_runtime::skills::{SkillError, SkillSettingsView, Skills, StagedSkillArchive};
+use butler_runtime::skills::{SkillError, Skills, StagedSkillArchive};
 use output::{CommandError, failure, render_error, render_success};
 
 pub(crate) use output::SkillCliResult;
@@ -49,9 +48,7 @@ async fn execute(
     let subcommand = options.args.get(1).map(String::as_str).unwrap_or("list");
     match subcommand {
         "list" => list(skills, options).await,
-        "inspect" | "show" => inspect(skills, options).await,
         "import" => import(skills, options).await,
-        "validate" => validate(skills, options).await,
         other => Err(failure(
             "unknown_command",
             format!("unknown skills command: {other}"),
@@ -75,44 +72,6 @@ async fn list(
             .map(|project| names(&format!("Project {}", project.id), &project.skills)),
     );
     Ok(("butler skills list", value(&view)?, lines.join("\n")))
-}
-
-async fn inspect(
-    skills: &Skills,
-    options: &Options,
-) -> Result<(&'static str, serde_json::Value, String), CommandError> {
-    let name = options
-        .args
-        .get(2)
-        .or_else(|| option_value(&options.args, "--name"))
-        .ok_or_else(|| failure("invalid_arguments", "skills inspect requires <name>", 2))?;
-    let view = skills
-        .cli_settings(project_values(&options.args))
-        .await
-        .map_err(|error| skill_failure(&error))?;
-    let matches: Vec<_> = flattened(&view)
-        .into_iter()
-        .filter(|skill| skill.name == *name)
-        .collect();
-    if matches.is_empty() {
-        return Err(failure("not_found", format!("skill not found: {name}"), 1));
-    }
-    let human = matches
-        .iter()
-        .map(|skill| {
-            let scope = skill
-                .project_id
-                .as_ref()
-                .map(|id| format!("{}:{id}", skill.source))
-                .unwrap_or_else(|| skill.source.to_owned());
-            format!(
-                "{} ({scope})\n{}\n{}",
-                skill.name, skill.description, skill.file_path
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n\n");
-    Ok(("butler skills inspect", json!({ "skills": matches }), human))
 }
 
 async fn import(
@@ -164,50 +123,6 @@ async fn import(
         )
     };
     Ok(("butler skills import", value(&result)?, human))
-}
-
-async fn validate(
-    skills: &Skills,
-    options: &Options,
-) -> Result<(&'static str, serde_json::Value, String), CommandError> {
-    let result = skills
-        .validate_settings(project_values(&options.args))
-        .await
-        .map_err(|error| skill_failure(&error))?;
-    if !result.ok {
-        let data = value(&result)?;
-        if options.json {
-            return Err(CommandError {
-                code: "health_failed".to_owned(),
-                message: format!("{} skill validation issue(s).", result.issues.len()),
-                exit_code: 3,
-                data: Some(Box::new(data)),
-            });
-        }
-        return Err(CommandError {
-            code: "health_failed".to_owned(),
-            message: result
-                .issues
-                .iter()
-                .map(|issue| {
-                    let scope = issue
-                        .project_id
-                        .as_ref()
-                        .map(|id| format!("{}:{id}", issue.source))
-                        .unwrap_or_else(|| issue.source.to_owned());
-                    format!("{scope} {}: {}", issue.file_path, issue.message)
-                })
-                .collect::<Vec<_>>()
-                .join("\n"),
-            exit_code: 3,
-            data: None,
-        });
-    }
-    let human = format!(
-        "Skill validation passed.\ncore={} user={} project={}",
-        result.counts.core, result.counts.user, result.counts.project
-    );
-    Ok(("butler skills validate", value(&result)?, human))
 }
 
 fn parse(raw_args: Vec<OsString>) -> Result<Options, CommandError> {
@@ -292,9 +207,7 @@ fn expand_home(value: &str) -> PathBuf {
 }
 
 fn user_home() -> PathBuf {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_default()
+    butler_platform::user_dirs::home_dir().unwrap_or_default()
 }
 
 fn project_values(args: &[String]) -> Option<Vec<String>> {
@@ -312,14 +225,6 @@ fn project_values(args: &[String]) -> Option<Vec<String>> {
 fn option_value<'a>(args: &'a [String], name: &str) -> Option<&'a String> {
     let index = args.iter().position(|arg| arg == name)?;
     args.get(index + 1).filter(|value| !value.starts_with("--"))
-}
-
-fn flattened(view: &SkillSettingsView) -> Vec<&butler_runtime::skills::SkillSummary> {
-    view.core
-        .iter()
-        .chain(&view.user)
-        .chain(view.projects.iter().flat_map(|project| &project.skills))
-        .collect()
 }
 
 fn names(label: &str, skills: &[butler_runtime::skills::SkillSummary]) -> String {

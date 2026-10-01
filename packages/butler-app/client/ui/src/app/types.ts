@@ -1,4 +1,6 @@
 import type { ReactElement, ReactNode } from "react";
+// Relative (not `@/butler-ds`): the root typecheck reaches this file without the UI path aliases.
+import type { WallpaperSetting, WallpaperSource } from "../libs/design-system/blocks/Wallpaper/types.ts";
 
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 export type AccessMode = "full_access" | "ask_first" | "read_only";
@@ -16,6 +18,7 @@ export type SettingsSectionId =
   | "logs"
   | "personalization"
   | "privacy"
+  | "security"
   | "system"
   | "archives"
   | "about";
@@ -82,6 +85,8 @@ export interface AppModelSummary {
   model_ref: string;
   display_name: string;
   status: "latest" | "recommended" | "available" | "deprecated";
+  /** #278: the model's place in its provider's lineup. */
+  tier?: "flagship" | "balanced" | "efficient";
   context_window_tokens?: number;
   max_output_tokens?: number;
   default_reasoning_effort: ReasoningEffort;
@@ -115,14 +120,47 @@ export interface AppModelSummary {
 
 export type ProviderAuthMethod = "api_key" | "codex_oauth";
 
+/** Where a saved API key is kept (#217). */
+export type CredentialStorage =
+  | "keychain"
+  | "secret_service"
+  | "credential_manager"
+  | "fallback_file"
+  | "legacy_plaintext";
+
 export interface ProviderCredentialView {
   id: string;
   provider_id: string;
   auth_type: ProviderAuthMethod;
   label: string;
   masked_value: string;
+  storage?: CredentialStorage;
   created_at: string;
   updated_at: string;
+}
+
+/** `GET /credentials`: a saved key and the registered models that use it. */
+export interface SavedCredentialView extends ProviderCredentialView {
+  model_refs: string[];
+}
+
+export interface CredentialListView {
+  credentials: SavedCredentialView[];
+  store: {
+    backend: CredentialStorage;
+    reason: "unsigned_build" | "signed_build" | "config" | "test_override";
+    fallback_reason?: string;
+    error?: string;
+    override_ignored: boolean;
+    legacy_plaintext: number;
+  };
+}
+
+/** `DELETE /credentials/{name}`. */
+export interface CredentialDeletionResult {
+  credential: ProviderCredentialView;
+  removed_model_refs: string[];
+  secret_removed: boolean;
 }
 
 export interface WorkerModelPreset {
@@ -146,6 +184,8 @@ export interface ModelCatalogView {
     auth_methods?: ProviderAuthMethod[];
     default_api_base_url?: string;
     models: AppModelSummary[];
+    /** #230: the per-provider default first-run setup picks (model ref or id, effort). */
+    presets?: { routine?: { model: string; effort: ReasoningEffort } };
   }>;
   models: AppModelSummary[];
   registered_models?: AppModelSummary[];
@@ -389,6 +429,9 @@ export interface ComponentUpdateStatus {
   activation_policy: UpdateActivationPolicy;
   rollback_policy: UpdateRollbackPolicy;
   checked_at: string;
+  /** "unavailable": no usable manifest at the last check; "unchecked": never checked. */
+  check_state?: "ok" | "unavailable" | "unchecked";
+  check_error?: string | null;
   staged: boolean;
   stage_path: string;
   stage_status: "up_to_date" | "staged" | "activated" | "rolled_back" | "dry_run";
@@ -538,6 +581,8 @@ export interface SettingsView {
     string,
     string,
   ];
+  /** The home screen wallpaper; derived from the legacy `main_screen_theme*` keys until one is saved. */
+  wallpaper: WallpaperSetting;
   translucent_sidebar: boolean;
   smart_grouping_enabled: boolean;
   diagnostics_enabled: boolean;
@@ -546,6 +591,38 @@ export interface SettingsView {
   web_search: WebSearchSettingsView;
   model_fallback: ModelFallbackSettingsView;
   profile_label: string;
+  /** #230: onboarding state kept by the agent; absent on agents before #230. */
+  onboarding?: OnboardingSettingsView;
+  /** Local clients that send the admin credential only. */
+  security?: SecuritySettingsView;
+}
+
+export interface OnboardingSettingsView {
+  consent_version?: number | null;
+  accepted_at?: string | null;
+  completed_at?: string | null;
+}
+
+/** The `security` object of GET/PATCH /settings. */
+export interface SecuritySettingsView {
+  remote_access_enabled: boolean;
+  allowed_hosts: string[];
+}
+
+/**
+ * GET /security: local clients with the admin credential only (403
+ * `loopback_required` or `admin_credential_required` otherwise).
+ */
+export interface SecurityView {
+  remote_access_enabled: boolean;
+  /** Every listen address, loopback first. */
+  bind_addresses: string[];
+  /** Empty while remote access is off. */
+  lan_urls: string[];
+  /** Extra host names the gateway answers (tunnels, reverse proxies). */
+  allowed_hosts: string[];
+  /** Null when local auth is off; `created_at` null when the token file has none. */
+  connection_code: { masked: string; created_at: string | null } | null;
 }
 
 export interface ModelFallbackSettingsView {
@@ -711,13 +788,32 @@ export interface CreateSessionResult {
   session: SessionSummary;
 }
 
+/**
+ * A project folder's Git state; what the agent could not read is null. The
+ * project list fills only `is_repo` and `branch`; the dashboard fills all.
+ */
+export interface ProjectGitState {
+  is_repo: boolean;
+  branch: string | null;
+  dirty?: boolean | null;
+  ahead?: number | null;
+  behind?: number | null;
+}
+
+/** A project's wallpaper: follow the global `wallpaper` setting, or its own source. */
+export type ProjectWallpaper = "inherit" | WallpaperSource;
+
 export interface ProjectSummary {
   id: string;
   display_name: string;
   last_activity_at: string;
   pinned: boolean;
   archived: boolean;
+  /** From the dashboard preferences; absent (older gateways, optimistic rows) means `inherit`. */
+  wallpaper?: ProjectWallpaper;
   sessions?: SessionSummary[];
+  /** Absent from agents that predate project Git state. */
+  git?: ProjectGitState | null;
 }
 
 export type { SpaceCommand, SpaceNode, SpaceGroup, SpaceView, SpaceMutationResult } from "../../../shared/app-contracts.ts";
@@ -750,6 +846,8 @@ export interface MessageFileRef {
   size_bytes: number;
   sha256: string;
   url: string;
+  /** Short-lived `url` with `?expires=..&signature=..` for token-less loads. */
+  signed_url?: string;
   created_at: string;
 }
 
@@ -966,7 +1064,8 @@ export interface SessionViewTurn {
   delivery_state?: RuntimeDeliveryState;
   limitation_codes?: string[];
   limitations?: string[];
-  progress: TurnProgressSnapshot;
+  /** Optional: the gateway may omit progress for a turn (treat as no rows). */
+  progress?: TurnProgressSnapshot;
   created_at: string;
   updated_at: string;
   execution_controls?: {
@@ -1222,6 +1321,8 @@ export interface UsageTokenBucketView {
   cachedTokens: number;
   uncachedTokens: number;
   outputTokens: number;
+  /** Present only when the provider reports reasoning tokens. */
+  reasoningTokens?: number;
   totalTokens: number;
   missingTotalTokenCount: number;
 }
@@ -1274,9 +1375,12 @@ export interface UsageMonitorView {
     }>;
   };
   cost: {
-    available: false;
-    estimatedUsd: null;
+    /** False until the gateway prices usage from its rate table. */
+    available: boolean;
+    estimatedUsd: number | null;
     reason: string;
+    /** Rate table date; present when the cost is an estimate. */
+    asOf?: string | null;
   };
   privacy: {
     rawTextStored: false;
@@ -1293,7 +1397,9 @@ export type ProviderQuotaSourceKind =
   | "zai_usage_query"
   | "provider_quota";
 export type ProviderQuotaReasonCode =
-  | "provider_quota_surface_unavailable"
+  | "provider_quota_pending"
+  | "provider_quota_not_offered"
+  | "provider_quota_fetch_failed"
   | "provider_auth_not_applicable"
   | "provider_auth_required"
   | "provider_auth_surface_mismatch"
@@ -1331,6 +1437,8 @@ export interface NewChatBriefingSuggestion {
   title: string;
   description: string;
   text: string;
+  /** A template the user finishes: it fills the composer instead of sending. */
+  template?: boolean;
 }
 
 export interface NewChatBriefingView {
@@ -1359,10 +1467,25 @@ export interface PaginationView {
   has_more: boolean;
 }
 
+export interface ProjectDashboardPreferences {
+  revision: number;
+  pinnedSourceRefs: Array<{ kind: string; id: string; revision: string }>;
+  /** Absent from older gateways: `inherit`. */
+  wallpaper?: ProjectWallpaper;
+}
+
+/** `PATCH /projects/:id/dashboard/preferences`: revision-checked, at least one field. */
+export interface ProjectDashboardPreferencesPatch {
+  expectedRevision: number;
+  description?: string;
+  pinnedSourceRefs?: ProjectDashboardPreferences["pinnedSourceRefs"];
+  wallpaper?: ProjectWallpaper;
+}
+
 export interface ProjectDashboardView {
   briefing?: import("../../../shared/app-contracts.ts").DashboardBriefingView;
   description?: string | null;
-  preferences?: { revision: number; pinnedSourceRefs: Array<{ kind: string; id: string; revision: string }> };
+  preferences?: ProjectDashboardPreferences;
   overview?: import("../../../shared/app-contracts.ts").DashboardOverview;
   project: ProjectSummary;
   stats: {
@@ -1391,6 +1514,8 @@ export interface SessionArtifactSummary {
   kind: string;
   safe_path_label?: string;
   url?: string;
+  /** Short-lived `url` with `?expires=..&signature=..` for token-less loads. */
+  signed_url?: string;
   size_bytes?: number;
   created_at: string;
   open_action?: "route" | "unsupported" | string;
@@ -1399,7 +1524,10 @@ export interface SessionArtifactSummary {
 export interface AutomationTargetSummary {
   automation_id: string;
   title: string;
-  interval_label: string;
+  interval_seconds?: number;
+  schedule_type?: string;
+  schedule?: CalendarSchedule | null;
+  next_run_at?: string | null;
 }
 
 export type WorkerActivityPhase =
@@ -1516,6 +1644,8 @@ export interface TimelineEvent {
     row?: ProgressRow;
     event?: AgentTurnEvent;
     event_id?: string;
+    /** `settings.updated`: the changed settings subset. */
+    settings?: Record<string, unknown>;
   };
 }
 
@@ -1553,6 +1683,9 @@ export type AppView =
   | { kind: "project-dashboard"; projectId: string };
 
 export interface CommandPaletteResult {
+  schedule?: CalendarSchedule | null;
+  schedule_type?: string;
+  interval_seconds?: number;
   id: string;
   kind: "chat" | "project" | "project_session" | "group" | "automation" | "settings";
   title: string;
@@ -1565,7 +1698,12 @@ export interface AutomationSummary {
   title: string;
   target_label: string;
   state: string;
-  interval_label: string;
+  interval_seconds?: number;
+  schedule_type?: string;
+  schedule?: CalendarSchedule | null;
+  next_run_at?: string | null;
+  /** The access the schedule's runs get; it never changes the target conversation's mode. */
+  access_mode: AccessMode;
 }
 
 export interface AutomationRunSummary {
@@ -1618,8 +1756,8 @@ export type AuthorityRequestRef = string;
 
 /**
  * Narrow read-only UI card for one pending self-session authority request.
- * Only category, reason, executable, and command count are renderable; the
- * request reference exists solely as an in-memory React key and narrow
+ * The card renders `approval` (or, from older agents, `scope` and `reason`);
+ * the request reference exists solely as an in-memory React key and narrow
  * decision handle.
  */
 export interface AuthorityApprovalCard {
@@ -1628,10 +1766,40 @@ export interface AuthorityApprovalCard {
   reason: string;
   executable: string;
   commandCount: number;
+  /** Legacy Korean display text; kept for older agents and the conversation grant. */
   scope?: { title: string; description: string };
+  /** What the request would do, as data the App phrases in its own language. */
+  approval?: ApprovalSummary;
   sourceTurnId?: string;
   sourceCallId?: string;
   sourceSessionId?: string;
+}
+
+export type ApprovalRisk = "low" | "medium" | "high";
+
+/**
+ * The narrowed `approval` of a pending authority request. `actionKind` and
+ * target kinds stay open strings: kinds this App does not know fall back to a
+ * generic sentence instead of dropping the request.
+ */
+export interface ApprovalSummary {
+  actionKind: string;
+  /** The folder first where there is one, then files, a connector or a named target. */
+  targets: ApprovalTarget[];
+  count: number;
+  /** Up to three concrete items: relative file paths, or the command line as sent. */
+  examples: string[];
+  /** As the agent classified it; the App never classifies. */
+  risk?: ApprovalRisk;
+}
+
+/** One thing a request touches. Never an absolute path. */
+export interface ApprovalTarget {
+  kind: string;
+  /** Relative to the workspace (empty for a folder), `server/tool` or a target name. */
+  path: string;
+  /** A folder's label as #277 sends it in `path`: `garden`, or `garden/app` inside it. */
+  label?: string;
 }
 
 export interface ConversationPermissionView {
@@ -1648,3 +1816,10 @@ export interface AuthorityApprovalProjection {
 export type IconElement = ReactElement<{ size?: number | "xs" | "sm" | "md" | "lg" | "xl" | "2xl" }>;
 export type ChildrenProps = { children?: ReactNode };
 import type { InterfaceContentReferences, InterfaceTextReference } from "../../../../../butler-i18n/src/index.ts";
+
+export interface CalendarSchedule {
+  kind: "daily" | "weekly";
+  time: string;
+  weekdays: number[];
+  tz: string;
+}

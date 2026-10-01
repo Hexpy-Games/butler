@@ -7,7 +7,6 @@ mod mcp_owner;
 pub(super) mod models;
 mod monitoring;
 mod owners;
-#[cfg(unix)]
 pub(super) mod process_probe;
 mod skills_owner;
 pub(super) mod storage_bootstrap;
@@ -15,13 +14,11 @@ pub(super) mod stores;
 mod subsession_queue;
 mod web_owner;
 use super::{AcceptedPlanProducer, ActiveAppEndpoint, CognitionPrompt, ConversationObserver};
-#[cfg(unix)]
 use super::{
     EmbeddingOwner, GuidedCatalog, GuidedPreparation, GuidedTurnFactoryAdapter,
     ProfileConversationSources, ResolvedInstallation, SystemIdentity, SystemPromptClock,
 };
 use crate::host::memory_jobs::context_maintenance::ContextMaintenance;
-#[cfg(unix)]
 use crate::host::memory_jobs::daily::{DailyCognitionJobs, DailyCognitionOwners};
 use crate::host::memory_jobs::recall_metrics::RecallMetrics;
 use crate::host::runtime::environment::ProcessEnvironment;
@@ -30,7 +27,6 @@ use boundary::{setup, validate_data_installation_boundary};
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
 use butler_ledger::project_ledger::{ProjectLedger, ProjectWork};
-#[cfg(unix)]
 use butler_memory::cognition::GenerationVectorAdapter;
 use butler_memory::cognition::{CognitionPromptReader, CompletionPublisher, ExactMemoryQuery};
 use butler_memory::cognition::{MemoryRecall, ProjectCapsuleService};
@@ -68,8 +64,10 @@ impl AgentRuntime {
         environment: ProcessEnvironment,
         locale: &str,
         worker_profiles: Arc<dyn butler_turn::btcc::WorkerProfileReader>,
-        app_endpoint: Arc<ActiveAppEndpoint>,
+        app: (Arc<ActiveAppEndpoint>, &tokio_util::sync::CancellationToken),
     ) -> Result<Self, BtccError> {
+        let (app_endpoint, stop) = app;
+        stores::check_startup(stop)?;
         validate_data_installation_boundary(&paths.data_root, &paths.installation_root)?;
         // All fallible in-memory setup precedes the first store owner.
         let collation = Arc::new(LocaleCollation::new(locale).map_err(setup)?);
@@ -86,16 +84,13 @@ impl AgentRuntime {
             &collation,
             mcp_client.clone(),
         )?;
-        let models = process_services.models;
+        let models = self::models::with_moved_credentials(process_services.models).await;
         let web_access = process_services.web_access;
-        let prompt_clock = Arc::new(SystemPromptClock::new().map_err(setup)?);
-        let date_parser = Arc::new(super::DateParser::from_process().map_err(setup)?);
+        let (prompt_clock, date_parser) = process_clocks()?;
         let metric_files = Arc::new(MetricFiles::new(paths.data_root.clone()));
         let coordinator =
             Arc::new(CognitionWriteCoordinator::new(Arc::new(SystemIdentity)).map_err(setup)?);
-        #[cfg(unix)]
         let embedding = Arc::new(EmbeddingOwner::new(paths.data_root.clone()).map_err(setup)?);
-        #[cfg(unix)]
         let vectors = Arc::new(GenerationVectorAdapter::new(
             paths.data_root.clone(),
             environment.cognition_paths.clone(),
@@ -111,45 +106,30 @@ impl AgentRuntime {
         let commands = Commands::new();
         let mutations = WorkspaceMutations::new();
         let (skills, capabilities, catalog) = skills_owner::open(&paths, &files, &mutations)?;
-        let stores = RuntimeStores::open(&paths.data_root, collation.clone()).await?;
-        let work_streams = match super::WorkStreams::open(paths.data_root.clone()) {
-            Ok(owner) => Arc::new(owner),
-            Err(error) => {
-                let _ = stores.close().await;
-                return Err(error);
-            }
-        };
-        let observer = match ConversationObserver::new(
+        stores::check_startup(stop)?;
+        let stores = RuntimeStores::open(&paths.data_root, collation.clone(), stop).await?;
+        let (work_streams, observer) = boundary::open_observer(
             &paths.data_root,
             &environment.cognition_paths,
-            Arc::new(SystemIdentity),
             metric_files.clone(),
-        ) {
-            Ok(observer) => Arc::new(observer),
-            Err(error) => {
-                let _ = work_streams.close().await;
-                let _ = stores.close().await;
-                return Err(setup(error));
-            }
-        };
-        let memory_sync = match crate::host::memory_jobs::sync::MemorySync::open(
-            &paths.data_root,
+            &stores,
+        )
+        .await?;
+        let memory_sync = boundary::MemoryStartup {
+            observer: &observer,
+            work_streams: &work_streams,
+            stores: &stores,
+            stop,
+        }
+        .open(
+            &paths,
             &environment.cognition_paths,
             coordinator.clone(),
             models.provider.clone(),
-            #[cfg(unix)]
             embedding.clone(),
-            #[cfg(unix)]
             vectors.clone(),
-        ) {
-            Ok(owner) => owner,
-            Err(error) => {
-                let _ = observer.close().await;
-                let _ = work_streams.close().await;
-                let _ = stores.close().await;
-                return Err(error);
-            }
-        };
+        )
+        .await?;
         let cognition_root = environment.cognition_paths.cognition_root(&paths.data_root);
         let capsule_service = Arc::new(ProjectCapsuleService::new(
             paths.data_root.clone(),
@@ -192,7 +172,6 @@ impl AgentRuntime {
             context_budget.clone(),
             metric_files.clone(),
         );
-        #[cfg(unix)]
         let daily_cognition = Arc::new(DailyCognitionJobs::new(DailyCognitionOwners {
             data_root: paths.data_root.clone(),
             paths: environment.cognition_paths.clone(),
@@ -213,7 +192,6 @@ impl AgentRuntime {
             tool_output.clone(),
             metric_files.clone(),
             date_parser.clone(),
-            #[cfg(unix)]
             daily_cognition,
         ));
         let command = Arc::new(crate::host::guided::command::GuidedCommand::new(
@@ -243,7 +221,6 @@ impl AgentRuntime {
             2,
         )
         .with_metric_sink(Arc::new(RecallMetrics::new(metric_files.clone())));
-        #[cfg(unix)]
         let memory_recall = memory_recall.with_vector_port(vectors);
         let memory_recall = Arc::new(memory_recall);
         let conversation_context = ContextConversation::new(
@@ -334,8 +311,6 @@ impl AgentRuntime {
         );
         let work_service = Arc::new(DurableWorkService::new(work_repository));
         let inbound_queue = Arc::new(butler_gateway::gateway::InboundQueue::new(&paths.data_root));
-        let automations =
-            super::open_automation_service(&paths.data_root, date_parser, inbound_queue.clone());
         let subsessions = Arc::new(butler_turn::btcc::SubsessionService::new(
             SqliteSubsessionRepository::new(stores.btcc.clone()),
             stores.bindings.clone(),
@@ -397,7 +372,6 @@ impl AgentRuntime {
             installation_root: paths.installation_root,
             subsessions: subsessions.clone(),
             work_streams: work_streams.clone(),
-            automations: automations.clone(),
             mcp_client: mcp_client.clone(),
             profile: profile.clone(),
             monitoring: monitoring::open(
@@ -432,7 +406,6 @@ impl AgentRuntime {
             image_files: image_files.clone(),
             attachment_context,
             memory_sync,
-            #[cfg(unix)]
             embedding,
             profile: profile.clone(),
             cognition,
@@ -450,7 +423,6 @@ impl AgentRuntime {
             work_streams: work_streams.clone(),
             skills: skills.clone(),
             context_maintenance: context_maintenance.clone(),
-            automations: automations.clone(),
         });
         let assembly = btcc::assemble(&TurnFacadeDependencies {
             preparation,
@@ -467,6 +439,7 @@ impl AgentRuntime {
             host: owner,
         });
         Ok(Self {
+            service_shutdown: stop.clone(),
             btcc: assembly.btcc,
             host: assembly.host,
             bindings,
@@ -493,4 +466,12 @@ impl AgentRuntime {
             profile,
         })
     }
+}
+
+/// Capture both process time sources before opening any persistent store.
+fn process_clocks() -> Result<(Arc<SystemPromptClock>, Arc<super::DateParser>), BtccError> {
+    Ok((
+        Arc::new(SystemPromptClock::new().map_err(setup)?),
+        Arc::new(super::DateParser::from_process().map_err(setup)?),
+    ))
 }

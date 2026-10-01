@@ -40,14 +40,7 @@ async fn pro_01_personalization_read_write() -> Result<(), HarnessError> {
             .unwrap_or_default()
             .contains(&marker)
     );
-    // The CLI shows the profile part of personalization.
-    let cli = s.agent.cli(&["personalization", "get", "--json"])?;
-    assert_eq!(cli.code, Some(0), "{} {}", cli.stdout, cli.stderr);
-    assert_eq!(
-        cli.json()?["data"]["profile"]["principal_name"],
-        marker.as_str(),
-        "CLI disagrees with HTTP"
-    );
+    assert_eq!(view.data()["profile"]["principal_name"], marker.as_str());
 
     let before = s.gw.get("/personalization").await?.data().clone();
     let rejected =
@@ -339,14 +332,22 @@ async fn q_01_queue_while_busy() -> Result<(), HarnessError> {
         );
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
-    tokio::time::sleep(Duration::from_millis(500)).await;
-    let users: Vec<String> =
-        s.gw.messages("general")
-            .await?
+    let users: Vec<String> = loop {
+        let messages = s.gw.messages("general").await?;
+        let users: Vec<String> = messages
             .iter()
-            .filter(|m| m["role"] == "user")
-            .filter_map(|m| m["text"].as_str().map(str::to_owned))
+            .filter(|message| message["role"] == "user")
+            .filter_map(|message| message["text"].as_str().map(str::to_owned))
             .collect();
+        if users.len() >= 3 {
+            break users;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "delivered turns were not persisted: {users:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    };
     assert_eq!(users.len(), 3, "{users:?}");
     assert!(
         users[1].contains("first") && users[2].contains("edited"),
@@ -398,7 +399,14 @@ async fn q_02_queue_durability_and_conflicts() -> Result<(), HarnessError> {
         let settled = turns
             .iter()
             .all(|turn| butler_e2e::e2e::gateway::TERMINAL.contains(&turn_state(turn)));
-        if settled && queue(&s).await?.is_empty() && turns.len() >= 2 {
+        // A message the restart interrupted stays listed as failed and
+        // retryable (an announced stop drains for 6 s at most); drained
+        // means nothing is still waiting.
+        let waiting = queue(&s)
+            .await?
+            .iter()
+            .any(|item| item["state"] == "queued");
+        if settled && !waiting && turns.len() >= 2 {
             break;
         }
         assert!(

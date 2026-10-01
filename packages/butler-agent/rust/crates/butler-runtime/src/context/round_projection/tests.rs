@@ -66,8 +66,10 @@ impl SummaryPort for FixedSummary {
     }
 }
 
+// test-category: race
 #[tokio::test]
 async fn summary_creation_and_reuse_keep_one_record_owner() {
+    crash_lock_recovery().await;
     let messages = [
         message(ModelRoundRole::User, "request"),
         message(ModelRoundRole::Assistant, &"history ".repeat(200)),
@@ -124,6 +126,9 @@ async fn fitting_all_mandatory_pressure_returns_without_saved_identity() {
     assert_eq!(projected.messages.expect("saved projection"), messages);
 }
 
+/// Format pin: context-message writers keep the persisted digest's field
+/// order and omissions.
+// test-category: format-pin
 #[test]
 fn message_writers_keep_the_persisted_digest_field_order_and_omissions() {
     {
@@ -274,4 +279,47 @@ fn bounded_projection_shares_large_content_and_rejects_orphan_results() {
         atomic_units::build(&protocol).unwrap_err().code(),
         "turn_tool_protocol_orphan"
     );
+}
+
+async fn crash_lock_recovery() {
+    use crate::context::compaction::storage::CompactionLock;
+    const CHILD: &str = "BUTLER_COMPACTION_CRASH_ROOT";
+    if let Some(root) = std::env::var_os(CHILD) {
+        let _held = CompactionLock::acquire(std::path::Path::new(&root), "crash")
+            .await
+            .unwrap();
+        std::process::exit(0); // Deliberately bypass Drop, as a terminated process does.
+    }
+    let root = std::env::temp_dir().join(format!("compaction-crash-{}", uuid::Uuid::new_v4()));
+    let legacy = crate::context::compaction::storage::compaction_snapshot_path(&root, "crash")
+        .with_extension("lock");
+    std::fs::create_dir_all(&legacy).unwrap();
+    let status = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "context::round_projection::tests::summary_creation_and_reuse_keep_one_record_owner",
+        ])
+        .env(CHILD, &root)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let lock = CompactionLock::acquire(&root, "crash")
+        .await
+        .expect("crashed lock must recover");
+    let flock = crate::context::compaction::storage::compaction_snapshot_path(&root, "crash")
+        .with_extension("flock");
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&flock)
+        .unwrap();
+    assert!(matches!(
+        butler_platform::instance::InstanceLock::try_exclusive(file),
+        Err(butler_platform::instance::LockError::Busy)
+    ));
+    drop(lock);
+    assert!(legacy.is_dir(), "legacy crash evidence is preserved");
+    let recovered = CompactionLock::acquire(&root, "crash").await.unwrap();
+    drop(recovered);
+    std::fs::remove_dir_all(root).unwrap();
 }

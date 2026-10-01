@@ -57,22 +57,6 @@ pub(super) fn record(turn_id: &str, session_id: &str, state: TurnSemanticState) 
     }
 }
 
-pub(super) fn apply_final(turn: &mut TurnRecord) {
-    let transition = super::transition::guided_final(turn, agent_result()).unwrap();
-    if let TurnTransition::AcceptFinal {
-        route,
-        payload,
-        outbox,
-    } = transition
-    {
-        turn.route = Some(route);
-        turn.final_payload = Some(*payload);
-        turn.delivery_outbox = Some(*outbox);
-        turn.semantic_state = TurnSemanticState::DeliveryCommitted;
-        turn.revision += 1;
-    }
-}
-
 pub(super) fn request(turn_id: &str, session_id: &str) -> TurnRequest {
     TurnRequest {
         turn_id: turn_id.into(),
@@ -111,6 +95,7 @@ pub(super) fn request(turn_id: &str, session_id: &str) -> TurnRequest {
         authority_request_ref: None,
         authority_client_message_id: None,
         app_queue_claim_id: None,
+        resume: false,
         preparation_cancellation: tokio_util::sync::CancellationToken::new(),
     }
 }

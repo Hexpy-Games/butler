@@ -112,6 +112,9 @@ async fn slow_initialization_outlives_first_deadline_and_keeps_ready_child() {
     kill_and_reap(&mut process).await;
 }
 
+/// Race: concurrent and repeated closes of the embedding owner finish even
+/// when its actor fails.
+// test-category: race
 #[tokio::test]
 async fn concurrent_and_repeated_close_finish_even_when_actor_fails() {
     let owner = EmbeddingOwner::new(PathBuf::new()).expect("owner without model load");

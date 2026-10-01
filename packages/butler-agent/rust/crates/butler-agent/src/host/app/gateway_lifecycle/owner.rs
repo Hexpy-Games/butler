@@ -1,9 +1,15 @@
 //! Serializes logical App listener lifecycle while the native service stays alive.
 
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::PathBuf,
+    sync::{
+        Arc,
+        atomic::{AtomicU16, Ordering},
+    },
+};
 
 use serde_json::{Value, json};
-use tokio::sync::Mutex;
+use tokio::{net::TcpListener, sync::Mutex};
 
 use butler_gateway::gateway::InboundQueue;
 use butler_runtime::operations::ServiceReadiness;
@@ -12,7 +18,9 @@ use butler_turn::btcc::BtccError;
 use super::ActiveAppEndpoint;
 use crate::host::service::configuration::{AppCapturedDependencies, AppServiceConfiguration};
 use crate::host::service::instance::mark_gateway_state;
-use crate::host::{AgentRuntime, AppServer, ResolvedInstallation, ServiceConfiguration};
+use crate::host::{
+    AgentRuntime, AppServer, AppServerOwners, ResolvedInstallation, ServiceConfiguration,
+};
 
 #[derive(Clone, Copy, Debug, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -23,6 +31,8 @@ pub(crate) enum GatewayControlCommand {
     Stop,
     Restart,
     RestartHandoffResult,
+    /// Stop the whole service (Windows controllers; see the control server).
+    ServiceStop,
 }
 
 pub(crate) struct AppGatewayLifecycle {
@@ -35,6 +45,8 @@ pub(crate) struct AppGatewayLifecycle {
     captured_dependencies: AppCapturedDependencies,
     nonce: String,
     current: Mutex<Option<AppServer>>,
+    /// Keep an OS-assigned port across App-only listener restarts.
+    allocated_port: AtomicU16,
 }
 
 impl AppGatewayLifecycle {
@@ -56,19 +68,21 @@ impl AppGatewayLifecycle {
             endpoint,
             nonce,
             current: Mutex::new(None),
+            allocated_port: AtomicU16::new(0),
         }
     }
 
     pub(crate) async fn start_initial(
         &self,
         initial: &AppServiceConfiguration,
+        listener: Option<TcpListener>,
     ) -> Result<bool, BtccError> {
         let mut current = self.current.lock().await;
         if !initial.enabled {
             return Ok(false);
         }
         self.require_captured_dependencies(initial)?;
-        self.start_locked(&mut current, initial).await
+        self.start_locked(&mut current, initial, listener).await
     }
 
     pub(crate) async fn execute(
@@ -89,7 +103,7 @@ impl AppGatewayLifecycle {
                     return Ok(view);
                 }
                 let already = current.is_some();
-                self.start_locked(&mut current, &desired)
+                self.start_locked(&mut current, &desired, None)
                     .await
                     .map_err(error_text)?;
                 let mut view = self.view(current.as_ref()).await?;
@@ -115,7 +129,7 @@ impl AppGatewayLifecycle {
                     return Ok(view);
                 }
                 self.stop_locked(&mut current).await?;
-                self.start_locked(&mut current, &desired)
+                self.start_locked(&mut current, &desired, None)
                     .await
                     .map_err(error_text)?;
                 let mut view = self.view(current.as_ref()).await?;
@@ -125,7 +139,17 @@ impl AppGatewayLifecycle {
             GatewayControlCommand::RestartHandoffResult => {
                 Err("gateway_command_requires_journal_owner".into())
             }
+            GatewayControlCommand::ServiceStop => {
+                Err("gateway_command_requires_service_owner".into())
+            }
         }
+    }
+
+    pub(crate) async fn stop_accepting(&self) -> Result<(), BtccError> {
+        if let Some(server) = self.current.lock().await.as_ref() {
+            server.stop_accepting().await?;
+        }
+        Ok(())
     }
 
     pub(crate) async fn close(&self) -> Result<(), BtccError> {
@@ -139,39 +163,42 @@ impl AppGatewayLifecycle {
         &self,
         current: &mut Option<AppServer>,
         app_config: &AppServiceConfiguration,
+        listener: Option<TcpListener>,
     ) -> Result<bool, BtccError> {
         if current.is_some() {
             return Ok(false);
         }
+        let local_auth = self.captured_dependencies.local_auth();
+        let port = if app_config.port == 0 {
+            self.allocated_port.load(Ordering::Relaxed)
+        } else {
+            app_config.port
+        };
+        let listener = match listener {
+            Some(listener) => listener,
+            None => AppServer::bind(&app_config.host, port).await?,
+        };
         let mut server = AppServer::open(
             &self.runtime,
             &self.data_root,
             &self.installation,
             app_config,
-            self.queue.clone(),
-            self.readiness.clone(),
+            AppServerOwners {
+                queue: self.queue.clone(),
+                receipt: self.readiness.clone(),
+                local_auth: local_auth.clone(),
+            },
+            listener,
         )
         .await?;
         let address = server.local_addr();
-        if !health_check(
-            &format!("http://{address}"),
-            app_config.gateway_config().local_auth,
-        )
-        .await
-        {
-            if let Err(error) = server.close_application().await {
-                *current = Some(server);
-                return Err(BtccError::relayed(
-                    "app_gateway_close_failed",
-                    format!("initial health check failed; cleanup also failed: {error}"),
-                ));
-            }
-            return Err(BtccError::relayed(
-                "app_gateway_health_check_failed",
-                "App gateway did not become healthy after initialization",
-            ));
+        if app_config.port == 0 {
+            self.allocated_port.store(address.port(), Ordering::Relaxed);
         }
-        self.endpoint.publish(address, app_config);
+        // AppServer owns the bound listener and initialized dispatch. A one-shot
+        // HTTP probe can time out under load even while that listener is healthy;
+        // status queries still probe it, but startup must not tear it down for that.
+        self.endpoint.publish(address, app_config, local_auth);
         if let Err(error) = self.persist(true, Some(format!("http://{address}")), app_config) {
             self.endpoint.clear();
             if let Err(close_error) = server.close_application().await {
@@ -251,32 +278,30 @@ impl AppGatewayLifecycle {
         let enabled = desired.enabled;
         let running = match (current, active.as_ref()) {
             (Some(_), Some(active)) => {
-                health_check(&active.base_url, active.local_auth.clone()).await
+                serves_clients(&active.base_url, active.local_auth.clone()).await
             }
             _ => false,
         };
         let restart_required = !self.captured_dependencies.matches(&desired)
             || active.as_ref().is_some_and(|active| {
                 active.configured_host != desired.host
-                    || active.configured_port != desired.port
+                    || (desired.port != 0 && active.configured_port != desired.port)
                     || active.database_path != desired.db_path
                     || active.local_auth.required != desired.gateway_config().local_auth.required
                     || active.local_auth.token() != desired.gateway_config().local_auth.token()
             });
-        let (status, next_actions) = if !enabled {
-            ("disabled", vec!["butler gateway enable app"])
-        } else if running {
-            ("online", vec!["butler gateway status app"])
-        } else {
-            ("offline", vec!["butler gateway start app"])
-        };
+        let refusing = current.is_some()
+            && active
+                .as_ref()
+                .is_some_and(|active| local_auth_unconfigured(&active.local_auth));
+        let (status, next_actions) = view_status(enabled, running, refusing);
         Ok(json!({
             "id":"app",
             "title":"Butler App Gateway",
             "lifecycle":"process",
             "transport":"app",
             "enabled":enabled,
-            "configured":!desired.host.is_empty() && desired.port > 0,
+            "configured":desired.server_url().is_some(),
             "running":running,
             "status":status,
             "restartRequired":restart_required,
@@ -284,8 +309,10 @@ impl AppGatewayLifecycle {
             "config":{
                 "host":desired.host,
                 "port":desired.port,
-                "serverUrl":format!("http://{}:{}", desired.host, desired.port),
+                "serverUrl":desired.server_url(),
                 "dbConfigured":desired.db_configured,
+                "remoteAccessEnabled":desired.remote_access_enabled(),
+                "allowedHosts":desired.allowed_hosts(),
             },
             "nextActions":next_actions,
         }))
@@ -299,14 +326,47 @@ impl AppGatewayLifecycle {
     }
 }
 
-async fn health_check(base_url: &str, auth: butler_gateway::gateway::LocalAuthConfig) -> bool {
-    let Ok(client) = reqwest::Client::builder()
+/// Whether local auth is required but has no token (its file was
+/// unreadable when the service started): the gateway refuses every client.
+pub(crate) fn local_auth_unconfigured(auth: &butler_gateway::gateway::LocalAuthConfig) -> bool {
+    auth.required && auth.token().is_none()
+}
+
+/// The view's `status` and the commands that move the gateway on from it.
+/// A gateway that is up but refuses every client is `unconfigured`, not
+/// `offline`: starting it again changes nothing, the log names the
+/// credential file, and a service restart reads that file again.
+fn view_status(enabled: bool, running: bool, refusing: bool) -> (&'static str, Vec<&'static str>) {
+    if !enabled {
+        ("disabled", vec!["Settings → Security"])
+    } else if running {
+        ("online", vec!["butler status"])
+    } else if refusing {
+        ("unconfigured", vec!["butler logs", "butler restart"])
+    } else {
+        ("offline", vec!["butler start"])
+    }
+}
+
+/// A bounded status probe; its result never controls startup admission.
+fn probe_client() -> Option<reqwest::Client> {
+    reqwest::Client::builder()
         .timeout(std::time::Duration::from_millis(500))
         .build()
-    else {
+        .ok()
+}
+
+fn health_url(base_url: &str) -> String {
+    format!("{}/health", base_url.trim_end_matches('/'))
+}
+
+/// Whether a client holding the token gets a healthy answer: the view's
+/// `running`, false while the gateway refuses every client.
+async fn serves_clients(base_url: &str, auth: butler_gateway::gateway::LocalAuthConfig) -> bool {
+    let Some(client) = probe_client() else {
         return false;
     };
-    let mut request = client.get(format!("{}/health", base_url.trim_end_matches('/')));
+    let mut request = client.get(health_url(base_url));
     if auth.required {
         let Some(token) = auth.token() else {
             return false;

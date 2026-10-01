@@ -32,6 +32,8 @@ const WINDOW_FOCUS_TOOLTIP_SUPPRESSION_MS = 800;
 interface TooltipProps {
   children: ReactNode;
   label?: string;
+  /** A label longer than a few words (e.g. an error line) wraps within the tooltip's width instead of one clipped line. */
+  wrap?: boolean;
 }
 
 interface TooltipPosition {
@@ -48,7 +50,7 @@ interface TooltipTriggerProps {
   onPointerLeave?: PointerEventHandler<HTMLElement>;
 }
 
-export function Tooltip({ children, label }: TooltipProps) {
+export function Tooltip({ children, label, wrap = false }: TooltipProps) {
   const tooltipId = useId();
   const triggerRef = useRef<HTMLElement | null>(null);
   const tooltipRef = useRef<HTMLSpanElement | null>(null);
@@ -177,6 +179,7 @@ export function Tooltip({ children, label }: TooltipProps) {
             data-glass="popover"
             data-radius="control"
             data-state={presence.state}
+            data-wrap={wrap ? "true" : undefined}
             id={tooltipId}
             ref={setTooltipNode}
             role="tooltip"

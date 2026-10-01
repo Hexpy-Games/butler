@@ -14,7 +14,9 @@ use butler_core::public_text::trim_js_whitespace;
 use butler_runtime::context::{
     ImageCapabilityEvidence, ImageCarrierTuple, VisualAttachmentManifest,
 };
-use butler_turn::btcc::{AccessMode, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
+use butler_turn::btcc::{
+    AccessMode, ApprovalExemptAction, GuidedInvocation, ModelRoundToolCall, ToolExecutionError,
+};
 
 use super::GuidedTools;
 
@@ -27,17 +29,25 @@ pub(super) fn supports(name: &str) -> bool {
     name == ToolName::AnalyzeAttachedImage
 }
 
+/// Full access and ask-first analyze an attached image without asking;
+/// read-only never analyzes one.
+fn require_analysis_access(access: &AccessMode) -> Result<(), ToolExecutionError> {
+    if access.allows_without_approval(ApprovalExemptAction::AttachedImageAnalysis) {
+        Ok(())
+    } else {
+        Err(integrity(
+            "image_analysis_requires_full_access",
+            "Image analysis requires full access or ask-first access.",
+        ))
+    }
+}
+
 pub(super) async fn execute(
     owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    if owner.binding.access_mode != AccessMode::FullAccess {
-        return Err(integrity(
-            "image_analysis_requires_full_access",
-            "Image analysis requires full access.",
-        ));
-    }
+    require_analysis_access(&owner.binding.access_mode)?;
     let file_id = required_text(
         &call.arguments,
         "file_id",
@@ -353,21 +363,13 @@ impl TempImageFile {
     fn create(root: &Path, extension: &str, bytes: &[u8]) -> io::Result<Self> {
         let directory = root.join(format!(".butler-zai-vision-{}", uuid::Uuid::new_v4()));
         let mut builder = fs::DirBuilder::new();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::DirBuilderExt;
-            builder.mode(0o700);
-        }
+        let _ = butler_platform::secure_fs::owner_only_dirs(&mut builder);
         builder.create(&directory)?;
         let path = directory.join(format!("input{extension}"));
         let guard = Self { directory, path };
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        let _ = butler_platform::secure_fs::owner_only(&mut options);
         let mut file = options.open(&guard.path)?;
         file.write_all(bytes)?;
         file.flush()?;

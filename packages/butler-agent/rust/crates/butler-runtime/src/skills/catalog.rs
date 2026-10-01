@@ -44,12 +44,68 @@ pub(super) fn runtime(
     data: &Path,
     project: Option<&str>,
 ) -> Result<Vec<SkillDefinition>, SkillError> {
-    let mut skills = load(&core_dir(home))?;
-    skills.extend(load(&user_dir(data))?);
+    let mut skills = Vec::new();
     if let Some(project) = project {
         skills.extend(load(&project_dir(data, project))?);
     }
+    skills.extend(load(&user_dir(data))?);
+    skills.extend(load(&core_dir(home))?);
+    // First scope wins: project > user > built-in.
+    let mut seen = HashSet::new();
+    skills.retain(|skill| seen.insert(skill.name.clone()));
     Ok(skills)
+}
+
+pub(super) fn fingerprint(
+    resources: &Path,
+    data: &Path,
+    project: Option<&str>,
+) -> Result<Vec<(PathBuf, Option<std::time::SystemTime>)>, SkillError> {
+    let mut roots = vec![core_dir(resources), user_dir(data)];
+    if let Some(project) = project {
+        roots.push(project_dir(data, project));
+    }
+    let mut stamps = Vec::new();
+    for root in roots {
+        stamp(&root, &mut stamps)?;
+        let entries = match fs::read_dir(&root) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(SkillError::Io(error)),
+        };
+        for entry in entries {
+            let entry = entry.map_err(SkillError::Io)?;
+            if entry.file_type().map_err(SkillError::Io)?.is_dir() {
+                stamp(&entry.path(), &mut stamps)?;
+                stamp(&entry.path().join("SKILL.md"), &mut stamps)?;
+            }
+        }
+    }
+    stamps.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(stamps)
+}
+
+pub(super) fn refresh_fingerprint(
+    previous: &[(PathBuf, Option<std::time::SystemTime>)],
+) -> Result<Vec<(PathBuf, Option<std::time::SystemTime>)>, SkillError> {
+    let mut current = Vec::with_capacity(previous.len());
+    for (path, _) in previous {
+        stamp(path, &mut current)?;
+    }
+    Ok(current)
+}
+
+fn stamp(
+    path: &Path,
+    stamps: &mut Vec<(PathBuf, Option<std::time::SystemTime>)>,
+) -> Result<(), SkillError> {
+    let modified = match fs::metadata(path) {
+        Ok(meta) => Some(meta.modified().map_err(SkillError::Io)?),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(SkillError::Io(error)),
+    };
+    stamps.push((path.to_owned(), modified));
+    Ok(())
 }
 
 pub(super) fn settings(
@@ -161,7 +217,9 @@ pub(super) fn load(root: &Path) -> Result<Vec<SkillDefinition>, SkillError> {
     let mut skills = Vec::new();
     for entry in entries {
         let entry = entry.map_err(SkillError::Io)?;
-        if !entry.file_type().map_err(SkillError::Io)?.is_dir() {
+        if entry.file_name().to_string_lossy().starts_with('.')
+            || !entry.file_type().map_err(SkillError::Io)?.is_dir()
+        {
             continue;
         }
         if let Some(skill) = read(&entry.path().join("SKILL.md"))? {
@@ -232,7 +290,7 @@ fn summaries(
         .collect()
 }
 
-fn read(path: &Path) -> Result<Option<SkillDefinition>, SkillError> {
+pub(super) fn read(path: &Path) -> Result<Option<SkillDefinition>, SkillError> {
     let content = match fs::read_to_string(path) {
         Ok(content) => content,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),

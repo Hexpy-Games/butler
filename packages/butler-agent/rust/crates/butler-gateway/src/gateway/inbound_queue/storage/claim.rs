@@ -106,6 +106,7 @@ pub(in crate::gateway::inbound_queue) fn recover_stale(
     owner: &str,
     active: &HashSet<String>,
 ) -> QueueResult<usize> {
+    ensure_dir(&root.join("pending"))?;
     let mut recovered = 0;
     for name in file_names(&root.join("processing"))? {
         let path = root.join("processing").join(&name);
@@ -115,12 +116,7 @@ pub(in crate::gateway::inbound_queue) fn recover_stale(
         if active.contains(&record.queue_id) {
             continue;
         }
-        let Some(lease) = record.processing.as_ref() else {
-            continue;
-        };
-        let expired = DateTime::parse_from_rfc3339(&lease.lease_expires_at)
-            .is_ok_and(|expires| expires.timestamp_millis() <= chrono_now_millis());
-        let dead = owner_dead(&lease.owner_id);
+        let (expired, dead) = lease_state(&record, &path);
         if !expired && !dead {
             continue;
         }
@@ -174,21 +170,42 @@ pub(in crate::gateway::inbound_queue) fn recover_stale(
     Ok(recovered)
 }
 
-#[cfg(unix)]
+/// Whether the claim's owner process is known to be gone.
 fn owner_dead(owner: &str) -> bool {
-    use nix::{errno::Errno, sys::signal::kill, unistd::Pid};
+    use butler_platform::process_control::{Liveness, liveness};
     let Some(pid) = owner
         .split(':')
         .next()
         .and_then(|value| value.parse::<i32>().ok())
+        .and_then(|pid| u32::try_from(pid).ok())
         .filter(|pid| *pid > 0)
     else {
         return false;
     };
-    matches!(kill(Pid::from_raw(pid), None), Err(Errno::ESRCH))
+    liveness(pid) == Liveness::Gone
 }
 
-#[cfg(not(unix))]
-fn owner_dead(_: &str) -> bool {
-    false
+fn lease_state(
+    record: &crate::gateway::inbound_queue::QueuedInboundEvent,
+    path: &Path,
+) -> (bool, bool) {
+    match record.processing.as_ref() {
+        Some(lease) => (
+            DateTime::parse_from_rfc3339(&lease.lease_expires_at)
+                .is_ok_and(|expires| expires.timestamp_millis() <= chrono_now_millis()),
+            owner_dead(&lease.owner_id),
+        ),
+        // Legacy claims can die between rename and lease publication. The
+        // file's mtime bounds their ownership just as the normal lease does.
+        None => (
+            fs::metadata(path)
+                .and_then(|meta| meta.modified())
+                .is_ok_and(|mtime| {
+                    SystemTime::now()
+                        .duration_since(mtime)
+                        .is_ok_and(|age| age >= LEASE)
+                }),
+            false,
+        ),
+    }
 }

@@ -71,7 +71,7 @@ export const stories: ShowcaseStory[] = [
     name: "Label / value rows",
     render: () => (
       <Grid columns="1" gap="xs">
-        {[["status", "draft"], ["owner", "yeonwoo"], ["updated", "2026-09-26"]].map(([label, value]) => (
+        {[["status", "draft"], ["owner", "mina"], ["updated", "2026-09-26"]].map(([label, value]) => (
           <Grid key={label} columns="label-value" gap="sm">
             <Typo.Caption tone="tertiary">{label}</Typo.Caption>
             <Typo.Caption tone="secondary" wrap="anywhere">{value}</Typo.Caption>

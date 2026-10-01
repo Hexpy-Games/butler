@@ -2,15 +2,22 @@
 
 mod core;
 mod migration;
+mod monitoring;
 mod project_ledger_bindings;
+mod schedule_access;
+mod schedule_legacy;
 mod space;
 mod supporting;
+mod wallpapers;
 
 use std::path::Path;
 
 use rusqlite::Connection;
 
 use super::AppStorageError;
+use crate::gateway::application::settings::{
+    record_default_access_mode, record_default_model_policy,
+};
 
 pub(super) fn migrate(
     connection: &mut Connection,
@@ -18,12 +25,19 @@ pub(super) fn migrate(
 ) -> Result<(), AppStorageError> {
     let turns_new = !migration::table_exists(connection, "turns")?;
     core::create(connection)?;
-    if turns_new {
-        connection
-            .execute_batch("CREATE INDEX turns_state_rowid_idx ON turns(state)")
-            .map_err(AppStorageError::sqlite)?;
-    }
+    // Open-turn lookups filter on the state alone; databases that predate the
+    // index get it here.
+    connection
+        .execute_batch("CREATE INDEX IF NOT EXISTS turns_state_rowid_idx ON turns(state)")
+        .map_err(AppStorageError::sqlite)?;
     supporting::create(connection)?;
+    // An App database from before ask-first (#236) keeps full access until
+    // the user saves a mode; a new one asks first. Before the schedule
+    // backfill, which resolves unsaved modes with it.
+    record_default_access_mode(connection, !turns_new)?;
+    // Likewise its default model (#230): the legacy default for an existing
+    // database, the connected provider's routine preset for a new one.
+    record_default_model_policy(connection, !turns_new)?;
     migration::add_current_columns(connection)?;
     // Existing App databases also need the actual-column index. Historical
     // payload turn ids can differ from events.turn_id, so the JSON indexes do
@@ -35,10 +49,34 @@ pub(super) fn migrate(
         )
         .map_err(AppStorageError::sqlite)?;
     migration::backfill_queue_identity(connection)?;
+    schedule_access::backfill(connection)?;
     migration::create_post_backfill_indexes(connection)?;
+    run_backfills_once(connection)?;
+    migration::settle_ended_turn_messages(connection)?;
     project_ledger_bindings::initialize(connection, butler_data)?;
     space::migrate(connection)?;
+    wallpapers::create(connection)?;
+    monitoring::migrate(connection)?;
     Ok(())
+}
+
+/// `PRAGMA user_version` once the full-table backfills of an older database
+/// have run. Both leave a current database untouched, but finding that out
+/// reads every message.
+const BACKFILLS_DONE: i64 = 1;
+
+fn run_backfills_once(connection: &Connection) -> Result<(), AppStorageError> {
+    let version: i64 = connection
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .map_err(AppStorageError::sqlite)?;
+    if version >= BACKFILLS_DONE {
+        return Ok(());
+    }
+    supporting::backfill_search_index(connection)?;
+    migration::backfill_message_updated_at(connection)?;
+    connection
+        .pragma_update(None, "user_version", BACKFILLS_DONE)
+        .map_err(AppStorageError::sqlite)
 }
 
 pub(super) fn seed(connection: &Connection, now: &str) -> Result<(), AppStorageError> {
@@ -60,5 +98,14 @@ pub(super) fn seed(connection: &Connection, now: &str) -> Result<(), AppStorageE
     Ok(())
 }
 
+pub(super) fn migrate_legacy_schedules(
+    connection: &mut Connection,
+    butler_data: Option<&Path>,
+) -> Result<(), AppStorageError> {
+    schedule_legacy::migrate(connection, butler_data)
+}
+
+#[cfg(test)]
+mod plans;
 #[cfg(test)]
 mod tests;

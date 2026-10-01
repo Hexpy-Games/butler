@@ -28,8 +28,9 @@ tests/.env.test
 
 # ── Build artifacts ───────────────────────────────────────────────────────────
 __pycache__/
-node_modules/
+node_modules
 dist/
+dist-ds-site*/
 app-client/ui/.*/skills/
 app-client/ui/.*/**/skills/
 app-client/ui/skills/
@@ -46,3 +47,10 @@ tests/capture_*
 # ── Backup files ──────────────────────────────────────────────────────────────
 *.bak
 data/personas/active.md
+
+# ── E2E fixtures are synthetic data dirs; the unanchored `data/` above must not
+#    drop them. Re-include only the directories: everything inside them is still
+#    subject to the rules above, so .DS_Store, .env, *.bak, node_modules/ etc.
+#    under fixtures stay ignored. (`memory/hot/*.md` and the other slash-containing
+#    patterns are anchored to the repo root and never match fixture paths.)
+!packages/butler-agent/rust/crates/butler-e2e/fixtures/**/data/

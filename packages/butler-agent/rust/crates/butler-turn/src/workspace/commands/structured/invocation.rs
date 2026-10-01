@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
+use butler_platform::command_sandbox::{self, ProtectError, Protection};
+
 use crate::workspace::CommandCode;
 use crate::workspace::commands::{CommandError, CommandStep, StructuredCommandInput};
+use crate::workspace::path_guard::lexical_absolute;
 
 pub(super) fn invocation_steps(
     input: &StructuredCommandInput,
@@ -16,45 +19,30 @@ pub(super) fn invocation_steps(
             "legacy command compatibility input is empty",
         ));
     }
-    #[cfg(unix)]
-    {
-        let mut arguments = if legacy.pipefail {
-            vec!["-o".into(), "pipefail".into()]
-        } else {
-            Vec::new()
-        };
-        arguments.extend(["-lc".into(), command.into()]);
-        let step = CommandStep {
-            executable: "/bin/bash".into(),
-            arguments,
-        };
-        Ok(vec![protect_program_files(
-            step,
-            legacy.read_only_installation_root.as_deref(),
-        )?])
-    }
-    #[cfg(not(unix))]
-    {
-        let executable = input
-            .environment
-            .get("BUTLER_POWERSHELL")
-            .and_then(Option::as_deref)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .unwrap_or("powershell.exe")
-            .to_owned();
-        Ok(vec![CommandStep {
-            executable,
-            arguments: vec![
-                "-NoLogo".into(),
-                "-NoProfile".into(),
-                "-NonInteractive".into(),
-                "-ExecutionPolicy".into(),
-                "Bypass".into(),
-                "-Command".into(),
-                command.into(),
-            ],
-        }])
+    let shell = command_sandbox::legacy_shell(command, legacy.pipefail, &input.environment);
+    let shell = match legacy.read_only_installation_root.as_deref() {
+        Some(root) => {
+            let root = lexical_absolute(root).map_err(CommandError::io)?;
+            match command_sandbox::protect_writes(shell, &root).map_err(protect_failed)? {
+                Protection::Enforced(protected) => protected,
+                // Linux (until Landlock) and Windows run the program files
+                // unprotected, as they always did.
+                Protection::Unavailable(unprotected) => unprotected,
+            }
+        }
+        None => shell,
+    };
+    Ok(vec![CommandStep {
+        executable: shell.program,
+        arguments: shell.arguments,
+    }])
+}
+
+fn protect_failed(error: ProtectError) -> CommandError {
+    match error {
+        ProtectError::Profile(error) => {
+            CommandError::new(CommandCode::CommandJsonFailed, error.to_string()).with_source(error)
+        }
     }
 }
 
@@ -75,47 +63,4 @@ pub(super) fn environment(input: &StructuredCommandInput) -> HashMap<String, Str
         }
     }
     env
-}
-
-fn protect_program_files(
-    step: CommandStep,
-    home: Option<&std::path::Path>,
-) -> Result<CommandStep, CommandError> {
-    let Some(home) = home else {
-        return Ok(step);
-    };
-    #[cfg(target_os = "macos")]
-    {
-        let lexical =
-            crate::workspace::path_guard::lexical_absolute(home).map_err(CommandError::io)?;
-        let real = lexical.canonicalize().unwrap_or_else(|_| lexical.clone());
-        let mut roots = vec![lexical];
-        if roots.first() != Some(&real) {
-            roots.push(real);
-        }
-        let mut clauses = Vec::with_capacity(roots.len());
-        for root in roots {
-            let quoted =
-                serde_json::to_string(&root.to_string_lossy().as_ref()).map_err(|error| {
-                    CommandError::new(CommandCode::CommandJsonFailed, error.to_string())
-                        .with_source(error)
-                })?;
-            clauses.push(format!("(subpath {quoted})"));
-        }
-        let profile = format!(
-            "(version 1)(allow default)(deny file-write* {})",
-            clauses.join(" ")
-        );
-        let mut arguments = vec!["-p".into(), profile, step.executable];
-        arguments.extend(step.arguments);
-        Ok(CommandStep {
-            executable: "/usr/bin/sandbox-exec".into(),
-            arguments,
-        })
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = home;
-        Ok(step)
-    }
 }

@@ -16,6 +16,9 @@ import {
   prepareAppManagedEmbedHealthPort,
   prepareAppManagedEmbedSocket,
 } from "../../packages/butler-app/client/electron/app-agent-native-service-bridge.mjs";
+import {
+  AGENT_RECOVERY_BUDGET,
+} from "../../packages/butler-app/client/electron/app-foreground-lifecycle.mjs";
 
 function createAppAgentNativeServiceBridge(input: {
   butlerData: string;
@@ -155,6 +158,41 @@ test("App Agent native service bridge installs launchd service with App-managed 
     );
     expect(commands[2]).toContain("launchctl kickstart -k gui/");
     expect(commands[2]).toContain("/com.hexpy.butler");
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("App Agent native service bridge passes the dev renderer origin only when one is set", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-dev-origin-"));
+  try {
+    const butlerData = join(tempDir, "data");
+    const install = async (platform: "darwin" | "linux", devOrigin: string | null) => {
+      const writes: Array<{ path: string; body: string }> = [];
+      const bridge = createAppAgentNativeServiceBridge({
+        butlerData,
+        platform,
+        homeDir: platform === "darwin" ? "/Users/alice" : "/home/alice",
+        getPort: () => 19123,
+        getDevOrigin: () => devOrigin,
+        prepareLocalAuth: () => ({
+          filePath: join(butlerData, "app", "runtime", "auth", "local-agent-auth.json"),
+        }),
+        writeFile: (path, body) => writes.push({ path, body }),
+        runCommand: () => ({ exitCode: 0 }),
+      });
+      await bridge.registration.install();
+      return writes[0]?.body ?? "";
+    };
+
+    const launchd = await install("darwin", "http://127.0.0.1:5173");
+    expect(launchd).toContain(
+      "<key>BUTLER_APP_DEV_ORIGIN</key>\n    <string>http://127.0.0.1:5173</string>",
+    );
+    const systemd = await install("linux", "http://127.0.0.1:5173");
+    expect(systemd).toContain('Environment=BUTLER_APP_DEV_ORIGIN="http://127.0.0.1:5173"');
+    expect(await install("darwin", null)).not.toContain("BUTLER_APP_DEV_ORIGIN");
+    expect(await install("linux", "  ")).not.toContain("BUTLER_APP_DEV_ORIGIN");
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -573,9 +611,11 @@ test("App Agent native service bridge installs systemd service with escaped env"
     expect(writes[1]?.body).toContain('Environment=BUTLER_APP_SERVER_PORT="19123"');
     expect(commands).toEqual([
       "systemctl --user daemon-reload",
+      "systemctl --user reset-failed butler.service",
       "systemctl --user enable --now butler.service",
       "systemctl --user stop butler.service",
       "systemctl --user daemon-reload",
+      "systemctl --user reset-failed butler.service",
       "systemctl --user start butler.service",
     ]);
   } finally {
@@ -616,15 +656,136 @@ test("App Agent native service bridge can isolate systemd unit for tests", async
     expect(writes[1]?.body).toContain('Environment=BUTLER_APP_VERSION="2.3.4"');
     expect(commands).toEqual([
       "systemctl --user daemon-reload",
+      "systemctl --user reset-failed butler-test-local.service",
       "systemctl --user enable --now butler-test-local.service",
       "systemctl --user stop butler-test-local.service",
       "systemctl --user daemon-reload",
+      "systemctl --user reset-failed butler-test-local.service",
       "systemctl --user start butler-test-local.service",
     ]);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+// #223: an intentional `butler stop` exits 0 and must stay stopped. The OS
+// service restarts the Agent only after a crash or a non-zero exit.
+test("App Agent launchd service restarts the Agent only after a failed exit", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-launchd-keepalive-"));
+  try {
+    const butlerData = join(tempDir, "data");
+    const writes: Array<{ path: string; body: string }> = [];
+    const bridge = createAppAgentNativeServiceBridge({
+      butlerData,
+      platform: "darwin",
+      homeDir: "/Users/alice",
+      getPort: () => 19123,
+      prepareLocalAuth: () => ({
+        filePath: join(butlerData, "app", "runtime", "auth", "local-agent-auth.json"),
+      }),
+      writeFile: (path, body) => writes.push({ path, body }),
+      runCommand: () => ({ exitCode: 0 }),
+    });
+
+    await bridge.registration.install();
+    await bridge.nativeServices.start();
+
+    expect(writes).toHaveLength(2);
+    for (const { body } of writes) {
+      expect(plistValue(body, "RunAtLoad")).toBe("<true/>");
+      expect(plistValue(body, "KeepAlive")).toBe(
+        "<dict><key>SuccessfulExit</key><false/></dict>",
+      );
+      for (const key of ["Crashed", "NetworkState", "PathState", "OtherJobEnabled"]) {
+        expect(body).not.toContain(`<key>${key}</key>`);
+      }
+    }
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("App Agent systemd service restarts the Agent only on failure within the App crash budget", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-systemd-restart-"));
+  try {
+    const butlerData = join(tempDir, "data");
+    const writes: Array<{ path: string; body: string }> = [];
+    const bridge = createAppAgentNativeServiceBridge({
+      butlerData,
+      platform: "linux",
+      homeDir: "/home/alice",
+      getPort: () => 19123,
+      prepareLocalAuth: () => ({
+        filePath: join(butlerData, "app", "runtime", "auth", "local-agent-auth.json"),
+      }),
+      writeFile: (path, body) => writes.push({ path, body }),
+      runCommand: () => ({ exitCode: 0 }),
+    });
+
+    await bridge.registration.install();
+    await bridge.nativeServices.start();
+
+    expect(AGENT_RECOVERY_BUDGET).toEqual({ maxAttempts: 3, windowMs: 60_000 });
+    expect(writes).toHaveLength(2);
+    for (const { body } of writes) {
+      const unit = systemdSection(body, "Unit");
+      const service = systemdSection(body, "Service");
+      expect(service).toContain("Restart=on-failure");
+      expect(body).not.toContain("Restart=always");
+      expect(service).toContain("RestartSec=5");
+      expect(unit).toContain(
+        `StartLimitIntervalSec=${AGENT_RECOVERY_BUDGET.windowMs / 1000}`,
+      );
+      expect(unit).toContain(`StartLimitBurst=${AGENT_RECOVERY_BUDGET.maxAttempts}`);
+      expect(service).not.toContain("StartLimit");
+    }
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("App Agent systemd start clears a hit crash budget but does not require it", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-systemd-reset-"));
+  try {
+    const butlerData = join(tempDir, "data");
+    const commands: string[] = [];
+    const bridge = createAppAgentNativeServiceBridge({
+      butlerData,
+      platform: "linux",
+      homeDir: "/home/alice",
+      getPort: () => 19123,
+      prepareLocalAuth: () => ({
+        filePath: join(butlerData, "app", "runtime", "auth", "local-agent-auth.json"),
+      }),
+      writeFile: () => {},
+      runCommand: (argv) => {
+        commands.push(argv.join(" "));
+        return { exitCode: argv[2] === "reset-failed" ? 1 : 0 };
+      },
+    });
+
+    await expect(bridge.registration.install()).resolves.toBeUndefined();
+    await expect(bridge.nativeServices.start()).resolves.toBeUndefined();
+    expect(commands).toContain("systemctl --user start butler.service");
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+function plistValue(body: string, key: string): string | null {
+  const compact = body.replace(/>\s+</g, "><");
+  const match = compact.match(
+    new RegExp(`<key>${key}</key>(<true/>|<false/>|<dict>.*?</dict>|<string>.*?</string>)`),
+  );
+  return match?.[1] ?? null;
+}
+
+function systemdSection(body: string, name: string): string {
+  const start = body.indexOf(`[${name}]\n`);
+  if (start < 0) return "";
+  const next = body.indexOf("\n[", start + 1);
+  return body.slice(start, next < 0 ? undefined : next);
+}
 
 test("App Agent native service bridge lists native service projections", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-list-"));

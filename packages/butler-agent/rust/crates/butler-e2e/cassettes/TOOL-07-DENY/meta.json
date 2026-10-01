@@ -1,0 +1,124 @@
+{
+  "scenario": "TOOL-07-DENY",
+  "provider": "openai-subscription",
+  "model": "openai/gpt-6-luna",
+  "effort": "max",
+  "wire_shape": "openai_responses",
+  "butler_git_sha": "54f5fe0c47c8",
+  "recorded_at": "2026-09-29T01:03:10Z",
+  "recorder": "butler-e2e record proxy",
+  "sanitization": [
+    "per-run values -> {{W}}, {{D}}, {{SANDBOX}}, scenario nonces",
+    "JWT/sk-key/bearer/email/home path/host name -> fixed placeholders",
+    "response.instructions -> {{REDACTED_ECHO}}, response.tools -> []",
+    "response headers reduced to content-type, retry-after and numeric quota headers",
+    "chunks re-cut at SSE event boundaries (event bytes unchanged)",
+    "JSON account identifiers (account_id, user_id, email, ...) -> {{ACCOUNT}}/{{EMAIL}}",
+    "JSON tokens (access_token, refresh_token, id_token, authorization) -> {{TOKEN}}",
+    "absolute reset times -> {{EPOCH_MS|S+delta}} relative to recording, rounded to the hour"
+  ],
+  "files": [
+    {
+      "file": "000.json",
+      "sha256": "284990862a338746fd2debee927097d6e9299ce4efcbdbaf9758f641c85ce76d"
+    },
+    {
+      "file": "001.json",
+      "sha256": "17aa5e2c4512889327786b16f5b9888a8ed124bedfcb8d8e8d6cac8daa523840"
+    },
+    {
+      "file": "002.json",
+      "sha256": "6a113c760123e0ef659eb568873dd666924f05085f860a455d43810a692c53e5"
+    },
+    {
+      "file": "003.json",
+      "sha256": "7f121fcadf2f03f701e260adf38234e46e67ca302ec35393e4ff5b00e0f0816e"
+    },
+    {
+      "file": "004.json",
+      "sha256": "af672a2c7e1a03d94ed3312a8e7ae4ebc30c1e2a0342c46d6d52b45ff3e105e8"
+    },
+    {
+      "file": "005.json",
+      "sha256": "2829b1130574035b00a30e10af729272b9bef367f7275dbc48545e9481d7212e"
+    }
+  ],
+  "fingerprint": [
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.content_part.added{content_index,item_id,output_index,part,sequence_number,type}",
+      "response.output_text.delta{content_index,delta,item_id,logprobs,obfuscation,output_index,sequence_number,type}",
+      "response.output_text.done{content_index,item_id,logprobs,output_index,sequence_number,text,type}",
+      "response.content_part.done{content_index,item_id,output_index,part,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.function_call_arguments.delta{delta,item_id,obfuscation,output_index,sequence_number,type}",
+      "response.function_call_arguments.done{arguments,item_id,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ],
+    [
+      "status:200",
+      "response.created{response,sequence_number,type}",
+      "response.in_progress{response,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.output_item.added{item,output_index,sequence_number,type}",
+      "response.content_part.added{content_index,item_id,output_index,part,sequence_number,type}",
+      "response.output_text.delta{content_index,delta,item_id,logprobs,obfuscation,output_index,sequence_number,type}",
+      "response.output_text.done{content_index,item_id,logprobs,output_index,sequence_number,text,type}",
+      "response.content_part.done{content_index,item_id,output_index,part,sequence_number,type}",
+      "response.output_item.done{item,output_index,sequence_number,type}",
+      "response.completed{response,sequence_number,type}"
+    ]
+  ]
+}

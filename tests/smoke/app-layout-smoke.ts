@@ -10,9 +10,9 @@ import {
 } from "../../packages/butler-app/client/ui/src/app/utils.ts";
 import { appCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import {
-  FIRST_RUN_STORAGE_KEY,
-  firstRunCompleteState,
-} from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
+  LEGACY_FIRST_RUN_STORAGE_KEY as FIRST_RUN_STORAGE_KEY,
+  legacyFirstRunCompleteRecord,
+} from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
 import type { ProjectSummary, SessionSummaryView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 
 const root = process.cwd();
@@ -98,7 +98,7 @@ async function expectInputValue(
 async function patchSettings(settings: Record<string, unknown>): Promise<void> {
   const response = await fetch(`${server.url}settings`, {
     method: "PATCH",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...server.authHeaders },
     body: JSON.stringify(settings),
   });
   const body = await response.json().catch(() => null);
@@ -315,8 +315,8 @@ assert(
 const server = await createNativeAppServer({
   butlerData: join(tempDir, "data"),
   uiRoot,
-  // The smoke asserts English copy (firstRunCompleteState("en")); keep the
-  // gateway's saved language in step so Settings does not switch locale.
+  // The smoke asserts English copy; keep the gateway's saved language in step
+  // so Settings does not switch locale.
   config: { user: { name: "Smoke", language: "en" } },
   stubReply: async (request) => {
     await smokeResponderProgressGate;
@@ -347,6 +347,13 @@ await server.api("/sessions", {
     title: "Desktop client polish",
   }),
 });
+// The layout smoke measures every inspector panel, including the Context and
+// Workers tabs, which only developer mode shows: turn it on for the gateway
+// (app info) and the harness (`developer=1`).
+await server.api("/settings", {
+  method: "PATCH",
+  body: JSON.stringify({ diagnostics_enabled: true }),
+});
 // Space sidebar session rows expose their title as the row's aria-label.
 const smokeSessionRowSelector = `${testClass("tree-row")}[aria-label="Desktop client polish"]`;
 
@@ -355,7 +362,8 @@ const page = await browser.newPage({
   viewport: { width: 1440, height: 900 },
   deviceScaleFactor: 1,
 });
-const firstRunStateJson = JSON.stringify(firstRunCompleteState("en"));
+await server.signIn(page);
+const firstRunStateJson = JSON.stringify(legacyFirstRunCompleteRecord());
 await page.addInitScript(
   ({ key, value }) => {
     window.localStorage.setItem(key, value);
@@ -365,7 +373,7 @@ await page.addInitScript(
 const screenshots: string[] = [];
 
 try {
-  await page.goto(`${server.url}?visual=components`, {
+  await page.goto(`${server.url}?visual=components&developer=1`, {
     waitUntil: "networkidle",
   });
   await page.locator(testClass("composer-card")).waitFor({ state: "visible" });
@@ -702,8 +710,23 @@ try {
     contextPopoverGlass.menuTop >= contextPopoverGlass.titlebarSafeTop - 1,
     `context popover should stay below titlebar safe area: ${JSON.stringify(contextPopoverGlass)}`,
   );
+  // Click pins the context popover (it stays when the pointer leaves); Escape
+  // closes it. Context details live in the inspector's Context tab.
   await page
     .getByRole("button", { name: appCopy.composer.contextDetails })
+    .click();
+  await page.locator(`${testClass("context-popover")}[data-pinned="true"]`).waitFor({ state: "visible" });
+  await page.mouse.move(260, 120);
+  await page.waitForTimeout(160);
+  assert(
+    await page.locator(testClass("context-popover")).isVisible(),
+    "pinned context popover should stay open when the pointer leaves",
+  );
+  await page.keyboard.press("Escape");
+  await page.locator(testClass("context-popover")).waitFor({ state: "hidden" });
+  await page
+    .getByRole("button", { name: appCopy.inspector.tabs.context, exact: true })
+    .first()
     .click();
   await page
     .getByRole("heading", { name: "Context details" })
@@ -1945,7 +1968,8 @@ try {
   assert(
     accessButtonState.svgCount === 1 &&
       accessButtonState.label.includes(appCopy.permissions.askFirst) &&
-      accessButtonState.color.includes("0, 122, 255"),
+      // Ask first reads in the accent text color (--accent-text, blue-07 light), AA on the composer.
+      accessButtonState.color.includes("0, 102, 217"),
     `permission button should update icon and ask-first color: ${JSON.stringify(accessButtonState)}`,
   );
   const accessButtonGeometry = await page
@@ -2347,7 +2371,7 @@ try {
     `compact settings detail should replace the master list: ${JSON.stringify(compactSettingsDetail)}`,
   );
   screenshots.push(await screenshot(page, "narrow-settings-detail.png"));
-  await page.getByRole("button", { name: appCopy.settings.back }).click();
+  await page.getByRole("button", { name: appCopy.settings.back, exact: true }).click();
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.waitForTimeout(240);
   await page
@@ -2420,74 +2444,33 @@ try {
   await page
     .getByRole("button", { name: appCopy.settings.sections.appearance })
     .click();
-  await page
-    .locator(testClass("settings-main-screen-theme-select"))
-    .waitFor({ state: "visible" });
-  await page.locator(testClass("settings-main-screen-theme-select")).click();
-  await page
-    .getByRole("option", {
-      exact: true,
-      name: appCopy.settings.options.mainScreenThemeNone,
-    })
-    .waitFor({ state: "visible" });
-  await page
-    .getByRole("option", {
-      exact: true,
-      name: appCopy.settings.options.mainScreenThemeBloom,
-    })
-    .waitFor({ state: "visible" });
-  await page
-    .getByRole("option", {
-      exact: true,
-      name: appCopy.settings.options.mainScreenThemeSilk,
-    })
-    .waitFor({ state: "visible" });
-  await page
-    .getByRole("option", {
-      exact: true,
-      name: appCopy.settings.options.mainScreenThemeSilk,
-    })
-    .click();
-  await page
-    .locator(testClass("settings-main-screen-theme-preset-select"))
-    .waitFor({ state: "detached" });
+  const wallpaperPicker = page.locator(
+    testClass("settings-main-screen-wallpaper-picker"),
+  );
+  await wallpaperPicker.waitFor({ state: "visible" });
+  const wallpaperTile = (key: string) =>
+    wallpaperPicker.locator(`[data-option="${key}"] [role="radio"]`);
+  for (const key of ["none", "live:butler.bloom", "live:butler.silk"]) {
+    await wallpaperTile(key).waitFor({ state: "visible" });
+  }
+  await wallpaperPicker.locator('[data-option="upload"]').waitFor({ state: "visible" });
+  const bloomPalette = wallpaperPicker.locator('[role="radiogroup"][aria-label="Colors"]');
+  await wallpaperTile("live:butler.silk").click();
+  await bloomPalette.waitFor({ state: "detached" });
   await expectLocatorCount(
     page,
-    testClass("settings-main-screen-theme-preset-select"),
+    '[data-test-class~="settings-main-screen-wallpaper-picker"] [role="radiogroup"][aria-label="Colors"]',
     0,
-    "silk main screen theme should not show palette detail controls",
+    "silk wallpaper should not show bloom palette controls",
   );
-  await expectLocatorCount(
-    page,
-    testClass("settings-main-screen-theme-color"),
-    0,
-    "silk main screen theme should not show custom color controls",
-  );
-  await page.locator(testClass("settings-main-screen-theme-select")).click();
-  await page
-    .getByRole("option", {
-      exact: true,
-      name: appCopy.settings.options.mainScreenThemeBloom,
-    })
+  await wallpaperTile("live:butler.bloom").click();
+  await bloomPalette.waitFor({ state: "visible" });
+  await bloomPalette
+    .getByRole("radio", { exact: true, name: "Custom" })
     .click();
-  await page
-    .locator(testClass("settings-main-screen-theme-preset-select"))
-    .waitFor({ state: "visible" });
-  await page
-    .locator(testClass("settings-main-screen-theme-preset-select"))
-    .click();
-  await page
-    .getByRole("option", {
-      exact: true,
-      name: appCopy.settings.options.paletteCustom,
-    })
-    .click();
-  await page
-    .locator(testClass("settings-main-screen-theme-color"))
-    .first()
-    .waitFor({ state: "visible" });
-  const bloomColorState = await page
-    .locator(testClass("settings-main-screen-theme-color"))
+  const bloomSwatch = wallpaperPicker.locator('input[type="color"]');
+  await bloomSwatch.first().waitFor({ state: "visible" });
+  const bloomColorState = await bloomSwatch
     .first()
     .evaluate((element) => {
       const inputBox = element.getBoundingClientRect();
@@ -2518,8 +2501,12 @@ try {
   await page
     .getByRole("heading", { name: appCopy.settings.pageSections.butlerModel })
     .waitFor({ state: "visible" });
+  // Memory cleanup and worker profiles sit in the page's collapsed Advanced disclosure.
   await page
-    .getByText(appCopy.settings.panels.workerProfiles)
+    .locator(`${testClass("settings-models-advanced")} [aria-expanded="false"]`)
+    .click();
+  await page
+    .getByRole("heading", { name: appCopy.settings.panels.workerProfiles })
     .waitFor({ state: "visible" });
   // Grouped settings: each section header sits above its card (outside the
   // surface, no divider), close to it, and far from the previous card.
@@ -2548,7 +2535,7 @@ try {
   const [modelSection, workerSection] = settingsSectionGeometry;
   assert(
     modelSection?.title === appCopy.settings.pageSections.butlerModel &&
-      workerSection?.title === appCopy.settings.pageSections.fallbackConsolidation &&
+      workerSection?.title === appCopy.settings.pageSections.backupModels &&
       settingsSectionGeometry.every(
         (section) =>
           section.headerBottom !== null &&
@@ -2708,7 +2695,7 @@ try {
     `unsupported provider preset leaked into settings: ${settingsModelsText}`,
   );
   screenshots.push(await screenshot(page, "settings-models.png"));
-  await page.getByRole("button", { name: appCopy.settings.back }).click();
+  await page.getByRole("button", { name: appCopy.settings.back, exact: true }).click();
   await page.locator(testClass("conversation")).waitFor({ state: "visible" });
   await page.getByRole("button", { name: appCopy.sidebar.settings }).click();
   await page.locator(testClass("settings-view")).waitFor({ state: "visible" });
@@ -2749,7 +2736,7 @@ try {
     `select-liquid-glass-tokenized failed: ${JSON.stringify(settingsSelectGlass)}`,
   );
 
-  await page.goto(`${server.url}?visual=components&theme=dark`, {
+  await page.goto(`${server.url}?visual=components&theme=dark&developer=1`, {
     waitUntil: "networkidle",
   });
   await page.locator(testClass("conversation")).waitFor({ state: "visible" });
@@ -3075,7 +3062,7 @@ try {
             visibleCoverage: 0,
           };
         }
-        const webgl = fluid.getContext("webgl");
+        const webgl = fluid.getContext("webgl2") ?? fluid.getContext("webgl");
         const canvas2d = webgl ? null : fluid.getContext("2d");
         const width = webgl?.drawingBufferWidth ?? fluid.width;
         const height = webgl?.drawingBufferHeight ?? fluid.height;
@@ -3599,7 +3586,7 @@ try {
       if (!(canvas instanceof HTMLCanvasElement)) {
         return { changedCoverageMax: 0, spreadMax: 0 };
       }
-      const webgl = canvas.getContext("webgl");
+      const webgl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
       const width = webgl?.drawingBufferWidth ?? canvas.width;
       const height = webgl?.drawingBufferHeight ?? canvas.height;
       const samples: Array<{ changedCoverage: number; spread: number }> = [];
@@ -3992,7 +3979,7 @@ try {
   await page.waitForTimeout(400);
 
   await page.setViewportSize({ width: 1180, height: 820 });
-  await page.goto(`${server.url}?visual=components`, {
+  await page.goto(`${server.url}?visual=components&developer=1`, {
     waitUntil: "networkidle",
   });
   await page.locator(testClass("composer-card")).waitFor({ state: "visible" });

@@ -50,7 +50,6 @@ pub(crate) struct GuidedTurnFactoryAdapter {
     pub protected_ledger_roots: Vec<PathBuf>,
     pub subsessions: Arc<butler_turn::btcc::SubsessionService>,
     pub work_streams: Arc<crate::host::WorkStreams>,
-    pub automations: Arc<butler_runtime::operations::AutomationService>,
     pub mcp_client: Arc<butler_models::mcp_client::McpClient>,
     pub profile: Arc<butler_memory::profile::ProfileService>,
     pub monitoring: Arc<crate::host::MonitoringReaders>,
@@ -63,6 +62,24 @@ struct BoundTurn<'a> {
     inputs: Option<GuidedTurnInputs>,
     progress: &'a dyn AgentLoopProgress,
     base: &'a dyn ModelRoundPort,
+}
+
+impl GuidedTurnFactoryAdapter {
+    async fn skill_catalog(&self, project_id: Option<String>) -> Result<String, BtccError> {
+        self.capabilities
+            .compact_skill_catalog(project_id)
+            .await
+            .map_err(|cause| error(cause.code()))
+    }
+}
+
+fn bound_project_id(project_id: Option<&str>, context: &serde_json::Value) -> Option<String> {
+    project_id.map(str::to_owned).or_else(|| {
+        context
+            .get("projectRef")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+    })
 }
 
 impl BoundGuidedTurn for BoundTurn<'_> {
@@ -179,7 +196,6 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 self.preparation.catalog.clone(),
                 self.subsessions.clone(),
                 self.work_streams.clone(),
-                self.automations.clone(),
                 self.mcp_client.clone(),
                 self.verified_image_payload.clone(),
                 self.profile.clone(),
@@ -220,14 +236,10 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                     memory: CanonicalMemoryReadBinding {
                         runtime_session_id: start.turn.session_id.clone(),
                         turn_id: start.turn.turn_id.clone(),
-                        project_id: policy.project_id.clone().or_else(|| {
-                            start
-                                .turn
-                                .context
-                                .get("projectRef")
-                                .and_then(serde_json::Value::as_str)
-                                .map(str::to_owned)
-                        }),
+                        project_id: bound_project_id(
+                            policy.project_id.as_deref(),
+                            &start.turn.context,
+                        ),
                     },
                     project_id: policy.project_id.clone(),
                     project_sources: project_sources(&start.turn.context),
@@ -250,6 +262,9 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 activity.clone(),
             ));
             let text = Arc::new(GuidedTextState {
+                skill_catalog: self
+                    .skill_catalog(phase.execution_policy.project_id.clone())
+                    .await?,
                 phase,
                 work: initial_work,
                 work_service: self.preparation.work.clone(),

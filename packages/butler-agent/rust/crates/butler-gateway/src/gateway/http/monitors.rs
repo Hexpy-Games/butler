@@ -155,6 +155,34 @@ pub(super) async fn route(
     )
 }
 
+/// `GET /provider-quota?provider_id=[&refresh=1]`: the provider's latest
+/// subscription quota; `refresh` polls its usage endpoint first.
+pub(super) async fn provider_quota(
+    state: Arc<HttpState>,
+    uri: &Uri,
+) -> Result<Response, HttpError> {
+    let parameters = query(uri);
+    let provider_id = parameters
+        .get("provider_id")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty() && value.len() <= 64)
+        .ok_or_else(|| HttpError::public(400, "invalid_request", "provider_id is required."))?;
+    let refresh = parameters
+        .get("refresh")
+        .is_some_and(|value| matches!(value.trim(), "1" | "true"));
+    let data = state
+        .application
+        .get_provider_quota(provider_id.to_owned(), refresh)
+        .await?;
+    json(
+        StatusCode::OK,
+        ApiEnvelope {
+            protocol_version: APP_PROTOCOL_VERSION,
+            data,
+        },
+    )
+}
+
 async fn worker_detail(state: &HttpState, worker_id: &str) -> Result<Value, HttpError> {
     let mut cursor = None;
     loop {
@@ -219,6 +247,7 @@ fn usage_query(parameters: &std::collections::HashMap<String, String>) -> AppUsa
         .filter(|hours| hours.is_finite() && *hours > 0.0);
     AppUsageMonitorQuery {
         session_id,
+        runtime_session_id: None,
         since_ts: hours
             .map(|hours| chrono::Utc::now().timestamp_millis() as f64 - hours * 3_600_000.0),
     }

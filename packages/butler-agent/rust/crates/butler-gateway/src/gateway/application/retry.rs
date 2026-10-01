@@ -2,6 +2,9 @@
 
 mod source;
 
+#[cfg(test)]
+pub(in crate::gateway::application) use source::RUNTIME_FAULT_SQL;
+
 use rusqlite::{Connection, params};
 use serde_json::{Value, json};
 
@@ -156,7 +159,7 @@ impl AppApplication {
             reasoning_effort: None,
             access_mode: None,
             plan_mode: None,
-            subsession_result: None,
+            subsession_result: source.subsession_result,
         };
         self.send_with_reused_attachments(
             SendMessageCommand {

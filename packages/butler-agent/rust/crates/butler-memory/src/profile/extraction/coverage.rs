@@ -1,3 +1,5 @@
+//! Coverage of source windows by the profile extractor: claims, completion and failure.
+
 use parking_lot::Mutex;
 use std::collections::HashSet;
 use std::path::Path;
@@ -11,7 +13,7 @@ use super::types::{CoverageCounts, EXTRACTOR_VERSION, SourceRead, SourceWindow};
 use crate::coordination::CognitionProcessStatus;
 
 pub(super) fn persist_discovery(root: &Path, read: &SourceRead, now: &str) -> ProfileResult<()> {
-    let mut db = storage::open(root, true)?;
+    let mut db = storage::open(root, storage::Access::Write)?;
     let tx = db.transaction().map_err(storage::db_error)?;
     if !read.stale_keys.is_empty() {
         let mut mark = tx.prepare("UPDATE profile_source_coverage SET failure_code='source_stale',updated_at=?1 WHERE coverage_key=?2 AND owner_nonce IS NULL").map_err(storage::db_error)?;
@@ -63,7 +65,7 @@ pub(super) fn claim(
     let pid = f64::from(host.process_id());
     let mut added = Vec::new();
     let result = (|| {
-        let mut db = storage::open(root, true)?;
+        let mut db = storage::open(root, storage::Access::Write)?;
         let tx = db.transaction().map_err(storage::db_error)?;
         for window in windows {
             let row = tx.query_row("SELECT disposition,owner_pid,owner_nonce FROM profile_source_coverage WHERE coverage_key=?1", [&window.coverage_key], |row| Ok((row.get::<_,String>(0)?,row.get::<_,Option<f64>>(1)?,row.get::<_,Option<String>>(2)?))).optional().map_err(storage::db_error)?;
@@ -120,7 +122,7 @@ pub(super) fn release(
     active: &Arc<Mutex<HashSet<String>>>,
 ) -> ProfileResult<()> {
     let result = (|| {
-        let mut db = storage::open(root, true)?;
+        let mut db = storage::open(root, storage::Access::Write)?;
         let tx = db.transaction().map_err(storage::db_error)?;
         let now = host.now_iso();
         let mut statement = tx.prepare("UPDATE profile_source_coverage SET owner_pid=NULL,owner_nonce=NULL,claimed_at=NULL,updated_at=?1 WHERE coverage_key=?2 AND owner_pid=?3 AND owner_nonce=?4 AND disposition!='complete'").map_err(storage::db_error)?;
@@ -152,7 +154,7 @@ pub(super) fn mark_failed(
     nonce: &str,
     host: &dyn ProfileHostFacts,
 ) -> ProfileResult<()> {
-    let mut db = storage::open(root, true)?;
+    let mut db = storage::open(root, storage::Access::Write)?;
     let tx = db.transaction().map_err(storage::db_error)?;
     let now = host.now_iso();
     let failure = super::super::naming::bounded(failure, 120);
@@ -179,7 +181,7 @@ pub(super) fn mark_failed_unclaimed(
     failure: &str,
     host: &dyn ProfileHostFacts,
 ) -> ProfileResult<()> {
-    let db = storage::open(root, true)?;
+    let db = storage::open(root, storage::Access::Write)?;
     db.execute("UPDATE profile_source_coverage SET disposition='failed',failure_code=?1,usage_json='null',updated_at=?2 WHERE coverage_key=?3",params![super::super::naming::bounded(failure,120),host.now_iso(),window.coverage_key]).map_err(storage::db_error)?;
     Ok(())
 }
@@ -200,7 +202,7 @@ pub(super) fn counts(root: &Path, keys: &HashSet<String>) -> ProfileResult<Cover
     if keys.is_empty() || !storage::database_path(root).exists() {
         return Ok(CoverageCounts::default());
     }
-    let db = storage::open(root, false)?;
+    let db = storage::open(root, storage::Access::Read)?;
     let mut output = CoverageCounts::default();
     let mut statement = db
         .prepare("SELECT disposition FROM profile_source_coverage WHERE coverage_key=?1")
@@ -227,7 +229,7 @@ pub(super) fn replace_parent(
     host: &dyn ProfileHostFacts,
     active: &Arc<Mutex<HashSet<String>>>,
 ) -> ProfileResult<bool> {
-    let mut db = storage::open(root, true)?;
+    let mut db = storage::open(root, storage::Access::Write)?;
     let tx = db.transaction().map_err(storage::db_error)?;
     let row = tx.query_row("SELECT message_id,source_hash,part_id,scalar_pointer,byte_start,byte_end,extractor_version,disposition,owner_pid,owner_nonce FROM profile_source_coverage WHERE coverage_key=?1", [&parent.coverage_key], |row| Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?,row.get::<_,String>(2)?,row.get::<_,String>(3)?,row.get::<_,i64>(4)?,row.get::<_,i64>(5)?,row.get::<_,String>(6)?,row.get::<_,String>(7)?,row.get::<_,Option<f64>>(8)?,row.get::<_,Option<String>>(9)?))).optional().map_err(storage::db_error)?;
     let Some((message, hash, part, pointer, start, end, version, disposition, pid, nonce)) = row

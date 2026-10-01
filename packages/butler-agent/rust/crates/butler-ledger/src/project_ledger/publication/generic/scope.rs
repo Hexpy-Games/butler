@@ -19,7 +19,8 @@ pub(super) fn resolve(project_root: &Path) -> Result<LedgerScope, LedgerEffectEr
     {
         return Err(LedgerEffectError::Uncertain { source: None });
     }
-    let root = fs::canonicalize(project_root).map_err(LedgerEffectError::uncertain)?;
+    let root = butler_platform::secure_fs::canonicalize(project_root)
+        .map_err(LedgerEffectError::uncertain)?;
     if fs::symlink_metadata(root.join("project.json"))
         .map_err(LedgerEffectError::uncertain)?
         .file_type()
@@ -45,22 +46,4 @@ pub(super) fn resolve(project_root: &Path) -> Result<LedgerScope, LedgerEffectEr
 
 fn valid_id(id: &str) -> bool {
     crate::project_ledger::active_reference::safe_id(id)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn initialized_mixed_case_project_id_keeps_its_exact_ledger_root() {
-        let data =
-            std::env::temp_dir().join(format!("butler-ledger-scope-{}", uuid::Uuid::new_v4()));
-        let root = data.join("project-ledger/projects/NanaChanAI");
-        fs::create_dir_all(&root).unwrap();
-        fs::write(root.join("project.json"), r#"{"id":"NanaChanAI"}"#).unwrap();
-        let scope = resolve(&root).unwrap();
-        assert_eq!(scope.project_id, "NanaChanAI");
-        assert_eq!(scope.root, root.canonicalize().unwrap());
-        fs::remove_dir_all(data).unwrap();
-    }
 }

@@ -57,8 +57,10 @@ pub(super) fn json(value: &Value) -> Value {
 mod tests {
     use serde_json::json;
 
+    // test-category: security
     #[test]
     fn preserves_privacy_boolean_but_redacts_secret_values() {
+        super::super::store::retention_regression();
         let redacted = super::json(&json!({
             "privacy": {"secrets_redacted": true},
             "request": {"api_key": "fixture-secret", "secrets_redacted": "fixture-secret"},

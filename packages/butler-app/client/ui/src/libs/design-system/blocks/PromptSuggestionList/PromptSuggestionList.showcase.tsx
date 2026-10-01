@@ -1,8 +1,8 @@
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import { Sparkles } from "../../components/Icons";
 import { ConversationShell } from "../ConversationShell";
+import type { WallpaperSource } from "../Wallpaper";
 import { PromptSuggestionList } from "./PromptSuggestionList";
-import type { FluidPalette, FluidRgb } from "./promptFluid";
 import styles from "./PromptSuggestionList.showcase.module.css";
 
 export const meta: ShowcaseMeta = {
@@ -12,17 +12,13 @@ export const meta: ShowcaseMeta = {
   status: "stable",
 };
 
-function silkPalette(color: FluidRgb): FluidPalette {
-  return [color, color, color, color, color, color];
-}
-
-const fluidPaletteOptions = [
-  { id: "monochrome", label: "Monochrome", colors: silkPalette([179, 179, 179]) },
-  { id: "aurora", label: "Aurora", colors: silkPalette([139, 92, 246]) },
-  { id: "bloom", label: "Bloom", colors: silkPalette([217, 70, 239]) },
-  { id: "lavender", label: "Lavender", colors: silkPalette([167, 139, 250]) },
-  { id: "morning", label: "Morning", colors: silkPalette([125, 211, 252]) },
-] as const;
+/** A gray silk in both tones; the Wallpaper showcase switches modules and params. */
+const SILK_GRAY: WallpaperSource = {
+  kind: "live",
+  module: "butler.silk",
+  params: { base: "#b3b3b3" },
+  paramsDark: { base: "#b3b3b3" },
+};
 
 const copy = {
   "en-US": {
@@ -49,7 +45,7 @@ const copy = {
   },
 } as const;
 
-function Suggestions({ locale, fluid }: ShowcaseRenderContext & { fluid: boolean }) {
+function Suggestions({ locale, wallpaper }: ShowcaseRenderContext & { wallpaper: boolean }) {
   const text = copy[locale];
   return (
     <div className={styles.showcaseStage}>
@@ -57,9 +53,7 @@ function Suggestions({ locale, fluid }: ShowcaseRenderContext & { fluid: boolean
         <PromptSuggestionList
           title={text.title}
           description={text.description}
-          fluidBackground={fluid}
-          fluidPaletteOptions={fluid ? fluidPaletteOptions : undefined}
-          fluidVariant="silk"
+          wallpaper={wallpaper ? SILK_GRAY : undefined}
           moment={text.moment}
           titleIcon={<Sparkles />}
           suggestions={text.suggestions.map(([id, title, description, prompt]) => ({ id, title, description, text: prompt }))}
@@ -70,6 +64,6 @@ function Suggestions({ locale, fluid }: ShowcaseRenderContext & { fluid: boolean
 }
 
 export const stories: ShowcaseStory[] = [
-  { name: "New chat", widths: ["app", "wide", "375"], render: (context) => <Suggestions {...context} fluid /> },
-  { name: "Plain background", render: (context) => <Suggestions {...context} fluid={false} /> },
+  { name: "New chat", widths: ["app", "wide", "375"], render: (context) => <Suggestions {...context} wallpaper /> },
+  { name: "Plain background", render: (context) => <Suggestions {...context} wallpaper={false} /> },
 ];

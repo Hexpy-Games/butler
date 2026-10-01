@@ -3,7 +3,7 @@
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Map, Value};
 
-use crate::gateway::application::storage::AppStorageError;
+use crate::gateway::application::storage::{AppStorageError, CachedSql};
 
 pub(super) fn next_sequence(
     db: &Connection,
@@ -21,7 +21,7 @@ pub(super) fn next_sequence(
         )
     } else {
         let indexed = db
-            .query_row(
+            .query_row_cached(
                 "SELECT 1 FROM sqlite_master WHERE type='index' AND name='events_turn_id_idx'",
                 [],
                 |_| Ok(()),
@@ -52,7 +52,7 @@ fn latest_positive_sequence(
     sequence_field: &str,
     identity: &str,
 ) -> Result<u64, AppStorageError> {
-    let mut statement = db.prepare(sql).map_err(AppStorageError::sqlite)?;
+    let mut statement = db.prepare_cached(sql).map_err(AppStorageError::sqlite)?;
     let mut rows = statement
         .query([identity])
         .map_err(AppStorageError::sqlite)?;

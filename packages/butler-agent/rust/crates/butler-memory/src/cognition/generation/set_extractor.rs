@@ -3,20 +3,20 @@
 use crate::cognition::CognitionCode;
 use std::{path::Path, sync::Arc};
 
-use serde_json::{Value, to_value};
 use tokio_util::sync::CancellationToken;
 
 use super::read;
 use crate::{
     cognition::{
-        CognitionError, CognitionPathEnvironment, CognitionResult, MemoryGenerationTarget,
-        assert_mutation_authority, ensure_data_authority,
-        graph::{GraphRepository, ProjectionModelPolicyInput},
+        CognitionError, CognitionPathEnvironment, CognitionResult, assert_mutation_authority,
+        ensure_data_authority,
+        graph::{GraphRepository, ProjectionModelPolicy, ProjectionModelPolicyInput},
         resolve_generation,
     },
-    coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator},
+    coordination::CognitionWriteCoordinator,
 };
 
+/// Sets the projection model policy of a generation.
 pub async fn run(
     data_root: &Path,
     environment: &CognitionPathEnvironment,
@@ -25,20 +25,15 @@ pub async fn run(
     policy: &ProjectionModelPolicyInput,
     now: &str,
     cancellation: &CancellationToken,
-) -> CognitionResult<Value> {
+) -> CognitionResult<ProjectionModelPolicy> {
     read::safe_generation_id(generation_id)?;
     let memory_root = environment.memory_root(data_root);
     let descriptor = read::read_descriptor(&memory_root)?;
     let manifest = read::read_manifest(&memory_root, generation_id)?;
-    if descriptor.generation_id == generation_id || manifest.state.as_deref() != Some("building") {
+    if descriptor.generation_id == generation_id {
         return Err(error(CognitionCode::MemoryGenerationChanged));
     }
-    let target = MemoryGenerationTarget::Rebuild {
-        generation_id: generation_id.to_owned(),
-        canonical_snapshot_id: manifest
-            .canonical_snapshot_id
-            .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?,
-    };
+    let target = read::candidate_target(generation_id, manifest)?;
     let handle = resolve_generation(data_root, environment, &target)?;
     let lock = environment.consolidation_lock(data_root);
     let manifest_path = memory_root
@@ -49,19 +44,13 @@ pub async fn run(
         data_root,
         &[&memory_root, &manifest_path, &handle.graph_path, &lock],
     )?;
-    let lease = coordinator
-        .acquire(
-            CognitionWriteAcquire {
-                lock_path: lock.clone(),
-                purpose: Some("projection".into()),
-                deadline_at_epoch_ms: None,
-                cancellation: Some(cancellation.clone()),
-            },
-            CognitionWaitClass::Background,
-        )
-        .await
-        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
-        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
+    let lease = crate::cognition::generation::stage::acquire(
+        &coordinator,
+        &lock,
+        "projection",
+        cancellation,
+    )
+    .await?;
     let data_root = data_root.to_owned();
     let environment = environment.to_owned();
     let policy = policy.to_owned();
@@ -92,8 +81,7 @@ pub async fn run(
             graph.ensure_schema(now)?;
             let configured = graph.configure_projection_model_policy(policy, now)?;
             graph.close()?;
-            to_value(configured)
-                .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))
+            Ok(configured)
         },
     )
     .await

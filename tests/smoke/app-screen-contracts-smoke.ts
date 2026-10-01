@@ -5,9 +5,9 @@ import { chromium, type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { appCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import {
-  FIRST_RUN_STORAGE_KEY,
-  firstRunCompleteState,
-} from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
+  LEGACY_FIRST_RUN_STORAGE_KEY as FIRST_RUN_STORAGE_KEY,
+  legacyFirstRunCompleteRecord,
+} from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
 
 // Focused smoke for the Phase 2 screen contracts in
 // SPEC-BUTLER-DEDICATED-CLIENT-DESIGN-SYSTEM.
@@ -22,7 +22,7 @@ function assert(condition: unknown, message: string): asserts condition {
 async function openApp(page: Page): Promise<void> {
   await page.addInitScript(
     ({ key, value }) => window.localStorage.setItem(key, value),
-    { key: FIRST_RUN_STORAGE_KEY, value: JSON.stringify(firstRunCompleteState("en")) },
+    { key: FIRST_RUN_STORAGE_KEY, value: JSON.stringify(legacyFirstRunCompleteRecord()) },
   );
   await page.goto(server.url, { waitUntil: "load" });
   await page.locator(testClass("composer-card")).waitFor({ state: "visible" });
@@ -52,6 +52,16 @@ async function assertInspectorContentStartsAtTop(page: Page): Promise<void> {
   await page.goto(`${server.url}?visual=components`, { waitUntil: "load" });
   const inspector = page.locator(testClass("right-inspector-open"));
   await inspector.waitFor({ state: "visible" });
+  // Outside developer mode the inspector hides the Context and Workers tabs.
+  const tabs = await inspector.locator(":scope > div").first().locator("button").allTextContents();
+  assert(
+    JSON.stringify(tabs) === JSON.stringify([
+      appCopy.inspector.tabs.summary,
+      appCopy.inspector.tabs.artifacts,
+      appCopy.inspector.tabs.automations,
+    ]),
+    `default inspector tabs should hide developer tabs: ${JSON.stringify(tabs)}`,
+  );
   const layout = await inspector.evaluate((element) => {
     const content = [...element.querySelectorAll<HTMLElement>("div")].find(
       (candidate) => getComputedStyle(candidate).alignContent === "start"
@@ -77,6 +87,7 @@ async function assertInspectorContentStartsAtTop(page: Page): Promise<void> {
 const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await server.signIn(page);
   await openApp(page);
   await assertMediumDrawerKeepsWorkspaceVisible(page);
   await assertInspectorContentStartsAtTop(page);

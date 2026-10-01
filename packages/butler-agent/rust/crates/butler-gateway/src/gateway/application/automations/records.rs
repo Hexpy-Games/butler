@@ -1,9 +1,10 @@
+use butler_turn::btcc::AccessMode;
 use rusqlite::{Connection, OptionalExtension, Row};
 
 use super::contracts::{AutomationRunSummary, AutomationSummary};
 use crate::gateway::application::storage::{AppStorageCode, AppStorageError};
 
-const COLUMNS: &str = "a.id,a.title,a.prompt_body,a.target_kind,a.target_session_id,a.interval_seconds,a.state,a.next_run_at,a.last_run_at,a.last_run_state,a.last_safe_error_code,a.run_count,a.consecutive_failure_count,a.created_at,a.updated_at,COALESCE(c.title,'Unavailable session')";
+const COLUMNS: &str = "a.id,a.title,a.prompt_body,a.target_kind,a.target_session_id,a.interval_seconds,a.state,a.next_run_at,a.last_run_at,a.last_run_state,a.last_safe_error_code,a.run_count,a.consecutive_failure_count,a.created_at,a.updated_at,COALESCE(c.title,'Unavailable session'),a.access_mode,a.schedule_type,a.run_at,a.start_at,a.schedule_json";
 
 #[derive(Clone)]
 pub(super) struct AutomationRow {
@@ -13,6 +14,10 @@ pub(super) struct AutomationRow {
     pub target_kind: String,
     pub target_id: String,
     pub interval: i64,
+    pub schedule: Option<super::CalendarSchedule>,
+    pub schedule_type: String,
+    pub run_at: Option<String>,
+    pub start_at: Option<String>,
     pub state: String,
     pub next: Option<String>,
     pub last: Option<String>,
@@ -23,6 +28,7 @@ pub(super) struct AutomationRow {
     pub created: String,
     pub updated: String,
     pub target_label: String,
+    pub access: AccessMode,
 }
 
 pub(super) struct QueuedRunRow {
@@ -60,14 +66,18 @@ pub(super) fn active(db: &Connection, id: &str) -> Result<AutomationRow, AppStor
 pub(super) fn list(
     db: &Connection,
     target_id: Option<&str>,
+    include_deleted: bool,
 ) -> Result<Vec<AutomationRow>, AppStorageError> {
     let mut sql = format!(
-        "SELECT {COLUMNS} FROM app_automations a LEFT JOIN chats c ON c.id=a.target_session_id WHERE a.state!='deleted'"
+        "SELECT {COLUMNS} FROM app_automations a LEFT JOIN chats c ON c.id=a.target_session_id WHERE 1=1"
     );
+    if !include_deleted {
+        sql.push_str(" AND a.state!='deleted'");
+    }
     if target_id.is_some() {
         sql.push_str(" AND a.target_session_id=?1");
     }
-    sql.push_str(" ORDER BY a.updated_at DESC LIMIT 200");
+    sql.push_str(" ORDER BY a.updated_at DESC,a.id ASC LIMIT 200");
     let mut statement = db.prepare(&sql).map_err(AppStorageError::sqlite)?;
     let rows = if let Some(id) = target_id {
         statement.query_map([id], row)
@@ -92,11 +102,25 @@ pub(super) fn due(db: &Connection, now: &str) -> Result<Vec<AutomationRow>, AppS
         .map_err(AppStorageError::sqlite)
 }
 
-pub(super) fn queued(db: &Connection) -> Result<Vec<QueuedRunRow>, AppStorageError> {
-    let sql = format!(
+pub(super) fn next_due(db: &Connection) -> Result<Option<String>, AppStorageError> {
+    db.query_row(
+        "SELECT next_run_at FROM app_automations WHERE state='enabled' AND next_run_at IS NOT NULL ORDER BY next_run_at LIMIT 1",
+        [], |row| row.get(0),
+    ).optional().map_err(AppStorageError::sqlite)
+}
+
+/// Runs waiting for their target session; served by the partial
+/// `app_automation_runs_queued_idx`.
+pub(in crate::gateway::application) fn queued_sql() -> String {
+    format!(
         "SELECT r.id,r.trigger,r.queued_message_id,r.target_session_id,{COLUMNS} FROM app_automation_runs r JOIN app_automations a ON a.id=r.automation_id LEFT JOIN chats c ON c.id=a.target_session_id WHERE r.state='queued' AND a.state!='deleted' ORDER BY r.rowid LIMIT 20"
-    );
-    let mut statement = db.prepare(&sql).map_err(AppStorageError::sqlite)?;
+    )
+}
+
+pub(super) fn queued(db: &Connection) -> Result<Vec<QueuedRunRow>, AppStorageError> {
+    let mut statement = db
+        .prepare_cached(&queued_sql())
+        .map_err(AppStorageError::sqlite)?;
     statement
         .query_map([], |item| {
             Ok(QueuedRunRow {
@@ -137,7 +161,11 @@ pub(super) fn summary(value: AutomationRow) -> AutomationSummary {
         target_session_id: value.target_id,
         target_label: value.target_label,
         interval_seconds: value.interval,
-        interval_label: interval_label(value.interval),
+        schedule_type: value.schedule_type,
+        run_at: value.run_at,
+        start_at: value.start_at,
+        schedule: value.schedule,
+        access_mode: value.access,
         next_run_at: value.next,
         last_run_at: value.last,
         last_run_state: value.last_state,
@@ -150,7 +178,7 @@ pub(super) fn summary(value: AutomationRow) -> AutomationSummary {
 }
 
 pub(super) fn not_found() -> AppStorageError {
-    AppStorageError::new(AppStorageCode::AutomationNotFound, "Automation not found.")
+    AppStorageError::new(AppStorageCode::AutomationNotFound, "Schedule not found.")
 }
 
 fn row(item: &Row<'_>) -> rusqlite::Result<AutomationRow> {
@@ -164,6 +192,10 @@ fn row_at(item: &Row<'_>, at: usize) -> rusqlite::Result<AutomationRow> {
         target_kind: item.get(at + 3)?,
         target_id: item.get(at + 4)?,
         interval: item.get(at + 5)?,
+        schedule_type: item.get(at + 17)?,
+        run_at: item.get(at + 18)?,
+        start_at: item.get(at + 19)?,
+        schedule: schedule_at(item, at + 20)?,
         state: item.get(at + 6)?,
         next: item.get(at + 7)?,
         last: item.get(at + 8)?,
@@ -174,6 +206,14 @@ fn row_at(item: &Row<'_>, at: usize) -> rusqlite::Result<AutomationRow> {
         created: item.get(at + 13)?,
         updated: item.get(at + 14)?,
         target_label: item.get(at + 15)?,
+        access: access_at(item, at + 16)?,
+    })
+}
+/// The stored access mode in column `at`; migration fills every row.
+fn access_at(item: &Row<'_>, at: usize) -> rusqlite::Result<AccessMode> {
+    let stored: String = item.get(at)?;
+    serde_json::from_value(serde_json::Value::String(stored)).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(at, rusqlite::types::Type::Text, Box::new(error))
     })
 }
 fn run_row(item: &Row<'_>) -> rusqlite::Result<AutomationRunSummary> {
@@ -190,13 +230,17 @@ fn run_row(item: &Row<'_>) -> rusqlite::Result<AutomationRunSummary> {
         turn_id: item.get(9)?,
     })
 }
-fn interval_label(seconds: i64) -> String {
-    match seconds {
-        600 => "10 minutes".into(),
-        1800 => "30 minutes".into(),
-        3600 => "1 hour".into(),
-        value if value % 3600 == 0 => format!("{} hours", value / 3600),
-        value if value % 60 == 0 => format!("{} minutes", value / 60),
-        value => format!("{value} seconds"),
-    }
+fn schedule_at(item: &Row<'_>, at: usize) -> rusqlite::Result<Option<super::CalendarSchedule>> {
+    let stored: Option<String> = item.get(at)?;
+    stored
+        .map(|value| {
+            serde_json::from_str(&value).map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    at,
+                    rusqlite::types::Type::Text,
+                    Box::new(error),
+                )
+            })
+        })
+        .transpose()
 }

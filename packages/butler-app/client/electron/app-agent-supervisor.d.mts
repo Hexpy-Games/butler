@@ -1,6 +1,27 @@
+import type {
+  AgentStopIntent,
+  AgentStopIntentRespawner,
+  NativeServiceInstance,
+} from "./app-agent-stop-intent.mjs";
+
+export type AgentRuntimeState =
+  | "running"
+  | "starting"
+  | "stopped"
+  | "restarting"
+  | "restart_failed"
+  | "failed"
+  | "idle";
+
 export const APP_LOCAL_AUTH_SCHEMA: "butler.app-local-agent-auth.v1";
 
 export function appLocalAuthPath(butlerData: string): string;
+
+export function readAppLocalAuth(input: { butlerData: string }): {
+  filePath: string;
+  created: false;
+  token: string;
+} | null;
 
 export function prepareAppLocalAuth(input: {
   butlerData: string;
@@ -57,10 +78,12 @@ export function createBundledAgentSupervisor(input: {
   };
   healthCheck: (
     localAuth?: { filePath: string; created: boolean; token: string } | null,
+    portOverride?: number | null,
   ) => boolean | Promise<boolean>;
   readinessCheck?: (
     localAuth?: { filePath: string; created: boolean; token: string } | null,
     activeGateway?: Record<string, unknown> | null,
+    portOverride?: number | null,
   ) => boolean | Promise<boolean>;
   isPortAvailable: (port: number) => boolean | Promise<boolean>;
   findAvailablePort: (startPort: number) => number | Promise<number>;
@@ -88,7 +111,42 @@ export function createBundledAgentSupervisor(input: {
     env?: Record<string, string | undefined>;
     bundledAgentVersion?: string;
   }) => void;
+  onUnexpectedExit?: (exit: { code: number | null; signal: string | null }) => void;
+  readStopIntent?: () => AgentStopIntent | null;
+  writeStopIntent?: (intent: {
+    reason: "stop" | "restart";
+    pid: number;
+    instanceId: string;
+    requestedBy: "app";
+    respawnBy: "app" | null;
+  }) => unknown;
+  retractStopIntent?: (target: { pid: number; instanceId: string }) => unknown;
+  readInstanceRecord?: () => NativeServiceInstance | null;
+  isProcessAlive?: (pid: number) => boolean;
+  restartReconnectTimeoutMs?: number;
+  externalPollMs?: number;
+  schedulePoll?: (fn: () => unknown, ms: number) => unknown;
+  cancelPoll?: (timer: unknown) => void;
+  onIntentionalExit?: (event: {
+    reason: "stop" | "restart";
+    requestedBy: "cli" | "app" | "mcp";
+    /** `app`: this App respawns the Agent itself; otherwise it waits and reconnects. */
+    respawnBy: AgentStopIntentRespawner | null;
+    exit: { code: number | null; signal: string | null };
+  }) => void;
+  onExternalAttach?: (event: {
+    pid: number;
+    instanceId: string;
+    port: number;
+    appSupervised: boolean;
+  }) => void;
+  onRestartReconnectFailed?: () => void;
 }): {
+  agentState(): {
+    state: AgentRuntimeState;
+    requested_by: "cli" | "app" | "mcp" | null;
+    raw_text_included: false;
+  };
   diagnostics(): {
     phase: string;
     pid: number | null;
@@ -113,14 +171,19 @@ export function createBundledAgentSupervisor(input: {
     };
     last_error_code: string | null;
     last_exit: { code: number | null; signal: string | null } | null;
+    agent_state: AgentRuntimeState;
+    external_agent_attached: boolean;
     raw_text_included: false;
   };
   authHeaders(): Record<string, string>;
+  /** Re-reads the data-folder token file; true when the token changed. */
+  reloadLocalAuth(): boolean;
   ensureReady(): Promise<void>;
   repair(): Promise<void>;
   restart(): Promise<void>;
+  resume(): Promise<void>;
   start(): Promise<void>;
-  stop(input?: { wait?: boolean }): Promise<{
+  stop(input?: { wait?: boolean; reason?: "stop" | "restart" }): Promise<{
     stopped: boolean;
     containment_released: boolean;
     raw_text_included: false;

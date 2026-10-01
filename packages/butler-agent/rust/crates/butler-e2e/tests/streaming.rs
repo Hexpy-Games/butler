@@ -31,7 +31,7 @@ const CASSETTE: &str = "TOOL-05-symlink";
 /// points the model's first write outside the workspace.
 async fn rejected_candidate_turn(id: &str) -> Result<Scenario, HarnessError> {
     let setup = Setup::new(id)?.cassette(CASSETTE);
-    std::os::unix::fs::symlink(&setup.sandbox.home, setup.sandbox.data.join("link"))?;
+    butler_platform::secure_fs::symlink(&setup.sandbox.home, &setup.sandbox.data.join("link"))?;
     let s = setup.start().await?;
     s.provider()?.inject(Fault::first_call(
         "inside.txt",

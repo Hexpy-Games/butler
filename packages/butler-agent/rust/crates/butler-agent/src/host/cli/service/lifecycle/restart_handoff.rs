@@ -1,28 +1,33 @@
 //! Detached one-shot restart handoff for a service-owned request.
 
+use butler_platform::secure_fs::Canonical as _;
 use std::{
-    fs,
     io::{Read, Write},
-    os::unix::fs::DirBuilderExt,
-    os::unix::process::CommandExt,
     path::Path,
     process::{Child, Command, Stdio},
     sync::mpsc,
     thread,
 };
 
+use butler_platform::{process_control, secure_fs};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use super::managed::{is_managed, is_pid_managed, restart_instance};
 use super::{
-    acquire_admission, active_service, log_file, resolve_data_root, service_configuration,
-    start_service_admitted, stop_service_admitted,
+    StopReport, acquire_admission, active_service, log_file, resolve_data_root,
+    service_configuration, start_replacement, stop_service_admitted,
 };
 use crate::host::ResolvedInstallation;
 use crate::host::service::instance as service_instance;
 use service_instance::{InstanceRecord, RestartIdentity};
 
 const INTENT_ID_MAX_LEN: usize = 128;
+/// The service asked for its own restart; the detached CLI helper carries it out.
+const HANDOFF_STOP: service_instance::StopRequest = service_instance::StopRequest {
+    reason: service_instance::StopReason::Restart,
+    requested_by: service_instance::StopRequester::Cli,
+};
 const MAX_HANDOFF_INPUT_BYTES: usize = 4096;
 
 #[derive(Deserialize, Serialize)]
@@ -41,7 +46,7 @@ pub(in crate::host::cli::service) fn spawn_restart_handoff(
     validate_identity(installation, expected)?;
     validate_intent_id(intent_id)?;
     let input = encode_input(expected, intent_id)?;
-    let data_root = data_root.canonicalize().map_err(|source| {
+    let data_root = data_root.canonical().map_err(|source| {
         crate::host::HostError::new("native_path_configuration_invalid").with_source(source)
     })?;
     crate::host::service::instance::validate_write_destinations(&data_root, installation)?;
@@ -49,7 +54,7 @@ pub(in crate::host::cli::service) fn spawn_restart_handoff(
         .map_err(|source| {
             crate::host::HostError::new("native_service_executable_unavailable").with_source(source)
         })?
-        .canonicalize()
+        .canonical()
         .map_err(|source| {
             crate::host::HostError::new("native_service_executable_unavailable").with_source(source)
         })?;
@@ -58,13 +63,9 @@ pub(in crate::host::cli::service) fn spawn_restart_handoff(
     }
 
     let logs = data_root.join("logs");
-    fs::DirBuilder::new()
-        .recursive(true)
-        .mode(0o700)
-        .create(&logs)
-        .map_err(|source| {
-            crate::host::HostError::new("native_service_logs_unavailable").with_source(source)
-        })?;
+    secure_fs::create_private_dir_all(&logs).map_err(|source| {
+        crate::host::HostError::new("native_service_logs_unavailable").with_source(source)
+    })?;
     let stdout = log_file(&logs.join("butler-agent-service.stdout.log"), installation)?;
     let stderr = log_file(&logs.join("butler-agent-service.stderr.log"), installation)?;
     let (reaper, receiver) = mpsc::sync_channel::<Child>(1);
@@ -91,8 +92,8 @@ pub(in crate::host::cli::service) fn spawn_restart_handoff(
         .arg(&data_root)
         .stdin(Stdio::piped())
         .stdout(Stdio::from(stdout))
-        .stderr(Stdio::from(stderr))
-        .process_group(0);
+        .stderr(Stdio::from(stderr));
+    process_control::detach(&mut command);
     command.arg("--quiet");
     let mut child = command.spawn().map_err(|source| {
         crate::host::HostError::new("native_service_restart_handoff_spawn_failed")
@@ -117,6 +118,34 @@ pub(in crate::host::cli::service) fn spawn_restart_handoff(
         return Err("native_service_restart_handoff_reaper_unavailable".into());
     }
     Ok(())
+}
+
+/// A restart the service asks of itself while a login job runs it goes to the
+/// manager as one queued request, with the stop intent written first: a helper
+/// started from inside the unit would be stopped with it (systemd stops
+/// everything in the unit's cgroup), so no process has to outlive the request.
+/// Whether the manager took it; when not, the helper carries the restart out.
+pub(in crate::host::cli::service) fn asked_of_manager(
+    data_root: &Path,
+    expected: &RestartIdentity,
+) -> bool {
+    let Ok(Some(record)) = service_instance::read_record(data_root) else {
+        return false;
+    };
+    if !expected.matches(&record) || !is_pid_managed(data_root, record.pid) {
+        return false;
+    }
+    let intent = service_instance::StopIntent::new(HANDOFF_STOP, &record);
+    if service_instance::write_stop_intent(data_root, &intent).is_err() {
+        return false;
+    }
+    match butler_platform::service_registration::restart_detached() {
+        Ok(true) => true,
+        _ => {
+            let _ = service_instance::withdraw_stop_intent(data_root, &record.nonce);
+            false
+        }
+    }
 }
 
 pub(in crate::host::cli::service) async fn execute_restart_handoff(
@@ -176,30 +205,29 @@ async fn restart_once(
     };
     validate_target(installation, expected, &active)
         .map_err(|error| ("target_changed", error.to_string()))?;
+    if is_managed(data_root, &active) {
+        return restart_instance(&config, &active, admission, HANDOFF_STOP.requested_by)
+            .await
+            .map_err(|error| ("stop_failed", error.to_string()));
+    }
 
-    let (stopped, admission) =
-        match stop_service_admitted(data_root, installation, admission, Some(expected)).await {
-            Ok(result) => result,
-            Err(error) => {
-                let state = if error
-                    .message()
-                    .starts_with("native_service_instance_changed")
-                {
-                    "target_changed"
-                } else {
-                    "stop_failed"
-                };
-                return Err((state, error.to_string()));
-            }
-        };
-    if stopped["alreadyStopped"] == true {
+    let (stopped, admission) = stop_service_admitted(
+        data_root,
+        installation,
+        admission,
+        Some(expected),
+        HANDOFF_STOP,
+    )
+    .await
+    .map_err(|error| (stop_failure_state(&error), error.to_string()))?;
+    if matches!(stopped, StopReport::AlreadyStopped) {
         drop(admission);
         return Err((
             "target_gone",
             "native_service_restart_handoff_target_gone".into(),
         ));
     }
-    let started = start_service_admitted(installation, &config, admission)
+    let started = start_replacement(installation, &config, admission, &stopped)
         .await
         .map_err(|error| ("start_failed", error.to_string()))?;
     let active = match active_service(data_root) {
@@ -223,6 +251,17 @@ async fn restart_once(
         ));
     }
     Ok(started)
+}
+
+fn stop_failure_state(error: &crate::host::HostError) -> &'static str {
+    if error
+        .message()
+        .starts_with("native_service_instance_changed")
+    {
+        "target_changed"
+    } else {
+        "stop_failed"
+    }
 }
 
 fn precondition_failure(error: impl std::fmt::Display) -> (&'static str, String) {

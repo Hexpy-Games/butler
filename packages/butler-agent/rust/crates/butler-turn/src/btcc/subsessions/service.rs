@@ -6,7 +6,7 @@ mod helpers;
 mod projection;
 mod result_delivery;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 mod worker;
 
 pub use control::{SubsessionCancelRequest, SubsessionDirectionRequest, SubsessionResumeRequest};
@@ -348,10 +348,13 @@ impl SubsessionService {
         &self,
         stored: &crate::btcc::StoredSubsessionDelegation,
     ) -> Result<(), BtccError> {
-        let envelope =
-            serde_json::to_value(&stored.dispatch_intent.envelope).map_err(|source| {
-                error(BtccCode::SubsessionDispatchIntentInvalid).with_source(source)
-            })?;
+        let intent = stored
+            .dispatch_intent
+            .as_ref()
+            .ok_or_else(|| error(BtccCode::SubsessionDispatchIntentInvalid))?;
+        let envelope = serde_json::to_value(&intent.envelope).map_err(|source| {
+            error(BtccCode::SubsessionDispatchIntentInvalid).with_source(source)
+        })?;
         self.queue.enqueue(SubsessionEnqueue {
             envelope,
             metadata: Map::new(),

@@ -24,7 +24,7 @@ impl AppApplication {
     pub(crate) async fn read_navigation(&self) -> Result<Value, GatewayApplicationError> {
         let chats = self.list_sessions(Some("chat".into()), None).await?;
         let projects = self.list_projects(true).await?;
-        let automations = self.list_automations_owned(None).await?;
+        let automations = self.list_automations_owned(None, false).await?;
         let space = self.read_space().await?;
         let generated_at = self.dependencies.identity_clock.now_iso();
         Ok(json!({
@@ -60,7 +60,7 @@ impl AppApplication {
         let space = self.read_space().await?;
         let projects = self.list_projects(false).await?.projects;
         let sessions = self.list_sessions(None, None).await?;
-        let automations = self.list_automations_owned(None).await?.automations;
+        let automations = self.list_automations_owned(None, false).await?.automations;
         Ok(command_palette(
             &query,
             &space,
@@ -176,12 +176,12 @@ fn command_palette(
                 "subtitle":if place.is_empty() {"스페이스"} else {&place},"route":format!("group:{id}")}));
         }
     }
-    for automation in automations {
-        if matches(&automation.title) {
-            results.push(json!({"id":automation.id,"kind":"automation","title":automation.title,
-                "subtitle":automation.interval_label,"route":format!("automation:{}",automation.id)}));
-        }
-    }
+    results.extend(
+        automations
+            .iter()
+            .filter(|item| matches(&item.title))
+            .map(schedule_result),
+    );
     for section in [
         "General",
         "Appearance",
@@ -241,5 +241,9 @@ fn command_palette(
     json!({"results":results.into_iter().take(30).collect::<Vec<_>>()})
 }
 
-#[cfg(test)]
-mod tests;
+fn schedule_result(automation: &super::automations::AutomationSummary) -> Value {
+    json!({"id":automation.id,"kind":"automation","title":automation.title,
+        "schedule":automation.schedule,"interval_seconds":automation.interval_seconds,
+        "schedule_type":automation.schedule_type,"next_run_at":automation.next_run_at,
+        "route":format!("automation:{}",automation.id)})
+}

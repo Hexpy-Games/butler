@@ -1,0 +1,44 @@
+name: macOS signing
+
+# PR-safe checks of deploy/macos/sign-and-notarize.sh (#243). No secrets and no
+# real identity: shellcheck, the no-identity no-op, and an ad-hoc inside-out
+# signing run over a synthetic Electron-shaped bundle. Real Developer ID signing
+# and notarization run only in release.yml on v* tags.
+
+on:
+  pull_request:
+    paths:
+      - "deploy/macos/**"
+      - ".github/workflows/macos-signing.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-signing-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          HOME=$(mktemp -d)
+          BUTLER_DATA=$(mktemp -d)
+          export HOME BUTLER_DATA
+          shellcheck deploy/macos/*.sh
+          deploy/macos/policy-selftest.sh
+
+  selftest:
+    name: no-identity and ad-hoc self-test
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          HOME=$(mktemp -d)
+          BUTLER_DATA=$(mktemp -d)
+          export HOME BUTLER_DATA
+          deploy/macos/selftest.sh

@@ -1,3 +1,4 @@
+use butler_platform::secure_fs;
 use parking_lot::Mutex;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
@@ -7,6 +8,7 @@ use std::sync::Arc;
 use serde_json::Value;
 
 const MAX_ENTRIES: usize = 500;
+const TRIM_THRESHOLD: usize = 600;
 
 pub trait DeveloperLogWriteAuthority: Send + Sync {
     /// Revalidates the captured DATA/installation boundary immediately before mutation.
@@ -16,7 +18,19 @@ pub trait DeveloperLogWriteAuthority: Send + Sync {
 pub struct DeveloperLogStore {
     data_root: PathBuf,
     authority: Arc<dyn DeveloperLogWriteAuthority>,
-    mutation: Mutex<()>,
+    mutation: Mutex<Option<RetentionState>>,
+}
+
+struct RetentionState {
+    count: usize,
+    metadata: fs::Metadata,
+}
+
+impl RetentionState {
+    fn matches(&self, current: &fs::Metadata) -> bool {
+        self.metadata.len() == current.len()
+            && secure_fs::identity(&self.metadata) == secure_fs::identity(current)
+    }
 }
 
 impl DeveloperLogStore {
@@ -24,24 +38,40 @@ impl DeveloperLogStore {
         Self {
             data_root,
             authority,
-            mutation: Mutex::new(()),
+            mutation: Mutex::new(None),
         }
     }
 
     pub(crate) fn append(&self, entry: &Value) -> io::Result<()> {
-        let _guard = self.mutation.lock();
+        let mut state = self.mutation.lock();
         let destination = self.path();
         self.authority.authorize(&destination)?;
         self.ensure_parent(&destination)?;
         reject_symlink(&destination)?;
 
+        let metadata = match fs::metadata(&destination) {
+            Ok(value) => Some(value),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error),
+        };
+        let count = match (state.take(), metadata.as_ref()) {
+            (Some(previous), Some(current)) if previous.matches(current) => previous.count,
+            (_, Some(_)) => count_entries(&destination)?,
+            (_, None) => 0,
+        };
         let mut line = serde_json::to_vec(entry)
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
         line.push(b'\n');
         let mut file = append_file(&destination)?;
         file.write_all(&line)?;
         secure_mode(&destination)?;
-        self.enforce_retention(&destination)
+        drop(file);
+        let count = self.enforce_retention(&destination, count.saturating_add(1))?;
+        *state = Some(RetentionState {
+            count,
+            metadata: fs::metadata(&destination)?,
+        });
+        Ok(())
     }
 
     fn path(&self) -> PathBuf {
@@ -67,16 +97,11 @@ impl DeveloperLogStore {
         secure_directory_mode(parent)
     }
 
-    fn enforce_retention(&self, destination: &Path) -> io::Result<()> {
+    fn enforce_retention(&self, destination: &Path, count: usize) -> io::Result<usize> {
         self.authority.authorize(destination)?;
         reject_symlink(destination)?;
-        let count = match count_entries(destination) {
-            Ok(count) => count,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
-            Err(error) => return Err(error),
-        };
-        if count <= MAX_ENTRIES {
-            return Ok(());
+        if count <= TRIM_THRESHOLD {
+            return Ok(count);
         }
 
         let temporary = temporary_path(destination);
@@ -126,7 +151,7 @@ impl DeveloperLogStore {
         reject_symlink(&temporary)?;
         fs::rename(&temporary, destination)?;
         cleanup.commit();
-        Ok(())
+        Ok(MAX_ENTRIES)
     }
 }
 
@@ -172,22 +197,15 @@ fn reject_symlink(path: &Path) -> io::Result<()> {
 fn append_file(path: &Path) -> io::Result<fs::File> {
     let mut options = OpenOptions::new();
     options.create(true).append(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600).custom_flags(nix::libc::O_NOFOLLOW);
-    }
+    let _ = secure_fs::owner_only(&mut options);
+    let _ = secure_fs::no_follow(&mut options);
     options.open(path)
 }
 
 fn open_read_no_follow(path: &Path) -> io::Result<File> {
     let mut options = OpenOptions::new();
     options.read(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(nix::libc::O_NOFOLLOW);
-    }
+    secure_fs::no_follow(&mut options);
     options.open(path)
 }
 
@@ -215,11 +233,8 @@ fn temporary_path(path: &Path) -> PathBuf {
 fn open_private_temporary(path: &Path) -> io::Result<File> {
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600).custom_flags(nix::libc::O_NOFOLLOW);
-    }
+    let _ = secure_fs::owner_only(&mut options);
+    let _ = secure_fs::no_follow(&mut options);
     options.open(path)
 }
 
@@ -249,24 +264,72 @@ impl Drop for TemporaryPath {
     }
 }
 
-#[cfg(unix)]
+/// Hosts without owner-only permissions keep the directory as it is.
 fn secure_directory_mode(path: &Path) -> io::Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o700))
+    secure_fs::restrict_directory(path).unwrap_or(Ok(()))
 }
 
-#[cfg(not(unix))]
-fn secure_directory_mode(_: &Path) -> io::Result<()> {
-    Ok(())
-}
-
-#[cfg(unix)]
+/// Hosts without owner-only permissions keep the file as it is.
 fn secure_mode(path: &Path) -> io::Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+    secure_fs::restrict_file(path).unwrap_or(Ok(()))
 }
 
-#[cfg(not(unix))]
-fn secure_mode(_: &Path) -> io::Result<()> {
-    Ok(())
+#[cfg(test)]
+pub(super) fn retention_regression() {
+    struct Allowed;
+    impl DeveloperLogWriteAuthority for Allowed {
+        fn authorize(&self, _: &Path) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    let root = std::env::temp_dir().join(format!("developer-retention-{}", uuid::Uuid::new_v4()));
+    let store = DeveloperLogStore::new(root.clone(), Arc::new(Allowed));
+    let path = store.path();
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let row =
+        |index: usize| serde_json::json!({"payload": format!("{index:04}{}", "x".repeat(4092))});
+    let line = format!("{}\n", row(0));
+    let rows = |range: std::ops::Range<usize>| {
+        use std::fmt::Write as _;
+        let mut output = String::new();
+        for index in range {
+            writeln!(&mut output, "{}", row(index)).unwrap();
+        }
+        output
+    };
+    fs::write(&path, rows(0..500)).unwrap();
+    let mut bytes_written = 0;
+    let mut counts = Vec::new();
+    for turn in 0..101 {
+        let before = fs::metadata(&path).unwrap();
+        store.append(&row(500 + turn)).unwrap();
+        let after = fs::metadata(&path).unwrap();
+        // An atomic rewrite changes file identity; count appended bytes plus the output.
+        bytes_written += line.len() as u64;
+        if !butler_platform::secure_fs::same_file(&before, &after) {
+            bytes_written += after.len();
+        }
+        if turn == 0 {
+            eprintln!("developer-log first-full-turn bytes={bytes_written}");
+        }
+        counts.push(count_entries(&path).unwrap());
+    }
+    eprintln!(
+        "developer-log bytes/turn={} total={} turns=101",
+        bytes_written / 101,
+        bytes_written
+    );
+    let expected: Vec<_> = (0..101)
+        .map(|turn| if turn == 100 { 500 } else { 501 + turn })
+        .collect();
+    assert_eq!(counts, expected, "retention needs hysteresis");
+    assert_eq!(fs::read_to_string(&path).unwrap(), rows(101..601));
+    fs::write(&path, rows(1000..1600)).unwrap();
+    store.append(&row(1600)).unwrap();
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        rows(1101..1601),
+        "external replacement must invalidate count"
+    );
+    fs::remove_dir_all(root).unwrap();
 }

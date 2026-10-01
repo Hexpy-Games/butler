@@ -6,7 +6,12 @@ mod automations;
 mod briefing_snapshot;
 mod context_details;
 mod contracts;
+mod errors;
+mod event_outbox;
 mod events;
+use errors::app_error;
+#[cfg(debug_assertions)]
+mod faults;
 mod gateway_dashboard_impl;
 mod gateway_impl;
 mod gateway_mutations;
@@ -16,10 +21,12 @@ mod internal_continuation;
 mod mcp_servers;
 mod message_files;
 mod message_projection;
+mod message_visibility;
 mod model_catalog;
 mod monitoring;
 mod new_chat_briefing;
 mod operation_output;
+mod panic_isolation;
 mod personalization;
 mod plan_decisions;
 mod progress_view;
@@ -29,6 +36,7 @@ mod projects;
 mod queue;
 mod queue_dispatcher;
 mod queue_view;
+mod quota_events;
 mod read_model;
 mod recovery;
 mod relocation_port;
@@ -43,6 +51,8 @@ mod session_relocation;
 mod session_views;
 mod sessions;
 mod settings;
+mod setup;
+mod turn_dispatch;
 pub use settings::diagnostics_enabled_readonly;
 mod shell;
 mod space;
@@ -50,14 +60,16 @@ mod storage;
 mod transcript_export;
 mod turn_cancellation;
 mod updates;
+mod wallpapers;
 
 use serde_json::Value;
 use std::{path::PathBuf, sync::Arc};
 
 use super::{
     AppEventEnvelope, ApplicationFuture, EventSubscription, GatewayApplication,
-    GatewayApplicationError, MessageContent, MessageSendResult, RuntimeReadinessView,
-    SendMessageCommand, SessionQueueUpdateRequest, SessionQueueView,
+    GatewayApplicationError, MessageContent, MessageSendResult, PublishedEvent,
+    RuntimeReadinessView, SendMessageCommand, SessionQueueUpdateRequest, SessionQueueView,
+    wallpaper_store::AppWallpaperFiles,
 };
 use admission_identity::stringify;
 pub(crate) use automations::*;
@@ -99,7 +111,8 @@ pub use projects::{
     AppProjectDashboardPreferencesUpdate, AppProjectDashboardRecordsQuery,
     AppProjectDashboardReview, AppProjectDashboardSnapshot, AppProjectDashboardSource,
     AppProjectDashboardSourceQuery, AppProjectDashboardStatisticsQuery, AppProjectDashboardWork,
-    AppProjectDashboardWorkHistoryEntry, AppProjectList, AppProjectSource, AppProjectUpdate,
+    AppProjectDashboardWorkHistoryEntry, AppProjectGit, AppProjectList, AppProjectSource,
+    AppProjectUpdate,
 };
 #[cfg(test)]
 pub(crate) use projects::{TestProjectDashboardBriefing, TestProjectDashboardLedger};
@@ -110,6 +123,7 @@ pub use relocation_port::{
     AppRelocationHost, AppRelocationSnapshot, AppRelocationTransportBinding,
     AppRelocationWorkspaceMarker, AppRelocationWorkspacePlan, AppRelocationWorkspaceRequest,
 };
+pub(crate) use session_branches::{AppSessionBranchDestination, AppSessionBranchRequest};
 pub use session_branches::{AppSessionBranchResult, AppStartTopicConversationRequest};
 pub use session_controls::{AppSessionControlUpdate, AppSessionControlsView};
 use session_queue_mutations::SessionQueueMutationOwner;
@@ -120,8 +134,16 @@ pub use sessions::{
     AppSessionWorkspaceSnapshot, AppWorkProgress, AppWorkStreamQuery, AppWorkStreamReader,
     AppWorkStreamTurnOutcome, AppWorkspaceMode,
 };
+#[cfg(test)]
+pub(crate) use setup::test_setup_port;
+pub use setup::{
+    AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
+    LocalModelServersView, OauthFlowStatus, OauthFlowView, ProviderKeyVerificationView,
+    ReplacedCredentialView, SETUP_READINESS_EVENT, SavedCredentialView, SetupReadinessStatus,
+    SetupReadinessStep, SetupReadinessView, SetupStepError, SetupStepStatus,
+};
 pub use space::{AppSpaceCommand, AppSpaceMutationResult, AppSpaceOrigin};
-use storage::{AppStorage, AppStorageError};
+use storage::{AppStorage, AppStorageError, CachedSql};
 type SkillImportResult = butler_runtime::skills::SkillImportResult;
 type SkillSettingsView = butler_runtime::skills::SkillSettingsView;
 type StagedSkillArchive = butler_runtime::skills::StagedSkillArchive;
@@ -150,6 +172,8 @@ pub struct AppApplication {
     queue_dispatcher: Option<queue_dispatcher::QueueDispatcher>,
     queue_wake: queue_dispatcher::QueueWake,
     automation_scheduler: Option<automations::AutomationScheduler>,
+    automation_wake: Arc<tokio::sync::Notify>,
+    automation_queued: Arc<std::sync::atomic::AtomicBool>,
     automation_runs: automations::AutomationRunOwner,
     queue_mutations: SessionQueueMutationOwner,
     session_creation: sessions::SessionCreationOwner,
@@ -160,8 +184,27 @@ pub struct AppApplication {
     project_dashboard_briefing: projects::ProjectDashboardBriefingOwner,
     queue_owner: String,
     butler_data: PathBuf,
+    wallpapers: AppWallpaperFiles,
     settings_update_lock: Arc<tokio::sync::Mutex<()>>,
     plan_decision_locks: PlanDecisionLocks,
+    setup_readiness: setup::ReadinessRelay,
+    quota_events: Arc<quota_events::QuotaEventForwarder>,
+}
+
+async fn initial_project_root(
+    storage: &AppStorage,
+    fallback: PathBuf,
+) -> Result<PathBuf, GatewayApplicationError> {
+    match storage
+        .execute(move |db| projects::initial_root(db, &fallback))
+        .await
+    {
+        Ok(root) => Ok(root),
+        Err(error) => {
+            let _ = storage.close().await;
+            Err(app_error(error))
+        }
+    }
 }
 
 impl AppApplication {
@@ -169,45 +212,23 @@ impl AppApplication {
         config: AppApplicationConfig,
         dependencies: AppApplicationDependencies,
     ) -> Result<Self, GatewayApplicationError> {
-        let initialized_at = dependencies.identity_clock.now_iso();
         let storage = AppStorage::open(
             config.database_path,
             Some(config.butler_data.clone()),
-            initialized_at,
+            dependencies.identity_clock.now_iso(),
         )
         .await
         .map_err(app_error)?;
-        let queue_owner = format!(
-            "app-session-queue:{}:{}:{}",
-            std::process::id(),
-            dependencies.identity_clock.new_uuid(),
-            dependencies.identity_clock.new_uuid()
-        );
-        let fallback_project_root = config.project_workspace_root.clone();
-        let project_root = match storage
-            .execute(move |db| projects::initial_root(db, &fallback_project_root))
-            .await
-        {
-            Ok(root) => root,
-            Err(error) => {
-                let _ = storage.close().await;
-                return Err(app_error(error));
-            }
-        };
+        let queue_owner = queue_owner_id(dependencies.identity_clock.as_ref());
+        let project_root =
+            initial_project_root(&storage, config.project_workspace_root.clone()).await?;
         let dependencies = Arc::new(dependencies);
         let subscribers = EventSubscribers::default();
-        let retention_cursor = match storage
-            .execute(|connection| events::latest(connection))
-            .await
-        {
-            Ok(cursor) => cursor,
-            Err(error) => {
-                let _ = storage.close().await;
-                return Err(app_error(error));
-            }
-        };
-        let (queue_dispatcher, queue_wake) = queue_dispatcher::QueueDispatcher::start();
-        let automation_scheduler = automations::AutomationScheduler::start();
+        let retention_cursor = latest_event_cursor(&storage).await?;
+        let (queue_dispatcher, queue_wake) =
+            queue_dispatcher::QueueDispatcher::start(dependencies.service_shutdown.child_token());
+        let (automation_wake, automation_queued) = automations::signals();
+        let automation_scheduler = automations::AutomationScheduler::start(automation_wake.clone());
         let automation_runs = automations::AutomationRunOwner::start();
         let (retention, retention_wake) = retention::RetentionOwner::start(
             storage.clone(),
@@ -222,6 +243,7 @@ impl AppApplication {
                 config.butler_data.clone(),
                 queue_wake.clone(),
                 retention_wake,
+                (automation_wake.clone(), automation_queued.clone()),
             )) {
                 Ok(projection) => projection,
                 Err(error) => {
@@ -242,6 +264,8 @@ impl AppApplication {
             queue_dispatcher: Some(queue_dispatcher.clone()),
             queue_wake,
             automation_scheduler: Some(automation_scheduler),
+            automation_wake,
+            automation_queued,
             automation_runs,
             queue_mutations: SessionQueueMutationOwner::new(),
             session_creation: sessions::SessionCreationOwner::new(),
@@ -254,20 +278,28 @@ impl AppApplication {
             transcript_exports: TranscriptExportOwner::new(),
             project_dashboard_briefing: projects::ProjectDashboardBriefingOwner::new(),
             queue_owner,
+            wallpapers: AppWallpaperFiles::new(&config.butler_data),
             butler_data: config.butler_data,
             settings_update_lock: Arc::new(tokio::sync::Mutex::new(())),
             plan_decision_locks: PlanDecisionLocks::default(),
+            setup_readiness: setup::ReadinessRelay::default(),
+            quota_events: Arc::default(),
         };
-        if let Err(error) = application.recover_session_relocation_owned().await {
-            let _ = application.close().await;
-            return Err(error);
-        }
+        application.recover_for_open().await?;
         Ok(application)
     }
 
-    /// The HTTP owner activates recovery only after its listener is ready.
-    /// Otherwise a persisted queued message can fail the readiness admission
-    /// guard during startup before it ever reaches the native queue.
+    async fn recover_for_open(&self) -> Result<(), GatewayApplicationError> {
+        if let Err(error) = self.recover_session_relocation_owned().await {
+            let _ = self.close().await;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    /// The host initializes native admission before activating recovery, then
+    /// starts HTTP admission only after this completes. Persisted queued
+    /// messages can reach the native queue without racing external requests.
     pub async fn start_dispatch(&self) -> Result<(), GatewayApplicationError> {
         self.queue_dispatcher
             .as_ref()
@@ -281,21 +313,40 @@ impl AppApplication {
         self.automation_runs.initialize(self.clone_handle()).await?;
         automation_scheduler.initialize(self.clone_handle())?;
         self.recover_turn_cancellations().await?;
+        self.watch_wallpaper_modules().await;
         // Failed authority retries remain durable for the next startup.
         let _ = self.dependencies.authority_handoff.retry_decided().await;
+        self.setup_readiness.start(
+            self.dependencies.setup.readiness(),
+            self.storage.clone(),
+            self.subscribers.clone(),
+            self.dependencies.identity_clock.clone(),
+        );
+        self.quota_events.start(self.clone_handle());
         Ok(())
     }
 
+    pub async fn drain_projection(&self) -> Result<(), GatewayApplicationError> {
+        self.projection.drain().await
+    }
+
+    /// Finish any claimed queue admission while native enqueue is still ready.
+    pub async fn stop_queue_dispatch(&self) -> Result<(), GatewayApplicationError> {
+        match &self.queue_dispatcher {
+            Some(dispatcher) => dispatcher.close().await,
+            None => Ok(()),
+        }
+    }
+
     pub async fn stop_dispatch(&self) -> Result<(), GatewayApplicationError> {
+        self.setup_readiness.close().await;
         let automations = match &self.automation_scheduler {
             Some(scheduler) => scheduler.close().await,
             None => Ok(()),
         };
         let automation_runs = self.automation_runs.close().await;
-        let queue = match &self.queue_dispatcher {
-            Some(dispatcher) => dispatcher.close().await,
-            None => Ok(()),
-        };
+        self.quota_events.close().await;
+        let queue = self.stop_queue_dispatch().await;
         automations.and(automation_runs).and(queue)
     }
 
@@ -309,6 +360,7 @@ impl AppApplication {
         self.project_creation.close().await;
         self.session_branches.close().await;
         self.space_mutations.close().await;
+        self.wallpapers.close().await;
         let projection = self.projection.close().await;
         let retention = match &self.retention {
             Some(retention) => retention.close().await,
@@ -363,6 +415,30 @@ impl AppApplication {
     }
 }
 
+/// The newest durable event cursor; storage is closed when it cannot be read.
+async fn latest_event_cursor(storage: &AppStorage) -> Result<u64, GatewayApplicationError> {
+    match storage
+        .execute(|connection| events::latest(connection))
+        .await
+    {
+        Ok(cursor) => Ok(cursor),
+        Err(error) => {
+            let _ = storage.close().await;
+            Err(app_error(error))
+        }
+    }
+}
+
+/// A process-unique owner id for the session queue claim.
+fn queue_owner_id(clock: &dyn AppIdentityClock) -> String {
+    format!(
+        "app-session-queue:{}:{}:{}",
+        std::process::id(),
+        clock.new_uuid(),
+        clock.new_uuid()
+    )
+}
+
 fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
     GatewayApplicationError::Public {
         status,
@@ -385,47 +461,11 @@ fn skill_error(error: butler_runtime::skills::SkillError) -> GatewayApplicationE
         _ => GatewayApplicationError::internal(),
     }
 }
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
-fn app_error(error: AppStorageError) -> GatewayApplicationError {
-    match error.code() {
-        "automation_interval_invalid"
-        | "project_required"
-        | "message_file_not_found"
-        | "too_many_attachments"
-        | "empty_queued_message"
-        | "invalid_message_content" => public(400, error.code(), &error.detail()),
-        "automation_not_enabled"
-        | "automation_state_invalid"
-        | "message_file_already_attached"
-        | "queued_message_changed"
-        | "general_channel_protected"
-        | "queued_message_identity_conflict"
-        | "project_source_scope_changed"
-        | "session_relocating"
-        | "session_model_unavailable"
-        | "authority_queue_immutable"
-        | "queued_message_cas_conflict"
-        | "turn_not_cancellable" => public(409, error.code(), &error.detail()),
-        "message_file_wrong_session" => public(403, error.code(), &error.detail()),
-        "session_not_found"
-        | "automation_not_found"
-        | "project_not_found"
-        | "queued_message_not_found"
-        | "turn_not_found" => public(404, error.code(), &error.detail()),
-        "turn_control_resolution_invalid" => public(500, error.code(), &error.detail()),
-        _ => GatewayApplicationError::internal(),
-    }
-}
 
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
-pub(crate) use test_support::{
-    seed_test_assistant_attachment, seed_test_authority_queue, seed_test_transcript_messages,
-};
+pub(crate) use test_support::seed_test_assistant_attachment;
 
 mod snapshot_input;
 #[cfg(test)]

@@ -1,4 +1,5 @@
-//! J/L. Restart handoff and service lifecycle (SCENARIOS.md REC-04, SVC-01).
+//! J/L. Restart handoff and service lifecycle (SCENARIOS.md REC-04, SVC-01,
+//! SVC-08).
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -11,6 +12,7 @@ use std::time::{Duration, Instant};
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::gateway::{Gateway, TERMINAL, turn_state};
 use butler_e2e::e2e::scenario::{Scenario, Setup};
+use butler_e2e::e2e::stop_intent::{instance_record, read_intent};
 
 async fn reachable(gw: &Gateway, within: Duration) -> bool {
     let deadline = Instant::now() + within;
@@ -87,17 +89,17 @@ async fn rec_04_restart_keeps_clients_working() -> Result<(), HarnessError> {
 #[tokio::test]
 async fn rec_04_restart_mid_turn_settles_the_turn() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    // Replays the REC-01 recording (same request); only REC-01 records it.
     let mut s = Setup::new("REC-04-TURN")?
         .cassette("REC-01")
+        .replay_only()
         .start()
         .await?;
-    if !s.recording() {
-        s.provider()?.set_pacing(butler_e2e::e2e::provider::Pacing {
-            scale: 1.0,
-            cap_ms: 300,
-            min_ms: 200,
-        });
-    }
+    s.provider()?.set_pacing(butler_e2e::e2e::provider::Pacing {
+        scale: 1.0,
+        cap_ms: 300,
+        min_ms: 200,
+    });
     let accepted = s
         .gw
         .say("general", "Write the numbers from one to twelve as English words, separated by single spaces, and nothing else.")
@@ -140,8 +142,8 @@ async fn svc_01_service_lifecycle() -> Result<(), HarnessError> {
     let mut s = Setup::new("SVC-01")?.start().await?;
     let status = s.agent.cli(&["status", "--json"])?;
     assert_eq!(status.code, Some(0), "{}", status.stderr);
-    let test = s.agent.cli(&["gateway", "test", "app", "--json"])?.json()?;
-    assert_eq!(test["data"]["status"], "online", "{test}");
+    let health = s.gw.get("/health").await?;
+    assert_eq!(health.status, 200, "{}", health.text);
     let doctor = s.agent.cli(&["doctor", "--json"])?;
     let doctor_json = doctor.json()?;
     assert_eq!(doctor_json["command"], "butler doctor");
@@ -180,62 +182,42 @@ async fn svc_01_service_lifecycle() -> Result<(), HarnessError> {
     s.finish().await
 }
 
-/// SVC-01 (inject) — a port already in use is a clear start failure.
+/// SVC-08 — the App releasing its foreground lease (closing the agent's
+/// stdin, as when the App quits) is a requested stop: the agent exits 0
+/// without an announcement, removes its record and stays stopped.
 #[tokio::test]
-#[ignore = "product gap: SVC-01-PORT — when the App port is in use the service logs `[native-app] unavailable code=app_listener_bind_failed` and keeps running without its gateway instead of exiting non-zero"]
-async fn svc_01_port_in_use_fails_start() -> Result<(), HarnessError> {
+async fn svc_08_released_foreground_lease_stops_cleanly() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let mut s = Setup::new("SVC-01-PORT")?.start().await?;
-    let stopped = s.agent.cli_reaping(&["stop", "--json"]).await?;
-    assert_eq!(stopped.code, Some(0), "{}", stopped.stderr);
-    s.agent.reap();
-    // Occupy the port, then start: the process must exit non-zero with a
-    // clear error, config intact.
-    let config_before = std::fs::read(s.sandbox.data.join("butler.config.json"))?;
-    let blocker = std::net::TcpListener::bind(("127.0.0.1", s.agent.launch.port))?;
-    let (code, text) = run_bounded(&s, Duration::from_secs(30))?;
-    drop(blocker);
-    assert!(
-        code.is_some_and(|code| code != 0),
-        "start on a port in use did not fail (exit {code:?}): {text}"
-    );
-    let text = text.to_lowercase();
-    assert!(
-        text.contains("port") || text.contains("address") || text.contains("bind"),
-        "unclear port error: {text}"
-    );
-    assert_eq!(
-        std::fs::read(s.sandbox.data.join("butler.config.json"))?,
-        config_before
-    );
-
-    Ok(())
-}
-
-/// Runs the service command to completion or kills it after `limit`.
-/// Returns the exit code (`None` when it had to be killed) and its output.
-fn run_bounded(s: &Scenario, limit: Duration) -> Result<(Option<i32>, String), HarnessError> {
-    let log = s.sandbox.logs.join("bounded.log");
-    let file = std::fs::File::create(&log)?;
-    let mut child = s
-        .agent
-        .launch
-        .command()
-        .stdin(std::process::Stdio::null())
-        .stdout(file.try_clone()?)
-        .stderr(file)
-        .spawn()?;
-    let deadline = Instant::now() + limit;
-    let code = loop {
-        if let Some(status) = child.try_wait()? {
-            break status.code();
+    let mut s = Setup::new("SVC-08")?.app_supervisor().start().await?;
+    let data = s.sandbox.data.clone();
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let record = loop {
+        if let Some(record) = instance_record(&data).filter(|record| record["state"] == "ready") {
+            break record;
         }
-        if Instant::now() > deadline {
-            let _ = child.kill();
-            let _ = child.wait();
-            break None;
-        }
-        std::thread::sleep(Duration::from_millis(100));
+        assert!(Instant::now() < deadline, "no ready instance record");
+        tokio::time::sleep(Duration::from_millis(50)).await;
     };
-    Ok((code, std::fs::read_to_string(&log).unwrap_or_default()))
+    assert_eq!(record["app_supervised"], true, "{record}");
+    let pid = s.agent.pid().expect("the App's child runs");
+    assert_eq!(record["pid"], pid, "{record}");
+
+    assert!(s.agent.release_foreground_lease(), "no leased agent runs");
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while s.agent.is_running() {
+        assert!(Instant::now() < deadline, "the agent did not exit");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let status = s.agent.reap().expect("the exited agent is reaped");
+    assert_eq!(status.code(), Some(0), "a released lease exited {status}");
+    assert!(
+        read_intent(&data).is_none(),
+        "a lease release was announced"
+    );
+    assert!(
+        instance_record(&data).is_none(),
+        "the stopped agent left its record"
+    );
+    assert!(!s.gw.healthy().await, "the stopped agent still serves");
+    s.finish().await
 }

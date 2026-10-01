@@ -6,6 +6,27 @@ use serde_json::json;
 use super::*;
 
 impl AppApplication {
+    /// Keep the linked Turn/message identity, but release only this admission's
+    /// exact claim. A queued link is excluded from active-turn gating on restart.
+    pub(super) async fn park_dispatch(
+        &self,
+        claim: &QueueClaim,
+    ) -> Result<(), GatewayApplicationError> {
+        let claim = claim.clone();
+        let now = self.dependencies.identity_clock.now_iso();
+        let subscribers = self.subscribers.clone();
+        self.storage.execute(move |db| {
+            let tx = db.transaction().map_err(AppStorageError::sqlite)?;
+            let changed = tx.execute("UPDATE session_queued_messages SET state='queued',safe_error_code=NULL,claim_id=NULL,claim_owner=NULL,claimed_at=NULL,lease_expires_at=NULL,updated_at=?1 WHERE id=?2 AND chat_id=?3 AND state='dispatching' AND claim_id=?4",
+                params![now,claim.queued_message_id,claim.chat_id,claim.claim_id]).map_err(AppStorageError::sqlite)?;
+            if changed == 1 {
+                events::append(&tx, &subscribers, "session_queue.changed", None,
+                    service::map(&json!({"session_id":claim.chat_id,"queued_message_id":claim.queued_message_id,"action":"recovered","recovery_reason":"service_stopping"}))?, &now)?;
+            }
+            tx.commit().map_err(AppStorageError::sqlite)
+        }).await.map_err(app_error)
+    }
+
     pub(super) async fn recover_expired(&self) -> Result<(), GatewayApplicationError> {
         let now = self.dependencies.identity_clock.now_iso();
         let rows = self
@@ -53,8 +74,16 @@ struct ExpiredClaim {
     claim_owner: Option<String>,
     lease_expires_at: Option<String>,
 }
+/// The `state IN` term repeats the predicate of the partial
+/// `session_queued_messages_active_idx`, which makes it applicable.
+pub(super) const DISPATCHING_SQL: &str = "SELECT id,claim_id,turn_id,chat_id,claim_owner,\
+    lease_expires_at FROM session_queued_messages \
+    WHERE state='dispatching' AND state IN ('queued','dispatching') ORDER BY rowid";
+
 fn dispatching_claims(db: &mut Connection) -> Result<Vec<ExpiredClaim>, AppStorageError> {
-    let mut statement=db.prepare("SELECT id,claim_id,turn_id,chat_id,claim_owner,lease_expires_at FROM session_queued_messages WHERE state='dispatching' ORDER BY rowid").map_err(AppStorageError::sqlite)?;
+    let mut statement = db
+        .prepare_cached(DISPATCHING_SQL)
+        .map_err(AppStorageError::sqlite)?;
     statement
         .query_map([], |row| {
             Ok(ExpiredClaim {
@@ -76,7 +105,7 @@ fn recover_one(
     now: &str,
     subscribers: &EventSubscribers,
 ) -> Result<(), AppStorageError> {
-    let changed=db.execute("UPDATE session_queued_messages SET state='queued',claim_id=NULL,claim_owner=NULL,claimed_at=NULL,lease_expires_at=NULL,updated_at=?1 WHERE id=?2 AND state='dispatching' AND claim_id IS ?3",params![now,row.id,row.claim_id]).map_err(AppStorageError::sqlite)?;
+    let changed=db.execute_cached("UPDATE session_queued_messages SET state='queued',claim_id=NULL,claim_owner=NULL,claimed_at=NULL,lease_expires_at=NULL,updated_at=?1 WHERE id=?2 AND state='dispatching' AND claim_id IS ?3",params![now,row.id,row.claim_id]).map_err(AppStorageError::sqlite)?;
     if changed == 1 {
         events::append(
             db,

@@ -2,14 +2,12 @@
 
 use std::{
     fs,
-    os::unix::fs::DirBuilderExt,
     path::{Path, PathBuf},
 };
 
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use crate::host::ResolvedInstallation;
-use crate::host::service::configuration::AppServiceConfiguration;
 
 pub(super) struct Settings {
     value: Value,
@@ -32,16 +30,6 @@ impl Settings {
         Ok(Self { value })
     }
 
-    pub(super) fn enabled(&self) -> bool {
-        self.value["enabled"].as_bool().unwrap_or(true)
-    }
-
-    pub(super) fn updated(&self) -> bool {
-        self.value["updatedAt"]
-            .as_str()
-            .is_some_and(|value| !value.is_empty())
-    }
-
     pub(super) async fn patch(
         &mut self,
         data_root: &Path,
@@ -51,6 +39,14 @@ impl Settings {
     ) -> Result<(), crate::host::HostError> {
         let writes = butler_core::configuration::ConfigurationWrites::new();
         let _permit = writes.acquire().await;
+        installation
+            .validate_data_root(&settings_path(data_root))
+            .map_err(|source| {
+                crate::host::HostError::new("native_path_configuration_invalid").with_source(source)
+            })?;
+        let _change = butler_core::configuration::lock_file_async(&settings_path(data_root))
+            .await
+            .map_err(crate::host::HostError::from_error)?;
         let current = Self::read(data_root, installation)?;
         let existing_config = current.value["config"]
             .as_object()
@@ -80,48 +76,6 @@ impl Settings {
     }
 }
 
-pub(super) fn local_view(
-    settings: &Settings,
-    app: &AppServiceConfiguration,
-    running: bool,
-    restart_required: bool,
-) -> Value {
-    let enabled = settings.enabled();
-    let status = if !enabled {
-        "disabled"
-    } else if running {
-        "online"
-    } else {
-        "offline"
-    };
-    let next_actions = if !enabled {
-        vec!["butler gateway enable app"]
-    } else if running {
-        vec!["butler gateway status app"]
-    } else {
-        vec!["butler gateway start app"]
-    };
-    json!({
-        "id":"app",
-        "title":"Butler App Gateway",
-        "lifecycle":"process",
-        "transport":"app",
-        "enabled":enabled,
-        "configured":!app.host.is_empty() && app.port > 0,
-        "running":running,
-        "status":status,
-        "restartRequired":restart_required,
-        "credentials":{},
-        "config":{
-            "host":app.host,
-            "port":app.port,
-            "serverUrl":format!("http://{}:{}", app.host, app.port),
-            "dbConfigured":app.db_configured,
-        },
-        "nextActions":next_actions,
-    })
-}
-
 fn write_settings(
     data_root: &Path,
     installation: &ResolvedInstallation,
@@ -135,7 +89,8 @@ fn write_settings(
         crate::host::HostError::new("native_path_configuration_invalid").with_source(source)
     })?;
     let mut builder = fs::DirBuilder::new();
-    builder.recursive(true).mode(0o700);
+    builder.recursive(true);
+    let _ = butler_platform::secure_fs::owner_only_dirs(&mut builder);
     builder
         .create(parent)
         .or_else(|error| {

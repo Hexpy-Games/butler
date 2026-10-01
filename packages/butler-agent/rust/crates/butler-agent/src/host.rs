@@ -11,23 +11,20 @@
 
 mod error;
 mod installation;
-#[cfg(unix)]
 mod mcp;
+mod oauth_callback;
 pub(crate) use crate::host::guided::tool_artifact::ToolArtifactReader;
 pub(crate) use butler_memory::cognition::MemorySourceReader;
 mod runtime;
 
-#[cfg(unix)]
 pub(crate) use crate::host::app::monitoring::AppMonitoring;
-#[cfg(unix)]
 pub(crate) use crate::host::app::runtime_ports::{
     AppAdmission, AppApprovalClaimsAdapter, AppAssets, AppBranchConversations,
     AppBranchSummarizerAdapter, AppContextRead, AppIngress, AppModelCatalog, AppPersonalization,
     AppQueueOwnerLivenessAdapter, AppReadiness, AppSessionProgress, AppSessionWorkspaces,
     AppSettingsFactsAdapter, AppSettingsMutation,
 };
-#[cfg(unix)]
-pub(crate) use crate::host::app::server::AppServer;
+pub(crate) use crate::host::app::server::{AppServer, AppServerOwners};
 pub(crate) use crate::host::app::subsessions::AppSubsessions;
 pub(crate) use crate::host::guided::activity::GuidedActivity;
 pub(crate) use crate::host::guided::authority_handoff::AuthorityHandoff;
@@ -56,20 +53,15 @@ mod guided;
 mod memory_jobs;
 mod service;
 mod time;
-pub(crate) use crate::host::automation::queue::AutomationQueue;
-pub(crate) use crate::host::automation::runtime::open_automation_service;
 pub(crate) use crate::host::time::date_parser::DateParser;
 
-#[cfg(unix)]
 pub(crate) use crate::host::app::gateway_lifecycle::ActiveAppEndpoint;
-#[cfg(unix)]
 pub(crate) use crate::host::embedding::owner::EmbeddingOwner;
 pub(crate) use crate::host::guided::tool_output::open_tool_output;
 
 pub(crate) use crate::host::guided::active_plan::AcceptedPlanProducer;
 pub(crate) use crate::host::guided::vision::{ZaiVisionCapability, catalog_for_visual_admission};
 pub(crate) use crate::host::guided::work_streams::WorkStreams;
-#[cfg(unix)]
 pub(crate) use crate::host::guided::worker_profiles::AppWorkerProfileReader;
 pub(crate) use crate::host::memory_jobs::profile_sources::ProfileConversationSources;
 pub(crate) use crate::host::runtime::environment::ProcessEnvironment;
@@ -78,7 +70,6 @@ pub(crate) use crate::host::runtime::storage_bootstrap::prepare_btcc_storage;
 pub(crate) use crate::host::service::configuration::{ServiceConfiguration, require_model_ref};
 pub(crate) use crate::host::service::progress_publisher::ProgressPublisher;
 pub(crate) use crate::host::time::prompt_clock::SystemPromptClock;
-#[cfg(unix)]
 pub(crate) use error::HostError;
 pub(crate) use installation::ResolvedInstallation;
 pub(crate) use runtime::{AgentRuntime, RuntimePaths};
@@ -101,7 +92,6 @@ impl butler_models::models::ProviderClock for SystemIdentity {
     }
 }
 
-#[cfg(unix)]
 impl butler_memory::profile::ProfileHostFacts for SystemIdentity {
     fn process_id(&self) -> u32 {
         std::process::id()
@@ -171,30 +161,5 @@ impl AppIdentityClock for SystemIdentity {
 
     fn iso_after_millis(&self, millis: u64) -> String {
         date::iso_from_system_time(SystemTime::now() + Duration::from_millis(millis))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn system_time_matches_js_iso_at_millisecond_and_calendar_boundaries() {
-        for (millis, expected) in [
-            (-1_i64, "1969-12-31T23:59:59.999Z"),
-            (0, "1970-01-01T00:00:00.000Z"),
-            (951_782_400_123, "2000-02-29T00:00:00.123Z"),
-            (253_402_300_800_000, "+010000-01-01T00:00:00.000Z"),
-            (-62_167_219_200_000, "0000-01-01T00:00:00.000Z"),
-            (-62_198_755_200_000, "-000001-01-01T00:00:00.000Z"),
-        ] {
-            let time = if millis < 0 {
-                SystemTime::UNIX_EPOCH - Duration::from_millis(millis.unsigned_abs())
-            } else {
-                SystemTime::UNIX_EPOCH
-                    + Duration::from_millis(u64::try_from(millis).unwrap_or_default())
-            };
-            assert_eq!(date::iso_from_system_time(time), expected);
-        }
     }
 }

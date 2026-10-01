@@ -1,24 +1,28 @@
 mod authority;
 mod automations;
 mod dashboard;
-mod dev_cors;
 mod error;
+mod listeners;
 mod mcp_servers;
 mod message_files;
 mod model_catalog;
 mod monitors;
 mod new_chat_briefing;
 mod operation_output;
+mod params;
 mod personalization;
 mod project_session_mutations;
 mod projects;
 mod read_routes;
 mod retry;
+mod security;
+mod security_settings;
 mod session_branches;
 mod session_controls;
 mod session_queue;
 mod sessions;
 mod settings;
+mod setup;
 mod shell;
 mod skills;
 mod space_mutations;
@@ -27,25 +31,26 @@ mod subsession_result;
 mod subsessions;
 mod transcript_export;
 mod updates;
+mod wallpaper_modules;
+mod wallpapers;
 
 use axum::http::HeaderValue;
-use std::{collections::HashMap, error::Error as StdError, path::PathBuf, sync::Arc};
+use std::{error::Error as StdError, net::SocketAddr, path::PathBuf, sync::Arc};
 
 use axum::{
-    Router,
     body::{Body, Bytes, to_bytes},
-    extract::{DefaultBodyLimit, Query, State},
+    extract::{ConnectInfo, State},
     http::{Method, Request, StatusCode, Uri, header},
     response::Response,
-    routing::any,
 };
 use http_body_util::LengthLimitError;
 use serde_json::Value;
+use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
 use super::{
-    EventReplayView, GatewayApplication, GatewayConfig, HealthView, SendMessageCommand,
-    auth::{self, LocalAuthConfig},
+    EventReplayView, GatewayApplication, GatewayConfig, GatewayExposure, GatewaySecurityStore,
+    HealthView, SendMessageCommand,
     live::create_live_stream,
     message_validation::{MessageRequestError, validate_message_request},
     protocol::{APP_PROTOCOL_VERSION, ApiEnvelope},
@@ -53,41 +58,62 @@ use super::{
 };
 pub(super) use error::HttpError;
 use error::{error_response, json};
+use params::{cursor_param, limit_param, query};
 use read_routes::{
-    get_artifacts, get_events, get_live_events, get_messages, get_session_queue, get_turns,
+    get_artifacts, get_events, get_live_events, get_messages, get_session_queue, get_turns, health,
 };
 
 const DEFAULT_PAGE_LIMIT: usize = 200;
 const MAX_REQUEST_BODY_SIZE: usize = 128 * 1024 * 1024;
 
-pub(super) fn router(
+/// Serves `listener` (loopback) until `shutdown`, and binds the LAN
+/// listeners too when remote access is enabled.
+pub(super) fn serve(
+    listener: TcpListener,
     application: Arc<dyn GatewayApplication>,
     config: GatewayConfig,
     shutdown: CancellationToken,
-) -> Router {
-    let limiter = FixedWindowRateLimiter::new(
-        config.message_rate_limit_max,
-        config.message_rate_limit_window,
-    );
-    Router::new()
-        .fallback(any(dispatch))
-        .with_state(Arc::new(HttpState {
-            application,
+    local_addr: SocketAddr,
+) -> JoinHandle<std::io::Result<()>> {
+    let exposure = GatewayExposure {
+        remote_access_enabled: config.remote_access_enabled,
+        allowed_hosts: config.allowed_hosts.clone(),
+    };
+    let state = Arc::new(HttpState {
+        application,
+        security: security::GatewaySecurity::new(security::SecurityConfig {
             auth: config.local_auth,
-            dev_cors: dev_cors::DevCorsPolicy::new(config.dev_cors_origin.as_deref()),
-            session_cursor_secret: uuid::Uuid::new_v4().to_string(),
-            limiter,
-            shutdown,
-            uploads: tokio::sync::Semaphore::new(2),
-            static_ui_root: config.static_ui_root,
-        }))
-        .layer(DefaultBodyLimit::max(MAX_REQUEST_BODY_SIZE))
+            admin: config.admin_credential,
+            local_addr,
+            allowed_hosts: config.allowed_hosts.clone(),
+            dev_origins: config.dev_cors_origin,
+            signed_url_ttl: config.signed_url_ttl,
+            shutdown: shutdown.clone(),
+        }),
+        remote: listeners::RemoteAccess::new(local_addr, config.allowed_hosts),
+        security_store: config.security_store,
+        session_cursor_secret: uuid::Uuid::new_v4().to_string(),
+        limiter: FixedWindowRateLimiter::new(
+            config.message_rate_limit_max,
+            config.message_rate_limit_window,
+        ),
+        shutdown: shutdown.clone(),
+        uploads: tokio::sync::Semaphore::new(2),
+        static_ui_root: config.static_ui_root,
+    });
+    // Publish the saved exposure before loopback admission: a successful
+    // health probe must not race initialization of Settings → Security.
+    if exposure.remote_access_enabled {
+        state.remote.apply(&state, exposure);
+    }
+    listeners::spawn(listener, state, shutdown)
 }
 
 struct HttpState {
     application: Arc<dyn GatewayApplication>,
-    auth: LocalAuthConfig,
-    dev_cors: dev_cors::DevCorsPolicy,
+    security: security::GatewaySecurity,
+    remote: listeners::RemoteAccess,
+    security_store: Option<Arc<dyn GatewaySecurityStore>>,
     session_cursor_secret: String,
     limiter: FixedWindowRateLimiter,
     shutdown: CancellationToken,
@@ -95,30 +121,129 @@ struct HttpState {
     static_ui_root: Option<PathBuf>,
 }
 
+/// Who sent an authorized request (a request extension for the routes).
+#[derive(Clone)]
+struct Client {
+    access: security::Access,
+    /// From this computer (see [`security::is_local_client`]).
+    local: bool,
+    /// Sent the local admin credential (`X-Butler-Admin`).
+    admin: bool,
+    /// The key set the request was authorized under.
+    keys: security::KeySet,
+}
+
+/// Host and Origin admission, CORS preflight before auth, then the
+/// authorized route; every answer to an admitted origin carries CORS headers.
 async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -> Response {
-    let origin = state.dev_cors.allowed_origin(request.headers());
-    if request.method() == Method::OPTIONS
-        && let Some(origin) = origin.as_ref()
-    {
-        return dev_cors::preflight(origin);
+    let connect_form =
+        request.method() == Method::POST && request.uri().path() == security::CONNECT_PATH;
+    let html_connect_form = connect_form && static_ui::accepts_html(request.headers());
+    let origin =
+        match state
+            .security
+            .admit(request.method(), request.uri().path(), request.headers())
+        {
+            Ok(origin) => origin,
+            Err(error) => {
+                return if html_connect_form {
+                    security::GatewaySecurity::connect_error_response(&error)
+                } else {
+                    error_response(&error)
+                };
+            }
+        };
+    if request.method() == Method::OPTIONS && origin.allowed().is_some() {
+        return security::preflight(&origin);
     }
-    if declared_body_too_large(&request) {
-        let mut response = payload_too_large_response();
-        dev_cors::apply(&mut response, origin.as_ref());
-        return response;
-    }
-    let mut response = match route(state, request).await {
-        Ok(response) => response,
-        Err(error) => error_response(&error),
+    let mut response = if declared_body_too_large(&request) {
+        if html_connect_form {
+            security::GatewaySecurity::connect_error_response(&HttpError::PayloadTooLarge)
+        } else {
+            payload_too_large_response()
+        }
+    } else {
+        match authorized_route(state, request, &origin).await {
+            Ok(response) => response,
+            Err(error) => {
+                if html_connect_form {
+                    security::GatewaySecurity::connect_error_response(&error)
+                } else {
+                    error_response(&error)
+                }
+            }
+        }
     };
-    dev_cors::apply(&mut response, origin.as_ref());
+    security::apply_cors(&mut response, &origin);
     response
 }
 
-async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response, HttpError> {
-    if !static_ui::is_public_static_request(request.method(), request.uri().path()) {
-        auth::enforce(request.headers(), &state.auth)?;
+async fn authorized_route(
+    state: Arc<HttpState>,
+    mut request: Request<Body>,
+    origin: &security::RequestOrigin,
+) -> Result<Response, HttpError> {
+    if request.method() == Method::POST && request.uri().path() == security::CONNECT_PATH {
+        let body =
+            read_body_with_limit(request.into_body(), security::MAX_CONNECT_FORM_BYTES).await?;
+        return state.security.connect_form(&body);
     }
+    let grant = match state.security.authorize(&request, origin)? {
+        security::Admission::Respond(response) => return Ok(response),
+        security::Admission::Granted(grant) => grant,
+    };
+    security::require_json_body(request.method(), request.uri().path(), request.headers())?;
+    if request.method() == Method::POST && request.uri().path() == security::CONNECTION_CODES_PATH {
+        return state
+            .security
+            .mint_connection_code(&grant, request.headers());
+    }
+    let peer = request
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|info| info.0);
+    let client = Client {
+        access: grant.access,
+        local: security::is_local_client(peer, request.headers(), origin),
+        admin: state.security.is_admin(request.headers()),
+        keys: grant.keys,
+    };
+    request.extensions_mut().insert(client.clone());
+    let signs = client.access.receives_signed_urls();
+    let keys = client.keys.clone();
+    let response = route_for_client(state, request, client).await?;
+    Ok(if signs {
+        keys.sign_urls(response).await
+    } else {
+        response
+    })
+}
+
+/// The routes whose answer depends on who asks (Settings → Security, the
+/// settings view, live streams), then every other route.
+async fn route_for_client(
+    state: Arc<HttpState>,
+    request: Request<Body>,
+    client: Client,
+) -> Result<Response, HttpError> {
+    let uri = request.uri().clone();
+    if uri.path() == "/security" || uri.path().starts_with("/security/") {
+        return security_settings::route(state, request).await;
+    }
+    match (request.method(), uri.path()) {
+        (&Method::GET, "/settings") => settings::get(state, Some(client)).await,
+        (&Method::GET, "/events/live") => {
+            let scope = request
+                .extensions()
+                .get::<listeners::ListenerScope>()
+                .cloned();
+            get_live_events(state, &uri, scope, &client.keys).await
+        }
+        _ => route(state, request).await,
+    }
+}
+
+async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response, HttpError> {
     let method = request.method().clone();
     let uri = request.uri().clone();
     let accepts_html = static_ui::accepts_html(request.headers());
@@ -196,14 +321,11 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
     {
         return updates::route(state, request).await;
     }
-    if (method == Method::POST && uri.path() == "/message-files")
-        || (method == Method::GET
-            && uri
-                .path()
-                .strip_prefix("/message-files/")
-                .is_some_and(|id| !id.is_empty() && !id.contains('/')))
-    {
+    if message_files::handles(&method, uri.path()) {
         return message_files::route(state, request).await;
+    }
+    if wallpapers::handles(uri.path()) {
+        return wallpapers::route(state, request).await;
     }
     if (method == Method::PATCH || method == Method::DELETE)
         && uri
@@ -231,40 +353,17 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
         }
         return Err(HttpError::public(404, "not_found", "Route not found."));
     }
-    if method == Method::POST
-        && let Some(turn_id) = uri
-            .path()
-            .strip_prefix("/turns/")
-            .and_then(|value| value.strip_suffix("/cancel"))
-            .filter(|value| !value.is_empty() && !value.contains('/'))
-    {
-        let result = state
-            .application
-            .cancel_turn(subsessions::decode_component(turn_id)?)
-            .await?;
-        return json(
-            StatusCode::ACCEPTED,
-            ApiEnvelope {
-                protocol_version: APP_PROTOCOL_VERSION,
-                data: result,
-            },
-        );
+    if let Some(response) = retry::cancel(&state, &method, &uri).await? {
+        return Ok(response);
+    }
+    if setup::handles(uri.path()) {
+        return setup::route(state, request, &uri).await;
     }
     match (method.clone(), uri.path()) {
-        (Method::GET, "/health") => json(
-            StatusCode::OK,
-            ApiEnvelope {
-                protocol_version: APP_PROTOCOL_VERSION,
-                data: HealthView {
-                    ok: true,
-                    service: "butler-app-server".to_owned(),
-                    protocol_version: APP_PROTOCOL_VERSION.to_owned(),
-                },
-            },
-        ),
+        (Method::GET, "/health") => health(),
+        (Method::GET, "/provider-quota") => monitors::provider_quota(state, &uri).await,
         (Method::GET, "/runtime-readiness") => {
             let mut readiness = state.application.runtime_readiness()?;
-            readiness.authenticated_gateway_ready = true;
             readiness.raw_text_included = false;
             json(
                 StatusCode::OK,
@@ -274,7 +373,6 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
                 },
             )
         }
-        (Method::GET, "/settings") => settings::get(state).await,
         (Method::PATCH, "/settings") => settings::patch(state, request).await,
         (Method::GET, "/skills") => skills::get(state).await,
         (Method::POST, "/skills/import") => skills::import(state, request).await,
@@ -299,7 +397,6 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
         (Method::POST, "/session-queue") => session_queue::create(state, request).await,
         (Method::GET, "/turns") => get_turns(state, &uri).await,
         (Method::GET, "/events") => get_events(state, &uri).await,
-        (Method::GET, "/events/live") => get_live_events(state, &uri).await,
         _ if method == Method::GET => {
             static_ui::serve(state.static_ui_root.as_deref(), uri.path(), accepts_html).await
         }
@@ -356,66 +453,6 @@ async fn post_message(
             data: result,
         },
     )
-}
-
-fn query(uri: &Uri) -> HashMap<String, String> {
-    Query::<Vec<(String, String)>>::try_from_uri(uri)
-        .map(|query| {
-            query
-                .0
-                .into_iter()
-                .fold(HashMap::new(), |mut values, (key, value)| {
-                    values.entry(key).or_insert(value);
-                    values
-                })
-        })
-        .unwrap_or_default()
-}
-
-fn cursor_param(value: Option<&String>) -> f64 {
-    value
-        .and_then(|value| javascript_number(value))
-        .filter(|value| value.is_finite())
-        .unwrap_or(0.0)
-}
-
-fn limit_param(value: Option<&String>) -> usize {
-    value
-        .and_then(|value| javascript_number(value))
-        .filter(|value| value.is_finite())
-        .map_or(DEFAULT_PAGE_LIMIT, |value| {
-            butler_core::json::saturating_usize(value.floor().clamp(1.0, DEFAULT_PAGE_LIMIT as f64))
-        })
-}
-
-fn javascript_number(value: &str) -> Option<f64> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return Some(0.0);
-    }
-    let integer = if let Some(digits) = trimmed
-        .strip_prefix("0x")
-        .or_else(|| trimmed.strip_prefix("0X"))
-    {
-        u64::from_str_radix(digits, 16).ok()
-    } else if let Some(digits) = trimmed
-        .strip_prefix("0b")
-        .or_else(|| trimmed.strip_prefix("0B"))
-    {
-        u64::from_str_radix(digits, 2).ok()
-    } else if let Some(digits) = trimmed
-        .strip_prefix("0o")
-        .or_else(|| trimmed.strip_prefix("0O"))
-    {
-        u64::from_str_radix(digits, 8).ok()
-    } else {
-        return trimmed.parse::<f64>().ok().or_else(|| {
-            matches!(trimmed, "Infinity" | "+Infinity")
-                .then_some(f64::INFINITY)
-                .or_else(|| (trimmed == "-Infinity").then_some(f64::NEG_INFINITY))
-        });
-    };
-    integer.map(|number| number as f64)
 }
 
 fn declared_body_too_large(request: &Request<Body>) -> bool {

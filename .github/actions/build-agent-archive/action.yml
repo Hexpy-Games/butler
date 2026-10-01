@@ -1,0 +1,104 @@
+name: Build the standalone Agent archive
+description: >-
+  Builds the native Agent for the runner's own platform (darwin-arm64,
+  linux-x64 or linux-arm64), then gates, packages and smokes its standalone
+  archive with the release scripts into `out`. Select prebuilt ORT for regular
+  CI or custom static ORT for tagged releases and nightly full install smoke.
+  Shared by release and install smoke.
+
+inputs:
+  cache-key:
+    description: The rust-cache shared key for this platform.
+    required: true
+  ort-mode:
+    description: "prebuilt-ort for regular CI or static-ort for tagged releases and nightly full install smoke."
+    required: false
+    default: prebuilt-ort
+  artifact-base-url:
+    description: URL prefix the archive will be published under; recorded in the manifests.
+    required: true
+  out:
+    description: Output directory, relative to the repository root.
+    required: false
+    default: dist/release/agent
+
+outputs:
+  platform:
+    description: The platform label of the archive (for example linux-x64).
+    value: ${{ steps.package.outputs.platform }}
+  archive:
+    description: Path of the archive.
+    value: ${{ steps.package.outputs.archive }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Rust and ONNX Runtime
+      uses: ./.github/actions/rust-agent-setup
+      with:
+        native-deps: ${{ inputs.ort-mode }}
+        cache-key: ${{ inputs.cache-key }}
+
+    - name: Set up Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: 1.3.11
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22.23.3
+        cache: npm
+        cache-dependency-path: packages/butler-app/client/ui/package-lock.json
+
+    # The renderer ships in the Agent's resources (app-client/dist).
+    - name: Build the App renderer
+      shell: bash
+      run: |
+        set -euo pipefail
+        bun install --frozen-lockfile
+        npm --prefix packages/butler-app/client/ui ci
+        npm --prefix packages/butler-app/client/ui run build
+
+    - name: Build the native Agent
+      shell: bash
+      working-directory: packages/butler-agent/rust
+      env:
+        ORT_MODE: ${{ inputs.ort-mode }}
+      run: |
+        set -euo pipefail
+        case "$ORT_MODE" in
+          static-ort)
+            cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
+            ;;
+          prebuilt-ort)
+            cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features prebuilt-ort
+            ;;
+          *)
+            printf 'Unsupported ONNX Runtime mode: %s\n' "$ORT_MODE" >&2
+            exit 1
+            ;;
+        esac
+        echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$PWD/target/release/butler-agent" >> "$GITHUB_ENV"
+
+    - name: Package and smoke the archive
+      id: package
+      shell: bash
+      env:
+        OUT: ${{ inputs.out }}
+        BASE_URL: ${{ inputs.artifact-base-url }}
+      run: |
+        set -euo pipefail
+        platform="$(node -p 'process.platform + "-" + process.arch')"
+        payload="$RUNNER_TEMP/butler-native-agent-payload"
+        scripts=packages/butler-agent/rust/scripts
+        node packages/butler-app/client/electron/scripts/prepare-native-agent.mjs "${platform%%-*}" "${platform#*-}" "$payload"
+        version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["version"])' "$payload/native-agent-manifest.json")"
+        archive="$OUT/butler-agent-${version}-${platform}.tar.gz"
+        url="$BASE_URL/$(basename "$archive")"
+        mkdir -p "$OUT"
+        python3 "$scripts/release-standalone-agent.py" gate --payload "$payload"
+        python3 "$scripts/package-standalone-agent.py" --payload "$payload" --output "$archive" --artifact-url "$url"
+        python3 "$scripts/release-standalone-agent.py" smoke --archive "$archive" --artifact-url "$url"
+        echo "platform=$platform" >> "$GITHUB_OUTPUT"
+        echo "archive=$archive" >> "$GITHUB_OUTPUT"

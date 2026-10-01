@@ -1,0 +1,16 @@
+---
+import { BrandMark } from "../BrandMark/BrandMark";
+import styles from "./Brand.module.css";
+
+interface Props {
+  href: string;
+  product: string;
+}
+
+const { href, product } = Astro.props;
+---
+<a aria-label={`Butler ${product}`} class={styles.brand} href={href}>
+  <BrandMark client:load />
+  <span class={styles.wordmark} aria-hidden="true">Butler</span>
+  <span class={styles.product} aria-hidden="true">{product}</span>
+</a>

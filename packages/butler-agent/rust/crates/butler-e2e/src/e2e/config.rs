@@ -90,8 +90,11 @@ pub struct LiveProvider {
     pub base_url: Option<String>,
 }
 
-pub const DEFAULT_LIVE_MODEL: &str = "openai/gpt-6-sol@low";
-pub const DEFAULT_LIVE_MATRIX: &str = "openai/gpt-6-sol@low,openai/gpt-6-luna@max";
+pub const DEFAULT_LIVE_MODEL: &str = "openai/gpt-6-luna@max";
+/// Owner decision: automated real calls use gpt-6-luna only (never
+/// gpt-6-sol or -astra), so the LIVE-07 matrix defaults to it alone; set
+/// `BUTLER_E2E_MODEL_MATRIX` to check more entries.
+pub const DEFAULT_LIVE_MATRIX: &str = "openai/gpt-6-luna@max";
 
 impl LiveProvider {
     pub fn from_env() -> Self {
@@ -101,8 +104,8 @@ impl LiveProvider {
             .and_then(|value| ModelChoice::parse(&value))
             .or_else(|| ModelChoice::parse(DEFAULT_LIVE_MODEL))
             .unwrap_or(ModelChoice {
-                model: "openai/gpt-6-sol".into(),
-                effort: Some("low".into()),
+                model: "openai/gpt-6-luna".into(),
+                effort: Some("max".into()),
             });
         let matrix = nonempty("BUTLER_E2E_MODEL_MATRIX")
             .unwrap_or_else(|| DEFAULT_LIVE_MATRIX.into())
@@ -131,8 +134,21 @@ impl LiveProvider {
             "openai-subscription" => Some("https://chatgpt.com/backend-api"),
             "openai" => Some("https://api.openai.com/v1"),
             "opencode-go" => Some("https://opencode.ai/zen/go/v1"),
+            // The origin: the Coding Plan's model and quota endpoints differ
+            // in path (see `base_path`).
+            "zai" => Some("https://api.z.ai"),
             _ => None,
         }
+    }
+}
+
+/// The path the product's base URL carries after the recorder's origin, for
+/// providers whose upstream default is an origin: the Z.AI Coding Plan's
+/// model base, from which the product derives its quota URL.
+pub fn base_path(provider: &str) -> &'static str {
+    match provider {
+        "zai" => "/api/coding/paas/v4",
+        _ => "",
     }
 }
 
@@ -154,7 +170,7 @@ pub fn base_url_env(provider: &str) -> Option<&'static str> {
 
 fn resolve_credential(provider: &str) -> Option<Credential> {
     if provider == "openai-subscription" {
-        let home = env::var_os("HOME").map(PathBuf::from);
+        let home = butler_platform::user_dirs::home_dir();
         if let Some(path) = nonempty("BUTLER_E2E_CODEX_PROFILE").map(PathBuf::from) {
             return existing(&path).map(Credential::CodexProfile);
         }

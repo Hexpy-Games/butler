@@ -5,12 +5,13 @@ use std::{
     collections::BTreeMap,
     fs::File,
     io::{BufRead, BufReader},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use serde_json::{Value, json};
 
 use super::super::stream::{number, unsigned_count, visit_jsonl};
+use super::UsageMonitor;
 
 pub(super) fn read_web_search(data_root: &Path, since_ts: Option<f64>) -> Value {
     if since_ts.is_none() {
@@ -58,27 +59,34 @@ pub(super) fn read_web_search(data_root: &Path, since_ts: Option<f64>) -> Value 
     })
 }
 
+/// What the monitor says about its transcript scan when it did not scan
+/// (or scanned only one session).
+fn degraded_activity() -> Value {
+    json!({ "status": "degraded", "reason": "read_only_transcript_activity_fallback" })
+}
+
 pub(super) fn read_tools(
     data_root: &Path,
     session_id: Option<&str>,
     since_ts: Option<f64>,
-    transcript_activity: &super::super::health::TranscriptActivityProjection,
+    monitor: &UsageMonitor,
 ) -> (Value, Value, Value) {
-    if let Some(session_id) = session_id.filter(|id| !id.trim().is_empty()) {
-        let tools = read_session_tools(data_root, session_id, since_ts);
+    if let Some(session_id) = session_id {
+        let tools = read_session_tools(data_root, session_id, since_ts, monitor);
         return (
             tools,
-            json!({"status":"available","reason":null}),
+            degraded_activity(),
             json!({"status":"available","reason":null}),
         );
     }
     if since_ts.is_some() {
         return (
             json!({ "calls": 0, "results": 0, "successes": 0, "failures": 0, "byTool": {} }),
-            transcript_activity.status.clone(),
+            degraded_activity(),
             json!({ "status": "unavailable", "reason": "unscoped_since_filter_requires_session" }),
         );
     }
+    let transcript_activity = monitor.transcript_activity(data_root);
     if transcript_activity.facts["available"] == true {
         return (
             json!({ "calls": transcript_activity.facts["tools"]["calls"], "results": transcript_activity.facts["tools"]["results"], "successes": transcript_activity.facts["tools"]["successes"], "failures": transcript_activity.facts["tools"]["failures"], "byTool": transcript_activity.facts.get("byTool").cloned().unwrap_or_else(|| json!({})) }),
@@ -93,7 +101,8 @@ pub(super) fn read_tools(
     )
 }
 
-fn read_session_tools(data_root: &Path, session_id: &str, since_ts: Option<f64>) -> Value {
+/// `transcripts/<session id>.jsonl`, the id reduced to file-name characters.
+fn session_transcript_path(data_root: &Path, session_id: &str) -> PathBuf {
     let safe = session_id
         .trim()
         .chars()
@@ -105,7 +114,40 @@ fn read_session_tools(data_root: &Path, session_id: &str, since_ts: Option<f64>)
             }
         })
         .collect::<String>();
-    let path = data_root.join("transcripts").join(format!("{safe}.jsonl"));
+    data_root.join("transcripts").join(format!("{safe}.jsonl"))
+}
+
+/// A session's tool usage: from the per-file activity cache, or, within a
+/// time window, by reading the session's transcript.
+fn read_session_tools(
+    data_root: &Path,
+    session_id: &str,
+    since_ts: Option<f64>,
+    monitor: &UsageMonitor,
+) -> Value {
+    let path = session_transcript_path(data_root, session_id);
+    if since_ts.is_some() {
+        return read_windowed_session_tools(&path, since_ts);
+    }
+    let Some(activity) = monitor.file_activity(&path) else {
+        return empty_tools();
+    };
+    let by_tool: serde_json::Map<String, Value> = activity
+        .by_tool
+        .iter()
+        .map(|(name, bucket)| (name.clone(), tool_bucket(bucket)))
+        .collect();
+    let mut tools = tool_bucket(&activity.tools);
+    butler_core::json::object_mut(&mut tools).insert("byTool".into(), Value::Object(by_tool));
+    tools
+}
+
+fn tool_bucket(bucket: &crate::context::StatusTranscriptToolUsageBucket) -> Value {
+    json!({"calls":bucket.calls,"results":bucket.results,
+        "successes":bucket.successes,"failures":bucket.failures})
+}
+
+fn read_windowed_session_tools(path: &Path, since_ts: Option<f64>) -> Value {
     let Ok(file) = File::open(path) else {
         return empty_tools();
     };

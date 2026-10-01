@@ -32,6 +32,7 @@ import {
   writeCachedSettings,
 } from "./settingsCache.ts";
 import { browserRandomId } from "./id.ts";
+import type { AgentNotice } from "./agentRuntime.ts";
 import {
   type OptimisticSessionStart,
   findSessionSummary,
@@ -47,6 +48,15 @@ import {
   freshAppUiPanelState,
   type AppUiStateSnapshot,
 } from "./appUiStateCache.ts";
+import { normalizeApprovalSummary } from "./approvalRequest.ts";
+import {
+  learnProjectWorkspaceKinds,
+  readCachedProjectWorkspaceKinds,
+  reportedGitRepo,
+  resolveGitProject,
+  writeCachedProjectWorkspaceKinds,
+  type ProjectWorkspaceKinds,
+} from "./projectWorkspaceKinds.ts";
 import {
   DEFAULT_LEFT_PANEL_WIDTH,
   DEFAULT_RIGHT_PANEL_WIDTH,
@@ -104,6 +114,7 @@ import {
   freezeMessageActivity as freezeMessageWorkBlocksForRecord,
 } from "./conversation-progress";
 import { isServerBackedSessionId } from "./sessionIds.ts";
+import { turnProgressOf } from "./turnProgress.ts";
 import { finishVisibleCancellation } from "./cancellation/finish-visible-cancellation.ts";
 
 type ProjectAction = "rename" | "pin" | "archive" | "delete";
@@ -137,6 +148,10 @@ interface ButlerStore {
   messages: MessageRecord[];
   sessionView: SessionView | null;
   sessionViews: Record<string, SessionView>;
+  /** Git or plain folder, per project, learned from its session views (fallback for older agents). */
+  projectWorkspaceKinds: ProjectWorkspaceKinds;
+  /** `git.is_repo`, per project, from a dashboard loaded after the last project list that reported `git`. */
+  projectDashboardGit: Readonly<Record<string, boolean>>;
   observerSessionId: string | null;
   observerTargetTurnId: string | null;
   observerHistory: Array<{ sessionId: string; targetTurnId: string | null }>;
@@ -163,6 +178,8 @@ interface ButlerStore {
   projectCreateDialogOpen: boolean;
   commandOpen: boolean;
   liveConnectionLost: boolean;
+  /** Set while the Agent is intentionally stopped, restarting externally, or that restart failed. */
+  agentNotice: AgentNotice | null;
   renameProject: ProjectSummary | null;
   renameSession: SessionSummary | null;
   setLeftOpen: (value: Updater<boolean>) => void;
@@ -189,6 +206,7 @@ interface ButlerStore {
   setMessages: (messages: Updater<MessageRecord[]>) => void;
   setMessageListView: (view: MessageListView) => void;
   setSessionView: (view: SessionView) => void;
+  setProjectDashboardGit: (projectId: string, git: ProjectSummary["git"]) => void;
   openSessionObserver: (sessionId: string, targetTurnId?: string) => void;
   goBackSessionObserver: () => void;
   closeSessionObserver: () => void;
@@ -582,7 +600,7 @@ function messageListViewFromSessionView(view: SessionView): MessageListView {
   const turnProgress =
     view.latest_turn?.id && view.latest_turn.progress
       ? { [view.latest_turn.id]: {
-          ...view.latest_turn.progress,
+          ...turnProgressOf(view.latest_turn),
           started_at: view.latest_turn.created_at,
         } }
       : {};
@@ -599,7 +617,7 @@ function messageListViewFromSessionView(view: SessionView): MessageListView {
 
 function summaryFromSessionView(view: SessionView): SessionSummaryView {
   const latestProgress = view.latest_turn ? {
-    ...view.latest_turn.progress,
+    ...turnProgressOf(view.latest_turn),
     started_at: view.latest_turn.created_at,
   } : {
     state: "idle",
@@ -733,6 +751,7 @@ function normalizeAuthorityApprovalCard(
   ) {
     return null;
   }
+  const approval = normalizeApprovalSummary(record.approval);
   return {
     requestRef: record.request_ref,
     category: record.category,
@@ -742,6 +761,7 @@ function normalizeAuthorityApprovalCard(
     ...(record.scope && typeof record.scope === "object" && "title" in record.scope && "description" in record.scope &&
       typeof record.scope.title === "string" && typeof record.scope.description === "string"
       ? { scope: { title: record.scope.title, description: record.scope.description } } : {}),
+    ...(approval ? { approval } : {}),
     ...(typeof record.source_turn_id === "string" ? { sourceTurnId: record.source_turn_id } : {}),
     ...(typeof record.source_call_id === "string" ? { sourceCallId: record.source_call_id } : {}),
     ...(typeof record.source_session_id === "string" ? { sourceSessionId: record.source_session_id } : {}),
@@ -902,7 +922,8 @@ setAppCopyLanguage(initialSettings.language);
 
 export const useButlerStore = create<ButlerStore>((set, get) => ({
   leftOpen: false,
-  rightOpen: true,
+  // New users start without the inspector; a saved UI state restores it.
+  rightOpen: false,
   rightTab: "summary",
   selectedArtifactId: null,
   selectedArtifact: null,
@@ -919,6 +940,8 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   messages: [],
   sessionView: null,
   sessionViews: {},
+  projectWorkspaceKinds: readCachedProjectWorkspaceKinds(),
+  projectDashboardGit: {},
   observerSessionId: null,
   observerTargetTurnId: null,
   observerHistory: [],
@@ -942,6 +965,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   projectCreateDialogOpen: false,
   commandOpen: false,
   liveConnectionLost: false,
+  agentNotice: null,
   renameProject: null,
   renameSession: null,
 
@@ -1092,6 +1116,11 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   setMessageListView: (view) =>
     set((state) => applyMessageListView(state, view)),
   setSessionView: (view) => set((state) => applySessionView(state, view)),
+  setProjectDashboardGit: (projectId, git) => {
+    const isRepo = reportedGitRepo({ git });
+    if (isRepo === undefined || get().projectDashboardGit[projectId] === isRepo) return;
+    set((state) => ({ projectDashboardGit: { ...state.projectDashboardGit, [projectId]: isRepo } }));
+  },
   openSessionObserver: (sessionId, targetTurnId) => {
     set((state) => ({
       observerSessionId: sessionId,
@@ -2418,6 +2447,39 @@ useButlerStore.subscribe((state, previousState) => {
   }
 });
 
+useButlerStore.subscribe((state, previousState) => {
+  if (state.sessionViews === previousState.sessionViews) return;
+  const changedViews = Object.entries(state.sessionViews)
+    .filter(([id, view]) => previousState.sessionViews[id] !== view)
+    .map(([, view]) => view);
+  const projectWorkspaceKinds = learnProjectWorkspaceKinds(
+    state.projectWorkspaceKinds,
+    changedViews,
+  );
+  if (projectWorkspaceKinds === state.projectWorkspaceKinds) return;
+  writeCachedProjectWorkspaceKinds(projectWorkspaceKinds);
+  useButlerStore.setState({ projectWorkspaceKinds });
+});
+
+// The latest Git answer wins: a project list that reports `git` replaces an
+// older dashboard answer for that project.
+useButlerStore.subscribe((state, previousState) => {
+  if (state.navigation === previousState.navigation) return;
+  const stale = Object.keys(state.projectDashboardGit).filter((projectId) =>
+    reportedGitRepo(state.navigation.projects.find((project) => project.id === projectId)) !== undefined);
+  if (!stale.length) return;
+  const projectDashboardGit = { ...state.projectDashboardGit };
+  for (const projectId of stale) delete projectDashboardGit[projectId];
+  useButlerStore.setState({ projectDashboardGit });
+});
+
+export const selectIsGitProject =
+  (projectId: string | undefined) => (state: ButlerStore) =>
+    Boolean(projectId) && resolveGitProject({
+      dashboard: state.projectDashboardGit[projectId!],
+      listed: reportedGitRepo(state.navigation.projects.find((project) => project.id === projectId)),
+      learned: state.projectWorkspaceKinds[projectId!],
+    });
 export const selectActiveChat = (state: ButlerStore) =>
   activeChatFromNavigation(state.navigation, state.activeChatId);
 export const selectActiveSessionView = (state: ButlerStore) =>

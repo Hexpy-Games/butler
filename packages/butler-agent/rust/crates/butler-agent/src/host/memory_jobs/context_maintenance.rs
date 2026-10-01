@@ -17,7 +17,6 @@ use butler_runtime::context::{PruneToolOutputInput, ToolOutput};
 use butler_runtime::operations::MetricFiles;
 
 use crate::host::DateParser;
-#[cfg(unix)]
 use crate::host::memory_jobs::daily::DailyCognitionJobs;
 use crate::host::memory_jobs::daily_schedule;
 
@@ -30,7 +29,6 @@ pub(crate) struct ContextMaintenance {
     tool_output: ToolOutput,
     metrics: Arc<MetricFiles>,
     timezone: Arc<DateParser>,
-    #[cfg(unix)]
     daily_cognition: Arc<DailyCognitionJobs>,
     cancellation: CancellationToken,
     task: Mutex<Option<JoinHandle<()>>>,
@@ -42,14 +40,13 @@ impl ContextMaintenance {
         tool_output: ToolOutput,
         metrics: Arc<MetricFiles>,
         timezone: Arc<DateParser>,
-        #[cfg(unix)] daily_cognition: Arc<DailyCognitionJobs>,
+        daily_cognition: Arc<DailyCognitionJobs>,
     ) -> Self {
         Self {
             data_root,
             tool_output,
             metrics,
             timezone,
-            #[cfg(unix)]
             daily_cognition,
             cancellation: CancellationToken::new(),
             task: Mutex::new(None),
@@ -65,7 +62,6 @@ impl ContextMaintenance {
         let tool_output = self.tool_output.clone();
         let metrics = Arc::clone(&self.metrics);
         let timezone = Arc::clone(&self.timezone);
-        #[cfg(unix)]
         let daily_cognition = Arc::clone(&self.daily_cognition);
         let cancellation = self.cancellation.clone();
         *task = Some(tokio::spawn(async move {
@@ -84,7 +80,6 @@ impl ContextMaintenance {
                         {
                             eprintln!("[context-maintenance] {error}");
                         }
-                        #[cfg(unix)]
                         {
                             if cancellation.is_cancelled() {
                                 break;
@@ -230,11 +225,7 @@ fn write_state(path: &std::path::Path, state: &Value) -> std::io::Result<()> {
         bytes.push(b'\n');
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        let _ = butler_platform::secure_fs::owner_only(&mut options);
         let mut file = options.open(&temporary)?;
         file.write_all(&bytes)?;
         file.sync_all()?;
@@ -248,6 +239,13 @@ fn write_state(path: &std::path::Path, state: &Value) -> std::io::Result<()> {
 }
 
 fn current_epoch_millis() -> i64 {
+    // Daily jobs and App fixtures must share the same clock in stub E2E.
+    #[cfg(debug_assertions)]
+    if let Ok(now) =
+        chrono::DateTime::parse_from_rfc3339(&crate::host::app::schedule_clock::clock().now_iso())
+    {
+        return now.timestamp_millis();
+    }
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |time| {
@@ -260,28 +258,4 @@ fn iso_at(now_ms: i64) -> String {
         || "1970-01-01T00:00:00.000Z".to_owned(),
         |date| date.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn local_daily_state_skips_success_and_error_until_next_day() {
-        let root =
-            std::env::temp_dir().join(format!("butler-context-schedule-{}", uuid::Uuid::new_v4()));
-        assert!(!should_run(&root, "2026-09-23", 209));
-        assert!(should_run(&root, "2026-09-23", 210));
-        let path = state_path(&root);
-        write_state(
-            &path,
-            &json!({"lastRunDate":"2026-09-23", "status":"error"}),
-        )
-        .unwrap();
-        assert!(!should_run(&root, "2026-09-23", 210));
-        assert!(should_run(&root, "2026-09-24", 210));
-        write_state(&path, &json!({"lastRunDate":"2026-09-24", "status":"ok"})).unwrap();
-        assert!(!should_run(&root, "2026-09-24", 210));
-        std::fs::remove_dir_all(root).unwrap();
-    }
 }

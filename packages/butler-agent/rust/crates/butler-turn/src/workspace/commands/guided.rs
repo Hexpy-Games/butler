@@ -2,6 +2,8 @@ use std::path::PathBuf;
 use std::process::{ExitStatus, Stdio};
 use std::time::Duration;
 
+use butler_platform::command_sandbox::{self, SandboxError, ShellAccess};
+use butler_platform::process_control;
 use tokio::process::{Child, Command};
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
@@ -160,7 +162,7 @@ async fn prepare_command(
         ));
     }
     let cwd = resolve_guided_cwd(&input.workspace_root, input.cwd.as_deref()).await?;
-    let (executable, arguments) = invocation(input)?;
+    let invocation = invocation(input)?;
     let environment = tokio::task::spawn_blocking({
         let host = input.host_environment.clone();
         let butler_data = input.butler_data.clone();
@@ -177,9 +179,9 @@ async fn prepare_command(
             "Command owner is closing",
         ));
     }
-    let mut command = Command::new(executable);
+    let mut command = Command::new(&invocation.program);
+    command_sandbox::add_arguments(command.as_std_mut(), &invocation);
     command
-        .args(arguments)
         .current_dir(&cwd)
         .env_clear()
         .envs(environment)
@@ -187,11 +189,7 @@ async fn prepare_command(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        command.as_std_mut().process_group(0);
-    }
+    process_control::isolate_group(command.as_std_mut());
     Ok((cwd, command))
 }
 
@@ -259,7 +257,6 @@ async fn settle_process(
     let stopped = match cause {
         Cause::Failed(error) => return Err(error),
         Cause::Exited(status) => {
-            #[cfg(unix)]
             host.signal_group(running.pid, GroupSignal::Kill)?;
             return Ok((Stopped::Exited, Reaped::Exited(status)));
         }
@@ -276,7 +273,6 @@ async fn terminate(host: &dyn ProcessHost, running: &mut Running) -> Result<Reap
     signal_command(host, &mut running.child, pid, GroupSignal::Terminate)?;
     match tokio::time::timeout(TERMINATION_GRACE, host.wait(&mut running.child)).await {
         Ok(Ok(status)) => {
-            #[cfg(unix)]
             host.signal_group(pid, GroupSignal::Kill)?;
             return Ok(Reaped::Exited(status));
         }
@@ -369,73 +365,21 @@ pub(super) fn guarded_directory(
     })
 }
 
-/// The shell invocation of a guided command: sandboxed read-only on macOS;
-/// other hosts only run fully accessible commands.
-#[cfg_attr(
-    target_os = "macos",
-    expect(
-        clippy::unnecessary_wraps,
-        reason = "only macOS can sandbox every access mode; other hosts refuse read-only commands"
-    )
-)]
-fn invocation(input: &GuidedCommandInput) -> Result<(String, Vec<String>), CommandError> {
-    #[cfg(target_os = "macos")]
-    {
-        if input.access == GuidedAccess::FullAccessContained {
-            Ok(("/bin/sh".into(), vec!["-lc".into(), input.command.clone()]))
-        } else {
-            let profile = [
-                "(version 1)",
-                "(allow default)",
-                "(deny file-write*)",
-                "(allow file-write-data (literal \"/dev/null\"))",
-                "(deny network*)",
-            ]
-            .join("\n");
-            Ok((
-                "/usr/bin/sandbox-exec".into(),
-                vec![
-                    "-p".into(),
-                    profile,
-                    "/bin/sh".into(),
-                    "-lc".into(),
-                    input.command.clone(),
-                ],
-            ))
-        }
-    }
-    #[cfg(windows)]
-    {
-        if input.access != GuidedAccess::FullAccessContained {
-            return Err(CommandError::new(
-                "command_observation_isolation_unavailable",
+/// The login-shell invocation of a guided command. Read-only commands run in
+/// the host sandbox; a host without one refuses them.
+fn invocation(input: &GuidedCommandInput) -> Result<command_sandbox::Invocation, CommandError> {
+    let access = match input.access {
+        GuidedAccess::FullAccessContained => ShellAccess::Full,
+        GuidedAccess::ReadOnlyObservation => ShellAccess::ReadOnly,
+    };
+    let invocation = command_sandbox::login_shell(&input.command, access, &input.host_environment)
+        .map_err(|SandboxError::ReadOnlyUnavailable| {
+            CommandError::new(
+                CommandCode::CommandObservationIsolationUnavailable,
                 "This host cannot enforce the admitted read-only local command boundary.",
-            ));
-        }
-        let executable = input
-            .host_environment
-            .iter()
-            .find(|(key, _)| key.eq_ignore_ascii_case("ComSpec"))
-            .map(|(_, value)| value.as_str())
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .unwrap_or("cmd.exe")
-            .to_owned();
-        return Ok((
-            executable,
-            vec!["/d".into(), "/s".into(), "/c".into(), input.command.clone()],
-        ));
-    }
-    #[cfg(all(not(target_os = "macos"), not(windows)))]
-    {
-        if input.access != GuidedAccess::FullAccessContained {
-            return Err(CommandError::new(
-                "command_observation_isolation_unavailable",
-                "This host cannot enforce the admitted read-only local command boundary.",
-            ));
-        }
-        Ok(("/bin/sh".into(), vec!["-lc".into(), input.command.clone()]))
-    }
+            )
+        })?;
+    Ok(invocation)
 }
 
 pub(super) fn guided_timeout(value: Option<f64>) -> Duration {

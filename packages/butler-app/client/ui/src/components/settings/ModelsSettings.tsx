@@ -1,110 +1,111 @@
 import { useAppLocale } from "@/app/copy.ts";
+import { useState } from "react";
+import { DisclosureRow } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
-import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
-import { runtimeModels } from "@/app/utils.ts";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
+import { BackupModelsSummary } from "./BackupModelsSummary";
 import { ButlerModelFields } from "./ButlerModelFields";
-import { FallbackConsolidationFields } from "./FallbackConsolidationFields";
+import { MemoryCleanupFields } from "./MemoryCleanupFields";
 import { PermissionsFields } from "./PermissionsFields";
+import { SavedKeysRows } from "./SavedKeysRows";
+import { useSavedKeys } from "./hooks/useSavedKeys";
 import { ModelAddEditPage } from "./ModelAddEditPage";
 import { ModelManagementPage } from "./ModelManagementPage";
 import { WorkerProfileControls } from "./WorkerProfileControls";
 import { WorkerProfileEditor } from "./WorkerProfileEditor";
-import {
-  WORKER_PROFILES_LIMIT,
-  createWorkerProfileInNextSlot,
-  removeWorkerProfileById,
-} from "./workerProfileUpdates";
-import type { WorkerProfile } from "@/app/types.ts";
+import { useWorkerProfiles } from "./hooks/useWorkerProfiles";
 
+/**
+ * The Models page. The main model, backup models, saved API keys and
+ * permissions are always visible; memory cleanup and worker profiles sit in a collapsed Advanced
+ * disclosure on the same page.
+ */
 export function ModelsSettings() {
   useAppLocale();
   const draft = useSettingsUIStore((state) => state.draft);
-  const update = useSettingsUIStore((state) => state.update);
   const modelRoute = useSettingsUIStore((state) => state.modelRoute);
-  const setSettings = useButlerStore((state) => state.setSettings);
-  const modelCatalog = useButlerStore((state) => state.modelCatalog);
-
-  const settingsCopy = appCopy.settings;
-  const models = runtimeModels(modelCatalog);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   if (!draft) return null;
-  const workerProfiles = draft.worker_profiles ?? [];
 
   if (modelRoute.page === "management") return <ModelManagementPage />;
   if (modelRoute.page === "add") return <ModelAddEditPage />;
   if (modelRoute.page === "edit") {
     return <ModelAddEditPage modelRef={modelRoute.modelRef} />;
   }
+  return <ModelsRootPage advancedOpen={advancedOpen} onToggleAdvanced={() => setAdvancedOpen(!advancedOpen)} />;
+}
 
-  function profileAt(index: number, partial: Partial<WorkerProfile>) {
-    return workerProfiles.map((profile, profileIndex) =>
-      profileIndex === index ? { ...profile, ...partial } : profile,
-    );
-  }
-
-  function updateProfile(index: number, partial: Partial<WorkerProfile>) {
-    update({ worker_profiles: profileAt(index, partial) }, setSettings);
-  }
-
-  function addProfile() {
-    const created = createWorkerProfileInNextSlot(workerProfiles, models);
-    if (created) {
-      update({ worker_profiles: [...workerProfiles, created] }, setSettings);
-    }
-  }
-
-  function deleteProfile(id: string) {
-    const remaining = removeWorkerProfileById(workerProfiles, id);
-    if (remaining.length !== workerProfiles.length) {
-      update({ worker_profiles: remaining }, setSettings);
-    }
-  }
-
+/** Mounted on each return from Add or Manage, so the saved keys load fresh. */
+function ModelsRootPage({ advancedOpen, onToggleAdvanced }: { advancedOpen: boolean; onToggleAdvanced: () => void }) {
+  const workers = useWorkerProfiles();
+  const savedKeys = useSavedKeys();
+  const settingsCopy = appCopy.settings;
   const sections = settingsCopy.pageSections;
   return (
     <SettingsPage>
       <SettingsSection id="butler-model" kind="form" title={sections.butlerModel}>
         <ButlerModelFields />
       </SettingsSection>
-      <SettingsSection
-        id="fallback-consolidation"
-        kind="form"
-        title={sections.fallbackConsolidation}
-        description={settingsCopy.pageSectionDescriptions.fallbackConsolidation}
-      >
-        <FallbackConsolidationFields />
+      <SettingsSection id="backup-models" kind="form" title={sections.backupModels}>
+        <BackupModelsSummary />
       </SettingsSection>
+      {savedKeys.state !== "unsupported" && (
+        <SettingsSection
+          id="saved-keys"
+          kind="list"
+          title={sections.savedKeys}
+          state={savedKeys.state === "ready" && savedKeys.credentials.length === 0 ? "empty" : savedKeys.state}
+          emptyMessage={settingsCopy.savedKeys.empty}
+          onRetry={() => void savedKeys.reload()}
+        >
+          <SavedKeysRows keys={savedKeys} />
+        </SettingsSection>
+      )}
       <SettingsSection id="permissions" kind="form" title={sections.permissions}>
         <PermissionsFields />
       </SettingsSection>
-      <SettingsSection
-        id="worker-profiles"
-        kind="list"
-        title={sections.workerProfiles}
-        description={workerProfiles.length < WORKER_PROFILES_LIMIT
-          ? undefined
-          : settingsCopy.workerProfilesPanel.addLimitReached}
-        actions={
-          <WorkerProfileControls
-            canAdd={workerProfiles.length < WORKER_PROFILES_LIMIT}
-            maxSimultaneousWorkers={draft.max_simultaneous_workers}
-            onAdd={() => addProfile()}
-            onMaxChange={(value) => update({ max_simultaneous_workers: value }, setSettings)}
-          />
-        }
-      >
-        {workerProfiles.map((profile, index) => (
-          <WorkerProfileEditor
-            key={profile.id}
-            profile={profile}
-            models={models}
-            onUpdate={(partial) => updateProfile(index, partial)}
-            onDelete={() => deleteProfile(profile.id)}
-          />
-        ))}
+      <SettingsSection id="advanced-models" kind="form" title={settingsCopy.modelsAdvanced.title}>
+        <DisclosureRow
+          surface="plain"
+          data-test-class="settings-models-advanced"
+          title={settingsCopy.modelsAdvanced.contents}
+          open={advancedOpen}
+          onToggle={onToggleAdvanced}
+        />
       </SettingsSection>
+      {advancedOpen && (
+        <>
+          <SettingsSection id="memory-cleanup" kind="form" title={sections.memoryCleanup}>
+            <MemoryCleanupFields />
+          </SettingsSection>
+          <SettingsSection
+            id="worker-profiles"
+            kind="list"
+            title={sections.workerProfiles}
+            description={workers.canAdd ? undefined : settingsCopy.workerProfilesPanel.addLimitReached}
+            actions={
+              <WorkerProfileControls
+                canAdd={workers.canAdd}
+                maxSimultaneousWorkers={workers.maxSimultaneousWorkers}
+                onAdd={workers.addProfile}
+                onMaxChange={workers.setMaxSimultaneousWorkers}
+              />
+            }
+          >
+            {workers.profiles.map((profile, index) => (
+              <WorkerProfileEditor
+                key={profile.id}
+                profile={profile}
+                models={workers.models}
+                onUpdate={(partial) => workers.updateProfile(index, partial)}
+                onDelete={() => workers.deleteProfile(profile.id)}
+              />
+            ))}
+          </SettingsSection>
+        </>
+      )}
     </SettingsPage>
   );
 }

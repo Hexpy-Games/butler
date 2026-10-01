@@ -1,0 +1,52 @@
+---
+title: "Remote access"
+description: "Connect to Butler from another computer, including WSL and servers."
+section: advanced
+order: 2
+status: published
+---
+
+Remote access is off by default. On the computer running Butler, Settings → Security lets you enable access from other computers, reveal or rotate the connection code, and manage allowed hosts. These settings require a local client; a browser on another computer cannot manage them.
+
+## Headless / WSL / server
+
+Run these commands in a terminal on the computer running Butler:
+
+```bash
+butler start
+butler remote enable
+butler remote code
+```
+
+On another computer, open `http://HOST:PORT` and enter the connection code. Use the server address or an address forwarded to WSL for `HOST`, and the port shown in the LAN URLs for `PORT`. Configure any firewall or port forwarding separately. Enable access only on trusted networks: anyone with the code can connect.
+
+The code is printed only to your local terminal. Keep it private and avoid capturing its output in logs.
+
+```bash
+butler remote status --json
+butler remote code --json
+butler remote code --rotate        # Confirm; invalidates the old code
+butler remote code --rotate --yes  # Skip confirmation
+butler remote disable
+```
+
+Status includes enabled state, bind addresses, LAN URLs, per-address bind errors, allowed hosts, and the masked code with its creation date. JSON code output includes the full secret. Rotation invalidates the old code and existing browser sessions. Commands need the running service and never start it automatically; if unavailable, run `butler start`.
+
+## Forwarders and allowed hosts
+
+When a WSL port forwarder, tunnel, or reverse proxy presents a different Host, add that name or IP to `allowedHosts`. For example, add the Windows host IP used to forward to WSL:
+
+```bash
+butler remote hosts add 192.0.2.10
+butler remote hosts remove 192.0.2.10
+```
+
+Allowed hosts still require the connection code. You manage the forwarder and its security yourself.
+
+## App port
+
+Currently `butler config get app.port` reports missing. The App port lives in `gateways/app.json` under `config.port` in the data folder; a change takes effect on restart. Do not edit the running service's configuration files directly.
+
+## Related
+
+- [Agent CLI](/en/help/advanced/agent-cli/)

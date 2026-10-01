@@ -1,0 +1,25 @@
+{
+  "id": "butler.grain",
+  "name": { "en": "Grain", "ko": "그레인" },
+  "version": "1.0.0",
+  "engine": 1,
+  "motion": "static",
+  "image": "required",
+  "params": [
+    {
+      "key": "amount",
+      "label": { "en": "Amount", "ko": "강도" },
+      "type": "number",
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "default": 0.5
+    },
+    {
+      "key": "mono",
+      "label": { "en": "Black and white", "ko": "흑백" },
+      "type": "boolean",
+      "default": false
+    }
+  ]
+}

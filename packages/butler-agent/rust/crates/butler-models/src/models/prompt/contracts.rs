@@ -1,5 +1,6 @@
 use std::{future::Future, pin::Pin};
 
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
 
@@ -140,6 +141,26 @@ pub struct PromptUsageMetricInput<'a> {
     pub prompt_cache_retention: Option<PromptCacheRetention>,
     pub butler_data: Option<&'a str>,
     pub usage_attribution: Option<&'a PromptUsageAttribution<'a>>,
+    /// Reasoning tokens the provider reported; a subset of the output tokens.
+    pub reasoning_tokens: Option<f64>,
+    /// The part of `cache_write_tokens` written to a 1-hour cache (Anthropic).
+    pub cache_write_1h_tokens: Option<f64>,
+    /// How the request was billed.
+    pub auth_mode: Option<UsageAuthMode>,
+}
+
+/// How a provider request was billed.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UsageAuthMode {
+    /// A provider API key: billed per token.
+    ApiKey,
+    /// A subscription login (e.g. ChatGPT): billed against plan quota.
+    Subscription,
+    /// A local model server.
+    Local,
+    /// No credential or an unrecognized route.
+    Unknown,
 }
 
 pub trait PromptUsageMetricSink: Send + Sync {

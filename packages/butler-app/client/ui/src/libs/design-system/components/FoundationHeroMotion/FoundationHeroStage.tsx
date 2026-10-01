@@ -1,0 +1,52 @@
+import { useRef, type ComponentType } from "react";
+import { cn } from "../../lib/utils";
+import { FOUNDATION_FEATURE_HEROES, type FoundationHeroLang, type FoundationHeroMotionProps, type FoundationHeroVariant } from "./FoundationHeroMotion";
+import { useHeroPlayback } from "./heroPlayback";
+import { ColorHero } from "./heroes/color/ColorHero";
+import { FocusHero } from "./heroes/focus/FocusHero";
+import { IconHero as IconographyHero } from "./heroes/iconography/IconHero";
+import { LayersHero } from "./heroes/layers/LayersHero";
+import { LayoutHero } from "./heroes/layout/LayoutHero";
+import { MotionHero } from "./heroes/motion/MotionHero";
+import { RadiusHero } from "./heroes/radius/RadiusHero";
+import { SizingHero } from "./heroes/sizing/SizingHero";
+import { SpacingHero } from "./heroes/spacing/SpacingHero";
+import { TypographyHero } from "./heroes/TypographyHero";
+import styles from "./FoundationHeroMotion.module.css";
+
+export const FOUNDATION_HERO_RENDERERS: Record<FoundationHeroVariant, ComponentType<{ lang: FoundationHeroLang }>> = {
+  color: ColorHero,
+  typography: TypographyHero,
+  spacing: SpacingHero,
+  sizing: SizingHero,
+  radius: RadiusHero,
+  iconography: IconographyHero,
+  focus: FocusHero,
+  motion: MotionHero,
+  "z-index": LayersHero,
+  layout: LayoutHero,
+};
+
+/**
+ * The hero itself, loaded on demand by FoundationHeroMotion so its graphics
+ * and keyframes stay out of the app's eager bundle.
+ */
+export default function FoundationHeroStage({ variant, still = false, lang = "en", className, ...props }: FoundationHeroMotionProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const playback = useHeroPlayback(ref, still);
+  const Hero = FOUNDATION_HERO_RENDERERS[variant];
+  return (
+    <div
+      {...props}
+      ref={ref}
+      className={cn(styles.stage, className)}
+      data-slot="foundation-hero"
+      data-hero-variant={variant}
+      data-feature={FOUNDATION_FEATURE_HEROES.has(variant) ? "" : undefined}
+      data-hero-state={playback}
+      aria-hidden="true"
+    >
+      <Hero lang={lang} />
+    </div>
+  );
+}

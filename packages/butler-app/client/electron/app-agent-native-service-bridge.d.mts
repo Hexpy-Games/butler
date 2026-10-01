@@ -8,6 +8,8 @@ export function createAppAgentNativeServiceBridge(options?: {
   systemdUnit?: string;
   getPort?: () => number;
   getAppVersion?: () => string | null | undefined;
+  /** Dev renderer origin (Vite) the gateway must allow; null in production. */
+  getDevOrigin?: () => string | null | undefined;
   ensureRuntimePointer?: () => {
     rollbackActivation?: (error?: Error) => void;
   } | void;

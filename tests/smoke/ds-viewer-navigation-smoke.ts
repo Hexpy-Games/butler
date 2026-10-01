@@ -7,6 +7,7 @@ import { createNativeAppServer } from "../support/native-app-server.ts";
 // DS Viewer deep links (page/theme/locale/width/motion, #anchors), toolbar URL writes, "/" filter and Cmd+K palette.
 // The Overview hero's fluid background follows the chrome theme it sits in (every viewer theme, both system
 // schemes), live when the hero's theme toggle flips, and its pixels are dark in dark and light in light.
+// The Wallpaper draws on its main canvas; a hidden sibling canvas only holds crossfades, so probes target the main one.
 
 const uiRoot = resolve(process.cwd(), "packages", "butler-app", "client", "ui", "dist");
 const tempDir = mkdtempSync(join(tmpdir(), "butler-ds-viewer-navigation-"));
@@ -28,6 +29,9 @@ async function assertDeepLinks(page: Page, baseUrl: string, label: string): Prom
     waitUntil: "networkidle",
   });
   await page.locator('[data-ds-detail="Button"]').waitFor({ state: "visible" });
+  // The viewer controls live in the View options popover (titlebar); phones leave out the width presets.
+  const phone = (page.viewportSize()?.width ?? 1440) <= 640;
+  await openViewOptions(page);
   const item = await page.evaluate(() => {
     const canvases = [...document.querySelectorAll<HTMLElement>('[data-ds-detail="Button"] [data-ds-examples] [data-ds-fixture-canvas]')];
     const pressed = [...document.querySelectorAll('[data-ds-toolbar] [role="radio"][aria-checked="true"]')]
@@ -54,7 +58,10 @@ async function assertDeepLinks(page: Page, baseUrl: string, label: string): Prom
   assert(item.maxCanvasWidth <= 375, `${label}: width=375 deep link rendered ${item.maxCanvasWidth}px canvases`);
   assert(item.importLine.includes('import { Button } from "@/butler-ds"'), `${label}: import line is missing`);
   assert(item.examplesBeforeReadme, `${label}: item page must show examples before the README`);
-  assert(["Dark", "KO", "375"].every((value) => item.pressed.includes(value)), `${label}: toolbar does not reflect the deep link`);
+  assert(["Dark", "KO", ...phone ? [] : ["375"]].every((value) => item.pressed.includes(value)),
+    `${label}: View options do not reflect the deep link (${item.pressed.join(", ")})`);
+  assert(!phone || !item.pressed.includes("375"), `${label}: phones must not offer width presets`);
+  await closeViewOptions(page);
 
   await page.goto(viewerUrl(baseUrl, { page: "navrow", theme: "side-by-side" }), { waitUntil: "networkidle" });
   await page.locator('[data-ds-detail="NavRow"]').waitFor({ state: "visible" });
@@ -62,9 +69,14 @@ async function assertDeepLinks(page: Page, baseUrl: string, label: string): Prom
     [...story.querySelectorAll("[data-ds-theme]")].map((frame) => frame.getAttribute("data-ds-theme")).join(",")));
   assert(frames.length > 0 && frames.every((value) => value === "light,dark"), `${label}: side-by-side should render light and dark frames`);
 
+  await openViewOptions(page);
   await page.locator("[data-ds-toolbar]").getByRole("radiogroup", { name: "Theme" }).getByRole("radio", { name: "Light" }).click();
-  await page.locator("[data-ds-toolbar]").getByRole("radiogroup", { name: "Width" }).getByRole("radio", { name: "Wide" }).click();
-  await page.waitForFunction(() => new URLSearchParams(window.location.search).get("width") === "wide");
+  await page.waitForFunction(() => new URLSearchParams(window.location.search).get("theme") === "light");
+  if (!phone) {
+    await page.locator("[data-ds-toolbar]").getByRole("radiogroup", { name: "Width" }).getByRole("radio", { name: "Wide" }).click();
+    await page.waitForFunction(() => new URLSearchParams(window.location.search).get("width") === "wide");
+  }
+  await closeViewOptions(page);
   assert(param(page, "theme") === "light", `${label}: toolbar theme was not written to the URL`);
   assert(param(page, "page") === "navrow", `${label}: toolbar changes must keep the page param`);
 
@@ -97,19 +109,32 @@ async function assertDeepLinks(page: Page, baseUrl: string, label: string): Prom
     viewer: document.querySelector("[data-ds-viewer]")?.getAttribute("data-motion"),
   }));
   assert(motion.body === "reduced" && motion.viewer === "reduced", `${label}: motion=reduced deep link was not applied`);
+  await openViewOptions(page);
   await page.locator("[data-ds-toolbar]").getByRole("radiogroup", { name: "Motion" }).getByRole("radio", { name: "Full" }).click();
   // Defaults are dropped from the URL, so Full clears the motion param.
   await page.waitForFunction(() => document.body.dataset.motion === "full" &&
     new URLSearchParams(window.location.search).get("motion") === null);
+  await closeViewOptions(page);
 
   await page.goto(viewerUrl(baseUrl, { page: "components/Button#states" }), { waitUntil: "networkidle" });
   await page.locator('[data-ds-detail="Button"] [data-ds-states-matrix]').first().waitFor({ state: "visible" });
   await page.waitForFunction(() => {
-    // The anchor lands just below the sticky toolbar, not under it.
+    // The anchor lands at the top of the page scroller, below the titlebar row, not under it.
     const top = document.getElementById("states")?.getBoundingClientRect().top ?? -1;
-    const toolbar = document.querySelector("main")?.firstElementChild?.getBoundingClientRect().bottom ?? 0;
-    return top >= toolbar - 2 && top < window.innerHeight / 2;
+    const scroller = document.querySelector("[data-ds-scroll]")?.getBoundingClientRect().top ?? 0;
+    const titlebar = document.querySelector('[data-test-class~="custom-titlebar"]')?.getBoundingClientRect().bottom ?? 0;
+    return top >= scroller - 2 && top >= titlebar - 2 && top < window.innerHeight / 2;
   });
+}
+
+async function openViewOptions(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "View options" }).click();
+  await page.locator("[data-ds-view-options-panel]").waitFor({ state: "visible" });
+}
+
+async function closeViewOptions(page: Page): Promise<void> {
+  await page.keyboard.press("Escape");
+  await page.locator("[data-ds-view-options-panel]").waitFor({ state: "detached" });
 }
 
 async function assertSearch(page: Page, baseUrl: string, label: string): Promise<void> {
@@ -146,7 +171,10 @@ async function assertSearch(page: Page, baseUrl: string, label: string): Promise
   await palette.waitFor({ state: "detached" });
 
   const blocksRow = page.locator('[data-ds-nav-item="blocks"]');
-  if (!(await blocksRow.isVisible())) await page.getByRole("button", { name: "Toggle navigation" }).click();
+  // The palette's navigation closes the phone drawer (it may still be sliding out); reopen it.
+  if (await page.locator('[data-ds-viewer][data-menu-open="false"]').count()) {
+    await page.getByRole("button", { name: "Open navigation" }).click();
+  }
   await blocksRow.click();
   await page.locator('[data-ds-gallery="blocks"]').waitFor({ state: "visible" });
   assert(param(page, "page") === "blocks", `${label}: sidebar navigation did not write the page param`);
@@ -155,33 +183,60 @@ async function assertSearch(page: Page, baseUrl: string, label: string): Promise
 type HeroState = { chrome: string | undefined; tone: string | null; luminance: number | null };
 
 async function heroState(page: Page): Promise<HeroState> {
-  return page.evaluate(() => {
-    const canvas = document.querySelector<HTMLCanvasElement>("[data-ds-hero] canvas");
+  const meta = await page.evaluate(() => {
+    const canvas = document.querySelector<HTMLCanvasElement>('[data-ds-hero] canvas[data-test-class~="wallpaper"]');
     const chrome = document.body.className.match(/theme-(light|dark)/u)?.[1];
-    if (!canvas) return { chrome, tone: null, luminance: null };
-    // Mean luminance of the rendered fluid; null when WebGL is unavailable (blank buffer).
+    const hero = document.querySelector("[data-ds-hero]")?.getBoundingClientRect();
+    return { chrome, tone: canvas?.getAttribute("data-tone") ?? null, hero: hero ? { x: hero.x, y: hero.y, width: hero.width } : null };
+  });
+  if (!meta.tone || !meta.hero) return { chrome: meta.chrome, tone: meta.tone, luminance: null };
+  // The Wallpaper engine keeps no drawing buffer between frames (alpha off, preserveDrawingBuffer off), so its
+  // canvas reads back black. Sample the composited page instead: a strip of the hero's top padding, where only
+  // the fluid shows.
+  const png = await page.screenshot({ clip: { x: meta.hero.x + 24, y: meta.hero.y + 4, width: meta.hero.width - 48, height: 16 } });
+  const luminance = await page.evaluate(async (data) => {
+    const image = new Image();
+    image.src = `data:image/png;base64,${data}`;
+    await image.decode();
     const probe = document.createElement("canvas");
     probe.width = 32;
-    probe.height = 32;
+    probe.height = 8;
     const context = probe.getContext("2d")!;
-    context.drawImage(canvas, 0, 0, 32, 32);
-    const pixels = context.getImageData(0, 0, 32, 32).data;
+    context.drawImage(image, 0, 0, 32, 8);
+    const pixels = context.getImageData(0, 0, 32, 8).data;
     let sum = 0;
-    let opaque = 0;
     for (let index = 0; index < pixels.length; index += 4) {
-      if (pixels[index + 3] === 0) continue;
-      opaque += 1;
       sum += (0.2126 * pixels[index]! + 0.7152 * pixels[index + 1]! + 0.0722 * pixels[index + 2]!) / 255;
     }
-    return { chrome, tone: canvas.getAttribute("data-tone"), luminance: opaque ? sum / opaque : null };
-  });
+    return sum / (pixels.length / 4);
+  }, png.toString("base64"));
+  return { chrome: meta.chrome, tone: meta.tone, luminance };
 }
 
-function assertHero(state: HeroState, label: string): void {
-  assert(state.chrome && state.tone === state.chrome, `${label}: hero fluid tone ${state.tone} != chrome theme ${state.chrome}`);
-  if (state.luminance === null) return;
+function heroProblem(state: HeroState, label: string): string | null {
+  if (!state.chrome || state.tone !== state.chrome) return `${label}: hero fluid tone ${state.tone} != chrome theme ${state.chrome}`;
+  if (state.luminance === null) return null;
   const ok = state.chrome === "dark" ? state.luminance < 0.35 : state.luminance > 0.65;
-  assert(ok, `${label}: hero fluid luminance ${state.luminance.toFixed(2)} does not match the ${state.chrome} theme`);
+  return ok ? null : `${label}: hero fluid luminance ${state.luminance.toFixed(2)} does not match the ${state.chrome} theme`;
+}
+
+/**
+ * The fluid paints on its own frame loop, so the canvas can lag the tone
+ * attribute by a few frames (many more on a loaded machine): poll until it
+ * matches instead of sampling once after a fixed sleep.
+ */
+async function assertHero(page: Page, label: string, timeoutMs = 10_000): Promise<void> {
+  const started = Date.now();
+  let state = await heroState(page);
+  // No sample yet means "not mounted yet" until the grace period ends; without
+  // WebGL the strip shows the hero's own surface, which follows the theme too.
+  while ((heroProblem(state, label) || (state.luminance === null && Date.now() - started < 2_000)) &&
+    Date.now() - started < timeoutMs) {
+    await page.waitForTimeout(100);
+    state = await heroState(page);
+  }
+  const problem = heroProblem(state, label);
+  assert(!problem, problem ?? "");
 }
 
 async function assertHeroTheme(browser: Awaited<ReturnType<typeof chromium.launch>>, baseUrl: string): Promise<void> {
@@ -189,17 +244,16 @@ async function assertHeroTheme(browser: Awaited<ReturnType<typeof chromium.launc
     for (const theme of ["system", "light", "dark", "side-by-side"] as const) {
       const label = `hero system=${colorScheme} viewer=${theme}`;
       const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, colorScheme });
+      await server.signIn(page);
       await page.goto(viewerUrl(baseUrl, { page: "overview", motion: "reduced", ...(theme === "system" ? {} : { theme }) }), { waitUntil: "networkidle" });
-      await page.locator("[data-ds-hero] canvas").waitFor({ state: "attached" });
-      await page.waitForTimeout(150);
-      assertHero(await heroState(page), label);
+      await page.locator('[data-ds-hero] canvas[data-test-class~="wallpaper"]').waitFor({ state: "attached" });
+      await assertHero(page, label);
       if (theme === "light" || theme === "dark") {
         // The hero's own toggle flips the chrome; the fluid follows without a reload.
         const next = theme === "light" ? "Dark" : "Light";
         await page.getByRole("radiogroup", { name: "Hero theme" }).getByRole("radio", { name: next }).click();
-        await page.waitForFunction((tone) => document.querySelector("[data-ds-hero] canvas")?.getAttribute("data-tone") === tone, next.toLowerCase());
-        await page.waitForTimeout(150);
-        assertHero(await heroState(page), `${label} -> ${next}`);
+        await page.waitForFunction((tone) => document.querySelector('[data-ds-hero] canvas[data-test-class~="wallpaper"]')?.getAttribute("data-tone") === tone, next.toLowerCase());
+        await assertHero(page, `${label} -> ${next}`);
       }
       await page.close();
     }
@@ -217,6 +271,7 @@ try {
     { label: "mobile-375", width: 375, height: 812 },
   ]) {
     const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height } });
+    await server.signIn(page);
     await assertDeepLinks(page, server.url, viewport.label);
     await assertSearch(page, server.url, viewport.label);
     await page.close();

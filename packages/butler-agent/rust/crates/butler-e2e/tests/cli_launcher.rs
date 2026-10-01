@@ -14,7 +14,6 @@
 )]
 
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::{Command, Output, Stdio};
 
@@ -23,7 +22,7 @@ use butler_e2e::e2e::scenario::Setup;
 
 /// Stand-in for the stale Bun launcher: it fails the way the real one does.
 const STALE_LAUNCHER: &str = "#!/bin/sh\n\
-echo 'error: Module not found \"/Users/owner/butler/bin/butler.js\"' >&2\n\
+echo 'Could not launch Butler CLI with $BUTLER_BUN: $BUTLER_HOME/bin/butler.js' >&2\n\
 exit 1\n";
 
 /// Marks the sandbox installation as an installed payload (what the App
@@ -42,8 +41,7 @@ fn mark_installed(install: &Path) -> Result<(), HarnessError> {
 }
 
 fn write_launcher(path: &Path, contents: &str) -> Result<(), HarnessError> {
-    fs::write(path, contents)?;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o755))?;
+    butler_e2e::e2e::executable::write_script(path, contents)?;
     Ok(())
 }
 
@@ -66,6 +64,10 @@ fn run_launcher(launcher: &Path, home: &Path, args: &[&str]) -> Result<Output, H
 #[tokio::test]
 async fn ins_01_stale_launcher_is_replaced_at_start() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        butler_platform::command_launcher::HAS_PRE_NATIVE_LAUNCHER,
+        "this host has no pre-native launcher at this path"
+    );
     let setup = Setup::new("INS-01")?;
     let bin = setup.sandbox.data.join("bin");
     fs::create_dir_all(&bin)?;
@@ -112,6 +114,10 @@ async fn ins_01_stale_launcher_is_replaced_at_start() -> Result<(), HarnessError
 #[tokio::test]
 async fn ins_01_launcher_repair_touches_only_butlers_launcher() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        butler_platform::command_launcher::HAS_PRE_NATIVE_LAUNCHER,
+        "this host has no pre-native launcher at this path"
+    );
     let setup = Setup::new("INS-01-GUARDS")?;
     let bin = setup.sandbox.data.join("bin");
     fs::create_dir_all(&bin)?;

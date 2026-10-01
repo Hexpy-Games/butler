@@ -1,8 +1,9 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { memo } from "react";
+import { memo, useCallback } from "react";
 import type { MessageRecord } from "@/app/types.ts";
 import { appCopy } from "@/app/copy.ts";
 import { visibleSystemMessageText } from "@/app/system-event-message.ts";
+import { refreshSessionFileUrls } from "@/app/messageFileRefresh.ts";
 import { Stack, Tag } from "@/butler-ds";
 import {
   canRetryWithCurrentControls,
@@ -10,7 +11,7 @@ import {
   isRetryableFailureMessage,
 } from "@/app/utils.ts";
 import { AssistantResponseFooter } from "./AssistantResponseFooter";
-import { BranchMessageActions } from "./BranchMessageActions";
+import { AssistantBranchActions } from "./AssistantBranchActions";
 import {
   AssistantFailureNotice,
   MessageRetryActionsContainer,
@@ -24,6 +25,7 @@ import { MessageMarkdown } from "./MessageMarkdown";
 import { PlanDocumentMessage } from "./PlanDocumentMessage";
 import { UserMessageText } from "./UserMessageText";
 import type { AssistantFooterMeta } from "./messageFooterMeta";
+import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
 import { StewardParentProgress } from "./StewardParentProgress";
 import type { AnchoredStewardProgress } from "./stewardParentProgressProjection";
 
@@ -44,6 +46,8 @@ function MessageContentComponent({
 }: MessageContentProps) {
   useAppLocale();
   const artifacts = message.artifacts ?? [];
+  const { chat_id: sessionId = "", cursor } = message;
+  const refreshFileUrls = useCallback(() => refreshSessionFileUrls(sessionId, { cursor }), [cursor, sessionId]);
   const failureNotice = isAssistantFailureNoticeMessage(message);
   return (
     <>
@@ -64,18 +68,24 @@ function MessageContentComponent({
                 <AssistantFailureNotice message={message} />
               ) : (
                 <MessageMarkdown
+                  artifacts={message.artifacts}
                   attachments={message.attachments}
+                  refreshFileUrls={refreshFileUrls}
                   streaming={message.status === "streaming"}
                   text={message.text}
                 />
               )}
-              <StewardParentProgress progress={stewardProgress} />
+              <ErrorBoundary fallback={null}>
+                <StewardParentProgress progress={stewardProgress} />
+              </ErrorBoundary>
             </Stack>
           ) : failureNotice ? (
             <AssistantFailureNotice message={message} />
           ) : (
             <MessageMarkdown
+              artifacts={message.artifacts}
               attachments={message.attachments}
+              refreshFileUrls={refreshFileUrls}
               streaming={message.status === "streaming"}
               text={message.text}
             />
@@ -115,10 +125,7 @@ function MessageContentComponent({
           status={message.status}
           suppressTerminalStatus={Boolean(stewardProgress)}
           onCopy={() => onCopyAssistantMessage(message)}
-          actions={message.chat_id === "general" && message.text.trim() &&
-            (!message.status || ["delivered", "completed", "sent"].includes(message.status)) ? (
-              <BranchMessageActions sessionId={message.chat_id} messageId={message.id} />
-            ) : undefined}
+          actions={<AssistantBranchActions message={message} />}
         />
       )}
       {message.role !== "assistant" &&

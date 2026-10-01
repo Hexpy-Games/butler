@@ -3,19 +3,25 @@ import { memo, useMemo, type ComponentProps } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { appCopy } from "@/app/copy.ts";
-import type { MessageFileRef } from "@/app/types.ts";
+import type { MessageFileRef, SessionArtifactSummary } from "@/app/types.ts";
 import { MarkdownContent, MarkdownTable, useStreamingReveal } from "@/butler-ds";
-import { resolveMarkdownImageSource } from "./messageMedia";
+import type { RefreshFileUrls } from "@/hooks/useMessageFileSource.ts";
 import { MarkdownCodeBlock } from "./MarkdownCodeBlock";
+import { MessageInlineImage } from "./MessageInlineImage";
 import { remarkPunctuationBoldSuffix } from "./remarkPunctuationBoldSuffix";
 
 const EMPTY_ATTACHMENTS: MessageFileRef[] = [];
+const EMPTY_ARTIFACTS: SessionArtifactSummary[] = [];
 const MESSAGE_MARKDOWN_PLUGINS: ComponentProps<typeof ReactMarkdown>["remarkPlugins"] = [
   [remarkGfm, { singleTilde: false }],
   remarkPunctuationBoldSuffix,
 ];
 
-function markdownComponents(attachments: MessageFileRef[]) {
+function markdownComponents(
+  attachments: MessageFileRef[],
+  artifacts: SessionArtifactSummary[],
+  refreshFileUrls: RefreshFileUrls | undefined,
+) {
   return {
     pre: MarkdownCodeBlock,
     table: MarkdownTable,
@@ -28,28 +34,25 @@ function markdownComponents(attachments: MessageFileRef[]) {
       </a>
     ),
     img: ({
-      alt,
-      src,
+      node: _node,
       ...props
-    }: React.ImgHTMLAttributes<HTMLImageElement>) => {
-      const resolvedSrc = resolveMarkdownImageSource(src, attachments);
-      if (!resolvedSrc) return null;
-      return (
-        <img
-          {...props}
-          alt={alt ?? ""}
-          data-test-class="markdown-inline-image"
-          decoding="async"
-          loading="lazy"
-          src={resolvedSrc}
-        />
-      );
-    },
+    }: React.ImgHTMLAttributes<HTMLImageElement> & { node?: unknown }) => (
+      <MessageInlineImage
+        {...props}
+        artifacts={artifacts}
+        attachments={attachments}
+        refreshFileUrls={refreshFileUrls}
+      />
+    ),
   };
 }
 
 interface MessageMarkdownProps {
   attachments?: MessageFileRef[];
+  /** Message artifacts, for inline `/message-files/<id>` images. */
+  artifacts?: SessionArtifactSummary[];
+  /** Refreshes signed file URLs once after an inline image fails to load. */
+  refreshFileUrls?: RefreshFileUrls;
   text: string;
   /** Streaming text fades in chunk by chunk. */
   streaming?: boolean;
@@ -57,14 +60,16 @@ interface MessageMarkdownProps {
 
 function MessageMarkdownComponent({
   attachments = EMPTY_ATTACHMENTS,
+  artifacts = EMPTY_ARTIFACTS,
+  refreshFileUrls,
   text,
   streaming = false,
 }: MessageMarkdownProps) {
   useAppLocale();
   const rehypePlugins = useStreamingReveal(text, streaming);
   const components = useMemo(
-    () => markdownComponents(attachments),
-    [attachments],
+    () => markdownComponents(attachments, artifacts, refreshFileUrls),
+    [attachments, artifacts, refreshFileUrls],
   );
   return (
     <section

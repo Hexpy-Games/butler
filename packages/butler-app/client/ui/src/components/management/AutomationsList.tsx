@@ -1,3 +1,6 @@
+import { useEffect } from "react";
+import { hintScheduleLogin } from "@/app/loginSettings";
+import { scheduleFrequency, scheduleNextRun, scheduleState } from "@/app/scheduleLabels";
 import { useAppLocale } from "@/app/copy.ts";
 import {
   Button,
@@ -12,6 +15,7 @@ import {
 } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { AutomationSummary } from "@/app/types.ts";
+import { accessLabel, accessModeIcon, isAccessMode } from "@/components/conversation/accessModeUtils";
 
 interface AutomationsListProps {
   automations: AutomationSummary[];
@@ -31,6 +35,7 @@ export function AutomationsList({
 }: AutomationsListProps) {
   useAppLocale();
   const copy = appCopy.automations;
+  useEffect(() => { if (automations.length) void hintScheduleLogin(); }, [automations.length]);
 
   return (
     <ManagementPage dataTestClass="automations-view">
@@ -55,9 +60,15 @@ export function AutomationsList({
               stretch
             >
               <ListRow
+                icon={isAccessMode(automation.access_mode) ? accessModeIcon(automation.access_mode) : undefined}
                 title={automation.title}
                 description={automation.target_label}
-                meta={`${automation.state} / ${automation.interval_label}`}
+                meta={[
+                  scheduleState(automation.state),
+                  scheduleFrequency(automation),
+                  scheduleNextRun(automation),
+                  isAccessMode(automation.access_mode) ? accessLabel(automation.access_mode) : "",
+                ].filter(Boolean).join(" · ")}
               />
             </Clickable>
           ))

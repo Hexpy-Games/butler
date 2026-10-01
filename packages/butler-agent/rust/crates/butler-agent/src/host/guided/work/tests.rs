@@ -117,6 +117,7 @@ async fn real_sqlite_work_final_reconcile_persists_current_open_disposition() {
         authority_request_ref: None,
         authority_client_message_id: None,
         app_queue_claim_id: None,
+        resume: false,
         preparation_cancellation: Default::default(),
     };
     repos

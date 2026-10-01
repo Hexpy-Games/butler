@@ -12,7 +12,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use super::{
-    AppApplication, AppStorageError, GatewayApplicationError, app_error, queue,
+    AppApplication, AppStorageError, CachedSql, GatewayApplicationError, app_error, queue,
     send::ResolvedAppAdmission, settings,
 };
 
@@ -20,19 +20,37 @@ const COMMAND_CAPACITY: usize = 64;
 const FIFO_WINDOW: usize = 20;
 
 #[derive(Clone)]
-pub(super) struct QueueWake(mpsc::Sender<Command>);
+pub(super) struct QueueWake {
+    sender: mpsc::Sender<Command>,
+    cancellation: CancellationToken,
+}
 
 impl QueueWake {
+    #[cfg(debug_assertions)]
+    pub(super) async fn stopped(&self) {
+        self.cancellation.cancelled().await;
+    }
+
+    pub(super) fn is_stopping(&self) -> bool {
+        self.cancellation.is_cancelled()
+    }
+
     pub(super) async fn chat(&self, chat_id: String) -> Result<(), GatewayApplicationError> {
-        self.0
-            .send(Command::Wake(Some(chat_id)))
-            .await
-            .map_err(GatewayApplicationError::internal_from)
+        // Terminal projection still settles claims after queue admission stops.
+        // Persisted waiting input will be dispatched by the next process.
+        if self.cancellation.is_cancelled() {
+            return Ok(());
+        }
+        match self.sender.send(Command::Wake(Some(chat_id))).await {
+            Ok(()) => Ok(()),
+            Err(_) if self.cancellation.is_cancelled() => Ok(()),
+            Err(error) => Err(GatewayApplicationError::internal_from(error)),
+        }
     }
 
     pub(super) async fn drain_chat(&self, chat_id: String) -> Result<(), GatewayApplicationError> {
         let (reply, result) = oneshot::channel();
-        self.0
+        self.sender
             .send(Command::Drain { chat_id, reply })
             .await
             .map_err(GatewayApplicationError::internal_from)?;
@@ -58,7 +76,7 @@ struct CloseState {
     result: Option<Result<(), GatewayApplicationError>>,
 }
 enum Command {
-    Initialize(AppApplication),
+    Initialize(Box<AppApplication>),
     Wake(Option<String>),
     Drain {
         chat_id: String,
@@ -68,9 +86,8 @@ enum Command {
 }
 
 impl QueueDispatcher {
-    pub(super) fn start() -> (Self, QueueWake) {
+    pub(super) fn start(cancellation: CancellationToken) -> (Self, QueueWake) {
         let (sender, receiver) = mpsc::channel(COMMAND_CAPACITY);
-        let cancellation = CancellationToken::new();
         let task = tokio::spawn(run(receiver, cancellation.clone()));
         let owner = Self {
             inner: Arc::new(Inner {
@@ -81,10 +98,16 @@ impl QueueDispatcher {
                     result: None,
                 }),
                 closed: Notify::new(),
-                cancellation,
+                cancellation: cancellation.clone(),
             }),
         };
-        (owner, QueueWake(sender))
+        (
+            owner,
+            QueueWake {
+                sender,
+                cancellation,
+            },
+        )
     }
 
     pub(super) async fn initialize(
@@ -93,7 +116,7 @@ impl QueueDispatcher {
     ) -> Result<(), GatewayApplicationError> {
         self.inner
             .sender
-            .send(Command::Initialize(app))
+            .send(Command::Initialize(Box::new(app)))
             .await
             .map_err(GatewayApplicationError::internal_from)
     }
@@ -166,7 +189,7 @@ async fn run(
             () = cancellation.cancelled() => return Ok(()),
             command = receiver.recv() => match command {
                 Some(Command::Initialize(app)) => {
-                    let app = application.insert(app);
+                    let app = application.insert(*app);
                     if !cycle(&cancellation, app, None).await { return Ok(()); }
                     deadline = next_deadline(app).await.ok().flatten();
                 }
@@ -177,14 +200,9 @@ async fn run(
                     }
                 }
                 Some(Command::Drain { chat_id, reply }) => {
-                    let result = tokio::select! {
-                        () = cancellation.cancelled() => Err(GatewayApplicationError::internal()),
-                        result = async {
-                            match application.as_ref() {
-                                Some(app) => recover_and_drain(&cancellation, app, Some(&chat_id)).await,
-                                None => Err(GatewayApplicationError::internal()),
-                            }
-                        } => result,
+                    let result = match application.as_ref() {
+                        Some(app) => recover_and_drain(&cancellation, app, Some(&chat_id)).await,
+                        None => Err(GatewayApplicationError::internal()),
                     };
                     if let Some(app) = application.as_ref() {
                         deadline = next_deadline(app).await.ok().flatten();
@@ -204,10 +222,10 @@ async fn run(
 }
 
 async fn cycle(cancellation: &CancellationToken, app: &AppApplication, chat: Option<&str>) -> bool {
-    tokio::select! {
-        () = cancellation.cancelled() => false,
-        _ = recover_and_drain(cancellation, app, chat) => true,
-    }
+    // An admission owns a durable App claim before native enqueue. Dropping it
+    // on close can leave a thinking turn with no native record to recover.
+    let _ = recover_and_drain(cancellation, app, chat).await;
+    !cancellation.is_cancelled()
 }
 
 async fn recover_and_drain(
@@ -215,8 +233,10 @@ async fn recover_and_drain(
     app: &AppApplication,
     only_chat: Option<&str>,
 ) -> Result<(), GatewayApplicationError> {
-    if cancellation.is_cancelled() {
-        return Err(GatewayApplicationError::internal());
+    tokio::select! {
+        biased;
+        () = cancellation.cancelled() => return Ok(()),
+        ready = app.dependencies.executor_readiness.wait_ready() => ready?,
     }
     app.recover_expired().await?;
     let chats = if let Some(chat) = only_chat {
@@ -225,12 +245,16 @@ async fn recover_and_drain(
         app.storage.execute(queued_chats).await.map_err(app_error)?
     };
     for chat in chats {
-        drain_chat(app, &chat).await?;
+        drain_chat(cancellation, app, &chat).await?;
     }
     Ok(())
 }
 
-async fn drain_chat(app: &AppApplication, chat_id: &str) -> Result<(), GatewayApplicationError> {
+async fn drain_chat(
+    cancellation: &CancellationToken,
+    app: &AppApplication,
+    chat_id: &str,
+) -> Result<(), GatewayApplicationError> {
     let chat = chat_id.to_owned();
     let rows = app
         .storage
@@ -238,6 +262,9 @@ async fn drain_chat(app: &AppApplication, chat_id: &str) -> Result<(), GatewayAp
         .await
         .map_err(app_error)?;
     for row in rows {
+        if cancellation.is_cancelled() {
+            return Ok(());
+        }
         let chat = chat_id.to_owned();
         let active = app
             .storage
@@ -293,7 +320,7 @@ async fn drain_chat(app: &AppApplication, chat_id: &str) -> Result<(), GatewayAp
                 },
             )
             .await
-            && !matches!(error, GatewayApplicationError::Public { ref code, .. } if code == "queued_message_claim_lost")
+            && !matches!(error, GatewayApplicationError::Public { ref code, .. } if code == "queued_message_claim_lost" || code == "service_stopping")
         {
             let _ = app
                 .fail_dispatch(&claim, "queued_message_dispatch_failed")
@@ -309,7 +336,7 @@ struct QueuedRow {
     control_resolution_json: String,
 }
 fn queued_rows(db: &mut Connection, chat: &str) -> Result<Vec<QueuedRow>, AppStorageError> {
-    let mut statement = db.prepare("SELECT id,text,control_resolution_json FROM session_queued_messages WHERE chat_id=?1 AND state='queued' AND NOT EXISTS (SELECT 1 FROM session_queue_pauses p WHERE p.chat_id=?1) ORDER BY rowid ASC LIMIT ?2")
+    let mut statement = db.prepare_cached("SELECT id,text,control_resolution_json FROM session_queued_messages WHERE chat_id=?1 AND state='queued' AND NOT EXISTS (SELECT 1 FROM session_queue_pauses p WHERE p.chat_id=?1) ORDER BY rowid ASC LIMIT ?2")
         .map_err(AppStorageError::sqlite)?;
     statement
         .query_map(params![chat, FIFO_WINDOW], |row| {
@@ -323,8 +350,21 @@ fn queued_rows(db: &mut Connection, chat: &str) -> Result<Vec<QueuedRow>, AppSto
         .collect::<Result<Vec<_>, _>>()
         .map_err(AppStorageError::sqlite)
 }
+/// The `state IN` term repeats the predicate of the partial
+/// `session_queued_messages_active_idx`, which makes it applicable.
+pub(super) const QUEUED_CHATS_SQL: &str = "SELECT chat_id FROM session_queued_messages q \
+    WHERE state='queued' AND state IN ('queued','dispatching') AND NOT EXISTS \
+    (SELECT 1 FROM session_queue_pauses p WHERE p.chat_id=q.chat_id) \
+    GROUP BY chat_id ORDER BY MIN(rowid)";
+/// Same index term as `QUEUED_CHATS_SQL`.
+pub(super) const LEASE_DEADLINE_SQL: &str = "SELECT MIN(lease_expires_at) \
+    FROM session_queued_messages WHERE state='dispatching' AND state IN ('queued','dispatching') \
+    AND lease_expires_at IS NOT NULL AND lease_expires_at>?1 \
+    AND (claim_owner IS NULL OR claim_owner<>?2)";
+
 fn queued_chats(db: &mut Connection) -> Result<Vec<String>, AppStorageError> {
-    let mut statement = db.prepare("SELECT chat_id FROM session_queued_messages q WHERE state='queued' AND NOT EXISTS (SELECT 1 FROM session_queue_pauses p WHERE p.chat_id=q.chat_id) GROUP BY chat_id ORDER BY MIN(rowid)")
+    let mut statement = db
+        .prepare_cached(QUEUED_CHATS_SQL)
         .map_err(AppStorageError::sqlite)?;
     statement
         .query_map([], |row| row.get(0))
@@ -333,21 +373,30 @@ fn queued_chats(db: &mut Connection) -> Result<Vec<String>, AppStorageError> {
         .map_err(AppStorageError::sqlite)
 }
 fn session_has_active_turn(db: &mut Connection, chat: &str) -> Result<bool, AppStorageError> {
-    db.query_row("SELECT 1 FROM turns WHERE chat_id=?1 AND state IN ('accepted','thinking','streaming','waiting_for_form','waiting_for_tool','cancelling','retrying') LIMIT 1", [chat], |_| Ok(()))
+    db.query_row_cached("SELECT 1 FROM turns t WHERE chat_id=?1 AND NOT EXISTS (SELECT 1 FROM session_queued_messages q WHERE q.chat_id=t.chat_id AND q.turn_id=t.id AND q.state='queued' AND q.state IN ('queued','dispatching')) AND state IN ('accepted','thinking','streaming','waiting_for_form','waiting_for_tool','cancelling','retrying') LIMIT 1", [chat], |_| Ok(()))
         .optional().map(|row| row.is_some()).map_err(AppStorageError::sqlite)
 }
 async fn next_deadline(app: &AppApplication) -> Result<Option<Duration>, GatewayApplicationError> {
     let owner = app.queue_owner.clone();
     let now = app.dependencies.identity_clock.now_iso();
-    app.storage.execute(move |db| {
-        let value: Option<String> = db.query_row("SELECT MIN(lease_expires_at) FROM session_queued_messages WHERE state='dispatching' AND lease_expires_at IS NOT NULL AND lease_expires_at>?1 AND (claim_owner IS NULL OR claim_owner<>?2)", params![now, owner], |row| row.get(0)).map_err(AppStorageError::sqlite)?;
-        let current = DateTime::parse_from_rfc3339(&now).ok();
-        Ok(value.and_then(|value| {
-            let millis = u64::try_from((DateTime::parse_from_rfc3339(&value).ok()? - current?)
-                .num_milliseconds().max(0)).unwrap_or_default();
-            Some(Duration::from_millis(millis))
-        }))
-    }).await.map_err(app_error)
+    app.storage
+        .execute(move |db| {
+            let value: Option<String> = db
+                .query_row_cached(LEASE_DEADLINE_SQL, params![now, owner], |row| row.get(0))
+                .map_err(AppStorageError::sqlite)?;
+            let current = DateTime::parse_from_rfc3339(&now).ok();
+            Ok(value.and_then(|value| {
+                let millis = u64::try_from(
+                    (DateTime::parse_from_rfc3339(&value).ok()? - current?)
+                        .num_milliseconds()
+                        .max(0),
+                )
+                .unwrap_or_default();
+                Some(Duration::from_millis(millis))
+            }))
+        })
+        .await
+        .map_err(app_error)
 }
 fn lock<T>(value: &Mutex<T>) -> parking_lot::MutexGuard<'_, T> {
     value.lock()

@@ -1,3 +1,5 @@
+//! Vector search over a memory generation for recall and candidate selection.
+
 use std::{path::PathBuf, sync::Arc};
 
 use crate::cognition::CognitionCode;
@@ -18,6 +20,7 @@ use super::{
     search::{search_generation_vectors, search_vector_candidates},
 };
 
+/// Searches the vectors of a memory generation.
 pub struct GenerationVectorAdapter {
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
@@ -25,6 +28,7 @@ pub struct GenerationVectorAdapter {
 }
 
 impl GenerationVectorAdapter {
+    /// An adapter over `data_root` embedding queries with `embedding`.
     pub fn new(
         data_root: PathBuf,
         paths: CognitionPathEnvironment,

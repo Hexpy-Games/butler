@@ -25,23 +25,11 @@ pub async fn read_context_tool(
         .await
 }
 
-pub fn read_usage_tool(data_root: &Path, session_id: &str, since_ts: Option<f64>) -> Value {
-    let activity = health::read_transcript_activity(data_root);
-    usage::read_usage(data_root, since_ts, Some(session_id), &activity)
-}
+pub use usage::{UsageMonitor, UsageMonitorSources};
 
-pub fn read_usage_monitor(
-    data_root: &Path,
-    session_id: Option<&str>,
-    since_ts: Option<f64>,
-) -> Value {
-    let activity = health::read_transcript_activity(data_root);
-    usage::read_usage(
-        data_root,
-        since_ts,
-        session_id.filter(|id| !id.trim().is_empty()),
-        &activity,
-    )
+/// The `read_usage` tool: one runtime session's usage.
+pub fn read_usage_tool(data_root: &Path, session_id: &str, since_ts: Option<f64>) -> Value {
+    UsageMonitor::default().read(data_root, Some(session_id), since_ts, None)
 }
 
 pub struct MetricsStatus {
@@ -79,8 +67,9 @@ pub async fn read_metrics_status(
     let enabled = operational::metrics_enabled(data_root);
     let operational = operational::read_summary(data_root, since_ts, enabled);
     let first_visible = operational::read_first_visible(data_root, since_ts);
-    let transcript_activity = health::read_transcript_activity(data_root);
-    let usage = usage::read_usage(data_root, since_ts, None, &transcript_activity);
+    let monitor = UsageMonitor::default();
+    let transcript_activity = monitor.transcript_activity(data_root);
+    let usage = monitor.read(data_root, None, since_ts, None);
     let context = context::read_context_monitor(data_root, models).await;
     let context_estimate = context::render_context_estimate(resources, data_root, models).await;
     let health = health::read_health(data_root, &transcript_activity);

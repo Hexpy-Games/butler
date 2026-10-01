@@ -9,11 +9,14 @@ use std::{
 use rusqlite::{Connection, params};
 use serde_json::{Map, Value};
 
-use super::storage::AppStorageError;
+use super::event_outbox;
+use super::storage::{AppStorageError, CachedSql};
 use crate::gateway::application::storage::AppStorageCode;
-use crate::gateway::{AppEventEnvelope, EventSubscription};
+use crate::gateway::{AppEventEnvelope, EventSubscription, PublishedEvent};
 
 const APP_PROTOCOL_VERSION: &str = "butler.app.v1";
+
+type Listener = Arc<dyn Fn(Arc<PublishedEvent>) + Send + Sync>;
 
 #[derive(Clone, Default)]
 pub(super) struct EventSubscribers {
@@ -23,7 +26,7 @@ pub(super) struct EventSubscribers {
 #[derive(Default)]
 struct SubscriberState {
     next_id: u64,
-    listeners: HashMap<u64, Arc<dyn Fn(AppEventEnvelope) + Send + Sync>>,
+    listeners: HashMap<u64, Listener>,
     cursor_observer: Option<Arc<dyn Fn(u64) + Send + Sync>>,
 }
 
@@ -31,10 +34,7 @@ impl EventSubscribers {
     pub(super) fn observe_cursor(&self, observer: Arc<dyn Fn(u64) + Send + Sync>) {
         self.inner.lock().cursor_observer = Some(observer);
     }
-    pub(super) fn subscribe(
-        &self,
-        listener: Arc<dyn Fn(AppEventEnvelope) + Send + Sync>,
-    ) -> Box<dyn EventSubscription> {
+    pub(super) fn subscribe(&self, listener: Listener) -> Box<dyn EventSubscription> {
         let mut state = self.inner.lock();
         state.next_id += 1;
         let id = state.next_id;
@@ -45,7 +45,13 @@ impl EventSubscribers {
         })
     }
 
-    pub(super) fn publish(&self, event: &AppEventEnvelope) {
+    /// Live-stream listeners (connected App clients).
+    pub(super) fn listener_count(&self) -> usize {
+        self.inner.lock().listeners.len()
+    }
+
+    /// Delivers a committed event to every listener; they share its frame.
+    pub(super) fn publish(&self, event: &Arc<PublishedEvent>) {
         let (listeners, cursor_observer) = {
             let state = self.inner.lock();
             (
@@ -54,10 +60,10 @@ impl EventSubscribers {
             )
         };
         if let Some(observer) = cursor_observer {
-            observer(event.id);
+            observer(event.id());
         }
         for listener in listeners {
-            listener(event.clone());
+            listener(Arc::clone(event));
         }
     }
 }
@@ -84,7 +90,10 @@ pub(super) fn append(
     created_at: &str,
 ) -> Result<AppEventEnvelope, AppStorageError> {
     let event = append_unpublished(connection, event_type, turn_id, payload, created_at)?;
-    subscribers.publish(&event.clone());
+    let published = Arc::new(PublishedEvent::new(event.clone()));
+    if let Some(published) = event_outbox::defer(connection, subscribers, published) {
+        subscribers.publish(&published);
+    }
     Ok(event)
 }
 
@@ -101,7 +110,7 @@ pub(super) fn append_unpublished(
     })?;
     let turn_id = turn_id.unwrap_or("");
     connection
-        .execute(
+        .execute_cached(
             "INSERT INTO events(type,turn_id,payload_json,created_at) VALUES(?1,?2,?3,?4)",
             params![event_type, turn_id, payload_json, created_at],
         )
@@ -117,13 +126,19 @@ pub(super) fn append_unpublished(
     Ok(event)
 }
 
+/// Delivers an event whose transaction has committed. On the storage lane the
+/// delivery waits for the running operation to return, so events reach
+/// subscribers in the order they were appended.
 pub(super) fn publish(subscribers: &EventSubscribers, event: &AppEventEnvelope) {
-    subscribers.publish(event);
+    let published = Arc::new(PublishedEvent::new(event.clone()));
+    if let Some(published) = event_outbox::defer_committed(subscribers, published) {
+        subscribers.publish(&published);
+    }
 }
 
 pub(super) fn latest(connection: &Connection) -> Result<u64, AppStorageError> {
     connection
-        .query_row("SELECT COALESCE(MAX(id),0) FROM events", [], |row| {
+        .query_row_cached("SELECT COALESCE(MAX(id),0) FROM events", [], |row| {
             row.get(0)
         })
         .map_err(AppStorageError::sqlite)
@@ -136,7 +151,7 @@ pub(super) fn replay(
 ) -> Result<Vec<AppEventEnvelope>, AppStorageError> {
     let cursor = if after.is_finite() { after } else { 0.0 };
     let mut statement = connection
-        .prepare(
+        .prepare_cached(
             "SELECT id,type,payload_json,created_at FROM events \
         WHERE id>?1 ORDER BY id ASC LIMIT ?2",
         )

@@ -260,20 +260,25 @@ fn run_connection_lane(
                 .with_source(error)
             })?;
         }
-        let connection = Connection::open(path).map_err(ConversationError::sqlite)?;
+        let mut connection = Connection::open(path).map_err(ConversationError::sqlite)?;
         connection
-            .busy_timeout(Duration::ZERO)
+            .busy_timeout(Duration::from_millis(5_000))
             .map_err(ConversationError::sqlite)?;
-        connection
-            .pragma_update(None, "journal_mode", "WAL")
+        let journal: String = connection
+            .pragma_query_value(None, "journal_mode", |row| row.get(0))
             .map_err(ConversationError::sqlite)?;
+        if journal != "wal" {
+            connection
+                .pragma_update(None, "journal_mode", "WAL")
+                .map_err(ConversationError::sqlite)?;
+        }
         connection
             .pragma_update(None, "synchronous", "NORMAL")
             .map_err(ConversationError::sqlite)?;
         connection
             .pragma_update(None, "foreign_keys", "ON")
             .map_err(ConversationError::sqlite)?;
-        schema::ensure(&connection, clock.as_ref())?;
+        schema::ensure(&mut connection, clock.as_ref())?;
         Ok(connection)
     })();
     let mut connection = match setup {

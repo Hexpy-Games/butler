@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use rusqlite::{Connection, params_from_iter, types::Value};
+use rusqlite::{Connection, params_from_iter, types::Value as SqlValue};
 use serde::Serialize;
 
 use super::{db_error, scope};
@@ -29,33 +29,19 @@ struct WeightedTerm<'a> {
     weight: f64,
 }
 
+/// Most query terms a raw selection weighs.
+const MAX_TERMS: usize = 256;
+
+/// BM25-style source candidates for the cue and seed phrases, exact cue
+/// matches first. Partial when terms were dropped or the deadline passed.
 pub(super) fn select(
     db: &Connection,
     input: &RecallRequest,
     deadline_at: i64,
     mut now_millis: impl FnMut() -> i64,
 ) -> CognitionResult<RawSourceSelection> {
-    let mut all_terms = Vec::new();
-    let mut seen = HashSet::new();
-    for phrase in
-        std::iter::once(input.cue.as_str()).chain(input.seed_phrases.iter().map(String::as_str))
-    {
-        let folded = lexical::case_fold(butler_core::public_text::trim_js_whitespace(phrase));
-        let grams = lexical::folded_grams(&folded);
-        let terms = if grams.is_empty() {
-            vec![folded]
-        } else {
-            grams
-        };
-        for term in terms {
-            if !butler_core::public_text::trim_js_whitespace(&term).is_empty()
-                && seen.insert(term.clone())
-            {
-                all_terms.push(term);
-            }
-        }
-    }
-    let terms = &all_terms[..all_terms.len().min(256)];
+    let all_terms = query_terms(input);
+    let terms = all_terms.get(..MAX_TERMS).unwrap_or(&all_terms);
     if terms.is_empty() || now_millis() >= deadline_at {
         return Ok(RawSourceSelection {
             sources: Vec::new(),
@@ -78,6 +64,55 @@ pub(super) fn select(
             Ok((row.get(0)?, row.get(1)?))
         })
         .map_err(db_error)?;
+    let weights = term_weights(db, &predicate, terms, population)?;
+    let sources = ranked_sources(
+        db,
+        predicate,
+        &weights,
+        (
+            average_length,
+            butler_core::public_text::trim_js_whitespace(&input.cue),
+        ),
+    )?;
+    Ok(RawSourceSelection {
+        sources,
+        partial: all_terms.len() > MAX_TERMS || now_millis() >= deadline_at,
+    })
+}
+
+/// Distinct case-folded grams of the cue and seed phrases, in order; a
+/// phrase too short for grams is one term.
+fn query_terms(input: &RecallRequest) -> Vec<String> {
+    let mut all_terms = Vec::new();
+    let mut seen = HashSet::new();
+    for phrase in
+        std::iter::once(input.cue.as_str()).chain(input.seed_phrases.iter().map(String::as_str))
+    {
+        let folded = lexical::case_fold(butler_core::public_text::trim_js_whitespace(phrase));
+        let grams = lexical::folded_grams(&folded);
+        let terms = if grams.is_empty() {
+            vec![folded]
+        } else {
+            grams
+        };
+        for term in terms {
+            if !butler_core::public_text::trim_js_whitespace(&term).is_empty()
+                && seen.insert(term.clone())
+            {
+                all_terms.push(term);
+            }
+        }
+    }
+    all_terms
+}
+
+/// Inverse document frequency of each term within the scoped sources.
+fn term_weights<'a>(
+    db: &Connection,
+    predicate: &scope::Predicate,
+    terms: &'a [String],
+    population: i64,
+) -> CognitionResult<Vec<WeightedTerm<'a>>> {
     let encoded_terms = serde_json::to_string(terms).map_err(json_error)?;
     let frequency_sql = format!(
         r"
@@ -91,7 +126,7 @@ pub(super) fn select(
     ",
         predicate.sql
     );
-    let mut frequency_args = vec![Value::Text(encoded_terms)];
+    let mut frequency_args = vec![SqlValue::Text(encoded_terms)];
     frequency_args.extend(predicate.args.iter().cloned());
     let mut statement = db.prepare(&frequency_sql).map_err(db_error)?;
     let frequencies = statement
@@ -101,17 +136,25 @@ pub(super) fn select(
         .map_err(db_error)?
         .collect::<Result<HashMap<_, _>, _>>()
         .map_err(db_error)?;
-    let weights = terms
+    Ok(terms
         .iter()
         .map(|term| {
             let df = *frequencies.get(term).unwrap_or(&0) as f64;
             let weight = (1.0 + (population as f64 - df + 0.5) / (df + 0.5)).ln();
             WeightedTerm { term, weight }
         })
-        .collect::<Vec<_>>();
+        .collect())
+}
+
+/// The 64 best sources matching enough weighted terms.
+fn ranked_sources(
+    db: &Connection,
+    predicate: scope::Predicate,
+    weights: &[WeightedTerm<'_>],
+    (average_length, cue): (Option<f64>, &str),
+) -> CognitionResult<Vec<RawSourceCandidate>> {
     let query_weight = weights.iter().map(|item| item.weight).sum::<f64>();
-    let encoded_weights = serde_json::to_string(&weights).map_err(json_error)?;
-    let cue = butler_core::public_text::trim_js_whitespace(&input.cue).to_owned();
+    let encoded_weights = serde_json::to_string(weights).map_err(json_error)?;
     let candidate_sql = format!(
         r"
         WITH query AS (
@@ -136,16 +179,16 @@ pub(super) fn select(
         predicate.sql
     );
     let mut args = vec![
-        Value::Text(encoded_weights),
-        Value::Real(query_weight),
-        Value::Real(average_length.unwrap_or(1.0).max(1.0)),
-        Value::Text(cue),
+        SqlValue::Text(encoded_weights),
+        SqlValue::Real(query_weight),
+        SqlValue::Real(average_length.unwrap_or(1.0).max(1.0)),
+        SqlValue::Text(cue.to_owned()),
     ];
     args.extend(predicate.args);
-    args.push(Value::Integer(if terms.len() == 1 { 1 } else { 2 }));
-    args.push(Value::Integer(64));
+    args.push(SqlValue::Integer(if weights.len() == 1 { 1 } else { 2 }));
+    args.push(SqlValue::Integer(64));
     let mut statement = db.prepare(&candidate_sql).map_err(db_error)?;
-    let sources = statement
+    statement
         .query_map(params_from_iter(&args), |row| {
             Ok(RawSourceCandidate {
                 source_id: row.get(0)?,
@@ -156,11 +199,7 @@ pub(super) fn select(
         })
         .map_err(db_error)?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(db_error)?;
-    Ok(RawSourceSelection {
-        sources,
-        partial: all_terms.len() > 256 || now_millis() >= deadline_at,
-    })
+        .map_err(db_error)
 }
 
 fn json_error(error: serde_json::Error) -> crate::cognition::CognitionError {

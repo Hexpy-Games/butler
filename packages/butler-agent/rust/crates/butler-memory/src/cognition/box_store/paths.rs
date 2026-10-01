@@ -1,3 +1,5 @@
+//! Paths inside the Cognition Box, checked to stay under the box root.
+
 use std::{
     fs::{self, File},
     path::{Component, Path, PathBuf},
@@ -9,7 +11,7 @@ use super::error;
 use crate::cognition::CognitionCode;
 
 pub(super) fn open_owned_manifest(path: &Path, item_root: &Path) -> CognitionResult<Option<File>> {
-    let canonical = match fs::canonicalize(path) {
+    let canonical = match butler_platform::secure_fs::canonicalize(path) {
         Ok(path) => path,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(_) => return Err(error(CognitionCode::MemoryBoxManifestReadFailed)),
@@ -24,12 +26,12 @@ pub(super) fn open_owned_manifest(path: &Path, item_root: &Path) -> CognitionRes
 
 pub(super) fn canonical_items_root(root: &Path) -> CognitionResult<Option<PathBuf>> {
     let items = root.join("items");
-    let canonical_root = match fs::canonicalize(root) {
+    let canonical_root = match butler_platform::secure_fs::canonicalize(root) {
         Ok(path) => path,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(_) => return Err(error(CognitionCode::MemoryBoxItemsReadFailed)),
     };
-    let canonical_items = match fs::canonicalize(&items) {
+    let canonical_items = match butler_platform::secure_fs::canonicalize(&items) {
         Ok(path) => path,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(_) => return Err(error(CognitionCode::MemoryBoxItemsReadFailed)),
@@ -41,7 +43,7 @@ pub(super) fn canonical_items_root(root: &Path) -> CognitionResult<Option<PathBu
 }
 
 pub(super) fn canonical_item_root(items_root: &Path, item_dir: &Path) -> CognitionResult<PathBuf> {
-    let canonical = fs::canonicalize(item_dir).map_err(|error| {
+    let canonical = butler_platform::secure_fs::canonicalize(item_dir).map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
             super::error(CognitionCode::MemoryBoxManifestMissing)
         } else {
@@ -65,7 +67,7 @@ pub(super) fn validate_relative_file(item_dir: &Path, relative: &str) -> Cogniti
     {
         return Err(error(CognitionCode::MemoryBoxRetentionPathUnsafe));
     }
-    let item_root = fs::canonicalize(item_dir)
+    let item_root = butler_platform::secure_fs::canonicalize(item_dir)
         .map_err(|source| error(CognitionCode::MemoryBoxItemPathUnsafe).with_source(source))?;
     let target = item_root.join(relative);
     crate::cognition::mutable_paths::ensure_data_authority(&item_root, &[&target])
@@ -74,9 +76,10 @@ pub(super) fn validate_relative_file(item_dir: &Path, relative: &str) -> Cogniti
     loop {
         match fs::symlink_metadata(ancestor) {
             Ok(_) => {
-                let canonical = fs::canonicalize(ancestor).map_err(|source| {
-                    error(CognitionCode::MemoryBoxRetentionPathUnsafe).with_source(source)
-                })?;
+                let canonical =
+                    butler_platform::secure_fs::canonicalize(ancestor).map_err(|source| {
+                        error(CognitionCode::MemoryBoxRetentionPathUnsafe).with_source(source)
+                    })?;
                 if !canonical.starts_with(&item_root)
                     || (ancestor == target && canonical == item_root)
                 {
@@ -95,21 +98,21 @@ pub(super) fn validate_relative_file(item_dir: &Path, relative: &str) -> Cogniti
 }
 
 pub(super) fn validate_manifest_target(path: &Path, item_dir: &Path) -> CognitionResult<PathBuf> {
-    let item_root = fs::canonicalize(item_dir)
+    let item_root = butler_platform::secure_fs::canonicalize(item_dir)
         .map_err(|source| error(CognitionCode::MemoryBoxItemPathUnsafe).with_source(source))?;
     crate::cognition::mutable_paths::ensure_data_authority(&item_root, &[path])
         .map_err(|source| error(CognitionCode::MemoryBoxManifestPathUnsafe).with_source(source))?;
     let parent = path
         .parent()
         .ok_or_else(|| error(CognitionCode::MemoryBoxManifestPathUnsafe))?;
-    let canonical_parent = fs::canonicalize(parent)
+    let canonical_parent = butler_platform::secure_fs::canonicalize(parent)
         .map_err(|source| error(CognitionCode::MemoryBoxManifestPathUnsafe).with_source(source))?;
     if canonical_parent != item_root {
         return Err(error(CognitionCode::MemoryBoxManifestPathUnsafe));
     }
     match fs::symlink_metadata(path) {
         Ok(_) => {
-            let target = fs::canonicalize(path).map_err(|source| {
+            let target = butler_platform::secure_fs::canonicalize(path).map_err(|source| {
                 error(CognitionCode::MemoryBoxManifestPathUnsafe).with_source(source)
             })?;
             if !target.starts_with(&item_root) || target == item_root {

@@ -1,3 +1,5 @@
+//! The sources a project capsule is refreshed from.
+
 mod evidence;
 mod graph;
 mod tasks;
@@ -28,6 +30,8 @@ use crate::cognition::CognitionCode;
 
 const TASK_LIMIT: usize = 5;
 
+/// Reads every capsule source of a project and renders the capsule body,
+/// without writing it.
 pub(super) fn prepare(
     data_root: &Path,
     paths: &CognitionPathEnvironment,
@@ -91,16 +95,8 @@ pub(super) fn prepare(
         workspace_path,
     };
     let source_revision = fingerprint(&snapshot)?;
-    let mut counts = ProjectCapsuleSourceCounts {
-        registry: usize::from(snapshot.registry.is_some()),
-        tasks: snapshot.tasks.len(),
-        explicit_feedback: snapshot.feedback.len(),
-        project_hot_cache: 0,
-        memory_evidence: snapshot.evidence.len(),
-        graph_evidence: snapshot.graph.len(),
-        promoted: 0,
-    };
-    let body = render(project_id, &snapshot, &mut counts, super::now_epoch_ms())?;
+    let mut counts = source_counts(&snapshot);
+    let body = render(project_id, &snapshot, &mut counts, super::now_epoch_ms());
     Ok(PreparedCapsule {
         project_id: project_id.to_owned(),
         path: target,
@@ -108,6 +104,20 @@ pub(super) fn prepare(
         source_revision,
         snapshot,
     })
+}
+
+/// How many items of each source kind the snapshot holds; nothing is
+/// promoted yet.
+fn source_counts(snapshot: &ProjectCapsuleSourceSnapshot) -> ProjectCapsuleSourceCounts {
+    ProjectCapsuleSourceCounts {
+        registry: usize::from(snapshot.registry.is_some()),
+        tasks: snapshot.tasks.len(),
+        explicit_feedback: snapshot.feedback.len(),
+        project_hot_cache: 0,
+        memory_evidence: snapshot.evidence.len(),
+        graph_evidence: snapshot.graph.len(),
+        promoted: 0,
+    }
 }
 
 pub(super) fn read_registry_entries(

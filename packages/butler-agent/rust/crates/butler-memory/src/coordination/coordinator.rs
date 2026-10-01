@@ -1,3 +1,5 @@
+//! The memory writer coordinator and its leases.
+
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -5,6 +7,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use rusqlite::Connection;
+use tokio::sync::Notify;
 
 use super::error::{CoordinationError, CoordinationResult, invalid, sqlite_error};
 use super::fence::{
@@ -16,6 +19,7 @@ use super::types::{
     ConsolidationLockInspection, LockInfo,
 };
 
+/// Serializes memory writers across processes through a SQLite gate beside each lock file.
 #[derive(Clone)]
 pub struct CognitionWriteCoordinator {
     pub(super) inner: Arc<CoordinatorInner>,
@@ -26,6 +30,9 @@ pub(super) struct CoordinatorInner {
     pub(super) pid: u32,
     pub(super) hostname: String,
     pub(super) local: Mutex<HashMap<PathBuf, LocalRegistration>>,
+    /// Signalled whenever a lease of this process ends, so an in-process
+    /// waiter retries at once instead of on a timer.
+    pub(super) released: Notify,
 }
 
 #[derive(Clone)]
@@ -34,6 +41,7 @@ pub(super) struct LocalRegistration {
     pub(super) owner: LockInfo,
 }
 
+/// A held memory writer lock; released explicitly or when dropped.
 pub struct CognitionWriteLease {
     inner: Arc<CoordinatorInner>,
     lock_path: PathBuf,
@@ -43,6 +51,7 @@ pub struct CognitionWriteLease {
 }
 
 impl CognitionWriteCoordinator {
+    /// A coordinator for this process.
     pub fn new(host: Arc<dyn CognitionCoordinationHost>) -> CoordinationResult<Self> {
         let pid = host.process_id();
         let hostname = host.hostname()?;
@@ -52,6 +61,7 @@ impl CognitionWriteCoordinator {
                 pid,
                 hostname,
                 local: Mutex::new(HashMap::new()),
+                released: Notify::new(),
             }),
         })
     }
@@ -63,6 +73,7 @@ impl CognitionWriteCoordinator {
         self.inner.try_acquire(request)
     }
 
+    /// Waits for the writer lock; `None` when the request gives up.
     pub async fn acquire(
         &self,
         mut request: CognitionWriteAcquire,
@@ -83,11 +94,19 @@ impl CognitionWriteCoordinator {
                 }
             },
         ));
+        let mut retry = MIN_RETRY;
         loop {
             if cancelled(&request) {
                 return Err(CoordinationError::Aborted);
             }
-            if let Some(lease) = self.inner.try_acquire(&request)? {
+            // Interest is registered before the attempt, so a lease released
+            // between the attempt and the wait still wakes this waiter.
+            let released = self.inner.released.notified();
+            tokio::pin!(released);
+            released.as_mut().enable();
+            if !self.inner.held_locally(&request.lock_path)
+                && let Some(lease) = self.inner.try_acquire(&request)?
+            {
                 return Ok(Some(lease));
             }
             let remaining = request.deadline_at_epoch_ms.unwrap_or(f64::INFINITY)
@@ -101,22 +120,29 @@ impl CognitionWriteCoordinator {
                 #[expect(
                     clippy::cast_possible_truncation,
                     clippy::cast_sign_loss,
-                    reason = "clamped to (0, 20] milliseconds above"
+                    reason = "clamped to (0, MAX_RETRY] milliseconds above"
                 )]
-                let millis = remaining.min(20.0) as u64;
+                let millis = remaining.min(retry.as_millis() as f64) as u64;
                 Duration::from_millis(millis)
             };
+            // Another process cannot signal this one, so the wait is bounded;
+            // the bound grows while the lock stays busy.
+            retry = (retry * 2).min(MAX_RETRY);
             if let Some(cancellation) = &request.cancellation {
                 tokio::select! {
                     () = cancellation.cancelled() => {
                         return Err(CoordinationError::Aborted);
                     }
+                    () = &mut released => {}
                     () = tokio::time::sleep(wait) => {}
                 }
             } else if wait.is_zero() {
                 tokio::task::yield_now().await;
             } else {
-                tokio::time::sleep(wait).await;
+                tokio::select! {
+                    () = &mut released => {}
+                    () = tokio::time::sleep(wait) => {}
+                }
             }
         }
     }
@@ -129,88 +155,30 @@ impl CognitionWriteCoordinator {
     }
 }
 
+/// The first wait after a busy attempt, doubling up to [`MAX_RETRY`] while a
+/// lock held by another process stays busy.
+const MIN_RETRY: Duration = Duration::from_millis(20);
+const MAX_RETRY: Duration = Duration::from_millis(250);
+
 impl CoordinatorInner {
+    /// Whether a lease of this process holds `lock_path` right now.
+    fn held_locally(&self, lock_path: &Path) -> bool {
+        self.local.lock().contains_key(lock_path)
+    }
+
+    /// Takes the writer lock when it is free right now; `None` when it is
+    /// busy, the request was cancelled or its deadline passed.
     fn try_acquire(
         self: &Arc<Self>,
         request: &CognitionWriteAcquire,
     ) -> CoordinationResult<Option<CognitionWriteLease>> {
-        if cancelled(request) || expired(request, self.host.now_epoch_millis()) {
+        if self.abandoned(request) || !self.ensure_bound(request)? {
             return Ok(None);
         }
-        match read_known_coordinator(&request.lock_path) {
-            Ok(Some(_)) => {}
-            Ok(None) => {
-                initialize_coordinator(&request.lock_path, self.pid, &self.host)?;
-            }
-            Err(error) if error.is_busy() => return Ok(None),
-            Err(error) => return Err(error),
-        }
-        let initialized = match read_known_coordinator(&request.lock_path) {
-            Ok(Some(meta)) => meta,
-            Ok(None) => return Err(invalid("coordinator initialization unavailable")),
-            Err(error) if error.is_busy() => return Ok(None),
-            Err(error) => return Err(error),
+        let Some(connection) = self.begin(request)? else {
+            return Ok(None);
         };
-        if initialized.fence_sha256.is_none()
-            && !bind_coordinator_fence(&request.lock_path, &self.hostname, &self.host)?
-        {
-            return Ok(None);
-        }
-        if cancelled(request) || expired(request, self.host.now_epoch_millis()) {
-            return Ok(None);
-        }
-        let verified = match read_known_coordinator(&request.lock_path) {
-            Ok(Some(meta)) => meta,
-            Ok(None) => return Err(invalid("coordinator verification unavailable")),
-            Err(error) if error.is_busy() => return Ok(None),
-            Err(error) => return Err(error),
-        };
-        if verified.fence_sha256.is_none() {
-            return Err(invalid("coordinator fence unbound"));
-        }
-        let connection = match open_readwrite(&coordinator_path(&request.lock_path)) {
-            Ok(connection) => connection,
-            Err(error) if error.is_busy() => return Ok(None),
-            Err(error) => return Err(error),
-        };
-        if let Err(error) = connection.execute_batch("BEGIN EXCLUSIVE") {
-            return if is_busy(&error) {
-                Ok(None)
-            } else {
-                Err(CoordinationError::gate_io(error))
-            };
-        }
-        if cancelled(request) || expired(request, self.host.now_epoch_millis()) {
-            let _ = connection.execute_batch("ROLLBACK");
-            return Ok(None);
-        }
-        let acquired = (|| {
-            let current = read_coordinator_meta(&connection)?
-                .filter(|meta| meta.format_version == super::fence::COORDINATOR_VERSION)
-                .ok_or_else(|| invalid("coordinator metadata mismatch"))?;
-            let known = read_known_coordinator_inside(&request.lock_path, current)?;
-            if !known {
-                return Err(invalid("coordinator fence changed"));
-            }
-            let purpose = request
-                .purpose
-                .as_deref()
-                .map(butler_core::public_text::trim_js_whitespace)
-                .filter(|value| !value.is_empty())
-                .unwrap_or("projection")
-                .to_owned();
-            let registration_id = self.host.new_uuid();
-            let owner = LockInfo {
-                pid: u64::from(self.pid),
-                started_at: self.host.now_iso(),
-                host: self.hostname.clone(),
-                owner_nonce: self.host.new_uuid(),
-                purpose,
-            };
-            write_owner(&connection, &owner)?;
-            Ok((registration_id, owner))
-        })();
-        let (registration_id, owner) = match acquired {
+        let (registration_id, owner) = match self.register_owner(&connection, request) {
             Ok(value) => value,
             Err(error) => {
                 let _ = connection.execute_batch("ROLLBACK");
@@ -231,6 +199,95 @@ impl CoordinatorInner {
             owner,
             connection: Some(connection),
         }))
+    }
+
+    fn abandoned(&self, request: &CognitionWriteAcquire) -> bool {
+        cancelled(request) || expired(request, self.host.now_epoch_millis())
+    }
+
+    /// Initializes the coordinator database and binds it to the fence when
+    /// needed; `false` when that is not possible right now.
+    fn ensure_bound(&self, request: &CognitionWriteAcquire) -> CoordinationResult<bool> {
+        match busy_as_none(read_known_coordinator(&request.lock_path))? {
+            None => return Ok(false),
+            Some(Some(_)) => {}
+            Some(None) => {
+                initialize_coordinator(&request.lock_path, self.pid, &self.host)?;
+            }
+        }
+        let initialized = match busy_as_none(read_known_coordinator(&request.lock_path))? {
+            None => return Ok(false),
+            Some(meta) => meta.ok_or_else(|| invalid("coordinator initialization unavailable"))?,
+        };
+        if initialized.fence_sha256.is_none()
+            && !bind_coordinator_fence(&request.lock_path, &self.hostname, &self.host)?
+        {
+            return Ok(false);
+        }
+        if self.abandoned(request) {
+            return Ok(false);
+        }
+        let verified = match busy_as_none(read_known_coordinator(&request.lock_path))? {
+            None => return Ok(false),
+            Some(meta) => meta.ok_or_else(|| invalid("coordinator verification unavailable"))?,
+        };
+        if verified.fence_sha256.is_none() {
+            return Err(invalid("coordinator fence unbound"));
+        }
+        Ok(true)
+    }
+
+    /// Opens the coordinator database inside an exclusive transaction.
+    fn begin(&self, request: &CognitionWriteAcquire) -> CoordinationResult<Option<Connection>> {
+        let Some(connection) = busy_as_none(open_readwrite(&coordinator_path(&request.lock_path)))?
+        else {
+            return Ok(None);
+        };
+        if let Err(error) = connection.execute_batch("BEGIN EXCLUSIVE") {
+            return if is_busy(&error) {
+                Ok(None)
+            } else {
+                Err(CoordinationError::gate_io(error))
+            };
+        }
+        if self.abandoned(request) {
+            let _ = connection.execute_batch("ROLLBACK");
+            return Ok(None);
+        }
+        Ok(Some(connection))
+    }
+
+    /// Records this process as the lock owner, after checking the fence is
+    /// still the one it was bound to.
+    fn register_owner(
+        &self,
+        connection: &Connection,
+        request: &CognitionWriteAcquire,
+    ) -> CoordinationResult<(String, LockInfo)> {
+        let current = read_coordinator_meta(connection)?
+            .filter(|meta| meta.format_version == super::fence::COORDINATOR_VERSION)
+            .ok_or_else(|| invalid("coordinator metadata mismatch"))?;
+        let known = read_known_coordinator_inside(&request.lock_path, current)?;
+        if !known {
+            return Err(invalid("coordinator fence changed"));
+        }
+        let purpose = request
+            .purpose
+            .as_deref()
+            .map(butler_core::public_text::trim_js_whitespace)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("projection")
+            .to_owned();
+        let registration_id = self.host.new_uuid();
+        let owner = LockInfo {
+            pid: u64::from(self.pid),
+            started_at: self.host.now_iso(),
+            host: self.hostname.clone(),
+            owner_nonce: self.host.new_uuid(),
+            purpose,
+        };
+        write_owner(connection, &owner)?;
+        Ok((registration_id, owner))
     }
 
     fn remove_registration(&self, path: &Path, registration_id: &str) {
@@ -256,6 +313,7 @@ impl CognitionWriteLease {
         Ok(())
     }
 
+    /// Releases the lock; `commit` records whether the writer finished its work.
     pub fn release(mut self, commit: bool) -> CoordinationResult<()> {
         self.finish(commit)
     }
@@ -272,6 +330,7 @@ impl CognitionWriteLease {
         let close_error = connection.close().err().map(|(_, error)| error);
         self.inner
             .remove_registration(&self.lock_path, &self.registration_id);
+        self.inner.released.notify_waiters();
         if let Some(error) = completion_error {
             return Err(sqlite_error(error));
         }
@@ -311,4 +370,13 @@ fn expired(request: &CognitionWriteAcquire, now: i64) -> bool {
     request
         .deadline_at_epoch_ms
         .is_some_and(|deadline| now as f64 >= deadline)
+}
+
+/// A busy coordinator reads as `None`; other errors pass through.
+fn busy_as_none<T>(result: CoordinationResult<T>) -> CoordinationResult<Option<T>> {
+    match result {
+        Ok(value) => Ok(Some(value)),
+        Err(error) if error.is_busy() => Ok(None),
+        Err(error) => Err(error),
+    }
 }

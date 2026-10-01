@@ -60,6 +60,10 @@ pub trait AppNativeAssetResolver: Send + Sync + 'static {
     fn resolve(&self, snapshot: ClaimedNativeSnapshot) -> ApplicationFuture<ResolvedNativeAssets>;
 }
 pub trait AppExecutorReadiness: Send + Sync + 'static {
+    /// Resolves when native dispatch is initialized, without polling.
+    fn wait_ready(&self) -> ApplicationFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
     fn readiness(&self) -> Result<RuntimeReadinessView, GatewayApplicationError>;
 }
 pub trait AppAdmissionAuthority: Send + Sync + 'static {
@@ -246,6 +250,8 @@ pub struct VisualAdmissionRequest {
     pub files: Vec<AppMessageFileSnapshot>,
 }
 pub struct AppApplicationDependencies {
+    /// Process stop fences queue admission before active turns are interrupted.
+    pub service_shutdown: tokio_util::sync::CancellationToken,
     pub updates: Arc<butler_runtime::operations::AppUpdateService>,
     pub skills: Arc<butler_runtime::skills::Skills>,
     pub mcp_client: Arc<butler_models::mcp_client::McpClient>,
@@ -276,6 +282,7 @@ pub struct AppApplicationDependencies {
     pub subsessions: Arc<dyn AppSubsessionPort>,
     pub branch_conversations: Arc<dyn AppBranchConversationReader>,
     pub branch_summarizer: Arc<dyn AppBranchSummarizer>,
+    pub setup: Arc<dyn super::AppSetupPort>,
 }
 
 #[derive(Clone, Debug)]
@@ -306,6 +313,10 @@ pub struct AppContextBudgetFacts {
 pub struct AppContextReadFacts {
     pub usage: Option<AppContextUsage>,
     pub compaction_summary: Option<String>,
+    /// The session's tokens and estimated cost (`SessionView.usage`).
+    pub session_usage: Option<butler_runtime::operations::SessionUsageView>,
+    /// How the session's model is billed (`ContextDetailsView.auth_mode`).
+    pub auth_mode: butler_models::models::UsageAuthMode,
     pub budget: AppContextBudgetFacts,
 }
 
@@ -313,7 +324,30 @@ pub trait AppContextReadPort: Send + Sync {
     fn read(&self, query: AppContextReadQuery) -> ApplicationFuture<AppContextReadFacts>;
 }
 
+pub struct AppWorkerActivitySourcePage {
+    pub children: Vec<Value>,
+    pub after: Option<(String, String, String)>,
+}
+
 pub trait AppSubsessionPort: Send + Sync {
+    fn activity_cursor_parents(
+        &self,
+        _worker: String,
+        _history: bool,
+        _parent: Option<String>,
+    ) -> ApplicationFuture<Option<Vec<String>>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn activity_page(
+        &self,
+        _history: bool,
+        _after: Option<(String, String, String)>,
+        _parent: Option<String>,
+        _limit: usize,
+    ) -> ApplicationFuture<Option<AppWorkerActivitySourcePage>> {
+        Box::pin(async { Ok(None) })
+    }
     fn projection(
         &self,
         session_id: String,
@@ -345,6 +379,17 @@ pub struct AppSettingsFacts {
     pub catalog_generation: String,
     /// Non-secret configuration-backed Settings values projected by Host.
     pub native_settings: Value,
+    /// Each provider's routine preset: the default model and effort when
+    /// no model was chosen yet (#230).
+    pub routine_presets: Arc<[AppRoutinePreset]>,
+}
+
+/// The model and effort a first setup selects for a connected provider.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AppRoutinePreset {
+    pub provider_id: String,
+    pub model_ref: String,
+    pub reasoning_effort: ReasoningEffort,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

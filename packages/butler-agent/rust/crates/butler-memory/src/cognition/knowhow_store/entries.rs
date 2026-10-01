@@ -1,13 +1,15 @@
+//! Entry files under `know-how/entries/`: listing, reading, validation and
+//! atomic private writes.
+
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::{self, File},
     io::Write,
     path::{Component, Path, PathBuf},
 };
 
-use serde_json::Value;
-
 use crate::cognition::CognitionResult;
 
+use super::document::{KnowHowDocument, KnowHowStatus};
 use super::error;
 use crate::cognition::CognitionCode;
 
@@ -19,17 +21,8 @@ pub(super) struct EntryPath {
     pub updated_at: String,
 }
 
-const ENTRY_STATUSES: [&str; 6] = [
-    "candidate",
-    "active",
-    "suppressed",
-    "needs_review",
-    "disabled",
-    "forgotten",
-];
-
 pub(super) fn list_paths(root: &Path) -> CognitionResult<Vec<EntryPath>> {
-    let Some(directory) = entries_directory(root, false)? else {
+    let Some(directory) = entries_directory(root, Presence::Existing)? else {
         return Ok(Vec::new());
     };
     let rows = fs::read_dir(&directory).map_err(|source| {
@@ -44,22 +37,21 @@ pub(super) fn list_paths(root: &Path) -> CognitionResult<Vec<EntryPath>> {
         if !row.file_name().to_string_lossy().ends_with(".json") {
             continue;
         }
-        let value = read_path(&directory, &path)?;
-        let updated_at = value
-            .get("updated_at")
-            .and_then(Value::as_str)
-            .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
-        entries.push(EntryPath {
-            path,
-            updated_at: updated_at.to_owned(),
-        });
+        let entry = read_path(&directory, &path)?;
+        let updated_at = KnowHowDocument::required(&entry.updated_at)?.to_owned();
+        entries.push(EntryPath { path, updated_at });
     }
-    entries.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
+    entries.sort_by(|left, right| {
+        right
+            .updated_at
+            .cmp(&left.updated_at)
+            .then_with(|| left.path.cmp(&right.path))
+    });
     Ok(entries)
 }
 
-pub(super) fn read_one(root: &Path, entry: &EntryPath) -> CognitionResult<Value> {
-    let directory = entries_directory(root, false)?
+pub(super) fn read_one(root: &Path, entry: &EntryPath) -> CognitionResult<KnowHowDocument> {
+    let directory = entries_directory(root, Presence::Existing)?
         .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryNotFound))?;
     if entry.path.parent() != Some(directory.as_path()) {
         return Err(error(CognitionCode::MemoryKnowhowEntryPathUnsafe));
@@ -67,11 +59,11 @@ pub(super) fn read_one(root: &Path, entry: &EntryPath) -> CognitionResult<Value>
     read_path(&directory, &entry.path)
 }
 
-pub(super) fn read_id(root: &Path, id: &str) -> CognitionResult<Option<Value>> {
+pub(super) fn read_id(root: &Path, id: &str) -> CognitionResult<Option<KnowHowDocument>> {
     if !safe_id(id) {
         return Err(error(CognitionCode::MemoryKnowhowEntryIdInvalid));
     }
-    let Some(directory) = entries_directory(root, false)? else {
+    let Some(directory) = entries_directory(root, Presence::Existing)? else {
         return Ok(None);
     };
     let path = directory.join(format!("{id}.json"));
@@ -83,7 +75,7 @@ pub(super) fn read_id(root: &Path, id: &str) -> CognitionResult<Option<Value>> {
 }
 
 pub(super) fn count_files(root: &Path) -> CognitionResult<usize> {
-    let Some(directory) = entries_directory(root, false)? else {
+    let Some(directory) = entries_directory(root, Presence::Existing)? else {
         return Ok(0);
     };
     let rows = fs::read_dir(directory).map_err(|source| {
@@ -111,13 +103,13 @@ pub(super) fn count_files(root: &Path) -> CognitionResult<usize> {
     Ok(count)
 }
 
-fn read_path(directory: &Path, path: &Path) -> CognitionResult<Value> {
+fn read_path(directory: &Path, path: &Path) -> CognitionResult<KnowHowDocument> {
     let metadata = fs::symlink_metadata(path)
         .map_err(|source| error(CognitionCode::MemoryKnowhowEntryReadFailed).with_source(source))?;
     if !metadata.file_type().is_file() {
         return Err(error(CognitionCode::MemoryKnowhowEntryPathUnsafe));
     }
-    let canonical = fs::canonicalize(path)
+    let canonical = butler_platform::secure_fs::canonicalize(path)
         .map_err(|source| error(CognitionCode::MemoryKnowhowEntryReadFailed).with_source(source))?;
     if !canonical.starts_with(directory) {
         return Err(error(CognitionCode::MemoryKnowhowEntryPathUnsafe));
@@ -128,21 +120,19 @@ fn read_path(directory: &Path, path: &Path) -> CognitionResult<Value> {
         .map_err(|source| error(CognitionCode::MemoryKnowhowEntryInvalid).with_source(source))
 }
 
-pub(super) fn write(root: &Path, entry: &Value) -> CognitionResult<()> {
-    let issues = validate(entry);
-    if !issues.is_empty() {
+/// Atomically replaces the entry's file (pretty JSON, mode 0600) after
+/// validating it.
+pub(super) fn write(root: &Path, document: &KnowHowDocument) -> CognitionResult<()> {
+    if !validate(document).is_empty() {
         return Err(error(CognitionCode::MemoryKnowhowEntryInvalid));
     }
-    let id = entry
-        .get("knowhow_id")
-        .and_then(Value::as_str)
-        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
-    let directory = entries_directory(root, true)?
+    let id = KnowHowDocument::required(&document.knowhow_id)?;
+    let directory = entries_directory(root, Presence::Created)?
         .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntriesWriteFailed))?;
     let path = directory.join(format!("{id}.json"));
     match fs::symlink_metadata(&path) {
         Ok(metadata) if metadata.file_type().is_file() => {
-            let canonical = fs::canonicalize(&path).map_err(|source| {
+            let canonical = butler_platform::secure_fs::canonicalize(&path).map_err(|source| {
                 error(CognitionCode::MemoryKnowhowEntryPathUnsafe).with_source(source)
             })?;
             if !canonical.starts_with(&directory) {
@@ -154,80 +144,63 @@ pub(super) fn write(root: &Path, entry: &Value) -> CognitionResult<()> {
         Err(_) => return Err(error(CognitionCode::MemoryKnowhowEntryWriteFailed)),
     }
 
-    let mut bytes = serde_json::to_vec_pretty(entry).map_err(|source| {
+    let mut bytes = serde_json::to_vec_pretty(document).map_err(|source| {
         error(CognitionCode::MemoryKnowhowEntryWriteFailed).with_source(source)
     })?;
     bytes.push(b'\n');
-    let temporary = directory.join(format!("{id}.json.tmp-{}", uuid::Uuid::new_v4()));
-    let result = (|| {
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut file = options.open(&temporary).map_err(|source| {
-            error(CognitionCode::MemoryKnowhowEntryWriteFailed).with_source(source)
-        })?;
-        file.write_all(&bytes).map_err(|source| {
-            error(CognitionCode::MemoryKnowhowEntryWriteFailed).with_source(source)
-        })?;
-        file.sync_all().map_err(|source| {
-            error(CognitionCode::MemoryKnowhowEntryWriteFailed).with_source(source)
-        })?;
-        fs::rename(&temporary, &path).map_err(|source| {
-            error(CognitionCode::MemoryKnowhowEntryWriteFailed).with_source(source)
-        })?;
-        #[cfg(unix)]
-        File::open(&directory)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|source| {
-                error(CognitionCode::MemoryKnowhowEntryWriteFailed).with_source(source)
-            })?;
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(temporary);
-    }
-    result
+    butler_platform::secure_fs::replace_private(
+        &path,
+        |file| file.write_all(&bytes),
+        std::convert::identity,
+    )
+    .map_err(|source| error(CognitionCode::MemoryKnowhowEntryWriteFailed).with_source(source))
 }
 
-pub(super) fn validate(entry: &Value) -> Vec<&'static str> {
+/// The fields that make an entry unusable: schema, a safe `kh_` id, a
+/// non-blank name, a known status, and a preferred-sources array.
+pub(super) fn validate(entry: &KnowHowDocument) -> Vec<&'static str> {
     let mut issues = Vec::new();
-    if entry.get("schema").and_then(Value::as_str) != Some(ENTRY_SCHEMA) {
+    if entry.schema.valid().map(String::as_str) != Some(ENTRY_SCHEMA) {
         issues.push("schema");
     }
-    let id = entry.get("knowhow_id").and_then(Value::as_str);
-    if !id.is_some_and(safe_id) {
+    if !entry.knowhow_id.valid().is_some_and(|id| safe_id(id)) {
         issues.push("knowhow_id");
     }
     if entry
-        .get("name")
-        .and_then(Value::as_str)
+        .name
+        .valid()
         .is_none_or(|name| butler_core::public_text::trim_js_whitespace(name).is_empty())
     {
         issues.push("name");
     }
-    if !entry
-        .get("status")
-        .and_then(Value::as_str)
-        .is_some_and(|status| ENTRY_STATUSES.contains(&status))
-    {
+    if !entry.status.valid().is_some_and(KnowHowStatus::is_known) {
         issues.push("status");
     }
-    if !entry
-        .get("strategy")
-        .and_then(Value::as_object)
-        .and_then(|strategy| strategy.get("preferred_sources"))
-        .is_some_and(Value::is_array)
-    {
+    let preferred_sources = match &entry.strategy {
+        crate::lenient::Arg::Valid(crate::lenient::Obj(strategy)) => {
+            strategy.preferred_sources.valid().is_some()
+        }
+        _ => false,
+    };
+    if !preferred_sources {
         issues.push("strategy.preferred_sources");
     }
     issues
 }
 
-fn entries_directory(root: &Path, create: bool) -> CognitionResult<Option<PathBuf>> {
+/// Whether the entries directory is created when missing.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Presence {
+    /// Create it (and the know-how root) when missing.
+    Created,
+    /// Only use it when it already exists.
+    Existing,
+}
+
+/// The entries directory, checked to stay inside the know-how root; `None`
+/// when it does not exist and may not be created.
+fn entries_directory(root: &Path, presence: Presence) -> CognitionResult<Option<PathBuf>> {
+    let create = presence == Presence::Created;
     if create {
         ensure_private_dir(root)?;
     } else {
@@ -238,7 +211,7 @@ fn entries_directory(root: &Path, create: bool) -> CognitionResult<Option<PathBu
             Err(_) => return Err(error(CognitionCode::MemoryKnowhowRootReadFailed)),
         }
     }
-    let canonical_root = fs::canonicalize(root)
+    let canonical_root = butler_platform::secure_fs::canonicalize(root)
         .map_err(|source| error(CognitionCode::MemoryKnowhowRootReadFailed).with_source(source))?;
     let path = root.join("entries");
     if create {
@@ -251,7 +224,7 @@ fn entries_directory(root: &Path, create: bool) -> CognitionResult<Option<PathBu
             Err(_) => return Err(error(CognitionCode::MemoryKnowhowEntriesReadFailed)),
         }
     }
-    let canonical = fs::canonicalize(&path).map_err(|source| {
+    let canonical = butler_platform::secure_fs::canonicalize(&path).map_err(|source| {
         error(CognitionCode::MemoryKnowhowEntriesReadFailed).with_source(source)
     })?;
     if !canonical.starts_with(&canonical_root) || canonical == canonical_root {
@@ -261,40 +234,24 @@ fn entries_directory(root: &Path, create: bool) -> CognitionResult<Option<PathBu
 }
 
 fn ensure_private_dir(path: &Path) -> CognitionResult<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        match fs::symlink_metadata(path) {
-            Ok(metadata) if metadata.file_type().is_dir() => return Ok(()),
-            Ok(_) => return Err(error(CognitionCode::MemoryKnowhowRootPathUnsafe)),
-            Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(_) => return Err(error(CognitionCode::MemoryKnowhowRootWriteFailed)),
-        }
-        let mut builder = fs::DirBuilder::new();
-        builder.recursive(true).mode(0o700);
-        match builder.create(path) {
-            Ok(()) => Ok(()),
-            Err(io_error) if io_error.kind() == std::io::ErrorKind::AlreadyExists => {
-                fs::symlink_metadata(path)
-                    .ok()
-                    .filter(|metadata| metadata.file_type().is_dir())
-                    .map(|_| ())
-                    .ok_or_else(|| error(CognitionCode::MemoryKnowhowRootPathUnsafe))
-            }
-            Err(_) => Err(error(CognitionCode::MemoryKnowhowRootWriteFailed)),
-        }
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_dir() => return Ok(()),
+        Ok(_) => return Err(error(CognitionCode::MemoryKnowhowRootPathUnsafe)),
+        Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => return Err(error(CognitionCode::MemoryKnowhowRootWriteFailed)),
     }
-    #[cfg(not(unix))]
-    {
-        match fs::symlink_metadata(path) {
-            Ok(metadata) if metadata.file_type().is_dir() => Ok(()),
-            Ok(_) => Err(error("memory_knowhow_root_path_unsafe")),
-            Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {
-                fs::create_dir_all(path)
-                    .map_err(|source| error("memory_knowhow_root_write_failed").with_source(source))
-            }
-            Err(_) => Err(error("memory_knowhow_root_write_failed")),
+    let mut builder = fs::DirBuilder::new();
+    butler_platform::secure_fs::owner_only_dirs(builder.recursive(true));
+    match builder.create(path) {
+        Ok(()) => Ok(()),
+        Err(io_error) if io_error.kind() == std::io::ErrorKind::AlreadyExists => {
+            fs::symlink_metadata(path)
+                .ok()
+                .filter(|metadata| metadata.file_type().is_dir())
+                .map(|_| ())
+                .ok_or_else(|| error(CognitionCode::MemoryKnowhowRootPathUnsafe))
         }
+        Err(_) => Err(error(CognitionCode::MemoryKnowhowRootWriteFailed)),
     }
 }
 

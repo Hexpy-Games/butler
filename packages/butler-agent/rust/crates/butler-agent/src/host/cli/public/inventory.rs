@@ -32,19 +32,10 @@ macro_rules! route {
     };
 }
 
-mod advanced;
 mod core;
-mod operator_a;
-mod operator_b;
 
 pub(super) fn all() -> Vec<Entry> {
-    [
-        core::ROUTES,
-        operator_a::ROUTES,
-        operator_b::ROUTES,
-        advanced::ROUTES,
-    ]
-    .concat()
+    core::ROUTES.to_vec()
 }
 
 pub(super) fn selected(path: &[String]) -> Vec<Entry> {
@@ -93,10 +84,10 @@ pub(super) fn render(entries: &[Entry]) -> String {
         }
         lines.push(format!("{priority}:"));
         for entry in selected {
-            lines.push(format!("  {}", entry.usage));
+            lines.push(format!("  {}\n    {}", entry.usage, entry.summary));
         }
         lines.push(String::new());
     }
-    lines.push("Mutable state uses BUTLER_DATA (default ~/.butler); --home and Bun runtime fallback are unsupported.".into());
+    lines.push("설치 / Install: npx @hexpygames/butler install".into());
     lines.join("\n")
 }

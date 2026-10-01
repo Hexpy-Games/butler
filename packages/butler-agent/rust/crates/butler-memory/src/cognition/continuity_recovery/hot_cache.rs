@@ -38,14 +38,14 @@ pub(super) fn replay_result(
     paths: &CognitionPathEnvironment,
     manifest_id: &str,
     workspace: &Path,
-    rollback: bool,
+    direction: super::Direction,
 ) -> CognitionResult<Option<ContinuityRecoveryAction>> {
     let Some(manifest) = manifest::read(data_root, paths, manifest_id)? else {
         return Err(error(CognitionCode::ContinuityRecoveryManifestNotFound));
     };
     validate_manifest_cache(&manifest, workspace)?;
     let current_hash = sha256(read_text(Path::new(&manifest.before.path))?.as_bytes());
-    let replayed = if rollback {
+    let replayed = if direction == super::Direction::Rollback {
         manifest.status == "rolled_back" && current_hash == manifest.before.sha256
     } else {
         manifest.status == "applied"
@@ -56,7 +56,7 @@ pub(super) fn replay_result(
     };
     if replayed {
         Ok(Some(ContinuityRecoveryAction {
-            manifest: super::view(manifest)?,
+            manifest: super::view(manifest),
             replayed: true,
         }))
     } else {
@@ -64,6 +64,8 @@ pub(super) fn replay_result(
     }
 }
 
+/// Appends the approved candidates of a manifest to its hot cache, restoring
+/// the cache when a write fails; replaying an applied manifest is a no-op.
 pub(super) fn apply(
     data_root: &Path,
     paths: &CognitionPathEnvironment,
@@ -82,7 +84,7 @@ pub(super) fn apply(
             .is_some_and(|after| after.sha256 == current_hash)
     {
         return Ok(ContinuityRecoveryAction {
-            manifest: super::view(manifest)?,
+            manifest: super::view(manifest),
             replayed: true,
         });
     }
@@ -99,34 +101,7 @@ pub(super) fn apply(
     if sha256(before_body.as_bytes()) != manifest.before.sha256 {
         return Err(error(CognitionCode::ContinuityRecoverySnapshotConflict));
     }
-    let approved = manifest
-        .approved_candidate_ids
-        .iter()
-        .collect::<std::collections::HashSet<_>>();
-    let result = (|| {
-        let mut current = before_body.clone();
-        for candidate in &manifest.candidates {
-            if !approved.contains(&candidate.candidate_id) {
-                continue;
-            }
-            current = append_semantic_entry(
-                &current,
-                cache,
-                SemanticEntry {
-                    project_id: &manifest.project_id,
-                    manifest_id: &manifest.manifest_id,
-                    session_id: &candidate.conversation_session_id,
-                    candidate_id: &candidate.candidate_id,
-                    body: &candidate.body,
-                    created_at: &candidate.completed_at,
-                },
-            )?;
-        }
-        write_atomic(cache, &current)?;
-        ensure_project_gitignore(cache)?;
-        Ok(current)
-    })();
-    let after_body = match result {
+    let after_body = match append_approved(&manifest, cache, &before_body) {
         Ok(value) => value,
         Err(failure) => {
             let _ = write_atomic(cache, &before_body);
@@ -141,9 +116,43 @@ pub(super) fn apply(
     });
     manifest::write(data_root, paths, &manifest)?;
     Ok(ContinuityRecoveryAction {
-        manifest: super::view(manifest)?,
+        manifest: super::view(manifest),
         replayed: false,
     })
+}
+
+/// Writes `before_body` plus an entry for each approved candidate to the
+/// cache; the new body.
+fn append_approved(
+    manifest: &ContinuityRecoveryManifest,
+    cache: &Path,
+    before_body: &str,
+) -> CognitionResult<String> {
+    let approved = manifest
+        .approved_candidate_ids
+        .iter()
+        .collect::<std::collections::HashSet<_>>();
+    let mut current = before_body.to_owned();
+    for candidate in &manifest.candidates {
+        if !approved.contains(&candidate.candidate_id) {
+            continue;
+        }
+        current = append_semantic_entry(
+            &current,
+            cache,
+            SemanticEntry {
+                project_id: &manifest.project_id,
+                manifest_id: &manifest.manifest_id,
+                session_id: &candidate.conversation_session_id,
+                candidate_id: &candidate.candidate_id,
+                body: &candidate.body,
+                created_at: &candidate.completed_at,
+            },
+        )?;
+    }
+    write_atomic(cache, &current)?;
+    ensure_project_gitignore(cache)?;
+    Ok(current)
 }
 
 pub(super) fn rollback(
@@ -160,7 +169,7 @@ pub(super) fn rollback(
     let current_hash = sha256(read_text(cache)?.as_bytes());
     if manifest.status == "rolled_back" && current_hash == manifest.before.sha256 {
         return Ok(ContinuityRecoveryAction {
-            manifest: super::view(manifest)?,
+            manifest: super::view(manifest),
             replayed: true,
         });
     }
@@ -193,7 +202,7 @@ pub(super) fn rollback(
     manifest.updated_at = manifest::now();
     manifest::write(data_root, paths, &manifest)?;
     Ok(ContinuityRecoveryAction {
-        manifest: super::view(manifest)?,
+        manifest: super::view(manifest),
         replayed: false,
     })
 }
@@ -316,11 +325,7 @@ fn lock_destination(cache: &Path) -> CognitionResult<DestinationLock> {
 fn create_lock(path: &Path) -> std::io::Result<()> {
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
+    butler_platform::secure_fs::owner_only(&mut options);
     let mut lock = options.open(path)?;
     writeln!(lock, "{}", std::process::id())
 }
@@ -340,11 +345,7 @@ fn write_atomic(path: &Path, body: &str) -> CognitionResult<()> {
     let result = (|| {
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
+        butler_platform::secure_fs::owner_only(&mut options);
         let mut file = options
             .open(&temp)
             .map_err(|source| error(CognitionCode::HotCacheIoFailed).with_source(source))?;
@@ -375,11 +376,7 @@ fn ensure_project_gitignore(cache: &Path) -> CognitionResult<()> {
     }
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
+    butler_platform::secure_fs::owner_only(&mut options);
     options
         .open(path)
         .and_then(|mut file| file.write_all(b"*\n"))

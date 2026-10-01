@@ -6,6 +6,7 @@ use super::{
     records::{self, AutomationRow, QueuedRunRow},
     store::publish,
 };
+use crate::gateway::application::settings;
 use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::{
     MessageRecord, MessageRole, MessageSendRequest, MessageStatus,
@@ -21,12 +22,24 @@ struct DispatchResult {
 }
 
 impl AppApplication {
+    pub(crate) async fn dispatch_due_request(
+        &self,
+    ) -> Result<AutomationRunListView, GatewayApplicationError> {
+        #[cfg(debug_assertions)]
+        self.inject_dispatch_fault().await?;
+        self.dispatch_due_owned().await
+    }
+
     pub(crate) async fn run_automation_owned(
         &self,
         id: String,
         trigger: &'static str,
     ) -> Result<AutomationRunResult, GatewayApplicationError> {
-        self.automation_runs.execute(id, trigger).await
+        let result = self.automation_runs.execute(id, trigger).await;
+        if result.is_ok() {
+            self.automation_wake.notify_one();
+        }
+        result
     }
 
     pub(crate) async fn dispatch_due_owned(
@@ -52,7 +65,7 @@ impl AppApplication {
         let (row, queued) = self.storage.execute(move |db| {
             let row = records::active(db, &automation_id)?;
             if trigger == "scheduled" && row.state != "enabled" {
-                return Err(AppStorageError::new(AppStorageCode::AutomationNotEnabled, "Automation is not enabled."));
+                return Err(AppStorageError::new(AppStorageCode::AutomationNotEnabled, "Schedule is not enabled."));
             }
             let busy = session_has_active_turn(db, &row.target_id)?;
             db.execute(
@@ -61,13 +74,16 @@ impl AppApplication {
             ).map_err(AppStorageError::sqlite)?;
             if busy {
                 db.execute(
-                    "INSERT INTO messages(id,chat_id,role,text,status,created_at,updated_at,retryable) VALUES(?1,?2,'automation','Automation prompt queued.','pending',?3,?3,0)",
+                    "INSERT INTO messages(id,chat_id,role,text,status,created_at,updated_at,retryable) VALUES(?1,?2,'automation','Scheduled prompt queued.','pending',?3,?3,0)",
                     params![stored_placeholder_id,row.target_id,started],
                 ).map_err(AppStorageError::sqlite)?;
             }
             Ok((row, busy))
         }).await.map_err(app_error)?;
         if queued {
+            self.automation_queued
+                .store(true, std::sync::atomic::Ordering::Release);
+            self.automation_wake.notify_one();
             return self
                 .complete_fresh_run(
                     row,
@@ -93,15 +109,29 @@ impl AppApplication {
             .execute(|db| records::queued(db))
             .await
             .map_err(app_error)?;
+        self.automation_queued
+            .store(!queued.is_empty(), std::sync::atomic::Ordering::Release);
         let mut runs = Vec::new();
+        let mut still_queued = false;
+        let batch_full = queued.len() == 20;
+        let mut dispatched_queued = 0;
         for row in queued {
             if self
                 .target_has_active_turn(row.run_target_id.clone())
                 .await?
             {
+                still_queued = true;
                 continue;
             }
             runs.push(self.dispatch_queued(row).await?);
+            dispatched_queued += 1;
+        }
+        self.automation_queued.store(
+            still_queued || batch_full,
+            std::sync::atomic::Ordering::Release,
+        );
+        if batch_full && dispatched_queued > 0 {
+            self.automation_wake.notify_one();
         }
         let now = self.dependencies.identity_clock.now_iso();
         let due = self
@@ -178,7 +208,8 @@ impl AppApplication {
             attachments: None,
             model: None,
             reasoning_effort: None,
-            access_mode: None,
+            // The schedule's own access, whatever the conversation's mode (#237).
+            access_mode: Some(json!(settings::access_mode_name(&row.access))),
             plan_mode: None,
             subsession_result: None,
         };
@@ -222,7 +253,20 @@ impl AppApplication {
         result: DispatchResult,
     ) -> Result<AutomationRunResult, GatewayApplicationError> {
         let completed = self.dependencies.identity_clock.now_iso();
-        let next = if row.state == "enabled" {
+        let next = if row.schedule_type == "once" {
+            None
+        } else if row.state == "enabled" && row.schedule.is_some() {
+            let rule = row.schedule.clone();
+            let now = completed.clone();
+            Some(
+                tokio::task::spawn_blocking(move || {
+                    super::timing::next(rule.as_ref().ok_or_else(super::timing::invalid)?, &now)
+                })
+                .await
+                .map_err(GatewayApplicationError::internal_from)?
+                .map_err(app_error)?,
+            )
+        } else if row.state == "enabled" {
             Some(
                 self.dependencies
                     .identity_clock
@@ -236,7 +280,7 @@ impl AppApplication {
         self.storage.execute(move|db|{
             let placeholder=if result.state=="queued"{result.turn_id.as_deref()}else{None};
             record_run(db,&run_id,&result,&completed,placeholder)?;
-            db.execute("UPDATE app_automations SET next_run_at=?1,last_run_at=?2,last_run_state=?3,last_safe_error_code=?4,run_count=run_count+1,consecutive_failure_count=CASE WHEN ?3='failed' THEN consecutive_failure_count+1 ELSE 0 END,updated_at=?2 WHERE id=?5",params![next,completed,result.state,result.safe_error,row.id]).map_err(AppStorageError::sqlite)?;
+            db.execute("UPDATE app_automations SET next_run_at=?1,last_run_at=?2,last_run_state=?3,last_safe_error_code=?4,run_count=run_count+1,consecutive_failure_count=CASE WHEN ?3='failed' THEN consecutive_failure_count+1 ELSE 0 END,updated_at=?2,state=CASE WHEN schedule_type='once' THEN 'paused' ELSE state END WHERE id=?5",params![next,completed,result.state,result.safe_error,row.id]).map_err(AppStorageError::sqlite)?;
             let run=records::run(db,&run_id)?;
             publish(
                 db,
@@ -362,11 +406,11 @@ fn record_run(
     db.execute("UPDATE app_automation_runs SET state=?1,completed_at=?2,safe_error_code=?3,queued_message_id=?4,turn_id=?5 WHERE id=?6",params![result.state,completed,result.safe_error,placeholder,turn,run_id]).map_err(AppStorageError::sqlite)?;
     if let Some(message_id) = placeholder {
         let (text, status, retryable) = if result.state == "queued" {
-            ("Automation prompt queued.", "pending", 0)
+            ("Scheduled prompt queued.", "pending", 0)
         } else if result.state == "succeeded" {
-            ("Automation prompt dispatched.", "delivered", 0)
+            ("Scheduled prompt dispatched.", "delivered", 0)
         } else {
-            ("Automation prompt could not be dispatched.", "failed", 1)
+            ("Scheduled prompt could not be dispatched.", "failed", 1)
         };
         db.execute("UPDATE messages SET text=?1,status=?2,safe_error_code=?3,retryable=?4,updated_at=?5 WHERE id=?6",params![text,status,result.safe_error,retryable,completed,message_id]).map_err(AppStorageError::sqlite)?;
     }

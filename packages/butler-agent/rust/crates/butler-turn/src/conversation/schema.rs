@@ -2,7 +2,7 @@ use rusqlite::Connection;
 
 use super::{ConversationError, ConversationIdentityClock, ConversationResult};
 
-pub(super) const VERSION: u64 = 4;
+pub(super) const VERSION: u64 = 5;
 
 const SQL: &str = r"
 CREATE TABLE IF NOT EXISTS conversation_sessions (
@@ -67,6 +67,9 @@ CREATE TABLE IF NOT EXISTS conversation_public_source_state (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1), revision INTEGER NOT NULL
 );
 INSERT OR IGNORE INTO conversation_public_source_state (singleton, revision) VALUES (1, 0);
+CREATE TABLE IF NOT EXISTS conversation_source_identity (
+  singleton INTEGER PRIMARY KEY CHECK (singleton = 1), identity TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS conversation_turns_session_seq_idx ON conversation_turns(session_id, seq);
 CREATE INDEX IF NOT EXISTS conversation_messages_session_seq_idx ON conversation_messages(session_id, seq);
 CREATE INDEX IF NOT EXISTS conversation_messages_role_created_idx ON conversation_messages(role, created_at, id);
@@ -80,28 +83,72 @@ CREATE INDEX IF NOT EXISTS conversation_turn_outcomes_session_created_idx ON con
 ";
 
 pub(super) fn ensure(
+    connection: &mut Connection,
+    clock: &dyn ConversationIdentityClock,
+) -> ConversationResult<()> {
+    if current(connection)? {
+        return Ok(());
+    }
+    let transaction = connection
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(ConversationError::sqlite)?;
+    // Another opener may have migrated while this connection waited for the write lock.
+    if !current(&transaction)? {
+        migrate(&transaction, clock)?;
+    }
+    transaction.commit().map_err(ConversationError::sqlite)
+}
+
+fn current(connection: &Connection) -> ConversationResult<bool> {
+    let exists: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='conversation_schema_migrations')",
+        [], |row| row.get(0),
+    ).map_err(ConversationError::sqlite)?;
+    if !exists {
+        return Ok(false);
+    }
+    connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM conversation_schema_migrations WHERE version=?1)",
+            [VERSION],
+            |row| row.get(0),
+        )
+        .map_err(ConversationError::sqlite)
+}
+
+fn migrate(
     connection: &Connection,
     clock: &dyn ConversationIdentityClock,
 ) -> ConversationResult<()> {
     connection
         .execute_batch(SQL)
         .map_err(ConversationError::sqlite)?;
-    for column in [
-        "origin_kind TEXT NOT NULL DEFAULT 'unknown'",
-        "origin_ref TEXT",
-        "origin_reason TEXT",
-        "origin_version TEXT",
-        "origin_evidence_json TEXT",
+    connection.execute(
+        "INSERT OR IGNORE INTO conversation_source_identity (singleton, identity) VALUES (1, ?1)",
+        [uuid::Uuid::new_v4().to_string()],
+    ).map_err(ConversationError::sqlite)?;
+    for (name, definition) in [
+        ("origin_kind", "TEXT NOT NULL DEFAULT 'unknown'"),
+        ("origin_ref", "TEXT"),
+        ("origin_reason", "TEXT"),
+        ("origin_version", "TEXT"),
+        ("origin_evidence_json", "TEXT"),
     ] {
-        let _ignored_additive_migration_error = connection.execute_batch(&format!(
-            "ALTER TABLE conversation_messages ADD COLUMN {column}"
-        ));
+        let exists: bool = connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('conversation_messages') WHERE name=?1)",
+            [name], |row| row.get(0),
+        ).map_err(ConversationError::sqlite)?;
+        if !exists {
+            connection
+                .execute_batch(&format!(
+                    "ALTER TABLE conversation_messages ADD COLUMN {name} {definition}"
+                ))
+                .map_err(ConversationError::sqlite)?;
+        }
     }
-    connection
-        .execute(
-            "INSERT OR IGNORE INTO conversation_schema_migrations (version, applied_at) VALUES (?1, ?2)",
-            rusqlite::params![VERSION, clock.now_iso()],
-        )
-        .map_err(ConversationError::sqlite)?;
+    connection.execute(
+        "INSERT OR IGNORE INTO conversation_schema_migrations (version, applied_at) VALUES (?1, ?2)",
+        rusqlite::params![VERSION, clock.now_iso()],
+    ).map_err(ConversationError::sqlite)?;
     Ok(())
 }

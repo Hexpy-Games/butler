@@ -26,16 +26,10 @@ impl<F: Fn(&Path) + Send + Sync> CommitObserver for At<(Point, F)> {
             (self.0.1)(target);
         }
     }
-    fn after_link(&self, temporary: &Path) {
-        if matches!(self.0.0, Point::AfterLink) {
-            (self.0.1)(temporary);
-        }
-    }
 }
 
 enum Point {
     BeforeReplace,
-    AfterLink,
 }
 
 fn sha(bytes: &[u8]) -> String {
@@ -96,8 +90,12 @@ async fn batch_retains_first_commit_and_reports_second_external_change() {
     std::fs::remove_dir_all(root).unwrap();
 }
 
+/// Race: an external writer between the check and the exclusive create keeps
+/// its bytes, and the temporary file is cleaned up.
+// test-category: race
 #[test]
 fn exclusive_create_race_keeps_external_bytes_and_cleans_temp() {
+    sync_failure_and_link_fallback();
     let root = std::env::temp_dir().join(format!("butler-k1b-create-race-{}", Uuid::new_v4()));
     std::fs::create_dir(&root).unwrap();
     let absolute = root.join("target.txt");
@@ -124,16 +122,6 @@ fn exclusive_create_race_keeps_external_bytes_and_cleans_temp() {
     assert_eq!(failure.error, "external_change_conflict");
     assert_eq!(std::fs::read(&absolute).unwrap(), b"external");
     assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
-    std::fs::remove_dir_all(root).unwrap();
-}
-
-#[cfg(unix)]
-#[test]
-fn committed_hardlink_cleanup_failure_remains_applied_success() {
-    use std::os::unix::fs::PermissionsExt;
-    let root = std::env::temp_dir().join(format!("butler-k1b-cleanup-{}", Uuid::new_v4()));
-    std::fs::create_dir(&root).unwrap();
-    let absolute = root.join("target.txt");
     let snapshot = io::observe(
         GuardedPath {
             public: "target.txt".into(),
@@ -143,22 +131,14 @@ fn committed_hardlink_cleanup_failure_remains_applied_success() {
         io::Parent::MustExist,
     )
     .unwrap();
-    let prepared = io::prepare(
-        snapshot,
-        b"committed".to_vec(),
-        None,
-        io::Replacement::RequiresExpectedDigest,
-    )
-    .unwrap();
-    let locked = root.clone();
-    let lock_directory = At((Point::AfterLink, move |_: &Path| {
-        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o500)).unwrap();
+    let prepared =
+        io::prepare(snapshot, b"ours".to_vec(), None, io::Replacement::Unguarded).unwrap();
+    let external = At((Point::BeforeReplace, |path: &Path| {
+        std::fs::write(path, b"new-editor-save").unwrap();
     }));
-    let result = io::commit(prepared, &lock_directory).unwrap();
-    std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
-    assert!(result.cleanup_failed);
-    assert_eq!(std::fs::read(&absolute).unwrap(), b"committed");
-    assert_eq!(std::fs::read_dir(&root).unwrap().count(), 2);
+    let failure = io::commit(prepared, &external).expect_err("late editor save must win");
+    assert_eq!(failure.error, "external_change_conflict");
+    assert_eq!(std::fs::read(&absolute).unwrap(), b"new-editor-save");
     std::fs::remove_dir_all(root).unwrap();
 }
 
@@ -216,7 +196,17 @@ async fn close_drains_running_and_queued_mutations_after_callers_drop() {
     assert_eq!(owner.active_count(), 2);
     let closing = owner.clone();
     let join = tokio::spawn(async move { closing.close().await });
-    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    let close_deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(1);
+    loop {
+        if owner.inner.state.lock().closing {
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < close_deadline,
+            "close did not stop admission"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+    }
     let rejected = MutationCommand::Write(super::contracts::WriteMutation {
         context: context(),
         path: "rejected.txt".into(),
@@ -235,5 +225,60 @@ async fn close_drains_running_and_queued_mutations_after_callers_drop() {
     assert_eq!(std::fs::read(root.join("second.txt")).unwrap(), b"four");
     assert_eq!(std::fs::read(root.join("queued.txt")).unwrap(), b"queued");
     assert!(!root.join("rejected.txt").exists());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+fn sync_failure_and_link_fallback() {
+    struct SyncFailure;
+    impl CommitObserver for SyncFailure {
+        fn sync_temporary(&self, _: &std::fs::File) -> std::io::Result<()> {
+            Err(std::io::ErrorKind::Other.into())
+        }
+    }
+    struct NoLinks(bool);
+    impl CommitObserver for NoLinks {
+        fn link(&self, _: &Path, target: &Path) -> std::io::Result<()> {
+            if self.0 {
+                std::fs::write(target, b"peer").unwrap();
+            }
+            Err(std::io::ErrorKind::Unsupported.into())
+        }
+    }
+    let root = std::env::temp_dir().join(format!("workspace-sync-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&root).unwrap();
+    let target = root.join("new.txt");
+    let prepare = || {
+        let before = io::observe(
+            GuardedPath {
+                public: "new.txt".into(),
+                absolute: target.clone(),
+                real: target.clone(),
+            },
+            io::Parent::MustExist,
+        )
+        .unwrap();
+        io::prepare(
+            before,
+            b"complete bytes".to_vec(),
+            None,
+            io::Replacement::Unguarded,
+        )
+        .unwrap()
+    };
+    assert!(
+        io::commit(prepare(), &SyncFailure).is_err(),
+        "sync failure must abort publication"
+    );
+    assert!(!target.exists());
+    let committed =
+        io::commit(prepare(), &NoLinks(false)).expect("unsupported links need create_new fallback");
+    assert!(committed.created);
+    assert_eq!(std::fs::read(&target).unwrap(), b"complete bytes");
+    assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
+    std::fs::remove_file(&target).unwrap();
+    let failure = io::commit(prepare(), &NoLinks(true)).unwrap_err();
+    assert_eq!(failure.error, "external_change_conflict");
+    assert_eq!(std::fs::read(&target).unwrap(), b"peer");
+    assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
     std::fs::remove_dir_all(root).unwrap();
 }

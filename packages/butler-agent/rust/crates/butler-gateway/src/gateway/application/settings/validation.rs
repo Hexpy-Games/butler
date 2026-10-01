@@ -19,6 +19,7 @@ const UPDATE_KEYS: &[&str] = &[
     "main_screen_theme",
     "main_screen_theme_preset",
     "main_screen_theme_custom_colors",
+    "wallpaper",
     "translucent_sidebar",
     "diagnostics_enabled",
     "desktop_notifications",
@@ -26,6 +27,7 @@ const UPDATE_KEYS: &[&str] = &[
     "web_search",
     "model_fallback",
     "default_project_folder_selection_token",
+    "onboarding",
 ];
 
 pub(super) fn is_request(value: &Value) -> bool {
@@ -71,6 +73,9 @@ pub(super) fn is_request(value: &Value) -> bool {
         || input
             .get("model_fallback")
             .is_some_and(|value| !is_model_fallback(value))
+        || input
+            .get(super::onboarding::KEY)
+            .is_some_and(|value| !super::onboarding::is_patch(value))
     {
         return false;
     }
@@ -89,14 +94,8 @@ pub(super) fn is_iana_timezone(value: &Value) -> bool {
     {
         return false;
     }
-    ["/usr/share/zoneinfo", "/var/db/timezone/zoneinfo"]
-        .iter()
-        .any(|root| {
-            let Ok(bytes) = std::fs::read(std::path::Path::new(root).join(zone)) else {
-                return false;
-            };
-            tz::TimeZone::from_tz_data(&bytes).is_ok()
-        })
+    butler_platform::time_zone::zone_rules(zone)
+        .is_ok_and(|bytes| tz::TimeZone::from_tz_data(&bytes).is_ok())
 }
 
 fn is_reasoning(value: &Value) -> bool {

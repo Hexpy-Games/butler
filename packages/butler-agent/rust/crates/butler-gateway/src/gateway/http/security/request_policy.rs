@@ -1,0 +1,268 @@
+//! Host and Origin admission for every request, and the JSON Content-Type
+//! rule for request bodies.
+//!
+//! The Host check stops DNS rebinding: a page on an attacker's name that
+//! resolves to loopback still sends its own name as Host. The Origin
+//! allowlist stops cross-site requests from browsers, which always send
+//! Origin on cross-origin fetches and state-changing requests; clients
+//! without a browser send none. Origins are compared as the raw header
+//! string: URL parsers serialize opaque origins such as `app://butler` as
+//! `null`.
+
+use std::collections::HashSet;
+use std::net::{IpAddr, SocketAddr};
+
+use axum::http::{HeaderMap, HeaderValue, Method, header};
+
+use super::super::HttpError;
+
+/// The renderer origin of the packaged desktop App.
+const APP_ORIGIN: &str = "app://butler";
+/// Loopback names the gateway always answers, with its bound port.
+const LOOPBACK_NAMES: [&str; 3] = ["127.0.0.1", "localhost", "[::1]"];
+/// Routes whose bodies are multipart uploads, not JSON.
+const MULTIPART_ROUTES: [&str; 4] = [
+    "/message-files",
+    "/skills/import",
+    "/wallpapers",
+    "/wallpaper-modules/import",
+];
+
+/// Where a request says it comes from (its raw `Origin` header).
+#[derive(Clone, Debug)]
+pub(in crate::gateway::http) enum RequestOrigin {
+    /// No `Origin` header: a client without a browser, or a same-origin
+    /// navigation or `GET`.
+    Absent,
+    /// An allowlisted browser origin, echoed in CORS response headers.
+    Allowed {
+        value: HeaderValue,
+        /// A page served on this computer (loopback, the App renderer, the
+        /// dev renderer), not one on a LAN or configured name.
+        local: bool,
+    },
+}
+
+impl RequestOrigin {
+    /// The origin to echo in `Access-Control-Allow-Origin`, if any.
+    pub(in crate::gateway::http) fn allowed(&self) -> Option<&HeaderValue> {
+        match self {
+            Self::Absent => None,
+            Self::Allowed { value, .. } => Some(value),
+        }
+    }
+
+    /// No Origin, or one of this computer's pages.
+    pub(in crate::gateway::http) fn is_local(&self) -> bool {
+        matches!(self, Self::Absent | Self::Allowed { local: true, .. })
+    }
+}
+
+/// The Host names and browser origins this gateway answers.
+pub(in crate::gateway::http) struct RequestPolicy {
+    hosts: HashSet<String>,
+    /// Origins of pages on this computer.
+    local_origins: HashSet<String>,
+    /// Origins of LAN names and configured names.
+    remote_origins: HashSet<String>,
+}
+
+impl RequestPolicy {
+    /// Loopback names and the literal bound address (with the bound port),
+    /// the App origin, the dev renderer origins (comma-separated, only when
+    /// configured), the operator's extra host names and, while remote access
+    /// is on, the LAN authorities (`ip:port`, `<name>.local:port`).
+    pub(in crate::gateway::http) fn new(
+        local_addr: SocketAddr,
+        allowed_hosts: &[String],
+        dev_origins: Option<&str>,
+        lan_authorities: &[String],
+    ) -> Self {
+        let port = local_addr.port();
+        let mut policy = Self {
+            hosts: HashSet::new(),
+            local_origins: HashSet::from([APP_ORIGIN.to_owned()]),
+            remote_origins: HashSet::new(),
+        };
+        for name in LOOPBACK_NAMES {
+            policy.allow_plain_http(&format!("{name}:{port}"), true);
+        }
+        let bound_loopback = local_addr.ip().to_canonical().is_loopback();
+        policy.allow_plain_http(&local_addr.to_string(), bound_loopback);
+        for authority in lan_authorities {
+            policy.allow_plain_http(authority, false);
+        }
+        for entry in allowed_hosts {
+            policy.allow_configured_host(entry, port);
+        }
+        let dev_origins = dev_origins.unwrap_or_default().split(',').map(str::trim);
+        policy.local_origins.extend(
+            dev_origins
+                .filter(|origin| !origin.is_empty() && *origin != "null")
+                .map(str::to_owned),
+        );
+        policy
+    }
+
+    fn allow_plain_http(&mut self, authority: &str, local: bool) {
+        let authority = authority.to_ascii_lowercase();
+        let origins = if local {
+            &mut self.local_origins
+        } else {
+            &mut self.remote_origins
+        };
+        origins.insert(format!("http://{authority}"));
+        self.hosts.insert(authority);
+    }
+
+    /// `name` answers Host `name` and `name:<bound port>`; `name:port`
+    /// answers exactly that. Both schemes are allowed as origins, so a TLS
+    /// reverse proxy in front of the gateway works.
+    fn allow_configured_host(&mut self, entry: &str, port: u16) {
+        let entry = entry.trim().to_ascii_lowercase();
+        if entry.is_empty() || entry.contains(['/', '@', '?', '#', ' ']) {
+            return;
+        }
+        let authorities = if has_port(&entry) {
+            vec![entry]
+        } else {
+            vec![format!("{entry}:{port}"), entry]
+        };
+        for authority in authorities {
+            self.remote_origins.insert(format!("http://{authority}"));
+            self.remote_origins.insert(format!("https://{authority}"));
+            self.hosts.insert(authority);
+        }
+    }
+
+    /// Refuses a request whose Host is missing, repeated or not ours.
+    pub(in crate::gateway::http) fn check_host(
+        &self,
+        headers: &HeaderMap,
+    ) -> Result<(), HttpError> {
+        let mut values = headers.get_all(header::HOST).iter();
+        let (Some(host), None) = (values.next(), values.next()) else {
+            return Err(host_not_allowed());
+        };
+        let host = host.to_str().map_err(|_| host_not_allowed())?;
+        if self.hosts.contains(&host.to_ascii_lowercase()) {
+            Ok(())
+        } else {
+            Err(host_not_allowed())
+        }
+    }
+
+    /// Classifies the raw `Origin` header; any origin not on the allowlist,
+    /// including `null`, is refused.
+    pub(in crate::gateway::http) fn classify_origin(
+        &self,
+        headers: &HeaderMap,
+    ) -> Result<RequestOrigin, HttpError> {
+        let mut values = headers.get_all(header::ORIGIN).iter();
+        let local = |origin: &HeaderValue| {
+            let value = origin.to_str().ok()?;
+            if self.local_origins.contains(value) {
+                Some(true)
+            } else {
+                self.remote_origins.contains(value).then_some(false)
+            }
+        };
+        match (values.next(), values.next()) {
+            (None, _) => Ok(RequestOrigin::Absent),
+            (Some(origin), None) => match local(origin) {
+                Some(local) => Ok(RequestOrigin::Allowed {
+                    value: origin.clone(),
+                    local,
+                }),
+                None => Err(origin_not_allowed()),
+            },
+            _ => Err(origin_not_allowed()),
+        }
+    }
+}
+
+fn origin_not_allowed() -> HttpError {
+    HttpError::public(
+        403,
+        "origin_not_allowed",
+        "Requests from this origin are not allowed.",
+    )
+}
+
+/// A request that sends a body must send JSON, except to the multipart
+/// upload routes. Body-less `POST`/`DELETE` (cancel, remove) need no type.
+pub(in crate::gateway::http) fn require_json_body(
+    method: &Method,
+    path: &str,
+    headers: &HeaderMap,
+) -> Result<(), HttpError> {
+    let sends_body = matches!(
+        *method,
+        Method::POST | Method::PUT | Method::PATCH | Method::DELETE
+    ) && declares_body(headers);
+    if !sends_body || MULTIPART_ROUTES.contains(&path) || is_json(headers) {
+        return Ok(());
+    }
+    Err(HttpError::public(
+        415,
+        "unsupported_media_type",
+        "Request bodies must be sent as application/json.",
+    ))
+}
+
+fn declares_body(headers: &HeaderMap) -> bool {
+    headers.contains_key(header::TRANSFER_ENCODING)
+        || headers
+            .get_all(header::CONTENT_LENGTH)
+            .iter()
+            .any(|value| value.to_str().map_or(true, |length| length.trim() != "0"))
+}
+
+fn is_json(headers: &HeaderMap) -> bool {
+    headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .is_some_and(|media| media.trim().eq_ignore_ascii_case("application/json"))
+}
+
+/// Whether the request's Host names a loopback address (`localhost`, a
+/// `.localhost` name or a loopback IP), which browsers treat as potentially
+/// trustworthy: they send it Fetch Metadata even over plain HTTP.
+pub(in crate::gateway::http) fn is_loopback_host(headers: &HeaderMap) -> bool {
+    let Some(authority) = headers
+        .get(header::HOST)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_ascii_lowercase)
+    else {
+        return false;
+    };
+    let name = match authority.rsplit_once(':') {
+        Some((name, _)) if has_port(&authority) => name,
+        _ => authority.as_str(),
+    };
+    let name = name.trim_start_matches('[').trim_end_matches(']');
+    name == "localhost"
+        || name.ends_with(".localhost")
+        || name.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback())
+}
+
+/// Whether an authority ends in `:port` (an IPv6 literal alone does not).
+fn has_port(authority: &str) -> bool {
+    authority.rsplit_once(':').is_some_and(|(host, port)| {
+        !port.is_empty()
+            && port.bytes().all(|byte| byte.is_ascii_digit())
+            && (!host.starts_with('[') || host.ends_with(']'))
+    })
+}
+
+fn host_not_allowed() -> HttpError {
+    HttpError::public(
+        403,
+        "host_not_allowed",
+        "This Butler gateway does not answer that host name.",
+    )
+}
+
+#[cfg(test)]
+mod tests;

@@ -241,6 +241,11 @@ const CORE_SCHEMA: &str = r"
       target_kind TEXT NOT NULL,
       target_session_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
       interval_seconds INTEGER NOT NULL,
+      schedule_type TEXT NOT NULL DEFAULT 'interval',
+      run_at TEXT,
+      start_at TEXT,
+      legacy_record_json TEXT,
+      access_mode TEXT,
       state TEXT NOT NULL,
       next_run_at TEXT,
       last_run_at TEXT,
@@ -275,6 +280,18 @@ const CORE_SCHEMA: &str = r"
     CREATE INDEX IF NOT EXISTS app_automation_runs_automation_idx
     ON app_automation_runs(automation_id);
 
+    CREATE INDEX IF NOT EXISTS app_automation_runs_queued_idx
+    ON app_automation_runs(state) WHERE state='queued';
+
+    CREATE INDEX IF NOT EXISTS app_automations_due_idx
+    ON app_automations(next_run_at) WHERE state='enabled' AND next_run_at IS NOT NULL;
+
+    CREATE INDEX IF NOT EXISTS app_automations_active_updated_idx
+    ON app_automations(updated_at DESC) WHERE state!='deleted';
+
+    CREATE INDEX IF NOT EXISTS app_automations_updated_idx
+    ON app_automations(updated_at DESC);
+
     CREATE INDEX IF NOT EXISTS message_files_owner_idx
     ON message_files(owner_session_id, message_id);
 
@@ -284,8 +301,21 @@ const CORE_SCHEMA: &str = r"
     CREATE INDEX IF NOT EXISTS session_queued_messages_session_idx
     ON session_queued_messages(chat_id, state);
 
+    -- The queue poll, lease recovery and dispatch deadline read only these
+    -- states; their queries repeat the IN term so the index applies.
+    CREATE INDEX IF NOT EXISTS session_queued_messages_active_idx
+    ON session_queued_messages(state, chat_id)
+    WHERE state IN ('queued', 'dispatching');
+
+    CREATE INDEX IF NOT EXISTS app_automation_runs_queued_idx
+    ON app_automation_runs(state)
+    WHERE state = 'queued';
+
     CREATE INDEX IF NOT EXISTS turns_chat_state_idx
     ON turns(chat_id, state);
+
+    CREATE INDEX IF NOT EXISTS turns_user_message_idx
+    ON turns(user_message_id);
 
     CREATE INDEX IF NOT EXISTS app_turn_cancel_outbox_pending_idx
     ON app_turn_cancel_outbox(state, turn_id);

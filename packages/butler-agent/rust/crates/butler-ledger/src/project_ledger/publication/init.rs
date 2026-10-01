@@ -2,8 +2,9 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
+use butler_platform::instance;
+use butler_platform::process_control::{Liveness, liveness};
 use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 
@@ -35,7 +36,7 @@ struct MutationClaim {
     claim_id: String,
     host_id: String,
     process_id: u32,
-    process_started_at_ms: i64,
+    process_started_at_ms: Option<i64>,
 }
 
 pub(super) fn ensure(
@@ -116,14 +117,15 @@ fn canonical_target(
     record::safe_id(&scope.ledger_project_id)?;
     let projects = data_root.join("project-ledger/projects");
     fs::create_dir_all(&projects).map_err(|source| io().with_source(source))?;
-    let canonical_projects =
-        fs::canonicalize(&projects).map_err(|source| io().with_source(source))?;
+    let canonical_projects = butler_platform::secure_fs::canonicalize(&projects)
+        .map_err(|source| io().with_source(source))?;
     let expected = projects.join(&scope.ledger_project_id);
     if scope.ledger_root != expected {
         return Err(mismatch());
     }
     if expected.exists() {
-        let actual = fs::canonicalize(&expected).map_err(|source| io().with_source(source))?;
+        let actual = butler_platform::secure_fs::canonicalize(&expected)
+            .map_err(|source| io().with_source(source))?;
         if actual != canonical_projects.join(&scope.ledger_project_id) {
             return Err(mismatch());
         }
@@ -192,11 +194,13 @@ fn acquire(path: &Path, owner: &MutationClaim) -> Result<(), ProjectWorkPublicat
                 if previous.host_id != owner.host_id {
                     return Err(ProjectWorkPublicationError::Uncertain { source: None });
                 }
-                let observed = process_started_ms(previous.process_id);
-                if observed.is_some_and(|started| started == previous.process_started_at_ms) {
+                let observed = instance::process_started_at_ms(previous.process_id);
+                if observed.is_some_and(|started| Some(started) == previous.process_started_at_ms) {
                     return Err(ProjectWorkPublicationError::Uncertain { source: None });
                 }
-                if observed.is_none() && process_alive(previous.process_id) {
+                if (observed.is_none() || previous.process_started_at_ms.is_none())
+                    && process_alive(previous.process_id)
+                {
                     return Err(ProjectWorkPublicationError::Uncertain { source: None });
                 }
                 let quarantine = path.with_extension(format!("dead-{}", previous.claim_id));
@@ -234,14 +238,10 @@ fn release(path: &Path, owner: &MutationClaim) -> Result<(), ProjectWorkPublicat
 
 fn current_claim() -> Result<MutationClaim, ProjectWorkPublicationError> {
     let process_id = std::process::id();
-    let host_id = nix::unistd::gethostname()
-        .map_err(|source| {
-            ProjectWorkPublicationError::Uncertain { source: None }.with_source(source)
-        })?
-        .to_string_lossy()
-        .into_owned();
-    let started = process_started_ms(process_id)
-        .ok_or(ProjectWorkPublicationError::Uncertain { source: None })?;
+    let host_id = instance::host_name().map_err(|source| {
+        ProjectWorkPublicationError::Uncertain { source: None }.with_source(source)
+    })?;
+    let started = instance::process_started_at_ms(process_id);
     Ok(MutationClaim {
         schema: "project-ledger.mutation-claim.v1".into(),
         claim_id: uuid::Uuid::new_v4().to_string(),
@@ -251,52 +251,17 @@ fn current_claim() -> Result<MutationClaim, ProjectWorkPublicationError> {
     })
 }
 
-fn process_started_ms(pid: u32) -> Option<i64> {
-    let output = Command::new("ps")
-        .args(["-p", &pid.to_string(), "-o", "lstart="])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let raw = std::str::from_utf8(&output.stdout).ok()?.trim();
-    #[cfg(target_os = "macos")]
-    let converted = Command::new("date")
-        .args(["-j", "-f", "%a %b %e %T %Y", raw, "+%s"])
-        .output()
-        .ok()?;
-    #[cfg(target_os = "linux")]
-    let converted = Command::new("date")
-        .args(["-d", raw, "+%s"])
-        .output()
-        .ok()?;
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    return None;
-    if !converted.status.success() {
-        return None;
-    }
-    std::str::from_utf8(&converted.stdout)
-        .ok()?
-        .trim()
-        .parse::<i64>()
-        .ok()?
-        .checked_mul(1000)
+/// Whether the claim's process may still be running, including a process this
+/// user cannot signal or a host that cannot tell.
+fn process_alive(pid: u32) -> bool {
+    process_may_be_alive(liveness(pid))
 }
 
-#[cfg(unix)]
-fn process_alive(pid: u32) -> bool {
-    use nix::sys::signal::kill;
-    use nix::unistd::Pid;
-    // A pid outside 1..=i32::MAX names no single process (0 and negative
-    // values address process groups).
-    let Ok(pid) = i32::try_from(pid) else {
-        return false;
-    };
-    pid > 0 && kill(Pid::from_raw(pid), None).is_ok()
-}
-#[cfg(not(unix))]
-fn process_alive(_pid: u32) -> bool {
-    true
+pub(in crate::project_ledger) fn process_may_be_alive(state: Liveness) -> bool {
+    matches!(
+        state,
+        Liveness::Running | Liveness::OtherOwner | Liveness::Unknown
+    )
 }
 
 fn now_iso() -> Result<String, ProjectWorkPublicationError> {

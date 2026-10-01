@@ -149,7 +149,11 @@ impl<'a> Identity<'a> {
             || occurrence.get("status").and_then(Value::as_str) != Some("pending")
             || occurrence.get("ledgerProjectId").and_then(Value::as_str)
                 != Some(&binding.ledger_project_id)
-            || occurrence.get("ledgerRoot").and_then(Value::as_str) != root.to_str()
+            || occurrence
+                .get("ledgerRoot")
+                .and_then(Value::as_str)
+                .map(Path::new)
+                != Some(root)
             || occurrence
                 .pointer("/operationIdentity/kind")
                 .and_then(Value::as_str)
@@ -238,7 +242,11 @@ fn validate_head(head: &Value, root: &Path) -> Result<(), ProjectLedgerReadError
             .keys()
             .any(|key| !keys.contains(&key.as_str()) && key != "recordPaths")
         || head.get("schema").and_then(Value::as_str) != Some("butler.btcc-project-ledger-head.v1")
-        || head.get("projectRoot").and_then(Value::as_str) != root.to_str()
+        || head
+            .get("projectRoot")
+            .and_then(Value::as_str)
+            .map(Path::new)
+            != Some(root)
         || !digest_shape(required_string(head, "sourceSha256")?)
         || !digest_shape(required_string(head, "storageSha256")?)
         || head

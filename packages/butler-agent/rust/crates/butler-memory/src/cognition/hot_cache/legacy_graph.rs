@@ -1,3 +1,5 @@
+//! The legacy entity graph extracted from hot-cache and transcript text.
+
 use std::{
     collections::HashMap,
     fs,

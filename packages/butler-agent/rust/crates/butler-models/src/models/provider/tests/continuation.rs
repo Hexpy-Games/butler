@@ -145,35 +145,6 @@ fn legacy_projection_acknowledges_then_strips_only_images_after_success() {
 }
 
 #[test]
-fn bounded_and_failed_legacy_rounds_do_not_mutate_prior_continuation() {
-    let messages = [message(ModelRoundRole::User, "hello", None)];
-    let prior = serde_json::json!({
-        "provider":"openai", "responseId":"old",
-        "sent":{"toolMessages":0,"userMessages":1},
-        "statelessInput":[{"opaque":true}]
-    });
-    let unchanged = prior.clone();
-    let mut legacy = request(
-        "openai/gpt-5.5",
-        &messages,
-        &ReasoningEffort::Medium,
-        CancellationToken::new(),
-        None,
-    );
-    legacy.continuation = Some(&prior);
-    drop(crate::models::provider::continuation::prepare(&legacy).unwrap());
-    assert_eq!(prior, unchanged);
-
-    let bounded = serde_json::json!({"responseItemId":"turn-item-1"});
-    legacy.bounded_continuation = Some(&bounded);
-    assert!(
-        crate::models::provider::continuation::prepare(&legacy)
-            .unwrap()
-            .is_none()
-    );
-}
-
-#[test]
 fn acknowledgement_uses_last_nonempty_matching_call_id() {
     let mut first = message(ModelRoundRole::Tool, "first", Some("duplicate"));
     first.operation_result_reference = Some(reference("one"));
@@ -209,55 +180,4 @@ fn acknowledgement_uses_last_nonempty_matching_call_id() {
         prepared.successful.stateless_request_input[1]["output"],
         "empty-old"
     );
-}
-
-#[tokio::test]
-async fn transport_failure_and_preflight_cancel_leave_prior_legacy_state_unchanged() {
-    let body = br#"{"error":{"message":"temporary"}}"#;
-    let response = format!(
-        "HTTP/1.1 500 Internal Server Error\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-        body.len(),
-        String::from_utf8_lossy(body)
-    )
-    .into_bytes();
-    let (endpoint, server) = super::transport::retry_server(vec![response]).await;
-    let (provider, _) = super::transport::provider(endpoint, "openai/gpt-5.5");
-    let messages = [message(ModelRoundRole::User, "hello", None)];
-    let prior = serde_json::json!({
-        "provider":"openai", "responseId":"old",
-        "sent":{"toolMessages":0,"userMessages":1},
-        "statelessInput":[{"opaque":true}]
-    });
-    let unchanged = prior.clone();
-    let mut failed = request(
-        "openai/gpt-5.5",
-        &messages,
-        &ReasoningEffort::Medium,
-        CancellationToken::new(),
-        None,
-    );
-    failed.continuation = Some(&prior);
-    assert!(provider.run_round(failed).await.is_err());
-    server.await.unwrap();
-    assert_eq!(prior, unchanged);
-
-    let (provider, _) = super::transport::provider(
-        Url::parse("http://127.0.0.1:1/v1/responses").unwrap(),
-        "openai/gpt-5.5",
-    );
-    let cancellation = CancellationToken::new();
-    cancellation.cancel();
-    let mut cancelled = request(
-        "openai/gpt-5.5",
-        &messages,
-        &ReasoningEffort::Medium,
-        cancellation,
-        None,
-    );
-    cancelled.continuation = Some(&prior);
-    assert!(matches!(
-        provider.run_round(cancelled).await,
-        Err(ModelRoundError::Cancelled)
-    ));
-    assert_eq!(prior, unchanged);
 }

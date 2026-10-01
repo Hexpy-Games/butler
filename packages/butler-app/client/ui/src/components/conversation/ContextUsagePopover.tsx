@@ -1,32 +1,65 @@
-import { useAppLocale } from "@/app/copy.ts";
-import { appCopy } from "@/app/copy.ts";
-import type { SessionSummaryView } from "@/app/types.ts";
-import { ProgressMeter, Stack, Typo } from "@/butler-ds";
+import { appCopy, getAppLocale, useAppLocale } from "@/app/copy.ts";
+import type { ContextDetailsView } from "@/app/types.ts";
+import { Button, formatUsageTokens, Inline, ProgressMeter, Stack, Typo, UsageSummaryRows } from "@/butler-ds";
+import { conversationUsageSummary } from "./conversationUsage";
+import type { UsageAuthMode } from "./usageAuthMode";
+import { useConversationUsage, type QuotaLoader, type UsageLoader } from "./useConversationUsage";
 
-function formatTokenCount(tokens: number): string {
-  if (tokens >= 1000) return `${Math.round(tokens / 1000)}k`;
-  return tokens.toLocaleString();
+interface ContextUsagePopoverProps {
+  context?: ContextDetailsView | null;
+  mode: UsageAuthMode;
+  sessionId: string | null;
+  onDetails?: () => void;
+  load?: UsageLoader;
+  loadQuota?: QuotaLoader;
 }
 
-export function ContextUsagePopover({
-  context,
-}: {
-  context?: SessionSummaryView["context_details"];
-}) {
+function contextRevision(context: ContextDetailsView): string {
+  return context.updated_at ?? `${context.used_tokens}/${context.budget_tokens}`;
+}
+
+/** Context meter, this conversation's usage for the model's auth mode, and Details. */
+export function ContextUsagePopover({ context, mode, sessionId, onDetails, load, loadQuota }: ContextUsagePopoverProps) {
   useAppLocale();
+  const tracked = mode === "subscription" || mode === "api_key";
+  const usage = useConversationUsage({
+    sessionId: tracked ? sessionId : null,
+    open: Boolean(context),
+    revision: context ? contextRevision(context) : "",
+    load,
+    providerId: mode === "subscription" ? context?.provider_id ?? null : null,
+    loadQuota,
+  });
   if (!context) return null;
   const percent = Math.round(Math.max(0, Math.min(1, context.ratio)) * 100);
+  const locale = getAppLocale();
+  const summary = conversationUsageSummary({ mode, context, ...usage });
 
   return (
-    <Stack gap="sm">
-      <ProgressMeter
-        label={appCopy.interfacePanels.contextWindow}
-        meta={appCopy.interfaceTemplates.contextMetric("full", percent)}
-        value={percent}
-      />
-      <Typo.Caption numeric="tabular" tone="secondary">
-        {formatTokenCount(context.used_tokens)} / {formatTokenCount(context.budget_tokens)}
-      </Typo.Caption>
+    <Stack gap="lg" data-test-class="context-usage">
+      <Stack gap="xs">
+        <ProgressMeter
+          label={appCopy.interfacePanels.contextWindow}
+          meta={appCopy.interfaceTemplates.contextMetric("full", percent)}
+          value={percent}
+        />
+        <Typo.Caption numeric="tabular" tone="secondary">
+          {formatUsageTokens(context.used_tokens, locale)} / {formatUsageTokens(context.budget_tokens, locale)}
+        </Typo.Caption>
+      </Stack>
+      {summary ? <UsageSummaryRows {...summary} /> : null}
+      {onDetails ? (
+        <Inline justify="end">
+          <Button
+            data-test-class="context-usage-details"
+            size="sm"
+            text={appCopy.composer.usage.details}
+            type="button"
+            variant="inline"
+            onClick={onDetails}
+          />
+        </Inline>
+      ) : null}
     </Stack>
   );
 }

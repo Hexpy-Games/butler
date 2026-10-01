@@ -1,0 +1,613 @@
+/* 02 Typography hero, "from token to product". The static layout below IS
+   the poster (reduced motion): the type tokens beside the assembled
+   components. Motion is compiled at runtime (typeChoreography.ts,
+   typeAssembly.ts, heroTimeline.ts) and only moves, fades, draws and weighs
+   these boxes. The board is a fixed canvas (1040x585 wide, 380x640 tall)
+   scaled to its stage by --fit, so every px here is a canvas px, and every
+   box sits on the grid of typeGrid.ts (--grid-* set on the board). */
+
+/* Laid out at 2x (zoom) and drawn at half scale: the compositor rasterizes
+   moving layers at their layout scale, so the camera can push in to 2x and
+   the text stays sharp. Zoom scales every length inside alike (keyframes
+   included), so the canvas math is unchanged. */
+.board {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  zoom: 2;
+  translate: -50% -50%;
+  scale: calc(var(--fit) / 2);
+  color: var(--text-primary);
+}
+
+.camera {
+  position: absolute;
+  inset: 0;
+  perspective: 112rem;
+  perspective-origin: 50% 50%;
+}
+
+.world,
+.poster,
+.tokens,
+.ladder,
+.rung,
+.sampleCell,
+.product,
+.column {
+  transform-style: preserve-3d;
+}
+
+.world {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 50%;
+}
+
+/* The poster: tokens on columns 1-5, product on 6-12; both run margin to
+   margin, top to bottom. */
+.poster {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: var(--grid-tokens) minmax(0, 1fr);
+  column-gap: var(--grid-gutter);
+  padding: var(--grid-margin);
+}
+
+/* Tall: the poster takes its content's height (the conversation whole, the
+   other components under it); the finale fits all of it into the frame. */
+.board[data-layout="tall"] .poster {
+  bottom: auto;
+  grid-template-rows: auto auto;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: var(--space-2xl);
+}
+
+/* ---- Tokens: specimen and role ladder ---- */
+
+.tokens {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  row-gap: var(--space-2xl);
+  min-width: 0;
+}
+
+.specimenRow {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--grid-gutter);
+}
+
+/* The specimen is laid out at its Act I size and drawn at --spec-q in the
+   poster; the slot holds the drawn size in the layout. */
+.specimenSlot {
+  position: relative;
+  flex: none;
+  inline-size: var(--slot-w);
+  block-size: var(--slot-h);
+}
+
+.specimen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  scale: var(--spec-q);
+  transform-origin: 0 0;
+}
+
+.glyphSvg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+.outline,
+.fillText {
+  font-size: var(--spec-size);
+}
+
+.outline {
+  fill: none;
+  opacity: 0;
+  stroke: var(--text-primary);
+  stroke-dasharray: var(--dash) var(--dash);
+  stroke-dashoffset: 0;
+  stroke-linejoin: round;
+  stroke-width: 1.5px;
+}
+
+.fillText {
+  fill: var(--text-primary);
+  font-weight: var(--font-weight-strong);
+}
+
+/* Guides, labels and the weight control live only in motion. */
+.hline,
+.vline,
+.band2,
+.advLabel,
+.sizeLabel,
+.overlay {
+  position: absolute;
+  opacity: 0;
+}
+
+.hline {
+  left: 0;
+  block-size: 1px;
+}
+
+.vline {
+  top: 0;
+  inline-size: 1px;
+}
+
+.rule {
+  position: absolute;
+  inset: 0;
+  background: var(--line-strong);
+  transform-origin: 0 100%;
+}
+
+.band2 {
+  top: 0;
+  bottom: 0;
+  background: var(--selection-strong);
+  transform-origin: 0 50%;
+}
+
+.guideLabel,
+.sizeLabel,
+.advLabel,
+.gapLabel,
+.mono {
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.guideLabel {
+  position: absolute;
+  right: 0;
+  bottom: var(--space-xs);
+}
+
+.sizeLabel {
+  bottom: calc(100% + var(--space-md));
+  left: 0;
+}
+
+.advLabel {
+  translate: -50% var(--space-md);
+}
+
+/* One label row above the size label, so both clear the ascender line. */
+.gapLabel {
+  position: absolute;
+  bottom: calc(100% + var(--space-md) + var(--space-2xl));
+  left: 0;
+  translate: -50% 0;
+}
+
+.values {
+  display: inline-grid;
+}
+
+.value {
+  grid-area: 1 / 1;
+  justify-self: center;
+  opacity: 0;
+}
+
+.value[data-poster] {
+  opacity: 1;
+}
+
+.family {
+  display: grid;
+  gap: var(--space-xs);
+  padding-block-end: var(--family-drop);
+  color: var(--text-secondary);
+  font-size: var(--typo-caption-size);
+}
+
+.ladder {
+  display: grid;
+  align-content: space-between;
+  row-gap: var(--space-sm);
+}
+
+.rung {
+  display: grid;
+  grid-template-areas: "tag sample spec";
+  grid-template-columns: var(--rung-tag) minmax(0, 1fr) var(--rung-spec);
+  column-gap: var(--grid-gutter);
+  align-items: baseline;
+}
+
+.board[data-layout="tall"] .rung {
+  column-gap: var(--space-sm);
+}
+
+/* Tall: the rungs stand further apart, so the list's close-up fills the
+   portrait frame. */
+.board[data-layout="tall"] .ladder {
+  row-gap: var(--space-2xl);
+}
+
+/* Role tag and spec share one fading layer (a subgrid over the rung), so a
+   rung costs one animation for its labels. */
+.chrome {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-template-columns: subgrid;
+  grid-row: 1 / -1;
+  grid-column: 1 / -1;
+  align-items: baseline;
+}
+
+.tag {
+  grid-area: tag;
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  white-space: nowrap;
+}
+
+.sampleCell {
+  position: relative;
+  grid-area: sample;
+  justify-self: start;
+  min-width: 0;
+}
+
+/* The sample's line box: leading drawn as a quiet band behind the text. */
+.band {
+  position: absolute;
+  inset: 0 calc(var(--space-xs) * -1);
+  overflow: hidden;
+}
+
+.bandIn {
+  position: absolute;
+  inset: 0;
+}
+
+.bandIn::before {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-control);
+  background: var(--selection-strong);
+  content: "";
+  opacity: 0.55;
+}
+
+.fly {
+  position: relative;
+  display: block;
+  inline-size: max-content;
+  white-space: nowrap;
+  transform-origin: 0 50%;
+}
+
+.spec {
+  grid-area: spec;
+  color: var(--text-tertiary);
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+  white-space: nowrap;
+}
+
+.digit {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: top;
+}
+
+.digitStrip {
+  position: absolute;
+  inset: 0 0 auto;
+  display: grid;
+  translate: 0 calc(var(--d) * -1lh);
+}
+
+.digitSpace {
+  visibility: hidden;
+}
+
+/* ---- Product: real components, column edges on the grid ---- */
+
+.product {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--grid-gutter);
+  min-width: 0;
+}
+
+/* The conversation is sized to its content (its card hugs the turn); the
+   composer sits on the bottom margin. */
+.column {
+  display: grid;
+  grid-template-rows: auto auto;
+  row-gap: var(--grid-gutter);
+  align-content: space-between;
+  min-width: 0;
+}
+
+.product > .column:last-child {
+  grid-row: 1 / -1;
+  grid-column: 2;
+}
+
+/* Tall: the components in one column, in build order, each with room under
+   it for its tags. */
+.board[data-layout="tall"] .product {
+  grid-template-rows: none;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: var(--grid-gutter);
+}
+
+.board[data-layout="tall"] .product > .panel {
+  margin-block-end: var(--tag-band, 0);
+}
+
+/* Off the poster on the tall canvas: the camera pans down to these. */
+.offstage {
+  position: absolute;
+  top: 100%;
+  right: var(--grid-margin);
+  left: var(--grid-margin);
+  display: grid;
+  row-gap: var(--grid-gutter);
+}
+
+/* A panel holds the real component (its surface) and, over it, the
+   blueprint sketch and the text build layer. */
+.panel {
+  position: relative;
+  display: grid;
+  min-width: 0;
+}
+
+.surface {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  row-gap: var(--space-sm);
+  min-width: 0;
+}
+
+.panel[data-panel="chat"] > .surface,
+.panel[data-panel="composer"] > .surface {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.sketchBox {
+  display: grid;
+  min-width: 0;
+}
+
+.line,
+.part {
+  display: inline-block;
+}
+
+.line[data-block],
+.part[data-block] {
+  display: block;
+}
+
+/* ---- Build layer: badge, baseline rule and outline of each text line ---- */
+
+.lines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* The tag stands far out in the frame gutter (three grid gutters off the
+   component's edge), right-aligned and centred on its line; a thin leader
+   joins it to the start of the text. All of it is absolute: the component
+   never reflows. */
+.lineFx {
+  --tag-far: calc(var(--grid-gutter) * 3);
+
+  position: absolute;
+}
+
+.lineTag,
+.lineLeader,
+.lineBand,
+.lineMeasure,
+.lineTagStep,
+.wipe {
+  opacity: 0;
+}
+
+.lineTag {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + var(--reach) + var(--tag-far));
+  translate: 0 -50%;
+  white-space: nowrap;
+}
+
+/* Tall: the tags stand in rows under the component, never clipped at the
+   frame's edge; no leader. */
+.board[data-layout="tall"] .lineTag {
+  top: var(--tag-top);
+  right: auto;
+  left: calc(-1 * var(--reach));
+  translate: none;
+}
+
+.board[data-layout="tall"] .lineTagStep {
+  justify-self: start;
+}
+
+.board[data-layout="tall"] .lineLeader {
+  display: none;
+}
+
+.lineTagSteps {
+  display: grid;
+}
+
+.lineTagStep {
+  grid-area: 1 / 1;
+  justify-self: end;
+}
+
+.lineLeader {
+  position: absolute;
+  top: 50%;
+  left: calc(-1 * (var(--reach) + var(--tag-far)));
+  inline-size: calc(var(--reach) + var(--tag-far) - var(--space-sm));
+  block-size: 1px;
+  background: var(--line-strong);
+  transform-origin: 0 50%;
+}
+
+/* Leading: the line box as a band, and a bracket measuring it. */
+.lineBand {
+  position: absolute;
+  inset: 0 calc(var(--space-xs) * -1);
+  overflow: hidden;
+}
+
+.lineMeasure {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--space-sm) * -1);
+  inline-size: var(--space-xs);
+  border: 1px solid var(--accent);
+  border-right: 0;
+  transform-origin: 50% 0;
+}
+
+/* The line's glyphs: set at a neutral size, then scaled to the role size from
+   the baseline's start. Each layer shows through a window that opens left to
+   right (the window and its content move in opposite directions). */
+.lineScale {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 100%;
+}
+
+.wipe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  inline-size: var(--wipe-w);
+  block-size: 100%;
+}
+
+.wipeIn {
+  position: absolute;
+  inset: 0;
+}
+
+.lineSvg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+.lineOutline {
+  stroke-linejoin: round;
+  stroke-width: 0.75px;
+}
+
+/* The paragraph (answer) reveals its rows left to right the same way. */
+.line[data-line="answer"] {
+  overflow: hidden;
+}
+
+/* ---- Motion-only overlays ---- */
+
+.overlay {
+  top: 0;
+  left: 0;
+  white-space: nowrap;
+}
+
+.caption {
+  color: var(--text-secondary);
+  font-size: var(--typo-body-size);
+}
+
+.overlay[data-t="control"] {
+  display: grid;
+  inline-size: var(--control-w);
+  row-gap: var(--space-md);
+}
+
+.readout {
+  display: flex;
+  font-size: calc(var(--typo-metric-value-size) * 3);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--typo-metric-value-weight);
+  line-height: var(--line-height-none);
+}
+
+.controlTrack {
+  position: relative;
+  display: block;
+  block-size: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+}
+
+.controlScale {
+  display: flex;
+  justify-content: space-between;
+}
+
+.axisTick {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--x) * 100%);
+  inline-size: 1px;
+  block-size: var(--space-md);
+  background: var(--text-tertiary);
+  translate: -50% -50%;
+}
+
+.axisThumb {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  inline-size: var(--space-md);
+  block-size: var(--space-md);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  translate: -50% -50%;
+}
+
+/* Column A of the wide product: settings at the top edge, metric at the
+   bottom edge, so both columns run margin to margin. */
+.columnSpread {
+  display: grid;
+  align-content: space-between;
+  row-gap: var(--grid-gutter);
+  min-width: 0;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+/* Tall poster: the conversation scrolls under the composer like the app. */
+.board[data-layout="tall"] .panel[data-panel="chat"] > .surface > :first-child {
+  overflow: hidden;
+}

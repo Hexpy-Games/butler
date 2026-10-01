@@ -26,14 +26,14 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "conversation-input", kind: "form", fields: ["follow-up-behavior", "multiline-send"] },
     { id: "notifications", kind: "form", fields: ["desktop-notifications", "notify-assistant-messages", "notify-task-completions"] },
     { id: "notification-permission", kind: "status", fields: ["notification-permission"] },
-    { id: "app-behavior", kind: "form", fields: ["desktop-tray"] },
+    { id: "app-behavior", kind: "form", fields: ["desktop-tray", "rerun-setup"] },
     { id: "search-provider", kind: "form", fields: ["search-provider", "search-api-key"] },
     { id: "search-behavior", kind: "form", fields: ["search-reader", "search-planning", "search-depth"] },
   ],
   appearance: [
     { id: "theme", kind: "form", fields: ["theme", "translucent-sidebar"] },
     { id: "sidebar", kind: "form", fields: ["smart-groups"] },
-    { id: "home-screen", kind: "form", fields: ["main-screen-theme", "main-screen-preset", "main-screen-colors"] },
+    { id: "home-screen", kind: "form", fields: ["main-screen-wallpaper", "main-screen-motion", "main-screen-battery"] },
   ],
   personalization: [
     { id: "profile", kind: "form", fields: ["butler-nickname", "principal-name", "preferred-address"] },
@@ -41,11 +41,16 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "learning", kind: "form", fields: ["profiling-mode", "profiling-model", "profiling-reasoning"] },
     { id: "import", kind: "form", fields: ["profile-migration", "profile-migration-prompt", "profile-migration-dump"] },
   ],
+  // Memory cleanup and worker profiles show when the Advanced disclosure is open.
   models: [
     { id: "butler-model", kind: "form", fields: ["primary-model", "reasoning", "context-limit", "local-reasoning-budget"] },
-    { id: "fallback-consolidation", kind: "form", fields: ["backup-models-enabled", "backup-models", "consolidation-model", "consolidation-reasoning"] },
+    { id: "backup-models", kind: "form", fields: ["backup-models-summary", "backup-models-enabled", "backup-models"] },
+    // Hidden only for an agent without the #217 key routes.
+    { id: "saved-keys", kind: "list", fields: [] },
     { id: "permissions", kind: "form", fields: ["access-mode", "plan-mode-default"] },
-    { id: "worker-profiles", kind: "list", fields: WORKER_PROFILE_FIELDS },
+    { id: "advanced-models", kind: "form", fields: [] },
+    { id: "memory-cleanup", kind: "form", fields: ["consolidation-model", "consolidation-reasoning"], optional: true },
+    { id: "worker-profiles", kind: "list", fields: WORKER_PROFILE_FIELDS, optional: true },
   ],
   mcp: [
     { id: "mcp-servers", kind: "list", fields: [] },
@@ -67,6 +72,14 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   ],
   logs: [{ id: "developer-logs", kind: "list", fields: [] }],
   privacy: [{ id: "diagnostics", kind: "form", fields: ["diagnostics"] }],
+  // Only the remote-access line shows for other computers (403
+  // `loopback_required`). Allowed hosts show when Advanced is open.
+  security: [
+    { id: "remote-access", kind: "form", fields: ["remote-access-enabled", "lan-urls"] },
+    { id: "connection-code", kind: "form", fields: ["connection-code"], optional: true },
+    { id: "security-advanced", kind: "form", fields: [], optional: true },
+    { id: "allowed-hosts", kind: "form", fields: ["allowed-hosts"], optional: true },
+  ],
   system: [{ id: "system-events", kind: "list", fields: [] }],
   archives: [{ id: "archives", kind: "list", fields: [] }],
   about: [

@@ -20,10 +20,12 @@ pub(crate) struct RuntimePaths {
     pub executable_path: PathBuf,
     pub resource_root: PathBuf,
     pub workspace_root: PathBuf,
+    pub unclean_previous_exit: bool,
 }
 
 /// Ingress holds this owner, admits via BTCC, then awaits close before process exit.
 pub(crate) struct AgentRuntime {
+    pub service_shutdown: tokio_util::sync::CancellationToken,
     pub btcc: Btcc,
     pub bindings: SessionBindingStore,
     pub models: ProcessModels,

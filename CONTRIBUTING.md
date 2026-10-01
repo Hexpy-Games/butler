@@ -8,12 +8,13 @@ This guide covers the repository layout, running Butler from source, the checks 
 | --- | --- |
 | `packages/butler-app` | The desktop app: the Electron shell (`client/electron`), the React UI and design system (`client/ui`), and dev, lint and release scripts (`scripts`). |
 | `packages/butler-agent` | The native agent: the Rust workspace (`rust`) and the resources shipped beside the binary (`resources`: prompts, personas, skills, templates). |
+| `packages/butler-npm` | The `@hexpygames/butler` installer wrapper for the native Agent. |
 | `packages/butler-i18n` | English and Korean UI copy. |
 | `packages/butler-progress-projection` | The event-to-progress projection behind live progress rows. |
 | `packages/project-ledger` | The Project Ledger CLI (`pl`), record templates and skill. |
 | `packages/butler-site` | The public site, [butler.hexpy.games](https://butler.hexpy.games): the manual (Astro) at `/help/` and the DS Viewer at `/ds/`, deployed to GitHub Pages. |
 | `deploy/app` | The app release gate, packager and smoke check. |
-| `tests` | Unit tests (`unit`), smoke scripts (`smoke`), and shared fixtures and helpers. |
+| `tests` | TypeScript checks (`unit`), App smoke scripts (`smoke`), and shared fixtures and helpers. |
 | `tools` | Repository-wide tools: the validation runner and the git hook setup. |
 
 ### Rust crates
@@ -30,23 +31,28 @@ The workspace in `packages/butler-agent/rust` uses Rust 1.91.0, pinned in `rust-
 | `butler-memory` | Long-term memory, the user profile and work records. |
 | `butler-ledger` | The Project Ledger index, project Work and dashboard signals. |
 | `butler-gateway` | The local HTTP and WebSocket API the app talks to. |
-| `butler-e2e` | A dev-only harness that drives the real binary with recorded model traffic. |
+| `butler-platform` | OS-specific filesystem, process, credential-store and service operations. |
+| `butler-e2e` | A dev-only harness that drives the real binary with stub or replay model traffic. |
 | `butler-test-support` | Shared test helpers. |
 
-`tools/source-check` enforces file-size limits and the domain dependency rules. To find your way around, start at `crates/butler-agent/src/main.rs` and `host::runtime`.
+Paths in this table are relative to `packages/butler-agent/rust`. `tools/source-check` enforces code-shape limits, the test ratchet, platform boundaries and domain dependency rules. To find your way around, start at `crates/butler-agent/src/main.rs` and `host::runtime`.
 
 ## Prerequisites
 
-- An Apple Silicon Mac to build the native agent. The TypeScript checks don't need it.
+- Apple silicon macOS, or Linux x64 / arm64 with glibc, for the packaged native Agent and App. The example below uses macOS; the payload producer also accepts `linux x64` or `linux arm64` on a matching host.
 - [Bun](https://bun.sh) 1.3.11 or later.
 - Node.js 22 and npm.
 - Rust through rustup. The pinned toolchain installs on first use.
-- Python 3.9 or later, the Xcode Command Line Tools and `jq`.
+- Python 3.9 or later and `jq`; Xcode Command Line Tools on macOS, or a C/C++ compiler on Linux. See the [native dependency recipe](packages/butler-agent/rust/scripts/STATIC_ORT.md).
 - Free disk space for the static ONNX Runtime build cache.
 
 ## Run from source
 
+The Agent is Rust; Bun runs repository tooling, not a second Agent. The App (desktop or browser) is the only conversation gateway.
+
 ```sh
+export CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}" RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
+export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
 git clone https://github.com/Hexpy-Games/butler.git
 cd butler
 bun install                 # also points git at the hooks in .githooks
@@ -55,23 +61,26 @@ bun run app:ui:build        # the agent payload includes the built UI
 node packages/butler-app/client/electron/scripts/prepare-native-agent.mjs darwin arm64
 ```
 
-`prepare-native-agent.mjs` builds a pinned static ONNX Runtime and a release build of `butler-agent`, then stages the binary and its resources in `packages/butler-app/client/electron/.native-agent-payload/bundled-agent`. The first run is slow. Later runs reuse the cache in `packages/butler-agent/rust/target/native-deps`. Run it again after you change the agent or its resources.
+`prepare-native-agent.mjs` builds a pinned static ONNX Runtime and a release build of `butler-agent`, then stages the binary and its resources in `packages/butler-app/client/electron/.native-agent-payload/bundled-agent`. The first run is slow. Later runs reuse the cache in `${CARGO_TARGET_DIR:-packages/butler-agent/rust/target}/native-deps`. Run it again after you change the agent or its resources.
 
 The development app doesn't build the agent. It starts the executable named by `BUTLER_NATIVE_AGENT_EXECUTABLE`, which must be an absolute path with a `resources` folder next to its `bin` folder:
 
 ```sh
 export BUTLER_NATIVE_AGENT_EXECUTABLE="$PWD/packages/butler-app/client/electron/.native-agent-payload/bundled-agent/bin/butler-agent"
-export BUTLER_DATA="$HOME/.butler-dev"  # keeps development data out of ~/.butler
+export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
+export BUTLER_APP_SERVER_PORT=28765
 bun run app:client:dev
 ```
 
-`app:client:dev` starts Vite for the UI with hot reload and opens Electron against it. `bun run app:client` builds the UI and starts Electron without Vite. Both need `BUTLER_NATIVE_AGENT_EXECUTABLE`. An installed Butler uses the same default gateway port (18765), so quit it first or set `BUTLER_APP_SERVER_PORT` to another port.
+`app:client:dev` starts Vite for the UI with hot reload and opens Electron against it. `bun run app:client` builds the UI and starts Electron without Vite. Both need `BUTLER_NATIVE_AGENT_EXECUTABLE`. Use a separate development port as above; leave the installed Butler service running.
 
 ## Checks
 
-Before you open a pull request, run:
+Read [AGENTS.md](AGENTS.md) and [plans/README.md](plans/README.md) before changing code. Run every test or check with a fresh temporary `HOME` and `BUTLER_DATA`; never use the owner's real `~/.butler`. Before you open a pull request, run:
 
 ```sh
+export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
+bun install --frozen-lockfile --ignore-scripts
 bun run check
 ```
 
@@ -90,32 +99,37 @@ The pre-commit hook runs `lint` and `typecheck`. Scripts in `tests/smoke` drive 
 
 ### Rust
 
-Run these from `packages/butler-agent/rust`:
+Run these from `packages/butler-agent/rust`, keeping `CARGO_HOME` and `RUSTUP_HOME` on their existing cache/toolchain paths:
 
 ```sh
+export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
 cargo fmt --all -- --check
 cargo run --locked -p butler-source-check -- .
 ```
 
-Clippy and anything that builds the agent need the pinned native dependencies. `prepare-static-ort-macos-arm64.py` prepares them, or reuses its cache, and prints their paths:
+Development and CI default to official prebuilt ONNX Runtime binaries. Prepare only `protoc` for those builds with `python3 scripts/prepare-static-ort.py --protoc-only` and export its reported path as `PROTOC`.
+
+Release payloads use the pinned static build. `prepare-static-ort.py` prepares it for the host, or reuses its cache:
 
 ```sh
-prepared="$(python3 scripts/prepare-static-ort-macos-arm64.py)"
+export HOME="$(mktemp -d)" BUTLER_DATA="$(mktemp -d)"
+prepared="$(python3 scripts/prepare-static-ort.py)"
 export ORT_LIB_PATH="$(jq -r .ort_lib_path <<<"$prepared")"
 export PROTOC="$(jq -r .protoc <<<"$prepared")"
 export ORT_PREFER_DYNAMIC_LINK=0 ORT_SKIP_DOWNLOAD=1
 
-cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo test --locked -p <crate> <filter>
+cargo clippy -p butler-agent --all-targets --locked --no-default-features --features static-ort -- -D warnings
 ```
 
-For Clippy alone, `--protoc-only` prepares only `protoc`. Run the tests for the crate you changed. CI runs the whole workspace with `cargo nextest run --workspace --locked`.
+Run Clippy on the crates you changed; the example selects the Agent's static build. For default prebuilt builds, omit those feature flags. CI also runs the workspace with `cargo nextest run --workspace --locked`.
 
-The end-to-end scenarios run the real binary against recorded provider traffic: `BUTLER_E2E_TIER=stub cargo test --locked -p butler-e2e`. The [harness README](packages/butler-agent/rust/crates/butler-e2e/README.md) covers tiers and recording.
+Test changed behavior E2E first: `BUTLER_E2E_TIER=stub cargo test --locked -p butler-e2e`. Use stub or replay only. Non-E2E tests require `// test-category: race`, `security`, `pure-logic` or `format-pin`; source-check ratchets the counts in `source-check-tests.txt`, which may only decrease. Live cassette recording, when explicitly required, uses only `openai/gpt-6-luna`. The [harness README](packages/butler-agent/rust/crates/butler-e2e/README.md) covers tiers and recording.
+
+Keep source files at most 500 lines and production functions at most 80 lines. OS-specific code belongs only in `butler-platform`; unsafe code is forbidden. Performance checks must verify complete, current results at owner scale (600+ chats, about 300k events and multi-GB stores). Follow the detailed request-path and idle-work rules in [plans/README.md](plans/README.md).
 
 ## Design system
 
-App UI is built only from the Butler design system (`@/butler-ds`). Before you change UI:
+App UI is built only from the Butler design system (`@/butler-ds`). Keep UI copy terse. Before you change UI:
 
 - Read the [design-system skill](packages/butler-app/client/ui/src/libs/design-system/skills/butler-design-system/SKILL.md).
 - Browse the DS Viewer at [butler.hexpy.games/ds](https://butler.hexpy.games/ds/), or locally: start the UI dev server (`npm --prefix packages/butler-app/client/ui run dev`) and open `http://127.0.0.1:5173/?visual=design-system`.
@@ -125,7 +139,7 @@ App UI is built only from the Butler design system (`@/butler-ds`). Before you c
 
 ## Manual
 
-The manual lives in `packages/butler-site`, with the Korean pages in `src/content/docs/ko`. `bun run site:dev` serves it locally. `.github/workflows/site.yml` deploys `main` to [butler.hexpy.games/help](https://butler.hexpy.games/help/). When a change alters what users see or do, update the matching page.
+The manual lives in `packages/butler-site`, with Korean pages in `src/content/docs/ko` and the available English pages in `src/content/docs/en`. `bun run site:dev` serves it locally. `.github/workflows/site.yml` deploys `main` to [butler.hexpy.games/help](https://butler.hexpy.games/help/). When a change alters what users see or do, update the matching page.
 
 ## Project records
 
@@ -140,14 +154,15 @@ A release is a `vX.Y.Z` tag pushed from `main`.
    - `package.json`
    - `packages/butler-app/client/electron/package.json`: the app version
    - `packages/butler-progress-projection/package.json`
+   - `packages/butler-npm/package.json`: the installer package version (the publish job sets it from the tag)
    - `packages/butler-agent/rust/crates/butler-agent/Cargo.toml`
 2. Refresh the lockfiles: `bun install`, `npm --prefix packages/butler-app/client/electron install`, and `cargo update --workspace` in `packages/butler-agent/rust`.
 3. Write the release notes in `.github/releases/vX.Y.Z.md`.
-4. Merge, then push the tag. `.github/workflows/release.yml` builds the macOS arm64 app and agent, runs the release gates and smoke checks, and publishes the files and a consolidated checksum list to the GitHub release.
+4. Merge, then push the tag. `.github/workflows/release.yml` builds the macOS arm64 App and Agent, Linux x64 / arm64 Agent archives and DEBs, and an Arch x64 App package. It runs release gates and smoke checks, attaches the installer and consolidated checksums, then publishes the release after the required assets exist. Hyphenated tags are prereleases; stable tags feed `releases/latest`. The npm job then publishes `@hexpygames/butler` (`latest` for stable, `next` for previews).
 
 The app release gate fails when the bundled agent version changes and the app version doesn't. The gates are also available locally as the `release:*` scripts in `package.json`.
 
-<!-- TODO(0.1.0): document the Windows and Linux release jobs once their formats are decided. -->
+Windows has compile-check coverage, but no release package.
 
 ## Reporting issues
 
@@ -159,5 +174,3 @@ Open an issue in [GitHub Issues](https://github.com/Hexpy-Games/butler/issues) a
 - for the standalone agent, the output of `butler doctor`
 
 Leave API keys, personal data and private conversation content out of issues.
-
-<!-- TODO: add SECURITY.md with a private channel for security reports. -->

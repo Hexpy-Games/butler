@@ -9,6 +9,9 @@ fn token(payload: &Value) -> String {
     format!("head.{body}.signature")
 }
 
+/// Security boundary: access-token claims follow the account precedence for
+/// either base64 alphabet.
+// test-category: security
 #[test]
 fn access_token_claims_follow_account_precedence_for_either_base64_alphabet() {
     // account precedence and codex authorization excludes sub fallback

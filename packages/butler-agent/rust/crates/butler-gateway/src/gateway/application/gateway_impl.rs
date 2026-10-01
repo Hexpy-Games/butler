@@ -2,10 +2,25 @@ use super::*;
 
 impl GatewayApplication for AppApplication {
     fn get_usage_monitor(&self, query: AppUsageMonitorQuery) -> ApplicationFuture<Value> {
-        self.dependencies.monitoring.usage_monitor(query)
+        self.usage_monitor_query(query)
+    }
+    fn get_provider_quota(
+        &self,
+        provider_id: String,
+        refresh: bool,
+    ) -> ApplicationFuture<butler_runtime::operations::ProviderQuotaView> {
+        self.dependencies
+            .monitoring
+            .provider_quota(provider_id, refresh)
     }
     fn work_status(&self) -> ApplicationFuture<Vec<AppBoundWorkStatusFact>> {
         self.dependencies.monitoring.work_status()
+    }
+    fn worker_activity_page(
+        &self,
+        query: AppWorkerActivityQuery,
+    ) -> ApplicationFuture<Option<Value>> {
+        super::monitoring::activity::read_owned(self.clone_handle(), query)
     }
     fn work_status_conversation(
         &self,
@@ -27,7 +42,16 @@ impl GatewayApplication for AppApplication {
         let updates = self.dependencies.updates.clone();
         Box::pin(async move {
             updates
-                .check(request)
+                .refresh(request)
+                .await
+                .map_err(|error| super::updates::update_error(&error))
+        })
+    }
+    fn app_update_status(&self) -> ApplicationFuture<serde_json::Value> {
+        let updates = self.dependencies.updates.clone();
+        Box::pin(async move {
+            updates
+                .current()
                 .await
                 .map_err(|error| super::updates::update_error(&error))
         })
@@ -163,9 +187,13 @@ impl GatewayApplication for AppApplication {
     fn list_automations(
         &self,
         target_session_id: Option<String>,
+        include_deleted: bool,
     ) -> ApplicationFuture<AutomationListView> {
         let this = self.clone_handle();
-        Box::pin(async move { this.list_automations_owned(target_session_id).await })
+        Box::pin(async move {
+            this.list_automations_owned(target_session_id, include_deleted)
+                .await
+        })
     }
     fn get_automation(&self, id: String) -> ApplicationFuture<AutomationDetailView> {
         let this = self.clone_handle();
@@ -196,7 +224,7 @@ impl GatewayApplication for AppApplication {
     }
     fn dispatch_due_automations(&self) -> ApplicationFuture<AutomationRunListView> {
         let this = self.clone_handle();
-        Box::pin(async move { this.dispatch_due_owned().await })
+        Box::pin(async move { this.dispatch_due_request().await })
     }
     fn list_automation_runs(&self, id: String) -> ApplicationFuture<AutomationRunListView> {
         let this = self.clone_handle();
@@ -215,6 +243,9 @@ impl GatewayApplication for AppApplication {
     }
     fn runtime_readiness(&self) -> Result<RuntimeReadinessView, GatewayApplicationError> {
         self.dependencies.executor_readiness.readiness()
+    }
+    fn setup(&self) -> Result<Arc<dyn super::AppSetupPort>, GatewayApplicationError> {
+        Ok(self.dependencies.setup.clone())
     }
     fn read_settings(&self) -> ApplicationFuture<serde_json::Value> {
         let this = self.clone_handle();
@@ -405,7 +436,7 @@ impl GatewayApplication for AppApplication {
     }
     fn context_details(&self, session_id: String) -> ApplicationFuture<Value> {
         let this = self.clone_handle();
-        Box::pin(async move { this.context_details_owned(session_id).await })
+        Box::pin(async move { Ok(this.context_details_owned(session_id).await?.view) })
     }
     fn cancel_subsession(
         &self,
@@ -424,6 +455,23 @@ impl GatewayApplication for AppApplication {
         self.dependencies
             .subsessions
             .resume(parent_session_id, relation_id)
+    }
+    fn publish_gateway_event(
+        &self,
+        event_type: &'static str,
+        payload: serde_json::Map<String, Value>,
+    ) -> ApplicationFuture<()> {
+        let storage = self.storage.clone();
+        let subscribers = self.subscribers.clone();
+        let now = self.dependencies.identity_clock.now_iso();
+        Box::pin(async move {
+            storage
+                .execute(move |db| {
+                    events::append(db, &subscribers, event_type, None, payload, &now).map(drop)
+                })
+                .await
+                .map_err(app_error)
+        })
     }
     fn latest_event_cursor(&self) -> ApplicationFuture<u64> {
         let storage = self.storage.clone();
@@ -445,7 +493,7 @@ impl GatewayApplication for AppApplication {
     }
     fn subscribe_events(
         &self,
-        listener: Arc<dyn Fn(AppEventEnvelope) + Send + Sync>,
+        listener: Arc<dyn Fn(Arc<PublishedEvent>) + Send + Sync>,
     ) -> Result<Box<dyn EventSubscription>, GatewayApplicationError> {
         Ok(self.subscribers.subscribe(listener))
     }

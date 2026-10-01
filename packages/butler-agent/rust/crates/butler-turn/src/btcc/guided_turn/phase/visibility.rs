@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::btcc::AccessMode;
+use crate::btcc::{AccessMode, ApprovalExemptAction};
 use butler_core::tool_protocol::ToolName;
 
 use super::catalog::{GuidedCatalogSnapshot, GuidedCatalogTool};
@@ -51,10 +51,19 @@ const NON_FULL: &[&str] = &[
     "recall_memory",
     "query_memory",
     "list_automations",
+    "list_wallpapers",
+    "set_wallpaper",
+    "save_wallpaper_module",
     "read_mcp_resource",
     "list_skills",
+    "load_skill",
+    "read_skill_file",
     "transform_public_data_table",
 ];
+/// Non-full tools that change something: offered when asking first, where
+/// each asks for approval before it runs (the wallpaper writes are reviewed
+/// persistent effects there), and never to a read-only turn.
+const ASK_FIRST_WRITES: &[&str] = &["run_command", "set_wallpaper", "save_wallpaper_module"];
 const STEWARD_PARENT: &[&str] = &["delegate_to_steward", "steer_steward", "cancel_steward"];
 const WORKER_DELEGATION: &[&str] = &["delegate_to_worker", "steer_worker", "wait_for_worker"];
 /// The tools a guided turn is authorized to call on the legacy surface, from
@@ -194,8 +203,11 @@ fn authorized_profiles(
     profiles
 }
 
-/// Full access adds effect-free tools, commands, file writes and MCP calls;
-/// other modes keep only the non-full allowlist (commands only when asking first).
+/// Full access adds effect-free tools, commands, file writes and MCP calls.
+/// Ask-first keeps the non-full allowlist with commands, file writes and MCP
+/// calls (each asks before it runs) and the required tools of its
+/// approval-free actions. Read-only keeps only the non-full allowlist, without
+/// its writes (`ASK_FIRST_WRITES`).
 fn apply_access_mode(
     names: &mut HashSet<String>,
     catalog: &GuidedCatalogSnapshot,
@@ -218,22 +230,25 @@ fn apply_access_mode(
         names.insert("call_mcp_tool".into());
         return;
     }
-    if policy.access_mode == AccessMode::AskFirst {
+    let ask_first = policy.access_mode == AccessMode::AskFirst;
+    if ask_first {
         names.extend(
             [
                 "run_command",
                 "write_file",
                 "edit_file",
                 "read_tool_output_artifact",
+                "call_mcp_tool",
             ]
             .map(str::to_owned),
         );
     }
     names.retain(|name| {
         NON_FULL.contains(&name.as_str())
-            && (name != ToolName::RunCommand || policy.access_mode == AccessMode::AskFirst)
+            && (!ASK_FIRST_WRITES.contains(&name.as_str()) || ask_first)
+            || ask_first && name == ToolName::CallMcpTool
+            || policy.required_tools.contains(name) && policy.access_mode.exempts_tool(name)
     });
-    names.remove("call_mcp_tool");
 }
 
 /// Only the butler may delegate to stewards and only a steward to workers.
@@ -250,7 +265,7 @@ fn apply_role(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
 }
 
 /// Tools every legacy surface shows.
-const LEGACY_BASE: [&str; 16] = [
+const LEGACY_BASE: [&str; 18] = [
     "tool_search",
     "tool_describe",
     "tool_call",
@@ -267,6 +282,8 @@ const LEGACY_BASE: [&str; 16] = [
     "project_ledger_status",
     "update_todo_list",
     "list_todo_list",
+    "load_skill",
+    "read_skill_file",
 ];
 
 pub(super) fn legacy_visible<'a>(
@@ -303,12 +320,21 @@ pub(super) fn legacy_visible<'a>(
     }
     match policy.access_mode {
         AccessMode::ReadOnly => {}
-        AccessMode::AskFirst => names.extend([
-            "run_command",
-            "read_tool_output_artifact",
-            "write_file",
-            "edit_file",
-        ]),
+        AccessMode::AskFirst => {
+            names.extend([
+                "run_command",
+                "read_tool_output_artifact",
+                "write_file",
+                "edit_file",
+            ]);
+            names.extend(
+                policy
+                    .required_tools
+                    .iter()
+                    .map(String::as_str)
+                    .filter(|name| policy.access_mode.exempts_tool(name)),
+            );
+        }
         AccessMode::FullAccess => {
             names.extend([
                 "run_command",
@@ -382,8 +408,12 @@ pub(super) fn profile_initial<'a>(
     tools
 }
 
+/// The host names the image tool as required only for a turn whose attached
+/// image it admitted; ask-first analyzes that image without asking.
 pub(super) fn turn_admits_zai_image_tool(policy: &GuidedExecutionPolicy) -> bool {
-    policy.access_mode == AccessMode::FullAccess
+    policy
+        .access_mode
+        .allows_without_approval(ApprovalExemptAction::AttachedImageAnalysis)
         && policy
             .required_tools
             .iter()

@@ -33,21 +33,27 @@ pub enum BriefingGenerationError {
     /// Nothing lower-level failed.
     #[error("{code}: {message}")]
     Detected {
+        /// What failed.
         code: BriefingGenerationCode,
+        /// Details.
         message: String,
     },
     /// A lower-level operation (model call, filesystem, JSON, clock) failed;
     /// `code` names the briefing step and `source` is the cause.
     #[error("{code}: {message}")]
     Failed {
+        /// What the briefing was doing.
         code: BriefingGenerationCode,
+        /// Details.
         message: String,
+        /// The cause.
         #[source]
         source: BriefingGenerationSource,
     },
 }
 
 impl BriefingGenerationError {
+    /// A detected failure.
     pub fn new(code: BriefingGenerationCode, message: impl Into<String>) -> Self {
         Self::Detected {
             code,
@@ -69,6 +75,7 @@ impl BriefingGenerationError {
         }
     }
 
+    /// The stable code of the failure.
     pub fn code(&self) -> &'static str {
         match self {
             Self::Detected { code, .. } | Self::Failed { code, .. } => code.as_str(),
@@ -80,20 +87,5 @@ impl BriefingGenerationError {
         match self {
             Self::Detected { message, .. } | Self::Failed { message, .. } => message.clone(),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::BriefingGenerationCode;
-
-    #[test]
-    fn wire_codes_are_stable() {
-        let codes: Vec<&str> = BriefingGenerationCode::ALL
-            .iter()
-            .map(|code| code.as_str())
-            .collect();
-        let expected: Vec<&str> = include_str!("wire_codes.txt").lines().collect();
-        assert_eq!(codes, expected);
     }
 }

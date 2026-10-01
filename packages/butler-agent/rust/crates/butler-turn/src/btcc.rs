@@ -3,6 +3,7 @@
 //! Gateway and host composition may run or stop a Turn. Durable state, model
 //! execution, delivery, and supervision remain private children of this module.
 
+mod access;
 pub mod agent_loop;
 mod authority;
 mod continuation_budget;
@@ -23,6 +24,7 @@ mod work;
 
 use std::sync::Arc;
 
+pub use access::{ApprovalExemptAction, stored_binding_access_mode};
 pub use contracts::{
     AcceptedWorkResult, AcceptedWorkStatus, AccessMode, AdmissionKind, AlreadyDeliveredOutcome,
     ArtifactKind, AttachmentKind, AttachmentRef, ChangedFileLine, ChangedFileSummary,
@@ -79,6 +81,9 @@ pub use agent_loop::{
 };
 pub use agent_loop::{
     AdmittedModelSelection, ButlerContext, EmptyResponsePolicy, ExecutionPolicy, TrackingMode,
+};
+pub use authority::approval::{
+    ApprovalActionKind, ApprovalRisk, ApprovalTarget, ApprovalTargetKind, AuthorityApproval,
 };
 pub use authority::contracts::{
     AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityDecisionInput, AuthorityError,
@@ -206,6 +211,12 @@ impl Btcc {
     /// Stops a turn and reports how it ended.
     pub async fn stop_turn(&self, request: StopRequest) -> Result<TurnOutcome, BtccError> {
         self.inner.stop_turn(&request.turn_id).await
+    }
+
+    /// Fences shutdown execution without cancelling the durable turn. Await the
+    /// active run before closing dependencies; its state remains retryable.
+    pub fn interrupt_turn(&self, turn_id: &str) {
+        self.inner.interrupt_turn(turn_id);
     }
 }
 

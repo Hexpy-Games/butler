@@ -1,4 +1,4 @@
-//! A. First run / onboarding (SCENARIOS.md ONB-01, ONB-02, ONB-04).
+//! A. First run / onboarding (SCENARIOS.md ONB-01..04).
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -31,6 +31,8 @@ async fn onb_01_fresh_install_boots_empty() -> Result<(), HarnessError> {
         settings["language"].is_string() && settings["timezone"].is_string(),
         "{settings}"
     );
+    // Owner decision #236: a fresh install asks first.
+    assert_eq!(settings["access_mode"], "ask_first", "{settings}");
     let model = settings["model"].as_str().unwrap_or_default().to_owned();
     let catalog = s.gw.get("/model-catalog").await?;
     let listed = catalog.data()["providers"]
@@ -70,31 +72,35 @@ async fn onb_01_fresh_install_boots_empty() -> Result<(), HarnessError> {
 async fn onb_01_unusable_data_dirs_are_refused() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let setup = Setup::new("ONB-01-INJECT")?.fixture(Fixture::Empty);
-    // (a) data dir not writable.
-    let locked = setup.sandbox.root.join("locked-data");
-    std::fs::create_dir_all(&locked)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o500))?;
+    // (a) data dir not writable (only where a host can make one).
+    if butler_platform::secure_fs::PERMISSION_MODES {
+        let locked = setup.sandbox.root.join("locked-data");
+        std::fs::create_dir_all(&locked)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o500))?;
+        }
+        let mut launch = Launch::new(&setup.sandbox)?;
+        launch.data = locked.clone();
+        let output = launch
+            .command()
+            .stdin(std::process::Stdio::null())
+            .output()?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o700))?;
+        }
+        assert!(!output.status.success(), "started on a read-only data dir");
+        assert_eq!(
+            std::fs::read_dir(&locked)?.count(),
+            0,
+            "partial files in the read-only data dir"
+        );
+    } else {
+        eprintln!("butler-e2e: SKIPPED (part (a): this host has no read-only directories)");
     }
-    let mut launch = Launch::new(&setup.sandbox)?;
-    launch.data = locked.clone();
-    let output = launch
-        .command()
-        .stdin(std::process::Stdio::null())
-        .output()?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o700))?;
-    }
-    assert!(!output.status.success(), "started on a read-only data dir");
-    assert_eq!(
-        std::fs::read_dir(&locked)?.count(),
-        0,
-        "partial files in the read-only data dir"
-    );
     // (b) data dir inside the installation dir.
     let inside = setup.sandbox.install.join("data");
     std::fs::create_dir_all(&inside)?;
@@ -267,10 +273,13 @@ async fn assert_message_burst_is_rate_limited(gw: &Gateway) -> Result<(), Harnes
 async fn onb_02_provider_401_fails_without_retry_storm() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     use butler_e2e::e2e::faults::{Fault, Transform};
-    let s = Setup::new("ONB-02-401")?.cassette("ONB-02").start().await?;
-    if s.recording() {
-        return s.finish().await;
-    }
+    let s = Setup::new("ONB-02-401")?
+        // After the daily jobs' due time, on a day independent of the host clock.
+        .env("BUTLER_E2E_APP_NOW", "2026-09-27T12:00:00Z")
+        .cassette("ONB-02")
+        .replay_only()
+        .start()
+        .await?;
     let exchange = s.provider()?.exchange_for("connected", 0)?;
     s.provider()?.inject(Fault::always(
         exchange,
@@ -303,5 +312,57 @@ async fn onb_02_provider_401_fails_without_retry_storm() -> Result<(), HarnessEr
         "credential leaked into the public error"
     );
     assert!(s.gw.healthy().await);
+    s.finish().await
+}
+
+/// ONB-03 — The language the installer passes (first-run setup sends
+/// `PATCH /settings {language}`) becomes the UI language and survives a
+/// restart; `butler config get user.language` agrees.
+#[tokio::test]
+async fn onb_03_installer_language_persists() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut s = Setup::new("ONB-03")?
+        .fixture(Fixture::Empty)
+        .start()
+        .await?;
+    let reply = s.gw.patch("/settings", json!({"language": "ko"})).await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    assert_eq!(reply.data()["language"], "ko", "{}", reply.text);
+    s.restart().await?;
+    let settings = s.gw.settings().await?;
+    assert_eq!(settings["language"], "ko", "{settings}");
+    let cli = s.agent.cli(&["config", "get", "user.language", "--json"])?;
+    assert_eq!(cli.code, Some(0), "{} {}", cli.stdout, cli.stderr);
+    assert!(
+        cli.stdout.contains("\"ko\""),
+        "CLI disagrees: {}",
+        cli.stdout
+    );
+    s.finish().await
+}
+
+/// ONB-03 — The installer language also sets the answer language.
+#[tokio::test]
+#[ignore = "product gap: ONB-03-LANG — `PATCH /settings {language:\"ko\"}` (what first-run setup sends) stores only user.language: GET /personalization keeps response_language \"en\", and `butler personalization get user.responseLanguage --json` ignores the key and prints the profile without any response language"]
+async fn onb_03_installer_language_sets_response_language() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut s = Setup::new("ONB-03")?
+        .fixture(Fixture::Empty)
+        .start()
+        .await?;
+    let reply = s.gw.patch("/settings", json!({"language": "ko"})).await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    for phase in ["before restart", "after restart"] {
+        let personalization = s.gw.get("/personalization").await?;
+        assert_eq!(
+            personalization.data()["response_language"],
+            "ko",
+            "{phase}: {}",
+            personalization.text
+        );
+        if phase == "before restart" {
+            s.restart().await?;
+        }
+    }
     s.finish().await
 }

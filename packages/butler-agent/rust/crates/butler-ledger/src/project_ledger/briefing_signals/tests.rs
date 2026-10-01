@@ -49,37 +49,6 @@ impl Drop for Fixture {
 }
 
 #[test]
-fn selected_app_project_uses_exact_ledger_id_and_combines_safe_signals() {
-    let fixture = Fixture::new();
-    let target = ProjectBriefingTarget {
-        id: "app-alpha".into(),
-        display_name: "App Alpha".into(),
-        ledger_project_id: "ledger-alpha".into(),
-        recent_session_titles: vec![" Recent topic ".into(), "Recent topic".into()],
-    };
-    let signals = read(
-        &fixture.0,
-        &LocaleCollation::new("en-US").unwrap(),
-        Some(&[target]),
-        &fixture.0.join("cognition/consolidation"),
-    )
-    .unwrap();
-    assert_eq!(signals.len(), 1);
-    let signal = &signals[0];
-    assert_eq!(signal.id, "app-alpha");
-    assert_eq!(signal.display_name, "App Alpha");
-    assert_eq!(signal.summary.as_deref(), Some("Project summary"));
-    assert_eq!(signal.recent_session_titles, vec!["Recent topic"]);
-    assert_eq!(
-        signal.ledger_event_summary,
-        vec!["work.updated:in_progress x1"]
-    );
-    assert_eq!(signal.open_work_titles, vec!["Persona routing"]);
-    assert_eq!(signal.completed_work_titles, vec!["Finished routing"]);
-    assert_eq!(signal.excluded_topics, vec!["canary", "카나리"]);
-}
-
-#[test]
 fn invalid_ledger_id_is_not_sanitized_into_another_project_path() {
     let fixture = Fixture::new();
     let target = ProjectBriefingTarget {

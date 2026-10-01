@@ -9,6 +9,7 @@ use std::{
 use super::{CognitionError, CognitionResult};
 use crate::cognition::CognitionCode;
 
+/// Checks that each path resolves inside `data_root` without following links out of it.
 pub fn ensure_data_authority(data_root: &Path, descendants: &[&Path]) -> CognitionResult<()> {
     let canonical_data = canonicalize_nearest_existing(data_root)?;
     for descendant in descendants {
@@ -46,8 +47,8 @@ fn canonicalize_nearest_existing(path: &Path) -> CognitionResult<PathBuf> {
             Err(_) => return Err(unsafe_path()),
         }
     }
-    let mut resolved =
-        fs::canonicalize(ancestor).map_err(|source| unsafe_path().with_source(source))?;
+    let mut resolved = butler_platform::secure_fs::canonicalize(ancestor)
+        .map_err(|source| unsafe_path().with_source(source))?;
     for component in suffix.iter().rev() {
         match Path::new(component).components().next() {
             Some(Component::Normal(name)) => resolved.push(name),

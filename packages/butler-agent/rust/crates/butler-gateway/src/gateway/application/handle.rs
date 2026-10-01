@@ -11,6 +11,8 @@ impl AppApplication {
             queue_dispatcher: None,
             queue_wake: self.queue_wake.clone(),
             automation_scheduler: None,
+            automation_wake: self.automation_wake.clone(),
+            automation_queued: self.automation_queued.clone(),
             automation_runs: self.automation_runs.clone(),
             queue_mutations: self.queue_mutations.clone(),
             session_creation: self.session_creation.clone(),
@@ -21,8 +23,12 @@ impl AppApplication {
             project_dashboard_briefing: self.project_dashboard_briefing.clone(),
             queue_owner: self.queue_owner.clone(),
             butler_data: self.butler_data.clone(),
+            wallpapers: self.wallpapers.clone(),
             settings_update_lock: self.settings_update_lock.clone(),
             plan_decision_locks: self.plan_decision_locks.clone(),
+            // Only the dispatching application relays readiness events.
+            setup_readiness: super::setup::ReadinessRelay::default(),
+            quota_events: self.quota_events.clone(),
         }
     }
 }

@@ -14,9 +14,7 @@ pub(super) fn resolve_data_root(
     options: &Options,
     installation: &ResolvedInstallation,
 ) -> Result<PathBuf, crate::host::HostError> {
-    let home = std::env::var_os("HOME")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from);
+    let home = butler_platform::user_dirs::non_empty_home_dir();
     let requested = options
         .data
         .clone()
@@ -142,98 +140,6 @@ pub(super) fn safe_data_file(
             CliError::failed("unsafe_path", "path overlaps the installation").with_source(source)
         })?;
     Ok(path)
-}
-
-pub(super) fn validate_data_mutation_paths(
-    installation: &ResolvedInstallation,
-    data_root: &Path,
-    requested: &[&str],
-) -> Result<(), CliError> {
-    for requested in requested {
-        let relative = Path::new(requested);
-        if relative.is_absolute()
-            || relative
-                .components()
-                .any(|component| !matches!(component, Component::Normal(_)))
-        {
-            return Err(CliError::failed(
-                "unsafe_path",
-                "mutation paths must remain inside DATA",
-            ));
-        }
-        validate_data_mutation_path(
-            installation,
-            data_root,
-            &absolute_normalized(data_root)
-                .map_err(|message| {
-                    CliError::failed("unsafe_path", message.to_string()).with_source(message)
-                })?
-                .join(relative),
-        )?;
-    }
-    Ok(())
-}
-
-pub(super) fn validate_absolute_data_mutation_paths(
-    installation: &ResolvedInstallation,
-    data_root: &Path,
-    requested: &[&Path],
-) -> Result<(), CliError> {
-    for path in requested {
-        validate_data_mutation_path(installation, data_root, path)?;
-    }
-    Ok(())
-}
-
-fn validate_data_mutation_path(
-    installation: &ResolvedInstallation,
-    data_root: &Path,
-    requested: &Path,
-) -> Result<(), CliError> {
-    let root = absolute_normalized(data_root).map_err(|message| {
-        CliError::failed("unsafe_path", message.to_string()).with_source(message)
-    })?;
-    let path = absolute_normalized(requested).map_err(|message| {
-        CliError::failed("unsafe_path", message.to_string()).with_source(message)
-    })?;
-    let relative = path.strip_prefix(&root).map_err(|source| {
-        CliError::failed("unsafe_path", "mutation paths must remain inside DATA")
-            .with_source(source)
-    })?;
-    if relative.as_os_str().is_empty() {
-        return Err(CliError::failed(
-            "unsafe_path",
-            "mutation paths must remain inside DATA",
-        ));
-    }
-    let mut current = root;
-    for component in relative.components() {
-        if !matches!(component, Component::Normal(_)) {
-            return Err(CliError::failed(
-                "unsafe_path",
-                "mutation paths must remain inside DATA",
-            ));
-        }
-        current.push(component.as_os_str());
-        let checked = safe_data_file(installation, data_root, &current)?;
-        match fs::symlink_metadata(&checked) {
-            Ok(metadata) if metadata.file_type().is_symlink() => {
-                return Err(CliError::failed(
-                    "unsafe_path",
-                    "mutation paths cannot use DATA symlink aliases",
-                ));
-            }
-            Ok(_) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(_) => {
-                return Err(CliError::failed(
-                    "unsafe_path",
-                    "mutation path metadata is unavailable",
-                ));
-            }
-        }
-    }
-    Ok(())
 }
 
 pub(super) fn read_private_environment(

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { isPreviewRelease } from "../../packages/butler-app/scripts/release/preview-policy.ts";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
@@ -156,13 +157,8 @@ function macReleaseSmokeMode(): MacReleaseSmokeMode {
     ? "production"
     : requested ?? "ad-hoc";
   if (mode === "production") {
-    if (!process.env.BUTLER_APP_SIGN_IDENTITY?.trim()) {
-      throw new Error("BUTLER_APP_SIGN_IDENTITY is required for production macOS release smoke");
-    }
-    if (!process.env.BUTLER_APP_NOTARY_KEYCHAIN_PROFILE?.trim()) {
-      throw new Error(
-        "BUTLER_APP_NOTARY_KEYCHAIN_PROFILE is required for production macOS release smoke",
-      );
+    if (!process.env.BUTLER_SIGN_IDENTITY?.trim()) {
+      throw new Error("BUTLER_SIGN_IDENTITY is required for production macOS release smoke");
     }
   }
   return mode;
@@ -274,10 +270,19 @@ function verifyMacCodeSignature(appPath: string, label = "Mac App"): void {
 }
 
 function verifyMacStapling(path: string, label: string): void {
-  const validate = spawnSync("xcrun", ["stapler", "validate", path], { encoding: "utf8" });
-  if (validate.status !== 0) {
-    throw new Error(
-      `${label} notarization staple validation failed: ${validate.stderr.trim() || validate.stdout.trim() || "unknown error"}`,
-    );
+  if (!isPreviewRelease()) {
+    const validate = spawnSync("xcrun", ["stapler", "validate", path], { encoding: "utf8" });
+    if (validate.status !== 0) {
+      throw new Error(`${label} notarization staple validation failed: ${validate.stderr.trim() || validate.stdout.trim() || "unknown error"}`);
+    }
+  }
+  // Team ID, hardened runtime, timestamp and the Gatekeeper assessment.
+  const trust = spawnSync(
+    resolve(import.meta.dir, "../macos/sign-and-notarize.sh"),
+    [path.endsWith(".dmg") ? "verify-dmg" : "verify-app", path],
+    { encoding: "utf8" },
+  );
+  if (trust.status !== 0) {
+    throw new Error(`${label} Developer ID verification failed: ${trust.stderr.trim() || trust.stdout.trim() || "unknown error"}`);
   }
 }

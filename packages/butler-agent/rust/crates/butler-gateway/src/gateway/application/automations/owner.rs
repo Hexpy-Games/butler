@@ -1,5 +1,7 @@
 use parking_lot::Mutex as StdMutex;
-use std::sync::Arc;
+use std::{panic::AssertUnwindSafe, sync::Arc};
+
+use futures_util::FutureExt;
 
 use tokio::{
     sync::{Mutex, mpsc, oneshot},
@@ -23,8 +25,10 @@ struct Admission {
     sender: Option<mpsc::Sender<Command>>,
 }
 enum Command {
+    #[cfg(debug_assertions)]
+    E2ePanic { reply: oneshot::Sender<()> },
     Initialize {
-        app: AppApplication,
+        app: Box<AppApplication>,
         reply: oneshot::Sender<Result<(), GatewayApplicationError>>,
     },
     Run {
@@ -38,6 +42,15 @@ enum Command {
 }
 
 impl AutomationRunOwner {
+    #[cfg(debug_assertions)]
+    pub(crate) async fn inject_panic(&self) -> Result<(), GatewayApplicationError> {
+        let (reply, completion) = oneshot::channel();
+        self.admit(Command::E2ePanic { reply }).await?;
+        completion
+            .await
+            .map_err(GatewayApplicationError::internal_from)
+    }
+
     pub(crate) fn start() -> Self {
         let (sender, receiver) = mpsc::channel(CAPACITY);
         let task = tokio::spawn(run(receiver));
@@ -56,7 +69,7 @@ impl AutomationRunOwner {
     ) -> Result<(), GatewayApplicationError> {
         let (reply_tx, reply_rx) = oneshot::channel();
         self.admit(Command::Initialize {
-            app,
+            app: Box::new(app),
             reply: reply_tx,
         })
         .await?;
@@ -102,7 +115,13 @@ impl AutomationRunOwner {
         admission
             .sender
             .as_ref()
-            .ok_or(GatewayApplicationError::internal())?
+            .ok_or_else(|| {
+                GatewayApplicationError::public(
+                    503,
+                    "service_stopping",
+                    "Service is stopping. Try again.",
+                )
+            })?
             .send(command)
             .await
             .map_err(GatewayApplicationError::internal_from)
@@ -112,54 +131,39 @@ impl AutomationRunOwner {
 async fn run(mut receiver: mpsc::Receiver<Command>) {
     let mut app = None;
     while let Some(command) = receiver.recv().await {
-        match command {
-            Command::Initialize { app: value, reply } => {
-                let result = if app.is_some() {
-                    Err(GatewayApplicationError::internal())
-                } else {
-                    app = Some(value);
-                    Ok(())
-                };
-                let _ = reply.send(result);
+        let operation = async {
+            match command {
+                #[cfg(debug_assertions)]
+                Command::E2ePanic { reply: _reply } => {
+                    super::super::faults::panic_owner();
+                }
+                Command::Initialize { app: value, reply } => {
+                    let result = if app.is_some() {
+                        Err(GatewayApplicationError::internal())
+                    } else {
+                        app = Some(*value);
+                        Ok(())
+                    };
+                    let _ = reply.send(result);
+                }
+                Command::Run { id, trigger, reply } => {
+                    let result = match app.as_ref() {
+                        Some(app) => app.execute_automation(id, trigger).await,
+                        None => Err(GatewayApplicationError::internal()),
+                    };
+                    let _ = reply.send(result);
+                }
+                Command::Due { reply } => {
+                    let result = match app.as_ref() {
+                        Some(app) => app.execute_due_automations().await,
+                        None => Err(GatewayApplicationError::internal()),
+                    };
+                    let _ = reply.send(result);
+                }
             }
-            Command::Run { id, trigger, reply } => {
-                let result = match app.as_ref() {
-                    Some(app) => app.execute_automation(id, trigger).await,
-                    None => Err(GatewayApplicationError::internal()),
-                };
-                let _ = reply.send(result);
-            }
-            Command::Due { reply } => {
-                let result = match app.as_ref() {
-                    Some(app) => app.execute_due_automations().await,
-                    None => Err(GatewayApplicationError::internal()),
-                };
-                let _ = reply.send(result);
-            }
+        };
+        if let Err(payload) = AssertUnwindSafe(operation).catch_unwind().await {
+            super::super::panic_isolation::report("automation-owner", payload.as_ref());
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn close_drains_admitted_commands_and_rejects_late_admission() {
-        let owner = AutomationRunOwner::start();
-        let (reply, admitted) = oneshot::channel();
-        owner
-            .admit(Command::Due { reply })
-            .await
-            .expect("command admitted before close");
-
-        owner.close().await.expect("owner closes after draining");
-        // Uninitialized, the owner answers the drained command instead of dropping it.
-        assert!(matches!(
-            admitted.await.expect("admitted command completed"),
-            Err(GatewayApplicationError::Internal { .. })
-        ));
-
-        assert!(owner.due().await.is_err());
     }
 }

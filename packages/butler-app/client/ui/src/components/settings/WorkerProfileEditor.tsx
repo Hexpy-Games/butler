@@ -24,6 +24,7 @@ import type {
   ReasoningEffort,
   WorkerProfile,
 } from "@/app/types.ts";
+import { ProviderMark } from "./ProviderMark";
 
 interface WorkerProfileEditorProps {
   profile: WorkerProfile;
@@ -104,6 +105,7 @@ export function WorkerProfileEditor({
           options={models.map((model) => ({
             value: model.model_ref,
             label: `${model.provider_label} / ${modelDisplayName(model)} (${tokenWindowLabel(model.context_window_tokens)})`,
+            icon: <ProviderMark providerId={model.provider_id} platform={model.platform} />,
           }))}
         />
         <SettingsSelect

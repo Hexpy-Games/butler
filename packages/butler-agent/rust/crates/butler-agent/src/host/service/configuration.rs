@@ -1,6 +1,8 @@
 //! Source native-Butler startup facts and the one default-session binding.
 
 mod app;
+mod local_admin;
+pub(crate) mod local_credentials;
 mod session;
 
 use std::path::{Path, PathBuf};
@@ -8,11 +10,14 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 use crate::host::installation::ResolvedInstallation;
+use crate::host::runtime::storage_bootstrap::is_unsupported_legacy_data;
 use butler_models::models::{DEFAULT_MODEL_REF, parse_model_ref};
 use butler_turn::btcc::BtccError;
 use butler_turn::workspace::StoredSessionBinding;
+use local_credentials::CredentialFiles;
 
 pub(crate) use app::{AppCapturedDependencies, AppServiceConfiguration};
+pub(crate) use local_credentials::data_folder_token;
 
 pub(crate) struct ServiceBootstrap {
     pub(crate) binding: StoredSessionBinding,
@@ -99,6 +104,16 @@ impl ServiceConfiguration {
             user_home: user_home.to_path_buf(),
             projects,
         })
+    }
+
+    /// Create credentials only after the service has reserved its App listener.
+    pub(crate) fn initialize_app_credentials(&mut self) {
+        let files = if is_unsupported_legacy_data(&self.data_root) {
+            CredentialFiles::ReadOnly
+        } else {
+            CredentialFiles::CreateMissing
+        };
+        self.app.initialize_credentials(&self.data_root, files);
     }
 
     pub(in crate::host) fn validate_workspace(&self, workspace: &Path) -> Result<(), BtccError> {

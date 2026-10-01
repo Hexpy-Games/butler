@@ -15,6 +15,10 @@ import {
   createBundledAgentSupervisor,
   prepareAppLocalAuth,
 } from "../../packages/butler-app/client/electron/app-agent-supervisor.mjs";
+import type {
+  AgentStopIntent,
+  NativeServiceInstance,
+} from "../../packages/butler-app/client/electron/app-agent-stop-intent.mjs";
 
 test("App local auth is generated under App runtime state and reused", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-auth-"));
@@ -394,6 +398,104 @@ test("bundled Agent supervisor adopts its live child after transient readiness w
     expect(commits).toBe(1);
     expect(portUpdates).toBe(0);
     expect(readinessChecks).toBe(3);
+    await supervisor.stop({ wait: true });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// test-category: pure-logic
+test("supervisor keeps its port until an external replacement passes readiness", async () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-app-supervisor-replacement-"));
+  try {
+    const oldPort = 18765;
+    const replacementPort = 18889;
+    let port = oldPort;
+    let record: NativeServiceInstance | null = null;
+    let child: FakeChildProcess | null = null;
+    const spawned: FakeChildProcess[] = [];
+    let updateCount = 0;
+    let releaseProbe: ((ready: boolean) => void) | undefined;
+    let enterProbe: (() => void) | undefined;
+    const probeEntered = new Promise<void>((resolve) => {
+      enterProbe = resolve;
+    });
+    const replacementProbe = new Promise<boolean>((resolve) => {
+      releaseProbe = resolve;
+    });
+    const supervisor = createBundledAgentSupervisor({
+      butlerData: root,
+      resolveGateway: () => ({ command: "butler-agent", args: [], env: {} }),
+      spawnProcess: () => {
+        const spawnedChild = new FakeChildProcess(9800, []);
+        child = spawnedChild;
+        spawned.push(spawnedChild);
+        record = {
+          pid: spawnedChild.pid,
+          instanceId: "old-instance",
+          state: "ready",
+          appEnabled: true,
+          appSupervised: true,
+          port: oldPort,
+        };
+        return spawnedChild;
+      },
+      healthCheck: (_localAuth, probePort) =>
+        probePort === replacementPort || child !== null,
+      readinessCheck: (_localAuth, _gateway, probePort) => {
+        if (probePort === replacementPort) {
+          enterProbe?.();
+          return replacementProbe;
+        }
+        return child !== null;
+      },
+      isPortAvailable: () => true,
+      findAvailablePort: (startPort) => startPort,
+      updatePort: (nextPort) => {
+        updateCount += 1;
+        port = nextPort;
+      },
+      getPort: () => port,
+      getServerUrl: () => `http://127.0.0.1:${port}/`,
+      getRendererOrigin: () => `http://127.0.0.1:${port}`,
+      readInstanceRecord: (): NativeServiceInstance | null => record,
+      readStopIntent: () => ({
+        reason: "restart",
+        requestedBy: "cli",
+        respawnBy: "controller",
+        instanceId: "old-instance",
+        pid: 9800,
+        requestedAt: "2026-09-30T00:00:00.000Z",
+      } satisfies AgentStopIntent),
+      isProcessAlive: (pid) => pid === 9900,
+      schedulePoll: () => 1,
+      cancelPoll: () => undefined,
+    });
+
+    await supervisor.ensureReady();
+    const exitedChild = spawned[0];
+    if (!exitedChild) throw new Error("Agent child was not spawned");
+    record = {
+      pid: 9900,
+      instanceId: "replacement-instance",
+      state: "ready",
+      appEnabled: true,
+      appSupervised: true,
+      port: replacementPort,
+    };
+    exitedChild.emit("exit", 0, null);
+    await probeEntered;
+
+    expect(port).toBe(oldPort);
+    expect(updateCount).toBe(0);
+    releaseProbe?.(true);
+    const deadline = Date.now() + 1000;
+    while (port !== replacementPort && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    expect(port).toBe(replacementPort);
+    expect(updateCount).toBe(1);
+    expect(supervisor.diagnostics().phase).toBe("running");
     await supervisor.stop({ wait: true });
   } finally {
     rmSync(root, { recursive: true, force: true });

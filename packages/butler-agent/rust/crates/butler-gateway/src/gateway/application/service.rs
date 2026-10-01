@@ -114,16 +114,28 @@ impl AppApplication {
         let now = self.dependencies.identity_clock.now_iso();
         self.storage
             .execute(move |db| {
-                let message_view = read_model::list_messages(db, &chat, 0.0, 200)?
-                    .messages
-                    .into_iter()
-                    .find(|row| row.id == message)
-                    .ok_or_else(|| {
-                        AppStorageError::new(
-                            AppStorageCode::AcceptedMessageMissing,
-                            "Accepted message was not found.",
-                        )
-                    })?;
+                // A delegated steward result is model input, never a bubble:
+                // it gets no live message event.
+                if !message_visibility::is_delegated_result(db, &message)? {
+                    let message_view = read_model::list_messages(db, &chat, 0.0, 200)?
+                        .messages
+                        .into_iter()
+                        .find(|row| row.id == message)
+                        .ok_or_else(|| {
+                            AppStorageError::new(
+                                AppStorageCode::AcceptedMessageMissing,
+                                "Accepted message was not found.",
+                            )
+                        })?;
+                    events::append(
+                        db,
+                        &subscribers,
+                        "message.created",
+                        Some(&turn),
+                        map(&json!({"message":message_view}))?,
+                        &now,
+                    )?;
+                }
                 let turn_view = read_model::list_turns(db, &chat, 0.0)?
                     .turns
                     .into_iter()
@@ -134,14 +146,6 @@ impl AppApplication {
                             "Accepted Turn was not found.",
                         )
                     })?;
-                events::append(
-                    db,
-                    &subscribers,
-                    "message.created",
-                    Some(&turn),
-                    map(&json!({"message":message_view}))?,
-                    &now,
-                )?;
                 events::append(
                     db,
                     &subscribers,

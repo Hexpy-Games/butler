@@ -108,6 +108,30 @@ impl TranscriptWriter {
             .map_err(|source| closed().with_source(source))?
     }
 
+    /// Best-effort drain for the service's forced deadline thread. It does not
+    /// depend on Tokio workers, which may be blocked during startup or shutdown.
+    pub fn close_on_deadline(&self, grace: std::time::Duration) -> bool {
+        let Ok(mut state) = self.state.try_lock() else {
+            return false;
+        };
+        state.sender.take();
+        let Some(worker) = state.worker.take() else {
+            return true;
+        };
+        drop(state);
+        let (flushed, receipt) = std::sync::mpsc::sync_channel(1);
+        if std::thread::Builder::new()
+            .name("butler-transcript-drain".into())
+            .spawn(move || {
+                let _ = flushed.send(worker.join().is_ok());
+            })
+            .is_err()
+        {
+            return false;
+        }
+        receipt.recv_timeout(grace).unwrap_or(false)
+    }
+
     pub async fn close(&self) -> TranscriptResult<()> {
         let mut state = self.state.lock().await;
         state.sender.take();
@@ -131,6 +155,3 @@ fn closed() -> TranscriptError {
         "Transcript writer is closed",
     )
 }
-
-#[cfg(test)]
-mod tests;

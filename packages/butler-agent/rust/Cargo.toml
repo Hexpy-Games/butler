@@ -41,7 +41,7 @@ lopdf = { version = "=0.45.0", default-features = false }
 serde = { version = "1.0.219", features = ["derive", "rc"] }
 serde_json = { version = "1.0.143", features = ["preserve_order", "raw_value"] }
 ryu-js = "1.0.3"
-rusqlite = { version = "0.37.0", features = ["bundled"] }
+rusqlite = { version = "0.37.0", features = ["bundled", "hooks"] }
 sha2 = "0.10.9"
 sha1 = "0.10.6"
 subtle = "2.6.1"
@@ -56,9 +56,32 @@ url = "2.5.8"
 regress = { version = "=0.12.0", features = ["utf16", "prohibit-unsafe"] }
 rmcp = { version = "=3.4.0", default-features = false, features = ["client", "server", "macros", "transport-io", "transport-async-rw", "transport-streamable-http-client-reqwest"] }
 zip = { version = "4", default-features = false, features = ["deflate"] }
+# Agent archives (`butler install`, `butler update --apply`): gzip-compressed tar.
+flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
+tar = { version = "0.4.46", default-features = false }
 rustix = { version = "=1.1.5", features = ["fs"] }
-nix = { version = "=0.31.3", default-features = false, features = ["feature", "fs", "hostname", "signal"] }
+nix = { version = "=0.31.3", default-features = false, features = ["feature", "fs", "hostname", "net", "signal"] }
 libproc = "=0.14.11"
+# Windows process table, Job Objects and path normalization (butler-platform).
+sysinfo = { version = "=0.37.2", default-features = false, features = ["system"] }
+win32job = "=2.0.3"
+dunce = "=1.0.5"
+iana-time-zone = "=0.1.65"
+# The OS credential store (#217, butler-platform `secrets`): the keyring-core
+# API and one store per OS (macOS Keychain; Secret Service over D-Bus in pure
+# Rust; Windows Credential Manager). The `keyring` crate's own docs point
+# applications at these crates rather than at its all-in-one wrapper.
+keyring-core = "=1.0.0"
+apple-native-keyring-store = { version = "=1.0.2", default-features = false, features = ["keychain"] }
+zbus-secret-service-keyring-store = { version = "=1.0.1", default-features = false, features = ["crypto-rust"] }
+windows-native-keyring-store = { version = "=1.1.0", default-features = false }
+zeroize = "1.8"
+# The Developer ID signature check that turns the system store on (macOS).
+security-framework = "3.7"
+# Secret input from a terminal with echo off (`butler auth keys replace`).
+rpassword = "7.4"
+# Key fingerprints (HMAC-SHA-256 with a data-folder secret) for duplicate checks.
+hmac = "0.12"
 
 # Debug info is limited to line tables because full DWARF made macOS target
 # directories exceed 50 GB: macOS defaults to split-debuginfo = "unpacked",
@@ -73,6 +96,18 @@ split-debuginfo = "packed"
 
 [profile.dev.package."*"]
 debug = false
+
+# Installing an Agent archive hashes and inflates a few hundred megabytes; at
+# opt-level 0 that takes minutes in the install scenarios. These leaf crates
+# are small, so optimizing them costs little.
+[profile.dev.package.sha2]
+opt-level = 3
+[profile.dev.package.flate2]
+opt-level = 3
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+[profile.dev.package.crc32fast]
+opt-level = 3
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

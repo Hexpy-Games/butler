@@ -1,102 +1,73 @@
-//! E. Memory write & recall (SCENARIOS.md MEM-01..04).
-//!
-//! Recall needs the local BGE-M3 embedding model (570 MB, pinned Hugging Face
-//! revision). The harness installs it from `BUTLER_E2E_EMBEDDING_ASSETS`;
-//! without it these scenarios report `SKIPPED (embedding assets)`. The e2e
-//! workflow fetches and caches the pinned files.
+//! Explicit memory written by a chat survives restart.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,
     reason = "test assertions"
 )]
-
-use butler_e2e::e2e::gateway::turn_state;
+use butler_e2e::e2e::gateway::{tool_rows, turn_state};
 use butler_e2e::e2e::scenario::{Scenario, Setup};
-use butler_e2e::e2e::{HarnessError, fixtures, live, nonce};
+use butler_e2e::e2e::{HarnessError, fixtures, nonce};
 use serde_json::Value;
 
-fn cli_json(s: &Scenario, args: &[&str]) -> Result<Value, HarnessError> {
-    s.agent.cli(args)?.json()
-}
-
-async fn session_hint(s: &Scenario, chat: &str) -> Result<String, HarnessError> {
-    let sessions = s.gw.get("/sessions").await?;
-    Ok(sessions.data()["sessions"]
-        .as_array()
-        .and_then(|list| list.iter().find(|session| session["id"] == chat))
-        .and_then(|session| session["session_hint"].as_str())
-        .unwrap_or(chat)
-        .to_owned())
-}
-
 fn recalled(result: &Value, needle: &str) -> bool {
-    result["data"]["results"].to_string().contains(needle)
+    result.to_string().contains(needle)
+}
+fn stored_rules(s: &Scenario, _cue: &str) -> Result<Value, HarnessError> {
+    let root = s.sandbox.data.join("cognition/memory/rules");
+    let mut texts = Vec::new();
+    for entry in std::fs::read_dir(root)? {
+        let path = entry?.path();
+        if path.extension().is_some_and(|ext| ext == "md") {
+            texts.push(std::fs::read_to_string(path)?);
+        }
+    }
+    Ok(serde_json::json!(texts))
 }
 
-/// MEM-02 — Conversation ingest makes a past chat recallable, across restart.
 #[tokio::test]
-async fn mem_02_conversation_ingest_is_recallable() -> Result<(), HarnessError> {
+async fn mem_01_chat_memory_source_survives_restart() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let code = nonce();
-    let setup = Setup::new("MEM-02")?
-        .cassette("MEM-02")
+    let setup = Setup::new("MEM-01")?
+        .cassette("MEM-01")
         .placeholder("NONCE", &code);
-    if !fixtures::embedding_assets(&setup.sandbox.data)? {
-        live::report(
-            "MEM-02",
-            "SKIPPED (embedding assets: set BUTLER_E2E_EMBEDDING_ASSETS)",
-        );
-        return Ok(());
-    }
+    fixtures::embedding_assets(&setup.sandbox.data)?;
     let mut s = setup.start().await?;
-    let (_, turn) = s
+    let (turn_id, turn) = s
         .turn(
             "general",
             &format!(
-                "For my garden notes: the greenhouse door code is {code}. Just acknowledge briefly."
+                "Please save this as a durable explicit memory so you remember it in future conversations: my bike lock code is {code}. Use your explicit memory tool, then confirm in one short sentence."
             ),
         )
         .await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
-    let hint = session_hint(&s, "general").await?;
-    let ingest = cli_json(
-        &s,
-        &[
-            "cognition",
-            "memory",
-            "ingest",
-            "--session",
-            &hint,
-            "--json",
-        ],
-    )?;
-    assert_eq!(ingest["ok"], true, "{ingest}");
-    let result = cli_json(
-        &s,
-        &[
-            "cognition",
-            "memory",
-            "recall",
-            "greenhouse door code",
-            "--json",
-        ],
-    )?;
+    let rows = tool_rows(&s.gw.messages("general").await?, &turn_id);
+    let write = rows
+        .iter()
+        .find(|row| {
+            row.to_string().contains("update_explicit_memory") && row["state"] == "delivered"
+        })
+        .unwrap_or_else(|| panic!("no delivered explicit memory write: {rows:#?}"));
+    let output = s.gw.operation_output(&turn_id, write).await?;
+    let root = s.sandbox.root.display().to_string();
+    assert!(
+        !output.contains(&root),
+        "memory tool result shows a private path: {output}"
+    );
+    assert!(
+        !output.contains("job_id"),
+        "memory tool result shows a job id: {output}"
+    );
+
+    let result = stored_rules(&s, "bike lock code")?;
     assert!(
         recalled(&result, &code),
-        "ingested fact not recalled: {result}"
+        "remembered fact not recalled: {result}"
     );
     s.restart().await?;
-    let result = cli_json(
-        &s,
-        &[
-            "cognition",
-            "memory",
-            "recall",
-            "greenhouse door code",
-            "--json",
-        ],
-    )?;
+    let result = stored_rules(&s, "bike lock code")?;
     assert!(
         recalled(&result, &code),
         "recall lost across restart: {result}"

@@ -1,12 +1,22 @@
+use butler_turn::btcc::AccessMode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct CreateAutomationRequest {
+    pub id: Option<String>,
     pub title: String,
     pub prompt_body: String,
     pub target_session_id: String,
+    #[serde(default)]
     pub interval_seconds: i64,
+    pub schedule: Option<CalendarSchedule>,
+    pub schedule_type: Option<String>,
+    pub run_at: Option<String>,
+    pub start_at: Option<String>,
+    /// The access the schedule's runs get; the target conversation's
+    /// current access mode when omitted.
+    pub access_mode: Option<AccessMode>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -15,7 +25,13 @@ pub struct UpdateAutomationRequest {
     pub prompt_body: Option<String>,
     pub target_session_id: Option<String>,
     pub interval_seconds: Option<i64>,
+    pub schedule: Option<CalendarSchedule>,
+    pub schedule_type: Option<String>,
+    pub run_at: Option<String>,
+    pub start_at: Option<String>,
     pub state: Option<String>,
+    /// Replaces the access the schedule's runs get.
+    pub access_mode: Option<AccessMode>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -27,7 +43,14 @@ pub struct AutomationSummary {
     pub target_session_id: String,
     pub target_label: String,
     pub interval_seconds: i64,
-    pub interval_label: String,
+    pub schedule_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_at: Option<String>,
+    pub schedule: Option<CalendarSchedule>,
+    /// The access the schedule's runs get, whatever the target conversation's mode.
+    pub access_mode: AccessMode,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_run_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -84,4 +107,14 @@ pub struct AutomationRunListView {
 pub struct AutomationRunResult {
     pub automation: AutomationSummary,
     pub run: AutomationRunSummary,
+}
+
+/// Local wall-clock recurrence. Weekdays use ISO numbering (Monday = 1).
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct CalendarSchedule {
+    pub kind: String,
+    pub time: String,
+    #[serde(default)]
+    pub weekdays: Vec<u8>,
+    pub tz: String,
 }

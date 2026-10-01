@@ -1,0 +1,129 @@
+/*
+ * Reading typography for MDX documents, derived from the app DS
+ * MarkdownContent: 14px body at the document line height, quiet headings,
+ * hairline inline code. DS components inside keep their own styles.
+ */
+.content {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: var(--typo-body-size);
+  line-height: var(--line-height-document);
+}
+
+/*
+ * Vertical rhythm. Blocks start flush wherever they sit: the reset has zero
+ * specificity, so it never outranks a spacing rule here or in a component,
+ * whatever the stylesheet order. The flow rules then space siblings in the
+ * document and in the blocks that hold nested MDX (tab panels, blockquotes).
+ * ul and ol are ordinary blocks: they share every spacing rule and differ only
+ * in their markers (lint: list-spacing).
+ */
+:where(.content) :where(p, ul, ol, pre, blockquote, h2, h3, h4) {
+  margin-block: 0;
+}
+
+.content > :where(*) + :where(*),
+.content :where([data-slot="tabs-panel"], blockquote) > :where(*) + :where(*) {
+  margin-top: var(--space-md);
+}
+
+.content > :where(div, nav, section, [data-slot]) + :where(*),
+.content > :where(*) + :where(div, nav, section, [data-slot]),
+.content :where([data-slot="tabs-panel"], blockquote) > :where(div, nav, section, [data-slot]) + :where(*),
+.content :where([data-slot="tabs-panel"], blockquote) > :where(*) + :where(div, nav, section, [data-slot]) {
+  margin-top: var(--space-lg);
+}
+
+/* Table cells and cards stack their blocks tightly, like a Notice body. */
+.content :where(th, td, [data-slot="card"]) > :where(p, ul, ol) + :where(p, ul, ol) {
+  margin-top: var(--space-xs);
+}
+
+.content > :where(h2) {
+  margin-top: var(--space-4xl);
+  color: var(--text-primary);
+  font-size: var(--typo-h3-size);
+  font-weight: var(--typo-h3-weight);
+  line-height: var(--typo-h3-line-height);
+}
+
+.content > :where(h3) {
+  margin-top: var(--space-2xl);
+  font-size: var(--typo-h5-size);
+  font-weight: var(--typo-h5-weight);
+  line-height: var(--typo-h5-line-height);
+}
+
+.content > :where(:first-child) {
+  margin-top: 0;
+}
+
+.content > :where(h2, h3) + :where(*) {
+  margin-top: var(--space-sm);
+}
+
+.content :where(h2, h3) {
+  word-break: keep-all;
+}
+
+/* One list box for ul and ol. Items, nested lists and the blocks of a loose
+   item sit a small step apart. */
+.content :where(ul, ol) {
+  padding-left: var(--space-2xl);
+}
+
+.content :where(li + li, li > ul, li > ol, li > :is(p, ul, ol, div, pre, blockquote) + *) {
+  margin-top: var(--space-xs);
+}
+
+/* Ordered lists always show plain "1." markers (never circled numerals). */
+.content :where(ol) {
+  list-style: decimal;
+}
+
+.content :where(ol > li)::marker {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.content :where(ul > li)::marker {
+  color: var(--text-tertiary);
+}
+
+.content :where(a) {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.content :where(a:hover) {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.content :where(strong) {
+  font-weight: var(--font-weight-semibold);
+}
+
+.content :where(:not(pre) > code) {
+  padding: 0 var(--space-1);
+  border: var(--border-hairline) solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  font: var(--font-code);
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.content :where(hr) {
+  height: 1px;
+  margin-block: var(--space-2xl);
+  border: 0;
+  background: var(--line);
+}
+
+.content :where(blockquote) {
+  margin-inline: 0;
+  padding-left: var(--space-lg);
+  border-left: var(--border-width-strong) solid var(--line-strong);
+  color: var(--text-secondary);
+}

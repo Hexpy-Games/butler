@@ -79,7 +79,8 @@ impl AuthorityHandoff {
         let document =
             JsonDocument::from_value(&envelope).map_err(GatewayApplicationError::internal_from)?;
         self.queue
-            .enqueue_idempotent(document)
+            .enqueue_async(document)
+            .await
             .map_err(GatewayApplicationError::internal_from)?;
         Ok(())
     }

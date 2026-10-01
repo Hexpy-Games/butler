@@ -2,6 +2,7 @@ use rusqlite::{Connection, OptionalExtension, Row, params_from_iter};
 use serde_json::Value;
 
 use super::{AppStorageError, contracts::*, json_error};
+use crate::gateway::application::message_visibility::owner_visible;
 use crate::gateway::application::storage::AppStorageCode;
 use butler_core::public_text::trim_js_whitespace;
 
@@ -38,11 +39,15 @@ pub(super) fn workspace_project(
     })
 }
 
-const SESSION_SELECT: &str = r"
+const SESSION_SELECT: &str = concat!(
+    r"
 SELECT c.id,c.kind,c.title,c.project_id,c.created_at,c.updated_at,
  (SELECT m.text FROM messages m WHERE m.chat_id=c.id
    AND NOT(m.role='assistant' AND m.safe_error_code IS NOT NULL
      AND m.safe_error_code IN ('app_turn_queue_failed','goal_completion_incomplete'))
+   AND ",
+    owner_visible!(),
+    r"
    ORDER BY m.rowid DESC LIMIT 1) AS last_message_preview,
  (SELECT t.state FROM turns t WHERE t.chat_id=c.id ORDER BY t.rowid DESC LIMIT 1) AS active_turn_state,
  (SELECT t.safe_status_label FROM turns t WHERE t.chat_id=c.id ORDER BY t.rowid DESC LIMIT 1) AS safe_status_label,
@@ -54,7 +59,8 @@ SELECT c.id,c.kind,c.title,c.project_id,c.created_at,c.updated_at,
  (SELECT COUNT(*) FROM app_automations a WHERE a.target_session_id=c.id AND a.state!='deleted'),
  (SELECT display_name FROM projects p WHERE p.id=c.project_id) AS project_display_name
 FROM chats c
-";
+"
+);
 
 struct SessionRow {
     id: String,
@@ -98,7 +104,10 @@ fn session_row(row: &Row<'_>) -> rusqlite::Result<SessionRow> {
     })
 }
 
-pub(super) fn session(db: &Connection, id: &str) -> Result<AppSessionSummary, AppStorageError> {
+pub(in crate::gateway::application) fn session(
+    db: &Connection,
+    id: &str,
+) -> Result<AppSessionSummary, AppStorageError> {
     let sql = format!("{SESSION_SELECT} WHERE c.id=?1");
     let row = db
         .query_row(&sql, [id], session_row)
@@ -120,7 +129,7 @@ pub(super) fn session(db: &Connection, id: &str) -> Result<AppSessionSummary, Ap
 
 pub(super) fn chats(db: &mut Connection) -> Result<Vec<AppChatSummary>, AppStorageError> {
     let mut statement = db
-        .prepare(
+        .prepare_cached(
             r"
 SELECT id,title,kind,project_id,created_at,updated_at FROM chats
 WHERE archived=0 AND NOT EXISTS(
@@ -176,7 +185,7 @@ pub(super) fn sessions(
         params.push(project_id);
     }
     sql.push_str(" ORDER BY c.pinned DESC,c.updated_at DESC,c.created_at DESC");
-    let mut statement = db.prepare(&sql).map_err(AppStorageError::sqlite)?;
+    let mut statement = db.prepare_cached(&sql).map_err(AppStorageError::sqlite)?;
     statement
         .query_map(params_from_iter(params), session_row)
         .map_err(AppStorageError::sqlite)?
@@ -192,7 +201,7 @@ pub(super) fn archives(
          SELECT 1 FROM app_session_branches b WHERE b.target_session_id=c.id AND b.state='prepared')\
          ORDER BY c.updated_at DESC,c.created_at DESC"
     );
-    let mut statement = db.prepare(&sql).map_err(AppStorageError::sqlite)?;
+    let mut statement = db.prepare_cached(&sql).map_err(AppStorageError::sqlite)?;
     statement
         .query_map([], session_row)
         .map_err(AppStorageError::sqlite)?

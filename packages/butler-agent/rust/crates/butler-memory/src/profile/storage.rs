@@ -1,3 +1,5 @@
+//! The profile database: consent, candidates, stable entries and runtime projections.
+
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -8,6 +10,7 @@ use super::contracts::{
     ClearProfilingResult, ProfileError, ProfileResult, ProfilingConsentSnapshot, ProfilingMode,
     RuntimeProfileProjection,
 };
+use super::understanding::StoredUnderstanding;
 use crate::profile::ProfileCode;
 
 pub(super) const CONSENT_VERSION: &str = "2026-05-16";
@@ -16,7 +19,17 @@ pub(super) fn database_path(data_root: &Path) -> PathBuf {
     data_root.join("cognition/profile/profile.sqlite")
 }
 
-pub(super) fn open(data_root: &Path, create: bool) -> ProfileResult<Connection> {
+/// How the profile database is opened.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Access {
+    /// Read-write, creating and migrating the database when needed.
+    Write,
+    /// Read-only.
+    Read,
+}
+
+pub(super) fn open(data_root: &Path, access: Access) -> ProfileResult<Connection> {
+    let create = access == Access::Write;
     let path = database_path(data_root);
     if create {
         fs::create_dir_all(data_root.join("cognition/profile")).map_err(io_error)?;
@@ -31,11 +44,7 @@ pub(super) fn open(data_root: &Path, create: bool) -> ProfileResult<Connection> 
         db.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
             .map_err(db_error)?;
         migrate(&db)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
-        }
+        let _ = butler_platform::secure_fs::restrict_file(&path);
     } else {
         db.execute_batch("PRAGMA foreign_keys=ON;")
             .map_err(db_error)?;
@@ -128,7 +137,7 @@ pub(super) fn read_consent(data_root: &Path) -> ProfilingConsentSnapshot {
     if !database_path(data_root).exists() {
         return default_consent();
     }
-    let Ok(db) = open(data_root, false) else {
+    let Ok(db) = open(data_root, Access::Read) else {
         return default_consent();
     };
     let result = (|| -> ProfileResult<_> {
@@ -184,7 +193,7 @@ pub(super) fn write_consent(
         consented_at: (mode != ProfilingMode::Off).then(|| consented_at.unwrap_or(now).to_owned()),
         raw_profile_browser_visible: false,
     };
-    let db = open(data_root, true)?;
+    let db = open(data_root, Access::Write)?;
     let values = [
         ("mode", json!(snapshot.mode)),
         ("consent_version", json!(snapshot.consent_version)),
@@ -206,7 +215,7 @@ pub(super) fn write_consent(
 }
 
 pub(super) fn clear(data_root: &Path) -> ProfileResult<ClearProfilingResult> {
-    let db = open(data_root, true)?;
+    let db = open(data_root, Access::Write)?;
     let count = |table: &str| -> ProfileResult<usize> {
         db.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
             row.get::<_, i64>(0)
@@ -232,7 +241,7 @@ pub(super) fn write_projection(
     data_root: &Path,
     value: &RuntimeProfileProjection,
 ) -> ProfileResult<()> {
-    let db = open(data_root, true)?;
+    let db = open(data_root, Access::Write)?;
     db.execute(
         "INSERT INTO runtime_projection(id,version,mode,payload_json,updated_at)
          VALUES('active',?1,?2,?3,?4) ON CONFLICT(id) DO UPDATE SET
@@ -246,7 +255,7 @@ pub(super) fn delete_projection(data_root: &Path) -> ProfileResult<()> {
     if !database_path(data_root).exists() {
         return Ok(());
     }
-    open(data_root, true)?
+    open(data_root, Access::Write)?
         .execute("DELETE FROM runtime_projection", [])
         .map_err(db_error)?;
     Ok(())
@@ -256,7 +265,7 @@ pub(super) fn read_projection(data_root: &Path) -> ProfileResult<Option<RuntimeP
     if !database_path(data_root).exists() {
         return Ok(None);
     }
-    let db = open(data_root, false)?;
+    let db = open(data_root, Access::Read)?;
     let raw = db
         .query_row(
             "SELECT payload_json FROM runtime_projection WHERE id='active' LIMIT 1",
@@ -269,12 +278,13 @@ pub(super) fn read_projection(data_root: &Path) -> ProfileResult<Option<RuntimeP
         .transpose()
 }
 
+/// A stable profile entry as stored.
 #[derive(Clone)]
 pub(super) struct StoredEntry {
     pub id: String,
     pub category: String,
     pub source_type: String,
-    pub payload: Value,
+    pub understanding: StoredUnderstanding,
     pub updated_at: String,
 }
 
@@ -282,7 +292,7 @@ pub(super) fn stable_entries(data_root: &Path) -> ProfileResult<Vec<StoredEntry>
     if !database_path(data_root).exists() {
         return Ok(Vec::new());
     }
-    let db = open(data_root, false)?;
+    let db = open(data_root, Access::Read)?;
     stable_entries_in_db(&db)
 }
 
@@ -310,7 +320,7 @@ pub(super) fn stable_entries_in_db(db: &Connection) -> ProfileResult<Vec<StoredE
                 id,
                 category,
                 source_type,
-                payload: serde_json::from_str(&raw).map_err(json_error)?,
+                understanding: StoredUnderstanding::parse(&raw).map_err(json_error)?,
                 updated_at,
             })
         })
@@ -329,6 +339,6 @@ fn io_error(_: std::io::Error) -> ProfileError {
         "Profile store is unavailable.",
     )
 }
-fn json_error(_: serde_json::Error) -> ProfileError {
+pub(super) fn json_error(_: serde_json::Error) -> ProfileError {
     ProfileError::new(ProfileCode::ProfileDataInvalid, "Profile data is invalid.")
 }

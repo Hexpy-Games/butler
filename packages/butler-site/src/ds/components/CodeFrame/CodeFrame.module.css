@@ -1,0 +1,89 @@
+/* Forked from the app DS MarkdownCodeFrame (MarkdownContent.module.css code frame). */
+.frame {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+}
+
+.header {
+  display: flex;
+  min-height: var(--control-height-md);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-inline: var(--space-4) var(--space-1);
+  border-bottom: 1px solid var(--line);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2);
+}
+
+.pre {
+  margin: 0;
+  padding: var(--space-md) var(--space-4);
+  overflow-x: auto;
+  font: var(--typo-code-font);
+  tab-size: 2;
+}
+
+.pre :where(code) {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+  font: inherit;
+  white-space: pre;
+}
+
+.pre [data-syntax="keyword"] {
+  color: var(--syntax-keyword);
+}
+
+.pre [data-syntax="string"] {
+  color: var(--syntax-string);
+}
+
+.pre [data-syntax="comment"] {
+  color: var(--syntax-comment);
+  font-style: italic;
+}
+
+.pre [data-syntax="number"] {
+  color: var(--syntax-number);
+}
+
+.pre [data-syntax="title"] {
+  color: var(--syntax-title);
+}
+
+.pre [data-syntax="type"] {
+  color: var(--syntax-type);
+}
+
+.pre [data-syntax="variable"] {
+  color: var(--syntax-variable);
+}
+
+.pre [data-syntax="meta"] {
+  color: var(--syntax-meta);
+}
+
+.pre [data-syntax="addition"] {
+  color: var(--syntax-addition);
+}
+
+.pre [data-syntax="deletion"] {
+  color: var(--syntax-deletion);
+}
+
+.copied {
+  display: none;
+}
+
+.frame[data-copied="true"] .copy {
+  display: none;
+}
+
+.frame[data-copied="true"] .copied {
+  display: inline-flex;
+}

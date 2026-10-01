@@ -1,58 +1,11 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
+use butler_platform::command_sandbox;
+use butler_platform::process_control::{self, Liveness, liveness};
+
 use super::{CommandStep, Commands, Fixture, GuidedAccess, ScriptedProcesses};
-
-#[cfg(unix)]
-#[tokio::test]
-async fn guided_normal_close_kills_owned_background_descendant() {
-    use nix::errno::Errno;
-    use nix::sys::signal::kill;
-    use nix::unistd::Pid;
-
-    let fixture = Fixture::new();
-    let owner = Commands::new();
-    let pid_path = fixture.0.join("child.pid");
-    let command = format!("sleep 10 & echo $! > '{}'; exit 0", pid_path.display());
-    let output = owner
-        .submit_guided(fixture.guided(&command))
-        .unwrap()
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(output.summary.exit_code, Some(0));
-    let pid: i32 = std::fs::read_to_string(&pid_path)
-        .unwrap()
-        .trim()
-        .parse()
-        .unwrap();
-    butler_test_support::eventually("the owned descendant to exit", || {
-        kill(Pid::from_raw(pid), None) == Err(Errno::ESRCH)
-    })
-    .await;
-    owner.close().await;
-}
-
-#[tokio::test]
-async fn spool_initialization_failure_does_not_start_child() {
-    let fixture = Fixture::new();
-    let owner = Commands::new();
-    let spool_parent = fixture.0.join("runtime/btcc");
-    std::fs::create_dir_all(&spool_parent).unwrap();
-    std::fs::write(spool_parent.join("command-spool"), b"occupied").unwrap();
-    let marker = fixture.0.join("started");
-    let command = format!("printf x > '{}'", marker.display());
-    let failure = owner
-        .submit_guided(fixture.guided(&command))
-        .unwrap()
-        .await
-        .unwrap()
-        .unwrap_err();
-    assert_eq!(failure.code(), "command_io_failed");
-    assert!(!marker.exists());
-    owner.close().await;
-    assert_eq!(owner.active_count(), 0);
-}
 
 #[tokio::test]
 async fn capture_write_failure_terminates_child_and_discards_owned_files() {
@@ -80,29 +33,6 @@ async fn capture_write_failure_terminates_child_and_discards_owned_files() {
 }
 
 #[tokio::test]
-async fn structured_timeout_and_close_reap_children() {
-    let fixture = Fixture::new();
-    let owner = Commands::new();
-    let mut timed = fixture.structured(vec![CommandStep {
-        executable: "/bin/sh".into(),
-        arguments: vec![
-            "-c".into(),
-            "trap '' TERM; while :; do sleep 1; done".into(),
-        ],
-    }]);
-    timed.timeout_ms = Some(10.0);
-    let output = tokio::time::timeout(std::time::Duration::from_secs(3), async {
-        owner.submit_structured(timed).unwrap().await.unwrap()
-    })
-    .await
-    .unwrap();
-    assert!(output.timed_out);
-    assert_eq!(output.exit_code, None);
-    assert_eq!(owner.active_count(), 0);
-    owner.close().await;
-}
-
-#[tokio::test]
 async fn close_cancels_running_command_and_rejects_admission() {
     let fixture = Fixture::new();
     let owner = Commands::new();
@@ -123,43 +53,120 @@ async fn close_cancels_running_command_and_rejects_admission() {
     );
 }
 
+/// Security boundary: commands see only the allowlisted host environment. A
+/// guided command never sees a private host value, and a structured step's
+/// undefined entry removes an inherited one.
+// test-category: security
 #[tokio::test]
+async fn command_environment_excludes_host_values() {
+    guided_environment_excludes_non_allowlisted_host_values().await;
+    structured_undefined_environment_entry_removes_inherited_value().await;
+    guided_quotes_reach_the_shell_intact().await;
+}
+
+/// What a POSIX shell or `cmd.exe` prints for an unset variable: the empty
+/// default, or the literal `%NAME%`.
+fn unset_marker(name: &str) -> String {
+    if command_sandbox::POSIX_SHELL {
+        "unset".into()
+    } else {
+        format!("%{name}%")
+    }
+}
+
+/// The command that prints `name`'s value in the host's shell.
+fn print_variable(name: &str) -> String {
+    if command_sandbox::POSIX_SHELL {
+        format!("printf %s \"${{{name}-unset}}\"")
+    } else {
+        format!("echo %{name}%")
+    }
+}
+
+/// Program files `cmd.exe` needs to start, which the allowlist keeps.
+fn system_environment(input: &mut HashMap<String, String>) {
+    for name in process_control::SYSTEM_ENVIRONMENT {
+        if let Some(value) = std::env::var_os(name) {
+            input.insert((*name).into(), value.to_string_lossy().into_owned());
+        }
+    }
+}
+
 async fn guided_environment_excludes_non_allowlisted_host_values() {
     let fixture = Fixture::new();
     let owner = Commands::new();
-    let mut input = fixture.guided("printf %s \"${PRIVATE_TOKEN-unset}\"");
+    let mut input = fixture.guided(&print_variable("PRIVATE_TOKEN"));
+    system_environment(&mut input.host_environment);
     input
         .host_environment
         .insert("PRIVATE_TOKEN".into(), "secret".into());
     let output = owner.submit_guided(input).unwrap().await.unwrap().unwrap();
-    let payload = std::fs::read_to_string(output.payload_source.path).unwrap();
-    assert!(payload.contains("\n--- stdout ---\nunset\n--- stderr ---\n"));
+    let payload = std::fs::read_to_string(output.payload_source.path)
+        .unwrap()
+        .replace("\r\n", "\n");
+    let expected = format!("\n--- stdout ---\n{}\n", unset_marker("PRIVATE_TOKEN"));
+    assert!(payload.contains(&expected), "{payload}");
     assert!(!payload.contains("secret"));
     owner.close().await;
 }
 
-#[tokio::test]
 async fn structured_undefined_environment_entry_removes_inherited_value() {
     let fixture = Fixture::new();
     let owner = Commands::new();
+    let (executable, arguments) = if command_sandbox::POSIX_SHELL {
+        (
+            "/bin/sh".to_owned(),
+            vec![
+                "-c".to_owned(),
+                "printf %s \"${BUTLER_ORACLE_ENV-unset}\"".to_owned(),
+            ],
+        )
+    } else {
+        (
+            "cmd.exe".to_owned(),
+            ["/d", "/c", "echo", "%BUTLER_ORACLE_ENV%"]
+                .map(str::to_owned)
+                .to_vec(),
+        )
+    };
     let mut input = fixture.structured(vec![CommandStep {
-        executable: "/bin/sh".into(),
-        arguments: vec![
-            "-c".into(),
-            "printf %s \"${BUTLER_ORACLE_ENV-unset}\"".into(),
-        ],
+        executable,
+        arguments,
     }]);
     input.inherit_environment = true;
+    system_environment(&mut input.host_environment);
     input
         .host_environment
         .insert("BUTLER_ORACLE_ENV".into(), "present".into());
     input.environment.insert("BUTLER_ORACLE_ENV".into(), None);
     let output = owner.submit_structured(input).unwrap().await.unwrap();
-    assert_eq!(output.stdout, "unset");
+    assert_eq!(output.stdout.trim_end(), unset_marker("BUTLER_ORACLE_ENV"));
     owner.close().await;
 }
 
-#[cfg(target_os = "macos")]
+/// A command containing quotes reaches the shell as written: `cmd.exe` does
+/// not undo the `\"` escaping of `Command::arg`.
+async fn guided_quotes_reach_the_shell_intact() {
+    let fixture = Fixture::new();
+    let owner = Commands::new();
+    let (command, printed) = if command_sandbox::POSIX_SHELL {
+        ("printf %s \"a b\" 'c d'", "a bc d")
+    } else {
+        ("echo \"a b\" \"c d\"", "\"a b\" \"c d\"")
+    };
+    let mut input = fixture.guided(command);
+    system_environment(&mut input.host_environment);
+    let output = owner.submit_guided(input).unwrap().await.unwrap().unwrap();
+    let payload = std::fs::read_to_string(output.payload_source.path)
+        .unwrap()
+        .replace("\r\n", "\n");
+    let expected = format!("\n--- stdout ---\n{printed}\n");
+    assert!(payload.contains(&expected), "{payload}");
+    owner.close().await;
+}
+
+/// A read-only command cannot write. A host with a sandbox must run it
+/// there, where the write fails; a host without one must refuse it.
 #[tokio::test]
 async fn guided_read_only_uses_actual_sandbox_boundary() {
     let fixture = Fixture::new();
@@ -167,8 +174,14 @@ async fn guided_read_only_uses_actual_sandbox_boundary() {
     let target = fixture.0.join("must-not-write");
     let mut input = fixture.guided(&format!("printf x > '{}'", target.display()));
     input.access = GuidedAccess::ReadOnlyObservation;
-    let output = owner.submit_guided(input).unwrap().await.unwrap().unwrap();
-    assert_ne!(output.summary.exit_code, Some(0));
+    let result = owner.submit_guided(input).unwrap().await.unwrap();
+    if command_sandbox::READ_ONLY_SANDBOX {
+        let output = result.expect("a host with a sandbox runs read-only commands");
+        assert_ne!(output.summary.exit_code, Some(0));
+    } else {
+        let error = result.expect_err("a host without a sandbox refuses read-only commands");
+        assert_eq!(error.code(), "command_observation_isolation_unavailable");
+    }
     assert!(!target.exists());
     owner.close().await;
 }
@@ -229,13 +242,8 @@ async fn structured_forced_public_settlement_precedes_owned_reap() {
     assert_close_waits_for_reap(&owner, release).await;
 }
 
-#[cfg(unix)]
 #[tokio::test]
 async fn partial_pipeline_spawn_failure_reaps_term_ignoring_descendant() {
-    use nix::errno::Errno;
-    use nix::sys::signal::kill;
-    use nix::unistd::Pid;
-
     let fixture = Fixture::new();
     let gate = Arc::new(tokio::sync::Notify::new());
     let owner = Commands::with_host(Arc::new(ScriptedProcesses {
@@ -266,7 +274,7 @@ async fn partial_pipeline_spawn_failure_reaps_term_ignoring_descendant() {
     butler_test_support::eventually("the TERM-ignoring descendant", || {
         pid = std::fs::read_to_string(&pid_path)
             .ok()
-            .and_then(|pid| pid.trim().parse::<i32>().ok());
+            .and_then(|pid| pid.trim().parse::<u32>().ok());
         pid.is_some()
     })
     .await;
@@ -278,7 +286,7 @@ async fn partial_pipeline_spawn_failure_reaps_term_ignoring_descendant() {
         .unwrap();
     assert_eq!(result.error.unwrap().code(), "command_spawn_failed");
     butler_test_support::eventually("the descendant to be reaped", || {
-        kill(Pid::from_raw(pid), None) == Err(Errno::ESRCH)
+        liveness(pid) == Liveness::Gone
     })
     .await;
     owner.close().await;

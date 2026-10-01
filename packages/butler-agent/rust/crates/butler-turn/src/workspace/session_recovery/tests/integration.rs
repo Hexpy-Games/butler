@@ -1,5 +1,4 @@
-#![cfg(unix)]
-
+use butler_platform::secure_fs::Canonical as _;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -192,7 +191,7 @@ async fn actual_binding_git_worktree_reopen_dirty_and_invalid_authority() {
         .unwrap();
     assert_eq!(
         valid.workspace_reference.get().unwrap(),
-        fixture.target.canonicalize().unwrap()
+        fixture.target.canonical().unwrap()
     );
     assert!(matches!(
         valid.authority,
@@ -316,7 +315,7 @@ async fn project_marker_missing_symlink_and_abort_keep_source_precedence() {
     );
 
     let link = fixture.root.join("symlink");
-    std::os::unix::fs::symlink(&fixture.target, &link).unwrap();
+    butler_platform::secure_fs::symlink(&fixture.target, &link).unwrap();
     Fixture::rebind(&fixture.store, &link, fixture.marker("feature/linked")).await;
     let symlink = recovery
         .recover("session", Some("/project"), CancellationToken::new())

@@ -170,8 +170,80 @@ pub fn civil_from_days(days: i64) -> (i64, i64, i64) {
 mod tests {
     use super::*;
 
+    /// Pure-logic table: the JavaScript `Date` grammar (UTC and local forms,
+    /// invalid dates, the extended-year range), which input consults the
+    /// local conversion, and the persisted ISO round trip with its time clip.
+    // test-category: pure-logic
     #[test]
-    fn persisted_iso_round_trips_extended_years_and_time_clip() {
+    fn date_grammar_and_persisted_iso_round_trip() {
+        // (text, parsed in UTC, parsed in a fixed UTC+09:00 zone)
+        for (text, utc, plus_nine) in [
+            ("2000-04-31", Some(957_139_200_000), Some(957_139_200_000)),
+            (
+                "2024-02-30 1:2",
+                Some(1_709_254_920_000),
+                Some(1_709_222_520_000),
+            ),
+            (
+                "2024-02-30 1:2+09",
+                Some(1_709_222_520_000),
+                Some(1_709_222_520_000),
+            ),
+            (
+                "Mar 30 1999 12:34 GMT-0800",
+                Some(922_826_040_000),
+                Some(922_826_040_000),
+            ),
+            (
+                "1900-02-29T12:34:56Z",
+                Some(-2_203_845_904_000),
+                Some(-2_203_845_904_000),
+            ),
+            (
+                "+010000-01-01T01:02:03.123456789999",
+                Some(253_402_304_523_123),
+                Some(253_402_272_123_123),
+            ),
+            ("Jan 1 50", Some(-631_152_000_000), Some(-631_184_400_000)),
+            (
+                "Dec 29 49",
+                Some(2_524_348_800_000),
+                Some(2_524_316_400_000),
+            ),
+            ("2024-13-01T24:00:00-00:30", None, None),
+            ("January 32 1999 12::34 GMT+9", None, None),
+            ("19700131", None, None),
+            (
+                "+275760-09-13T00:00:00Z",
+                Some(8_640_000_000_000_000),
+                Some(8_640_000_000_000_000),
+            ),
+        ] {
+            for (offset, expected) in [(0, utc), (9 * 3_600_000, plus_nine)] {
+                assert_eq!(
+                    parse_date_millis(text, &|local| local.checked_sub(offset)),
+                    expected,
+                    "{text} at offset {offset}"
+                );
+            }
+        }
+
+        // UTC dates never consult the local conversion; invalid host output is rejected.
+        assert_eq!(
+            parse_date_millis("1970-01-01", &|_| panic!("date only is UTC")),
+            Some(0)
+        );
+        assert_eq!(
+            parse_date_millis("1970-01-01T00:00:00Z", &|_| panic!("explicit UTC")),
+            Some(0)
+        );
+        assert_eq!(parse_date_millis("1970-01-01T00:00:00", &|_| None), None);
+        assert_eq!(
+            parse_date_millis("1970-01-01T00:00:00", &|_| Some(i64::MIN)),
+            None
+        );
+
+        // (millis, persisted ISO): extended years round trip; the time clip bounds both ways.
         for (millis, iso) in [
             (-8_640_000_000_000_000, "-271821-04-20T00:00:00.000Z"),
             (-62_198_755_200_000, "-000001-01-01T00:00:00.000Z"),

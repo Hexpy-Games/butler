@@ -1,0 +1,58 @@
+/* FoundationHeroMotion: the stage and its playback states. Every hero is
+   CSS animation on transform and opacity only (compositor work, no frame
+   loop); timing is multiples of --motion-deliberate and every move eases on a --motion-ease-* token. */
+
+.stage {
+  /* One beat; every hero's cycle is a multiple of it. */
+  --hero-beat: var(--motion-deliberate);
+
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  isolation: isolate;
+  container-type: size;
+  inline-size: 100%;
+  min-inline-size: 0;
+  aspect-ratio: 8 / 5;
+  max-block-size: 17rem;
+  border-radius: var(--radius-popover);
+  background: var(--selection);
+  color: var(--text-primary);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Feature heroes: the full width of their column at 16:9 (up to 36rem
+   tall), portrait under a 45rem column so phones get a tall stage. They sit
+   straight on the page, with no frame or fill of their own: the motion
+   graphic's components are the only surfaces. */
+.stage[data-feature] {
+  aspect-ratio: 16 / 9;
+  max-block-size: 36rem;
+  border-radius: 0;
+  background: transparent;
+}
+
+@container (width < 45rem) {
+  .stage[data-feature] {
+    aspect-ratio: 19 / 32;
+    max-block-size: none;
+  }
+}
+
+/* Offscreen or in a hidden tab: every loop holds its frame, in step. */
+.stage[data-hero-state="paused"] * {
+  animation-play-state: paused;
+}
+
+/* Reduced motion: the poster frame, no animation at all. */
+.stage[data-hero-state="still"] * {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage * {
+    animation: none;
+  }
+}

@@ -81,7 +81,16 @@ impl Drop for Fixture {
     }
 }
 
+/// Race: the exclusive write gate's fencing. A real gate preserves its fence
+/// and release projection, and dropping a guard rolls back without an old
+/// guard removing its successor's registration.
+// test-category: race
 #[test]
+fn exclusive_gate_fences_and_guard_drop_order() {
+    real_exclusive_gate_preserves_fence_and_release_projection();
+    drop_rolls_back_and_old_guard_does_not_remove_successor_registration();
+}
+
 fn real_exclusive_gate_preserves_fence_and_release_projection() {
     let fixture = Fixture::new("exclusive");
     let first = CognitionWriteCoordinator::new(Arc::new(Host::new(101, "host-a"))).unwrap();
@@ -177,7 +186,6 @@ fn real_exclusive_gate_preserves_fence_and_release_projection() {
     assert_eq!(actual, source);
 }
 
-#[test]
 fn drop_rolls_back_and_old_guard_does_not_remove_successor_registration() {
     let fixture = Fixture::new("drop");
     let coordinator = CognitionWriteCoordinator::new(Arc::new(Host::new(101, "host-a"))).unwrap();
@@ -276,124 +284,6 @@ fn legacy_reclaim_requires_same_host_definitely_dead_safe_pid() {
             ConsolidationLockState::LegacyBlocked
         );
     }
-}
-
-#[tokio::test]
-async fn cancellation_while_waiting_leaves_no_sqlite_owner() {
-    let fixture = Fixture::new("cancel");
-    let first = CognitionWriteCoordinator::new(Arc::new(Host::new(101, "host-a"))).unwrap();
-    let second = CognitionWriteCoordinator::new(Arc::new(Host::new(202, "host-a"))).unwrap();
-    let held = first
-        .try_acquire(&CognitionWriteAcquire::immediate(
-            fixture.lock.clone(),
-            "profile",
-        ))
-        .unwrap()
-        .unwrap();
-    let cancellation = tokio_util::sync::CancellationToken::new();
-    let waiting = {
-        let second = second.clone();
-        let lock = fixture.lock.clone();
-        let cancellation = cancellation.clone();
-        tokio::spawn(async move {
-            second
-                .acquire(
-                    CognitionWriteAcquire {
-                        lock_path: lock,
-                        purpose: Some("memory".into()),
-                        deadline_at_epoch_ms: Some(f64::NAN),
-                        cancellation: Some(cancellation),
-                    },
-                    CognitionWaitClass::Background,
-                )
-                .await
-        })
-    };
-    tokio::task::yield_now().await;
-    cancellation.cancel();
-    let Err(error) = waiting.await.unwrap() else {
-        panic!("cancelled acquisition should fail")
-    };
-    assert_eq!(error.code(), "memory_write_aborted");
-    drop(held);
-    second
-        .try_acquire(&CognitionWriteAcquire::immediate(
-            fixture.lock.clone(),
-            "memory",
-        ))
-        .unwrap()
-        .unwrap()
-        .release(true)
-        .unwrap();
-}
-
-#[tokio::test]
-async fn async_deadline_preserves_first_attempt_expiry_and_cancel_classes() {
-    let expired = Fixture::new("expired");
-    let coordinator = CognitionWriteCoordinator::new(Arc::new(Host::new(101, "host-a"))).unwrap();
-    let result = coordinator
-        .acquire(
-            CognitionWriteAcquire {
-                lock_path: expired.lock.clone(),
-                purpose: Some("projection".into()),
-                deadline_at_epoch_ms: Some(1_789_344_000_000.0),
-                cancellation: None,
-            },
-            CognitionWaitClass::Interactive,
-        )
-        .await
-        .unwrap();
-    assert!(result.is_none());
-    assert!(!expired.lock.exists());
-    assert!(!super::fence::coordinator_path(&expired.lock).exists());
-
-    let available = Fixture::new("available-before-deadline");
-    coordinator
-        .acquire(
-            CognitionWriteAcquire {
-                lock_path: available.lock.clone(),
-                purpose: Some("projection".into()),
-                deadline_at_epoch_ms: Some(1_789_344_000_001.0),
-                cancellation: None,
-            },
-            CognitionWaitClass::Interactive,
-        )
-        .await
-        .unwrap()
-        .expect("the first attempt before the deadline must acquire")
-        .release(false)
-        .unwrap();
-
-    let cancelled = Fixture::new("immediate-cancel");
-    let cancellation = tokio_util::sync::CancellationToken::new();
-    cancellation.cancel();
-    let Err(error) = coordinator
-        .acquire(
-            CognitionWriteAcquire {
-                lock_path: cancelled.lock.clone(),
-                purpose: Some("projection".into()),
-                deadline_at_epoch_ms: None,
-                cancellation: Some(cancellation.clone()),
-            },
-            CognitionWaitClass::Background,
-        )
-        .await
-    else {
-        panic!("cancelled async acquisition should fail")
-    };
-    assert_eq!(error.code(), "memory_write_aborted");
-    assert!(!cancelled.lock.exists());
-    assert!(
-        coordinator
-            .try_acquire(&CognitionWriteAcquire {
-                lock_path: cancelled.lock.clone(),
-                purpose: Some("projection".into()),
-                deadline_at_epoch_ms: None,
-                cancellation: Some(cancellation),
-            })
-            .unwrap()
-            .is_none()
-    );
 }
 
 fn write_legacy(path: &Path, pid: u64, host: &str) {

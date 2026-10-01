@@ -14,6 +14,7 @@ import {
 import { readCachedSettings } from "@/app/settingsCache.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { isDraftChatId } from "@/app/utils.ts";
+import { turnProgressOf } from "@/app/turnProgress.ts";
 import { isServerBackedSessionId } from "@/app/sessionIds.ts";
 import {
   selectActiveSessionView,
@@ -27,7 +28,9 @@ import type {
   SessionView,
   SettingsView,
 } from "@/app/types.ts";
+import { userWallpaperModules } from "@/app/userWallpaperModules.ts";
 import { recoverBootstrapResource } from "./bootstrapResource.ts";
+import { noteSettingsSnapshotRequest } from "./live-session/liveSettingsSync.ts";
 import { useLiveSessionEvents } from "./live-session/useLiveSessionEvents.ts";
 
 export function useAppBootstrap() {
@@ -64,6 +67,11 @@ export function useAppBootstrap() {
   useEffect(() => {
     if (!rightAvailable) setRightOpen(false);
   }, [rightAvailable, setRightOpen]);
+
+  // User wallpaper modules; `wallpaper.modules.updated` refreshes them live.
+  useEffect(() => {
+    void userWallpaperModules.refresh();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -163,7 +171,11 @@ export function useAppBootstrap() {
   useEffect(() => {
     const abortController = new AbortController();
     void recoverBootstrapResource({
-      load: () => api<SettingsView>("/settings"),
+      load: () => {
+        // Replayed settings.updated events older than this snapshot are already in it.
+        noteSettingsSnapshotRequest();
+        return api<SettingsView>("/settings");
+      },
       onReady: setSettings,
       onUnavailable: () => setSettings(readCachedSettings()),
       isCancelled: () => abortController.signal.aborted,
@@ -216,7 +228,7 @@ export function useAppBootstrap() {
             messages: data.messages,
             turn_progress: data.latest_turn?.id
               ? { [data.latest_turn.id]: {
-                  ...data.latest_turn.progress,
+                  ...turnProgressOf(data.latest_turn),
                   started_at: data.latest_turn.created_at,
                 } }
               : {},

@@ -18,6 +18,7 @@ use butler_turn::conversation::{CanonicalMemoryReadBinding, conversation_store_p
 use super::{CognitionError, CognitionResult};
 use crate::cognition::CognitionCode;
 
+/// Answers `query_memory`: exact text search over the canonical conversation store.
 pub struct ExactMemoryQuery {
     path: PathBuf,
     permits: Arc<Semaphore>,
@@ -26,6 +27,7 @@ pub struct ExactMemoryQuery {
 }
 
 impl ExactMemoryQuery {
+    /// A query service over `data_root` running at most `read_concurrency` reads at once.
     pub fn new(data_root: &Path, read_concurrency: usize) -> Self {
         Self {
             path: conversation_store_path(data_root),
@@ -35,6 +37,7 @@ impl ExactMemoryQuery {
         }
     }
 
+    /// Runs one query; its hits, cursor or failure as the tool result.
     pub async fn query(
         &self,
         binding: CanonicalMemoryReadBinding,
@@ -62,7 +65,7 @@ impl ExactMemoryQuery {
             self.jobs.spawn(async move {
                 let result = tokio::task::spawn_blocking(move || {
                     let _permit = permit;
-                    run::query(&path, &binding, &args)
+                    run::query(&path, &binding, &crate::lenient::view(&args))
                 })
                 .await
                 .unwrap_or_else(|error| {
@@ -83,6 +86,7 @@ impl ExactMemoryQuery {
         })?
     }
 
+    /// Stops admitting queries and waits for running ones.
     pub async fn close(&self) -> CognitionResult<()> {
         {
             let mut closing = self.closing.lock();

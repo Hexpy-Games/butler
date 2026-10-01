@@ -1,10 +1,11 @@
 //! Source foreground-executor readiness publication owned by the live service.
 
-use std::fs::{self, DirBuilder, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
+use butler_platform::secure_fs;
 use serde_json::{Value, json};
 
 const SCHEMA: &str = "butler.app-foreground-executor-readiness.v1";
@@ -13,16 +14,15 @@ pub struct ServiceReadiness {
     path: PathBuf,
     pid: u32,
     ready_at: String,
+    dispatch_ready: AtomicBool,
+    dispatch_wake: tokio::sync::Notify,
 }
 
 impl ServiceReadiness {
     /// Publish only after the native queue consumer and BTCC are initialized.
     pub fn publish(data_root: &Path, now_iso: &str, now_ms: i64) -> io::Result<Self> {
         let directory = data_root.join("state/app-foreground");
-        DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(&directory)?;
+        secure_fs::create_private_dir_all(&directory)?;
         let pid = std::process::id();
         let path = directory.join("executor-ready.json");
         let temporary = directory.join(format!("executor-ready.json.{pid}.{now_ms}.tmp"));
@@ -30,12 +30,10 @@ impl ServiceReadiness {
             "schema": SCHEMA, "pid": pid, "readyAt": now_iso, "rawTextIncluded": false,
         });
         let result = (|| {
-            let mut file = OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .mode(0o600)
-                .open(&temporary)?;
+            let mut options = OpenOptions::new();
+            options.write(true).create(true).truncate(true);
+            let _ = secure_fs::owner_only(&mut options);
+            let mut file = options.open(&temporary)?;
             serde_json::to_writer_pretty(&mut file, &record)?;
             file.write_all(b"\n")?;
             drop(file);
@@ -49,7 +47,32 @@ impl ServiceReadiness {
             path,
             pid,
             ready_at: now_iso.into(),
+            dispatch_ready: AtomicBool::new(false),
+            dispatch_wake: tokio::sync::Notify::new(),
         })
+    }
+
+    /// Mark the point when the inbound dispatcher can accept turns.
+    pub fn mark_dispatch_ready(&self) {
+        self.dispatch_ready.store(true, Ordering::Release);
+        self.dispatch_wake.notify_waiters();
+    }
+
+    /// Await the initial inbound poll without a timer or file reads.
+    pub async fn wait_dispatch_ready(&self) {
+        loop {
+            let ready = self.dispatch_wake.notified();
+            tokio::pin!(ready);
+            ready.as_mut().enable();
+            if self.dispatch_ready() {
+                return;
+            }
+            ready.await;
+        }
+    }
+
+    pub fn dispatch_ready(&self) -> bool {
+        self.dispatch_ready.load(Ordering::Acquire)
     }
 
     pub fn published_identity(&self) -> io::Result<Option<(u32, String)>> {

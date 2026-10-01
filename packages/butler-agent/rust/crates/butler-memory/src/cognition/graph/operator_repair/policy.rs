@@ -6,30 +6,46 @@ use serde::{Deserialize, Serialize};
 use super::error;
 use crate::cognition::{CognitionCode, CognitionResult};
 
+/// The extractor models an operator configures for a generation.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ProjectionModelPolicyInput {
+    /// Model tried first.
     pub primary_model: String,
+    /// Reasoning effort for the primary model.
     pub primary_effort: String,
+    /// Model used after the primary fails.
     pub fallback_model: String,
+    /// Reasoning effort for the fallback model.
     pub fallback_effort: String,
 }
 
+/// Which configured extractor model projection currently uses.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub(in crate::cognition) enum ProjectionModelSlot {
+pub enum ProjectionModelSlot {
+    /// The primary model.
     Primary,
+    /// The fallback model.
     Fallback,
 }
 
+/// The stored extractor policy of a generation.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-pub(in crate::cognition) struct ProjectionModelPolicy {
-    pub(in crate::cognition) primary_model: String,
-    pub(in crate::cognition) primary_effort: String,
-    pub(in crate::cognition) fallback_model: String,
-    pub(in crate::cognition) fallback_effort: String,
-    pub(in crate::cognition) active_slot: ProjectionModelSlot,
-    pub(in crate::cognition) updated_at: String,
-    pub(in crate::cognition) last_transition_json: Option<String>,
+pub struct ProjectionModelPolicy {
+    /// Model tried first.
+    pub primary_model: String,
+    /// Reasoning effort for the primary model.
+    pub primary_effort: String,
+    /// Model used after the primary fails.
+    pub fallback_model: String,
+    /// Reasoning effort for the fallback model.
+    pub fallback_effort: String,
+    /// The model projection currently uses.
+    pub active_slot: ProjectionModelSlot,
+    /// When the policy last changed.
+    pub updated_at: String,
+    /// Stored JSON of the last slot transition, verbatim.
+    pub last_transition_json: Option<String>,
 }
 
 pub(super) fn configure_projection_model_policy(

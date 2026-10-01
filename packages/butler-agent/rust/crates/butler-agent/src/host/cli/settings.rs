@@ -8,11 +8,7 @@ mod path;
 mod tests;
 
 use crate::host::cli::error::CliError;
-use std::{
-    ffi::OsString,
-    path::{Path, PathBuf},
-    process::ExitCode,
-};
+use std::{ffi::OsString, path::PathBuf, process::ExitCode};
 
 use serde_json::{Value, json};
 
@@ -36,8 +32,6 @@ struct Options {
 enum Command {
     ConfigGet,
     ConfigSet,
-    ConfigEdit,
-    ConfigValidate,
     AuthStatus,
     AuthLogin,
     AuthLogout,
@@ -51,8 +45,6 @@ impl Command {
             [family, action, ..] if family == "config" => match action.as_str() {
                 "get" => Some(Self::ConfigGet),
                 "set" => Some(Self::ConfigSet),
-                "edit" => Some(Self::ConfigEdit),
-                "validate" => Some(Self::ConfigValidate),
                 _ => None,
             },
             [family, action, ..] if family == "auth" => match action.as_str() {
@@ -74,8 +66,6 @@ impl Command {
         match self {
             Self::ConfigGet => "butler config get",
             Self::ConfigSet => "butler config set",
-            Self::ConfigEdit => "butler config edit",
-            Self::ConfigValidate => "butler config validate",
             Self::AuthStatus => "butler auth status",
             Self::AuthLogin => "butler auth login",
             Self::AuthLogout => "butler auth logout",
@@ -103,26 +93,6 @@ pub(in crate::host) fn resolve_data_root_override(
     )
 }
 
-pub(in crate::host) fn validate_data_mutation_paths(
-    data_root: &std::path::Path,
-    installation: &ResolvedInstallation,
-    requested: &[&str],
-) -> Result<(), crate::host::HostError> {
-    path::validate_data_mutation_paths(installation, data_root, requested)
-        .map_err(|error| error.message)
-        .map_err(crate::host::HostError::from)
-}
-
-pub(in crate::host) fn validate_absolute_data_mutation_paths(
-    data_root: &Path,
-    installation: &ResolvedInstallation,
-    requested: &[&Path],
-) -> Result<(), crate::host::HostError> {
-    path::validate_absolute_data_mutation_paths(installation, data_root, requested)
-        .map_err(|error| error.message)
-        .map_err(crate::host::HostError::from)
-}
-
 pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> ExitCode {
     let json_requested = args.iter().any(|arg| arg == "--json");
     let parsed = parse(&args);
@@ -146,13 +116,7 @@ pub(crate) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
             config_commands::config_get(&options, command, &data_root, &installation)
         }
         Command::ConfigSet => {
-            config_commands::config_set(&options, command, &data_root, &installation)
-        }
-        Command::ConfigEdit => {
-            config_commands::config_edit(&options, command, &data_root, &installation)
-        }
-        Command::ConfigValidate => {
-            config_commands::config_validate(&options, command, &data_root, &installation)
+            config_commands::config_set(&options, command, &data_root, &installation).await
         }
         Command::AuthStatus => {
             auth_model::auth_status(&options, command, &data_root, &installation)

@@ -5,6 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use butler_platform::secure_fs;
 use rusqlite::{Connection, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -165,7 +166,7 @@ fn validate(
     if stored.schema != "butler.btcc-project-ledger-effect-occurrence.v2"
         || stored.status != "pending"
         || stored.ledger_project_id != scope.ledger_project_id
-        || stored.ledger_root != scope.ledger_root.to_string_lossy()
+        || Path::new(&stored.ledger_root) != scope.ledger_root
         || stored.operation_identity != logical(identity)
         || stored.occurrence_id != occurrence_id(scope, identity)?
         || stored.attempts.is_empty()
@@ -318,7 +319,8 @@ pub(super) fn with_lock<T>(
     id: &str,
     action: impl FnOnce() -> Result<T, ProjectWorkPublicationError>,
 ) -> Result<T, ProjectWorkPublicationError> {
-    let canonical_root = fs::canonicalize(root).map_err(|source| io().with_source(source))?;
+    let canonical_root = butler_platform::secure_fs::canonicalize(root)
+        .map_err(|source| io().with_source(source))?;
     let logical = canonical_root
         .join("runtime/btcc-project-ledger-effects-v2/admission-locks")
         .join(id);
@@ -369,29 +371,23 @@ fn open_shard(
         }
     }
     fs::create_dir_all(&directory).map_err(|source| io().with_source(source))?;
-    if !fs::canonicalize(&directory)
+    if !butler_platform::secure_fs::canonicalize(&directory)
         .map_err(|source| io().with_source(source))?
         .starts_with(canonical_root)
     {
         return Err(ProjectWorkPublicationError::Uncertain { source: None });
     }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700))
-            .map_err(|source| io().with_source(source))?;
-    }
+    secure_fs::restrict_directory(&directory)
+        .transpose()
+        .map_err(|source| io().with_source(source))?;
     let shard = directory.join(format!("mutation-lock-{shard:02}.sqlite3"));
     if is_symlink(&shard)? {
         return Err(ProjectWorkPublicationError::Uncertain { source: None });
     }
     let connection = Connection::open(&shard).map_err(|source| io().with_source(source))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&shard, fs::Permissions::from_mode(0o600))
-            .map_err(|source| io().with_source(source))?;
-    }
+    secure_fs::restrict_file(&shard)
+        .transpose()
+        .map_err(|source| io().with_source(source))?;
     connection
         .busy_timeout(Duration::from_millis(250))
         .map_err(|source| io().with_source(source))?;

@@ -29,12 +29,19 @@ impl ActiveAppEndpoint {
         self.current.read().clone()
     }
 
-    pub(crate) fn publish(&self, address: SocketAddr, configuration: &AppServiceConfiguration) {
+    /// Publishes the running listener; `local_auth` is the token it enforces
+    /// (shared, so a rotated connection code reaches every caller).
+    pub(crate) fn publish(
+        &self,
+        address: SocketAddr,
+        configuration: &AppServiceConfiguration,
+        local_auth: LocalAuthConfig,
+    ) {
         let snapshot = ActiveAppEndpointSnapshot {
             base_url: format!("http://{address}"),
-            local_auth: configuration.gateway_config().local_auth,
+            local_auth,
             configured_host: configuration.host.clone(),
-            configured_port: configuration.port,
+            configured_port: address.port(),
             database_path: configuration.db_path.clone(),
         };
         *self.current.write() = Some(snapshot);

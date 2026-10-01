@@ -1,0 +1,65 @@
+[package]
+name = "butler-platform"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# The only crate with operating-system specific code (see src/lib.rs). It is a
+# leaf: it depends on no other workspace crate, so every crate can use it.
+[dependencies]
+# Quotes paths inside macOS sandbox profiles.
+serde_json.workspace = true
+thiserror.workspace = true
+# Shutdown requests (host stop signals) and the stdin lease are awaited on the
+# service's runtime.
+tokio = { workspace = true, features = ["io-std"] }
+
+[target.'cfg(unix)'.dependencies]
+nix.workspace = true
+rustix.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+dunce.workspace = true
+libproc.workspace = true
+
+# The process table (identity, liveness, host facts), Job Objects that
+# contain command trees, paths without a needless `\\?\` prefix, and the
+# system time zone's IANA name.
+[target.'cfg(windows)'.dependencies]
+dunce.workspace = true
+iana-time-zone.workspace = true
+sysinfo.workspace = true
+win32job.workspace = true
+
+[features]
+# Fixture values for tests of other crates (e.g. archive entry modes).
+test-support = []
+
+[lints]
+workspace = true
+
+# `secrets` (#217): the OS credential store through keyring-core, one store
+# per OS. Kept as sub-tables here so the per-OS dependency lists above stay
+# untouched.
+[dependencies.keyring-core]
+workspace = true
+
+[dependencies.zeroize]
+workspace = true
+
+[dependencies.rpassword]
+workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies.apple-native-keyring-store]
+workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies.security-framework]
+workspace = true
+
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies.zbus-secret-service-keyring-store]
+workspace = true
+
+[target.'cfg(windows)'.dependencies.windows-native-keyring-store]
+workspace = true

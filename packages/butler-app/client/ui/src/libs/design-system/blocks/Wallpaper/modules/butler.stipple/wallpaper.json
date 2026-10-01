@@ -1,0 +1,139 @@
+{
+  "id": "butler.stipple",
+  "name": {
+    "en": "Stipple",
+    "ko": "점묘"
+  },
+  "version": "0.2.0",
+  "engine": 1,
+  "motion": "animated",
+  "image": "optional",
+  "imageDim": "none",
+  "pixelRatio": "device",
+  "timePeriod": 120,
+  "overlay": true,
+  "defaultImage": "photo.jpg",
+  "params": [
+    {
+      "key": "ink",
+      "type": "enum",
+      "label": {
+        "en": "Ink",
+        "ko": "잉크"
+      },
+      "default": "ultramarine",
+      "defaultDark": "ultramarine",
+      "options": [
+        {
+          "value": "ultramarine",
+          "label": {
+            "en": "Ultramarine · White",
+            "ko": "울트라마린 · 화이트"
+          }
+        },
+        {
+          "value": "vermilion",
+          "label": {
+            "en": "Vermilion · Cream",
+            "ko": "버밀리언 · 크림"
+          }
+        },
+        {
+          "value": "green",
+          "label": {
+            "en": "Deep Green · Bone",
+            "ko": "딥 그린 · 본"
+          }
+        },
+        {
+          "value": "bone",
+          "label": {
+            "en": "Bone · Indigo",
+            "ko": "본 · 인디고"
+          }
+        }
+      ]
+    },
+    {
+      "key": "tone",
+      "type": "number",
+      "label": {
+        "en": "Softness",
+        "ko": "부드러움"
+      },
+      "default": 0.15,
+      "min": 0,
+      "max": 1,
+      "step": 0.05
+    },
+    {
+      "key": "invert",
+      "type": "boolean",
+      "label": {
+        "en": "Invert ink and paper",
+        "ko": "잉크·종이 반전"
+      },
+      "default": false
+    },
+    {
+      "key": "vignette",
+      "type": "number",
+      "label": {
+        "en": "Vignette",
+        "ko": "비네팅"
+      },
+      "default": 0.5,
+      "min": 0,
+      "max": 1,
+      "step": 0.05
+    },
+    {
+      "key": "vignetteSize",
+      "type": "number",
+      "label": {
+        "en": "Vignette size",
+        "ko": "비네팅 크기"
+      },
+      "default": 0.55,
+      "min": 0,
+      "max": 1,
+      "step": 0.05
+    },
+    {
+      "key": "density",
+      "type": "number",
+      "label": {
+        "en": "Ink density",
+        "ko": "잉크 농도"
+      },
+      "default": 0,
+      "min": -1,
+      "max": 1,
+      "step": 0.05
+    },
+    {
+      "key": "breathe",
+      "type": "number",
+      "label": {
+        "en": "Grain breathing",
+        "ko": "입자 호흡"
+      },
+      "default": 1,
+      "min": 0,
+      "max": 2,
+      "step": 0.05
+    },
+    {
+      "key": "sweep",
+      "type": "number",
+      "label": {
+        "en": "Light sweep",
+        "ko": "빛 스침"
+      },
+      "default": 1,
+      "min": 0,
+      "max": 2,
+      "step": 0.05
+    }
+  ]
+}

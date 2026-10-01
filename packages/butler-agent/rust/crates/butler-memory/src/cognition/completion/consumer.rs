@@ -1,10 +1,18 @@
 //! Bounded serving-generation consumer of durable completion notices.
 
+mod blocking;
 mod catchup;
+mod probe;
 mod process;
+use super::wake;
 
 use parking_lot::Mutex;
-use std::{path::PathBuf, sync::Arc, time::Instant};
+use std::{
+    path::PathBuf,
+    sync::Arc,
+    sync::atomic::AtomicBool,
+    time::{Duration, Instant},
+};
 
 use tokio::sync::{Semaphore, oneshot};
 use tokio_util::sync::CancellationToken;
@@ -19,10 +27,14 @@ use crate::{
     coordination::{CognitionWriteCoordinator, ConsolidationLockState},
 };
 
+/// What one poll of the memory sync queue did.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MemorySyncPoll {
+    /// Nothing was waiting.
     Idle,
+    /// One queue entry or projection step was processed.
     Processed,
+    /// Work is waiting but cannot run yet.
     Deferred,
 }
 
@@ -38,6 +50,8 @@ pub struct MemoryCatchupOutcome {
 
 type Clock = Arc<dyn Fn() -> String + Send + Sync>;
 
+/// Consumes the memory sync queue: registers completed turns and typed sources, projects them and
+/// embeds their vectors.
 pub struct MemorySyncConsumer {
     data_root: PathBuf,
     environment: CognitionPathEnvironment,
@@ -51,9 +65,13 @@ pub struct MemorySyncConsumer {
     shutdown: CancellationToken,
     closing: Mutex<bool>,
     catchup_at: Arc<Mutex<Option<Instant>>>,
+    unclean_start: Arc<AtomicBool>,
+    catchup_progress: Arc<Mutex<Option<(PathBuf, crate::cognition::graph::CatchupState)>>>,
+    probe: Arc<probe::ProbeReader>,
 }
 
 impl MemorySyncConsumer {
+    /// A consumer over `data_root`.
     pub fn new(
         data_root: PathBuf,
         environment: CognitionPathEnvironment,
@@ -74,14 +92,25 @@ impl MemorySyncConsumer {
             shutdown: CancellationToken::new(),
             closing: Mutex::new(false),
             catchup_at: Arc::new(Mutex::new(None)),
+            unclean_start: Arc::new(AtomicBool::new(false)),
+            catchup_progress: Arc::new(Mutex::new(None)),
+            probe: Arc::new(probe::ProbeReader::default()),
         }
     }
 
+    /// Also embeds projected vector units with `embedding`.
     pub fn with_embedding(mut self, embedding: Arc<dyn CognitionEmbeddingPort>) -> Self {
         self.embedding = Some(embedding);
         self
     }
 
+    /// Reconcile the entire canonical inventory once after an unclean service exit.
+    pub fn with_unclean_start(mut self, unclean: bool) -> Self {
+        self.unclean_start = Arc::new(AtomicBool::new(unclean));
+        self
+    }
+
+    /// Consumes into a rebuild candidate instead of the active generation.
     pub fn with_rebuild_target(
         mut self,
         generation_id: String,
@@ -94,6 +123,7 @@ impl MemorySyncConsumer {
         self
     }
 
+    /// Processes the next queue entry or projection step.
     pub async fn poll_once(&self) -> CognitionResult<MemorySyncPoll> {
         let permit = self
             .admission
@@ -117,6 +147,9 @@ impl MemorySyncConsumer {
             coordinator: self.coordinator.clone(),
             clock: self.clock.clone(),
             catchup_at: self.catchup_at.clone(),
+            unclean_start: self.unclean_start.clone(),
+            catchup_progress: self.catchup_progress.clone(),
+            probe: self.probe.clone(),
             shutdown: self.shutdown.clone(),
         };
         let (sender, receiver) = oneshot::channel();
@@ -166,6 +199,9 @@ impl MemorySyncConsumer {
             coordinator: self.coordinator.clone(),
             clock: self.clock.clone(),
             catchup_at: self.catchup_at.clone(),
+            unclean_start: self.unclean_start.clone(),
+            catchup_progress: self.catchup_progress.clone(),
+            probe: self.probe.clone(),
             shutdown: operation.clone(),
         };
         let (sender, receiver) = oneshot::channel();
@@ -176,7 +212,8 @@ impl MemorySyncConsumer {
         tokio::spawn(async move {
             let _token = token;
             let _permit = permit;
-            let result = match paused(&input) {
+            let owned = input.clone();
+            let result = match blocking::run(move || paused(&owned)).await {
                 Err(error) => Err(error),
                 Ok(true) => Err(CognitionError::new(
                     CognitionCode::MemoryWriteBusy,
@@ -207,6 +244,7 @@ impl MemorySyncConsumer {
         })?
     }
 
+    /// Stops admitting polls and waits for running ones.
     pub async fn close(&self) {
         {
             let mut closing = self.closing.lock();
@@ -218,7 +256,53 @@ impl MemorySyncConsumer {
             }
         }
         self.tasks.wait().await;
+        if let Err(error) = self.probe.close().await {
+            eprintln!("[memory-sync-close] {}", error.code());
+        }
     }
+
+    /// Bounds the backoff after a successful idle poll by the next catch-up.
+    /// Call only after polling an available generation: deferred work and absent
+    /// generations must keep their backoff even when catch-up is overdue.
+    pub fn idle_delay(&self, backoff: Duration) -> Duration {
+        self.catchup_at.lock().map_or(backoff, |last| {
+            backoff.min(catchup::INTERVAL.saturating_sub(last.elapsed()))
+        })
+    }
+
+    /// Sleeps up to `delay`, ending early when in-process work is signalled,
+    /// the queue changes (another process appended to it), or the consumer
+    /// closes. An idle loop calls this instead of polling on a short timer.
+    /// Returns whether something woke it before `delay` elapsed.
+    pub async fn wait_for_work(&self, delay: Duration) -> bool {
+        let memory_root = self.environment.memory_root(&self.data_root);
+        let queue = queue_length(&memory_root);
+        let deadline = Instant::now() + delay;
+        loop {
+            let slice = deadline
+                .saturating_duration_since(Instant::now())
+                .min(QUEUE_WATCH_INTERVAL);
+            if slice.is_zero() {
+                return false;
+            }
+            tokio::select! {
+                () = self.shutdown.cancelled() => return true,
+                () = wake::memory_work_signalled() => return true,
+                () = tokio::time::sleep(slice) => {}
+            }
+            if queue_length(&memory_root) != queue {
+                return true;
+            }
+        }
+    }
+}
+
+/// How often a long idle sleep looks at the queue file for appends made by
+/// another process. A metadata read, no database.
+const QUEUE_WATCH_INTERVAL: Duration = Duration::from_secs(2);
+
+fn queue_length(memory_root: &std::path::Path) -> u64 {
+    std::fs::metadata(memory_root.join("queue/sync.jsonl")).map_or(0, |meta| meta.len())
 }
 
 fn paused(input: &process::Input) -> CognitionResult<bool> {

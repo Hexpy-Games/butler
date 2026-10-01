@@ -12,14 +12,10 @@ pub(in crate::gateway::application) async fn sync_chat_once(
     chat_id: &str,
 ) -> Result<bool, GatewayApplicationError> {
     let session_id = crate::gateway::application::snapshot_input::session_hint(chat_id);
-    let file_name = format!(
-        "{}.jsonl",
-        session_id.replace(
-            |ch: char| !ch.is_ascii_alphanumeric() && !"._-".contains(ch),
-            "_"
-        )
-    );
-    let path = context.butler_data.join("transcripts").join(file_name);
+    let path = context
+        .butler_data
+        .join("transcripts")
+        .join(transcript_name(&session_id));
     let chat = chat_id.to_owned();
     let prior = context
         .storage
@@ -32,12 +28,28 @@ pub(in crate::gateway::application) async fn sync_chat_once(
         .map_err(GatewayApplicationError::internal_from)??;
     let Some(state) = state else { return Ok(false) };
     let spool_path = spool_path(&context.butler_data, chat_id, &path);
-    let mut checkpoint = prior
-        .clone()
-        .filter(|value| {
-            super::byte_window::reusable(value, &path, (state.device, state.inode), state.size)
-        })
-        .unwrap_or_else(|| fresh_checkpoint(chat_id, &session_id, &path, &spool_path, &state));
+    let reusable = prior
+        .as_ref()
+        .is_some_and(|value| super::byte_window::reusable(value, &path, state.size));
+    if reusable
+        && prior
+            .as_ref()
+            .is_some_and(|value| is_complete(value, &state))
+    {
+        return Ok(false);
+    }
+    let mut checkpoint = match prior.clone() {
+        Some(value) if reusable => value,
+        found => {
+            if found.is_some() {
+                eprintln!(
+                    "[gateway] transcript checkpoint no longer matches its file; projecting {chat_id} from the start"
+                );
+            }
+            fresh_checkpoint(chat_id, &session_id, &path, &spool_path, &state)
+        }
+    };
+    (checkpoint.device, checkpoint.inode) = (state.device, state.inode);
     if checkpoint.spool_path.is_empty() {
         checkpoint.spool_path = spool_path.to_string_lossy().into_owned();
     }
@@ -59,6 +71,8 @@ pub(in crate::gateway::application) async fn sync_chat_once(
     let pending = read.pending;
     let completed = read.completed_spool.clone();
     let advanced = match read.event {
+        // A sweep over a chat whose file has not changed writes nothing.
+        None if prior.as_ref() == Some(&read.checkpoint) => true,
         None => {
             super::save_checkpoint(context, read.checkpoint).await?;
             true
@@ -71,6 +85,26 @@ pub(in crate::gateway::application) async fn sync_chat_once(
     // An unproven old claim retains its original event and yields this sync.
     // Reporting pending here would replay that same record in a tight loop.
     Ok(advanced && pending)
+}
+
+fn transcript_name(session_id: &str) -> String {
+    format!(
+        "{}.jsonl",
+        session_id.replace(
+            |ch: char| !ch.is_ascii_alphanumeric() && !"._-".contains(ch),
+            "_"
+        )
+    )
+}
+
+// An unchanged, completed transcript must not rewrite its checkpoint on a
+// later sweep. A changed file identity still updates the durable checkpoint.
+fn is_complete(checkpoint: &Checkpoint, state: &FileState) -> bool {
+    checkpoint.projected_bytes == state.size
+        && checkpoint.trailing.is_empty()
+        && checkpoint.spool_bytes == 0
+        && checkpoint.device == state.device
+        && checkpoint.inode == state.inode
 }
 
 struct FileState {
@@ -88,12 +122,11 @@ fn file_state(path: &std::path::Path) -> Result<Option<FileState>, GatewayApplic
     if !metadata.is_file() {
         return Ok(None);
     }
-    #[cfg(unix)]
-    use std::os::unix::fs::MetadataExt;
-    #[cfg(unix)]
-    let (device, inode) = (metadata.dev(), metadata.ino());
-    #[cfg(not(unix))]
-    let (device, inode) = (0, 0);
+    // Hosts without file ids record 0/0; the checkpoint then rests on the
+    // path, size and boundary anchor alone, as before.
+    let (device, inode) = butler_platform::secure_fs::identity(&metadata)
+        .id
+        .map_or((0, 0), |id| (id.device, id.inode));
     let modified_at_ms = metadata
         .modified()
         .ok()

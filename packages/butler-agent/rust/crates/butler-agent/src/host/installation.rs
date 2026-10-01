@@ -1,5 +1,6 @@
 //! Immutable files selected once by the process entrypoint.
 
+use butler_platform::secure_fs::Canonical as _;
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug)]
@@ -28,7 +29,7 @@ impl ResolvedInstallation {
         let executable = std::env::current_exe()
             .map_err(|error| format!("installation_executable_unavailable: {error}"))?;
         let executable = executable
-            .canonicalize()
+            .canonical()
             .map_err(|error| format!("installation_executable_unavailable: {error}"))?;
         let root = executable
             .parent()
@@ -82,16 +83,25 @@ impl ResolvedInstallation {
         &self.resource_root
     }
 
+    /// The directory that holds the payload manifest: the parent of the
+    /// resource root, which is the installation root for a standalone
+    /// installation and `bundled-agent/` inside an App bundle or package
+    /// (whose installation root is the App itself). An installation whose
+    /// resources sit elsewhere keeps its manifest in the installation root.
+    pub(crate) fn payload_root(&self) -> PathBuf {
+        self.resource_root
+            .parent()
+            .filter(|parent| parent.starts_with(&self.installation_root))
+            .map_or_else(|| self.installation_root.clone(), Path::to_path_buf)
+    }
+
     pub(crate) fn app_version(&self) -> Option<String> {
         if let Ok(value) = std::env::var("BUTLER_APP_VERSION")
             && !value.trim().is_empty()
         {
             return Some(value.trim().to_owned());
         }
-        let manifest = self
-            .resource_root
-            .parent()?
-            .join("native-agent-manifest.json");
+        let manifest = self.payload_root().join("native-agent-manifest.json");
         if !std::fs::symlink_metadata(&manifest)
             .ok()?
             .file_type()
@@ -99,7 +109,7 @@ impl ResolvedInstallation {
         {
             return None;
         }
-        let manifest = manifest.canonicalize().ok()?;
+        let manifest = manifest.canonical().ok()?;
         if !manifest.starts_with(&self.installation_root) {
             return None;
         }
@@ -117,7 +127,8 @@ impl ResolvedInstallation {
     pub(crate) fn payload_provenance(
         &self,
     ) -> Result<Option<PayloadProvenance>, crate::host::HostError> {
-        let manifest_path = self.installation_root.join("native-agent-manifest.json");
+        let payload_root = self.payload_root();
+        let manifest_path = payload_root.join("native-agent-manifest.json");
         let metadata = match std::fs::symlink_metadata(&manifest_path) {
             Ok(metadata) => metadata,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -126,10 +137,10 @@ impl ResolvedInstallation {
         if metadata.file_type().is_symlink() || !metadata.is_file() {
             return Err("installation_manifest_invalid".into());
         }
-        let manifest_path = manifest_path.canonicalize().map_err(|source| {
+        let manifest_path = manifest_path.canonical().map_err(|source| {
             crate::host::HostError::new("installation_manifest_unavailable").with_source(source)
         })?;
-        if !manifest_path.starts_with(&self.installation_root) {
+        if !manifest_path.starts_with(&payload_root) {
             return Err("installation_manifest_invalid".into());
         }
         let value: serde_json::Value =
@@ -156,22 +167,14 @@ impl ResolvedInstallation {
         if binary != expected_binary || resources != "resources" {
             return Err("installation_manifest_layout_invalid".into());
         }
-        let binary_path = safe_manifest_path(&self.installation_root, binary)?;
-        let resources_path = safe_manifest_path(&self.installation_root, resources)?;
+        let binary_path = safe_manifest_path(&payload_root, binary)?;
+        let resources_path = safe_manifest_path(&payload_root, resources)?;
         if binary_path != self.executable_path || resources_path != self.resource_root {
             return Err("installation_manifest_layout_invalid".into());
         }
         let version = string_field(&value, "version");
-        if schema == "butler.native-agent-install.v1"
-            && (version.is_none()
-                || value["platform"].as_str() != Some("darwin")
-                || value["architecture"].as_str() != Some("arm64")
-                || value["launcher"].as_str() != Some("butler")
-                || string_field(&value, "binarySha256").is_none()
-                || string_field(&value, "resourcesSha256").is_none()
-                || !launcher_is_expected(&self.installation_root))
-        {
-            return Err("installation_manifest_invalid".into());
+        if schema == "butler.native-agent-install.v1" {
+            check_install_manifest(&value, &payload_root)?;
         }
         let binary_sha256 = string_field(&value, "binarySha256");
         let resources_sha256 = string_field(&value, "resourcesSha256");
@@ -212,6 +215,8 @@ impl ResolvedInstallation {
         {
             return Err("butler_data_overlaps_installation".to_owned().into());
         }
+        #[cfg(test)]
+        refuse_owner_data_root(&resolved);
         Ok(resolved)
     }
 
@@ -228,6 +233,83 @@ impl ResolvedInstallation {
         }
         Ok(())
     }
+}
+
+/// Unit tests never resolve the owner's own data folder: `cargo test` run from a
+/// shell that exports `BUTLER_DATA=~/.butler` would otherwise read and write real
+/// data. A test uses a temp data root; a `~/.butler` inside the temp dir is fine.
+#[cfg(test)]
+fn refuse_owner_data_root(resolved: &Path) {
+    let real = |path: PathBuf| realpath_or_nearest(&path).ok();
+    let owner = butler_platform::user_dirs::home_dir().and_then(|home| real(home.join(".butler")));
+    let temp = real(std::env::temp_dir());
+    assert_test_data_root_is_isolated(resolved, owner.as_deref(), temp.as_deref());
+}
+
+#[cfg(test)]
+fn assert_test_data_root_is_isolated(resolved: &Path, owner: Option<&Path>, temp: Option<&Path>) {
+    assert!(
+        !owner.is_some_and(|owner| resolved.starts_with(owner))
+            || temp.is_some_and(|temp| resolved.starts_with(temp)),
+        "test resolved the owner's data folder {}; point it at a temp dir",
+        resolved.display()
+    );
+}
+
+/// Platforms a standalone installation (`butler.native-agent-install.v1`) may
+/// target, named as Node names them (`process.platform`, `process.arch`).
+/// Windows installations are not supported yet.
+const INSTALL_PLATFORMS: [(&str, &str); 3] =
+    [("darwin", "arm64"), ("linux", "x64"), ("linux", "arm64")];
+
+/// The standalone installation's own fields: platform, version, launcher and digests.
+fn check_install_manifest(
+    value: &serde_json::Value,
+    root: &Path,
+) -> Result<(), crate::host::HostError> {
+    check_install_platform(
+        (value["platform"].as_str(), value["architecture"].as_str()),
+        host_install_platform(),
+    )?;
+    if string_field(value, "version").is_none()
+        || value["launcher"].as_str() != Some("butler")
+        || string_field(value, "binarySha256").is_none()
+        || string_field(value, "resourcesSha256").is_none()
+        || !launcher_is_expected(root)
+    {
+        return Err("installation_manifest_invalid".into());
+    }
+    Ok(())
+}
+
+/// This host in install-manifest names.
+fn host_install_platform() -> (&'static str, &'static str) {
+    let platform = butler_platform::launcher::node_platform();
+    let architecture = match std::env::consts::ARCH {
+        "aarch64" => "arm64",
+        "x86_64" => "x64",
+        other => other,
+    };
+    (platform, architecture)
+}
+
+/// An installation manifest must name a supported platform, and the host's own.
+fn check_install_platform(
+    manifest: (Option<&str>, Option<&str>),
+    host: (&str, &str),
+) -> Result<(), crate::host::HostError> {
+    if host.0 == "win32" {
+        return Err(
+            "installation_platform_unsupported: Windows installations are not supported yet".into(),
+        );
+    }
+    let (Some(platform), Some(architecture)) = manifest else {
+        return Err("installation_manifest_invalid".into());
+    };
+    if (platform, architecture) != host || !INSTALL_PLATFORMS.contains(&(platform, architecture)) {
+        return Err("installation_manifest_invalid".into());
+    }
+    Ok(())
 }
 
 fn string_field(value: &serde_json::Value, field: &str) -> Option<String> {
@@ -249,7 +331,7 @@ fn safe_manifest_path(root: &Path, relative: &str) -> Result<PathBuf, crate::hos
     {
         return Err("installation_manifest_layout_invalid".into());
     }
-    let path = root.join(relative).canonicalize().map_err(|source| {
+    let path = root.join(relative).canonical().map_err(|source| {
         crate::host::HostError::new("installation_manifest_layout_invalid").with_source(source)
     })?;
     if !path.starts_with(root) {
@@ -266,7 +348,7 @@ fn launcher_is_expected(root: &Path) -> bool {
 
 fn canonical_file(path: &Path, code: &str) -> Result<PathBuf, crate::host::HostError> {
     let resolved = path
-        .canonicalize()
+        .canonical()
         .map_err(|error| format!("{code}: {error}"))?;
     if !resolved.is_file() {
         return Err(code.to_owned().into());
@@ -276,7 +358,7 @@ fn canonical_file(path: &Path, code: &str) -> Result<PathBuf, crate::host::HostE
 
 fn canonical_dir(path: &Path, code: &str) -> Result<PathBuf, crate::host::HostError> {
     let resolved = path
-        .canonicalize()
+        .canonical()
         .map_err(|error| format!("{code}: {error}"))?;
     if !resolved.is_dir() {
         return Err(code.to_owned().into());
@@ -293,7 +375,7 @@ pub(crate) fn realpath_or_nearest(path: &Path) -> std::io::Result<PathBuf> {
     let mut current = absolute;
     let mut suffix = Vec::new();
     loop {
-        match current.canonicalize() {
+        match current.canonical() {
             Ok(real) => {
                 return Ok(suffix
                     .into_iter()
@@ -316,12 +398,12 @@ pub(crate) fn realpath_or_nearest(path: &Path) -> std::io::Result<PathBuf> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::ResolvedInstallation;
+    use butler_platform::secure_fs::Canonical as _;
 
-    #[test]
-    fn data_and_workspace_cannot_overlap_the_installation() {
-        let executable = std::env::current_exe().unwrap().canonicalize().unwrap();
+    pub(crate) fn data_and_workspace_cannot_overlap_the_installation() {
+        let executable = std::env::current_exe().unwrap().canonical().unwrap();
         let root = executable.parent().unwrap().to_path_buf();
         let installation = ResolvedInstallation::desktop(&executable, &root, &root).unwrap();
         assert_eq!(
@@ -347,5 +429,22 @@ mod tests {
                 .ends_with(outside.file_name().unwrap())
         );
         installation.validate_workspace_root(&outside).unwrap();
+
+        let owner_root = std::env::current_dir()
+            .unwrap()
+            .join("test-owner")
+            .join(".butler");
+        let temp_root = owner_root.with_file_name("other-temp");
+        let resolved = owner_root.join("project-ledger");
+        assert!(
+            std::panic::catch_unwind(|| {
+                super::assert_test_data_root_is_isolated(
+                    &resolved,
+                    Some(&owner_root),
+                    Some(&temp_root),
+                );
+            })
+            .is_err()
+        );
     }
 }

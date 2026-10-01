@@ -1,0 +1,108 @@
+# WallpaperPicker
+
+## What is this component
+
+WallpaperPicker chooses a `WallpaperSource`: a grid of 16:10 still
+thumbnails (none, every live module in the registry, the uploaded images,
+an import-module tile, an upload tile, and optionally an `inherit` tile
+first) and, below it, the selected choice's controls. Live modules get
+controls generated from their
+manifest (`WallpaperParamControls`: sliders, shuffle buttons, switches,
+labeled enum options, colors, palette presets plus custom swatches). Images
+get fit (fill / whole image), dim, blur and a filter (registered modules that
+take an image, e.g. `butler.stipple`, `butler.grain`) with that filter's own params.
+
+## When to use this component
+
+Use it wherever the user picks a wallpaper: the Home screen setting, and a
+project's wallpaper (with `inherit`).
+
+## Where to use this component
+
+In a settings field's control slot or a panel. It is fluid: tiles are at
+least 112px wide and fill the row (two on a phone).
+
+## Why to use this component
+
+One picker keeps every scope consistent: the same tiles, the same stills
+from the engine (`renderWallpaperStill`, one shared offscreen WebGL2 context,
+cached by source, module content, tone and size, so an edited user module's
+still renders again; the selected module's still shows its current params) and the same manifest-driven controls, for built-in and
+user modules alike.
+
+## How to use this component
+
+```tsx
+<WallpaperPicker
+  value={source}
+  onChange={save}
+  labels={labels}
+  locale={locale}
+  images={assets.map(({ id, luminance }) => ({ id, luminance }))}
+  onUpload={(file) => void upload(file)}
+  onDeleteImage={(id) => void remove(id)}
+  uploading={uploading}
+  onImportModule={(file) => void importModule(file)}
+  onDeleteModule={(id) => void deleteModule(id)}
+  importingModule={importingModule}
+/>
+```
+
+- Controlled: `value` is a `WallpaperSource` or `"inherit"`; every tile
+  choice and control edit calls `onChange` with the next value.
+- Storage-agnostic: the picker never uploads, imports or deletes.
+  `onUpload(file)` receives a chosen or dropped file (the whole picker is a
+  drop zone); the container uploads it and selects the new image.
+  `onDeleteImage(id)` appears on every image tile except the selected one
+  (it is in use). `uploading` shows a spinner on the upload tile and takes
+  no files.
+- `onImportModule(file)` receives a chosen `.zip` from its own tile (next to
+  the upload tile); the container installs it, then selects the new module.
+  `onDeleteModule(id)` appears on every user module tile except the selected
+  one, usable or not. `importingModule` shows a spinner on the import tile
+  and takes no files.
+- A picked image starts as `{ fit: "cover", dim, blur: 0 }` with
+  `dim = wallpaperImageDefaultDim(luminance)` (brighter images dim more).
+  Re-picking any tile restores what it had earlier in the session.
+- Image thumbnails load through `imageLoader(id, "thumbnail")` (prop or
+  `WallpaperImageLoaderProvider`) and show as `data:` URLs.
+- `inherit={{ label, source }}` adds the first tile; `source` is previewed.
+- `registry` (default: the nearest `WallpaperRegistryProvider`'s, else the
+  built-ins) lists the modules and the filters; modules with
+  `image: "required"` are filters only, unless they bring a `defaultImage`
+  (living photos: live tiles on their own photo, never filters). Modules with
+  `image: "optional"` (e.g. `butler.stipple` with its sample photo) are both.
+- `userModules` (default: the provider's) lists the user's own modules
+  after the others, in their order, with a subtle `labels.mine` marker.
+  One with an `error` is a disabled tile (aria-disabled, focusable, skipped
+  by arrow keys) whose tooltip is the first line of the error, e.g. the
+  GLSL compile log; it shows no still.
+- `labels` carries the copy (`WallpaperPickerLabels`); module and param
+  names come from the manifests in `locale`.
+
+## Who can use this component
+
+Settings and project containers. They map their assets to `images`, own the
+uploads and module imports, and translate failures into brief toasts.
+
+## Best practice
+
+- Save optimistically and debounce the write: sliders call `onChange` on
+  every step.
+- Validate type (JPEG, PNG, WebP) and size before uploading; answer a
+  rejection with a short toast, not text in the picker.
+- Keep `images` in display order (newest last reads naturally after an
+  upload).
+- Answer a rejected `.zip` import with the gateway's own message (imports
+  fail for many specific reasons); a delete conflict (the module is in use)
+  is its own short toast.
+
+## Wrong use cases
+
+- Do not use it to render the wallpaper itself; use `Wallpaper`.
+- Do not put upload rules or errors inside the picker as banners.
+- Do not add product-only choices as fake modules; register real modules.
+
+## Tags
+
+wallpaper, picker, background, image, upload, import, module, thumbnail, settings

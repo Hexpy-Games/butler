@@ -4,6 +4,7 @@ import {
   Activity,
   BookOpenText,
   Database,
+  Lock,
   MagicWand,
   McpServer,
   Palette,
@@ -49,6 +50,7 @@ function createSettingsSectionMap(
     logs: section("logs", settingsCopy.sections.logs, <Terminal />),
     personalization: section("personalization", settingsCopy.sections.personalization, <UserRound />),
     privacy: section("privacy", settingsCopy.sections.privacy, <ShieldCheck />),
+    security: section("security", settingsCopy.sections.security, <Lock />),
     system: section("system", settingsCopy.sections.system, <Activity />),
     archives: section("archives", settingsCopy.sections.archives, <Archive />),
     about: section("about", settingsCopy.sections.about, <BookOpenText />),
@@ -73,26 +75,27 @@ const SETTINGS_SECTION_GROUPS: SettingsSectionGroupDefinition[] = [
   {
     id: "general",
     label: "preferences",
-    sectionIds: ["general", "appearance", "personalization"],
-  },
-  {
-    id: "models-and-extensions",
-    label: "modelsAndExtensions",
-    sectionIds: ["models", "mcp", "skills"],
+    sectionIds: ["general", "appearance", "personalization", "models"],
   },
   {
     id: "app-and-system",
     label: "appAndSystem",
     sectionIds: [
-      "server",
       "updates",
       "usage",
       "logs",
       "privacy",
+      "security",
       "system",
       "archives",
       "about",
     ],
+  },
+  // Agent-level settings most people never need; always the last group.
+  {
+    id: "advanced",
+    label: "advanced",
+    sectionIds: ["mcp", "skills", "server"],
   },
 ];
 

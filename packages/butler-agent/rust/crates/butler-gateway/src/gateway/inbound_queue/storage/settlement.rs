@@ -62,15 +62,8 @@ pub(in crate::gateway::inbound_queue) fn settle(
         item.processing.claim_id.clone().into(),
     );
     atomic_write(&record_path(root, state, &record.queue_id), &record)?;
-    let suffix = if state == "processed" {
-        "done"
-    } else {
-        "failed"
-    };
-    let _ = fs::rename(
-        &item.path,
-        item.path.with_extension(format!("json.{suffix}")),
-    );
+    // The terminal record is durable before the claimed copy is removed.
+    let _ = fs::remove_file(&item.path);
     Ok(true)
 }
 
@@ -153,6 +146,7 @@ pub(in crate::gateway::inbound_queue) fn defer(
 pub(in crate::gateway::inbound_queue) fn recover_runtime_interruptions(
     root: &Path,
 ) -> QueueResult<usize> {
+    prune_terminal_files(root)?;
     let mut recovered = 0;
     for name in file_names(&root.join("failed"))? {
         let from = root.join("failed").join(&name);
@@ -186,4 +180,45 @@ pub(in crate::gateway::inbound_queue) fn recover_runtime_interruptions(
         recovered += 1;
     }
     Ok(recovered)
+}
+
+/// One startup pass over legacy tombstones and aged completed records.
+fn prune_terminal_files(root: &Path) -> QueueResult<()> {
+    const PROCESSED_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+    let now = SystemTime::now();
+    for state in ["processing", "processed"] {
+        let dir = root.join(state);
+        let entries = match fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(super::io::io_error(error)),
+        };
+        for entry in entries {
+            let entry = entry.map_err(super::io::io_error)?;
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            let expired = entry
+                .metadata()
+                .ok()
+                .and_then(|metadata| metadata.modified().ok())
+                .is_some_and(|modified| {
+                    now.duration_since(modified)
+                        .is_ok_and(|age| age >= PROCESSED_AGE)
+                });
+            if (state == "processing"
+                && [
+                    ".json.done",
+                    ".json.failed",
+                    ".json.interrupted",
+                    ".json.deferred",
+                ]
+                .iter()
+                .any(|suffix| name.ends_with(suffix)))
+                || (state == "processed" && name.ends_with(".json") && expired)
+            {
+                let _ = fs::remove_file(entry.path());
+            }
+        }
+    }
+    Ok(())
 }

@@ -1,3 +1,4 @@
+import { StartAtLoginField } from "./StartAtLoginField";
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -6,6 +7,7 @@ import type { SettingsView as SettingsData } from "@/app/types.ts";
 import { SettingsPage, SettingsSection, SettingsSelect, SettingsSwitch } from "./SettingsFormComponents";
 import { SettingsSearchableSelect } from "./SettingsSearchableSelect";
 import { NativeNotificationStatusPanel } from "./NativeNotificationStatusPanel";
+import { RerunSetupField } from "./RerunSetupField";
 import { SearchBehaviorFields, SearchProviderFields } from "./SearchSettings";
 
 export function GeneralSettings() {
@@ -117,6 +119,8 @@ export function GeneralSettings() {
           checked={draft.desktop_tray_enabled}
           onChange={(desktopTrayEnabled) => update({ desktop_tray_enabled: desktopTrayEnabled }, setSettings)}
         />
+        <StartAtLoginField />
+        <RerunSetupField />
       </SettingsSection>
       <SettingsSection
         id="search-provider"

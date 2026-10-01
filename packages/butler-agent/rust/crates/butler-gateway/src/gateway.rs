@@ -6,21 +6,25 @@
 
 mod application;
 mod auth;
+mod crypto;
 mod http;
 mod image_files;
 mod live;
 mod message_validation;
 mod mutations;
 mod protocol;
+mod published_event;
 mod rate_limit;
+mod security_settings;
+mod server;
 mod session_references;
 mod transcript;
 mod ui_language;
 
 pub(crate) use mutations::GatewayMutationCommands;
-use std::{future::Future, net::SocketAddr, pin::Pin, sync::Arc};
+use std::{future::Future, pin::Pin, sync::Arc};
 
-use tokio::{net::TcpListener, task::JoinHandle};
+use butler_runtime::operations::ProviderQuotaView;
 use tokio_util::sync::CancellationToken;
 
 pub use crate::gateway::inbound_queue::{
@@ -53,23 +57,30 @@ pub use application::{
     AppProjectDashboardPreferencesUpdate, AppProjectDashboardRecordsQuery,
     AppProjectDashboardReview, AppProjectDashboardSnapshot, AppProjectDashboardSource,
     AppProjectDashboardSourceQuery, AppProjectDashboardStatisticsQuery, AppProjectDashboardWork,
-    AppProjectDashboardWorkHistoryEntry, AppProjectList, AppProjectSource, AppProjectUpdate,
-    AppQueueOwnerLiveness, AppReferencedChatSnapshot, AppRelocateSessionRequest,
+    AppProjectDashboardWorkHistoryEntry, AppProjectGit, AppProjectList, AppProjectSource,
+    AppProjectUpdate, AppQueueOwnerLiveness, AppReferencedChatSnapshot, AppRelocateSessionRequest,
     AppRelocationBinding, AppRelocationBindingResult, AppRelocationBindingSeed,
     AppRelocationBindingUpdate, AppRelocationCanonicalUpdate, AppRelocationHost,
     AppRelocationSnapshot, AppRelocationTransportBinding, AppRelocationWorkspaceMarker,
-    AppRelocationWorkspacePlan, AppRelocationWorkspaceRequest, AppRuntimeInfoProvider,
-    AppSessionActionResult, AppSessionBranchQuery, AppSessionBranchResult, AppSessionControlUpdate,
-    AppSessionControlsView, AppSessionSummary, AppSessionUpdate, AppSessionViewPage,
-    AppSessionWorkProgress, AppSessionWorkspaceProvisioner, AppSessionWorkspaceSnapshot,
-    AppSettingsFacts, AppSettingsFactsProvider, AppSettingsMutationPort, AppSourceDocument,
-    AppSourceSnapshotRequest, AppSpaceCommand, AppSpaceMutationResult, AppSpaceOrigin,
-    AppStartTopicConversationRequest, AppSubsessionPort, AppTurn, AppUsageMonitorQuery,
-    AppWorkOperationalNoticeFact, AppWorkProgress, AppWorkStatusConversationFact,
-    AppWorkStreamQuery, AppWorkStreamReader, AppWorkStreamTurnOutcome, AppWorkerActivityQuery,
+    AppRelocationWorkspacePlan, AppRelocationWorkspaceRequest, AppRoutinePreset,
+    AppRuntimeInfoProvider, AppSessionActionResult, AppSessionBranchQuery, AppSessionBranchResult,
+    AppSessionControlUpdate, AppSessionControlsView, AppSessionSummary, AppSessionUpdate,
+    AppSessionViewPage, AppSessionWorkProgress, AppSessionWorkspaceProvisioner,
+    AppSessionWorkspaceSnapshot, AppSettingsFacts, AppSettingsFactsProvider,
+    AppSettingsMutationPort, AppSourceDocument, AppSourceSnapshotRequest, AppSpaceCommand,
+    AppSpaceMutationResult, AppSpaceOrigin, AppStartTopicConversationRequest, AppSubsessionPort,
+    AppTurn, AppUsageMonitorQuery, AppWorkOperationalNoticeFact, AppWorkProgress,
+    AppWorkStatusConversationFact, AppWorkStreamQuery, AppWorkStreamReader,
+    AppWorkStreamTurnOutcome, AppWorkerActivityQuery, AppWorkerActivitySourcePage,
     AppWorkspaceMode, ArtifactFileCandidate, ArtifactMaterializationRequest, ClaimedNativeSnapshot,
     EnqueueReceipt, MaterializedResponderFile, OperationOutputChunk, OperationOutputView,
     ProjectSnapshot, ResolvedNativeAssets, TranscriptExport, VisualAdmissionRequest,
+};
+pub use application::{
+    AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
+    LocalModelServersView, OauthFlowStatus, OauthFlowView, ProviderKeyVerificationView,
+    ReplacedCredentialView, SETUP_READINESS_EVENT, SavedCredentialView, SetupReadinessStatus,
+    SetupReadinessStep, SetupReadinessView, SetupStepError, SetupStepStatus,
 };
 pub(crate) use application::{
     AutomationDetailView, AutomationListView, AutomationMutationResult, AutomationRunListView,
@@ -89,22 +100,28 @@ pub use protocol::{
     EventReplayView, HealthView, MessageContent, MessageContentPart, MessageFileKind,
     MessageFileRef, MessageListView, MessageRecord, MessageRole, MessageSendRequest,
     MessageSendResult, MessageStatus, ProgressState, ProjectSourceReference, QueueState,
-    QueuedMessageRecord, RuntimeReadinessView, SessionArtifactSummary, SessionControlState,
-    SessionQueueUpdateRequest, SessionQueueView, TurnListView, TurnProgressSnapshotView,
-    TurnRecord, TurnState,
+    QueuedMessageRecord, RuntimeReadinessView, SendMessageCommand, SessionArtifactSummary,
+    SessionControlState, SessionQueueUpdateRequest, SessionQueueView, TurnListView,
+    TurnProgressSnapshotView, TurnRecord, TurnState,
 };
+pub use published_event::PublishedEvent;
+pub use security_settings::{
+    ADMIN_CREDENTIAL_HEADER, AllowedHostError, GatewayExposure, GatewaySecurityStore,
+    MAX_ALLOWED_HOSTS, RotatedConnectionCode, normalize_allowed_host,
+};
+pub use server::{GatewayConfig, GatewayServer, serve_gateway};
 mod error;
 pub use error::GatewayApplicationError;
 pub use session_references::resolve_session_references;
 pub use transcript::{TranscriptCode, TranscriptWriter};
+pub use wallpapers::{
+    AppWallpaperAsset, AppWallpaperChange, AppWallpaperFile, AppWallpaperModuleShader,
+    AppWallpaperModuleStatusReport, AppWallpaperRejection, AppWallpaperScope,
+    AppWallpaperSetRequest, AppWallpaperVariant, GatewayWallpapers,
+};
 
 pub type ApplicationFuture<T> =
     Pin<Box<dyn Future<Output = Result<T, GatewayApplicationError>> + Send + 'static>>;
-
-pub struct SendMessageCommand {
-    pub request: MessageSendRequest,
-    pub chat_id: String,
-}
 
 /// Project dashboard HTTP operations, backed by the App and Project Ledger owners.
 pub trait GatewayProjectDashboard: Send + Sync {
@@ -181,12 +198,22 @@ pub trait GatewaySessionControls: Send + Sync {
 /// Every method is required. Composition cannot replace absent persistence or
 /// BTCC readiness with process-liveness guesses or an optional callback.
 pub trait GatewayApplication:
-    GatewayMutationCommands + GatewayProjectDashboard + GatewaySessionControls + Send + Sync + 'static
+    GatewayMutationCommands
+    + GatewayProjectDashboard
+    + GatewaySessionControls
+    + GatewayWallpapers
+    + Send
+    + Sync
+    + 'static
 {
     fn check_app_update(
         &self,
         request: butler_runtime::operations::UpdateRequest,
     ) -> ApplicationFuture<serde_json::Value>;
+    /// The last saved update status, without a network check.
+    fn app_update_status(&self) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn apply_app_update(
         &self,
         request: butler_runtime::operations::UpdateRequest,
@@ -235,6 +262,15 @@ pub trait GatewayApplication:
         &self,
         query: AppUsageMonitorQuery,
     ) -> ApplicationFuture<serde_json::Value>;
+    /// `GET /provider-quota`: the latest quota, polled first on `refresh`.
+    fn get_provider_quota(&self, id: String, refresh: bool)
+    -> ApplicationFuture<ProviderQuotaView>;
+    fn worker_activity_page(
+        &self,
+        _query: AppWorkerActivityQuery,
+    ) -> ApplicationFuture<Option<serde_json::Value>> {
+        Box::pin(async { Ok(None) })
+    }
     fn work_status(&self) -> ApplicationFuture<Vec<AppBoundWorkStatusFact>>;
     fn work_status_conversation(
         &self,
@@ -264,6 +300,7 @@ pub trait GatewayApplication:
     fn list_automations(
         &self,
         target_session_id: Option<String>,
+        include_deleted: bool,
     ) -> ApplicationFuture<AutomationListView>;
     fn get_automation(&self, id: String) -> ApplicationFuture<AutomationDetailView>;
     fn create_automation(
@@ -282,6 +319,14 @@ pub trait GatewayApplication:
     fn upload_message_file(&self, input: AppFileUpload) -> ApplicationFuture<MessageFileRef>;
     fn download_message_file(&self, id: String) -> ApplicationFuture<AppFileDownload>;
     fn runtime_readiness(&self) -> Result<RuntimeReadinessView, GatewayApplicationError>;
+    /// First-run setup (#230); an application without it answers 404.
+    fn setup(&self) -> Result<Arc<dyn AppSetupPort>, GatewayApplicationError> {
+        Err(GatewayApplicationError::public(
+            404,
+            "not_found",
+            "Route not found.",
+        ))
+    }
     fn read_settings(&self) -> ApplicationFuture<serde_json::Value>;
     fn update_settings(&self, input: serde_json::Value) -> ApplicationFuture<serde_json::Value> {
         let _ = input;
@@ -396,6 +441,15 @@ pub trait GatewayApplication:
     ) -> ApplicationFuture<serde_json::Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
+    /// Records and publishes a live event the gateway itself raises, such as
+    /// `security.connection_code_rotated`. Without an event log, a no-op.
+    fn publish_gateway_event(
+        &self,
+        _event_type: &'static str,
+        _payload: serde_json::Map<String, serde_json::Value>,
+    ) -> ApplicationFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
     fn latest_event_cursor(&self) -> ApplicationFuture<u64>;
     fn replay_events(
         &self,
@@ -404,84 +458,17 @@ pub trait GatewayApplication:
     ) -> ApplicationFuture<Vec<AppEventEnvelope>>;
     fn subscribe_events(
         &self,
-        listener: Arc<dyn Fn(AppEventEnvelope) + Send + Sync>,
+        listener: Arc<dyn Fn(Arc<PublishedEvent>) + Send + Sync>,
     ) -> Result<Box<dyn EventSubscription>, GatewayApplicationError>;
 }
 
 /// Dropping the subscription must synchronously unregister its callback.
 pub trait EventSubscription: Send {}
 
-pub struct GatewayConfig {
-    pub local_auth: LocalAuthConfig,
-    pub dev_cors_origin: Option<String>,
-    pub message_rate_limit_max: u64,
-    pub message_rate_limit_window: std::time::Duration,
-    pub static_ui_root: Option<std::path::PathBuf>,
-}
-
-impl Default for GatewayConfig {
-    fn default() -> Self {
-        Self {
-            local_auth: LocalAuthConfig::default(),
-            dev_cors_origin: None,
-            message_rate_limit_max: 60,
-            message_rate_limit_window: std::time::Duration::from_secs(60),
-            static_ui_root: None,
-        }
-    }
-}
-
-pub struct GatewayServer {
-    local_addr: SocketAddr,
-    shutdown: CancellationToken,
-    task: Option<JoinHandle<std::io::Result<()>>>,
-}
-
-impl GatewayServer {
-    pub fn local_addr(&self) -> SocketAddr {
-        self.local_addr
-    }
-
-    /// Stop admission, terminate live streams, and wait for the listener task.
-    pub async fn close(mut self) -> std::io::Result<()> {
-        self.shutdown.cancel();
-        let Some(task) = self.task.take() else {
-            return Ok(());
-        };
-        task.await.map_err(std::io::Error::other)?
-    }
-}
-
-impl Drop for GatewayServer {
-    fn drop(&mut self) {
-        // Normal shutdown awaits `close`; partial initialization still stops
-        // admission and streams instead of leaving a detached serving task.
-        self.shutdown.cancel();
-    }
-}
-
-pub fn serve_gateway(
-    listener: TcpListener,
-    application: Arc<dyn GatewayApplication>,
-    config: GatewayConfig,
-) -> std::io::Result<GatewayServer> {
-    let local_addr = listener.local_addr()?;
-    let shutdown = CancellationToken::new();
-    let router = http::router(application, config, shutdown.clone());
-    let graceful = shutdown.clone();
-    let task = tokio::spawn(async move {
-        axum::serve(listener, router)
-            .with_graceful_shutdown(graceful.cancelled_owned())
-            .await
-    });
-    Ok(GatewayServer {
-        local_addr,
-        shutdown,
-        task: Some(task),
-    })
-}
-
 mod inbound_queue;
 mod message_file_store;
 #[cfg(test)]
 mod tests;
+mod wallpaper_modules;
+mod wallpaper_store;
+mod wallpapers;

@@ -1,18 +1,20 @@
 use std::path::Path;
 
 use rusqlite::Connection;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 use super::{
     AppSettingsFacts, EventSubscribers, SETTINGS_KEY, global_settings, model,
+    onboarding::{KEY, view as onboarding_view},
     persistence::read_json,
+    wallpaper,
 };
 mod normalize;
 use crate::gateway::application::storage::AppStorageError;
 use crate::gateway::ui_language::UiLanguage;
 use normalize::{
-    access, enum_value, integer, language, main_colors, main_preset, main_theme, multiline,
-    native_value, notifications, object, timezone, ui_defaults, workspace_label,
+    enum_value, integer, language, main_colors, main_preset, main_theme, multiline, native_value,
+    notifications, object, timezone, ui_defaults, workspace_label,
 };
 
 /// The language the App shows (`language` of the settings view): Settings,
@@ -124,15 +126,12 @@ pub(super) fn read(
         .min(max_context)
         .max(1_000);
     let defaults = ui_defaults();
+    // The defaults hold every fixed value (gateway_profile, profile_label).
     let mut output = defaults.as_object().cloned().unwrap_or_default();
-    output.insert(
-        "bridge_mode".into(),
-        native
-            .get("bridge_mode")
-            .cloned()
-            .unwrap_or_else(|| json!("local")),
-    );
-    output.insert("gateway_profile".into(), json!("electron"));
+    if let Some(mode) = native.get("bridge_mode") {
+        output.insert("bridge_mode".into(), mode.clone());
+    }
+    output.insert(KEY.into(), onboarding_view(&stored));
     output.insert(
         "server_url".into(),
         stored
@@ -215,7 +214,7 @@ pub(super) fn read(
     );
     output.insert(
         "access_mode".into(),
-        json!(access(stored.get("access_mode"))),
+        json!(super::access_mode_name(&controls.access)),
     );
     output.insert(
         "plan_mode_default".into(),
@@ -246,16 +245,7 @@ pub(super) fn read(
             "system"
         )),
     );
-    output.insert(
-        "main_screen_theme".into(),
-        json!(main_theme(stored.get("main_screen_theme"))),
-    );
-    let colors = main_colors(stored.get("main_screen_theme_custom_colors"));
-    output.insert(
-        "main_screen_theme_preset".into(),
-        json!(main_preset(stored.get("main_screen_theme_preset"), &colors)),
-    );
-    output.insert("main_screen_theme_custom_colors".into(), json!(colors));
+    main_screen(&stored, &mut output);
     output.insert(
         "translucent_sidebar".into(),
         json!(
@@ -301,6 +291,32 @@ pub(super) fn read(
         "model_fallback".into(),
         json!({"enabled":model_fallback.enabled,"models":model_fallback.models}),
     );
-    output.insert("profile_label".into(), json!("Local Butler"));
     Ok(Value::Object(output))
+}
+
+/// The legacy main-screen keys, normalized, and the `wallpaper` setting, which
+/// they describe until a PATCH stores one.
+fn main_screen(stored: &Map<String, Value>, output: &mut Map<String, Value>) {
+    let colors = main_colors(stored.get("main_screen_theme_custom_colors"));
+    output.insert(
+        "main_screen_theme".into(),
+        json!(main_theme(stored.get("main_screen_theme"))),
+    );
+    output.insert(
+        "main_screen_theme_preset".into(),
+        json!(main_preset(stored.get("main_screen_theme_preset"), &colors)),
+    );
+    output.insert("main_screen_theme_custom_colors".into(), json!(colors));
+    let setting = wallpaper::view(stored.get(wallpaper::KEY), legacy_source(stored));
+    output.insert(wallpaper::KEY.into(), setting);
+}
+
+/// The wallpaper source the legacy main-screen keys of `settings` describe.
+pub(super) fn legacy_source(settings: &Map<String, Value>) -> Value {
+    let colors = main_colors(settings.get("main_screen_theme_custom_colors"));
+    wallpaper::from_legacy(
+        main_theme(settings.get("main_screen_theme")),
+        main_preset(settings.get("main_screen_theme_preset"), &colors),
+        &colors,
+    )
 }

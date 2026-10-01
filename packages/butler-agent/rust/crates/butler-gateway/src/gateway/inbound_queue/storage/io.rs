@@ -1,10 +1,8 @@
 //! Atomic source-format record writes and bounded record reads.
 
-use std::{
-    fs::{self, File},
-    io::{BufWriter, Write},
-    path::Path,
-};
+use std::{fs, io::Write, path::Path};
+
+use butler_platform::secure_fs;
 
 use super::super::{InboundQueueError, QueueResult, QueuedInboundEvent};
 use crate::gateway::InboundQueueCode;
@@ -32,35 +30,19 @@ pub(super) fn atomic_write(path: &Path, record: &QueuedInboundEvent) -> QueueRes
         )
     })?;
     ensure_dir(parent)?;
-    let temp = path.with_extension(format!(
-        "json.{}.{}.tmp",
-        std::process::id(),
-        uuid::Uuid::new_v4()
-    ));
-    let result = (|| {
-        let file = File::create_new(&temp).map_err(io_error)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            file.set_permissions(fs::Permissions::from_mode(0o600))
-                .map_err(io_error)?;
-        }
-        let mut writer = BufWriter::new(file);
-        serde_json::to_writer_pretty(&mut writer, record).map_err(|error| {
-            InboundQueueError::new(
-                InboundQueueCode::InboundQueueEncodeFailed,
-                error.to_string(),
-            )
-            .with_source(error)
-        })?;
-        writer.write_all(b"\n").map_err(io_error)?;
-        writer.flush().map_err(io_error)?;
-        fs::rename(&temp, path).map_err(io_error)
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(&temp);
-    }
-    result
+    let mut bytes = serde_json::to_vec_pretty(record).map_err(|error| {
+        InboundQueueError::new(
+            InboundQueueCode::InboundQueueEncodeFailed,
+            error.to_string(),
+        )
+        .with_source(error)
+    })?;
+    bytes.push(b'\n');
+    secure_fs::replace_private(
+        path,
+        |file| file.write_all(&bytes).map_err(io_error),
+        io_error,
+    )
 }
 
 pub(super) fn file_names(path: &Path) -> QueueResult<Vec<String>> {
@@ -82,19 +64,7 @@ pub(super) fn file_names(path: &Path) -> QueueResult<Vec<String>> {
 }
 
 pub(super) fn ensure_dir(path: &Path) -> QueueResult<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(path)
-            .map_err(io_error)
-    }
-    #[cfg(not(unix))]
-    {
-        fs::create_dir_all(path).map_err(io_error)
-    }
+    secure_fs::create_private_dir_all(path).map_err(io_error)
 }
 
 pub(super) fn io_error(error: std::io::Error) -> InboundQueueError {

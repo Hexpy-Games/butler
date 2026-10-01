@@ -17,9 +17,13 @@ pub(in crate::cognition) fn case_fold(value: &str) -> String {
     let table = table();
     let mut folded = String::with_capacity(value.len());
     for character in value.chars() {
-        match table.binary_search_by_key(&(character as u32), |entry| entry.0) {
-            Ok(index) => folded.push_str(table[index].1),
-            Err(_) => folded.push(character),
+        let fold = table
+            .binary_search_by_key(&(character as u32), |entry| entry.0)
+            .ok()
+            .and_then(|index| table.get(index));
+        match fold {
+            Some((_, fold)) => folded.push_str(fold),
+            None => folded.push(character),
         }
     }
     folded.nfc().collect()
@@ -57,9 +61,8 @@ fn table() -> &'static [(u32, &'static str)] {
 }
 
 #[cfg(test)]
-mod tests {
-    #[test]
-    fn bundled_case_fold_table_parses() {
+pub(super) mod tests {
+    pub(crate) fn bundled_case_fold_table_parses() {
         assert!(!super::table().is_empty());
     }
 }

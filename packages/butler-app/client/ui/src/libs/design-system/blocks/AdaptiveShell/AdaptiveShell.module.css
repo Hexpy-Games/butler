@@ -13,6 +13,12 @@
       var(--space-md)
   );
 
+  /* The top-level shell is square: the host window (browser tab or native
+     macOS window) clips its own corners. The workspace's leading corners sit
+     on that edge, so they are square too (PromptSuggestionList reads it). */
+  --app-window-radius: 0px;
+  --workspace-left-radius: var(--app-window-radius);
+
   position: relative;
   display: grid;
   width: 100%;
@@ -22,9 +28,17 @@
     minmax(0, var(--adaptive-right-track));
   overflow: hidden;
   padding: var(--app-window-frame-inset, 0);
-  border-radius: var(--app-window-radius, 18px);
+  border-radius: var(--app-window-radius);
   background: var(--sidebar-bg);
   color: var(--text-primary);
+}
+
+/* A docked sidebar puts the workspace's leading corners inside the window,
+   where they keep the panel radius on every platform. */
+.root:not(
+    [data-chrome-environment="electron"]
+  )[data-panel-layout="docked"][data-left-track="true"] {
+  --workspace-left-radius: 18px;
 }
 
 .root[data-chrome-environment="browser"] {
@@ -42,7 +56,6 @@
 }
 
 .root[data-chrome-environment="electron"][data-platform="win32"] {
-  --app-window-radius: 0px;
   --sidebar-bg: var(--windows-sidebar-bg);
 }
 
@@ -83,6 +96,11 @@
 
 .sidebar {
   z-index: 30;
+}
+
+/* An opened drawer takes focus itself (its rows draw their own rings). */
+.sidebar:focus {
+  outline: none;
 }
 
 /* Docked sidebar keeps its full width while its track collapses and slides
@@ -142,8 +160,7 @@
   grid-template-rows: var(--titlebar-safe-area-top) minmax(0, 1fr);
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: var(--app-window-radius, 18px) 0 0
-    var(--app-window-radius, 18px);
+  border-radius: var(--workspace-left-radius) 0 0 var(--workspace-left-radius);
   background: var(--workspace-bg);
   transition:
     background var(--motion-base) var(--motion-ease-standard),
@@ -439,7 +456,30 @@
       visibility 0s var(--motion-ease-linear) var(--motion-exit-fast);
   }
 
-  .root[data-panel-layout="drawer"] .sidebar {
-    transition: none;
+  /* Reduced motion: drawers fade in place over the scrim; nothing slides or
+     pushes the workspace. */
+  .root[data-panel-layout="drawer"] .sidebar,
+  .root[data-panel-layout="drawer"] .inspector {
+    opacity: 0;
+    transform: none;
+    transition:
+      opacity var(--motion-exit-fast) var(--motion-ease-standard),
+      visibility 0s var(--motion-ease-linear) var(--motion-exit-fast);
+  }
+
+  .root[data-panel-layout="drawer"] .sidebar[data-open="true"],
+  .root[data-panel-layout="drawer"] .inspector[data-open="true"] {
+    opacity: 1;
+    transition:
+      opacity var(--motion-fast) var(--motion-ease-standard),
+      visibility 0s var(--motion-ease-linear);
+  }
+
+  .root[data-panel-layout="drawer"][data-left-open="true"] .workspace {
+    transform: none;
+  }
+
+  .root[data-panel-layout="drawer"] .scrim {
+    transition: opacity var(--motion-fast) var(--motion-ease-standard);
   }
 }

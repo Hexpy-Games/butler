@@ -22,10 +22,29 @@ must remain unchanged. For local runs, use an **isolated** `BUTLER_DATA` and the
 under `runtime/inbound-events`, rather than a new stdin protocol. Stop it with SIGINT/SIGTERM
 or its existing `locks/butler-shutdown` flag. Existing installed processes are not replaced.
 
-The build includes static ONNX Runtime and Lance dependencies. Follow the repository-owned
-[static dependency recipe](scripts/STATIC_ORT.md); the existing Electron native producer
+Development and CI builds use the official prebuilt ONNX Runtime binaries provided by `ort`.
+Release package builds explicitly select the repository-owned [static dependency recipe](scripts/STATIC_ORT.md)
+and build ONNX Runtime from its pinned source inputs. The existing Electron native producer
 prepares that dependency cache and builds the packaged executable. Do not use an old ad hoc
 ORT build directory as an undocumented prerequisite.
+
+**Windows preview (x64).** In an x64 Visual Studio developer shell, prepare the static ORT
+cache with `python scripts\prepare-static-ort.py` (a short `CARGO_TARGET_DIR`, see the recipe),
+set `ORT_LIB_PATH` and `PROTOC` from its output with `ORT_PREFER_DYNAMIC_LINK=0` and
+`ORT_SKIP_DOWNLOAD=1`, and run `cargo build --release --locked -p butler-agent`. Lay the binary
+out as `<install>\bin\butler-agent.exe` next to a copy of `packages/butler-agent/resources` in
+`<install>\resources`, and run it with `--installation-root <install> --resource-root
+<install>\resources` (no subcommand runs the service; `stop`, `status`, `doctor` as on Unix).
+`butler stop` stops a Windows service through its control endpoint's `service_stop` command
+(the DATA shutdown flag while it is still starting) and ends it through a held process handle
+after the grace period; the service has no SIGTERM there. Not yet on Windows: read-only
+commands (refused with `command_observation_isolation_unavailable`), write protection of
+program files, Task Scheduler registration, an owner-only access list on a DATA folder outside
+`%USERPROFILE%`, and the `butler.exe` command launcher (see `butler_platform::launcher`).
+Commands the agent runs go through `cmd.exe`. A `butler restart` whose output is a pipe holds
+that pipe open until the new service exits, because Windows children inherit every inheritable
+handle and safe Rust cannot clear that; a terminal or file output is unaffected. Time zones
+come from the rules embedded in the executable (`butler_platform::time_zone`).
 
 The executable has passed an isolated source-queue smoke through a local mock provider,
 physical file read, canonical persistence, reply transcript, close, and restart. A further
@@ -53,6 +72,14 @@ blank lines, and inline tests. Files from 400 through 500 lines require a respon
 pass with a notice. Files over 500 lines fail. `.git` and `target` directories are excluded. Rust
 source symlinks and directory symlinks are rejected so they cannot bypass the scan.
 
+Behaviour is tested end to end in `crates/butler-e2e`. The checker counts every other test
+function (`#[test]`, `#[tokio::test]`) per package against `source-check-tests.txt`, and the
+counts may only shrink. A test kept outside the E2E harness carries a marker comment directly
+above it naming why it cannot be a scenario: `// test-category: race`, `security`, `pure-logic`
+or `format-pin`. Unmarked tests are waiting for E2E coverage; their count may only shrink too.
+After deleting tests, ratchet the baseline with `cargo run -p butler-source-check -- --bless .`,
+which never raises a count.
+
 When the scan root contains `agent/src/lib.rs`, the checker also reads the production module tree
 and enforces the reviewed domain dependency table, cross-domain facade access, and an acyclic
 dependency graph. Test-only modules are excluded from that graph; their physical files still count
@@ -65,5 +92,11 @@ replace Rust name resolution, expand procedural macros, or resolve paths through
 Module-file lookup follows the [Rust Reference](https://doc.rust-lang.org/reference/items/modules.html).
 Update `tools/source-check/src/architecture/policy.rs` only after reviewing a domain or dependency
 change. A passing checker does not establish runtime composition or performance acceptance.
+
+Operating-system specific code belongs in `crates/butler-platform` only. Elsewhere the checker
+flags `cfg(unix)`, `cfg(windows)`, `cfg(target_os)` and `cfg!` conditions, `std::os::*`, `nix`,
+`libc`, `libproc` and `rustix` paths, octal permission literals, `HOME`/`USERPROFILE` reads and
+OS-specific dependency tables in package manifests, tests included. Existing lines are ratcheted
+per package in `os-specific-baseline.txt`; the counts may only shrink, and `--bless` records them.
 
 The parser source notice is retained in [agent/THIRD_PARTY_NOTICES.md](agent/THIRD_PARTY_NOTICES.md). Final binary packaging must carry these notices; the current library checks do not prove distribution closure.

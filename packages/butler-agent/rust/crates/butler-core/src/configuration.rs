@@ -3,17 +3,9 @@
 //! Domains retain normalization and file/DB ordering; this is not a transaction
 //! and it never rolls back already completed writes or retains snapshots.
 
-use std::{
-    collections::HashMap,
-    fs::{self, OpenOptions},
-    io::Write,
-    path::Path,
-    sync::Arc,
-};
+use std::{collections::HashMap, fs, io::Write, path::Path, sync::Arc};
 
-#[cfg(unix)]
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
-
+use butler_platform::{secrets::ChangeLock, secure_fs};
 use tokio::sync::{Mutex, MutexGuard, OwnedMutexGuard};
 
 /// Failures reading or writing the shared user configuration files.
@@ -40,6 +32,12 @@ pub enum ConfigError {
     /// Writing, syncing or renaming the temporary configuration file failed.
     #[error("Config write failed.")]
     WriteFailed(#[source] std::io::Error),
+    /// Another writer could not be locked before reading its current file.
+    #[error("Configuration change lock failed.")]
+    LockFailed(#[source] std::io::Error),
+    /// The blocking lock acquisition failed.
+    #[error("Configuration change lock task failed.")]
+    LockTask(#[source] tokio::task::JoinError),
 }
 
 /// Serializes read/modify/write cycles of the configuration file within this process.
@@ -127,44 +125,31 @@ pub fn read_json_object(path: &Path) -> Result<serde_json::Value, ConfigError> {
 /// Atomically replace a user-owned JSON file with a private temporary file.
 pub fn write_json_atomic(path: &Path, value: &serde_json::Value) -> Result<(), ConfigError> {
     let parent = path.parent().ok_or(ConfigError::InvalidPath)?;
-    create_private_directories(parent)?;
-    let temporary = parent.join(format!(".butler-config-{}.tmp", uuid::Uuid::new_v4()));
-    let result = (|| {
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        options.mode(0o600);
-        let mut file = options.open(&temporary)?;
-        serde_json::to_writer_pretty(&mut file, value)?;
-        file.write_all(b"\n")?;
-        file.sync_all()?;
-        drop(file);
-        fs::rename(&temporary, path)
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(&temporary);
-    }
-    result.map_err(ConfigError::WriteFailed)
+    secure_fs::create_private_dir_all(parent).map_err(ConfigError::DirectoryUnavailable)?;
+    secure_fs::replace_private(
+        path,
+        |file| {
+            serde_json::to_writer_pretty(&mut *file, value)?;
+            file.write_all(b"\n")
+        },
+        std::convert::identity,
+    )
+    .map_err(ConfigError::WriteFailed)
 }
 
-fn create_private_directories(path: &Path) -> Result<(), ConfigError> {
-    #[cfg(unix)]
-    {
-        let mut builder = fs::DirBuilder::new();
-        builder.recursive(true).mode(0o700);
-        builder
-            .create(path)
-            .or_else(|error| {
-                if error.kind() == std::io::ErrorKind::AlreadyExists && path.is_dir() {
-                    Ok(())
-                } else {
-                    Err(error)
-                }
-            })
-            .map_err(ConfigError::DirectoryUnavailable)
-    }
-    #[cfg(not(unix))]
-    {
-        fs::create_dir_all(path).map_err(ConfigError::DirectoryUnavailable)
-    }
+/// Holds the sibling `<filename>.lock` for a full read-modify-write cycle.
+/// Blocking callers keep this guard until the atomic replacement finishes.
+pub fn lock_file(path: &Path) -> Result<ChangeLock, ConfigError> {
+    let mut name = path.as_os_str().to_owned();
+    name.push(".lock");
+    ChangeLock::acquire(Path::new(&name), std::time::Duration::from_secs(30))
+        .map_err(ConfigError::LockFailed)
+}
+
+/// Acquires the process-shared gate without blocking a Tokio worker.
+pub async fn lock_file_async(path: &Path) -> Result<ChangeLock, ConfigError> {
+    let path = path.to_owned();
+    tokio::task::spawn_blocking(move || lock_file(&path))
+        .await
+        .map_err(ConfigError::LockTask)?
 }

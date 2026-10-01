@@ -1,5 +1,6 @@
-export const APP_FOREGROUND_QUIT_COPY =
-  "Butler를 종료하면 실행 중인 작업과 자동화가 중지됩니다.";
+import { getDesktopCopy } from "./i18n/desktop-copy.mjs";
+
+export const APP_FOREGROUND_QUIT_COPY = getDesktopCopy().quit;
 
 const terminalTurnStates = new Set([
   "completed",
@@ -62,17 +63,19 @@ export function classifyAppForegroundActiveWork({
 export async function confirmAppForegroundQuit({
   snapshot,
   showMessageBox,
+  language = "en",
 }) {
   if (snapshot?.classification === "no_active_work") return true;
+  const copy = getDesktopCopy(language);
   const result = await showMessageBox({
     type: "warning",
-    buttons: ["취소", "Butler 종료"],
+    buttons: [copy.cancel, copy.quitButton],
     cancelId: 0,
     defaultId: 0,
-    message: APP_FOREGROUND_QUIT_COPY,
+    message: copy.quit,
     detail: snapshot?.classification === "active_work_unknown"
-      ? "실행 중인 작업 상태를 확인할 수 없습니다."
-      : "종료 전에 실행 중인 작업을 중지합니다.",
+      ? copy.unknown
+      : copy.stopping,
   });
   return result?.response === 1;
 }

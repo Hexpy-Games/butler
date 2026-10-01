@@ -20,13 +20,20 @@ pub(super) async fn route(
 ) -> Result<Response, HttpError> {
     let method = request.method().clone();
     let path = uri.path();
+    #[cfg(debug_assertions)]
+    if scheduler_counter_route(&method, path) {
+        return json(
+            StatusCode::OK,
+            crate::gateway::application::next_due_read_count(),
+        );
+    }
     if method == Method::GET && path == "/automations" {
-        let target_session_id = query_value(uri, "target_session_id");
+        let (target_session_id, include_deleted) = list_query(uri);
         return json(
             StatusCode::OK,
             state
                 .application
-                .list_automations(target_session_id)
+                .list_automations(target_session_id, include_deleted)
                 .await?,
         );
     }
@@ -44,26 +51,44 @@ pub(super) async fn route(
         );
     }
     let suffix = path.strip_prefix("/automations/").ok_or_else(not_found)?;
+    if let Some(response) = route_action(&state, &method, suffix).await? {
+        return Ok(response);
+    }
+    route_item(state, request, method, suffix).await
+}
+
+#[cfg(debug_assertions)]
+fn scheduler_counter_route(method: &Method, path: &str) -> bool {
+    method == Method::GET
+        && path == "/automations/_test/scheduler-next-due-reads"
+        && std::env::var_os("BUTLER_E2E_SCHEDULER_INSTRUMENTATION").is_some()
+}
+
+async fn route_action(
+    state: &Arc<HttpState>,
+    method: &Method,
+    suffix: &str,
+) -> Result<Option<Response>, HttpError> {
     if method == Method::GET
         && let Some(id) = suffix.strip_suffix("/runs")
     {
-        return json(
+        return Ok(Some(json(
             StatusCode::OK,
             state.application.list_automation_runs(decode(id)?).await?,
-        );
+        )?));
     }
     if method == Method::POST
         && let Some(id) = suffix.strip_suffix("/run")
     {
-        return json(
+        return Ok(Some(json(
             StatusCode::ACCEPTED,
             state.application.run_automation(decode(id)?).await?,
-        );
+        )?));
     }
     if method == Method::POST
         && let Some(id) = suffix.strip_suffix("/pause")
     {
-        return json(
+        return Ok(Some(json(
             StatusCode::ACCEPTED,
             state
                 .application
@@ -75,12 +100,12 @@ pub(super) async fn route(
                     },
                 )
                 .await?,
-        );
+        )?));
     }
     if method == Method::POST
         && let Some(id) = suffix.strip_suffix("/resume")
     {
-        return json(
+        return Ok(Some(json(
             StatusCode::ACCEPTED,
             state
                 .application
@@ -92,8 +117,17 @@ pub(super) async fn route(
                     },
                 )
                 .await?,
-        );
+        )?));
     }
+    Ok(None)
+}
+
+async fn route_item(
+    state: Arc<HttpState>,
+    request: Request<Body>,
+    method: Method,
+    suffix: &str,
+) -> Result<Response, HttpError> {
     if suffix.contains('/') {
         return Err(not_found());
     }
@@ -124,6 +158,12 @@ fn decode(value: &str) -> Result<String, HttpError> {
 fn query_value(uri: &Uri, key: &str) -> Option<String> {
     url::form_urlencoded::parse(uri.query()?.as_bytes())
         .find_map(|(name, value)| (name == key && !value.is_empty()).then(|| value.into_owned()))
+}
+fn list_query(uri: &Uri) -> (Option<String>, bool) {
+    (
+        query_value(uri, "target_session_id"),
+        query_value(uri, "include_deleted").as_deref() == Some("true"),
+    )
 }
 fn not_found() -> HttpError {
     HttpError::public(404, "not_found", "Route not found.")

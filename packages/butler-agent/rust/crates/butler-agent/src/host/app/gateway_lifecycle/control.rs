@@ -14,7 +14,8 @@ use tokio_util::sync::CancellationToken;
 
 use crate::host::ResolvedInstallation;
 use crate::host::service::instance::{
-    instance_is_locked, process_matches, read_record, validate_write_destinations,
+    instance_is_locked, process_matches, read_record, stop_announced_for,
+    validate_write_destinations,
 };
 use butler_turn::btcc::StorageEffectJournal;
 
@@ -24,6 +25,10 @@ const CONTROL_SCHEMA: &str = "butler.native-app-gateway-control.v1";
 const MAX_FRAME_BYTES: usize = 8 * 1024;
 const IO_TIMEOUT: Duration = Duration::from_secs(3);
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(90);
+
+/// Requests this service's stop, as a stop request from the host does (see
+/// the service's `StopSignal`).
+pub(crate) type ServiceStopRequester = Arc<dyn Fn() + Send + Sync>;
 
 pub(crate) struct GatewayControlServer {
     endpoint: String,
@@ -51,13 +56,30 @@ struct ControlResponse {
     result: Value,
 }
 
+/// What the control server answers for: this instance and its owners.
+struct ControlContext {
+    data_root: std::path::PathBuf,
+    installation: ResolvedInstallation,
+    nonce: String,
+    token: String,
+    lifecycle: Arc<AppGatewayLifecycle>,
+    effects: Arc<StorageEffectJournal>,
+    stop: ServiceStopRequester,
+}
+
+/// The owners the control server needs besides its instance identity.
+pub(crate) struct ControlOwners {
+    pub(crate) lifecycle: Arc<AppGatewayLifecycle>,
+    pub(crate) effects: Arc<StorageEffectJournal>,
+    pub(crate) stop: ServiceStopRequester,
+}
+
 impl GatewayControlServer {
     pub(crate) async fn bind(
         data_root: std::path::PathBuf,
         installation: ResolvedInstallation,
         nonce: String,
-        lifecycle: Arc<AppGatewayLifecycle>,
-        effects: Arc<StorageEffectJournal>,
+        owners: ControlOwners,
     ) -> Result<Self, crate::host::HostError> {
         let listener = TcpListener::bind(("127.0.0.1", 0))
             .await
@@ -70,36 +92,16 @@ impl GatewayControlServer {
         let endpoint = address.to_string();
         let token = uuid::Uuid::new_v4().to_string();
         let shutdown = CancellationToken::new();
-        let worker_shutdown = shutdown.clone();
-        let worker_nonce = nonce.clone();
-        let worker_token = token.clone();
-        let task = tokio::spawn(async move {
-            loop {
-                let accepted = tokio::select! {
-                    () = worker_shutdown.cancelled() => break,
-                    value = listener.accept() => value,
-                };
-                let Ok((mut stream, _peer)) = accepted else {
-                    continue;
-                };
-                let root = data_root.clone();
-                let installation = installation.clone();
-                let nonce = worker_nonce.clone();
-                let token = worker_token.clone();
-                let lifecycle = lifecycle.clone();
-                let effects = effects.clone();
-                let _ = serve_one(
-                    &mut stream,
-                    &root,
-                    &installation,
-                    &nonce,
-                    &token,
-                    &lifecycle,
-                    &effects,
-                )
-                .await;
-            }
+        let context = Arc::new(ControlContext {
+            data_root,
+            installation,
+            nonce,
+            token: token.clone(),
+            lifecycle: owners.lifecycle,
+            effects: owners.effects,
+            stop: owners.stop,
         });
+        let task = tokio::spawn(accept(listener, context, shutdown.clone()));
         Ok(Self {
             endpoint,
             token,
@@ -116,13 +118,17 @@ impl GatewayControlServer {
         &self.token
     }
 
+    pub(crate) fn stop_accepting(&self) {
+        self.shutdown.cancel();
+    }
+
     pub(crate) async fn close(mut self) -> Result<(), crate::host::HostError> {
         self.shutdown.cancel();
         let task = self
             .task
             .take()
             .ok_or_else(|| "gateway_control_task_missing".to_owned())?;
-        timeout(COMMAND_TIMEOUT + Duration::from_secs(4), task)
+        timeout(IO_TIMEOUT, task)
             .await
             .map_err(|source| {
                 crate::host::HostError::new("gateway_control_shutdown_timeout").with_source(source)
@@ -133,65 +139,35 @@ impl GatewayControlServer {
     }
 }
 
+/// Serves one connection at a time until `shutdown`.
+async fn accept(listener: TcpListener, context: Arc<ControlContext>, shutdown: CancellationToken) {
+    loop {
+        let accepted = tokio::select! {
+            () = shutdown.cancelled() => break,
+            value = listener.accept() => value,
+        };
+        let Ok((mut stream, _peer)) = accepted else {
+            continue;
+        };
+        tokio::select! {
+            biased;
+            _ = serve_one(&mut stream, &context) => {},
+            () = shutdown.cancelled() => break,
+        }
+    }
+}
+
 async fn serve_one(
     stream: &mut TcpStream,
-    data_root: &std::path::Path,
-    installation: &ResolvedInstallation,
-    nonce: &str,
-    token: &str,
-    lifecycle: &AppGatewayLifecycle,
-    effects: &StorageEffectJournal,
+    context: &ControlContext,
 ) -> Result<(), crate::host::HostError> {
     let request = timeout(IO_TIMEOUT, read_frame::<ControlRequest>(stream))
         .await
         .map_err(|source| {
             crate::host::HostError::new("gateway_control_request_timeout").with_source(source)
         })??;
-    let valid = request.schema == CONTROL_SCHEMA
-        && request.nonce == nonce
-        && constant_time_equal(request.token.as_bytes(), token.as_bytes())
-        && validate_write_destinations(data_root, installation).is_ok()
-        && instance_is_locked(data_root).unwrap_or(false)
-        && read_record(data_root).ok().flatten().is_some_and(|record| {
-            (record.state == "ready"
-                || (matches!(request.command, GatewayControlCommand::RestartHandoffResult)
-                    && record.state == "stopping"))
-                && record.nonce == nonce
-                && record
-                    .control_token
-                    .as_deref()
-                    .is_some_and(|stored| constant_time_equal(stored.as_bytes(), token.as_bytes()))
-                && process_matches(&record).unwrap_or(false)
-        });
-    let result = if valid {
-        let command = async {
-            if matches!(request.command, GatewayControlCommand::RestartHandoffResult) {
-                let key = request
-                    .intent_id
-                    .as_deref()
-                    .ok_or("restart_handoff_result_invalid")?;
-                let state = restart_outcome(request.outcome.as_deref())?;
-                effects
-                    .finish_restart_handoff(key.to_owned(), state)
-                    .await
-                    .map_err(|error| {
-                        format!("{}: journal result could not be recorded", error.code())
-                    })?;
-                Ok(json!({"recorded":true}))
-            } else {
-                lifecycle.execute(request.command).await
-            }
-        };
-        match timeout(COMMAND_TIMEOUT, command).await {
-            Err(_) => {
-                json!({"ok":false,"error":{"code":"gateway_lifecycle_timeout","message":"Gateway lifecycle command timed out"}})
-            }
-            Ok(Ok(data)) => json!({"ok":true,"data":data}),
-            Ok(Err(message)) => {
-                let (code, message) = lifecycle_error_parts(message.message());
-                json!({"ok":false,"error":{"code":code,"message":message}})
-            }
-        }
+    let result = if request_is_valid(&request, context) {
+        run(&request, context).await
     } else {
         json!({"ok":false,"error":{"code":"gateway_control_identity_invalid","message":"Gateway control identity could not be verified"}})
     };
@@ -209,6 +185,94 @@ async fn serve_one(
     .map_err(|source| {
         crate::host::HostError::new("gateway_control_response_timeout").with_source(source)
     })?
+}
+
+/// The request names this instance with its token, and the instance still
+/// owns DATA as its record says.
+fn request_is_valid(request: &ControlRequest, context: &ControlContext) -> bool {
+    request.schema == CONTROL_SCHEMA
+        && request.nonce == context.nonce
+        && constant_time_equal(request.token.as_bytes(), context.token.as_bytes())
+        && validate_write_destinations(&context.data_root, &context.installation).is_ok()
+        && instance_is_locked(&context.data_root).unwrap_or(false)
+        && read_record(&context.data_root)
+            .ok()
+            .flatten()
+            .is_some_and(|record| {
+                state_admits(request.command, &record.state)
+                    && record.nonce == context.nonce
+                    && record.control_token.as_deref().is_some_and(|stored| {
+                        constant_time_equal(stored.as_bytes(), context.token.as_bytes())
+                    })
+                    && process_matches(&record).unwrap_or(false)
+            })
+}
+
+/// Commands run while the instance is ready; a stopping instance (its
+/// controller marked the record first) still takes its stop and reports a
+/// restart handoff.
+fn state_admits(command: GatewayControlCommand, state: &str) -> bool {
+    state == "ready"
+        || (state == "stopping"
+            && matches!(
+                command,
+                GatewayControlCommand::RestartHandoffResult | GatewayControlCommand::ServiceStop
+            ))
+}
+
+async fn run(request: &ControlRequest, context: &ControlContext) -> Value {
+    let command = async {
+        match request.command {
+            GatewayControlCommand::RestartHandoffResult => {
+                record_restart_handoff(request, &context.effects).await
+            }
+            GatewayControlCommand::ServiceStop => stop_service(request, context),
+            command => context.lifecycle.execute(command).await,
+        }
+    };
+    match timeout(COMMAND_TIMEOUT, command).await {
+        Err(_) => {
+            json!({"ok":false,"error":{"code":"gateway_lifecycle_timeout","message":"Gateway lifecycle command timed out"}})
+        }
+        Ok(Ok(data)) => json!({"ok":true,"data":data}),
+        Ok(Err(message)) => {
+            let (code, message) = lifecycle_error_parts(message.message());
+            json!({"ok":false,"error":{"code":code,"message":message}})
+        }
+    }
+}
+
+async fn record_restart_handoff(
+    request: &ControlRequest,
+    effects: &StorageEffectJournal,
+) -> Result<Value, crate::host::HostError> {
+    let key = request
+        .intent_id
+        .as_deref()
+        .ok_or("restart_handoff_result_invalid")?;
+    let state = restart_outcome(request.outcome.as_deref())?;
+    effects
+        .finish_restart_handoff(key.to_owned(), state)
+        .await
+        .map_err(|error| format!("{}: journal result could not be recorded", error.code()))?;
+    Ok(json!({"recorded":true}))
+}
+
+/// `service_stop`: the controller's stop of this instance, delivered where
+/// the host has no stop signal (Windows). As with SIGTERM, the controller
+/// announced the stop in the DATA stop intent first; the intent id is the
+/// instance nonce the intent names.
+fn stop_service(
+    request: &ControlRequest,
+    context: &ControlContext,
+) -> Result<Value, crate::host::HostError> {
+    let announced = request.intent_id.as_deref() == Some(context.nonce.as_str())
+        && stop_announced_for(&context.data_root, std::process::id(), &context.nonce);
+    if !announced {
+        return Err("service_stop_unannounced: no stop intent names this instance".into());
+    }
+    (context.stop)();
+    Ok(json!({"stopping":true}))
 }
 
 fn restart_outcome(value: Option<&str>) -> Result<&'static str, crate::host::HostError> {
@@ -230,6 +294,33 @@ pub(crate) async fn report_restart_handoff(
     outcome: &str,
 ) -> Result<(), crate::host::HostError> {
     restart_outcome(Some(outcome))?;
+    let request = json!({
+        "schema":CONTROL_SCHEMA,"nonce":record.nonce,"command":"restart_handoff_result",
+        "intent_id":key,"outcome":outcome,
+    });
+    send(record, request, "restart_handoff_result_failed").await
+}
+
+/// Sends `service_stop` to the instance `record` names, after the caller
+/// announced the stop in the DATA stop intent (see [`stop_service`]).
+pub(crate) async fn request_service_stop(
+    record: &crate::host::service::instance::InstanceRecord,
+) -> Result<(), crate::host::HostError> {
+    let request = json!({
+        "schema":CONTROL_SCHEMA,"nonce":record.nonce,"command":"service_stop",
+        "intent_id":record.nonce,
+    });
+    send(record, request, "service_stop_failed").await
+}
+
+/// Sends `request` (without its token, which comes from `record`) to the
+/// loopback control endpoint `record` publishes; a refused command is its
+/// error code, or `failed`.
+async fn send(
+    record: &crate::host::service::instance::InstanceRecord,
+    mut request: Value,
+    failed: &str,
+) -> Result<(), crate::host::HostError> {
     let endpoint = record
         .control_endpoint
         .as_deref()
@@ -240,10 +331,12 @@ pub(crate) async fn report_restart_handoff(
     if !address.ip().is_loopback() {
         return Err("gateway_control_identity_invalid".into());
     }
-    let token = record
-        .control_token
-        .as_deref()
-        .ok_or("gateway_control_unavailable")?;
+    request["token"] = Value::from(
+        record
+            .control_token
+            .as_deref()
+            .ok_or("gateway_control_unavailable")?,
+    );
     let mut stream = timeout(IO_TIMEOUT, TcpStream::connect(address))
         .await
         .map_err(|source| {
@@ -252,10 +345,6 @@ pub(crate) async fn report_restart_handoff(
         .map_err(|source| {
             crate::host::HostError::new("gateway_control_unavailable").with_source(source)
         })?;
-    let request = serde_json::json!({
-        "schema":CONTROL_SCHEMA,"nonce":record.nonce,"token":token,
-        "command":"restart_handoff_result","intent_id":key,"outcome":outcome,
-    });
     timeout(IO_TIMEOUT, write_frame(&mut stream, &request))
         .await
         .map_err(|source| {
@@ -269,7 +358,7 @@ pub(crate) async fn report_restart_handoff(
     if response.schema != CONTROL_SCHEMA || response.result["ok"] != true {
         return Err(response.result["error"]["code"]
             .as_str()
-            .unwrap_or("restart_handoff_result_failed")
+            .unwrap_or(failed)
             .to_owned()
             .into());
     }

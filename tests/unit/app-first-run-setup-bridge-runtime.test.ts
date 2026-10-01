@@ -97,11 +97,15 @@ test("first-run setup bridge diagnostics expose redacted shape only", async () =
     errors: [
       {
         code: "setup_failed",
-        message: "Butler Agent를 준비하지 못했습니다.",
       },
     ],
   });
   const serialized = JSON.stringify(diagnostics);
+  // Display text is the renderer's job (butler-i18n); the bridge sends ids and codes.
+  expect(serialized).not.toMatch(/[가-힣]/u);
+  expect(JSON.stringify(bridge.status())).not.toMatch(/[가-힣]/u);
+  expect(diagnostics.checks.every((check) => !("label" in check))).toBe(true);
+  expect("message" in diagnostics.errors[0]!).toBe(false);
   expect(serialized).not.toContain("/Users/example/.butler");
   expect(serialized).not.toContain("/tmp/butler");
   expect(serialized).not.toContain("/Users/Alice Smith");

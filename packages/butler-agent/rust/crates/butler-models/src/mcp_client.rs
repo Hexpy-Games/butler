@@ -3,12 +3,16 @@
 //! session scoped to the calling Turn.
 
 mod catalog;
+mod children;
 mod client;
+pub use children::stop_mcp_children;
 mod image_capability;
 mod management;
 mod registry;
 mod session;
 mod sse_transport;
+#[cfg(test)]
+pub(crate) use sse_transport::parser_tests::parses_fragmented_multiline_events;
 mod transport;
 
 pub use catalog::{

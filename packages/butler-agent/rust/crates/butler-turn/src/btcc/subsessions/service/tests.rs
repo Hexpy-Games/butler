@@ -115,7 +115,7 @@ fn child_root_work_scope_uses_steward_ledger_binding_but_keeps_worker_local() {
             crate::btcc::ChildRole::Steward,
             "Complete task.",
         ),
-        dispatch_intent: crate::btcc::DispatchIntent::fixture(),
+        dispatch_intent: Some(crate::btcc::DispatchIntent::fixture()),
         anchor_message_id: "anchor".into(),
         ordinal: 1,
         safe_title: "Task".into(),
@@ -303,8 +303,7 @@ async fn cancelled_child_abandons_bound_work_and_commits_cancelled_result() {
 mod child_work;
 
 /// KEEP: delegation ids are digests of these identity encodings.
-#[test]
-fn delegation_identities_are_byte_stable() {
+pub(crate) fn delegation_identities_are_byte_stable() {
     let steward = super::helpers::StewardIdentity {
         parent_session_id: "ps",
         parent_turn_id: "pt",

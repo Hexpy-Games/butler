@@ -4,6 +4,8 @@ mod control;
 mod endpoint;
 mod owner;
 
-pub(crate) use control::{GatewayControlServer, report_restart_handoff};
+pub(crate) use control::{
+    ControlOwners, GatewayControlServer, report_restart_handoff, request_service_stop,
+};
 pub(crate) use endpoint::ActiveAppEndpoint;
-pub(crate) use owner::{AppGatewayLifecycle, GatewayControlCommand};
+pub(crate) use owner::{AppGatewayLifecycle, GatewayControlCommand, local_auth_unconfigured};

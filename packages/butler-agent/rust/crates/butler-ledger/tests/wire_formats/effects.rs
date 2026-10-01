@@ -14,8 +14,7 @@ fn updates(value: serde_json::Value) -> Vec<ProjectLedgerRecordUpdate> {
     serde_json::from_value(value).unwrap()
 }
 
-#[tokio::test]
-async fn record_effects_keep_their_journal_lock_shard_and_answers() {
+pub(crate) async fn record_effects_keep_their_journal_lock_shard_and_answers() {
     let mut h = Harness::new("effects");
     h.init().await;
     let root = h.root.clone();

@@ -3,7 +3,9 @@ import { useCallback, useMemo, useState } from "react";
 import { activeChatFromNavigation } from "@/app/utils.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
+import { useAppearanceTheme } from "@/stores/appearanceStore.ts";
 import { EmptyState } from "./EmptyState";
+import { BranchProjectContext } from "./AssistantBranchActions";
 import { MessageList } from "./MessageList";
 import { Composer } from "./Composer";
 import {
@@ -21,6 +23,12 @@ void appCopy;
 export function Conversation() {
   const locale = useAppLocale();
   const activeChatId = useButlerStore((state) => state.activeChatId);
+  const branchProjectId = useButlerStore((state) => {
+    if (activeChatId === "general") return null;
+    const view = state.sessionViews[activeChatId] ??
+      (state.sessionView?.session_id === activeChatId ? state.sessionView : null);
+    return view?.project_id ?? null;
+  });
   const navigation = useButlerStore((state) => state.navigation);
   const messages = useButlerStore((state) => state.messages);
   const summary = useButlerStore((state) => state.summary);
@@ -28,16 +36,12 @@ export function Conversation() {
   const messageLoadPending = useButlerStore(
     (state) => state.messageLoadPending,
   );
-  const appearanceTheme = useButlerStore(
-    (state) => state.settings.appearance_theme,
-  );
+  const appearanceTheme = useAppearanceTheme();
   const isSending = useButlerStore((state) => state.isSending);
   const sendingChatId = useButlerStore((state) => state.sendingChatId);
   const sendingOperations = useButlerStore((state) => state.sendingOperations);
   const sendMessage = useButlerStore((state) => state.sendMessage);
   const refreshSessionView = useButlerStore((state) => state.refreshSessionView);
-  const setRightOpen = useButlerStore((state) => state.setRightOpen);
-  const setRightTab = useButlerStore((state) => state.setRightTab);
 
   const activeChat = useMemo(
     () => activeChatFromNavigation(navigation, activeChatId),
@@ -59,10 +63,6 @@ export function Conversation() {
       Math.abs(current - nextReserve) < 1 ? current : nextReserve,
     );
   }, []);
-  const openContext = useCallback(() => {
-    setRightOpen(true);
-    setRightTab("context");
-  }, [setRightOpen, setRightTab]);
 
   const hasMessages = messages.length > 0;
   const stewardParentSubscriptionId = summary?.steward_children?.some(
@@ -92,12 +92,14 @@ export function Conversation() {
       titleIconSize={newChatTitleIconSize}
     >
       {showMessageList ? (
-        <MessageList
-          messages={messages}
-          turnProgress={turnProgress}
-          bottomReserve={composerReserve}
-          isSending={isActiveChatSending}
-        />
+        <BranchProjectContext.Provider value={branchProjectId}>
+          <MessageList
+            messages={messages}
+            turnProgress={turnProgress}
+            bottomReserve={composerReserve}
+            isSending={isActiveChatSending}
+          />
+        </BranchProjectContext.Provider>
       ) : showEmptyState ? (
         <ConversationScroll masked={false} scrollable={false}>
           <EmptyState
@@ -112,7 +114,6 @@ export function Conversation() {
       )}
       <Composer
         onReserveChange={updateComposerReserve}
-        onOpenContext={openContext}
         large={composerLarge}
       />
     </ConversationShell>

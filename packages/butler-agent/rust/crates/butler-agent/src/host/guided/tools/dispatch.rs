@@ -50,6 +50,9 @@ pub(super) async fn execute(
     if call.name == ToolName::ReadProjectSource {
         return super::project_source::execute(owner, call).await;
     }
+    if super::wallpaper::supports(&call.name) {
+        return super::wallpaper::execute(owner, invocation, call, call_id).await;
+    }
     if mcp::supports(&call.name) {
         return Box::pin(mcp::execute(owner, invocation, call)).await;
     }
@@ -92,12 +95,7 @@ pub(super) async fn execute(
                         .map(str::to_owned),
                     model_ref: owner.binding.model_ref.clone(),
                     reasoning_effort: owner.binding.reasoning_effort.clone(),
-                    access_mode: match owner.binding.access_mode {
-                        butler_turn::btcc::AccessMode::FullAccess => "full_access",
-                        butler_turn::btcc::AccessMode::AskFirst => "ask_first",
-                        butler_turn::btcc::AccessMode::ReadOnly => "read_only",
-                    }
-                    .into(),
+                    access_mode: access_mode(owner),
                 },
                 &reviewed,
             )
@@ -121,20 +119,7 @@ pub(super) async fn execute(
         return encoded(&result);
     }
     if call.name == ToolName::ListAutomations {
-        let result = owner
-            .automations
-            .execute(
-                &call.name,
-                call.arguments.clone(),
-                &owner.binding.source_session_id,
-            )
-            .await;
-        return encoded(&result.unwrap_or_else(|error| {
-            json!({"ok":false,"error":{
-                "code":"tool_error",
-                "message":format!("{} could not complete: {}", call.name, error.code()),
-            }})
-        }));
+        return list_automations(owner, call).await;
     }
     if call.name == ToolName::DelegateToWorker {
         let required = |key: &str| {
@@ -210,12 +195,7 @@ pub(super) async fn execute(
                         .get("profile_id")
                         .and_then(Value::as_str)
                         .map(str::to_owned),
-                    access_mode: match owner.binding.access_mode {
-                        butler_turn::btcc::AccessMode::FullAccess => "full_access",
-                        butler_turn::btcc::AccessMode::AskFirst => "ask_first",
-                        butler_turn::btcc::AccessMode::ReadOnly => "read_only",
-                    }
-                    .into(),
+                    access_mode: access_mode(owner),
                 },
                 &reviewed,
             )
@@ -279,12 +259,7 @@ pub(super) async fn execute(
                 } else {
                     butler_turn::workspace::SessionRole::Steward
                 },
-                access_mode: match owner.binding.access_mode {
-                    butler_turn::btcc::AccessMode::FullAccess => "full_access",
-                    butler_turn::btcc::AccessMode::AskFirst => "ask_first",
-                    butler_turn::btcc::AccessMode::ReadOnly => "read_only",
-                }
-                .into(),
+                access_mode: access_mode(owner),
             })
             .await
             .map_err(ToolExecutionError::Integrity)?;
@@ -359,6 +334,7 @@ pub(super) async fn execute(
                 | ToolName::StartTopicConversation
                 | ToolName::RequestServiceRestart
                 | ToolName::CreateAutomation
+                | ToolName::UpdateAutomation
                 | ToolName::DeleteAutomation
                 | ToolName::RunDueAutomations
         )
@@ -435,23 +411,8 @@ pub(super) async fn execute(
             .read(owner.binding.memory.clone(), args)
             .await
             .map_err(|error| BtccError::relayed(error.code(), error.message())),
-        "read_file" | "list_files" | "grep_files" | "list_skills" => owner
-            .capabilities
-            .invoke(
-                &call.name,
-                CapabilityInvocation {
-                    call: &json!({"arguments": args, "projectId": owner.binding.memory.project_id}),
-                    workspace_reference: owner.binding.workspace_reference.as_ref(),
-                    workspace_path: Some(&owner.binding.workspace_path),
-                    butler_data: &owner.binding.butler_data,
-                    protected_ledger_roots: &owner.binding.protected_ledger_roots,
-                    allowed_tools_and_effects: owner.binding.allowed_tools_and_effects.as_deref(),
-                    mutation_scope: owner.binding.mutation_scope.as_deref(),
-                    installation_root: owner.binding.installation_root.as_deref(),
-                },
-            )
-            .await
-            .map_err(|error| BtccError::relay(error.code(), error.code(), error)),
+        "read_file" | "list_files" | "grep_files" | "list_skills" | "load_skill"
+        | "read_skill_file" => file_capability(owner, call, &args).await,
         _ => {
             return Err(ToolExecutionError::Integrity(BtccError::relayed(
                 "guided_tool_executor_missing",
@@ -462,6 +423,64 @@ pub(super) async fn execute(
     encoded(&result.unwrap_or_else(|error| {
         json!({"ok":false,"error":{
             "code":"tool_error", "message":format!("{} could not complete: {}",call.name,error.code())
+        }})
+    }))
+}
+
+async fn file_capability(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+    args: &Value,
+) -> Result<Value, BtccError> {
+    owner
+        .capabilities
+        .invoke(
+            &call.name,
+            CapabilityInvocation {
+                call: &json!({"arguments": args, "projectId": owner.binding.memory.project_id}),
+                workspace_reference: owner.binding.workspace_reference.as_ref(),
+                workspace_path: Some(&owner.binding.workspace_path),
+                butler_data: &owner.binding.butler_data,
+                protected_ledger_roots: &owner.binding.protected_ledger_roots,
+                allowed_tools_and_effects: owner.binding.allowed_tools_and_effects.as_deref(),
+                mutation_scope: owner.binding.mutation_scope.as_deref(),
+                installation_root: owner.binding.installation_root.as_deref(),
+            },
+        )
+        .await
+        .map_err(|error| BtccError::relay(error.code(), error.code(), error))
+}
+
+/// The Turn's access mode as delegation requests name it.
+fn access_mode(owner: &GuidedTools) -> String {
+    match owner.binding.access_mode {
+        butler_turn::btcc::AccessMode::FullAccess => "full_access",
+        butler_turn::btcc::AccessMode::AskFirst => "ask_first",
+        butler_turn::btcc::AccessMode::ReadOnly => "read_only",
+    }
+    .into()
+}
+
+async fn list_automations(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+) -> Result<JsonDocument, ToolExecutionError> {
+    let result = match crate::host::automation::client::ScheduleClient::active(&owner.app_endpoint)
+    {
+        Ok(client) => {
+            client
+                .tool(
+                    &call.name,
+                    call.arguments.clone(),
+                    &owner.binding.source_session_id,
+                )
+                .await
+        }
+        Err(error) => Err(error),
+    };
+    encoded(&result.unwrap_or_else(|error| {
+        json!({"ok":false,"error":{
+            "code":error.code(), "message":error.message(),
         }})
     }))
 }

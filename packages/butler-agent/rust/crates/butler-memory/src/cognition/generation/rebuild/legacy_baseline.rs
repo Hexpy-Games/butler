@@ -3,6 +3,10 @@
 
 use super::*;
 use crate::cognition::CognitionCode;
+use crate::cognition::generation::manifest::{
+    ACTIVE_DESCRIPTOR_SCHEMA, ActiveDescriptor, DescriptorView, GenerationFormat,
+    GenerationManifest, GenerationState, InitializationOrigin, NewManifest, ProjectionMode,
+};
 
 pub(super) async fn ensure(
     data_root: &Path,
@@ -18,121 +22,148 @@ pub(super) async fn ensure(
         return validate_active_descriptor(data_root, &descriptor);
     }
     let first = inventory::read(data_root, canonical, now, cancellation)?;
-    let lease = coordinator
-        .acquire(
-            CognitionWriteAcquire {
-                lock_path: lock.to_owned(),
-                purpose: Some("cutover".into()),
-                deadline_at_epoch_ms: None,
-                cancellation: Some(cancellation.clone()),
-            },
-            CognitionWaitClass::Background,
-        )
-        .await
-        .map_err(gate_error)?
-        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
-    let data_root = data_root.to_owned();
-    let memory_root = memory_root.to_owned();
-    let canonical = canonical.to_owned();
-    let lock = lock.to_owned();
-    let now = now.to_owned();
-    let cancellation = cancellation.to_owned();
-    crate::cognition::generation::stage::leased(lease, CognitionCode::MemoryGenerationUnavailable, move |lease| {
-        let data_root = &data_root;
-        let memory_root = &memory_root;
-        let canonical = &canonical;
-        let lock = &lock;
-        let now = &now;
-        let cancellation = &cancellation;
+    let lease = crate::cognition::generation::stage::acquire_abortable(
+        coordinator,
+        lock,
+        "cutover",
+        cancellation,
+    )
+    .await?;
+    let adoption = Adoption {
+        data_root: data_root.to_owned(),
+        memory_root: memory_root.to_owned(),
+        canonical: canonical.to_owned(),
+        lock: lock.to_owned(),
+        now: now.to_owned(),
+        cancellation: cancellation.to_owned(),
+        first,
+    };
+    crate::cognition::generation::stage::leased(
+        lease,
+        CognitionCode::MemoryGenerationUnavailable,
+        move |lease| adoption.adopt(lease),
+    )
+    .await
+}
+
+/// Inputs of the leased adoption step.
+struct Adoption {
+    data_root: PathBuf,
+    memory_root: PathBuf,
+    canonical: PathBuf,
+    lock: PathBuf,
+    now: String,
+    cancellation: CancellationToken,
+    /// Inventory observed before waiting for the write gate.
+    first: inventory::SourceInventory,
+}
+
+impl Adoption {
+    fn adopt(&self, lease: &crate::coordination::CognitionWriteLease) -> CognitionResult<()> {
         lease
-            .assert_for_path(lock)
+            .assert_for_path(&self.lock)
             .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
+        let descriptor = self.memory_root.join("active-generation.json");
         if descriptor.exists() {
-            return validate_active_descriptor(data_root, &descriptor);
+            return validate_active_descriptor(&self.data_root, &descriptor);
         }
-        let second = inventory::read(data_root, canonical, now, cancellation)?;
-        if second.hash != first.hash || second.canonical_revision != first.canonical_revision {
+        let second = inventory::read(
+            &self.data_root,
+            &self.canonical,
+            &self.now,
+            &self.cancellation,
+        )?;
+        if second.hash != self.first.hash
+            || second.canonical_revision != self.first.canonical_revision
+        {
             return Err(error(CognitionCode::MemorySourceChanged));
         }
-        let generations = memory_root.join("generations");
+        let generations = self.memory_root.join("generations");
         durable::create_dir(&generations)?;
-        let mut reusable = None;
-        for entry in fs::read_dir(&generations).map_err(io_error)? {
-            let path = entry.map_err(io_error)?.path();
-            let manifest = path.join("manifest.json");
-            if !manifest.is_file() {
-                continue;
-            }
-            ensure_data_authority(data_root, &[&path, &manifest])?;
-            let value: Value = serde_json::from_slice(&fs::read(&manifest).map_err(io_error)?)
-                .map_err(|source| {
-                    error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
-                })?;
-            if value["format"] == "legacy"
-                && value["initialization_origin"] == "legacy"
-                && value["state"] == "active"
-                && value["source_inventory_hash"] == first.hash
-            {
-                let id = value["generation_id"]
-                    .as_str()
-                    .ok_or_else(|| error(CognitionCode::MemoryGenerationUnavailable))?;
-                if path.file_name().and_then(|name| name.to_str()) != Some(id) || reusable.is_some()
-                {
-                    return Err(error(CognitionCode::MemoryGenerationRecoveryRequired));
-                }
-                reusable = Some(id.to_owned());
-            }
-        }
-        let generation_id = if let Some(id) = reusable {
-            id
-        } else {
-            let id = uuid::Uuid::new_v4().to_string();
-            let root = generations.join(&id);
-            ensure_data_authority(data_root, &[&root])?;
-            durable::create_dir(&root)?;
-            let legacy_hash =
-                butler_core::json::stringify(&json!(["legacy-baseline", id, first.hash])).map_err(
-                    |source| error(CognitionCode::MemoryInventoryIncomplete).with_source(source),
-                )?;
-            durable::write_json(
-                &root.join("manifest.json"),
-                &json!({
-                    "schema":"butler.memory-generation.v2", "generation_id":id,
-                    "format":"legacy", "state":"active", "initialization_origin":"legacy",
-                    "schema_version":null, "extraction_version":null, "ranking_version":null,
-                    "embedding":null, "unicode_version":null, "icu_version":null,
-                    "canonical_snapshot_id":format!("{:x}",Sha256::digest(legacy_hash.as_bytes())),
-                    "canonical_snapshot_path":null, "source_inventory_hash":first.hash,
-                    "registered_source_count":0, "unaccounted_source_count":first.source_count,
-                    "required_acceptance_passed":false,
-                }),
-            )?;
-            id
+        let generation_id = match self.reusable_baseline(&generations)? {
+            Some(id) => id,
+            None => self.write_baseline(&generations)?,
         };
-        ensure_data_authority(data_root, &[&descriptor])?;
+        ensure_data_authority(&self.data_root, &[&descriptor])?;
         durable::write_json(
             &descriptor,
-            &json!({
-                "schema":"butler.memory-active-generation.v2", "generation_id":generation_id,
-                "previous_generation_id":null, "activated_at":now, "projection_mode":"paused",
-            }),
+            &ActiveDescriptor::new(&generation_id, None, &self.now, ProjectionMode::Paused),
         )
-    })
-    .await
+    }
+
+    /// A baseline left by an interrupted earlier adoption of the same sources.
+    fn reusable_baseline(&self, generations: &Path) -> CognitionResult<Option<String>> {
+        let mut reusable = None;
+        for entry in fs::read_dir(generations).map_err(io_error)? {
+            let path = entry.map_err(io_error)?.path();
+            let manifest_path = path.join("manifest.json");
+            if !manifest_path.is_file() {
+                continue;
+            }
+            ensure_data_authority(&self.data_root, &[&path, &manifest_path])?;
+            let manifest = GenerationManifest::parse(
+                &fs::read(&manifest_path).map_err(io_error)?,
+                CognitionCode::MemoryGenerationUnavailable,
+            )?;
+            if !self.is_adopted_baseline(&manifest) {
+                continue;
+            }
+            let id = manifest
+                .generation_id
+                .ok_or_else(|| error(CognitionCode::MemoryGenerationUnavailable))?;
+            if path.file_name().and_then(|name| name.to_str()) != Some(id.as_str())
+                || reusable.is_some()
+            {
+                return Err(error(CognitionCode::MemoryGenerationRecoveryRequired));
+            }
+            reusable = Some(id);
+        }
+        Ok(reusable)
+    }
+
+    fn is_adopted_baseline(&self, manifest: &GenerationManifest) -> bool {
+        manifest.format == Some(GenerationFormat::Legacy)
+            && manifest.initialization_origin == Some(InitializationOrigin::Legacy)
+            && manifest.state == Some(GenerationState::Active)
+            && manifest.source_inventory_hash.as_deref() == Some(self.first.hash.as_str())
+    }
+
+    fn write_baseline(&self, generations: &Path) -> CognitionResult<String> {
+        let id = uuid::Uuid::new_v4().to_string();
+        let root = generations.join(&id);
+        ensure_data_authority(&self.data_root, &[&root])?;
+        durable::create_dir(&root)?;
+        let legacy_hash =
+            butler_core::json::stringify(&json!(["legacy-baseline", id, self.first.hash]))
+                .map_err(|source| {
+                    error(CognitionCode::MemoryInventoryIncomplete).with_source(source)
+                })?;
+        let manifest = GenerationManifest::new(
+            NewManifest {
+                generation_id: &id,
+                format: GenerationFormat::Legacy,
+                state: GenerationState::Active,
+                origin: InitializationOrigin::Legacy,
+                canonical_snapshot_id: format!("{:x}", Sha256::digest(legacy_hash.as_bytes())),
+                source_inventory_hash: self.first.hash.clone(),
+                unaccounted_source_count: self.first.source_count as u64,
+            },
+            None,
+        );
+        durable::write_json(&root.join("manifest.json"), &manifest)?;
+        Ok(id)
+    }
 }
 
 fn validate_active_descriptor(data_root: &Path, path: &Path) -> CognitionResult<()> {
     ensure_data_authority(data_root, &[path])?;
-    let descriptor: Value =
+    let descriptor: DescriptorView =
         serde_json::from_slice(&fs::read(path).map_err(|source| {
             error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
         })?)
         .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
-    if descriptor["schema"] != "butler.memory-active-generation.v2"
-        || descriptor["generation_id"]
-            .as_str()
-            .filter(|id| !id.is_empty())
-            .is_none()
+    if descriptor.schema.as_deref() != Some(ACTIVE_DESCRIPTOR_SCHEMA)
+        || descriptor.generation_id.is_none_or(|id| id.is_empty())
     {
         return Err(error(CognitionCode::MemoryGenerationUnavailable));
     }

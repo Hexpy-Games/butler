@@ -118,3 +118,20 @@ pub(super) fn serialize_option<T: serde::Serialize>(
 pub(super) fn json_error(_: serde_json::Error) -> GatewayApplicationError {
     GatewayApplicationError::internal()
 }
+
+/// Whether a delivered turn without a user message was superseded by a
+/// later standalone assistant reply, so its progress rows are hidden.
+pub(super) fn superseded_by_reply(
+    latest: Option<&TurnRecord>,
+    latest_message: Option<&MessageRecord>,
+) -> bool {
+    latest.is_some_and(|turn| {
+        turn.user_message_id.is_none()
+            && matches!(&turn.state, &TurnState::Delivered)
+            && latest_message.is_some_and(|message| {
+                matches!(&message.role, &crate::gateway::MessageRole::Assistant)
+                    && message.turn_id.is_none()
+                    && message.created_at.as_str() >= turn.created_at.as_str()
+            })
+    })
+}

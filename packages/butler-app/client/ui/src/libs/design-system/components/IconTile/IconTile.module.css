@@ -1,0 +1,58 @@
+.tile {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  box-sizing: border-box;
+  width: 36px;
+  height: 36px;
+  border: var(--border-hairline) solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--muted);
+  color: var(--text-primary);
+}
+
+.tile[data-size="sm"] {
+  width: 28px;
+  height: 28px;
+}
+
+.tile[data-size="md"] {
+  width: 36px;
+  height: 36px;
+}
+
+.tile[data-size="lg"] {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-popover);
+}
+
+.tile[data-size="xl"] {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-popover);
+}
+
+.tile[data-tone="accent"] {
+  border-color: transparent;
+  background: var(--color-info-bg);
+  color: var(--color-info-text);
+}
+
+.tile[data-tone="danger"] {
+  color: var(--danger);
+}
+
+.tile[data-tone="plain"] {
+  border-color: transparent;
+  background: transparent;
+}
+
+/* An animated mark sizes to its container (AspectFrame). */
+.tile > [data-slot="aspect-frame"] {
+  width: 50%;
+}
+
+.tile[data-tone="plain"] > [data-slot="aspect-frame"] {
+  width: 100%;
+}
