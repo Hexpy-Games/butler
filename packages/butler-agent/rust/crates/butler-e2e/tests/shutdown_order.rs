@@ -180,19 +180,40 @@ async fn sigterm_during_store_open_never_publishes_ready() -> Result<(), Harness
 
 #[tokio::test]
 async fn shutdown_interrupts_a_control_request_read() -> Result<(), HarnessError> {
-    use tokio::io::AsyncWriteExt;
     butler_e2e::gate!();
-    let mut s = Setup::new("SHUTDOWN-CONTROL")?.start().await?;
+    control_read_shutdown("read").await?;
+    if butler_platform::process_control::SIGNALS {
+        control_read_shutdown("cancel-before-wait").await?;
+    }
+    Ok(())
+}
+
+async fn control_read_shutdown(order: &str) -> Result<(), HarnessError> {
+    use tokio::io::AsyncWriteExt;
+    let mut s = Setup::new("SHUTDOWN-CONTROL")?
+        .env("BUTLER_E2E_CONTROL_SHUTDOWN_ORDER", order)
+        .start()
+        .await?;
     let record = instance_record(&s.sandbox.data).unwrap();
     let endpoint = record["control_endpoint"].as_str().unwrap();
     let mut stream = tokio::net::TcpStream::connect(endpoint).await?;
     stream.write_all(&[0, 0]).await?; // An unfinished frame holds serve_one.
-    tokio::time::sleep(Duration::from_millis(50)).await;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !s.sandbox.data.join("e2e-control-accepted").exists() {
+        assert!(
+            Instant::now() < deadline,
+            "control connection never accepted"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
     let started = Instant::now();
     s.agent.terminate().await.map_err(|error| {
         HarnessError(format!("{error}; {}", diagnostics::snapshot(&s, started)))
     })?;
-    eprintln!("blocked control shutdown: {:?}", started.elapsed());
+    eprintln!(
+        "blocked control shutdown ({order}): {:?}",
+        started.elapsed()
+    );
     assert!(
         started.elapsed() < Duration::from_secs(2),
         "control shutdown exceeded 2s; {}",
@@ -203,6 +224,10 @@ async fn shutdown_interrupts_a_control_request_read() -> Result<(), HarnessError
         "control shutdown left its record; {}",
         diagnostics::snapshot(&s, started)
     );
+    if order == "cancel-before-wait" {
+        assert!(s.agent.logs().contains("control_cancelled_before_wait"));
+        assert!(s.agent.logs().contains("control_connection_cancelled"));
+    }
     s.finish().await
 }
 

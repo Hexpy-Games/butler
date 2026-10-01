@@ -21,6 +21,9 @@ use butler_turn::btcc::StorageEffectJournal;
 
 use super::{AppGatewayLifecycle, GatewayControlCommand};
 
+#[cfg(debug_assertions)]
+mod shutdown_order;
+
 const CONTROL_SCHEMA: &str = "butler.native-app-gateway-control.v1";
 const MAX_FRAME_BYTES: usize = 8 * 1024;
 const IO_TIMEOUT: Duration = Duration::from_secs(3);
@@ -119,6 +122,7 @@ impl GatewayControlServer {
     }
 
     pub(crate) fn stop_accepting(&self) {
+        crate::host::service::shutdown_trace::event("control_cancel_requested");
         self.shutdown.cancel();
     }
 
@@ -131,6 +135,7 @@ impl GatewayControlServer {
         timeout(IO_TIMEOUT, task)
             .await
             .map_err(|source| {
+                crate::host::service::shutdown_trace::event("control_join_timeout");
                 crate::host::HostError::new("gateway_control_shutdown_timeout").with_source(source)
             })?
             .map_err(|source| {
@@ -149,6 +154,8 @@ async fn accept(listener: TcpListener, context: Arc<ControlContext>, shutdown: C
         let Ok((mut stream, _peer)) = accepted else {
             continue;
         };
+        #[cfg(debug_assertions)]
+        shutdown_order::before_wait(&context.data_root, &shutdown).await;
         tokio::select! {
             biased;
             _ = serve_one(&mut stream, &context) => {},
@@ -164,11 +171,13 @@ async fn serve_one(
     stream: &mut TcpStream,
     context: &ControlContext,
 ) -> Result<(), crate::host::HostError> {
-    let request = timeout(IO_TIMEOUT, read_frame::<ControlRequest>(stream))
-        .await
-        .map_err(|source| {
-            crate::host::HostError::new("gateway_control_request_timeout").with_source(source)
-        })??;
+    let read = read_frame::<ControlRequest>(stream);
+    #[cfg(debug_assertions)]
+    let read = shutdown_order::read_started(&context.data_root, read);
+    let request = timeout(IO_TIMEOUT, read).await.map_err(|source| {
+        crate::host::service::shutdown_trace::event("control_request_timeout");
+        crate::host::HostError::new("gateway_control_request_timeout").with_source(source)
+    })??;
     let result = if request_is_valid(&request, context) {
         run(&request, context).await
     } else {
