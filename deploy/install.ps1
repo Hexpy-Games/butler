@@ -98,7 +98,7 @@ function Enable-ButlerInstallation {
         "set `"BUTLER_PREVIEW_EXIT=%ERRORLEVEL%`"`r`nchcp %BUTLER_PREVIEW_CP% >nul`r`nexit /b %BUTLER_PREVIEW_EXIT%`r`n"
     Write-ButlerFile $launcher $text
     $userPath = [string][Environment]::GetEnvironmentVariable('Path','User')
-    if (@($userPath -split ';') -notcontains $bin) {
+    if ($env:BUTLER_INSTALL_MODIFY_PATH -ne '0' -and @($userPath -split ';') -notcontains $bin) {
         [Environment]::SetEnvironmentVariable('Path', ($userPath.TrimEnd(';') + ';' + $bin).TrimStart(';'), 'User')
     }
     if (@($env:PATH -split ';') -notcontains $bin) { $env:PATH += ";$bin" }

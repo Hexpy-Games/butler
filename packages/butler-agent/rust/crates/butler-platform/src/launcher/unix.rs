@@ -7,6 +7,13 @@ use std::path::{Path, PathBuf};
 
 /// The executable name in release archives.
 pub(super) const AGENT_BINARY: &str = "butler-agent";
+pub(super) const AGENT_LAUNCHER: &str = "butler";
+
+pub(super) fn installed_launcher_is_expected(root: &Path) -> bool {
+    let launcher = root.join(AGENT_LAUNCHER);
+    fs::symlink_metadata(&launcher).is_ok_and(|metadata| metadata.file_type().is_symlink())
+        && fs::read_link(launcher).is_ok_and(|target| target == Path::new(AGENT_BINARY))
+}
 
 /// Release artifacts name macOS `darwin`; other Unix hosts by Rust's name.
 pub(super) const RELEASE_OS: &str = if cfg!(target_os = "macos") {

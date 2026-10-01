@@ -16,10 +16,11 @@ $root = Join-Path $env:RUNNER_TEMP ('installed-preview-' + [guid]::NewGuid())
 $originalProfile = $env:USERPROFILE
 $env:CARGO_HOME = "$originalProfile/.cargo"
 $env:RUSTUP_HOME = "$originalProfile/.rustup"
-$oldPath = [Environment]::GetEnvironmentVariable('Path','User')
 $env:HOME = "$root/home/미리 보기 %USERPROFILE% !"
 $env:USERPROFILE = $env:HOME
 $env:LOCALAPPDATA = "$root/local/미리 보기 %USERPROFILE% !"
+$env:APPDATA = "$root/roaming"
+$env:BUTLER_INSTALL_MODIFY_PATH = '0'
 $env:BUTLER_DATA = "$root/data/미리 보기 %USERPROFILE% !"
 $env:BUTLER_APP_SERVER_HOST = '127.0.0.1'
 $env:BUTLER_APP_SERVER_PORT = '0'
@@ -103,5 +104,4 @@ try {
 } finally {
     if (Test-Path $launcher) { & $launcher stop --json | Out-Null }
     Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
-    [Environment]::SetEnvironmentVariable('Path',$oldPath,'User')
 }

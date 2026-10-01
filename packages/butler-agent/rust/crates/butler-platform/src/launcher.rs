@@ -50,6 +50,17 @@ pub fn is_runnable_by_all(metadata: &Metadata) -> bool {
 /// The installed Agent executable's file name on this host.
 pub const AGENT_BINARY: &str = sys::AGENT_BINARY;
 
+/// The command launcher recorded in a standalone installation manifest.
+pub const AGENT_LAUNCHER: &str = sys::AGENT_LAUNCHER;
+
+/// The OS name used by standalone release manifests.
+pub const RELEASE_OS: &str = sys::RELEASE_OS;
+
+/// Whether the installed launcher has the platform's exact managed layout.
+pub fn installed_launcher_is_expected(root: &Path) -> bool {
+    sys::installed_launcher_is_expected(root)
+}
+
 /// This host as Node's `process.platform` names it: `darwin`, `linux`,
 /// `win32` (other hosts keep Rust's name).
 pub fn node_platform() -> &'static str {

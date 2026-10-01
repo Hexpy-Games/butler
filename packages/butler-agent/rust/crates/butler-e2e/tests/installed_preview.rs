@@ -58,6 +58,7 @@ async fn installed_release_delivers_one_stub_chat_turn() -> Result<(), HarnessEr
         setup.sandbox.binary = root.join("butler-agent.exe");
         setup.sandbox.resources = root.join("resources");
         setup.sandbox.install = root;
+        assert_installed_manifest(&setup.sandbox)?;
     }
     let s = setup.start().await?;
     let stored = s.gw.post("/model-catalog/provider-credentials", json!({
@@ -92,6 +93,20 @@ async fn installed_release_delivers_one_stub_chat_turn() -> Result<(), HarnessEr
     assert_eq!(requests.load(Ordering::SeqCst), 1);
     s.finish().await?;
     server.abort();
+    Ok(())
+}
+
+fn assert_installed_manifest(
+    sandbox: &butler_e2e::e2e::sandbox::Sandbox,
+) -> Result<(), HarnessError> {
+    let launch = butler_e2e::e2e::agent::Launch::new(sandbox)?;
+    let output = launch
+        .command()
+        .args(["doctor", "--check", "installation", "--json"])
+        .output()?;
+    assert!(output.status.success(), "installed manifest doctor failed");
+    let report: Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(report["data"]["status"], "healthy");
     Ok(())
 }
 
