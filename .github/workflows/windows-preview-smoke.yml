@@ -54,6 +54,7 @@ jobs:
         run: ./deploy/windows-preview-smoke.ps1
       - name: Installed release stub chat
         run: |
+          $env:BUTLER_E2E_BIN = Join-Path $env:BUTLER_E2E_INSTALLED_ROOT 'butler-agent.exe'
           $env:CARGO_HOME = "$env:USERPROFILE/.cargo"
           $env:RUSTUP_HOME = "$env:USERPROFILE/.rustup"
           $env:HOME = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
