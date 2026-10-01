@@ -78,7 +78,7 @@ async function auditDeferral(scope: Locator, reduced: boolean, ko: boolean) {
   const panel = scope.locator("[data-slot=\"composer-question-panel\"]");
   const options = panel.locator("[data-question-option]");
   await options.last().click();
-  const input = panel.locator('input');
+  const input = panel.locator('textarea');
   await input.fill("Preserved draft");
   await panel.getByRole("button", { name: ko ? "나중에" : "Answer later", exact: true }).click();
   const motion = await panel.evaluate((node) => node.getAnimations().map((a) => ({
@@ -91,7 +91,7 @@ async function auditDeferral(scope: Locator, reduced: boolean, ko: boolean) {
   await scope.getByRole("button", { name: ko ? "답변 대기" : "Answer pending", exact: true }).click();
   await panel.waitFor();
   // Restoration preserves the answer even when its row is no longer editing.
-  assert.equal(await panel.locator("input").inputValue(), "Preserved draft");
+  assert.equal(await panel.locator("textarea").inputValue(), "Preserved draft");
 }
 async function auditChanges(scope: Locator, page: Page) {
   const tabs = scope.locator('[data-slot="tabs-list"]');

@@ -49,7 +49,7 @@ export function useQuestionPanel(props: ComposerQuestionPanelProps) {
     const input = (event.target as HTMLElement).closest("input, textarea");
     const key = event.key;
     if (key === "Escape") { event.preventDefault(); if (input && otherOpen) { setOtherOpen(false); event.currentTarget.focus({ preventScroll: true }); } else props.onCollapse(); return; }
-    if (input) { if (key === "Enter" && answerText(question, answer)) { event.preventDefault(); advance(); } return; }
+    if (input) { if (key === "Enter" && !event.shiftKey) { event.preventDefault(); if (answerText(question, answer)) advance(); } return; }
     if ((event.target as HTMLElement).closest('[role="tab"], button')) return;
     if (questions.length > 1 && (key === "ArrowLeft" || key === "ArrowRight")) { event.preventDefault(); go(step + (key === "ArrowRight" ? 1 : -1)); return; }
     if (review && (event.target as HTMLElement).closest('[role="button"]')) return;

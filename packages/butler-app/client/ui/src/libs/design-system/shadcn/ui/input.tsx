@@ -2,6 +2,7 @@ import type { DsBaseProps } from "../../lib/dsProps";
 import * as React from "react";
 
 import { cn } from "../../lib/utils";
+import underline from "../../components/Input/UnderlineField.module.css";
 import styles from "../../components/Input/Input.module.css";
 
 function Input({
@@ -28,12 +29,13 @@ function Input({
       data-compact={compact || undefined}
       className={cn(
         styles.input,
+        variant === "underline" && underline.field,
         className,
       )}
       {...props} />
   );
   return variant === "underline"
-    ? <span className={styles.inlineField} data-text-size={textSize}>{input}</span>
+    ? <span className={underline.inlineField} data-text-size={textSize}>{input}</span>
     : input;
 }
 

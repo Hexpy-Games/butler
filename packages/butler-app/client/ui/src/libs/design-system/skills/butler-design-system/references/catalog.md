@@ -313,6 +313,7 @@
 | Group several fields with FieldSet and FieldGroup | `Field` |  |
 | Grouped menus, submenus or radio items | `DropdownMenu` | `OverflowActionMenu` |
 | Icon actions trailing a list row | `ListRow` | `ButtonContainer` |
+| In-place wrapping entry: variant=underline, textSize=label beside Typo.Label | `Textarea` |  |
 | Inline help under a field | `FieldDescription` | `Tooltip` |
 | Inset content by a token step | `Box` |  |
 | Inspector sections (Summary, Files, Workers) | `Tabs` |  |
@@ -717,9 +718,10 @@ An on/off setting that takes effect immediately.
 A multi-line text box for prompts, personas, arguments and descriptions.
 
 - Use for: Enter a paragraph or a list with one item per line
+- Use for: In-place wrapping entry: variant=underline, textSize=label beside Typo.Label
 - Not for: A single-line value → `Input`
 - Not for: Writing a chat message → `ComposerCard`
-- Tokens: `--line`, `--radius-control`, `--placeholder`, `--focus-ring`
+- Tokens: `--line`, `--radius-control`, `--placeholder`, `--focus-ring`, `--focus-ring-width`, `--textarea-max-lines`, `--scroll-fade-size`
 
 ## Components · Overlay
 

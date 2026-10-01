@@ -81,6 +81,7 @@ export function observeScrollEdges(
 
   update();
   element.addEventListener("scroll", schedule, { passive: true });
+  element.addEventListener("input", schedule);
   element.addEventListener("transitionend", schedule);
   resizeObserver?.observe(element);
   observeChildren();
@@ -91,6 +92,7 @@ export function observeScrollEdges(
     if (frame !== 0) cancelAnimationFrame(frame);
     frame = 0;
     element.removeEventListener("scroll", schedule);
+    element.removeEventListener("input", schedule);
     element.removeEventListener("transitionend", schedule);
     resizeObserver?.disconnect();
     mutationObserver?.disconnect();

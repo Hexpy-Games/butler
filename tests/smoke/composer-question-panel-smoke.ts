@@ -1,4 +1,4 @@
-import { auditQuestionSwap, underlineFocus } from "./question-input-geometry";
+import { auditGrowth, auditQuestionSwap, underlineFocus } from "./question-input-geometry";
 import { resolve } from "node:path";
 import { chromium, type Locator } from "playwright";
 
@@ -46,13 +46,17 @@ async function verifyActions(panel: Locator) {
 }
 
 async function verifyPanel(panel: Locator) {
-  const controls = panel.locator('button:enabled:not([role="tab"]), input:enabled, [role="radio"], [role="checkbox"], [role="button"][data-disabled="false"]');
+  const controls = panel.locator('button:enabled:not([role="tab"]), input:enabled, textarea:enabled, [role="radio"], [role="checkbox"], [role="button"][data-disabled="false"]');
   for (const control of await controls.all()) await assertFocus(control);
 }
 
 try {
   for (const width of [375, 1280]) for (const locale of ["ko", "en"]) for (const theme of ["light", "dark"]) {
     const page = await browser.newPage({ viewport: { width, height: 1000 }, reducedMotion: "reduce" });
+    if (process.env.DS_TEXTAREA_FALLBACK === "1") await page.addInitScript(() => {
+      const supports = CSS.supports.bind(CSS);
+      CSS.supports = ((property: string, value?: string) => property === "field-sizing" ? false : value === undefined ? supports(property) : supports(property, value)) as typeof CSS.supports;
+    });
     await page.goto(`http://127.0.0.1:${server.port}/?page=blocks/ComposerQuestionPanel&width=${width}&locale=${locale}&theme=${theme}&motion=reduced`);
     const panels = page.locator('[data-ds-examples] [data-slot="composer-question-panel"]');
     await panels.first().waitFor();
@@ -107,6 +111,9 @@ try {
     await assertFocus(input);
     await input.fill(locale === "ko" ? "직접 정한 위치" : "Custom location");
     await page.screenshot({ path: `/tmp/question-panel-${width}-${locale}-${theme}.png` });
+    await input.press("Shift+Enter");
+    await input.evaluate((e) => e.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true })));
+    if (await input.count() !== 1) throw new Error("IME confirmed entry");
     await page.keyboard.press("Escape");
     if (await single.getByRole("textbox").count()) throw new Error("Escape did not close custom entry");
     await single.focus();
@@ -117,6 +124,10 @@ try {
     await underline.first().waitFor();
     await page.keyboard.press("Tab");
     for (const field of await underline.all()) { await field.focus(); await underlineFocus(field); }
+    await page.goto(`http://127.0.0.1:${server.port}/?page=components/Textarea&width=${width}&locale=${locale}&theme=${theme}&motion=reduced`);
+    const textarea = page.locator("[data-ds-examples] textarea[data-variant=underline]").first();
+    await textarea.waitFor(); await textarea.focus(); await underlineFocus(textarea);
+    await auditGrowth(textarea.locator(".."), textarea, 0, `${width} ${locale} ${theme} Textarea`);
     await page.close();
     console.log(`PASS ${width} ${locale} ${theme}`);
   }
