@@ -1789,6 +1789,8 @@ export interface ApprovalSummary {
   count: number;
   /** Up to three concrete items: relative file paths, or the command line as sent. */
   examples: string[];
+  /** Explicit safety-cap flags, one per example; absent means complete. */
+  examplesTruncated?: boolean[];
   /** As the agent classified it; the App never classifies. */
   risk?: ApprovalRisk;
 }

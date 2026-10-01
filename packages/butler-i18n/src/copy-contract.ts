@@ -104,6 +104,9 @@ type CountFormatter = (count: number) => string;
  */
 export interface ApprovalRequestCopy {
   editFiles: (count: number, workspace: string | null) => string;
+  editFilesOutside: (count: number) => string;
+  runCommandOutside: string;
+  networkCommandOutside: string;
   runCommand: (workspace: string | null) => string;
   networkCommand: (workspace: string | null) => string;
   useConnector: (tool: string | null, server: string | null) => string;

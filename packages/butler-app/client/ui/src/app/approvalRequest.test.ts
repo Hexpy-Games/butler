@@ -18,10 +18,10 @@ type TransportTarget = { kind: string; path: string };
 
 /** A request's `approval` as #277 sends it, narrowed the way the store does. */
 function summary(actionKind: string, fields: { targets?: TransportTarget[]; count?: number; examples?: string[];
-  risk?: string } = {}): ApprovalSummary {
+  risk?: string; examples_truncated?: boolean[] } = {}): ApprovalSummary {
   const { targets = [], count = 1, examples = [], ...rest } = fields;
   return normalizeApprovalSummary({ action_kind: actionKind, targets, count, examples,
-    risk: "risk" in fields ? rest.risk : "medium" })!;
+    ...rest, risk: "risk" in fields ? rest.risk : "medium" })!;
 }
 
 /** #277's folder target: its path is the folder label (`garden`, `garden/app`). */
@@ -102,14 +102,18 @@ test("up to three examples show, then a +N more line for the rest", () => {
 });
 
 // test-category: pure-logic
-test("paths and command lines are shown in full; a command at the gateway's cut is marked", () => {
+test("paths and command lines are shown in full; only an explicit gateway cut is marked", () => {
   const long = "photos/2026/September/holiday trip to the coast/day 3/IMG_20260927_100214.png";
   const edits = summary("edit_files", { targets: [folder("Desktop")], count: 1, examples: [long] });
   expect(approvalRequestView(card(edits), en).details).toEqual([long]);
   const command = `npm run build -- --out ${"dist/".repeat(12)}`;
   expect(approvalRequestView(card(summary("run_command", { examples: [command] })), en).details).toEqual([command]);
-  const cut = "x".repeat(200);
-  expect(approvalRequestView(card(summary("run_command", { examples: [cut] })), en).details).toEqual([`${cut}…`]);
+  for (const length of [200, 600, 16 * 1024]) {
+    const text = "x".repeat(length);
+    expect(approvalRequestView(card(summary("run_command", { examples: [text] })), en).details).toEqual([text]);
+    expect(approvalRequestView(card(summary("run_command", { examples: [text], examples_truncated: [true] })), en).details)
+      .toEqual([`${text}…`]);
+  }
 });
 
 // test-category: pure-logic
@@ -147,6 +151,16 @@ test("#277 folder labels and relative paths read as sent; a stray absolute path 
     }
     expect(approvalRequestView(card(approval), en).title).toBe("Edit 24 files in 'Desktop'?");
     expect(approvalRequestView(card(approval), ko).title).toBe("'Desktop'의 파일 24개를 수정할까요?");
+  }
+  for (const kind of ["edit_files", "run_command", "network_command"]) {
+    const outside = summary(kind, { targets: [folder("garden"), { kind: "outside", path: "hosts" }], risk: "high" });
+    for (const copy of [en, ko]) {
+      const view = approvalRequestView(card(outside), copy);
+      expect(view.title).toContain(copy === en ? "outside the project folder" : "작업 폴더 밖");
+      expect(view.title).not.toContain("garden");
+      expect(view.risk).toBe("high");
+      expect(view.conversationScope).toBe(copy.covers.other);
+    }
   }
   const windows = normalizeApprovalSummary({ action_kind: "edit_files", examples: ["C:\\Users\\mina\\Downloads\\a.txt"],
     targets: [{ kind: "folder", path: "C:\\Users\\mina\\Downloads" }] });
