@@ -641,6 +641,7 @@ export interface PersonalizationView {
   eol: string;
   updated_at: string;
   response_language?: "en" | "ko";
+  response_language_explicit?: boolean;
   persona_presets: PersonaPresetView[];
   profile: PersonalizationProfileView;
   profiling: PersonalizationProfilingView;

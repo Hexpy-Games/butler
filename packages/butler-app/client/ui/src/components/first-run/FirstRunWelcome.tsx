@@ -72,7 +72,7 @@ export function FirstRunWelcome({ flow }: { flow: FirstRunFlow }) {
       </Stack>
       <Inline justify="between">
         <Inline gap="sm" wrap={false}>
-          <Typo.Caption as="label" htmlFor="first-run-language" tone="tertiary">{copy.languageLabel}</Typo.Caption>
+          <Typo.Caption as="label" htmlFor="first-run-language" tone="tertiary">{flow.language === "ko" ? "인터페이스 언어" : "Interface language"}</Typo.Caption>
           <NativeSelect
             id="first-run-language"
             size="sm"

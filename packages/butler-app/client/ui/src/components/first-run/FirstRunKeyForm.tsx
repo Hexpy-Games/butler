@@ -43,6 +43,7 @@ export function FirstRunKeyForm({ cardId, flow }: { cardId: FirstRunProviderCard
         <Input
           aria-describedby="first-run-key-status"
           aria-invalid={bad}
+          disabled={Boolean(flow.commit.connected)}
           autoComplete="off"
           autoFocus
           id="first-run-api-key"
