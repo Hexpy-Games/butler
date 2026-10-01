@@ -16,6 +16,7 @@ const data = join(dir, "data");
 const home = join(dir, "home");
 const from = "0.1.0-preview.90", to = "0.1.0-preview.91";
 const profile = process.env.BUTLER_UPDATE_SMOKE_PROFILE ?? "release";
+const agentBuilds = process.env.BUTLER_UPDATE_SMOKE_AGENT_BUILDS;
 const rust = join(root, "packages/butler-agent/rust");
 const target = resolve(process.env.CARGO_TARGET_DIR ?? join(rust, "target"));
 const electronRoot = join(root, "packages/butler-app/client/electron");
@@ -39,11 +40,11 @@ async function run(command: string, args: string[], extra: Record<string, string
 
 async function packageVersion(version: string) {
   const tagEnv = { GITHUB_REF_NAME: `v${version}`, CARGO_PROFILE_DEV_DEBUG: "0", CARGO_PROFILE_DEV_INCREMENTAL: "false" };
-  await run("cargo", ["build", "--locked", "--profile", profile, "-p", "butler-agent", "--bin", "butler-agent", "--no-default-features", "--features", "static-ort"], tagEnv, rust);
+  if (!agentBuilds) await run("cargo", ["build", "--locked", "--profile", profile, "-p", "butler-agent", "--bin", "butler-agent", "--no-default-features", "--features", "static-ort"], tagEnv, rust);
   const work = join(dir, version);
   mkdirSync(work);
   const binary = join(work, "butler-agent");
-  cpSync(join(target, profile === "dev" ? "debug" : profile, "butler-agent"), binary);
+  cpSync(agentBuilds ? join(agentBuilds, version, "butler-agent") : join(target, profile === "dev" ? "debug" : profile, "butler-agent"), binary);
   Object.assign(process.env, env, tagEnv, { BUTLER_NATIVE_AGENT_EXECUTABLE: binary });
   const payload = prepareBundledAgentResource(root, work, "darwin-arm64");
   const source = stageElectronPackageSource(root, join(work, "source"));
@@ -85,14 +86,14 @@ async function proof(page: ElectronPage, version: string, sessionId?: string) {
   const facts = await page.evaluate(async () => {
     const bridge = window.butlerApp as Record<string, (...args: unknown[]) => Promise<unknown>>;
     return { info: await bridge.getAppInfo(), health: await bridge.health(), sessions: await bridge.listSessions(), settings: await bridge.getSettings(), updates: await bridge.getUpdates() };
-  }) as { info: { version: string }; updates: { components: Array<{ current_version: string; bundled_agent_version: string }> }; health: unknown; sessions: Array<{ id: string; title: string }>; settings: { update_previews: boolean } };
+  }) as { info: { version: string }; updates: { components: Array<{ current_version: string; bundled_agent_version: string }> }; health: unknown; sessions: { sessions: Array<{ id: string; title: string }> }; settings: { update_previews: boolean } };
   assert.equal(facts.info.version, version);
   assert.equal((facts.health as { ok: boolean }).ok, true);
   assert.equal(facts.updates.components[0].current_version, version);
   const payload = JSON.parse(readFileSync(join(dir, "installed/Butler.app/Contents/Resources/bundled-agent/native-agent-manifest.json"), "utf8"));
   assert.equal(payload.version, version);
   assert.equal(statSync(join(dir, "installed/Butler.app/Contents/Resources/bundled-agent/bin/butler-agent")).mode & 0o777, 0o555);
-  if (sessionId) assert.ok(facts.sessions.some(s => s.id === sessionId && s.title === "Update keeps this chat"));
+  if (sessionId) assert.ok(facts.sessions.sessions.some(s => s.id === sessionId && s.title === "Update keeps this chat"));
   assert.equal(readFileSync(join(data, "update-sentinel.txt"), "utf8"), "preserved");
   console.log(`PROOF ${JSON.stringify({ version: facts.info.version, bundledAgent: facts.updates.components[0].current_version, health: facts.health, dataPreserved: true, sessionPreserved: Boolean(sessionId), previews: facts.settings.update_previews })}`);
 }
@@ -139,24 +140,35 @@ async function smoke() {
   });
   await page.reload();
   await proof(page, from);
-  const session = await page.evaluate(async () => (window.butlerApp!.createSession as (v: unknown) => Promise<{ id: string }>)({ kind: "chat", title: "Update keeps this chat" }));
+  const created = await page.evaluate(async () => (window.butlerApp!.createSession as (v: unknown) => Promise<{ session: { id: string } }>)({ kind: "chat", title: "Update keeps this chat" }));
+  const session = created.session;
+  assert.ok(session?.id, "Created chat ID is missing.");
   await page.waitForFunction(() => Array.from(document.querySelectorAll('button, [role="button"]')).some(e => e.getAttribute("aria-label") === "Settings" || e.textContent?.trim() === "Settings"));
   await clickNamed(page, "Settings");
   await clickNamed(page, "Updates");
-  await page.waitForFunction(() => Boolean(document.querySelector('[data-test-id="update-component-app"] button')));
-  assert.equal(await page.expression(`document.querySelector('[data-setting-id="update-previews"] [role="switch"]').getAttribute('aria-checked')`), "false");
-  await page.waitForFunction(() => document.querySelector('[data-test-id="update-component-app"] button')?.hasAttribute("disabled"));
+  await page.waitForFunction(() => Boolean(document.querySelector("[data-test-id='update-component-app'] button")));
+  assert.equal(await page.expression(`document.querySelector("[data-setting-id='update-previews'] [role='switch']").getAttribute('aria-checked')`), "false");
+  await page.waitForFunction(() => document.querySelector("[data-test-id='update-component-app'] button")?.hasAttribute("disabled"));
   const rowText = () => page.expression<string>(`document.querySelector('[data-test-id="update-component-app"]').innerText`);
   console.log(`OFF: ${await rowText()} (preview hidden)`);
-  await page.waitForFunction(() => !document.querySelector('[data-setting-id="update-previews"] [role="switch"]')?.hasAttribute("disabled"));
-  await page.expression(`document.querySelector('[data-setting-id="update-previews"] [role="switch"]').click()`);
-  await page.waitForFunction(() => !document.querySelector('[data-test-id="update-component-app"] button')?.hasAttribute("disabled"));
+  await page.waitForFunction(() => !document.querySelector("[data-setting-id='update-previews'] [role='switch']")?.hasAttribute("disabled"));
+  await page.expression(`document.querySelector("[data-setting-id='update-previews'] [role='switch']").click()`);
+  await page.waitForFunction(() => !document.querySelector("[data-test-id='update-component-app'] button")?.hasAttribute("disabled"));
   assert.match(await rowText(), /0\.1\.0-preview\.91/);
   console.log(`ON: ${await rowText()}`);
-  await page.expression(`document.querySelector('[data-test-id="update-component-app"] button').click()`);
+  await page.expression(`document.querySelector("[data-test-id='update-component-app'] button").click()`);
   await new Promise<void>((done, fail) => {
-    const timer = setTimeout(() => fail(new Error(`Old App did not exit: ${logs.join("").slice(-6000)}`)), 60_000);
-    child!.once("exit", code => { clearTimeout(timer); assert.equal(code, 0); done(); });
+    const exited = (code: number | null) => {
+      clearTimeout(timer);
+      if (code === 0) done();
+      else fail(new Error(`App exit code: ${code}`));
+    };
+    const timer = setTimeout(() => {
+      child!.removeListener("exit", exited);
+      fail(new Error(`Old App did not exit: ${logs.join("").slice(-6000)}`));
+    }, 60_000);
+    child!.once("exit", exited);
+    if (child!.exitCode !== null) { child!.removeListener("exit", exited); exited(child!.exitCode); }
   });
   await browser.close(); browser = null;
   connected = await connect(debugPort); browser = connected.browser;
@@ -167,6 +179,10 @@ async function smoke() {
 
 async function cleanup() {
   browser?.close();
+  try {
+    const instance = JSON.parse(readFileSync(join(data, "app/runtime/foreground/instance.json"), "utf8"));
+    ownedPids.add(instance.app_pid); ownedPids.add(instance.agent_host_pid);
+  } catch { /* App never started. */ }
   if (child && child.exitCode === null) child.kill("SIGTERM");
   for (const pid of ownedPids) {
     try { process.kill(pid, "SIGTERM"); } catch { /* Already exited. */ }
@@ -179,7 +195,7 @@ async function cleanup() {
 }
 
 function makeWritable(path: string) {
-  chmodSync(path, 0o700);
+  if ((statSync(path).mode & 0o200) === 0) chmodSync(path, statSync(path).mode | 0o200);
   for (const entry of readdirSync(path, { withFileTypes: true })) {
     if (entry.isDirectory()) makeWritable(join(path, entry.name));
   }

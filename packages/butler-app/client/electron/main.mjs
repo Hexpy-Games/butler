@@ -2357,6 +2357,7 @@ async function runAppUpdateQuit(quitAndInstall) {
           raw_text_included: false,
         };
       }
+      isQuitting = true;
       finalQuitAllowed = true;
       return stopResult;
     },
@@ -2580,7 +2581,8 @@ ipcMain.handle("butler:open-update-artifact", async (_event, input = {}) => {
     };
   }
   const helper = await prepareAppPackageUpdate({ artifactPath, dataRoot: butlerDataRoot,
-    installation: currentNativeAgentInstallation(), executable: process.execPath, parent: process.pid, arguments: process.argv.slice(1) });
+    installation: currentNativeAgentInstallation(), executable: process.execPath, parent: process.pid,
+    externalServerUrl: explicitServerUrl, arguments: process.argv.slice(1) });
   let update;
   try {
     update = await runAppUpdateQuit(() => {
