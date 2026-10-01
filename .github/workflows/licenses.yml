@@ -2,7 +2,15 @@ name: Open source notices
 on:
   push:
     branches: [main, codex/oss-notices]
+    paths-ignore:
+      - "README.md"
+      - "CONTRIBUTING.md"
+      - "assets/readme/**"
   pull_request:
+    paths-ignore:
+      - "README.md"
+      - "CONTRIBUTING.md"
+      - "assets/readme/**"
   workflow_dispatch:
 permissions:
   contents: read
