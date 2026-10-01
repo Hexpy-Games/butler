@@ -343,14 +343,9 @@ export function createMacDmg(input: { appBundle: string; artifactPath: string })
   try {
     const staging = join(workDir, "Butler");
     mkdirSync(staging, { recursive: true });
-    cpSync(input.appBundle, join(staging, "Butler.app"), {
-      dereference: false,
-      // Keep framework links relative when the source work directory is removed.
-      verbatimSymlinks: true,
-      errorOnExist: false,
-      force: true,
-      recursive: true,
-    });
+    // ditto preserves role hard links and relative framework symlinks.
+    const copy = spawnSync("ditto", [input.appBundle, join(staging, "Butler.app")], { encoding: "utf8" });
+    if (copy.status !== 0) throw new Error(`mac App staging failed: ${copy.stderr.trim()}`);
     symlinkSync("/Applications", join(staging, "Applications"));
     rmSync(input.artifactPath, { force: true });
     const result = spawnSync("hdiutil", [

@@ -13,6 +13,7 @@
  * build (see prepare-native-agent.mjs).
  */
 import { stageElectronPackageSource } from "./electron-package-source.ts";
+import { archPackageVersion, debPackageVersion } from "./package-versions.ts";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
@@ -198,7 +199,7 @@ function createPacman(staged: StagedApp, workDir: string, artifactPath: string):
     cwd: buildDir,
     env: { ...process.env, PKGEXT: ".pkg.tar.zst", PKGDEST: buildDir },
   });
-  const built = join(buildDir, `${PACKAGE_NAME}-${staged.version}-1-x86_64.pkg.tar.zst`);
+  const built = join(buildDir, `${PACKAGE_NAME}-${archPackageVersion(staged.version)}-1-x86_64.pkg.tar.zst`);
   if (!existsSync(built)) throw new Error(`pacman package was not created: ${built}`);
   copyFileSync(built, artifactPath);
 }
@@ -244,7 +245,7 @@ function compareVersions(left: number[], right: number[]): number {
 
 function debControl(staged: StagedApp): string {
   return `Package: ${PACKAGE_NAME}
-Version: ${staged.version}
+Version: ${debPackageVersion(staged.version)}
 Section: utils
 Priority: optional
 Architecture: ${DEB_ARCHITECTURES[staged.platform]}
@@ -259,7 +260,7 @@ Description: Butler desktop app
 
 function pkgbuild(staged: StagedApp, installDir: string): string {
   return `pkgname=${PACKAGE_NAME}
-pkgver=${staged.version}
+pkgver=${archPackageVersion(staged.version)}
 pkgrel=1
 pkgdesc='Butler desktop app with the bundled native Butler Agent'
 arch=('x86_64')
