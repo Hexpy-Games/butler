@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { browserRandomUUID } from "@/app/id.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useComposerStore } from "../composerStore";
+import { focusComposer } from "../editor/focusComposer";
 import type {
   QueuedMessageRecord,
   SessionSummaryView,
@@ -53,5 +54,5 @@ export function loadQueuedMessageIntoComposer(message: QueuedMessageRecord) {
     })),
   );
   void useButlerStore.getState().deleteQueuedMessage(message.id);
-  window.requestAnimationFrame(() => composer.textAreaRef?.current?.focus());
+  window.requestAnimationFrame(() => focusComposer(composer.textAreaRef?.current));
 }

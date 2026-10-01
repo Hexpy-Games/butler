@@ -9,13 +9,13 @@ import {
   type OnboardingGate,
 } from "@/app/onboarding.ts";
 import { useButlerStore } from "@/app/store.ts";
-import type { OnboardingSettingsView, SettingsView } from "@/app/types.ts";
+import type { ModelCatalogView, OnboardingSettingsView, SettingsView } from "@/app/types.ts";
 
 /** Retry delay while the agent is still starting. */
 export const ONBOARDING_SETTINGS_RETRY_MS = 2000;
 
 /** `pending` until the agent answers; `legacy` for an agent without `settings.onboarding`. */
-type AgentOnboarding = { loaded: false; legacyAgent: boolean } | { loaded: true; onboarding: OnboardingSettingsView };
+type AgentOnboarding = { loaded: false } | { loaded: true; onboarding: OnboardingSettingsView | null };
 
 function writeLegacyCompletion(): void {
   safeStorage()?.setItem(LEGACY_FIRST_RUN_STORAGE_KEY, JSON.stringify(legacyFirstRunCompleteRecord()));
@@ -41,7 +41,7 @@ export function useOnboardingGate(): { gate: OnboardingGate; markComplete: () =>
     const storage = safeStorage();
     return storage ? readLegacyFirstRunCompletedAt(storage) : null;
   });
-  const [agent, setAgent] = useState<AgentOnboarding>({ loaded: false, legacyAgent: false });
+  const [agent, setAgent] = useState<AgentOnboarding>({ loaded: false });
   const [completed, setCompleted] = useState(false);
 
   useEffect(() => {
@@ -49,11 +49,14 @@ export function useOnboardingGate(): { gate: OnboardingGate; markComplete: () =>
     let timer: ReturnType<typeof setTimeout> | undefined;
     const load = async () => {
       try {
-        const settings = await api<SettingsView>("/settings");
+        const [settings, catalog] = await Promise.all([
+          api<SettingsView>("/settings"), api<ModelCatalogView>("/model-catalog"),
+        ]);
         if (cancelled) return;
         useButlerStore.getState().setSettings(settings);
+        useButlerStore.getState().setModelCatalog(catalog);
         if (!settings.onboarding) {
-          setAgent({ loaded: false, legacyAgent: true });
+          setAgent({ loaded: true, onboarding: null });
           return;
         }
         let onboarding = settings.onboarding;
@@ -90,7 +93,7 @@ export function useOnboardingGate(): { gate: OnboardingGate; markComplete: () =>
     gate,
     markComplete: () => {
       // Only an agent that cannot store onboarding keeps the renderer flag.
-      if (!agent.loaded && agent.legacyAgent) writeLegacyCompletion();
+      if (agent.loaded && !agent.onboarding) writeLegacyCompletion();
       setCompleted(true);
     },
   };

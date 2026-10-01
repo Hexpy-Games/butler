@@ -18,6 +18,7 @@ import { useButlerStore } from "@/app/store.ts";
 import type { CommandPaletteResult } from "@/app/types.ts";
 import { useOrganization } from "@/app/space/organization";
 import { commandResultSubtitle, commandResultTitle } from "./commandPaletteLabels";
+import { useCommandPaletteFocus } from "./useCommandPaletteFocus";
 
 export function CommandPalette({
   open = true,
@@ -44,12 +45,7 @@ export function CommandPalette({
   const status = searchState.query === query ? searchState.status : "loading";
   const results = status === "ready" ? searchState.results : [];
   const inputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    setQuery("");
-    inputRef.current?.focus();
-  }, [open]);
+  useCommandPaletteFocus(open, inputRef, () => setQuery(""));
 
   useEffect(() => {
     if (!open) return;
