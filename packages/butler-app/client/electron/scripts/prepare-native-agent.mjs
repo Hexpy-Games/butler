@@ -26,6 +26,7 @@ const explicitPayloadRoot = process.argv[4] ? resolve(process.argv[4]) : null;
 // Each supported payload maps to the static ONNX Runtime recipe target that
 // builds it (prepare-static-ort.py). Builds are native only.
 const ORT_TARGETS = {
+  "win32/x64": "windows-x64",
   "darwin/arm64": "macos-arm64",
   "linux/x64": "linux-x64",
   "linux/arm64": "linux-arm64",
@@ -59,8 +60,10 @@ const payloadRoot = explicitPayloadRoot ??
   join(electronRoot, ".native-agent-payload", "bundled-agent");
 const prebuiltBinary = resolvePrebuiltBinary(process.env.BUTLER_NATIVE_AGENT_EXECUTABLE, payloadRoot);
 const sourceBinary = prebuiltBinary ?? buildNativeAgent();
+const binaryName = requestedPlatform === "win32" ? "butler-agent.exe" : "butler-agent";
 if (requestedPlatform === "darwin") verifyMacDependencyClosure(sourceBinary);
 if (requestedPlatform === "linux") verifyLinuxDependencyClosure(sourceBinary, requestedArch);
+if (requestedPlatform === "win32") verifyWindowsDependencyClosure(sourceBinary);
 const sourceSha256 = createHash("sha256").update(readFileSync(sourceBinary)).digest("hex");
 process.stdout.write(
   `Native Butler Agent binary (${prebuiltBinary ? "prebuilt, cargo build skipped" : "built from source"}): ${sourceBinary}\n` +
@@ -71,7 +74,8 @@ makeWritable(payloadRoot);
 rmSync(payloadRoot, { recursive: true, force: true });
 const binaryRoot = join(payloadRoot, "bin");
 mkdirSync(binaryRoot, { recursive: true });
-copyFileSync(sourceBinary, join(binaryRoot, "butler-agent"));
+copyFileSync(sourceBinary, join(binaryRoot, binaryName));
+run(process.execPath, [join(scriptDir, "prepare-process-links.mjs"), join(binaryRoot, binaryName)], rustRoot);
 const roleLinks = spawnSync(join(binaryRoot, "butler-agent"), ["--prepare-process-links"], { stdio: "inherit" });
 if (roleLinks.status !== 0 && roleLinks.status !== 2) throw new Error("Could not prepare Agent process role links.");
 cpSync(
@@ -103,7 +107,7 @@ writeFileSync(
     appVersion,
     platform: requestedPlatform,
     architecture: requestedArch,
-    binary: "bin/butler-agent",
+    binary: `bin/${binaryName}`,
     resources: "resources",
   }, null, 2)}\n`,
 );
@@ -123,7 +127,7 @@ function resolvePrebuiltBinary(configured, payload) {
     throw new Error(`BUTLER_NATIVE_AGENT_EXECUTABLE is not an existing file: ${binary}`);
   }
   try {
-    accessSync(binary, constants.X_OK);
+    if (requestedPlatform !== "win32") accessSync(binary, constants.X_OK);
   } catch {
     throw new Error(`BUTLER_NATIVE_AGENT_EXECUTABLE is not executable: ${binary}`);
   }
@@ -137,7 +141,7 @@ function resolvePrebuiltBinary(configured, payload) {
 
 function buildNativeAgent() {
   const prepareScript = join(rustRoot, "scripts", "prepare-static-ort.py");
-  const prepared = JSON.parse(run(process.env.PYTHON3 || "python3", [prepareScript, "--target", ortTarget], rustRoot));
+  const prepared = JSON.parse(run(process.env.PYTHON3 || (requestedPlatform === "win32" ? "python" : "python3"), [prepareScript, "--target", ortTarget], rustRoot));
   if (!prepared.ort_lib_path || !prepared.protoc) {
     throw new Error("Static ONNX Runtime preparation returned incomplete build paths.");
   }
@@ -154,6 +158,9 @@ function buildNativeAgent() {
     ORT_SKIP_DOWNLOAD: "1",
     PROTOC: prepared.protoc,
   });
+  if (requestedPlatform === "win32") {
+    buildEnv.RUSTFLAGS = `${buildEnv.RUSTFLAGS ?? ""} -C target-feature=+crt-static`.trim();
+  }
   run("cargo", [
     "build", "--release", "--locked", "-p", "butler-agent",
     "--no-default-features", "--features", "static-ort",
@@ -161,7 +168,7 @@ function buildNativeAgent() {
   const targetRoot = process.env.CARGO_TARGET_DIR
     ? resolve(rustRoot, process.env.CARGO_TARGET_DIR)
     : join(rustRoot, "target");
-  const built = join(targetRoot, "release", "butler-agent");
+  const built = join(targetRoot, "release", requestedPlatform === "win32" ? "butler-agent.exe" : "butler-agent");
   if (!existsSync(built)) {
     throw new Error(`Native Butler Agent build did not produce ${built}.`);
   }
@@ -209,6 +216,34 @@ function verifyLinuxDependencyClosure(binary, arch) {
     .map((match) => match[1])
     .filter((name) => !LINUX_SYSTEM_LIBRARIES.has(name));
   if (unsupported.length > 0) {
+    throw new Error(`Native Butler Agent has unpackaged runtime dependencies: ${unsupported.join(", ")}`);
+  }
+}
+
+// Inspect both regular and delay-load imports. Static ORT/CRT must not leave
+// development-machine DLLs behind. dumpbin is supplied by the MSVC build shell.
+function verifyWindowsDependencyClosure(binary) {
+  const header = run("dumpbin", ["/headers", binary], rustRoot);
+  if (!/8664 machine \(x64\)/iu.test(header)) {
+    throw new Error("Native Butler Agent is not a Windows x64 executable.");
+  }
+  const imports = run("dumpbin", ["/imports", binary], rustRoot);
+  const systemDlls = new Set([
+    "advapi32.dll", "bcrypt.dll", "bcryptprimitives.dll", "cfgmgr32.dll",
+    "crypt32.dll", "dbghelp.dll", "dnsapi.dll", "gdi32.dll", "iphlpapi.dll",
+    "kernel32.dll", "mswsock.dll", "ncrypt.dll", "netapi32.dll", "ntdll.dll",
+    "ole32.dll", "oleaut32.dll", "powrprof.dll", "propsys.dll", "psapi.dll",
+    "rpcrt4.dll", "secur32.dll", "setupapi.dll", "shell32.dll", "shlwapi.dll",
+    "synchronization.dll", "user32.dll", "userenv.dll", "uuid.dll",
+    "version.dll", "winhttp.dll", "winmm.dll", "wintrust.dll", "ws2_32.dll",
+    "wtsapi32.dll", "normaliz.dll",
+  ]);
+  const names = [...imports.matchAll(/^\s+([\w.-]+\.dll)\s*$/gimu)]
+    .map((match) => match[1].toLowerCase());
+  if (names.length === 0) throw new Error("Native Butler Agent PE imports are missing.");
+  const unsupported = names.filter((name) => !systemDlls.has(name) &&
+    !/^(?:api|ext)-ms-win-[a-z0-9-]+\.dll$/u.test(name));
+  if (unsupported.length) {
     throw new Error(`Native Butler Agent has unpackaged runtime dependencies: ${unsupported.join(", ")}`);
   }
 }

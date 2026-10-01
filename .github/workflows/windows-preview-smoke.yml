@@ -3,6 +3,9 @@ name: Unsigned Windows preview smoke
 on:
   pull_request:
     paths:
+      - packages/butler-app/client/electron/**
+      - packages/butler-app/scripts/windows/**
+      - deploy/licenses/package-app.mjs
       - .github/workflows/windows-preview-smoke.yml
       - .github/workflows/windows-native-deps.yml
       - .github/actions/build-windows-agent/**
@@ -46,6 +49,32 @@ jobs:
           cache-key: windows-preview-release
           native-deps-artifact: windows-native-deps
           artifact-base-url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
+      - name: Package unsigned Electron App and portable ZIP
+        working-directory: .
+        run: |
+          $env:HOME = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+          $env:BUTLER_DATA = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          npm.cmd --prefix packages/butler-app/client/electron ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:BUTLER_NATIVE_AGENT_EXECUTABLE = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/butler-agent.exe"
+          npm.cmd --prefix packages/butler-app/client/electron run package:win
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Extract portable App and prove packaged foreground lifecycle
+        working-directory: .
+        run: |
+          $env:HOME = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+          $env:BUTLER_DATA = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          $portable = Join-Path $env:RUNNER_TEMP 'portable-electron'
+          Expand-Archive -LiteralPath packages/butler-app/client/electron/dist/Butler-win32-x64-portable.zip -DestinationPath $portable
+          bun run packages/butler-app/scripts/windows/packaged-app-smoke.ts "$portable/Butler-win32-x64"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-windows-x64-portable
+          path: packages/butler-app/client/electron/dist/Butler-win32-x64-portable.zip
+          if-no-files-found: error
       - name: Install ZIP, authenticate browser UI and exercise lifecycle
         working-directory: .
         run: ./deploy/windows-preview-smoke.ps1
