@@ -1,251 +1,95 @@
 <p align="center">
-  <img src="assets/butler_banner.png" alt="Butler" width="100%" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/mark-dark.png">
+    <img src="assets/readme/mark-light.png" alt="Butler logo" width="120" height="120">
+  </picture>
 </p>
 
-# Butler
+<h1 align="center">Butler</h1>
 
-Butler is a local-first AI agent runtime for personal and project work.
+<p align="center">
+  <strong>At your service, on your machine.</strong>
+</p>
 
-It can remember local context, plan work, coordinate tools and workers, and
-report after reviewing the outcome.
+<p align="center">
+  A personal AI agent that asks before it acts.<br>
+  For macOS (Apple silicon) and Linux, with hosted or local models.
+</p>
 
-Not a chatbot. Not a hosted profile. A local operating layer for personal and
-project work.
+0.1.0 is in preview. The current build is [`0.1.0-preview.4`](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.4).
 
-## Core Ideas
+<p align="center">
+  <a href="https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.4"><strong>Download</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://butler.hexpy.games/help/"><strong>Manual</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/Hexpy-Games/butler/releases">Releases</a>
+</p>
 
-**Local memory.** Context and runtime state are stored under your Butler data
-directory by default. Local-first does not mean every inference is local: if
-you enable profiling or hosted model providers, selected prompt, context, or
-profile-candidate text may be sent to the configured provider. Use a local
-provider when that processing must stay on your machine.
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/hero-demo-dark.svg">
+    <img src="assets/readme/hero-demo-light.svg" alt="Butler working on a task and asking before it acts" width="100%">
+  </picture>
+</p>
 
-**Reviewed outcomes.** Tool output and worker results are evidence, not final
-answers.
+## What Butler does
 
-Successful native `list_files` results emit the candidate `workspace_file_list` capability and do not satisfy source verification.
+Use Butler through the App, on desktop or in a browser. The Agent is a native Rust service; the TypeScript/Bun Agent is retired.
 
-**Real work.** Butler can plan, execute, repair, and report through durable
-workstreams.
+- **Works on your computer, with permission.** Butler reads and edits files and runs commands. By default, new conversations start in *Ask first*, so it asks before it changes a file or runs a command. Approvals show the full command, and Butler treats commands it doesn't recognize as high risk. When it needs a decision from you, it asks in the chat. You can switch a conversation to *Read only* or *Full access*. [Conversations](https://butler.hexpy.games/help/basics/conversation/)
+- **Projects.** A project gives its conversations a shared folder. Butler records plans and progress for the project, and the dashboard summarizes them. [Projects](https://butler.hexpy.games/help/projects/)
+- **Schedules.** Butler sends a prompt to a conversation at a fixed interval, or daily, on weekdays or weekly at a set time. [Schedules](https://butler.hexpy.games/help/scheduled-tasks/)
+- **Memory and personalization.** Give Butler a name and a persona, and choose how much it learns about you. Learning is off by default. [Personalization](https://butler.hexpy.games/help/personalization/)
+- **Your choice of model.** Use OpenAI, Anthropic, Google and other hosted providers, or an OpenAI-compatible server such as Ollama, LM Studio or llama.cpp. Manage saved API keys in **Settings → Models**. When enabled, backup models handle eligible provider failures. [Models](https://butler.hexpy.games/help/models/cloud/)
+- **CLI and MCP.** Run the Agent without the desktop App and connect MCP servers for extra tools. Use `butler --help` for service, model, schedule and extension commands. [MCP servers](https://butler.hexpy.games/help/extensions/mcp-servers/), [Agent CLI](https://butler.hexpy.games/help/advanced/agent-cli/)
 
-**App first.** The Butler App is the primary tested product surface.
+## Install
 
-## Quick Start
+Download Butler from the [0.1.0 preview.4 release](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.4).
 
-The current native Agent bundle is packaged and verified for macOS Apple Silicon
-(`darwin-arm64`). Use a release that explicitly includes the native Agent, or
-build the local App package using the native release workflow. Earlier release
-assets may contain the retired TypeScript/Bun Agent.
+| Platform | Download |
+| --- | --- |
+| macOS (Apple silicon) | [DMG](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-darwin-arm64.dmg) |
+| Linux (x64) | [DEB](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-linux-x64.deb) |
+| Linux (arm64) | [DEB](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-linux-arm64.deb) |
+| Arch Linux (x64) | [Package](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-archlinux-x64.pkg.tar.zst) |
+| Windows | No installer yet |
 
-Butler Agent is included in the app. On first launch, setup runs inside the
-Butler App in this order:
+Each file has a `.sha256` checksum, and `butler-0.1.0-preview.4-SHA256SUMS` lists them all.
 
-1. Language
-2. Safety notice
-3. `Butler Agent를 준비합니다`
-4. Model setup
+On first launch, choose the interface language on the welcome screen, accept the safety notice and connect an AI. Choose Butler's reply language at the end of the AI connection step; you can change it later in **Settings → Personalization**. See [Install](https://butler.hexpy.games/help/getting-started/install/) and [First run](https://butler.hexpy.games/help/getting-started/first-run/).
 
-On macOS, drag `Butler.app` from the DMG into Applications. The bundled native
-Agent runs only while Butler is open. Electron UI code and packaging tooling
-for Windows and Linux remain in the repository, but native Agent bundles for
-those platforms are not yet supported or verified.
+macOS preview builds are signed but not notarized, so Gatekeeper shows a prompt on first open. Right-click **Butler → Open**, or choose **System Settings → Privacy & Security → Open Anyway** after trying to open it.
 
-To run only the headless Agent without the desktop app, see
-[Advanced: Butler Agent](#advanced-butler-agent).
+### Headless Agent
 
-## Advanced: Butler Agent
+On Apple silicon macOS or Linux x64 / arm64 with glibc:
 
-For servers and remote machines, install only the headless Agent and its
-`butler` command. macOS Apple Silicon (`darwin-arm64`) and Linux x64/arm64
-(glibc) are supported; Windows is planned.
-
-```bash
-curl -fsSL https://github.com/Hexpy-Games/butler/releases/latest/download/install.sh | sh
-# or, with Node.js:
+```sh
+curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/install.sh | sh -s -- --version 0.1.0-preview.4
+# Or, with Node.js:
 npx @hexpygames/butler install
 ```
 
-The installer downloads the release archive, verifies it against
-`butler-<version>-SHA256SUMS`, installs it under
-`~/Applications/ButlerAgent` (macOS) or `~/.local/share/butler/agent` (Linux),
-puts `butler` in `~/.local/bin`, checks the installation, and starts Butler.
-Runtime data stays in `BUTLER_DATA` (default `~/.butler`) and is never touched.
-Running it again is safe. The desktop App and the CLI share this layout
-(`packages/butler-agent/rust/docs/install-layout.md`).
+Use `butler open` to open the App in your browser. For another computer on a trusted network, enable access and generate a pairing code in **Settings → Security**, or use `butler remote enable` and `butler remote pair` on the host. Open the displayed address on the other computer and enter the 8-digit one-time pairing code. Remote access is off by default. [Remote access](https://butler.hexpy.games/help/advanced/remote-access/)
 
-Options go after `sh -s --`, for example
-`... | sh -s -- --version X.Y.Z --no-start`: `--version X.Y.Z` picks a release,
-`--no-start` skips starting Butler, and `--modify-path` adds `~/.local/bin` to
-your shell profile (otherwise you get a hint). It refuses to run as root
-unless `BUTLER_ALLOW_ROOT=1`. An existing file at `~/.local/bin/butler` that is
-not Butler's launcher stops the install; the old pre-native launcher is kept as
-`butler.previous`.
+## Where your data lives
 
-To update, run `butler update --check`, then `butler update --apply --yes`,
-which installs the new version beside the old one and restarts a running
-Butler. `butler rollback` returns to the previous version, and the installer
-can be re-run at any time.
+Conversations, memory and settings stay in a local data folder, `~/.butler` by default. Saved API keys go to the system credential store on Developer ID-signed macOS builds, and otherwise to an owner-only file in that folder. When you use a hosted model, that provider receives the prompt and context for each request. Use a local model to keep inference on your machine too.
 
-The user CLI provides `install`, `start`, `stop`, `restart`, `status`, `open`,
-`doctor`, `update`, `rollback`, `uninstall`, `startup enable|disable|status`,
-`auth login|logout|status`, `model list|status|set`, `logs`, `schedule`, `mcp`,
-`skills list|import`, `config get|set`, `help`, and `version`.
-Run `butler --help` for Korean/English help. `startup` manages start at login;
-`schedule` manages scheduled tasks. Use the App for memory, personalization,
-and remote access settings. Internal service and integration entry points are
-not part of the user command guide.
+## Documentation
 
-`npx @hexpygames/butler install` bootstraps an installation; after that,
-`butler install --from ARCHIVE|URL` installs a supplied Agent archive.
-
-### Manual install
-
-If you cannot run the installer, extract a release archive yourself. Each
-archive is an immutable installation package: extract each version to a new
-directory and keep runtime data separate under `BUTLER_DATA`.
-
-```bash
-set -euo pipefail
-VERSION=X.Y.Z # A release version that publishes the native Agent archive.
-PLATFORM=darwin-arm64 # darwin-arm64, linux-x64, or linux-arm64
-ARCHIVE="butler-agent-${VERSION}-${PLATFORM}.tar.gz"
-RELEASE_URL="https://github.com/Hexpy-Games/butler/releases/download/v${VERSION}"
-DOWNLOAD_DIR="$HOME/Downloads/butler-agent-${VERSION}"
-INSTALL_ROOT="$HOME/.local/opt/butler-agent"
-INSTALL_DIR="$INSTALL_ROOT/$VERSION"
-export BUTLER_DATA="${BUTLER_DATA:-$HOME/.butler}"
-
-mkdir -p "$DOWNLOAD_DIR" "$INSTALL_ROOT" "$BUTLER_DATA"
-cd "$DOWNLOAD_DIR"
-curl -fL --retry 3 -o "$ARCHIVE" "$RELEASE_URL/$ARCHIVE"
-SUMS="butler-${VERSION}-SHA256SUMS"
-curl -fL --retry 3 -o "$SUMS" "$RELEASE_URL/$SUMS"
-EXPECTED_SHA256="$(awk -v name="$ARCHIVE" '$2 == name { print $1 }' "$SUMS")"
-test "${#EXPECTED_SHA256}" -eq 64
-printf '%s  %s\n' "$EXPECTED_SHA256" "$ARCHIVE" | shasum -a 256 -c -
-
-if [ -e "$INSTALL_DIR" ]; then
-  printf 'Installation already exists; choose a new version directory: %s\n' "$INSTALL_DIR" >&2
-  exit 1
-fi
-mkdir "$INSTALL_DIR"
-tar -xzf "$ARCHIVE" -C "$INSTALL_DIR"
-"$INSTALL_DIR/butler" --data "$BUTLER_DATA" version --json
-"$INSTALL_DIR/butler" --data "$BUTLER_DATA" doctor --check installation --json
-```
-
-## How Butler Works
-
-```mermaid
-flowchart LR
-  User[User] --> App[Butler App]
-  App --> Gateway[Local App Gateway]
-
-  Gateway --> Runtime[Native Butler Runtime]
-  Runtime --> Loop[Agent Loop]
-  Runtime --> Cognition[Local Cognition System]
-  Runtime --> Work[WorkStreams and Workers]
-  Runtime --> Delivery[Delivery State]
-  Runtime --> Providers[Model Providers]
-
-  Cognition --> Data[BUTLER_DATA]
-  Work --> Data
-  Delivery --> Data
-```
-
-The runtime follows a simple product discipline:
-
-1. Understand the request and available context.
-2. Plan the work.
-3. Execute tools or dispatch workers.
-4. Review evidence and repair ordinary failures.
-5. Consolidate the result.
-6. Report the outcome.
-
-## Main Components
-
-| Component | Purpose |
-| --- | --- |
-| `packages/butler-agent` | The headless Butler runtime, agent loop, tools, memory, workers, app gateway, and service scripts. |
-| `packages/butler-app` | The local desktop app and app-facing client code. |
-| `packages/project-ledger` | A portable project ledger used for structured project records and planning. |
-| `tools` | Validation, Docker install checks, and release verification. |
-| `tests` | Unit, smoke, and product-boundary tests. |
-
-## Models
-
-Butler supports hosted and local model providers: OpenAI/GPT, Anthropic/Claude,
-Google/Gemini, xAI/Grok, Alibaba/Qwen, Moonshot/Kimi, Z.AI Coding Plan,
-Z.AI API, Codex subscription auth, and local OpenAI-compatible models.
-
-See [`.env.example`](.env.example) for configuration options.
-
-## App And Agent Releases
-
-Butler has two release shapes:
-
-- **Butler App:** the Electron desktop experience.
-- **Butler Agent:** the standalone/headless runtime for advanced operators.
-
-## Development
-
-Source checkouts and package scripts are for development, not the normal user
-install path. Use a native Butler App release or the standalone Butler Agent
-artifact for headless operation.
-
-```bash
-git clone https://github.com/Hexpy-Games/butler.git ~/butler
-cd ~/butler
-bun install
-```
-
-```bash
-bun run lint
-bun run typecheck
-bun test tests/unit/*.test.ts
-bun run check
-```
-
-`bun run check` covers the retained Electron/UI and development TypeScript. The
-Rust Agent has its own checks in `packages/butler-agent/rust/README.md`:
-`cargo fmt --all -- --check` and
-`cargo clippy --workspace --all-targets --locked -- -D warnings` from its
-workspace with the documented native dependency environment.
-
-Useful app commands:
-
-```bash
-bun run app:client:dev
-bun run app:ui:build
-bun run app:client
-```
-
-`app:client:dev` serves the UI from Vite on another origin than the gateway,
-so the gateway must be started with `BUTLER_APP_DEV_ORIGIN=http://127.0.0.1:5173`
-(see `packages/butler-app/README.md`).
-
-App UI is assembled only from the Butler design system. Before changing UI,
-read the design-system skill
-(`packages/butler-app/client/ui/src/libs/design-system/skills/butler-design-system/SKILL.md`)
-and browse the DS Viewer at `?visual=design-system`.
+The [Butler manual](https://butler.hexpy.games/help/) covers setup, conversations, projects, schedules, models, MCP, settings and troubleshooting. Most pages are in Korean; English guides cover [installation](https://butler.hexpy.games/en/help/getting-started/install/), the [Agent CLI](https://butler.hexpy.games/en/help/advanced/agent-cli/) and [remote access](https://butler.hexpy.games/en/help/advanced/remote-access/).
 
 ## Status
 
-Butler is `v0.0.21` and pre-release. Expect breaking changes before `v1.0.0`.
+Butler is pre-1.0, so expect breaking changes between releases. It edits files and runs commands, so run it on a machine you control.
 
-The intended deployment model is single-user and self-hosted on a machine you
-control. Butler can run tools, edit files, dispatch background workers, and
-operate unattended services, so install it only in environments where that level
-of local agent automation is acceptable.
+## Contributing
 
-## Project development records
-
-Specs, plans, decisions, implementation reports, and experimental evidence belong
-in the canonical [Project Ledger](packages/project-ledger/README.md), written
-through its CLI or native tools. Do not create duplicate project-management
-records under `docs/`. Work and Task records should reference canonical record
-IDs; package READMEs remain the home for source-owned usage and API guidance.
+To build Butler from source, run the checks or work on the Rust agent, see [CONTRIBUTING.md](CONTRIBUTING.md). Report bugs in [Issues](https://github.com/Hexpy-Games/butler/issues).
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+[MIT](LICENSE)
