@@ -116,14 +116,19 @@ fn hold_shutdown_write(record: &InstanceRecord) {
     {
         return;
     }
-    let Some(ms) = std::env::var("BUTLER_E2E_RECORD_WRITE_HOLD_MS")
+    let Some(ms) = std::env::var("BUTLER_E2E_RECORD_WRITE_RELEASE_AFTER_STOP_MS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
     else {
         return;
     };
+    let Some(elapsed) = super::super::shutdown_trace::stop_elapsed() else {
+        return;
+    };
     super::super::shutdown_trace::event("record_write_hold:begin");
-    std::thread::sleep(std::time::Duration::from_millis(ms));
+    // Align with the grace deadline, even when earlier close work is slow.
+    let remaining = std::time::Duration::from_millis(ms).saturating_sub(elapsed);
+    std::thread::sleep(remaining);
     super::super::shutdown_trace::event("record_write_hold:end");
 }
 

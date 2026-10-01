@@ -348,7 +348,7 @@ async fn deadline_waits_for_an_in_progress_record_write() -> Result<(), HarnessE
         return Ok(());
     }
     let mut s = Setup::new("SHUTDOWN-RECORD-RACE")?
-        .env("BUTLER_E2E_RECORD_WRITE_HOLD_MS", "6500")
+        .env("BUTLER_E2E_RECORD_WRITE_RELEASE_AFTER_STOP_MS", "6500")
         .start()
         .await?;
     let started = Instant::now();
