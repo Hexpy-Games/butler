@@ -30,7 +30,7 @@ runs:
         root="$(cygpath -u "$RUNNER_TEMP")"
         mkdir -p "$root/ort-cache/native-deps"
         tar -xf "$root/windows-native-artifact/windows-native-deps.tar.zst" \
-          -C "$root/ort-cache/native-deps" --use-compress-program unzstd
+          -C "$root/ort-cache/native-deps" --use-compress-program 'zstd -d'
     - uses: ./.github/actions/rust-agent-setup
       with:
         native-deps: static-ort
