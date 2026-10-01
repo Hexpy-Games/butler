@@ -70,3 +70,14 @@ fn expand_home_path(value: &str) -> PathBuf {
         _ => PathBuf::from(value),
     }
 }
+
+/// Process-owned memory progress is available even when the App listener is disabled.
+pub(crate) async fn memory_status(
+    data_root: &std::path::Path,
+    installation: &ResolvedInstallation,
+) -> Option<Value> {
+    let record = control::verified_instance(data_root, installation).ok()??;
+    crate::host::app::gateway_lifecycle::memory_status(&record)
+        .await
+        .ok()
+}

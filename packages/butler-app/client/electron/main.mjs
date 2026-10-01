@@ -1170,7 +1170,6 @@ async function readSetupSettings() {
 }
 
 function configureAppIdentity() {
-  const pkg = readPackageJson(packagePath);
   app.setName(appDisplayName);
   if (isWindows) {
     app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);

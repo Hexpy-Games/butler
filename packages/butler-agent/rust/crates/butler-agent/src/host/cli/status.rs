@@ -106,12 +106,14 @@ pub(crate) async fn run_native_status_cli(
             let services = service_health(&data_root);
             let previews = update_previews(&models.configuration).await;
             let version = env!("BUTLER_RELEASE_VERSION");
+            let memory_model = super::status_memory::read(&data_root, &installation).await;
             let text = format!(
-                "Butler {version}\nupdate.previews: {previews}\n{}",
-                operations::render_status_context(&metrics, &models, &services)
+                "Butler {version}\nupdate.previews: {previews}\n{}\n{}",
+                operations::render_status_context(&metrics, &models, &services),
+                super::status_memory::line(&memory_model)
             );
             (
-                json!({ "version": version, "update": {"previews": previews}, "status": metrics.value, "services": services, "model": model }),
+                json!({ "version": version, "update": {"previews": previews}, "status": metrics.value, "services": services, "model": model, "memoryModel": memory_model }),
                 text,
             )
         }

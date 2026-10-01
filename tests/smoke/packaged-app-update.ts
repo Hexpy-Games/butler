@@ -130,7 +130,7 @@ async function smoke() {
   await page.reload();
   await proof(page, from);
   const session = await page.evaluate(async () => (window.butlerApp!.createSession as (v: unknown) => Promise<{ id: string }>)({ kind: "chat", title: "Update keeps this chat" }));
-  await page.waitForFunction(() => Array.from(document.querySelectorAll("button")).some(e => e.getAttribute("aria-label") === "Settings" || e.textContent?.trim() === "Settings"));
+  await page.waitForFunction(() => Array.from(document.querySelectorAll('button, [role="button"]')).some(e => e.getAttribute("aria-label") === "Settings" || e.textContent?.trim() === "Settings"));
   await clickNamed(page, "Settings");
   await clickNamed(page, "Updates");
   await page.waitForFunction(() => Boolean(document.querySelector('[data-test-id="update-component-app"] button')));

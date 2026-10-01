@@ -7,6 +7,7 @@ import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import { checkWallpaperPosters } from "./scripts/check-wallpaper-posters";
 
 const srcRoot = path.resolve(process.cwd(), "src");
 const designSystemRoot = path.resolve(srcRoot, "libs/design-system");
@@ -81,7 +82,11 @@ export default defineConfig({
     createHash("sha256").update(srcRoot).digest("hex").slice(0, 12),
   ),
   base: "./",
-  plugins: [hugeiconsPureAnnotationPatch(), react(), fontLicenseNotices(), thirdPartyNotices()],
+  plugins: [hugeiconsPureAnnotationPatch(), react(), fontLicenseNotices(), thirdPartyNotices(), {
+    name: "wallpaper-poster-inputs",
+    apply: "build",
+    buildStart: () => checkWallpaperPosters(process.cwd()),
+  }],
   // Font slices stay files so unicode-range fetches them lazily.
   build: { assetsInlineLimit: (file) => (file.endsWith(".woff2") ? false : undefined) },
   resolve: {

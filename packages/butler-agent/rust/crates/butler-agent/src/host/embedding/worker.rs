@@ -9,7 +9,7 @@ use butler_memory::cognition::{
     EmbeddingEngine, WorkerOperation, WorkerRequest, WorkerResponse, WorkerResult,
 };
 
-mod assets;
+pub(crate) mod assets;
 
 const MAX_FRAME_BYTES: usize = 1024 * 1024;
 const MAX_RESPONSE_BYTES: usize = 4 * 1024 * 1024;

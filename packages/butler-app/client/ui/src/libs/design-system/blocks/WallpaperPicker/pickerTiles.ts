@@ -1,6 +1,7 @@
 // What each picker tile shows (caption, thumbnail) and where arrow keys go: pure, no rendering.
 import {
-  renderWallpaperStill,
+  BUILTIN_WALLPAPERS,
+  resolveWallpaperValues,
   wallpaperLabelText,
   wallpaperStillKey,
   type WallpaperImageLoader,
@@ -12,6 +13,8 @@ import {
 import type { WallpaperPickerOption } from "./pickerModel";
 import type { WallpaperPickerLabels, WallpaperPickerValue } from "./types";
 import type { WallpaperThumbnailRequest } from "./useWallpaperThumbnail";
+import { builtinPosters } from "./builtinPosters";
+import { renderPickerThumbnail } from "./thumbnailRenderer";
 
 /** Drawing-buffer size of module stills (16:10, sharp on a 2x display at tile size). */
 const THUMBNAIL_SIZE = { width: 320, height: 200 };
@@ -26,7 +29,11 @@ function sourcePreview(source: WallpaperSource, { tone, registry, loader }: Wall
   if (source.kind === "none") return null;
   if (source.kind === "image") return loader ? { key: `image:${source.asset}`, load: () => loader(source.asset, "thumbnail") } : null;
   // Keyed by the module's content too: an edited user module's still renders again.
-  return { key: wallpaperStillKey(source, THUMBNAIL_SIZE, tone, registry), load: () => renderWallpaperStill(source, THUMBNAIL_SIZE, tone, registry) };
+  const module = registry.get(source.module);
+  const defaults = module && module === BUILTIN_WALLPAPERS.get(source.module)
+    && JSON.stringify(resolveWallpaperValues(module.manifest, source, tone)) === JSON.stringify(resolveWallpaperValues(module.manifest, {}, tone));
+  const url = defaults ? builtinPosters[`${source.module}|${tone}`] : undefined;
+  return { key: wallpaperStillKey(source, THUMBNAIL_SIZE, tone, registry), url, load: () => renderPickerThumbnail(source, tone, registry) };
 }
 
 /**

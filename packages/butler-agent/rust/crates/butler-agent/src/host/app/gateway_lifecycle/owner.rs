@@ -312,6 +312,7 @@ impl AppGatewayLifecycle {
                 .is_some_and(|active| local_auth_unconfigured(&active.local_auth));
         let (status, next_actions) = view_status(enabled, running, refusing);
         Ok(json!({
+            "memoryModel": self.runtime.memory_acquisition.subscribe().borrow().clone(),
             "id":"app",
             "title":"Butler App Gateway",
             "lifecycle":"process",

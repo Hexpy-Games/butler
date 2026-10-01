@@ -121,16 +121,12 @@ export function probeWallpaperStillDraw(module: WallpaperModule): void {
 async function ensureImage(image: WallpaperImageScene): Promise<void> {
   if (gpu()?.resources.images.get(image.asset)) return;
   const blob = await loadWallpaperImageBytes(NO_LOADER, image.asset, "thumbnail");
-  const full = await createImageBitmap(blob);
-  const scale = Math.min(1, STILL_IMAGE_EDGE / Math.max(full.width, full.height));
-  const bitmap = await createImageBitmap(full, {
+  const bitmap = await createImageBitmap(blob, {
     imageOrientation: "flipY",
     premultiplyAlpha: "premultiply",
-    resizeWidth: Math.max(1, Math.round(full.width * scale)),
-    resizeHeight: Math.max(1, Math.round(full.height * scale)),
+    resizeWidth: STILL_IMAGE_EDGE,
     resizeQuality: "high",
   });
-  full.close();
   gpu()?.resources.images.upload(image.asset, "thumbnail", bitmap);
   bitmap.close();
 }

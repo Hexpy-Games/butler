@@ -37,6 +37,7 @@ pub(crate) struct AppSetupParts {
     pub(crate) installation: ResolvedInstallation,
     pub(crate) data_root: PathBuf,
     pub(crate) executor: Arc<ServiceReadiness>,
+    pub(crate) acquisition: Arc<crate::host::embedding::worker::assets::Acquisition>,
 }
 
 /// Cheap to clone: every clone shares one preparation and one flow table.
@@ -58,11 +59,14 @@ impl AppSetup {
     /// `BUTLER_OLLAMA_BASE_URL` and `BUTLER_LM_STUDIO_BASE_URL`, else the
     /// servers' default ports on 127.0.0.1.
     pub(crate) fn start(parts: AppSetupParts) -> Self {
-        let preparation = Preparation::start(ReadinessChecks {
-            data_root: parts.data_root.clone(),
-            configuration: parts.configuration.clone(),
-            executor: parts.executor,
-        });
+        let preparation = Preparation::start(
+            ReadinessChecks {
+                data_root: parts.data_root.clone(),
+                configuration: parts.configuration.clone(),
+                executor: parts.executor,
+            },
+            parts.acquisition,
+        );
         Self(Arc::new(SetupInner {
             oauth: OauthFlows::new(parts.configuration.clone()),
             configuration: parts.configuration,
@@ -106,6 +110,10 @@ impl AppSetupPort for AppSetup {
 
     fn retry_readiness(&self) -> SetupReadinessView {
         self.0.preparation.retry()
+    }
+
+    fn retry_memory_model(&self) -> SetupReadinessView {
+        self.0.preparation.retry_memory_model()
     }
 
     fn local_model_servers(&self) -> ApplicationFuture<LocalModelServersView> {

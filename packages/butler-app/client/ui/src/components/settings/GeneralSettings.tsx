@@ -7,6 +7,7 @@ import type { SettingsView as SettingsData } from "@/app/types.ts";
 import { SettingsPage, SettingsSection, SettingsSelect, SettingsSwitch } from "./SettingsFormComponents";
 import { SettingsSearchableSelect } from "./SettingsSearchableSelect";
 import { NativeNotificationStatusPanel } from "./NativeNotificationStatusPanel";
+import { MemoryModelPreparation } from "./MemoryModelPreparation";
 import { RerunSetupField } from "./RerunSetupField";
 import { SearchBehaviorFields, SearchProviderFields } from "./SearchSettings";
 
@@ -121,6 +122,7 @@ export function GeneralSettings() {
         />
         <StartAtLoginField />
         <RerunSetupField />
+        <MemoryModelPreparation />
       </SettingsSection>
       <SettingsSection
         id="search-provider"

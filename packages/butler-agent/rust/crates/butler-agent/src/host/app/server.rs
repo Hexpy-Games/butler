@@ -369,6 +369,7 @@ impl AppServerOwners {
             installation: installation.clone(),
             data_root: data_root.to_path_buf(),
             executor: self.receipt.clone(),
+            acquisition: runtime.memory_acquisition.clone(),
         })
     }
 }
