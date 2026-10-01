@@ -1,0 +1,119 @@
+---
+title: "Use Butler as an MCP server"
+description: "Connect Butler to other MCP clients."
+section: advanced
+order: 2
+status: published
+---
+
+An MCP client runs Butler's stdio server. From another client that supports MCP, you can call tools for Butler's status, task history, memory graph and skill list.
+
+<Notice tone="info">
+  You set the internal launch arguments in the client's configuration. First install the Agent by following [Butler Agent CLI](/en/help/advanced/agent-cli/#install).
+</Notice>
+
+## Connect
+
+<Steps>
+  1. Find the absolute path of the installed `butler`. If you used the install script as is, it is `~/.local/bin/butler`.
+  2. Add Butler to the server configuration of your MCP client. The command is the absolute path of `butler`, and the arguments are `mcp serve`.
+  3. Reload the server in the client, then check that the 8 Butler tools appear.
+</Steps>
+
+### Client configuration example
+
+For a client that uses the `mcpServers` format, use this configuration. Change the paths to match your installation.
+
+```json
+{
+  "mcpServers": {
+    "butler": {
+      "command": "/Users/me/.local/bin/butler",
+      "args": ["mcp", "serve", "--data", "/Users/me/.butler"]
+    }
+  }
+}
+```
+
+- `command`: The client runs it without a shell, so write an absolute path without `~`.
+- `args`: `mcp serve` is required. You can leave out `--data`.
+
+Instead of `--data`, you can put `BUTLER_DATA` in `env`.
+
+```json
+{
+  "mcpServers": {
+    "butler": {
+      "command": "/Users/me/.local/bin/butler",
+      "args": ["mcp", "serve"],
+      "env": { "BUTLER_DATA": "/Users/me/.butler" }
+    }
+  }
+}
+```
+
+## Options
+
+| Item | Description |
+| --- | --- |
+| Transport | Only standard input/output (stdio) is supported. There is no other transport such as HTTP. |
+| `--data PATH` | The data folder to use. Paths that start with `~/` are accepted. |
+| `BUTLER_DATA` | The data folder used when `--data` is not given. If neither is set, `~/.butler` is used. |
+| Server name | The server announces the `system.mcpServerName` value from `butler.config.json` in the data folder as its name. Without that value, the name is `butler-main`. |
+
+With an unsupported option, the server exits with an `unsupported MCP option` error.
+
+## Available tools
+
+The Butler MCP server provides tools only. It does not provide resources or prompts.
+
+### Read-only tools
+
+| Tool | Description |
+| --- | --- |
+| `butler_status` | Shows the service uptime, model status, task statistics (total, running, done, failed) and the number of hot cache files. |
+| `list_tasks` | Shows the task list. To filter it, set the optional `status` argument to one of `RUNNING`, `DONE`, `FAILED` or `PENDING`. |
+| `get_task_result` | Shows the request and the full result of one task, given the required `task_id` argument. |
+| `project_list` | Shows the task count and recent tasks for each project. |
+| `memory_graph` | Searches the graph of relationships between projects, decisions, tools and people. See the table below for its arguments. |
+| `skill_list` | Shows the loaded skills and their descriptions. |
+
+`memory_graph` takes these arguments.
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `query` | Yes | The entity name or keyword to find. |
+| `type` | No | Filters by one of `project`, `person`, `concept`, `decision`, `tool` or `interest`. |
+| `hops` | No | The number of relationship steps to follow. From 1 to 4; the default is 2. |
+| `project` | No | Shows results for one project only. |
+
+### Tools that make changes
+
+| Tool | Description |
+| --- | --- |
+| `model_set` | Shows or changes the Worker model and the Butler model. All arguments are optional. With `target` (`worker` or `butler`) and `model`, it changes that model. With `model` empty, it shows the current settings. With `action` set to `list`, it shows the model aliases you can use. A Butler model change applies from the next restart. |
+| `restart_butler` | Restarts the Agent service that uses the same DATA folder. |
+
+## How it works
+
+- `butler mcp serve` does not start the Agent service. It answers from the records and settings stored in the data folder. If the service is not running, the uptime in `butler_status` is `unknown`.
+- On start, it deletes done (`DONE`) and failed (`FAILED`) task records older than 30 days from `tasks` in the data folder. If more than 100 records remain, it deletes the oldest done and failed records first.
+- Standard output carries MCP messages only. Startup messages and errors go to standard error.
+
+## Notes
+
+<Notice tone="warning" title="Tools that change settings and the service">
+  `model_set` changes the configuration file, and `restart_butler` restarts the Agent service. If you use the same DATA folder as the Butler app, these tools also affect the Agent that the app started. Setting the client to ask for confirmation before tool calls is recommended.
+</Notice>
+
+<Notice tone="info">
+  Without the `HOME` environment variable, the server cannot start and returns a `native_home_unavailable` error. If the client runs it with an empty environment, add `HOME` to `env`.
+</Notice>
+
+## Related pages
+
+<CardGrid>
+  <DocCard slug="advanced/agent-cli" />
+  <DocCard slug="extensions/mcp-servers" />
+  <DocCard slug="troubleshooting" />
+</CardGrid>

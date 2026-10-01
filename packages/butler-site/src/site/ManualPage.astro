@@ -1,0 +1,29 @@
+---
+/** One manual page for one locale: /help/<slug>/ and /<locale>/help/<slug>/. */
+import { render, type CollectionEntry } from "astro:content";
+import DocPage from "../ds/web/DocPage/DocPage.astro";
+import { alternates, loadNav } from "./docs";
+import { mdxComponents } from "./mdxComponents";
+import { docSlug } from "./nav";
+import type { Locale } from "./sections";
+
+interface Props {
+  locale: Locale;
+  entry: CollectionEntry<"docs">;
+}
+
+const { locale, entry } = Astro.props;
+const slug = docSlug(entry.id);
+const { Content, headings } = await render(entry);
+---
+<DocPage
+  alternates={await alternates(slug)}
+  description={entry.data.description}
+  headings={headings}
+  locale={locale}
+  nav={await loadNav(locale, slug)}
+  slug={slug}
+  title={entry.data.title}
+>
+  <Content components={mdxComponents(locale)} />
+</DocPage>

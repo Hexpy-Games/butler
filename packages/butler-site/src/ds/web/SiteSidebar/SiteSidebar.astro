@@ -1,6 +1,7 @@
 ---
 import type { NavSectionItem } from "../../../site/nav";
 import type { Locale } from "../../../site/sections";
+import { ui } from "../../../site/ui";
 import { Button } from "../../components/Button";
 import { Close } from "../../components/Icons";
 import Brand from "../Brand/Brand.astro";
@@ -17,20 +18,21 @@ interface Props {
 }
 
 const { nav, homeHref, locale, alternates } = Astro.props;
+const copy = ui(locale);
 ---
-<aside aria-label="문서 탐색" class={styles.sidebar} data-drawer data-pagefind-ignore id="site-nav">
+<aside aria-label={copy.sidebar} class={styles.sidebar} data-drawer data-pagefind-ignore id="site-nav">
   <div class={styles.brandRow}>
-    <Brand href={homeHref} product="사용 설명서" />
+    <Brand href={homeHref} product={copy.product} />
     <span class={styles.close}>
-      <Button aria-label="메뉴 닫기" data-drawer-close size="icon" variant="ghost"><Close /></Button>
+      <Button aria-label={copy.closeMenu} data-drawer-close size="icon" variant="ghost"><Close /></Button>
     </span>
   </div>
-  <nav aria-label="문서" class={styles.nav} data-scroll-fade="y">
-    <SidebarNav plannedBadge="예정" plannedReason="준비 중인 문서" sections={nav} />
+  <nav aria-label={copy.docs} class={styles.nav} data-scroll-fade="y">
+    <SidebarNav plannedBadge={copy.planned.badge} plannedReason={copy.planned.reason} sections={nav} />
   </nav>
   <div class={styles.controls}>
     <LanguageSwitch alternates={alternates} locale={locale} />
-    <ThemeToggle />
+    <ThemeToggle locale={locale} />
   </div>
 </aside>
 <div aria-hidden="true" class={styles.scrim} data-drawer-close data-drawer-scrim></div>

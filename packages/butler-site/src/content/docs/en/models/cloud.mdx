@@ -1,0 +1,174 @@
+---
+title: "Cloud models"
+description: "Connect hosted models with an API key or OAuth."
+section: models
+order: 1
+status: published
+---
+
+Cloud models are models hosted by a provider such as OpenAI or Anthropic. In **Model management**, choose a provider and a model, connect a credential to register the model, then select it as the Butler model.
+
+## Supported providers
+
+| Provider | Auth method |
+| --- | --- |
+| **OpenAI** | API key or OAuth (OpenAI account sign-in) |
+| **Anthropic** | API key |
+| **Google** | API key |
+| **xAI / Grok** | API key |
+| **Qwen Cloud** | API key |
+| **Moonshot / Kimi** | API key |
+| **Z.AI Coding Plan** | API key |
+| **Z.AI API** | API key |
+| **OpenCode Go** | API key |
+
+The model list for each provider comes from the model catalog included in Butler, and shows only the models that can run now. To use a model that is not in the list, or a server you run yourself, connect it as a [Custom model](/en/help/models/custom/).
+
+## Register a model
+
+<Tabs
+  label="Auth method"
+  items={[
+    { value: "api-key", label: "API key" },
+    { value: "oauth", label: "OAuth (OpenAI)" },
+  ]}
+>
+  <TabPanel value="api-key">
+    <Steps>
+      1. In the sidebar, open **Settings** and select **Models**.
+      2. In the **Butler model** section, click **Manage models**.
+      3. Click **Add model**.
+      4. Choose a **Provider** and a **Model**. For OpenAI, leave **Auth method** set to **API key**.
+      5. In **Saved credential**, choose **New credential** and enter the **API key**. **Credential name** tells several keys apart, and you can leave it empty.
+      6. Click **Add**. When registration finishes, you return to the **Registered models** list.
+    </Steps>
+
+    If you already saved a key for the same provider, choose that key in **Saved credential**. You do not need to enter the key again.
+  </TabPanel>
+  <TabPanel value="oauth">
+    <Steps>
+      1. In the sidebar, open **Settings** and select **Models**.
+      2. In the **Butler model** section, click **Manage models**, then click **Add model**.
+      3. Leave **Provider** set to **OpenAI** and choose a **Model**.
+      4. Change **Auth method** to **OAuth**. The OpenAI sign-in page opens in your browser.
+      5. Finish signing in in the browser and return to Butler. When Butler confirms that authentication is complete, it registers the model automatically.
+    </Steps>
+
+    If you have signed in before, **OAuth complete** appears and the browser does not open. Click **Add** to register the model.
+
+    - If the browser does not open, click **Open in browser** under **OAuth link**, or use **Copy link** to copy the address and open it yourself.
+    - If you finished signing in but the screen does not change, click **Check completion**.
+    - If authentication failed or you want to start over, click **Authenticate again**.
+  </TabPanel>
+</Tabs>
+
+You can also pick a service and connect a model during [first run](/en/help/getting-started/first-run/#choose-an-ai). First run does not ask you to choose a model. It registers the everyday model set for each service.
+
+## Choose the default model
+
+<Steps>
+  1. In the **Butler model** section of **Settings → Models**, open the **Model** list.
+  2. Choose the model to use. The change is saved right away.
+</Steps>
+
+- The list shows the provider, the model name and the context size. Once you register at least one model, the list shows only the models you registered.
+- For **Reasoning**, choose one of the reasoning efforts the selected model supports. If you change models and the new model does not support the current reasoning effort, it changes to that model's default.
+- **Context limit** is the context budget Butler actually uses. Set it from 1,000 tokens up to the model's maximum. When you change models, it is adjusted so that it does not exceed the new model's maximum.
+- The model menu in the composer shows the same list of models.
+
+## Manage registered models
+
+The **Registered models** list in **Model management** shows each model's auth method and masked key, as in `API key · sk-...x`.
+
+- **Edit** — Change the auth method, the saved credential or the API base URL, then click **Save**.
+- **Delete** — Click **Delete** in the confirmation dialog to remove the model from the list of selectable models.
+
+### API base URL
+
+For the following providers, the **API base URL** field also appears, filled in with the default address. Change it only when you need an endpoint other than the default address. The address must be an `http` or `https` URL.
+
+| Provider | Default address |
+| --- | --- |
+| xAI / Grok | `https://api.x.ai/v1` |
+| Qwen Cloud | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` |
+| Moonshot / Kimi | `https://api.moonshot.ai/v1` |
+| Z.AI Coding Plan | `https://api.z.ai/api/coding/paas/v4` |
+| Z.AI API | `https://api.z.ai/api/paas/v4` |
+| OpenCode Go | `https://opencode.ai/zen/go/v1` |
+
+## Manage API keys
+
+The **API keys** section of **Settings → Models** lists your saved keys by provider. If you named a key, the name follows the provider, as in `OpenAI / work`. If no keys are saved, the **No saved API keys.** message appears.
+
+Each key shows the following information.
+
+- Masked key
+- Number of models that use the key
+- Storage location
+
+The app never shows a whole key, only its first three characters and its last character. If models use the key, a model count such as **2 models** appears. If none do, **Not in use** appears. The storage location appears as **Stored only on this computer** or **Stored in Keychain**. See [Where credentials are stored](#where-credentials-are-stored).
+
+### Replace a key
+
+<Steps>
+  1. In the **API keys** section of **Settings → Models**, click **Replace** for the key you want to change.
+  2. Paste the key into the **New key** field.
+  3. Click **Save**.
+</Steps>
+
+- When you save, Butler first checks the new key with the provider. **Checking** appears during the check.
+- If the provider rejects the key, an error appears under the field and the saved key does not change.
+- After a replacement, the key name and the models that use the key stay the same.
+- To stop replacing the key, click **Cancel**.
+
+### Delete a key
+
+<Steps>
+  1. In the **API keys** section of **Settings → Models**, click **Delete** for the key you want to remove.
+  2. Click **Delete** in the confirmation dialog.
+</Steps>
+
+- You cannot delete a key that the default model uses. The **Delete** button is disabled and the **Change the default model first** hint appears. Change the [default model](#choose-the-default-model) to another model, then delete the key.
+- If you delete a key that other models use, those models are deleted with it. The confirmation dialog shows how many models will be deleted.
+- A key that no model uses is deleted as soon as you click **Delete** in the confirmation dialog.
+
+For example, for an OpenAI key that two models use, the **Delete the OpenAI key? 2 models use it and will be removed.** message appears.
+
+## Where credentials are stored
+
+Credentials are stored in the data folder (`~/.butler` by default). If you changed the data folder with the `BUTLER_DATA` environment variable, the paths below are under that folder.
+
+- API key list (provider, name, masked key): `~/.butler/auth/model-provider-credentials.json`
+- API keys: `~/.butler/auth/credential-store.json`
+- OpenAI OAuth sign-in data: `~/.butler/auth/openai-codex.json`
+- Registered model list: `~/.butler/butler.config.json`
+
+The current release stores API keys in a file on this computer. The file permissions are set so that only the owner can read and write it (`0600`). The app shows **Stored only on this computer**.
+
+A release signed with a Developer ID stores API keys in the macOS Keychain, and the app shows **Stored in Keychain**. The first time you run a signed release, it moves the keys you already saved into the Keychain automatically.
+
+If keys saved by an earlier version remain in `model-provider-credentials.json`, Butler Agent moves them to the storage location when it starts.
+
+Butler renews the OpenAI OAuth sign-in data automatically when it is close to expiring.
+
+## Notes
+
+<Notice tone="warning" title="The key file is copied with the data folder">
+  When keys are stored only on this computer, they are in a file in the data folder. If you share the data folder with someone else or back it up, the keys are copied with it.
+</Notice>
+
+<Notice tone="info">
+  Deleting a registered model does not delete the saved API key. You can choose it in **Saved credential** when you add a model from the same provider again. To delete a key, see [Delete a key](#delete-a-key).
+</Notice>
+
+<Notice tone="info">
+  OAuth is available only for OpenAI. Connect other providers with an API key.
+</Notice>
+
+## Related pages
+
+<CardGrid>
+  <DocCard slug="models/custom" />
+  <DocCard slug="models/backup" />
+  <DocCard slug="getting-started/first-run" />
+</CardGrid>

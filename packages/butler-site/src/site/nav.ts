@@ -1,4 +1,4 @@
-import { DEFAULT_LOCALE, SECTIONS, type Locale, type SectionId } from "./sections";
+import { DEFAULT_LOCALE, LOCALES, SECTIONS, type Locale, type SectionId } from "./sections";
 
 export type DocStatus = "published" | "planned";
 
@@ -65,6 +65,25 @@ export const DS_REDIRECT_HELPER = "ds-404-redirect.js";
 
 export function docHref(base: string, locale: Locale, slug: string): string {
   return withBase(docsRoot(base, locale), `${slug}/`);
+}
+
+/**
+ * A page in every locale, for hreflang links and the language switcher: null
+ * where that translation is not published. `slug` null is the manual's
+ * landing page, which every locale has.
+ */
+export function localeAlternates(entries: DocEntryLike[], base: string, slug: string | null): Record<Locale, string | null> {
+  const result = {} as Record<Locale, string | null>;
+  for (const locale of LOCALES) {
+    const published = entries.some((entry) => entry.id === `${locale}/${slug}` && entry.data.status === "published");
+    result[locale] = slug === null ? docsRoot(base, locale) : published ? docHref(base, locale, slug) : null;
+  }
+  return result;
+}
+
+/** Where the switcher sends a reader: the same page, or that locale's landing page when it has no translation. */
+export function switchHref(alternates: Partial<Record<Locale, string | null>>, base: string, locale: Locale): string {
+  return alternates[locale] ?? docsRoot(base, locale);
 }
 
 export function buildNav(

@@ -1,5 +1,6 @@
 ---
 import type { Locale } from "../../../site/sections";
+import { ui } from "../../../site/ui";
 import { Button } from "../../components/Button";
 import { GitHub, PanelLeft, Search } from "../../components/Icons";
 import { Kbd } from "../../components/Kbd";
@@ -16,28 +17,30 @@ interface Props {
 }
 
 const { homeHref, repositoryUrl, locale, alternates } = Astro.props;
+const copy = ui(locale);
 ---
 <header class={styles.titlebar} data-pagefind-ignore data-titlebar>
   <div class={styles.compact}>
-    <Button aria-controls="site-nav" aria-expanded="false" aria-label="메뉴" data-drawer-open size="icon" variant="ghost">
+    <Button aria-controls="site-nav" aria-expanded="false" aria-label={copy.menu} data-drawer-open size="icon" variant="ghost">
       <PanelLeft />
     </Button>
-    <Brand href={homeHref} product="사용 설명서" />
+    <Brand href={homeHref} product={copy.product} />
   </div>
   <button aria-haspopup="dialog" class={styles.search} data-search-open type="button">
     <Search size="sm" />
-    <span class={styles.searchLabel}>검색</span>
+    <span class={styles.searchLabel}>{copy.search.button}</span>
     <span data-mod-key><Kbd keys={["⌘", "K"]} label="Command K" size="sm" /></span>
   </button>
   <span class={styles.spacer}></span>
   <div class={styles.actions}>
     <LanguageSwitch alternates={alternates} locale={locale} />
-    <ThemeToggle />
-    <Button aria-label="GitHub 저장소" href={repositoryUrl} rel="noopener" size="icon-sm" target="_blank" title="GitHub" variant="ghost">
+    <ThemeToggle locale={locale} />
+    <Button aria-label={copy.githubRepository} href={repositoryUrl} rel="noopener" size="icon-sm" target="_blank" title="GitHub" variant="ghost">
       <GitHub />
     </Button>
   </div>
+  <span class={styles.compactLanguage}><LanguageSwitch alternates={alternates} locale={locale} /></span>
   <span class={styles.searchIcon}>
-    <Button aria-haspopup="dialog" aria-label="검색" data-search-open size="icon" variant="ghost"><Search /></Button>
+    <Button aria-haspopup="dialog" aria-label={copy.search.button} data-search-open size="icon" variant="ghost"><Search /></Button>
   </span>
 </header>

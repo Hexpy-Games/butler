@@ -2,31 +2,40 @@
 // The site-wide 404.html (GitHub Pages serves it for every missing path).
 // /ds/<path> links forward to the DS Viewer's ?page= route before paint (the
 // DS build's redirect helper, which ignores other paths); everything else
-// shows the manual's not-found page.
+// shows the manual's not-found page. One file answers for every locale, so it
+// uses the default locale's chrome and adds a line per other locale.
 import { Typo } from "../ds/components/Typo";
 import pageStyles from "../ds/web/DocPage/DocPage.module.css";
 import DocsLayout from "../ds/web/DocsLayout/DocsLayout.astro";
 import { alternates, loadNav } from "../site/docs";
 import { DS_REDIRECT_HELPER, designSystemRoot, docsRoot } from "../site/nav";
+import { DEFAULT_LOCALE, LOCALES } from "../site/sections";
+import { ui } from "../site/ui";
 
-const title = "페이지를 찾을 수 없습니다";
-const description = "주소가 바뀌었거나 없는 페이지입니다.";
-const homeHref = docsRoot(import.meta.env.BASE_URL, "ko");
+const base = import.meta.env.BASE_URL;
+const copy = ui(DEFAULT_LOCALE).notFound;
+const homeHref = docsRoot(base, DEFAULT_LOCALE);
+const others = LOCALES.filter((locale) => locale !== DEFAULT_LOCALE);
 ---
 <DocsLayout
   alternates={await alternates(null)}
-  description={description}
+  description={copy.description}
   homeHref={homeHref}
-  locale="ko"
-  nav={await loadNav("ko", "")}
+  locale={DEFAULT_LOCALE}
+  nav={await loadNav(DEFAULT_LOCALE, "")}
   noindex
-  title={title}
+  title={copy.title}
 >
-  <script is:inline slot="head" src={`${designSystemRoot(import.meta.env.BASE_URL)}${DS_REDIRECT_HELPER}`}></script>
+  <script is:inline slot="head" src={`${designSystemRoot(base)}${DS_REDIRECT_HELPER}`}></script>
   <article class={pageStyles.article}>
     <header class={pageStyles.header}>
-      <Typo.H1>{title}</Typo.H1>
-      <p class={pageStyles.lead}>{description} <a href={homeHref}>사용 설명서 처음으로</a></p>
+      <Typo.H1>{copy.title}</Typo.H1>
+      <p class={pageStyles.lead}>{copy.description} <a href={homeHref}>{copy.home}</a></p>
+      {others.map((locale) => (
+        <p class={pageStyles.lead} lang={locale}>
+          {ui(locale).notFound.title}. {ui(locale).notFound.description} <a href={docsRoot(base, locale)}>{ui(locale).notFound.home}</a>
+        </p>
+      ))}
     </header>
   </article>
 </DocsLayout>
