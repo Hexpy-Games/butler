@@ -3,7 +3,7 @@
 # Registry decisions and release admission, with no network or real publish.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
-scratch="$(mktemp -d)"
+scratch="$(mktemp -d "${TMPDIR:-/tmp}/butler-npm-test.XXXXXX")"
 trap 'rm -rf "$scratch"' EXIT
 export HOME="$scratch/home" BUTLER_DATA="$scratch/data"
 mkdir -p "$HOME" "$BUTLER_DATA" "$scratch/bin" "$scratch/package"
@@ -38,9 +38,9 @@ jq -n --arg state "$RELEASE_STATE" '
   {tagName: "v0.1.0-preview.3", isDraft: ($state == "draft"),
    publishedAt: (if $state == "unpublished" then null else "2026-10-01" end),
    assets: (["butler-0.1.0-preview.3-SHA256SUMS",
-             "butler-agent-0.1.0-darwin-arm64.tar.gz",
-             "butler-agent-0.1.0-linux-x64.tar.gz",
-             "butler-agent-0.1.0-linux-arm64.tar.gz"]
+             "butler-agent-0.1.0-preview.3-darwin-arm64.tar.gz",
+             "butler-agent-0.1.0-preview.3-linux-x64.tar.gz",
+             "butler-agent-0.1.0-preview.3-linux-arm64.tar.gz"]
      | if $state == "no-archive" then .[:-1]
        elif $state == "no-checksums" then .[1:] else . end
      | map({name: .}))}'

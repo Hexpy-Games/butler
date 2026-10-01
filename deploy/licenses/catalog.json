@@ -1,9 +1,9 @@
 {
   "inputs": {
     "bun.lock": "6da68de704dbc47dea3ae850efa02a7e7ccf9691a5778c73fb77a8bb1687a84e",
-    "packages/butler-agent/rust/Cargo.lock": "1daf911a874bea15eefa9b91afeb1f9ebc0603b48f727d98cb69fec1741f5af1",
-    "packages/butler-agent/rust/Cargo.toml": "c7e1a63498d771a837005fef0b6a27772923ec746cd59a31a6400cbe94696eb9",
-    "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "7dcc5a22480ff96f1c6460a16fcacc2a5407be321d3e0709e255fc05ef403718",
+    "packages/butler-agent/rust/Cargo.lock": "9bba0d4e03f05daf8812a66be071d02288a8aaf8ce817583d1e12b927d1f52e3",
+    "packages/butler-agent/rust/Cargo.toml": "f93e0f6eb7ff452ebd4d3e86c9e5ed3ea627dfac9da153ca28057b0bba8def5a",
+    "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "7bc16915e7c3ff9c8f67ac2f1021a763760f6f4f67d8f241f284ae606bd104d5",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
     "packages/butler-agent/rust/crates/butler-core/Cargo.toml": "736517adc6731fe7bef9a81897979400c1d9cf40d8fea399cf35c830471689d7",
     "packages/butler-agent/rust/crates/butler-core/src/js_date/parse/LICENSE.txt": "a0af5aa0d38e4c35e56c8e42a43a4b1e462619a26332e43249bb0772ad06a3e2",
@@ -14,7 +14,7 @@
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "95abb3064ab75a21c95efdb6fa5049c80c46abcfe62794330cab063d7d574820",
     "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "90781f4840f7705f2ac7a577abf1f4d8fdb90aaf8f7c6c25e7df9548ff6a9814",
     "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "64da42f6f886ea7101d64301d15061435e92bdb1821c1c8d15a5e02581a84314",
-    "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "01b6913903b7649fcc88e576ba0c821ac38d8fdb4ffe68d5d8b6c8699cd21d65",
+    "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "e8e6f6d7ef418db0e100f2560ee8fc5f17d567cc30fda2f12e409dff552d96e9",
     "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "fd97e7279fef8e91a95c908d368c5eb4548c40cf5d9d3fa277a8d49f71901b53",
     "packages/butler-agent/rust/crates/butler-turn/Cargo.toml": "67226f9ea15df5cbe76ccf0f8f7ac75bbc553130ac07a77b256fb05d9c75d3aa",
     "packages/butler-agent/rust/rust-toolchain.toml": "57dc91c7ef18e7f2f5b5b52265f2eb79c240359fbdebdf3d2f9661de3143a2e6",

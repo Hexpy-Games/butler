@@ -45,6 +45,7 @@
 // Every public item says what it is for.
 #![deny(missing_docs)]
 
+pub mod app_update;
 pub mod command_launcher;
 pub mod command_sandbox;
 pub mod cpu;

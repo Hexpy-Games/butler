@@ -278,4 +278,12 @@ pub(super) const ROUTES: &[Entry] = &[
         "버전을 봅니다. / Show version.",
         "core"
     ),
+    route!(
+        "--version",
+        "butler --version, -V",
+        "릴리스 버전과 빌드 ID를 봅니다. / Show release version and build ID.",
+        "core",
+        false,
+        &["-V"]
+    ),
 ];

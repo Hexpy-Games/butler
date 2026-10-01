@@ -15,6 +15,7 @@ type Recognizer = fn(&[OsString]) -> bool;
 /// Every command family the `butler-agent` executable accepts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Command {
+    AppUpdate,
     Public,
     ServiceControl,
     Doctor,
@@ -36,6 +37,9 @@ impl Command {
     /// Classifies command arguments (installation options already removed).
     pub fn classify(args: &[OsString]) -> Self {
         use crate::host::cli;
+        if args.first().is_some_and(|arg| arg == "app-update-install") {
+            return Self::AppUpdate;
+        }
         let families: [(Recognizer, Self); 11] = [
             (cli::public::recognizes, Self::Public),
             (cli::service::recognizes, Self::ServiceControl),
@@ -73,6 +77,7 @@ impl Command {
     ) -> ExitCode {
         use crate::host::cli;
         match self {
+            Self::AppUpdate => cli::app_update::run(&args),
             Self::Public => cli::public::run(&installation, &args),
             Self::ServiceControl => cli::service::run_native_service_cli(installation, args).await,
             Self::Doctor => cli::doctor::run(&installation, &args),
@@ -140,6 +145,9 @@ pub async fn main(args: Vec<OsString>) -> ExitCode {
     if args.len() == 1 && args[0] == "--private-embedding-worker" {
         return crate::host::embedding::worker::run().await;
     }
+    if matches!(args.as_slice(), [flag] if flag == "--version" || flag == "-V") {
+        return print_version();
+    }
     let (installation, command_args) = match installation(&args) {
         Ok(value) => value,
         Err(error) => {
@@ -150,6 +158,23 @@ pub async fn main(args: Vec<OsString>) -> ExitCode {
     Command::classify(&command_args)
         .run(installation, command_args)
         .await
+}
+
+fn print_version() -> ExitCode {
+    let Ok(executable) = std::env::current_exe().and_then(std::fs::canonicalize) else {
+        eprintln!("Could not read Butler build ID.");
+        return ExitCode::FAILURE;
+    };
+    let Ok(digest) = butler_runtime::operations::sha256_file(&executable) else {
+        eprintln!("Could not read Butler build ID.");
+        return ExitCode::FAILURE;
+    };
+    let Some(build_id) = digest.get(..8) else {
+        eprintln!("Could not read Butler build ID.");
+        return ExitCode::FAILURE;
+    };
+    println!("butler {} ({build_id})", env!("BUTLER_RELEASE_VERSION"));
+    ExitCode::SUCCESS
 }
 
 fn printed(stdout: &str, stderr: &str, exit_code: u8) -> ExitCode {

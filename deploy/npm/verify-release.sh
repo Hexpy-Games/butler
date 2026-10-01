@@ -2,7 +2,7 @@
 set -euo pipefail
 tag="${1:?Usage: verify-release.sh vVERSION}"
 version="${tag#v}"
-archive_version="${version%%-*}"
+archive_version="$version"
 release="$(gh release view "$tag" --json tagName,isDraft,publishedAt,assets)"
 jq -e --arg tag "$tag" --arg version "$version" --arg base "$archive_version" '
   .tagName == $tag and .isDraft == false and .publishedAt != null

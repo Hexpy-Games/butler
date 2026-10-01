@@ -15,20 +15,7 @@ pub(super) fn sanitize(
         return Ok(Value::Object(Map::new()));
     };
     let mut output = Map::new();
-    if let Some(value) = input.get("server_url").and_then(Value::as_str) {
-        let value = value.trim();
-        if valid_server_url(value) {
-            output.insert("server_url".into(), json!(value));
-        }
-    }
-    if let Some(value @ ("en" | "ko")) = input.get("language").and_then(Value::as_str) {
-        output.insert("language".into(), json!(value));
-    }
-    if let Some(value) = input.get("timezone").and_then(Value::as_str)
-        && validation::is_iana_timezone(&json!(value))
-    {
-        output.insert("timezone".into(), json!(value.trim()));
-    }
+    sanitize_preferences(input, &mut output);
     if let Some(value) = input.get("model").and_then(Value::as_str) {
         let value = super::super::available_model_ref(value, facts)
             .ok_or_else(|| super::super::model_unavailable("model"))?;
@@ -279,4 +266,24 @@ fn colors(value: &Value) -> Option<[String; 6]> {
 
 fn reasoning(value: &str) -> Option<butler_turn::btcc::ReasoningEffort> {
     super::super::model::parse_reasoning(value)
+}
+
+fn sanitize_preferences(input: &Map<String, Value>, output: &mut Map<String, Value>) {
+    if let Some(value) = input.get("update_previews").and_then(Value::as_bool) {
+        output.insert("update_previews".into(), json!(value));
+    }
+    if let Some(value) = input.get("server_url").and_then(Value::as_str) {
+        let value = value.trim();
+        if valid_server_url(value) {
+            output.insert("server_url".into(), json!(value));
+        }
+    }
+    if let Some(value @ ("en" | "ko")) = input.get("language").and_then(Value::as_str) {
+        output.insert("language".into(), json!(value));
+    }
+    if let Some(value) = input.get("timezone").and_then(Value::as_str)
+        && validation::is_iana_timezone(&json!(value))
+    {
+        output.insert("timezone".into(), json!(value.trim()));
+    }
 }

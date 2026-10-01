@@ -18,6 +18,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // consume that identity without coupling general filesystem paths to it.
         "instance" => &["process_table", "process_names"],
         "process_names" => &["launcher", "secure_fs"],
+        // Package activation waits for its Electron parent through the process port.
+        "app_update" => &["process_control", "secure_fs"],
         // The credential store's owner-only fallback file is a secure_fs file.
         "secrets" => &["secure_fs"],
         // The `butler` command launcher is a runnable file under the user's

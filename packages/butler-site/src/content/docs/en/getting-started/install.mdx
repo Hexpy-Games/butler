@@ -22,20 +22,20 @@ Use the [0.1.0 preview.4 release](https://github.com/Hexpy-Games/butler/releases
 
 ### macOS
 
-1. Download the [macOS DMG](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-darwin-arm64.dmg).
+1. Download the [macOS DMG](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-preview.4-darwin-arm64.dmg).
 2. Open the DMG and drag `Butler.app` into Applications.
 
 ### Linux
 
-Download the [DEB x64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-linux-x64.deb), [DEB arm64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-linux-arm64.deb), or [Arch x64 package](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-archlinux-x64.pkg.tar.zst).
+Download the [DEB x64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-preview.4-linux-x64.deb), [DEB arm64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-preview.4-linux-arm64.deb), or [Arch x64 package](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-preview.4-archlinux-x64.pkg.tar.zst).
 
 From the download folder, install the package for your distribution:
 
 ```bash
 # Debian / Ubuntu (x64; substitute the arm64 filename when needed)
-sudo apt install ./butler-app-0.1.0-linux-x64.deb
+sudo apt install ./butler-app-0.1.0-preview.4-linux-x64.deb
 # Arch Linux (x64)
-sudo pacman -U ./butler-app-0.1.0-archlinux-x64.pkg.tar.zst
+sudo pacman -U ./butler-app-0.1.0-preview.4-archlinux-x64.pkg.tar.zst
 ```
 
 Open Butler from your application menu.
@@ -46,7 +46,7 @@ Each release file has a SHA-256 checksum (`.sha256`). Download both files into t
 
 ```bash
 cd ~/Downloads
-shasum -a 256 -c butler-app-0.1.0-darwin-arm64.dmg.sha256
+shasum -a 256 -c butler-app-0.1.0-preview.4-darwin-arm64.dmg.sha256
 ```
 
 `OK` means the download matches the published file. On Linux, use `sha256sum -c` with the package's checksum file.

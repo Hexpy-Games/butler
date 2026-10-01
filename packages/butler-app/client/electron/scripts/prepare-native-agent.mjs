@@ -89,9 +89,11 @@ if (!gunzipSync(readFileSync(join(uiDistRoot, "THIRD_PARTY_NOTICES.txt.gz"))).eq
   throw new Error("Renderer notices are stale; rebuild the App renderer.");
 }
 cpSync(uiDistRoot, join(payloadRoot, "resources", "app-client", "dist"), { recursive: true });
-const version = readCargoVersion(join(rustRoot, "crates", "butler-agent", "Cargo.toml"));
+const baseVersion = readCargoVersion(join(rustRoot, "crates", "butler-agent", "Cargo.toml"));
+const tagVersion = process.env.GITHUB_REF_NAME?.replace(/^v/u, "");
+const version = tagVersion && /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(tagVersion) ? tagVersion : `${baseVersion}-dev`;
 const appVersion = process.env.BUTLER_PACKAGED_APP_VERSION?.trim() ||
-  JSON.parse(readFileSync(join(electronRoot, "package.json"), "utf8")).version?.trim();
+  version;
 if (!appVersion) throw new Error("Packaged App version is required for the native Agent payload.");
 writeFileSync(
   join(payloadRoot, "native-agent-manifest.json"),
