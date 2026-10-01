@@ -49,7 +49,8 @@ function Assert-CommandBinding {
 
 # Public installer/CLI/browser smoke. Never emit connection codes or credentials.
 $ErrorActionPreference = 'Stop'
-$root = Join-Path $env:RUNNER_TEMP ('installed-preview-' + [guid]::NewGuid())
+# Keep the fixture within Windows PowerShell 5.1's normal path limit.
+$root = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid().ToString('N'))
 $originalProfile = $env:USERPROFILE
 $env:CARGO_HOME = "$originalProfile/.cargo"
 $env:RUSTUP_HOME = "$originalProfile/.rustup"
