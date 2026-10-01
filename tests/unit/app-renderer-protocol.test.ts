@@ -190,7 +190,8 @@ test("main process loads production UI through the app protocol", () => {
     "utf8",
   );
   expect(main).toContain("protocol.registerSchemesAsPrivileged([APP_RENDERER_SCHEME_PRIVILEGES])");
-  expect(main).toContain("createAppRendererProtocolHandler({ distRoot: staticRendererDistRoot })");
+  expect(main).toContain("distRoot: staticRendererDistRoot");
+  expect(main).toContain('noticesFile: app.isPackaged ? join(process.resourcesPath, "bundled-agent/resources/app-client/dist/THIRD_PARTY_NOTICES.txt.gz") : null');
   expect(main).toMatch(/protocol\.handle\(\s*APP_RENDERER_SCHEME,/u);
   expect(main).toContain("migrateRendererStorageOrigin({");
   expect(main).toContain("await prepareAppRendererProtocol();\n  await win.loadURL(rendererUrl);");

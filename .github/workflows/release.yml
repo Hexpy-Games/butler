@@ -54,13 +54,14 @@ jobs:
 
       - name: Install app client dependencies
         run: |
-          bun install --frozen-lockfile
-          npm --prefix packages/butler-app/client/electron ci
-          npm --prefix packages/butler-app/client/ui ci
+          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          bun install --frozen-lockfile --ignore-scripts
 
       # The renderer ships in the Agent's resources (app-client/dist).
       - name: Build the App renderer
-        run: npm --prefix packages/butler-app/client/ui run build
+        run: |
+          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          npm --prefix packages/butler-app/client/ui run build
 
       - name: Prepare the native Agent payload
         run: node packages/butler-app/client/electron/scripts/prepare-native-agent.mjs darwin arm64 "$BUTLER_NATIVE_AGENT_PAYLOAD"

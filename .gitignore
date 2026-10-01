@@ -43,6 +43,7 @@ tests/recordings/
 tests/debug_*
 tests/capture_*
 .tmp/
+packages/butler-npm/THIRD_PARTY_NOTICES.txt*
 
 # ── Backup files ──────────────────────────────────────────────────────────────
 *.bak
