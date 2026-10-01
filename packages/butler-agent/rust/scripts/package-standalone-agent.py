@@ -40,7 +40,7 @@ def main() -> int:
     parser.add_argument("--payload", required=True, type=Path, help="prepared native payload directory")
     parser.add_argument("--output", required=True, type=Path, help="standalone .tar.gz destination")
     parser.add_argument("--artifact-url", help="published URL for the independently installed archive")
-    parser.add_argument("--channel", default="stable", help="update channel in the Agent manifest")
+    parser.add_argument("--channel", default=("preview" if "-preview." in os.environ.get("GITHUB_REF_NAME", "") else "stable"), help="update channel in the Agent manifest")
     args = parser.parse_args()
     if not args.channel.strip():
         parser.error("Agent update channel is empty")

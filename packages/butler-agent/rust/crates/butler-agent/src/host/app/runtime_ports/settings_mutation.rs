@@ -71,7 +71,8 @@ impl AppSettingsMutation {
         let environment_key = api_key.and_then(|_| environment_key(provider));
 
         let mut destinations = Vec::new();
-        let writes_config = patch.contains_key("consolidation_model")
+        let writes_config = patch.contains_key("update_previews")
+            || patch.contains_key("consolidation_model")
             || patch.contains_key("consolidation_reasoning_effort")
             || patch.contains_key("web_search")
             || patch.contains_key("language")
@@ -86,21 +87,7 @@ impl AppSettingsMutation {
         }
         let root = self.validated_root(&destinations)?;
 
-        if let Some(model) = patch.get("consolidation_model").and_then(Value::as_str) {
-            self.profile
-                .set_extractor_model(Some(model.to_owned()))
-                .await
-                .map_err(GatewayApplicationError::internal_from)?;
-        }
-        if let Some(effort) = patch
-            .get("consolidation_reasoning_effort")
-            .and_then(Value::as_str)
-        {
-            self.profile
-                .set_extractor_reasoning_effort(Some(effort.to_owned()))
-                .await
-                .map_err(GatewayApplicationError::internal_from)?;
-        }
+        self.apply_profile_and_channel(&patch, &root).await?;
         if let (Some(key), Some(value)) = (environment_key, api_key) {
             self.configuration
                 .upsert_private_environment_value(key, value, &root)
@@ -138,6 +125,35 @@ impl AppSettingsMutation {
         if !user_patch.is_empty() {
             self.configuration
                 .update_user_settings(&Value::Object(user_patch), Some(&root))
+                .await
+                .map_err(GatewayApplicationError::internal_from)?;
+        }
+        Ok(())
+    }
+
+    async fn apply_profile_and_channel(
+        &self,
+        patch: &serde_json::Map<String, Value>,
+        root: &std::path::Path,
+    ) -> Result<(), GatewayApplicationError> {
+        if let Some(enabled) = patch.get("update_previews").and_then(Value::as_bool) {
+            self.configuration
+                .set_update_previews(enabled, root)
+                .await
+                .map_err(GatewayApplicationError::internal_from)?;
+        }
+        if let Some(model) = patch.get("consolidation_model").and_then(Value::as_str) {
+            self.profile
+                .set_extractor_model(Some(model.to_owned()))
+                .await
+                .map_err(GatewayApplicationError::internal_from)?;
+        }
+        if let Some(effort) = patch
+            .get("consolidation_reasoning_effort")
+            .and_then(Value::as_str)
+        {
+            self.profile
+                .set_extractor_reasoning_effort(Some(effort.to_owned()))
                 .await
                 .map_err(GatewayApplicationError::internal_from)?;
         }

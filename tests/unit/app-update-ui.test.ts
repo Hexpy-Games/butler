@@ -79,7 +79,7 @@ test("Electron App update apply opens a staged App artifact", () => {
   expect(preload).toContain('result?.stage_status === "staged"');
   expect(preload).toContain("result?.artifact_path");
   expect(main).toContain('ipcMain.handle("butler:open-update-artifact"');
-  expect(main).toContain("shell.openPath(artifactPath)");
+  expect(main).toContain("prepareAppPackageUpdate({");
   expect(main).toContain('resolve(butlerDataRoot, "updates", "artifacts")');
   expect(main).toContain("publisherConsistent: signature.publisherConsistent");
 });

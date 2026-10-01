@@ -123,7 +123,7 @@ butler version
 
 ## 명령
 
-`butler --help`와 `butler help schedule`로 한국어·영어 도움말을 봅니다.
+`butler --help`와 `butler help schedule`로 한국어·영어 도움말을 봅니다. `butler --version` 또는 `-V`는 서비스나 데이터 폴더 없이 릴리스 버전과 빌드 ID를 표시합니다.
 
 | 명령 | 용도 |
 | --- | --- |
@@ -141,6 +141,7 @@ butler version
 | `mcp list\|add\|enable\|disable\|delete\|test` | MCP 서버 연결 관리 |
 | `skills list`, `skills import PATH` | 스킬 조회·가져오기 |
 | `config get KEY`, `config set KEY VALUE` | 설정 조회·변경 |
+| `--version`, `-V` | 릴리스 버전과 빌드 ID를 표시합니다. |
 | `help`, `version` | 도움말·버전 |
 
 예약 작업은 서비스가 실행 중일 때 동작합니다. `schedule create`와 `update`의 옵션은 `butler help schedule`에서 확인합니다. `schedule list --status STATUS`는 상태별로 거르고, `--include-deleted`는 삭제한 예약 작업도 보여 줍니다.

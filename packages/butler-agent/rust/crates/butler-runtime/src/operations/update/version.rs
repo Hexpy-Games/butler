@@ -1,31 +1,14 @@
-//! Version ordering shared by update checks and the installed-version list.
+//! SemVer ordering shared by updates and installed versions.
 
-/// Whether `available` is a newer version than `current`, comparing the
-/// numeric segments of `1.2.3-4` style versions left to right.
+/// Whether a valid release version is newer; invalid versions are never offered.
 pub fn version_newer(available: &str, current: &str) -> bool {
-    let parse = |version: &str| {
-        version
-            .split(['.', '-'])
-            .map(|part| {
-                part.chars()
-                    .take_while(char::is_ascii_digit)
-                    .collect::<String>()
-                    .parse::<u64>()
-                    .unwrap_or(0)
-            })
-            .collect::<Vec<_>>()
-    };
-    let available = parse(available);
-    let current = parse(current);
-    (0..available.len().max(current.len()).max(3))
-        .map(|index| {
-            (
-                available.get(index).copied().unwrap_or(0),
-                current.get(index).copied().unwrap_or(0),
-            )
-        })
-        .find(|(left, right)| left != right)
-        .is_some_and(|(left, right)| left > right)
+    match (
+        semver::Version::parse(available),
+        semver::Version::parse(current),
+    ) {
+        (Ok(available), Ok(current)) => available.cmp_precedence(&current).is_gt(),
+        _ => false,
+    }
 }
 
 #[cfg(test)]
@@ -38,5 +21,9 @@ mod tests {
         assert!(version_newer("1.2.1", "1.2.0"));
         assert!(!version_newer("1.2.0", "1.2.0"));
         assert!(!version_newer("1.1.9", "1.2.0"));
+        assert!(version_newer("0.1.0-preview.10", "0.1.0-preview.9"));
+        assert!(version_newer("0.1.0", "0.1.0-preview.99"));
+        assert!(!version_newer("0.1.0-preview.99", "0.1.0"));
+        assert!(!version_newer("invalid", "0.1.0"));
     }
 }

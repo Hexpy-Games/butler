@@ -275,39 +275,23 @@ impl AgentArchiveUpdateService {
             .as_deref()
             .filter(|version| !version.trim().is_empty())
             .ok_or(UpdateCode::AgentVersionUnavailable)?;
-        let source = request.manifest.as_deref().unwrap_or(&self.manifest);
+        let previews = super::channel::previews(&self.data, request.channel.as_deref()).await;
+        let source = super::channel::source(
+            &self.client,
+            &self.shutdown,
+            request.manifest.as_deref().unwrap_or(&self.manifest),
+            previews,
+        )
+        .await?;
         let artifact = manifest::load_agent_artifact(
             &self.client,
             &self.shutdown,
-            source,
-            request.channel.as_deref(),
+            &source,
+            Some(if previews { "preview" } else { "stable" }),
         )
         .await?;
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        let prior = stage::read_json(
-            &self.data,
-            &self.installation,
-            "updates/staged/service.json",
-        )
-        .await;
-        let prior_record_matches = prior.as_ref().is_some_and(|value| {
-            value["staged"] == true
-                && value["available_version"] == artifact.version
-                && value["sha256"].as_str() == artifact.sha256.as_deref()
-        });
-        let prior_staged = if prior_record_matches {
-            match prior
-                .as_ref()
-                .and_then(|value| value["artifact_path"].as_str())
-            {
-                Some(label) => {
-                    stage::staged_file_exists(&self.data, &self.installation, label).await
-                }
-                None => false,
-            }
-        } else {
-            false
-        };
+        let prior_staged = self.prior_staged(&artifact).await;
         let url = artifact.url.clone();
         Ok((
             json!({
@@ -347,10 +331,36 @@ impl AgentArchiveUpdateService {
                 "attempted_runtime_path": null,
                 "previous_runtime_path": null,
                 "rollback_reason": null,
-                "manifest_source": manifest::public_source(source),
+                "manifest_source": manifest::public_source(&source),
             }),
             url,
         ))
+    }
+    async fn prior_staged(&self, artifact: &manifest::AgentArtifact) -> bool {
+        let prior = stage::read_json(
+            &self.data,
+            &self.installation,
+            "updates/staged/service.json",
+        )
+        .await;
+        let prior_record_matches = prior.as_ref().is_some_and(|value| {
+            value["staged"] == true
+                && value["available_version"] == artifact.version
+                && value["sha256"].as_str() == artifact.sha256.as_deref()
+        });
+        if prior_record_matches {
+            match prior
+                .as_ref()
+                .and_then(|value| value["artifact_path"].as_str())
+            {
+                Some(label) => {
+                    stage::staged_file_exists(&self.data, &self.installation, label).await
+                }
+                None => false,
+            }
+        } else {
+            false
+        }
     }
 }
 

@@ -44,6 +44,9 @@ unicode-segmentation.workspace = true
 url.workspace = true
 rmcp.workspace = true
 
+[build-dependencies]
+semver.workspace = true
+
 [dev-dependencies]
 butler-ledger = { path = "../butler-ledger", features = ["test-support"] }
 butler-runtime = { path = "../butler-runtime", features = ["test-support"] }
