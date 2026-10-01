@@ -112,10 +112,12 @@ pub(super) async fn poll_service(
         }
     };
     let _ = stop_maintenance.send(());
+    super::super::shutdown_trace::event("maintenance_join:begin");
     let maintenance_result = match maintenance.join_next().await {
         Some(joined) => maintenance_join_result(joined),
         None => Ok(()),
     };
+    super::super::shutdown_trace::event("maintenance_join:end");
     result.and(maintenance_result)
 }
 

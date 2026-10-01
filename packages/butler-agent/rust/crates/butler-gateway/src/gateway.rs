@@ -20,6 +20,7 @@ mod security_settings;
 pub use devices::{GatewayDevices, PairedDevice};
 mod server;
 mod session_references;
+mod shutdown_trace;
 mod transcript;
 mod ui_language;
 
@@ -80,9 +81,10 @@ pub use application::{
 };
 pub use application::{
     AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
-    LocalModelServersView, OauthFlowStatus, OauthFlowView, ProviderKeyVerificationView,
-    ReplacedCredentialView, SETUP_READINESS_EVENT, SavedCredentialView, SetupReadinessStatus,
-    SetupReadinessStep, SetupReadinessView, SetupStepError, SetupStepStatus,
+    LocalModelServersView, MemoryModelProgress, OauthFlowStatus, OauthFlowView,
+    ProviderKeyVerificationView, ReplacedCredentialView, SETUP_READINESS_EVENT,
+    SavedCredentialView, SetupReadinessStatus, SetupReadinessStep, SetupReadinessView,
+    SetupStepError, SetupStepStatus,
 };
 pub(crate) use application::{
     AutomationDetailView, AutomationListView, AutomationMutationResult, AutomationRunListView,

@@ -229,56 +229,56 @@ fn card(id: &str, title: &str, description: &str, text: &str) -> Value {
 fn general_cards_en() -> Vec<Value> {
     vec![
         card(
-            "daily-briefing",
-            "Worth a short look today",
-            "A compact pass over notable news and public sources can make the day easier to place.",
-            "Give me a short briefing on today's notable news and public sources.",
+            "organize-download-folder",
+            "Downloads folder cleanup",
+            "Butler checks files on this computer and asks before moving them.",
+            "Sort my Downloads folder by type. Show me the plan before moving anything.",
         ),
         card(
-            "open-source-trends",
-            "Open source getting attention",
-            "Looking at projects gaining attention can surface useful ideas and patterns.",
-            "Summarize recent open-source projects by why they are gaining attention and where they may be useful.",
+            "summarize-document",
+            "Document summary",
+            "Attach or paste a document to get the key points.",
+            "Summarize this in a few key points: ",
         ),
         card(
-            "search-strategy",
-            "How to split the search",
-            "Splitting a broad question helps separate quick scanning from deeper verification.",
-            "Lay out a way to split broad research into quick search and deeper verification.",
+            "draft-reply",
+            "Reply draft",
+            "Turn a short note into a clear reply.",
+            "Draft a reply from this note: ",
         ),
         card(
-            "web-standards-rendering",
-            "Why browsers render differently",
-            "Comparing CSS specs with browser behavior can make rendering issues easier to narrow down.",
-            "Compare CSS specs with browser rendering differences.",
+            "morning-briefing",
+            "Morning briefing",
+            "Create a daily 8 AM schedule for weather, news, and today's plans.",
+            "Create a daily 8 AM schedule with weather, news, and today's plans.",
         ),
     ]
 }
 fn general_cards_ko() -> Vec<Value> {
     vec![
         card(
-            "daily-briefing",
-            "오늘 볼 만한 소식",
-            "주요 이슈와 공개 자료를 짧게 훑어두면 하루의 방향을 잡는 데 도움이 됩니다.",
-            "오늘 볼 만한 주요 이슈와 공개 자료를 짧게 브리핑해줘.",
+            "organize-download-folder",
+            "다운로드 폴더 정리하기",
+            "이 컴퓨터의 파일을 살펴보고 옮기기 전에 묻습니다.",
+            "다운로드 폴더를 종류별로 정리해줘. 옮기기 전에 계획부터 보여줘.",
         ),
         card(
-            "open-source-trends",
-            "요즘 뜨는 오픈소스",
-            "최근 주목받는 오픈소스 프로젝트를 살펴보고 영감을 얻을 수 있도록 정리해봐요.",
-            "최근 주목받는 오픈소스 프로젝트를 이유와 활용처 중심으로 정리해줘.",
+            "summarize-document",
+            "문서 요약하기",
+            "첨부하거나 붙여 넣은 문서의 핵심을 정리합니다.",
+            "이 내용을 핵심만 요약해줘: ",
         ),
         card(
-            "search-strategy",
-            "검색어를 어떻게 나눌까",
-            "넓은 질문을 몇 갈래로 나누면 빠르게 훑을 부분과 깊게 볼 부분을 더 잘 구분할 수 있습니다.",
-            "넓은 검색 요청을 빠른 검색과 깊은 검색으로 나누는 기준을 정리해줘.",
+            "draft-reply",
+            "답장 초안 쓰기",
+            "짧은 메모를 바탕으로 답장 초안을 씁니다.",
+            "이 메모로 답장 초안을 써줘: ",
         ),
         card(
-            "web-standards-rendering",
-            "브라우저마다 다르게 보이는 이유",
-            "CSS 스펙과 실제 구현 차이를 같이 보면 UI 문제가 어디에서 생기는지 더 빨리 좁힐 수 있습니다.",
-            "CSS 스펙과 브라우저별 렌더링 차이를 비교해서 설명해줘.",
+            "morning-briefing",
+            "매일 아침 브리핑 받기",
+            "날씨·뉴스·일정을 8시에 전하는 예약 작업을 만듭니다.",
+            "매일 아침 8시에 날씨와 뉴스, 오늘 일정을 알려주는 예약 작업을 만들어줘.",
         ),
     ]
 }

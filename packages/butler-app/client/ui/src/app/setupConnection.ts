@@ -25,8 +25,8 @@ export async function fetchSetupReadiness(): Promise<SetupReadinessView | "unsup
 }
 
 /** Runs the agent's preparation again after a failure; answers the new (preparing) view. */
-export async function retrySetupReadiness(): Promise<SetupReadinessView> {
-  const view = normalizeReadiness(await api<unknown>("/setup/readiness/retry", { method: "POST", body: JSON.stringify({}) }));
+export async function retrySetupReadiness(memoryModelOnly = false): Promise<SetupReadinessView> {
+  const view = normalizeReadiness(await api<unknown>("/setup/readiness/retry", { method: "POST", body: JSON.stringify({ memory_model_only: memoryModelOnly }) }));
   return view ?? { status: "preparing", steps: [] };
 }
 

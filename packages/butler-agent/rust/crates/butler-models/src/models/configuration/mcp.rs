@@ -8,6 +8,7 @@ use crate::models::{ModelCatalogError, ParsedModelRef, parse_model_ref};
 const DEFAULT_MODEL: &str = "openai/gpt-5.5-codex";
 const VALID_MODELS: &[&str] = &[
     "gpt-6-astra",
+    "gpt-6.1-sol",
     "gpt-6-sol",
     "gpt-6-luna",
     "gpt-5.6-sol",
@@ -155,6 +156,7 @@ mod tests {
     use super::{McpModelTarget, details, valid_model};
     use serde_json::json;
 
+    // test-category: pure-logic
     #[test]
     fn mcp_model_targets_accept_supported_refs_and_fall_back_from_unsupported_ids() {
         // reads worker and butler with source fallbacks
@@ -193,6 +195,7 @@ mod tests {
         // accepts source aliases namespaced refs and supported raw ids
         {
             assert!(valid_model("gpt-6-astra"));
+            assert!(valid_model("gpt-6.1-sol"));
             assert!(valid_model("gpt-6-sol"));
             assert!(valid_model("gpt-6-luna"));
             assert!(valid_model("anthropic/claude-sonnet-5"));

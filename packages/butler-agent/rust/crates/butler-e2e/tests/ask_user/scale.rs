@@ -1,7 +1,6 @@
 //! Settled authority history must not add work to a visible question poll.
-use super::{HarnessError, Scenario, Value, answer, json};
+use super::{HarnessError, Scenario, Value, answer};
 use rusqlite::{Connection, params};
-use std::time::{Duration, Instant};
 
 const HISTORY: i64 = 10_000;
 
@@ -62,38 +61,57 @@ fn seed(db: &Connection, request_ref: &str) {
     assert_eq!(counts, (HISTORY + 1, HISTORY));
 }
 
-pub(super) async fn assert_projection(s: &Scenario, question: &Value) -> Result<(), HarnessError> {
+fn assert_pending_question_lookup_is_indexed(db: &Connection) {
+    let mut statement = db
+        .prepare(
+            "EXPLAIN QUERY PLAN
+             SELECT request_ref FROM btcc_authority_requests
+             WHERE owner_session_id='general' AND close_reason IS NULL
+               AND decision='pending' AND source_call_id IS NOT NULL
+               AND EXISTS (SELECT 1 FROM btcc_turns turn
+                 WHERE turn.turn_id=btcc_authority_requests.source_turn_id
+                   AND turn.suspension_reason='authority_pending')
+             UNION ALL
+             SELECT request_ref FROM btcc_authority_requests
+               INDEXED BY idx_btcc_questions_deferred
+             WHERE owner_session_id='general' AND capability='ask_user'
+               AND decision='modified' AND close_reason IS NULL
+               AND outcome_receipt_json IS NULL
+               AND json_extract(CASE WHEN capability='ask_user'
+                 THEN private_alternative_input END,'$.status')='deferred'",
+        )
+        .unwrap();
+    let plan = statement
+        .query_map([], |row| row.get::<_, String>(3))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect::<Vec<_>>();
+    assert!(
+        plan.iter()
+            .any(|detail| detail.contains("idx_btcc_authority_requests_owner_pending")),
+        "pending authority lookup did not use its owner index: {plan:?}"
+    );
+    assert!(
+        plan.iter()
+            .any(|detail| detail.contains("idx_btcc_questions_deferred")),
+        "deferred question lookup did not use its partial index: {plan:?}"
+    );
+    assert!(
+        plan.iter()
+            .all(|detail| !detail.contains("SCAN btcc_authority_requests")),
+        "pending-question lookup scans authority history: {plan:?}"
+    );
+}
+
+pub(super) async fn seed_history(s: &Scenario, question: &Value) -> Result<(), HarnessError> {
     let data = s.sandbox.data.clone();
     let request_ref = question["request_ref"].as_str().unwrap().to_owned();
     tokio::task::spawn_blocking(move || {
-        seed(
-            &Connection::open(data.join("agent-runtime/btcc.sqlite")).unwrap(),
-            &request_ref,
-        );
+        let db = Connection::open(data.join("agent-runtime/btcc.sqlite")).unwrap();
+        seed(&db, &request_ref);
+        assert_pending_question_lookup_is_indexed(&db);
     })
     .await
     .map_err(|e| HarnessError(e.to_string()))?;
-    let mut samples = Vec::new();
-    for _ in 0..20 {
-        let start = Instant::now();
-        let view = s.gw.get("/session-view?session_id=general").await?;
-        samples.push(start.elapsed());
-        assert_eq!(view.status, 200, "{}", view.text);
-        assert_eq!(view.data()["pending_questions"], json!([question]));
-        assert_eq!(view.data()["question_answers"], json!([]));
-        assert_eq!(view.data()["authority_requests"], json!([]));
-        assert_eq!(view.data()["active_turn"]["id"], question["source_turn_id"]);
-        assert_eq!(view.data()["latest_turn"]["state"], "waiting_for_form");
-    }
-    samples.sort();
-    eprintln!(
-        "ask_user authority_history={HISTORY} permissions={HISTORY} complete_pending_questions=1 session-view p50 {:?}; p95 {:?}",
-        samples[9], samples[18]
-    );
-    assert!(
-        samples[18] < Duration::from_millis(150),
-        "session-view p95 {:?}",
-        samples[18]
-    );
     Ok(())
 }

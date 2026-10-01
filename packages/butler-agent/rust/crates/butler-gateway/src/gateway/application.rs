@@ -9,6 +9,8 @@ mod contracts;
 mod errors;
 mod event_outbox;
 mod events;
+use crate::gateway::shutdown_trace::measure as measure_shutdown;
+
 use errors::app_error;
 mod devices;
 #[cfg(debug_assertions)]
@@ -140,9 +142,10 @@ pub use sessions::{
 pub(crate) use setup::test_setup_port;
 pub use setup::{
     AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
-    LocalModelServersView, OauthFlowStatus, OauthFlowView, ProviderKeyVerificationView,
-    ReplacedCredentialView, SETUP_READINESS_EVENT, SavedCredentialView, SetupReadinessStatus,
-    SetupReadinessStep, SetupReadinessView, SetupStepError, SetupStepStatus,
+    LocalModelServersView, MemoryModelProgress, OauthFlowStatus, OauthFlowView,
+    ProviderKeyVerificationView, ReplacedCredentialView, SETUP_READINESS_EVENT,
+    SavedCredentialView, SetupReadinessStatus, SetupReadinessStep, SetupReadinessView,
+    SetupStepError, SetupStepStatus,
 };
 pub use space::{AppSpaceCommand, AppSpaceMutationResult, AppSpaceOrigin};
 use storage::{AppStorage, AppStorageError, CachedSql};
@@ -359,21 +362,31 @@ impl AppApplication {
 
     pub async fn close(&self) -> Result<(), GatewayApplicationError> {
         self.cancel_updates();
-        self.project_dashboard_briefing.close().await;
-        let dispatch = self.stop_dispatch().await;
-        self.transcript_exports.close().await;
-        self.queue_mutations.close().await;
-        self.session_creation.close().await;
-        self.project_creation.close().await;
-        self.session_branches.close().await;
-        self.space_mutations.close().await;
-        self.wallpapers.close().await;
-        let projection = self.projection.close().await;
+        measure_shutdown(
+            "app_project_dashboard_briefing_join",
+            self.project_dashboard_briefing.close(),
+        )
+        .await;
+        let dispatch = measure_shutdown("app_dispatcher", self.stop_dispatch()).await;
+        measure_shutdown(
+            "app_transcript_exports_join",
+            self.transcript_exports.close(),
+        )
+        .await;
+        measure_shutdown("app_queue_mutations_join", self.queue_mutations.close()).await;
+        measure_shutdown("app_session_creation_join", self.session_creation.close()).await;
+        measure_shutdown("app_project_creation_join", self.project_creation.close()).await;
+        measure_shutdown("app_session_branches_join", self.session_branches.close()).await;
+        measure_shutdown("app_space_mutations_join", self.space_mutations.close()).await;
+        measure_shutdown("app_wallpapers_join", self.wallpapers.close()).await;
+        let projection = measure_shutdown("app_projection_join", self.projection.close()).await;
         let retention = match &self.retention {
-            Some(retention) => retention.close().await,
+            Some(retention) => measure_shutdown("app_retention_join", retention.close()).await,
             None => Ok(()),
         };
-        let storage = self.storage.close().await.map_err(app_error);
+        let storage = measure_shutdown("app_storage_join", self.storage.close())
+            .await
+            .map_err(app_error);
         dispatch.and(projection).and(retention).and(storage)
     }
 

@@ -22,6 +22,7 @@
   },
   "include": [
     "packages/butler-app/scripts/**/*.ts",
+    "packages/butler-app/client/ui/scripts/**/*.ts",
     "tools/**/*.ts",
     "tests/**/*.ts"
   ],

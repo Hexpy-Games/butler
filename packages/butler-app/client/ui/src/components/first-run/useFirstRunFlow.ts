@@ -12,7 +12,7 @@ import { useOnlineStatus } from "./useOnlineStatus";
 import { useSetupReadiness } from "./useSetupReadiness";
 import { useSignIn } from "./useSignIn";
 
-/** `first-run`: welcome, then pick an AI. `consent`: a newer consent only. `rerun`: from Settings, cancellable. */
+/** `first-run`: welcome, consent, then pick an AI. `consent`: a newer consent only. `rerun`: from Settings, cancellable. */
 export type FirstRunMode = "first-run" | "consent" | "rerun";
 
 export type ConnectView =
@@ -23,7 +23,7 @@ export type ConnectView =
   | { kind: "custom" }
   | { kind: "customModels"; options: LocalModelOption[]; apiKey?: string };
 
-/** What the first run connected, for the landing toast; null after a consent-only run. */
+/** What the first run connected, for the landing toast; null when no connection changes. */
 export type FirstRunResult = { cardId: FirstRunProviderCardId } | null;
 
 /** The card of the model Butler uses now; only "Run setup again" shows it. */
@@ -38,6 +38,22 @@ function initialLanguage(mode: FirstRunMode): FirstRunLanguage {
   return detectFirstRunLanguage(typeof navigator === "undefined" ? [] : navigator.languages);
 }
 
+/** Navigation stays local; declining never changes durable onboarding. */
+function useConsentScreen(mode: FirstRunMode) {
+  const [screen, setScreen] = useState<"welcome" | "consent" | "connect">(mode === "consent" ? "consent" : "welcome");
+  const [focusStart, setFocusStart] = useState(false);
+  return {
+    screen, setScreen, focusStart,
+    start: () => setScreen("consent"),
+    backToConsent: () => setScreen("consent"),
+    decline: (clearAcceptance: () => void) => {
+      clearAcceptance();
+      setFocusStart(true);
+      setScreen("welcome");
+    },
+  };
+}
+
 export function useFirstRunFlow({ mode, onComplete, onCancel }: {
   mode: FirstRunMode;
   onComplete: (result: FirstRunResult) => void;
@@ -45,10 +61,11 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
   onCancel?: () => void;
 }) {
   const [language, setLanguage] = useState<FirstRunLanguage>(() => initialLanguage(mode));
-  const [screen, setScreen] = useState<"welcome" | "connect">("welcome");
+  const navigation = useConsentScreen(mode);
+  const { screen, setScreen, focusStart } = navigation;
   const [view, setView] = useState<ConnectView>({ kind: "list" });
   const copy = firstRunCopy[language];
-  const { acceptedAt, savingConsent, agree } = useWelcomeConsent({ mode, language, onComplete, onAgree: () => setScreen("connect") });
+  const { acceptedAt, savingConsent, agree, clearAcceptance } = useWelcomeConsent({ language, onAgree: () => setScreen("connect") });
   const setup = useSetupReadiness();
   const online = useOnlineStatus();
   const current = useButlerStore((state) => currentCardId(mode, state.settings.model, state.modelCatalog));
@@ -87,12 +104,14 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
   }
 
   return {
-    mode, copy, language, setLanguage, online, screen, view, savingConsent, local, signIn, commit, reply,
+    mode, copy, language, setLanguage, online, screen, focusStart, view, savingConsent, local, signIn, commit, reply,
     currentCardId: commit.connected?.cardId ?? current,
     readiness: setup.readiness,
     retryPreparation: setup.retry,
     repairPreparation: setup.repair,
     agree,
+    start: navigation.start,
+    decline: () => navigation.decline(clearAcceptance),
     pick,
     cancel: () => {
       signIn.leave();
@@ -103,7 +122,7 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
       commit.clear();
       setView({ kind: "list" });
     },
-    backToWelcome: () => setScreen("welcome"),
+    backToConsent: navigation.backToConsent,
     showCustomModels: (options: LocalModelOption[], apiKey?: string) => setView({ kind: "customModels", options, apiKey }),
     connectKey: (cardId: FirstRunProviderCardId, credentialId: string) =>
       commit.submit({

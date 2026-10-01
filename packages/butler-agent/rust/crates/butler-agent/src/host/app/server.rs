@@ -274,10 +274,17 @@ impl AppServer {
 
     /// Drain the App projection and its file jobs before native runtime owners.
     pub(crate) async fn close_application(&mut self) -> Result<(), BtccError> {
-        let listener = self.stop_listener().await;
-        self.setup.close().await;
+        let listener =
+            crate::host::service::shutdown_trace::measure("app_admission", self.stop_listener())
+                .await;
+        crate::host::service::shutdown_trace::measure("app_setup_join", self.setup.close()).await;
         let application = self.application.close().await.map_err(app_error);
-        let artifacts = self.artifacts.close().await.map_err(app_error);
+        let artifacts = crate::host::service::shutdown_trace::measure(
+            "app_artifacts_join",
+            self.artifacts.close(),
+        )
+        .await
+        .map_err(app_error);
         listener.and(application).and(artifacts)
     }
 }
@@ -362,6 +369,7 @@ impl AppServerOwners {
             installation: installation.clone(),
             data_root: data_root.to_path_buf(),
             executor: self.receipt.clone(),
+            acquisition: runtime.memory_acquisition.clone(),
         })
     }
 }

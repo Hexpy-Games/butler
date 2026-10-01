@@ -15,4 +15,5 @@ pub(super) mod service;
 pub(super) mod settings;
 pub(super) mod skills;
 pub(super) mod status;
+mod status_memory;
 pub(super) mod update;

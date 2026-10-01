@@ -118,11 +118,12 @@ fn subscription_plans_bill_api_keys_against_quota() {
     }
 }
 
+// test-category: format-pin
 #[test]
-fn confirmed_routine_presets_are_pinned() {
+fn confirmed_routine_presets_and_openai_sol_metadata_are_pinned() {
     let catalog = catalog();
     for (provider, model) in [
-        ("openai", "openai/gpt-6-sol"),
+        ("openai", "openai/gpt-6.1-sol"),
         ("anthropic", "anthropic/claude-sonnet-5"),
         ("google", "google/gemini-3.8-flash"),
         ("zai", "zai/glm-5"),
@@ -132,6 +133,37 @@ fn confirmed_routine_presets_are_pinned() {
         assert_eq!(preset.model, model);
         assert_eq!(preset.effort, ReasoningEffort::Medium);
     }
+
+    let sol = catalog
+        .models
+        .iter()
+        .find(|model| model.model_ref == "openai/gpt-6.1-sol")
+        .unwrap();
+    assert_eq!(sol.status, "latest");
+    assert_eq!(sol.context_window_tokens, Some(1_050_000.0));
+    assert_eq!(sol.max_output_tokens, Some(128_000.0));
+    assert_eq!(sol.default_reasoning_effort, ReasoningEffort::Medium);
+    assert_eq!(
+        sol.reasoning_efforts,
+        [
+            ReasoningEffort::Low,
+            ReasoningEffort::Medium,
+            ReasoningEffort::High,
+            ReasoningEffort::Xhigh,
+            ReasoningEffort::Max,
+        ]
+    );
+    assert_eq!(sol.image_input_support.as_deref(), Some("supported"));
+    assert_eq!(sol.image_max_width, None);
+    assert_eq!(sol.image_max_height, None);
+    assert_eq!(sol.image_max_pixels, None);
+    assert_eq!(sol.image_max_patches, Some(30_000.0));
+    let previous_sol = catalog
+        .models
+        .iter()
+        .find(|model| model.model_ref == "openai/gpt-6-sol")
+        .unwrap();
+    assert_eq!(previous_sol.status, "previous");
 }
 
 #[test]
@@ -159,8 +191,9 @@ fn every_setup_provider_has_a_servable_routine_preset() {
     }
 }
 
+// test-category: pure-logic
 #[test]
-fn supported_image_models_carry_a_complete_sourced_capability() {
+fn supported_image_models_carry_sourced_known_capability_limits() {
     for model in &catalog().models {
         if model.image_input_support.as_deref() != Some("supported") {
             continue;
@@ -196,15 +229,22 @@ fn supported_image_models_carry_a_complete_sourced_capability() {
             (ImageLimitField::ImageMaxWidth, model.image_max_width),
             (ImageLimitField::ImageMaxHeight, model.image_max_height),
             (ImageLimitField::ImageMaxPixels, model.image_max_pixels),
+            (ImageLimitField::ImageMaxPatches, model.image_max_patches),
         ] {
-            assert!(value.is_some_and(|v| v > 0.0), "{name} {field:?}");
             let documented = sources.provider_documented.contains(&field);
             let internal = sources.butler_internal_default.contains(&field);
-            assert!(documented != internal, "{name} {field:?} needs one source");
+            match value {
+                Some(value) => {
+                    assert!(value > 0.0, "{name} {field:?}");
+                    assert!(documented != internal, "{name} {field:?} needs one source");
+                }
+                None => assert!(!documented && !internal, "{name} {field:?} is unverified"),
+            }
         }
     }
 }
 
+// test-category: pure-logic
 #[test]
 fn pricing_picks_the_prompt_band_day_and_cache_rates() {
     let catalog = catalog();
@@ -215,6 +255,17 @@ fn pricing_picks_the_prompt_band_day_and_cache_rates() {
     assert_eq!(short.cache_write_per_mtok_usd, Some(2.5));
     assert_eq!(long.input_per_mtok_usd, 4.0);
     assert_eq!(long.cache_write_per_mtok_usd, Some(5.0));
+    let sol_61 = catalog.pricing("openai/gpt-6.1-sol").unwrap();
+    let short_61 = sol_61.prices_at(272_000, "2026-10-01").unwrap();
+    let long_61 = sol_61.prices_at(272_001, "2026-10-01").unwrap();
+    assert_eq!(short_61.input_per_mtok_usd, 2.0);
+    assert_eq!(short_61.cached_input_per_mtok_usd, Some(0.1));
+    assert_eq!(short_61.cache_write_per_mtok_usd, Some(2.5));
+    assert_eq!(short_61.output_per_mtok_usd, 10.0);
+    assert_eq!(long_61.input_per_mtok_usd, 4.0);
+    assert_eq!(long_61.cached_input_per_mtok_usd, Some(0.2));
+    assert_eq!(long_61.cache_write_per_mtok_usd, Some(5.0));
+    assert_eq!(long_61.output_per_mtok_usd, 15.0);
     // 1M prompt tokens: 400k cached, 100k written to the cache; 100k output.
     let tokens = RequestTokens {
         input: 1_000_000,

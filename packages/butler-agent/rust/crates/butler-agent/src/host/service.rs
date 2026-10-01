@@ -10,3 +10,4 @@ pub(super) mod instance;
 pub(super) mod instance_identity;
 pub(super) mod progress_publisher;
 pub(super) mod restart_handoff;
+pub(crate) mod shutdown_trace;
