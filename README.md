@@ -7,8 +7,6 @@
 
 <h1 align="center">Butler</h1>
 
-Current version: `0.1.0-preview.3` — a preview; stable 0.1.0 is coming.
-
 <p align="center">
   <strong>At your service, on your machine.</strong>
 </p>
@@ -71,7 +69,7 @@ curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-previe
 npx @hexpygames/butler@next install
 ```
 
-Use `butler open` to open the App in your browser. For another computer on a trusted network, enable access in **Settings → Security**, or use `butler remote enable` and `butler remote pair` on the host. Open the displayed address on the other computer and enter the 8-digit one-time pairing code. Remote access is off by default. [Remote access](https://butler.hexpy.games/help/advanced/remote-access/)
+Use `butler open` to open the App in your browser. For another computer on a trusted network, enable access and generate a pairing code in **Settings → Security**, or use `butler remote enable` and `butler remote pair` on the host. Open the displayed address on the other computer and enter the 8-digit one-time pairing code. Remote access is off by default. [Remote access](https://butler.hexpy.games/help/advanced/remote-access/)
 
 ## Where your data lives
 
