@@ -4,7 +4,7 @@ import { contrastRatio, flatten, parseColor, type Rgba } from "../../packages/bu
 /** Let initial theme transitions finish before measuring the painted screen. */
 export async function settleFirstRun(page: Page) {
   await page.waitForFunction(() => {
-    const root = document.querySelector('[data-first-run-screen]');
+    const root = document.querySelector("[data-first-run-screen]");
     return root && root.getAnimations({ subtree: true }).every((animation) =>
       animation.effect?.getComputedTiming().iterations === Infinity || animation.playState !== "running");
   });
@@ -14,7 +14,7 @@ export async function settleFirstRun(page: Page) {
 /** Audit every rendered text node, including text below the scroll fold. */
 export async function assertFirstRunContrast(page: Page) {
   await settleFirstRun(page);
-  const nodes = await page.locator('[data-first-run-screen]').evaluate((root) => {
+  const nodes = await page.locator("[data-first-run-screen]").evaluate((root) => {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     const result: Array<{ text: string; color: string; backgrounds: string[]; size: number; weight: number; opacity: number }> = [];
     while (walker.nextNode()) {

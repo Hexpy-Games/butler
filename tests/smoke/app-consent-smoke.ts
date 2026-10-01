@@ -54,29 +54,29 @@ async function verifyWelcome(page: Page, copy: typeof firstRunCopy.en) {
   const label = page.locator('label[for="first-run-language"]');
   const original = await label.innerText();
   await label.evaluate((node) => { node.textContent = "L".repeat(40); });
-  const above = await label.evaluate((node) => node.getBoundingClientRect().bottom <= document.querySelector('#first-run-language')!.getBoundingClientRect().top);
+  const above = await label.evaluate((node) => node.getBoundingClientRect().bottom <= document.querySelector("#first-run-language")!.getBoundingClientRect().top);
   assert(above, "40-character language label stays above control");
   await assertFirstRunLayout(page);
   await label.evaluate((node, text) => { node.textContent = text; }, original);
-  await page.locator('#first-run-language').focus();
+  await page.locator("#first-run-language").focus();
   await page.keyboard.press("Tab");
   assert(await page.getByRole("link", { name: copy.learnMore, exact: true }).evaluate((node) => node === document.activeElement), "language then help");
   await page.keyboard.press("Tab");
   assert(await page.evaluate(() => document.activeElement?.id) === "first-run-start", "help then Start");
-  assert(await page.locator('#first-run-start').evaluate((node) => getComputedStyle(node).boxShadow !== "none"), "keyboard focus ring visible");
+  assert(await page.locator("#first-run-start").evaluate((node) => getComputedStyle(node).boxShadow !== "none"), "keyboard focus ring visible");
 }
 
 async function verifyIcons(page: Page) {
   const valid = await page.locator('[role="listitem"]').evaluateAll((items) => items.every((item) => {
     const slot = item.querySelector('[data-slot="icon-slot"]')!.getBoundingClientRect();
-    const text = item.querySelector('p')!;
+    const text = item.querySelector("p")!;
     const style = getComputedStyle(text);
     return Math.abs(slot.top - text.getBoundingClientRect().top) < 1 && Math.abs(slot.height - parseFloat(style.lineHeight)) < 1;
   }));
   assert(valid, "consent icons align to first body line");
   const firstLine = await page.locator('[data-first-run-screen="consent"] [data-slot="icon-slot"]').last().evaluate((slot) => {
-    const text = slot.nextElementSibling!.querySelector('p')!;
-    const glyph = slot.querySelector('svg')!.getBoundingClientRect();
+    const text = slot.nextElementSibling!.querySelector("p")!;
+    const glyph = slot.querySelector("svg")!.getBoundingClientRect();
     const lineCenter = text.getBoundingClientRect().top + parseFloat(getComputedStyle(text).lineHeight) / 2;
     return Math.abs(glyph.top + glyph.height / 2 - lineCenter) < 1;
   });

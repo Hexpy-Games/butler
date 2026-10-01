@@ -28,7 +28,7 @@ async function audit(page: Page) {
   minimumContrast = Math.min(minimumContrast, result.minimum);
   const aligned = await page.locator('[data-test-class="memory-model-status"]').evaluate((node) => {
     const slot = node.querySelector('[data-slot="icon-slot"]')!;
-    const text = slot.nextElementSibling!.querySelector('span')!;
+    const text = slot.nextElementSibling!.querySelector("span")!;
     return Math.abs(slot.getBoundingClientRect().top - text.getBoundingClientRect().top) < 1;
   });
   assert(aligned, "memory icon aligns to first caption line");
