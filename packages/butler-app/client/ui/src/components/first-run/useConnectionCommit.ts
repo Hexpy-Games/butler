@@ -1,7 +1,7 @@
 import { api } from "@/app/api.ts";
 import { connectionCardId, type FirstRunProviderCardId } from "@/app/setupProviders.ts";
 import { useEffect, useRef, useState } from "react";
-import { consentAcceptedPatch } from "@/app/onboarding.ts";
+import { consentAcceptedPatch, consentIsCurrent } from "@/app/onboarding.ts";
 import { commitConnection, type PendingConnection } from "@/app/setupConnection.ts";
 import type { SetupReadinessStatus } from "@/app/setupReadiness.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -53,7 +53,7 @@ export function useConnectionCommit({ readinessStatus, acceptedAt, language, res
     if (!resume || readinessStatus !== "ready") return;
     let cancelled = false;
     void Promise.all([api<SettingsView>("/settings"), api<ModelCatalogView>("/model-catalog")]).then(([settings, catalog]) => {
-      if (cancelled || !settings.onboarding?.accepted_at || settings.onboarding.completed_at) return;
+      if (cancelled || !settings.onboarding?.accepted_at || !consentIsCurrent(settings.onboarding) || settings.onboarding.completed_at) return;
       const model = catalog.registered_models?.find((entry) => entry.model_ref === settings.model);
       const cardId = connectionCardId(model);
       if (cardId) {

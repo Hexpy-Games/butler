@@ -6,12 +6,12 @@ import type { OnboardingSettingsView } from "./types.ts";
  * consent lines change and agents with an older version show only the
  * consent step again.
  */
-export const FIRST_RUN_CONSENT_VERSION = 1;
+export const FIRST_RUN_CONSENT_VERSION = 2;
 
 /** Pre-#230 renderer flag; read once to migrate existing installs. */
 export const LEGACY_FIRST_RUN_STORAGE_KEY = "butler:first-run-setup:v1";
 
-/** `first-run`: welcome and pick an AI. `consent`: welcome only. `workspace`: no setup. */
+/** `first-run`: welcome and pick an AI. `consent`: consent renewal. `workspace`: no setup. */
 export type OnboardingGate = "first-run" | "consent" | "workspace";
 
 type OnboardingPatch = { onboarding: OnboardingSettingsView };
