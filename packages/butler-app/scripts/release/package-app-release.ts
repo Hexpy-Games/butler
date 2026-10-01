@@ -127,8 +127,9 @@ function createNativeMacReleasePackage(options: AppReleasePackageOptions): AppRe
       bundled_agent_version: manifest.bundledAgentVersion, updater_owner: "butler-app",
       artifacts: [{
         component: "app", product: "butler-app", platform: "darwin-arm64", version: manifest.version,
-        app_version: manifest.version, channel: "stable", artifact_url: item.downloadUrl,
-        sha256: item.sha256, payload_format: "platform-app-package", update_policy: "app-user-action",
+        app_version: manifest.version, channel: isPreviewRelease() ? "preview" : "stable",
+        artifact_url: artifactDownloadUrl(options.artifactBaseUrl, artifact.updaterArtifactPath, artifact.updaterArtifactName),
+        sha256: artifact.updaterSha256, payload_format: "platform-app-package", update_policy: "app-user-action",
         restart_policy: "restart-app", updater_owner: "butler-app",
         bundled_agent_version: manifest.bundledAgentVersion,
         staging_policy: item.stagingPolicy,

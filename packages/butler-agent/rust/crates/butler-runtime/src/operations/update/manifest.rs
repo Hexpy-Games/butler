@@ -8,6 +8,7 @@ use tokio_util::sync::CancellationToken;
 const MAX_MANIFEST_BYTES: usize = 1024 * 1024;
 
 mod agent;
+pub(super) use agent::AgentArtifact;
 pub(super) use agent::{ACTIVATION_POLICY, ROLLBACK_POLICY, load_agent_artifact};
 
 pub(super) struct AppArtifact {
@@ -33,73 +34,9 @@ pub(super) async fn load_artifact(
         .get("artifacts")
         .and_then(Value::as_array)
         .ok_or(UpdateCode::UpdateManifestArtifactsMissing)?;
+    let selected = select_app_artifact(array, channel == Some("preview"))?;
     let platform = butler_platform::launcher::release_platform();
-    let app: Vec<&Value> = array
-        .iter()
-        .filter(|value| value.get("component").and_then(Value::as_str) == Some("app"))
-        .collect();
-    let selected = app
-        .iter()
-        .copied()
-        .find(|value| value.get("platform").and_then(Value::as_str) == Some(platform.as_str()))
-        .or_else(|| {
-            app.iter()
-                .copied()
-                .find(|value| value.get("platform").is_none())
-        })
-        .ok_or(UpdateCode::UpdateManifestAppPlatformMissing)?;
-    for (field, expected) in [
-        ("product", "butler-app"),
-        ("canonical_component", "app"),
-        ("profile", "electron"),
-        ("update_policy", "app-user-action"),
-        ("restart_policy", "restart-app"),
-        ("updater_owner", "butler-app"),
-        ("payload_format", "platform-app-package"),
-        ("staging_policy", "butler-data-updates"),
-        ("activation_policy", "user-installs-app-package"),
-        ("rollback_policy", "not-managed-by-butler"),
-    ] {
-        if selected
-            .get(field)
-            .and_then(Value::as_str)
-            .is_some_and(|value| value != expected)
-        {
-            return Err(UpdateCode::UpdateManifestIncompatible.into());
-        }
-        if matches!(
-            field,
-            "staging_policy" | "activation_policy" | "rollback_policy"
-        ) && selected.get(field).and_then(Value::as_str) != Some(expected)
-        {
-            return Err(UpdateCode::UpdateManifestIncompatible.into());
-        }
-    }
-    if selected
-        .get("bundled_components")
-        .is_some_and(|value| value != &json!(["app"]))
-    {
-        return Err(UpdateCode::UpdateManifestIncompatible.into());
-    }
-    let signature = selected
-        .get("signature")
-        .and_then(Value::as_str)
-        .filter(|value| !value.is_empty())
-        .or_else(|| {
-            selected
-                .pointer("/integrity/signature")
-                .and_then(Value::as_str)
-                .filter(|value| !value.is_empty())
-        });
-    if signature.is_some() {
-        return Err(UpdateCode::UpdateSignatureUnsupported.into());
-    }
-    if selected
-        .get("integrity")
-        .is_some_and(|value| value.get("digestAlgorithm").and_then(Value::as_str) != Some("sha256"))
-    {
-        return Err(UpdateCode::UpdateManifestIncompatible.into());
-    }
+    validate_app_contract(selected)?;
     let version = required_version(selected)?;
     let url = selected
         .get("artifact_url")
@@ -167,7 +104,7 @@ fn required_version(value: &Value) -> Result<&str, UpdateError> {
         .ok_or(UpdateCode::UpdateManifestVersionMissing.into())
 }
 
-async fn read_manifest(
+pub(super) async fn read_manifest(
     client: &reqwest::Client,
     shutdown: &CancellationToken,
     source: &str,
@@ -175,7 +112,7 @@ async fn read_manifest(
     if source.starts_with("http://") || source.starts_with("https://") {
         let response = tokio::select! {
             () = shutdown.cancelled() => return Err(UpdateCode::UpdateCancelled.into()),
-            result = client.get(source).send() => result.map_err(|source| UpdateError::caused(UpdateCode::UpdateManifestUnavailable, source))?,
+            result = client.get(source).header("User-Agent", "Butler updater").send() => result.map_err(|source| UpdateError::caused(UpdateCode::UpdateManifestUnavailable, source))?,
         };
         if !response.status().is_success() {
             return Err(UpdateCode::UpdateManifestUnavailable.into());
@@ -229,4 +166,101 @@ pub(super) fn public_source(source: &str) -> String {
         return url.to_string();
     }
     "local-file".into()
+}
+
+fn validate_app_contract(selected: &Value) -> Result<(), UpdateError> {
+    for (field, expected) in [
+        ("product", "butler-app"),
+        ("canonical_component", "app"),
+        ("profile", "electron"),
+        ("update_policy", "app-user-action"),
+        ("restart_policy", "restart-app"),
+        ("updater_owner", "butler-app"),
+        ("payload_format", "platform-app-package"),
+        ("staging_policy", "butler-data-updates"),
+        ("activation_policy", "user-installs-app-package"),
+        ("rollback_policy", "not-managed-by-butler"),
+    ] {
+        if selected
+            .get(field)
+            .and_then(Value::as_str)
+            .is_some_and(|value| value != expected)
+        {
+            return Err(UpdateCode::UpdateManifestIncompatible.into());
+        }
+        if matches!(
+            field,
+            "staging_policy" | "activation_policy" | "rollback_policy"
+        ) && selected.get(field).and_then(Value::as_str) != Some(expected)
+        {
+            return Err(UpdateCode::UpdateManifestIncompatible.into());
+        }
+    }
+    if selected
+        .get("bundled_components")
+        .is_some_and(|value| value != &json!(["app"]))
+    {
+        return Err(UpdateCode::UpdateManifestIncompatible.into());
+    }
+    let signature = selected
+        .get("signature")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            selected
+                .pointer("/integrity/signature")
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+        });
+    if signature.is_some() {
+        return Err(UpdateCode::UpdateSignatureUnsupported.into());
+    }
+    if selected
+        .get("integrity")
+        .is_some_and(|value| value.get("digestAlgorithm").and_then(Value::as_str) != Some("sha256"))
+    {
+        return Err(UpdateCode::UpdateManifestIncompatible.into());
+    }
+    Ok(())
+}
+
+fn select_app_artifact(array: &[Value], previews: bool) -> Result<&Value, UpdateError> {
+    let platform = butler_platform::launcher::release_platform();
+    let app: Vec<&Value> = array
+        .iter()
+        .filter(|value| value.get("component").and_then(Value::as_str) == Some("app"))
+        .collect();
+    let eligible =
+        |value: &&Value| super::channel::eligible(value, previews) && compatible_package(value);
+    let selected =
+        super::channel::newest(app.iter().copied().filter(eligible).filter(|value| {
+            value.get("platform").and_then(Value::as_str) == Some(platform.as_str())
+        }))
+        .or_else(|| {
+            super::channel::newest(
+                app.iter()
+                    .copied()
+                    .filter(eligible)
+                    .filter(|value| value.get("platform").is_none()),
+            )
+        })
+        .ok_or(UpdateCode::UpdateManifestAppPlatformMissing)?;
+    Ok(selected)
+}
+
+fn compatible_package(artifact: &Value) -> bool {
+    let format = artifact
+        .get("package_format")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .or_else(|| {
+            artifact
+                .get("artifact_url")
+                .and_then(Value::as_str)
+                .and_then(|url| url.split('?').next())
+                .and_then(|url| Path::new(url).extension())
+                .and_then(|ext| ext.to_str())
+                .map(str::to_ascii_lowercase)
+        });
+    format.is_none_or(|format| format == butler_platform::app_update::package_format())
 }

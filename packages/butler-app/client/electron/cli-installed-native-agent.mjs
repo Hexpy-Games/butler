@@ -71,19 +71,23 @@ export function preferNewerAgent(bundled, cliInstalled) {
     : bundled;
 }
 
-// Numeric segments of `1.2.3-4`, compared left to right (the Rust CLI's rule).
+// SemVer precedence, including numeric prerelease identifiers.
 export function versionNewer(available, current) {
-  const parse = (version) => String(version).split(/[.-]/u).map((part) => {
-    const digits = /^\d+/u.exec(part)?.[0];
-    return digits ? Number.parseInt(digits, 10) : 0;
-  });
-  const left = parse(available);
-  const right = parse(current);
-  const length = Math.max(left.length, right.length, 3);
-  for (let index = 0; index < length; index += 1) {
-    const a = left[index] ?? 0;
-    const b = right[index] ?? 0;
-    if (a !== b) return a > b;
+  const parse = text => /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/u.exec(String(text));
+  const a = parse(available), b = parse(current);
+  if (!a || !b) return false;
+  for (let i = 1; i <= 3; i += 1) {
+    if (BigInt(a[i]) !== BigInt(b[i])) return BigInt(a[i]) > BigInt(b[i]);
+  }
+  if (!a[4] || !b[4]) return Boolean(b[4]) && !a[4];
+  const left = a[4].split("."), right = b[4].split(".");
+  for (let i = 0; i < Math.max(left.length, right.length); i += 1) {
+    if (left[i] === undefined || right[i] === undefined) return right[i] === undefined;
+    if (left[i] === right[i]) continue;
+    const ln = /^\d+$/u.test(left[i]), rn = /^\d+$/u.test(right[i]);
+    if (ln && rn) return BigInt(left[i]) > BigInt(right[i]);
+    if (ln !== rn) return !ln;
+    return left[i] > right[i];
   }
   return false;
 }

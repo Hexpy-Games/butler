@@ -10,6 +10,7 @@ license = "MIT"
 publish = false
 
 [workspace.dependencies]
+semver = "1.0.27"
 arrow-array = "=57.3.1"
 arrow-schema = "=57.3.1"
 axum = { version = "0.8.4", features = ["http1", "json", "multipart", "tokio"] }

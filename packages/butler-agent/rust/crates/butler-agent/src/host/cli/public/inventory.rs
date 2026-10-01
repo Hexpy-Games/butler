@@ -6,6 +6,7 @@ use serde_json::{Value, json};
 pub(super) struct Entry {
     id: &'static str,
     usage: &'static str,
+    aliases: &'static [&'static str],
     summary: &'static str,
     priority: &'static str,
     supports_json: bool,
@@ -16,6 +17,7 @@ macro_rules! route {
         Entry {
             id: $id,
             usage: $usage,
+            aliases: &[],
             summary: $summary,
             priority: $priority,
             supports_json: true,
@@ -25,6 +27,17 @@ macro_rules! route {
         Entry {
             id: $id,
             usage: $usage,
+            aliases: &[],
+            summary: $summary,
+            priority: $priority,
+            supports_json: $json,
+        }
+    };
+    ($id:literal, $usage:literal, $summary:literal, $priority:literal, $json:expr, $aliases:expr) => {
+        Entry {
+            id: $id,
+            usage: $usage,
+            aliases: $aliases,
             summary: $summary,
             priority: $priority,
             supports_json: $json,
@@ -60,7 +73,7 @@ pub(super) fn values(entries: &[Entry]) -> Vec<Value> {
                 "id": entry.id,
                 "usage": entry.usage,
                 "path": entry.id.split('.').collect::<Vec<_>>(),
-                "aliases": [],
+                "aliases": entry.aliases,
                 "priority": entry.priority,
                 "status": "implemented",
                 "summary": entry.summary,

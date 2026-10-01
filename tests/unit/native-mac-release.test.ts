@@ -27,8 +27,8 @@ test("native mac release validates inputs and stages the runtime shell", () => {
   writeFileSync(join(packageDir, "package.json"), JSON.stringify({ version: "1.2.3" }));
   writeFileSync(join(root, "VERSION"), "9.8.7");
   const manifest = createNativeMacReleaseManifest(root);
-  expect(manifest.version).toBe("1.2.3");
-  expect(manifest.bundledAgentVersion).toBe("9.8.7");
+  expect(manifest.version).toBe("1.2.3-dev");
+  expect(manifest.bundledAgentVersion).toBe("9.8.7-dev");
   expect(validateNativeMacReleaseManifest(root, manifest)).toContain(
     "native mac release input missing: packages/butler-app/client/electron/main.mjs",
   );

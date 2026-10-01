@@ -9,6 +9,14 @@ on:
       - "packages/butler-app/client/electron/**"
       - "packages/butler-app/scripts/release/**"
       - "deploy/**"
+      - "tests/smoke/packaged-app-update.ts"
+      - "tests/support/electron-page-cdp.ts"
+      - "packages/butler-app/client/ui/src/components/settings/Update*"
+      - "packages/butler-agent/rust/crates/butler-platform/src/app_update.rs"
+      - "packages/butler-agent/rust/crates/butler-agent/build.rs"
+      - "packages/butler-agent/rust/crates/butler-agent/src/host/cli/app_update.rs"
+      - "packages/butler-agent/rust/crates/butler-runtime/src/operations/update.rs"
+      - "packages/butler-agent/rust/crates/butler-runtime/src/operations/update/**"
       - "bun.lock"
       - "**/package.json"
 
@@ -50,6 +58,7 @@ jobs:
         run: |
           set -euo pipefail
           export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
           bun install --frozen-lockfile --ignore-scripts
           npm --prefix packages/butler-app/client/ui run build
 
@@ -59,6 +68,7 @@ jobs:
           set -euo pipefail
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
           export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
           cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
           echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$PWD/target/release/butler-agent" >> "$GITHUB_ENV"
 
@@ -67,7 +77,16 @@ jobs:
           set -euo pipefail
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
           export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
           bun run release:app:package -- \
             --platform=darwin-arm64 --out dist/release/app \
             --artifact-base-url "https://example.invalid/butler/pr-${{ github.event.number }}"
           bun run release:app:smoke -- --platform=darwin-arm64 --out dist/release/app
+
+      - name: Packaged preview App update through Settings
+        run: |
+          set -euo pipefail
+          export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
+          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
+          bun run app:update:smoke

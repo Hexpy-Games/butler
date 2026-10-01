@@ -13,6 +13,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // Windows process table serves instance identity and liveness.
         "command_sandbox" | "cpu" | "desktop" | "launcher" | "network" | "process_table"
         | "secure_fs" | "stdio" | "time_zone" | "user_dirs" => &[],
+        // Package activation waits for its Electron parent through the process port.
+        "app_update" => &["process_control", "secure_fs"],
         "instance" | "process_control" => &["process_table"],
         // The credential store's owner-only fallback file is a secure_fs file.
         "secrets" => &["secure_fs"],

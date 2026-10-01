@@ -543,6 +543,7 @@ export interface DeveloperLogListView {
 }
 
 export interface SettingsView {
+  update_previews?: boolean;
   bridge_mode: "local" | "external";
   gateway_profile: "electron";
   server_url: string;

@@ -2,6 +2,7 @@
 //! update that stages, installs and activates a new Agent version.
 
 mod agent;
+mod channel;
 mod error;
 mod manifest;
 mod source;
@@ -49,6 +50,7 @@ pub struct AppUpdateService {
     /// dead network fails the check quickly.
     manifest_client: reqwest::Client,
     writes: Arc<Mutex<()>>,
+    checks: Arc<Mutex<()>>,
     shutdown: CancellationToken,
     /// Whether a background check is running.
     refreshing: Arc<AtomicBool>,
@@ -73,6 +75,7 @@ impl AppUpdateService {
             .build()
             .map_err(|source| UpdateError::caused(UpdateCode::UpdateHttpUnavailable, source))?;
         let manifest_client = reqwest::Client::builder()
+            .user_agent("Butler updater")
             .connect_timeout(MANIFEST_CONNECT_TIMEOUT)
             .timeout(MANIFEST_TIMEOUT)
             .build()
@@ -94,6 +97,7 @@ impl AppUpdateService {
             client,
             manifest_client,
             writes: Arc::new(Mutex::new(())),
+            checks: Arc::new(Mutex::new(())),
             shutdown: CancellationToken::new(),
             refreshing: Arc::new(AtomicBool::new(false)),
         })
@@ -104,6 +108,11 @@ impl AppUpdateService {
     }
 
     pub async fn check(&self, request: UpdateRequest) -> Result<Value, UpdateError> {
+        let _check = self.checks.lock().await;
+        self.check_now(self.resolved_request(request).await).await
+    }
+
+    async fn check_now(&self, request: UpdateRequest) -> Result<Value, UpdateError> {
         validate_request(&request)?;
         let artifact = self.artifact(&request).await?;
         let status = self.status(&request, &artifact, "ok", None).await?;
@@ -112,6 +121,8 @@ impl AppUpdateService {
     }
 
     pub async fn apply(&self, request: UpdateRequest) -> Result<Value, UpdateError> {
+        let _check = self.checks.lock().await;
+        let request = self.resolved_request(request).await;
         validate_request(&request)?;
         let artifact = self.artifact(&request).await?;
         let status = self.status(&request, &artifact, "ok", None).await?;
@@ -175,7 +186,9 @@ impl AppUpdateService {
         request: &UpdateRequest,
         status: Value,
     ) -> Result<Value, UpdateError> {
-        let view = self.view(request, &status);
+        let mut view = self.view(request, &status);
+        view["receive_previews"] =
+            json!(channel::previews(&self.data, request.channel.as_deref()).await);
         let _write = self.writes.lock().await;
         stage::write_json(&self.data, &self.installation, status::STATUS_LABEL, &view).await?;
         Ok(view)
@@ -250,12 +263,19 @@ impl AppUpdateService {
         if self.version.is_none() {
             return Err(UpdateCode::AppVersionUnavailable.into());
         }
-        let source = request.manifest.as_deref().unwrap_or(&self.manifest);
+        let previews = channel::previews(&self.data, request.channel.as_deref()).await;
+        let source = channel::source(
+            &self.manifest_client,
+            &self.shutdown,
+            request.manifest.as_deref().unwrap_or(&self.manifest),
+            previews,
+        )
+        .await?;
         load_artifact(
             &self.manifest_client,
             &self.shutdown,
-            source,
-            request.channel.as_deref(),
+            &source,
+            Some(if previews { "preview" } else { "stable" }),
         )
         .await
     }

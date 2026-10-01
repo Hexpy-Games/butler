@@ -70,7 +70,7 @@ if (nativeMac) {
       item?.activationPolicy !== "user-installs-app-package" ||
       item?.rollbackPolicy !== "not-managed-by-butler" ||
       updateManifest.artifacts.length !== 1 ||
-      updateManifest.artifacts[0]?.sha256 !== item.sha256 ||
+      updateManifest.artifacts[0]?.sha256 !== item.updaterSha256 ||
       updateManifest.artifacts[0]?.staging_policy !== item.stagingPolicy ||
       updateManifest.artifacts[0]?.activation_policy !== item.activationPolicy ||
       updateManifest.artifacts[0]?.rollback_policy !== item.rollbackPolicy) {
