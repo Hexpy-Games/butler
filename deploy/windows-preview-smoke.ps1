@@ -18,11 +18,16 @@ function Assert-PrivateAcl {
 }
 
 function Invoke-PreviewLauncher {
-    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+    param([switch]$CaptureFailure, [Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
     # Expand the path once; literal percent/exclamation characters in its value
     # must survive cmd's parsing. All arguments here are fixed smoke commands.
     $env:BUTLER_E2E_LAUNCHER = $launcher
-    & $env:ComSpec /d /v:off /s /c ('""%BUTLER_E2E_LAUNCHER%" ' + ($Arguments -join ' ') + '"')
+    $command = '""%BUTLER_E2E_LAUNCHER%" ' + ($Arguments -join ' ') + '"'
+    if ($CaptureFailure) {
+        # CLI failures are JSON on stderr; PS5 exposes them as ErrorRecords.
+        $ErrorActionPreference = 'Continue'
+        & $env:ComSpec /d /v:off /s /c $command 2>&1 | ForEach-Object { $_.ToString() }
+    } else { & $env:ComSpec /d /v:off /s /c $command }
 }
 
 # Public installer/CLI/browser smoke. Never emit connection codes or credentials.
@@ -109,8 +114,8 @@ try {
     Assert-PrivateAcl "$env:BUTLER_DATA/app/runtime/auth/local-agent-auth.json"
     Assert-PrivateAcl "$env:BUTLER_DATA/app/runtime/auth/local-admin.json"
     Assert-PrivateAcl "$env:BUTLER_DATA/state/app-gateway/project-folder-token-secret"
-    $startup = (Invoke-PreviewLauncher startup enable --json | ConvertFrom-Json)
-    if ($startup.ok -or ($startup | ConvertTo-Json -Depth 10) -notmatch 'not supported on Windows yet') { throw 'Startup did not report the preview limitation' }
+    $startup = (Invoke-PreviewLauncher -CaptureFailure startup enable --json | ConvertFrom-Json)
+    if ($LASTEXITCODE -ne 1 -or $startup.ok -or ($startup | ConvertTo-Json -Depth 10) -notmatch 'not supported on Windows yet') { throw 'Startup did not report the preview limitation' }
     Invoke-PreviewLauncher restart --json | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Restart failed' }
     $after = Get-Content "$env:BUTLER_DATA/state/butler-agent-native-service.json" -Raw | ConvertFrom-Json
