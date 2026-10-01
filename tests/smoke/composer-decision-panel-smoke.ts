@@ -30,6 +30,40 @@ async function geometry(panel: Locator) {
       radius: getComputedStyle(e).borderRadius };
   });
 }
+async function auditDecisionFeedback(page: Page, width: number, locale: string, theme: string) {
+  for (const name of ["Plan decision", "Authority decision", "Failed decision"]) {
+    const panel = story(page, name).locator('[tabindex="0"]').first();
+    const measured = await panel.evaluate(e => {
+      const header = e.querySelector('[data-slot="composer-decision-subject"]')!;
+      const title = header.querySelector('[data-slot="clickable"] label')!;
+      const eyebrow = header.querySelector('[data-tone="tertiary"]')!;
+      const aside = header.querySelector('[data-slot="composer-decision-aside"] span');
+      const error = e.querySelector('[role="alert"]');
+      const footer = e.querySelector('[data-slot="composer-decision-actions"]')!;
+      const css = getComputedStyle(error ?? header);
+      return { gap: footer.getBoundingClientRect().top - (error ?? title).getBoundingClientRect().bottom,
+        padding: css.paddingBottom, sm: getComputedStyle(e).getPropertyValue("--space-sm").trim(),
+        errorInset: error ? error.getBoundingClientRect().left + parseFloat(css.paddingLeft) - title.getBoundingClientRect().left : 0,
+        errorTop: error ? css.paddingTop : null, color: error ? getComputedStyle(error.querySelector("p")!).color : null,
+        asideOffset: aside ? aside.getBoundingClientRect().top - eyebrow.getBoundingClientRect().top : 0,
+        asideHeight: aside ? aside.getBoundingClientRect().height - eyebrow.getBoundingClientRect().height : 0 };
+    });
+    assert.equal(measured.padding, measured.sm, "content-to-footer spacing uses space-sm");
+    assert(measured.gap >= 0, "content stays above divider");
+    assert(Math.abs(measured.asideOffset) < 1 && Math.abs(measured.asideHeight) < 1, "pending count shares eyebrow baseline");
+    if (name === "Failed decision") {
+      assert(Math.abs(measured.errorInset) < 1, "error shares title text edge");
+      assert.equal(measured.errorTop, measured.sm, "error has token spacing above");
+      const danger = await panel.evaluate(e => {
+        const probe = document.createElement("span"); probe.style.color = "var(--danger)"; e.append(probe);
+        const color = getComputedStyle(probe).color; probe.remove(); return color;
+      });
+      assert.equal(measured.color, danger, "inline error uses FieldError danger tone");
+      assert.equal(await panel.getByRole("alert").innerText(), locale === "ko" ? "결정을 전달하지 못했습니다." : "Could not submit the decision. Try again.");
+    }
+    await panel.screenshot({ path: `${output}/${name.replaceAll(" ", "-")}-${width}-${locale}-${theme}.png` });
+  }
+}
 async function auditFocus(panel: Locator, page: Page) {
   await page.keyboard.press("Tab");
   for (const control of await panel.locator('button:enabled, [tabindex="0"]').all()) {
@@ -130,6 +164,7 @@ try {
     assert.equal(await command.locator('[data-tone="danger"]').count(), 1);
     assert.equal(await page.getByRole("button", { name: /Compose a message first|먼저 메시지 작성|Later|나중에|Skip|건너뛰기/ }).count(), 0);
     await command.screenshot({ path: `${output}/decision-${width}-${locale}-${theme}.png` });
+    await auditDecisionFeedback(page, width, locale, theme);
     await auditFocus(command, page); await auditDetails(command, page, locale === "ko"); await keyboard(page, locale === "ko");
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "no viewport overflow");
     await page.screenshot({ path: `${output}/${width}-${locale}-${theme}.png`, fullPage: true }); renders++;

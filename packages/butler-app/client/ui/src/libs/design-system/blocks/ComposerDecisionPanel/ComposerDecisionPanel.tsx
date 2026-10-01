@@ -5,6 +5,8 @@ import { ComposerPanelFrame, ComposerPanelHeader, ComposerPanelBody, ComposerPan
 import { useComposerPanelTransition } from "../../lib/useComposerPanelTransition";
 import { composerDecisionKeyboard } from "../../lib/composerDecisionKeyboard";
 import { Typo } from "../../components/Typo";
+import { FieldError } from "../../components/Field";
+import { dsClass } from "../../lib/internal";
 import { ComposerDecisionDetails } from "./ComposerDecisionDetails";
 import styles from "./ComposerDecisionPanel.module.css";
 
@@ -43,7 +45,7 @@ export function ComposerDecisionPanel({ icon, eyebrow, title, onOpen, details, d
     {hasDetails && <ComposerPanelBody dataSlot="decision-details-scroll" single>
       <ComposerDecisionDetails lines={details!} showMoreLabel={detailsShowMoreLabel} showLessLabel={detailsShowLessLabel} />
     </ComposerPanelBody>}
-    {error && <div className={styles.error}><Typo.Caption as="p" tone="secondary" role="alert">{error}</Typo.Caption></div>}
+    {error && <FieldError className={dsClass(styles.error)}><Typo.Caption as="p" tone="inherit">{error}</Typo.Caption></FieldError>}
     <ComposerPanelActions dataSlot="composer-decision-actions">{typeof actions === "function" ? actions(defer) : actions}</ComposerPanelActions>
   </ComposerPanelFrame>;
 }

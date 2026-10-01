@@ -19,5 +19,9 @@
 }
 
 .error {
+  padding-block: var(--space-sm);
   padding-inline: var(--space-lg);
+  padding-inline-start: calc(
+    var(--space-lg) + var(--icon-size-sm) + var(--space-sm)
+  );
 }

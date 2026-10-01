@@ -56,7 +56,8 @@ test("ComposerDecisionPanel puts the icon, the clickable title and the aside on 
 test("ComposerDecisionPanel shows an error between the subject and the actions as an alert", () => {
   const panel = render("Could not send the decision.").querySelector('[data-test-class="decision"]')!;
   expect(panel.children).toHaveLength(3);
-  expect(panel.children[1]!.querySelector('[role="alert"]')?.textContent).toBe("Could not send the decision.");
+  expect(panel.children[1]!.getAttribute("role")).toBe("alert");
+  expect(panel.children[1]!.textContent).toBe("Could not send the decision.");
 });
 
 // test-category: format-pin
