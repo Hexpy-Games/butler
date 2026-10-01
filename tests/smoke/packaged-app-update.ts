@@ -99,7 +99,6 @@ async function proof(page: ElectronPage, version: string, sessionId?: string) {
 
 async function smoke() {
   mkdirSync(home); mkdirSync(data);
-  writeFileSync(join(data, "butler.config.json"), JSON.stringify({ user: { language: "en" }, metrics: { enabled: false } }));
   writeFileSync(join(data, "update-sentinel.txt"), "preserved");
   const first = await packageVersion(from), second = await packageVersion(to);
   await run("xattr", ["-w", "com.apple.quarantine", "0081;66000000;ButlerSmoke;", second]);
@@ -107,18 +106,28 @@ async function smoke() {
   await run("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", second, zip]);
   const sha256 = new Bun.CryptoHasher("sha256").update(await Bun.file(zip).arrayBuffer()).digest("hex");
   server = Bun.serve({ hostname: "127.0.0.1", port: 0, idleTimeout: 0, fetch(request) {
+    if (new URL(request.url).pathname === "/v1/chat/completions") {
+      return Response.json({ id: "update-smoke", object: "chat.completion", created: 0, model: "stub",
+        choices: [{ index: 0, message: { role: "assistant", content: "Update smoke stub." }, finish_reason: "stop" }] });
+    }
     return new URL(request.url).pathname === "/update.zip" ? new Response(Bun.file(zip)) : Response.json({ artifacts: [{
       component: "app", product: "butler-app", platform: "darwin-arm64", version: to, channel: "preview", bundled_agent_version: to,
       artifact_url: `http://127.0.0.1:${server!.port}/update.zip`, sha256,
       staging_policy: "butler-data-updates", activation_policy: "user-installs-app-package", rollback_policy: "not-managed-by-butler",
     }] });
   } });
+  writeFileSync(join(data, "butler.config.json"), JSON.stringify({
+    user: { language: "en" }, metrics: { enabled: false }, system: { defaultModel: "local/stub" },
+    models: { local: [{ model_id: "stub", display_name: "Stub", server_url: `http://127.0.0.1:${server.port}`,
+      context_window_tokens: 128000 }] },
+  }));
   const installed = join(dir, "installed/Butler.app");
   cpSync(first, installed, { recursive: true });
   const debugPort = await freePort(), agentPort = await freePort();
   child = spawn(join(installed, "Contents/MacOS/Butler"), [`--remote-debugging-port=${debugPort}`], { env: {
     ...env, BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_APP_ELECTRON_USER_DATA_DIR: join(dir, "profile"),
     BUTLER_APP_UPDATE_MANIFEST: `http://127.0.0.1:${server.port}/manifest.json`, BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
+    BUTLER_E2E_TIER: "stub", BUTLER_E2E_EMBED_SOURCES: "http://127.0.0.1:9",
   }, stdio: ["ignore", "pipe", "pipe"] });
   child.stdout!.on("data", bytes => logs.push(String(bytes))); child.stderr!.on("data", bytes => logs.push(String(bytes)));
   child.on("exit", (code, signal) => logs.push(`App exited: code=${code}, signal=${signal}\n`));

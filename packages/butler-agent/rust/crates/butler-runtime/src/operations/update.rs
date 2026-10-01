@@ -50,6 +50,7 @@ pub struct AppUpdateService {
     /// dead network fails the check quickly.
     manifest_client: reqwest::Client,
     writes: Arc<Mutex<()>>,
+    checks: Arc<Mutex<()>>,
     shutdown: CancellationToken,
     /// Whether a background check is running.
     refreshing: Arc<AtomicBool>,
@@ -96,6 +97,7 @@ impl AppUpdateService {
             client,
             manifest_client,
             writes: Arc::new(Mutex::new(())),
+            checks: Arc::new(Mutex::new(())),
             shutdown: CancellationToken::new(),
             refreshing: Arc::new(AtomicBool::new(false)),
         })
@@ -106,6 +108,11 @@ impl AppUpdateService {
     }
 
     pub async fn check(&self, request: UpdateRequest) -> Result<Value, UpdateError> {
+        let _check = self.checks.lock().await;
+        self.check_now(self.resolved_request(request).await).await
+    }
+
+    async fn check_now(&self, request: UpdateRequest) -> Result<Value, UpdateError> {
         validate_request(&request)?;
         let artifact = self.artifact(&request).await?;
         let status = self.status(&request, &artifact, "ok", None).await?;
@@ -114,6 +121,8 @@ impl AppUpdateService {
     }
 
     pub async fn apply(&self, request: UpdateRequest) -> Result<Value, UpdateError> {
+        let _check = self.checks.lock().await;
+        let request = self.resolved_request(request).await;
         validate_request(&request)?;
         let artifact = self.artifact(&request).await?;
         let status = self.status(&request, &artifact, "ok", None).await?;

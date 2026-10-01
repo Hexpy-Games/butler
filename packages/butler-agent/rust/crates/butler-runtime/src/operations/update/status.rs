@@ -25,19 +25,10 @@ impl AppUpdateService {
             .as_deref()
             .ok_or(UpdateCode::AppVersionUnavailable)?;
         let previews = super::channel::previews(&self.data, None).await;
-        let saved = self.saved().await.filter(|view| {
-            view.get("receive_previews")
-                .and_then(Value::as_bool)
-                .map(|prior| prior == previews)
-                .unwrap_or_else(|| {
-                    previews
-                        || view["components"][0]["update_available"] != true
-                        || view["components"][0]["available_version"]
-                            .as_str()
-                            .and_then(|version| semver::Version::parse(version).ok())
-                            .is_some_and(|version| version.pre.is_empty())
-                })
-        });
+        let saved = self
+            .saved()
+            .await
+            .filter(|view| channel_matches(view, previews));
         if saved.as_ref().is_none_or(is_stale) {
             self.refresh_in_background();
         }
@@ -62,7 +53,18 @@ impl AppUpdateService {
     /// unreachable, incompatible or invalid is a saved status
     /// (`check_state: "unavailable"`), not a failure.
     pub async fn refresh(&self, request: UpdateRequest) -> Result<Value, UpdateError> {
-        match self.check(request.clone()).await {
+        let _check = self.checks.lock().await;
+        self.refresh_now(self.resolved_request(request).await).await
+    }
+
+    pub(super) async fn resolved_request(&self, mut request: UpdateRequest) -> UpdateRequest {
+        let previews = super::channel::previews(&self.data, request.channel.as_deref()).await;
+        request.channel = Some(if previews { "preview" } else { "stable" }.into());
+        request
+    }
+
+    async fn refresh_now(&self, request: UpdateRequest) -> Result<Value, UpdateError> {
+        match self.check_now(request.clone()).await {
             Err(error) if error_is_calm(error.code()) => {
                 self.persist_unavailable(&request, error.code()).await
             }
@@ -83,7 +85,16 @@ impl AppUpdateService {
         }
         let this = self.clone();
         tokio::spawn(async move {
-            let _ = this.refresh(UpdateRequest::default()).await;
+            let _check = this.checks.lock().await;
+            let request = this.resolved_request(UpdateRequest::default()).await;
+            let previews = request.channel.as_deref() == Some("preview");
+            if this
+                .saved()
+                .await
+                .is_none_or(|view| is_stale(&view) || !channel_matches(&view, previews))
+            {
+                let _ = this.refresh_now(request).await;
+            }
             this.refreshing.store(false, Ordering::Release);
         });
     }
@@ -138,6 +149,20 @@ impl AppUpdateService {
             }),
         }
     }
+}
+
+fn channel_matches(view: &Value, previews: bool) -> bool {
+    let eligible = previews
+        || view["components"][0]["update_available"] != true
+        || view["components"][0]["available_version"]
+            .as_str()
+            .and_then(|version| semver::Version::parse(version).ok())
+            .is_some_and(|version| version.pre.is_empty());
+    eligible
+        && view
+            .get("receive_previews")
+            .and_then(Value::as_bool)
+            .is_none_or(|prior| prior == previews)
 }
 
 /// Failures that leave the status calm: no usable manifest, not a broken
