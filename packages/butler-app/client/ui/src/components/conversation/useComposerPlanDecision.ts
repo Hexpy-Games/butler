@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { focusComposer } from "./editor/focusComposer";
 import type { ComposerSubmit } from "./hooks/composerEventTypes";
 import { ACTIVE_TURN_STATES } from "@/app/constants.ts";
 import { appCopy } from "@/app/copy.ts";
@@ -127,7 +128,7 @@ export function useComposerPlanDecision(): ComposerPlanDecision | undefined {
     onOpenInstruction: () => {
       setInstructionPlanId(plan.id);
       setEngaged(true);
-      window.requestAnimationFrame(() => textAreaRef?.current?.focus({ preventScroll: true }));
+      window.requestAnimationFrame(() => focusComposer(textAreaRef?.current));
     },
     onOpenPlan: () => {
       document.getElementById(planDocumentElementId(plan.id))?.scrollIntoView({
