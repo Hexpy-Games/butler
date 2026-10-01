@@ -17,7 +17,7 @@ function PersonaField() {
 
 export const guidance: ShowcaseGuidance = {
   purpose: "A multi-line text box for prompts, personas, arguments and descriptions.",
-  whenToUse: ["Enter a paragraph or a list with one item per line"],
+  whenToUse: ["Enter a paragraph or a list with one item per line", "In-place wrapping entry: variant=underline, textSize=label beside Typo.Label"],
   whenNotToUse: [
     { when: "A single-line value", use: "Input" },
     { when: "Writing a chat message", use: "ComposerCard" },
@@ -31,5 +31,5 @@ export const guidance: ShowcaseGuidance = {
   ],
   content: ["Say the expected format in the description (One per line)."],
   accessibility: ["Resizes vertically only; keep a visible label; maxLength needs a visible count when it matters."],
-  tokens: ["--line", "--radius-control", "--placeholder", "--focus-ring"],
+  tokens: ["--line", "--radius-control", "--placeholder", "--focus-ring", "--focus-ring-width", "--textarea-max-lines", "--scroll-fade-size"],
 };

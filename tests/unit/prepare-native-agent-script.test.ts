@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
+import { gzipSync, gunzipSync } from "node:zlib";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
@@ -35,6 +36,7 @@ function fixture() {
   mkdirSync(tools);
   mkdirSync(ui);
   writeFileSync(join(ui, "index.html"), "<main>Butler</main>");
+  writeFileSync(join(ui, "THIRD_PARTY_NOTICES.txt.gz"), gzipSync(readFileSync("deploy/licenses/THIRD_PARTY_NOTICES.txt")));
   const stub = (name: string, body: string) => {
     writeFileSync(join(tools, name), `#!/bin/sh\necho "${name} $*" >> "${calls}"\n${body}\n`);
     chmodSync(join(tools, name), 0o755);
@@ -68,6 +70,8 @@ function expectPayload(payload: string, source: string, stdout: string) {
   const sha = sha256(source);
   expect(sha256(join(payload, "bin", "butler-agent"))).toBe(sha);
   expect(existsSync(join(payload, "resources", "app-client", "dist", "index.html"))).toBe(true);
+  const notices = join(payload, "resources", "app-client", "dist", "THIRD_PARTY_NOTICES.txt.gz");
+  expect(gunzipSync(readFileSync(notices))).toEqual(readFileSync("deploy/licenses/THIRD_PARTY_NOTICES.txt"));
   const manifest = JSON.parse(readFileSync(join(payload, "native-agent-manifest.json"), "utf8"));
   expect(manifest).toMatchObject({
     schema: "butler.native-agent-payload.v1",
@@ -77,6 +81,7 @@ function expectPayload(payload: string, source: string, stdout: string) {
   expect(stdout).toContain(`Native Butler Agent binary sha256: ${sha}`);
 }
 
+// test-category: format-pin
 test.skipIf(!supportedHost)("prepare-native-agent builds from source by default", () => {
   const { root, payload, prepare, log } = fixture();
   const result = prepare();
@@ -86,6 +91,7 @@ test.skipIf(!supportedHost)("prepare-native-agent builds from source by default"
   expectPayload(payload, join(root, "target", "release", "butler-agent"), result.stdout);
 });
 
+// test-category: format-pin
 test.skipIf(!supportedHost)("prepare-native-agent lays out a supplied prebuilt binary without building", () => {
   const { root, payload, prepare, log } = fixture();
   const prebuilt = join(root, "prebuilt-agent");
@@ -98,6 +104,7 @@ test.skipIf(!supportedHost)("prepare-native-agent lays out a supplied prebuilt b
   expectPayload(payload, prebuilt, result.stdout);
 });
 
+// test-category: format-pin
 test.skipIf(!supportedHost)("prepare-native-agent rejects a supplied binary that is not executable", () => {
   const { root, prepare, log } = fixture();
   const prebuilt = join(root, "prebuilt-agent");

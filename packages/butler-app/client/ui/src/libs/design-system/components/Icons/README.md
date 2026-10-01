@@ -1,5 +1,10 @@
 # Icons
 
+## Source and license
+The icons come from the [Hugeicons free set](https://hugeicons.com), using
+`@hugeicons/core-free-icons` 4.1.4 and `@hugeicons/react` 1.1.6. Both packages
+are licensed under MIT.
+
 ## What is this component
 Icons is a Butler design-system component for building consistent client UI without reaching into domain components or raw implementation details.
 

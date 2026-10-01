@@ -1,0 +1,22 @@
+name: Open source notices
+on:
+  push:
+    branches: [main, codex/oss-notices]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  licenses:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Validate locked inventory and deterministic notices
+        run: |
+          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          node deploy/licenses/generate.mjs --check
+          node deploy/licenses/check.mjs
+          python3 deploy/licenses/check-disclosure.py

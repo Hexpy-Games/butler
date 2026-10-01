@@ -61,7 +61,7 @@ fn input(value: &Value) -> AuthorityAdmissionInput {
 /// Format pin: what each admission projects (identity, permission scope)
 /// matches the Bun oracle, and every approval summary and command risk is
 /// as the App reads it.
-// test-category: format-pin
+// test-category: pure-logic
 #[test]
 fn actual_bun_principal_admission_identity_and_permission_match() {
     super::super::approval::pinned::assert_approval_summaries();

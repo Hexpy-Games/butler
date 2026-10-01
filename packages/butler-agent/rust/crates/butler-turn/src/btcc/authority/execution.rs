@@ -47,6 +47,7 @@ pub(super) fn execution(
     let outcome_receipt = record
         .outcome_receipt_json
         .as_deref()
+        .filter(|_| record.capability != "ask_user")
         .map(|json| {
             receipt::parse(json).ok_or_else(|| AuthorityError::policy("authority_request_corrupt"))
         })

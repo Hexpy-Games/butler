@@ -25,6 +25,23 @@ Prefer token-backed spacing and responsive composition. Check its showcase and u
 touch target still applies on coarse pointers) for a number in a toolbar,
 such as the Worker profiles header's max simultaneous Workers.
 
+`variant="default"` is the boxed field. `variant="underline"` is an in-place
+field with a single token bottom border, transparent background, no radius and
+zero horizontal padding. It inherits surrounding text metrics; `textSize="label"`
+matches Typo.Label. Its one-line footprint stays stable on mobile; the enclosing
+editable row must provide the touch target. Long values scroll within the input.
+Hover uses `--line-strong`; focus uses `--focus-ring-color`; invalid uses
+`--color-danger-border`. Disabled keeps a quiet line and disabled text;
+read-only uses secondary text and remains selectable and keyboard focusable.
+There is no transition, so reduced motion is respected without an override.
+
+Keyboard focus is the bottom line only: `--focus-ring-width` thickens the
+bottom border with `--focus-ring-color`, without a shadow or other-side outline.
+Reserved thickness below the text keeps its baseline unchanged. The focus
+foundation's shape-specific indicator rule allows a bottom line while retaining
+token thickness (2px) and at least 3:1 contrast against adjacent surfaces.
+The enclosing row must reserve space for the line inside clipping containers.
+
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.
 

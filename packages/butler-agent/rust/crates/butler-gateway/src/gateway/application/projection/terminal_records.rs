@@ -136,7 +136,7 @@ fn safe_token(value: &Value) -> Option<String> {
     {
         return None;
     }
-    Some(text.chars().take(96).collect())
+    Some(text.to_owned())
 }
 
 #[cfg(test)]
@@ -189,6 +189,17 @@ mod tests {
         .unwrap();
         assert_eq!(disposition(&root, &event(false)), Disposition::Reject);
         assert_eq!(disposition(&root, &event(true)), Disposition::Accept);
+        // Queue identities must remain exact: authority resumes include a full
+        // request hash, making their id longer than ordinary App message ids.
+        let queue_id = format!("idempotent-app_resume_question-ref-{}", "a".repeat(64));
+        std::fs::write(
+            processed.join(format!("{queue_id}.json")),
+            r#"{"metadata":{"terminalClaimId":"claim-1"}}"#,
+        )
+        .unwrap();
+        let mut resumed = event(false);
+        resumed.payload.get_mut("metadata").unwrap()["queueId"] = queue_id.into();
+        assert_eq!(disposition(&root, &resumed), Disposition::Accept);
         let _ = std::fs::remove_dir_all(root);
     }
 }
