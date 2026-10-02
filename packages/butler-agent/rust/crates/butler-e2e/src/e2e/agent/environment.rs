@@ -3,7 +3,10 @@ use std::process::Command;
 
 pub(super) fn isolated_command(program: &Path, data: &Path, home: &Path) -> Command {
     let mut command = Command::new(program);
-    command.current_dir(data).env_clear();
+    // Canonical paths carry the native extended-path prefix when required.
+    // Keep BUTLER_DATA unchanged so long-path tests exercise user input.
+    let directory = data.canonicalize().unwrap_or_else(|_| data.to_path_buf());
+    command.current_dir(directory).env_clear();
     command
         .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
         .env("HOME", home)
