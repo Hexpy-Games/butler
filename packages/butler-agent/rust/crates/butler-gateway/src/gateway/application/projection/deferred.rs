@@ -19,7 +19,7 @@ pub(super) async fn sync_deferred_step(
     let cursor = after.clone();
     let row = context
         .storage
-        .execute(move |db| staging::deferred_batch(db, &cursor, 1))
+        .read(move |db| staging::deferred_batch(db, &cursor, 1))
         .await
         .map_err(app_error)?
         .into_iter()

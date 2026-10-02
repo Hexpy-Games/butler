@@ -167,18 +167,27 @@ impl Buffer {
             .filter(|(_, session)| session.opened.elapsed() >= WINDOW)
             .map(|(chat, _)| chat.clone())
             .collect::<Vec<_>>();
-        for chat in chats {
-            self.flush(context, &chat).await?;
-        }
-        Ok(())
+        self.flush_chats(context, chats).await
     }
     pub(super) async fn flush_all(
         &self,
         context: &ProjectionContext,
     ) -> Result<(), GatewayApplicationError> {
         let chats = self.0.lock().keys().cloned().collect::<Vec<_>>();
-        for chat in chats {
-            self.flush(context, &chat).await?;
+        self.flush_chats(context, chats).await
+    }
+    async fn flush_chats(
+        &self,
+        context: &ProjectionContext,
+        chats: Vec<String>,
+    ) -> Result<(), GatewayApplicationError> {
+        // Await every flush, even after an error, so failed sessions are restored
+        // and successful sessions cannot lose an admitted operation's completion.
+        let results =
+            futures_util::future::join_all(chats.iter().map(|chat| self.flush(context, chat)))
+                .await;
+        for result in results {
+            result?;
         }
         Ok(())
     }
@@ -257,10 +266,14 @@ async fn flush_session(
     chat: &str,
     session: Arc<Session>,
 ) -> Result<(), GatewayApplicationError> {
-    for chunk in session.deltas.chunks(8) {
-        let deltas = chunk.to_vec();
+    for offset in (0..session.deltas.len().max(1)).step_by(8) {
+        let end = (offset + 8).min(session.deltas.len());
+        let deltas = session.deltas[offset..end].to_vec();
+        let last = end == session.deltas.len();
+        let pending = session.clone();
         let chat_id = chat.to_owned();
         let subscribers = context.subscribers.clone();
+        let now = context.dependencies.identity_clock.now_iso();
         context
             .storage
             .execute(move |db| {
@@ -268,22 +281,18 @@ async fn flush_session(
                     for delta in &deltas {
                         persist(db, &chat_id, delta, &subscribers)?;
                     }
-                    Ok(())
-                })
+                    Ok::<_, super::super::storage::AppStorageError>(())
+                })?;
+                if last {
+                    for (action, outbound) in &pending.staged {
+                        stage(db, action, &chat_id, outbound, &now)?;
+                    }
+                    checkpoint::save(db, &pending.cursor, &now)?;
+                }
+                Ok(())
             })
             .await
             .map_err(app_error)?;
     }
-    let chat_id = chat.to_owned();
-    let now = context.dependencies.identity_clock.now_iso();
-    context
-        .storage
-        .execute(move |db| {
-            for (action, outbound) in &session.staged {
-                stage(db, action, &chat_id, outbound, &now)?;
-            }
-            checkpoint::save(db, &session.cursor, &now)
-        })
-        .await
-        .map_err(app_error)
+    Ok(())
 }
