@@ -64,7 +64,9 @@ fn load(
     connection: &Connection,
     turn_id: &str,
 ) -> StorageResult<Vec<Arc<ContextCompactionRecord>>> {
-    let mut statement = connection.prepare(LOAD).map_err(StorageError::sqlite)?;
+    let mut statement = connection
+        .prepare_cached(LOAD)
+        .map_err(StorageError::sqlite)?;
     let rows = statement
         .query_map([turn_id], |row| {
             Ok((

@@ -76,6 +76,13 @@ async fn opener_cuts_over_an_r2_nonterminal_turn_without_reexecuting_it() {
 }
 
 async fn cancelled_reader_joins_on_close(storage: BtccStorage) {
+    storage
+        .inner
+        .readers
+        .as_ref()
+        .expect("durable read pool")
+        .assert_quiet_retirement()
+        .await;
     let reader = storage.clone();
     let (started, ready) = tokio::sync::oneshot::channel();
     let (release, blocked) = std::sync::mpsc::channel();

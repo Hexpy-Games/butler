@@ -2,6 +2,7 @@
 use super::super::{
     AppSettingsFacts, EventSubscribers, read_model, settings, storage::AppStorageError,
 };
+use crate::gateway::application::storage::CachedSql;
 use crate::gateway::{MessageRecord, SessionArtifactSummary, TurnRecord};
 use rusqlite::Connection;
 
@@ -49,14 +50,14 @@ pub(in crate::gateway::application) fn read_metadata(
         artifacts: view.artifacts,
         controls: settings::session_context_settings(db, subscribers, facts, session, now)?,
         turn_count: db
-            .query_row(
+            .query_row_cached(
                 "SELECT COUNT(*) FROM turns WHERE chat_id=?1",
                 [session],
                 |row| row.get(0),
             )
             .map_err(AppStorageError::sqlite)?,
         file_count: db
-            .query_row(
+            .query_row_cached(
                 "SELECT COUNT(*) FROM message_files WHERE owner_session_id=?1",
                 [session],
                 |row| row.get(0),

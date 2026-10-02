@@ -1,4 +1,5 @@
 //! Terminal assistant-message delivery, work-block, and activity projection.
+use crate::gateway::application::storage::CachedSql;
 
 use std::collections::BTreeMap;
 
@@ -31,7 +32,7 @@ pub(super) fn decorate(
             continue;
         };
         let explicit = db
-            .query_row(
+            .query_row_cached(
                 "SELECT delivery_metadata_json FROM app_terminal_turn_projections WHERE turn_id=?1",
                 [turn],
                 |row| row.get::<_, Option<String>>(0),

@@ -4,7 +4,10 @@ use parking_lot::Mutex;
 use rusqlite::{Connection, OpenFlags};
 use std::{
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant},
 };
 use tokio::sync::Semaphore;
@@ -25,6 +28,7 @@ pub(super) struct ReadPool {
     available: Mutex<Vec<CachedReader>>,
     permits: Arc<Semaphore>,
     gate: Arc<tokio::sync::RwLock<()>>,
+    retiring: AtomicBool,
 }
 impl ReadPool {
     pub(super) fn open(path: &Path) -> StorageResult<Self> {
@@ -39,6 +43,7 @@ impl ReadPool {
             available: Mutex::new(available),
             permits: Arc::new(Semaphore::new(CONNECTIONS)),
             gate: Arc::default(),
+            retiring: AtomicBool::new(false),
         })
     }
     fn connection(path: &Path) -> StorageResult<Connection> {
@@ -107,8 +112,8 @@ impl ReadPool {
                 transaction.commit().map_err(AppStorageError::sqlite)?;
                 Ok(())
             }));
-            // Maintenance keeps one reader hot. Retire an unused spare on this
-            // blocking worker; a concurrent burst can open its second reader.
+            // Returning a reader starts one change-driven retirement task. It
+            // also runs when the pool goes completely quiet after a burst.
             let mut readers = pool.available.lock();
             readers.retain(|reader| reader.last_used.elapsed() < SPARE_RETENTION);
             readers.push(CachedReader {
@@ -116,6 +121,7 @@ impl ReadPool {
                 last_used: Instant::now(),
             });
             drop(readers);
+            pool.schedule_retirement();
             drop(permit);
             drop(guard);
             match result {
@@ -130,6 +136,41 @@ impl ReadPool {
                 error.to_string(),
             )
         })?
+    }
+    fn schedule_retirement(self: &Arc<Self>) {
+        if self.retiring.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let pool = Arc::downgrade(self);
+        tokio::spawn(async move {
+            let mut wait = SPARE_RETENTION;
+            loop {
+                tokio::time::sleep(wait).await;
+                let Some(pool) = pool.upgrade() else { break };
+                let next = tokio::task::spawn_blocking(move || {
+                    let mut readers = pool.available.lock();
+                    if pool.permits.is_closed() {
+                        return None;
+                    }
+                    readers.retain(|reader| reader.last_used.elapsed() < SPARE_RETENTION);
+                    let next = readers
+                        .iter()
+                        .map(|reader| SPARE_RETENTION.saturating_sub(reader.last_used.elapsed()))
+                        .min();
+                    if next.is_none() {
+                        // Clear under the same lock used when returning readers:
+                        // a subsequent return will start a new retirement task.
+                        pool.retiring.store(false, Ordering::Release);
+                    }
+                    next
+                })
+                .await;
+                match next {
+                    Ok(Some(next)) => wait = next,
+                    _ => break,
+                }
+            }
+        });
     }
     pub(super) async fn close(self: &Arc<Self>) {
         let _guard = self.gate.write().await;

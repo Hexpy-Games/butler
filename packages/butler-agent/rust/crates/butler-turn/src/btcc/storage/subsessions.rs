@@ -51,6 +51,12 @@ pub struct StoredSubsessionDelegation {
     pub created_at: String,
 }
 
+/// Both relation lookups for one App projection share the same WAL snapshot.
+pub(crate) struct SessionRelations {
+    pub children: Vec<StoredSubsessionDelegation>,
+    pub own: super::StorageResult<Option<StoredSubsessionDelegation>>,
+}
+
 /// A direction sent to a subsession.
 #[derive(Clone, Debug)]
 pub struct StoredSubsessionDirection {
@@ -149,6 +155,24 @@ impl SqliteSubsessionRepository {
     ) -> Result<Option<StoredSubsessionDelegation>, StorageError> {
         self.storage
             .read(move |db| read(db, "r.relation_id=?1", &id))
+            .await
+    }
+
+    pub(crate) async fn projection_relations(
+        &self,
+        session: String,
+    ) -> super::StorageResult<SessionRelations> {
+        self.storage
+            .read(move |db| {
+                let children = list(
+                    db,
+                    "WHERE r.parent_session_id=?1 ORDER BY r.ordinal",
+                    [&session],
+                )?;
+                // Preserve the caller's handling of an undecodable own relation.
+                let own = read(db, "r.child_session_id=?1", &session);
+                Ok(SessionRelations { children, own })
+            })
             .await
     }
 
