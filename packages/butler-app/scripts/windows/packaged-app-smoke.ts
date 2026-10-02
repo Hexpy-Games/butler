@@ -88,6 +88,8 @@ try {
     messages[1].role === "assistant" && messages[1].text === answer && calls === 1, "Stub chat content/order/count mismatch");
   cdp = await electronPage(debugPort);
   assert(await cdp.expression("typeof window.butlerApp?.quitApp === 'function'"), "Sandbox preload missing");
+  await cdp.reload();
+  assert((await api("/health")).data.ok === true, "Reloaded portable Agent is unhealthy");
   for (const pid of processTree(appPid)) owned.add(pid);
   await cdp.expression("setTimeout(() => window.butlerApp.quitApp({confirmed:true}), 50); true");
   await waitFor(() => existsSync(exitFile), "App quit");
@@ -98,7 +100,7 @@ try {
     readJson("app/runtime/foreground/instance.json")?.clean_exit === true, "Unclean foreground shutdown");
   assert(protocolRegistration() === priorProtocol, "Portable App changed the protocol registration");
   console.log(JSON.stringify({ ok: true, windowCreated: true, agentChild: true, authenticatedHealth: 200,
-    stubTurns: 1, providerCalls: calls, messages: messages.length, processesChecked: owned.size,
+    reloadVerified: true, stubTurns: 1, providerCalls: calls, messages: messages.length, processesChecked: owned.size,
     quitExit: 0, leftoverProcesses: 0, portReleased: true, protocolUnchanged: true, rawTextIncluded: false }));
 } finally {
   cdp?.close();

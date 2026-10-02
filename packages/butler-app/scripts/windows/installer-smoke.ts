@@ -4,7 +4,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
 import { alive, assertShortcuts, bridge, click, ownedProcesses, powershell, readJson, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
@@ -21,6 +21,7 @@ const owned = new Set<number>();
 let page: ElectronPage | null = null;
 let calls = 0;
 let uninstalled = false;
+let phase = "one-click install";
 const manifest = readJson(join(second, "app-update-manifest.json"))!;
 const packageName = manifest.artifacts[0].artifact_url.split("/").at(-1);
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async request => {
@@ -57,6 +58,7 @@ const started = Date.now();
 try {
   prepare();
   await oneClickLaunch();
+  phase = "silent install";
   run(join(release, `ButlerSetup-${from}-x64.exe`), ["--silent"]);
   await waitFor(() => existsSync(stub) && existsSync(updater), "per-user install");
   await waitFor(() => shortcuts.every(path => existsSync(path)), "Start Menu and Desktop shortcuts");
@@ -69,14 +71,17 @@ try {
   await bridge(page, "updateSettings", { language: "en", onboarding: {
     consent_version: 1, accepted_at: new Date().toISOString(), completed_at: new Date().toISOString(),
   } });
+  phase = "silent install reload";
   await page.reload();
   await proof(from);
   const session = (await bridge(page, "createSession", { kind: "chat", title: "Update retains chat" })).session;
   await stubChat(session.id);
+  phase = "shell features";
   await shellFeatures(session.id);
   const oldPid = readJson(join(data, "app/runtime/foreground/instance.json"))!.app_pid;
   const oldBinary = agentPath(from);
   const oldHash = digest(oldBinary);
+  phase = "Settings update";
   await settingsUpdate();
   await waitFor(() => !alive(oldPid), "old App quit");
   page.close(); page = null;
@@ -106,6 +111,12 @@ try {
     normalInstallLaunch: true, exactAgent: true, chatPreserved: true, rollbackRetained: true, uninstallPreservesData: true,
     leftoverProcesses: 0, durationMs: Date.now() - started }));
 } catch (error) {
+  console.error(JSON.stringify({ phase, renderer: page ? await page.diagnostics().catch(() => null) : null,
+    instanceState: readJson(join(data, "app/runtime/foreground/instance.json"))?.state,
+    packages: [from, to].map(version => ({ version,
+      preloadExists: existsSync(join(resolve(dirname(agentPath(version)), "../../.."), "resources/app/preload.cjs")),
+      agentExists: existsSync(agentPath(version)),
+    })) }));
   if (existsSync(join(data, "updates/app-install.log"))) console.error(readFileSync(join(data, "updates/app-install.log"), "utf8"));
   throw error;
 } finally {

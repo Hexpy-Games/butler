@@ -6,6 +6,7 @@ export interface ElectronPage {
   expression<T>(expression: string): Promise<T>;
   waitForFunction(fn: () => unknown): Promise<void>;
   reload(): Promise<void>;
+  diagnostics(): Promise<unknown>;
   close(): void;
 }
 
@@ -28,10 +29,13 @@ async function connect(url: string): Promise<ElectronPage> {
     socket.addEventListener("close", () => { clearTimeout(timer); fail(new Error("Electron CDP closed before connecting.")); }, { once: true });
     socket.addEventListener("error", () => fail(new Error("Electron CDP connection failed.")), { once: true });
   });
+  const errors: string[] = [];
   const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
   let id = 0;
   socket.addEventListener("message", message => {
     const payload = JSON.parse(String(message.data));
+    if (payload.method === "Log.entryAdded" && payload.params.entry.level === "error") errors.push(payload.params.entry.text);
+    if (payload.method === "Runtime.exceptionThrown") errors.push(payload.params.exceptionDetails.exception?.description ?? payload.params.exceptionDetails.text);
     const entry = pending.get(payload.id);
     if (!entry) return;
     pending.delete(payload.id);
@@ -53,16 +57,21 @@ async function connect(url: string): Promise<ElectronPage> {
     assert.ok(!result.exceptionDetails, `Electron evaluation failed: ${JSON.stringify(result.exceptionDetails)}`);
     return result.result.value;
   }
+  await send("Log.enable", {});
+  await send("Runtime.enable", {});
+  async function diagnostics() {
+    return { errors, page: await expression("({url:location.href,ready:document.readyState,preload:Boolean(window.butlerApp)})").catch(() => null) };
+  }
   async function waitForFunction(fn: () => unknown) {
     const deadline = Date.now() + 30_000;
     while (Date.now() < deadline) {
       if (await expression(`(${fn.toString()})()`).catch(() => false)) return;
       await new Promise(done => setTimeout(done, 200));
     }
-    throw new Error(`Electron UI did not become ready: ${fn.toString()}`);
+    throw new Error(`Electron UI did not become ready: ${fn.toString()}; ${JSON.stringify(await diagnostics())}`);
   }
   return {
-    expression, waitForFunction,
+    expression, waitForFunction, diagnostics,
     evaluate: fn => expression(`(${fn.toString()})()`),
     reload: async () => { await send("Page.reload", {}); await waitForFunction(() => Boolean(window.butlerApp)); },
     close: () => socket.close(),

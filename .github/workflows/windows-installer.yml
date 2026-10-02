@@ -1,6 +1,11 @@
 name: Windows Squirrel install and update
 on:
   workflow_dispatch:
+    inputs:
+      artifact_run:
+        description: Reuse a completed run's packages only when product sources are identical
+        type: string
+        default: ''
   pull_request:
     paths:
       - '.github/workflows/windows-installer.yml'
@@ -12,13 +17,16 @@ on:
       - 'packages/butler-agent/rust/crates/butler-platform/src/app_update/**'
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: windows-installer-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   native:
+    if: github.event_name != 'workflow_dispatch' || inputs.artifact_run == ''
     uses: ./.github/workflows/windows-native-deps.yml
   installer:
+    if: github.event_name != 'workflow_dispatch' || inputs.artifact_run == ''
     needs: native
     runs-on: windows-latest
     timeout-minutes: 120
@@ -101,5 +109,59 @@ jobs:
         if: always()
         with:
           name: windows-installer-preview
-          path: dist/release/app-windows*/*
+          path: |
+            dist/release/app-windows-first/
+            dist/release/app-windows/
           if-no-files-found: ignore
+
+  verify-packaged:
+    if: github.event_name == 'workflow_dispatch' && inputs.artifact_run != ''
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      ARTIFACT_RUN: ${{ inputs.artifact_run }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      EXPECTED_BRANCH: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require identical product sources before reusing verified packages
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:ARTIFACT_RUN -notmatch '^\d+$') { throw 'Invalid source run' }
+          $run = gh api "repos/$env:GH_REPO/actions/runs/$env:ARTIFACT_RUN" | ConvertFrom-Json
+          if ($LASTEXITCODE -or $run.status -ne 'completed' -or $run.head_branch -ne $env:EXPECTED_BRANCH -or $run.path -ne '.github/workflows/windows-installer.yml') { throw 'Unexpected source run' }
+          git fetch origin $run.head_sha
+          if ($LASTEXITCODE) { throw 'Source revision unavailable' }
+          git diff --exit-code $run.head_sha HEAD -- VERSION package.json bun.lock packages/butler-agent packages/butler-app/client packages/butler-app/scripts/release packages/butler-app/scripts/windows/package-release.ts deploy/licenses
+          if ($LASTEXITCODE) { throw 'Product changed: rebuild packages instead of reusing them' }
+          Write-Output "Verified unchanged product sources from run $env:ARTIFACT_RUN ($($run.head_sha))"
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-installer-preview
+          run-id: ${{ inputs.artifact_run }}
+          github-token: ${{ github.token }}
+          path: dist/reused
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Run the complete installer smoke against the same packaged bytes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $profile = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+          $env:HOME = Join-Path $profile 'home'
+          $env:BUTLER_DATA = Join-Path $profile 'data'
+          New-Item -ItemType Directory -Force $env:HOME,$env:BUTLER_DATA | Out-Null
+          try {
+            bun install --frozen-lockfile --ignore-scripts
+            if ($LASTEXITCODE) { throw 'Dependency installation failed' }
+            $first = @(Get-ChildItem dist/reused -Recurse -Filter ButlerSetup-0.1.0-preview.90-x64.exe)
+            $second = @(Get-ChildItem dist/reused -Recurse -Filter app-update-manifest.json | Where-Object { (Get-Content -Raw $_.FullName | ConvertFrom-Json).app_version -eq '0.1.0-preview.91' })
+            if ($first.Count -ne 1 -or $second.Count -ne 1) { throw 'Expected both exact package versions' }
+            ./packages/butler-app/scripts/windows/verify-squirrel-version.ps1 -Squirrel packages/butler-app/client/electron/node_modules/electron-winstaller/vendor/Squirrel.exe
+            bun run packages/butler-app/scripts/windows/installer-smoke.ts $first[0].DirectoryName $second[0].DirectoryName
+            if ($LASTEXITCODE) { throw 'Installer/update smoke failed' }
+          } finally { Remove-Item -Recurse -Force $profile }
