@@ -1,10 +1,10 @@
+import { launchSmokeBrowser } from "../support/browser-launch.ts";
 // Browser smoke: observe every mount from document creation, including reloads.
 import { strict as assert } from "node:assert";
-import { chromium } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 
 const server = await createNativeAppServer();
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 const completed = "2026-09-01T00:00:00Z";
 try {
   for (const desktop of [false, true]) {

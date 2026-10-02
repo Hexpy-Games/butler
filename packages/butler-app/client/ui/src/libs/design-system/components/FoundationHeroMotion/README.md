@@ -43,8 +43,11 @@ scenes, its prelude choreography and its builds.
 
 ## Motion and performance
 
-- CSS animations of `transform` and `opacity` only: compositor work, no frame
-  loop, no canvas. Timing is multiples of `--motion-deliberate`; moves ease
+- CSS animations use `transform` and `opacity`; the shared Sketch overlay
+  also traces SVG rounded-rect contours with `stroke-dashoffset`. Typography
+  demonstrates its variable `font-weight` axis. The motion smoke checks these
+  specimen exceptions and retains layout, frame and long-task budgets. No
+  frame loop or canvas. Timing is multiples of `--motion-deliberate`; moves ease
   on `--motion-ease-emphasized`, fades on `--motion-ease-standard`, and the
   Motion plot runs each easing token as its own timing function.
 - Easing is set per element (it applies to every keyframe segment); `var()`

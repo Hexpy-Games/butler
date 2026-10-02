@@ -1,3 +1,4 @@
+import { launchSmokeBrowser } from "../support/browser-launch.ts";
 // The Steward composer pill on the visual harness (built UI served by an
 // isolated native gateway): shown while an #307-shaped child is admitted or
 // finalizing its answer, gone once the child is terminal.
@@ -5,7 +6,6 @@ import { strict as assert } from "node:assert";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { chromium } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "butler-steward-pill-"));
@@ -13,7 +13,7 @@ const server = await createNativeAppServer({
   butlerData: join(dir, "data"),
   uiRoot: resolve("packages/butler-app/client/ui/dist"),
 });
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await server.signIn(page);

@@ -1,8 +1,9 @@
+import { launchSmokeBrowser } from "../support/browser-launch.ts";
 import { Buffer } from "node:buffer";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { chromium, type Locator, type Page } from "playwright";
+import { type Locator, type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import {
   clientTurnIdFromMessageId,
@@ -357,7 +358,7 @@ await server.api("/settings", {
 // Space sidebar session rows expose their title as the row's aria-label.
 const smokeSessionRowSelector = `${testClass("tree-row")}[aria-label="Desktop client polish"]`;
 
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 const page = await browser.newPage({
   viewport: { width: 1440, height: 900 },
   deviceScaleFactor: 1,

@@ -1,3 +1,4 @@
+import { launchSmokeBrowser } from "../support/browser-launch.ts";
 // Real App typing under unrelated SSE/work-status refreshes, on a stub agent.
 // Checks the committed controls, DOM identity, focus, geometry and full submitted draft.
 import { strict as assert } from "node:assert";
@@ -16,7 +17,7 @@ const server = await createNativeAppServer({
   stubReply: () => "Complete stub answer.",
 });
 const engine = process.env.BUTLER_SMOKE_BROWSER === "firefox" ? firefox : chromium;
-const browser = await engine.launch({ headless: true });
+const browser = await (engine === chromium ? launchSmokeBrowser() : engine.launch({ headless: true }));
 
 async function beginFrames(page: Page): Promise<void> {
   await page.evaluate(() => {

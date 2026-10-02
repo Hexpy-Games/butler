@@ -1,4 +1,4 @@
-import { HARNESS_SS03_STEWARD_STATES, HARNESS_SS03_SUMMARY } from "@/app/fixtures.ts";
+import { HARNESS_SS03_OBSERVER_VIEW, HARNESS_SS03_STEWARD_STATES, HARNESS_SS03_SUMMARY } from "@/app/fixtures.ts";
 import type { SessionSummaryView } from "@/app/types.ts";
 
 /** Native observer states selected by the same visual harness used by smokes. */
@@ -24,4 +24,16 @@ export function stewardHarnessSummary(state: string): SessionSummaryView {
     };
   }
   return HARNESS_SS03_STEWARD_STATES[state] ?? HARNESS_SS03_SUMMARY;
+}
+
+/** Keep the opened observer consistent with the selected parent-card state. */
+export function stewardHarnessView(state: string) {
+  const child = stewardHarnessSummary(state).steward_children![0]!;
+  return {
+    ...HARNESS_SS03_OBSERVER_VIEW,
+    status: child.status,
+    active_turn: child.active_turn,
+    latest_turn: child.latest_turn,
+    waiting_for_children: child.waiting_for_children,
+  };
 }

@@ -1,3 +1,4 @@
+import { launchSmokeBrowser } from "../support/browser-launch.ts";
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
@@ -290,7 +291,7 @@ const { componentNames: requestedNames, viewports, themes, locale, fullPage } = 
   Bun.argv.slice(2),
 );
 const server = await createNativeAppServer({ uiRoot });
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 
 try {
   const writtenPaths: string[] = [];

@@ -1,7 +1,8 @@
+import { launchSmokeBrowser } from "../support/browser-launch.ts";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { chromium, type Page } from "playwright";
+import { type Page, type Request } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 
 // Every DS Viewer item page: no example or states-matrix cell lets its content
@@ -37,10 +38,27 @@ function viewerUrl(baseUrl: string, params: Record<string, string>): string {
   return `${baseUrl}?${new URLSearchParams({ visual: "design-system", ...params }).toString()}`;
 }
 
+async function navigateViewer(page: Page, url: string): Promise<void> {
+  const pending = new Map<Request, number>();
+  const started = (request: Request) => pending.set(request, Date.now());
+  const finished = (request: Request) => pending.delete(request);
+  page.on("request", started).on("requestfinished", finished).on("requestfailed", finished);
+  try {
+    await page.goto(url, { waitUntil: "networkidle" });
+  } catch (error) {
+    console.error("DS pending requests", [...pending].map(([request, start]) => ({
+      path: new URL(request.url()).pathname, elapsedMs: Date.now() - start,
+    })));
+    throw error;
+  } finally {
+    page.off("request", started).off("requestfinished", finished).off("requestfailed", finished);
+  }
+}
+
 async function itemIds(page: Page, baseUrl: string): Promise<Map<string, string>> {
   const items = new Map<string, string>();
   for (const gallery of ["components", "blocks"]) {
-    await page.goto(viewerUrl(baseUrl, { page: gallery }), { waitUntil: "networkidle" });
+    await navigateViewer(page, viewerUrl(baseUrl, { page: gallery }));
     await page.locator(`[data-ds-gallery="${gallery}"]`).waitFor({ state: "attached" });
     const cards = await page.locator("[data-ds-component][data-ds-item]").evaluateAll((elements) =>
       elements.map((element) => [element.getAttribute("data-ds-component")!, element.getAttribute("data-ds-item")!]));
@@ -175,7 +193,7 @@ if (!existsSync(join(uiRoot, "index.html"))) throw new Error("UI dist is missing
 
 const only = new Set(Bun.argv.slice(2).filter((arg) => arg && arg !== "--"));
 const server = await createNativeAppServer({ uiRoot });
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 const offenders: Offender[] = [];
 let checkedPages = 0;
 try {
@@ -186,7 +204,8 @@ try {
     const items = await itemIds(page, server.url);
     for (const [name, id] of items) {
       if (only.size && !only.has(name)) continue;
-      await page.goto(viewerUrl(server.url, { page: id, theme: "side-by-side", motion: "reduced" }), { waitUntil: "networkidle" });
+      if (process.env.BUTLER_SMOKE_DIAGNOSTICS) console.log(`DS overflow: ${runLabel} ${name}`);
+      await navigateViewer(page, viewerUrl(server.url, { page: id, theme: "side-by-side", motion: "reduced" }));
       await page.locator(`[data-ds-detail="${name}"] [data-ds-examples]`).waitFor({ state: "visible" });
       await waitForLayout(page);
       for (const found of await page.evaluate(auditPage, { tolerance: TOLERANCE, pageScroll: true })) offenders.push({ item: name, run: runLabel, ...found });
@@ -200,7 +219,7 @@ try {
       await page.setViewportSize({ width, height: 1000 });
       for (const chapter of FOUNDATION_PAGES) {
         if (only.size && !only.has(chapter)) continue;
-        await page.goto(viewerUrl(server.url, { page: chapter, motion: "reduced", locale: width === 375 ? "ko" : "en" }), { waitUntil: "networkidle" });
+        await navigateViewer(page, viewerUrl(server.url, { page: chapter, motion: "reduced", locale: width === 375 ? "ko" : "en" }));
         await page.locator("[data-ds-chapter-head]").first().waitFor({ state: "visible" });
         await waitForLayout(page);
         for (const found of await page.evaluate(auditPage, { tolerance: TOLERANCE, pageScroll: true })) offenders.push({ item: chapter, run: `${runLabel} @${width}`, ...found });
@@ -209,6 +228,9 @@ try {
     }
     await page.close();
   }
+} catch (error) {
+  console.error(error);
+  throw error;
 } finally {
   await browser.close();
   await server.stop();

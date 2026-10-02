@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { stewardHarnessSummary } from "./stewardHarnessSummary.ts";
+import { stewardHarnessSummary, stewardHarnessView } from "./stewardHarnessSummary.ts";
 import { appCopy } from "@/app/copy.ts";
 import {
   AdaptivePanelResizeHandle,
@@ -189,7 +189,7 @@ export function VisualHarness() {
     setModelCatalog(harnessCatalog);
     setSummary(harnessSummary);
     if (ss03Surface) {
-      setSessionView(HARNESS_SS03_OBSERVER_VIEW);
+      setSessionView(stewardHarnessView(new URLSearchParams(window.location.search).get("steward") ?? ""));
       openSessionObserver(HARNESS_SS03_OBSERVER_VIEW.session_id);
     }
     setTurnProgress(

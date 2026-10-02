@@ -1,3 +1,4 @@
+import { launchSmokeBrowser } from "../support/browser-launch.ts";
 // Browser regression for the observer's incremental session-view contract.
 // The native gateway/stub model owns startup; only the child projection is
 // intercepted, so the real modal, store, timer and HTTP client perform refreshes.
@@ -11,7 +12,7 @@ import type { SessionView } from "../../packages/butler-app/client/ui/src/app/ty
 
 const server = await createNativeAppServer({ uiRoot: resolve("packages/butler-app/client/ui/dist") });
 const engine = process.env.BUTLER_SMOKE_BROWSER === "firefox" ? firefox : chromium;
-const browser = await engine.launch({ headless: true });
+const browser = await (engine === chromium ? launchSmokeBrowser() : engine.launch({ headless: true }));
 const original = structuredClone(HARNESS_SS03_OBSERVER_VIEW);
 const turn = original.latest_turn!;
 const first = original.messages[0]!;

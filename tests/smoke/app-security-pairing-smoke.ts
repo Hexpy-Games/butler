@@ -1,8 +1,9 @@
+import { launchSmokeBrowser } from "../support/browser-launch.ts";
 // Real UI -> isolated native gateway -> paired browser. Providers are stubbed.
 import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { chromium, type Page } from "playwright";
+import { type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { appCopy, setAppCopyLanguage } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 type PairingStatus = { id: string };
@@ -15,7 +16,7 @@ const adminHeaders = { ...server.authHeaders, "x-butler-admin": secret };
 const admin = <T>(path: string, init: RequestInit = {}) => server.api<T>(path, {
   ...init, headers: adminHeaders,
 });
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 const copy = appCopy.settings.security;
 const section = (page: Page, id: string) => page.locator(`[data-settings-section-id="${id}"]`);
 

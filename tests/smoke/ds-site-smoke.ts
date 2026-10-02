@@ -1,6 +1,7 @@
+import { launchSmokeBrowser } from "../support/browser-launch.ts";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, normalize, resolve, sep } from "node:path";
-import { chromium, type Page } from "playwright";
+import { type Page } from "playwright";
 import { MOBILE_VIEWPORTS, assertMobileViewer, launchMobileBrowser, mobileContext } from "../support/ds-viewer-mobile-checks.ts";
 
 // Static DS site smoke. Serves a ds-site build the way GitHub Pages does (real files, directory
@@ -86,7 +87,7 @@ function assertUnderBase(page: Page, label: string): void {
   assert(pathname === base || pathname === `${base}index.html`, `${label}: expected to stay at ${base}, got ${pathname}`);
 }
 
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 try {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const foreign: string[] = [];

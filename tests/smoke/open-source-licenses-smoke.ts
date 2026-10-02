@@ -1,6 +1,6 @@
+import { launchSmokeBrowser } from "../support/browser-launch.ts";
 import { readFileSync } from "node:fs";
 import { resolve, sep } from "node:path";
-import { chromium } from "playwright";
 import { getAppCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 
 // Existing App visual harness: real Settings navigation, no Agent or model calls.
@@ -16,7 +16,7 @@ const server = Bun.serve({
     return Response.json({ error: "Offline smoke: no API" }, { status: 503 });
   },
 });
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 try {
   for (const locale of ["en", "ko"]) {
     const copy = getAppCopy(locale === "ko" ? "ko-KR" : "en-US");

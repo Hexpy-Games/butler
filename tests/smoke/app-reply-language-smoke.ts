@@ -1,6 +1,6 @@
+import { launchSmokeBrowser } from "../support/browser-launch.ts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { chromium } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -8,7 +8,7 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 const server = await createNativeAppServer({ onboardingComplete: false, config: { user: { language: "ko", responseLanguage: "en", responseLanguageDefaultSource: "installer" } } });
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 try {
   const context = await browser.newContext({ locale: "ko-KR" });
   await server.signIn(context);

@@ -1,3 +1,4 @@
+import { launchSmokeBrowser } from "../support/browser-launch.ts";
 /**
  * Motion verification on the DS Viewer (DS spec Motion Contract):
  * - Chrome traces (CDP tracing) of overlay open/close and 25 chunks/s
@@ -25,7 +26,7 @@
 import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import { type Browser, type BrowserContext, type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 
 const root = process.cwd();
@@ -843,7 +844,7 @@ async function measure(browser: Browser, serverUrl: string, ids: Map<string, str
 assert(existsSync(join(uiRoot, "index.html")), "UI dist is missing; build the UI first.");
 mkdirSync(outDir, { recursive: true });
 const server = await createNativeAppServer({ uiRoot });
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 try {
   const lookup = await browser.newPage();
   await server.signIn(lookup);

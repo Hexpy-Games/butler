@@ -1,3 +1,4 @@
+import { launchSmokeBrowser } from "../support/browser-launch.ts";
 // Bundled fonts render in the served UI (DS spec Typeface Contract).
 //
 // Web mode: Playwright Chromium against an isolated native gateway serving the
@@ -14,7 +15,6 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { chromium } from "playwright";
 import { createNativeAppServer, freePort } from "../support/native-app-server.ts";
 import { LEGACY_FIRST_RUN_STORAGE_KEY as FIRST_RUN_STORAGE_KEY, legacyFirstRunCompleteRecord } from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
 
@@ -94,7 +94,7 @@ function assertFonts(mode: string, load: FontLoad, rendered: Rendered): void {
 const report: Record<string, unknown> = {};
 
 async function webMode(): Promise<void> {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await launchSmokeBrowser();
   try {
     for (const locale of ["en", "ko"] as const) {
       await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: locale }) });

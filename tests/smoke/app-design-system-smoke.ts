@@ -1,7 +1,8 @@
+import { launchSmokeBrowser } from "../support/browser-launch.ts";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { chromium, type Page } from "playwright";
+import { type Page, type Request } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 
 const root = process.cwd();
@@ -13,10 +14,25 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 async function openViewerPage(page: Page, baseUrl: string, pageId: string): Promise<void> {
-  await page.goto(`${baseUrl}?visual=design-system&page=${encodeURIComponent(pageId)}`, {
-    waitUntil: "networkidle",
-  });
+  if (process.env.BUTLER_SMOKE_DIAGNOSTICS) console.log(`DS navigation: ${pageId}`);
+  const pending = new Map<Request, number>();
+  const started = (request: Request) => pending.set(request, Date.now());
+  const finished = (request: Request) => pending.delete(request);
+  page.on("request", started).on("requestfinished", finished).on("requestfailed", finished);
+  try {
+    await page.goto(`${baseUrl}?visual=design-system&page=${encodeURIComponent(pageId)}`, {
+      waitUntil: "networkidle",
+    });
+  } catch (error) {
+    console.error("DS pending requests", [...pending].map(([request, start]) => ({
+      path: new URL(request.url()).pathname, elapsedMs: Date.now() - start,
+    })));
+    throw error;
+  } finally {
+    page.off("request", started).off("requestfinished", finished).off("requestfailed", finished);
+  }
   await page.locator(`[data-ds-page="${pageId}"]`).waitFor({ state: "attached" });
+  if (process.env.BUTLER_SMOKE_DIAGNOSTICS) console.log(`DS ready: ${pageId}`);
 }
 
 async function assertNoHorizontalOverflow(page: Page, label: string): Promise<void> {
@@ -453,7 +469,7 @@ assert(
 );
 
 const server = await createNativeAppServer({ uiRoot });
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 
 try {
   for (const viewport of [
