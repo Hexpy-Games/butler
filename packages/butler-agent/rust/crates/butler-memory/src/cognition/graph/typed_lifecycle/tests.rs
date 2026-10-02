@@ -6,14 +6,9 @@ use crate::cognition::sources::TypedMemoryLifecycle;
 #[test]
 fn lifecycle_consumption_updates_only_matching_revision_and_records_disposition() {
     let mut connection = Connection::open_in_memory().unwrap();
-    connection
-            .execute_batch(
-                "CREATE TABLE memory_chunks(source_key TEXT PRIMARY KEY,current_revision TEXT NOT NULL,status TEXT NOT NULL,updated_at TEXT NOT NULL);\
-                 CREATE TABLE memory_state(key TEXT PRIMARY KEY,value TEXT NOT NULL);\
-                 INSERT INTO memory_chunks VALUES('task_report:task-a','new-revision','active','old');\
-                 INSERT INTO memory_chunks VALUES('explicit_record:rule-a','old-revision','active','old');",
-            )
-            .unwrap();
+    crate::cognition::graph::schema::ensure(&mut connection, "now").unwrap();
+    connection.execute_batch("INSERT INTO memory_chunks(memory_chunk_id,source_key,current_revision,origin_kind,status,source_hash,created_at,updated_at) VALUES('task','task_report:task-a','new-revision','user_input','active','hash','old','old'),('rule','explicit_record:rule-a','old-revision','user_input','active','hash','old','old');
+    INSERT INTO memory_projection_jobs(job_id,episode_id,revision,extraction_version,generation,extraction_model,reasoning_effort,observed_completion_job_ids,source_state,semantic_graph_state,episode_vectors_state,node_vectors_state,hot_cache_state,created_at) VALUES('job','rule','old-revision','v3','g','stub','low','[]','{}','{\"state\":\"complete\"}','{}','{}','{\"state\":\"complete\"}','old');").unwrap();
 
     consume(
         &mut connection,
@@ -73,4 +68,16 @@ fn lifecycle_consumption_updates_only_matching_revision_and_records_disposition(
             "revision": "forgotten-revision"
         })
     );
+    let cache_state: String = connection
+        .query_row(
+            "SELECT hot_cache_state FROM memory_projection_jobs WHERE job_id='job'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&cache_state).unwrap()["state"],
+        "pending"
+    );
+    super::super::cache_work::tests::assert_query_plan();
 }
