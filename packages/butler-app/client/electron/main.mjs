@@ -99,7 +99,6 @@ import {
   resolveWindowsSquirrelLaunch,
   resolveWindowsUpdateFeedUrl,
   shouldDelayWindowsFirstUpdateCheck,
-  verifyWindowsInstallerPublisher,
   WINDOWS_APP_PROTOCOL,
   WINDOWS_APP_USER_MODEL_ID,
   WINDOWS_SQUIRREL_FIRST_RUN_UPDATE_DELAY_MS,
@@ -172,6 +171,7 @@ if (process.platform === "win32") {
   app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);
 }
 if (windowsSquirrelLaunch.handled) {
+  if (process.env.BUTLER_APP_DISABLE_SHELL_REGISTRATION === "1") process.exit(0);
   let squirrelExitCode = 0;
   let squirrelErrorCode = null;
   let squirrelResult = null;
@@ -179,6 +179,8 @@ if (windowsSquirrelLaunch.handled) {
     squirrelResult = executeWindowsSquirrelLaunch(windowsSquirrelLaunch, {
       manageShortcut: (shortcut) => manageWindowsSquirrelShortcut({
         ...shortcut,
+        desktopPath: app.getPath("desktop"),
+        writeShortcut: (path, options) => shell.writeShortcutLink(path, "create", options),
         runPowerShell: spawnSync,
       }),
       setLoginItemSettings: (settings) => app.setLoginItemSettings(settings),
@@ -282,6 +284,10 @@ autoUpdater.on("before-quit-for-update", () => {
   isQuitting = true;
   finalQuitAllowed = true;
 });
+if (process.env.BUTLER_E2E_TIER === "stub" && process.env.BUTLER_APP_SMOKE_DEBUG_PORT) {
+  app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
+  app.commandLine.appendSwitch("remote-debugging-port", process.env.BUTLER_APP_SMOKE_DEBUG_PORT);
+}
 const explicitElectronUserDataDir = process.env.BUTLER_APP_ELECTRON_USER_DATA_DIR?.trim();
 let openAIOAuthLoginSession = null;
 const bundledAgentSupervisor = createBundledAgentSupervisor({
@@ -1185,7 +1191,8 @@ function configureAppIdentity() {
 }
 
 function configureWindowsProtocolRegistration() {
-  if (!isWindows || !app.isPackaged) return false;
+  if (!isWindows || !app.isPackaged ||
+      process.env.BUTLER_APP_DISABLE_SHELL_REGISTRATION === "1") return false;
   const settings = windowsLoginItemSettings({
     openAtLogin: false,
     platform: process.platform,
@@ -1218,6 +1225,7 @@ function getButlerLoginItemSettings() {
 }
 
 function setButlerLoginItemSettings(openAtLogin) {
+  if (process.env.BUTLER_APP_DISABLE_SHELL_REGISTRATION === "1") return;
   app.setLoginItemSettings(windowsLoginItemSettings({
     openAtLogin,
     platform: process.platform,
@@ -2560,33 +2568,6 @@ ipcMain.handle("butler:save-message-file", async (_event, input = {}) => {
 
 ipcMain.handle("butler:open-update-artifact", async (_event, input = {}) => {
   const artifactPath = safeUpdateArtifactPath(input?.artifactPath);
-  if (isWindows && artifactPath.toLocaleLowerCase("en-US").endsWith(".exe")) {
-    const signature = verifyWindowsInstallerPublisher({
-      currentExecutable: process.execPath,
-      candidateInstaller: artifactPath,
-      runPowerShell: spawnSync,
-      env: process.env,
-    });
-    const update = await runAppUpdateQuit(() => {
-      const installer = spawn(artifactPath, ["--silent"], {
-        detached: true,
-        shell: false,
-        stdio: "ignore",
-        windowsHide: true,
-      });
-      installer.unref();
-      finalQuitAllowed = true;
-      app.quit();
-    });
-    return {
-      opened: update.update_started,
-      update,
-      signature: {
-        status: signature.status,
-        publisherConsistent: signature.publisherConsistent,
-      },
-    };
-  }
   const helper = await prepareAppPackageUpdate({ artifactPath, dataRoot: butlerDataRoot,
     installation: currentNativeAgentInstallation(), executable: process.execPath, parent: process.pid,
     externalServerUrl: explicitServerUrl, arguments: process.argv.slice(1) });

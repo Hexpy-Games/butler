@@ -37,7 +37,7 @@ const launcher = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Fil
   ...process.env, HOME: join(root, "home"), USERPROFILE: join(root, "home"),
   LOCALAPPDATA: join(root, "local"), APPDATA: join(root, "roaming"), BUTLER_DATA: data,
   BUTLER_APP_SERVER_PORT: String(serverPort), BUTLER_SECRET_STORE: "file",
-  BUTLER_E2E_TIER: "stub",
+  BUTLER_E2E_TIER: "stub", BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1",
   OPENAI_API_KEY: "e2e-not-real", OPENAI_BASE_URL: `http://127.0.0.1:${stub.port}/v1`,
   BUTLER_PROVIDER_QUOTA_POLLING: "0", BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
 } });

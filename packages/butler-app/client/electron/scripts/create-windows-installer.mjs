@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { windowsPackageVersion } from "./windows-package-version.mjs";
 import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
@@ -86,7 +87,8 @@ await createWindowsInstaller({
   title: "Butler",
   name: "butler-app",
   exe: "Butler.exe",
-  version,
+  version: windowsPackageVersion(version),
+  noDelta: true,
   setupExe,
   setupIcon: resolve(setupIcon),
   iconUrl:

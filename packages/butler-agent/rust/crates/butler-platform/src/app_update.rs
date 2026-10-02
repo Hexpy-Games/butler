@@ -186,7 +186,21 @@ fn install_platform(
     Ok(())
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(target_os = "windows")]
+#[path = "app_update/windows.rs"]
+mod windows;
+
+#[cfg(target_os = "windows")]
+fn install_platform(
+    artifact: &Path,
+    executable: &Path,
+    parent: u32,
+    arguments: &[OsString],
+) -> Result<(), String> {
+    windows::install(artifact, executable, parent, arguments)
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
 fn install_platform(_: &Path, _: &Path, _: u32, _: &[OsString]) -> Result<(), String> {
     Err("App activation is unavailable on this platform.".into())
 }
@@ -234,7 +248,11 @@ pub fn package_format() -> &'static str {
             "deb"
         }
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(target_os = "windows")]
+    {
+        "nupkg"
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         "exe"
     }

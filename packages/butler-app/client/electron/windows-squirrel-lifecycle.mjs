@@ -1,4 +1,4 @@
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { basename, win32 } from "node:path";
 import { windowsPowerShellEnvironment } from "./windows-powershell-environment.mjs";
 
@@ -148,6 +148,8 @@ export function manageWindowsSquirrelShortcut({
   target,
   workingDirectory,
   runPowerShell,
+  writeShortcut,
+  desktopPath,
   env = process.env,
   removePath = (path) => rmSync(path, { force: true }),
   pathExists = existsSync,
@@ -175,11 +177,24 @@ export function manageWindowsSquirrelShortcut({
     );
     try {
       removePath(shortcutPath);
+      if (desktopPath) removePath(win32.join(desktopPath, name));
     } catch {
       throw windowsSquirrelError("windows_squirrel_shortcut_failed");
     }
-    if (pathExists(shortcutPath)) {
+    if (pathExists(shortcutPath) ||
+        (desktopPath && pathExists(win32.join(desktopPath, name)))) {
       throw windowsSquirrelError("windows_squirrel_shortcut_failed");
+    }
+    return true;
+  }
+  if (typeof writeShortcut === "function" && desktopPath && env.APPDATA) {
+    const programs = win32.join(env.APPDATA, "Microsoft", "Windows", "Start Menu", "Programs");
+    mkdirSync(programs, { recursive: true });
+    for (const directory of [programs, desktopPath]) {
+      if (!writeShortcut(win32.join(directory, name), {
+        target, cwd: workingDirectory, icon: target, iconIndex: 0,
+        description: "Butler", appUserModelId: WINDOWS_APP_USER_MODEL_ID,
+      })) throw windowsSquirrelError("windows_squirrel_shortcut_failed");
     }
     return true;
   }

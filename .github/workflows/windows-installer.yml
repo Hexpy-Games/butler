@@ -1,0 +1,82 @@
+name: Windows Squirrel install and update
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/windows-installer.yml'
+      - '.github/workflows/release.yml'
+      - '.github/actions/package-windows-app/**'
+      - 'packages/butler-app/client/electron/**'
+      - 'packages/butler-app/scripts/windows/**'
+      - 'packages/butler-agent/rust/crates/butler-platform/src/app_update*'
+      - 'packages/butler-agent/rust/crates/butler-platform/src/app_update/**'
+permissions:
+  contents: read
+concurrency:
+  group: windows-installer-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  native:
+    uses: ./.github/workflows/windows-native-deps.yml
+  installer:
+    needs: native
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/windows-installer
+      GITHUB_REF_NAME: v0.1.0-preview.90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/build-windows-agent
+        with:
+          cache-key: windows-installer
+          native-deps-artifact: windows-native-deps
+          artifact-base-url: http://127.0.0.1/unused
+      - uses: ./.github/actions/package-windows-app
+      - name: Preserve the first version and build the second Agent
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Move-Item dist/release/app-windows dist/release/app-windows-first
+          Remove-Item -Recurse -Force dist/release/agent
+          $env:CARGO_HOME = "$env:USERPROFILE/.cargo"
+          $env:RUSTUP_HOME = "$env:USERPROFILE/.rustup"
+          $profile = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+          New-Item -ItemType Directory $profile | Out-Null
+          $env:HOME = Join-Path $profile 'home'
+          $env:BUTLER_DATA = Join-Path $profile 'data'
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          try {
+            $env:GITHUB_REF_NAME = 'v0.1.0-preview.91'
+            $env:RUSTFLAGS = '-C target-feature=+crt-static'
+            Push-Location packages/butler-agent/rust
+            cargo clippy --locked --target x86_64-pc-windows-msvc -p butler-platform -- -D warnings
+            if ($LASTEXITCODE) { throw 'Windows platform clippy failed' }
+            cargo build --locked --release --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent
+            if ($LASTEXITCODE) { throw 'Second Agent build failed' }
+            Pop-Location
+            python packages/butler-agent/rust/scripts/package-windows-agent.py --binary "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/butler-agent.exe" --resources packages/butler-agent/resources --renderer packages/butler-app/client/ui/dist --output dist/release/agent --artifact-base-url http://127.0.0.1/unused
+            if ($LASTEXITCODE) { throw 'Second Agent package failed' }
+            'GITHUB_REF_NAME=v0.1.0-preview.91' >> $env:GITHUB_ENV
+          } finally { Remove-Item -Recurse -Force $profile }
+      - uses: ./.github/actions/package-windows-app
+      - name: Prove Squirrel ordering and real install/update/uninstall
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $profile = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+          New-Item -ItemType Directory $profile | Out-Null
+          $env:HOME = Join-Path $profile 'home'
+          $env:BUTLER_DATA = Join-Path $profile 'data'
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          try {
+            ./packages/butler-app/scripts/windows/verify-squirrel-version.ps1 -Squirrel packages/butler-app/client/electron/node_modules/electron-winstaller/vendor/Squirrel.exe
+            bun run packages/butler-app/scripts/windows/installer-smoke.ts dist/release/app-windows-first dist/release/app-windows
+            if ($LASTEXITCODE) { throw 'Installer/update smoke failed' }
+          } finally { Remove-Item -Recurse -Force $profile }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-installer-preview
+          path: dist/release/app-windows*/*
+          if-no-files-found: ignore

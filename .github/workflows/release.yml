@@ -270,6 +270,24 @@ jobs:
           path: dist/release/agent/*
           if-no-files-found: error
 
+  app-windows:
+    name: Package unsigned Windows Squirrel App
+    needs: agent-windows
+    if: contains(github.ref_name, '-preview.')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: agent-windows-x64
+          path: dist/release/agent
+      - uses: ./.github/actions/package-windows-app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-windows-x64
+          path: dist/release/app-windows/*
+          if-no-files-found: error
+
   # Runs after the macOS job, whose single-platform manifests it replaces with
   # the merged ones (the update manifest lists one artifact per platform).
   agent-release:
@@ -345,7 +363,8 @@ jobs:
   app-linux-release:
     name: Attach Linux App packages to the draft release
     runs-on: ubuntu-latest
-    needs: [native-release, app-linux]
+    needs: [agent-release, app-linux]
+    if: ${{ always() && !cancelled() && needs.agent-release.result == 'success' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -365,37 +384,60 @@ jobs:
           # Archive names retain the exact release tag version.
           version="${GITHUB_REF_NAME#v}"
           cd dist/release/app-linux
-          files=(
-            "butler-app-${version}-linux-x64.deb"
-            "butler-app-${version}-linux-arm64.deb"
-            "butler-app-${version}-archlinux-x64.pkg.tar.zst"
-          )
-          for file in "${files[@]}"; do
-            test -f "$file"
-            sha256sum -c "$file.sha256"
-          done
+          shopt -s nullglob
+          files=(butler-app-*.deb butler-app-*.pkg.tar.zst)
+          test "${#files[@]}" -gt 0
+          for file in "${files[@]}"; do sha256sum -c "$file.sha256"; done
           gh release upload "$GITHUB_REF_NAME" "${files[@]}" "${files[@]/%/.sha256}" --clobber
 
-      - name: Publish the App updater manifest for all released platforms
+  app-manifests:
+    name: Publish successful Windows artifacts and merged App update manifest
+    runs-on: ubuntu-latest
+    needs: [native-release, agent-release, app-linux-release, app-windows]
+    if: ${{ always() && !cancelled() && needs.agent-release.result == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        if: needs.app-windows.result == 'success'
+        with:
+          name: app-windows-x64
+          path: dist/release/app-windows
+      - name: Merge only published platforms
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
-          trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
-          gh release download "$GITHUB_REF_NAME" --pattern app-update-manifest.json --dir "$BUTLER_DATA"
-          python3 deploy/app/merge-update-manifest.py \
-            --mac-manifest "$BUTLER_DATA/app-update-manifest.json" \
-            --linux-dir dist/release/app-linux --version "${GITHUB_REF_NAME#v}" \
-            --base-url "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME" \
-            --output "$HOME/app-update-manifest.json"
-          gh release upload "$GITHUB_REF_NAME" "$HOME/app-update-manifest.json" --clobber
+          task_home="$(mktemp -d)"
+          task_data="$(mktemp -d)"
+          export HOME="$task_home" BUTLER_DATA="$task_data"
+          trap 'rm -rf "$task_home" "$task_data"' EXIT
+          mkdir -p dist/release/published
+          gh release download "$GITHUB_REF_NAME" --dir dist/release/published
+          inputs=()
+          if [ -f dist/release/published/app-update-manifest.json ]; then
+            inputs+=(--mac-manifest dist/release/published/app-update-manifest.json)
+          fi
+          if compgen -G 'dist/release/published/butler-app-*-linux-*.deb' > /dev/null; then
+            inputs+=(--linux-dir dist/release/published)
+          fi
+          if [ -f dist/release/app-windows/app-update-manifest.json ]; then
+            inputs+=(--windows-dir dist/release/app-windows)
+            shopt -s nullglob
+            files=(dist/release/app-windows/*.exe dist/release/app-windows/*.nupkg dist/release/app-windows/*.zip dist/release/app-windows/RELEASES dist/release/app-windows/*.sha256)
+            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+          fi
+          if [ "${#inputs[@]}" -eq 0 ]; then exit 0; fi
+          python3 deploy/app/merge-update-manifest.py "${inputs[@]}" \
+            --version "${GITHUB_REF_NAME#v}" \
+            --base-url "https://github.com/$GH_REPO/releases/download/$GITHUB_REF_NAME" \
+            --output "$task_data/app-update-manifest.json"
+          gh release upload "$GITHUB_REF_NAME" "$task_data/app-update-manifest.json" --clobber
 
   release-checksums:
     name: Publish consolidated release checksums
     runs-on: ubuntu-latest
-    needs: [native-release, agent-release, app-linux-release]
+    needs: [agent-release, app-manifests]
     if: ${{ always() && !cancelled() && needs.agent-release.result == 'success' }}
     steps:
       - name: Build consolidated checksum asset from published outputs
@@ -425,6 +467,14 @@ jobs:
             dist/release/checksums/assets/butler-app-*-darwin-arm64.dmg.sha256
             dist/release/checksums/assets/butler-app-*-darwin-arm64.zip
             dist/release/checksums/assets/butler-app-*-darwin-arm64.zip.sha256
+            dist/release/checksums/assets/ButlerSetup-*-x64.exe
+            dist/release/checksums/assets/ButlerSetup-*-x64.exe.sha256
+            dist/release/checksums/assets/*-full.nupkg
+            dist/release/checksums/assets/*-full.nupkg.sha256
+            dist/release/checksums/assets/RELEASES
+            dist/release/checksums/assets/RELEASES.sha256
+            dist/release/checksums/assets/butler-app-*-windows-x64-portable.zip
+            dist/release/checksums/assets/butler-app-*-windows-x64-portable.zip.sha256
             dist/release/checksums/assets/app-release-manifest.json
             dist/release/checksums/assets/app-update-manifest.json
             dist/release/checksums/assets/butler-app-*-linux-x64.deb

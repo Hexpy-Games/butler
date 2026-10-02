@@ -1,0 +1,31 @@
+name: Package unsigned Windows App
+description: Consume the Windows Agent archive and emit Squirrel and portable artifacts
+runs:
+  using: composite
+  steps:
+    - uses: oven-sh/setup-bun@v2
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 24
+    - name: Package the exact App and bundled Agent version
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $profile = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+        New-Item -ItemType Directory $profile | Out-Null
+        $env:HOME = Join-Path $profile 'home'
+        $env:BUTLER_DATA = Join-Path $profile 'data'
+        New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+        try {
+          bun install --frozen-lockfile --ignore-scripts
+          if ($LASTEXITCODE) { throw 'Dependency installation failed' }
+          $archives = @(Get-ChildItem dist/release/agent/butler-agent-*-windows-x64.zip)
+          if ($archives.Count -ne 1) { throw 'Expected one Windows Agent archive' }
+          $expected = (Get-Content ($archives[0].FullName + '.sha256')).Split(' ')[0]
+          if ((Get-FileHash $archives[0].FullName -Algorithm SHA256).Hash.ToLower() -ne $expected) { throw 'Agent checksum mismatch' }
+          Expand-Archive $archives[0].FullName (Join-Path $profile 'agent')
+          $env:BUTLER_NATIVE_AGENT_EXECUTABLE = Join-Path $profile 'agent/butler-agent.exe'
+          $env:BUTLER_NATIVE_UI_DIST = Join-Path $profile 'agent/resources/app-client/dist'
+          bun run packages/butler-app/scripts/windows/package-release.ts
+          if ($LASTEXITCODE) { throw 'Windows packaging failed' }
+        } finally { Remove-Item -Recurse -Force $profile }
