@@ -9,6 +9,8 @@ import { electronPage, type ElectronPage } from "../../../../tests/support/elect
 import { FIRST_RUN_CONSENT_VERSION } from "../../client/ui/src/app/onboarding.ts";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
 import { alive, assertShortcuts, bridge, click, ownedProcesses, powershell, readJson, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
+import { smokeProviderReply } from "./smoke-provider.ts";
+import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
 
 if (process.platform !== "win32" || process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_ENVIRONMENT !== "github-hosted") {
   throw new Error("Registry/shortcut/installer smoke is restricted to disposable GitHub-hosted runners");
@@ -20,7 +22,7 @@ const root = mkdtempSync(join(tmpdir(), "butler-installer-e2e-"));
 const data = join(root, "data");
 const owned = new Set<number>();
 let page: ElectronPage | null = null;
-let calls = 0;
+const calls = { chat: 0, memory: 0 };
 let uninstalled = false;
 let phase = "one-click install";
 const manifest = readJson(join(second, "app-update-manifest.json"))!;
@@ -29,12 +31,7 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async request 
   const path = new URL(request.url).pathname;
   if (path === "/v1/responses") {
     const body = await request.json();
-    assert.ok(JSON.stringify(body).includes("Reply with Windows update ready."));
-    calls++;
-    return Response.json({ id: "resp_installer", object: "response", status: "completed", model: "gpt-6-luna",
-      output: [{ type: "message", id: "msg_installer", role: "assistant", status: "completed",
-        content: [{ type: "output_text", text: "Windows update ready.", annotations: [] }] }],
-      usage: { input_tokens: 100, output_tokens: 4, total_tokens: 104 } });
+    return smokeProviderReply(body, "Reply with Windows update ready.", "Windows update ready.", calls);
   }
   if (path === `/${packageName}`) return new Response(Bun.file(join(second, packageName)));
   if (path === "/manifest.json") return Response.json({ ...manifest, artifacts: manifest.artifacts.map((item: any) => ({
@@ -44,7 +41,7 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async request 
 } });
 const debugPort = await freePort();
 const agentPort = await freePort();
-const env = { ...process.env, HOME: join(root, "home"), BUTLER_DATA: data,
+const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), BUTLER_DATA: data,
   LOCALAPPDATA: join(root, "local"), APPDATA: join(root, "roaming"), BUTLER_SECRET_STORE: "file",
   BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"), BUTLER_APP_SMOKE_DEBUG_PORT: String(debugPort),
   BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_E2E_TIER: "stub", BUTLER_PROVIDER_QUOTA_POLLING: "0",
@@ -113,7 +110,9 @@ try {
   assert.equal(powershell("[bool](Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run' -ErrorAction SilentlyContinue).'com.squirrel.butler-app.Butler'", env), "False");
   assert.equal(readFileSync(join(data, "sentinel.txt"), "utf8"), "retained");
   assert.ok(existsSync(join(data, "butler.config.json")));
-  console.log(JSON.stringify({ ok: true, from, to, shellIntegration: true, stubCalls: calls,
+  assert.equal(calls.chat, 1); assert.equal(calls.memory, 1);
+  console.log(JSON.stringify({ ok: true, from, to, shellIntegration: true, stubCalls: calls.chat + calls.memory,
+    chatCalls: calls.chat, memoryCalls: calls.memory,
     normalInstallLaunch: true, exactAgent: true, chatPreserved: true, rollbackRetained: true, uninstallPreservesData: true,
     leftoverProcesses: 0, durationMs: Date.now() - started }));
 } catch (error) {
@@ -192,7 +191,8 @@ async function stubChat(chatId: string) {
   await waitFor(async () => (await bridge(page!, "listTurns", { chatId })).turns.some((turn: any) => turn.state === "delivered"), "stub chat");
   const messages = (await bridge(page!, "listMessages", { chatId })).messages;
   assert.equal(messages.length, 2); assert.equal(messages[0].role, "user");
-  assert.equal(messages[1].text, "Windows update ready."); assert.equal(calls, 1);
+  assert.equal(messages[1].text, "Windows update ready."); assert.equal(calls.chat, 1);
+  await waitFor(() => calls.memory === 1, "one successful meaning extraction");
 }
 
 function shellProof() {

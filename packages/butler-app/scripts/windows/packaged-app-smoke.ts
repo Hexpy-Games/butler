@@ -1,12 +1,15 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createServer } from "node:net";
 import { classifyAppForegroundActiveWork } from "../../client/electron/app-foreground-quit.mjs";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
+import { smokeProviderReply } from "./smoke-provider.ts";
+import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
 
 if (process.platform !== "win32") throw new Error("Packaged smoke requires Windows");
+if (!process.env.BUTLER_SMOKE_PROFILE_ROOT) throw new Error("Run through deploy/windows-portable-smoke.ps1");
 const packageRoot = resolve(process.argv[2]);
 const root = mkdtempSync(join(tmpdir(), "Butler portable 전경 smoke-"));
 const data = join(root, "data");
@@ -15,16 +18,11 @@ const exitFile = join(root, "app.exit");
 const owned = new Set<number>();
 const priorProtocol = protocolRegistration();
 const answer = "Windows Electron ready.";
-let calls = 0;
+const calls = { chat: 0, memory: 0 };
 const stub = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
   if (new URL(request.url).pathname !== "/v1/responses") return new Response(null, { status: 404 });
   const body = await request.json();
-  assert(JSON.stringify(body).includes("Reply with Windows Electron ready."), "Unexpected stub prompt");
-  calls++;
-  return Response.json({ id: "resp_windows", object: "response", status: "completed", model: "gpt-6-luna",
-    output: [{ type: "message", id: "msg_windows", role: "assistant", status: "completed",
-      content: [{ type: "output_text", text: answer, annotations: [] }] }],
-    usage: { input_tokens: 100, output_tokens: 4, total_tokens: 104 } });
+  return smokeProviderReply(body, "Reply with Windows Electron ready.", answer, calls);
 } });
 const debugPort = await freePort();
 const serverPort = await freePort();
@@ -35,8 +33,8 @@ const launcher = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Com
   "& ([scriptblock]::Create([IO.File]::ReadAllText($env:BUTLER_SMOKE_LAUNCH_SCRIPT))) " +
   "-Electron $launch.Electron -AppRoot $launch.AppRoot -Profile $launch.Profile " +
   "-PidFile $launch.PidFile -ExitFile $launch.ExitFile -DebugPort $launch.DebugPort",
-], { stdio: "ignore", env: {
-  ...process.env, PSModuleAnalysisCachePath: join(root, "powershell-module-cache"),
+], { stdio: "ignore", env: windowsPowerShellEnvironment(process.env, {
+  PSModuleAnalysisCachePath: join(root, "powershell-module-cache"),
   BUTLER_SMOKE_LAUNCH_SCRIPT: resolve("packages/butler-app/scripts/windows/launch-electron-smoke.ps1"),
   BUTLER_SMOKE_LAUNCH_INPUT: JSON.stringify({ Electron: join(packageRoot, "Butler.exe"), AppRoot: packageRoot,
     Profile: join(root, "profile"), PidFile: pidFile, ExitFile: exitFile, DebugPort: debugPort }),
@@ -46,7 +44,7 @@ const launcher = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Com
   BUTLER_E2E_TIER: "stub", BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1",
   OPENAI_API_KEY: "e2e-not-real", OPENAI_BASE_URL: `http://127.0.0.1:${stub.port}/v1`,
   BUTLER_PROVIDER_QUOTA_POLLING: "0", BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
-} });
+}) });
 let cdp: ElectronPage | null = null;
 try {
   await waitFor(() => existsSync(pidFile), "Electron launch PID");
@@ -62,7 +60,9 @@ try {
   const processes = processTree(appPid);
   for (const pid of processes) owned.add(pid);
   const parent = spawnSync("powershell.exe", ["-NoProfile", "-Command",
-    `(Get-CimInstance Win32_Process -Filter 'ProcessId = ${agentPid}').ParentProcessId`], { encoding: "utf8" });
+    `(Get-CimInstance Win32_Process -Filter 'ProcessId = ${agentPid}').ParentProcessId`], {
+    encoding: "utf8", env: windowsPowerShellEnvironment(),
+  });
   assert(parent.status === 0 && Number(parent.stdout.trim()) === appPid, "Agent is not the App child");
   const auth = readJson("app/runtime/auth/local-agent-auth.json");
   assert(typeof auth?.token === "string", "Local authentication missing");
@@ -87,7 +87,11 @@ try {
   }, "stub turn delivery", 60_000);
   const messages = (await api("/messages?chat_id=general")).data.messages;
   assert(messages.length === 2 && messages[0].role === "user" && messages[0].text === prompt &&
-    messages[1].role === "assistant" && messages[1].text === answer && calls === 1, "Stub chat content/order/count mismatch");
+    messages[1].role === "assistant" && messages[1].text === answer && calls.chat === 1,
+    `Stub chat content/order/count mismatch: ${JSON.stringify({ calls, messages: messages.map((message: any) => ({
+      role: message.role, text: message.text,
+    })) })}`);
+  await waitFor(() => calls.memory === 1, "one successful meaning extraction");
   cdp = await electronPage(debugPort);
   assert(await cdp.expression("typeof window.butlerApp?.quitApp === 'function'"), "Sandbox preload missing");
   await cdp.reload();
@@ -108,7 +112,8 @@ try {
     readJson("app/runtime/foreground/instance.json")?.clean_exit === true, "Unclean foreground shutdown");
   assert(protocolRegistration() === priorProtocol, "Portable App changed the protocol registration");
   console.log(JSON.stringify({ ok: true, windowCreated: true, agentChild: true, authenticatedHealth: 200,
-    reloadVerified: true, deliveredWorkSettled: true, stubTurns: 1, providerCalls: calls, messages: messages.length, processesChecked: owned.size,
+    reloadVerified: true, deliveredWorkSettled: true, stubTurns: 1, providerCalls: calls.chat + calls.memory,
+    chatCalls: calls.chat, memoryCalls: calls.memory, messages: messages.length, processesChecked: owned.size,
     quitExit: 0, leftoverProcesses: 0, portReleased: true, protocolUnchanged: true, rawTextIncluded: false }));
 } catch (error) {
   console.error(error);
@@ -137,7 +142,8 @@ try {
   for (const pid of owned) if (alive(pid)) { try { process.kill(pid, "SIGKILL"); } catch {} }
   stub.stop(true);
   await waitFor(() => [...owned].every((pid) => !alive(pid)), "forced smoke process cleanup");
-  rmSync(root, { recursive: true, force: true });
+  // The PowerShell owner removes the isolated profile after Bun exits, releasing
+  // all process-held Windows file handles before deleting the directory.
 }
 
 function prepareData() {
@@ -165,7 +171,9 @@ if (!$key) { 'absent'; exit 0 }
     [ordered]@{ name = $_; kind = [string]$item.GetValueKind($_); value = $item.GetValue($_) }
   }) }
 } | ConvertTo-Json -Depth 6 -Compress`;
-  const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8" });
+  const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
+    encoding: "utf8", env: windowsPowerShellEnvironment(),
+  });
   assert(result.status === 0, "Could not inspect protocol registration");
   return result.stdout.trim();
 }
@@ -200,7 +208,9 @@ async function portAvailable(port: number): Promise<boolean> {
 }
 function processTree(pid: number): number[] {
   const result = spawnSync("powershell.exe", ["-NoProfile", "-Command",
-    "$all = @(Get-CimInstance Win32_Process); $ids = @(" + pid + "); do { $next = @($all | Where-Object { $_.ParentProcessId -in $ids -and $_.ProcessId -notin $ids } | ForEach-Object { $_.ProcessId }); $ids += $next } while ($next.Count); ConvertTo-Json -Compress -InputObject @($ids)"], { encoding: "utf8" });
+    "$all = @(Get-CimInstance Win32_Process); $ids = @(" + pid + "); do { $next = @($all | Where-Object { $_.ParentProcessId -in $ids -and $_.ProcessId -notin $ids } | ForEach-Object { $_.ProcessId }); $ids += $next } while ($next.Count); ConvertTo-Json -Compress -InputObject @($ids)"], {
+    encoding: "utf8", env: windowsPowerShellEnvironment(),
+  });
   assert(result.status === 0, "Process tree query failed");
   return JSON.parse(result.stdout);
 }

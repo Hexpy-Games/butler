@@ -28,10 +28,28 @@ Never run registration or installer tests on the owner's Windows host.
 
 ## Verification boundary
 
-The owner's PC is a build host only: private task worktree and target, isolated
-HOME/DATA/APPDATA/LOCALAPPDATA, registration disabled, protocol registry checked
-before/after, exact owned PIDs stopped. Install/update/uninstall and shell effects
-run only on GitHub's disposable windows-latest runner. No live model calls.
+The owner's self-hosted job builds only. SSH portable smoke uses a private task
+worktree and target, isolated HOME/DATA/APPDATA/LOCALAPPDATA, registration disabled,
+protocol registry checked before/after, and exact owned PIDs stopped.
+Install/update/uninstall and shell effects run only on GitHub's disposable
+windows-latest runner. No live model calls.
+
+## Fast Windows pipeline
+
+`windows-installer.yml` has only workflow_dispatch. BUILD on `[self-hosted,
+butler-win]` creates preview.90 and preview.91 Agent/App packages and compiles the
+five existing update/channel/process-role E2Es without executing them. VERIFY on
+windows-latest consumes those artifacts, executes the E2Es and the full Squirrel
+install/update/uninstall smoke. The release App job uses the same packaging
+action; failed Windows jobs do not prevent successful other-platform publication.
+
+Reuse `C:\Users\yeonw\work\target\win-installer` during iterations and the verified
+`C:\Users\yeonw\work\ort-cache`. Keep isolated profiles short enough for NuGet.
+Run portable smoke through `deploy/windows-portable-smoke.ps1`; its PowerShell
+owner deletes the profile after Bun releases all file handles and restores the
+parent environment. Windows PowerShell child commands discard inherited pwsh
+module paths. Chat and background memory use strict stub responses; each is
+asserted to make one successful provider call, with exact chat content/order/count.
 
 ## Evidence
 
