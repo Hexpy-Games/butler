@@ -23,6 +23,7 @@ const data = join(root, "data");
 const owned = new Set<number>();
 let page: ElectronPage | null = null;
 const calls = { chat: 0, memory: 0 };
+const meaningSpeakers = new Set<string>();
 let uninstalled = false;
 let phase = "one-click install";
 const manifest = readJson(join(second, "app-update-manifest.json"))!;
@@ -31,7 +32,14 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async request 
   const path = new URL(request.url).pathname;
   if (path === "/v1/responses") {
     const body = await request.json();
-    return smokeProviderReply(body, "Reply with Windows update ready.", "Windows update ready.", calls);
+    return smokeProviderReply(body, "Reply with Windows update ready.", "Windows update ready.", calls, input => {
+      assert.ok(["user", "assistant"].includes(input.speaker), "Unexpected memory speaker");
+      assert.ok(!meaningSpeakers.has(input.speaker), "Repeated extraction of the same chat speaker");
+      meaningSpeakers.add(input.speaker);
+      const expected = input.speaker === "user" ? "Reply with Windows update ready." : "Windows update ready.";
+      assert.equal(input.parts.map((part: any) => part.text).join(""), expected);
+      console.log(JSON.stringify({ meaningSpeaker: input.speaker, phase, parts: input.parts.length }));
+    });
   }
   if (path === `/${packageName}`) return new Response(Bun.file(join(second, packageName)));
   if (path === "/manifest.json") return Response.json({ ...manifest, artifacts: manifest.artifacts.map((item: any) => ({
@@ -110,7 +118,9 @@ try {
   assert.equal(powershell("[bool](Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run' -ErrorAction SilentlyContinue).'com.squirrel.butler-app.Butler'", env), "False");
   assert.equal(readFileSync(join(data, "sentinel.txt"), "utf8"), "retained");
   assert.ok(existsSync(join(data, "butler.config.json")));
-  assert.equal(calls.chat, 1); assert.equal(calls.memory, 1);
+  assert.equal(calls.chat, 1);
+  assert.deepEqual([...meaningSpeakers].sort(), ["assistant", "user"]);
+  assert.equal(calls.memory, meaningSpeakers.size);
   console.log(JSON.stringify({ ok: true, from, to, shellIntegration: true, stubCalls: calls.chat + calls.memory,
     chatCalls: calls.chat, memoryCalls: calls.memory,
     normalInstallLaunch: true, exactAgent: true, chatPreserved: true, rollbackRetained: true, uninstallPreservesData: true,

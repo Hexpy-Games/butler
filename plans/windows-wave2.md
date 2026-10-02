@@ -42,14 +42,20 @@ five existing update/channel/process-role E2Es without executing them. VERIFY on
 windows-latest consumes those artifacts, executes the E2Es and the full Squirrel
 install/update/uninstall smoke. The release App job uses the same packaging
 action; failed Windows jobs do not prevent successful other-platform publication.
+For harness-only iterations, optional `reuse-run` requires a successful BUILD
+from this workflow/branch and proves every product and compiled E2E source is
+identical. Only an explicit harness/workflow/document allowlist may differ;
+all five E2Es and the entire installer smoke still execute on hosted Windows.
 
 Reuse `C:\Users\yeonw\work\target\win-installer` during iterations and the verified
 `C:\Users\yeonw\work\ort-cache`. Keep isolated profiles short enough for NuGet.
 Run portable smoke through `deploy/windows-portable-smoke.ps1`; its PowerShell
 owner deletes the profile after Bun releases all file handles and restores the
 parent environment. Windows PowerShell child commands discard inherited pwsh
-module paths. Chat and background memory use strict stub responses; each is
-asserted to make one successful provider call, with exact chat content/order/count.
+module paths. Chat and background memory use strict stub responses. Portable smoke asserts
+one chat and one meaning call before exit. Installer smoke verifies one chat,
+one meaning call for each user/assistant source, no repair or duplicate source,
+and exact chat content/order/count. Meaning input batches cannot mix speakers.
 
 ## Evidence
 
