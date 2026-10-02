@@ -262,7 +262,7 @@ async fn prj_05_repository_config_never_runs_programs() -> Result<(), HarnessErr
 /// PRJ-06 — without Git, or with a Git that hangs, the dashboard still
 /// answers in time: `is_repo` and `branch` from HEAD, the rest unknown.
 #[tokio::test]
-async fn prj_06_missing_or_hanging_git_leaves_status_unknown() -> Result<(), HarnessError> {
+async fn perf_prj_06_missing_or_hanging_git_leaves_status_unknown() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(
         butler_platform::command_sandbox::POSIX_SHELL,

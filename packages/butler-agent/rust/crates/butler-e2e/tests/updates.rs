@@ -114,7 +114,7 @@ async fn until(gw: &Gateway, done: impl Fn(&Value) -> bool) -> Result<Value, Har
 }
 
 #[tokio::test]
-async fn use_07_updates_read_never_waits_for_the_network() -> Result<(), HarnessError> {
+async fn perf_use_07_updates_read_never_waits_for_the_network() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let manifest = Manifest::start().await?;
     let setup = Setup::new("USE-07")?

@@ -173,7 +173,7 @@ async fn timed(gw: &Gateway, path: &str) -> Result<(Duration, Value), HarnessErr
 }
 
 #[tokio::test]
-async fn use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), HarnessError> {
+async fn perf_use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let setup = Setup::new("USE-06")?;
     let mut expected = write_usage_log(&setup.sandbox.data, chrono_now())?;

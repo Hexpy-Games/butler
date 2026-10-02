@@ -216,7 +216,7 @@ async fn proj_backlog_large_transcript_projects_in_bounded_time_and_space()
 /// and inode is not projected again: the agent resumes at the recorded offset
 /// (the bytes before it still match) and records the file's current ids.
 #[tokio::test]
-async fn proj_device_change_resumes_at_the_recorded_offset() -> Result<(), HarnessError> {
+async fn perf_proj_device_change_resumes_at_the_recorded_offset() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("PROJ-DEVICE")?.start().await?;
     s.agent.terminate().await?;

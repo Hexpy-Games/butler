@@ -21,8 +21,8 @@ use std::time::{Duration, Instant};
 mod diagnostics;
 
 #[tokio::test]
-async fn stop_interrupts_a_thirty_second_stream_before_closing_storage() -> Result<(), HarnessError>
-{
+async fn perf_stop_interrupts_a_thirty_second_stream_before_closing_storage()
+-> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (mut s, turn_id) = streaming_scenario("SHUTDOWN-STREAM").await?;
     let record = instance_record(&s.sandbox.data).unwrap();
@@ -76,7 +76,7 @@ async fn stop_interrupts_a_thirty_second_stream_before_closing_storage() -> Resu
 }
 
 #[tokio::test]
-async fn stop_reaps_a_hung_mcp_server_and_releases_the_instance() -> Result<(), HarnessError> {
+async fn perf_stop_reaps_a_hung_mcp_server_and_releases_the_instance() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("SHUTDOWN-MCP")?.start().await?;
     let pid_file = s.sandbox.root.join("mcp.pid");
@@ -137,7 +137,7 @@ async fn stop_reaps_a_hung_mcp_server_and_releases_the_instance() -> Result<(), 
 }
 
 #[tokio::test]
-async fn sigterm_during_store_open_never_publishes_ready() -> Result<(), HarnessError> {
+async fn perf_sigterm_during_store_open_never_publishes_ready() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     if !butler_platform::process_control::SIGNALS {
         return Ok(());
@@ -288,7 +288,7 @@ async fn streaming_scenario(id: &str) -> Result<(Scenario, String), HarnessError
 }
 
 #[tokio::test]
-async fn unannounced_sigterm_has_a_deadline_even_when_storage_is_blocked()
+async fn perf_unannounced_sigterm_has_a_deadline_even_when_storage_is_blocked()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
     if !butler_platform::process_control::SIGNALS {
@@ -350,7 +350,7 @@ async fn unannounced_sigterm_has_a_deadline_even_when_storage_is_blocked()
 }
 
 #[tokio::test]
-async fn deadline_waits_for_an_in_progress_record_write() -> Result<(), HarnessError> {
+async fn perf_deadline_waits_for_an_in_progress_record_write() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     if !butler_platform::process_control::SIGNALS {
         return Ok(());

@@ -92,7 +92,7 @@ jobs:
         with:
           tool: cargo-nextest
       - name: Run tests
-        run: cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" run --workspace --locked --no-fail-fast
+        run: cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" run --workspace --locked --no-fail-fast -E 'not test(/^perf_/)'
       - name: Run doctests when present
         run: |
           if grep -rqE '^[[:space:]]*//[/!][[:space:]]*```' crates; then
@@ -190,30 +190,29 @@ jobs:
 
   linux-e2e-perf:
     name: E2E perf (Linux x64)
-    needs: linux-e2e-archive
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+      - name: Set up Rust and prebuilt ONNX Runtime
+        uses: ./.github/actions/rust-agent-setup
         with:
-          toolchain: 1.91.0
+          native-deps: prebuilt-ort
+          cache-key: pr-linux-x64-perf
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
-      - uses: actions/download-artifact@v4
-        with:
-          name: e2e-linux-x64
-          path: ${{ runner.temp }}/e2e-artifact
+      - name: Build release agent binary
+        run: cargo build --release --locked -p butler-agent --bin butler-agent
       - name: Run wall-clock performance tests
         uses: ./.github/actions/e2e-stub
         with:
           filterset: "test(/^perf_/)"
           test-threads: "1"
+          release-profile: "true"
+          exclude-perf: "false"
           success-output: final
-          archive-file: ${{ runner.temp }}/e2e-artifact/nextest-archive.tar.zst
-          agent-binary: ${{ runner.temp }}/e2e-artifact/butler-agent
+          agent-binary: ${{ github.workspace }}/packages/butler-agent/rust/target/release/butler-agent
       - name: Assert runner home untouched
         if: always()
         uses: ./.github/actions/assert-home-untouched
@@ -256,8 +255,7 @@ jobs:
   macos-arm64:
     name: Rust checks (macOS arm64)
     needs: source
-    if: >-
-      always() && (github.event_name != 'pull_request' || needs.source.outputs.macos == 'true')
+    if: github.event_name != 'pull_request'
     runs-on: macos-15
     timeout-minutes: 180
     steps:
@@ -276,7 +274,7 @@ jobs:
       - name: Clippy all targets
         run: cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
       - name: Run tests
-        run: cargo nextest run --workspace --locked --no-fail-fast
+        run: cargo nextest run --workspace --locked --no-fail-fast -E 'not test(/^perf_/)'
       - name: Run doctests when present
         run: |
           if grep -rqE '^[[:space:]]*//[/!][[:space:]]*```' crates; then
@@ -288,6 +286,7 @@ jobs:
         uses: ./.github/actions/e2e-stub
         with:
           partition: 1/1
+          filterset: "not test(/^perf_/)"
           run-idle-disk: "true"
       - name: Assert runner home untouched
         if: always()
@@ -318,7 +317,7 @@ jobs:
       - name: Clippy all targets
         run: cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
       - name: Run tests
-        run: cargo nextest run --workspace --locked --no-fail-fast
+        run: cargo nextest run --workspace --locked --no-fail-fast -E 'not test(/^perf_/)'
       - name: Assert runner home untouched
         if: always()
         uses: ./.github/actions/assert-home-untouched
@@ -331,8 +330,7 @@ jobs:
     needs: source
     outputs:
       compile: ${{ steps.check.outcome }}
-    if: >-
-      always() && (github.event_name != 'pull_request' || needs.source.outputs.windows == 'true')
+    if: github.event_name != 'pull_request'
     runs-on: windows-latest
     timeout-minutes: 60
     defaults:

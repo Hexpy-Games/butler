@@ -108,6 +108,7 @@ impl<'ast> Visit<'ast> for Finder {
 #[cfg(test)]
 mod tests {
     use super::{FileTests, tests};
+    use crate::wall_clock::untiered_budget_assertions;
 
     /// Pure-logic table: test functions are counted in every module, and a
     /// marker counts only directly above its test with a known category.
@@ -157,5 +158,25 @@ mod tests {
             );
         }
         assert!(tests("fn broken( {").is_err());
+
+        let budget = "#[tokio::test]\nasync fn scenario() { assert!(started.elapsed() < Duration::from_millis(10)); }";
+        assert_eq!(
+            untiered_budget_assertions(budget).unwrap(),
+            vec![(2, "scenario".to_owned())]
+        );
+        let tiered = "#[tokio::test]\nasync fn perf_scenario() { assert!(p95 < Duration::from_millis(10)); }";
+        assert!(untiered_budget_assertions(tiered).unwrap().is_empty());
+        let elapsed_local = "#[tokio::test]\nasync fn scenario() { let elapsed = started.elapsed(); assert!(elapsed < deadline); }";
+        assert_eq!(
+            untiered_budget_assertions(elapsed_local).unwrap(),
+            vec![(2, "scenario".to_owned())]
+        );
+        let diagnostic_only =
+            "#[tokio::test]\nasync fn scenario() { let _elapsed = started.elapsed(); }";
+        assert!(
+            untiered_budget_assertions(diagnostic_only)
+                .unwrap()
+                .is_empty()
+        );
     }
 }
