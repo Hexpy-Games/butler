@@ -1,8 +1,6 @@
 use super::*;
-use butler_turn::btcc::ContextProjectionError;
-
 #[tokio::test]
-async fn summary_failure_drops_turn_owner_without_saving() {
+async fn summary_failure_persists_retrieval_fallback() {
     let fixture = TestStorageFixture::activated();
     let storage = BtccStorage::open(fixture.config("context-native-error"))
         .await
@@ -51,7 +49,7 @@ async fn summary_failure_drops_turn_owner_without_saving() {
         ModelRoundMessage::user("latest".into(), Some("current_user_request".into())),
     ];
     let model_ref = execution.active_model_ref();
-    let error = owner
+    let projection = owner
         .project(
             invocation,
             ContextProjectionInput {
@@ -69,30 +67,44 @@ async fn summary_failure_drops_turn_owner_without_saving() {
             },
         )
         .await
-        .err()
-        .expect("summary provider failure");
-    assert!(matches!(error, ContextProjectionError::Model(_)));
-    assert!(!bodies.lock().await.is_empty());
+        .expect("provider failure must preserve a usable retrieval fallback");
+    let ContextMessages::Owned(projected) = &projection.messages else {
+        panic!("fallback must materialize")
+    };
+    assert_eq!(projected.first().unwrap(), &semantic[0]);
+    assert_eq!(projected.last().unwrap(), &semantic[2]);
+    assert!(projected.iter().any(|message| {
+        message.content.contains("Earlier history was elided")
+            && message.content.contains("read_operation_results")
+    }));
+    let captured = bodies.lock().await;
+    assert_eq!(captured.len(), 1, "one failing summary request");
     assert!(
-        ContextCompactionRepository::new(storage.clone())
-            .load(&turn.turn_id)
-            .await
-            .unwrap()
-            .is_empty()
+        captured[0]
+            .0
+            .to_string()
+            .contains("Summarize the previous summary")
     );
+    drop(captured);
+    let saved = ContextCompactionRepository::new(storage.clone())
+        .load(&turn.turn_id)
+        .await
+        .unwrap();
+    assert_eq!(saved.len(), 1);
+    assert!(saved[0].summary.contains("read_operation_results"));
     drop(owner);
     drop(execution);
     storage.close().await.unwrap();
     let reopened = BtccStorage::open(fixture.config("context-native-error-reopen"))
         .await
         .unwrap();
-    assert!(
-        ContextCompactionRepository::new(reopened.clone())
-            .load(&turn.turn_id)
-            .await
-            .unwrap()
-            .is_empty()
-    );
+    let restored = ContextCompactionRepository::new(reopened.clone())
+        .load(&turn.turn_id)
+        .await
+        .unwrap();
+    assert_eq!(restored.len(), 1);
+    assert_eq!(restored[0].source_digest, saved[0].source_digest);
+    assert_eq!(restored[0].summary, saved[0].summary);
     reopened.close().await.unwrap();
     serving.abort();
 }

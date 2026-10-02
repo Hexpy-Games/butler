@@ -1,6 +1,6 @@
 //! Cognition: extraction of memories from conversations into the memory graph
 //! (SQLite) and vectors (LanceDB), recall for turn context, consolidation, and
-//! the memory generations that rebuilds produce and cut over.
+//! the serving memory generation.
 
 use std::{future::Future, pin::Pin};
 
@@ -70,7 +70,7 @@ pub use briefing::{
 };
 pub use completion::{
     CompletionNotice, CompletionPublisher, MemorySyncConsumer, MemorySyncPoll,
-    TypedMemorySourceNotice, signal_memory_work,
+    TypedMemorySourceNotice, VECTOR_BACKLOG_CAP, VECTOR_MAX_AGE_HOURS, signal_memory_work,
 };
 pub use configured_cycle::{
     ConfiguredCycleOptions, ConfiguredCycleResult, ConfiguredCycleService, ConfiguredPhase,
@@ -93,26 +93,16 @@ pub use exact_query::ExactMemoryQuery;
 pub use extraction::{CandidateSearchInput, CognitionVectorSearch, VectorSearchFuture};
 pub use feedback_buffer::{FeedbackBufferService, FeedbackTarget};
 pub use generation::{
-    AcceptanceBinding, ActiveDescriptor, BuildInventory, CandidateInputRepairRequest,
-    CanonicalSnapshot, CutoverStamp, EmbeddingSlot, FreshMemoryGeneration, GenerationEmbedding,
-    GenerationFormat, GenerationManifest, GenerationReadiness, GenerationState,
-    InitializationOrigin, MemoryGenerationHandle, MemoryGenerationTarget, ProjectionMode,
-    RebuildInspection, RetriedGeneration, RollbackOutcome, RollbackStep, SemanticCounts,
-    StageCounts, VectorCounts, activate_memory_rebuild, active_memory_descriptor_exists,
-    advance_rebuild_cache, assert_mutation_authority, assert_rebuild_sources_registered,
-    bind_native_embedding_identity, compute_rebuild_readiness, initialize_empty_memory_generation,
-    inspect_memory_rebuild, prepare_fresh_memory_generation, prepare_memory_rebuild,
-    read_build_inventory, rebuild_typed_cursor, reconcile_rebuild_vector_representatives,
-    record_rebuild_readiness, refresh_memory_rebuild_snapshot, repair_memory_candidate_inputs,
-    resolve_active_generation, resolve_generation, retry_failed_memory_generation,
-    rollback_memory_rebuild, set_extractor_memory_generation, validate_memory_rebuild,
+    AcceptanceBinding, ActiveDescriptor, CanonicalSnapshot, EmbeddingSlot, FreshMemoryGeneration,
+    GenerationEmbedding, GenerationFormat, GenerationManifest, GenerationReadiness,
+    GenerationState, InitializationOrigin, MemoryGenerationHandle, MemoryGenerationTarget,
+    ProjectionMode, SemanticCounts, StageCounts, active_memory_descriptor_exists,
+    advance_rebuild_cache, assert_mutation_authority, bind_native_embedding_identity,
+    initialize_empty_memory_generation, prepare_fresh_memory_generation, resolve_active_generation,
+    resolve_generation,
 };
 pub use generation_vectors::GenerationVectorAdapter;
-pub use graph::{
-    CandidateInputRepairResult, GraphProgress, JobOutcome, ProjectionModelPolicy,
-    ProjectionModelPolicyInput, ProjectionModelSlot, RepairMode, RepairReceipt, RetryFailedCounts,
-    StageState, StageStatus,
-};
+pub use graph::{GraphProgress, JobOutcome, StageState, StageStatus};
 pub use graph_consolidation::GraphConsolidationService;
 pub use hot_cache::{LegacyIndexService, extract_legacy_import_transcript};
 pub use knowhow_store::{FeedbackResolvePort, KnowHowService};

@@ -39,7 +39,7 @@ pub(super) fn decode(
         text_calls(raw, &allowed)
     };
     let visible = sanitize(raw);
-    let names = if calls
+    let mut names = if calls
         .iter()
         .any(|call| call.origin == Some(ToolCallOrigin::Text))
     {
@@ -47,7 +47,31 @@ pub(super) fn decode(
     } else {
         standalone_names(&visible, &allowed)
     };
+    let attempted = structured.map_or_else(|| call_bodies(raw).len(), Vec::len);
+    if attempted > calls.len() || (raw.contains("<tool_call>") && calls.is_empty()) {
+        names.push("invalid or oversized tool call: use the native tool schema".into());
+    }
+    names.sort();
+    names.dedup();
     (super::nonempty(visible), calls, names)
+}
+
+pub(super) fn rejected_text_calls(text: &str, request: &ModelRoundRequest<'_>) -> Vec<String> {
+    let allowed = request
+        .tools
+        .iter()
+        .map(|tool| tool.name.as_str())
+        .collect::<HashSet<_>>();
+    let mut names = standalone_names(text, &allowed);
+    for (index, body) in call_bodies(text).into_iter().enumerate() {
+        names.push(parse_body(body, &allowed, index).map_or_else(
+            || "invalid or oversized text tool call".into(),
+            |call| call.name,
+        ));
+    }
+    names.sort();
+    names.dedup();
+    names
 }
 
 fn text_calls(text: &str, allowed: &HashSet<&str>) -> Vec<ModelRoundToolCall> {
@@ -56,7 +80,6 @@ fn text_calls(text: &str, allowed: &HashSet<&str>) -> Vec<ModelRoundToolCall> {
     }
     call_bodies(text)
         .into_iter()
-        .take(8)
         .enumerate()
         .filter_map(|(index, body)| parse_body(body, allowed, index + 1))
         .collect()

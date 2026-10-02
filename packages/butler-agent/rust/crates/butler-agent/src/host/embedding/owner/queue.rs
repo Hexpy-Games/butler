@@ -37,6 +37,7 @@ pub(super) struct Pending {
     pub(super) id: u64,
     pub(super) frame: Vec<u8>,
     pub(super) bytes: usize,
+    pub(super) cold_start_allowed: bool,
     pub(super) mode: EmbeddingMode,
     pub(super) requested_texts: usize,
     pub(super) resplit: bool,
@@ -99,8 +100,10 @@ impl QueueState {
 pub(super) fn validate_request(request: &EmbeddingRequest) -> CognitionResult<()> {
     if request.texts.is_empty()
         || request.texts.len() > MAX_TEXTS
-        || (request.request_class == EmbeddingRequestClass::Background
-            && request.texts.len() > MAX_BACKGROUND_TEXTS)
+        || (matches!(
+            request.request_class,
+            EmbeddingRequestClass::Background | EmbeddingRequestClass::WarmBackground
+        ) && request.texts.len() > MAX_BACKGROUND_TEXTS)
         || (request.mode == EmbeddingMode::CheckedCls && request.texts.iter().any(String::is_empty))
         || (request.mode == EmbeddingMode::LegacyMean
             && (request.resplit || request.max_embeddings.is_some()))

@@ -13,7 +13,9 @@ use super::{
     START_TIMEOUT, active_service,
 };
 use crate::host::ServiceConfiguration;
-use crate::host::service::instance::{InstanceRecord, instance_is_locked, read_record};
+use crate::host::service::instance::{
+    InstanceRecord, instance_is_locked, read_record, record_process_gone,
+};
 
 pub(super) async fn wait_until_ready(
     config: &ServiceConfiguration,
@@ -207,20 +209,20 @@ async fn readiness_probe(client: &reqwest::Client, url: &str, token: Option<&str
 
 pub(super) async fn wait_for_stop(
     data_root: &Path,
-    nonce: &str,
+    stopped: &InstanceRecord,
     timeout: Duration,
 ) -> Result<bool, crate::host::HostError> {
     let deadline = Instant::now() + timeout;
     loop {
         let locked = instance_is_locked(data_root)?;
         let current = read_record(data_root)?;
-        if current.as_ref().is_some_and(|record| record.nonce != nonce) {
-            return Ok(true);
-        }
-        if current.is_none() && !locked {
-            return Ok(true);
-        }
-        if !locked && current.as_ref().is_some_and(|record| record.nonce == nonce) {
+        let replaced = current
+            .as_ref()
+            .is_some_and(|record| record.nonce != stopped.nonce);
+        // Releasing the instance file precedes runtime/process teardown. A
+        // successful stop must also observe the original OS identity gone;
+        // a reused PID or a ready replacement is a different process.
+        if (replaced || !locked) && record_process_gone(stopped)? {
             return Ok(true);
         }
         if Instant::now() >= deadline {

@@ -21,6 +21,7 @@ async fn active_cancellation_kills_and_reaps_child() {
         data_root: PathBuf::new(),
         executable: PathBuf::new(),
         next_id: AtomicU64::new(1),
+        warm: AtomicBool::new(false),
         state: Mutex::new(QueueState::default()),
         notify: Notify::new(),
         shutdown: CancellationToken::new(),
@@ -31,6 +32,7 @@ async fn active_cancellation_kills_and_reaps_child() {
         id: 1,
         frame: b"{}\n".to_vec(),
         bytes: 3,
+        cold_start_allowed: true,
         mode: EmbeddingMode::LegacyMean,
         requested_texts: 1,
         resplit: false,
@@ -80,6 +82,7 @@ async fn slow_initialization_outlives_first_deadline_and_keeps_ready_child() {
         data_root: PathBuf::new(),
         executable: PathBuf::new(),
         next_id: AtomicU64::new(1),
+        warm: AtomicBool::new(false),
         state: Mutex::new(QueueState::default()),
         notify: Notify::new(),
         shutdown: CancellationToken::new(),
@@ -89,6 +92,7 @@ async fn slow_initialization_outlives_first_deadline_and_keeps_ready_child() {
         id: 1,
         frame: b"{}\n".to_vec(),
         bytes: 3,
+        cold_start_allowed: true,
         mode: EmbeddingMode::CheckedCls,
         requested_texts: 1,
         resplit: false,
@@ -118,6 +122,28 @@ async fn slow_initialization_outlives_first_deadline_and_keeps_ready_child() {
 #[tokio::test]
 async fn concurrent_and_repeated_close_finish_even_when_actor_fails() {
     let owner = EmbeddingOwner::new(PathBuf::new()).expect("owner without model load");
+    for request_class in [
+        EmbeddingRequestClass::WarmInteractive,
+        EmbeddingRequestClass::WarmBackground,
+    ] {
+        let failure = owner
+            .embed(
+                EmbeddingRequest {
+                    texts: vec!["opportunistic".into()],
+                    mode: EmbeddingMode::CheckedCls,
+                    resplit: true,
+                    max_embeddings: Some(1),
+                    request_class,
+                    deadline_at_epoch_ms: None,
+                },
+                CancellationToken::new(),
+            )
+            .await
+            .err()
+            .expect("warm-only work must never load a child");
+        assert_eq!(failure.code(), "embed_worker_cold");
+        assert!(!owner.is_warm());
+    }
     let (first, second) = tokio::time::timeout(Duration::from_secs(2), async {
         tokio::join!(owner.close(), owner.close())
     })

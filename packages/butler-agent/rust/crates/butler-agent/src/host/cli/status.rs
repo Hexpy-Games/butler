@@ -95,11 +95,13 @@ pub(crate) async fn run_native_status_cli(
                 ) as f64
                     - hours * 3_600_000.0
             });
+            let memory_paths = super::status_memory::estimate_paths(&data_root).await;
             let metrics = operations::read_metrics_status(
                 &data_root,
                 since_ts,
                 &models,
                 installation.resources(),
+                &memory_paths,
             )
             .await;
             let model = models.status_value(&metrics.model_telemetry());

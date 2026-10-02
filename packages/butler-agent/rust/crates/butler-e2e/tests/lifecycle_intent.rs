@@ -17,7 +17,6 @@ use std::io::Write;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use butler_e2e::e2e::gateway::Gateway;
 use butler_e2e::e2e::scenario::{Scenario, Setup};
 use butler_e2e::e2e::stop_intent::{
     RestartWatch, StopOnDrop, instance_record, intent_path, mcp_tool_call, read_intent,
@@ -36,30 +35,6 @@ const INTENT_SCHEMA: &str = "butler.agent-stop-intent.v1";
 /// looked up last; each sandbox now has its own copy, and the product's
 /// identity check compares files, not names.)
 static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-
-/// The ready instance record, once the service has marked itself ready (its
-/// gateway answers a little earlier).
-async fn ready_record(data: &Path, within: Duration) -> Value {
-    let deadline = Instant::now() + within;
-    loop {
-        if let Some(record) = instance_record(data).filter(|record| record["state"] == "ready") {
-            return record;
-        }
-        assert!(Instant::now() < deadline, "no ready instance record");
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
-}
-
-async fn reachable(gw: &Gateway, within: Duration) -> bool {
-    let deadline = Instant::now() + within;
-    while Instant::now() < deadline {
-        if gw.healthy().await {
-            return true;
-        }
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
-    false
-}
 
 /// Asserts the announcement a controller wrote for the instance `record`.
 fn assert_intent(intent: &Value, reason: &str, requested_by: &str, record: &Value) {
@@ -131,11 +106,15 @@ async fn svc_02_stop_is_announced_and_sticks() -> Result<(), HarnessError> {
     let _serial = SERIAL.lock().await;
     let mut s = Setup::new("SVC-02")?.start().await?;
     let data = s.sandbox.data.clone();
-    let record = ready_record(&data, Duration::from_secs(30)).await;
+    let record =
+        butler_e2e::e2e::readiness::wait_ready(&data, &s.gw, Duration::from_secs(30), |_| true)
+            .await?;
     let pid = s.agent.pid().unwrap();
     assert_eq!(record["pid"], pid);
 
-    let stopped = s.agent.cli_reaping(&["stop"]).await?;
+    // Hold the exited child unreaped until stop returns: a successful stop
+    // must recognize the exit even while its PID is still a zombie.
+    let stopped = s.agent.cli(&["stop"])?;
     assert_eq!(stopped.code, Some(0), "{stopped:?}");
     assert!(
         stopped.stdout.contains("Butler native service stopped"),
@@ -167,7 +146,9 @@ async fn svc_02_stop_is_announced_and_sticks() -> Result<(), HarnessError> {
 
     // Starting again (the App's start action) clears the announcement at ready.
     s.gw = s.agent.start_again().await?;
-    let again = ready_record(&data, Duration::from_secs(30)).await;
+    let again =
+        butler_e2e::e2e::readiness::wait_ready(&data, &s.gw, Duration::from_secs(30), |_| true)
+            .await?;
     assert_ne!(again["nonce"], record["nonce"]);
     assert!(
         read_intent(&data).is_none(),
@@ -185,7 +166,9 @@ async fn svc_03_restart_is_announced_until_the_new_instance_is_ready() -> Result
     let mut s = Setup::new("SVC-03")?.start().await?;
     let cleanup = StopOnDrop(s.agent.launch.clone());
     let data = s.sandbox.data.clone();
-    let before = ready_record(&data, Duration::from_secs(30)).await;
+    let before =
+        butler_e2e::e2e::readiness::wait_ready(&data, &s.gw, Duration::from_secs(30), |_| true)
+            .await?;
     // Started without the App's foreground lease: the controller restarts it.
     assert_eq!(before["app_supervised"], false, "{before}");
     let old_pid = s.agent.pid().unwrap();
@@ -214,7 +197,6 @@ async fn svc_03_restart_is_announced_until_the_new_instance_is_ready() -> Result
     assert_eq!(restart["data"]["pid"], after["pid"]);
     assert!(read_intent(&data).is_none(), "intent survived the restart");
     assert_exited_cleanly(&s, old_pid);
-    assert!(reachable(&s.gw, Duration::from_secs(30)).await);
     // Written to the process stderr directly, not through the captured
     // `eprintln!`, so the timing shows in the log of a passing run too.
     let _ = writeln!(
@@ -249,7 +231,9 @@ async fn svc_04_restart_keeps_the_app_supervised_instance() -> Result<(), Harnes
     let mut s = setup.start().await?;
     let cleanup = StopOnDrop(s.agent.launch.clone());
     let data = s.sandbox.data.clone();
-    let first = ready_record(&data, Duration::from_secs(30)).await;
+    let first =
+        butler_e2e::e2e::readiness::wait_ready(&data, &s.gw, Duration::from_secs(30), |_| true)
+            .await?;
     assert_app_instance(&first, &s);
 
     let mut command = s.agent.launch.command_without_local_auth();
@@ -263,7 +247,9 @@ async fn svc_04_restart_keeps_the_app_supervised_instance() -> Result<(), Harnes
     let (reply, intent) = restart_butler_over_mcp(&mut s, &first).await?;
     assert_ne!(reply["result"]["isError"], true, "{reply}");
     assert_intent(&intent, "restart", "mcp", &first);
-    let second = ready_record(&data, Duration::from_secs(30)).await;
+    let second =
+        butler_e2e::e2e::readiness::wait_ready(&data, &s.gw, Duration::from_secs(30), |_| true)
+            .await?;
     assert_ne!(second["nonce"], first["nonce"]);
     assert_app_instance(&second, &s);
     assert_exited_cleanly(&s, pid_of(&first));
@@ -273,7 +259,6 @@ async fn svc_04_restart_keeps_the_app_supervised_instance() -> Result<(), Harnes
         "{reply}"
     );
     assert!(read_intent(&data).is_none(), "intent survived the restart");
-    assert!(reachable(&s.gw, Duration::from_secs(30)).await);
 
     let started = Instant::now();
     let mut watch = RestartWatch::default();
@@ -289,12 +274,13 @@ async fn svc_04_restart_keeps_the_app_supervised_instance() -> Result<(), Harnes
     let restart = restart.json()?;
     let (intent, _) = watch.intent.expect("restart wrote no intent");
     assert_intent(&intent, "restart", "cli", &second);
-    let third = ready_record(&data, Duration::from_secs(30)).await;
+    let third =
+        butler_e2e::e2e::readiness::wait_ready(&data, &s.gw, Duration::from_secs(30), |_| true)
+            .await?;
     assert_ne!(third["nonce"], second["nonce"]);
     assert_app_instance(&third, &s);
     assert_exited_cleanly(&s, pid_of(&second));
     assert_eq!(restart["data"]["pid"], third["pid"], "{restart}");
-    assert!(reachable(&s.gw, Duration::from_secs(30)).await);
     drop(cleanup);
     s.finish().await
 }
@@ -357,7 +343,9 @@ async fn svc_06_undeliverable_stop_leaves_the_service_ready() -> Result<(), Harn
     let _serial = SERIAL.lock().await;
     let mut s = Setup::new("SVC-06")?.start().await?;
     let data = s.sandbox.data.clone();
-    let record = ready_record(&data, Duration::from_secs(30)).await;
+    let record =
+        butler_e2e::e2e::readiness::wait_ready(&data, &s.gw, Duration::from_secs(30), |_| true)
+            .await?;
     // A directory where the intent goes: its atomic rename into place fails.
     std::fs::create_dir_all(intent_path(&data).join("occupied"))?;
 
@@ -405,7 +393,7 @@ async fn svc_05_crash_leaves_no_intent() -> Result<(), HarnessError> {
     });
     std::fs::write(intent_path(&data), stale.to_string())?;
     let mut s = setup.start().await?;
-    ready_record(&data, Duration::from_secs(30)).await;
+    butler_e2e::e2e::readiness::wait_ready(&data, &s.gw, Duration::from_secs(30), |_| true).await?;
     assert!(read_intent(&data).is_none(), "stale intent survived ready");
 
     let pid = s.agent.pid().unwrap();
@@ -423,7 +411,7 @@ async fn svc_05_crash_leaves_no_intent() -> Result<(), HarnessError> {
         "{status}"
     );
     s.gw = s.agent.start_again().await?;
-    ready_record(&data, Duration::from_secs(30)).await;
+    butler_e2e::e2e::readiness::wait_ready(&data, &s.gw, Duration::from_secs(30), |_| true).await?;
     assert!(read_intent(&data).is_none());
     s.finish().await
 }
@@ -437,7 +425,7 @@ async fn svc_07_stop_during_startup_exits_zero() -> Result<(), HarnessError> {
     let _serial = SERIAL.lock().await;
     let mut s = Setup::new("SVC-07")?.start().await?;
     let data = s.sandbox.data.clone();
-    ready_record(&data, Duration::from_secs(30)).await;
+    butler_e2e::e2e::readiness::wait_ready(&data, &s.gw, Duration::from_secs(30), |_| true).await?;
     let stopped = s.agent.cli_reaping(&["stop", "--json"]).await?;
     assert_eq!(stopped.code, Some(0), "{stopped:?}");
     wait_exited(&mut s).await;
@@ -475,7 +463,7 @@ async fn svc_07_stop_during_startup_exits_zero() -> Result<(), HarnessError> {
     }
 
     s.gw = s.agent.start_again().await?;
-    ready_record(&data, Duration::from_secs(30)).await;
+    butler_e2e::e2e::readiness::wait_ready(&data, &s.gw, Duration::from_secs(30), |_| true).await?;
     assert!(
         read_intent(&data).is_none(),
         "intent survived a new ready instance"

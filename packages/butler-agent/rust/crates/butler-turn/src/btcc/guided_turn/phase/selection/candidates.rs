@@ -45,7 +45,7 @@ pub(super) fn provider_candidates(
 
 /// Initial tools of the public-web, workspace (outside the direct phase),
 /// project (when a project tool is authorized) and required profiles, the
-/// startup memory tools and the required tools.
+/// startup memory and skill tools and the required tools.
 pub(super) fn profile_candidates(
     catalog: &GuidedCatalogSnapshot,
     authorized: &[&GuidedCatalogTool],
@@ -76,7 +76,7 @@ pub(super) fn profile_candidates(
     }
     for tool in catalog.tools.iter().filter(|tool| {
         catalog.profile("startup").contains(&tool.name)
-            && tool.category.as_deref() == Some("memory")
+            && matches!(tool.category.as_deref(), Some("memory" | "skill"))
             && !tool.tags.iter().any(|tag| tag == "context")
     }) {
         names.insert(tool.name.clone());

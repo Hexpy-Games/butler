@@ -458,6 +458,7 @@ jobs:
       issues: write
     steps:
       - name: Open or update issue
+        working-directory: ${{ runner.temp }}
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}

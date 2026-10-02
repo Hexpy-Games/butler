@@ -5,7 +5,7 @@ use butler_platform::sqlite;
 use rusqlite::OpenFlags;
 use serde_json::Value;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
     time::{Duration, SystemTime},
@@ -44,13 +44,33 @@ fn settled(data: &Path, turn: &str) -> bool {
         return false;
     };
     let complete: i64 = db.query_row("SELECT COUNT(*) FROM memory_projection_jobs j JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id WHERE c.source_key=?1 AND json_extract(j.semantic_graph_state,'$.state')='complete' AND json_extract(j.hot_cache_state,'$.state')='complete'", [format!("conversation_turn:{turn}")], |row| row.get(0)).unwrap();
-    // MemorySync uses the real SystemIdentity clock, independently of App's
-    // fixed stub clock. Include retries due within the measured idle window.
-    let through = (chrono::Utc::now() + chrono::Duration::seconds(10))
+    // Ordinary cold turns preserve vectors for a later admitted batch. This
+    // fixture has exactly the user's and assistant's episode units, neither
+    // attempted nor failed, and no batch admitted by age or backlog cap.
+    let cutoff = (chrono::Utc::now() - chrono::Duration::hours(48))
         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    let runnable: i64 = db.query_row("SELECT COUNT(*) FROM memory_vector_units WHERE state='running' OR (state='pending' AND (next_attempt_at IS NULL OR next_attempt_at<=?1))", [through], |row| row.get(0)).unwrap();
+    let deferred: bool = db.query_row("SELECT COUNT(*)=2 AND COUNT(DISTINCT u.source_role)=2 AND MIN(u.source_role IN ('user','assistant') AND u.record_kind='episode' AND u.state='pending' AND u.attempt_count=0 AND u.error_code IS NULL AND length(u.projection_text)>0 AND j.created_at>?2) FROM memory_vector_units u JOIN memory_projection_jobs j ON j.job_id=u.job_id JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id WHERE c.source_key=?1", rusqlite::params![format!("conversation_turn:{turn}"), cutoff], |row| row.get(0)).unwrap();
+    let active: i64 = db
+        .query_row(
+            "SELECT COUNT(*) FROM memory_vector_units WHERE state='running' OR state='failed'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let pending: usize = db
+        .query_row(
+            "SELECT COUNT(*) FROM memory_vector_units WHERE state='pending'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
     complete == 1
-        && runnable == 0
+        && deferred
+        && active == 0
+        && pending <= 1_024
+        // Graph/cache commits precede the writer lease's final COMMIT/close.
+        // Its DELETE journal must be removed before the idle window begins.
+        && !data.join("cognition/consolidation/locks/consolidation.lock.coord.sqlite-journal").exists()
         && fs::read_to_string(data.join("cognition/memory/queue/sync.jsonl"))
             .is_ok_and(|text| text.trim().is_empty())
 }
@@ -58,21 +78,31 @@ fn settled(data: &Path, turn: &str) -> bool {
 pub(super) async fn assert_idle(s: &Scenario, turn: &str) -> Result<(), HarnessError> {
     // Delivery precedes memory registration/projection and fresh startup work.
     // Preserve all of that work; start the unchanged 10s zero-write window only
-    // after the turn is projected/cached and no vector quantum is runnable.
+    // after the turn is projected/cached and its complete vector inputs are
+    // durably deferred without an embedding worker.
     until(|| settled(&s.sandbox.data, turn)).await?;
     let messages = s.gw.messages("general").await?;
     let record = instance_record(&s.sandbox.data).unwrap();
     let pids = ["pid", "cli_supervisor_pid"]
         .map(|key| u32::try_from(record[key].as_u64().unwrap()).unwrap());
+    assert_no_embedding_worker(pids[0])?;
     let before_files = stamps(&s.sandbox.data)?;
     let before = pids.map(|pid| usage::sample(pid).unwrap());
     tokio::time::sleep(Duration::from_secs(10)).await;
     let after = pids.map(|pid| usage::sample(pid).unwrap());
     let after_files = stamps(&s.sandbox.data)?;
-    let changed: Vec<_> = after_files
-        .iter()
-        .filter(|(path, value)| before_files.get(*path) != Some(*value))
-        .map(|(path, _)| path.strip_prefix(&s.sandbox.data).unwrap())
+    assert!(
+        settled(&s.sandbox.data, turn),
+        "deferred memory content changed"
+    );
+    assert_no_embedding_worker(pids[0])?;
+    let changed: Vec<_> = before_files
+        .keys()
+        .chain(after_files.keys())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .filter(|path| before_files.get(*path) != after_files.get(*path))
+        .map(|path| path.strip_prefix(&s.sandbox.data).unwrap())
         .collect();
     eprintln!("idle changed files: {changed:?}");
     for i in 0..2 {
@@ -96,6 +126,16 @@ pub(super) async fn assert_idle(s: &Scenario, turn: &str) -> Result<(), HarnessE
         messages,
         "idle changed session content"
     );
+    Ok(())
+}
+
+fn assert_no_embedding_worker(pid: u32) -> Result<(), HarnessError> {
+    if let Some(workers) = butler_platform::process_control::usage::embedding_children(pid)? {
+        assert!(
+            workers.is_empty(),
+            "cold diagnostic turn loaded embedding worker"
+        );
+    }
     Ok(())
 }
 

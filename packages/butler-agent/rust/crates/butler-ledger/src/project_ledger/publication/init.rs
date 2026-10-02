@@ -12,7 +12,10 @@ use butler_turn::btcc::ResolvedProjectWorkScope;
 
 use super::contracts::ProjectWorkPublicationError;
 use super::record;
-use crate::project_ledger::events::{self, Event};
+use crate::project_ledger::{
+    commands,
+    events::{self, Event},
+};
 
 const LAYOUT_DIRS: &[&str] = &[
     "initiatives",
@@ -53,15 +56,19 @@ pub(super) fn ensure(
     let root = canonical_target(data_root, scope)?;
     let project = root.join("project.json");
     let ledger = root.join("ledger.jsonl");
-    if project.exists() && ledger.exists() {
+    let index = root.join("index/project.json");
+    if project.exists() && ledger.exists() && index.exists() {
         return Ok(());
     }
     let claim = claim_path(&root);
     let owner = current_claim()?;
     acquire(&claim, &owner)?;
     let result = (|| {
-        if project.exists() && ledger.exists() {
+        if project.exists() && ledger.exists() && index.exists() {
             return Ok(());
+        }
+        if project.exists() && ledger.exists() {
+            return initialize_index(&root);
         }
         fs::create_dir_all(&root).map_err(|source| io().with_source(source))?;
         for directory in LAYOUT_DIRS {
@@ -104,10 +111,15 @@ pub(super) fn ensure(
             ProjectWorkPublicationError::adapter("project_ledger_init_project_invalid_json")
                 .with_source(source)
         })?;
-        Ok(())
+        initialize_index(&root)
     })();
     let release = release(&claim, &owner);
     result.and(release)
+}
+
+fn initialize_index(root: &Path) -> Result<(), ProjectWorkPublicationError> {
+    commands::initialize_index_locked(root)
+        .map_err(|()| ProjectWorkPublicationError::adapter("project_ledger_init_index_failed"))
 }
 
 fn canonical_target(

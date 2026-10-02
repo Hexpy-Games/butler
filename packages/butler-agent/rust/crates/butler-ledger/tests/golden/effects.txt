@@ -27,7 +27,7 @@ Ok(
             "sourceSha256": String("<sha:2>"),
             "sourceFileCount": Number(1),
             "storageSha256": String("<sha:3>"),
-            "storageEntryCount": Number(14),
+            "storageEntryCount": Number(15),
         },
         "currentHead": Object {
             "schema": String("butler.btcc-project-ledger-head.v1"),
@@ -69,7 +69,7 @@ Ok(
             "sourceSha256": String("<sha:2>"),
             "sourceFileCount": Number(1),
             "storageSha256": String("<sha:3>"),
-            "storageEntryCount": Number(14),
+            "storageEntryCount": Number(15),
         },
         "currentHead": Object {
             "schema": String("butler.btcc-project-ledger-head.v1"),
@@ -159,7 +159,7 @@ Ok(
                 "sourceSha256": String("<sha:2>"),
                 "sourceFileCount": Number(1),
                 "storageSha256": String("<sha:3>"),
-                "storageEntryCount": Number(14),
+                "storageEntryCount": Number(15),
             },
             "currentHead": Object {
                 "schema": String("butler.btcc-project-ledger-head.v1"),
@@ -422,6 +422,7 @@ Decision body
 }
 --- file project-ledger/projects/demo/ledger.jsonl
 {"schema":"project-ledger.event.v1","ts":"<ts>","type":"project_initialized","projectId":"demo","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":2,"issues":0,"source":"project-ledger"}
 {"schema":"project-ledger.event.v1","ts":"<ts>","type":"decision_created","id":"DEC-7","kind":"decision","status":"accepted","path":"project-ledger/projects/<sha:1>/decisions/dec-7.md","source":"project-ledger"}
 {"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":3,"issues":0,"source":"project-ledger"}
 {"schema":"project-ledger.event.v1","ts":"<ts>","type":"work_created","id":"W-7","kind":"work","status":"proposed","path":"project-ledger/projects/<sha:1>/work/W-7/work.md","source":"project-ledger"}
@@ -566,7 +567,7 @@ Managed by Project Ledger.
     "sourceSha256": "<sha:2>",
     "sourceFileCount": 1,
     "storageSha256": "<sha:3>",
-    "storageEntryCount": 14
+    "storageEntryCount": 15
   },
   "status": "observed",
   "candidateHead": {
@@ -629,7 +630,7 @@ Managed by Project Ledger.
         "sourceSha256": "<sha:2>",
         "sourceFileCount": 1,
         "storageSha256": "<sha:3>",
-        "storageEntryCount": 14
+        "storageEntryCount": 15
       },
       "targetPreconditions": [
         {
@@ -717,7 +718,7 @@ Managed by Project Ledger.
     "sourceSha256": "<sha:2>",
     "sourceFileCount": 1,
     "storageSha256": "<sha:3>",
-    "storageEntryCount": 14
+    "storageEntryCount": 15
   },
   "candidateHead": {
     "schema": "project-ledger.source-head.v1",

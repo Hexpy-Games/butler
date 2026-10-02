@@ -118,10 +118,24 @@ export function helperLifecycleAction(action) {
 export function navigationRequestFromArgs(argv = []) {
   if (hasArg(argv, NEW_CHAT_ARG)) return { action: "new-chat" };
   const sessionArg = argv.find((arg) => arg.startsWith(OPEN_SESSION_ARG_PREFIX));
-  if (!sessionArg) return null;
+  if (!sessionArg) return navigationRequestFromDeepLink(argv);
   const sessionId = sessionArg.slice(OPEN_SESSION_ARG_PREFIX.length).trim();
   if (!sessionId) return null;
   return { action: "open-session", sessionId };
+}
+
+function navigationRequestFromDeepLink(argv) {
+  const value = argv.find(arg => arg.startsWith("butler://"));
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (url.username || url.password || url.port || url.search || url.hash) return null;
+    if (url.hostname === "new-chat" && ["", "/"].includes(url.pathname)) return { action: "new-chat" };
+    if (url.hostname !== "session") return null;
+    const sessionId = decodeURIComponent(url.pathname.slice(1));
+    if (!sessionId || sessionId.includes("/") || sessionId.length > 256) return null;
+    return { action: "open-session", sessionId };
+  } catch { return null; }
 }
 
 export function argsForNavigationRequest(request = {}) {

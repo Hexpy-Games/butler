@@ -126,6 +126,8 @@ Check for a new version of Butler and install it.
   An update replaces only the app and leaves the data folder alone. On Linux, an app installed from the DEB package asks for administrator authentication when it applies an update.
 </Notice>
 
+Release versions retain the full preview suffix, such as `0.1.0-preview.5`; development builds show `0.1.0-dev`. With the same data folder, `butler config set update.previews true` enables preview updates from the CLI.
+
 ## Usage
 
 Review model tokens, prompt cache, web search and tool calls. Usage is tracked separately from context window capacity.
@@ -138,6 +140,8 @@ Review model tokens, prompt cache, web search and tool calls. Usage is tracked s
 | **Tokens by model** | Token usage by model. |
 | **Estimates by context section** | Estimated tokens by prompt section. Shows up to 12, largest first. |
 | **Calls by tool** | Number of calls by tool. Shows up to 8, most called first. |
+
+Ask Butler to separate conversation cost from background memory processing cost. The runtime usage response exposes `cost.byWork` with `conversation`, `memory` and `other`; the overall total includes all work. Costs are estimates from known model prices and are unavailable when pricing is unknown. This screen currently has no separate cost-by-work table.
 
 ## Logs
 
