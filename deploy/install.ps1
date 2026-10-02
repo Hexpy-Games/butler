@@ -29,13 +29,8 @@ function Install-Butler {
     $agentHome = if ($env:BUTLER_AGENT_HOME) { $env:BUTLER_AGENT_HOME } else { Join-Path $env:LOCALAPPDATA 'Butler/agent' }
     $bin = if ($env:BUTLER_BIN_DIR) { $env:BUTLER_BIN_DIR } else { Join-Path $env:LOCALAPPDATA 'Butler/bin' }
     $data = if ($env:BUTLER_DATA) { $env:BUTLER_DATA } else { Join-Path $env:USERPROFILE '.butler' }
-    foreach ($path in @($agentHome,$bin,$data)) {
-        if (![IO.Path]::IsPathRooted($path) -or $path -match '["\r\n]') { throw 'Invalid installation path' }
-    }
+    Assert-ButlerInstallationPaths $agentHome $bin $data
     $agentHome = [IO.Path]::GetFullPath($agentHome).TrimEnd('\')
-    $data = [IO.Path]::GetFullPath($data).TrimEnd('\')
-    if ($agentHome.StartsWith("$data\",[StringComparison]::OrdinalIgnoreCase) -or
-        $data.StartsWith("$agentHome\",[StringComparison]::OrdinalIgnoreCase) -or $data -eq $agentHome) { throw 'Installation and DATA must be separate' }
     Assert-ButlerCommand $bin $agentHome
     $launcher = Join-Path $bin 'butler.cmd'
     $marker = 'REM butler-native-launcher v1'
@@ -82,6 +77,17 @@ function Install-Butler {
         if ($stage -and (Test-Path $stage)) { [IO.Directory]::Delete((ConvertTo-ButlerExtendedPath $stage),$true) }
         [IO.Directory]::Delete((ConvertTo-ButlerExtendedPath $temp),$true)
     }
+}
+
+function Assert-ButlerInstallationPaths {
+    param([string]$AgentHome, [string]$Bin, [string]$Data)
+    foreach ($path in @($AgentHome,$Bin,$Data)) {
+        if (![IO.Path]::IsPathRooted($path) -or $path -match '["\r\n]') { throw 'Invalid installation path' }
+    }
+    $agentHome = [IO.Path]::GetFullPath($AgentHome).TrimEnd('\')
+    $data = [IO.Path]::GetFullPath($Data).TrimEnd('\')
+    if ($agentHome.StartsWith("$data\",[StringComparison]::OrdinalIgnoreCase) -or
+        $data.StartsWith("$agentHome\",[StringComparison]::OrdinalIgnoreCase) -or $data -eq $agentHome) { throw 'Installation and DATA must be separate' }
 }
 
 function Enable-ButlerInstallation {
