@@ -91,6 +91,18 @@ async fn active_generation_serving_health_reads_populated_graph_without_writing(
     assert_eq!(serving["stages"]["episode_vectors"]["failed"], 1);
     assert_eq!(serving["source_resolution_failures"], 1);
     assert_eq!(serving["embedding_version_mismatch"], 1);
+    assert_eq!(serving["memories_without_vectors"], 1);
+    assert!(serving["oldest_vector_pending_at"].as_str().is_some());
+    assert!(
+        summary["diagnostics"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value
+                .as_str()
+                .unwrap()
+                .starts_with("1 memories without vectors; oldest "))
+    );
     assert_eq!(serving["graph_revision"], 3);
     assert_eq!(fs::read(&graph_path).unwrap(), before);
     fs::remove_dir_all(root).unwrap();

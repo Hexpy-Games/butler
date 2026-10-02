@@ -1,5 +1,5 @@
-//! Read-only compatibility for the one verified Transformers.js checked CLS profile.
-//! The JavaScript manifest and row identity remain JavaScript-owned.
+//! Read/write compatibility for the verified Transformers.js checked CLS profile.
+//! Stored version labels remain the serving generation compatibility domain.
 
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -7,12 +7,11 @@ use sha2::{Digest, Sha256};
 use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult, EmbeddingIdentity, GenerationEmbedding};
 
-pub(super) fn preflight(embedding: &GenerationEmbedding) -> CognitionResult<()> {
+pub(crate) fn preflight(embedding: &GenerationEmbedding) -> CognitionResult<()> {
     let GenerationEmbedding::JavaScript(js) = embedding else {
         return Ok(());
     };
     if js.model != "Xenova/bge-m3"
-        || js.transformers_version != "3.8.1"
         || js.dimension != 1024.0
         || js.max_tokens != 8192.0
         || js.pooling != "cls"
@@ -43,26 +42,30 @@ pub(super) fn preflight(embedding: &GenerationEmbedding) -> CognitionResult<()> 
     Ok(())
 }
 
-pub(super) fn query_identity(
+pub(crate) fn query_identity(
     embedding: &GenerationEmbedding,
     actual: &EmbeddingIdentity,
 ) -> CognitionResult<()> {
     match embedding {
         GenerationEmbedding::Native(expected) => {
-            if expected.version != actual.version {
+            if expected.model_asset_sha256 != actual.model_asset_sha256
+                || expected.tokenizer_asset_sha256 != actual.tokenizer_asset_sha256
+                || expected.dimension != actual.dimension
+                || expected.pooling != actual.pooling
+                || expected.normalize != actual.normalize
+                || expected.truncation != actual.truncation
+                || expected.max_tokens != actual.max_tokens
+                || expected.preprocessing != actual.preprocessing
+            {
                 return Err(mismatch());
             }
         }
         GenerationEmbedding::JavaScript(js) => {
             preflight(embedding)?;
-            if actual.model != js.model
-                || actual.dimension != 1024
+            if actual.dimension != 1024
                 || actual.max_tokens != 8192
                 || actual.tokenizer_asset_sha256 != js.tokenizer_asset_sha256
                 || actual.model_asset_sha256 != js.model_asset_sha256
-                || actual.runtime != "onnxruntime-cpu-static"
-                || actual.ort_api != 21
-                || actual.tokenizer_runtime_version != "0.22.2"
                 || actual.preprocessing != "tokenizer-json-special-tokens-checked-v1"
                 || actual.pooling != "cls"
                 || actual.truncation != "strict-error-over-max"
@@ -80,50 +83,4 @@ fn mismatch() -> CognitionError {
         CognitionCode::MemoryEmbeddingVersionMismatch,
         "memory_embedding_version_mismatch",
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn js() -> GenerationEmbedding {
-        let mut value = json!({
-            "model":"Xenova/bge-m3", "dimension":1024, "pooling":"cls", "normalize":true,
-            "version":"", "max_tokens":8192, "transformers_version":"3.8.1",
-            "node_runtime_version":"24.0.0", "bun_runtime_version":"1.2.0",
-            "tokenizer_asset_sha256":"a".repeat(64), "model_asset_sha256":"b".repeat(64)
-        });
-        let identity = json!([
-            "butler-embedding-runtime-v1",
-            value["model"],
-            value["transformers_version"],
-            "cls",
-            true,
-            1024,
-            8192,
-            value["tokenizer_asset_sha256"],
-            value["model_asset_sha256"],
-            value["node_runtime_version"],
-            value["bun_runtime_version"],
-        ]);
-        value["version"] = json!(format!(
-            "{:x}",
-            Sha256::digest(identity.to_string().as_bytes())
-        ));
-        serde_json::from_value(value).unwrap()
-    }
-
-    #[test]
-    fn source_identity_is_not_native_identity() {
-        let source = js();
-        assert!(preflight(&source).is_ok());
-        let mut altered = serde_json::to_value(js()).unwrap();
-        altered["transformers_version"] = json!("3.8.0");
-        assert_eq!(
-            preflight(&serde_json::from_value(altered).unwrap())
-                .unwrap_err()
-                .code(),
-            "memory_embedding_version_mismatch"
-        );
-    }
 }

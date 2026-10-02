@@ -1,8 +1,8 @@
-//! Physical Lance rows for an explicitly native, current memory generation.
+//! Physical Lance rows for a compatible, current memory generation.
 //! Every operation owns its bounded connection and table lifetime.
 
 mod adapter;
-mod compatibility;
+pub(crate) mod compatibility;
 mod readiness;
 mod representative;
 mod rows;
