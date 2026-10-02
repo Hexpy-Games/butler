@@ -34,6 +34,7 @@ jobs:
     timeout-minutes: 150
     env:
       BUTLER_APP_RELEASE_SMOKE_MODE: ad-hoc
+      BUTLER_SIGN_IDENTITY: "-"
     steps:
       - uses: actions/checkout@v4
 
@@ -68,6 +69,7 @@ jobs:
           set -euo pipefail
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
           export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          export GITHUB_REF_NAME=v0.1.0-preview.99
           trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
           cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
           echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$PWD/target/release/butler-agent" >> "$GITHUB_ENV"
@@ -77,6 +79,7 @@ jobs:
           set -euo pipefail
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
           export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          export GITHUB_REF_NAME=v0.1.0-preview.99
           trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
           bun run release:app:package -- \
             --platform=darwin-arm64 --out dist/release/app \

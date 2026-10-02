@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { isPreviewRelease } from "../../packages/butler-app/scripts/release/preview-policy.ts";
+import { verifyMacPackageMetadata } from "./native-mac-package-smoke.ts";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
@@ -203,6 +204,7 @@ function verifyMacDmg(path: string, mode: MacReleaseSmokeMode, closure: NativeMa
     }
     const appPath = join(mountPoint, "Butler.app");
     if (closure) verifyNativeMacBundle(appPath, closure);
+    if (closure) verifyMacPackageMetadata(appPath, releaseManifest.version, true);
     verifyMacCodeSignature(appPath, "Mac App DMG Butler.app");
     if (mode === "production") {
       verifyMacStapling(appPath, "Mac App DMG Butler.app");
@@ -235,6 +237,8 @@ function verifyMacZip(path: string, mode: MacReleaseSmokeMode, closure: NativeMa
     const appPath = join(extractDir, "Butler.app");
     if (!existsSync(appPath)) throw new Error("Mac App zip is missing Butler.app");
     if (closure) verifyNativeMacBundle(appPath, closure);
+    // ZIP stores copies; the verified App update activation restores hard links.
+    if (closure) verifyMacPackageMetadata(appPath, releaseManifest.version, false);
     verifyMacCodeSignature(appPath, "Mac App ZIP Butler.app");
     if (mode === "production") {
       verifyMacStapling(appPath, "Mac App ZIP Butler.app");

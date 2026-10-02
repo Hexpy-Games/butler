@@ -10,6 +10,54 @@ use butler_platform::{
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 #[tokio::test]
+async fn archived_process_roles_restore_only_identical_files() -> Result<(), HarnessError> {
+    let sandbox = Sandbox::new("PROC-ZIP")?;
+    process_names::prepare(&sandbox.binary)?;
+    let aliases = [Role::Memory, Role::Restart, Role::Update]
+        .map(|role| sandbox.binary.with_file_name(role.file_name()));
+    for alias in &aliases {
+        std::fs::remove_file(alias)?;
+        std::fs::copy(&sandbox.binary, alias)?;
+    }
+    assert!(process_names::prepare(&sandbox.binary).is_err());
+    let directory = sandbox.binary.parent().expect("binary parent");
+    let permissions = std::fs::metadata(directory)?.permissions();
+    let mut read_only = permissions.clone();
+    read_only.set_readonly(true);
+    std::fs::set_permissions(directory, read_only.clone())?;
+    let restored = process_names::restore_archive_links(&sandbox.binary);
+    let after = std::fs::metadata(directory)?.permissions();
+    std::fs::set_permissions(directory, permissions)?;
+    restored?;
+    assert_eq!(after, read_only);
+    process_names::prepare(&sandbox.binary)?;
+    for role in [Role::Memory, Role::Restart, Role::Update] {
+        let alias = process_names::executable(&sandbox.binary, role)?;
+        assert_eq!(
+            process_names::canonical_executable(&alias)?,
+            sandbox.binary.canonical()?
+        );
+    }
+    std::fs::remove_file(&aliases[0])?;
+    std::fs::write(&aliases[0], b"foreign")?;
+    assert!(process_names::restore_archive_links(&sandbox.binary).is_err());
+    assert_eq!(std::fs::read(&aliases[0])?, b"foreign");
+    // Same-sized foreign code must also be refused before any links change.
+    std::fs::copy(&sandbox.binary, &aliases[0])?;
+    use std::io::Write;
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(&aliases[0])?
+        .write_all(b"foreign")?;
+    assert!(process_names::restore_archive_links(&sandbox.binary).is_err());
+    assert_eq!(
+        std::fs::metadata(&aliases[0])?.len(),
+        std::fs::metadata(&sandbox.binary)?.len()
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn process_roles_preserve_worker_protocol_and_executable_identity() -> Result<(), HarnessError>
 {
     // Like every Agent E2E, run only after the explicit tier has prepared its binary.

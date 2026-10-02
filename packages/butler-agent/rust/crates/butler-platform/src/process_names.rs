@@ -2,6 +2,9 @@
 //!
 //! macOS and Windows use full-name hard links. Linux uses a short basename
 //! and comm, with the full name in argv[0].
+mod archive;
+pub use archive::restore_archive_links;
+
 use std::{
     fs, io,
     path::{Path, PathBuf},
