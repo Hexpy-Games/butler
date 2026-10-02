@@ -16,7 +16,7 @@ Never run registration or installer tests on the owner's Windows host.
 - [x] Package exact preview versions and prove Squirrel's numeric preview ordering.
 - [x] Connect the existing App update helper to Squirrel; preserve drain/cancel.
 - [x] Explicitly disable all shell registration in portable smoke.
-- [ ] Disposable Windows smoke: silent install, shortcuts/protocol/AUMID,
+- [x] Disposable Windows smoke: silent install, shortcuts/protocol/AUMID,
   tray/login toggle/notifications/deep link, authenticated health and stub chat,
   Settings Update to preview.91, exact replacement Agent and preserved DATA,
   previous version retained, uninstall cleans shell registration and retains DATA.
@@ -24,7 +24,7 @@ Never run registration or installer tests on the owner's Windows host.
   merge App update manifests once and include Windows checksums.
 - [x] Korean/English install, unsigned SmartScreen, update and uninstall docs.
 - [x] Isolated local checks and native Windows portable loop.
-- [ ] Final disposable Windows installer/update/uninstall CI.
+- [x] Final disposable Windows installer/update/uninstall CI.
 
 ## Verification boundary
 
@@ -59,33 +59,45 @@ and exact chat content/order/count. Meaning input batches cannot mix speakers.
 
 ## Evidence
 
-Native Windows clippy/release build: 296.967 seconds. Portable health/reload,
-stub chat (two ordered messages), five owned process exits, port release and
-unchanged owner protocol all passed. Squirrel comparer proves preview.9 <
-preview.10 < stable. Local frozen Bun/check, platform clippy/fmt/source-check,
-28 existing Bun tests (119 assertions), two process-role E2Es and docs passed.
+Native Windows portable proof passed: authenticated health 200, exact preview.91,
+reload, one stub chat and one meaning call, two ordered messages, delivered work
+settled, five owned processes exited, port released and owner protocol unchanged.
+Native platform clippy with `-D warnings`, both Agent/App package builds, forbidden
+DLL dependency checks, Squirrel version comparer and relocated process-role E2Es
+passed. Incremental Agent rebuilds took 7m50s and 3m44s (initial cold loop 28m09s).
 
-CI run 36966939910 built both preview.90/preview.91 packages and passed all
-five existing Windows update/channel/process-role E2Es. Ordinary Setup launch
-and reload, silent install shell links/AUMID/protocol, exact App/Agent, stub
-chat passed. Shell-feature verification lost CDP while the runtime remained
-ready. The smoke used DOM window.close instead of the product close button; the fresh disposable rerun will use that real UI path
-and retain the complete tray, notification, deep-link, update and uninstall
-assertions. Packages are reusable only after the workflow proves all product
-sources match their producing revision.
+Final hosted run [37035265489](https://github.com/Hexpy-Games/butler/actions/runs/37035265489)
+is green at `97857abd1`. It verified all product and compiled E2E sources against
+successful BUILD revision `1282a1f69` before downloading immutable packages.
+Five existing E2Es passed: updates 1/21.75s, channels 2/32.68s, process roles
+2/13.88s. Full installer proof took 174.029s: normal Setup auto-launch, silent
+install, shell features, real Settings Update from preview.90 to preview.91,
+exact App/Agent replacement and healthy Agent, retained chat/config/sentinel,
+Squirrel rollback version, owned shutdown, uninstall removing shortcuts,
+protocol and login registrations while keeping DATA. No leftover processes.
+The strict provider recorded one chat and one extraction per user/assistant
+source, with exact source text, no duplicate speaker and no schema repair.
 
-Latest Linux packaging and macOS packaged App update passed. Separate macOS
-stub E2E failures remain tracked in #437 and #442; no assertions or timeouts
-were weakened. Source checks retain the baseline. No release tag was created.
+| Run | BUILD wall | VERIFY wall | Result |
+| --- | --- | --- | --- |
+| 37021990416 | 11m38s | skipped | WinPS inherited pwsh module paths; fixed child environment |
+| 37025617939 | 21m59s | 1m52s | Compiled checkout path in existing E2E; fixed workspace override |
+| 37029595044 | 17m27s | 9m33s | Full product flow passed; incorrect global one-meaning assumption |
+| 37035265489 | reused 17m27s BUILD | 7m37s | Green; explicit source equality guard and all hosted tests |
 
-Disposable run 36973557798 also passed login toggles, real close-to-tray,
-notification show acknowledgement and registered deep-link restoration.
-Settings then remained behind first-run consent: the fixture used version 1
-while the product requires FIRST_RUN_CONSENT_VERSION (2). Use that existing
-product constant, as the packaged macOS update smoke does.
+Final isolated local frozen Bun install and full `bun run check` passed.
+`cargo fmt --all --check`, clippy `-D warnings` on touched platform/Agent/memory
+crates and process-role E2E, and `cargo run -p butler-source-check -- .` from the
+Rust workspace passed (2,192 Rust files; all ratchet/OS/architecture/E2E gates zero
+violations). Existing focused Squirrel lifecycle tests passed (11 tests,
+42 assertions). YAML parsing, publisher bash syntax, unchanged publisher command
+order, Windows reuse-guard syntax and file line limits passed.
+The earlier Bun doctor timeout was reported on existing issue #418; no timeout,
+assertion or test was weakened. An incorrect source-check root rejected dependency
+symlinks; the required Rust workspace scan passed.
 
-Run 36974465477 reached the real Update button and the verified helper-ready
-handshake, then the App remained ready. Navigation exposes its latest turn
-state (delivered), but foreground quit omitted delivered from terminal states.
-Recognize that completed state; retain active worker/turn and queued-message
-protection. This product change requires new packaged bytes and native proof.
+Release uses the same packaging action and preserves successful-platform
+publication when Windows fails. Tag-triggered release publication was not run;
+no PR or release tag was created. Only the installer workflow was dispatched.
+Task build targets on Mac/Windows are removed after delivery; ORT/build caches
+remain. The final evidence-only commit changes no packaged or test source.
