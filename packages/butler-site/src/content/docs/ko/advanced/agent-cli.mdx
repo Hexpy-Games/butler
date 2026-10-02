@@ -20,10 +20,10 @@ Butler Agent CLI는 데스크톱 앱 없이 Butler 런타임을 설치하고 실
 
 ## 설치
 
-서버나 원격 PC처럼 앱 없이 쓸 때는 설치 스크립트 한 줄이면 됩니다. 현재 버전은 `0.1.0-preview.4` 프리뷰이므로 프리뷰 릴리스의 스크립트를 받고 `--version`으로 같은 버전을 지정합니다.
+서버나 원격 PC처럼 앱 없이 쓸 때는 설치 스크립트 한 줄이면 됩니다. 현재 버전은 `0.1.0-preview.5` 프리뷰이므로 프리뷰 릴리스의 스크립트를 받고 `--version`으로 같은 버전을 지정합니다.
 
 ```bash
-curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/install.sh | sh -s -- --version 0.1.0-preview.4
+curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/install.sh | sh -s -- --version 0.1.0-preview.5
 ```
 
 Node.js가 있다면 npx로도 같은 설치를 실행할 수 있습니다.
@@ -46,7 +46,7 @@ npx @hexpygames/butler install
 옵션은 `sh -s --` 뒤에 붙입니다(npx는 `install` 뒤에 붙입니다).
 
 ```bash
-curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/install.sh | sh -s -- --version 0.1.0-preview.4 --no-start
+curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/install.sh | sh -s -- --version 0.1.0-preview.5 --no-start
 ```
 
 | 옵션 | 설명 |
@@ -80,7 +80,7 @@ curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-previe
 ```bash
 set -euo pipefail
 VERSION=X.Y.Z # Agent 아카이브 버전입니다. 프리뷰 릴리스는 "-preview.N"을 뺍니다(예: 0.1.0).
-RELEASE=X.Y.Z # 릴리스 태그에서 "v"를 뺀 값입니다(예: 0.1.0-preview.4). 정식 릴리스는 VERSION과 같습니다.
+RELEASE=X.Y.Z # 릴리스 태그에서 "v"를 뺀 값입니다(예: 0.1.0-preview.5). 정식 릴리스는 VERSION과 같습니다.
 PLATFORM=darwin-arm64 # darwin-arm64, linux-x64, linux-arm64 중 하나입니다.
 ARCHIVE="butler-agent-${VERSION}-${PLATFORM}.tar.gz"
 RELEASE_URL="https://github.com/Hexpy-Games/butler/releases/download/v${RELEASE}"
