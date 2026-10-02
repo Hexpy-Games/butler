@@ -112,7 +112,7 @@ butler open
 
 The installer verifies SHA-256 checksums, installs under `%LOCALAPPDATA%\Butler`, adds `butler` to your user PATH, and starts the Agent. Open a new terminal if `butler` is not found. The UI runs in your browser. Use `butler start`, `stop`, `restart`, and `status` to manage the background process.
 
-- No autostart; run `butler start` after signing in.
+- Agent-only installs support autostart: `butler startup enable`. Use `butler startup status` to check it and `butler startup disable` to remove it.
 - LAN remote access and pairing are supported.
 - No command write sandbox; commands still require approval.
 - SmartScreen may warn about the unsigned preview. Choose **More info → Run anyway**.

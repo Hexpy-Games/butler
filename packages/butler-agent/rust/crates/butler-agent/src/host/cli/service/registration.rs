@@ -134,10 +134,28 @@ fn uninstall(activation: Activation) -> Result<(Value, String), Error> {
 }
 
 fn status() -> Result<(Value, String), Error> {
-    let status = service_registration::status()?;
+    let status = match service_registration::status() {
+        Ok(status) => status,
+        Err(Error::Foreign(task)) => {
+            return Ok((
+                json!({
+                    "manager": service_registration::manager().name(), "definition": task,
+                    "state": "foreign", "registered": true, "loaded": null, "running": null,
+                }),
+                "startup: foreign".to_owned(),
+            ));
+        }
+        Err(error) => return Err(error),
+    };
+    let state = if status.loaded == Some(true) {
+        "enabled"
+    } else {
+        "disabled"
+    };
     let human = format!(
-        "{}: {}, {}, {}",
+        "{}: {}, {}, {}, {}",
         status.manager.name(),
+        state,
         if status.registered {
             "registered"
         } else {
@@ -148,6 +166,7 @@ fn status() -> Result<(Value, String), Error> {
     );
     let value = json!({
         "manager": status.manager.name(),
+        "state": state,
         "definition": status.definition,
         "registered": status.registered,
         "loaded": status.loaded,
