@@ -14,7 +14,8 @@ pub(crate) mod assets;
 const MAX_FRAME_BYTES: usize = 1024 * 1024;
 const MAX_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
 const MAX_TEXTS: usize = 32;
-const IDLE_EXIT: Duration = Duration::from_secs(15 * 60);
+// Retain one minute for follow-up recalls, then release the resident model.
+const IDLE_EXIT: Duration = Duration::from_secs(60);
 
 /// Called only by main's hidden private entrypoint, before normal installation.
 pub(crate) async fn run() -> std::process::ExitCode {

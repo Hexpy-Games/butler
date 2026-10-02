@@ -98,13 +98,36 @@ async fn active_generation_serving_health_reads_populated_graph_without_writing(
             .as_array()
             .unwrap()
             .iter()
-            .any(|value| value
-                .as_str()
-                .unwrap()
-                .starts_with("1 memories without vectors; oldest "))
+            .any(|value| value.as_str().unwrap().starts_with(
+                "1 memories without vectors; 1 failed; remaining pending batch embedding; oldest "
+            ))
     );
     assert_eq!(serving["graph_revision"], 3);
     assert_eq!(fs::read(&graph_path).unwrap(), before);
+    let db = Connection::open(&graph_path).unwrap();
+    db.execute(
+        "UPDATE memory_vector_units SET state='pending',error_code=NULL",
+        [],
+    )
+    .unwrap();
+    drop(db);
+    let report = service.read_tool(no_profile_coverage()).await.unwrap();
+    let summary = report.summary().unwrap();
+    assert_eq!(
+        summary["serving"]["stages"]["episode_vectors"]["pending"],
+        1
+    );
+    assert_eq!(summary["serving"]["stages"]["episode_vectors"]["failed"], 0);
+    assert!(
+        summary["diagnostics"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value
+                .as_str()
+                .unwrap()
+                .contains("pending batch embedding, will be embedded later"))
+    );
     fs::remove_dir_all(root).unwrap();
 }
 

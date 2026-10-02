@@ -37,6 +37,9 @@ fn seed_graph(path: &Path) {
                 .unwrap();
         }
     }
+    tx.execute("INSERT INTO memory_chunks(memory_chunk_id,source_key,current_revision,origin_kind,status,source_hash,created_at,updated_at) VALUES('deferred','explicit_record:deferred','1','user_input','complete','hash','2026-10-01T00:00:00Z','2026-10-01T00:00:00Z')", []).unwrap();
+    tx.execute(r#"INSERT INTO memory_projection_jobs(job_id,episode_id,revision,extraction_version,generation,extraction_model,reasoning_effort,observed_completion_job_ids,source_state,semantic_graph_state,episode_vectors_state,node_vectors_state,hot_cache_state,created_at) VALUES('deferred','deferred','1','v3','synthetic','stub','low','[]','complete','{"state":"complete"}','{"state":"pending"}','{"state":"complete"}','{"state":"complete"}','2026-10-01T00:00:00Z')"#, []).unwrap();
+    tx.execute("INSERT INTO memory_vector_units(unit_id,job_id,record_kind,owner_id,owner_revision,origin_kind,projection_text) VALUES('deferred','deferred','episode','deferred','1','user_input','A pending memory')", []).unwrap();
     tx.commit().unwrap();
 }
 
@@ -196,6 +199,15 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
     let before_graph = signature(&graph);
     let before_wal = signature(&PathBuf::from(format!("{}-wal", graph.display())));
     let before_lock = signature(&lock);
+    let usage_before = butler_platform::process_control::usage::sample(s.agent.pid().unwrap())?;
+    if let Some(workers) =
+        butler_platform::process_control::usage::embedding_children(s.agent.pid().unwrap())?
+    {
+        assert!(
+            workers.is_empty(),
+            "deferred backlog loaded an embedding worker"
+        );
+    }
     let idle_started = Instant::now();
     tokio::time::sleep(IDLE).await;
     let idle_window = idle_started.elapsed();
@@ -213,7 +225,41 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
         "graph files changed during idle"
     );
     assert!(!lock_changed, "consolidation lock changed during idle");
-    assert!(leases <= 2, "too many idle leases: {leases}");
+    assert_eq!(leases, 0, "idle leases with deferred backlog");
+    if let Some(workers) =
+        butler_platform::process_control::usage::embedding_children(s.agent.pid().unwrap())?
+    {
+        assert!(workers.is_empty());
+    }
+    let pending: u64 = graph_db
+        .query_row(
+            "SELECT COUNT(*) FROM memory_vector_units WHERE state='pending'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(pending, 1);
+    let completed: u64 = graph_db
+        .query_row(
+            "SELECT COUNT(*) FROM memory_projection_windows WHERE state='complete'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(completed, COMPLETED_WINDOWS as u64);
+    if let (Some(before), Some(after)) = (
+        usage_before,
+        butler_platform::process_control::usage::sample(s.agent.pid().unwrap())?,
+    ) {
+        eprintln!(
+            "MEM-IDLE deferred_pending={pending} workers=0 rchar_delta={} read_bytes_delta={}",
+            after
+                .read_chars
+                .unwrap_or_default()
+                .saturating_sub(before.read_chars.unwrap_or_default()),
+            after.read_bytes.saturating_sub(before.read_bytes)
+        );
+    }
     s.finish().await
 }
 

@@ -22,8 +22,12 @@ pub enum EmbeddingMode {
 pub enum EmbeddingRequestClass {
     /// A user is waiting.
     Interactive,
-    /// Background maintenance.
+    /// Background maintenance, allowed to load the worker.
     Background,
+    /// Interactive priority, but never starts or reloads a cold worker.
+    WarmInteractive,
+    /// Opportunistic background work, but never starts or reloads a cold worker.
+    WarmBackground,
 }
 
 /// Texts to embed.
@@ -48,6 +52,11 @@ pub type EmbeddingFuture<'a> =
 
 /// Embeds texts for memory projection and recall.
 pub trait CognitionEmbeddingPort: Send + Sync {
+    /// Readiness without loading or I/O. In-process implementations are already available.
+    fn is_warm(&self) -> bool {
+        true
+    }
+
     /// Embeds the request, or fails when cancelled.
     fn embed(
         &self,
