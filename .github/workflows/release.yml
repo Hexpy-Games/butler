@@ -309,7 +309,7 @@ jobs:
     name: Package unsigned Windows Squirrel App
     needs: agent-windows-build
     if: contains(github.ref_name, '-preview.')
-    runs-on: [self-hosted, butler-win]
+    runs-on: ${{ inputs.runner == 'hosted' && 'windows-latest' || fromJSON('["self-hosted", "butler-win"]') }}
     concurrency:
       group: windows-app-release-${{ github.ref }}
       cancel-in-progress: false
@@ -320,18 +320,19 @@ jobs:
           name: agent-windows-x64
           path: dist/release/agent
       - uses: ./.github/actions/windows-owner-setup
+        if: inputs.runner != 'hosted'
         with:
           workflow: win-installer-release
       - uses: ./.github/actions/package-windows-app
         with:
-          owner-runner: 'true'
+          owner-runner: ${{ inputs.runner != 'hosted' }}
       - uses: actions/upload-artifact@v4
         with:
           name: app-windows-x64
           path: dist/release/app-windows/*
           if-no-files-found: error
       - name: Verify owner registration and clean job profile
-        if: always()
+        if: always() && inputs.runner != 'hosted'
         shell: pwsh
         run: ./deploy/windows-owner-cleanup.ps1
 
