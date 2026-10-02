@@ -21,6 +21,7 @@ use butler_turn::btcc::StorageEffectJournal;
 
 use super::{AppGatewayLifecycle, GatewayControlCommand};
 
+mod accept;
 #[cfg(debug_assertions)]
 mod shutdown_order;
 
@@ -104,7 +105,7 @@ impl GatewayControlServer {
             effects: owners.effects,
             stop: owners.stop,
         });
-        let task = tokio::spawn(accept(listener, context, shutdown.clone()));
+        let task = tokio::spawn(accept::run(listener, context, shutdown.clone()));
         Ok(Self {
             endpoint,
             token,
@@ -128,51 +129,31 @@ impl GatewayControlServer {
 
     pub(crate) async fn close(mut self) -> Result<(), crate::host::HostError> {
         self.shutdown.cancel();
-        let task = self
+        let mut task = self
             .task
             .take()
             .ok_or_else(|| "gateway_control_task_missing".to_owned())?;
-        // Cancellation is orderly; abort bounds the pending read independently
-        // of its IO timeout if the accept task has not observed cancellation.
-        task.abort();
-        crate::host::service::shutdown_trace::event("control_abort_requested");
-        timeout(IO_TIMEOUT, task)
-            .await
-            .map_err(|source| {
+        // The accept owner cancels and joins every connection before releasing
+        // its context. Abort remains a fallback if that owner cannot finish.
+        let result = match timeout(IO_TIMEOUT, &mut task).await {
+            Ok(result) => result,
+            Err(source) => {
+                task.abort();
+                let _ = task.await;
                 crate::host::service::shutdown_trace::event("control_join_timeout");
-                crate::host::HostError::new("gateway_control_shutdown_timeout").with_source(source)
-            })?
-            .or_else(|source| {
-                if source.is_cancelled() {
-                    Ok(())
-                } else {
-                    Err(crate::host::HostError::new("gateway_control_task_failed")
-                        .with_source(source))
-                }
-            })
-    }
-}
-
-/// Serves one connection at a time until `shutdown`.
-async fn accept(listener: TcpListener, context: Arc<ControlContext>, shutdown: CancellationToken) {
-    loop {
-        let accepted = tokio::select! {
-            () = shutdown.cancelled() => break,
-            value = listener.accept() => value,
+                return Err(
+                    crate::host::HostError::new("gateway_control_shutdown_timeout")
+                        .with_source(source),
+                );
+            }
         };
-        let Ok((mut stream, _peer)) = accepted else {
-            continue;
-        };
-        #[cfg(debug_assertions)]
-        shutdown_order::before_wait(&context.data_root, &shutdown).await;
-        tokio::select! {
-            biased;
-            _ = serve_one(&mut stream, &context) => {},
-            () = shutdown.cancelled() => {
-                crate::host::service::shutdown_trace::event("control_connection_cancelled");
-                break;
-            },
-        }
+        result.or_else(|source| {
+            if source.is_cancelled() {
+                Ok(())
+            } else {
+                Err(crate::host::HostError::new("gateway_control_task_failed").with_source(source))
+            }
+        })
     }
 }
 
