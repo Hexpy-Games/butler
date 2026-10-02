@@ -1,13 +1,20 @@
 name: Windows Squirrel install and update
 on:
   workflow_dispatch:
+    inputs:
+      reuse-run:
+        description: Completed BUILD run to reuse after product-source equality verification
+        required: false
+        type: string
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: windows-installer-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   build:
+    if: ${{ !inputs.reuse-run }}
     name: Build Windows Squirrel artifacts
     runs-on: [self-hosted, butler-win]
     timeout-minutes: 120
@@ -64,12 +71,22 @@ jobs:
   verify:
     name: Verify Windows install update uninstall
     needs: build
+    if: ${{ always() && (needs.build.result == 'success' || inputs.reuse-run) }}
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: Verify immutable package sources before reuse
+        if: inputs.reuse-run
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REUSE_RUN: ${{ inputs.reuse-run }}
+        run: ./deploy/windows-installer-reuse.ps1 -RunId $env:REUSE_RUN
       - uses: actions/download-artifact@v4
         with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.reuse-run || github.run_id }}
           name: windows-installer-preview
           path: dist/release
       - uses: oven-sh/setup-bun@v2

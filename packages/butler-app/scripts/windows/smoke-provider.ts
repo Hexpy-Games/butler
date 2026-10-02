@@ -6,7 +6,8 @@ const contract = JSON.parse(readFileSync(new URL(
 ), "utf8"));
 
 /** Same strict synthetic-conversation fixture as butler-e2e/provider/memory.rs. */
-export function smokeProviderReply(body: any, prompt: string, answer: string, calls: { chat: number; memory: number; memorySpeakers: Set<string> }): Response {
+export function smokeProviderReply(body: any, prompt: string, answer: string,
+  calls: { chat: number; memory: number; memorySpeakers: Set<string> }, observeMeaning?: (input: any) => void): Response {
   assert.ok(JSON.stringify(body).includes(prompt), "Unexpected stub prompt");
   const format = body.text?.format;
   let text = answer;
@@ -17,6 +18,8 @@ export function smokeProviderReply(body: any, prompt: string, answer: string, ca
       schema: boundedSchema(contract.meaning_schema, input.parts.length) });
     assert.equal(body.instructions, contract.meaning_instructions);
     assert.ok(input.speaker === "user" || input.speaker === "assistant", "Unexpected meaning source");
+    assert.ok(!input.correction, "Unexpected meaning repair");
+    observeMeaning?.(input);
     calls.memory++;
     calls.memorySpeakers.add(input.speaker);
     text = JSON.stringify({ status: "processed", entities: [], items: [], attributes: [] });
