@@ -4,9 +4,9 @@ if ($env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:RUNNER_OS -ne 'Windows'
 }
 $ErrorActionPreference = 'Stop'
 $root = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
-$env:HOME = "$root/home"
+$env:HOME = "$root/home/미리 보기 %USERPROFILE% !"
 $env:USERPROFILE = $env:HOME
-$env:LOCALAPPDATA = "$root/local"
+$env:LOCALAPPDATA = "$root/local/미리 보기 %USERPROFILE% !"
 $env:APPDATA = "$root/roaming"
 $env:BUTLER_DATA = "$root/data"
 $env:BUTLER_SECRET_STORE = 'file'
@@ -49,9 +49,15 @@ try {
     $registered = $true
     $remote = (& schtasks /Query /TN $name /XML) -join "`n"
     if ($LASTEXITCODE) { throw 'Task export failed' }
+    $scheduler = New-Object -ComObject Schedule.Service
+    $scheduler.Connect()
+    $unicode = $scheduler.GetFolder('\').GetTask($name).Xml
+    [ordered]@{ consoleExportMatchesUnicode = $remote.Trim() -eq $unicode.Trim();
+        currentAccount = [Security.Principal.WindowsIdentity]::GetCurrent().Name } | ConvertTo-Json -Compress
     foreach ($item in @(
         @{ Kind = 'local'; Xml = [IO.File]::ReadAllText($local.data.definition) },
-        @{ Kind = 'scheduler'; Xml = $remote }
+        @{ Kind = 'scheduler'; Xml = $remote },
+        @{ Kind = 'unicode-api'; Xml = $unicode }
     )) {
         [xml]$document = $item.Xml
         $fields = [ordered]@{ kind = $item.Kind; root = $document.DocumentElement.LocalName }
