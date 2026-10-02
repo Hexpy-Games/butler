@@ -1,4 +1,4 @@
-//! Durable active-descriptor CAS retained for the offline directory swap in issue #435.
+//! Offline SQLite copy and active-descriptor CAS retained for alias-postings issue #435.
 #![allow(dead_code, reason = "reserved for alias-postings issue #435")]
 //!
 //! [`capture_active_descriptor`] observes the descriptor; a transition commits
@@ -11,6 +11,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use butler_platform::sqlite;
+use rusqlite::{OpenFlags, params};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
@@ -203,4 +205,32 @@ fn io_unavailable(error: std::io::Error) -> CognitionError {
 
 fn error(code: CognitionCode) -> CognitionError {
     CognitionError::new(code, code.as_str())
+}
+
+/// Writes a consistent copy of the SQLite store at `source` to `target` with
+/// `VACUUM INTO`, then syncs the copy and its directory.
+pub(super) fn vacuum_snapshot(source: &Path, target: &Path) -> CognitionResult<()> {
+    let parent = target
+        .parent()
+        .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
+    durable::create_dir(parent)?;
+    let snapshot_changed = |source| error(CognitionCode::MemorySnapshotChanged).with_source(source);
+    let db = sqlite::open_with_flags(source, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(snapshot_changed)?;
+    let path = target
+        .to_str()
+        .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
+    db.execute("VACUUM INTO ?1", params![path])
+        .map_err(snapshot_changed)?;
+    db.close().map_err(|(_, source)| snapshot_changed(source))?;
+    sync(target)?;
+    sync(parent)
+}
+
+fn sync(path: &Path) -> CognitionResult<()> {
+    butler_platform::secure_fs::sync_path(path).map_err(io_error)
+}
+
+fn io_error(error: std::io::Error) -> CognitionError {
+    CognitionError::new(CognitionCode::MemoryRebuildIoError, error.to_string()).with_source(error)
 }

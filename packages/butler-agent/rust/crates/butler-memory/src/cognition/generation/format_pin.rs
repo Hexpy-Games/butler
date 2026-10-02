@@ -5,17 +5,12 @@
 //! them only when a format change is intended.
 
 use std::{
-    cmp::Ordering,
     fs,
     path::{Path, PathBuf},
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use butler_turn::conversation::{
-    AgentConversationStore, ConversationIdentityClock, ConversationLocaleCollation,
-    ConversationStoreConfig,
-};
 use tokio_util::sync::CancellationToken;
 
 use crate::cognition::CognitionPathEnvironment;
@@ -26,22 +21,6 @@ use crate::coordination::{
 const NOW: &str = "2026-09-23T00:00:00.000Z";
 
 struct Host;
-
-impl ConversationIdentityClock for Host {
-    fn id(&self, prefix: &'static str) -> String {
-        format!("{prefix}_{}", uuid::Uuid::new_v4())
-    }
-
-    fn now_iso(&self) -> String {
-        NOW.into()
-    }
-}
-
-impl ConversationLocaleCollation for Host {
-    fn compare(&self, left: &str, right: &str) -> Ordering {
-        left.cmp(right)
-    }
-}
 
 impl CognitionCoordinationHost for Host {
     fn process_id(&self) -> u32 {
@@ -108,10 +87,7 @@ impl Normalizer {
         for (from, to) in &self.0 {
             text = text.replace(from, to);
         }
-        regex::Regex::new(r#""duration_ms":\d+"#)
-            .unwrap()
-            .replace_all(&text, r#""duration_ms":0"#)
-            .into_owned()
+        text
     }
 }
 
@@ -132,18 +108,6 @@ fn read(path: &Path) -> String {
     fs::read_to_string(path).unwrap()
 }
 
-async fn conversation_store(root: &Path) {
-    let host = Arc::new(Host);
-    let store = AgentConversationStore::open(ConversationStoreConfig {
-        path: root.join("runtime/conversation-store.sqlite"),
-        identity_clock: host.clone(),
-        collation: host,
-    })
-    .await
-    .unwrap();
-    store.close().await.unwrap();
-}
-
 type Coordinator = Arc<CognitionWriteCoordinator>;
 
 // test-category: format-pin
@@ -153,10 +117,8 @@ async fn generation_files_and_results_keep_their_pre_typing_bytes() {
     let environment = CognitionPathEnvironment::default();
     pin_empty_generation(&coordinator, &environment).await;
     pin_descriptor_swap_guards(&coordinator, &environment).await;
-    let data = Root::new();
-    let rebuild = pin_prepared_rebuild(&data.0, &coordinator, &environment).await;
-    pin_readiness(&data.0, &coordinator, &environment, &rebuild).await;
     pin_historical_documents();
+    pin_vacuum_snapshot();
 }
 
 /// Empty initialization: manifest and descriptor.
@@ -182,120 +144,6 @@ async fn pin_empty_generation(coordinator: &Coordinator, environment: &Cognition
         "empty-descriptor.json",
         &normalize.apply(&read(&memory.join("active-generation.json"))),
     );
-}
-
-/// A prepared rebuild next to its legacy baseline.
-struct Rebuild {
-    prepared: super::rebuild::PreparedRebuild,
-    root: PathBuf,
-    normalize: Normalizer,
-}
-
-/// Legacy baseline and rebuild preparation.
-async fn pin_prepared_rebuild(
-    data: &Path,
-    coordinator: &Coordinator,
-    environment: &CognitionPathEnvironment,
-) -> Rebuild {
-    conversation_store(data).await;
-    let prepared = super::prepare_memory_rebuild(
-        data.to_path_buf(),
-        environment.clone(),
-        coordinator.clone(),
-        CancellationToken::new(),
-        NOW.into(),
-        "17.0.0".into(),
-        "ICU4X 1.4.0".into(),
-    )
-    .await
-    .unwrap();
-    let memory = environment.memory_root(data);
-    let descriptor_text = read(&memory.join("active-generation.json"));
-    let descriptor: serde_json::Value = serde_json::from_str(&descriptor_text).unwrap();
-    let legacy_id = descriptor["generation_id"].as_str().unwrap().to_owned();
-    let legacy_root = memory.join("generations").join(&legacy_id);
-    let legacy: serde_json::Value =
-        serde_json::from_str(&read(&legacy_root.join("manifest.json"))).unwrap();
-    let root = memory.join("generations").join(&prepared.generation_id);
-    let prepared_manifest: serde_json::Value =
-        serde_json::from_str(&read(&root.join("manifest.json"))).unwrap();
-    let snapshot_hash = prepared_manifest["canonical_snapshot"]["file_sha256"]
-        .as_str()
-        .unwrap();
-    assert_eq!(snapshot_hash.len(), 64);
-    assert!(snapshot_hash.bytes().all(|byte| byte.is_ascii_hexdigit()));
-    let normalize = Normalizer(vec![
-        (legacy_id.clone(), "<LEGACY>".into()),
-        (
-            legacy["canonical_snapshot_id"].as_str().unwrap().to_owned(),
-            "<LEGACY_SNAPSHOT>".into(),
-        ),
-        (prepared.generation_id.clone(), "<REBUILD>".into()),
-        (prepared.canonical_snapshot_id.clone(), "<SNAPSHOT>".into()),
-        // The source store now carries a random persistent identity. Its
-        // snapshot hash varies per run while the manifest layout stays pinned.
-        (snapshot_hash.into(), "<SNAPSHOT_SHA256>".into()),
-    ]);
-    pin(
-        "legacy-manifest.json",
-        &normalize.apply(&read(&legacy_root.join("manifest.json"))),
-    );
-    pin("legacy-descriptor.json", &normalize.apply(&descriptor_text));
-    pin(
-        "prepared-manifest.json",
-        &normalize.apply(&read(&root.join("manifest.json"))),
-    );
-    pin(
-        "prepared-inventory.json",
-        &normalize.apply(&read(
-            &root.join("source-snapshot/memory-source-inventory.json"),
-        )),
-    );
-    Rebuild {
-        prepared,
-        root,
-        normalize,
-    }
-}
-
-/// Readiness record and inspection; the readiness and the recorded manifest.
-async fn pin_readiness(
-    data: &Path,
-    coordinator: &Coordinator,
-    environment: &CognitionPathEnvironment,
-    rebuild: &Rebuild,
-) -> (super::GenerationReadiness, String) {
-    let Rebuild {
-        prepared,
-        normalize,
-        ..
-    } = rebuild;
-    let target = super::MemoryGenerationTarget::Rebuild {
-        generation_id: prepared.generation_id.clone(),
-        canonical_snapshot_id: prepared.canonical_snapshot_id.clone(),
-    };
-    let readiness = super::record_rebuild_readiness(
-        data,
-        environment,
-        coordinator.clone(),
-        &target,
-        &CancellationToken::new(),
-    )
-    .await
-    .unwrap();
-    pin(
-        "readiness-result.json",
-        &normalize.apply(&serde_json::to_string(&readiness).unwrap()),
-    );
-    let recorded_text = read(&rebuild.root.join("manifest.json"));
-    pin("readiness-manifest.json", &normalize.apply(&recorded_text));
-    let inspected =
-        super::inspect_memory_rebuild(data, environment, &prepared.generation_id).unwrap();
-    let inspected = serde_json::to_string(&inspected)
-        .unwrap()
-        .replace(&data.to_string_lossy().into_owned(), "<DATA>");
-    pin("inspect-result.json", &normalize.apply(&inspected));
-    (readiness, recorded_text)
 }
 
 /// The retained offline CAS rejects changed descriptor metadata and manifest bytes.
@@ -374,7 +222,14 @@ async fn pin_descriptor_swap_guards(
 
 /// Existing qualified manifests and descriptors remain readable without their writers.
 fn pin_historical_documents() {
-    for name in ["qualified-manifest.json", "activated-descriptor.json"] {
+    for name in [
+        "legacy-manifest.json",
+        "prepared-manifest.json",
+        "readiness-manifest.json",
+        "qualified-manifest.json",
+        "legacy-descriptor.json",
+        "activated-descriptor.json",
+    ] {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("src/cognition/generation/fixtures/format")
             .join(name);
@@ -395,4 +250,36 @@ fn pin_historical_documents() {
             serde_json::from_str::<serde_json::Value>(&original).unwrap()
         );
     }
+}
+
+/// The retained SQLite copy includes committed rows and leaves its source intact.
+fn pin_vacuum_snapshot() {
+    let data = Root::new();
+    let source = data.0.join("source.sqlite");
+    let db = rusqlite::Connection::open(&source).unwrap();
+    db.execute_batch("CREATE TABLE records(id INTEGER PRIMARY KEY, value TEXT); INSERT INTO records VALUES(1,'one'),(2,'two');").unwrap();
+    db.close().unwrap();
+    let before = fs::read(&source).unwrap();
+    let target = data.0.join("copy/store.sqlite");
+    super::swap::vacuum_snapshot(&source, &target).unwrap();
+    let copied =
+        rusqlite::Connection::open_with_flags(&target, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .unwrap();
+    let rows: Vec<(i64, String)> = copied
+        .prepare("SELECT id,value FROM records ORDER BY id")
+        .unwrap()
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    assert_eq!(rows, vec![(1, "one".into()), (2, "two".into())]);
+    assert_eq!(fs::read(&source).unwrap(), before);
+    assert!(super::swap::vacuum_snapshot(&source, &target).is_err());
+    assert_eq!(
+        copied
+            .query_row("SELECT COUNT(*) FROM records", [], |row| row
+                .get::<_, i64>(0))
+            .unwrap(),
+        2
+    );
 }

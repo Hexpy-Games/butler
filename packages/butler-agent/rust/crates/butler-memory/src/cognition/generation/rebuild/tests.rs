@@ -8,6 +8,7 @@ use std::{
 
 use crate::coordination::{
     CognitionCoordinationHost, CognitionProcessStatus, CognitionWriteAcquire,
+    CognitionWriteCoordinator,
 };
 use butler_turn::conversation::{
     AgentConversationStore, ConversationIdentityClock, ConversationLocaleCollation,
@@ -15,6 +16,8 @@ use butler_turn::conversation::{
 };
 
 use super::*;
+use crate::cognition::CognitionPathEnvironment;
+use tokio_util::sync::CancellationToken;
 
 /// Coordinator clock reads happen only inside write-gate acquisition in these
 /// flows, so a read after `before` proves the operation is at the gate.
@@ -148,25 +151,7 @@ async fn readiness_rejects_candidate_change_while_waiting_for_commit_gate() {
     .unwrap();
     let coordinator = Arc::new(CognitionWriteCoordinator::new(host.clone()).unwrap());
     let environment = CognitionPathEnvironment::default();
-    let prepared = prepare(
-        fixture.0.clone(),
-        environment.clone(),
-        coordinator.clone(),
-        CancellationToken::new(),
-        "2026-09-23T00:00:00.000Z".into(),
-        "17.0.0".into(),
-        "ICU4X 1.4.0".into(),
-    )
-    .await
-    .unwrap();
-    let target = crate::cognition::MemoryGenerationTarget::Rebuild {
-        generation_id: prepared.generation_id.clone(),
-        canonical_snapshot_id: prepared.canonical_snapshot_id,
-    };
-    let root = fixture
-        .0
-        .join("cognition/memory/generations")
-        .join(&prepared.generation_id);
+    let (target, root) = candidate_fixture(&fixture.0);
     let manifest = root.join("manifest.json");
     let original = fs::read(&manifest).unwrap();
     let lock = environment.consolidation_lock(&fixture.0);
@@ -214,4 +199,63 @@ async fn readiness_rejects_candidate_change_while_waiting_for_commit_gate() {
             ["sha256"],
         serde_json::json!(current.sha256)
     );
+}
+
+fn candidate_fixture(
+    data: &std::path::Path,
+) -> (crate::cognition::MemoryGenerationTarget, PathBuf) {
+    use super::super::{
+        initialize::durable,
+        manifest::{
+            GenerationFormat, GenerationManifest, GenerationState, InitializationOrigin,
+            NewManifest,
+        },
+        swap,
+    };
+    let generation_id = "22222222-2222-2222-2222-222222222222";
+    let root = data
+        .join("cognition/memory/generations")
+        .join(generation_id);
+    let source_root = root.join("source-snapshot");
+    let snapshot = source_root.join("runtime/conversation-store.sqlite");
+    swap::vacuum_snapshot(&data.join("runtime/conversation-store.sqlite"), &snapshot).unwrap();
+    let inventory = inventory::read(
+        &source_root,
+        &snapshot,
+        "2026-09-23T00:00:00.000Z",
+        &CancellationToken::new(),
+    )
+    .unwrap();
+    durable::write_json(
+        &source_root.join("memory-source-inventory.json"),
+        &inventory.inventory,
+    )
+    .unwrap();
+    let mut manifest = GenerationManifest::new(
+        NewManifest {
+            generation_id,
+            format: GenerationFormat::V2,
+            state: GenerationState::Building,
+            origin: InitializationOrigin::Rebuild,
+            canonical_snapshot_id: "snapshot".into(),
+            source_inventory_hash: inventory.hash,
+            unaccounted_source_count: inventory.source_count as u64,
+        },
+        None,
+    );
+    manifest.canonical_snapshot_path =
+        Some("source-snapshot/runtime/conversation-store.sqlite".into());
+    durable::write_json(&root.join("manifest.json"), &manifest).unwrap();
+    crate::cognition::graph::GraphRepository::create_fresh(
+        &root.join("graph.sqlite"),
+        "2026-09-23T00:00:00.000Z",
+    )
+    .unwrap();
+    (
+        crate::cognition::MemoryGenerationTarget::Rebuild {
+            generation_id: generation_id.into(),
+            canonical_snapshot_id: "snapshot".into(),
+        },
+        root,
+    )
 }

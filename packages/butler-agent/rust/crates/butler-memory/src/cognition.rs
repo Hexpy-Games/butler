@@ -93,16 +93,13 @@ pub use exact_query::ExactMemoryQuery;
 pub use extraction::{CandidateSearchInput, CognitionVectorSearch, VectorSearchFuture};
 pub use feedback_buffer::{FeedbackBufferService, FeedbackTarget};
 pub use generation::{
-    AcceptanceBinding, ActiveDescriptor, BuildInventory, CanonicalSnapshot, EmbeddingSlot,
-    FreshMemoryGeneration, GenerationEmbedding, GenerationFormat, GenerationManifest,
-    GenerationReadiness, GenerationState, InitializationOrigin, MemoryGenerationHandle,
-    MemoryGenerationTarget, ProjectionMode, RebuildInspection, SemanticCounts, StageCounts,
-    VectorCounts, active_memory_descriptor_exists, advance_rebuild_cache,
-    assert_mutation_authority, assert_rebuild_sources_registered, bind_native_embedding_identity,
-    compute_rebuild_readiness, initialize_empty_memory_generation, inspect_memory_rebuild,
-    prepare_fresh_memory_generation, prepare_memory_rebuild, read_build_inventory,
-    rebuild_typed_cursor, record_rebuild_readiness, refresh_memory_rebuild_snapshot,
-    resolve_active_generation, resolve_generation,
+    AcceptanceBinding, ActiveDescriptor, CanonicalSnapshot, EmbeddingSlot, FreshMemoryGeneration,
+    GenerationEmbedding, GenerationFormat, GenerationManifest, GenerationReadiness,
+    GenerationState, InitializationOrigin, MemoryGenerationHandle, MemoryGenerationTarget,
+    ProjectionMode, SemanticCounts, StageCounts, active_memory_descriptor_exists,
+    advance_rebuild_cache, assert_mutation_authority, bind_native_embedding_identity,
+    compute_rebuild_readiness, initialize_empty_memory_generation, prepare_fresh_memory_generation,
+    record_rebuild_readiness, resolve_active_generation, resolve_generation,
 };
 pub use generation_vectors::GenerationVectorAdapter;
 pub use graph::{GraphProgress, JobOutcome, StageState, StageStatus};

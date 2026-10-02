@@ -29,14 +29,6 @@ pub use manifest::{
 pub(crate) use read::resolve_projection_generation;
 pub use read::{active_memory_descriptor_exists, resolve_active_generation, resolve_generation};
 pub(in crate::cognition) use rebuild::MemorySourceInventory;
-pub use rebuild::refresh_memory_rebuild_snapshot;
-pub use rebuild::{
-    BuildInventory, assert_rebuild_sources_registered, read_build_inventory, rebuild_typed_cursor,
-};
-pub use rebuild::{
-    RebuildInspection, VectorCounts, inspect as inspect_memory_rebuild,
-    prepare as prepare_memory_rebuild,
-};
 pub use rebuild::{compute_rebuild_readiness, record_rebuild_readiness};
 pub use types::{GenerationEmbedding, MemoryGenerationHandle, MemoryGenerationTarget};
 

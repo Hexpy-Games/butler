@@ -1,7 +1,6 @@
 //! Snapshot inventory from canonical Conversation and the source typed registry.
 
 use crate::cognition::CognitionCode;
-use butler_platform::sqlite;
 use std::{
     fs,
     path::Path,
@@ -9,7 +8,6 @@ use std::{
 };
 
 use indexmap::IndexMap;
-use rusqlite::OpenFlags;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -167,7 +165,6 @@ pub(super) struct SourceInventory {
     pub inventory: MemorySourceInventory,
     pub hash: String,
     pub source_count: usize,
-    pub canonical_revision: i64,
 }
 
 /// Reads the inventory of the sources under `data_root` as of `as_of`.
@@ -212,7 +209,6 @@ pub(super) fn read(
     Ok(SourceInventory {
         hash: inventory.hash()?,
         source_count: inventory.source_count(),
-        canonical_revision: canonical_revision(canonical_path)?,
         inventory,
     })
 }
@@ -298,18 +294,6 @@ fn inventory_request(as_of: &str) -> RecallRequest {
             project_id: None,
         },
     }
-}
-
-fn canonical_revision(canonical_path: &Path) -> CognitionResult<i64> {
-    let connection = sqlite::open_with_flags(canonical_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|source| error(CognitionCode::MemoryInventoryIncomplete).with_source(source))?;
-    connection
-        .query_row(
-            "SELECT revision FROM conversation_public_source_state WHERE singleton=1",
-            [],
-            |row| row.get(0),
-        )
-        .map_err(|source| error(CognitionCode::MemoryInventoryIncomplete).with_source(source))
 }
 
 fn entry(record: crate::cognition::sources::TypedMemoryRecord) -> CognitionResult<TypedEntry> {

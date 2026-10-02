@@ -101,21 +101,6 @@ impl LiveWitness {
         }
         Ok(())
     }
-
-    pub(super) fn assert_public_revision(&self, expected: i64) -> CognitionResult<()> {
-        let revision: i64 = self
-            .canonical
-            .query_row(
-                "SELECT revision FROM conversation_public_source_state WHERE singleton=1",
-                [],
-                |row| row.get(0),
-            )
-            .map_err(|source| error(CognitionCode::MemorySourceChanged).with_source(source))?;
-        if revision != expected {
-            return Err(error(CognitionCode::MemorySourceChanged));
-        }
-        Ok(())
-    }
 }
 
 fn data_version(connection: &Connection, code: CognitionCode) -> CognitionResult<i64> {
