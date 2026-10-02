@@ -331,6 +331,11 @@ async fn wiring_daily_capsule_includes_app_registered_project() -> Result<(), Ha
         .join("cognition/memory/projects")
         .join(format!("{project}.md"));
     let present = capsule.exists();
+    if present {
+        let body = std::fs::read_to_string(&capsule)?;
+        assert!(body.contains(&format!("# Project Memory: {project}")));
+        assert!(body.contains("source_counts: registry=1"));
+    }
     eprintln!(
         "WIRING-CAPSULE registered=1 considered={} refreshed={} capsule_present={present}",
         health["metrics"]["project_capsules_considered"],

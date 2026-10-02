@@ -2,6 +2,7 @@
 
 mod evidence;
 mod graph;
+mod registry;
 mod tasks;
 
 use std::{
@@ -128,25 +129,23 @@ pub(super) fn read_registry_entries(
     check_active(cancellation, deadline)?;
     let path = data_root.join("butler.config.json");
     ensure_data_authority(data_root, &[&path])?;
-    let Ok(raw) = fs::read_to_string(path) else {
-        return Ok(Vec::new());
-    };
-    let Ok(config) = serde_json::from_str::<Value>(&raw) else {
-        return Ok(Vec::new());
-    };
+    let config = fs::read_to_string(path)
+        .ok()
+        .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+        .unwrap_or(Value::Null);
     let projects = match config.get("projects") {
         Some(Value::Array(projects)) => projects.iter().collect::<Vec<_>>(),
         Some(Value::Object(projects)) => projects.values().collect::<Vec<_>>(),
         _ => Vec::new(),
     };
-    let mut entries = Vec::new();
+    let mut entries = registry::app_entries(data_root, cancellation, deadline)?;
     for project in projects {
         check_active(cancellation, deadline)?;
         let Some(name) = project.get("name").and_then(Value::as_str) else {
             continue;
         };
         let name = trim_js_whitespace(name);
-        if name.is_empty() {
+        if name.is_empty() || entries.iter().any(|entry| entry.name == name) {
             continue;
         }
         entries.push(ProjectRegistryEntry {
