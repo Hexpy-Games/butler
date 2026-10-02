@@ -5,6 +5,7 @@ const BASE_SETTINGS_SECTION_IDS: SettingsSectionId[] = [
   "general",
   "appearance",
   "personalization",
+  "memory",
   "models",
   "updates",
   "usage",
