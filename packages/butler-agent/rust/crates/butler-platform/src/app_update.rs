@@ -166,7 +166,6 @@ fn install_platform(
     parent: u32,
     arguments: &[OsString],
 ) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt;
     let appimage = std::env::var_os("APPIMAGE").map(std::path::PathBuf::from);
     println!("app-update-ready");
     await_activation()?;
@@ -178,19 +177,70 @@ fn install_platform(
             .spawn()
             .map_err(|e| e.to_string())?;
     } else if let Some(image) = appimage {
-        let replacement = image.with_extension("AppImage.new");
-        std::fs::copy(artifact, &replacement).map_err(|e| e.to_string())?;
-        std::fs::set_permissions(&replacement, std::fs::Permissions::from_mode(0o755))
-            .map_err(|e| e.to_string())?;
-        std::fs::rename(&replacement, &image).map_err(|e| e.to_string())?;
-        Command::new(image)
-            .args(arguments)
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        replace_appimage(artifact, &image, arguments)?;
     } else {
         return Err("AppImage installation path is unavailable.".into());
     }
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn replace_appimage(artifact: &Path, image: &Path, arguments: &[OsString]) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+    let replacement = crate::secure_fs::unique_temporary(image);
+    let backup = crate::secure_fs::unique_temporary(image);
+    let (mut replacement_created, mut backup_created) = (false, false);
+    let prepared = (|| -> std::io::Result<()> {
+        copy_image_new(artifact, &replacement)?;
+        replacement_created = true;
+        std::fs::set_permissions(&replacement, std::fs::Permissions::from_mode(0o755))?;
+        match std::fs::hard_link(image, &backup) {
+            Ok(()) => {}
+            Err(error) if crate::secure_fs::hard_link_unsupported(&error) => {
+                copy_image_new(image, &backup)?;
+            }
+            Err(error) => return Err(error),
+        }
+        backup_created = true;
+        // Keep the installed pathname present throughout the replacement.
+        std::fs::rename(&replacement, image)
+    })();
+    if let Err(error) = prepared {
+        if replacement_created {
+            let _ = std::fs::remove_file(&replacement);
+        }
+        if backup_created {
+            let _ = std::fs::remove_file(&backup);
+        }
+        return Err(error.to_string());
+    }
+    if let Err(error) = Command::new(image).args(arguments).spawn() {
+        std::fs::rename(&backup, image).map_err(|restore| {
+            format!("App launch failed: {error}; restoration failed: {restore}; previous image retained at {}", backup.display())
+        })?;
+        let _ = Command::new(image).args(arguments).spawn();
+        return Err(error.to_string());
+    }
+    let _ = std::fs::remove_file(&backup);
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn copy_image_new(source: &Path, destination: &Path) -> std::io::Result<()> {
+    let mut source = std::fs::File::open(source)?;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    crate::secure_fs::owner_only(&mut options);
+    let mut destination_file = options.open(destination)?;
+    let result = (|| {
+        std::io::copy(&mut source, &mut destination_file)?;
+        destination_file.set_permissions(source.metadata()?.permissions())?;
+        destination_file.sync_all()
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(destination);
+    }
+    result
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]

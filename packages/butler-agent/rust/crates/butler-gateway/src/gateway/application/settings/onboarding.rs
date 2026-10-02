@@ -83,29 +83,52 @@ pub(super) fn is_patch(value: &Value) -> bool {
 /// The onboarding state of a stored or projected settings object; a
 /// missing or unreadable value reads as all null.
 pub(super) fn view(settings: &Map<String, Value>) -> Value {
-    let onboarding = settings
+    let mut onboarding = settings
         .get(KEY)
         .and_then(|value| Onboarding::deserialize(value).ok())
         .unwrap_or_default();
+    // Previously saved versions without an acceptance must require renewal.
+    if missing_acceptance(&onboarding) {
+        onboarding.consent_version = None;
+    }
     serde_json::to_value(onboarding).unwrap_or(Value::Null)
+}
+
+fn missing_acceptance(onboarding: &Onboarding) -> bool {
+    onboarding
+        .consent_version
+        .is_some_and(|version| version > 0)
+        && onboarding
+            .accepted_at
+            .as_ref()
+            .is_none_or(|at| !is_timestamp(at))
 }
 
 /// Adds the merged onboarding state to a sanitized settings `patch` when
 /// the request `input` changes it. `current` is the settings view.
-pub(super) fn merge_into_patch(patch: &mut Value, input: &Value, current: &Value) {
+pub(super) fn merge_into_patch(
+    patch: &mut Value,
+    input: &Value,
+    current: &Value,
+) -> Result<(), crate::gateway::GatewayApplicationError> {
     let (Some(requested), Some(patch)) = (
         input.get(KEY).and_then(OnboardingPatch::parse),
         patch.as_object_mut(),
     ) else {
-        return;
+        return Ok(());
     };
     let stored = current
         .get(KEY)
         .and_then(|value| Onboarding::deserialize(value).ok())
         .unwrap_or_default();
-    if let Ok(merged) = serde_json::to_value(requested.apply(stored)) {
+    let merged = requested.apply(stored);
+    if missing_acceptance(&merged) {
+        return Err(super::update::invalid_settings());
+    }
+    if let Ok(merged) = serde_json::to_value(merged) {
         patch.insert(KEY.into(), merged);
     }
+    Ok(())
 }
 
 /// Copies the patch's onboarding state into the settings `projection`.

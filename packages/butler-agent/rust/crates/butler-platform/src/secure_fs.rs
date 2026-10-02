@@ -266,7 +266,7 @@ pub fn rename(from: &Path, to: &Path) -> io::Result<()> {
 
 /// `.<name>.<pid>.<sequence>.<nanos>.tmp` next to `path`, unique within this
 /// process and practically unique across processes.
-fn unique_temporary(path: &Path) -> PathBuf {
+pub(crate) fn unique_temporary(path: &Path) -> PathBuf {
     static SEQUENCE: AtomicU64 = AtomicU64::new(0);
     let sequence = SEQUENCE.fetch_add(1, Ordering::Relaxed);
     let nanos = SystemTime::now()

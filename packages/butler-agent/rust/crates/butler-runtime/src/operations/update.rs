@@ -72,12 +72,14 @@ impl AppUpdateService {
         }
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(60))
+            .redirect(source::redirect_policy())
             .build()
             .map_err(|source| UpdateError::caused(UpdateCode::UpdateHttpUnavailable, source))?;
         let manifest_client = reqwest::Client::builder()
             .user_agent("Butler updater")
             .connect_timeout(MANIFEST_CONNECT_TIMEOUT)
             .timeout(MANIFEST_TIMEOUT)
+            .redirect(source::redirect_policy())
             .build()
             .map_err(|source| UpdateError::caused(UpdateCode::UpdateHttpUnavailable, source))?;
         let manifest = std::env::var("BUTLER_APP_UPDATE_MANIFEST")

@@ -31,6 +31,14 @@ async fn setup_11_onboarding_state_lives_in_the_agent() -> Result<(), HarnessErr
     let empty = json!({"consent_version": null, "accepted_at": null, "completed_at": null});
     assert_eq!(s.gw.settings().await?["onboarding"], empty);
 
+    for bypass in [
+        json!({"onboarding":{"consent_version":2}}),
+        json!({"onboarding":{"consent_version":2,"completed_at":COMPLETED_AT}}),
+    ] {
+        let rejected = s.gw.patch("/settings", bypass).await?;
+        assert_eq!(rejected.status, 400, "consent recorded without acceptance");
+        assert_eq!(s.gw.settings().await?["onboarding"], empty);
+    }
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
     let consent =
         s.gw.patch(
@@ -88,6 +96,14 @@ async fn setup_11_onboarding_state_lives_in_the_agent() -> Result<(), HarnessErr
             .await?;
     assert_eq!(bumped.data()["onboarding"]["consent_version"], 2);
     assert_eq!(bumped.data()["onboarding"]["completed_at"], COMPLETED_AT);
+    let cleared =
+        s.gw.patch("/settings", json!({"onboarding":{"accepted_at":null}}))
+            .await?;
+    assert_eq!(cleared.status, 400);
+    assert_eq!(
+        s.gw.settings().await?["onboarding"]["accepted_at"],
+        ACCEPTED_AT
+    );
     s.finish().await
 }
 

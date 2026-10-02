@@ -1,6 +1,7 @@
 //! Detached CLI supervision when no reachable manager owns this DATA.
 //! A clean service exit ends supervision. Crashes back off, at most five in a minute.
 
+use crate::host::service::instance_identity::CLI_SUPERVISOR_NONCE;
 use std::{
     process::{ExitCode, Stdio},
     time::{Duration, Instant},
@@ -20,7 +21,7 @@ pub(super) async fn run(
     let mut signals = butler_platform::process_control::shutdown_requests().map_err(io)?;
     loop {
         let began = Instant::now();
-        let (mut child, stdout, stderr) = spawn()?;
+        let (mut child, stdout, stderr, nonce) = spawn()?;
         let pid = child.id().unwrap_or_default();
         let status = tokio::select! {
             status = child.wait() => status.map_err(io)?,
@@ -58,7 +59,7 @@ pub(super) async fn run(
                 "[service-lifecycle] event=exit version={version} pid={pid} code={reason} Service was terminated by a signal."
             );
         }
-        if status.success() || requested_stop(&root, pid) {
+        if status.success() || requested_stop(&root, pid, &nonce) {
             return Ok(ExitCode::SUCCESS);
         }
         let now = Instant::now();
@@ -79,24 +80,28 @@ pub(super) async fn run(
     }
 }
 
-fn requested_stop(root: &std::path::Path, pid: u32) -> bool {
+fn requested_stop(root: &std::path::Path, pid: u32, nonce: &str) -> bool {
     let intent = std::fs::read(root.join("state/agent-stop-intent.json"))
         .ok()
         .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok());
     intent.is_some_and(|intent| {
-        intent["schema"] == "butler.agent-stop-intent.v1" && intent["pid"] == pid
+        intent["schema"] == "butler.agent-stop-intent.v1"
+            && intent["pid"] == pid
+            && intent["instance_id"] == nonce
     })
 }
 
 type Relay = tokio::task::JoinHandle<std::io::Result<()>>;
 
-fn spawn() -> Result<(tokio::process::Child, Relay, Relay), crate::host::HostError> {
+fn spawn() -> Result<(tokio::process::Child, Relay, Relay, String), crate::host::HostError> {
     let executable = butler_platform::process_names::current_exe().map_err(io)?;
+    let nonce = uuid::Uuid::new_v4().to_string();
     let mut command = tokio::process::Command::new(executable);
     command
         .args(std::env::args_os().skip(1))
         .env_remove(VARIABLE)
         .env("BUTLER_CLI_SUPERVISOR_PID", std::process::id().to_string())
+        .env(CLI_SUPERVISOR_NONCE, &nonce)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -108,6 +113,7 @@ fn spawn() -> Result<(tokio::process::Child, Relay, Relay), crate::host::HostErr
         child,
         tokio::spawn(relay(stdout, false)),
         tokio::spawn(relay(stderr, true)),
+        nonce,
     ))
 }
 
