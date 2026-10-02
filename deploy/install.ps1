@@ -59,8 +59,6 @@ function Install-Butler {
             $manifest.binarySha256 -notmatch '^[a-f0-9]{64}$') { throw 'Invalid Agent manifest' }
         $program = Join-Path $stage 'butler-agent.exe'
         if ((Get-FileHash $program -Algorithm SHA256).Hash -ne $manifest.binarySha256) { throw 'Binary checksum mismatch' }
-        & $program --installation-root $stage --resource-root "$stage/resources" doctor --check installation
-        if ($LASTEXITCODE -ne 0) { throw 'Agent installation check failed' }
         $name = "$version-$($manifest.binarySha256.Substring(0,8))"
         $target = Join-Path $agentHome $name
         if (Test-Path $target) {
@@ -68,11 +66,16 @@ function Install-Butler {
             if ($installed.binarySha256 -ne $manifest.binarySha256 -or $installed.resourcesSha256 -ne $manifest.resourcesSha256) {
                 throw 'Existing version differs from this archive; nothing activated'
             }
-            & "$target/butler-agent.exe" --installation-root $target --resource-root "$target/resources" doctor --check installation
-            if ($LASTEXITCODE -ne 0) { throw 'Existing version is damaged; remove it before reinstalling' }
         } else { Move-Item $stage $target; $stage = $null }
+        # Never execute a staging image that must then be moved or deleted.
+        # Full resource integrity must pass at the final path before activation.
+        & "$target/butler-agent.exe" --installation-root $target --resource-root "$target/resources" doctor --check installation
+        if ($LASTEXITCODE -ne 0) { throw 'Agent installation is damaged; nothing activated' }
         Enable-ButlerInstallation $agentHome $name $target $bin $start
         Write-Host 'Butler installed. Run: butler open'
+    } catch {
+        Write-Host "Installation failed before cleanup: $($_.Exception.Message)"
+        throw
     } finally {
         if ($stage -and (Test-Path $stage)) { [IO.Directory]::Delete((ConvertTo-ButlerExtendedPath $stage),$true) }
         [IO.Directory]::Delete((ConvertTo-ButlerExtendedPath $temp),$true)
