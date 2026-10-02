@@ -30,6 +30,8 @@ exe "$app/Contents/MacOS/Fake"
 exe "$helper/Contents/MacOS/Fake Helper"
 exe "$fw/Versions/A/Lib"
 exe "$app/Contents/Resources/bundled-agent/bin/butler-agent"
+agent=$app/Contents/Resources/bundled-agent/bin/butler-agent
+for role in memory restart update; do ln "$agent" "$agent ($role)"; done
 clang -dynamiclib -x c - -o "$fw/Versions/A/Libraries/libx.dylib" <<< 'int x(void){return 1;}'
 ln -s A "$fw/Versions/Current"
 ln -s Versions/Current/Lib "$fw/Lib"
@@ -43,6 +45,11 @@ grep -q 'Identifier=com.hexpy.butler.agent' <<< "$agent_signature" || { echo "ag
 app_entitlements=$(codesign -d --entitlements - "$app" 2>&1)
 grep -q allow-jit <<< "$app_entitlements" || { echo "app entitlements missing" >&2; exit 1; }
 [ "$(stat -f %Lp "$app/Contents/Resources/bundled-agent/bin/butler-agent")" = 555 ] || { echo "agent mode not restored" >&2; exit 1; }
+for role in memory restart update; do
+  alias="$agent ($role)"
+  [ "$(stat -f %Lp "$alias")" = 555 ] || { echo "role mode not restored" >&2; exit 1; }
+  [ "$(stat -f %i "$alias")" = "$(stat -f %i "$agent")" ] || { echo "role hardlink broken" >&2; exit 1; }
+done
 # Unofficial previews still verify real signatures, without an online ticket.
 export GITHUB_REF_NAME=v0.1.0-preview.1 BUTLER_SIGN_IDENTITY=-
 "$script" agent "$app/Contents/Resources/bundled-agent/bin/butler-agent"
@@ -73,5 +80,9 @@ hdiutil attach "$BUTLER_DMG_TEST_IMAGE" -nobrowse -readonly -mountpoint "$mount"
 [ "$(readlink "$mount/Butler.app/Contents/Frameworks/Lib.framework/Lib")" = Versions/Current/Lib ] || { echo "framework executable link changed" >&2; exit 1; }
 [ "$(readlink "$mount/Butler.app/Contents/Frameworks/Lib.framework/Resources")" = Versions/Current/Resources ] || { echo "framework resource link changed" >&2; exit 1; }
 codesign --verify --strict --deep "$mount/Butler.app"
+mounted_agent="$mount/Butler.app/Contents/Resources/bundled-agent/bin/butler-agent"
+for role in memory restart update; do
+  [ "$(stat -f %i "$mounted_agent ($role)")" = "$(stat -f %i "$mounted_agent")" ] || { echo "DMG role hardlink broken" >&2; exit 1; }
+done
 hdiutil detach "$mount"
 echo "selftest: ok"

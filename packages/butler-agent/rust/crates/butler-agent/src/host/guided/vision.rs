@@ -65,7 +65,7 @@ pub(crate) async fn catalog_for_visual_admission(
         return Ok(catalog);
     };
     if entry.provider_id != "zai"
-        || entry.model_id != "glm-5.2"
+        || entry.model_id != butler_models::models::ZAI_IMAGE_MODEL
         || entry.image_carrier_protocol.as_deref() != Some("zai_mcp_vision")
     {
         return Ok(catalog);

@@ -153,6 +153,7 @@ impl AppApplication {
         &self,
         turn_id: String,
     ) -> Result<MessageSendResult, GatewayApplicationError> {
+        self.wait_retry_ready().await?;
         self.recover_expired().await?;
         let operation_turn = turn_id;
         let source = self

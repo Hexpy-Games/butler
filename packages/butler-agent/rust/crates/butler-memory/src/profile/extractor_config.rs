@@ -24,7 +24,7 @@ pub(crate) fn read(data_root: &Path) -> ProfilingExtractorModelSnapshot {
     }
     .and_then(Value::as_str)
     .and_then(valid_model)
-    .unwrap_or_else(|| butler_models::models::DEFAULT_MODEL_REF.to_owned());
+    .unwrap_or_else(|| butler_models::models::default_model_at(data_root).unwrap_or_default());
     let reasoning = config
         .pointer("/personalization/profiling/extractorReasoningEffort")
         .and_then(Value::as_str)

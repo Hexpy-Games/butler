@@ -137,7 +137,7 @@ cleanup() {
 # unless BUTLER_SIGN_NO_RUNTIME=1 (disk images). A read-only payload file (and
 # its directory) is made writable just for the call.
 sign_path() {
-  local path=$1 mode="" dmode="" dir=""
+  local path=$1 mode="" dmode="" dir="" links="" alias status=0
   shift
   local args=(--force --sign "$BUTLER_SIGN_IDENTITY")
   if [ "${BUTLER_SIGN_NO_RUNTIME:-}" != 1 ]; then args+=(--options runtime); fi
@@ -147,13 +147,25 @@ sign_path() {
     dir=$(dirname "$path")
     mode=$(stat -f %Lp "$path")
     dmode=$(stat -f %Lp "$dir")
+    links=$(find "$dir" -maxdepth 1 -type f -inum "$(stat -f %i "$path")" ! -path "$path")
     chmod u+w "$path" "$dir"
   fi
-  codesign "${args[@]}" "$@" "$path"
+  codesign "${args[@]}" "$@" "$path" || status=$?
   if [ -n "$mode" ]; then
+    # codesign replaces hard-linked Mach-O files with a new inode. Rebind every
+    # sibling link before restoring permissions or sealing the enclosing App.
+    while IFS= read -r alias; do
+      [ -n "$alias" ] || continue
+      if [ "$status" -eq 0 ]; then
+        rm -f "$alias"
+        ln "$path" "$alias"
+      fi
+      chmod "$mode" "$alias"
+    done <<< "$links"
     chmod "$mode" "$path"
     chmod "$dmode" "$dir"
   fi
+  return "$status"
 }
 
 # assert_signed <path>: valid, expected team, secure timestamp, hardened runtime
@@ -188,17 +200,23 @@ is_bundle_main() {
 }
 
 sign_app() {
-  local app=${1%/} list files bundles f b
+  local app=${1%/} list files bundles f b agent agent_inode=""
   [ -d "$app/Contents" ] || die "not an app bundle: $app"
   [ -f "$entitlements" ] || die "entitlements missing: $entitlements"
   list=$(mktemp)
   files=$(mktemp)
   bundles=$(mktemp)
+  agent=$app/Contents/Resources/bundled-agent/bin/butler-agent
+  if [ -f "$agent" ]; then agent_inode=$(stat -f '%d:%i' "$agent"); fi
 
   # 1. Loose Mach-O code (agent, dylibs, helper tools), not bundle main executables.
   find "$app" -type f -print0 | xargs -0 file | sed -n 's/: *Mach-O .*$//p' > "$list"
   while IFS= read -r f; do
     if is_bundle_main "$f"; then continue; fi
+    # The canonical Agent owns the signature identifier. Role aliases are the
+    # same code, so signing them again would split/rewrite that shared inode.
+    if [ -n "$agent_inode" ] && [ "$f" != "$agent" ] &&
+      [ "$(stat -f '%d:%i' "$f")" = "$agent_inode" ]; then continue; fi
     printf '%s\n' "$f" >> "$files"
   done < "$list"
   while IFS= read -r f; do

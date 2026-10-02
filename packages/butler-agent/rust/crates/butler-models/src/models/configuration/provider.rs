@@ -20,8 +20,6 @@ use crate::models::{
 };
 use butler_turn::btcc::{BtccError, ModelRoundError, ProviderRequestError};
 
-const DEFAULT_MODEL_REF: &str = "openai/gpt-5.5-codex";
-
 impl ProviderRequestConfigPort for ModelConfiguration {
     fn effective_prompt_model(&self, requested: Option<&str>) -> Result<String, ModelRoundError> {
         let config = super::read_object_sync(&self.data_root.join("butler.config.json"));
@@ -30,7 +28,7 @@ impl ProviderRequestConfigPort for ModelConfiguration {
             .filter(|value| !value.is_empty())
             .map(str::to_owned)
             .or_else(|| super::configured_default(&config).map(str::to_owned))
-            .unwrap_or_else(|| DEFAULT_MODEL_REF.to_owned());
+            .unwrap_or_else(|| self.default_model_from(&self.data_root).model);
         let provider = parse_model_ref(&model).provider_id;
         if [
             "openai",
@@ -166,11 +164,7 @@ impl ModelConfiguration {
         let prompt_reasoning_effort = (metadata.provider_id == "openai")
             .then(|| dynamic::configured_reasoning(&self.environment, &read.config));
         let wire_model = if metadata.provider_id == "openai" {
-            if configured_openai_request {
-                requested.clone()
-            } else {
-                parsed.model_id.clone()
-            }
+            parsed.model_id.clone()
         } else {
             metadata.model_id.clone()
         };
@@ -345,6 +339,7 @@ fn effective_model(
     let requested = butler_core::public_text::trim_js_whitespace(requested);
     if requested.is_empty() {
         dynamic::configured_model(environment, &read.config)
+            .unwrap_or_else(|| read.catalog.view().default_model_ref.clone())
     } else {
         requested.into()
     }
@@ -356,10 +351,17 @@ fn registered_config<'a>(
     model_ref: &str,
 ) -> Option<&'a RegisteredHostedModelConfig> {
     let parsed = parse_model_ref(model_ref);
-    read.registered.iter().find(|value| {
-        value.provider_id == provider
-            && (value.model_ref == parsed.canonical_ref || value.model_id == parsed.model_id)
-    })
+    read.registered
+        .iter()
+        .find(|value| {
+            value.provider_id == provider
+                && (value.model_ref == parsed.canonical_ref || value.model_id == parsed.model_id)
+        })
+        .or_else(|| {
+            read.default_connection
+                .as_ref()
+                .filter(|value| value.model_ref == parsed.canonical_ref)
+        })
 }
 #[expect(
     clippy::needless_pass_by_value,

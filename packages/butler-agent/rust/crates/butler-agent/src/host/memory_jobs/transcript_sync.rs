@@ -209,10 +209,10 @@ impl LegacySessionSync {
                             )
                             .await
                             {
-                                eprintln!("[session-sync] hot index failed: {}", failure.code());
+                                log_hot_failure("index", failure.code());
                             }
                         }
-                        Err(code) => eprintln!("[session-sync] hot save failed: {code}"),
+                        Err(code) => log_hot_failure("save", code.message()),
                         _ => {}
                     }
                     let admission = cancellation.child_token();
@@ -242,7 +242,7 @@ impl LegacySessionSync {
                 })?
                 .map_err(|failure| failure.code().to_owned())?;
         }
-        println!("[session-sync] legacySessions={visited}");
+        butler_core::diagnostic!("[session-sync] legacySessions={visited}");
         Ok(())
     }
 }
@@ -270,4 +270,8 @@ where
             Err(CognitionError::new(CognitionCode::LegacySessionIndexTimeout, "legacy_session_index_timeout"))
         }
     }
+}
+
+fn log_hot_failure(operation: &str, code: &str) {
+    butler_core::diagnostic!("[session-sync] hot {operation} failed: {code}");
 }

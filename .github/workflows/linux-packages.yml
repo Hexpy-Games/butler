@@ -50,6 +50,8 @@ jobs:
     name: Package (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 150
+    env:
+      BUTLER_PACKAGE_REF_NAME: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
     strategy:
       fail-fast: false
       matrix:
@@ -103,6 +105,9 @@ jobs:
         working-directory: packages/butler-agent/rust
         run: |
           set -euo pipefail
+          export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
+          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          export GITHUB_REF_NAME="$BUTLER_PACKAGE_REF_NAME"
           if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == refs/tags/v* ]]; then
             cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
           else
@@ -112,6 +117,11 @@ jobs:
 
       - name: Package the App
         run: |
+          set -euo pipefail
+          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          export GITHUB_REF_NAME="$BUTLER_PACKAGE_REF_NAME"
+          bun test tests/unit/package-versions.test.ts
+          bun run deploy/app/linux-version-smoke.ts
           bun run packages/butler-app/scripts/release/package-linux-app.ts \
             --platform=${{ matrix.target }} ${{ matrix.formats }} --out=dist/release/app-linux
 

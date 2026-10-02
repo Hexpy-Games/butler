@@ -6,6 +6,7 @@ import {
   copyFileSync,
   existsSync,
   readdirSync,
+  readFileSync,
   statSync,
 } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -76,6 +77,17 @@ if (!existsSync(nativeAgentResources) || !statSync(nativeAgentResources).isDirec
 accessSync(nativeAgentBinary, constants.X_OK);
 run("node", [resolve(scriptDir, "prepare-process-links.mjs"), nativeAgentBinary]);
 setNativePayloadReadOnly(nativeAgentRoot);
+
+// Electron's runtime package retains the exact release identity. Apple bundle
+// versions (including Electron helpers) require three numeric components.
+const version = JSON.parse(readFileSync(resolve(nativeAgentRoot, "native-agent-manifest.json"), "utf8")).appVersion;
+const numericVersion = /^\d+\.\d+\.\d+/u.exec(version)?.[0];
+if (!numericVersion) throw new Error(`invalid packaged App version: ${version}`);
+for (const path of walk(appPath).filter((path) => path.endsWith(".app/Contents/Info.plist"))) {
+  for (const key of ["CFBundleShortVersionString", "CFBundleVersion"]) {
+    run("/usr/libexec/PlistBuddy", ["-c", `Set :${key} ${numericVersion}`, path]);
+  }
+}
 
 copyFileSync(iconPath, targetIconPath);
 setPlistString("CFBundleDisplayName", "Butler");

@@ -113,7 +113,18 @@ mod tests {
     /// marker counts only directly above its test with a known category.
     // test-category: pure-logic
     #[test]
-    fn counts_tests_and_their_category_markers() {
+    fn counts_test_metadata_and_rejects_unguarded_scenarios() {
+        for (body, violations) in [
+            ("butler_e2e::gate!(); helper();", 0),
+            ("use crate::Helper; butler_e2e::gate!(); helper();", 0),
+            ("helper(); butler_e2e::gate!();", 1),
+            ("if false { butler_e2e::gate!(); } helper();", 1),
+            ("let text = \"butler_e2e::gate!();\"; helper();", 1),
+            ("helper();", 1),
+        ] {
+            let source = format!("#[tokio::test] async fn scenario() {{ {body} }}");
+            assert_eq!(crate::e2e_gate::ungated(&source).unwrap().len(), violations);
+        }
         let marked = "// test-category: race\n#[test]\nfn a() {}\n";
         let doc_then_marker = "/// Why.\n// test-category: format-pin\n#[tokio::test(flavor = \"multi_thread\")]\nasync fn a() {}\n";
         let between_attributes = "#[cfg(unix)]\n// test-category: security\n#[test]\nfn a() {}\n";

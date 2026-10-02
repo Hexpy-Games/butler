@@ -20,7 +20,9 @@ impl McpClient {
         credential_id: Option<&str>,
         signal: &CancellationToken,
     ) -> Result<String, McpClientError> {
-        if provider_id != "zai" || model_id != "glm-5.2" {
+        // Share the catalog carrier identity without importing the Models owner.
+        if provider_id != "zai" || model_id != include_str!("../models/catalog/zai-image-model.txt")
+        {
             return Err(failure(
                 "image_carrier_unverified",
                 "Z.AI Vision is unavailable for this model.",

@@ -125,6 +125,7 @@ async fn load(
     let web_search = read.config.get("webSearch").unwrap_or(&Value::Null);
     let planning = web_search.get("planning").unwrap_or(&Value::Null);
     let native_settings = serde_json::json!({
+        "routine_default": {"model": catalog.default_model_ref, "effort": catalog.default_reasoning_effort},
         "update_previews": read.config.pointer("/update/previews").and_then(Value::as_bool).unwrap_or(false),
         "bridge_mode": bridge_mode,
         "server_url": server_url,

@@ -1,6 +1,6 @@
 //! The service's poll loop: inbound dispatch, maintenance and the stop
 //! conditions (a stop request, the shutdown flag, the App's foreground lease,
-//! or an interrupted turn that needs a new process).
+//! or an unrecoverable infrastructure failure).
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -93,12 +93,9 @@ pub(super) async fn poll_service(
                 Err(error) => break Err(error),
             };
         log_inbound_summary(logs, summary);
-        if summary.interrupted > 0 {
-            // Unrequested: non-zero, so launchd and systemd start a new one.
-            break Err(failure(
-                "native_service_replacement_required",
-                "an interrupted turn needs a new service process",
-            ));
+        #[cfg(debug_assertions)]
+        if let Err(error) = injected_service_failure(&config.data_root).await {
+            break Err(error);
         }
         tokio::select! {
             () = stop.wait() => break Ok(()),
@@ -184,4 +181,20 @@ async fn wait_for_foreground_close(
         Some(lease) => lease.closed().await,
         None => std::future::pending().await,
     }
+}
+
+#[cfg(debug_assertions)]
+async fn injected_service_failure(data_root: &std::path::Path) -> Result<(), BtccError> {
+    if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
+        && std::env::var("BUTLER_E2E_FORCE_SERVICE_EXIT").as_deref() == Ok("1")
+        && tokio::fs::remove_file(data_root.join("e2e-service-exit"))
+            .await
+            .is_ok()
+    {
+        return Err(failure(
+            "native_service_replacement_required",
+            "Injected unrecoverable service failure",
+        ));
+    }
+    Ok(())
 }

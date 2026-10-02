@@ -2,7 +2,7 @@ use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
 use butler_core::json::JsonDocument;
-use butler_turn::btcc::{BtccError, ToolExecutionError};
+use butler_turn::btcc::ToolExecutionError;
 
 use super::{GuidedTools, bridge_error, encoded};
 
@@ -61,5 +61,5 @@ pub(super) async fn describe(
         signal,
     ))
     .await
-    .map_err(|error| ToolExecutionError::Integrity(BtccError::relayed(error.code, error.message)))
+    .or_else(|error| Ok(Some(bridge_error(error.code, "The MCP server could not describe this tool. Retry discovery or choose an enabled tool."))))
 }

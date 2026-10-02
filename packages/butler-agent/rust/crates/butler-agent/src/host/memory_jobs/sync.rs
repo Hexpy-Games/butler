@@ -187,7 +187,7 @@ async fn poll(
             Err(error) => {
                 // Diagnostic codes only. The durable queue retains failed work;
                 // paths, prompts, credentials and raw provider errors stay private.
-                eprintln!("[native-memory-sync] {}", error.code());
+                butler_core::diagnostic!("[native-memory-sync] {}", error.code());
                 idle_polls = idle_polls.saturating_add(1);
                 backoff(idle_polls, DEFERRED_CAP)
             }

@@ -242,7 +242,7 @@ fn admitted_image(
 
 fn frozen_carrier_valid(tuple: &ImageCarrierTuple, capability: &ImageCapabilityEvidence) -> bool {
     tuple.provider_id == "zai"
-        && tuple.model_id == "glm-5.2"
+        && tuple.model_id == butler_models::models::ZAI_IMAGE_MODEL
         && tuple.carrier_protocol == "zai_mcp_vision"
         && tuple.endpoint_profile_id == capability.endpoint_profile_id
         && tuple.catalog_capability_revision == capability.catalog_capability_revision

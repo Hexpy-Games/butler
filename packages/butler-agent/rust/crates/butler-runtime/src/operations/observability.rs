@@ -1,7 +1,9 @@
 //! Bounded native log readers and one-owner follow state.
 
+mod summary;
 #[cfg(test)]
 mod tests;
+pub use summary::{export_line, log_is_error, log_summary};
 
 use butler_core::public_text::fixed_regex;
 use butler_platform::secure_fs::FileId;
@@ -214,10 +216,16 @@ pub fn redact_log_line(line: &str) -> String {
     static BEARER: OnceLock<Regex> = OnceLock::new();
     static API_KEY: OnceLock<Regex> = OnceLock::new();
     static BOT_TOKEN: OnceLock<Regex> = OnceLock::new();
+    static SECRET_FIELD: OnceLock<Regex> = OnceLock::new();
+    static SECRET_VALUE: OnceLock<Regex> = OnceLock::new();
     let bearer = BEARER.get_or_init(|| fixed_regex(r"(?i)(Bearer\s+)[A-Za-z0-9._-]+"));
     let api_key = API_KEY.get_or_init(|| fixed_regex(r"(?i)(OPENAI_API_KEY=)[^\s]+"));
     let bot = BOT_TOKEN.get_or_init(|| fixed_regex(r"bot\d+:[A-Za-z0-9_-]+"));
     let redacted = bearer.replace_all(line, "$1[redacted]");
     let redacted = api_key.replace_all(&redacted, "$1[redacted]");
-    bot.replace_all(&redacted, "bot[redacted]").into_owned()
+    let redacted = bot.replace_all(&redacted, "bot[redacted]");
+    let field = SECRET_FIELD.get_or_init(|| fixed_regex(r#"(?i)((?:[a-z_]*api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|password)["']?\s*[:=]\s*["']?)[^\s,"'}]+"#));
+    let value = SECRET_VALUE.get_or_init(|| fixed_regex(r"\bsk-[A-Za-z0-9_-]+"));
+    let redacted = field.replace_all(&redacted, "$1[redacted]");
+    value.replace_all(&redacted, "[redacted]").into_owned()
 }

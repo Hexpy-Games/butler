@@ -73,7 +73,7 @@ async fn actual_config_reads_preserve_first_records_defaults_and_secret_boundari
     assert_eq!(read.local.len(), 1);
     assert_eq!(read.local[0].context_window_tokens, 8192.0);
     assert_eq!(read.registered.len(), 1);
-    assert_eq!(read.configured_default_model(), None);
+    assert_eq!(read.configured_default_model(), Some("local/sample"));
     assert_eq!(read.catalog.view().default_model_ref, "local/sample");
     assert_eq!(read.catalog.view().provider_credentials.len(), 1);
     assert_eq!(

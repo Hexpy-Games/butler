@@ -1,6 +1,9 @@
 use serde_json::{Map, Value, json};
 
-use crate::models::{ProviderPromptRequest, ProviderRequestConfig, ReasoningEffort};
+use crate::models::{
+    KIMI_ADAPTIVE_MODEL, OPENCODE_THINKING_MODEL, ProviderPromptRequest, ProviderRequestConfig,
+    ReasoningEffort,
+};
 use butler_turn::btcc::ModelRoundError;
 
 pub(super) fn anthropic(
@@ -26,18 +29,16 @@ pub(super) fn anthropic(
     {
         body.insert("system".into(), instructions.into());
     }
-    let claude5 = ["claude-fable-5", "claude-opus-5", "claude-sonnet-5"]
-        .iter()
-        .any(|base| {
-            config.wire_model == *base
-                || config
-                    .wire_model
-                    .strip_prefix(base)
-                    .and_then(|suffix| suffix.strip_prefix('-'))
-                    .is_some_and(|version| {
-                        !version.is_empty() && version.bytes().all(|byte| byte.is_ascii_digit())
-                    })
-        });
+    let claude5 = crate::models::ANTHROPIC_ADAPTIVE_MODELS.iter().any(|base| {
+        config.wire_model == *base
+            || config
+                .wire_model
+                .strip_prefix(base)
+                .and_then(|suffix| suffix.strip_prefix('-'))
+                .is_some_and(|version| {
+                    !version.is_empty() && version.bytes().all(|byte| byte.is_ascii_digit())
+                })
+    });
     if claude5 {
         body.insert("thinking".into(), json!({"type":"adaptive"}));
         if let Some(reasoning) = reasoning.filter(|value| *value != ReasoningEffort::None) {
@@ -46,7 +47,7 @@ pub(super) fn anthropic(
                 json!({"effort":super::effort(reasoning)}),
             );
         }
-    } else if config.wire_model == "claude-haiku-4-5" {
+    } else if config.wire_model == crate::models::ANTHROPIC_BUDGET_MODEL {
         body.insert(
             "thinking".into(),
             reasoning
@@ -168,7 +169,7 @@ pub(super) fn chat(
     match (provider, reasoning) {
         ("zai" | "zai-api" | "xai" | "opencode-go", Some(reasoning))
             if reasoning != ReasoningEffort::None
-                && (provider != "opencode-go" || config.wire_model == "glm-5.3") =>
+                && (provider != "opencode-go" || config.wire_model == OPENCODE_THINKING_MODEL) =>
         {
             body.insert("reasoning_effort".into(), super::effort(reasoning).into());
         }
@@ -179,7 +180,7 @@ pub(super) fn chat(
             );
         }
         ("kimi", Some(reasoning))
-            if config.wire_model == "kimi-k3" && reasoning != ReasoningEffort::None =>
+            if config.wire_model == KIMI_ADAPTIVE_MODEL && reasoning != ReasoningEffort::None =>
         {
             body.insert("reasoning_effort".into(), super::effort(reasoning).into());
         }

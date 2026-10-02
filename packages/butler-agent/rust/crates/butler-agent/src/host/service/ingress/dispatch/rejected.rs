@@ -76,7 +76,7 @@ pub(super) async fn settle(
     if !internal_child
         && let Err(error) = interrupted::report(item, bindings, delivery, Some(code)).await
     {
-        eprintln!(
+        butler_core::diagnostic!(
             "[native-btcc] rejection report unavailable code={}",
             error.code
         );
@@ -124,7 +124,7 @@ async fn close_child(
         .complete_child(&binding.session_id, turn_id, "failed", summary)
         .await
     {
-        eprintln!(
+        butler_core::diagnostic!(
             "[native-btcc] rejected child result unavailable code={}",
             error.code()
         );

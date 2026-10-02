@@ -106,8 +106,8 @@ pub(in crate::gateway::application) fn update_session_controls(
     if let Some(plan_mode) = update.plan_mode {
         controls.plan_mode = plan_mode;
     }
-    assert_selectable(&controls.model, available_models(facts))?;
-    let controls = normalize_controls(controls, available_models(facts));
+    assert_selectable(&controls.model, &available_models(facts))?;
+    let controls = normalize_controls(controls, &available_models(facts));
     let (controls_key, explicit_key, revision_key) = session_control_keys(chat_id);
     write_json(db, &controls_key, &controls_json(&controls), now)?;
     write_json(db, &explicit_key, &serde_json::Value::Bool(true), now)?;
