@@ -58,7 +58,9 @@ try {
     & "$PSScriptRoot/install.ps1" --no-start
     if ($LASTEXITCODE) { throw 'Isolated PowerShell installation failed' }
     $launcher = "$env:LOCALAPPDATA/Butler/bin/butler.exe"
-    $env:BUTLER_E2E_INSTALLED_ROOT = "$env:LOCALAPPDATA/Butler/agent/$env:BUTLER_VERSION"
+    $active = (Get-Content "$env:LOCALAPPDATA/Butler/agent/current" -Raw).Trim()
+    if ($active.Contains('..') -or $active -match '[\\/]') { throw 'Invalid installed projection' }
+    $env:BUTLER_E2E_INSTALLED_ROOT = Join-Path "$env:LOCALAPPDATA/Butler/agent" $active
     if ($StartupContract) {
         & "$PSScriptRoot/windows-startup-smoke.ps1" -Launcher $launcher
         if ($LASTEXITCODE) { throw 'Installed Task Scheduler contract failed' }
