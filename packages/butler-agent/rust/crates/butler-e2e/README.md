@@ -187,7 +187,9 @@ well as health and the current PID's instance record. The dispatch-readiness
 scenario deliberately holds the executor and observes the earlier health-only
 state. Shutdown ordering and record-write fault hooks run in the stub tier in
 both debug and release builds, so strict release budgets exercise the same
-injected product operations.
+injected product operations. App and maintenance owners also honor the same
+stub fixture clock in both profiles; a fixture day must not become a due daily
+job on the host's real date.
 
 ## Idle resources at owner scale (PERF-IDLE)
 

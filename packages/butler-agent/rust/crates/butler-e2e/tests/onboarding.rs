@@ -280,6 +280,21 @@ async fn onb_02_provider_401_fails_without_retry_storm() -> Result<(), HarnessEr
         .replay_only()
         .start()
         .await?;
+    // The maintenance owner must use the same fixture date as App admission.
+    let marker = s
+        .sandbox
+        .data
+        .join("state/scheduler/context-maintenance.json");
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while !marker.exists() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "maintenance did not settle"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let maintenance: serde_json::Value = serde_json::from_slice(&std::fs::read(marker)?)?;
+    assert_eq!(maintenance["lastRunDate"], "2026-09-27", "{maintenance}");
     let exchange = s.provider()?.exchange_for("connected", 0)?;
     s.provider()?.inject(Fault::always(
         exchange,
