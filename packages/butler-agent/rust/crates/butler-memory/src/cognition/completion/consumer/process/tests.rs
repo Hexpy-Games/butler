@@ -274,3 +274,5 @@ async fn malformed_queue_head_keeps_its_error_after_canonical_catchup() {
         .unwrap();
     assert_eq!(cursor, "outcome");
 }
+
+mod vector;
