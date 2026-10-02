@@ -48,11 +48,23 @@ impl GatewayFeedback for super::AppApplication {
             if changed {
                 let now = this.dependencies.identity_clock.now_iso();
                 let subscribers = this.subscribers.clone();
-                this.storage.execute(move |db| {
-                    super::events::append(db, &subscribers, "memory.operation", None,
-                        serde_json::Map::from_iter([("kind".into(), serde_json::json!("recent_feedback"))]), &now)
+                this.storage
+                    .execute(move |db| {
+                        super::events::append(
+                            db,
+                            &subscribers,
+                            "memory.operation",
+                            None,
+                            serde_json::Map::from_iter([(
+                                "kind".into(),
+                                serde_json::json!("recent_feedback"),
+                            )]),
+                            &now,
+                        )
                         .map(|_| ())
-                }).await.map_err(super::app_error)?;
+                    })
+                    .await
+                    .map_err(super::app_error)?;
             }
             Ok(value)
         })

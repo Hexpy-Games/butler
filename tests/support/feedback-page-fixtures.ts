@@ -43,6 +43,14 @@ export async function feedbackFlow(page: Page, locale: string, counts: () => { r
   const card = page.locator('[data-settings-section-id="recent-feedback"]');
   const rows = card.locator('[data-test-class="feedback-row"]');
   if (await rows.count() !== 3) throw new Error("Complete active list required");
+  const beforeEvent = counts().reads;
+  await page.evaluate(() => {
+    const streams = (window as unknown as { memorySmokeStreams: EventSource[] }).memorySmokeStreams;
+    for (const stream of streams) stream.onmessage?.(new MessageEvent("message", { data: JSON.stringify({ id: 10002, type: "memory.operation", payload: { kind: "recent_feedback" } }) }));
+  });
+  await page.waitForFunction(() => document.querySelectorAll('[data-test-class="feedback-row"]').length === 3);
+  await page.waitForTimeout(100);
+  if (counts().reads <= beforeEvent) throw new Error("Feedback changes must refresh the card");
   const before = counts().reads;
   await page.waitForTimeout(1000);
   if (counts().reads !== before) throw new Error("Idle feedback polling");
