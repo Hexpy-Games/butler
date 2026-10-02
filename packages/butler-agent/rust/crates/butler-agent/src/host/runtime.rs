@@ -180,13 +180,13 @@ impl AgentRuntime {
             bindings: stores.bindings.clone(),
             embedding: embedding.clone(),
         }));
-        let context_maintenance = Arc::new(ContextMaintenance::new(
-            paths.data_root.clone(),
-            tool_output.clone(),
-            metric_files.clone(),
-            date_parser.clone(),
-            daily_cognition,
-        ));
+        let context_maintenance = ContextMaintenance::for_cognition(
+            &paths.data_root,
+            &tool_output,
+            &metric_files,
+            &date_parser,
+            &daily_cognition,
+        );
         let command = Arc::new(crate::host::guided::command::GuidedCommand::new(
             commands.clone(),
             tool_output.clone(),
@@ -350,7 +350,7 @@ impl AgentRuntime {
             tool_artifacts,
             memory_query: memory_query.clone(),
             memory_recall: memory_recall.clone(),
-            memory_writes,
+            memory_writes: memory_writes.clone(),
             conversation_reference: conversation_reference.clone(),
             conversation_tools: conversation_tools.clone(),
             compactions: ContextCompactionRepository::new(stores.btcc.clone()),
@@ -428,9 +428,7 @@ impl AgentRuntime {
             host: owner,
         });
         Ok(Self {
-            memory_acquisition: Arc::new(
-                crate::host::embedding::worker::assets::Acquisition::start(paths.data_root.clone()),
-            ),
+            memory_acquisition: memory_acquisition(&paths.data_root),
             service_shutdown: stop.clone(),
             btcc: assembly.btcc,
             host: assembly.host,
@@ -455,6 +453,8 @@ impl AgentRuntime {
             skills: skills.clone(),
             mcp_client,
             context_maintenance,
+            daily_cognition,
+            feedback: memory_writes.feedback.clone(),
             profile,
         })
     }
@@ -465,5 +465,13 @@ fn process_clocks() -> Result<(Arc<SystemPromptClock>, Arc<super::DateParser>), 
     Ok((
         Arc::new(SystemPromptClock::new().map_err(setup)?),
         Arc::new(super::DateParser::from_process().map_err(setup)?),
+    ))
+}
+
+fn memory_acquisition(
+    root: &std::path::Path,
+) -> Arc<crate::host::embedding::worker::assets::Acquisition> {
+    Arc::new(crate::host::embedding::worker::assets::Acquisition::start(
+        root.to_path_buf(),
     ))
 }

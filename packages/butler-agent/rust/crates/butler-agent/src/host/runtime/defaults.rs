@@ -133,14 +133,17 @@ pub(super) async fn open_profile(
     use std::sync::Arc;
     let profile = Arc::new(ProfileService::new(
         paths.data_root.clone(),
-        cognition_root,
+        cognition_root.clone(),
         Arc::new(PersonaPresets::new(paths.resource_root.clone())),
         writes,
         coordinator,
         Arc::new(SystemIdentity),
-        Arc::new(ProfileConversationSources::new(
-            butler_turn::conversation::conversation_store_path(&paths.data_root),
-        )),
+        Arc::new(
+            ProfileConversationSources::new(butler_turn::conversation::conversation_store_path(
+                &paths.data_root,
+            ))
+            .with_feedback(cognition_root.join("feedback")),
+        ),
         provider,
     ));
     profile

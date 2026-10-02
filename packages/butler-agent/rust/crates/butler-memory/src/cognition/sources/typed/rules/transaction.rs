@@ -10,6 +10,8 @@ pub(super) enum Request {
     Remember {
         input: ExplicitMemoryUpdateInput,
         target: Option<RememberedRuleTarget>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        feedback: Option<crate::cognition::FeedbackPromotion>,
     },
     Forget {
         target: RememberedRuleTarget,
@@ -21,7 +23,7 @@ pub(super) enum Request {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(super) struct Intent {
-    request: Request,
+    pub(super) request: Request,
     pub entry: Entry,
     text: String,
     binding: ExplicitRuleBinding,
@@ -42,7 +44,12 @@ pub(super) fn run(
 ) -> CognitionResult<Option<RememberedRuleReceipt>> {
     let root = owner.root();
     if let Some(pending) = read_json::<Intent>(&root.join("pending.json"))? {
-        complete(owner, &pending)?;
+        if super::feedback::valid(owner, &pending)? {
+            complete(owner, &pending)?;
+        } else {
+            fs::remove_file(root.join("pending.json")).map_err(failure_source)?;
+            butler_platform::secure_fs::sync_path(&root).map_err(failure_source)?;
+        }
     }
     let Some(request) = request else {
         return Ok(None);
@@ -77,6 +84,9 @@ pub(super) fn run(
         return Ok(Some(result));
     }
     let intent = prepare(owner, request)?;
+    if !super::feedback::valid(owner, &intent)? {
+        return Err(failure("feedback_revision_changed"));
+    }
     ensure_data_authority(
         &owner.data_root,
         &[&root.join("operations"), &root.join("pending.json")],

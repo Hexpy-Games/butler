@@ -2,7 +2,7 @@
 use butler_memory::cognition::{CognitionCode, CognitionError, RememberedRuleOwner};
 use std::{path::Path, sync::Arc};
 
-pub(super) fn configure(owner: RememberedRuleOwner, data: &Path) -> RememberedRuleOwner {
+pub(in crate::host) fn configure(owner: RememberedRuleOwner, data: &Path) -> RememberedRuleOwner {
     if std::env::var("BUTLER_E2E_TIER").as_deref() != Ok("stub")
         || std::env::var("BUTLER_E2E_RULE_CRASH_POINTS").as_deref() != Ok("1")
     {

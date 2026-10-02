@@ -9,14 +9,28 @@ use butler_memory::cognition::{FeedbackBufferService, PhaseError};
 use butler_memory::profile::{ProfileModelTranscriptCaptureOptions, ProfileService, ProfilingMode};
 
 pub(in crate::host) struct ProfileConsolidation {
+    pub(in crate::host) provider: Arc<butler_models::models::ModelProvider>,
+    pub(in crate::host) rules: butler_memory::cognition::RememberedRuleOwner,
     pub(in crate::host) profile: Arc<ProfileService>,
     pub(in crate::host) feedback: Arc<FeedbackBufferService>,
 }
 
 impl ProfileConsolidation {
-    pub(in crate::host) fn feedback_triage(&self) -> Result<Map<String, Value>, PhaseError> {
-        let counts = self.feedback.counts(now_ms()).map_err(feedback_error)?;
-        Ok(butler_core::json::json_object!({"active_feedback_count":counts.active_count}))
+    pub(in crate::host) async fn feedback_triage(
+        &self,
+        cancellation: &CancellationToken,
+    ) -> Result<Map<String, Value>, PhaseError> {
+        let report = self
+            .feedback
+            .consolidate_feedback(
+                &self.rules,
+                self.profile.as_ref(),
+                self.provider.as_ref(),
+                cancellation.clone(),
+            )
+            .await
+            .map_err(feedback_error)?;
+        Ok(report.as_object().cloned().unwrap_or_default())
     }
 
     pub(in crate::host) async fn consolidate(

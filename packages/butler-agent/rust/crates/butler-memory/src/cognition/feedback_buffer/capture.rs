@@ -33,6 +33,8 @@ pub struct FeedbackCapture {
     pub needs_clarification: bool,
     /// Existing identical Instructions handle, verified by the host.
     pub represented_by: Option<String>,
+    /// Exact Instructions revision selected from the admitted turn snapshot.
+    pub instruction_target: Option<crate::cognition::RememberedRuleTarget>,
 }
 
 impl FeedbackBufferService {
@@ -68,7 +70,15 @@ impl FeedbackBufferService {
         let root = self.paths.cognition_root(&self.data_root).join("feedback");
         let data = self.data_root.clone();
         let found = tokio::task::spawn_blocking(move || {
-            mutable_paths::ensure_data_authority(&data, &[&root])?;
+            mutable_paths::ensure_data_authority(
+                &data,
+                &[
+                    &root,
+                    &root.join("pending"),
+                    &root.join("feedback.md"),
+                    &root.join("generation"),
+                ],
+            )?;
             store::pending(&root).map(|paths| !paths.is_empty())
         })
         .await
@@ -84,7 +94,18 @@ impl FeedbackBufferService {
 }
 
 fn capture(root: &std::path::Path, input: FeedbackCapture) -> CognitionResult<Value> {
-    if input.target_ref.contains(['\n', '\r']) || input.scope.contains(['\n', '\r']) {
+    if [
+        &input.target_ref,
+        &input.scope,
+        &input.category,
+        &input.operation_id,
+        &input.session_id,
+        &input.message_id,
+        &input.turn_id,
+    ]
+    .iter()
+    .any(|value| value.contains(['\n', '\r']))
+    {
         return Err(store::failure(std::io::Error::other(
             "Invalid feedback field",
         )));
@@ -130,7 +151,9 @@ fn build_entry(
     let iso = now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let mut entry = FeedbackEntry {
         feedback_id: id,
-        status: if input.needs_clarification {
+        status: if input.category == "session_end" {
+            FeedbackStatus::Applied
+        } else if input.needs_clarification {
             FeedbackStatus::NeedsClarification
         } else {
             FeedbackStatus::Active
@@ -160,6 +183,12 @@ fn build_entry(
     ] {
         entry.extra_fields.insert(key.into(), value);
     }
+    if let Some(target) = input.instruction_target {
+        entry.extra_fields.insert(
+            "instruction_target".into(),
+            serde_json::to_string(&target).map_err(store::failure)?,
+        );
+    }
     if let Some(handle) = input.represented_by {
         entry.status = FeedbackStatus::Discarded;
         entry
@@ -175,7 +204,9 @@ fn link_duplicate(entry: &mut FeedbackEntry, entries: &[FeedbackEntry]) {
         return;
     }
     if let Some(existing) = entries.iter().find(|e| {
-        e.status == FeedbackStatus::Active && e.scope == entry.scope && e.text == entry.text
+        e.is_active_at(chrono::Utc::now().timestamp_millis())
+            && e.scope == entry.scope
+            && e.text == entry.text
     }) {
         entry.status = FeedbackStatus::Discarded;
         entry

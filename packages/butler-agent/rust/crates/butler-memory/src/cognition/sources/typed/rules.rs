@@ -1,4 +1,5 @@
 //! Explicit rule owner: inventory, lease-bound journal and request recovery.
+mod feedback;
 mod inventory;
 mod transaction;
 
@@ -107,6 +108,7 @@ impl RememberedRuleOwner {
             Some(transaction::Request::Remember {
                 input,
                 target: None,
+                feedback: None,
             }),
             cancellation,
         )
@@ -128,6 +130,7 @@ impl RememberedRuleOwner {
             Some(transaction::Request::Remember {
                 input,
                 target: Some(target),
+                feedback: None,
             }),
             cancellation,
         )

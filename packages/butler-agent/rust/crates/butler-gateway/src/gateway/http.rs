@@ -4,6 +4,7 @@ pub(super) use start::serve;
 mod automations;
 mod dashboard;
 mod error;
+mod feedback;
 mod listeners;
 mod mcp_servers;
 mod message_files;
@@ -11,6 +12,7 @@ mod model_catalog;
 mod monitors;
 mod new_chat_briefing;
 mod operation_output;
+mod owner_memory;
 mod params;
 mod personalization;
 mod project_session_mutations;
@@ -227,8 +229,8 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
     if uri.path() == "/model-catalog" || uri.path().starts_with("/model-catalog/") {
         return model_catalog::route(state, request, &uri).await;
     }
-    if uri.path() == "/personalization" || uri.path().starts_with("/personalization/") {
-        return personalization::route(state, request, &uri).await;
+    if owner_memory::matches(uri.path()) {
+        return owner_memory::route(state, request, &uri).await;
     }
     if matches!(
         uri.path(),

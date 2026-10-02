@@ -2,12 +2,15 @@
 
 mod capture;
 mod lifecycle;
+mod promotion;
+pub use promotion::{FeedbackPromotion, feedback_evidence_is_current};
 pub(crate) mod operator;
 pub(crate) mod store;
 pub use capture::FeedbackCapture;
 mod quality_operator;
 mod resolve;
 mod targets;
+mod triage;
 
 pub use targets::FeedbackTarget;
 

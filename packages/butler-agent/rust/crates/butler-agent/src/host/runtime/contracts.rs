@@ -50,6 +50,8 @@ pub(crate) struct AgentRuntime {
     pub mcp_client: Arc<butler_models::mcp_client::McpClient>,
     pub context_maintenance: Arc<ContextMaintenance>,
     pub profile: Arc<butler_memory::profile::ProfileService>,
+    pub feedback: Arc<butler_memory::cognition::FeedbackBufferService>,
+    pub(in crate::host) daily_cognition: Arc<crate::host::memory_jobs::daily::DailyCognitionJobs>,
     pub(super) host: BtccHost,
 }
 

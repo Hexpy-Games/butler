@@ -111,6 +111,33 @@ pub(crate) fn overlay(
             }
         }
     }
+    let mut ended = std::collections::HashMap::<String, String>::new();
+    for entry in &entries {
+        if entry.category == "session_end"
+            && entry.extra_fields.get("reset_generation") == Some(&generation)
+        {
+            let time = ended.entry(entry.scope.clone()).or_default();
+            if entry.created_at > *time {
+                *time = entry.created_at.clone();
+            }
+        }
+    }
+    for entry in &mut entries {
+        if entry.status == super::FeedbackStatus::Active
+            && ended
+                .get(&entry.scope)
+                .is_some_and(|time| *time >= entry.created_at)
+            && entry
+                .extra_fields
+                .get("retention_class")
+                .is_some_and(|class| class == "session_only")
+        {
+            entry.status = super::FeedbackStatus::Discarded;
+            entry
+                .extra_fields
+                .insert("resolution_reason".into(), "session_end".into());
+        }
+    }
     Ok(entries)
 }
 

@@ -7,6 +7,7 @@ pub(super) mod maintain_phase;
 pub(super) mod profile_consolidation;
 pub(super) mod profile_sources;
 pub(super) mod recall_metrics;
+pub(super) mod rule_checkpoints;
 pub(super) mod signals;
 pub(super) mod sync;
 pub(super) mod transcript_sync;

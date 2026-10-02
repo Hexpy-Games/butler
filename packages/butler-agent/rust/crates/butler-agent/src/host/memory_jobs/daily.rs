@@ -95,7 +95,7 @@ impl DailyCognitionJobs {
         let briefing = Arc::new(BriefingGeneration::from_runtime(
             data_root.clone(),
             coordinator.clone(),
-            provider,
+            provider.clone(),
             configuration,
             profile.clone(),
             ledger,
@@ -106,6 +106,8 @@ impl DailyCognitionJobs {
             metrics: cycle_metrics.clone(),
             briefing,
             profile: Arc::new(ProfileConsolidation {
+                provider,
+                rules: feedback_rules(&data_root, &paths, coordinator.clone()),
                 profile,
                 feedback: feedback.clone(),
             }),
@@ -117,11 +119,7 @@ impl DailyCognitionJobs {
             )),
             feedback,
             knowhow,
-            health: Arc::new(MemoryHealthService::new(
-                data_root.clone(),
-                paths.clone(),
-                coordinator.clone(),
-            )),
+            health: feedback_health(&data_root, &paths, coordinator.clone()),
             box_store,
         });
         let generic = CycleService::new(
@@ -168,6 +166,19 @@ impl DailyCognitionJobs {
             result.wrapped,
         );
         Ok(())
+    }
+
+    pub(in crate::host) async fn manual_feedback(
+        &self,
+        input: serde_json::Value,
+        cancellation: CancellationToken,
+    ) -> Result<serde_json::Value, crate::host::HostError> {
+        let result = self
+            .generic
+            .run(feedback_run(&input, cancellation)?)
+            .await
+            .map_err(crate::host::HostError::from_error)?;
+        serde_json::to_value(result).map_err(crate::host::HostError::from_error)
     }
 
     pub(in crate::host) async fn consolidation_cycle(
@@ -254,4 +265,60 @@ impl DailyCognitionJobs {
             .map_err(|error| error.code().to_owned())
             .map_err(crate::host::HostError::from)
     }
+}
+
+fn feedback_rules(
+    data: &std::path::Path,
+    paths: &CognitionPathEnvironment,
+    coordinator: Arc<CognitionWriteCoordinator>,
+) -> butler_memory::cognition::RememberedRuleOwner {
+    let clock =
+        Arc::new(|| butler_models::models::ModelConfigurationClock::now_iso(&SystemIdentity));
+    let publisher = Arc::new(butler_memory::cognition::CompletionPublisher::new(
+        data, paths, clock,
+    ));
+    super::rule_checkpoints::configure(
+        butler_memory::cognition::RememberedRuleOwner::new(
+            data.to_owned(),
+            paths.clone(),
+            coordinator,
+            publisher,
+        ),
+        data,
+    )
+}
+
+fn feedback_health(
+    root: &std::path::Path,
+    paths: &CognitionPathEnvironment,
+    coordinator: Arc<CognitionWriteCoordinator>,
+) -> Arc<MemoryHealthService> {
+    Arc::new(MemoryHealthService::new(
+        root.to_path_buf(),
+        paths.clone(),
+        coordinator,
+    ))
+}
+
+fn feedback_run(
+    input: &serde_json::Value,
+    cancellation: CancellationToken,
+) -> Result<RunCycle, crate::host::HostError> {
+    let budget = input
+        .get("rate_budget")
+        .map(|value| serde_json::from_value::<butler_memory::cognition::RateBudget>(value.clone()))
+        .transpose()
+        .map_err(crate::host::HostError::from_error)?;
+    Ok(RunCycle {
+        run_id: input
+            .get("run_id")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
+        resume: input
+            .get("resume")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false),
+        rate_budget: Arc::new(move || budget.clone()),
+        cancellation,
+    })
 }

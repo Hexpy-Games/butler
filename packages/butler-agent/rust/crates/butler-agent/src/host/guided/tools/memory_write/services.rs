@@ -1,5 +1,5 @@
 //! Process composition and targeted startup recovery for remembered rules.
-mod checkpoints;
+use crate::host::memory_jobs::rule_checkpoints as checkpoints;
 use butler_memory::cognition::{
     CognitionPathEnvironment, CompletionPublisher, RememberedRuleOwner,
 };

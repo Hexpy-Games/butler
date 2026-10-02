@@ -154,7 +154,15 @@ impl FeedbackBufferService {
         let lock_path = self.paths.consolidation_lock(&self.data_root);
         mutable_paths::ensure_data_authority(
             &self.data_root,
-            &[&cognition_root, &path, &quality_path, &lock_path],
+            &[
+                &cognition_root,
+                &path,
+                &quality_path,
+                &lock_path,
+                &cognition_root.join("feedback/pending"),
+                &cognition_root.join("feedback/generation"),
+                &cognition_root.join("feedback/enabled"),
+            ],
         )?;
         let lease = self
             .coordinator

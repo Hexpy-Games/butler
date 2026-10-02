@@ -3,6 +3,7 @@
 
 mod async_operations;
 mod extraction;
+mod feedback;
 mod onboarding_update;
 mod personalization;
 mod prompt_port;
