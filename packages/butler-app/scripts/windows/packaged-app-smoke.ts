@@ -28,13 +28,18 @@ const stub = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
 const debugPort = await freePort();
 const serverPort = await freePort();
 prepareData();
-const launcher = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-File",
-  resolve("packages/butler-app/scripts/windows/launch-electron-smoke.ps1"),
-  "-Electron", join(packageRoot, "Butler.exe"), "-AppRoot", packageRoot,
-  "-Profile", join(root, "profile"), "-PidFile", pidFile, "-ExitFile", exitFile,
-  "-DebugPort", String(debugPort),
+// Execute the reviewed launcher as a command, without changing host execution policy.
+const launcher = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
+  "$launch = ConvertFrom-Json $env:BUTLER_SMOKE_LAUNCH_INPUT; " +
+  "& ([scriptblock]::Create([IO.File]::ReadAllText($env:BUTLER_SMOKE_LAUNCH_SCRIPT))) " +
+  "-Electron $launch.Electron -AppRoot $launch.AppRoot -Profile $launch.Profile " +
+  "-PidFile $launch.PidFile -ExitFile $launch.ExitFile -DebugPort $launch.DebugPort",
 ], { stdio: "ignore", env: {
-  ...process.env, HOME: join(root, "home"), USERPROFILE: join(root, "home"),
+  ...process.env,
+  BUTLER_SMOKE_LAUNCH_SCRIPT: resolve("packages/butler-app/scripts/windows/launch-electron-smoke.ps1"),
+  BUTLER_SMOKE_LAUNCH_INPUT: JSON.stringify({ Electron: join(packageRoot, "Butler.exe"), AppRoot: packageRoot,
+    Profile: join(root, "profile"), PidFile: pidFile, ExitFile: exitFile, DebugPort: debugPort }),
+  HOME: join(root, "home"), USERPROFILE: join(root, "home"),
   LOCALAPPDATA: join(root, "local"), APPDATA: join(root, "roaming"), BUTLER_DATA: data,
   BUTLER_APP_SERVER_PORT: String(serverPort), BUTLER_SECRET_STORE: "file",
   BUTLER_E2E_TIER: "stub", BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1",
