@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createServer } from "node:net";
@@ -7,6 +7,7 @@ import { classifyAppForegroundActiveWork } from "../../client/electron/app-foreg
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
 
 if (process.platform !== "win32") throw new Error("Packaged smoke requires Windows");
+if (!process.env.BUTLER_SMOKE_PROFILE_ROOT) throw new Error("Run through deploy/windows-portable-smoke.ps1");
 const packageRoot = resolve(process.argv[2]);
 const root = mkdtempSync(join(tmpdir(), "Butler portable 전경 smoke-"));
 const data = join(root, "data");
@@ -87,7 +88,10 @@ try {
   }, "stub turn delivery", 60_000);
   const messages = (await api("/messages?chat_id=general")).data.messages;
   assert(messages.length === 2 && messages[0].role === "user" && messages[0].text === prompt &&
-    messages[1].role === "assistant" && messages[1].text === answer && calls === 1, "Stub chat content/order/count mismatch");
+    messages[1].role === "assistant" && messages[1].text === answer && calls === 1,
+    `Stub chat content/order/count mismatch: ${JSON.stringify({ calls, messages: messages.map((message: any) => ({
+      role: message.role, text: message.text,
+    })) })}`);
   cdp = await electronPage(debugPort);
   assert(await cdp.expression("typeof window.butlerApp?.quitApp === 'function'"), "Sandbox preload missing");
   await cdp.reload();
@@ -137,7 +141,8 @@ try {
   for (const pid of owned) if (alive(pid)) { try { process.kill(pid, "SIGKILL"); } catch {} }
   stub.stop(true);
   await waitFor(() => [...owned].every((pid) => !alive(pid)), "forced smoke process cleanup");
-  rmSync(root, { recursive: true, force: true });
+  // The PowerShell owner removes the isolated profile after Bun exits, releasing
+  // all process-held Windows file handles before deleting the directory.
 }
 
 function prepareData() {
