@@ -11,13 +11,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::host::installation::ResolvedInstallation;
 use crate::host::service::instance_identity::{
-    executable_matches, process_executable, process_is_alive, process_start_identity,
+    executable_matches, process_executable, process_start_identity,
 };
 
 const INSTANCE_SCHEMA: &str = "butler.native-agent-service-instance.v1";
 
 mod delivery;
 mod gateway_state;
+mod legacy;
 mod probe;
 mod record;
 mod restart;
@@ -27,6 +28,7 @@ pub(crate) use delivery::{
     StopDelivery, force_stop, remove_shutdown_flag, request_stop, shutdown_flag_path,
 };
 pub(crate) use gateway_state::mark_gateway_state;
+pub(crate) use legacy::refuse_live_legacy_process;
 pub(crate) use probe::instance_lock_is_held_read_only;
 use record::{
     acquire_record_update_lock, instance_record_path, read_record_at, record_update_lock_path,
@@ -411,35 +413,6 @@ pub(crate) fn validate_write_destinations(
             .map_err(|source| {
                 crate::host::HostError::new("native_path_configuration_invalid").with_source(source)
             })?;
-    }
-    Ok(())
-}
-
-pub(crate) fn refuse_live_legacy_process(data_root: &Path) -> Result<(), crate::host::HostError> {
-    for path in [
-        data_root.join("state/services/butler-main.json"),
-        data_root.join("state/butler-main-native.json"),
-    ] {
-        let bytes = match fs::read(&path) {
-            Ok(bytes) => bytes,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
-            Err(_) => return Err("native_service_legacy_state_unreadable".into()),
-        };
-        let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|source| {
-            crate::host::HostError::new("native_service_legacy_state_ambiguous").with_source(source)
-        })?;
-        // Positive and within the host's signed process ids.
-        let pid = value
-            .get("pid")
-            .and_then(serde_json::Value::as_u64)
-            .filter(|pid| *pid > 0 && i32::try_from(*pid).is_ok())
-            .and_then(|pid| u32::try_from(pid).ok())
-            .ok_or_else(|| "native_service_legacy_state_ambiguous".to_owned())?;
-        if process_is_alive(pid)? {
-            return Err(format!(
-                "native_service_legacy_supervisor_pid_alive: legacy state references live PID {pid}; verify and stop the existing Butler supervisor before starting the native service"
-            ).into());
-        }
     }
     Ok(())
 }

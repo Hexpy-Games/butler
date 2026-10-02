@@ -2862,6 +2862,12 @@ Copyright (c) 2016 Alex Crichton
 Copyright (c) 2017 The Tokio Authors
 
 ===== COMPONENT =====
+atomicwrites 0.4.4
+MIT
+License: https://github.com/untitaker/rust-atomicwrites/blob/bfad85d09eabce6414285024fcdcb4d01830726b/LICENSE
+Copyright (c) 2015 Markus Unterwaditzer
+
+===== COMPONENT =====
 axum-core 0.5.6
 MIT
 License: https://github.com/tokio-rs/axum/blob/e710a97a5a8e1e2f629f78e0377d7ab17e597eaf/axum-core/LICENSE

@@ -1,9 +1,9 @@
 {
   "inputs": {
     "bun.lock": "6da68de704dbc47dea3ae850efa02a7e7ccf9691a5778c73fb77a8bb1687a84e",
-    "packages/butler-agent/rust/Cargo.lock": "8baa56a5953d16002c8db127ff640b7ddcb779187db74f3ae22d2f39b7394d59",
-    "packages/butler-agent/rust/Cargo.toml": "f93e0f6eb7ff452ebd4d3e86c9e5ed3ea627dfac9da153ca28057b0bba8def5a",
-    "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "7bc16915e7c3ff9c8f67ac2f1021a763760f6f4f67d8f241f284ae606bd104d5",
+    "packages/butler-agent/rust/Cargo.lock": "57d1be27b617148c8d6cf28e90135ee937d1cd0423e9207424c31993f43709af",
+    "packages/butler-agent/rust/Cargo.toml": "d91219a84e8ebead27511e4b999557ba5684093c3841efd1f0d44cb1d06a3a70",
+    "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "690fda7222f9512cf014e186be63dea93147e046ad1bdd40d62b145b3d29cc9b",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
     "packages/butler-agent/rust/crates/butler-core/Cargo.toml": "736517adc6731fe7bef9a81897979400c1d9cf40d8fea399cf35c830471689d7",
     "packages/butler-agent/rust/crates/butler-core/src/js_date/parse/LICENSE.txt": "a0af5aa0d38e4c35e56c8e42a43a4b1e462619a26332e43249bb0772ad06a3e2",
@@ -13,7 +13,7 @@
     "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "0f8f2135454f2995bdb17e9eb72bf1e891ac3b862bbeffd03af75e2427525641",
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "95abb3064ab75a21c95efdb6fa5049c80c46abcfe62794330cab063d7d574820",
     "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "90781f4840f7705f2ac7a577abf1f4d8fdb90aaf8f7c6c25e7df9548ff6a9814",
-    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "64da42f6f886ea7101d64301d15061435e92bdb1821c1c8d15a5e02581a84314",
+    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "58d52c448736b5e4700aa92e86801c89caf2301bb8fc947af45039e4ef947277",
     "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "e8e6f6d7ef418db0e100f2560ee8fc5f17d567cc30fda2f12e409dff552d96e9",
     "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "fd97e7279fef8e91a95c908d368c5eb4548c40cf5d9d3fa277a8d49f71901b53",
     "packages/butler-agent/rust/crates/butler-turn/Cargo.toml": "67226f9ea15df5cbe76ccf0f8f7ac75bbc553130ac07a77b256fb05d9c75d3aa",
@@ -12191,6 +12191,28 @@
         "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
         "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
         "6226d0632e2e1a80c23597e964da9812ae193c535fe058154afb034e94167aa5"
+      ]
+    },
+    {
+      "id": "rust:atomicwrites@0.4.4",
+      "name": "atomicwrites",
+      "version": "0.4.4",
+      "license": "MIT",
+      "source": "https://github.com/untitaker/rust-atomicwrites/tree/bfad85d09eabce6414285024fcdcb4d01830726b",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "89a0f9662c20fc93a9c6d25aee58c7d6073f1538e92b8fa668a3aed60b0beda3"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "links": [
+        "https://github.com/untitaker/rust-atomicwrites/blob/bfad85d09eabce6414285024fcdcb4d01830726b/LICENSE"
+      ],
+      "copyright": [
+        "Copyright (c) 2015 Markus Unterwaditzer"
       ]
     },
     {

@@ -1,3 +1,5 @@
+param([switch]$OwnerHost)
+
 function Assert-PrivateAcl {
     param([string]$Path)
     $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
@@ -49,6 +51,7 @@ function Assert-CommandBinding {
 
 # Public installer/CLI/browser smoke. Never emit connection codes or credentials.
 $ErrorActionPreference = 'Stop'
+$protocolBefore = (& reg query HKCU\Software\Classes\butler /s 2>$null) -join "`n"
 # Keep the fixture within Windows PowerShell 5.1's normal path limit.
 $root = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid().ToString('N'))
 $originalProfile = $env:USERPROFILE
@@ -134,8 +137,10 @@ try {
     Assert-PrivateAcl "$env:BUTLER_DATA/app/runtime/auth/local-agent-auth.json"
     Assert-PrivateAcl "$env:BUTLER_DATA/app/runtime/auth/local-admin.json"
     Assert-PrivateAcl "$env:BUTLER_DATA/state/app-gateway/project-folder-token-secret"
-    $startup = (& $launcher startup enable --json | ConvertFrom-Json)
-    if ($startup.ok -or ($startup | ConvertTo-Json -Depth 10) -notmatch 'not supported on Windows yet') { throw 'Startup did not report the preview limitation' }
+    if (!$OwnerHost) {
+        $startup = (& $launcher startup enable --json | ConvertFrom-Json)
+        if ($startup.ok -or ($startup | ConvertTo-Json -Depth 10) -notmatch 'not supported on Windows yet') { throw 'Startup did not report the preview limitation' }
+    }
     # Windows PowerShell 5.1 waits for descendants of piped native commands.
     & $launcher restart
     if ($LASTEXITCODE -ne 0) { throw 'Restart failed' }
@@ -151,4 +156,6 @@ try {
 } finally {
     if (Test-Path $launcher) { & $launcher stop --json | Out-Null }
     Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+    $protocolAfter = (& reg query HKCU\Software\Classes\butler /s 2>$null) -join "`n"
+    if ($protocolBefore -cne $protocolAfter) { throw 'Owner protocol registry changed' }
 }
