@@ -16,7 +16,12 @@ function Invoke-Startup([string]$Action) {
 try {
     if ((Invoke-Startup status).state -ne 'disabled') { throw 'Initial startup state' }
     $testOwnsName = $true
-    Invoke-Startup enable | Out-Null
+    $enabled = Invoke-Startup enable
+    $bytes = [IO.File]::ReadAllBytes($enabled.definition)
+    if ($bytes.Length -lt 6 -or $bytes[0] -ne 255 -or $bytes[1] -ne 254 -or
+        ![Text.Encoding]::Unicode.GetString($bytes, 2, $bytes.Length - 2).StartsWith('<?xml version="1.0" encoding="UTF-16"?>')) {
+        throw 'Task XML must use UTF-16LE with a matching declaration and BOM'
+    }
     if ((Invoke-Startup status).state -ne 'enabled') { throw 'Startup not enabled' }
     [xml]$xml = (& schtasks /Query /TN $name /XML) -join "`n"
     if ($LASTEXITCODE -ne 0) { throw 'Task XML query failed' }

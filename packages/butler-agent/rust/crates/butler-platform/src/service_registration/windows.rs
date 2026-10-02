@@ -55,8 +55,8 @@ pub(super) fn definition_path() -> Result<PathBuf, Error> {
 }
 
 fn read_local() -> Result<Option<String>, Error> {
-    match std::fs::read_to_string(definition_path()?) {
-        Ok(text) => Ok(Some(text)),
+    match std::fs::read(definition_path()?) {
+        Ok(bytes) => Ok(Some(task_xml::decode(&bytes)?)),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(e.into()),
     }
@@ -113,14 +113,18 @@ pub(super) fn install(
     } else {
         None
     };
-    let previous = read_local()?;
+    let previous = match std::fs::read(&path) {
+        Ok(bytes) => Some(bytes),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => return Err(e.into()),
+    };
     let shell = PathBuf::from(std::env::var_os("SystemRoot").ok_or(Error::InvalidValue)?)
         .join("System32/WindowsPowerShell/v1.0/powershell.exe");
     let mut definition = definition.clone();
     inherit_profile(&mut definition);
     let xml = task_xml::render(&definition, &user, &shell.to_string_lossy())?;
     crate::secure_fs::create_private_dir_all(path.parent().ok_or(Error::InvalidValue)?)?;
-    std::fs::write(&path, xml)?;
+    std::fs::write(&path, task_xml::encode(&xml))?;
     if activation == Activation::Load {
         let path_text = path.to_string_lossy();
         let name = task_name(&user);

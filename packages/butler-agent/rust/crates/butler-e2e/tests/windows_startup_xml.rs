@@ -69,8 +69,15 @@ fn windows_task_xml_roundtrip_and_foreign_detection() -> Result<(), Box<dyn std:
     assert!(script.contains("SetEnvironmentVariable('BUTLER_DATA','C:\\'' & %DATA% !','Process')"));
     assert!(script.ends_with(";exit $LASTEXITCODE"));
     assert!(test_support::task_owned(&xml, &xml, SID));
-    let mut unicode = vec![0xff, 0xfe];
-    unicode.extend(xml.encode_utf16().flat_map(u16::to_le_bytes));
+    assert!(xml.starts_with("<?xml version=\"1.0\" encoding=\"UTF-16\"?>"));
+    let mut unicode = test_support::task_bytes(&xml);
+    assert!(unicode.starts_with(&[0xff, 0xfe, b'<', 0, b'?', 0]));
+    assert_eq!(
+        &unicode[2..],
+        xml.encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<_>>()
+    );
     assert_eq!(test_support::task_text(&unicode).unwrap(), xml);
     assert_eq!(test_support::task_text(xml.as_bytes()).unwrap(), xml);
     unicode.push(0);

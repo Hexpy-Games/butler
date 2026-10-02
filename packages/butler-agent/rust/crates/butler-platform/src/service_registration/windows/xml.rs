@@ -28,7 +28,7 @@ pub(crate) fn render(def: &Definition, sid: &str, shell: &str) -> Result<String,
     let arguments =
         format!("-NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand {encoded}");
     Ok(format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?>
+        r#"<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="{NS}">
   <RegistrationInfo><Source>Butler Agent CLI</Source><Documentation>{metadata}</Documentation></RegistrationInfo>
   <Triggers><LogonTrigger><Enabled>true</Enabled><UserId>{sid}</UserId></LogonTrigger></Triggers>
@@ -154,6 +154,14 @@ pub(crate) fn same_owner(local: &str, remote: &str, sid: &str) -> bool {
         return false;
     };
     local.sid == sid && remote.sid == sid && local.fingerprint == remote.fingerprint
+}
+
+/// schtasks imports XML as Unicode, including its declaration and BOM.
+pub(crate) fn encode(xml: &str) -> Vec<u8> {
+    [0xff, 0xfe]
+        .into_iter()
+        .chain(xml.encode_utf16().flat_map(u16::to_le_bytes))
+        .collect()
 }
 
 /// Decodes schtasks' Unicode output without silently dropping invalid bytes.

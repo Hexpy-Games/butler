@@ -62,6 +62,11 @@ pub fn task_text(bytes: &[u8]) -> Result<String, super::Error> {
     super::task_xml::decode(bytes)
 }
 
+/// Encodes the same bytes installed for schtasks, without registering a task.
+pub fn task_bytes(xml: &str) -> Vec<u8> {
+    super::task_xml::encode(xml)
+}
+
 /// Copies the invoking profile into a Windows task, with no manager calls.
 /// Returns false on hosts whose service definitions already inherit HOME.
 pub fn task_profile(definition: &mut Definition) -> bool {
