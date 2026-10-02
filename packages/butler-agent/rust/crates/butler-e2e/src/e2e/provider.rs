@@ -344,12 +344,12 @@ async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
         .unwrap_or_default();
     let json: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
     let memory = memory::matches(&json);
-    if memory && matches!(&state.mode, Mode::Replay(_)) {
+    if memory {
         lock(&state.memory_requests).push(json.clone());
     } else {
         *lock(&state.served) += 1;
     }
-    if !memory && matches!(&state.mode, Mode::Replay(_)) {
+    if !memory {
         lock(&state.requests).push(json.clone());
     }
     learn_echo_ids(&state, &String::from_utf8_lossy(&bytes));

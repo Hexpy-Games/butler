@@ -55,7 +55,7 @@ impl Placeholders {
         self.0.retain(|(existing, _)| existing != name);
         self.0.push((name.to_owned(), value));
         // Longest values first so a path is replaced before its prefix.
-        self.0.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+        self.0.sort_by_key(|entry| std::cmp::Reverse(entry.1.len()));
     }
 
     /// Value → `{{NAME}}`.

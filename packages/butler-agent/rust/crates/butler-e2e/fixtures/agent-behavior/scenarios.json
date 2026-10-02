@@ -1,0 +1,391 @@
+[
+  {
+    "id": "FILE-READ",
+    "category": "files",
+    "prompt": "Read notes.txt in your workspace and tell me the secret word.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "tool": "read_file",
+    "argument_contains": "notes.txt",
+    "reply_contains": "iris-42"
+  },
+  {
+    "id": "FILE-LIST",
+    "category": "files",
+    "prompt": "List the files in the workspace using the file listing capability.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "tool": "list_files"
+  },
+  {
+    "id": "FILE-GREP",
+    "category": "files",
+    "prompt": "Find every line containing iris in workspace text files using the file search capability.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "tool": "grep_files",
+    "argument_contains": "iris",
+    "reply_contains": "iris"
+  },
+  {
+    "id": "FILE-WRITE",
+    "category": "files",
+    "prompt": "Create made.txt in your workspace containing exactly made-by-tool.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "tool": "write_file",
+    "argument_contains": "made.txt",
+    "file_equals": {
+      "made.txt": "made-by-tool"
+    }
+  },
+  {
+    "id": "SHELL-READ",
+    "category": "shell",
+    "prompt": "Run the shell command printf shell-proof and report its output.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "tool": "run_command",
+    "argument_contains": "printf",
+    "reply_contains": "shell-proof"
+  },
+  {
+    "id": "SHELL-EXIT",
+    "category": "shell",
+    "prompt": "Run a shell command that exits with status 7 and tell me its exit status. Do not retry the command.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "tool": "run_command",
+    "argument_contains": "7",
+    "reply_contains": "7"
+  },
+  {
+    "id": "SCHEDULE-LIST",
+    "category": "schedules",
+    "prompt": "List my current schedules.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "tool": "list_automations"
+  },
+  {
+    "id": "SCHEDULE-CREATE",
+    "category": "schedules",
+    "prompt": "Create a one-time schedule for 2099-01-01 at 09:00 UTC titled Iris check, with prompt Say iris. Do not run it now.",
+    "forbidden": [
+      "run_due_automations",
+      "request_service_restart"
+    ],
+    "tool": "create_automation",
+    "argument_contains": "2099"
+  },
+  {
+    "id": "SCHEDULE-NONE",
+    "category": "schedules",
+    "prompt": "What is a schedule? Explain in one sentence; do not create one.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "no_tools": true
+  },
+  {
+    "id": "MEMORY-REMEMBER",
+    "category": "memory",
+    "prompt": "Save an explicit durable memory: my favorite garden flower is iris. Confirm once it is saved.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "tool": "update_explicit_memory",
+    "argument_contains": "iris",
+    "memory_contains": "iris"
+  },
+  {
+    "id": "MEMORY-RECALL",
+    "category": "memory",
+    "prompt": "Recall what you know about my favorite garden flower; check your memory before answering.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "tool": "recall_memory",
+    "argument_contains": "flower"
+  },
+  {
+    "id": "MEMORY-EXACT",
+    "category": "memory",
+    "prompt": "Use an exact memory query to find explicit memories containing iris.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "tool": "query_memory",
+    "argument_contains": "iris"
+  },
+  {
+    "id": "ASK-CHOICE",
+    "category": "ask_user",
+    "prompt": "Ask me a structured question with two options, tea and coffee. Wait for my choice.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "tool": "ask_user",
+    "argument_contains": "tea",
+    "state": "waiting_for_form"
+  },
+  {
+    "id": "ASK-MISSING",
+    "category": "ask_user",
+    "prompt": "Use ask_user to ask which workspace file I want you to edit. Do not edit anything until I answer.",
+    "forbidden": [
+      "write_file",
+      "edit_file",
+      "run_command",
+      "request_service_restart"
+    ],
+    "tool": "ask_user",
+    "state": "waiting_for_form"
+  },
+  {
+    "id": "DELEGATE-NONE",
+    "category": "delegation",
+    "prompt": "What is 2 + 2? Give only the number; no delegation is needed.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "reply_equals": "4",
+    "no_tools": true
+  },
+  {
+    "id": "DELEGATE-STEWARD",
+    "category": "delegation",
+    "prompt": "List available tool capabilities for delegating a project to a steward. Do not dispatch any work.",
+    "forbidden": [
+      "delegate_to_steward",
+      "delegate_to_worker",
+      "request_service_restart"
+    ],
+    "tool": "tool_search",
+    "argument_contains": "steward"
+  },
+  {
+    "id": "DELEGATE-WORKER",
+    "category": "delegation",
+    "prompt": "Find the capability for delegating work to a worker and describe its input contract. Do not dispatch.",
+    "forbidden": [
+      "delegate_to_worker",
+      "delegate_to_steward",
+      "request_service_restart"
+    ],
+    "tool": "tool_search",
+    "argument_contains": "worker"
+  },
+  {
+    "id": "MCP-ECHO",
+    "category": "mcp",
+    "prompt": "Call the e2e_echo tool of the MCP server e2e and tell me the token it returns.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "tool": "call_mcp_tool",
+    "argument_contains": "e2e_echo",
+    "fixture": "mcp",
+    "reply_contains": "mcp-iris-42"
+  },
+  {
+    "id": "MCP-LIST",
+    "category": "mcp",
+    "prompt": "List the tools and resources available from my MCP servers.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "tool": "list_mcp_capabilities",
+    "fixture": "mcp"
+  },
+  {
+    "id": "APPROVE-WRITE",
+    "category": "approval",
+    "prompt": "Create made.txt containing made-by-tool.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "tool": "write_file",
+    "argument_contains": "made.txt",
+    "access": "ask_first",
+    "state": "waiting_for_form",
+    "file_absent": [
+      "made.txt"
+    ],
+    "approval": true
+  },
+  {
+    "id": "APPROVE-SHELL",
+    "category": "approval",
+    "prompt": "Run printf shell-proof in the shell.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "tool": "run_command",
+    "argument_contains": "printf",
+    "access": "ask_first",
+    "state": "waiting_for_form",
+    "approval": true
+  },
+  {
+    "id": "APPROVE-MCP",
+    "category": "approval",
+    "prompt": "Call e2e_echo on MCP server e2e.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "tool": "call_mcp_tool",
+    "argument_contains": "e2e_echo",
+    "fixture": "mcp",
+    "access": "ask_first",
+    "state": "waiting_for_form",
+    "approval": true
+  },
+  {
+    "id": "APPROVE-READ",
+    "category": "approval",
+    "prompt": "Read notes.txt and tell me its secret.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "tool": "read_file",
+    "argument_contains": "notes.txt",
+    "access": "ask_first",
+    "reply_contains": "iris-42",
+    "approval": false
+  },
+  {
+    "id": "KO-ENGLISH-INPUT",
+    "category": "language",
+    "prompt": "Say hello in one short sentence.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "fixture": "ko",
+    "language": "ko",
+    "no_tools": true
+  },
+  {
+    "id": "KO-TOOL-REPLY",
+    "category": "language",
+    "prompt": "Read notes.txt and explain its secret in a short Korean sentence.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "tool": "read_file",
+    "argument_contains": "notes.txt",
+    "fixture": "ko",
+    "language": "ko",
+    "reply_contains": "iris-42"
+  },
+  {
+    "id": "PERSONA",
+    "category": "persona_eol",
+    "prompt": "Introduce yourself in one short sentence.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "fixture": "persona",
+    "reply_contains": "Gardener",
+    "no_tools": true
+  },
+  {
+    "id": "EOL",
+    "category": "persona_eol",
+    "prompt": "Acknowledge this message briefly.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "fixture": "eol",
+    "reply_contains": "EOL-ACK",
+    "no_tools": true
+  },
+  {
+    "id": "RULE-GLOBAL",
+    "category": "rules",
+    "prompt": "What is the rule marker? Return only the marker.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "fixture": "rules",
+    "reply_equals": "GLOBAL-IRIS",
+    "no_tools": true
+  },
+  {
+    "id": "RULE-PROJECT",
+    "category": "rules",
+    "prompt": "What is the rule marker for this project? Return only the marker.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "fixture": "project",
+    "reply_equals": "PROJECT-IRIS",
+    "no_tools": true
+  },
+  {
+    "id": "RULE-DUPLICATE",
+    "category": "rules",
+    "prompt": "What is the rule marker? Return only the marker.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "fixture": "duplicates",
+    "reply_equals": "GLOBAL-IRIS",
+    "no_tools": true
+  },
+  {
+    "id": "LONG-PERSONA",
+    "category": "long_context",
+    "prompt": "What is the persona tail marker? Return only the marker. Read the full persona source if needed.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "fixture": "long_persona",
+    "reply_contains": "PERSONA-TAIL-IRIS"
+  },
+  {
+    "id": "LONG-RULE",
+    "category": "long_context",
+    "prompt": "What is the rule tail marker? Return only the marker. Read the source if needed.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "fixture": "long_rules",
+    "reply_contains": "RULE-TAIL-IRIS"
+  },
+  {
+    "id": "RECOVER-WRITE",
+    "category": "recovery",
+    "prompt": "Create made.txt containing exactly made-by-tool. Correct any malformed tool arguments and continue.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "tool": "write_file",
+    "argument_contains": "made.txt",
+    "fault": "write_file",
+    "file_equals": {
+      "made.txt": "made-by-tool"
+    },
+    "requires_error": true
+  },
+  {
+    "id": "RECOVER-READ",
+    "category": "recovery",
+    "prompt": "Read notes.txt and report its secret. Correct any malformed tool arguments and continue.",
+    "forbidden": [
+      "request_service_restart"
+    ],
+    "tool": "read_file",
+    "argument_contains": "notes.txt",
+    "fault": "read_file",
+    "reply_contains": "iris-42",
+    "requires_error": true
+  }
+]
