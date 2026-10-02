@@ -32,8 +32,8 @@ export async function prepareAppPackageUpdate({ artifactPath, dataRoot, installa
   else delete env.BUTLER_APP_SERVER_URL;
   const child = spawn(installation.command, [
     ...installation.args, "app-update-install", candidate, executable, String(parent), ...launchArguments,
-  ], { detached: true, stdio: ["pipe", log, log], env });
-  if (child.pid) await writeFile(resolve(dataRoot, "updates/app-install.pid"), String(child.pid), { mode: 0o600 });
+  ], { detached: true, windowsHide: true, stdio: ["pipe", log, log], env });
+  if (child.pid) void writeFile(resolve(dataRoot, "updates/app-install.pid"), String(child.pid), { mode: 0o600 }).catch(() => {});
   try { await new Promise((accept, reject) => {
     const buffer = Buffer.alloc(2048);
     let reading = false, tail = "";

@@ -1,4 +1,8 @@
 //! Activate one verified full package with the installed Squirrel updater.
+use std::os::windows::process::CommandExt;
+
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 use std::{
     ffi::OsString,
     path::Path,
@@ -58,6 +62,7 @@ fn activate(
             "-Command",
             "(Get-FileHash -Algorithm SHA1 -LiteralPath $env:BUTLER_UPDATE_PACKAGE).Hash",
         ])
+        .creation_flags(CREATE_NO_WINDOW)
         .env_remove("PSModulePath")
         .env("BUTLER_UPDATE_PACKAGE", &package)
         .output()
