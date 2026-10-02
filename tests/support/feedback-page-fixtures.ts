@@ -68,10 +68,12 @@ export async function auditFeedback(page: Page) {
     const section = document.querySelector<HTMLElement>('[data-settings-section-id="recent-feedback"]')!;
     const surface = section.querySelector<HTMLElement>("[data-kind]")!;
     const css = getComputedStyle(surface);
-    const parent = getComputedStyle(section.closest('[data-slot="settings-detail"]') ?? section.parentElement!);
+    let ancestor: HTMLElement | null = section;
+    while (ancestor && getComputedStyle(ancestor).backgroundColor === "rgba(0, 0, 0, 0)") ancestor = ancestor.parentElement;
+    const parent = getComputedStyle(ancestor ?? section);
     const rows = [...section.querySelectorAll<HTMLElement>('[data-test-class="feedback-row"]')];
     const horizontal = [...section.querySelectorAll<HTMLElement>("*")].some((node) => node.clientWidth > 0 && node.scrollWidth > node.clientWidth + 1 && ["auto", "scroll"].includes(getComputedStyle(node).overflowX));
-    const scrolls = [...document.querySelectorAll<HTMLElement>("[data-scroll-top], [data-scroll-bottom]")];
+    const scrolls = [...document.querySelectorAll<HTMLElement>('[data-overflowing="true"]')];
     const fades = scrolls.filter((node) => node.scrollHeight > node.clientHeight + 1).map((node) => ({ top: node.dataset.atStart, bottom: node.dataset.atEnd, mask: getComputedStyle(node).maskImage }));
     return {
       cardBackground: css.backgroundColor, pageBackground: parent.backgroundColor, inset: css.padding,
@@ -82,6 +84,6 @@ export async function auditFeedback(page: Page) {
       iconSlot: "No row glyphs; busy Spinner uses Button iconStart",
     };
   });
-  if (proof.cardBackground === "rgba(0, 0, 0, 0)" || !proof.rowInsets || proof.horizontalScroll || proof.inset === "0px") throw new Error(`Feedback DS audit failed: ${JSON.stringify(proof)}`);
+  if (proof.cardBackground === "rgba(0, 0, 0, 0)" || !proof.rowInsets || proof.horizontalScroll || proof.inset === "0px" || proof.fades.some((fade) => fade.mask === "none")) throw new Error(`Feedback DS audit failed: ${JSON.stringify(proof)}`);
   return proof;
 }

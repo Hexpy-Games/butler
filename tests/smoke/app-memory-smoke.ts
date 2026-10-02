@@ -72,7 +72,7 @@ try {
         (window as unknown as { memorySmokeStreams: EventSource[] }).memorySmokeStreams = streams;
         window.EventSource = class extends Original { constructor(url: string | URL, options?: EventSourceInit) { super(url, options); streams.push(this); } };
       }, { key: LEGACY_FIRST_RUN_STORAGE_KEY, value: JSON.stringify(legacyFirstRunCompleteRecord()) });
-      let instructionRows = rows(locale, state === "long" || state === "confirm-long");
+      let instructionRows = rows(locale, !feedback && (state === "long" || state === "confirm-long"));
       if (state === "empty") instructionRows = [];
       let reads = 0;
       let finished = false;

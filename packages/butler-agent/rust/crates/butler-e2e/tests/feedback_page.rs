@@ -8,6 +8,8 @@
 )]
 #[path = "feedback/support.rs"]
 mod feedback_support;
+#[path = "support/memory_fixture.rs"]
+mod memory_fixture;
 use butler_e2e::e2e::HarnessError;
 use feedback_support::*;
 use serde_json::json;
@@ -19,6 +21,7 @@ async fn feedback_page_list_delete_reset_keeps_chats_and_instructions() -> Resul
     let setup = Setup::new("FEEDBACK-PAGE")?
         .fixture(Fixture::Empty)
         .stub_cassette(stub()?);
+    memory_fixture::initialize_empty(&setup.sandbox.data)?;
     let rules = setup.sandbox.data.join("cognition/memory/rules");
     std::fs::create_dir_all(&rules)?;
     std::fs::write(rules.join("global.md"), "Keep this existing instruction.")?;
@@ -27,7 +30,9 @@ async fn feedback_page_list_delete_reset_keeps_chats_and_instructions() -> Resul
     let first = support::tool(&s, "general", "Correct globally", "record_user_feedback").await?;
     support::tool(&s, "general", "Correct session", "record_user_feedback").await?;
     let chats = s.gw.get("/sessions").await?.data().clone();
-    let instructions = s.gw.get("/memory/instructions").await?.data().clone();
+    let reply = s.gw.get("/memory/instructions").await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    let instructions = reply.data().clone();
     assert_eq!(instructions["instructions"].as_array().unwrap().len(), 1);
     let list = s.gw.get("/memory/feedback").await?;
     assert_eq!(list.status, 200, "{}", list.text);
