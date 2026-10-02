@@ -2,6 +2,7 @@
 
 mod inspect;
 mod render;
+mod reset;
 mod source;
 mod types;
 mod write;
@@ -164,6 +165,17 @@ impl ProjectCapsuleService {
         for project in projects {
             check_active(cancellation, deadline_at_epoch_ms)?;
             let project_id = project.name.clone();
+            let root = self.data_root.clone();
+            let paths = self.paths.clone();
+            let id = project_id.clone();
+            if !tokio::task::spawn_blocking(move || reset::may_refresh(&root, &paths, &id))
+                .await
+                .map_err(|source| {
+                    error(CognitionCode::ProjectCapsuleWorkerFailed).with_source(source)
+                })??
+            {
+                continue;
+            }
             let workspace = project.raw.get("path").and_then(serde_json::Value::as_str);
             match self
                 .refresh(&project_id, workspace, cancellation, deadline_at_epoch_ms)
