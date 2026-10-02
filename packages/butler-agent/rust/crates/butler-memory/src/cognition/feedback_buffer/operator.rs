@@ -233,7 +233,7 @@ fn push_entry(record: &[u8], fallback_iso: &str, entries: &mut Vec<FeedbackEntry
     entries.push(parse_entry(&block, fallback_iso));
 }
 
-fn write_entries(path: &Path, entries: &[FeedbackEntry]) -> CognitionResult<()> {
+pub(super) fn write_entries(path: &Path, entries: &[FeedbackEntry]) -> CognitionResult<()> {
     let parent = path
         .parent()
         .ok_or_else(|| operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed))?;
@@ -258,7 +258,7 @@ fn write_entries(path: &Path, entries: &[FeedbackEntry]) -> CognitionResult<()> 
     })
 }
 
-fn create_private_dir(path: &Path) -> CognitionResult<()> {
+pub(super) fn create_private_dir(path: &Path) -> CognitionResult<()> {
     let mut builder = fs::DirBuilder::new();
     builder.recursive(true);
     butler_platform::secure_fs::owner_only_dirs(&mut builder);
@@ -276,7 +276,7 @@ fn create_private_dir(path: &Path) -> CognitionResult<()> {
         })
 }
 
-fn entry_value(entry: &FeedbackEntry) -> Value {
+pub(super) fn entry_value(entry: &FeedbackEntry) -> Value {
     let mut extra_fields = Map::new();
     for (key, value) in &entry.extra_fields {
         extra_fields.insert(key.clone(), Value::String(value.clone()));

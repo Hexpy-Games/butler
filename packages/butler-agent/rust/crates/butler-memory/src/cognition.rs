@@ -91,7 +91,7 @@ pub use embedding_port::{
 pub use error::{CognitionCode, CognitionError, CognitionResult};
 pub use exact_query::ExactMemoryQuery;
 pub use extraction::{CandidateSearchInput, CognitionVectorSearch, VectorSearchFuture};
-pub use feedback_buffer::{FeedbackBufferService, FeedbackTarget};
+pub use feedback_buffer::{FeedbackBufferService, FeedbackCapture, FeedbackTarget};
 pub use generation::{
     AcceptanceBinding, ActiveDescriptor, BuildInventory, CandidateInputRepairRequest,
     CanonicalSnapshot, CutoverStamp, EmbeddingSlot, FreshMemoryGeneration, GenerationEmbedding,

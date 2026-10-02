@@ -1,6 +1,10 @@
 //! Bounded, read-only access to the canonical feedback buffer.
 
+mod capture;
+mod lifecycle;
 mod operator;
+mod store;
+pub use capture::FeedbackCapture;
 mod quality_operator;
 mod resolve;
 mod targets;
