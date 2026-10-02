@@ -105,9 +105,8 @@ async fn process_roles_preserve_worker_protocol_and_executable_identity() -> Res
             std::fs::copy(&sandbox.binary, &alias)?;
         }
         assert!(process_names::prepare(&sandbox.binary).is_err());
-        let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(
-            "../../../../../packages/butler-app/client/electron/scripts/prepare-process-links.mjs",
-        );
+        let script = butler_e2e::e2e::binary::workspace_root()
+            .join("../../butler-app/client/electron/scripts/prepare-process-links.mjs");
         let output = launch
             .env_command(std::path::Path::new("node"))
             .env("PATH", std::env::var_os("PATH").unwrap_or_default())
