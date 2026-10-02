@@ -161,7 +161,7 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<String, Error> {
     if bytes.starts_with(&[0xff, 0xfe]) || bytes.get(1) == Some(&0) {
         let offset = usize::from(bytes.starts_with(&[0xff, 0xfe])) * 2;
         let bytes = bytes.get(offset..).ok_or(Error::InvalidValue)?;
-        if bytes.len() % 2 != 0 {
+        if !bytes.len().is_multiple_of(2) {
             return Err(Error::InvalidValue);
         }
         let words = bytes
