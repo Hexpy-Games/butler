@@ -8,6 +8,8 @@ use tokio::sync::Semaphore;
 // Two readers bound aggregate page-cache memory while writes remain independent.
 const CONNECTIONS: usize = 2;
 
+type ReadOperation = Box<dyn FnOnce(&Connection) -> StorageResult<()> + Send>;
+
 pub(super) struct ReadPool {
     available: Mutex<Vec<Connection>>,
     permits: Arc<Semaphore>,
@@ -34,6 +36,23 @@ impl ReadPool {
         T: Send + 'static,
         F: FnOnce(&Connection) -> StorageResult<T> + Send + 'static,
     {
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        self.dispatch(Box::new(move |db| {
+            let value = operation(db)?;
+            let _sent = sender.send(value);
+            Ok(())
+        }))
+        .await?;
+        receiver.await.map_err(|error| {
+            AppStorageError::new(
+                super::AppStorageCode::AppSqliteJoinFailed,
+                error.to_string(),
+            )
+        })
+    }
+    // Erase the query type before the async/blocking boundary. Every query shares
+    // one admission, transaction and panic-isolation implementation.
+    async fn dispatch(self: &Arc<Self>, operation: ReadOperation) -> StorageResult<()> {
         let guard = self.gate.clone().read_owned().await;
         let permit = self
             .permits
@@ -58,9 +77,9 @@ impl ReadPool {
                 let transaction = connection
                     .unchecked_transaction()
                     .map_err(AppStorageError::sqlite)?;
-                let value = operation(&transaction)?;
+                operation(&transaction)?;
                 transaction.commit().map_err(AppStorageError::sqlite)?;
-                Ok(value)
+                Ok(())
             }));
             pool.available.lock().push(connection);
             drop(permit);
