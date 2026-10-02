@@ -59,3 +59,9 @@ notification show acknowledgement and registered deep-link restoration.
 Settings then remained behind first-run consent: the fixture used version 1
 while the product requires FIRST_RUN_CONSENT_VERSION (2). Use that existing
 product constant, as the packaged macOS update smoke does.
+
+Run 36974465477 reached the real Update button and the verified helper-ready
+handshake, then the App remained ready. Navigation exposes its latest turn
+state (delivered), but foreground quit omitted delivered from terminal states.
+Recognize that completed state; retain active worker/turn and queued-message
+protection. This product change requires new packaged bytes and native proof.
