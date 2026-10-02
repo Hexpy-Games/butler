@@ -14,8 +14,8 @@ runs:
       shell: pwsh
       working-directory: ${{ github.workspace }}
       run: |
-        $root = Join-Path $env:RUNNER_TEMP ('butler-' + [guid]::NewGuid())
-        New-Item -ItemType Directory "$root/home","$root/data","$root/local","$root/roaming","$root/tmp" | Out-Null
+        $root = Join-Path 'C:\Users\yeonw\work\tmp' ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Force "$root/home","$root/data","$root/local","$root/roaming","$root/tmp" | Out-Null
         & ./deploy/windows-protocol-snapshot.ps1 -Output "$root/protocol-before.json"
         @("OWNER_JOB_ROOT=$root", "CARGO_TARGET_DIR=C:\Users\yeonw\work\target\${{ inputs.workflow }}",
           "CARGO_HOME=$env:USERPROFILE\.cargo", "RUSTUP_HOME=$env:USERPROFILE\.rustup",
