@@ -64,23 +64,24 @@ fn read_local() -> Result<Option<String>, Error> {
 
 fn query(sid: &str) -> Result<Option<String>, Error> {
     let name = task_name(sid);
-    let output = run("schtasks.exe", &["/Query", "/TN", &name, "/XML"])?;
+    // schtasks with CREATE_NO_WINDOW exports through the OEM code page and
+    // loses Unicode paths. The scheduler's BSTR stays intact through UTF-8.
+    let script = format!(
+        "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);$ErrorActionPreference='Stop';try{{$s=New-Object -ComObject Schedule.Service;$s.Connect();[Console]::Write($s.GetFolder('\\').GetTask('{name}').Xml)}}catch{{if(($_.Exception.GetBaseException().HResult -band 65535) -eq 2){{exit 3}};[Console]::Error.WriteLine('Task Scheduler query failed');exit 1}}"
+    );
+    let output = run(
+        "powershell.exe",
+        &["-NoProfile", "-NonInteractive", "-Command", &script],
+    )?;
     if output.status.success() {
         return Ok(Some(task_xml::decode(&output.stdout)?));
     }
     // Never interpret access-denied or other scheduler failures as absence.
-    let probe = format!(
-        "$ErrorActionPreference='Stop';try{{$s=New-Object -ComObject Schedule.Service;$s.Connect();$null=$s.GetFolder('\\').GetTask('{name}');exit 0}}catch{{if(($_.Exception.GetBaseException().HResult -band 65535) -eq 2){{exit 3}};exit 1}}"
-    );
-    let missing = run(
-        "powershell.exe",
-        &["-NoProfile", "-NonInteractive", "-Command", &probe],
-    )?;
-    if missing.status.code() == Some(3) {
+    if output.status.code() == Some(3) {
         return Ok(None);
     }
     Err(Error::Manager {
-        command: "schtasks /Query /XML".into(),
+        command: "Task Scheduler query".into(),
         message: String::from_utf8_lossy(&output.stderr).trim().into(),
     })
 }
