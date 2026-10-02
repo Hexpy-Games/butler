@@ -1,5 +1,6 @@
 //! Explicit project artifact discovery. No prompt snapshot or background work.
 mod query;
+mod read;
 
 use butler_core::json::JsonDocument;
 use butler_turn::btcc::{BtccError, GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
@@ -19,14 +20,17 @@ pub(super) async fn execute(
         Ok(request) => request,
         Err(_) => return encoded(json!({"ok":false,"error":"invalid_arguments"})),
     };
-    let root = owner.binding.butler_data.clone();
-    let result = tokio::select! {
-        biased;
-        () = invocation.cancellation.cancelled() => {
-            return encoded(json!({"ok":false,"error":"cancelled"}));
-        }
-        result = tokio::task::spawn_blocking(move || query::page(&root, &project, &request)) => {
-            result.unwrap_or_else(|_| Err("artifact_index_unavailable".into()))
+    let result = if request.read_handle.is_some() {
+        read::execute(owner, invocation, &project, request).await
+    } else {
+        let root = owner.binding.butler_data.clone();
+        let signal = invocation.cancellation.clone();
+        tokio::select! {
+            biased;
+            () = invocation.cancellation.cancelled() => Err("cancelled".into()),
+            result = tokio::task::spawn_blocking(move || {
+                query::page(&root, &project, &request, signal)
+            }) => result.unwrap_or_else(|_| Err("artifact_index_unavailable".into())),
         }
     };
     encoded(result.unwrap_or_else(|error| json!({"ok":false,"error":error})))

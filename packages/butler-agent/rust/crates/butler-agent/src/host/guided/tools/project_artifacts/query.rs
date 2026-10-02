@@ -6,6 +6,7 @@ use butler_core::public_text::sanitize_public_text;
 use rusqlite::{Connection, OpenFlags, params};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use tokio_util::sync::CancellationToken;
 
 #[derive(Default, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -62,23 +63,24 @@ const CANDIDATES: &str = "WITH origins AS (\
     AND (?3='' OR lower(f.mime_type)=lower(?3) OR lower(f.kind)=lower(?3)) \
     AND (?4='' OR f.id=?4)) ";
 
-pub(super) fn open(root: &Path) -> rusqlite::Result<Connection> {
+pub(super) fn open(root: &Path, signal: CancellationToken) -> rusqlite::Result<Connection> {
     // Read-only flags must never create a DB or mutate a refused data root.
     let db = butler_platform::sqlite::open_with_flags(
         root.join("app-server/butler-client.sqlite"),
         OpenFlags::SQLITE_OPEN_READ_ONLY,
     )?;
+    db.progress_handler(1000, Some(move || signal.is_cancelled()));
     db.busy_timeout(std::time::Duration::ZERO)?;
     Ok(db)
 }
 
-pub(super) fn page(root: &Path, project: &str, request: &Request) -> Result<Value, String> {
+pub(super) fn page(root: &Path, project: &str, request: &Request, signal: CancellationToken) -> Result<Value, String> {
     let limit = request.limit.unwrap_or(50);
     if !(1..=100).contains(&limit) || request.read_handle.is_some() {
         return Err("invalid_arguments".into());
     }
     let cursor = decode_cursor(project, request)?;
-    let mut db = open(root).map_err(|_| "artifact_index_unavailable")?;
+    let mut db = open(root, signal).map_err(|_| "artifact_index_unavailable")?;
     let tx = db.transaction().map_err(|_| "artifact_index_unavailable")?;
     let total: u64 = tx.query_row(
         &format!("{CANDIDATES} SELECT COUNT(*) FROM matches"),
@@ -109,8 +111,8 @@ pub(super) fn page(root: &Path, project: &str, request: &Request) -> Result<Valu
         .take(limit).map(|a| a.value).collect::<Vec<_>>(),"next_cursor":next}))
 }
 
-pub(super) fn find(root: &Path, project: &str, id: &str) -> Result<Option<Artifact>, String> {
-    let db = open(root).map_err(|_| "artifact_index_unavailable")?;
+pub(super) fn find(root: &Path, project: &str, id: &str, signal: CancellationToken) -> Result<Option<Artifact>, String> {
+    let db = open(root, signal).map_err(|_| "artifact_index_unavailable")?;
     let mut statement = db.prepare(&format!("{CANDIDATES} SELECT * FROM matches"))
         .map_err(|_| "artifact_index_unavailable")?;
     let mut rows = statement.query_map(params![project, "", "", id], artifact)
