@@ -8,7 +8,7 @@ status: published
 
 ## Supported platforms
 
-The current version is `0.1.0-preview.4`, a preview. The stable 0.1.0 release is still to come.
+The current version is `0.1.0-preview.5`, a preview. The stable 0.1.0 release is still to come.
 
 - Apple silicon (M-series) Mac, macOS 12 or later
 - Linux x64 / arm64: DEB package
@@ -31,8 +31,8 @@ The current version is `0.1.0-preview.4`, a preview. The stable 0.1.0 release is
 >
   <TabPanel value="macos">
     <Steps>
-      1. Open the [0.1.0 preview.4 release](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.4).
-      2. Download the [macOS DMG](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-darwin-arm64.dmg).
+      1. Open the [0.1.0 preview.5 release](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.5).
+      2. Download the [macOS DMG](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/butler-app-0.1.0-preview.5-darwin-arm64.dmg).
       3. Open the DMG and drag `Butler.app` into the Applications folder.
     </Steps>
   </TabPanel>
@@ -43,16 +43,16 @@ The current version is `0.1.0-preview.4`, a preview. The stable 0.1.0 release is
   </TabPanel>
   <TabPanel value="linux">
     <Steps>
-      1. Download the [DEB x64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-linux-x64.deb), [DEB arm64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-linux-arm64.deb) or [Arch x64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-archlinux-x64.pkg.tar.zst) package.
+      1. Download the [DEB x64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/butler-app-0.1.0-preview.5-linux-x64.deb), [DEB arm64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/butler-app-0.1.0-preview.5-linux-arm64.deb) or [Arch x64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/butler-app-0.1.0-preview.5-archlinux-x64.pkg.tar.zst) package.
       2. In the download folder, install it with the command for your distribution.
       3. Open Butler from your app list.
     </Steps>
 
     ```bash
     # Debian / Ubuntu (x64; change the file name for arm64)
-    sudo apt install ./butler-app-0.1.0-linux-x64.deb
+    sudo apt install ./butler-app-0.1.0-preview.5-linux-x64.deb
     # Arch Linux (x64)
-    sudo pacman -U ./butler-app-0.1.0-archlinux-x64.pkg.tar.zst
+    sudo pacman -U ./butler-app-0.1.0-preview.5-archlinux-x64.pkg.tar.zst
     ```
   </TabPanel>
 </Tabs>
@@ -60,6 +60,8 @@ The current version is `0.1.0-preview.4`, a preview. The stable 0.1.0 release is
 <Notice tone="warning">
   Earlier releases may contain the TypeScript/Bun Agent, which is no longer used. Download a release that includes the native Agent.
 </Notice>
+
+After you install the `0.1.0-preview.5` app, turn on **Receive preview versions** to get later previews from **Settings → Updates**. Run `butler --version` to see the exact version.
 
 ### Verify the download (optional)
 
@@ -92,7 +94,7 @@ After setup, press <span data-mod-key><Kbd keys={["⌘", "K"]} label="Command K"
 The headless Agent supports Apple silicon macOS and glibc-based Linux x64 / arm64.
 
 ```bash
-curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/install.sh | sh -s -- --version 0.1.0-preview.4
+curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/install.sh | sh -s -- --version 0.1.0-preview.5
 # With Node.js
 npx @hexpygames/butler install
 ```

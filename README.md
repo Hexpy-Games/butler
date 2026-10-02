@@ -16,10 +16,10 @@
   For macOS (Apple silicon) and Linux, with hosted or local models.
 </p>
 
-0.1.0 is in preview. The current build is [`0.1.0-preview.4`](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.4).
+0.1.0 is in preview. The current build is [`0.1.0-preview.5`](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.5).
 
 <p align="center">
-  <a href="https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.4"><strong>Download</strong></a>
+  <a href="https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.5"><strong>Download</strong></a>
   &nbsp;·&nbsp;
   <a href="https://butler.hexpy.games/en/help/"><strong>Manual</strong></a>
   &nbsp;·&nbsp;
@@ -58,22 +58,23 @@ Use Butler through the App, on desktop or in a browser.
 
 ## Install
 
-Download Butler from the [0.1.0 preview.4 release](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.4).
+Download Butler from the [0.1.0 preview.5 release](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.5).
 
 | Platform | Download |
 | --- | --- |
-| macOS (Apple silicon) | [DMG](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-darwin-arm64.dmg) |
-| Linux (x64) | [DEB](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-linux-x64.deb) |
-| Linux (arm64) | [DEB](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-linux-arm64.deb) |
-| Arch Linux (x64) | [Package](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-archlinux-x64.pkg.tar.zst) |
+| macOS (Apple silicon) | [DMG](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/butler-app-0.1.0-preview.5-darwin-arm64.dmg) |
+| Linux (x64) | [DEB](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/butler-app-0.1.0-preview.5-linux-x64.deb) |
+| Linux (arm64) | [DEB](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/butler-app-0.1.0-preview.5-linux-arm64.deb) |
+| Arch Linux (x64) | [Package](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/butler-app-0.1.0-preview.5-archlinux-x64.pkg.tar.zst) |
 | Windows | No installer yet |
 
-Each file has a `.sha256` checksum, and `butler-0.1.0-preview.4-SHA256SUMS` lists them all.
+Each file has a `.sha256` checksum, and `butler-0.1.0-preview.5-SHA256SUMS` lists them all.
 
 Settings → Updates installs the new App and bundled Agent, then relaunches with the same data directory.
 **Receive preview versions** defaults to OFF. Turn it on to receive the newest stable or preview release.
+After installing `0.1.0-preview.5`, later previews arrive through Settings → Updates when **Receive preview versions** is on. `butler --version` shows the exact version.
 The CLI shares this preference: `butler config set update.previews true` (or `false`); `butler status` shows it.
-Release builds identify with their full tag, such as `0.1.0-preview.4`; development builds use `0.1.0-dev`.
+Release builds identify with their full tag, such as `0.1.0-preview.5`; development builds use `0.1.0-dev`.
 
 On first launch, choose the interface language on the welcome screen, accept the safety notice and connect an AI. Choose Butler's reply language at the end of the AI connection step; you can change it later in **Settings → Personalization**. See [Install](https://butler.hexpy.games/en/help/getting-started/install/) and [First run](https://butler.hexpy.games/en/help/getting-started/first-run/).
 
@@ -84,7 +85,7 @@ macOS preview builds are signed but not notarized, so Gatekeeper shows a prompt 
 On Apple silicon macOS or Linux x64 / arm64 with glibc:
 
 ```sh
-curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/install.sh | sh -s -- --version 0.1.0-preview.4
+curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/install.sh | sh -s -- --version 0.1.0-preview.5
 # Or, with Node.js:
 npx @hexpygames/butler install
 ```
