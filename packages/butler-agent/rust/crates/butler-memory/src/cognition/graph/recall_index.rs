@@ -9,9 +9,7 @@ use crate::cognition::CognitionResult;
 pub(super) fn install_and_backfill(connection: &Connection) -> CognitionResult<()> {
     connection.execute_batch(
         r"CREATE INDEX IF NOT EXISTS idx_alias_postings_gram_source ON memory_alias_postings(gram,node_id,source_id);
-         CREATE INDEX IF NOT EXISTS idx_alias_postings_entity ON memory_alias_postings(node_id,gram,source_id,surface_original);
          CREATE INDEX IF NOT EXISTS idx_alias_postings_alias ON memory_alias_postings(node_id,source_id,surface_original,gram);
-         CREATE INDEX IF NOT EXISTS idx_alias_postings_scope_gram_node ON memory_alias_postings(identity_scope,project_id,gram,node_id);
          CREATE TABLE IF NOT EXISTS memory_alias_index_dirty(node_id TEXT NOT NULL,source_id TEXT NOT NULL,surface_original TEXT NOT NULL,PRIMARY KEY(node_id,source_id,surface_original));
          CREATE TRIGGER IF NOT EXISTS memory_alias_index_insert AFTER INSERT ON memory_aliases BEGIN
            INSERT OR IGNORE INTO memory_alias_index_dirty VALUES(NEW.node_id,NEW.source_id,NEW.surface_original); END;

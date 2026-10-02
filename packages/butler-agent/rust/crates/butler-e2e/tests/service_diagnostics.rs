@@ -100,7 +100,9 @@ async fn cli_logs_export_safe_summary_and_have_zero_idle_writes() -> Result<(), 
     assert_eq!(stop.code, Some(0), "{stop:?}");
     let stderr = s.sandbox.data.join("logs/butler-agent-service.stderr.log");
     fs::OpenOptions::new().append(true).open(&stderr)?.write_all(
-        b"2026-10-02T00:00:00Z [native-app] unavailable token=fixture-secret Bearer fixture-bearer\nprivate conversation content\n2026-10-02T00:00:00Z [native-model] prompt=private conversation content\n")?;
+        b"2026-10-02T00:00:00Z [native-app] unavailable token=fixture-secret Bearer fixture-bearer\n2026-10-02T00:00:00Z [native-app] Cookie: butler_session_123=v2.fixture-device.fixture-cookie; other=fixture-other-cookie\n2026-10-02T00:00:00Z [native-app] unavailable pairing_code=12349876 code=ABCD-EFGH-JKLM-NPQR path=/home/fixture-owner/data C:\\Users\\fixture-windows\\data count=42\nprivate conversation content\n2026-10-02T00:00:00Z [native-model] prompt=private conversation content\n")?;
+    fs::OpenOptions::new().append(true).open(&stderr)?.write_all(
+        b"2026-10-02T00:00:00Z [native-app] Cookie: quoted=\"fixture-cookie\"; other=fixture-other-cookie\n2026-10-02T00:00:00Z [native-app] {\"cookie\":\"quoted=\\\"fixture-cookie\\\"; other=fixture-other-cookie\",\"count\":42}\n")?;
     let export = s
         .agent
         .cli_async(&["doctor", "--collect-logs", "--json"])
@@ -129,9 +131,18 @@ async fn cli_logs_export_safe_summary_and_have_zero_idle_writes() -> Result<(), 
         assert!(
             !text.contains("fixture-secret")
                 && !text.contains("fixture-bearer")
-                && !text.contains("private conversation content"),
+                && !text.contains("private conversation content")
+                && !text.contains("fixture-cookie")
+                && !text.contains("fixture-other-cookie")
+                && !text.contains("12349876")
+                && !text.contains("ABCD-EFGH-JKLM-NPQR")
+                && !text.contains("fixture-owner")
+                && !text.contains("fixture-windows"),
             "{name}"
         );
+        if name == "butler-agent-service.stderr.log" {
+            assert!(text.contains("count=42"), "operational fields were lost");
+        }
         if name.ends_with(".log") {
             for line in text.lines() {
                 assert!(

@@ -23,7 +23,7 @@ use butler_platform::sqlite;
 async fn mig_01_pre_btcc_data_dir_is_refused_without_writes() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let manifest = legacy_manifest()?;
-    let setup = Setup::new("MIG-01")?;
+    let mut setup = Setup::new("MIG-01")?;
     let data = setup.sandbox.data.clone();
     butler_e2e::e2e::fixtures::legacy(
         &data,
@@ -61,6 +61,7 @@ async fn mig_01_pre_btcc_data_dir_is_refused_without_writes() -> Result<(), Harn
         before,
         "refused start modified the legacy data dir"
     );
+    setup.sandbox.mark_success();
     Ok(())
 }
 

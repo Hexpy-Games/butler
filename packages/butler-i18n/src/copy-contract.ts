@@ -948,6 +948,17 @@ export interface AppCopy {
     copy: string;
   };
   settings: {
+    deleteSchedule: (name: string) => string;
+    deleteMcpServer: (name: string) => string;
+    mcpEnabled: string;
+    mcpDisabled: string;
+    mcpIdRequired: string;
+    mcpIdInvalid: string;
+    mcpIdPreview: (id: string) => string;
+    mcpSaveFailed: string;
+    mcpActionFailed: string;
+    mcpCommandRequired: string;
+    mcpUrlRequired: string;
     title: string;
     back: string;
     saving: string;
@@ -1618,7 +1629,6 @@ export interface AppCopy {
     failed: string;
     kindLabels: Record<"chat" | "project" | "project_session" | "group" | "automation" | "settings", string>;
     /** Keyed by the stable settings result id suffix (`settings:<key>`). */
-    settingsSections: Record<string, string>;
   };
   feedback: {
     retry: string;

@@ -4,12 +4,14 @@ param(
   [Parameter(Mandatory = $true)][string]$Profile,
   [Parameter(Mandatory = $true)][string]$PidFile,
   [Parameter(Mandatory = $true)][string]$ExitFile,
+  [int]$DebugPort = 0,
   [switch]$QuitMain
 )
 
 $ErrorActionPreference = "Stop"
 try {
   $arguments = @("`"--user-data-dir=$Profile`"")
+  if ($DebugPort) { $arguments += "--remote-debugging-port=$DebugPort" }
   if ($QuitMain) { $arguments += "--butler-quit-main-ui" }
   $arguments += "`"$AppRoot`""
   $appProcess = Start-Process `

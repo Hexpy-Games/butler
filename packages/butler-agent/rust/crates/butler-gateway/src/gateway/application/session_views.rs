@@ -258,6 +258,12 @@ impl AppApplication {
             .subsessions
             .projection(session_id.clone(), Some(page))
             .await?;
+        let mut projection = projection;
+        steward_children::project_progress(
+            projection
+                .as_object_mut()
+                .ok_or(GatewayApplicationError::internal())?,
+        );
         require_relation(&projection)?;
         let messages = projection
             .get("messages")
@@ -289,6 +295,11 @@ impl AppApplication {
             "messages",
             "workers",
             "relation",
+            "activity_rows",
+            "approved_plan_revision",
+            "approved_plan_total",
+            "approved_plan_completed",
+            "waiting_for_children",
         ] {
             copy(&mut view, key, &projection);
         }
@@ -331,6 +342,12 @@ impl AppApplication {
                 }),
             )
             .await?;
+        let mut projection = projection;
+        steward_children::project_progress(
+            projection
+                .as_object_mut()
+                .ok_or(GatewayApplicationError::internal())?,
+        );
         require_relation(&projection)?;
         let mut latest = projection
             .get("latest_turn")
@@ -350,11 +367,11 @@ impl AppApplication {
         );
         view.insert(
             "latest_progress".into(),
-            json!({
+            latest.get("progress").cloned().unwrap_or_else(|| json!({
                 "summary": projection.pointer("/result/summary").and_then(Value::as_str).unwrap_or("No progress yet"),
                 "updated_at": updated,
                 "state": latest.get("state").cloned().unwrap_or_else(||json!("idle")),
-            }),
+            })),
         );
         view.insert(
             "context_details".into(),

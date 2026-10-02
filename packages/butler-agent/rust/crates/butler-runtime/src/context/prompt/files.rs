@@ -88,7 +88,7 @@ pub(super) fn bounded_persona(value: &str) -> String {
         return value.to_owned();
     }
     format!(
-        "{}\n...",
+        "{}\n[Persona excerpt elided; read_file personas/active.md for the full configured voice]",
         butler_core::public_text::trim_js_whitespace_end(prefix_utf16(value, 3_000))
     )
 }

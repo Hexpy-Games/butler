@@ -6,13 +6,15 @@ import {
   ButtonContainer,
   Field,
   FieldLabel,
+  FieldError,
+  FieldDescription,
   Input,
   NativeSelect,
   NativeSelectOption,
   Stack,
   Switch,
 } from "@/butler-ds";
-import type { McpServerFormState } from "./mcpSettingsUtils";
+import { mcpServerIdError, type McpServerFormState } from "./mcpSettingsUtils";
 import { HttpFields } from "./HttpFields";
 import { StdioFields } from "./StdioFields";
 
@@ -21,23 +23,34 @@ export function McpServerForm({
   onChange,
   onCancel,
   onSave,
+  busy,
 }: {
   form: McpServerFormState;
+  busy: boolean;
   onChange: (patch: Partial<McpServerFormState>) => void;
   onCancel: () => void;
   onSave: () => void;
 }) {
   useAppLocale();
   const copy = appCopy.settings;
+  const idError = mcpServerIdError(form.id);
   return (
     <Stack gap="sm">
-      <Field>
+      <Field data-invalid={Boolean(idError)}>
         <FieldLabel htmlFor="mcp-server-id">{copy.fields.mcpServerId}</FieldLabel>
         <Input
           id="mcp-server-id"
+          required
+          aria-invalid={Boolean(idError)}
+          aria-describedby="mcp-server-id-hint"
           value={form.id}
           onChange={(event) => onChange({ id: event.target.value })}
         />
+        {idError ? <FieldError id="mcp-server-id-hint">
+          {idError === "required" ? copy.mcpIdRequired : copy.mcpIdInvalid}
+        </FieldError> : <FieldDescription id="mcp-server-id-hint">
+          {copy.mcpIdPreview(form.id.toLowerCase().replace(/^-+|-+$/gu, ""))}
+        </FieldDescription>}
       </Field>
       <Field>
         <FieldLabel htmlFor="mcp-server-name">{copy.fields.mcpServerName}</FieldLabel>
@@ -81,10 +94,10 @@ export function McpServerForm({
         <HttpFields form={form} onChange={onChange} />
       )}
       <ButtonContainer size="default" justify="end">
-        <Button type="button" variant="outline" onClick={onCancel}>
+        <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>
           {appCopy.common.cancel}
         </Button>
-        <Button type="button" onClick={onSave}>
+        <Button type="button" disabled={busy || Boolean(idError)} onClick={onSave}>
           {appCopy.common.save}
         </Button>
       </ButtonContainer>

@@ -71,7 +71,7 @@ async fn onb_01_fresh_install_boots_empty() -> Result<(), HarnessError> {
 #[tokio::test]
 async fn onb_01_unusable_data_dirs_are_refused() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let setup = Setup::new("ONB-01-INJECT")?.fixture(Fixture::Empty);
+    let mut setup = Setup::new("ONB-01-INJECT")?.fixture(Fixture::Empty);
     // (a) data dir not writable (only where a host can make one).
     if butler_platform::secure_fs::PERMISSION_MODES {
         let locked = setup.sandbox.root.join("locked-data");
@@ -117,6 +117,7 @@ async fn onb_01_unusable_data_dirs_are_refused() -> Result<(), HarnessError> {
     );
     let after = setup.sandbox.installation_fingerprint()?;
     assert_eq!(after, before, "writes into the installation dir");
+    setup.sandbox.mark_success();
     Ok(())
 }
 

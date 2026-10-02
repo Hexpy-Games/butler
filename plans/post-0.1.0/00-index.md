@@ -15,6 +15,8 @@ The summaries are in `HANDOFF.md` §4. The per-item status and file:line referen
 | [ ] | P9 Windows completion | `origin/main` | sol medium |
 | [ ] | P10 Follow-ups | `origin/main` | luna max |
 
+Preview decisions and partial implementation evidence are listed in [the 2026-10-02 Ledger publication queue](../ledger-updates-2026-10-02.md). In particular, fresh memory bootstrap, hot-cache refresh and compatible vector identity adoption are on main; P2 remains open for its other acceptance items. P9 remains Windows installer/completion work.
+
 What each item covers:
 
 - **P1 BTCC storage**
@@ -24,7 +26,7 @@ What each item covers:
   - Add progress-events retention.
   - Filter operation-output reads in SQL.
 - **P2 Memory**
-  - Fix the vector identity bug.
+  - Compatible serving identity adoption is merged (#445); retain verification of remaining identity and catch-up cases.
   - Catch-up wrap-around.
   - The `pending_semantic_job` query.
   - Idle leases.

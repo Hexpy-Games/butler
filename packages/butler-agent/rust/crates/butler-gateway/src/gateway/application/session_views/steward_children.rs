@@ -6,7 +6,7 @@
 //! `safe_progress_rows`), `delivery_state`, `cancellable`, `retryable`,
 //! limitations, the child's activity rows, artifacts and changed files, and an
 //! App `status`. Missing fields are filled with empty values so clients never
-//! see a partial turn. Progress rows are not projected yet (always empty).
+//! see a partial turn. Public child events use the ordinary App progress mapper.
 
 use serde_json::{Map, Value, json};
 
@@ -57,7 +57,16 @@ pub(super) fn complete_turn_value(turn: &mut Value) {
 
 fn complete_child(child: &mut Map<String, Value>, now_ms: i64) {
     let raw = Value::Object(child.clone());
-    let mut status = child_status(&raw);
+    project_progress(child);
+    let mut status = if raw
+        .pointer("/latest_turn/retryable")
+        .and_then(Value::as_bool)
+        == Some(true)
+    {
+        "failed"
+    } else {
+        child_status(&raw)
+    };
     if is_orphan(&raw, now_ms) {
         status = "failed";
         child.insert("terminal".into(), json!(true));
@@ -79,6 +88,64 @@ fn complete_child(child: &mut Map<String, Value>, now_ms: i64) {
     child.entry("activity_rows").or_insert_with(|| json!([]));
     child.entry("artifacts").or_insert_with(|| json!([]));
     child.entry("changed_files").or_insert(changed_files);
+}
+
+pub(super) fn project_progress(child: &mut Map<String, Value>) {
+    let events = child
+        .remove("public_progress_events")
+        .unwrap_or_else(|| json!([]));
+    let rows: Vec<Value> = events
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|event| {
+            let kind = event.get("kind")?.as_str()?;
+            let empty = Map::new();
+            let payload = event
+                .get("payload")
+                .and_then(Value::as_object)
+                .unwrap_or(&empty);
+            let id = event.get("id")?.as_str()?;
+            let now = event.get("createdAt").and_then(Value::as_str).or_else(|| {
+                child
+                    .get("latest_turn")
+                    .and_then(|turn| turn.get("updated_at"))
+                    .and_then(Value::as_str)
+            })?;
+            super::super::projection::row_from_runtime_event(
+                kind,
+                payload,
+                id,
+                now,
+                event.get("turnSequence").and_then(Value::as_u64),
+            )
+            .map(Value::Object)
+        })
+        .collect();
+    let summary = rows
+        .iter()
+        .rev()
+        .find(|row| {
+            !matches!(row["kind"].as_str(), Some("turn" | "todo"))
+                && row["bridge_phase"] != "model_round_waiting"
+                && row["work_decision_source"] != "model-authored"
+        })
+        .or_else(|| rows.last())
+        .and_then(|row| row.get("safe_label"))
+        .cloned();
+    for key in ["latest_turn", "active_turn"] {
+        if let Some(turn) = child.get_mut(key).and_then(Value::as_object_mut) {
+            complete_turn(turn);
+            if let Some(progress) = turn.get_mut("progress").and_then(Value::as_object_mut) {
+                progress.insert("safe_progress_rows".into(), json!(rows));
+                if let Some(summary) = &summary {
+                    progress.insert("summary".into(), summary.clone());
+                    progress.insert("safe_status_label".into(), summary.clone());
+                }
+            }
+        }
+    }
+    child.insert("activity_rows".into(), json!(rows));
 }
 
 /// A child without a result whose latest turn settled (or stayed finalizing)
@@ -121,7 +188,10 @@ fn complete_turn(turn: &mut Map<String, Value>) {
     let id = turn.get("id").cloned().unwrap_or(Value::Null);
     let state =
         app_turn_state(turn.get("state").and_then(Value::as_str).unwrap_or("idle")).to_owned();
-    let terminal = matches!(state.as_str(), "delivered" | "cancelled" | "failed");
+    let terminal = matches!(
+        state.as_str(),
+        "delivered" | "cancelled" | "failed" | "runtime_fault"
+    );
     let updated_at = turn.get("updated_at").cloned().unwrap_or(Value::Null);
     turn.insert("state".into(), json!(state));
     turn.entry("delivery_state")

@@ -52,7 +52,7 @@ async fn stub_rejects_real_model_sources_before_network_or_retry() -> Result<(),
 #[test]
 fn offline_status_reads_partial_progress_without_model_writes() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let setup = Setup::new("EMBED-OFFLINE")?;
+    let mut setup = Setup::new("EMBED-OFFLINE")?;
     let root = setup.sandbox.data.join("cache/models/Xenova/bge-m3");
     let staging = root.join(".native-embedding-acquire");
     std::fs::create_dir_all(&staging)?;
@@ -66,6 +66,7 @@ fn offline_status_reads_partial_progress_without_model_writes() -> Result<(), Ha
     assert_eq!(view["data"]["memoryModel"]["bytes_done"], 7);
     assert_eq!(view["data"]["memoryModel"]["bytes_total"], 586_779_294_u64);
     assert_eq!(before, snapshot(&root)?);
+    setup.sandbox.mark_success();
     Ok(())
 }
 

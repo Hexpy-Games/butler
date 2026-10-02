@@ -1,4 +1,4 @@
-import { useAppLocale } from "@/app/copy.ts";
+import { getAppCopy, useAppLocale } from "@/app/copy.ts";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Briefcase,
@@ -17,7 +17,9 @@ import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { CommandPaletteResult } from "@/app/types.ts";
 import { useOrganization } from "@/app/space/organization";
-import { commandResultSubtitle, commandResultTitle } from "./commandPaletteLabels";
+import { commandResultSubtitle } from "./commandPaletteLabels";
+import { createSettingsSections, matchesSettingsSection } from "../settings/settingsSections";
+import { useDeveloperLogsAvailability } from "../settings/useDeveloperLogsAvailability";
 import { useCommandPaletteFocus } from "./useCommandPaletteFocus";
 
 export function CommandPalette({
@@ -30,7 +32,9 @@ export function CommandPalette({
   onClose?: () => void;
   onSelect?: (result: CommandPaletteResult) => void;
 } = {}) {
-  useAppLocale();
+  const locale = useAppLocale();
+  const diagnosticsEnabled = useButlerStore((state) => state.settings.diagnostics_enabled === true);
+  const developerMode = useDeveloperLogsAvailability(diagnosticsEnabled);
   const setCommandOpen = useButlerStore((state) => state.setCommandOpen);
   const navigateCommandResult = useButlerStore(
     (state) => state.navigateCommandResult,
@@ -43,7 +47,13 @@ export function CommandPalette({
   }>({ query: "", status: "loading", results: [] });
   const [retry, setRetry] = useState(0);
   const status = searchState.query === query ? searchState.status : "loading";
-  const results = status === "ready" ? searchState.results : [];
+  const english = getAppCopy("en-US").settings.sections;
+  const settingsResults: CommandPaletteResult[] = createSettingsSections(appCopy.settings, developerMode)
+    .filter((section) => matchesSettingsSection(section, query, [english[section.id]]))
+    .map((section) => ({ id: `settings:${section.id}`, kind: "settings", title: section.label,
+      subtitle: appCopy.commandPalette.kindLabels.settings, route: `settings:${section.id}` }));
+  const results = [...settingsResults, ...(status === "ready"
+    ? searchState.results.filter((result) => result.kind !== "settings") : [])];
   const inputRef = useRef<HTMLInputElement | null>(null);
   useCommandPaletteFocus(open, inputRef, () => setQuery(""));
 
@@ -66,7 +76,7 @@ export function CommandPalette({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query, retry, open]);
+  }, [query, retry, open, locale]);
 
   return (
     <CommandPalettePanel
@@ -88,7 +98,7 @@ export function CommandPalette({
       ) : undefined}
       items={results.map((result) => ({
         id: `${result.kind}-${result.id}`,
-        title: highlightMatch(commandResultTitle(result), query),
+        title: highlightMatch(result.title, query),
         subtitle: commandResultSubtitle(result),
         icon: <CommandIcon kind={result.kind} />,
         onSelect: () => {

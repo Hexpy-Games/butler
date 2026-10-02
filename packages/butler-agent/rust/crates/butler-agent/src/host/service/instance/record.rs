@@ -1,6 +1,10 @@
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+// Forced release is terminal for this service process. No later persist may publish.
+static DEADLINE_RELEASE: AtomicBool = AtomicBool::new(false);
 
 use butler_platform::instance::InstanceLock;
 use butler_platform::secure_fs;
@@ -44,18 +48,20 @@ pub(super) fn write_record(
     secure_fs::create_private_dir_all(parent).map_err(|source| {
         crate::host::HostError::new("native_service_instance_state_unavailable").with_source(source)
     })?;
-    let temporary = path.with_extension(format!(
-        "json.{}.{}.{}.tmp",
-        record.pid,
-        record.nonce,
-        uuid::Uuid::new_v4()
-    ));
+    let temporary = staged_record_path(path, record.pid, &record.nonce);
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
     let _ = secure_fs::owner_only(&mut options);
     let mut file = options.open(&temporary).map_err(|source| {
         crate::host::HostError::new("native_service_instance_state_unavailable").with_source(source)
     })?;
+    // Check after creation: a writer that opens after cancellation must still
+    // discard its staging file instead of resurrecting the published record.
+    if DEADLINE_RELEASE.load(Ordering::Acquire) {
+        drop(file);
+        let _ = fs::remove_file(&temporary);
+        return Err("native_service_record_released".into());
+    }
     let result = (|| {
         serde_json::to_writer_pretty(&mut file, record).map_err(|source| {
             crate::host::HostError::new("native_service_instance_state_unavailable")
@@ -70,7 +76,8 @@ pub(super) fn write_record(
                 crate::host::HostError::new("native_service_instance_state_unavailable")
                     .with_source(source)
             })?;
-        hold_shutdown_write(record);
+        super::record_fault::hold_write(record);
+        super::record_fault::hold_rename();
         super::super::shutdown_trace::measure_sync("instance_file_rename", || {
             fs::rename(&temporary, path)
         })
@@ -88,6 +95,7 @@ pub(super) fn write_record(
     } else {
         "instance_write:failed"
     });
+    super::record_fault::write_finished();
     result
 }
 
@@ -110,30 +118,6 @@ pub(super) fn instance_record_path(data_root: &Path) -> PathBuf {
     data_root.join("state/butler-agent-native-service.json")
 }
 
-/// Stub-only reproduction of a slow fsync while the record lock is held.
-fn hold_shutdown_write(record: &InstanceRecord) {
-    if std::env::var("BUTLER_E2E_TIER").as_deref() != Ok("stub")
-        || record.state != "ready"
-        || record.app_enabled
-    {
-        return;
-    }
-    let Some(ms) = std::env::var("BUTLER_E2E_RECORD_WRITE_RELEASE_AFTER_STOP_MS")
-        .ok()
-        .and_then(|value| value.parse::<u64>().ok())
-    else {
-        return;
-    };
-    let Some(elapsed) = super::super::shutdown_trace::stop_elapsed() else {
-        return;
-    };
-    super::super::shutdown_trace::event("record_write_hold:begin");
-    // Align with the grace deadline, even when earlier close work is slow.
-    let remaining = std::time::Duration::from_millis(ms).saturating_sub(elapsed);
-    std::thread::sleep(remaining);
-    super::super::shutdown_trace::event("record_write_hold:end");
-}
-
 /// The grace thread must leave room for the controller's eight-second kill.
 pub(super) fn acquire_record_update_lock_until(
     path: &Path,
@@ -144,7 +128,9 @@ pub(super) fn acquire_record_update_lock_until(
         let file = open_lock(path, false)?;
         match InstanceLock::try_exclusive(file) {
             Ok(lock) => return Ok(Some(lock)),
-            Err(butler_platform::instance::LockError::Busy) => {}
+            Err(butler_platform::instance::LockError::Busy) => {
+                super::record_fault::lock_wait();
+            }
             Err(butler_platform::instance::LockError::Failed(error)) => {
                 return Err(format!("native_service_record_lock_failed: {error}").into());
             }
@@ -154,4 +140,28 @@ pub(super) fn acquire_record_update_lock_until(
         };
         std::thread::sleep(remaining.min(std::time::Duration::from_millis(10)));
     }
+}
+
+fn staged_record_path(path: &Path, pid: u32, nonce: &str) -> PathBuf {
+    // Record updates already hold the DATA record lock, so one staging name
+    // per owner is enough and lets the deadline cancel even a pending rename.
+    path.with_extension(format!("json.{pid}.{nonce}.tmp"))
+}
+
+pub(super) fn fence_deadline_writes() {
+    DEADLINE_RELEASE.store(true, Ordering::Release);
+}
+
+pub(super) fn cancel_staged_write(path: &Path, nonce: &str) -> io::Result<()> {
+    let staged = staged_record_path(path, std::process::id(), nonce);
+    match fs::remove_file(staged) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+    // Removing the rename source precedes removing its destination. Whether
+    // the rename won or lost that race, it cannot publish after final removal.
+    super::super::shutdown_trace::event("instance_release:staged_write_cancelled");
+    super::record_fault::cancel_rename();
+    Ok(())
 }

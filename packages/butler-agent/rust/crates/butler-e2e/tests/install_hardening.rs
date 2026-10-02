@@ -14,7 +14,7 @@ mod install_support;
 
 use std::fs;
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::agent::Launch;
@@ -23,7 +23,7 @@ use butler_e2e::e2e::install_fixture::{
     release_platform, write_update_manifest,
 };
 use butler_e2e::e2e::sandbox::Sandbox;
-use butler_e2e::e2e::stop_intent::{StopOnDrop, instance_record};
+use butler_e2e::e2e::stop_intent::StopOnDrop;
 use install_support::{error_code, ok, run, sandbox};
 use serde_json::Value;
 
@@ -43,17 +43,8 @@ fn mark_installed(sandbox: &Sandbox) -> Result<(), HarnessError> {
     Ok(())
 }
 
-fn ready_record(sandbox: &Sandbox) -> Value {
-    let deadline = Instant::now() + Duration::from_secs(60);
-    loop {
-        if let Some(record) =
-            instance_record(&sandbox.data).filter(|record| record["state"] == "ready")
-        {
-            return record;
-        }
-        assert!(Instant::now() < deadline, "no ready service record");
-        std::thread::sleep(Duration::from_millis(100));
-    }
+fn ready_record(launch: &Launch) -> Value {
+    butler_e2e::e2e::readiness::wait_launch_ready_blocking(launch, Duration::from_secs(60)).unwrap()
 }
 
 fn entries(directory: &Path) -> usize {
@@ -67,12 +58,12 @@ fn entries(directory: &Path) -> usize {
 #[test]
 fn ins_09_failed_restart_restores_what_was_running() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (sandbox, mut launch) = sandbox("INS-09")?;
+    let (mut sandbox, mut launch) = sandbox("INS-09")?;
     launch.use_data_folder_token();
     mark_installed(&sandbox)?;
     let _stop = StopOnDrop(launch.clone());
     ok(&run(launch.command().args(["start", "--json"]))?)?;
-    let before = ready_record(&sandbox);
+    let before = ready_record(&launch);
 
     let bad = build_failing_archive(&sandbox.root.join("fixtures"), "0.0.2", "bad")?;
     let manifest = sandbox.root.join("update.json");
@@ -84,7 +75,7 @@ fn ins_09_failed_restart_restores_what_was_running() -> Result<(), HarnessError>
     assert_eq!(error_code(&output)?, "update_restart_failed");
     assert!(output.stdout.contains("running again"), "{}", output.stdout);
 
-    let after = ready_record(&sandbox);
+    let after = ready_record(&launch);
     assert_eq!(after["executable"], before["executable"], "{after}");
     assert_ne!(
         after["nonce"], before["nonce"],
@@ -127,6 +118,7 @@ fn ins_09_failed_restart_restores_what_was_running() -> Result<(), HarnessError>
         0,
         "the download of a failed update was kept"
     );
+    sandbox.mark_success();
     Ok(())
 }
 
@@ -137,7 +129,7 @@ fn ins_09_failed_restart_restores_what_was_running() -> Result<(), HarnessError>
 #[test]
 fn ins_10_login_job_needs_an_installed_agent() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (sandbox, mut launch) = sandbox("INS-10")?;
+    let (mut sandbox, mut launch) = sandbox("INS-10")?;
     launch.set_env("PATH", "/opt/leak/bin:/usr/bin:/bin");
     let fixtures = sandbox.root.join("fixtures");
     let service = |launch: &Launch, args: &[&str]| run(launch.command().args(args));
@@ -220,6 +212,7 @@ fn ins_10_login_job_needs_an_installed_agent() -> Result<(), HarnessError> {
         "{removed}"
     );
     assert!(!definition.exists());
+    sandbox.mark_success();
     Ok(())
 }
 
@@ -229,7 +222,7 @@ fn ins_10_login_job_needs_an_installed_agent() -> Result<(), HarnessError> {
 #[test]
 fn ins_11_purge_deletes_only_a_butler_data_folder() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (sandbox, launch) = sandbox("INS-11")?;
+    let (mut sandbox, launch) = sandbox("INS-11")?;
     let purge = |data: &Path| {
         run(launch.command().args([
             "uninstall",
@@ -258,6 +251,7 @@ fn ins_11_purge_deletes_only_a_butler_data_folder() -> Result<(), HarnessError> 
     let purged = ok(&purge(&real)?)?;
     assert_eq!(purged["data"]["data"]["purged"], true, "{purged}");
     assert!(!real.exists());
+    sandbox.mark_success();
     Ok(())
 }
 
@@ -306,7 +300,7 @@ async fn serve(body: Vec<u8>) -> Result<u16, HarnessError> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn ins_12_a_download_is_verified_capped_and_cleaned_up() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (sandbox, launch) = sandbox("INS-12")?;
+    let (mut sandbox, launch) = sandbox("INS-12")?;
     let archive = build_stub_archive(&sandbox.root.join("fixtures"), "1.0.0", "url")?;
     let port = serve(fs::read(&archive.path)?).await?;
     let url = format!("http://127.0.0.1:{port}/a.tar.gz");
@@ -389,6 +383,7 @@ async fn ins_12_a_download_is_verified_capped_and_cleaned_up() -> Result<(), Har
         0,
         "the download went through DATA"
     );
+    sandbox.mark_success();
     Ok(())
 }
 
@@ -398,7 +393,7 @@ async fn ins_12_a_download_is_verified_capped_and_cleaned_up() -> Result<(), Har
 #[test]
 fn ins_13_legacy_directories_are_rollback_targets_and_never_pruned() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (sandbox, launch) = sandbox("INS-13")?;
+    let (mut sandbox, launch) = sandbox("INS-13")?;
     let home = sandbox.root.join("agent-home");
     let fixtures = sandbox.root.join("fixtures");
     let cli = |args: &[&str]| {
@@ -455,5 +450,6 @@ fn ins_13_legacy_directories_are_rollback_targets_and_never_pruned() -> Result<(
         "uninstall removed a legacy directory: {removed}"
     );
     assert_eq!(removed["data"]["agentHome"]["removed"], false, "{removed}");
+    sandbox.mark_success();
     Ok(())
 }

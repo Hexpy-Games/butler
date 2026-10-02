@@ -44,6 +44,8 @@ export type SessionFolderLaunchResult =
     };
 
 interface ButlerAppBridge {
+  startupIssue?: "legacy-data" | null;
+  recoverLegacyData?: (action: "open-folder" | "restart") => Promise<{ ok: boolean }>;
   protocolVersion?: string;
   serverUrl?: string;
   platform?: string;
