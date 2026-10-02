@@ -31,7 +31,10 @@ pub(super) async fn process(
     if let Err(failure) = &result
         && failure.code() == "memory_embedding_version_mismatch"
     {
-        input.probe.identity_refused(&generation, failure.code());
+        // The write-time recheck may have observed a newly pinned identity.
+        let refused = resolve_input_generation(input)?;
+        input.probe.identity_refused(&refused, failure.code());
+        // A refused identity is a steady state; claimed work was failed below.
         return Ok(false);
     }
     result
@@ -54,26 +57,31 @@ async fn process_generation(
     {
         return Ok(false);
     }
-    let units = {
+    let (units, current) = {
         let _lease = acquire(input, "memory-vector-claim").await?;
         assert_generation_current(input, generation, Admission::Required)?;
         let mut graph = GraphRepository::open(&generation.graph_path)?;
         let units = graph.claim_vector_quantum(&now)?;
         graph.close()?;
-        if !units.is_empty() {
-            assert_current(input, generation, &units, Admission::Required)?;
-        }
-        units
+        let current = if units.is_empty() {
+            Ok(())
+        } else {
+            assert_current(input, generation, &units, Admission::Required)
+        };
+        (units, current)
     };
     if units.is_empty() {
         return Ok(false);
     }
-    let result = run_claimed(input, embedding, generation, &units).await;
+    let result = match current {
+        Ok(()) => run_claimed(input, embedding, generation, &units).await,
+        Err(failure) => Err(failure),
+    };
     if let Err(failure) = &result {
         // A cancelled admission leaves the durable running claim for recovery.
         // Failure bookkeeping must never cross the generation/source write gate.
         if let Ok(_lease) = acquire(input, "memory-vector-fail").await
-            && assert_current(input, generation, &units, Admission::Required).is_ok()
+            && assert_current(input, generation, &units, Admission::Failure).is_ok()
         {
             let mut graph = GraphRepository::open(&generation.graph_path)?;
             graph.fail_vector_quantum(&units, failure.code(), &(input.clock)())?;
@@ -243,6 +251,8 @@ async fn write_rows(
 enum Admission {
     Required,
     Ignored,
+    /// Failure bookkeeping retains authority/source gates but permits identity refusal.
+    Failure,
 }
 
 async fn acquire(
@@ -277,7 +287,7 @@ fn assert_generation_current(
     generation: &MemoryGenerationHandle,
     admission: Admission,
 ) -> CognitionResult<()> {
-    if admission == Admission::Required && input.shutdown.is_cancelled() {
+    if admission != Admission::Ignored && input.shutdown.is_cancelled() {
         return Err(error(CognitionCode::MemoryWriteAborted));
     }
     let target = input
@@ -290,7 +300,9 @@ fn assert_generation_current(
     if current.generation_id != generation.generation_id {
         return Err(error(CognitionCode::MemoryGenerationChanged));
     }
-    if let Some(identity) = &current.embedding {
+    if admission != Admission::Failure
+        && let Some(identity) = &current.embedding
+    {
         compatibility::preflight(identity)?;
     }
     ensure_data_authority(&input.data_root, &[&current.root, &current.graph_path])?;

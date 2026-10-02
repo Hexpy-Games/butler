@@ -16,6 +16,8 @@ use crate::cognition::graph::{CatchupState, GraphRepository, PendingSemanticJob}
 #[derive(Default)]
 pub(super) struct ProbeReader {
     open: Mutex<Option<(PathBuf, GraphRepository)>>,
+    #[cfg(test)]
+    pub(super) identity_diagnostic_count: Mutex<usize>,
     identity_diagnostic: Mutex<Option<(String, Option<String>, String)>>,
 }
 
@@ -38,6 +40,10 @@ impl ProbeReader {
         if last.as_ref() != Some(&key) {
             butler_core::diagnostic!("[native-memory-sync] {}", code);
             *last = Some(key);
+            #[cfg(test)]
+            {
+                *self.identity_diagnostic_count.lock() += 1;
+            }
             return true;
         }
         false

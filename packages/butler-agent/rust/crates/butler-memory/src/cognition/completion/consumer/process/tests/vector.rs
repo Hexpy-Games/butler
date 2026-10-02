@@ -289,6 +289,7 @@ async fn adopted_stage_pins_serving_receipts_and_refuses_other_assets() {
     }
     input.registration.close().await;
     native_upgrade_stage().await;
+    refused_stage_idles().await;
 }
 
 async fn js_table(generation: &MemoryGenerationHandle) {
@@ -372,5 +373,69 @@ async fn native_upgrade_stage() {
         std::fs::read(generation.root.join("manifest.json")).unwrap(),
         before
     );
+    input.registration.close().await;
+}
+
+struct RefusingEmbeddings(MemoryGenerationHandle);
+impl CognitionEmbeddingPort for RefusingEmbeddings {
+    fn embed(&self, request: EmbeddingRequest, token: CancellationToken) -> EmbeddingFuture<'_> {
+        Box::pin(async move {
+            let mut identity = js(&"b".repeat(64));
+            identity["max_tokens"] = json!(1);
+            manifest(&self.0, identity);
+            Embeddings.embed(request, token).await
+        })
+    }
+}
+
+async fn refused_stage_idles() {
+    let fixture = Fixture::new();
+    let (mut input, generation) = setup(&fixture).await;
+    input.embedding = Some(Arc::new(RefusingEmbeddings(generation.clone())));
+    // The identity changes after the claim, so the write-time gate must fail it.
+    assert!(
+        !super::super::vector::process(&input, input.embedding.as_ref().unwrap().as_ref())
+            .await
+            .unwrap()
+    );
+    let db = Connection::open(&generation.graph_path).unwrap();
+    let state: String = db
+        .query_row("SELECT state FROM memory_vector_units", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(state, "failed");
+    assert_eq!(*input.probe.identity_diagnostic_count.lock(), 1);
+    // No independent semantic/cache/catchup work remains in this idle fixture.
+    db.execute("UPDATE memory_projection_windows SET state='complete'", [])
+        .unwrap();
+    db.execute(
+        r#"UPDATE memory_projection_jobs SET hot_cache_state='{"state":"not_configured"}'"#,
+        [],
+    )
+    .unwrap();
+    let graph = crate::cognition::graph::GraphRepository::open(&generation.graph_path).unwrap();
+    graph.ensure_cache_index(&input.shutdown).unwrap();
+    graph.close().unwrap();
+    *input.catchup_at.lock() = Some(std::time::Instant::now());
+    let version: i64 = db
+        .pragma_query_value(None, "data_version", |r| r.get(0))
+        .unwrap();
+    let before = std::fs::read(generation.root.join("manifest.json")).unwrap();
+    for _ in 0..3 {
+        assert!(matches!(
+            super::poll(input.clone()).await.unwrap(),
+            super::super::super::MemorySyncPoll::Idle
+        ));
+        assert_eq!(*input.probe.identity_diagnostic_count.lock(), 1);
+        assert_eq!(
+            db.pragma_query_value::<i64, _>(None, "data_version", |r| r.get(0))
+                .unwrap(),
+            version
+        );
+        assert_eq!(
+            std::fs::read(generation.root.join("manifest.json")).unwrap(),
+            before
+        );
+    }
+    input.probe.close().await.unwrap();
     input.registration.close().await;
 }
