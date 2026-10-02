@@ -1172,7 +1172,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     pageSections: {
       instructions: "지침",
       chatMemory: "대화 기억",
-      profileMemory: "알아가기",
+      profileMemory: "프로필",
       projectMemory: "프로젝트 기억",
       languageRegion: "언어 및 지역",
       conversationInput: "대화 입력",

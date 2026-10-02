@@ -1164,7 +1164,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     pageSections: {
       instructions: "Instructions",
       chatMemory: "Chat memory",
-      profileMemory: "Profile building",
+      profileMemory: "Profile",
       projectMemory: "Project memory",
       languageRegion: "Language & region",
       conversationInput: "Conversation input",
