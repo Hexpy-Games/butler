@@ -18,5 +18,6 @@ if ($Mode -eq 'Export') {
         New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
         & "$artifacts/$test.exe" --test-threads=8 --nocapture
         if ($LASTEXITCODE -ne 0) { throw "E2E failed: $test ($LASTEXITCODE)" }
+        Add-Content "$env:PREVIEW_ROOT/logs/completed-harnesses.txt" $test
     }
 }

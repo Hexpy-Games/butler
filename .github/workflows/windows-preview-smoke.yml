@@ -206,7 +206,7 @@ jobs:
           $env:BUTLER_E2E_BIN = Join-Path $env:BUTLER_E2E_INSTALLED_ROOT 'butler-agent.exe'
           ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests installed_preview
       - name: Existing CLI E2E
-        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
+        if: ${{ !cancelled() }}
         run: |
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
@@ -216,7 +216,7 @@ jobs:
             Tee-Object "$env:PREVIEW_ROOT/logs/cli-surface.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: LAN listener, bind failures and API pairing smoke
-        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
+        if: ${{ !cancelled() }}
         run: |
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
@@ -227,7 +227,7 @@ jobs:
             Tee-Object "$env:PREVIEW_ROOT/logs/lan-pairing.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Existing active plus queued shutdown recovery E2E
-        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
+        if: ${{ !cancelled() }}
         run: |
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
@@ -254,6 +254,16 @@ jobs:
           ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests service_supervision,service_diagnostics   |
             Tee-Object "$env:PREVIEW_ROOT/logs/paths-supervision.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Require every hosted verification harness
+        if: ${{ !cancelled() }}
+        run: |
+          $expected = @('installed_preview','cli_surface','gateway_remote','gateway_pairing','cli_remote',
+            'queue_shutdown','migration','durable_configuration','service_supervision','service_diagnostics')
+          $actual = @(Get-Content "$env:PREVIEW_ROOT/logs/completed-harnesses.txt")
+          if ($actual.Count -ne $expected.Count -or (Compare-Object $expected $actual)) {
+            throw "Incomplete verification: completed=$($actual -join ',')"
+          }
+          "Verified all 10 compiled harnesses: $($actual -join ',')"
       - name: Upload diagnostic logs
         if: always()
         uses: actions/upload-artifact@v4
