@@ -15,6 +15,7 @@ mod question;
 pub(in crate::host) use monitoring::MonitoringReaders;
 mod profile;
 mod project_source;
+mod project_artifacts;
 mod resume;
 mod wallpaper;
 pub(in crate::host) use message::structured_raw as structured_tool_preview;
@@ -291,6 +292,7 @@ impl GuidedTools {
                     | ToolName::SummarizeUserProfile
                     | ToolName::UpdateOnboardingProfile
                     | ToolName::ReadProjectSource
+                    | ToolName::ProjectArtifacts
                     | ToolName::BindSessionGitWorktree
                     | ToolName::StartTopicConversation
                     | ToolName::RequestServiceRestart

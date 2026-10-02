@@ -14,6 +14,7 @@ const DISCOVERY: &[&str] = &[
     "web_search",
     "web_read",
     "read_file",
+    "project_artifacts",
     "grep_files",
     "list_files",
 ];
@@ -28,6 +29,7 @@ const NON_FULL: &[&str] = &[
     "web_search",
     "web_read",
     "read_file",
+    "project_artifacts",
     "read_project_source",
     "grep_files",
     "list_files",
@@ -265,13 +267,14 @@ fn apply_role(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
 }
 
 /// Tools every legacy surface shows.
-const LEGACY_BASE: [&str; 18] = [
+const LEGACY_BASE: [&str; 19] = [
     "tool_search",
     "tool_describe",
     "tool_call",
     "web_search",
     "web_read",
     "read_file",
+    "project_artifacts",
     "grep_files",
     "list_files",
     "recall_memory",
