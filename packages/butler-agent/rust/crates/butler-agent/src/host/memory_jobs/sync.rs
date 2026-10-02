@@ -131,7 +131,6 @@ async fn poll(
     fresh: Option<FreshMemoryGeneration>,
 ) {
     if let Some(fresh) = fresh {
-        #[cfg(debug_assertions)]
         if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
             && std::env::var("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP").as_deref() == Ok("1")
         {

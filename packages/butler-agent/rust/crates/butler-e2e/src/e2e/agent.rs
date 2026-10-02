@@ -266,6 +266,12 @@ impl Agent {
     async fn spawn(&mut self) -> Result<Gateway, HarnessError> {
         let log = self.launch_child()?;
         let deadline = Instant::now() + Duration::from_secs(90);
+        // Only the readiness scenario intentionally returns with dispatch held.
+        let dispatch_held = self
+            .launch
+            .env
+            .iter()
+            .any(|(key, value)| key == "BUTLER_E2E_HOLD_DISPATCH_READY" && value == "1");
         loop {
             if self.launch.port == 0
                 && let Some(port) = process::bound_port(&self.launch.data, self.pid())
@@ -286,7 +292,11 @@ impl Agent {
                     stop_intent::instance_ready(&record) && record["pid"] == pid
                 })
             });
-            if !self.launch.token.is_empty() && gateway.healthy().await && instance_ready {
+            if !self.launch.token.is_empty()
+                && gateway.healthy().await
+                && instance_ready
+                && (dispatch_held || gateway.executor_ready().await)
+            {
                 self.remember_instance();
                 return Ok(gateway);
             }

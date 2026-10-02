@@ -5,6 +5,7 @@ mod model_literals;
 mod modules;
 mod platform_boundary;
 mod test_count;
+mod wall_clock;
 
 use std::env;
 use std::ffi::OsStr;
@@ -78,6 +79,7 @@ fn scan(root: &Path, mode: Mode) -> Result<bool, String> {
     has_violations |= function_length::check(root, &sources, mode)?;
     has_violations |= platform_boundary::check(root, &sources, mode)?;
     has_violations |= test_count::check(root, &sources, mode)?;
+    has_violations |= wall_clock::check(root, &sources)?;
     has_violations |= architecture::check(root)?;
     has_violations |= model_literals::check(root, &sources)?;
     has_violations |= e2e_gate::check(root, &sources)?;

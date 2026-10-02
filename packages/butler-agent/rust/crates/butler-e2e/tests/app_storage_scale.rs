@@ -46,13 +46,13 @@ async fn wait_retention_settled(s: &Scenario) -> Duration {
                        (SELECT 1 FROM app_terminal_turn_projections p WHERE p.turn_id=t.id))",
         );
         if pending == 0 {
+            butler_e2e::assert_wall_clock_budget!(
+                started.elapsed(),
+                Duration::from_secs(120),
+                "retention left"
+            );
             return started.elapsed();
         }
-        assert!(
-            started.elapsed() < Duration::from_secs(120),
-            "retention left {pending} items after {:?}",
-            started.elapsed()
-        );
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }
@@ -158,14 +158,12 @@ async fn perf_01_owner_scale_delivery_and_restart() -> Result<(), HarnessError> 
         "PERF-01 empty turn {empty:?}; owner-scale start {first_ready:?}, turn {at_scale:?}, \
          session-view p95 {view_p95:?}, retention settled {settled:?} after the turn"
     );
-    assert!(
-        view_p95 < Duration::from_millis(150),
-        "session-view p95 {view_p95:?}"
-    );
+    butler_e2e::assert_wall_clock_budget!(view_p95, Duration::from_millis(150), "session-view p95");
     // The projection of a delivered turn does not scale with the events table.
-    assert!(
-        at_scale < empty * 3 + Duration::from_secs(2),
-        "delivery took {at_scale:?} at scale, {empty:?} on an empty database"
+    butler_e2e::assert_wall_clock_budget!(
+        at_scale,
+        empty * 3 + Duration::from_secs(2),
+        "delivery took"
     );
 
     // Only the turns that needed work were compacted; the rest kept their rows.

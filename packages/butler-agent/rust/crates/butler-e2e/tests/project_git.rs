@@ -301,10 +301,10 @@ async fn prj_06_missing_or_hanging_git_leaves_status_unknown() -> Result<(), Har
     init_repository(&folder)?;
     let started = std::time::Instant::now();
     assert_eq!(dashboard_git(&s, &id).await?, expected, "git hangs");
-    assert!(
-        started.elapsed() < std::time::Duration::from_secs(8),
-        "the dashboard waited {:?} for git",
-        started.elapsed()
+    butler_e2e::assert_wall_clock_budget!(
+        started.elapsed(),
+        std::time::Duration::from_secs(8),
+        "the dashboard waited"
     );
     s.finish().await
 }

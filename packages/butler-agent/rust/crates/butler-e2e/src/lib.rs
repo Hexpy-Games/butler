@@ -35,3 +35,23 @@ macro_rules! skip_unless {
         }
     };
 }
+
+/// Records an upper wall-clock budget in every tier; enforces it only in the
+/// isolated, single-threaded perf job (`BUTLER_E2E_PERF=1`). Functional assertions
+/// stay unconditional. Both expressions are evaluated exactly once.
+#[macro_export]
+macro_rules! assert_wall_clock_budget {
+    ($elapsed:expr, $budget:expr, $label:expr $(,)?) => {{
+        let elapsed: ::std::time::Duration = $elapsed;
+        let budget: ::std::time::Duration = $budget;
+        let label = $label;
+        let enforce = ::std::env::var("BUTLER_E2E_PERF").as_deref() == Ok("1");
+        eprintln!(
+            "wall-clock budget: {} elapsed={elapsed:?} budget={budget:?} enforced={enforce}",
+            label
+        );
+        if enforce {
+            assert!(elapsed < budget, "{label}: {elapsed:?} >= {budget:?}");
+        }
+    }};
+}
