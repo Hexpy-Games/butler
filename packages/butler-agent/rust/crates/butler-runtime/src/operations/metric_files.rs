@@ -75,10 +75,12 @@ impl MetricFiles {
         let _guard = self.lock(file);
         let directory = self.metric_directory();
         fs::create_dir_all(&directory)?;
-        let mut output = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(directory.join(file.file_name()))?;
+        let mut options = OpenOptions::new();
+        options.create(true).append(true);
+        butler_platform::secure_fs::owner_only(&mut options);
+        butler_platform::secure_fs::no_follow(&mut options);
+        let mut output = options.open(directory.join(file.file_name()))?;
+        butler_platform::secure_fs::restrict_open_file(&output).unwrap_or(Ok(()))?;
         output.write_all(bytes)
     }
 
@@ -117,7 +119,6 @@ impl MetricFiles {
             }
             Err(error) => return Err(error),
         };
-        let source_permissions = source.metadata()?.permissions();
 
         let temporary_path = temporary_path(&path);
         let output = open_private_temporary(&temporary_path)?;
@@ -168,8 +169,8 @@ impl MetricFiles {
         writer.flush()?;
         writer.get_ref().sync_all()?;
         drop(writer);
-        fs::set_permissions(&temporary_path, source_permissions)?;
-        fs::rename(&temporary_path, &path)?;
+        butler_platform::secure_fs::rename(&temporary_path, &path)?;
+        butler_platform::secure_fs::sync_directory(&self.metric_directory()).unwrap_or(Ok(()))?;
         cleanup.commit();
         Ok(stats)
     }

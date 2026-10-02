@@ -127,14 +127,14 @@ runs:
             exit 2
           fi
           export BUTLER_E2E_PERF=1
-          TEST_FILTERSET="($(python3 "$GITHUB_WORKSPACE/.github/scripts/e2e-perf-filter.py")) and not binary(=idle_resources)"
+          TEST_FILTERSET="($(python3 "$GITHUB_WORKSPACE/.github/scripts/e2e-perf-filter.py")) and not binary(=idle_resources) and not binary(=data_perf)"
         elif [ "$ENFORCE_BUDGETS" = 'false' ]; then
           export BUTLER_E2E_PERF=0
         else
           echo "::error::enforce-budgets must be true or false"
           exit 2
         fi
-        filterset='not test(idle_disk_writes_and_cpu_stay_bounded)'
+        filterset='not test(idle_disk_writes_and_cpu_stay_bounded) and not binary(=data_perf)'
         if [ -n "$TEST_FILTERSET" ]; then
           filterset="($TEST_FILTERSET) and $filterset"
         fi
@@ -189,9 +189,9 @@ runs:
             2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
         fi
 
-    # PERF-IDLE takes five minutes by design; its documented cargo-test runner
+    # Resource measurements include minute-long idle windows; this cargo-test runner
     # avoids nextest's three-minute per-test watchdog without changing budgets.
-    - name: Run PERF-IDLE resource budgets
+    - name: Run idle, startup and WAL resource budgets
       if: inputs.enforce-budgets == 'true'
       shell: bash
       working-directory: packages/butler-agent/rust
@@ -201,7 +201,7 @@ runs:
         BUTLER_E2E_SKIP_BUILD: "1"
         BUTLER_E2E_BIN: ${{ inputs.agent-binary }}
         BUTLER_E2E_EMBEDDING_ASSETS: ${{ runner.temp }}/e2e-models/bge-m3
-      run: cargo test --release --locked -p butler-e2e --test idle_resources -- --nocapture --test-threads=1
+      run: cargo test --release --locked --no-fail-fast -p butler-e2e --test idle_resources --test data_perf -- --nocapture --test-threads=1
 
     - name: Report IDLE-DISK counters
       if: >-

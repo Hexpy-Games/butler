@@ -277,13 +277,9 @@ async fn append(data_root: PathBuf, path: PathBuf, event: Value) -> CognitionRes
         use std::io::Write;
         ensure_data_authority(&data_root, &[&path])?;
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(log_error)?;
+            butler_platform::secure_fs::create_private_dir_all(parent).map_err(log_error)?;
         }
-        let mut file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)
-            .map_err(log_error)?;
+        let mut file = butler_platform::secure_fs::append_private(&path).map_err(log_error)?;
         writeln!(file, "{event}").map_err(log_error)?;
         Ok::<(), CognitionError>(())
     })

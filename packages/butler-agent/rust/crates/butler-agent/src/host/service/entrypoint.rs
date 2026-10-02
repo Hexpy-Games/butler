@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use butler_gateway::gateway::TranscriptWriter;
 use butler_models::models::ModelConfigurationClock;
-use butler_runtime::operations::ServiceReadiness;
 use butler_turn::btcc::BtccError;
 
 use crate::host::app::gateway_lifecycle::{
@@ -283,24 +282,21 @@ async fn serve(
     stop: &StopSignal,
 ) -> Result<String, BtccError> {
     let (app_endpoint, listener, ready) = app;
+    let mut startup = crate::host::runtime::startup_trace::Trace::new();
     let admission::Admission {
         session_id,
         progress,
         queue,
         dispatcher,
     } = admission::prepare(&runtime, config, writer, instance, stop).await?;
+    startup.phase("admission");
 
     let parent_client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(io)?;
     let foreground_lease = capture_foreground_lease(instance)?;
-    let now_ms = SystemIdentity.now_epoch_millis();
-    ServiceReadiness::startup_grace(&config.data_root, now_ms).map_err(io)?;
-    let readiness = Arc::new(
-        ServiceReadiness::publish(&config.data_root, &SystemIdentity.now_iso(), now_ms)
-            .map_err(io)?,
-    );
+    let readiness = support::publish_readiness(config).await?;
     let gateway = Arc::new(AppGatewayLifecycle::new(
         runtime.clone(),
         config,
@@ -309,11 +305,13 @@ async fn serve(
         app_endpoint.clone(),
         instance.nonce().to_owned(),
     ));
+    startup.phase("executor_publication");
     if let Err(error) = start_app_gateway(&gateway, config, &app_endpoint, logs, listener).await {
         let _ = dispatcher.close().await;
         let _ = gateway.close().await;
         return Err(error);
     }
+    startup.phase("app_gateway");
     let control = start_control(&gateway, &runtime, config, instance, &dispatcher, stop).await?;
     if let Err(error) = start_runtime(&runtime, instance, &app_endpoint, stop).await {
         let _ = control.close().await;
@@ -321,6 +319,7 @@ async fn serve(
         let _ = gateway.close().await;
         return Err(error);
     }
+    startup.phase("dispatch_recovery_and_instance_ready");
     log_effective_model(&gateway, logs).await?;
     let _ = ready.send(());
     let subsessions = runtime.subsessions.repository();

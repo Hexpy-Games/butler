@@ -134,10 +134,7 @@ pub(super) fn record_failure_best_effort(
         return;
     };
     bytes.push(b'\n');
-    let mut options = OpenOptions::new();
-    options.create(true).append(true);
-    set_private_mode(&mut options);
-    if let Ok(mut file) = options.open(path) {
+    if let Ok(mut file) = butler_platform::secure_fs::append_private(&path) {
         let _ = file.write_all(&bytes);
         let _ = file.sync_data();
     }

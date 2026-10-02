@@ -2,7 +2,7 @@
 
 mod local;
 
-use std::path::{Path, PathBuf};
+use std::{io::Write, path::Path};
 
 use serde_json::{Value, json};
 
@@ -272,14 +272,13 @@ pub(super) fn write_json(path: &Path, value: &Value) -> Result<(), ModelCatalogE
         .parent()
         .ok_or_else(|| error("Model configuration path is invalid."))?;
     std::fs::create_dir_all(parent).map_err(io_error)?;
-    let temp = PathBuf::from(format!("{}.{}.tmp", path.display(), uuid::Uuid::new_v4()));
     let mut bytes = serde_json::to_vec_pretty(value).map_err(json_error)?;
     bytes.push(b'\n');
-    if let Err(failure) = std::fs::write(&temp, bytes).and_then(|()| std::fs::rename(&temp, path)) {
-        let _ = std::fs::remove_file(&temp);
-        return Err(io_error(failure));
-    }
-    Ok(())
+    butler_platform::secure_fs::replace_private(
+        path,
+        |file| file.write_all(&bytes).map_err(io_error),
+        io_error,
+    )
 }
 
 /// A key operation's failure as the model catalog reports it.

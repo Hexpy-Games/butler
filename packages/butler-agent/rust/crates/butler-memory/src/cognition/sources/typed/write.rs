@@ -6,7 +6,7 @@ pub use task::ingest_task_outcome_memory;
 
 use crate::cognition::CognitionCode;
 use std::{
-    fs::{self, OpenOptions},
+    fs,
     io::Write,
     path::{Path, PathBuf},
 };
@@ -297,11 +297,7 @@ fn append_durable(path: &Path, bytes: &[u8]) -> CognitionResult<()> {
         .parent()
         .ok_or_else(|| error(CognitionCode::MemoryDataPathUnsafe))?;
     let existed = path.exists();
-    let mut options = OpenOptions::new();
-    options.create(true).append(true);
-    butler_platform::secure_fs::owner_only(&mut options);
-    options
-        .open(path)
+    butler_platform::secure_fs::append_private(path)
         .and_then(|mut file| {
             file.write_all(bytes)?;
             file.sync_all()

@@ -34,7 +34,7 @@ async fn perf_idle_owner_scale_reads_and_footprint() -> Result<(), HarnessError>
         process_usage::sample(std::process::id())?.is_some(),
         "process resource counters unavailable"
     );
-    let setup = Setup::new("PERF-IDLE")?;
+    let setup = Setup::new("PERF-IDLE")?.env("BUTLER_E2E_TIER", "stub");
     memory_fixture::initialize_empty(&setup.sandbox.data)?;
     let mut s = setup.start().await?;
     s.agent.terminate().await?;
@@ -63,6 +63,11 @@ async fn perf_idle_owner_scale_reads_and_footprint() -> Result<(), HarnessError>
         assert!(
             chars.is_none_or(|chars| chars < READ_BUDGET) && reads < READ_BUDGET,
             "idle reads: rchar={chars:?} read_bytes={reads}"
+        );
+        assert_eq!(
+            after.write_bytes - before.write_bytes,
+            0,
+            "idle storage writes"
         );
         seed::assert_complete(&s.sandbox.data, &expected)?;
         before = after;

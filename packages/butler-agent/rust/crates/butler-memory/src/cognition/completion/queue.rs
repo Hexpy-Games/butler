@@ -57,10 +57,7 @@ pub(super) fn append(
             return Ok(());
         }
         let existed = path.exists();
-        let mut options = OpenOptions::new();
-        options.create(true).append(true);
-        butler_platform::secure_fs::owner_only(&mut options);
-        let mut file = options.open(&path).map_err(io_error)?;
+        let mut file = butler_platform::secure_fs::append_private(&path).map_err(io_error)?;
         write_entry(&mut file, &request.to_string()).map_err(io_error)?;
         file.sync_all().map_err(io_error)?;
         if !existed {
@@ -157,10 +154,7 @@ fn append_idempotent(
             return Ok(());
         }
         let existed = path.exists();
-        let mut options = OpenOptions::new();
-        options.create(true).append(true);
-        butler_platform::secure_fs::owner_only(&mut options);
-        let mut file = options.open(&path).map_err(io_error)?;
+        let mut file = butler_platform::secure_fs::append_private(&path).map_err(io_error)?;
         write_entry(&mut file, entry).map_err(io_error)?;
         file.sync_all().map_err(io_error)?;
         if !existed {

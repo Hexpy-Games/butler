@@ -73,4 +73,34 @@ async fn opener_cuts_over_an_r2_nonterminal_turn_without_reexecuting_it() {
     assert_eq!(outbox_status, "pending");
     assert!(evidence.contains("btcc.r3.legacy-turn-cutover.v2"));
     storage.close().await.expect("close cutover owner");
+    reject_null_legacy_state().await;
+}
+
+// Security regression within the existing cutover race scenario: narrowing
+// candidates must not silently preserve malformed rows in a legacy schema.
+async fn reject_null_legacy_state() {
+    let fixture = Fixture::activated();
+    {
+        let db = Connection::open(&fixture.path).expect("malformed legacy fixture");
+        schema::create_current(&db).expect("companion schema");
+        db.execute_batch(
+            "DROP TABLE btcc_turns;
+             CREATE TABLE btcc_turns (turn_id TEXT PRIMARY KEY, session_id TEXT NOT NULL,
+             inbox_id TEXT NOT NULL UNIQUE, trigger_key TEXT NOT NULL, original_message_id TEXT NOT NULL,
+             original_message TEXT NOT NULL, admission_snapshot_ref TEXT NOT NULL,
+             model_selection_json TEXT NOT NULL, context_json TEXT NOT NULL, semantic_state TEXT,
+             active_checkpoint_id TEXT, route TEXT, final_payload_json TEXT, delivery_outbox_id TEXT,
+             canonical_assistant_message_id TEXT, revision INTEGER NOT NULL, execution_fence INTEGER NOT NULL,
+             final_disposition TEXT);
+             INSERT INTO btcc_turns VALUES ('bad-turn','session','inbox','trigger','message',
+             'preserve rejection','record','{}','{}',NULL,NULL,NULL,NULL,NULL,NULL,1,1,NULL);",
+        ).expect("legacy row with nullable state");
+    }
+    match BtccStorage::open(fixture.config("owner-invalid-state")).await {
+        Err(error) => assert!(error.message().contains("semantic_state"), "{error}"),
+        Ok(storage) => {
+            storage.close().await.expect("close unexpected opener");
+            panic!("a malformed legacy state was silently filtered out");
+        }
+    }
 }

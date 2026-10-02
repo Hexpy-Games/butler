@@ -101,3 +101,35 @@ impl HostDependencies for RuntimeOwners {
         })
     }
 }
+
+/// Daily maintenance owns the same paths and metrics as its cognition jobs.
+pub(super) fn context_maintenance(
+    owners: DailyCognitionOwners,
+    tool_output: ToolOutput,
+) -> Arc<ContextMaintenance> {
+    let root = owners.data_root.clone();
+    let metrics = owners.metrics.clone();
+    let timezone = owners.date_parser.clone();
+    Arc::new(ContextMaintenance::new(
+        root,
+        tool_output,
+        metrics,
+        timezone,
+        Arc::new(DailyCognitionJobs::new(owners)),
+    ))
+}
+
+/// Exact source readers share a path authority and a bounded blocking pool.
+pub(super) fn memory_source_readers(
+    data_root: &std::path::Path,
+    paths: &butler_memory::cognition::CognitionPathEnvironment,
+) -> (Arc<ExactMemoryQuery>, Arc<ConversationSessionReference>) {
+    let sources = Arc::new(crate::host::MemorySourceReader::new(
+        data_root.to_owned(),
+        paths.clone(),
+    ));
+    (
+        Arc::new(ExactMemoryQuery::new(data_root, 2)),
+        Arc::new(ConversationSessionReference::new(data_root, 2, sources)),
+    )
+}

@@ -1,7 +1,7 @@
 //! Private append-only compaction evidence and per-session locking.
 
 use std::{
-    fs::{self, OpenOptions},
+    fs::OpenOptions,
     io::Write,
     path::{Path, PathBuf},
     time::{Duration, Instant},
@@ -22,19 +22,26 @@ pub(super) fn append_snapshot(
             "Snapshot path has no parent",
         )
     })?;
-    fs::create_dir_all(parent).map_err(snapshot_io_error)?;
-    let mut options = OpenOptions::new();
-    options.create(true).append(true);
-    butler_platform::secure_fs::owner_only(&mut options);
-    let mut file = options.open(path).map_err(snapshot_io_error)?;
-    serde_json::to_writer(&mut file, snapshot).map_err(|error| {
+    butler_platform::secure_fs::create_private_dir_all(parent).map_err(snapshot_io_error)?;
+    let existed = path.try_exists().map_err(snapshot_io_error)?;
+    let mut bytes = serde_json::to_vec(snapshot).map_err(|error| {
         ContextError::new(
             ContextCode::ContextCompactionSnapshotError,
             error.to_string(),
         )
         .with_source(error)
     })?;
-    file.write_all(b"\n").map_err(snapshot_io_error)
+    bytes.push(b'\n');
+    let mut file = butler_platform::secure_fs::append_private(&path).map_err(snapshot_io_error)?;
+    file.write_all(&bytes)
+        .and_then(|()| file.sync_all())
+        .map_err(snapshot_io_error)?;
+    if !existed {
+        butler_platform::secure_fs::sync_directory(parent)
+            .unwrap_or(Ok(()))
+            .map_err(snapshot_io_error)?;
+    }
+    Ok(())
 }
 
 pub fn compaction_snapshot_path(data_root: &Path, session_id: &str) -> PathBuf {

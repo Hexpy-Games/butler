@@ -6,10 +6,10 @@ use std::io::{self, Write};
 
 use butler_platform::secure_fs::{
     DIRECTORY_SYNC, ExchangeError, FILE_IDS, FileMode, NO_FOLLOW, OWNER_ONLY, PERMISSION_MODES,
-    create_private_dir_all, exchange_directories, file_mode, identity, is_owner_only, is_private,
-    no_follow, open_read_no_follow, owner_only, protect_folder, replace_private,
-    restrict_directory, restrict_file, restrict_open_file, same_file, set_file_mode, symlink,
-    sync_directory,
+    append_private, create_private_dir_all, exchange_directories, file_mode, identity,
+    is_owner_only, is_private, no_follow, open_read_no_follow, owner_only, protect_folder,
+    replace_private, restrict_directory, restrict_file, restrict_open_file, same_file,
+    set_file_mode, symlink, sync_directory,
 };
 
 use super::scratch;
@@ -107,6 +107,15 @@ fn private_directories_and_files_are_owner_only_where_supported() {
         OWNER_ONLY.then_some(())
     );
     assert_eq!(is_owner_only(&fs::metadata(&restricted).unwrap()), private);
+    if let Some(result) = set_file_mode(&restricted, FileMode::GROUP_READABLE) {
+        result.unwrap();
+    }
+    let mut append = append_private(&restricted).unwrap();
+    append.write_all(b" appended").unwrap();
+    append.sync_all().unwrap();
+    assert_eq!(is_owner_only(&append.metadata().unwrap()), private);
+    assert_eq!(fs::read_to_string(&restricted).unwrap(), "x appended");
+    drop(append);
 
     let file = fs::File::create(nested.join("open")).unwrap();
     assert_eq!(
@@ -199,6 +208,7 @@ fn no_follow_opens_refuse_a_symbolic_link() {
     assert_eq!(refusing.is_some(), NO_FOLLOW);
     if let Some(options) = refusing {
         assert!(options.open(&link).is_err());
+        assert!(append_private(&link).is_err());
     }
     assert_eq!(fs::read_to_string(&target).unwrap(), "secret");
     fs::remove_dir_all(directory).unwrap();

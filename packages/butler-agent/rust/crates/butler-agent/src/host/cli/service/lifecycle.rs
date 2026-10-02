@@ -1,7 +1,7 @@
 //! Detached launch, identity-checked stop, and readiness for the native service.
 
 use butler_platform::secure_fs::Canonical as _;
-use std::fs::{self, OpenOptions};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
@@ -383,10 +383,7 @@ fn log_file(
     installation.validate_data_root(path).map_err(|source| {
         crate::host::HostError::new("native_path_configuration_invalid").with_source(source)
     })?;
-    let mut options = OpenOptions::new();
-    options.create(true).append(true);
-    let _ = secure_fs::owner_only(&mut options);
-    options.open(path).map_err(|source| {
+    secure_fs::append_private(path).map_err(|source| {
         crate::host::HostError::new("native_service_logs_unavailable").with_source(source)
     })
 }

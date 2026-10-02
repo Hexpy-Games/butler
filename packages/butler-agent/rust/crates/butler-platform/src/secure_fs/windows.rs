@@ -13,6 +13,11 @@
 
 use std::fs::{self, DirBuilder, File, Metadata, OpenOptions};
 use std::io;
+
+#[cfg(feature = "test-support")]
+pub(super) fn discard_cached_pages(_: &File) -> Option<io::Result<()>> {
+    None
+}
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;

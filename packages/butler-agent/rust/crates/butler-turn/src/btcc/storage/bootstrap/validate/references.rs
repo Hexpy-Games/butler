@@ -446,6 +446,8 @@ const RULES: &[Rule] = &[
 
 pub(super) fn validate(db: &Connection) -> StorageResult<()> {
     for rule in RULES {
+        let started = std::time::Instant::now();
+        super::activated::trace(&format!("reference_{}_begin", rule.name), started);
         let predicate = rule
             .filter
             .map_or(String::new(), |filter| format!("AND {filter}"));
@@ -461,6 +463,7 @@ pub(super) fn validate(db: &Connection) -> StorageResult<()> {
             .optional()
             .map_err(StorageError::sqlite)?
             .is_some();
+        super::activated::trace(&format!("reference_{}_end", rule.name), started);
         if orphan {
             return Err(StorageError::new(
                 StorageCode::AgentBtccMigrationReferenceCheckFailed,

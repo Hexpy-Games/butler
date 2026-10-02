@@ -1,11 +1,6 @@
 //! Private bearer keys for registered Custom model endpoints.
 
-use std::{
-    collections::HashMap,
-    fs::{self, OpenOptions},
-    io::Write,
-    path::Path,
-};
+use std::{collections::HashMap, fs, io::Write, path::Path};
 
 use butler_platform::secure_fs;
 use serde_json::{Map, Value};
@@ -46,29 +41,11 @@ pub(super) fn write(
     let mut bytes = serde_json::to_vec(&Value::Object(object)).map_err(write_failed)?;
     bytes.push(b'\n');
 
-    let temp = parent.join(format!(
-        "custom-model-credentials.json.{}.tmp",
-        uuid::Uuid::new_v4()
-    ));
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    secure_fs::owner_only(&mut options);
-    let mut file = options.open(&temp).map_err(write_failed)?;
-    if let Err(error) = file.write_all(&bytes).and_then(|()| file.sync_all()) {
-        drop(file);
-        let _ = fs::remove_file(&temp);
-        return Err(write_failed(error));
-    }
-    drop(file);
-    if let Some(Err(error)) = secure_fs::restrict_file(&temp) {
-        let _ = fs::remove_file(&temp);
-        return Err(write_failed(error));
-    }
-    if let Err(error) = fs::rename(&temp, path) {
-        let _ = fs::remove_file(&temp);
-        return Err(write_failed(error));
-    }
-    Ok(())
+    secure_fs::replace_private(
+        path,
+        |file| file.write_all(&bytes).map_err(write_failed),
+        write_failed,
+    )
 }
 
 fn decode(bytes: &[u8]) -> Result<HashMap<String, String>, ModelCatalogError> {

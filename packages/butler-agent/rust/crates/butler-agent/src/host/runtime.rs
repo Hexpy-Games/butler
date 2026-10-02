@@ -12,6 +12,7 @@ mod monitoring;
 mod owners;
 pub(super) mod process_probe;
 mod skills_owner;
+pub(super) mod startup_trace;
 pub(super) mod storage_bootstrap;
 pub(super) mod stores;
 mod subsession_queue;
@@ -67,6 +68,7 @@ impl AgentRuntime {
         app: (Arc<ActiveAppEndpoint>, &tokio_util::sync::CancellationToken),
     ) -> Result<Self, BtccError> {
         let (app_endpoint, stop) = app;
+        let mut startup = startup_trace::Trace::new();
         stores::check_startup(stop)?;
         validate_data_installation_boundary(&paths.data_root, &paths.installation_root)?;
         // All fallible in-memory setup precedes the first store owner.
@@ -88,8 +90,10 @@ impl AgentRuntime {
         let web_access = process_services.web_access;
         let (prompt_clock, date_parser) = process_clocks()?;
         let metric_files = Arc::new(MetricFiles::new(paths.data_root.clone()));
+        startup.phase("configuration_and_models");
         let (coordinator, embedding, vectors, fresh_memory) =
             memory_bootstrap::open(&paths, &environment.cognition_paths).await?;
+        startup.phase("memory_preflight");
         let files = WorkspaceFiles::new(4);
         let image_files = Arc::new(butler_gateway::gateway::AppImageFiles::new(
             &paths.data_root,
@@ -100,8 +104,10 @@ impl AgentRuntime {
         let commands = Commands::new();
         let mutations = WorkspaceMutations::new();
         let (skills, capabilities, catalog) = skills_owner::open(&paths, &files, &mutations)?;
+        startup.phase("skills");
         stores::check_startup(stop)?;
         let stores = RuntimeStores::open(&paths.data_root, collation.clone(), stop).await?;
+        startup.phase("canonical_stores");
         let response_language =
             defaults::initialize(&paths, &app_database_path, &installation).await?;
         let (work_streams, observer) = boundary::open_observer(
@@ -127,6 +133,7 @@ impl AgentRuntime {
             vectors.clone(),
         )
         .await?;
+        startup.phase("defaults_observer_and_memory_consumer");
         let capsule_service = Arc::new(ProjectCapsuleService::new(
             paths.data_root.clone(),
             environment.cognition_paths.clone(),
@@ -146,6 +153,7 @@ impl AgentRuntime {
             &response_language,
         )
         .await?;
+        startup.phase("profile");
         let project_ledger = ProjectLedger::with_collation(&paths.data_root, 2, collation.clone());
         let plans = AcceptedPlanProducer::from_ledger(project_ledger.clone());
         let project_tools = Arc::new(crate::host::guided::project_tools::GuidedProjectTools::new(
@@ -165,44 +173,32 @@ impl AgentRuntime {
             context_budget.clone(),
             metric_files.clone(),
         );
-        let daily_cognition = Arc::new(DailyCognitionJobs::new(DailyCognitionOwners {
-            data_root: paths.data_root.clone(),
-            paths: environment.cognition_paths.clone(),
-            coordinator: coordinator.clone(),
-            metrics: metric_files.clone(),
-            consumer: memory_sync.consumer(),
-            capsules: capsule_service,
-            provider: models.provider.clone(),
-            configuration: models.configuration.clone(),
-            profile: profile.clone(),
-            ledger: project_ledger.clone(),
-            date_parser: date_parser.clone(),
-            bindings: stores.bindings.clone(),
-            embedding: embedding.clone(),
-        }));
-        let context_maintenance = Arc::new(ContextMaintenance::new(
-            paths.data_root.clone(),
+        let context_maintenance = owners::context_maintenance(
+            DailyCognitionOwners {
+                data_root: paths.data_root.clone(),
+                paths: environment.cognition_paths.clone(),
+                coordinator: coordinator.clone(),
+                metrics: metric_files.clone(),
+                consumer: memory_sync.consumer(),
+                capsules: capsule_service,
+                provider: models.provider.clone(),
+                configuration: models.configuration.clone(),
+                profile: profile.clone(),
+                ledger: project_ledger.clone(),
+                date_parser: date_parser.clone(),
+                bindings: stores.bindings.clone(),
+                embedding: embedding.clone(),
+            },
             tool_output.clone(),
-            metric_files.clone(),
-            date_parser.clone(),
-            daily_cognition,
-        ));
+        );
         let command = Arc::new(crate::host::guided::command::GuidedCommand::new(
             commands.clone(),
             tool_output.clone(),
             host_environment.clone(),
         ));
         let tool_artifacts = Arc::new(super::ToolArtifactReader::new(tool_output.clone()));
-        let memory_query = Arc::new(ExactMemoryQuery::new(&paths.data_root, 2));
-        let memory_sources = Arc::new(super::MemorySourceReader::new(
-            paths.data_root.clone(),
-            environment.cognition_paths.clone(),
-        ));
-        let conversation_reference = Arc::new(ConversationSessionReference::new(
-            &paths.data_root,
-            2,
-            memory_sources,
-        ));
+        let (memory_query, conversation_reference) =
+            owners::memory_source_readers(&paths.data_root, &environment.cognition_paths);
         let compare = collation.clone();
         let recall_date_parser = date_parser.clone();
         let memory_recall = MemoryRecall::new(
@@ -427,6 +423,7 @@ impl AgentRuntime {
             ),
             host: owner,
         });
+        startup.phase("runtime_ports");
         Ok(Self {
             memory_acquisition: Arc::new(
                 crate::host::embedding::worker::assets::Acquisition::start(paths.data_root.clone()),

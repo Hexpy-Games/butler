@@ -54,10 +54,15 @@ impl PromptUsageMetricSink for PromptUsageMetrics {
         let data_root = input.butler_data.map(Path::new).unwrap_or(&self.data_root);
         let directory = data_root.join("metrics");
         create_dir_all(&directory).map_err(io_failure)?;
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
+        let mut options = OpenOptions::new();
+        options.create(true).append(true);
+        butler_platform::secure_fs::owner_only(&mut options);
+        butler_platform::secure_fs::no_follow(&mut options);
+        let mut file = options
             .open(directory.join("prompt-cache-usage.jsonl"))
+            .map_err(io_failure)?;
+        butler_platform::secure_fs::restrict_open_file(&file)
+            .unwrap_or(Ok(()))
             .map_err(io_failure)?;
         file.write_all(line.as_bytes()).map_err(io_failure)
     }

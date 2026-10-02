@@ -114,6 +114,11 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
         [format!("conversation_turn:{turn_id}")], |row| row.get::<_, i64>(0)).unwrap() == 1).await;
     until(|| cache_complete(&graph, &turn_id)).await;
     let refreshed = std::fs::read(&cache)?;
+    assert_eq!(
+        butler_platform::secure_fs::is_owner_only(&std::fs::metadata(&cache)?),
+        butler_platform::secure_fs::OWNER_ONLY.then_some(true),
+        "hot cache privacy"
+    );
     let refreshed_modified = std::fs::metadata(&cache)?.modified()?;
     assert_ne!(before, refreshed, "cache must refresh before restart");
     assert!(String::from_utf8_lossy(&refreshed).contains("blue iris"));
@@ -170,6 +175,24 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
             .join("state/scheduler/consolidation-cycle.json"),
     )?)?;
     assert_eq!(cycle["status"], "ok", "{cycle}");
+    let summary = s
+        .sandbox
+        .data
+        .join("cognition/consolidation/run-summary.jsonl");
+    assert_eq!(
+        butler_platform::secure_fs::is_owner_only(&std::fs::metadata(&summary)?),
+        butler_platform::secure_fs::OWNER_ONLY.then_some(true),
+        "maintenance summary privacy"
+    );
+    for job in ["session-sync", "consolidation-cycle"] {
+        assert_eq!(
+            butler_platform::secure_fs::is_owner_only(&std::fs::metadata(
+                s.sandbox.data.join(format!("state/scheduler/{job}.json"))
+            )?),
+            butler_platform::secure_fs::OWNER_ONLY.then_some(true),
+            "{job} privacy"
+        );
+    }
     let reply =
         s.gw.post(
             "/sessions",
