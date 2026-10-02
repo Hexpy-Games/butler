@@ -1860,6 +1860,10 @@ try {
     "refused image should use the brief toast, not a composer error",
   );
 
+  // The product defaults to ask-first; this fixture explicitly exercises the
+  // full-access -> ask-first transition below.
+  await page.locator(testClass("access-button")).click();
+  await page.locator(testClass("composer-menu")).getByRole("button", { name: appCopy.permissions.fullAccess }).click();
   await page.locator(`${testClass("composer-card")} ${composerEditor}`).focus();
   await page
     .getByRole("button", { name: appCopy.permissions.fullAccess })
