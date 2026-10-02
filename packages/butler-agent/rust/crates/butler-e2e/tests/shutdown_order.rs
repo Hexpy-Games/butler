@@ -362,8 +362,13 @@ async fn deadline_waits_for_an_in_progress_record_write() -> Result<(), HarnessE
     if !butler_platform::process_control::SIGNALS {
         return Ok(());
     }
+    record_write_deadline("lock-wait").await?;
+    record_write_deadline("stalled-rename").await
+}
+
+async fn record_write_deadline(mode: &str) -> Result<(), HarnessError> {
     let mut s = Setup::new("SHUTDOWN-RECORD-RACE")?
-        .env("BUTLER_E2E_RECORD_WRITE_RELEASE_AFTER_STOP_MS", "6500")
+        .env("BUTLER_E2E_RECORD_WRITE_DEADLINE", mode)
         .start()
         .await?;
     let started = Instant::now();
@@ -386,6 +391,20 @@ async fn deadline_waits_for_an_in_progress_record_write() -> Result<(), HarnessE
     let written = logs.find("record_write_hold:end").unwrap();
     let removed = logs.find("instance_release:removed").unwrap();
     assert!(release < written && written < removed, "{logs}");
-    assert!(!logs.contains("record_lock_unavailable"), "{logs}");
+    let waiting = logs.find("record_lock_wait:begin").unwrap();
+    assert!(release < waiting && waiting < written, "{logs}");
+    if mode == "stalled-rename" {
+        let cancelled = logs
+            .find("instance_release:staged_write_cancelled")
+            .unwrap();
+        let failed = logs.find("instance_write:failed").unwrap();
+        assert!(
+            written < cancelled && cancelled < failed && failed < removed,
+            "{logs}"
+        );
+        assert!(logs.contains("record_rename_hold:begin"), "{logs}");
+    } else {
+        assert!(!logs.contains("record_lock_unavailable"), "{logs}");
+    }
     s.finish().await
 }

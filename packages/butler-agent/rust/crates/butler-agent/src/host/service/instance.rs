@@ -21,6 +21,7 @@ mod gateway_state;
 mod legacy;
 mod probe;
 mod record;
+mod record_fault;
 mod restart;
 mod stop_intent;
 mod stopping;
@@ -322,6 +323,9 @@ fn release_record_at(
         super::shutdown_trace::event("instance_release:invalid_destination");
         return;
     }
+    if !wait {
+        record::fence_deadline_writes();
+    }
     let lock_path = record_update_lock_path(data_root);
     let lock = if wait {
         acquire_record_update_lock(&lock_path).ok()
@@ -337,15 +341,13 @@ fn release_record_at(
             }
         }
     };
-    let Some(_record_update_lock) = lock else {
-        if !wait {
-            butler_core::diagnostic!(
-                "[native-butler] record_lock_unavailable: deadline release budget expired"
-            );
-        }
+    if lock.is_none() {
         super::shutdown_trace::event("instance_release:record_lock_unavailable");
-        return;
-    };
+        if wait || record::cancel_staged_write(record_path, nonce).is_err() {
+            super::shutdown_trace::event("instance_release:staged_write_cancel_failed");
+            return;
+        }
+    }
     if read_record_at(record_path)
         .ok()
         .flatten()
