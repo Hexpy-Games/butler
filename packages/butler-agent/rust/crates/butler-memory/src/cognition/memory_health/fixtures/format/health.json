@@ -88,6 +88,8 @@
           "hot_cache": "projection_job"
         },
         "oldest_pending_age_ms": null,
+        "memories_without_vectors": null,
+        "oldest_vector_pending_at": null,
         "source_resolution_failures": null,
         "historical_source_resolution_failures": null,
         "embedding_version_mismatch": null,
@@ -235,6 +237,8 @@
           "hot_cache": "projection_job"
         },
         "oldest_pending_age_ms": 0,
+        "memories_without_vectors": 0,
+        "oldest_vector_pending_at": null,
         "source_resolution_failures": 1,
         "historical_source_resolution_failures": 0,
         "embedding_version_mismatch": 0,

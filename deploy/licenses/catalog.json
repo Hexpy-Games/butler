@@ -11,7 +11,7 @@
     "packages/butler-agent/rust/crates/butler-gateway/Cargo.toml": "13a216ab7c58c1b280a8ff5dbe634af414e27a42fffc9828a4f4a1e60200b18e",
     "packages/butler-agent/rust/crates/butler-ledger/Cargo.toml": "ccc46a2a8bb225eebcdf7858d73f5bddd3742ea57477e0208ca3c16464815b54",
     "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "0f8f2135454f2995bdb17e9eb72bf1e891ac3b862bbeffd03af75e2427525641",
-    "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "95abb3064ab75a21c95efdb6fa5049c80c46abcfe62794330cab063d7d574820",
+    "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "4d00dc13612305c65f36890e47aa3ed91e4a61a7d96a905ffb6816b49d726bf6",
     "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "90781f4840f7705f2ac7a577abf1f4d8fdb90aaf8f7c6c25e7df9548ff6a9814",
     "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "64da42f6f886ea7101d64301d15061435e92bdb1821c1c8d15a5e02581a84314",
     "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "e8e6f6d7ef418db0e100f2560ee8fc5f17d567cc30fda2f12e409dff552d96e9",

@@ -5,7 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::{Input, canonical_path, resolve_input_generation};
 use crate::cognition::generation_vectors::{
-    GenerationVectorRow, GenerationVectorStore, persisted_receipt,
+    GenerationVectorRow, GenerationVectorStore, compatibility, persisted_receipt,
 };
 use crate::cognition::graph::{ClaimedVectorUnit, GraphRepository};
 use crate::cognition::sources::read_typed_record;
@@ -27,12 +27,26 @@ pub(super) async fn process(
         return Ok(false);
     }
     let generation = resolve_input_generation(input)?;
-    if generation
-        .embedding
-        .as_ref()
-        .is_some_and(|value| value.native_identity().is_none())
+    let result = process_generation(input, embedding, &generation).await;
+    if let Err(failure) = &result
+        && failure.code() == "memory_embedding_version_mismatch"
     {
+        // The write-time recheck may have observed a newly pinned identity.
+        let refused = resolve_input_generation(input)?;
+        input.probe.identity_refused(&refused, failure.code());
+        // A refused identity is a steady state; claimed work was failed below.
         return Ok(false);
+    }
+    result
+}
+
+async fn process_generation(
+    input: &Input,
+    embedding: &dyn CognitionEmbeddingPort,
+    generation: &MemoryGenerationHandle,
+) -> CognitionResult<bool> {
+    if let Some(identity) = &generation.embedding {
+        compatibility::preflight(identity)?;
     }
     let now = (input.clock)();
     // The claim takes the write lease; look first, without it.
@@ -43,26 +57,31 @@ pub(super) async fn process(
     {
         return Ok(false);
     }
-    let units = {
+    let (units, current) = {
         let _lease = acquire(input, "memory-vector-claim").await?;
-        assert_generation_current(input, &generation, Admission::Required)?;
+        assert_generation_current(input, generation, Admission::Required)?;
         let mut graph = GraphRepository::open(&generation.graph_path)?;
         let units = graph.claim_vector_quantum(&now)?;
         graph.close()?;
-        if !units.is_empty() {
-            assert_current(input, &generation, &units, Admission::Required)?;
-        }
-        units
+        let current = if units.is_empty() {
+            Ok(())
+        } else {
+            assert_current(input, generation, &units, Admission::Required)
+        };
+        (units, current)
     };
     if units.is_empty() {
         return Ok(false);
     }
-    let result = run_claimed(input, embedding, &generation, &units).await;
+    let result = match current {
+        Ok(()) => run_claimed(input, embedding, generation, &units).await,
+        Err(failure) => Err(failure),
+    };
     if let Err(failure) = &result {
         // A cancelled admission leaves the durable running claim for recovery.
         // Failure bookkeeping must never cross the generation/source write gate.
         if let Ok(_lease) = acquire(input, "memory-vector-fail").await
-            && assert_current(input, &generation, &units, Admission::Required).is_ok()
+            && assert_current(input, generation, &units, Admission::Failure).is_ok()
         {
             let mut graph = GraphRepository::open(&generation.graph_path)?;
             graph.fail_vector_quantum(&units, failure.code(), &(input.clock)())?;
@@ -90,10 +109,15 @@ async fn run_claimed(
     }
     let embedded = embed(input, embedding, units).await?;
     let observed = embedded.metadata;
+    // The version is a compatibility domain, not producer provenance.
+    let version = generation
+        .embedding
+        .as_ref()
+        .map_or(observed.version.as_str(), |identity| identity.version());
     let rows = units
         .iter()
         .zip(embedded.embeddings)
-        .map(|(unit, vector)| row(unit, generation, &observed.version, vector))
+        .map(|(unit, vector)| row(unit, generation, version, vector))
         .collect::<CognitionResult<Vec<_>>>()?;
     write_rows(input, generation, units, &observed, &rows).await
 }
@@ -105,16 +129,12 @@ async fn complete_from_receipt(
     generation: &MemoryGenerationHandle,
     units: &[ClaimedVectorUnit],
 ) -> CognitionResult<bool> {
-    let Some(identity) = generation
-        .embedding
-        .as_ref()
-        .and_then(|value| value.native_identity())
-    else {
+    let Some(identity) = generation.embedding.as_ref() else {
         return Ok(false);
     };
     let rows = units
         .iter()
-        .map(|unit| row(unit, generation, identity.version.as_str(), Vec::new()))
+        .map(|unit| row(unit, generation, identity.version(), Vec::new()))
         .collect::<CognitionResult<Vec<_>>>()?;
     let Some(receipt) = persisted_receipt(&input.data_root, generation, &rows).await? else {
         return Ok(false);
@@ -202,18 +222,11 @@ async fn write_rows(
             observed,
             &lease,
         )?,
-        Some(value)
-            if value
-                .native_identity()
-                .is_some_and(|identity| identity.version == observed.version) =>
-        {
+        Some(value) => {
+            compatibility::query_identity(value, observed)?;
             value.clone()
         }
-        _ => return Err(error(CognitionCode::MemoryEmbeddingVersionMismatch)),
     };
-    if pinned.version() != observed.version {
-        return Err(error(CognitionCode::MemoryEmbeddingVersionMismatch));
-    }
     let current = resolve_generation(&input.data_root, &input.environment, &target)?;
     let receipt = store.upsert(&lease, &target, &current, rows).await?;
     assert_current(input, &current, units, Admission::Ignored)?;
@@ -222,7 +235,7 @@ async fn write_rows(
         || final_generation
             .embedding
             .as_ref()
-            .is_none_or(|value| value.version() != observed.version)
+            .is_none_or(|value| value.version() != pinned.version())
     {
         return Err(error(CognitionCode::MemoryGenerationChanged));
     }
@@ -238,6 +251,8 @@ async fn write_rows(
 enum Admission {
     Required,
     Ignored,
+    /// Failure bookkeeping retains authority/source gates but permits identity refusal.
+    Failure,
 }
 
 async fn acquire(
@@ -272,7 +287,7 @@ fn assert_generation_current(
     generation: &MemoryGenerationHandle,
     admission: Admission,
 ) -> CognitionResult<()> {
-    if admission == Admission::Required && input.shutdown.is_cancelled() {
+    if admission != Admission::Ignored && input.shutdown.is_cancelled() {
         return Err(error(CognitionCode::MemoryWriteAborted));
     }
     let target = input
@@ -285,12 +300,10 @@ fn assert_generation_current(
     if current.generation_id != generation.generation_id {
         return Err(error(CognitionCode::MemoryGenerationChanged));
     }
-    if current
-        .embedding
-        .as_ref()
-        .is_some_and(|value| value.native_identity().is_none())
+    if admission != Admission::Failure
+        && let Some(identity) = &current.embedding
     {
-        return Err(error(CognitionCode::MemoryEmbeddingVersionMismatch));
+        compatibility::preflight(identity)?;
     }
     ensure_data_authority(&input.data_root, &[&current.root, &current.graph_path])?;
     assert_mutation_authority(&input.data_root, &input.environment, &target, &current)

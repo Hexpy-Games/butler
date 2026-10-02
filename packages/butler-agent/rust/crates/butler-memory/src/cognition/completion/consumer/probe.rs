@@ -16,9 +16,39 @@ use crate::cognition::graph::{CatchupState, GraphRepository, PendingSemanticJob}
 #[derive(Default)]
 pub(super) struct ProbeReader {
     open: Mutex<Option<(PathBuf, GraphRepository)>>,
+    #[cfg(test)]
+    pub(super) identity_diagnostic_count: Mutex<usize>,
+    identity_diagnostic: Mutex<Option<(String, Option<String>, String)>>,
 }
 
 impl ProbeReader {
+    /// Emit once per serving identity/refusal transition, without idle writes.
+    pub(super) fn identity_refused(
+        &self,
+        generation: &crate::cognition::MemoryGenerationHandle,
+        code: &str,
+    ) -> bool {
+        let key = (
+            generation.generation_id.clone(),
+            generation
+                .embedding
+                .as_ref()
+                .map(|value| value.version().to_owned()),
+            code.to_owned(),
+        );
+        let mut last = self.identity_diagnostic.lock();
+        if last.as_ref() != Some(&key) {
+            butler_core::diagnostic!("[native-memory-sync] {}", code);
+            *last = Some(key);
+            #[cfg(test)]
+            {
+                *self.identity_diagnostic_count.lock() += 1;
+            }
+            return true;
+        }
+        false
+    }
+
     /// Runs `read` on the connection to the graph at `path`.
     async fn with<T: Send + 'static>(
         self: &Arc<Self>,
