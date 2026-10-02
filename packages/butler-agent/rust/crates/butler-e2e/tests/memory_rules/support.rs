@@ -138,14 +138,56 @@ pub(crate) async fn tool(
         "{turn}; {:?}",
         s.provider()?.misses()
     );
-    let rows = butler_e2e::e2e::gateway::tool_rows(&s.gw.messages(chat).await?, &id);
-    let row = rows
+    result(s, chat, &id, name).await
+}
+
+/// Delivered successes use the owner API; failures use the model-visible result.
+pub(crate) async fn result(
+    s: &Scenario,
+    chat: &str,
+    turn: &str,
+    name: &str,
+) -> Result<Value, HarnessError> {
+    let row = tokio::time::timeout(std::time::Duration::from_secs(90), async {
+        loop {
+            let rows = butler_e2e::e2e::gateway::tool_rows(&s.gw.messages(chat).await?, turn);
+            if let Some(row) = rows.iter().rev().find(|row| {
+                row.to_string().contains(name)
+                    && matches!(row["state"].as_str(), Some("delivered" | "failed"))
+            }) {
+                return Ok::<_, HarnessError>(row.clone());
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("tool activity did not publish its result")?;
+    if row["state"] == "delivered" && row["tool_result_id"].is_string() {
+        return Ok(serde_json::from_str(
+            &s.gw.operation_output(turn, &row).await?,
+        )?);
+    }
+    Ok(
+        model_output(&s.provider()?.requests(), row["tool_call_id"].as_str())
+            .unwrap_or_else(|| panic!("missing model-visible result for {row}")),
+    )
+}
+
+pub(crate) fn model_output(requests: &[Value], call: Option<&str>) -> Option<Value> {
+    requests
         .iter()
-        .find(|row| row.to_string().contains(name) && row["state"] == "delivered")
-        .unwrap_or_else(|| panic!("missing {name}: {rows:?}"));
-    Ok(serde_json::from_str(
-        &s.gw.operation_output(&id, row).await?,
-    )?)
+        .rev()
+        .filter_map(|request| request["input"].as_array())
+        .flat_map(|items| items.iter().rev())
+        .filter(|item| {
+            item["type"] == "function_call_output"
+                && call.is_none_or(|call| item["call_id"] == call)
+        })
+        .find_map(|item| {
+            item["output"]
+                .as_str()
+                .and_then(|output| serde_json::from_str(output).ok())
+        })
 }
 
 pub(crate) fn typed_evidence(value: &Value) -> Vec<Value> {
@@ -209,4 +251,44 @@ pub(crate) async fn conversation_vectors(data: &Path, turn: &str) {
         let db = Connection::open_with_flags(graph(data), OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
         db.query_row("SELECT EXISTS(SELECT 1 FROM memory_chunks c JOIN memory_projection_jobs j ON j.episode_id=c.memory_chunk_id AND j.revision=c.current_revision WHERE c.source_key=?1 AND c.status='active' AND json_extract(j.semantic_graph_state,'$.state')='complete' AND json_extract(j.episode_vectors_state,'$.state')='complete' AND json_extract(j.episode_vectors_state,'$.completed_units')=json_extract(j.episode_vectors_state,'$.total_units') AND json_extract(j.episode_vectors_state,'$.total_units')>0)", [format!("conversation_turn:{turn}")], |row| row.get::<_, bool>(0)).unwrap()
     }).await;
+}
+
+/// Cover the explicit context item used by chats with prior public history.
+pub(crate) fn historical(cassette: &mut Cassette) {
+    let ids = regex::Regex::new(r"\b((?:resp|msg|fc|rs|call)_[A-Za-z0-9]{8,})").unwrap();
+    let historical = cassette
+        .exchanges
+        .iter()
+        .cloned()
+        .map(|mut exchange| {
+            exchange.request.key.round.insert(0, "user".into());
+            for chunk in &mut exchange.response.chunks {
+                chunk.text = ids.replace_all(&chunk.text, "${1}history").into_owned();
+            }
+            exchange
+        })
+        .collect::<Vec<_>>();
+    cassette.exchanges.extend(historical);
+}
+
+/// Complete identities of retained graph records; lifecycle must change sources only.
+pub(crate) fn retained_graph_rows(data: &Path) -> Vec<Vec<String>> {
+    use rusqlite::{Connection, OpenFlags};
+    let db = Connection::open_with_flags(graph(data), OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+    [
+        "SELECT id FROM memory_nodes ORDER BY id",
+        "SELECT node_id||':'||source_id FROM memory_evidence ORDER BY node_id,source_id",
+        "SELECT edge_id FROM edges ORDER BY edge_id",
+        "SELECT edge_id||':'||chunk_source_id FROM edge_evidence ORDER BY edge_id,chunk_source_id",
+    ]
+    .into_iter()
+    .map(|sql| {
+        db.prepare(sql)
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+    })
+    .collect()
 }

@@ -2,6 +2,8 @@
 use super::inventory::{Entry, read_json, write_json};
 use super::*;
 use std::fs;
+mod commit;
+use commit::complete;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(super) enum Request {
@@ -83,6 +85,7 @@ pub(super) fn run(
         .map_err(failure_source)?;
     butler_platform::secure_fs::sync_path(&root).map_err(failure_source)?;
     write_json(&root.join("pending.json"), &intent)?;
+    owner.checkpoint("intent", operation_id(&intent.request))?;
     complete(owner, &intent).map(Some)
 }
 
@@ -219,124 +222,6 @@ fn binding(
     })
 }
 
-fn complete(
-    owner: &RememberedRuleOwner,
-    intent: &Intent,
-) -> CognitionResult<RememberedRuleReceipt> {
-    let root = owner.root();
-    ensure_data_authority(
-        &owner.data_root,
-        &[
-            &root.join("archive").join(&intent.entry.record_id),
-            &root
-                .join("handles")
-                .join(format!("{}.json", intent.entry.handle)),
-            &root.join("operations"),
-            &root.join("pending.json"),
-            &root.join("manifest.json"),
-            &root.join("INDEX.md"),
-            &root.join(format!("{}.md", intent.entry.record_id)),
-            &root.join(format!("{}.source.json", intent.entry.record_id)),
-        ],
-    )?;
-    butler_platform::secure_fs::create_private_dir_all(&root.join("handles"))
-        .map_err(failure_source)?;
-    write_json(
-        &root
-            .join("handles")
-            .join(format!("{}.json", intent.entry.handle)),
-        &intent.entry,
-    )?;
-    archive(&root, intent)?;
-    super::super::write::write_atomic(
-        &root.join(format!("{}.md", intent.entry.record_id)),
-        intent.text.as_bytes(),
-    )?;
-    write_json(
-        &root.join(format!("{}.source.json", intent.entry.record_id)),
-        &intent.binding,
-    )?;
-    exclude(owner, intent)?;
-    write_index(&root, intent)?;
-    write_json(&root.join("manifest.json"), &intent.inventory)?;
-    let notice = crate::cognition::TypedMemorySourceNotice::ExplicitRule {
-        record_id: intent.entry.record_id.clone(),
-        revision: intent.binding.revision.clone(),
-        operation_id: intent.binding.operation_id.clone(),
-    };
-    owner.publisher.publish_typed_source(&notice)?;
-    let result = RememberedRuleReceipt {
-        rule: intent.entry.handle.clone(),
-        operation_id: intent.binding.operation_id.clone(),
-        state: intent.binding.state.clone(),
-        replayed: false,
-        recall_state: (intent.entry.state == "active").then(|| "pending".into()),
-    };
-    write_json(
-        &root
-            .join("operations")
-            .join(format!("{}.json", sha256(result.operation_id.as_bytes()))),
-        &Receipt {
-            request: intent.request.clone(),
-            result: result.clone(),
-        },
-    )?;
-    fs::remove_file(root.join("pending.json")).map_err(failure_source)?;
-    butler_platform::secure_fs::sync_path(&root).map_err(failure_source)?;
-    Ok(result)
-}
-
-fn archive(root: &std::path::Path, intent: &Intent) -> CognitionResult<()> {
-    let Some(text) = &intent.previous_text else {
-        return Ok(());
-    };
-    let path = root.join("archive").join(&intent.entry.record_id);
-    butler_platform::secure_fs::create_private_dir_all(&path).map_err(failure_source)?;
-    let revision = intent
-        .previous
-        .as_ref()
-        .map(|b| b.revision.clone())
-        .unwrap_or_else(|| sha256(text.as_bytes()));
-    write_json(
-        &path.join(format!("{revision}.json")),
-        &serde_json::json!({
-            "text":text, "binding":intent.previous, "revision":revision,
-        }),
-    )
-}
-
-fn write_index(root: &std::path::Path, intent: &Intent) -> CognitionResult<()> {
-    let filename = format!("{}.md", intent.entry.record_id);
-    let prior = match fs::read_to_string(root.join("INDEX.md")) {
-        Ok(text) => text,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(error) => return Err(failure_source(error)),
-    };
-    let replacement = format!(
-        "- [{}]({filename})",
-        super::super::write::compact(&intent.text, 80)
-    );
-    let mut found = false;
-    let mut lines = Vec::new();
-    for line in prior.lines() {
-        if line.contains(&format!("]({filename})")) {
-            if !found && intent.entry.state == "active" {
-                lines.push(replacement.clone());
-            }
-            found = true;
-        } else {
-            lines.push(line.to_owned());
-        }
-    }
-    if !found && intent.entry.state == "active" {
-        lines.push(replacement);
-    }
-    super::super::write::write_atomic(
-        &root.join("INDEX.md"),
-        format!("{}\n", lines.join("\n")).as_bytes(),
-    )
-}
-
 fn revision(
     id: &str,
     hash: &str,
@@ -373,49 +258,6 @@ fn select(
         return Err(failure("rule_forgotten"));
     }
     Ok(entry)
-}
-
-/// Apply source lifecycle under the same lease as the source commit, before success.
-fn exclude(owner: &RememberedRuleOwner, intent: &Intent) -> CognitionResult<()> {
-    use crate::cognition::graph::{GraphRepository, TypedLifecycleInput};
-    use crate::cognition::sources::TypedMemoryLifecycle;
-    let forgotten = intent.binding.state == "forgotten";
-    let selected = if forgotten {
-        Some(&intent.binding)
-    } else {
-        intent.previous.as_ref()
-    };
-    let Some(binding) = selected else {
-        return Ok(());
-    };
-    let generation = resolve_active_generation(&owner.data_root, &owner.environment)?;
-    ensure_data_authority(&owner.data_root, &[&generation.graph_path])?;
-    let mut graph = GraphRepository::open(&generation.graph_path)?;
-    let consumed = graph.consume_typed_lifecycle(TypedLifecycleInput {
-        source_kind: "explicit_record",
-        record_id: &intent.entry.record_id,
-        revision: &binding.revision,
-        operation_id: &binding.operation_id,
-        disposition: if forgotten {
-            TypedMemoryLifecycle::Forgotten
-        } else {
-            TypedMemoryLifecycle::Superseded
-        },
-        now: &owner.publisher.now_iso(),
-    });
-    let closed = graph.close();
-    consumed.and(closed)?;
-    // An already acknowledged old observation must be explicitly republished.
-    if let Some(prior) = &intent.previous {
-        owner.publisher.publish_typed_source(
-            &crate::cognition::TypedMemorySourceNotice::ExplicitRule {
-                record_id: prior.record_id.clone(),
-                revision: prior.revision.clone(),
-                operation_id: prior.operation_id.clone(),
-            },
-        )?;
-    }
-    Ok(())
 }
 
 fn already_forgotten(

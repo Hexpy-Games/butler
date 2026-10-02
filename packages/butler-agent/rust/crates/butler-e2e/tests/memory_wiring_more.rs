@@ -11,6 +11,14 @@ use butler_e2e::e2e::cassette::Cassette;
 use butler_e2e::e2e::faults::{ArgsMutation, mutate_chunk};
 use butler_e2e::e2e::scenario::{Fixture, Setup};
 use serde_json::json;
+#[path = "memory_rules/crash.rs"]
+mod crash;
+#[path = "memory_rules/cursor.rs"]
+mod cursor;
+#[path = "memory_rules/failure.rs"]
+mod failure;
+#[path = "memory_rules/forget.rs"]
+mod forget;
 #[path = "memory_rules/support.rs"]
 mod support;
 use support::{new_chat, read_json, until};

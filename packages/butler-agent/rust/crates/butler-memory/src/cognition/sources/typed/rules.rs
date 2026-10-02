@@ -43,6 +43,9 @@ pub struct RememberedRuleReceipt {
     pub recall_state: Option<String>,
 }
 
+/// Synchronous commit boundary observer, invoked only under the mutation lease.
+pub type RuleCommitObserver = Arc<dyn Fn(&str, &str) -> CognitionResult<()> + Send + Sync>;
+
 /// Process-owned rule mutation service using the shared consolidation lease.
 #[derive(Clone)]
 pub struct RememberedRuleOwner {
@@ -50,6 +53,7 @@ pub struct RememberedRuleOwner {
     environment: CognitionPathEnvironment,
     coordinator: Arc<CognitionWriteCoordinator>,
     publisher: Arc<CompletionPublisher>,
+    commit_observer: Option<RuleCommitObserver>,
 }
 
 impl RememberedRuleOwner {
@@ -65,7 +69,21 @@ impl RememberedRuleOwner {
             environment,
             coordinator,
             publisher,
+            commit_observer: None,
         }
+    }
+
+    /// Attach commit diagnostics or deterministic fault injection; no idle work.
+    #[must_use]
+    pub fn with_commit_observer(mut self, observer: RuleCommitObserver) -> Self {
+        self.commit_observer = Some(observer);
+        self
+    }
+
+    fn checkpoint(&self, stage: &str, operation: &str) -> CognitionResult<()> {
+        self.commit_observer
+            .as_ref()
+            .map_or(Ok(()), |observe| observe(stage, operation))
     }
 
     /// List complete active rows for the authenticated settings adapter.
@@ -163,20 +181,27 @@ impl RememberedRuleOwner {
             .await
             .map_err(failure_source)??;
         let lock = self.environment.consolidation_lock(&self.data_root);
-        let lease = self
-            .coordinator
-            .acquire(
+        let coordinator = self.coordinator.clone();
+        let request_lock = lock.clone();
+        let wait_cancellation = cancellation.clone();
+        let executor = tokio::runtime::Handle::current();
+        // The existing coordinator performs SQLite attempts synchronously.
+        // Poll its cancellable wait off the Tokio workers as well as the commit.
+        let lease = tokio::task::spawn_blocking(move || {
+            executor.block_on(coordinator.acquire(
                 CognitionWriteAcquire {
-                    lock_path: lock.clone(),
+                    lock_path: request_lock,
                     purpose: Some("remembered_rule".into()),
                     deadline_at_epoch_ms: None,
-                    cancellation: Some(cancellation.clone()),
+                    cancellation: Some(wait_cancellation),
                 },
                 CognitionWaitClass::Interactive,
-            )
-            .await
-            .map_err(CognitionError::from)?
-            .ok_or_else(|| failure("rule_write_cancelled"))?;
+            ))
+        })
+        .await
+        .map_err(failure_source)?
+        .map_err(CognitionError::from)?
+        .ok_or_else(|| failure("rule_write_busy"))?;
         let owner = self.clone();
         tokio::task::spawn_blocking(move || {
             lease.assert_for_path(&lock).map_err(CognitionError::from)?;
@@ -184,20 +209,39 @@ impl RememberedRuleOwner {
             let result = if cancellation.is_cancelled() {
                 Err(failure("rule_write_cancelled"))
             } else {
-                transaction::run(&owner, request).and_then(|result| {
-                    result
-                        .map(|mut receipt| {
-                            receipt.recall_state = owner.recall_state(&receipt)?;
-                            Ok(receipt)
-                        })
-                        .transpose()
-                })
+                transaction::run(&owner, request)
+                    .map_err(|error| owner.pending_error(error))
+                    .and_then(|result| {
+                        result
+                            .map(|mut receipt| {
+                                receipt.recall_state = owner.recall_state(&receipt)?;
+                                Ok(receipt)
+                            })
+                            .transpose()
+                    })
             };
             let released = lease.release(result.is_ok()).map_err(CognitionError::from);
             result.and_then(|value| released.map(|()| value))
         })
         .await
         .map_err(failure_source)?
+    }
+
+    fn pending_error(&self, error: CognitionError) -> CognitionError {
+        if self
+            .root()
+            .join("pending.json")
+            .try_exists()
+            .unwrap_or(false)
+        {
+            CognitionError::new(
+                CognitionCode::MemorySourceUnavailable,
+                "Rule change is pending recovery.",
+            )
+            .with_source(error)
+        } else {
+            error
+        }
     }
 
     fn root(&self) -> PathBuf {

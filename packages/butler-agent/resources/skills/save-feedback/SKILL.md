@@ -1,9 +1,9 @@
 ---
 name: save-feedback
-description: Remember an explicit rule or preference.
+description: Remember, correct or forget an explicit rule.
 user-invocable: true
-applicability: Use only when the user explicitly asks to remember a durable rule or preference.
-allowed-tools: update_explicit_memory
+applicability: Use only when the user explicitly asks to remember, correct or forget a durable rule.
+allowed-tools: update_explicit_memory forget_explicit_memory
 dispatch: none
 review: none
 reporting: Confirm only a successful durable rule update.
@@ -21,3 +21,5 @@ The server owns files, handles, revisions and recovery. Never edit memory files
 or indexes directly. Confirm success only when the tool returns `ok: true`;
 on a stale rule, ask the user to review the latest rule. Recall projection of
 new text may still be pending.
+
+When the user asks to forget a saved rule, use `forget_explicit_memory` with its Active Rules handle. Chats are kept.

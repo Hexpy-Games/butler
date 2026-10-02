@@ -22,7 +22,11 @@ use super::GuidedTools;
 pub(super) fn supports(name: &str) -> bool {
     matches!(
         ToolName::parse(name),
-        Some(ToolName::IngestTaskMemory | ToolName::UpdateExplicitMemory)
+        Some(
+            ToolName::IngestTaskMemory
+                | ToolName::UpdateExplicitMemory
+                | ToolName::ForgetExplicitMemory
+        )
     )
 }
 
@@ -32,6 +36,14 @@ pub(super) async fn execute(
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    if call.name == ToolName::ForgetExplicitMemory
+        && owner.binding.access_mode != butler_turn::btcc::AccessMode::FullAccess
+    {
+        return encoded(&failure(
+            "memory_write_requires_full_access",
+            "Full access is required to forget a rule.",
+        ));
+    }
     if !owner
         .binding
         .access_mode
@@ -46,6 +58,7 @@ pub(super) async fn execute(
     let result = match call.name.as_str() {
         "ingest_task_memory" => ingest(owner, &call.arguments),
         "update_explicit_memory" => update(owner, invocation, &call.arguments, call_id).await,
+        "forget_explicit_memory" => forget(owner, invocation, &call.arguments, call_id).await,
         // Dispatch routes only supported names here.
         _ => json!({"ok":false,"error":{"code":"unknown_tool",
             "message":"This tool is not a memory write tool."}}),
@@ -117,6 +130,41 @@ async fn update(
     };
     match result {
         Ok(result) => explicit_result(&result),
+        Err(error) => cognition_failure(error.code(), &error.message()),
+    }
+}
+
+async fn forget(
+    owner: &GuidedTools,
+    invocation: GuidedInvocation<'_>,
+    args: &Map<String, Value>,
+    call_id: &str,
+) -> Value {
+    if let Err(error) = require_source(args) {
+        return error;
+    }
+    let handle = args.get("rule").unwrap_or(&Value::Null);
+    let target = match selected_target(owner, invocation, handle) {
+        Ok(target) => target,
+        Err(error) => return error,
+    };
+    let (session, message) = match canonical_authored_source(owner, invocation).await {
+        Ok(binding) => binding,
+        Err(code) => return binding_failure(code),
+    };
+    match owner
+        .memory_writes
+        .rules
+        .forget(
+            target,
+            call_id.into(),
+            session,
+            message,
+            invocation.cancellation.clone(),
+        )
+        .await
+    {
+        Ok(receipt) => explicit_result(&receipt),
         Err(error) => cognition_failure(error.code(), &error.message()),
     }
 }

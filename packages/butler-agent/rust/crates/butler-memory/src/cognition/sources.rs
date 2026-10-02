@@ -22,8 +22,8 @@ pub(in crate::cognition) use recall::{
 };
 pub use typed::{
     ExplicitMemoryUpdateInput, RememberedRule, RememberedRuleOwner, RememberedRuleReceipt,
-    RememberedRuleTarget, TaskMemoryIngestionResult, ingest_task_outcome_memory,
-    list_remembered_rules,
+    RememberedRuleTarget, RuleCommitObserver, TaskMemoryIngestionResult,
+    ingest_task_outcome_memory, list_remembered_rules,
 };
 pub(in crate::cognition) use typed::{
     TypedMemoryLifecycle, TypedMemoryRecord, hydrate_typed_source, read_explicit_record,

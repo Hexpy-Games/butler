@@ -278,6 +278,7 @@ impl GuidedTools {
                     | ToolName::RecallMemory
                     | ToolName::IngestTaskMemory
                     | ToolName::UpdateExplicitMemory
+                    | ToolName::ForgetExplicitMemory
                     | ToolName::AnalyzeAttachedImage
                     | ToolName::ReadConversationSession
                     | ToolName::ListConversationSessions

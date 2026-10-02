@@ -1,4 +1,5 @@
 //! Process composition and targeted startup recovery for remembered rules.
+mod checkpoints;
 use butler_memory::cognition::{
     CognitionPathEnvironment, CompletionPublisher, RememberedRuleOwner,
 };
@@ -23,11 +24,14 @@ impl MemoryWriteServices {
         let publisher = Arc::new(CompletionPublisher::new(data, paths, clock));
         Self {
             paths: paths.clone(),
-            rules: RememberedRuleOwner::new(
-                data.to_owned(),
-                paths.clone(),
-                coordinator,
-                publisher.clone(),
+            rules: checkpoints::configure(
+                RememberedRuleOwner::new(
+                    data.to_owned(),
+                    paths.clone(),
+                    coordinator,
+                    publisher.clone(),
+                ),
+                data,
             ),
             publisher,
         }

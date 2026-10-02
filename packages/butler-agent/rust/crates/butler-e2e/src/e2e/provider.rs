@@ -25,6 +25,8 @@ use super::matching;
 use super::sanitize::Placeholders;
 use super::{HarnessError, harness_error};
 
+mod hold;
+pub use hold::ReplyGate;
 mod memory;
 mod record;
 mod replay;
@@ -79,6 +81,7 @@ struct State {
     requests: Mutex<Vec<Value>>,
     memory_requests: Mutex<Vec<Value>>,
     memory_responder: Mutex<Option<MemoryResponder>>,
+    holds: Mutex<hold::Holds>,
 }
 
 pub struct Provider {
@@ -153,6 +156,7 @@ impl Provider {
             requests: Mutex::new(Vec::new()),
             memory_requests: Mutex::new(Vec::new()),
             memory_responder: Mutex::new(None),
+            holds: Mutex::new(hold::Holds::default()),
         });
         let shared = state.clone();
         let app = axum::Router::new().fallback(move |request: Request<Body>| {
@@ -226,6 +230,16 @@ impl Provider {
     /// Override only the validated synthetic memory contract, for semantic E2Es.
     pub fn set_memory_responder(&self, responder: MemoryResponder) {
         *lock(&self.state.memory_responder) = Some(responder);
+    }
+
+    /// Hold the next reply after a tool result for this explicit user request.
+    pub fn hold_after_tool(&self, user: &str) -> ReplyGate {
+        lock(&self.state.holds).reply(user, true)
+    }
+
+    /// Hold the next reply for a request whose persisted turn snapshot is needed.
+    pub fn hold_next_reply(&self, user: &str) -> ReplyGate {
+        lock(&self.state.holds).reply(user, false)
     }
 
     pub fn add_placeholder(&self, name: &str, value: impl Into<String>) {
@@ -363,6 +377,10 @@ async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
     }
     learn_echo_ids(&state, &String::from_utf8_lossy(&bytes));
     let key = matching::key(&path, &json, &lock(&state.placeholders));
+    let hold = lock(&state.holds).take(&key);
+    if let Some(hold) = hold {
+        let _ = hold.await;
+    }
     match &state.mode {
         Mode::Replay(cassette) => {
             if let Some(response) = replay_recorded(&state, cassette, &key) {
