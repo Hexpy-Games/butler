@@ -1,11 +1,8 @@
 //! Generation build cursors and the typed source registration adapter.
 
-use crate::lenient::JsonField;
-use rusqlite::OptionalExtension;
-
 use super::{
     CatchupState, CognitionResult, GraphRegistration, GraphRepository, TypedRegistrationInput,
-    db_error, jobs, typed_registration,
+    jobs, typed_registration,
 };
 
 impl GraphRepository {
@@ -33,30 +30,6 @@ impl GraphRepository {
         ids: &[String],
     ) -> CognitionResult<std::collections::HashSet<String>> {
         jobs::registered_observations(self.connection()?, ids)
-    }
-
-    pub(in crate::cognition) fn rebuild_typed_cursor(
-        &self,
-        snapshot_id: &str,
-    ) -> CognitionResult<Option<String>> {
-        let stored: Option<String> = self
-            .connection()?
-            .query_row(
-                "SELECT value FROM memory_state WHERE key='rebuild_typed_cursor'",
-                [],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()
-            .map_err(db_error)?;
-        let Some(value) =
-            stored.and_then(|value| serde_json::from_str::<serde_json::Value>(&value).ok())
-        else {
-            return Ok(None);
-        };
-        if value.field("snapshot_id") != snapshot_id {
-            return Ok(None);
-        }
-        Ok(value.field("source_key").as_str().map(str::to_owned))
     }
 
     pub(in crate::cognition) fn register_typed(

@@ -1,14 +1,11 @@
-//! Physical candidate cache entry currentness, using the recall quality reader.
+//! Live retained hot-cache entry validation, using the recall quality reader.
 
-use std::{
-    collections::{HashMap, HashSet},
-    path::Path,
-};
+use std::{collections::HashSet, path::Path};
 
 use crate::cognition::generation::HotCacheEntryView;
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::{GraphRepository, db_error, hydrate, source};
+use super::{GraphRepository, db_error, vector_registration::source_row};
 use crate::cognition::feedback::{FeedbackSourceRow, excluded_source_ids};
 use crate::cognition::{
     CognitionResult, CognitionSourceRow, ConversationSourceNotice,
@@ -40,38 +37,6 @@ impl GraphRepository {
             }
         }
         Ok(source_class(&rows))
-    }
-
-    pub(in crate::cognition) fn requeue_missing_rebuild_cache(
-        &mut self,
-        generation: &str,
-        jobs: &[String],
-    ) -> CognitionResult<usize> {
-        let tx = self.connection_mut()?.transaction().map_err(db_error)?;
-        let mut changed = 0;
-        for job in jobs {
-            changed += tx.execute("UPDATE memory_projection_jobs SET hot_cache_state=?1,hot_cache_next_attempt_at=NULL,hot_cache_attempt_count=0 WHERE job_id=?2 AND generation=?3 AND json_extract(hot_cache_state,'$.state')='complete'",
-                params![crate::cognition::graph::StageWrite::blocked("hot_cache_evidence_missing").json()?,job,generation]).map_err(db_error)?;
-        }
-        tx.commit().map_err(db_error)?;
-        Ok(changed)
-    }
-
-    pub(in crate::cognition) fn rebuild_cache_outcomes(
-        &self,
-        generation: &str,
-    ) -> CognitionResult<HashMap<String, bool>> {
-        let mut statement = self
-            .connection()?
-            .prepare("SELECT entry_id,admitted FROM memory_hot_cache_outcomes WHERE generation=?1")
-            .map_err(db_error)?;
-        statement
-            .query_map([generation], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? != 0))
-            })
-            .map_err(db_error)?
-            .collect::<Result<HashMap<_, _>, _>>()
-            .map_err(db_error)
     }
 
     /// The ids of `entries` whose evidence is still current as of `as_of`.
@@ -447,4 +412,36 @@ fn superseded(
     Ok(corrections
         .iter()
         .any(|row| !excluded.contains(&row.source_id)))
+}
+
+const SOURCE_COLUMNS: &str = "source_id,episode_id,revision,source_kind,conversation_session_id,conversation_message_id,part_id,scalar_pointer,byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis";
+
+fn source(db: &Connection, id: &str) -> CognitionResult<Option<CognitionSourceRow>> {
+    db.query_row(
+        &format!("SELECT {SOURCE_COLUMNS} FROM memory_chunk_sources WHERE source_id=?1"),
+        [id],
+        source_row,
+    )
+    .optional()
+    .map_err(db_error)
+}
+
+fn hydrate(
+    canonical: &ConversationSourceReader,
+    source_root: &Path,
+    row: &CognitionSourceRow,
+) -> bool {
+    if matches!(row.source_kind.as_str(), "task_report" | "explicit_record") {
+        return crate::cognition::sources::hydrate_typed_source(source_root, row).is_ok();
+    }
+    let Some(message_id) = row.conversation_message_id.as_deref() else {
+        return false;
+    };
+    canonical
+        .read_message(message_id)
+        .ok()
+        .flatten()
+        .is_some_and(|message| {
+            crate::cognition::hydrate_conversation_source(&message, row, f64::INFINITY).is_ok()
+        })
 }

@@ -152,38 +152,6 @@ pub(crate) fn resolve_projection_generation(
     )
 }
 
-/// The target an operator command mutates: the serving generation itself, or
-/// a building candidate bound to its snapshot.
-pub(super) fn operator_target(
-    memory_root: &Path,
-    generation_id: &str,
-) -> Result<MemoryGenerationTarget, CognitionError> {
-    let descriptor = read_descriptor(memory_root)?;
-    let manifest = read_manifest(memory_root, generation_id)?;
-    if descriptor.generation_id == generation_id {
-        return Ok(MemoryGenerationTarget::Active {
-            expected_generation: generation_id.to_owned(),
-        });
-    }
-    candidate_target(generation_id, manifest)
-}
-
-/// The rebuild target of a building candidate.
-pub(super) fn candidate_target(
-    generation_id: &str,
-    manifest: GenerationManifest,
-) -> Result<MemoryGenerationTarget, CognitionError> {
-    if manifest.state != Some(GenerationState::Building) {
-        return Err(error(CognitionCode::MemoryGenerationChanged));
-    }
-    Ok(MemoryGenerationTarget::Rebuild {
-        generation_id: generation_id.to_owned(),
-        canonical_snapshot_id: manifest
-            .canonical_snapshot_id
-            .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?,
-    })
-}
-
 /// Whether an active generation descriptor exists.
 pub fn active_memory_descriptor_exists(
     data_root: &Path,

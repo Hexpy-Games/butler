@@ -8,14 +8,10 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 mod hydration;
-mod pinned;
 mod selection;
 
 pub(super) use hydration::assert_current;
 use hydration::hydrate;
-pub(super) use pinned::{
-    assert_source_current as assert_pinned_source_current, load as load_pinned,
-};
 
 use rusqlite::{Connection, params};
 use serde::{Serialize, Serializer, ser::SerializeSeq};
