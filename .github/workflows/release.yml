@@ -5,11 +5,20 @@ on:
     tags:
       - "v*"
 
+  workflow_dispatch:
+    inputs:
+      runner:
+        type: choice
+        options: [self, hosted]
+        default: self
+        description: Windows build host (select a release tag as the ref)
+
 permissions:
   contents: write
 
 jobs:
   native-release:
+    if: startsWith(github.ref, 'refs/tags/v')
     name: Build and publish native macOS arm64 artifacts
     runs-on: macos-15
     # Holds the Apple signing secrets; restricted to v* tags (docs: packages/butler-app/scripts/README.md).
@@ -215,6 +224,7 @@ jobs:
         run: deploy/macos/sign-and-notarize.sh cleanup
 
   agent-linux:
+    if: startsWith(github.ref, 'refs/tags/v')
     name: Build Linux Agent archive (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 150
@@ -242,25 +252,49 @@ jobs:
           path: dist/release/agent/*
           if-no-files-found: error
 
-  windows-native:
-    if: contains(github.ref_name, '-preview.')
-    uses: ./.github/workflows/windows-native-deps.yml
-
-  agent-windows:
+  agent-windows-build:
     name: Build unsigned Windows x64 Agent preview
-    needs: windows-native
-    if: contains(github.ref_name, '-preview.')
-    runs-on: windows-latest
+    if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-preview.') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ${{ inputs.runner == 'hosted' && 'windows-latest' || fromJSON('["self-hosted", "butler-win"]') }}
+    concurrency:
+      group: windows-release-${{ github.ref }}
+      cancel-in-progress: false
     timeout-minutes: 90
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/target/windows-release
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/windows-owner-setup
+        if: inputs.runner != 'hosted'
+        with:
+          workflow: windows-release
       - uses: ./.github/actions/build-windows-agent
         with:
+          owner-runner: ${{ inputs.runner != 'hosted' }}
+          profile: release
           cache-key: package-windows-x64
-          native-deps-artifact: windows-native-deps
           artifact-base-url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-windows-x64
+          path: dist/release/agent/*
+          if-no-files-found: error
+      - name: Check owner registration and remove job profile
+        if: always() && inputs.runner != 'hosted'
+        shell: pwsh
+        run: ./deploy/windows-owner-cleanup.ps1
+
+  agent-windows:
+    name: Verify unsigned Windows x64 Agent preview
+    needs: agent-windows-build
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: agent-windows-x64
+          path: dist/release/agent
       - name: Smoke the installed archive
         shell: pwsh
         run: |
@@ -270,11 +304,6 @@ jobs:
               Remove-Item $env:WINDOWS_PREVIEW_TEMP_ROOT -Recurse -Force
             }
           }
-      - uses: actions/upload-artifact@v4
-        with:
-          name: agent-windows-x64
-          path: dist/release/agent/*
-          if-no-files-found: error
 
   # Runs after the macOS job, whose single-platform manifests it replaces with
   # the merged ones (the update manifest lists one artifact per platform).
@@ -341,6 +370,7 @@ jobs:
           gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
 
   app-linux:
+    if: startsWith(github.ref, 'refs/tags/v')
     name: Build and smoke Linux App packages
     # The reusable workflow declares an issues-writing main/nightly reporter.
     permissions:

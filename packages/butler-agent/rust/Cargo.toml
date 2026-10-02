@@ -94,6 +94,16 @@ hmac = "0.12"
 # file:line in panic messages and backtraces (no test inspects variables or
 # frames beyond that); "packed" moves them into one .dSYM per binary.
 # Dependencies need no debug info. profile.test inherits these settings.
+# Branch previews retain optimizations without release link-time optimization.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+[profile.ci-fast]
+inherits = "release"
+lto = false
+codegen-units = 16
+
 [profile.dev]
 debug = "line-tables-only"
 split-debuginfo = "packed"

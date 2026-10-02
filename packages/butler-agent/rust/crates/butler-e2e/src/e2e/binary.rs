@@ -16,7 +16,9 @@ use super::{HarnessError, harness_error};
 static BINARY: OnceLock<Result<PathBuf, String>> = OnceLock::new();
 
 pub fn workspace_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+    nonempty("BUTLER_E2E_WORKSPACE_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."))
 }
 
 /// `packages/butler-agent/resources` as shipped next to the binary.

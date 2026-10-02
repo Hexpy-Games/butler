@@ -108,7 +108,11 @@ pub struct FileHash {
 pub fn root() -> PathBuf {
     nonempty("BUTLER_E2E_CASSETTES")
         .map(PathBuf::from)
-        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("cassettes"))
+        .unwrap_or_else(|| {
+            super::binary::workspace_root()
+                .join("crates/butler-e2e")
+                .join("cassettes")
+        })
 }
 
 pub struct Cassette {
