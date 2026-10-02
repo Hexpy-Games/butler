@@ -171,7 +171,11 @@ impl DailyCognitionJobs {
             return Err("memory_write_aborted".into());
         }
         let now: chrono::DateTime<chrono::Utc> = SystemTime::now().into();
-        let run_id = format!("cr_scheduled_{}", now.format("%Y%m%d%H%M%S"));
+        let run_id = format!(
+            "cr_scheduled_{}_{}",
+            now.format("%Y%m%d%H%M%S"),
+            uuid::Uuid::new_v4().simple()
+        );
         let generic = self
             .generic
             .run(RunCycle {

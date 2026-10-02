@@ -275,6 +275,7 @@ fn prepare(
     graph_pool: GraphPool,
 ) -> CognitionResult<InitialPreparation> {
     let handle = resolve_generation(&input.data_root, environment, &input.target)?;
+    super::admission::assert_admitted(&handle.graph_path, &input.notice)?;
     let canonical_path = handle
         .canonical_snapshot_path
         .clone()

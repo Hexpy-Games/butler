@@ -81,7 +81,7 @@ fn read_owned(
             }
             canonical_scanned += 1;
             sessions.insert(message.session_id.clone());
-            add_message_windows(root, message, &mut windows, &mut seen, limit);
+            add_message_windows(root, message, &mut windows, &mut seen, limit)?;
             if windows.len() >= limit {
                 stopped = true;
                 break;
@@ -111,12 +111,13 @@ fn add_message_windows(
     windows: &mut Vec<SourceWindow>,
     seen: &mut HashSet<String>,
     limit: usize,
-) {
+) -> ProfileResult<()> {
+    if !super::super::admission::profile_message_is_admitted(root, &message.id)? { return Ok(()); }
     for part in &message.parts {
         for scalar in &part.scalars {
             for (start, end) in source_spans(&scalar.text) {
                 if windows.len() >= limit {
-                    return;
+                    return Ok(());
                 }
                 let window = make_window(SourceWindowInput {
                     message_id: &message.id,
@@ -137,6 +138,7 @@ fn add_message_windows(
             }
         }
     }
+    Ok(())
 }
 
 struct Incomplete {

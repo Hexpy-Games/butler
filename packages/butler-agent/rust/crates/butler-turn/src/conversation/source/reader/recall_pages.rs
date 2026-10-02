@@ -91,6 +91,21 @@ pub(super) fn recovered(
     after_id: Option<&str>,
     limit: Option<usize>,
 ) -> ConversationResult<Vec<ConversationMessageWithParts>> {
+    let ids = recovered_ids(db, after_id, limit)?;
+    let mut messages = Vec::with_capacity(ids.len());
+    for id in ids {
+        if let Some(message) = read_message(db, &id)? {
+            messages.push(message);
+        }
+    }
+    Ok(messages)
+}
+
+pub(super) fn recovered_ids(
+    db: &Connection,
+    after_id: Option<&str>,
+    limit: Option<usize>,
+) -> ConversationResult<Vec<String>> {
     let after_row = match after_id {
         Some(id) => db
             .query_row(
@@ -122,11 +137,5 @@ pub(super) fn recovered(
         .map_err(ConversationError::sqlite)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(ConversationError::sqlite)?;
-    let mut messages = Vec::with_capacity(ids.len());
-    for id in ids {
-        if let Some(message) = read_message(db, &id)? {
-            messages.push(message);
-        }
-    }
-    Ok(messages)
+    Ok(ids)
 }
