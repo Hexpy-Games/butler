@@ -516,7 +516,7 @@ function heroAnimations(hero: ReturnType<Page["locator"]>): Promise<HeroAnimatio
         for (const key of Object.keys(frame)) {
           if (["offset", "computedOffset", "easing", "composite"].includes(key)) continue;
           properties.add(key);
-          const part = target?.getAttribute("data-t");
+          const part = target?.closest("[data-t]")?.getAttribute("data-t");
           const valid = key === "strokeDashoffset" ? target instanceof SVGGraphicsElement && Boolean(part) && getComputedStyle(target).strokeDasharray !== "none"
             : key === "fontWeight" ? target?.tagName.toLowerCase() === "text" && Boolean(part) : true;
           if (!valid) invalidTargets.push(`${key}:${part ?? target?.tagName}`);
