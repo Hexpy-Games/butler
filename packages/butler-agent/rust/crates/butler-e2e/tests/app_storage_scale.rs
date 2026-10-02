@@ -13,6 +13,7 @@
     reason = "test assertions"
 )]
 
+use butler_platform::sqlite;
 use std::time::{Duration, Instant};
 
 use butler_e2e::e2e::gateway::turn_state;
@@ -27,7 +28,7 @@ mod seed;
 use seed::{SEEDED_AT, UNCOMPACTED, seed_owner_scale};
 
 fn database(s: &Scenario) -> Connection {
-    Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap()
+    sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap()
 }
 
 fn count(db: &Connection, sql: &str) -> i64 {

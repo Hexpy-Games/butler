@@ -1,5 +1,6 @@
 //! Completed memory jobs and native conversation rows, with owner-sized metrics.
 use butler_e2e::e2e::{HarnessError, harness_error};
+use butler_platform::sqlite;
 use rusqlite::{Connection, params};
 use std::{
     fs,
@@ -38,7 +39,7 @@ pub(super) fn owner_scale(data: &Path) -> Result<Expected, HarnessError> {
 }
 
 fn seed_graph(path: &Path) -> rusqlite::Result<()> {
-    let mut db = Connection::open(path)?;
+    let mut db = sqlite::open(path)?;
     let tx = db.transaction()?;
     {
         let mut job = tx.prepare("INSERT INTO memory_projection_jobs(job_id,episode_id,revision,extraction_version,generation,extraction_model,reasoning_effort,observed_completion_job_ids,source_state,semantic_graph_state,episode_vectors_state,node_vectors_state,hot_cache_state,created_at) VALUES(?1,?1,'1','v3','synthetic','stub','low','[]','complete','complete','complete','complete','complete','2026-01-01T00:00:00Z')")?;
@@ -54,7 +55,7 @@ fn seed_graph(path: &Path) -> rusqlite::Result<()> {
 }
 
 fn seed_native_messages(data: &Path) -> rusqlite::Result<()> {
-    let mut db = Connection::open(data.join("runtime/conversation-store.sqlite"))?;
+    let mut db = sqlite::open(data.join("runtime/conversation-store.sqlite"))?;
     let tx = db.transaction()?;
     tx.execute("INSERT INTO conversation_sessions(id,gateway_origin,created_at,updated_at,status,schema_version) VALUES('idle-native','app','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','active',4)", [])?;
     {
@@ -79,7 +80,7 @@ fn seed_native_messages(data: &Path) -> rusqlite::Result<()> {
 }
 
 pub(super) fn assert_complete(data: &Path, expected: &Expected) -> Result<(), HarnessError> {
-    let app = Connection::open(data.join("app-server/butler-client.sqlite")).unwrap();
+    let app = sqlite::open(data.join("app-server/butler-client.sqlite")).unwrap();
     assert_eq!(
         count(&app, "SELECT COUNT(*) FROM turns WHERE id LIKE 'perf-t%'"),
         5_000
@@ -98,7 +99,7 @@ pub(super) fn assert_complete(data: &Path, expected: &Expected) -> Result<(), Ha
         ),
         5_000
     );
-    let canonical = Connection::open(data.join("runtime/conversation-store.sqlite")).unwrap();
+    let canonical = sqlite::open(data.join("runtime/conversation-store.sqlite")).unwrap();
     assert_eq!(
         count(
             &canonical,
@@ -124,7 +125,7 @@ pub(super) fn assert_complete(data: &Path, expected: &Expected) -> Result<(), Ha
         serde_json::from_str::<serde_json::Value>(&last)?["text"],
         "Fact 29999"
     );
-    let graph = Connection::open(&expected.graph).unwrap();
+    let graph = sqlite::open(&expected.graph).unwrap();
     assert_eq!(
         count(
             &graph,

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
-import { resolve } from "node:path";
+import { relative, resolve, sep } from "node:path";
 
 /** Pin engine, manifests, shaders and original photos so a build cannot silently ship stale posters. */
 export function wallpaperPosterInputs(root: string): Record<string, string> {
@@ -8,6 +8,6 @@ export function wallpaperPosterInputs(root: string): Record<string, string> {
   const files = readdirSync(directory, { recursive: true, withFileTypes: true })
     .filter((file) => file.isFile() && /\.(ts|tsx|json|frag|jpg)$/.test(file.name)
       && !/\.(test|showcase|guidance)\./.test(file.name))
-    .map((file) => resolve(file.parentPath, file.name)).sort();
-  return Object.fromEntries(files.map((file) => [file.slice(directory.length + 1), createHash("sha256").update(readFileSync(file)).digest("hex")]));
+    .map((file) => relative(directory, resolve(file.parentPath, file.name)).split(sep).join("/")).sort();
+  return Object.fromEntries(files.map((file) => [file, createHash("sha256").update(readFileSync(resolve(directory, file))).digest("hex")]));
 }

@@ -13,9 +13,10 @@ status: published
 - Apple Silicon(M 시리즈 칩) Mac, macOS 12 이상
 - Linux x64 / arm64: DEB 패키지
 - Arch Linux x64: Arch 패키지
+- Windows x64 프리뷰: 서명되지 않은 Agent와 브라우저 UI
 
 <Notice tone="info">
-  Butler Agent는 앱에 포함되어 있어 따로 설치하지 않습니다. 앱에 포함된 Agent는 Butler가 열려 있는 동안에만 실행됩니다.
+  macOS와 Linux에서는 Butler Agent가 앱에 포함되어 있어 따로 설치하지 않습니다. 앱에 포함된 Agent는 Butler가 열려 있는 동안에만 실행됩니다.
 </Notice>
 
 ## 내려받기
@@ -36,8 +37,8 @@ status: published
     </Steps>
   </TabPanel>
   <TabPanel value="windows">
-    <Notice tone="warning" title="아직 지원하지 않습니다">
-      Windows용 네이티브 Agent 번들은 아직 지원하거나 검증하지 않았습니다.
+    <Notice tone="warning" title="Agent 프리뷰">
+      서명되지 않은 x64 Agent와 브라우저 UI를 제공합니다. 설치 방법과 제한 사항은 아래 Windows 프리뷰 안내를 따릅니다.
     </Notice>
   </TabPanel>
   <TabPanel value="linux">
@@ -111,3 +112,19 @@ npx @hexpygames/butler install
     description="버전별 변경 사항과 배포 파일을 확인합니다."
   />
 </CardGrid>
+
+## Windows x64 Agent 프리뷰
+
+Windows 프리뷰는 서명되지 않은 Agent 전용 배포입니다. Agent 매니페스트에 `windows-x64`가 있는 프리뷰 릴리스의 ZIP과 `install.ps1`을 사용합니다. PowerShell에서 `0.1.0-preview.N`을 해당 릴리스 버전으로 바꿉니다.
+
+```powershell
+$env:BUTLER_VERSION = '0.1.0-preview.N'; irm "https://github.com/Hexpy-Games/butler/releases/download/v$env:BUTLER_VERSION/install.ps1" | iex
+butler open
+```
+
+설치기는 SHA-256 체크섬을 검증하고 `%LOCALAPPDATA%\Butler`에 설치하며, 사용자 PATH에 `butler`를 추가하고 Agent를 시작합니다. 명령을 찾을 수 없으면 새 터미널을 엽니다. UI는 브라우저에서 사용합니다. 백그라운드 프로세스는 `butler start`, `stop`, `restart`, `status`로 관리합니다.
+
+- 자동 시작은 지원하지 않습니다. 로그인 후 `butler start`를 실행합니다.
+- LAN 원격 접속과 페어링을 지원합니다.
+- 명령 쓰기 샌드박스는 지원하지 않습니다. 명령 실행에는 승인이 필요합니다.
+- SmartScreen 경고가 표시되면 **추가 정보 → 실행**을 선택합니다(More info → Run anyway).

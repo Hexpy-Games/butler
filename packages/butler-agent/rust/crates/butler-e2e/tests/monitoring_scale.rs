@@ -9,7 +9,7 @@ use butler_e2e::e2e::{
     HarnessError,
     scenario::{Scenario, Setup},
 };
-use rusqlite::Connection;
+use butler_platform::sqlite;
 use serde_json::Value;
 #[path = "monitoring_scale/history.rs"]
 mod history;
@@ -17,7 +17,7 @@ use history::assert_history_labels;
 use std::time::Instant;
 
 fn seed(s: &Scenario) {
-    let db = Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
+    let db = sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
     db.execute_batch("BEGIN;
       WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<599)
       INSERT INTO chats(id,title,kind,created_at,updated_at)
@@ -34,7 +34,7 @@ fn seed(s: &Scenario) {
       CASE WHEN i%3000=2999 THEN 'Final report '||(i/3000) ELSE hex(zeroblob(1000)) END,
       'delivered','2026-01-01','2026-01-01' FROM n;
       COMMIT;").unwrap();
-    let btcc = Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap();
+    let btcc = sqlite::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap();
     btcc.execute_batch("INSERT INTO btcc_inbound_inbox(inbox_id,session_id,trigger_key,turn_id,admission_input_hash,command_json,status)
         VALUES('monitor-inbox','monitor-session','monitor-trigger','turn','hash','{}','accepted');
       INSERT INTO btcc_turns(turn_id,session_id,inbox_id,trigger_key,original_message_id,original_message,

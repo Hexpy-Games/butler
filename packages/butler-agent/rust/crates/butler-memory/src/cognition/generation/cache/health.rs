@@ -1,8 +1,9 @@
 //! Read-only active hot-cache health using the same physical-entry validator.
 
+use butler_platform::sqlite;
 use std::{collections::HashSet, fs, path::Path};
 
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::OpenFlags;
 use serde::Serialize;
 
 use crate::cognition::MemoryGenerationHandle;
@@ -136,7 +137,7 @@ fn validate(
 }
 
 fn graph_revision(path: &Path) -> Option<i64> {
-    let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
+    let db = sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
     db.query_row(
         "SELECT value FROM memory_state WHERE key='graph_revision'",
         [],
@@ -148,7 +149,7 @@ fn graph_revision(path: &Path) -> Option<i64> {
 
 /// Entries receipts report as evicted for size or budget.
 fn receipt_evictions(path: &Path) -> usize {
-    let Ok(db) = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY) else {
+    let Ok(db) = sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY) else {
         return 0;
     };
     let Ok(mut statement) = db.prepare(

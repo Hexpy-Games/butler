@@ -1,3 +1,4 @@
+use butler_platform::sqlite;
 use std::path::Path;
 use std::time::Duration;
 
@@ -53,7 +54,7 @@ impl ConversationSourceReader {
     }
     /// Opens the store read-only.
     pub fn open(path: &Path) -> ConversationResult<Self> {
-        let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        let connection = sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
             .map_err(source_open_error)?;
         connection
             .busy_timeout(Duration::from_millis(5_000))

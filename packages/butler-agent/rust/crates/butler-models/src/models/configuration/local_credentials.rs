@@ -13,6 +13,12 @@ use serde_json::{Map, Value};
 use crate::models::ModelCatalogError;
 
 pub(super) async fn read(path: &Path) -> Result<HashMap<String, String>, ModelCatalogError> {
+    if !secure_fs::OWNER_ONLY {
+        let path = path.to_path_buf();
+        tokio::task::spawn_blocking(move || protect_existing(&path))
+            .await
+            .map_err(read_failed)??;
+    }
     let bytes = match tokio::fs::read(path).await {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(HashMap::new()),
@@ -22,6 +28,7 @@ pub(super) async fn read(path: &Path) -> Result<HashMap<String, String>, ModelCa
 }
 
 pub(super) fn read_sync(path: &Path) -> Result<HashMap<String, String>, ModelCatalogError> {
+    protect_existing(path)?;
     let bytes = match fs::read(path) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(HashMap::new()),
@@ -35,7 +42,14 @@ pub(super) fn write(
     credentials: &HashMap<String, String>,
 ) -> Result<(), ModelCatalogError> {
     let parent = path.parent().ok_or_else(write_error)?;
-    fs::create_dir_all(parent).map_err(write_failed)?;
+    if secure_fs::OWNER_ONLY {
+        fs::create_dir_all(parent).map_err(write_failed)?;
+    } else {
+        secure_fs::create_private_dir_all(parent).map_err(write_failed)?;
+        secure_fs::protect_folder(parent)
+            .transpose()
+            .map_err(write_failed)?;
+    }
 
     let mut object = Map::new();
     for (model_ref, secret) in credentials {
@@ -67,6 +81,15 @@ pub(super) fn write(
     if let Err(error) = fs::rename(&temp, path) {
         let _ = fs::remove_file(&temp);
         return Err(write_failed(error));
+    }
+    Ok(())
+}
+
+fn protect_existing(path: &Path) -> Result<(), ModelCatalogError> {
+    if !secure_fs::OWNER_ONLY && path.exists() {
+        secure_fs::restrict_file(path)
+            .transpose()
+            .map_err(read_failed)?;
     }
     Ok(())
 }

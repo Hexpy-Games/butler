@@ -1,7 +1,8 @@
+use butler_platform::sqlite;
 use std::path::Path;
 use std::time::Duration;
 
-use rusqlite::{Connection, OpenFlags, OptionalExtension};
+use rusqlite::{OpenFlags, OptionalExtension};
 
 use super::{WorkspaceError, WorkspaceResult};
 use crate::workspace::WorkspaceCode;
@@ -28,7 +29,7 @@ pub fn read_active_butler_session(path: &Path) -> WorkspaceResult<Option<StatusS
     }
 
     let connection =
-        Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(|error| {
+        sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(|error| {
             WorkspaceError::new(WorkspaceCode::SessionStoreUnavailable, error.to_string())
                 .with_source(error)
         })?;

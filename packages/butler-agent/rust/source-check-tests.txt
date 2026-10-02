@@ -10,7 +10,7 @@ crates/butler-gateway	45	31
 crates/butler-ledger	5	1
 crates/butler-memory	118	107
 crates/butler-models	66	46
-crates/butler-platform	20	18
+crates/butler-platform	20	15
 crates/butler-runtime	76	62
 crates/butler-turn	110	92
 tools/source-check	16	14

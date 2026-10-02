@@ -1,12 +1,13 @@
 //! Storage fixtures shared by BTCC tests and, through the `test-support`
 //! feature, by scenario tests in dependent crates.
 
+use butler_platform::sqlite;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rusqlite::{Connection, params};
+use rusqlite::params;
 use serde_json::json;
 
 use super::*;
@@ -102,7 +103,7 @@ impl Fixture {
 
     pub fn activated() -> Self {
         let fixture = Self::empty();
-        let connection = Connection::open(&fixture.path).expect("fixture connection");
+        let connection = sqlite::open(&fixture.path).expect("fixture connection");
         connection
             .execute_batch(
                 "CREATE TABLE agent_storage_migration_receipt (singleton INTEGER PRIMARY KEY, \

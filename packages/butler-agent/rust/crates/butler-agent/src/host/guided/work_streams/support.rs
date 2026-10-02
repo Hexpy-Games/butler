@@ -1,3 +1,4 @@
+use butler_platform::sqlite;
 use std::{
     collections::{HashMap, HashSet},
     fs,
@@ -44,7 +45,7 @@ pub(super) fn open_lock(root: &Path, logical: &Path) -> Result<Connection, BtccE
     let shard = u32::from_str_radix(&digest[..8], 16).unwrap_or(0) % 64;
     let directory = root.join("runtime/mutation-lock-shards");
     fs::create_dir_all(&directory).map_err(io_error)?;
-    let connection = Connection::open(directory.join(format!("mutation-lock-{shard:02}.sqlite3")))
+    let connection = sqlite::open(directory.join(format!("mutation-lock-{shard:02}.sqlite3")))
         .map_err(sql_error)?;
     connection
         .busy_timeout(std::time::Duration::ZERO)

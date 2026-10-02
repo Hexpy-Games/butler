@@ -35,6 +35,7 @@ mod vector_quantum;
 mod vector_registration;
 mod vector_representative;
 
+use butler_platform::sqlite;
 use std::path::Path;
 use std::time::Duration;
 
@@ -134,7 +135,7 @@ impl GraphRepository {
         tx.commit().map_err(db_error)
     }
     pub(in crate::cognition) fn create_fresh(path: &Path, now: &str) -> CognitionResult<()> {
-        let mut connection = Connection::open(path).map_err(db_error)?;
+        let mut connection = sqlite::open(path).map_err(db_error)?;
         connection
             .pragma_update(None, "journal_mode", "WAL")
             .map_err(db_error)?;
@@ -301,7 +302,7 @@ impl GraphRepository {
         )
     }
     pub(super) fn open(path: &Path) -> CognitionResult<Self> {
-        let connection = Connection::open_with_flags(
+        let connection = sqlite::open_with_flags(
             path,
             OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_URI,
         )
@@ -318,8 +319,8 @@ impl GraphRepository {
     }
 
     pub(in crate::cognition) fn open_readonly(path: &Path) -> CognitionResult<Self> {
-        let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .map_err(db_error)?;
+        let connection =
+            sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(db_error)?;
         connection
             .busy_timeout(Duration::from_millis(5_000))
             .map_err(db_error)?;

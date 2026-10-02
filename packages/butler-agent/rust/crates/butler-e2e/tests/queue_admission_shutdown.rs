@@ -12,7 +12,7 @@ use butler_e2e::e2e::{
     provider::Pacing,
     scenario::{Setup, accepted_turn_id},
 };
-use rusqlite::Connection;
+use butler_platform::sqlite;
 use serde_json::json;
 use std::time::{Duration, Instant};
 
@@ -63,7 +63,7 @@ async fn q_02_shutdown_finishes_an_in_flight_queue_admission() -> Result<(), Har
     assert_eq!(turn_state(held_turn), "thinking");
     let held_turn_id = held_turn["id"].as_str().unwrap().to_owned();
     s.agent.terminate().await?;
-    let db = Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
+    let db = sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
     let pending: (String, Option<String>, Option<String>) = db
         .query_row(
             "SELECT state,safe_error_code,turn_id FROM session_queued_messages WHERE text=?1",

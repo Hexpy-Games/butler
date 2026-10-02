@@ -59,6 +59,7 @@ pub use work::{
     PersistedWorkTurnScope, SessionPlanObservation, SessionWorkRepository, WorkStatusObservation,
 };
 
+use butler_platform::sqlite;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread::JoinHandle;
@@ -307,7 +308,7 @@ fn run_connection_lane(
                     .with_source(error)
             })?;
         }
-        let mut connection = Connection::open(path).map_err(StorageError::sqlite)?;
+        let mut connection = sqlite::open(path).map_err(StorageError::sqlite)?;
         configure(&connection, profile)?;
         validate_activation(&connection, activation)?;
         schema::create_current(&connection).map_err(StorageError::sqlite)?;
@@ -340,6 +341,17 @@ fn run_connection_lane(
             "BTCC database transaction remained open at close",
         ));
     }
+    // NORMAL commits are durable once the WAL is synced. Keep it for recovery
+    // instead of copying and syncing the same pages again at final close.
+    sqlite::sync_wal(&connection).map_err(|error| {
+        StorageError::new(StorageCode::SqliteWalSyncFailed, error.to_string()).with_source(error)
+    })?;
+    connection
+        .set_db_config(
+            rusqlite::config::DbConfig::SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE,
+            true,
+        )
+        .map_err(StorageError::sqlite)?;
     connection
         .close()
         .map_err(|(_, error)| StorageError::sqlite(error))

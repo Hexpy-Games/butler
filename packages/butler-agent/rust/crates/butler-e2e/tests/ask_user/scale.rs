@@ -1,5 +1,6 @@
 //! Settled authority history must not add work to a visible question poll.
 use super::{HarnessError, Scenario, Value, answer};
+use butler_platform::sqlite;
 use rusqlite::{Connection, params};
 
 const HISTORY: i64 = 10_000;
@@ -107,7 +108,7 @@ pub(super) async fn seed_history(s: &Scenario, question: &Value) -> Result<(), H
     let data = s.sandbox.data.clone();
     let request_ref = question["request_ref"].as_str().unwrap().to_owned();
     tokio::task::spawn_blocking(move || {
-        let db = Connection::open(data.join("agent-runtime/btcc.sqlite")).unwrap();
+        let db = sqlite::open(data.join("agent-runtime/btcc.sqlite")).unwrap();
         seed(&db, &request_ref);
         assert_pending_question_lookup_is_indexed(&db);
     })

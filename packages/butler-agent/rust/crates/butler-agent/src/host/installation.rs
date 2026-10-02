@@ -160,8 +160,10 @@ impl ResolvedInstallation {
             .as_str()
             .ok_or("installation_manifest_invalid")?;
         let expected_binary = match schema {
-            "butler.native-agent-install.v1" => "butler-agent",
-            "butler.native-agent-payload.v1" => "bin/butler-agent",
+            "butler.native-agent-install.v1" => butler_platform::launcher::AGENT_BINARY.to_owned(),
+            "butler.native-agent-payload.v1" => {
+                format!("bin/{}", butler_platform::launcher::AGENT_BINARY)
+            }
             _ => return Err("installation_manifest_invalid".into()),
         };
         if binary != expected_binary || resources != "resources" {
@@ -258,9 +260,12 @@ fn assert_test_data_root_is_isolated(resolved: &Path, owner: Option<&Path>, temp
 
 /// Platforms a standalone installation (`butler.native-agent-install.v1`) may
 /// target, named as Node names them (`process.platform`, `process.arch`).
-/// Windows installations are not supported yet.
-const INSTALL_PLATFORMS: [(&str, &str); 3] =
-    [("darwin", "arm64"), ("linux", "x64"), ("linux", "arm64")];
+const INSTALL_PLATFORMS: [(&str, &str); 4] = [
+    ("darwin", "arm64"),
+    ("linux", "x64"),
+    ("linux", "arm64"),
+    ("win32", "x64"),
+];
 
 /// The standalone installation's own fields: platform, version, launcher and digests.
 fn check_install_manifest(
@@ -272,10 +277,10 @@ fn check_install_manifest(
         host_install_platform(),
     )?;
     if string_field(value, "version").is_none()
-        || value["launcher"].as_str() != Some("butler")
+        || value["launcher"].as_str() != Some(butler_platform::launcher::STANDALONE_LAUNCHER)
         || string_field(value, "binarySha256").is_none()
         || string_field(value, "resourcesSha256").is_none()
-        || !launcher_is_expected(root)
+        || !butler_platform::launcher::standalone_launcher_is_expected(root)
     {
         return Err("installation_manifest_invalid".into());
     }
@@ -298,11 +303,6 @@ fn check_install_platform(
     manifest: (Option<&str>, Option<&str>),
     host: (&str, &str),
 ) -> Result<(), crate::host::HostError> {
-    if host.0 == "win32" {
-        return Err(
-            "installation_platform_unsupported: Windows installations are not supported yet".into(),
-        );
-    }
     let (Some(platform), Some(architecture)) = manifest else {
         return Err("installation_manifest_invalid".into());
     };
@@ -338,12 +338,6 @@ fn safe_manifest_path(root: &Path, relative: &str) -> Result<PathBuf, crate::hos
         return Err("installation_manifest_layout_invalid".into());
     }
     Ok(path)
-}
-
-fn launcher_is_expected(root: &Path) -> bool {
-    let launcher = root.join("butler");
-    std::fs::symlink_metadata(&launcher).is_ok_and(|metadata| metadata.file_type().is_symlink())
-        && std::fs::read_link(launcher).is_ok_and(|target| target == Path::new("butler-agent"))
 }
 
 fn canonical_file(path: &Path, code: &str) -> Result<PathBuf, crate::host::HostError> {

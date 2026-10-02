@@ -8,6 +8,7 @@
 
 #[path = "support/memory_fixture.rs"]
 mod memory_fixture;
+use butler_platform::sqlite;
 use memory_fixture::initialize_empty;
 
 use std::path::{Path, PathBuf};
@@ -23,7 +24,7 @@ const IDLE: Duration = Duration::from_secs(60);
 
 /// Completed windows exercise the idle indexes without starting model work.
 fn seed_graph(path: &Path) {
-    let mut db = Connection::open(path).unwrap();
+    let mut db = sqlite::open(path).unwrap();
     let tx = db.transaction().unwrap();
     {
         let mut job = tx.prepare_cached("INSERT INTO memory_projection_jobs(job_id,episode_id,revision,extraction_version,generation,extraction_model,reasoning_effort,observed_completion_job_ids,source_state,semantic_graph_state,episode_vectors_state,node_vectors_state,hot_cache_state,created_at) VALUES(?1,?1,'1','v3','synthetic','stub','low','[]','complete','complete','complete','complete','complete','2026-01-01T00:00:00Z')").unwrap();
@@ -45,7 +46,7 @@ fn data_version(db: &Connection) -> u64 {
 }
 
 fn readonly(path: &Path) -> Connection {
-    Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap()
+    sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap()
 }
 
 fn signature(path: &Path) -> Option<(u64, SystemTime)> {
@@ -55,7 +56,7 @@ fn signature(path: &Path) -> Option<(u64, SystemTime)> {
 }
 
 fn seed_imported_message(data: &Path) {
-    let canonical = Connection::open(data.join("runtime/conversation-store.sqlite")).unwrap();
+    let canonical = sqlite::open(data.join("runtime/conversation-store.sqlite")).unwrap();
     let now = "2026-09-29T00:00:00.000Z";
     canonical.execute("INSERT INTO conversation_sessions(id,gateway_origin,created_at,updated_at,status,schema_version) VALUES('idle-recovery-session','app',?1,?1,'active',4)", [now]).unwrap();
     canonical.execute("INSERT INTO conversation_messages(id,session_id,seq,role,status,visibility,provenance,created_at,origin_kind) VALUES('idle-recovery-message','idle-recovery-session',1,'user','complete','user','imported',?1,'user_input')", [now]).unwrap();
@@ -69,7 +70,7 @@ fn seed_imported_message(data: &Path) {
 }
 
 fn hide_registered_message(graph: &Path) {
-    let graph = Connection::open(graph).unwrap();
+    let graph = sqlite::open(graph).unwrap();
     let cursor: String = graph
         .query_row(
             "SELECT value FROM memory_state WHERE key='canonical_catchup_message_cursor'",

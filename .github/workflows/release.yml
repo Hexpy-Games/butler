@@ -5,11 +5,20 @@ on:
     tags:
       - "v*"
 
+  workflow_dispatch:
+    inputs:
+      runner:
+        type: choice
+        options: [self, hosted]
+        default: self
+        description: Windows build host (select a release tag as the ref)
+
 permissions:
   contents: write
 
 jobs:
   native-release:
+    if: startsWith(github.ref, 'refs/tags/v')
     name: Build and publish native macOS arm64 artifacts
     runs-on: macos-15
     # Holds the Apple signing secrets; restricted to v* tags (docs: packages/butler-app/scripts/README.md).
@@ -104,12 +113,13 @@ jobs:
             --artifact-url "$artifact_url"
           bun run release:agent:smoke -- --artifact-url "$artifact_url"
 
-      # The darwin-arm64 entries of the multi-platform Agent manifests.
-      - name: Keep the darwin-arm64 Agent manifests for the merge
+      # Preserve the validated Agent payload even if later App steps fail.
+      - name: Keep the darwin-arm64 Agent archive and manifests for the merge
         uses: actions/upload-artifact@v4
         with:
           name: agent-darwin-arm64
           path: |
+            dist/release/agent/butler-agent-*-darwin-arm64.tar.gz
             dist/release/agent/agent-release-manifest.json
             dist/release/agent/agent-update-manifest.json
           if-no-files-found: error
@@ -214,6 +224,7 @@ jobs:
         run: deploy/macos/sign-and-notarize.sh cleanup
 
   agent-linux:
+    if: startsWith(github.ref, 'refs/tags/v')
     name: Build Linux Agent archive (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 150
@@ -241,12 +252,66 @@ jobs:
           path: dist/release/agent/*
           if-no-files-found: error
 
+  agent-windows-build:
+    name: Build unsigned Windows x64 Agent preview
+    if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-preview.') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ${{ inputs.runner == 'hosted' && 'windows-latest' || fromJSON('["self-hosted", "butler-win"]') }}
+    concurrency:
+      group: windows-release-${{ github.ref }}
+      cancel-in-progress: false
+    timeout-minutes: 90
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/windows-release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/windows-owner-setup
+        if: inputs.runner != 'hosted'
+        with:
+          workflow: windows-release
+      - uses: ./.github/actions/build-windows-agent
+        with:
+          owner-runner: ${{ inputs.runner != 'hosted' }}
+          profile: release
+          cache-key: package-windows-x64
+          artifact-base-url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-windows-x64
+          path: dist/release/agent/*
+          if-no-files-found: error
+      - name: Check owner registration and remove job profile
+        if: always() && inputs.runner != 'hosted'
+        shell: pwsh
+        run: ./deploy/windows-owner-cleanup.ps1
+
+  agent-windows:
+    name: Verify unsigned Windows x64 Agent preview
+    needs: agent-windows-build
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: agent-windows-x64
+          path: dist/release/agent
+      - name: Smoke the installed archive
+        shell: pwsh
+        run: |
+          try { ./deploy/windows-preview-smoke.ps1 }
+          finally {
+            if ($env:WINDOWS_PREVIEW_TEMP_ROOT -and (Test-Path $env:WINDOWS_PREVIEW_TEMP_ROOT)) {
+              Remove-Item $env:WINDOWS_PREVIEW_TEMP_ROOT -Recurse -Force
+            }
+          }
+
   # Runs after the macOS job, whose single-platform manifests it replaces with
   # the merged ones (the update manifest lists one artifact per platform).
   agent-release:
-    name: Publish Linux Agent archives, merged manifests and the installer
+    name: Publish Agent archives, merged manifests and installers
     runs-on: ubuntu-latest
-    needs: [native-release, agent-linux]
+    needs: [native-release, agent-linux, agent-windows]
+    if: ${{ always() && !cancelled() && needs.native-release.result == 'success' && needs.agent-linux.result == 'success' && (needs.agent-windows.result == 'success' || (needs.agent-windows.result == 'skipped' && !contains(github.ref_name, '-preview.'))) }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -274,8 +339,10 @@ jobs:
       - name: Merge the Agent manifests
         run: |
           set -euo pipefail
+          inputs=(dist/agent/agent-darwin-arm64 dist/agent/agent-linux-x64 dist/agent/agent-linux-arm64)
+          if [[ "$GITHUB_REF_NAME" == *-preview.* ]]; then inputs+=(dist/agent/agent-windows-x64); fi
           python3 packages/butler-agent/rust/scripts/release-standalone-agent.py merge \
-            --output dist/agent/merged dist/agent/agent-darwin-arm64 dist/agent/agent-linux-x64 dist/agent/agent-linux-arm64
+            --output dist/agent/merged "${inputs[@]}"
 
       - name: Publish to the GitHub Release
         env:
@@ -290,14 +357,20 @@ jobs:
             dist/agent/merged/agent-update-manifest.json
             deploy/install.sh
           )
-          if [ "${#files[@]}" -ne 5 ]; then
-            printf 'Expected 5 Agent release files, got %s\n' "${#files[@]}" >&2
-            printf '%s\n' "${files[@]}" >&2
+          expected=5
+          if [[ "$GITHUB_REF_NAME" == *-preview.* ]]; then
+            files+=(dist/agent/agent-windows-x64/butler-agent-*-windows-x64.zip
+                    dist/agent/agent-windows-x64/butler-agent-*-windows-x64.zip.sha256 deploy/install.ps1)
+            expected=8
+          fi
+          if [ "${#files[@]}" -ne "$expected" ]; then
+            printf 'Expected %s Agent release files, got %s\n' "$expected" "${#files[@]}" >&2
             exit 1
           fi
           gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
 
   app-linux:
+    if: startsWith(github.ref, 'refs/tags/v')
     name: Build and smoke Linux App packages
     # The reusable workflow declares an issues-writing main/nightly reporter.
     permissions:
@@ -393,9 +466,15 @@ jobs:
             dist/release/checksums/assets/butler-app-*-archlinux-x64.pkg.tar.zst
             dist/release/checksums/assets/butler-app-*-archlinux-x64.pkg.tar.zst.sha256
           )
-          if [ "${#files[@]}" -ne 18 ]; then
-            printf 'Expected 18 current release outputs, got %s\n' "${#files[@]}" >&2
-            printf '%s\n' "${files[@]}" >&2
+          expected=18
+          if [[ "$tag" == *-preview.* ]]; then
+            files+=(dist/release/checksums/assets/butler-agent-*-windows-x64.zip
+                    dist/release/checksums/assets/butler-agent-*-windows-x64.zip.sha256
+                    dist/release/checksums/assets/install.ps1)
+            expected=21
+          fi
+          if [ "${#files[@]}" -ne "$expected" ]; then
+            printf 'Expected %s current release outputs, got %s\n' "$expected" "${#files[@]}" >&2
             exit 1
           fi
           checksum_file="dist/release/checksums/butler-${version}-SHA256SUMS"
@@ -406,9 +485,8 @@ jobs:
             done
           ) > "$checksum_file"
           checksum_count="$(wc -l < "$checksum_file" | tr -d ' ')"
-          if [ "$checksum_count" -ne 18 ]; then
-            printf 'Expected 18 checksummed release outputs, got %s\n' "$checksum_count" >&2
-            cat "$checksum_file" >&2
+          if [ "$checksum_count" -ne "$expected" ]; then
+            printf 'Expected %s checksummed release outputs, got %s\n' "$expected" "$checksum_count" >&2
             exit 1
           fi
           gh release upload "$tag" "$checksum_file" --clobber

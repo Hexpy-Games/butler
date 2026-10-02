@@ -1,5 +1,6 @@
 //! App-owned global and per-session execution-control resolution.
 
+use butler_platform::sqlite;
 use std::{path::Path, sync::Arc};
 
 use rusqlite::{Connection, OpenFlags};
@@ -41,8 +42,7 @@ const SETTINGS_KEY: &str = "settings";
 /// Read the App-owned preference without starting or mutating the App service.
 /// Missing or unreadable settings leave diagnostics disabled.
 pub fn diagnostics_enabled_readonly(database_path: &Path) -> bool {
-    let Ok(db) = Connection::open_with_flags(database_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-    else {
+    let Ok(db) = sqlite::open_with_flags(database_path, OpenFlags::SQLITE_OPEN_READ_ONLY) else {
         return false;
     };
     read_json(&db, SETTINGS_KEY)
@@ -64,7 +64,7 @@ fn stored_ui_language(database_path: &Path) -> Result<Option<String>, AppStorage
     if !database_path.exists() {
         return Ok(None);
     }
-    let db = Connection::open_with_flags(database_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    let db = sqlite::open_with_flags(database_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(AppStorageError::sqlite)?;
     let exists: bool = db
         .query_row(

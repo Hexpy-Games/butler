@@ -1,0 +1,40 @@
+name: Prepare Windows native dependencies
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Prepare pinned static ORT
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/windows-native-deps
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - uses: ./.github/actions/rust-agent-setup
+        with:
+          native-deps: static-ort
+          cache-key: windows-native-deps
+      # Preserve the recipe's archives, output hashes and complete marker.
+      # Consumers verify them again; a cold build stays out of the Agent job.
+      - name: Archive native tree without following source links
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$(cygpath -u "$RUNNER_TEMP")"
+          tar --posix -cf "$root/windows-native-deps.tar.zst" \
+            -C "$root/ort-cache/native-deps" --use-compress-program 'zstd -T0' .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-native-deps
+          path: ${{ runner.temp }}/windows-native-deps.tar.zst
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7

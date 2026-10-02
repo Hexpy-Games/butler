@@ -1,5 +1,6 @@
 //! Graph mentions of recall seeds in the legacy graph.
 
+use butler_platform::sqlite;
 use std::{collections::HashMap, path::Path};
 
 use rusqlite::{Connection, OpenFlags, params};
@@ -30,7 +31,7 @@ fn read_legacy_graph(
     path: &Path,
     project_id: Option<&str>,
 ) -> rusqlite::Result<LegacyRecallCorpus> {
-    let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+    let connection = sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
     let nodes = {
         let mut statement = connection.prepare(
             "SELECT e.id, e.type, e.name, COUNT(edge.id) AS degree

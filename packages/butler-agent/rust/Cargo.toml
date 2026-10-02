@@ -61,11 +61,14 @@ zip = { version = "4", default-features = false, features = ["deflate"] }
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
 tar = { version = "0.4.46", default-features = false }
 rustix = { version = "=1.1.5", features = ["fs"] }
+if-addrs = "=0.15.0"
 nix = { version = "=0.31.3", default-features = false, features = ["feature", "fs", "hostname", "net", "signal"] }
 libproc = "=0.14.11"
 # Windows process table, Job Objects and path normalization (butler-platform).
 sysinfo = { version = "=0.37.2", default-features = false, features = ["system"] }
 win32job = "=2.0.3"
+atomicwrites = "=0.4.4"
+embed-manifest = "=1.5.0"
 dunce = "=1.0.5"
 iana-time-zone = "=0.1.65"
 # The OS credential store (#217, butler-platform `secrets`): the keyring-core
@@ -91,6 +94,12 @@ hmac = "0.12"
 # file:line in panic messages and backtraces (no test inspects variables or
 # frames beyond that); "packed" moves them into one .dSYM per binary.
 # Dependencies need no debug info. profile.test inherits these settings.
+# Branch previews retain optimizations without release link-time optimization.
+[profile.ci-fast]
+inherits = "release"
+lto = false
+codegen-units = 16
+
 [profile.dev]
 debug = "line-tables-only"
 split-debuginfo = "packed"

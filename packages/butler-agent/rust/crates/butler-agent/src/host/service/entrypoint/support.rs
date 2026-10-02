@@ -140,3 +140,62 @@ pub(super) async fn close_serving(
         .and(publication)
         .and(app_close)
 }
+
+/// Hosts without owner-only modes use external ACL tools off the listener runtime.
+pub(super) async fn capture_configuration(
+    data: Option<&str>,
+    home: &std::path::Path,
+    installation: &crate::host::ResolvedInstallation,
+) -> Result<crate::host::ServiceConfiguration, BtccError> {
+    if butler_platform::secure_fs::OWNER_ONLY {
+        return crate::host::ServiceConfiguration::capture(data, home, installation);
+    }
+    let data = data.map(str::to_owned);
+    let home = home.to_path_buf();
+    let installation = installation.clone();
+    tokio::task::spawn_blocking(move || {
+        crate::host::ServiceConfiguration::capture(data.as_deref(), &home, &installation)
+    })
+    .await
+    .map_err(io)?
+}
+
+pub(super) async fn initialize_credentials(
+    mut config: crate::host::ServiceConfiguration,
+) -> Result<crate::host::ServiceConfiguration, BtccError> {
+    if butler_platform::secure_fs::OWNER_ONLY {
+        config.initialize_app_credentials();
+        return Ok(config);
+    }
+    tokio::task::spawn_blocking(move || {
+        config.initialize_app_credentials();
+        config
+    })
+    .await
+    .map_err(io)
+}
+
+pub(super) async fn acquire_instance(
+    config: &crate::host::ServiceConfiguration,
+    executable: std::path::PathBuf,
+    supervised: bool,
+) -> Result<crate::host::service::instance::InstanceGuard, BtccError> {
+    let data = config.data_root.clone();
+    let installation = config.installation.clone();
+    let acquire = move || {
+        crate::host::service::instance::InstanceGuard::acquire(
+            &data,
+            &executable,
+            &installation,
+            supervised,
+        )
+    };
+    let instance = if butler_platform::secure_fs::OWNER_ONLY {
+        acquire()
+    } else {
+        tokio::task::spawn_blocking(acquire).await.map_err(io)?
+    };
+    instance.map_err(|message| {
+        failure("native_service_instance_unavailable", message.to_string()).with_source(message)
+    })
+}
