@@ -11,8 +11,6 @@ use crate::gateway::{
     application::AppApplication,
 };
 
-const SUMMARY_MODEL_FALLBACK: &str = butler_models::models::DEFAULT_MODEL_REF;
-
 impl AppApplication {
     pub(super) async fn resolve_request(
         &self,
@@ -217,14 +215,17 @@ impl AppApplication {
                 .await
                 .map_err(super::super::app_error)?,
         };
-        let model_ref = self
-            .dependencies
-            .settings_facts
-            .snapshot()?
+        let facts = self.dependencies.settings_facts.snapshot()?;
+        let model_ref = facts
             .config_default_model
             .clone()
             .filter(|model| !model.trim().is_empty())
-            .unwrap_or_else(|| SUMMARY_MODEL_FALLBACK.to_owned());
+            .unwrap_or_else(|| {
+                facts.native_settings["routine_default"]["model"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_owned()
+            });
         let cancellation = CancellationToken::new();
         let summary_input = crate::gateway::AppBranchSummaryInput { text, model_ref };
         let result = tokio::select! {

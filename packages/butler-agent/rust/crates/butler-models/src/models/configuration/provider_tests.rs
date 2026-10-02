@@ -385,7 +385,7 @@ async fn prompt_resolution_preserves_explicit_precedence_and_dynamic_discovery()
     );
     assert_eq!(
         owner.effective_prompt_model(None).unwrap(),
-        "openai/gpt-5.5-codex"
+        "openai/gpt-6.1-sol"
     );
     let config = owner
         .resolve(ProviderConfigRequest {
@@ -449,7 +449,7 @@ async fn prompt_resolution_preserves_explicit_precedence_and_dynamic_discovery()
     });
     assert_eq!(
         owner.effective_prompt_model(None).unwrap(),
-        "openai/gpt-5.5-codex"
+        "openai/gpt-5.6-astra"
     );
     assert!(matches!(
         owner.effective_prompt_model(Some("auto:codex-latest")),
@@ -473,5 +473,5 @@ async fn prompt_resolution_preserves_explicit_precedence_and_dynamic_discovery()
         })
         .await
         .unwrap();
-    assert_eq!(lower_default.wire_model, "gpt-5.5-codex");
+    assert_eq!(lower_default.wire_model, "gpt-5.6-astra");
 }

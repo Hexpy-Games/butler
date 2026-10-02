@@ -107,12 +107,27 @@ fn canonical_ref(value: &str) -> String {
     format!("{}/{trimmed}", if openai { "openai" } else { "custom" })
 }
 
-pub(super) fn available(facts: &AppSettingsFacts) -> &[AppModelMetadata] {
+pub(super) fn available(facts: &AppSettingsFacts) -> std::borrow::Cow<'_, [AppModelMetadata]> {
+    use std::borrow::Cow;
     if facts.registered_models.is_empty() {
-        &facts.known_models
-    } else {
-        &facts.registered_models
+        return Cow::Borrowed(&facts.known_models);
     }
+    let default = facts.native_settings["routine_default"]["model"].as_str();
+    let routine = facts
+        .known_models
+        .iter()
+        .find(|model| Some(model.model_ref.as_str()) == default && model.runtime_supported);
+    if let Some(routine) = routine
+        && !facts
+            .registered_models
+            .iter()
+            .any(|model| model.model_ref == routine.model_ref)
+    {
+        let mut available = facts.registered_models.to_vec();
+        available.push(routine.clone());
+        return Cow::Owned(available);
+    }
+    Cow::Borrowed(&facts.registered_models)
 }
 
 pub(super) fn assert_selectable(

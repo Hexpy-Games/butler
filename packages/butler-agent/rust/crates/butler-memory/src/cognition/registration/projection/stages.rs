@@ -246,7 +246,7 @@ async fn run_window(
         input: input.clone(),
     };
     let timeout = if matches!(target, MemoryGenerationTarget::Rebuild { .. })
-        && matches!(claim.model.as_str(), "zai/glm-5.3" | "zai-api/glm-5.3")
+        && butler_models::models::ZAI_THINKING_REFS.contains(&claim.model.as_str())
     {
         600_000
     } else {

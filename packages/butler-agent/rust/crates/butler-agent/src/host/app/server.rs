@@ -56,6 +56,20 @@ pub(crate) struct AppServerOwners {
 }
 
 impl AppServer {
+    pub(crate) async fn effective_default_model(&self) -> Result<String, BtccError> {
+        use butler_gateway::gateway::GatewayApplication;
+        let settings =
+            self.application.read_settings().await.map_err(|error| {
+                BtccError::relayed("default_model_unavailable", error.to_string())
+            })?;
+        settings["model"]
+            .as_str()
+            .map(str::to_owned)
+            .ok_or_else(|| {
+                BtccError::relayed("default_model_unavailable", "Settings has no default model")
+            })
+    }
+
     pub(crate) fn local_addr(&self) -> SocketAddr {
         self.address
     }

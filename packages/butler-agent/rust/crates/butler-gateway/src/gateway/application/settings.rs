@@ -139,10 +139,10 @@ pub(super) fn resolve_for_message_send(
     let message_override = has_message_override(request);
     if message_override {
         merge_message_controls(&mut controls, request);
-        assert_selectable(&controls.model, available_models(facts))?;
-        controls = normalize_controls(controls, available_models(facts));
+        assert_selectable(&controls.model, &available_models(facts))?;
+        controls = normalize_controls(controls, &available_models(facts));
     }
-    assert_selectable(&controls.model, available_models(facts))?;
+    assert_selectable(&controls.model, &available_models(facts))?;
     let revision = revision(db, &revision_key)?;
     let source = if message_override {
         ControlSource::MessageOverride

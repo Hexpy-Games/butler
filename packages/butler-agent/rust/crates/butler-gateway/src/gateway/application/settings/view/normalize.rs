@@ -6,9 +6,9 @@ pub(super) fn ui_defaults() -> Value {
     json!({
         "bridge_mode":"local", "gateway_profile":"electron", "server_url":"",
         "default_project_workspace_label":"Project", "language":"en", "timezone":"UTC",
-        "model":"openai/gpt-5.5", "reasoning_effort":"medium",
+        "model":butler_models::models::LEGACY_DEFAULT_MODEL, "reasoning_effort":"medium",
         "consolidation_model":"default", "consolidation_reasoning_effort":"xhigh",
-        "effective_consolidation_model":"openai/gpt-5.5", "consolidation_uses_butler_model":true,
+        "effective_consolidation_model":butler_models::models::LEGACY_DEFAULT_MODEL, "consolidation_uses_butler_model":true,
         "context_window_tokens":258_000, "worker_profiles":[], "max_simultaneous_workers":10,
         "access_mode":"ask_first", "plan_mode_default":false, "follow_up_behavior":"queue",
         "multiline_send_behavior":"modifier_enter_send_enter_newline", "appearance_theme":"system",

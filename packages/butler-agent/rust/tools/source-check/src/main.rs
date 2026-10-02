@@ -1,5 +1,6 @@
 mod architecture;
 mod function_length;
+mod model_literals;
 mod modules;
 mod platform_boundary;
 mod test_count;
@@ -77,6 +78,7 @@ fn scan(root: &Path, mode: Mode) -> Result<bool, String> {
     has_violations |= platform_boundary::check(root, &sources, mode)?;
     has_violations |= test_count::check(root, &sources, mode)?;
     has_violations |= architecture::check(root)?;
+    has_violations |= model_literals::check(root, &sources)?;
     Ok(has_violations)
 }
 
