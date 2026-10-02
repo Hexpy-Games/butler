@@ -91,6 +91,12 @@ When **Live connection lost. Reconnecting automatically. The displayed work stat
 
 The Agent included in the app runs only while Butler is open.
 
+## Agent restarts and long data paths
+
+For an Agent launched with `butler start`, the CLI supervisor restarts abnormal exits even without a service manager. It stops after five crashes in one minute. Fix the cause, then run `butler start`. A clean exit or `butler stop` does not trigger automatic restart. Agent-requested self-restarts use the same data folder restart path.
+
+You can use a long path with `--data`. Quote paths with spaces and keep the data folder outside the installation folder. If startup fails, check write permissions on the data folder and the result of `butler doctor --check installation`.
+
 ## An error appears on screen
 
 If **Butler UI crashed.** appears, reload the window or open Butler again.
@@ -150,6 +156,14 @@ Logs of the service started with `butler start` are written to `logs/butler-agen
 ```bash
 butler logs --lines 200
 butler logs --follow
+```
+
+### Export diagnostic logs
+
+`butler doctor --collect-logs` exports service logs and `summary.txt` to `log-exports/<ID>/` in the data folder and prints the path. The summary includes the version, OS, install kind, service manager availability, recent exits and last error. It excludes model request/response logs and redacts secrets. Review the content before sharing it.
+
+```bash
+butler doctor --collect-logs
 ```
 
 ## Check the installation with doctor
