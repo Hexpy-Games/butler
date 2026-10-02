@@ -2,7 +2,7 @@
   "inputs": {
     "bun.lock": "6da68de704dbc47dea3ae850efa02a7e7ccf9691a5778c73fb77a8bb1687a84e",
     "packages/butler-agent/rust/Cargo.lock": "f65b9415bd6b39cdc5a0036923c459607745c62a0cb99631491796ceeb934226",
-    "packages/butler-agent/rust/Cargo.toml": "d91219a84e8ebead27511e4b999557ba5684093c3841efd1f0d44cb1d06a3a70",
+    "packages/butler-agent/rust/Cargo.toml": "918f2f3a2d97cdd00dedb63e5753579be168e1355f2103f83d2898c326642d00",
     "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "690fda7222f9512cf014e186be63dea93147e046ad1bdd40d62b145b3d29cc9b",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
     "packages/butler-agent/rust/crates/butler-core/Cargo.toml": "736517adc6731fe7bef9a81897979400c1d9cf40d8fea399cf35c830471689d7",
