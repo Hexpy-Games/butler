@@ -104,24 +104,13 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)?;
         let role = relation.packet.child_role.as_str();
-        let status = match result
-            .as_ref()
-            .and_then(|value| value.get("status"))
-            .and_then(Value::as_str)
-        {
-            Some("success") => "completed",
-            Some("cancelled") => "cancelled",
-            Some("blocked") => "blocked",
-            Some("failed") => "failed",
-            _ if latest
-                .as_ref()
-                .is_some_and(|(_, state)| state == "admitted") =>
-            {
-                "active"
-            }
-            _ => "waiting",
+        let status = projected_status(result.as_ref(), latest.as_ref());
+        let retryable = if result.is_none() {
+            self.child_recoverable(relation).await?
+        } else {
+            false
         };
-        let turn=latest.as_ref().map(|(id,state)|json!({"id":id,"state":state,"created_at":relation.created_at,"updated_at":relation.created_at}));
+        let turn=latest.as_ref().map(|(id,state)|json!({"id":id,"state":if retryable { "runtime_fault" } else { state },"retryable":retryable,"cancellable":state == "admitted" && !retryable,"created_at":relation.created_at,"updated_at":relation.created_at}));
         let relation_view = json!({"relation_id":relation.relation_id,"parent_session_id":relation.parent_session_id,"parent_turn_id":relation.parent_turn_id,"child_session_id":relation.child_session_id,"anchor_message_id":relation.anchor_message_id,"ordinal":relation.ordinal,"safe_title":relation.safe_title,"created_at":relation.created_at});
         let result_view = result.map(|mut value| {
             if let Some(object) = value.as_object_mut() {
@@ -131,8 +120,136 @@ impl SubsessionService {
             }
             value
         });
-        Ok(
-            json!({"role":role,"relation":relation_view,"session_id":relation.child_session_id,"title":relation.safe_title,"status":status,"active_turn":if status=="active"{turn.clone()}else{None},"latest_turn":turn,"waiting_for_children":false,"result":result_view,"updated_at":relation.created_at,"terminal":result_view.is_some()}),
-        )
+        let waiting_for_children = self
+            .waiting_for_children(&relation.child_session_id)
+            .await?;
+        let mut projection = json!({"role":role,"relation":relation_view,"session_id":relation.child_session_id,"title":relation.safe_title,"status":status,"active_turn":if status=="active" && !retryable{turn.clone()}else{None},"latest_turn":turn,"waiting_for_children":waiting_for_children,"result":result_view,"updated_at":relation.created_at,"terminal":result_view.is_some()});
+        if let Some((id, _)) = &latest {
+            self.plan_counters(id, &mut projection).await?;
+        }
+        Ok(projection)
+    }
+}
+
+impl SubsessionService {
+    async fn waiting_for_children(&self, session: &str) -> Result<bool, BtccError> {
+        for child in self
+            .repository
+            .relations_for_parent(session.into())
+            .await
+            .map_err(BtccError::from)?
+        {
+            if self
+                .repository
+                .result_for_relation(child.relation_id)
+                .await
+                .map_err(BtccError::from)?
+                .is_none()
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    async fn child_recoverable(
+        &self,
+        relation: &StoredSubsessionDelegation,
+    ) -> Result<bool, BtccError> {
+        if self
+            .repository
+            .open_relation_by_work(relation.root_work_id.clone())
+            .await
+            .map_err(BtccError::from)?
+            .is_none()
+        {
+            return Ok(false);
+        }
+        let Some(turn) = self
+            .repository
+            .latest_resume_turn(relation.child_session_id.clone())
+            .await
+            .map_err(BtccError::from)?
+        else {
+            return Ok(false);
+        };
+        if turn.semantic_state != "admitted" {
+            return Ok(false);
+        }
+        let queue = self.queue.clone();
+        let session = relation.child_session_id.clone();
+        tokio::task::spawn_blocking(move || {
+            Ok(queue
+                .interrupted_event(&turn.original_event_id, &session, &turn.turn_id)?
+                .is_some_and(|event| {
+                    event.event_id == turn.original_event_id
+                        && event.message_id == turn.original_message_id
+                        && event.message == turn.original_message
+                }))
+        })
+        .await
+        .map_err(|error| {
+            BtccError::detected(
+                BtccCode::SubsessionProjectionInvalid,
+                "Child recovery projection failed",
+            )
+            .with_source(error)
+        })?
+    }
+
+    async fn plan_counters(&self, turn_id: &str, projection: &mut Value) -> Result<(), BtccError> {
+        let work = match self.work.bound_work_for_turn(turn_id.to_owned()).await {
+            Ok(work) => work,
+            // Legacy children without a durable Work binding have no plan.
+            Err(error)
+                if matches!(
+                    error.code(),
+                    "work_scope_session_binding_missing" | "work_scope_turn_missing"
+                ) =>
+            {
+                None
+            }
+            Err(error) => return Err(error),
+        };
+        let Some(work) = work else {
+            return Ok(());
+        };
+        let Some(plan) = &work.current_plan else {
+            return Ok(());
+        };
+        if !work.latest_plan_review.as_ref().is_some_and(|review| {
+            review.verdict == crate::btcc::ReviewVerdict::Accept
+                && review.bound_plan_revision_id.as_deref() == Some(&plan.plan_revision_id)
+        }) {
+            return Ok(());
+        }
+        let completed = plan
+            .actions
+            .iter()
+            .filter(|action| {
+                work.action_progress.iter().any(|progress| {
+                    progress.action_key == action.action_key
+                        && progress.status == crate::btcc::ActionStatus::Done
+                })
+            })
+            .count();
+        projection["approved_plan_revision"] = json!(plan.revision);
+        projection["approved_plan_total"] = json!(plan.actions.len());
+        projection["approved_plan_completed"] = json!(completed);
+        Ok(())
+    }
+}
+
+fn projected_status(result: Option<&Value>, latest: Option<&(String, String)>) -> &'static str {
+    match result
+        .and_then(|value| value.get("status"))
+        .and_then(Value::as_str)
+    {
+        Some("success") => "completed",
+        Some("cancelled") => "cancelled",
+        Some("blocked") => "blocked",
+        Some("failed") => "failed",
+        _ if latest.is_some_and(|(_, state)| state == "admitted") => "active",
+        _ => "waiting",
     }
 }

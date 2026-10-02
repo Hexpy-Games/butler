@@ -32,13 +32,20 @@ describe("App foreground quit", () => {
       .toBe("active_work_unknown");
   });
 
+  // test-category: pure-logic
   test("does not prompt without active work", async () => {
     let prompts = 0;
     expect(await confirmAppForegroundQuit({
-      snapshot: classifyAppForegroundActiveWork({ navigation: { chats: [] } }),
+      snapshot: classifyAppForegroundActiveWork({
+        navigation: { chats: [{ active_turn_state: "delivered", active_turn_id: "turn-delivered" }] },
+      }),
       showMessageBox: async () => { prompts += 1; return { response: 0 }; },
     })).toBeTrue();
     expect(prompts).toBe(0);
+    expect(classifyAppForegroundActiveWork({
+      navigation: { chats: [{ active_turn_state: "delivered" }] },
+      queues: [{ items: [{ id: "queued-follow-up" }] }],
+    })).toMatchObject({ classification: "active_work_detected", reasons: ["queued_work"] });
   });
 
   // test-category: pure-logic

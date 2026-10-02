@@ -255,7 +255,7 @@ fn memory_response(item: &Value) -> butler_e2e::e2e::cassette::ResponseRecord {
 #[tokio::test]
 async fn mem_03_bootstrap_does_not_hold_service_readiness() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let s = Setup::new("MEM-03")?
+    let mut s = Setup::new("MEM-03")?
         .env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1")
         .start()
         .await?;
@@ -265,6 +265,23 @@ async fn mem_03_bootstrap_does_not_hold_service_readiness() -> Result<(), Harnes
         .join("cognition/memory/active-generation.json");
     assert!(!descriptor.exists(), "bootstrap ran despite hold");
     assert!(s.gw.healthy().await, "bootstrap blocked readiness");
+    let intent_path = descriptor.with_file_name("fresh-initialization.json");
+    let intent: Value = serde_json::from_slice(&std::fs::read(&intent_path)?)?;
+    let generation = descriptor
+        .parent()
+        .unwrap()
+        .join("generations")
+        .join(intent["generation_id"].as_str().unwrap());
+    // Simulate interruption after the reserved generation directory is made.
+    std::fs::create_dir_all(&generation)?;
+    std::fs::write(generation.join("retained.txt"), b"retained")?;
+    // Windows App shutdown can terminate the first Agent after readiness but
+    // before publication. The next launch must retain the fresh reservation.
+    s.crash_and_restart().await?;
+    assert!(
+        !descriptor.exists(),
+        "bootstrap ran despite hold after restart"
+    );
     std::fs::write(
         s.sandbox.data.join("state/e2e-memory-bootstrap-release"),
         b"",
@@ -279,6 +296,13 @@ async fn mem_03_bootstrap_does_not_hold_service_readiness() -> Result<(), Harnes
     }
     let active: Value = serde_json::from_slice(&std::fs::read(&descriptor)?)?;
     assert!(active["generation_id"].is_string(), "{active}");
+    assert_eq!(active["generation_id"], intent["generation_id"]);
+    assert_eq!(std::fs::read(generation.join("retained.txt"))?, b"retained");
+    assert!(generation.join("graph.sqlite").exists());
+    assert!(
+        !intent_path.exists(),
+        "published reservation was not retired"
+    );
     s.finish().await
 }
 
@@ -315,80 +339,5 @@ async fn mem_04_bootstrap_preserves_nonfresh_memory() -> Result<(), HarnessError
     Ok(())
 }
 
-#[tokio::test]
-async fn mem_05_vector_batch_finds_chat_a_fact_by_paraphrase_in_chat_b() -> Result<(), HarnessError>
-{
-    use butler_e2e::e2e::cassette::Cassette;
-    use serde_json::json;
-    butler_e2e::gate!();
-    let code = nonce();
-    let mut cassette = Cassette::load("MEM-01")?;
-    let remember = cassette.exchanges[0].request.key.user_request.clone();
-    let ask = "How do I unlock my bicycle security cable? Call recall_memory with cue bicycle security cable combination.";
-    let mut call = cassette.exchanges[0].clone();
-    call.request.key.user_request = ask.into();
-    call.response = memory_response(&json!({"type":"function_call","id":"fc_recall",
-        "call_id":"call_recall","name":"recall_memory","status":"completed",
-        "arguments":json!({"cue":"bicycle security cable combination"}).to_string()}));
-    let mut answer = cassette.exchanges[1].clone();
-    answer.request.key.user_request = ask.into();
-    cassette.exchanges.extend([call, answer]);
-    memory_stubs::extraction(&mut cassette, ask)?;
-    let setup = Setup::new("MEM-05")?
-        .stub_cassette(cassette)
-        .placeholder("NONCE", &code);
-    assert!(
-        fixtures::embedding_assets(&setup.sandbox.data)?,
-        "MEM-05 needs local embedding assets"
-    );
-    let s = setup.start().await?;
-    let (_, turn) = s
-        .turn("general", &remember.replace("{{NONCE}}", &code))
-        .await?;
-    assert_eq!(turn_state(&turn), "delivered", "{turn}");
-    memory_stubs::vectors_complete(&s.sandbox.data).await?;
-    let chat =
-        s.gw.post("/sessions", json!({"kind":"chat","title":"Memory B"}))
-            .await?;
-    assert_eq!(chat.status, 201, "{}", chat.text);
-    let first = s.provider()?.requests().len();
-    let (id, turn) = s
-        .turn(chat.data()["session"]["id"].as_str().unwrap(), ask)
-        .await?;
-    assert_eq!(turn_state(&turn), "delivered", "{turn}");
-    let rows = tool_rows(
-        &s.gw
-            .messages(chat.data()["session"]["id"].as_str().unwrap())
-            .await?,
-        &id,
-    );
-    let row = rows
-        .iter()
-        .find(|row| row.to_string().contains("recall_memory"))
-        .unwrap();
-    assert_eq!(row["state"], "delivered");
-    let requests = s.provider()?.requests();
-    let output = requests[first..]
-        .iter()
-        .filter_map(|request| request["input"].as_array())
-        .flatten()
-        .find(|item| item["type"] == "function_call_output")
-        .unwrap()["output"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let result: Value = serde_json::from_str(&output)?;
-    assert_eq!(result["ok"], true, "{output}");
-    assert!(
-        result["output"]["results"]
-            .as_array()
-            .unwrap_or_else(|| panic!("missing recall results: {output}"))
-            .iter()
-            .any(|item| item.to_string().contains(&code)
-                && item["channels"]
-                    .as_array()
-                    .is_some_and(|channels| channels.iter().any(|value| value == "vector"))),
-        "paraphrase missed the remembered fact in the vector lane: {output}"
-    );
-    s.finish().await
-}
+#[path = "memory/batch.rs"]
+mod batch;

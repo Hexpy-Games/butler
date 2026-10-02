@@ -1,5 +1,4 @@
 use butler_core::public_text::fixed_regex;
-use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
@@ -31,28 +30,31 @@ async fn group(
     limit: usize,
     projected: Option<&HashMap<String, String>>,
 ) -> String {
+    let mut documents = Vec::new();
+    for reference in refs {
+        let Ok(document) = repo.read_context_document(reference.clone()).await else {
+            continue;
+        };
+        let content = match projected {
+            Some(projected) => projected.get(&reference).cloned().unwrap_or_default(),
+            None => document.content,
+        };
+        documents.push((document.source_id, content));
+    }
+    documents.sort_by_key(|(source, _)| std::cmp::Reverse(super::excerpts::priority(source)));
+    let count = documents.len();
     let mut remaining = limit;
     let mut contents = Vec::new();
-    for reference in refs {
-        if remaining == 0 {
-            break;
+    for (index, (source, content)) in documents.into_iter().enumerate() {
+        // Keep room for a deterministic omission marker for every later source.
+        let reserve = (count - index - 1) * 160;
+        let allowance = remaining.saturating_sub(reserve).max(remaining.min(160));
+        let retrieval = format!("source {source}; use recall_memory or read_file to expand");
+        let value = super::excerpts::text(&content, allowance, &retrieval);
+        if !value.trim().is_empty() {
+            contents.push(value.clone());
         }
-        // Source treats missing optional context as a best-effort omission.
-        let content: Cow<'_, str> = match projected {
-            Some(projected) => {
-                Cow::Borrowed(projected.get(&reference).map(String::as_str).unwrap_or(""))
-            }
-            None => match repo.resolve_context_document(reference).await {
-                Ok(content) => Cow::Owned(content),
-                Err(_) => continue,
-            },
-        };
-        let prefix = butler_core::json::Utf16Prefix::new(content.as_ref(), remaining);
-        let value = prefix.utf8_for_hash();
-        if !butler_core::public_text::trim_js_whitespace(&value).is_empty() {
-            contents.push(value.into_owned());
-        }
-        remaining = remaining.saturating_sub(prefix.len_utf16());
+        remaining = remaining.saturating_sub(value.len() + 2);
     }
     contents.join("\n\n")
 }
@@ -84,30 +86,28 @@ pub(super) async fn response_language(repo: &BtccRepositories, turn: &TurnRecord
     String::new()
 }
 
-fn bounded_non_eol(documents: Vec<ContextDocumentRead>) -> Vec<ContextDocumentRead> {
-    let mut remaining = 10 * 1024;
-    let count = documents.len();
-    let mut bounded = Vec::new();
-    for (index, mut document) in documents.into_iter().enumerate() {
-        if remaining == 0 {
-            break;
+fn bounded_non_eol(
+    mut documents: Vec<ContextDocumentRead>,
+    limit: usize,
+) -> Vec<ContextDocumentRead> {
+    documents.sort_by_key(|doc| std::cmp::Reverse(super::excerpts::priority(&doc.source_id)));
+    let mut remaining = limit;
+    for document in &mut documents {
+        if matches!(
+            document.source_id.as_str(),
+            "role" | "runtime-system-contract"
+        ) {
+            remaining = remaining.saturating_sub(document.content.len());
+            continue; // Governing runtime instructions stay exact.
         }
-        let allowance = remaining / (count - index);
-        let mut bytes = 0;
-        let mut end = 0;
-        for (offset, character) in document.content.char_indices() {
-            let size = character.len_utf8();
-            if bytes + size > allowance {
-                break;
-            }
-            bytes += size;
-            end = offset + size;
-        }
-        document.content.truncate(end);
-        remaining -= bytes;
-        bounded.push(document);
+        let retrieval = format!(
+            "source {}; use read_file for configured persona or recall_memory for profile hints",
+            document.source_id
+        );
+        document.content = super::excerpts::text(&document.content, remaining, &retrieval);
+        remaining = remaining.saturating_sub(document.content.len());
     }
-    bounded
+    documents
 }
 
 pub(super) async fn read(
@@ -116,6 +116,12 @@ pub(super) async fn read(
     response_language: String,
     projected: Option<&HashMap<String, String>>,
 ) -> Result<DocumentProjection, BtccError> {
+    let window = turn
+        .model_selection
+        .context_window_tokens
+        .unwrap_or(200_000.0);
+    let optional_limit = butler_core::json::saturating_usize((window * 0.2).min(16_000.0));
+    let profile_limit = butler_core::json::saturating_usize((window * 0.2).min(10_240.0));
     let recent = group(
         repo,
         references(turn, "recentFeedbackRefs").map(str::to_owned),
@@ -133,7 +139,7 @@ pub(super) async fn read(
     let optional = group(
         repo,
         references(turn, "optionalHotCacheRefs").map(str::to_owned),
-        16_000,
+        optional_limit,
         projected,
     )
     .await;
@@ -147,6 +153,23 @@ pub(super) async fn read(
             groups.push(format!("## {title}\n\n{value}"));
         }
     }
+    project_profile(
+        repo,
+        turn,
+        groups.join("\n\n"),
+        response_language,
+        profile_limit,
+    )
+    .await
+}
+
+async fn project_profile(
+    repo: &BtccRepositories,
+    turn: &TurnRecord,
+    context: String,
+    response_language: String,
+    profile_limit: usize,
+) -> Result<DocumentProjection, BtccError> {
     let mut admitted = Vec::new();
     let user_ref = turn
         .context
@@ -167,18 +190,7 @@ pub(super) async fn read(
         }
         admitted.push(document);
     }
-    let mut eol = admitted
-        .iter()
-        .filter(|document| document.source_id == "eol");
-    let eol_content = eol
-        .next()
-        .map(|document| butler_core::public_text::trim_js_whitespace(&document.content).to_owned());
-    if eol.next().is_some() || eol_content.as_deref().is_none_or(str::is_empty) {
-        return Err(BtccError::relayed(
-            "guided_eol_instruction_document_invalid",
-            "guided_eol_instruction_document_invalid",
-        ));
-    }
+    let eol_content = exact_eol(&admitted)?;
     let persona_sources: HashSet<_> = [
         "active-persona-reminder",
         "first-chat-onboarding",
@@ -202,7 +214,7 @@ pub(super) async fn read(
             "guided_profile_instruction_document_invalid",
         ));
     }
-    let bounded = bounded_non_eol(others);
+    let bounded = bounded_non_eol(others, profile_limit);
     let join = |accepted: &HashSet<&str>| {
         bounded
             .iter()
@@ -213,13 +225,28 @@ pub(super) async fn read(
             .join("\n\n")
     };
     Ok(DocumentProjection {
-        context: groups.join("\n\n"),
+        context,
         response_language,
         governing: join(&governing_sources),
         persona: join(&persona_sources),
         eol: format!(
-            "The following exact EOL was durably admitted for this Turn. It is a governing instruction for both Butler and Steward, not Butler persona or ordinary user content.\n{}",
-            eol_content.unwrap_or_default()
+            "The following exact EOL was durably admitted for this Turn. It is a governing instruction for both Butler and Steward, not Butler persona or ordinary user content.\n{eol_content}"
         ),
     })
+}
+
+fn exact_eol(admitted: &[ContextDocumentRead]) -> Result<String, BtccError> {
+    let mut eol = admitted
+        .iter()
+        .filter(|document| document.source_id == "eol");
+    let eol_content = eol
+        .next()
+        .map(|document| butler_core::public_text::trim_js_whitespace(&document.content).to_owned());
+    if eol.next().is_some() || eol_content.as_deref().is_none_or(str::is_empty) {
+        return Err(BtccError::relayed(
+            "guided_eol_instruction_document_invalid",
+            "guided_eol_instruction_document_invalid",
+        ));
+    }
+    Ok(eol_content.unwrap_or_default())
 }

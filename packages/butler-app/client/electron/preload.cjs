@@ -592,6 +592,8 @@ const butlerApp = Object.freeze({
     return cachedServerUrl;
   },
   platform: process.platform,
+  startupIssue: process.argv.includes("--butler-legacy-data") ? "legacy-data" : null,
+  recoverLegacyData: (action) => ipcRenderer.invoke("butler:legacy-data-recovery", action),
   getAppInfo: () => ipcRenderer.invoke("butler:get-app-info"),
   setDeveloperMode: ({ enabled } = {}) =>
     ipcRenderer.invoke("butler:set-developer-mode", { enabled }),

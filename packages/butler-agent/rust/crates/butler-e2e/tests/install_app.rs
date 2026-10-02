@@ -72,7 +72,7 @@ fn ins_15_the_app_runs_the_newer_of_its_bundled_and_the_installed_agent() -> Res
         eprintln!("SKIPPED (node is not installed)");
         return Ok(());
     }
-    let (sandbox, launch) = sandbox("INS-15")?;
+    let (mut sandbox, launch) = sandbox("INS-15")?;
     let home = sandbox.root.join("agent-home");
     let install = |version: &str| -> Result<(), HarnessError> {
         let archive = build_stub_archive(&sandbox.root.join("fixtures"), version, "app")?;
@@ -118,5 +118,6 @@ fn ins_15_the_app_runs_the_newer_of_its_bundled_and_the_installed_agent() -> Res
         app_picks(&app_root, &home, "0.0.21").as_deref(),
         Some("0.0.21")
     );
+    sandbox.mark_success();
     Ok(())
 }

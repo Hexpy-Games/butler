@@ -64,19 +64,15 @@ fn claim_pins_exact_input_and_enforces_nonce() {
 }
 
 #[test]
-fn configured_policy_is_used_by_the_next_claim() {
+fn persisted_policy_is_used_by_the_next_claim() {
     let mut graph = crate::cognition::graph::GraphRepository {
         connection: Some(database()),
     };
-    let policy = crate::cognition::ProjectionModelPolicyInput {
-        primary_model: "new/model".into(),
-        primary_effort: "high".into(),
-        fallback_model: "fallback/model".into(),
-        fallback_effort: "low".into(),
-    };
-    graph
-        .configure_projection_model_policy(&policy, "2026-01-02T00:00:00.000Z")
-        .unwrap();
+    // Existing policy rows remain part of live claim selection after removing
+    // the unused operator configuration API.
+    graph.connection.as_ref().unwrap().execute(
+        "INSERT INTO memory_projection_model_policy(id,primary_model,primary_effort,fallback_model,fallback_effort,active_slot,updated_at) VALUES(1,'new/model','high','fallback/model','low','primary','2026-01-02T00:00:00.000Z')", [],
+    ).unwrap();
     let active = HashSet::new();
     let claimed = graph
         .claim_projection_window(ClaimProjectionWindowInput {

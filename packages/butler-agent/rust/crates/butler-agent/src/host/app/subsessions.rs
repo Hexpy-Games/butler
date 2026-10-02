@@ -78,73 +78,20 @@ impl AppSubsessionPort for AppSubsessions {
     ) -> ApplicationFuture<serde_json::Value> {
         let service = self.service.clone();
         let conversations = self.conversations.clone();
+        let progress = self.progress.clone();
         Box::pin(async move {
             let mut projection = service
                 .app_projection(&session_id)
                 .await
-                .map_err(|error| map_error(&error))?;
+                .map_err(GatewayApplicationError::internal_from)?;
+            with_turn_times(&conversations, &mut projection).await;
             if projection
                 .get("relation")
-                .is_none_or(serde_json::Value::is_null)
+                .is_some_and(serde_json::Value::is_object)
             {
-                with_turn_times(&conversations, &mut projection).await;
-                return Ok(projection);
+                with_child_messages(&conversations, &session_id, page, &mut projection).await?;
             }
-            let canonical_session_id = conversation_session_id_for_durable_session(&session_id);
-            let page = page.unwrap_or(AppSessionViewPage {
-                after_cursor: None,
-                before_cursor: None,
-                limit: 200,
-            });
-            let page = conversations
-                .read_projection_message_page(
-                    &canonical_session_id,
-                    page.after_cursor,
-                    page.before_cursor,
-                    page.limit,
-                )
-                .await
-                .map_err(GatewayApplicationError::internal_from)?;
-            let messages = page
-                .messages
-                .iter()
-                .filter_map(|message| project_message(message, &session_id))
-                .collect::<Vec<_>>();
-            let turn_id = projection
-                .pointer("/latest_turn/id")
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_owned);
-            let turn = match turn_id {
-                Some(turn_id) => conversations
-                    .read_turn(&turn_id)
-                    .await
-                    .map_err(GatewayApplicationError::internal_from)?,
-                None => None,
-            };
-            let object = projection
-                .as_object_mut()
-                .ok_or(GatewayApplicationError::internal())?;
-            object.insert("messages".into(), serde_json::json!(messages));
-            object.insert("messages_has_more".into(), serde_json::json!(page.has_more));
-            if let Some(turn) = turn {
-                let state = turn_state(&turn.status);
-                let projected = serde_json::json!({
-                    "id": turn.id,
-                    "state": state,
-                    "created_at": turn.started_at,
-                    "updated_at": turn.completed_at.as_deref().unwrap_or(&turn.started_at),
-                    "cancellable": state == "thinking",
-                });
-                object.insert("latest_turn".into(), projected.clone());
-                object.insert(
-                    "active_turn".into(),
-                    if state == "thinking" {
-                        projected
-                    } else {
-                        serde_json::Value::Null
-                    },
-                );
-            }
+            with_progress(&progress, &mut projection).await?;
             Ok(projection)
         })
     }
@@ -207,6 +154,77 @@ impl AppSubsessionPort for AppSubsessions {
                 .collect())
         })
     }
+}
+
+async fn with_child_messages(
+    conversations: &AgentConversationStore,
+    session_id: &str,
+    page: Option<AppSessionViewPage>,
+    projection: &mut serde_json::Value,
+) -> Result<(), GatewayApplicationError> {
+    let canonical_session_id = conversation_session_id_for_durable_session(session_id);
+    let page = page.unwrap_or(AppSessionViewPage {
+        after_cursor: None,
+        before_cursor: None,
+        limit: 200,
+    });
+    let page = conversations
+        .read_projection_message_page(
+            &canonical_session_id,
+            page.after_cursor,
+            page.before_cursor,
+            page.limit,
+        )
+        .await
+        .map_err(GatewayApplicationError::internal_from)?;
+    let messages: Vec<_> = page
+        .messages
+        .iter()
+        .filter_map(|message| project_message(message, session_id))
+        .collect();
+    let turn_id = projection
+        .pointer("/latest_turn/id")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned);
+    let turn = match turn_id {
+        Some(id) => conversations
+            .read_turn(&id)
+            .await
+            .map_err(GatewayApplicationError::internal_from)?,
+        None => None,
+    };
+    let object = projection
+        .as_object_mut()
+        .ok_or(GatewayApplicationError::internal())?;
+    object.insert("messages".into(), serde_json::json!(messages));
+    object.insert("messages_has_more".into(), serde_json::json!(page.has_more));
+    if let Some(turn) = turn {
+        let recoverable = object
+            .get("latest_turn")
+            .and_then(|turn| turn.get("retryable"))
+            .and_then(serde_json::Value::as_bool)
+            == Some(true);
+        let state = if recoverable {
+            "runtime_fault"
+        } else {
+            turn_state(&turn.status)
+        };
+        let projected = serde_json::json!({
+            "id": turn.id, "state": state, "created_at": turn.started_at,
+            "updated_at": turn.completed_at.as_deref().unwrap_or(&turn.started_at),
+            "cancellable": state == "thinking", "retryable": recoverable,
+        });
+        object.insert("latest_turn".into(), projected.clone());
+        object.insert(
+            "active_turn".into(),
+            if state == "thinking" {
+                projected
+            } else {
+                serde_json::Value::Null
+            },
+        );
+    }
+    Ok(())
 }
 
 fn project_message(
@@ -272,6 +290,47 @@ fn turn_state(status: &str) -> &'static str {
         "failed" | "runtime_fault" => "failed",
         _ => "delivered",
     }
+}
+
+async fn with_progress(
+    progress: &StorageProgressPublication,
+    projection: &mut serde_json::Value,
+) -> Result<(), GatewayApplicationError> {
+    for key in ["steward_children"] {
+        if let Some(children) = projection
+            .get_mut(key)
+            .and_then(serde_json::Value::as_array_mut)
+        {
+            for child in children {
+                child_progress(progress, child).await?;
+            }
+        }
+    }
+    if projection
+        .get("relation")
+        .is_some_and(serde_json::Value::is_object)
+    {
+        child_progress(progress, projection).await?;
+    }
+    Ok(())
+}
+
+async fn child_progress(
+    progress: &StorageProgressPublication,
+    child: &mut serde_json::Value,
+) -> Result<(), GatewayApplicationError> {
+    let Some(id) = child
+        .pointer("/latest_turn/id")
+        .and_then(serde_json::Value::as_str)
+    else {
+        return Ok(());
+    };
+    let events = progress
+        .read_child_progress_events(id.to_owned())
+        .await
+        .map_err(GatewayApplicationError::internal_from)?;
+    child["public_progress_events"] = serde_json::json!(events);
+    Ok(())
 }
 
 fn map_error(error: &butler_turn::btcc::BtccError) -> GatewayApplicationError {

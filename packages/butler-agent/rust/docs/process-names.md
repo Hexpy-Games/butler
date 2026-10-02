@@ -65,3 +65,18 @@ binary; Unix argv still carries the role. They gain role names on installation
 of a new version. Service identity, manifests and binary digests stay unchanged.
 Alias work is bounded to three file-identity checks at spawn/install, independent of
 chat, event, transcript or memory database size. No polling or scans are added.
+
+## Windows portable Electron App
+
+`package:win` bundles `butler-agent.exe` and prepares the three role-named
+NTFS hardlinks (`butler-agent (memory).exe`, `(restart).exe`, `(update).exe`).
+The portable ZIP contains the whole `Butler-win32-x64` directory, renderer,
+resources and notices. ZIP extraction turns links into copies; the bundled
+loader restores these aliases as hardlinks before launching the child. Extract
+onto a writable NTFS volume. Copies cannot satisfy Rust's file identity check.
+The foreground child uses a stdin owner lease; its Electron diagnostics report
+`direct_child`, with no Job Object or owner-death guarantee claimed.
+
+Wave 1-A is unsigned portable packaging. Squirrel installer, auto-update and
+interactive tray behavior remain outside this qualification. No release tag
+is created; the Windows preview PR workflow runs the packaged App smoke.

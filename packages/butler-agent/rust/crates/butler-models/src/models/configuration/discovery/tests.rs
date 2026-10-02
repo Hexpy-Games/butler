@@ -52,7 +52,7 @@ async fn loopback_discovery_uses_models_and_per_model_props_with_fallbacks() {
     assert_eq!(result.models[0].display_name, "model one");
     assert_eq!(result.models[0].context_window_tokens, 32_768.0);
     assert_eq!(result.models[1].context_window_tokens, 4_096.0);
-    assert_eq!(result.models[2].context_window_tokens, 0.0);
+    assert_eq!(result.models[2].context_window_tokens, 4_096.0);
     assert_eq!(result.models[3].context_window_tokens, 8.0);
     let (paths, authenticated) = server.await.unwrap();
     assert_eq!(paths[0], "/v1/models");
@@ -77,7 +77,8 @@ async fn custom_discovery_preserves_raw_ids_and_skips_llama_props() {
                 .to_ascii_lowercase()
                 .contains("authorization: bearer custom-key")
         );
-        let body = r#"{"data":[{"id":"org/model.gguf","context_length":8192}]}"#;
+        let body =
+            r#"{"data":[{"id":"org/model.gguf","context_length":8192},{"id":"unknown-window"}]}"#;
         stream
                 .write_all(
                     format!(
@@ -102,4 +103,9 @@ async fn custom_discovery_preserves_raw_ids_and_skips_llama_props() {
     assert_eq!(result.models[0].model_id, "org/model.gguf");
     assert_eq!(result.models[0].model_ref, "local/org-model.gguf");
     assert_eq!(result.models[0].context_window_tokens, 8_192.0);
+    assert_eq!(result.models[1].context_window_tokens, 0.0);
+    assert!(!result.models[1].runtime_supported);
+    assert!(crate::models::normalize_local_model_config(&serde_json::json!({
+        "model_id":"unknown-window", "server_url":address.to_string(), "context_window_tokens":0
+    }), "now").is_none());
 }

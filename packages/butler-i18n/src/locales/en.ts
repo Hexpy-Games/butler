@@ -1078,6 +1078,15 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     copy: "Copy",
   },
   settings: {
+    deleteSchedule: name => `Delete schedule "${name}".`,
+    deleteMcpServer: name => `Delete MCP server "${name}" and its saved credentials.`,
+    mcpEnabled: "Enabled", mcpDisabled: "Disabled",
+    mcpIdRequired: "Enter a server ID.",
+    mcpIdInvalid: "Use letters, numbers, dots, underscores or hyphens (1–80).",
+    mcpIdPreview: id => `Saved ID: ${id}`,
+    mcpSaveFailed: "Could not save server.", mcpActionFailed: "Server action failed.",
+    mcpCommandRequired: "Enter a command.", mcpUrlRequired: "Enter a URL.",
+
     title: "Settings",
     back: "Back",
     saving: "Saving",
@@ -1833,7 +1842,6 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     empty: "No matches. Try another name or title.",
     failed: "Could not search. Check your connection and try again.",
     kindLabels: { chat: "Chat", project: "Project", project_session: "Project chat", group: "Space", automation: "Schedule", settings: "Settings" },
-    settingsSections: { general: "General", appearance: "Appearance", "server-bridge": "Server", "models-access": "Models and access", "privacy-data": "Privacy and data", diagnostics: "Diagnostics", "system-events": "System events", archived: "Archived" },
   },
   feedback: {
     retry: "Try again",

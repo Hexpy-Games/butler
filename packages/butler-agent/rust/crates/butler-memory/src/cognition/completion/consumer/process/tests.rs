@@ -256,6 +256,8 @@ async fn malformed_queue_head_keeps_its_error_after_canonical_catchup() {
         unclean_start: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         catchup_progress: Arc::new(parking_lot::Mutex::new(None)),
         probe: Arc::default(),
+        vector_batch: Arc::default(),
+        daily_batch: false,
         shutdown: CancellationToken::new(),
     })
     .await;
@@ -275,4 +277,5 @@ async fn malformed_queue_head_keeps_its_error_after_canonical_catchup() {
     assert_eq!(cursor, "outcome");
 }
 
+mod cold;
 mod vector;

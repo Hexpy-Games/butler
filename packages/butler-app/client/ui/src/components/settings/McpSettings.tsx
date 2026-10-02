@@ -3,19 +3,17 @@ import { useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
 import type {
-  McpCapabilitiesView,
   McpServerListView,
-  McpServerMutationResult,
   McpServerView,
 } from "@/app/types.ts";
 import { Button, CardList, Plus, Typo } from "@/butler-ds";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
+import { useMcpSettingsActions } from "./useMcpSettingsActions";
 import { McpServerForm } from "./McpServerForm";
 import { McpServerRow } from "./McpServerRow";
 import {
   emptyMcpServerForm,
   formFromMcpServer,
-  mcpServerPayload,
   type McpServerFormState,
 } from "./mcpSettingsUtils";
 
@@ -43,51 +41,14 @@ export function McpSettings() {
   function update(patch: Partial<McpServerFormState>) {
     setForm((current) => ({ ...current, ...patch }));
   }
-  async function save() {
-    const includeSecrets = {
-      env: !editingId || form.envDirty,
-      headers: !editingId || form.headersDirty,
-    };
-    const path = editingId
-      ? `/mcp-servers/${encodeURIComponent(editingId)}`
-      : "/mcp-servers";
-    const method = editingId ? "PATCH" : "POST";
-    const result = await api<McpServerMutationResult>(path, {
-      method,
-      body: JSON.stringify(mcpServerPayload(form, includeSecrets)),
-    });
-    setStatus(`${copy.saved}: ${result.server.id}`);
-    setOpen(false);
-    setEditingId(null);
-    setForm(emptyMcpServerForm());
-    await refresh();
-  }
-  async function remove(server: McpServerView) {
-    await api(`/mcp-servers/${encodeURIComponent(server.id)}`, {
-      method: "DELETE",
-    });
-    setStatus(`${appCopy.common.delete}: ${server.id}`);
-    await refresh();
-  }
-  async function toggle(server: McpServerView) {
-    await api(`/mcp-servers/${encodeURIComponent(server.id)}`, {
-      method: "PATCH",
-      body: JSON.stringify({ enabled: !server.enabled }),
-    });
-    await refresh();
-  }
-  async function probe(server: McpServerView) {
-    const result = await api<McpCapabilitiesView>(
-      `/mcp-servers/${encodeURIComponent(server.id)}/probe`,
-      { method: "POST", body: JSON.stringify({}) },
-    );
-    const item = result.servers[0];
-    setStatus(
-      item?.ok
-        ? `${server.id}: tools ${item.tools.length}, resources ${item.resources.length}`
-        : `${server.id}: ${item?.error ?? "probe failed"}`,
-    );
-  }
+  const { save, remove, toggle, probe, busy } = useMcpSettingsActions({
+    form, editingId, setServers, setStatus,
+    onSaved: () => {
+      setOpen(false);
+      setEditingId(null);
+      setForm(emptyMcpServerForm());
+    },
+  });
   function edit(server: McpServerView) {
     setEditingId(server.id);
     setForm(formFromMcpServer(server));
@@ -104,6 +65,7 @@ export function McpSettings() {
         onRetry={() => void refresh()}
         actions={
           <Button
+            disabled={busy}
             type="button"
             size="sm"
             onClick={() => {
@@ -121,6 +83,7 @@ export function McpSettings() {
             <McpServerRow
               key={server.id}
               server={server}
+              busy={busy}
               onProbe={() => void probe(server)}
               onToggle={() => void toggle(server)}
               onEdit={() => edit(server)}
@@ -133,6 +96,7 @@ export function McpSettings() {
         <SettingsSection id="mcp-server-form" kind="form" title={editingId ?? copy.actions.addMcpServer}>
           <McpServerForm
             form={form}
+            busy={busy}
             onChange={update}
             onCancel={() => setOpen(false)}
             onSave={() => void save()}

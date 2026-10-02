@@ -46,16 +46,16 @@ impl JournalPort for GuidedJournal {
     fn handle_text_tool_calls<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
-        _: &'a [String],
+        names: &'a [String],
         _: &'a [ModelRoundToolCall],
         _: &'a str,
         _: u32,
     ) -> PortFuture<'a, TextCallDisposition> {
         Box::pin(async move {
             self.check_turn(invocation)?;
-            Ok(TextCallDisposition::Fail(BtccError::relayed(
-                "guided_text_tool_call_unsupported",
-                "Use the selected structured tool definition",
+            Ok(TextCallDisposition::Continue(format!(
+                "You wrote these tool names as text: {}. They were not executed. Use the selected native tool-call definitions and schema-valid arguments, or answer directly when no tool is needed.",
+                names.join(", ")
             )))
         })
     }

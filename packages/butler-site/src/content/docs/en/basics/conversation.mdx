@@ -89,7 +89,9 @@ The approval request shows what Butler is about to do as a one-sentence question
 - Target — Shows up to three files to edit or commands to run, and the rest as **+N more**. Files appear as paths relative to the working folder, and commands appear exactly as they will run.
 - Risk — Appears as **Low risk**, **Medium risk** or **High risk**.
 
-If the targets take more than four lines, click **Show more** to expand them all and **Show less** to collapse them again. If a command is longer than 200 characters, only the first 200 appear, followed by `…`.
+If the targets take more than four lines, click **Show more** to expand the displayed details and **Show less** to collapse them. Commands remain complete beyond 200 characters. An example cut at the Agent safety limit (16 KiB of UTF-8 per example) is marked with `…`. Check the full action before deciding in that case.
+
+The Agent classifies risk. Known simple read commands such as `ls`, `pwd` and `git status` are low risk; shell evaluation, redirection and unrecognized commands are high risk. File edits inside the workspace are medium risk; edits outside it and MCP tool calls are high risk. Missing or malformed classification also displays as high risk.
 
 These buttons answer the request.
 
@@ -99,6 +101,12 @@ These buttons answer the request.
 - **Decide later and compose a message** — Click the down arrow to the right of the request to put off the decision and write a message. **N pending approvals** stays above the input box, so you can return to the request.
 
 Items you always allow appear on the **Permission** button as **N allowed**. To revoke one, click it under **Allowed in this conversation** in the **Permission** menu.
+
+## Answer a question
+
+When Butler needs more information, an `ask_user` question form appears in the composer. Choose one or several options, or type an answer, depending on the question. If **Other…** is available, enter your own answer. A recommended option does not submit an answer automatically.
+
+For several questions, use **Next** and **Back**, review your answers, then click **Send**. Use **Skip** to leave an answer empty. **Answer later** collapses the form so you can compose a message; click the pending indicator to return. Submitted answers appear in the conversation and Butler continues the work. Answering a question and approving an action are separate decisions.
 
 ## Plan mode
 

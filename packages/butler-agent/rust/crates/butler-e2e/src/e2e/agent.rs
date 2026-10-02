@@ -10,7 +10,6 @@ use std::time::{Duration, Instant};
 use super::executable;
 use super::gateway::Gateway;
 use super::sandbox::Sandbox;
-use super::stop_intent;
 use super::{HarnessError, harness_error};
 
 mod app_supervisor;
@@ -287,15 +286,13 @@ impl Agent {
                 format!("http://127.0.0.1:{}", self.launch.port),
                 self.launch.token.clone(),
             );
-            let instance_ready = self.pid().is_some_and(|pid| {
-                stop_intent::instance_record(&self.launch.data).is_some_and(|record| {
-                    stop_intent::instance_ready(&record) && record["pid"] == pid
-                })
-            });
+            let ready = if dispatch_held {
+                super::readiness::serving_record(&self.launch.data, &gateway).await
+            } else {
+                super::readiness::ready_record(&self.launch.data, &gateway).await
+            };
             if !self.launch.token.is_empty()
-                && gateway.healthy().await
-                && instance_ready
-                && (dispatch_held || gateway.executor_ready().await)
+                && ready.is_some_and(|record| self.pid().is_some_and(|pid| record["pid"] == pid))
             {
                 self.remember_instance();
                 return Ok(gateway);

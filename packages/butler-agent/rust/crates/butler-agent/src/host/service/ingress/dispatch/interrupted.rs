@@ -78,6 +78,11 @@ pub(super) async fn settle(
     delivery: &dyn IngressDelivery,
     status: &str,
 ) -> Option<IngressPoll> {
+    // Child sessions publish through BTCC, and have no App turn delivery
+    // target. Preserve their exact queue claim for the explicit resume route.
+    if let Some(poll) = settle_child(item, queue, bindings).await {
+        return Some(poll);
+    }
     let error = match report(item, bindings, delivery, None).await {
         Ok(()) => {
             let completed = queue
@@ -133,6 +138,35 @@ pub(super) async fn settle(
             Some(IngressPoll::default())
         }
     }
+}
+
+async fn settle_child(
+    item: &ClaimedInboundEvent,
+    queue: &InboundQueue,
+    bindings: &SessionBindingStore,
+) -> Option<IngressPoll> {
+    let envelope = bind::Envelope::from_record(&item.record).ok()?;
+    let binding = bind::existing_control_binding(&envelope, bindings)
+        .await
+        .ok()?;
+    if !matches!(
+        binding.role,
+        butler_turn::workspace::SessionRole::Steward | butler_turn::workspace::SessionRole::Worker
+    ) {
+        return None;
+    }
+    let settled = queue
+        .fail_async(
+            item.clone(),
+            "child_turn_interrupted".into(),
+            json!({"recoveredFromRuntimeInterruption":true,"sameLogicalTurnContinuation":true,
+            "interruptedClaimId":item.processing.claim_id,"dispatchStatus":"child-interrupted"}),
+        )
+        .await;
+    Some(IngressPoll {
+        interrupted: usize::from(matches!(settled, Ok(true))),
+        ..Default::default()
+    })
 }
 
 /// Tells the App the turn failed: interrupted, or `rejected` with that code.

@@ -108,11 +108,13 @@ Windows previews are unsigned and agent-only. Use the Windows ZIP and `install.p
 ```powershell
 $env:BUTLER_VERSION = '0.1.0-preview.N'; irm "https://github.com/Hexpy-Games/butler/releases/download/v$env:BUTLER_VERSION/install.ps1" | iex
 butler open
+# With Node.js
+npx @hexpygames/butler install
 ```
 
 The installer verifies SHA-256 checksums, installs under `%LOCALAPPDATA%\Butler`, adds `butler` to your user PATH, and starts the Agent. Open a new terminal if `butler` is not found. The UI runs in your browser. Use `butler start`, `stop`, `restart`, and `status` to manage the background process.
 
-- No autostart; run `butler start` after signing in.
+- Agent-only installs support autostart through Task Scheduler: `butler startup enable`. Use `butler startup status` to check it and `butler startup disable` to remove it.
 - LAN remote access and pairing are supported.
 - No command write sandbox; commands still require approval.
 - SmartScreen may warn about the unsigned preview. Choose **More info → Run anyway**.

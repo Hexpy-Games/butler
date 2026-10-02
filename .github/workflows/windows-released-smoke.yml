@@ -1,0 +1,50 @@
+name: Verify published Windows preview
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published preview tag to install
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  verify:
+    name: Install and use the released Windows asset
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Download, verify, install and recover legacy data
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RELEASE_TAG -notmatch '^v0\.1\.0-preview\.\d+$') { throw 'Expected a preview tag' }
+          $profile = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+          New-Item -ItemType Directory $profile | Out-Null
+          $env:HOME = Join-Path $profile 'home'
+          $env:BUTLER_DATA = Join-Path $profile 'data'
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          try {
+            $assets = Join-Path $profile 'assets'
+            gh release download $env:RELEASE_TAG --dir $assets --pattern 'ButlerSetup-*-x64.exe*' --pattern '*-windows-x64-portable.zip*'
+            if ($LASTEXITCODE) { throw 'Released asset download failed' }
+            bun install --frozen-lockfile --ignore-scripts
+            if ($LASTEXITCODE) { throw 'Dependency installation failed' }
+            bun run packages/butler-app/scripts/windows/released-install-smoke.ts $assets $env:RELEASE_TAG
+            if ($LASTEXITCODE) { throw 'Published installer smoke failed' }
+            $archive = @(Get-ChildItem $assets/*-windows-x64-portable.zip)
+            if ($archive.Count -ne 1) { throw 'Expected one released portable archive' }
+            $expected = (Get-Content ($archive[0].FullName + '.sha256')).Split(' ')[0]
+            if ((Get-FileHash $archive[0].FullName -Algorithm SHA256).Hash.ToLower() -ne $expected) { throw 'Portable checksum mismatch' }
+            Expand-Archive $archive[0].FullName (Join-Path $profile 'portable')
+            bun run packages/butler-app/scripts/windows/legacy-data-smoke.ts (Join-Path $profile 'portable/Butler-win32-x64/Butler.exe')
+            if ($LASTEXITCODE) { throw 'Published legacy-data recovery smoke failed' }
+          } finally { Remove-Item -Recurse -Force $profile }

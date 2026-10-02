@@ -1,8 +1,7 @@
 //! Source-backed hot cache for active and building generations.
 //!
 //! [`advance`] claims one pending job, renders its windows in memory, and
-//! publishes changed bytes once before recording a durable receipt. Rebuilds
-//! also reconcile missing retained entries at their quiescent boundary.
+//! publishes changed bytes once before recording a durable receipt.
 
 mod format;
 #[cfg(test)]
@@ -18,7 +17,6 @@ pub(in crate::cognition) use health::{HotCacheHealth, read as read_hot_cache_hea
 
 use crate::cognition::CognitionCode;
 use std::{
-    fs,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -132,13 +130,7 @@ fn run_claimed(step: &CacheStep, handle: &MemoryGenerationHandle) -> CognitionRe
     let mut graph = GraphRepository::open(&handle.graph_path)?;
     graph.ensure_cache_index(&step.cancellation)?;
     let now = &step.now;
-    let mut job = graph.claim_cache_job(now)?;
-    if job.is_none() && matches!(step.target, MemoryGenerationTarget::Rebuild { .. }) {
-        // A full retained-cache scan is needed at the quiescent boundary, not
-        // before each pending job in a large rebuild.
-        reconcile_missing(&mut graph, handle, &step.cache)?;
-        job = graph.claim_cache_job(now)?;
-    }
+    let job = graph.claim_cache_job(now)?;
     let Some(job) = job else {
         graph.close()?;
         return Ok(false);
@@ -247,47 +239,6 @@ fn canonical_path(handle: &MemoryGenerationHandle, data_root: &Path) -> PathBuf 
         .canonical_snapshot_path
         .clone()
         .unwrap_or_else(|| butler_turn::conversation::conversation_store_path(data_root))
-}
-
-fn reconcile_missing(
-    graph: &mut GraphRepository,
-    handle: &MemoryGenerationHandle,
-    cache: &Path,
-) -> CognitionResult<()> {
-    let rows = graph.complete_rebuild_cache_rows(&handle.generation_id)?;
-    if rows.is_empty() {
-        return Ok(());
-    }
-    let as_of = super::MemorySourceInventory::read(
-        &handle.source_root.join("memory-source-inventory.json"),
-    )?
-    .as_of;
-    let canonical = handle
-        .canonical_snapshot_path
-        .as_deref()
-        .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
-    let reader = ConversationSourceReader::open(canonical)
-        .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
-    let text = match fs::read_to_string(cache) {
-        Ok(value) => value,
-        Err(failure) if failure.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(_) => return Err(error(CognitionCode::HotCacheIoFailed)),
-    };
-    let valid = graph.valid_rebuild_cache_entries(
-        &handle.generation_id,
-        &physical_entries(&text),
-        &handle.source_root,
-        &reader,
-        &as_of,
-    )?;
-    let outcomes = graph.rebuild_cache_outcomes(&handle.generation_id)?;
-    let evidence =
-        super::rebuild::readiness::cache::evaluate(&rows, &outcomes, &valid, &handle.generation_id);
-    reader
-        .close()
-        .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
-    graph.requeue_missing_rebuild_cache(&handle.generation_id, &evidence.actual_invalid_jobs)?;
-    Ok(())
 }
 
 fn assert_source_current(

@@ -2,6 +2,7 @@ use super::*;
 use butler_turn::btcc::{ModelRoundTool, ToolCallOrigin, ToolChoice};
 use serde_json::Map;
 
+// test-category: format-pin
 #[test]
 fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
     let (catalog, snapshot) = catalog();
@@ -42,7 +43,7 @@ fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
     });
     request.stable_provider_cache_prefix = Some(&stable);
     request.route_context = Some(&route);
-    let config = ProviderRequestConfig {
+    let mut config = ProviderRequestConfig {
         metadata: snapshot
             .find_model_metadata(Some("openai/gpt-5.5"))
             .unwrap(),
@@ -79,6 +80,41 @@ fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
         "41af67d477a09e70211ebec9e99780ce52a8ae4cfb00e387f0d33a8b138cc6d8"
     );
 
+    let prior = serde_json::json!({"provider":"openai","toolSurfaceDigest":"a".repeat(64),
+        "providerRouteIdentity":identity,"sent":{"toolMessages":0,"userMessages":0},"statelessInput":[]});
+    let mut changed_route = route.clone();
+    changed_route["toolSurfaceDigest"] = serde_json::json!("b".repeat(64));
+    request.continuation = Some(&prior);
+    request.route_context = Some(&changed_route);
+    let replacement = [ModelRoundTool {
+        name: "tool_search".into(),
+        description: "discover".into(),
+        parameters: Map::new(),
+        concurrency_safe: None,
+        tool_contract_version: None,
+    }];
+    request.tools = &replacement;
+    let changed = serialize::body(&request, &config, serialize::Carrier::Responses).unwrap();
+    let changed_encoded = butler_core::json::stringify(&changed).unwrap();
+    let new_identity =
+        serialize::provider_cache_identity(&changed, &changed_encoded, &request, &config)
+            .unwrap()
+            .unwrap();
+    assert_ne!(
+        new_identity["capabilityDigest"], identity["capabilityDigest"],
+        "legitimate phase changes create a new cache prefix without ending the Turn"
+    );
+    request.tools = &[];
+    request.continuation = None;
+    request.route_context = Some(&route);
+    config.metadata.provider_id = "local".into();
+    assert!(
+        serialize::provider_cache_identity(&body, &encoded, &request, &config)
+            .unwrap()
+            .is_none(),
+        "OpenAI cache identity must not reject local or other carriers"
+    );
+    config.metadata.provider_id = "openai".into();
     let mut gemini_request = request;
     gemini_request.reasoning_effort = &ReasoningEffort::Xhigh;
     let gemini = serialize::body(&gemini_request, &config, serialize::Carrier::Gemini).unwrap();
@@ -88,6 +124,7 @@ fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
     );
 }
 
+// test-category: pure-logic
 #[test]
 fn local_text_protocol_repairs_tool_markers_and_hides_reasoning_but_not_user_fences() {
     {
@@ -136,6 +173,22 @@ fn local_text_protocol_repairs_tool_markers_and_hides_reasoning_but_not_user_fen
         assert_eq!(result.tool_calls[0].name, "search_web");
         assert_eq!(result.tool_calls[0].origin, Some(ToolCallOrigin::Text));
         assert_eq!(result.tool_calls[0].arguments["query"], "rust");
+        let many = serde_json::json!({"choices":[{"message":{"content":
+            r#"<tool_call>call: search_web {query:"rust"}</tool_call>"#.repeat(12)}}]});
+        let many = result::decode(
+            many,
+            "local",
+            "local/test",
+            serialize::Carrier::Chat { stream: false },
+            0,
+            &request,
+            None,
+        );
+        assert_eq!(
+            many.tool_calls.len(),
+            12,
+            "never silently omit the ninth call"
+        );
     }
     {
         let messages = [ModelRoundMessage {

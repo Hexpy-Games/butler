@@ -27,7 +27,7 @@ pub(super) fn prepare(
         return Err(invalid_settings());
     }
     let mut patch = patch::sanitize(input, facts)?;
-    onboarding::merge_into_patch(&mut patch, input, current);
+    onboarding::merge_into_patch(&mut patch, input, current)?;
     let workspace_root = input
         .get("default_project_folder_selection_token")
         .and_then(Value::as_str)

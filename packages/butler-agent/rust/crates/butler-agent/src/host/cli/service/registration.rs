@@ -77,7 +77,13 @@ fn install(
         return Err(refused("the Butler App supervises this service"));
     }
     let data_text = data_root.to_string_lossy().into_owned();
-    let mut env = vec![("BUTLER_DATA".to_owned(), data_text.clone())];
+    let mut env = vec![
+        ("BUTLER_DATA".to_owned(), data_text.clone()),
+        (
+            butler_platform::user_dirs::AGENT_HOME_VARIABLE.to_owned(),
+            home.root().to_string_lossy().into_owned(),
+        ),
+    ];
     // The service settings this command was run with are the job's.
     env.extend(JOB_SETTINGS.iter().filter_map(|name| {
         let value = std::env::var(name).ok().filter(|value| !value.is_empty())?;
@@ -134,10 +140,28 @@ fn uninstall(activation: Activation) -> Result<(Value, String), Error> {
 }
 
 fn status() -> Result<(Value, String), Error> {
-    let status = service_registration::status()?;
+    let status = match service_registration::status() {
+        Ok(status) => status,
+        Err(Error::Foreign(task)) => {
+            return Ok((
+                json!({
+                    "manager": service_registration::manager().name(), "definition": task,
+                    "state": "foreign", "registered": true, "loaded": null, "running": null,
+                }),
+                "startup: foreign".to_owned(),
+            ));
+        }
+        Err(error) => return Err(error),
+    };
+    let state = match status.loaded {
+        Some(true) => "enabled",
+        Some(false) => "disabled",
+        None => "unknown",
+    };
     let human = format!(
-        "{}: {}, {}, {}",
+        "{}: {}, {}, {}, {}",
         status.manager.name(),
+        state,
         if status.registered {
             "registered"
         } else {
@@ -148,6 +172,7 @@ fn status() -> Result<(Value, String), Error> {
     );
     let value = json!({
         "manager": status.manager.name(),
+        "state": state,
         "definition": status.definition,
         "registered": status.registered,
         "loaded": status.loaded,

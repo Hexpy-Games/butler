@@ -8,7 +8,7 @@ use std::{
     path::PathBuf,
     sync::{
         Arc,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
 };
 
@@ -47,6 +47,7 @@ struct Inner {
     data_root: PathBuf,
     executable: PathBuf,
     next_id: AtomicU64,
+    warm: AtomicBool,
     state: Mutex<QueueState>,
     notify: Notify,
     shutdown: CancellationToken,
@@ -66,6 +67,7 @@ impl EmbeddingOwner {
             data_root,
             executable,
             next_id: AtomicU64::new(1),
+            warm: AtomicBool::new(false),
             state: Mutex::new(QueueState::default()),
             notify: Notify::new(),
             shutdown: CancellationToken::new(),
@@ -145,36 +147,23 @@ impl EmbeddingOwner {
         let bytes = frame.len();
         let admitted_cancel = cancellation.child_token();
         let (sender, receiver) = oneshot::channel();
-        {
-            let mut state = self.inner.state.lock();
-            if state.closed {
-                return Err(error(CognitionCode::EmbedOwnerClosed));
-            }
-            if state.queued_requests >= MAX_QUEUE_REQUESTS
-                || state.queued_bytes + bytes > MAX_QUEUE_BYTES
-            {
-                return Err(error(CognitionCode::EmbedQueueFull));
-            }
-            let pending = Pending {
-                id,
-                frame,
-                bytes,
-                mode,
-                requested_texts,
-                resplit,
-                max_embeddings,
-                cancellation: admitted_cancel.clone(),
-                deadline,
-                response: sender,
-            };
-            state.queued_requests += 1;
-            state.queued_bytes += bytes;
-            match request.request_class {
-                EmbeddingRequestClass::Interactive => state.interactive.push_back(pending),
-                EmbeddingRequestClass::Background => state.background.push_back(pending),
-            }
-        }
-        self.inner.notify.notify_one();
+        let pending = Pending {
+            id,
+            frame,
+            bytes,
+            mode,
+            requested_texts,
+            resplit,
+            max_embeddings,
+            cold_start_allowed: matches!(
+                request.request_class,
+                EmbeddingRequestClass::Interactive | EmbeddingRequestClass::Background
+            ),
+            cancellation: admitted_cancel.clone(),
+            deadline,
+            response: sender,
+        };
+        self.inner.enqueue(pending, request.request_class)?;
         let _guard = AdmissionGuard {
             inner: self.inner.clone(),
             id,
@@ -201,6 +190,10 @@ impl Drop for EmbeddingOwner {
 }
 
 impl CognitionEmbeddingPort for EmbeddingOwner {
+    fn is_warm(&self) -> bool {
+        self.inner.warm.load(Ordering::Acquire)
+    }
+
     fn embed(
         &self,
         request: EmbeddingRequest,
@@ -211,6 +204,31 @@ impl CognitionEmbeddingPort for EmbeddingOwner {
 }
 
 impl Inner {
+    fn enqueue(&self, pending: Pending, class: EmbeddingRequestClass) -> CognitionResult<()> {
+        let mut state = self.state.lock();
+        if state.closed {
+            return Err(error(CognitionCode::EmbedOwnerClosed));
+        }
+        if state.queued_requests >= MAX_QUEUE_REQUESTS
+            || state.queued_bytes + pending.bytes > MAX_QUEUE_BYTES
+        {
+            return Err(error(CognitionCode::EmbedQueueFull));
+        }
+        state.queued_requests += 1;
+        state.queued_bytes += pending.bytes;
+        match class {
+            EmbeddingRequestClass::Interactive | EmbeddingRequestClass::WarmInteractive => {
+                state.interactive.push_back(pending);
+            }
+            EmbeddingRequestClass::Background | EmbeddingRequestClass::WarmBackground => {
+                state.background.push_back(pending);
+            }
+        }
+        drop(state);
+        self.notify.notify_one();
+        Ok(())
+    }
+
     fn close(&self) {
         let mut state = self.state.lock();
         if state.closed {
@@ -277,6 +295,11 @@ async fn run_actor(inner: Arc<Inner>) {
         };
         if let Some(item) = next {
             let result = run_item(&inner, &mut child, &item).await;
+            let ready = child.as_ref().is_some_and(|process| process.initialized);
+            if inner.warm.swap(ready, Ordering::AcqRel) != ready && ready {
+                butler_core::diagnostic!("[embedding-worker] ready");
+                butler_memory::cognition::signal_memory_work();
+            }
             let _ = item.response.send(result);
             let mut state = inner.state.lock();
             state.active_cancel = None;
@@ -290,7 +313,7 @@ async fn run_actor(inner: Arc<Inner>) {
             tokio::select! {
                 () = inner.notify.notified() => {},
                 () = inner.shutdown.cancelled() => {},
-                _ = process.child.wait() => { child = None; },
+                _ = process.child.wait() => { child = None; inner.warm.store(false, Ordering::Release); },
             }
         } else {
             tokio::select! {
@@ -300,6 +323,7 @@ async fn run_actor(inner: Arc<Inner>) {
         }
     }
     kill_and_reap(&mut child).await;
+    inner.warm.store(false, Ordering::Release);
 }
 
 async fn run_item(
@@ -320,9 +344,13 @@ async fn run_item(
         *child = None;
     }
     if child.is_none() {
+        if !item.cold_start_allowed {
+            return Err(error(CognitionCode::EmbedWorkerCold));
+        }
         *child = Some(spawn_worker(&inner.executable, &inner.data_root).await?);
     }
     if let Some(process) = child.as_mut().filter(|process| !process.initialized) {
+        let load_started = Instant::now();
         let initialized = tokio::select! {
             biased;
             () = inner.shutdown.cancelled() => Err(error(CognitionCode::EmbedOwnerClosed)),
@@ -330,7 +358,13 @@ async fn run_item(
                 result.unwrap_or_else(|_| Err(error(CognitionCode::EmbedWorkerUnavailable))),
         };
         match initialized {
-            Ok(()) => process.initialized = true,
+            Ok(()) => {
+                process.initialized = true;
+                butler_core::diagnostic!(
+                    "[embedding-worker] initialized load_ms={}",
+                    load_started.elapsed().as_millis()
+                );
+            }
             Err(failure) => {
                 kill_and_reap(child).await;
                 return Err(failure);

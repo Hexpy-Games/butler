@@ -182,27 +182,6 @@ fn command_palette(
             .filter(|item| matches(&item.title))
             .map(schedule_result),
     );
-    for section in [
-        "General",
-        "Appearance",
-        "Server/Bridge",
-        "Models/Access",
-        "Privacy/Data",
-        "Diagnostics",
-        "System events",
-        "Archived",
-    ] {
-        if matches(section) {
-            let slug = section
-                .to_lowercase()
-                .replace(|character: char| !character.is_ascii_alphanumeric(), "-");
-            let slug = slug.trim_matches('-');
-            results.push(
-                json!({"id":format!("settings:{slug}"),"kind":"settings","title":section,
-                "subtitle":"Settings","route":format!("settings:{section}")}),
-            );
-        }
-    }
     let rank = |title: &str| {
         let title = normalize(title);
         if title == needle {

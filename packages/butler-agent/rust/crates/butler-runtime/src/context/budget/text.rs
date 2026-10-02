@@ -1,10 +1,6 @@
 use super::*;
 use butler_models::models::TokenEstimateInput;
 
-pub(crate) fn token_budget_to_chars(tokens: f64) -> usize {
-    butler_core::json::saturating_usize(tokens.trunc().max(0.0) * 4.0)
-}
-
 pub(crate) fn trim_text_to_token_budget(
     snapshot: &ContextBudgetSnapshot<'_>,
     text: &str,
@@ -24,21 +20,40 @@ pub(crate) fn trim_text_to_token_budget(
         return Ok(trimmed.to_owned());
     }
     let marker = marker.unwrap_or("[...trimmed for context budget...]");
-    let marker_units = marker.encode_utf16().count();
-    let max_units = token_budget_to_chars(max_tokens).saturating_sub(marker_units + 2);
-    if max_units == 0 {
-        return Ok(marker.to_owned());
+    if snapshot
+        .estimate(TokenEstimateInput::Text(marker), None)?
+        .tokens
+        > max_tokens
+    {
+        return Ok(String::new());
     }
-    let slice = if from_start {
-        butler_core::public_text::trim_js_whitespace_end(prefix_utf16(trimmed, max_units))
-    } else {
-        butler_core::public_text::trim_js_whitespace_start(suffix_utf16(trimmed, max_units))
-    };
-    Ok(if from_start {
-        format!("{slice}\n{marker}")
-    } else {
-        format!("{marker}\n{slice}")
-    })
+    let mut low = 0;
+    let mut high = trimmed.encode_utf16().count();
+    let mut result = marker.to_owned();
+    while low < high {
+        let middle = low + (high - low).div_ceil(2);
+        let slice = if from_start {
+            prefix_utf16(trimmed, middle)
+        } else {
+            suffix_utf16(trimmed, middle)
+        };
+        let candidate = if from_start {
+            format!("{slice}\n{marker}")
+        } else {
+            format!("{marker}\n{slice}")
+        };
+        if snapshot
+            .estimate(TokenEstimateInput::Text(&candidate), None)?
+            .tokens
+            <= max_tokens
+        {
+            result = candidate;
+            low = middle;
+        } else {
+            high = middle - 1;
+        }
+    }
+    Ok(result)
 }
 
 pub fn prefix_utf16(value: &str, units: usize) -> &str {

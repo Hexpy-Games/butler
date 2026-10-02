@@ -1,6 +1,8 @@
 //! Serving-label receipt pin through the real vector stage and recall adapter.
+use super::cold::ColdEmbeddings;
 use super::*;
 use crate::cognition::generation_vectors::compatibility;
+use crate::cognition::graph::GraphRepository;
 use crate::cognition::{
     CognitionConversationSourceNotice, CognitionEmbeddingPort, EmbeddingFuture, EmbeddingIdentity,
     EmbeddingRequest, EmbeddingResult, GenerationVectorAdapter, MemoryGenerationHandle,
@@ -151,6 +153,8 @@ async fn setup(fixture: &Fixture) -> (Input, MemoryGenerationHandle) {
         unclean_start: Arc::new(Default::default()),
         catchup_progress: Arc::default(),
         probe: Arc::default(),
+        vector_batch: Arc::default(),
+        daily_batch: false,
         shutdown: CancellationToken::new(),
     };
     (input, generation)
@@ -161,6 +165,47 @@ async fn setup(fixture: &Fixture) -> (Input, MemoryGenerationHandle) {
 async fn adopted_stage_pins_serving_receipts_and_refuses_other_assets() {
     let fixture = Fixture::new();
     let (input, generation) = setup(&fixture).await;
+    let graph = GraphRepository::open_readonly(&generation.graph_path).unwrap();
+    assert!(
+        !graph.vector_batch_due("2000-01-01T00:00:00Z", 1).unwrap(),
+        "at cap stays deferred"
+    );
+    assert!(
+        graph.vector_batch_due("2000-01-01T00:00:00Z", 0).unwrap(),
+        "above cap is due"
+    );
+    assert!(
+        graph.vector_batch_due(NOW, 1).unwrap(),
+        "oldest age is inclusive"
+    );
+    graph.close().unwrap();
+    assert!(
+        !super::super::vector::process(&input, &ColdEmbeddings)
+            .await
+            .unwrap()
+    );
+    let db = Connection::open(&generation.graph_path).unwrap();
+    let state: (String, u32, Option<String>) = db
+        .query_row(
+            "SELECT state,attempt_count,error_code FROM memory_vector_units",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(
+        state,
+        ("pending".into(), 0, None),
+        "warm-only deferral must not become a failure or consume an attempt"
+    );
+    assert!(
+        db.query_row(
+            "SELECT provider_invoked=0 AND invocation_ref IS NULL FROM memory_vector_units",
+            [],
+            |row| row.get::<_, bool>(0)
+        )
+        .unwrap()
+    );
+    drop(db);
     js_table(&generation).await;
     manifest(&generation, js(&"d".repeat(64)));
     assert!(

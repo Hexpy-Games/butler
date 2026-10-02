@@ -13,6 +13,7 @@ import {
   shell,
 } from "electron";
 import { prepareAppPackageUpdate } from "./app-package-update.mjs";
+import { unsupportedLegacyData } from "./app-legacy-data.mjs";
 import { getDesktopCopy } from "./i18n/desktop-copy.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import { createHmac, randomUUID } from "node:crypto";
@@ -99,7 +100,6 @@ import {
   resolveWindowsSquirrelLaunch,
   resolveWindowsUpdateFeedUrl,
   shouldDelayWindowsFirstUpdateCheck,
-  verifyWindowsInstallerPublisher,
   WINDOWS_APP_PROTOCOL,
   WINDOWS_APP_USER_MODEL_ID,
   WINDOWS_SQUIRREL_FIRST_RUN_UPDATE_DELAY_MS,
@@ -133,6 +133,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../../../..");
 const userHome = homedir();
 const butlerDataRoot = process.env.BUTLER_DATA || join(userHome, ".butler");
+const legacyDataBlocked = unsupportedLegacyData(butlerDataRoot);
 const preloadPath = resolve(__dirname, "preload.cjs");
 const appCacheBudget = readCacheBudgetArtifact(
   resolve(__dirname, "../shared/cache-budget.json"),
@@ -172,6 +173,7 @@ if (process.platform === "win32") {
   app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);
 }
 if (windowsSquirrelLaunch.handled) {
+  if (process.env.BUTLER_APP_DISABLE_SHELL_REGISTRATION === "1") process.exit(0);
   let squirrelExitCode = 0;
   let squirrelErrorCode = null;
   let squirrelResult = null;
@@ -179,6 +181,8 @@ if (windowsSquirrelLaunch.handled) {
     squirrelResult = executeWindowsSquirrelLaunch(windowsSquirrelLaunch, {
       manageShortcut: (shortcut) => manageWindowsSquirrelShortcut({
         ...shortcut,
+        desktopPath: app.getPath("desktop"),
+        writeShortcut: (path, options) => shell.writeShortcutLink(path, "create", options),
         runPowerShell: spawnSync,
       }),
       setLoginItemSettings: (settings) => app.setLoginItemSettings(settings),
@@ -271,7 +275,7 @@ let appAgentLaunchReconcilePromise = null;
 let nativeServiceGatewayReady = false;
 let nativeServiceGatewayLastErrorCode = null;
 const nativeShellPreferences = {
-  trayEnabled: true,
+  trayEnabled: !legacyDataBlocked,
 };
 const nativeNotificationState = {
   lastError: null,
@@ -282,6 +286,10 @@ autoUpdater.on("before-quit-for-update", () => {
   isQuitting = true;
   finalQuitAllowed = true;
 });
+if (process.env.BUTLER_E2E_TIER === "stub" && process.env.BUTLER_APP_SMOKE_DEBUG_PORT) {
+  app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
+  app.commandLine.appendSwitch("remote-debugging-port", process.env.BUTLER_APP_SMOKE_DEBUG_PORT);
+}
 const explicitElectronUserDataDir = process.env.BUTLER_APP_ELECTRON_USER_DATA_DIR?.trim();
 let openAIOAuthLoginSession = null;
 const bundledAgentSupervisor = createBundledAgentSupervisor({
@@ -398,6 +406,7 @@ function projectFolderTokenSecretPath(dataRoot = butlerDataRoot) {
 function resolveProjectFolderTokenSecret() {
   const envSecret = process.env.BUTLER_PROJECT_FOLDER_TOKEN_SECRET?.trim();
   if (envSecret) return envSecret;
+  if (legacyDataBlocked) return randomUUID();
   const secretPath = projectFolderTokenSecretPath();
   try {
     const existing = readFileSync(secretPath, "utf8").trim();
@@ -1053,6 +1062,9 @@ function resolveStaticRendererDist() {
     explicitRendererDist,
     process.resourcesPath ? join(process.resourcesPath, "app-client") : null,
     process.resourcesPath ? join(process.resourcesPath, "dist") : null,
+    process.platform === "win32" && process.resourcesPath
+      ? join(process.resourcesPath, "bundled-agent", "resources", "app-client", "dist")
+      : null,
     process.resourcesPath
       ? join(
           process.resourcesPath,
@@ -1182,13 +1194,18 @@ function configureAppIdentity() {
 }
 
 function configureWindowsProtocolRegistration() {
-  if (!isWindows || !app.isPackaged) return false;
+  if (!isWindows || !app.isPackaged ||
+      process.env.BUTLER_APP_DISABLE_SHELL_REGISTRATION === "1") return false;
   const settings = windowsLoginItemSettings({
     openAtLogin: false,
     platform: process.platform,
     isPackaged: app.isPackaged,
     execPath: process.execPath,
   });
+  // A portable App has no Squirrel stub; registering that missing executable
+  // would replace the user's protocol association with a temporary path.
+  if (!existsSync(settings.path) ||
+      !existsSync(join(dirname(settings.path), "Update.exe"))) return false;
   return app.setAsDefaultProtocolClient(
     WINDOWS_APP_PROTOCOL,
     settings.path,
@@ -1211,6 +1228,7 @@ function getButlerLoginItemSettings() {
 }
 
 function setButlerLoginItemSettings(openAtLogin) {
+  if (process.env.BUTLER_APP_DISABLE_SHELL_REGISTRATION === "1") return;
   app.setLoginItemSettings(windowsLoginItemSettings({
     openAtLogin,
     platform: process.platform,
@@ -2059,6 +2077,7 @@ function safeString(value) {
 
 async function createWindow() {
   if (
+    !legacyDataBlocked &&
     (rendererUrl === serverUrl || usesAppForegroundLifecycle) &&
     !shouldUseAppAgentNativeServiceBridge()
   ) {
@@ -2066,15 +2085,15 @@ async function createWindow() {
     await ensureServer();
     recordAppStartupProgress("agent_ready");
   }
-  const launchReconcile = reconcileAppAgentServiceForLaunch();
-  if (rendererUrl === serverUrl && shouldUseAppAgentNativeServiceBridge()) {
+  const launchReconcile = legacyDataBlocked ? Promise.resolve() : reconcileAppAgentServiceForLaunch();
+  if (!legacyDataBlocked && rendererUrl === serverUrl && shouldUseAppAgentNativeServiceBridge()) {
     await launchReconcile;
     await ensureServer();
   }
-  await loadInitialNativeShellPreferences();
-  if (isPersistentMenuBarHelperSupported()) {
+  if (!legacyDataBlocked) await loadInitialNativeShellPreferences();
+  if (!legacyDataBlocked && isPersistentMenuBarHelperSupported()) {
     ensurePersistentMenuBarHelper();
-  } else {
+  } else if (!legacyDataBlocked) {
     scheduleTrayMenuRefresh();
   }
   if (mainWindow && !mainWindow.isDestroyed()) return mainWindow;
@@ -2102,7 +2121,7 @@ async function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      additionalArguments: [appCacheBudgetArgument],
+      additionalArguments: [appCacheBudgetArgument, ...(legacyDataBlocked ? ["--butler-legacy-data"] : [])],
     },
   });
   mainWindow = win;
@@ -2143,7 +2162,7 @@ async function createWindow() {
   });
   await prepareAppRendererProtocol();
   await win.loadURL(rendererUrl);
-  if (usesAppForegroundLifecycle && app.isPackaged) {
+  if (!legacyDataBlocked && usesAppForegroundLifecycle && app.isPackaged) {
     const migration = await ensureLegacyAppServiceMigration();
     if (migration.status === "cancelled") {
       scheduleTrayMenuRefresh();
@@ -2228,6 +2247,22 @@ function appManagedAgentRuntimeCurrent() {
 }
 
 ipcMain.handle("butler:get-app-info", () => appInfoView());
+
+ipcMain.handle("butler:legacy-data-recovery", async (_event, action) => {
+  if (!legacyDataBlocked) return { ok: false };
+  if (action === "open-folder") return { ok: !(await shell.openPath(dirname(butlerDataRoot))) };
+  if (action === "restart") {
+    // The preload endpoint is internal state, not an external-server override
+    // for the next App. Keep only an override supplied at the original launch.
+    if (explicitServerUrl) process.env.BUTLER_APP_SERVER_URL = explicitServerUrl;
+    else delete process.env.BUTLER_APP_SERVER_URL;
+    app.relaunch();
+    finalQuitAllowed = true;
+    app.quit();
+    return { ok: true };
+  }
+  return { ok: false };
+});
 
 ipcMain.handle("butler:get-session-folder-launch-targets", async (_event, input = {}) =>
   await sessionFolderLauncher.availableTargets(input?.sessionId));
@@ -2553,33 +2588,6 @@ ipcMain.handle("butler:save-message-file", async (_event, input = {}) => {
 
 ipcMain.handle("butler:open-update-artifact", async (_event, input = {}) => {
   const artifactPath = safeUpdateArtifactPath(input?.artifactPath);
-  if (isWindows && artifactPath.toLocaleLowerCase("en-US").endsWith(".exe")) {
-    const signature = verifyWindowsInstallerPublisher({
-      currentExecutable: process.execPath,
-      candidateInstaller: artifactPath,
-      runPowerShell: spawnSync,
-      env: process.env,
-    });
-    const update = await runAppUpdateQuit(() => {
-      const installer = spawn(artifactPath, ["--silent"], {
-        detached: true,
-        shell: false,
-        stdio: "ignore",
-        windowsHide: true,
-      });
-      installer.unref();
-      finalQuitAllowed = true;
-      app.quit();
-    });
-    return {
-      opened: update.update_started,
-      update,
-      signature: {
-        status: signature.status,
-        publisherConsistent: signature.publisherConsistent,
-      },
-    };
-  }
   const helper = await prepareAppPackageUpdate({ artifactPath, dataRoot: butlerDataRoot,
     installation: currentNativeAgentInstallation(), executable: process.execPath, parent: process.pid,
     externalServerUrl: explicitServerUrl, arguments: process.argv.slice(1) });
@@ -2989,6 +2997,7 @@ function recordAppStartupProgress(stage, {
   windowReady = false,
   trayReady = Boolean(tray),
 } = {}) {
+  if (legacyDataBlocked) return;
   try {
     const diagnostics = bundledAgentSupervisor.diagnostics();
     writeAppForegroundStartupProgress(butlerDataRoot, {
