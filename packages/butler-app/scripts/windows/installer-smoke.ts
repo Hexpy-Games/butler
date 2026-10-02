@@ -191,11 +191,16 @@ async function shellFeatures(sessionId: string) {
     const value = powershell("[string](Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -ErrorAction SilentlyContinue).'com.squirrel.butler-app.Butler'", env);
     assert.equal(value.includes(stub), enabled);
   }
+  await page!.expression("window.close(); true");
+  await waitFor(async () => await page!.expression("document.visibilityState === 'hidden'"), "close to tray");
+  assert.equal((await bridge(page!, "health")).ok, true);
   const notification = await bridge(page!, "testDesktopNotification");
   assert.equal(notification.shown, true); assert.equal(notification.status.last_error, null);
+  assert.ok(notification.status.last_shown_at, "Native notification show event missing");
   await page!.expression("window.__navigation = null; window.butlerApp.onNativeNavigation(value => window.__navigation = value); true");
   powershell("Start-Process $env:BUTLER_DEEP_LINK", { ...env, BUTLER_DEEP_LINK: `butler://session/${sessionId}` });
   await waitFor(async () => await page!.expression(`window.__navigation?.sessionId === ${JSON.stringify(sessionId)}`), "registered deep link dispatch");
+  await waitFor(async () => await page!.expression("document.visibilityState === 'visible'"), "deep link restores window");
 }
 
 async function settingsUpdate() {
