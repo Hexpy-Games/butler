@@ -1,0 +1,25 @@
+name: Windows Task Scheduler XML contract
+on:
+  workflow_dispatch:
+    inputs:
+      build-run:
+        description: Windows preview BUILD run whose immutable Agent archive is inspected
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.build-run }}
+          name: agent-windows-x64
+          path: artifacts
+      - name: Compare imported XML and enforce ownership
+        shell: pwsh
+        run: ./deploy/windows-task-xml-probe.ps1 -ArchiveDirectory "$pwd/artifacts"
