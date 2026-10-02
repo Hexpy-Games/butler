@@ -31,6 +31,8 @@ pub struct FeedbackCapture {
     pub turn_id: String,
     /// Ambiguous feedback stays inactive.
     pub needs_clarification: bool,
+    /// Existing identical Instructions handle, verified by the host.
+    pub represented_by: Option<String>,
 }
 
 impl FeedbackBufferService {
@@ -57,7 +59,7 @@ impl FeedbackBufferService {
         }
         let result = self.drain_pending().await;
         if result.is_err() {
-            store::signal(&root);
+            store::retry(&root);
         }
         result
     }
@@ -82,6 +84,11 @@ impl FeedbackBufferService {
 }
 
 fn capture(root: &std::path::Path, input: FeedbackCapture) -> CognitionResult<Value> {
+    if input.target_ref.contains(['\n', '\r']) || input.scope.contains(['\n', '\r']) {
+        return Err(store::failure(std::io::Error::other(
+            "Invalid feedback field",
+        )));
+    }
     let id = format!("fb_{:x}", Sha256::digest(input.operation_id.as_bytes()));
     let generation = store::generation(root)?;
     let entries = store::snapshot(root)?;
@@ -89,6 +96,10 @@ fn capture(root: &std::path::Path, input: FeedbackCapture) -> CognitionResult<Va
         return Ok(receipt(entry, true));
     }
     let mut entry = build_entry(generation, id, input)?;
+    entry.extra_fields.insert(
+        "text_json".into(),
+        serde_json::to_string(&entry.text).map_err(store::failure)?,
+    );
     link_duplicate(&mut entry, &entries);
     store::replace(
         &root
@@ -149,10 +160,20 @@ fn build_entry(
     ] {
         entry.extra_fields.insert(key.into(), value);
     }
+    if let Some(handle) = input.represented_by {
+        entry.status = FeedbackStatus::Discarded;
+        entry
+            .extra_fields
+            .insert("resolution_reason".into(), "already_represented".into());
+        entry.extra_fields.insert("destination_link".into(), handle);
+    }
     Ok(entry)
 }
 
 fn link_duplicate(entry: &mut FeedbackEntry, entries: &[FeedbackEntry]) {
+    if entry.status != FeedbackStatus::Active {
+        return;
+    }
     if let Some(existing) = entries.iter().find(|e| {
         e.status == FeedbackStatus::Active && e.scope == entry.scope && e.text == entry.text
     }) {

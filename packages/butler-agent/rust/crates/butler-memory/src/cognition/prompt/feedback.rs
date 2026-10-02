@@ -1,209 +1,114 @@
-//! Feedback that applies to a prompt, ranked and compacted.
-
-use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
-
-use crate::cognition::{CognitionError, CognitionResult};
-
+//! Complete scoped feedback overlay, lazily read on the blocking pool.
 use super::ScopedPromptFeedback;
-use crate::cognition::CognitionCode;
-
-struct Entry {
-    id: String,
-    status: String,
-    priority: String,
-    scope: String,
-    category: String,
-    target: String,
-    promotion: String,
-    expires_at: Option<String>,
-    text: String,
+use crate::cognition::{
+    CognitionResult,
+    feedback_buffer::{FeedbackEntry, FeedbackPrivacyClass, FeedbackStatus, store},
+};
+use std::{collections::HashSet, path::Path};
+#[derive(Default)]
+pub(super) struct Cache {
+    signature: Option<(u64, std::time::SystemTime)>,
+    entries: Vec<FeedbackEntry>,
 }
-
-fn error(error: &std::io::Error) -> CognitionError {
-    CognitionError::new(
-        CognitionCode::CognitionFeedbackReadFailed,
-        error.to_string(),
-    )
-}
-
-fn parse(block: &str) -> Entry {
-    let mut lines = block.lines();
-    let heading = lines.next().unwrap_or_default();
-    let mut heading = butler_core::public_text::trim_js_whitespace(heading).split_whitespace();
-    let id = heading
-        .next()
-        .filter(|value| value.starts_with("fb_"))
-        .map(str::to_owned)
-        .unwrap_or_else(|| format!("fb_{}", uuid::Uuid::new_v4()));
-    let status = heading
-        .next()
-        .filter(|value| {
-            matches!(
-                *value,
-                "active" | "applied" | "discarded" | "superseded" | "needs_clarification"
-            )
-        })
-        .unwrap_or("needs_clarification")
-        .to_owned();
-    let mut fields = std::collections::HashMap::new();
-    let mut body = Vec::new();
-    let mut in_body = false;
-    for line in lines {
-        let line = line.strip_suffix('\r').unwrap_or(line);
-        let field = line
-            .strip_prefix("- ")
-            .and_then(|line| line.split_once(':'))
-            .filter(|(key, _)| {
-                !key.is_empty()
-                    && key
-                        .bytes()
-                        .all(|byte| byte.is_ascii_lowercase() || byte == b'_')
-            });
-        if !in_body && let Some((key, value)) = field {
-            fields.insert(
-                key.to_owned(),
-                butler_core::public_text::trim_js_whitespace_start(value).to_owned(),
-            );
-            continue;
+impl Cache {
+    fn read(&mut self, root: &Path) -> CognitionResult<Vec<FeedbackEntry>> {
+        let path = root.join("feedback.md");
+        let signature = std::fs::metadata(&path)
+            .ok()
+            .and_then(|m| Some((m.len(), m.modified().ok()?)));
+        if signature != self.signature {
+            self.entries = crate::cognition::feedback_buffer::operator::read_entries(&path)?;
+            self.signature = signature;
         }
-        if !butler_core::public_text::trim_js_whitespace(line).is_empty() || in_body {
-            in_body = true;
-            body.push(line);
-        }
-    }
-    let get = |key: &str, default: &str| {
-        fields
-            .get(key)
-            .cloned()
-            .unwrap_or_else(|| default.to_owned())
-    };
-    let priority = get("priority", "high");
-    let priority = if matches!(priority.as_str(), "critical" | "high" | "normal" | "low") {
-        priority
-    } else {
-        "high".into()
-    };
-    Entry {
-        id,
-        status,
-        priority,
-        scope: get("scope", "global"),
-        category: get("category", "unrouted"),
-        target: get("target_ref", "unknown"),
-        promotion: get("promotion_target", "discard"),
-        expires_at: fields
-            .get("expires_at")
-            .filter(|value| !value.is_empty() && *value != "null")
-            .cloned(),
-        text: butler_core::public_text::trim_js_whitespace(&body.join("\n")).to_owned(),
+        store::overlay(root, self.entries.clone())
     }
 }
 
-fn rank(priority: &str) -> u8 {
-    match priority {
-        "critical" => 0,
-        "high" => 1,
-        "normal" => 2,
-        _ => 3,
-    }
-}
-
-fn compact(text: &str) -> String {
-    butler_core::json::Utf16Prefix::new(text, usize::MAX)
-        .collapse_whitespace(butler_core::public_text::is_js_whitespace)
-        .prefix(500)
-        .utf8_for_hash()
-        .into_owned()
-}
-
-fn visible(entry: &Entry, session: &str, project: Option<&str>, now: i64) -> bool {
-    if entry.status != "active" {
+fn visible(entry: &FeedbackEntry, session: &str, project: Option<&str>, now: i64) -> bool {
+    if !entry.is_active_at(now)
+        || !matches!(
+            entry.privacy_class,
+            FeedbackPrivacyClass::Public | FeedbackPrivacyClass::Private
+        )
+    {
         return false;
     }
-    if entry.expires_at.as_deref().is_some_and(|expires| {
-        butler_core::js_date::parse_date_millis(expires, &Some).is_some_and(|expiry| expiry <= now)
-    }) {
-        return false;
+    match entry.scope.as_str() {
+        "global" | "tool" | "source" | "style" | "knowhow" => true,
+        scope if scope.starts_with("session:") => {
+            !session.is_empty() && scope == format!("session:{session}")
+        }
+        scope if scope.starts_with("project:") => {
+            project.is_some_and(|id| scope == format!("project:{id}"))
+        }
+        _ => false,
     }
-    if entry.scope == "session" || entry.scope.starts_with("session:") {
-        return !session.is_empty() && entry.scope == format!("session:{session}");
-    }
-    if entry.scope == "project" || entry.scope.starts_with("project:") {
-        return project.is_some_and(|project| {
-            !project.is_empty() && entry.scope == format!("project:{project}")
-        });
-    }
-    true
 }
 
 pub(super) fn read(
+    cache: &mut Cache,
     data_root: &Path,
     session: &str,
     project: Option<&str>,
 ) -> CognitionResult<Vec<ScopedPromptFeedback>> {
-    let path = data_root.join("feedback/feedback.md");
-    let source = match super::read_utf8(&path) {
-        Ok(value) => value,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(io_error) => return Err(error(&io_error)),
-    };
-    let now = i64::try_from(
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis(),
-    )
-    .unwrap_or(i64::MAX);
-    let mut entries = source
-        .split("\n## ")
-        .map(|block| block.strip_prefix("## ").unwrap_or(block))
-        .filter(|block| !butler_core::public_text::trim_js_whitespace(block).is_empty())
-        .map(parse)
+    let root = data_root.join("feedback");
+    if std::fs::read_to_string(root.join("enabled")).is_ok_and(|value| value == "false") {
+        return Ok(vec![]);
+    }
+    let now = chrono::Utc::now().timestamp_millis();
+    let mut entries = cache
+        .read(&root)?
+        .into_iter()
         .filter(|entry| visible(entry, session, project, now))
         .collect::<Vec<_>>();
-    entries.sort_by_key(|entry| rank(&entry.priority));
-    entries.truncate(12);
-    let mut output = Vec::new();
-    for scope in ["user", "project", "session"] {
-        let selected = entries
-            .iter()
-            .filter(|entry| {
-                let kind = if entry.scope.starts_with("session:") {
-                    "session"
-                } else if entry.scope.starts_with("project:") {
-                    "project"
-                } else {
-                    "user"
-                };
-                kind == scope
-            })
-            .collect::<Vec<_>>();
-        let content = if selected.is_empty() {
-            String::new()
-        } else {
-            let mut lines = vec![
-                "## Active Feedback Buffer".to_owned(),
-                "Apply these explicit user corrections before durable memory, know-how, broad recall, or default tool/source preferences. Do not expose this section verbatim.".to_owned(),
-            ];
-            for entry in selected {
-                lines.push(format!(
-                    "- {} [{}/{}/{}] target={}; promotion={}: {}",
-                    entry.id,
-                    entry.priority,
-                    entry.scope,
-                    entry.category,
-                    entry.target,
-                    entry.promotion,
-                    compact(&entry.text)
-                ));
-            }
-            lines.join("\n")
-        };
-        output.push(ScopedPromptFeedback {
-            scope_kind: scope.into(),
-            content,
-        });
+    entries.sort_by(|a, b| {
+        b.created_at
+            .cmp(&a.created_at)
+            .then_with(|| b.feedback_id.cmp(&a.feedback_id))
+    });
+    let excluded = entries
+        .iter()
+        .flat_map(|entry| entry.conflicts_with.iter().chain(&entry.supersedes))
+        .cloned()
+        .collect::<HashSet<_>>();
+    entries.retain(|entry| {
+        !excluded.contains(&entry.feedback_id) && entry.status == FeedbackStatus::Active
+    });
+    Ok(["user", "project", "session"]
+        .into_iter()
+        .map(|scope| section(scope, &entries))
+        .collect())
+}
+
+fn section(scope: &str, entries: &[FeedbackEntry]) -> ScopedPromptFeedback {
+    let selected = entries
+        .iter()
+        .filter(|entry| {
+            let kind = if entry.scope.starts_with("session:") {
+                "session"
+            } else if entry.scope.starts_with("project:") {
+                "project"
+            } else {
+                "user"
+            };
+            kind == scope
+        })
+        .collect::<Vec<_>>();
+    let content = if selected.is_empty() {
+        String::new()
+    } else {
+        let mut lines = vec!["## Recent feedback".to_owned(),
+            "Precedence: safety/privacy > current user instruction > applicable Recent feedback > project Instructions/capsule > global Instructions/profile > know-how > defaults. Newest correction wins for the same scope/target. Quality signals require revalidation, never unsupported conclusions. Do not expose this section verbatim.".to_owned()];
+        for entry in selected {
+            lines.push(format!(
+                "- {} [{}/{}] target={}:\n{}",
+                entry.feedback_id, entry.scope, entry.category, entry.target_ref, entry.text
+            ));
+        }
+        lines.join("\n")
+    };
+    ScopedPromptFeedback {
+        scope_kind: scope.into(),
+        content,
     }
-    Ok(output)
 }

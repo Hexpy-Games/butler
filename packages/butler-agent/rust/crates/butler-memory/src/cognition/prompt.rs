@@ -40,6 +40,7 @@ pub struct CognitionPromptReader {
     data_root: PathBuf,
     environment: CognitionPathEnvironment,
     owner: PromptReadOwner,
+    feedback_cache: std::sync::Arc<parking_lot::Mutex<feedback::Cache>>,
 }
 
 impl CognitionPromptReader {
@@ -53,6 +54,7 @@ impl CognitionPromptReader {
             data_root,
             environment,
             owner: PromptReadOwner::new(max_blocking_reads),
+            feedback_cache: Default::default(),
         }
     }
 
@@ -63,8 +65,9 @@ impl CognitionPromptReader {
         project: Option<String>,
     ) -> CognitionResult<Vec<ScopedPromptFeedback>> {
         let root = self.environment.cognition_root(&self.data_root);
+        let cache = self.feedback_cache.clone();
         self.owner
-            .run(move || feedback::read(&root, &session, project.as_deref()))
+            .run(move || feedback::read(&mut cache.lock(), &root, &session, project.as_deref()))
             .await
     }
 

@@ -187,7 +187,7 @@ fn feedback_path(service: &FeedbackBufferService) -> PathBuf {
         .join("feedback/feedback.md")
 }
 
-pub(super) fn read_entries(path: &Path) -> CognitionResult<Vec<FeedbackEntry>> {
+pub(crate) fn read_entries(path: &Path) -> CognitionResult<Vec<FeedbackEntry>> {
     let source = match File::open(path) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),

@@ -22,6 +22,7 @@ impl FeedbackBufferService {
             for entry in &mut entries {
                 entry.status = FeedbackStatus::Discarded;
                 entry.text.clear();
+                entry.extra_fields.shift_remove("text_json");
                 entry
                     .extra_fields
                     .insert("resolution_reason".into(), "owner_reset".into());

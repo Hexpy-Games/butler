@@ -13,8 +13,12 @@ use std::{
 
 static WORK: std::sync::LazyLock<parking_lot::Mutex<HashSet<PathBuf>>> =
     std::sync::LazyLock::new(|| parking_lot::Mutex::new(HashSet::new()));
-pub(super) fn signal(root: &Path) {
+pub(super) fn retry(root: &Path) {
     WORK.lock().insert(root.to_owned());
+}
+
+pub(super) fn signal(root: &Path) {
+    retry(root);
     crate::cognition::signal_memory_work();
 }
 pub(super) fn take_work(root: &Path) -> bool {
@@ -68,8 +72,14 @@ pub(super) fn pending(root: &Path) -> CognitionResult<Vec<PathBuf>> {
 }
 
 pub(crate) fn snapshot(root: &Path) -> CognitionResult<Vec<FeedbackEntry>> {
+    overlay(root, read_entries(&root.join("feedback.md"))?)
+}
+
+pub(crate) fn overlay(
+    root: &Path,
+    mut entries: Vec<FeedbackEntry>,
+) -> CognitionResult<Vec<FeedbackEntry>> {
     let generation = generation(root)?;
-    let mut entries = read_entries(&root.join("feedback.md"))?;
     for entry in &mut entries {
         if entry
             .extra_fields
@@ -78,6 +88,7 @@ pub(crate) fn snapshot(root: &Path) -> CognitionResult<Vec<FeedbackEntry>> {
         {
             entry.status = super::FeedbackStatus::Discarded;
             entry.text.clear();
+            entry.extra_fields.shift_remove("text_json");
             entry
                 .extra_fields
                 .insert("resolution_reason".into(), "owner_reset".into());

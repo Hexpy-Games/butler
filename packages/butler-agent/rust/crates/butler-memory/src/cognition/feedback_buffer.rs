@@ -2,8 +2,8 @@
 
 mod capture;
 mod lifecycle;
-mod operator;
-mod store;
+pub(crate) mod operator;
+pub(crate) mod store;
 pub use capture::FeedbackCapture;
 mod quality_operator;
 mod resolve;
@@ -73,7 +73,7 @@ pub(crate) struct FeedbackEntry {
 }
 
 impl FeedbackEntry {
-    fn is_active_at(&self, now_epoch_ms: i64) -> bool {
+    pub(crate) fn is_active_at(&self, now_epoch_ms: i64) -> bool {
         self.status == FeedbackStatus::Active
             && self.expires_at.as_deref().is_none_or(|value| {
                 butler_core::js_date::parse_date_millis(value, &Some)
@@ -278,6 +278,10 @@ fn parse_entry(block: &str, fallback_iso: &str) -> FeedbackEntry {
     let mut lines = block.split('\n');
     let (feedback_id, status) = parse_heading(lines.next().unwrap_or_default());
     let (fields, text) = parse_fields(lines);
+    let text = fields
+        .get("text_json")
+        .and_then(|json| serde_json::from_str::<String>(json).ok())
+        .unwrap_or(text);
     let get = |key: &str, default: &str| {
         fields
             .get(key)

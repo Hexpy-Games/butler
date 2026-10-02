@@ -299,6 +299,7 @@ fn required_action_tools(mode: &AccessMode, facts: &ActionToolFacts<'_>) -> Vec<
     // task-memory ingest stays with the legacy memory-write profile.
     if facts.butler_role || facts.selected_memory_write {
         selected.push(ToolName::UpdateExplicitMemory);
+        selected.push(ToolName::RecordUserFeedback);
     }
     if facts.selected_memory_write {
         selected.push(ToolName::IngestTaskMemory);
