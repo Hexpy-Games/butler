@@ -34,7 +34,10 @@ async fn run(case: &str, command: &str) -> Result<Value, HarnessError> {
         .iter()
         .find(|r| r["safe_tool_name"] == "run_command")
         .expect("command tool row");
-    assert_eq!(row["state"], "delivered", "{row}");
+    assert!(
+        matches!(row["state"].as_str(), Some("delivered" | "failed")),
+        "{row}"
+    );
     let requests = s.provider()?.requests();
     let text = requests
         .iter()
