@@ -225,8 +225,9 @@ async fn setup_10_stray_callbacks_are_ignored() -> Result<(), HarnessError> {
     let started = Instant::now();
     let (status, page) = callback(port, &format!("code=e2e-code&state={state}")).await?;
     assert_eq!(status, 200, "{page}");
-    assert!(
-        started.elapsed() < Duration::from_secs(5),
+    butler_e2e::assert_wall_clock_budget!(
+        started.elapsed(),
+        Duration::from_secs(5),
         "the idle connection held it up"
     );
     assert_eq!(

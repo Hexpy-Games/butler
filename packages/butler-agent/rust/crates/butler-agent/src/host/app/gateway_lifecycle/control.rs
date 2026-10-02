@@ -22,7 +22,6 @@ use butler_turn::btcc::StorageEffectJournal;
 use super::{AppGatewayLifecycle, GatewayControlCommand};
 
 mod accept;
-#[cfg(debug_assertions)]
 mod shutdown_order;
 
 const CONTROL_SCHEMA: &str = "butler.native-app-gateway-control.v1";
@@ -162,7 +161,6 @@ async fn serve_one(
     context: &ControlContext,
 ) -> Result<(), crate::host::HostError> {
     let read = read_frame::<ControlRequest>(stream);
-    #[cfg(debug_assertions)]
     let read = shutdown_order::read_started(&context.data_root, read);
     let request = timeout(IO_TIMEOUT, read).await.map_err(|source| {
         crate::host::service::shutdown_trace::event("control_request_timeout");

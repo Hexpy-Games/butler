@@ -125,6 +125,7 @@ async fn schedule_write_contention_is_retryable() -> Result<(), HarnessError> {
         reply.status,
         reply.text
     );
+    // Minimum fixture hold proves contention; this is a functional invariant.
     assert!(held.elapsed() >= Duration::from_secs(5));
     assert_eq!(reply.status, 503, "{}", reply.text);
     assert_eq!(reply.error_code(), Some("storage_busy"));

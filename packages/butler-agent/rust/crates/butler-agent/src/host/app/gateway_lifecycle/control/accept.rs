@@ -24,7 +24,6 @@ pub(super) async fn run(
 }
 
 async fn serve(mut stream: TcpStream, context: Arc<ControlContext>, shutdown: CancellationToken) {
-    #[cfg(debug_assertions)]
     super::shutdown_order::before_wait(&context.data_root, &shutdown).await;
     tokio::select! {
         biased;

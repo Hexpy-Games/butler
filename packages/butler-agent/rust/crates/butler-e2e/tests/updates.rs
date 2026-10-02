@@ -101,7 +101,7 @@ async fn until(gw: &Gateway, done: impl Fn(&Value) -> bool) -> Result<Value, Har
     let deadline = Instant::now() + Duration::from_secs(20);
     loop {
         let (took, component) = get_updates(gw).await?;
-        assert!(took < INSTANT, "GET /updates took {took:?}");
+        butler_e2e::assert_wall_clock_budget!(took, INSTANT, "GET /updates took");
         if done(&component) {
             return Ok(component);
         }
@@ -137,16 +137,13 @@ async fn use_07_updates_read_never_waits_for_the_network() -> Result<(), Harness
     let s = setup.start().await?;
 
     let (took, component) = get_updates(&s.gw).await?;
-    assert!(
-        took < INSTANT,
-        "GET /updates took {took:?} (manifest delay {DELAY:?})"
-    );
+    butler_e2e::assert_wall_clock_budget!(took, INSTANT, "GET /updates took");
     eprintln!("USE-07 GET /updates: {took:?} (manifest delay {DELAY:?})");
     assert_eq!(component["available_version"], "0.0.5", "{component}");
     // The stale status started one background check, and only one.
     manifest.wait_for_hit().await?;
     let (again, _) = get_updates(&s.gw).await?;
-    assert!(again < INSTANT);
+    butler_e2e::assert_wall_clock_budget!(again, INSTANT, "updates: again");
     assert_eq!(manifest.hits(), 1, "a stale status starts one check");
 
     let component = until(&s.gw, |component| {
@@ -159,7 +156,7 @@ async fn use_07_updates_read_never_waits_for_the_network() -> Result<(), Harness
     let hits = manifest.hits();
     for _ in 0..3 {
         let (took, _) = get_updates(&s.gw).await?;
-        assert!(took < INSTANT, "{took:?}");
+        butler_e2e::assert_wall_clock_budget!(took, INSTANT, "updates: took");
     }
     assert_eq!(manifest.hits(), hits, "a fresh status is not refetched");
 
@@ -171,6 +168,7 @@ async fn use_07_updates_read_never_waits_for_the_network() -> Result<(), Harness
     assert_eq!(forced.status, 200, "{}", forced.text);
     let forced_took = started.elapsed();
     eprintln!("USE-07 POST /updates/check: {forced_took:?}");
+    // Minimum injected delay proves that forced refresh actually hit the network.
     assert!(forced_took >= DELAY - Duration::from_millis(500));
     assert_eq!(manifest.hits(), hits + 1);
 
@@ -184,7 +182,7 @@ async fn use_07_updates_read_never_waits_for_the_network() -> Result<(), Harness
     assert_eq!(component["check_state"], "unavailable", "{component}");
     assert_eq!(component["check_error"], "update_manifest_incompatible");
     let (took, read) = get_updates(&s.gw).await?;
-    assert!(took < INSTANT);
+    butler_e2e::assert_wall_clock_budget!(took, INSTANT, "updates: took");
     assert_eq!(read["check_state"], "unavailable", "{read}");
     s.finish().await
 }

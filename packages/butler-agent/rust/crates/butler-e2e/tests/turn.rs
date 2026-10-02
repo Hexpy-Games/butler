@@ -349,7 +349,7 @@ async fn turn_03_stop_mid_stream() -> Result<(), HarnessError> {
         s.gw.wait_terminal("general", &turn_id, Duration::from_secs(15))
             .await?;
     assert_eq!(turn_state(&turn), "cancelled", "{turn}");
-    assert!(stopped_at.elapsed() < Duration::from_secs(10));
+    butler_e2e::assert_wall_clock_budget!(stopped_at.elapsed(), Duration::from_secs(10), "stop");
 
     tokio::time::sleep(Duration::from_millis(1500)).await;
     let events = live.snapshot();
