@@ -1,53 +1,27 @@
-//! Settings memory backend and the deliberately failing profile-clear reproduction.
+//! Settings memory management, reset exclusions and restart recovery.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,
     reason = "E2E assertions"
 )]
-use butler_e2e::e2e::fake_servers::LOCAL_MODEL;
-use butler_e2e::e2e::scenario::{Fixture, Scenario, Setup};
-use butler_e2e::e2e::{HarnessError, fixtures};
+use butler_e2e::e2e::HarnessError;
+use butler_e2e::e2e::scenario::{Scenario, Setup};
 use butler_platform::sqlite;
 use rusqlite::OpenFlags;
 use serde_json::{Value, json};
 use std::{path::Path, time::Duration};
-#[path = "support/memory_fixture.rs"]
-mod memory_fixture;
-const NOW: &str = "2026-10-02T04:01:00.000Z";
+#[path = "support/memory_reset_support.rs"]
+mod memory_reset_support;
+use memory_reset_support::{cycle, local_model, profile_server, setup};
 const ORPHAN: &str = "00000000-0000-4000-8000-000000000333";
 const RETIRED: &str = "00000000-0000-4000-8000-000000000444";
-const FACT: &str = "Prefers concise answers";
-
-async fn until(mut ready: impl FnMut() -> bool) {
-    tokio::time::timeout(Duration::from_secs(90), async {
-        while !ready() {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("durable completion barrier");
-}
 
 fn sql_count(path: &Path, sql: &str) -> i64 {
     sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .unwrap()
         .query_row(sql, [], |row| row.get(0))
         .unwrap()
-}
-
-async fn setup(id: &str) -> Result<Scenario, HarnessError> {
-    let setup = Setup::new(id)?
-        .fixture(Fixture::Empty)
-        .env("BUTLER_E2E_APP_NOW", NOW)
-        .env(
-            "BUTLER_E2E_EMBED_MANIFEST",
-            "http://127.0.0.1:1/unavailable",
-        );
-    fixtures::onboarding_complete(&setup.sandbox.data)?;
-    fixtures::scheduler_ran_today(&setup.sandbox.data, NOW)?;
-    memory_fixture::initialize_empty(&setup.sandbox.data)?;
-    setup.start().await
 }
 
 async fn completed(s: &Scenario, id: &str) -> Result<Value, HarnessError> {
@@ -111,6 +85,8 @@ async fn inventory_and_explicit_cleanup_preserve_memory_and_replay_receipts()
     assert_eq!(result["bytes_reclaimed"], orphan_bytes.unwrap_or(0));
     assert!(!memory.join(format!("generations/{ORPHAN}")).exists());
     assert!(!memory.join(format!("generations/{RETIRED}")).exists());
+    assert!(!generation.join("qualification").exists());
+    assert!(!generation.join("source-snapshot-deadbeef").exists());
     assert_eq!(
         std::fs::read(generation.join("graph.sqlite"))?,
         graph_before
@@ -147,52 +123,6 @@ async fn inventory_and_explicit_cleanup_preserve_memory_and_replay_receipts()
     legacy_management_is_unreachable()
 }
 
-async fn local_model(s: &Scenario, base: &str) -> Result<String, HarnessError> {
-    let reply =
-        s.gw.post(
-            "/model-catalog/local-models",
-            json!({"provider_id":"local",
-        "api_type":"openai_compatible","platform":"ollama","server_url":base,
-        "model_id":LOCAL_MODEL,"display_name":LOCAL_MODEL,"context_window_tokens":131_072,
-        "source":"discovered"}),
-        )
-        .await?;
-    assert_eq!(reply.status, 201, "{}", reply.text);
-    let model = reply.data()["model"]["model_ref"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    assert_eq!(
-        s.gw.patch(
-            "/settings",
-            json!({"model":model,"consolidation_model":model})
-        )
-        .await?
-        .status,
-        200
-    );
-    Ok(model)
-}
-
-async fn cycle(s: &mut Scenario) -> Result<(), HarnessError> {
-    s.agent.terminate().await?;
-    for job in ["session-sync", "consolidation-cycle"] {
-        let path = s.sandbox.data.join(format!("state/scheduler/{job}.json"));
-        if path.exists() {
-            std::fs::remove_file(path)?;
-        }
-    }
-    s.gw = s.agent.start_again().await?;
-    let marker = s
-        .sandbox
-        .data
-        .join("state/scheduler/consolidation-cycle.json");
-    until(|| marker.exists()).await;
-    let result: Value = serde_json::from_slice(&std::fs::read(marker)?)?;
-    assert_eq!(result["status"], "ok", "{result}");
-    Ok(())
-}
-
 #[tokio::test]
 async fn wiring_profile_clear_relearns_from_old_chats() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -226,6 +156,8 @@ async fn wiring_profile_clear_relearns_from_old_chats() -> Result<(), HarnessErr
     assert!(inventory.data()["kinds"][1]["item_count"].as_u64().unwrap() > 0);
     assert_eq!(inventory.data()["kinds"][2]["item_count"], 1);
     assert_eq!(inventory.data()["kinds"][2]["health"]["consent_on"], true);
+    let chats = s.sandbox.data.join("runtime/conversation-store.sqlite");
+    let chat_count = sql_count(&chats, "SELECT COUNT(*) FROM conversation_messages");
     let cleared =
         s.gw.patch(
             "/personalization",
@@ -250,71 +182,34 @@ async fn wiring_profile_clear_relearns_from_old_chats() -> Result<(), HarnessErr
         std::fs::read_to_string(&pinned)?,
         "Keep this pinned memory."
     );
+    assert_eq!(relearned, 0, "reset boundary allowed an old chat");
+    assert_eq!(
+        sql_count(&chats, "SELECT COUNT(*) FROM conversation_messages"),
+        chat_count
+    );
+    assert_eq!(
+        sql_count(&db, "SELECT COUNT(*) FROM profile_source_coverage"),
+        0
+    );
+    let (_, turn) = s
+        .turn(
+            "general",
+            "I prefer concise answers in future conversations.",
+        )
+        .await?;
+    assert_eq!(turn["state"], "delivered");
+    cycle(&mut s).await?;
+    assert_eq!(
+        sql_count(&db, "SELECT COUNT(*) FROM stable_profile_entries"),
+        1
+    );
+    assert_eq!(
+        std::fs::read_to_string(&pinned)?,
+        "Keep this pinned memory."
+    );
     s.finish().await?;
     server.abort();
-    assert_eq!(
-        relearned, 0,
-        "existing clear loses coverage/scan offset and relearns old chats; phase 2 must establish an admission floor"
-    );
     Ok(())
-}
-
-async fn profile_server() -> Result<(String, tokio::task::JoinHandle<()>), HarnessError> {
-    use axum::{Router, routing::post};
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let base = format!("http://{}", listener.local_addr()?);
-    let router = Router::new().route("/v1/chat/completions", post(profile_reply));
-    let task = tokio::spawn(async move {
-        axum::serve(listener, router).await.unwrap();
-    });
-    Ok((base, task))
-}
-
-async fn profile_reply(axum::Json(request): axum::Json<Value>) -> axum::response::Response {
-    use axum::response::IntoResponse;
-    let prompt = request["messages"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|message| message["content"].as_str())
-        .find_map(|text| serde_json::from_str::<Value>(text).ok());
-    let text = match prompt.as_ref() {
-        Some(value) if value["task"] == "extract_profile_candidates" => {
-            let observations = value["observations"].as_array().unwrap();
-            let references: Vec<Value> = observations
-                .iter()
-                .filter(|v| v["text"].as_str().is_some_and(|t| t.contains("concise")))
-                .map(|v| v["ref"].clone())
-                .collect();
-            if references.is_empty() {
-                json!({"candidates":[]}).to_string()
-            } else {
-                json!({"candidates":[{"category":"communication","summary":FACT,
-                "source_type":"explicit","confidence":"high","evidence_refs":references,
-                "sensitive_domain":false}]})
-                .to_string()
-            }
-        }
-        Some(_) => {
-            json!({"status":"processed","entities":[],"items":[],"attributes":[]}).to_string()
-        }
-        None => "Understood.".into(),
-    };
-    if request["stream"] == true {
-        let first = json!({"id":"stub","object":"chat.completion.chunk","model":LOCAL_MODEL,
-            "choices":[{"index":0,"delta":{"role":"assistant","content":text},"finish_reason":null}]});
-        let last = json!({"id":"stub","object":"chat.completion.chunk","model":LOCAL_MODEL,
-            "choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":20,"completion_tokens":10,"total_tokens":30}});
-        (
-            [("content-type", "text/event-stream")],
-            format!("data: {first}\n\ndata: {last}\n\ndata: [DONE]\n\n"),
-        )
-            .into_response()
-    } else {
-        axum::Json(json!({"id":"stub","object":"chat.completion","model":LOCAL_MODEL,
-            "choices":[{"index":0,"message":{"role":"assistant","content":text},"finish_reason":"stop"}],
-            "usage":{"prompt_tokens":20,"completion_tokens":10,"total_tokens":30}})).into_response()
-    }
 }
 
 #[tokio::test]
@@ -418,6 +313,10 @@ fn seed_dormant(s: &Scenario) -> Result<CleanupFixture, HarnessError> {
     )?;
     std::fs::write(retired.join("manifest.json"), json!({"schema":"butler.memory-generation.v2",
         "generation_id":RETIRED,"state":"retired","canonical_snapshot_path":"source-snapshot/runtime/conversation-store.sqlite"}).to_string())?;
+    for artifact in ["qualification", "source-snapshot-deadbeef"] {
+        std::fs::create_dir_all(generation.join(artifact))?;
+        std::fs::write(generation.join(artifact).join("detached"), vec![2; 4096])?;
+    }
     std::fs::create_dir_all(memory.join("db"))?;
     std::fs::write(memory.join("db/graph.sqlite"), "legacy source")?;
     std::fs::create_dir_all(memory.join("queue"))?;
@@ -425,8 +324,10 @@ fn seed_dormant(s: &Scenario) -> Result<CleanupFixture, HarnessError> {
     let orphan_bytes = butler_platform::storage_size::allocated_bytes(
         &memory.join(format!("generations/{ORPHAN}")),
     )?
-    .zip(butler_platform::storage_size::allocated_bytes(&retired)?)
-    .map(|(a, b)| a + b);
+    .zip(tree_bytes(&retired)?)
+    .zip(tree_bytes(&generation.join("qualification"))?)
+    .zip(tree_bytes(&generation.join("source-snapshot-deadbeef"))?)
+    .map(|(((a, b), c), d)| a + b + c + d);
     Ok(CleanupFixture {
         memory,
         generation,
@@ -452,4 +353,14 @@ async fn assert_fresh_inventory(s: &Scenario) -> Result<(), HarnessError> {
         assert_eq!(card["item_count"], 0, "{card}");
     }
     Ok(())
+}
+
+fn tree_bytes(root: &Path) -> std::io::Result<Option<u64>> {
+    let mut total = butler_platform::storage_size::allocated_bytes(root)?;
+    if root.is_dir() {
+        for entry in std::fs::read_dir(root)? {
+            total = total.zip(tree_bytes(&entry?.path())?).map(|(a, b)| a + b);
+        }
+    }
+    Ok(total)
 }

@@ -112,7 +112,9 @@ fn add_message_windows(
     seen: &mut HashSet<String>,
     limit: usize,
 ) -> ProfileResult<()> {
-    if !super::super::admission::profile_message_is_admitted(root, &message.id)? { return Ok(()); }
+    if !super::super::admission::profile_message_is_admitted(root, &message.id)? {
+        return Ok(());
+    }
     for part in &message.parts {
         for scalar in &part.scalars {
             for (start, end) in source_spans(&scalar.text) {

@@ -25,7 +25,21 @@ impl ProfileConversationSources {
 impl CanonicalProfileSourceFactory for ProfileConversationSources {
     fn open(&self) -> ProfileResult<Box<dyn CanonicalProfileSourceReader>> {
         let reader = ConversationSourceReader::open(&self.path).map_err(source_error)?;
-        Ok(Box::new(ProfileSourceRead { reader, root: self.path.parent().and_then(std::path::Path::parent).ok_or_else(|| ProfileError::port("profile_source_unavailable", "Invalid source path", std::io::Error::other("Invalid source path")))?.to_owned() }))
+        Ok(Box::new(ProfileSourceRead {
+            reader,
+            root: self
+                .path
+                .parent()
+                .and_then(std::path::Path::parent)
+                .ok_or_else(|| {
+                    ProfileError::port(
+                        "profile_source_unavailable",
+                        "Invalid source path",
+                        std::io::Error::other("Invalid source path"),
+                    )
+                })?
+                .to_owned(),
+        }))
     }
 }
 
@@ -39,12 +53,16 @@ impl CanonicalProfileSourceReader for ProfileSourceRead {
         &mut self,
         scan: CanonicalProfileScan,
     ) -> ProfileResult<Vec<CanonicalProfileMessage>> {
-        if let Some(ids) = butler_memory::profile::admitted_profile_message_ids(&self.root, &scan)? {
-            return ids.into_iter().filter_map(|id| match self.reader.read_message(&id) {
-                Ok(Some(message)) => Some(Ok(project_message(message))),
-                Ok(None) => None,
-                Err(error) => Some(Err(source_error(error))),
-            }).collect();
+        if let Some(ids) = butler_memory::profile::admitted_profile_message_ids(&self.root, &scan)?
+        {
+            return ids
+                .into_iter()
+                .filter_map(|id| match self.reader.read_message(&id) {
+                    Ok(Some(message)) => Some(Ok(project_message(message))),
+                    Ok(None) => None,
+                    Err(error) => Some(Err(source_error(error))),
+                })
+                .collect();
         }
         self.reader
             .read_cognition_messages(&ReadCognitionMessagesInput {
@@ -61,7 +79,9 @@ impl CanonicalProfileSourceReader for ProfileSourceRead {
     }
 
     fn read_message(&mut self, id: &str) -> ProfileResult<Option<CanonicalProfileMessage>> {
-        if !butler_memory::profile::profile_message_is_admitted(&self.root, id)? { return Ok(None); }
+        if !butler_memory::profile::profile_message_is_admitted(&self.root, id)? {
+            return Ok(None);
+        }
         self.reader
             .read_message(id)
             .map(|message| message.map(project_message))
