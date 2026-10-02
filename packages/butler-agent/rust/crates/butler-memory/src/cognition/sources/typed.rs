@@ -251,6 +251,9 @@ pub(in crate::cognition) fn read_explicit_record(
     memory_root: &Path,
     record_id: &str,
 ) -> CognitionResult<Option<TypedMemoryRecord>> {
+    if rules::rule_pending(memory_root, record_id)? {
+        return Ok(None);
+    }
     let Some(binding) = read_binding(memory_root, record_id)? else {
         return Ok(None);
     };

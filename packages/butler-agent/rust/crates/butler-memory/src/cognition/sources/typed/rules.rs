@@ -82,6 +82,49 @@ impl RememberedRuleOwner {
         .ok_or_else(|| failure("rule_receipt_missing"))
     }
 
+    /// Correct a selected rule without changing its immutable binding.
+    pub async fn correct(
+        &self,
+        target: RememberedRuleTarget,
+        input: ExplicitMemoryUpdateInput,
+        cancellation: CancellationToken,
+    ) -> CognitionResult<RememberedRuleReceipt> {
+        if input.project_id != target.project_id {
+            return Err(failure("rule_binding_mismatch"));
+        }
+        self.run(
+            Some(transaction::Request::Remember {
+                input,
+                target: Some(target),
+            }),
+            cancellation,
+        )
+        .await?
+        .ok_or_else(|| failure("rule_receipt_missing"))
+    }
+
+    /// Delete the selected saved rule only. Chats and archived revisions are kept.
+    pub async fn forget(
+        &self,
+        target: RememberedRuleTarget,
+        operation_id: String,
+        conversation_session_id: Option<String>,
+        conversation_message_id: Option<String>,
+        cancellation: CancellationToken,
+    ) -> CognitionResult<RememberedRuleReceipt> {
+        self.run(
+            Some(transaction::Request::Forget {
+                target,
+                operation_id,
+                conversation_session_id,
+                conversation_message_id,
+            }),
+            cancellation,
+        )
+        .await?
+        .ok_or_else(|| failure("rule_receipt_missing"))
+    }
+
     /// Recover only the durable pending operation; no directory or idle scan.
     pub async fn recover(&self, cancellation: CancellationToken) -> CognitionResult<()> {
         // Read-only fast path means a restart with no pending operation takes no lease.
@@ -166,4 +209,15 @@ fn failure(message: &str) -> CognitionError {
 fn failure_source(source: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
     CognitionError::new(CognitionCode::MemorySourceUnavailable, source.to_string())
         .with_source(source)
+}
+
+/// Pending source changes are invisible until files, graph and receipt agree.
+pub(super) fn rule_pending(
+    memory_root: &std::path::Path,
+    record_id: &str,
+) -> CognitionResult<bool> {
+    let pending: Option<transaction::Intent> = inventory::read_json(
+        &crate::cognition::explicit_memory_rules_root(memory_root).join("pending.json"),
+    )?;
+    Ok(pending.is_some_and(|pending| pending.entry.record_id == record_id))
 }

@@ -63,6 +63,16 @@ pub(super) fn run(
             ..receipt.result
         }));
     }
+    if let Some(result) = already_forgotten(&root, &request)? {
+        write_json(
+            &path,
+            &Receipt {
+                request,
+                result: result.clone(),
+            },
+        )?;
+        return Ok(Some(result));
+    }
     let intent = prepare(owner, request)?;
     ensure_data_authority(
         &owner.data_root,
@@ -231,6 +241,7 @@ fn complete(
         &root.join(format!("{}.source.json", intent.entry.record_id)),
         &intent.binding,
     )?;
+    exclude(owner, intent)?;
     write_index(&root, intent)?;
     write_json(&root.join("manifest.json"), &intent.inventory)?;
     let notice = crate::cognition::TypedMemorySourceNotice::ExplicitRule {
@@ -342,4 +353,77 @@ fn select(
         return Err(failure("rule_forgotten"));
     }
     Ok(entry.clone())
+}
+
+/// Apply source lifecycle under the same lease as the source commit, before success.
+fn exclude(owner: &RememberedRuleOwner, intent: &Intent) -> CognitionResult<()> {
+    use crate::cognition::graph::{GraphRepository, TypedLifecycleInput};
+    use crate::cognition::sources::TypedMemoryLifecycle;
+    let forgotten = intent.binding.state == "forgotten";
+    let selected = if forgotten {
+        Some(&intent.binding)
+    } else {
+        intent.previous.as_ref()
+    };
+    let Some(binding) = selected else {
+        return Ok(());
+    };
+    let generation = resolve_active_generation(&owner.data_root, &owner.environment)?;
+    ensure_data_authority(&owner.data_root, &[&generation.graph_path])?;
+    let mut graph = GraphRepository::open(&generation.graph_path)?;
+    let consumed = graph.consume_typed_lifecycle(TypedLifecycleInput {
+        source_kind: "explicit_record",
+        record_id: &intent.entry.record_id,
+        revision: &binding.revision,
+        operation_id: &binding.operation_id,
+        disposition: if forgotten {
+            TypedMemoryLifecycle::Forgotten
+        } else {
+            TypedMemoryLifecycle::Superseded
+        },
+        now: &owner.publisher.now_iso(),
+    });
+    let closed = graph.close();
+    consumed.and(closed)?;
+    // An already acknowledged old observation must be explicitly republished.
+    if let Some(prior) = &intent.previous {
+        owner.publisher.publish_typed_source(
+            &crate::cognition::TypedMemorySourceNotice::ExplicitRule {
+                record_id: prior.record_id.clone(),
+                revision: prior.revision.clone(),
+                operation_id: prior.operation_id.clone(),
+            },
+        )?;
+    }
+    Ok(())
+}
+
+fn already_forgotten(
+    root: &std::path::Path,
+    request: &Request,
+) -> CognitionResult<Option<RememberedRuleReceipt>> {
+    let Request::Forget {
+        target,
+        operation_id,
+        ..
+    } = request
+    else {
+        return Ok(None);
+    };
+    let inventory = Inventory::read(root)?;
+    let Some(entry) = inventory.find(&target.handle) else {
+        return Ok(None);
+    };
+    if entry.project_id != target.project_id {
+        return Err(failure("rule_binding_mismatch"));
+    }
+    if entry.state != "forgotten" {
+        return Ok(None);
+    }
+    Ok(Some(RememberedRuleReceipt {
+        rule: entry.handle.clone(),
+        operation_id: operation_id.clone(),
+        state: "forgotten".into(),
+        replayed: true,
+    }))
 }
