@@ -10,11 +10,13 @@ use butler_e2e::e2e::{
     cassette::Cassette,
     fixtures,
     scenario::{Fixture, Setup},
-    stop_intent::{StopOnDrop, instance_record},
+    stop_intent::StopOnDrop,
 };
-use butler_platform::process_control::usage;
 use serde_json::json;
-use std::{fs, io::Write, time::Duration};
+use std::{fs, io::Write};
+
+#[path = "service_diagnostics/idle.rs"]
+mod idle;
 
 #[tokio::test]
 async fn fresh_service_uses_routine_model_and_it_runs_a_turn() -> Result<(), HarnessError> {
@@ -84,49 +86,16 @@ async fn cli_logs_export_safe_summary_and_have_zero_idle_writes() -> Result<(), 
         .stub_cassette(Cassette::load("Q-02")?)
         .start()
         .await?;
+    idle::memory_initialized(&s.sandbox.data).await?;
     s.agent.terminate().await?;
     let cleanup = StopOnDrop(s.agent.launch.clone());
     let start = s.agent.cli_async(&["start", "--json"]).await?;
     assert_eq!(start.code, Some(0), "{start:?}");
-    let (_, turn) = s
+    let (turn_id, turn) = s
         .turn("general", "Reply with exactly the word: waiting")
         .await?;
     assert_eq!(turn["state"], "delivered");
-    let messages = s.gw.messages("general").await?;
-    tokio::time::sleep(Duration::from_secs(5)).await;
-    let record = instance_record(&s.sandbox.data).unwrap();
-    let pids = [
-        u32::try_from(record["pid"].as_u64().unwrap()).unwrap(),
-        u32::try_from(record["cli_supervisor_pid"].as_u64().unwrap()).unwrap(),
-    ];
-    let before_files = stamps(&s.sandbox.data)?;
-    let before = pids.map(|pid| usage::sample(pid).unwrap());
-    tokio::time::sleep(Duration::from_secs(10)).await;
-    let after = pids.map(|pid| usage::sample(pid).unwrap());
-    for i in 0..2 {
-        if let (Some(before), Some(after)) = (&before[i], &after[i]) {
-            let bytes = after.write_bytes - before.write_bytes;
-            let chars = after
-                .write_chars
-                .zip(before.write_chars)
-                .map(|(a, b)| a - b);
-            eprintln!(
-                "idle pid={} window=10s write_bytes={bytes} write_chars={chars:?}",
-                pids[i]
-            );
-            assert_eq!(bytes, 0, "idle service storage writes");
-            // Linux wchar includes Tokio eventfd notifications. Disk files,
-            // including buffered logs and SQLite WALs, are checked below.
-        }
-    }
-    let after_files = stamps(&s.sandbox.data)?;
-    assert_eq!(after_files, before_files, "idle buffered file writes");
-    eprintln!("idle window=10s modified_files=0 log_bytes_written=0");
-    assert_eq!(
-        s.gw.messages("general").await?,
-        messages,
-        "idle changed session content"
-    );
+    idle::assert_idle(&s, &turn_id).await?;
     let stop = s.agent.cli_async(&["stop", "--json"]).await?;
     assert_eq!(stop.code, Some(0), "{stop:?}");
     let stderr = s.sandbox.data.join("logs/butler-agent-service.stderr.log");
@@ -175,23 +144,4 @@ async fn cli_logs_export_safe_summary_and_have_zero_idle_writes() -> Result<(), 
     }
     drop(cleanup);
     s.finish().await
-}
-
-fn stamps(
-    root: &std::path::Path,
-) -> Result<
-    std::collections::BTreeMap<std::path::PathBuf, (u64, std::time::SystemTime)>,
-    HarnessError,
-> {
-    let mut files = std::collections::BTreeMap::new();
-    for entry in fs::read_dir(root)? {
-        let entry = entry?;
-        if entry.file_type()?.is_dir() {
-            files.extend(stamps(&entry.path())?);
-        } else {
-            let metadata = entry.metadata()?;
-            files.insert(entry.path(), (metadata.len(), metadata.modified()?));
-        }
-    }
-    Ok(files)
 }
