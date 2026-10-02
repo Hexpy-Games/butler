@@ -4,6 +4,8 @@
 function Install-Butler {
     param([string[]]$Options)
     $ErrorActionPreference = 'Stop'
+    [AppContext]::SetSwitch('Switch.System.IO.UseLegacyPathHandling', $false)
+    [AppContext]::SetSwitch('Switch.System.IO.BlockLongPaths', $false)
     $version = $env:BUTLER_VERSION -replace '^v', ''
     $start = $true
     for ($i = 0; $i -lt $Options.Count; $i++) {
@@ -77,8 +79,8 @@ function Install-Butler {
         Enable-ButlerInstallation $agentHome $name $target $bin $start
         Write-Host 'Butler installed. Run: butler open'
     } finally {
-        if ($stage -and (Test-Path $stage)) { Remove-Item $stage -Recurse -Force }
-        Remove-Item $temp -Recurse -Force
+        if ($stage -and (Test-Path $stage)) { [IO.Directory]::Delete((ConvertTo-ButlerExtendedPath $stage),$true) }
+        [IO.Directory]::Delete((ConvertTo-ButlerExtendedPath $temp),$true)
     }
 }
 
@@ -149,7 +151,8 @@ function Set-ButlerCommand {
 function Expand-ButlerZip {
     param([string]$Zip, [string]$Destination)
     Add-Type -AssemblyName System.IO.Compression.FileSystem
-    $archive = [IO.Compression.ZipFile]::OpenRead($Zip)
+    $archive = [IO.Compression.ZipFile]::OpenRead((ConvertTo-ButlerExtendedPath $Zip))
+    $destination = ConvertTo-ButlerExtendedPath $Destination
     try {
         $seen = @{}
         foreach ($entry in $archive.Entries) {
@@ -158,12 +161,20 @@ function Expand-ButlerZip {
                 $name -notmatch '^(butler-agent\.exe|butler\.cmd|native-agent-manifest\.json|THIRD_PARTY_NOTICES\.txt|resources(/.*)?)$' -or
                 (($entry.ExternalAttributes -shr 16) -band 0xF000) -eq 0xA000 -or $seen.ContainsKey($name)) { throw 'Unsafe archive entry' }
             $seen[$name] = $true
-            $path = Join-Path $Destination $name
-            if ($name.EndsWith('/')) { New-Item -ItemType Directory -Force $path | Out-Null; continue }
-            New-Item -ItemType Directory -Force ([IO.Path]::GetDirectoryName($path)) | Out-Null
+            $path = $destination.TrimEnd('\') + '\' + $name.Replace('/','\')
+            if ($name.EndsWith('/')) { [IO.Directory]::CreateDirectory($path) | Out-Null; continue }
+            [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($path)) | Out-Null
             [IO.Compression.ZipFileExtensions]::ExtractToFile($entry,$path,$false)
         }
     } finally { $archive.Dispose() }
+}
+
+function ConvertTo-ButlerExtendedPath {
+    param([string]$Path)
+    $full = [IO.Path]::GetFullPath($Path)
+    if ($full.StartsWith('\\?\')) { return $full }
+    if ($full.StartsWith('\\')) { return '\\?\UNC\' + $full.Substring(2) }
+    return '\\?\' + $full
 }
 
 function Move-ButlerFile {
