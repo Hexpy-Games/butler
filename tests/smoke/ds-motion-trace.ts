@@ -12,7 +12,7 @@
  * - Thinking mark: working marks run without long tasks and stop drawing when
  *   offscreen or under reduced motion.
  * - Foundations chapter heroes (FoundationHeroMotion): each hero runs only
- *   CSS animations of transform/opacity, holds the frame rate with no long
+ *   CSS animations of transform/opacity and the authored SVG specimen, holds the frame rate with no long
  *   task and a small main-thread cost per frame, pauses offscreen and in a
  *   hidden tab, and has no animation under reduced motion.
  * - Optional `--video`: Playwright recordings of each motion in light and dark
@@ -490,26 +490,36 @@ const HERO_VIDEO_MS: Record<string, number> = {
 const HERO_FRAME_BUDGET_MS = 0.5;
 /** The Typography feature hero runs a 64-beat, ~75-animation sequence over real components: its budget is 1ms. */
 const HERO_FRAME_BUDGET_OVERRIDE_MS: Record<string, number> = { typography: 1 };
-/** The Typography specimen draws its outlines (stroke-dashoffset) and moves along the weight axis (font-weight) on one SVG; it may re-lay that text. */
-const HERO_SPECIMEN_PROPERTIES: Record<string, string[]> = { typography: ["strokeDashoffset", "fontWeight"] };
+/** Blueprint outlines draw in every chapter; Typography also exercises the weight axis. */
+const HERO_SPECIMEN_PROPERTIES: Record<string, string[]> = { typography: ["fontWeight"] };
 
 async function openHero(page: Page, serverUrl: string, pageId: string, theme: string) {
   await page.goto(viewerUrl(serverUrl, { page: pageId, theme }), { waitUntil: "load" });
   const hero = page.locator('[data-slot="foundation-hero"]').first();
   await hero.waitFor({ state: "visible" });
+  await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(400);
   return hero;
 }
 
-type HeroAnimations = { state: string | null; count: number; running: number; cssOnly: boolean; properties: string[] };
+type HeroAnimations = { state: string | null; count: number; running: number; cssOnly: boolean; properties: string[]; invalidTargets: string[] };
 
 function heroAnimations(hero: ReturnType<Page["locator"]>): Promise<HeroAnimations> {
   return hero.evaluate((node) => {
     const list = node.getAnimations({ subtree: true });
     const properties = new Set<string>();
+    const invalidTargets: string[] = [];
     for (const animation of list) {
       for (const frame of (animation.effect as KeyframeEffect).getKeyframes()) {
-        for (const key of Object.keys(frame)) if (!["offset", "computedOffset", "easing", "composite"].includes(key)) properties.add(key);
+        const target = (animation.effect as KeyframeEffect).target;
+        for (const key of Object.keys(frame)) {
+          if (["offset", "computedOffset", "easing", "composite"].includes(key)) continue;
+          properties.add(key);
+          const part = target?.getAttribute("data-t");
+          const valid = key === "strokeDashoffset" ? target instanceof SVGElement
+            : key === "fontWeight" ? target?.tagName.toLowerCase() === "text" : true;
+          if (!valid) invalidTargets.push(`${key}:${part ?? target?.tagName}`);
+        }
       }
     }
     return {
@@ -518,6 +528,7 @@ function heroAnimations(hero: ReturnType<Page["locator"]>): Promise<HeroAnimatio
       running: list.filter((animation) => animation.playState === "running").length,
       cssOnly: list.every((animation) => animation instanceof CSSAnimation),
       properties: [...properties].sort(),
+      invalidTargets,
     };
   });
 }
@@ -553,7 +564,14 @@ async function measureHeroes(page: Page, serverUrl: string) {
         await markNow(page, `${label}-end`);
         return {};
       });
-      return windowStats(events, thread, markTs(events, `${label}-start`), markTs(events, `${label}-end`));
+      const stats = windowStats(events, thread, markTs(events, `${label}-start`), markTs(events, `${label}-end`));
+      if (stats.longTasks) {
+        const tasks = events.filter((event) => event.pid === thread.pid && event.tid === thread.tid && event.name === "RunTask" && (event.dur ?? 0) > LONG_TASK_MS * 1000);
+        writeFileSync(join(outDir, `${label}-long-tasks.json`), JSON.stringify(tasks.map((task) => ({ durationMs: (task.dur ?? 0) / 1000,
+          work: events.filter((event) => event.pid === thread.pid && event.tid === thread.tid && event.ph === "X" && event.ts >= task.ts && event.ts <= task.ts + (task.dur ?? 0))
+            .map((event) => ({ name: event.name, durationMs: (event.dur ?? 0) / 1000 })) }))));
+      }
+      return stats;
     };
     // Two windows, the quieter one judged: a one-off task (GC, a font slice
     // landing) is not the hero's per-frame cost.
@@ -592,13 +610,14 @@ async function measureHeroes(page: Page, serverUrl: string) {
     if (reportOnly) continue;
     assert(playingAnimations.state === "playing" && playingAnimations.running > 0, `${variant} hero is not playing: ${JSON.stringify(playingAnimations)}`);
     assert(playingAnimations.cssOnly, `${variant} hero runs a non-CSS animation`);
-    const allowed = ["transform", "opacity", ...(HERO_SPECIMEN_PROPERTIES[variant] ?? [])];
+    const allowed = ["transform", "opacity", "strokeDashoffset", ...(HERO_SPECIMEN_PROPERTIES[variant] ?? [])];
+    assert(playingAnimations.invalidTargets.length === 0, `${variant} hero animates outside its specimen: ${playingAnimations.invalidTargets.join(", ")}`);
     assert(playingAnimations.properties.every((property) => allowed.includes(property)),
       `${variant} hero animates ${playingAnimations.properties.join(", ")}; only ${allowed.join(", ")}`);
-    assert(windows.every((stats) => stats.longTasks === 0), `${variant} hero produced ${playing.longTasks} task(s) over ${LONG_TASK_MS}ms (max ${playing.maxTaskMs}ms)`);
+    assert(windows.every((stats) => stats.longTasks === 0), `${variant} hero produced tasks over ${LONG_TASK_MS}ms: ${JSON.stringify(windows)}`);
     // The Motion page runs its own demos; the hero adds no layout beyond the still control.
     // (Frame counts of two 2s windows differ by a frame or two.)
-    assert(HERO_SPECIMEN_PROPERTIES[variant] !== undefined || playing.layouts <= still.layouts * 1.05 + 2, `${variant} hero laid out ${playing.layouts} time(s) while playing (${still.layouts} still)`);
+    assert(variant === "typography" || playing.layouts <= still.layouts * 1.05 + 2, `${variant} hero laid out ${playing.layouts} time(s) while playing (${still.layouts} still)`);
     assert(fps >= 50, `${variant} hero dropped the page to ${fps}fps`);
     const budget = HERO_FRAME_BUDGET_OVERRIDE_MS[variant] ?? HERO_FRAME_BUDGET_MS;
     assert(frameCostMs <= budget, `${variant} hero costs ${frameCostMs}ms of main thread per frame (max ${budget}ms)`);
@@ -668,8 +687,8 @@ async function recordVideos(browser: Browser, serverUrl: string, ids: Map<string
 
 function mainThread(events: TraceEvent[]): { pid: number; tid: number } {
   const meta = events.find((event) => event.ph === "M" && event.name === "thread_name" &&
-    (event.args as { name?: string } | undefined)?.name === "CrRendererMain" &&
-    events.some((other) => other.pid === event.pid && other.name === "RunTask"));
+    ["CrRendererMain", "Chrome_InProcRendererThread"].includes((event.args as { name?: string } | undefined)?.name ?? "") &&
+    events.some((other) => other.pid === event.pid && other.tid === event.tid && other.name === "RunTask"));
   assert(meta, "trace has no renderer main thread");
   return { pid: meta.pid, tid: meta.tid };
 }
@@ -707,13 +726,22 @@ function windowStats(events: TraceEvent[], thread: { pid: number; tid: number },
 }
 
 async function traced(browser: Browser, page: Page, action: () => Promise<Record<string, [number, number]>>) {
-  await browser.startTracing(page, {
-    categories: ["devtools.timeline", "disabled-by-default-devtools.timeline", "toplevel", "blink.user_timing"],
+  const session = await browser.newBrowserCDPSession();
+  const events: TraceEvent[] = [];
+  session.on("Tracing.dataCollected", ({ value }) => events.push(...value as unknown as TraceEvent[]));
+  const complete = new Promise<void>((done) => session.once("Tracing.tracingComplete", () => done()));
+  await session.send("Tracing.start", {
+    categories: "devtools.timeline,disabled-by-default-devtools.timeline,toplevel,blink.user_timing",
+    transferMode: "ReportEvents",
   });
-  const marks = await action();
-  const buffer = await browser.stopTracing();
-  const events = (JSON.parse(buffer.toString("utf8")) as { traceEvents: TraceEvent[] }).traceEvents;
-  return { events, thread: mainThread(events), marks };
+  try {
+    const marks = await action();
+    await session.send("Tracing.end");
+    await complete;
+    return { events, thread: mainThread(events), marks };
+  } finally {
+    await session.detach();
+  }
 }
 
 /** Page-clock (performance.now) ms converted to trace microseconds via a user-timing mark. */

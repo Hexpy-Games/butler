@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, type Locator, type Page } from "playwright";
+import { installWallpaperPixelCapture } from "../support/wallpaper-frame.ts";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import {
   clientTurnIdFromMessageId,
@@ -80,6 +81,14 @@ async function readInputValue(locator: Locator): Promise<string> {
       ? element.value
       : (element as HTMLElement).innerText.replace(/\n$/u, ""),
   );
+}
+
+/** Lexical owns selection on focus; replace through the same keys a user uses. */
+async function replaceComposerText(input: ReturnType<Page["locator"]>, text: string) {
+  await input.focus();
+  await input.press("ControlOrMeta+A");
+  await input.press("Backspace");
+  if (text) await input.pressSequentially(text);
 }
 
 async function expectInputValue(
@@ -1204,7 +1213,15 @@ try {
   await page
     .getByRole("button", { name: appCopy.titlebar.hideRightPanel })
     .click();
-  await page.waitForTimeout(90);
+  await page.waitForFunction((selector) => {
+    const slot = document.querySelector(selector);
+    return slot?.getAnimations().some((animation) => animation instanceof CSSTransition && animation.transitionProperty === "transform");
+  }, testClass("right-panel-slot"));
+  await rightPanelSlot.evaluate((slot) => {
+    const motion = slot.getAnimations().find((animation) => animation instanceof CSSTransition && animation.transitionProperty === "transform")!;
+    motion.pause();
+    motion.currentTime = Number(motion.effect!.getTiming().duration) / 2;
+  });
   const closingSlotBox = await rightPanelSlot.boundingBox();
   const closingInspectorBox = await page
     .locator(testClass("right-inspector"))
@@ -1234,7 +1251,8 @@ try {
       closingInspectorState.transform === "none",
     `right panel content should keep stable width while the slot clips it: box=${JSON.stringify(closingInspectorBox)} state=${JSON.stringify(closingInspectorState)}`,
   );
-  await page.waitForTimeout(260);
+  await rightPanelSlot.evaluate((slot) => slot.getAnimations().forEach((animation) => animation.play()));
+  await waitForMotionToSettle(page);
   const closedInspectorCount = await page
     .locator(testClass("right-inspector"))
     .count();
@@ -1521,7 +1539,7 @@ try {
   );
   screenshots.push(await screenshot(page, "narrow-conversation.png"));
   await page.getByRole("button", { name: "Show sidebar" }).click();
-  await page.waitForTimeout(240);
+  await waitForMotionToSettle(page);
   const narrowSidebarBox = await page
     .locator(testClass("sidebar-slot"))
     .boundingBox();
@@ -1870,7 +1888,7 @@ try {
   await page.locator(testClass("composer-menu")).waitFor({ state: "visible" });
   // The fixture follows the safe Ask first default. Exercise the public menu
   // before measuring Full access, including its prefixed accessible name.
-  await page.getByRole("button", { name: appCopy.permissions.fullAccess, exact: true }).click();
+  await page.locator(testClass("composer-menu")).getByRole("button", { name: appCopy.permissions.fullAccess }).click();
   await page.locator(testClass("composer-menu")).waitFor({ state: "hidden" });
   await page.getByRole("button", {
     name: `${appCopy.composer.permission}: ${appCopy.permissions.fullAccess}`, exact: true,
@@ -2993,6 +3011,8 @@ try {
   // widths; measure the settled layout, not the opening transition.
   await page.locator(testClass("app-sidebar")).waitFor({ state: "visible" });
   await page.waitForTimeout(400);
+  await page.addInitScript(installWallpaperPixelCapture);
+  await page.evaluate(installWallpaperPixelCapture);
   const emptyStateLayout = await page
     .locator(testClass("new-chat-empty-state"))
     .evaluate(async (element) => {
@@ -3060,7 +3080,7 @@ try {
       const fluidStyle = fluid ? getComputedStyle(fluid) : null;
       const titlebarStyle = titlebar ? getComputedStyle(titlebar) : null;
       const workspaceStyle = workspace ? getComputedStyle(workspace) : null;
-      const measureFluidFrame = () => {
+      const measureFluidFrame = async () => {
         if (!(fluid instanceof HTMLCanvasElement)) {
           return {
             activeCells: 0,
@@ -3076,17 +3096,7 @@ try {
         const height = webgl?.drawingBufferHeight ?? fluid.height;
         let pixels: Uint8Array | Uint8ClampedArray | undefined;
         if (webgl) {
-          const buffer = new Uint8Array(width * height * 4);
-          webgl.readPixels(
-            0,
-            0,
-            width,
-            height,
-            webgl.RGBA,
-            webgl.UNSIGNED_BYTE,
-            buffer,
-          );
-          pixels = buffer;
+          pixels = await window.captureWallpaperPixels(fluid);
         } else {
           pixels = canvas2d?.getImageData(0, 0, width, height).data;
         }
@@ -3154,7 +3164,7 @@ try {
       // 8s window reached visible >= 0.06 and 4+ tinted cells. Sample an 8s
       // window and assert on its peak liquid and mean tone instead.
       for (let index = 0; index < 8; index += 1) {
-        fluidSamples.push(measureFluidFrame());
+        fluidSamples.push(await measureFluidFrame());
         await new Promise((resolve) => setTimeout(resolve, 1_000));
       }
       const fluidMean = (key: "averageTone" | "grayCoverage") =>
@@ -3385,13 +3395,13 @@ try {
   await page.waitForTimeout(260);
   const desktopEngagedBox = await desktopComposer.boundingBox();
   const desktopTextareaBox = await desktopTextarea.boundingBox();
-  await desktopTextarea.fill("Verify stationary send hover");
+  await replaceComposerText(desktopTextarea, "Verify stationary send hover");
   await assertStationaryOnHover(
     page,
     testClass("composer-send-button"),
     "composer send/stop control",
   );
-  await desktopTextarea.fill("");
+  await replaceComposerText(desktopTextarea, "");
   assert(
     desktopIdleBox &&
       desktopIdleBox.height <= 68 &&
@@ -3430,7 +3440,7 @@ try {
     Number.parseFloat(getComputedStyle(element).borderTopLeftRadius),
   );
   const engagedTextareaBox = await compactTextarea.boundingBox();
-  await compactTextarea.fill(
+  await replaceComposerText(compactTextarea,
     "A long compact draft that should remain visible as one ellipsized line after focus leaves the composer",
   );
   await compactTextarea.evaluate((element) => element.blur());
@@ -3473,7 +3483,7 @@ try {
     `compact composer should morph between idle and engaged states while preserving draft: ${JSON.stringify({ collapsedDraftBox, collapsedDraftRadius, collapsedDraftState, engagedComposerBox, engagedComposerRadius, engagedTextareaBox, idleComposerBox, idleComposerRadius })}`,
   );
   await compactPreview.click();
-  await compactTextarea.fill("");
+  await replaceComposerText(compactTextarea, "");
   await compactTextarea.evaluate((element) => element.blur());
   await page.waitForTimeout(260);
   const narrowNewChatState = await page
@@ -3600,16 +3610,7 @@ try {
       const samples: Array<{ changedCoverage: number; spread: number }> = [];
       for (let sample = 0; sample < 5; sample += 1) {
         await new Promise((resolve) => setTimeout(resolve, 80));
-        const pixels = new Uint8Array(width * height * 4);
-        webgl?.readPixels(
-          0,
-          0,
-          width,
-          height,
-          webgl.RGBA,
-          webgl.UNSIGNED_BYTE,
-          pixels,
-        );
+        const pixels = await window.captureWallpaperPixels(canvas);
         let changedPixels = 0;
         let minTone = 255;
         let maxTone = 0;
@@ -3649,7 +3650,7 @@ try {
     .locator(testClass("new-chat-empty-state"))
     .waitFor({ state: "visible" });
   const composerInput = page.locator(`${testClass("composer-card")} ${composerEditor}`);
-  await composerInput.fill("synthetic draft for new chat");
+  await replaceComposerText(composerInput, "synthetic draft for new chat");
   const showSidebarForDraftCheck = page.getByRole("button", {
     name: "Show sidebar",
   });
@@ -3660,7 +3661,7 @@ try {
     .locator(smokeSessionRowSelector)
     .first();
   await draftProjectSession.click();
-  await composerInput.fill("synthetic draft for project session");
+  await replaceComposerText(composerInput, "synthetic draft for project session");
   await page
     .getByRole("button", { name: appCopy.space.newChat, exact: true })
     .first()
@@ -3701,7 +3702,7 @@ try {
     "synthetic draft for new chat",
     "new-chat draft should survive another session reload",
   );
-  await composerInput.fill("");
+  await replaceComposerText(composerInput, "");
   const draftComposerBox = await page
     .locator(testClass("composer-card"))
     .boundingBox();
@@ -3731,8 +3732,8 @@ try {
       composerFocusAfterPoll.value === "composer focus",
     `composer-focus-survives-summary-poll failed: ${JSON.stringify(composerFocusAfterPoll)}`,
   );
-  await composerInput.fill("");
-  await composerInput.fill("IME draft");
+  await replaceComposerText(composerInput, "");
+  await replaceComposerText(composerInput, "IME draft");
   await composerInput.dispatchEvent("compositionstart");
   await page.keyboard.press("Meta+Enter");
   await page.waitForTimeout(240);
@@ -3743,7 +3744,7 @@ try {
     "cmd enter should not send while IME composition is active",
   );
   await composerInput.dispatchEvent("compositionend");
-  await composerInput.fill("## Smoke request\n\n- show markdown");
+  await replaceComposerText(composerInput, "## Smoke request\n\n- show markdown");
   const messageAcceptedResponse = page.waitForResponse(
     (response) =>
       response.url() === `${server.url}messages` &&

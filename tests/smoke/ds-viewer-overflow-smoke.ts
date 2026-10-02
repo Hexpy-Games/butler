@@ -186,8 +186,13 @@ try {
     const items = await itemIds(page, server.url);
     for (const [name, id] of items) {
       if (only.size && !only.has(name)) continue;
-      await page.goto(viewerUrl(server.url, { page: id, theme: "side-by-side", motion: "reduced" }), { waitUntil: "networkidle" });
+      await page.goto(viewerUrl(server.url, { page: id, theme: "side-by-side", motion: "reduced" }), { waitUntil: "load" });
       await page.locator(`[data-ds-detail="${name}"] [data-ds-examples]`).waitFor({ state: "visible" });
+      // The feature showcase lazy-loads all ten chapters in both stories and themes.
+      // Audit the complete rendered set, rather than waiting for unrelated network idleness.
+      if (name === "FoundationHeroMotion") await page.waitForFunction(() =>
+        document.querySelectorAll('[data-ds-examples] [data-slot="foundation-hero"]').length === 40 &&
+        document.querySelectorAll('[data-slot="foundation-hero-placeholder"]').length === 0);
       await waitForLayout(page);
       for (const found of await page.evaluate(auditPage, { tolerance: TOLERANCE, pageScroll: true })) offenders.push({ item: name, run: runLabel, ...found });
       if (name === "NativeSelect") {

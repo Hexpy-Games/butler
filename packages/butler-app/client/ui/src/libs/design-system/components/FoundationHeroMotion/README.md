@@ -43,8 +43,10 @@ scenes, its prelude choreography and its builds.
 
 ## Motion and performance
 
-- CSS animations of `transform` and `opacity` only: compositor work, no frame
-  loop, no canvas. Timing is multiples of `--motion-deliberate`; moves ease
+- CSS animations use `transform` and `opacity` for movement and fading, and
+  `stroke-dashoffset` on SVG blueprint outlines. Typography interpolates SVG
+  text weight. The trace validates the SVG targets and retains the same measured
+  frame-cost budgets, no frame loop, and no canvas. Timing is multiples of `--motion-deliberate`; moves ease
   on `--motion-ease-emphasized`, fades on `--motion-ease-standard`, and the
   Motion plot runs each easing token as its own timing function.
 - Easing is set per element (it applies to every keyframe segment); `var()`
