@@ -96,7 +96,30 @@ pub fn embedding_children(parent: u32) -> io::Result<Option<Vec<u32>>> {
         }
         Ok(Some(workers))
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+        let mut system = System::new();
+        system.refresh_processes_specifics(
+            ProcessesToUpdate::All,
+            true,
+            ProcessRefreshKind::nothing().with_cmd(UpdateKind::Always),
+        );
+        let workers = system
+            .processes()
+            .iter()
+            .filter_map(|(pid, process)| {
+                (process.parent() == Some(Pid::from_u32(parent))
+                    && process
+                        .cmd()
+                        .iter()
+                        .any(|arg| arg == "--private-embedding-worker"))
+                .then_some(pid.as_u32())
+            })
+            .collect();
+        Ok(Some(workers))
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     {
         let _ = parent;
         Ok(None)

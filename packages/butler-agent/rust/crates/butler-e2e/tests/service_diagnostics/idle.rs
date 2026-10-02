@@ -5,7 +5,7 @@ use butler_platform::sqlite;
 use rusqlite::OpenFlags;
 use serde_json::Value;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
     time::{Duration, SystemTime},
@@ -68,6 +68,9 @@ fn settled(data: &Path, turn: &str) -> bool {
         && deferred
         && active == 0
         && pending <= 1_024
+        // Graph/cache commits precede the writer lease's final COMMIT/close.
+        // Its DELETE journal must be removed before the idle window begins.
+        && !data.join("cognition/consolidation/locks/consolidation.lock.coord.sqlite-journal").exists()
         && fs::read_to_string(data.join("cognition/memory/queue/sync.jsonl"))
             .is_ok_and(|text| text.trim().is_empty())
 }
@@ -93,10 +96,13 @@ pub(super) async fn assert_idle(s: &Scenario, turn: &str) -> Result<(), HarnessE
         "deferred memory content changed"
     );
     assert_no_embedding_worker(pids[0])?;
-    let changed: Vec<_> = after_files
-        .iter()
-        .filter(|(path, value)| before_files.get(*path) != Some(*value))
-        .map(|(path, _)| path.strip_prefix(&s.sandbox.data).unwrap())
+    let changed: Vec<_> = before_files
+        .keys()
+        .chain(after_files.keys())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .filter(|path| before_files.get(*path) != after_files.get(*path))
+        .map(|path| path.strip_prefix(&s.sandbox.data).unwrap())
         .collect();
     eprintln!("idle changed files: {changed:?}");
     for i in 0..2 {
