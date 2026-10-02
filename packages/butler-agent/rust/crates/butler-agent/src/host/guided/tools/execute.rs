@@ -160,6 +160,8 @@ async fn dispatch_result(
     call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
     #[cfg(debug_assertions)]
+    hold_stub_tool(owner, call).await?;
+    #[cfg(debug_assertions)]
     if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
         && std::env::var("BUTLER_E2E_INTERRUPT_TOOL").as_deref() == Ok(call.name.as_str())
         && tokio::fs::remove_file(owner.binding.butler_data.join("e2e-interrupt-tool"))
@@ -190,6 +192,38 @@ async fn dispatch_result(
             Err(ToolExecutionError::Integrity(error))
         }
     }
+}
+
+#[cfg(debug_assertions)]
+async fn hold_stub_tool(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+) -> Result<(), ToolExecutionError> {
+    if std::env::var("BUTLER_E2E_TIER").as_deref() != Ok("stub")
+        || std::env::var("BUTLER_E2E_HOLD_TOOL").as_deref() != Ok(call.name.as_str())
+    {
+        return Ok(());
+    }
+    let hold = owner.binding.butler_data.join("e2e-hold-tool");
+    if !tokio::fs::try_exists(&hold)
+        .await
+        .map_err(|_| integrity("e2e_tool_hold_failed"))?
+    {
+        return Ok(());
+    }
+    tokio::fs::write(
+        owner.binding.butler_data.join("e2e-held-tool"),
+        call.id.as_bytes(),
+    )
+    .await
+    .map_err(|_| integrity("e2e_tool_hold_failed"))?;
+    while tokio::fs::try_exists(&hold)
+        .await
+        .map_err(|_| integrity("e2e_tool_hold_failed"))?
+    {
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    Ok(())
 }
 
 pub(super) async fn record_unexecuted(

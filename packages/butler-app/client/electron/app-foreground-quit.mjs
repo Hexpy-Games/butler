@@ -3,6 +3,7 @@ import { getDesktopCopy } from "./i18n/desktop-copy.mjs";
 export const APP_FOREGROUND_QUIT_COPY = getDesktopCopy().quit;
 
 const terminalTurnStates = new Set([
+  "delivered",
   "completed",
   "failed",
   "cancelled",

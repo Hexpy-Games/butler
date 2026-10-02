@@ -11,6 +11,8 @@ use tokio_util::sync::CancellationToken;
 
 use super::{MemorySyncPoll, catchup, paused};
 mod cache;
+mod index_retirement;
+mod projection;
 mod typed;
 mod vector;
 use crate::cognition::generation::{resolve_active_generation, resolve_generation};
@@ -111,18 +113,14 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
         return Ok(MemorySyncPoll::Deferred);
     }
     if input.target.is_some() {
-        let (projected, generation) = project_next(&input).await?;
-        let cached = cache::process(&input, generation.as_ref()).await?;
-        let vectorized = if let Some(embedding) = &input.embedding {
-            vector::process(&input, embedding.as_ref()).await?
-        } else {
-            false
-        };
-        return Ok(if projected || cached || vectorized {
+        return Ok(if projection::process(&input).await? {
             MemorySyncPoll::Processed
         } else {
             MemorySyncPoll::Idle
         });
+    }
+    if index_retirement::process(&input).await? {
+        return Ok(MemorySyncPoll::Processed);
     }
     let root = input.environment.memory_root(&input.data_root);
     let mut processed = false;
@@ -154,22 +152,14 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
     if let Some(error) = queue_error {
         return Err(error);
     }
-    let (projected, generation) = project_next(&input).await?;
-    let cached = cache::process(&input, generation.as_ref()).await?;
-    let vectorized = if let Some(embedding) = &input.embedding {
-        vector::process(&input, embedding.as_ref()).await?
+    let projected = projection::process(&input).await?;
+    Ok(if processed || caught_up || projected {
+        MemorySyncPoll::Processed
+    } else if queued {
+        MemorySyncPoll::Deferred
     } else {
-        false
-    };
-    Ok(
-        if processed || caught_up || projected || cached || vectorized {
-            MemorySyncPoll::Processed
-        } else if queued {
-            MemorySyncPoll::Deferred
-        } else {
-            MemorySyncPoll::Idle
-        },
-    )
+        MemorySyncPoll::Idle
+    })
 }
 
 /// Registers the conversation turn a v3 request names once its completion

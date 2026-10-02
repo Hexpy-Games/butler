@@ -48,6 +48,14 @@ If you choose **Basic** or **Deep** and click **Apply**, Butler records that you
 
 To see when and how an analysis finished, check the **Personal information analysis** entries in [**Settings → System events**](/en/help/settings/#system-events).
 
+## Conversation memory
+
+On a fresh installation, you can ask Butler to remember something and ask about it later. Explicit requests to remember information are saved even when personal information analysis is off. Personal information analysis has its own consent setting, separate from conversation memory.
+
+Conversation records remain as sources. Memory consolidation and search vector generation run in the background. Vector search can take longer to become ready while the memory model downloads. Check preparation in **Settings → General**.
+
+Frequently needed memories are kept in a hot cache, which refreshes as new memories are projected. Every past conversation is not included in every request. Ask for the source of an older decision and check whether it still applies.
+
 ## Import external AI memory
 
 Move the memories another AI service has stored into your Butler profile.

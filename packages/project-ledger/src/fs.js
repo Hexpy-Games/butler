@@ -123,7 +123,26 @@ function defaultLedgerRoot(project) {
   return join(butlerData, "project-ledger", "projects", safeProjectSegment(id));
 }
 
+let commandRoots = null;
+
+/** Resolve storage identity once per synchronous command; source data stays live. */
+export function withLedgerRootResolution(command) {
+  if (commandRoots) return command();
+  commandRoots = new Map();
+  try { return command(); } finally { commandRoots = null; }
+}
+
 export function ledgerRoot(project) {
+  const key = resolve(project);
+  if (commandRoots?.has(key)) return commandRoots.get(key);
+  const root = resolveLedgerRoot(key);
+  // init may create the configured root during this command. Never retain an
+  // unresolved default; after creation the next lookup observes its identity.
+  if (commandRoots && isLedgerRoot(root)) commandRoots.set(key, root);
+  return root;
+}
+
+function resolveLedgerRoot(project) {
   const resolvedProject = resolve(project);
   if (isLedgerRoot(resolvedProject)) return resolvedProject;
   const externalFromPath = externalLedgerRootFromProjectPath(resolvedProject);

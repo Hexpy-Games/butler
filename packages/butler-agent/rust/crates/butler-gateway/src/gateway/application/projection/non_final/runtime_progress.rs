@@ -4,7 +4,7 @@ use serde_json::{Map, Value, json};
 
 use crate::gateway::application::service;
 
-pub(super) fn row_from_runtime_event(
+pub(in crate::gateway::application) fn row_from_runtime_event(
     kind: &str,
     payload: &Map<String, Value>,
     id: &str,

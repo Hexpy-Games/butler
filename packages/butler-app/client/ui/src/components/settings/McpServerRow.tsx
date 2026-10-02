@@ -3,7 +3,7 @@ import { appCopy } from "@/app/copy.ts";
 import type { McpServerView } from "@/app/types.ts";
 import {
   Button,
-  ButtonContainer,
+  ButtonContainer, Switch,
   CardListItem,
   PencilLine,
   RefreshCcw,
@@ -17,8 +17,10 @@ export function McpServerRow({
   onToggle,
   onEdit,
   onRemove,
+  busy,
 }: {
   server: McpServerView;
+  busy: boolean;
   onProbe: () => void;
   onToggle: () => void;
   onEdit: () => void;
@@ -33,10 +35,11 @@ export function McpServerRow({
     <CardListItem
       title={server.display_name}
       description={mcpServerSubtitle(server)}
-      meta={toggleLabel}
+      meta={server.enabled ? copy.mcpEnabled : copy.mcpDisabled}
       actions={
         <ButtonContainer size="xs">
           <Button
+            disabled={busy}
             type="button"
             size="xs"
             variant="outline"
@@ -45,10 +48,10 @@ export function McpServerRow({
           >
             <RefreshCcw size="sm" />
           </Button>
-          <Button type="button" size="xs" variant="outline" onClick={onToggle}>
-            {toggleLabel}
-          </Button>
+          <Switch checked={server.enabled} disabled={busy}
+            aria-label={`${server.display_name}: ${toggleLabel}`} onCheckedChange={onToggle} />
           <Button
+            disabled={busy}
             type="button"
             size="xs"
             variant="outline"
@@ -58,6 +61,7 @@ export function McpServerRow({
             <PencilLine size="sm" />
           </Button>
           <Button
+            disabled={busy}
             type="button"
             size="xs"
             variant="outline"

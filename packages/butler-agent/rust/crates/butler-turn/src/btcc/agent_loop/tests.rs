@@ -2,7 +2,7 @@ use std::sync::atomic::Ordering;
 
 use serde_json::json;
 
-use crate::btcc::{AgentLoop, AgentLoopError, ExecutionRoute, SuspensionReason, TerminalOutcome};
+use crate::btcc::{AgentLoop, AgentLoopError, ExecutionRoute, SuspensionReason};
 
 use super::continuation::AuthorityLoopContinuation;
 use super::contracts::{AuthorityDecision, ToolOutcome};
@@ -348,16 +348,19 @@ async fn authority_snapshot_roundtrips_and_resumes_allow_deny_and_modify() {
     }
 }
 
+// test-category: pure-logic
 #[tokio::test]
 async fn no_visible_empty_recovery_and_first_effective_outcome_are_preserved() {
-    let empty = Fixture::new([result("", vec![], 0), result("", vec![], 1)]);
+    let empty = Fixture::new([
+        result("", vec![], 0),
+        result("", vec![], 1),
+        result("recovered", vec![], 2),
+    ]);
     let no_visible = run(&empty.agent(), &turn(None, "typed_terminal"))
         .await
         .unwrap();
-    assert_eq!(
-        no_visible.terminal_outcome,
-        Some(TerminalOutcome::NoVisible)
-    );
+    assert_eq!(no_visible.terminal_outcome, None);
+    assert_eq!(no_visible.content, "recovered");
     assert_eq!(
         empty
             .events
@@ -366,7 +369,7 @@ async fn no_visible_empty_recovery_and_first_effective_outcome_are_preserved() {
             .iter()
             .filter(|value| value.starts_with("model:"))
             .count(),
-        2
+        3
     );
 
     let first = Fixture::new([result(

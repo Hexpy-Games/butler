@@ -1,5 +1,15 @@
 //! Where an Agent archive may be fetched from.
 
+pub(super) fn redirect_policy() -> reqwest::redirect::Policy {
+    reqwest::redirect::Policy::custom(|attempt| {
+        if redirect_allowed(attempt.previous(), attempt.url()) {
+            attempt.follow()
+        } else {
+            attempt.stop()
+        }
+    })
+}
+
 /// Whether a download may be redirected from the first URL of `previous` (or
 /// this one) to `next`: to https; to plain http only within this machine,
 /// and only when the download began on this machine; never more than five

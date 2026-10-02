@@ -79,8 +79,8 @@ If you cannot use the install script, extract the archive yourself. The archive 
 
 ```bash
 set -euo pipefail
-VERSION=X.Y.Z # The Agent archive version. For a preview release, leave out "-preview.N" (for example, 0.1.0).
-RELEASE=X.Y.Z # The release tag without the "v" (for example, 0.1.0-preview.5). Same as VERSION for a stable release.
+VERSION=0.1.0-preview.5 # The exact release version, including the preview suffix.
+RELEASE="$VERSION" # The release tag without v.
 PLATFORM=darwin-arm64 # One of darwin-arm64, linux-x64 or linux-arm64.
 ARCHIVE="butler-agent-${VERSION}-${PLATFORM}.tar.gz"
 RELEASE_URL="https://github.com/Hexpy-Games/butler/releases/download/v${RELEASE}"
@@ -131,7 +131,7 @@ Run `butler --help` or `butler help schedule` for help in Korean and English. `b
 | `install --from ARCHIVE\|URL` | Installs a downloaded archive. For a first install, use the npx route above. |
 | `start`, `stop`, `restart` | Starts, stops or restarts the service. |
 | `remote status`, `remote enable`, `remote disable`, `remote pair`, `remote devices`, `remote hosts add\|remove HOST` | Manage remote access |
-| `status`, `open`, `doctor` | Check status, open the browser, check the installation |
+| `status`, `open`, `doctor [--check NAME]`, `doctor --collect-logs` | Check status, open the browser, check the installation |
 | `update --check`, `update --apply --yes` | Check for and install updates |
 | `rollback`, `uninstall --yes` | Restore the previous version, uninstall |
 | `startup enable\|disable\|status` | Manage start at login |
@@ -187,6 +187,15 @@ If WSL port forwarding or a proxy presents a different host, add that name or IP
 `remote status` shows whether remote access is on, the bind addresses, LAN URLs, bind errors for each address and allowed hosts. It does not show a code. `remote pair` runs until a device pairs or you press Ctrl-C, and issues a new code when the code expires. A device revoked with `remote devices` has to pair again. `remote code --rotate` and `remote code --json` no longer work. For the pairing steps, see [Remote access](/en/help/advanced/remote-access/).
 
 Currently `butler config get app.port` cannot read the App port. The setting is `config.port` in `gateways/app.json` in the data folder, and a change applies after a restart. Stop the running service before you edit the configuration file.
+
+`user.responseLanguage` sets the reply language (`ko` or `en`) separately from the interface language. `update.previews` controls preview updates (`true` or `false`), defaulting to `false`. The app and CLI share it when they use the same data folder. Check the preference with `status`.
+
+```bash
+butler config get user.responseLanguage
+butler config set user.responseLanguage ko
+butler config set update.previews true
+butler status
+```
 
 ## Data and updates
 

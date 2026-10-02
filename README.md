@@ -40,7 +40,7 @@ Use Butler through the App, on desktop or in a browser.
 - **Keep talking while it works.** Give Butler a long job and move on to something else. The result lands in the same conversation when it's done.
 - **You talk to Butler, nobody else.** It farms the pieces out to background workers and checks their work before giving you one answer.
 - **It checks the bag against the list.** Send someone shopping and the careful ones compare the bag to your list before coming home. Butler does that with your request and its own result.
-- **Memory that carries over.** Past conversations and decisions stay available. To have Butler pick up your preferences too, turn that on during setup.
+- **Memory that carries over.** Ask Butler to remember information and recall it later, including on a fresh install. Search vectors and the hot cache update in the background. Personal information analysis is a separate opt-in under Settings → Personalization.
 - **Work gets written down.** Butler keeps a record of what it planned and what it finished, so it can pick up where it stopped. In a project, a new conversation starts from that record.
 - **It lives on your computer.** Butler stores everything on your machine. Data leaves only when it goes to the model you chose or to a tool that reaches the internet, like web search or a server you connected.
 
@@ -52,9 +52,10 @@ Use Butler through the App, on desktop or in a browser.
 - **Skills.** A skill is a `SKILL.md` file that tells Butler how to handle one kind of request.
 - **Model providers.** Use OpenAI, Anthropic, Google and other hosted providers, or an OpenAI-compatible server such as Ollama, LM Studio or llama.cpp. Backup models take over on eligible provider failures when you enable them. [Cloud models](https://butler.hexpy.games/en/help/models/cloud/), [Custom models](https://butler.hexpy.games/en/help/models/custom/), [Backup models](https://butler.hexpy.games/en/help/models/backup/)
 - **Projects.** A project gives its conversations a shared folder and a dashboard. [Projects](https://butler.hexpy.games/en/help/projects/)
-- **Remote access.** Open the App from another computer on a trusted network with a one-time pairing code. It is off by default. [Remote access](https://butler.hexpy.games/en/help/advanced/remote-access/)
+- **Remote access.** Open the App from another computer on a trusted network with an 8-digit one-time pairing code. It is off by default. [Remote access](https://butler.hexpy.games/en/help/advanced/remote-access/)
 - **API key management.** Manage saved API keys in **Settings → Models**. [Settings](https://butler.hexpy.games/en/help/settings/)
-- **CLI.** Run the Agent as a background service without the desktop App. `butler --help` lists the commands. [Agent CLI](https://butler.hexpy.games/en/help/advanced/agent-cli/)
+- **Usage.** Ask Butler for conversation and background memory costs separately. Runtime estimates group them by work; unavailable prices remain unavailable. [Usage](https://butler.hexpy.games/en/help/settings/#usage)
+- **CLI.** Run the Agent as a background service without the desktop App. `butler --help` lists the commands; `butler config set user.responseLanguage en` sets the reply language. [Agent CLI](https://butler.hexpy.games/en/help/advanced/agent-cli/)
 
 ## Install
 
@@ -66,7 +67,7 @@ Download Butler from the [0.1.0 preview.5 release](https://github.com/Hexpy-Game
 | Linux (x64) | [DEB](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/butler-app-0.1.0-preview.5-linux-x64.deb) |
 | Linux (arm64) | [DEB](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/butler-app-0.1.0-preview.5-linux-arm64.deb) |
 | Arch Linux (x64) | [Package](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/butler-app-0.1.0-preview.5-archlinux-x64.pkg.tar.zst) |
-| Windows | No installer yet |
+| Windows | Coming in a later preview |
 
 Each file has a `.sha256` checksum, and `butler-0.1.0-preview.5-SHA256SUMS` lists them all.
 

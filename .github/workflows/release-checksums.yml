@@ -1,0 +1,70 @@
+name: Release checksums
+
+on:
+  workflow_call:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish consolidated release checksums
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build consolidated checksum asset from published outputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          mkdir -p dist/release/checksums/assets
+          gh release download "$tag" \
+            --dir dist/release/checksums/assets \
+            --clobber
+          shopt -s nullglob
+          files=(
+            dist/release/checksums/assets/butler-agent-*-darwin-arm64.tar.gz
+            dist/release/checksums/assets/butler-agent-*-linux-x64.tar.gz
+            dist/release/checksums/assets/butler-agent-*-linux-arm64.tar.gz
+            dist/release/checksums/assets/butler-agent-*-windows-x64.zip
+            dist/release/checksums/assets/butler-agent-*-windows-x64.zip.sha256
+            dist/release/checksums/assets/install.ps1
+            dist/release/checksums/assets/install.sh
+            dist/release/checksums/assets/agent-release-manifest.json
+            dist/release/checksums/assets/agent-update-manifest.json
+            dist/release/checksums/assets/butler-app-*-darwin-arm64.dmg
+            dist/release/checksums/assets/butler-app-*-darwin-arm64.dmg.sha256
+            dist/release/checksums/assets/butler-app-*-darwin-arm64.zip
+            dist/release/checksums/assets/butler-app-*-darwin-arm64.zip.sha256
+            dist/release/checksums/assets/ButlerSetup-*-x64.exe
+            dist/release/checksums/assets/ButlerSetup-*-x64.exe.sha256
+            dist/release/checksums/assets/*-full.nupkg
+            dist/release/checksums/assets/*-full.nupkg.sha256
+            dist/release/checksums/assets/RELEASES
+            dist/release/checksums/assets/RELEASES.sha256
+            dist/release/checksums/assets/butler-app-*-windows-x64-portable.zip
+            dist/release/checksums/assets/butler-app-*-windows-x64-portable.zip.sha256
+            dist/release/checksums/assets/app-release-manifest.json
+            dist/release/checksums/assets/app-update-manifest.json
+            dist/release/checksums/assets/butler-app-*-linux-x64.deb
+            dist/release/checksums/assets/butler-app-*-linux-x64.deb.sha256
+            dist/release/checksums/assets/butler-app-*-linux-arm64.deb
+            dist/release/checksums/assets/butler-app-*-linux-arm64.deb.sha256
+            dist/release/checksums/assets/butler-app-*-archlinux-x64.pkg.tar.zst
+            dist/release/checksums/assets/butler-app-*-archlinux-x64.pkg.tar.zst.sha256
+          )
+          test "${#files[@]}" -gt 0
+          checksum_file="dist/release/checksums/butler-${version}-SHA256SUMS"
+          (
+            cd dist/release/checksums/assets
+            for file in "${files[@]}"; do
+              sha256sum "$(basename "$file")"
+            done
+          ) > "$checksum_file"
+          gh release upload "$tag" "$checksum_file" --clobber
+
+  # Publish the successful outputs after all platform jobs finish. Only now does
+  # /releases/latest (and so install.sh) see it. A tag with a hyphen is a
+  # preview and is marked as a prerelease, which /releases/latest skips.

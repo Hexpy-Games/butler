@@ -88,7 +88,7 @@ async fn stop_reaps_a_hung_mcp_server_and_releases_the_instance() -> Result<(), 
             "/mcp-servers",
             json!({
                 "id":"hung", "display_name":"Hung fixture", "enabled":true, "transport":"stdio",
-                "command":env!("CARGO_BIN_EXE_e2e-mcp-fixture"), "args":[], "env":[
+                "command":butler_e2e::e2e::binary::mcp_fixture_binary()?, "args":[], "env":[
                     {"key":"E2E_MCP_MODE", "source":"literal", "value":"hang_init"},
                     {"key":"E2E_MCP_PID_FILE", "source":"literal", "value":pid_file},
             {"key":"E2E_MCP_CHILD_PID_FILE", "source":"literal", "value":descendant_file}

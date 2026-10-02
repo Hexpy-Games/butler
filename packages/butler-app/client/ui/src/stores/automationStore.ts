@@ -1,3 +1,4 @@
+import { confirmAction } from "@/app/confirmation.ts";
 import { hintScheduleLogin } from "@/app/loginSettings";
 import { appCopy } from "@/app/copy.ts";
 import type { FormEvent } from "react";
@@ -258,8 +259,11 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
 
   // Remove automation
   remove: async (onSaved, onBack, onStatus) => {
-    const { automationId, isNew } = get();
+    const { automationId, isNew, title } = get();
     if (isNew) return;
+    if (!await confirmAction(appCopy.settings.deleteSchedule(title), {
+      title: appCopy.common.delete, confirmLabel: appCopy.common.delete, destructive: true,
+    })) return;
 
     try {
       await api(`/automations/${encodeURIComponent(automationId)}`, {

@@ -169,7 +169,7 @@ impl InstanceGuard {
         }
         let record = InstanceRecord {
             schema: INSTANCE_SCHEMA.into(),
-            nonce: uuid::Uuid::new_v4().to_string(),
+            nonce: super::instance_identity::instance_nonce(),
             pid,
             cli_supervisor_pid: std::env::var("BUTLER_CLI_SUPERVISOR_PID")
                 .ok()

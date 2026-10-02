@@ -59,6 +59,13 @@ pub(super) fn safe_errors(messages: &[MessageRecord]) -> Vec<Value> {
 }
 
 pub(super) fn child_status(projection: &Value) -> &'static str {
+    if projection
+        .pointer("/latest_turn/retryable")
+        .and_then(Value::as_bool)
+        == Some(true)
+    {
+        return "failed";
+    }
     match projection.get("status").and_then(Value::as_str) {
         Some("completed" | "delivered") => "delivered",
         Some("cancelled") => "cancelled",

@@ -97,13 +97,10 @@ impl ProcessEnvironment {
                 cognition_home: optional("BUTLER_COGNITION_HOME"),
                 memory_home: optional("BUTLER_COGNITION_MEMORY_HOME"),
             },
-            phase_surface_flag: optional("BUTLER_PHASE_TOOL_SURFACE").unwrap_or_default(),
+            phase_surface_flag: optional("BUTLER_PHASE_TOOL_SURFACE")
+                .unwrap_or_else(|| "on".into()),
             operation_replay_flag: optional("BUTLER_OPERATION_RESULT_REPLAY").unwrap_or_default(),
-            model_route_retry_base_ms: if retry.is_finite() {
-                retry.max(0.0)
-            } else {
-                750.0
-            },
+            model_route_retry_base_ms: retry_delay(retry),
         }
     }
 }
@@ -152,4 +149,12 @@ fn first_nonempty_raw(names: &[&str]) -> Option<String> {
 
 fn first_trimmed(names: &[&str]) -> Option<String> {
     names.iter().find_map(|name| trimmed(name))
+}
+
+fn retry_delay(value: f64) -> f64 {
+    if value.is_finite() {
+        value.max(0.0)
+    } else {
+        750.0
+    }
 }

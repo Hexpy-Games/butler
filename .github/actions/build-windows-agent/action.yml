@@ -1,6 +1,10 @@
 name: Build unsigned Windows Agent
 description: Build and package the x64 browser-UI Agent preview
 inputs:
+  version:
+    required: false
+    default: ""
+    description: Exact release version override for update packages
   artifact-base-url:
     required: true
     description: Published archive base URL
@@ -78,6 +82,7 @@ runs:
         $env:HOME = Join-Path $profileRoot ([guid]::NewGuid())
         $env:BUTLER_DATA = Join-Path $profileRoot ([guid]::NewGuid())
         New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+        if ('${{ inputs.version }}') { $env:GITHUB_REF_NAME = 'v${{ inputs.version }}' }
         $env:RUSTFLAGS = '-C target-feature=+crt-static'
         if ('${{ inputs.profile }}' -eq 'release') {
           $env:CARGO_PROFILE_RELEASE_LTO = 'thin'

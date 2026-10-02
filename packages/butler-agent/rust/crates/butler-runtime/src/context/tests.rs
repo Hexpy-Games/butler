@@ -1,3 +1,5 @@
+mod quality;
+
 use std::cmp::Ordering;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -438,7 +440,7 @@ async fn budget_precedence_numeric_strings_metadata_and_thresholds_match_source(
     );
     let snapshot = owner.snapshot().await.unwrap();
     let base = snapshot.resolve(Some("local/sample"), &ContextBudgetOverrides::default());
-    assert_eq!(base.context_window_tokens, 16384.0); // environment precedes config/model metadata
+    assert_eq!(base.context_window_tokens, 15555.0); // catalog is a physical capacity ceiling
     assert_eq!(base.reserved_output_tokens, 2048.0);
     assert_eq!(base.reserved_tool_tokens, 1400.0);
     let overrides = ContextBudgetOverrides {
@@ -451,15 +453,15 @@ async fn budget_precedence_numeric_strings_metadata_and_thresholds_match_source(
         snapshot
             .resolve(Some("local/sample"), &overrides)
             .context_window_tokens,
-        32768.0
+        15555.0
     );
-    let evaluation = snapshot.evaluate(Some("local/sample"), 22938.6, &overrides);
-    assert_eq!(evaluation.input_tokens, 22938.0);
+    let evaluation = snapshot.evaluate(Some("local/sample"), 10889.6, &overrides);
+    assert_eq!(evaluation.input_tokens, 10889.0);
     assert_eq!(evaluation.threshold_state, ContextThresholdState::Warning);
     assert_eq!(evaluation.pressure_level, ContextPressureLevel::Medium);
-    let compact = snapshot.evaluate(Some("local/sample"), 26215.0, &overrides);
+    let compact = snapshot.evaluate(Some("local/sample"), 12445.0, &overrides);
     assert_eq!(compact.threshold_state, ContextThresholdState::AutoCompact);
-    let hard = snapshot.evaluate(Some("local/sample"), 29492.0, &overrides);
+    let hard = snapshot.evaluate(Some("local/sample"), 14000.0, &overrides);
     assert_eq!(hard.threshold_state, ContextThresholdState::HardPressure);
     let working = snapshot.evaluate_working(&WorkingContextBudgetInput {
         model_ref: Some("local/sample".into()),
@@ -476,6 +478,7 @@ async fn budget_precedence_numeric_strings_metadata_and_thresholds_match_source(
         snapshot.default_recent_conversation_token_budget(Some("local/sample")),
         2000.0
     );
+    quality::verify(&snapshot);
     drop(snapshot);
     std::fs::write(root.join("butler.config.json"),r#"{"models":{"local":[{"model_id":"sample","server_url":"http://localhost:8000","context_window_tokens":15555}]}}"#).unwrap();
     let metadata = configured_owner.snapshot().await.unwrap();

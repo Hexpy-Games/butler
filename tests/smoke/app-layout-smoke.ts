@@ -1860,13 +1860,25 @@ try {
     "refused image should use the brief toast, not a composer error",
   );
 
+  // The product defaults to ask-first; this fixture explicitly exercises the
+  // full-access -> ask-first transition below.
+  await page.locator(testClass("access-button")).click();
+  await page.locator(testClass("composer-menu")).getByRole("button", { name: appCopy.permissions.fullAccess }).click();
   await page.locator(`${testClass("composer-card")} ${composerEditor}`).focus();
   await page
-    .getByRole("button", { name: appCopy.permissions.fullAccess })
+    .getByRole("button", { name: `${appCopy.composer.permission}: ${appCopy.permissions.askFirst}`, exact: true })
     .waitFor({ state: "visible" });
   await page
-    .getByRole("button", { name: appCopy.permissions.fullAccess })
+    .getByRole("button", { name: `${appCopy.composer.permission}: ${appCopy.permissions.askFirst}`, exact: true })
     .click();
+  await page.locator(testClass("composer-menu")).waitFor({ state: "visible" });
+  // The fixture follows the safe Ask first default. Exercise the public menu
+  // before measuring Full access, including its prefixed accessible name.
+  await page.getByRole("button", { name: appCopy.permissions.fullAccess, exact: true }).click();
+  await page.locator(testClass("composer-menu")).waitFor({ state: "hidden" });
+  await page.getByRole("button", {
+    name: `${appCopy.composer.permission}: ${appCopy.permissions.fullAccess}`, exact: true,
+  }).click();
   await page.locator(testClass("composer-menu")).waitFor({ state: "visible" });
   const permissionMenuLayout = await page
     .locator(testClass("composer-menu"))
@@ -1944,7 +1956,7 @@ try {
   );
   await page.locator(`${testClass("composer-card")} ${composerEditor}`).focus();
   await page
-    .getByRole("button", { name: appCopy.permissions.fullAccess })
+    .getByRole("button", { name: `${appCopy.composer.permission}: ${appCopy.permissions.fullAccess}`, exact: true })
     .click();
   await page.locator(testClass("composer-menu")).waitFor({ state: "visible" });
   await page

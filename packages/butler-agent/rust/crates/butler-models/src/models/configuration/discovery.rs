@@ -8,7 +8,6 @@ use crate::models::{
     ModelProviderMetadata, TokenEstimatorKind,
 };
 
-const DEFAULT_CONTEXT: f64 = 16_384.0;
 const SOURCE_URL: &str = "https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md";
 
 #[derive(Clone)]
@@ -70,13 +69,7 @@ pub(super) async fn discover(
     platform: LocalModelPlatform,
     api_key: Option<&str>,
 ) -> Result<LocalModelDiscoveryResult, ModelCatalogError> {
-    if api_key.is_some_and(|value| {
-        value
-            .chars()
-            .any(|character| matches!(character, '\r' | '\n'))
-    }) {
-        return Err(error("Local model API key is invalid."));
-    }
+    validate_key(api_key)?;
     let (server_url, api_base_url) = normalize_server(server_url)?;
     let server_root = api_base_url.strip_suffix("/v1").unwrap_or(&api_base_url);
     let models = fetch_object(client, &format!("{api_base_url}/models"), api_key)
@@ -107,24 +100,13 @@ pub(super) async fn discover(
         if butler_core::public_text::trim_js_whitespace(raw_id).is_empty() {
             continue;
         }
-        let props = if platform == LocalModelPlatform::LlamaCpp {
-            let props_url = format!(
-                "{server_root}/props?model={}",
-                url::form_urlencoded::byte_serialize(raw_id.as_bytes()).collect::<String>()
-            );
-            match fetch_object(client, &props_url, api_key).await {
-                Some(value) => Some(value),
-                None => fetch_object(client, &format!("{server_root}/props"), api_key).await,
-            }
-        } else {
-            None
-        };
+        let props = model_props(client, server_root, raw_id, platform, api_key).await;
         let model_id = butler_core::public_text::trim_js_whitespace(raw_id);
         let context = props
             .as_ref()
             .and_then(context_from_props)
             .or_else(|| context_from_model(&model))
-            .unwrap_or(DEFAULT_CONTEXT);
+            .unwrap_or(0.0);
         output.push(DiscoveredLocalModel {
             provider_id: "local",
             provider_label: "Custom",
@@ -139,7 +121,8 @@ pub(super) async fn discover(
             max_output_tokens: None,
             reasoning_budget_ratio: None,
             source_url: SOURCE_URL,
-            runtime_supported: true,
+            // Unknown capacity must be configured explicitly before selection.
+            runtime_supported: context > 0.0,
         });
     }
     if output.is_empty() {
@@ -154,6 +137,27 @@ pub(super) async fn discover(
         platform,
         models: output,
     })
+}
+
+async fn model_props(
+    client: &reqwest::Client,
+    server_root: &str,
+    raw_id: &str,
+    platform: LocalModelPlatform,
+    api_key: Option<&str>,
+) -> Option<Value> {
+    if platform == LocalModelPlatform::LlamaCpp {
+        let props_url = format!(
+            "{server_root}/props?model={}",
+            url::form_urlencoded::byte_serialize(raw_id.as_bytes()).collect::<String>()
+        );
+        match fetch_object(client, &props_url, api_key).await {
+            Some(value) => Some(value),
+            None => fetch_object(client, &format!("{server_root}/props"), api_key).await,
+        }
+    } else {
+        None
+    }
 }
 
 async fn fetch_object(client: &reqwest::Client, url: &str, api_key: Option<&str>) -> Option<Value> {
@@ -250,8 +254,7 @@ fn context_from_args(value: Option<&Value>) -> Option<f64> {
                 pair[1]
                     .as_str()
                     .map(butler_core::json::number_from_string)
-                    .filter(|value| value.is_finite() && *value > 0.0)
-                    .map(f64::trunc)
+                    .and_then(positive_number)
             })
             .flatten()
     })
@@ -331,3 +334,14 @@ fn error(message: &'static str) -> ModelCatalogError {
 
 #[cfg(test)]
 mod tests;
+
+fn validate_key(api_key: Option<&str>) -> Result<(), ModelCatalogError> {
+    if api_key.is_some_and(|value| {
+        value
+            .chars()
+            .any(|character| matches!(character, '\r' | '\n'))
+    }) {
+        return Err(error("Local model API key is invalid."));
+    }
+    Ok(())
+}
