@@ -1,9 +1,9 @@
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 // Stub App harness: approval priority, question delivery, transcript and reload at mobile/desktop widths.
 import { strict as assert } from "node:assert";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { chromium } from "playwright";
 import { api } from "../../packages/butler-app/client/ui/src/app/api";
 import { snapshotForAppUiState } from "../../packages/butler-app/client/ui/src/app/appUiStateCache";
 import { createNativeAppServer } from "../support/native-app-server";
@@ -12,7 +12,7 @@ const dir = mkdtempSync(join(tmpdir(), "butler-ask-user-ui-"));
 const server = await createNativeAppServer({ butlerData: join(dir, "data"), uiRoot: resolve("packages/butler-app/client/ui/dist"), config: { user: { name: "Smoke", language: "en" } } });
 const session = await server.api<{ session: { id: string } }>("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: "Question smoke" }) });
 const sessionId = session.session.id;
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 const questions = { questions: [{ id: "format", eyebrow: "Output", title: "Which format?", kind: "single", allow_custom: true,
   options: [{ id: "brief", label: "Brief", recommended: true }, { id: "full", label: "Full" }] }] };
 try {

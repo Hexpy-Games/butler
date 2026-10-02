@@ -18,7 +18,8 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, write
 import { createServer, type Server } from "node:http";
 import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { onboardingCompletedPatch } from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
 
 export type StubModelRequest = { stream: boolean; messages: unknown[]; body: Record<string, unknown> };
@@ -59,7 +60,7 @@ export type NativeAppServerHandle = {
   stop(): Promise<void>;
 };
 
-const repositoryRoot = resolve(import.meta.dir, "../..");
+const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
 
 // ---------------------------------------------------------------------------
 // Process tracking: a spawned gateway must never outlive its owner.
@@ -89,9 +90,12 @@ function hasExited(child: ChildProcess): boolean {
 function signalGroup(entry: TrackedEntry, signal: NodeJS.Signals): void {
   try {
     process.kill(-entry.pid, signal);
-  } catch {
-    // ESRCH: the group is already gone.
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ESRCH" && hasExited(entry.child)) throw error;
   }
+  // Also signal the exact ChildProcess we own: restricted macOS runners can
+  // refuse group delivery. StopSignal coalesces duplicate graceful requests.
+  if (!hasExited(entry.child)) entry.child.kill(signal);
 }
 
 async function waitForExit(child: ChildProcess, timeoutMs: number): Promise<boolean> {
@@ -109,10 +113,11 @@ function removeCleanupPaths(entry: TrackedEntry): void {
 async function stopTracked(entry: TrackedEntry, graceMs = 15_000): Promise<void> {
   entry.stopping ??= (async () => {
     if (!hasExited(entry.child)) {
+      entry.child.stdin?.end();
       signalGroup(entry, "SIGTERM");
       if (!(await waitForExit(entry.child, graceMs))) {
         signalGroup(entry, "SIGKILL");
-        await waitForExit(entry.child, 5_000);
+        if (!(await waitForExit(entry.child, 5_000))) throw new Error(`Owned gateway ${entry.pid} did not exit`);
       }
     }
     // Anything the leader forked and left behind in its group.
@@ -325,6 +330,7 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
     ["--installation-root", installation, "--resource-root", resources],
     {
       cwd: butlerData,
+      stdio: ["pipe", "pipe", "pipe"],
       cleanupPaths: [scratch],
       env: {
         PATH: process.env.PATH ?? "/usr/bin:/bin",
@@ -332,6 +338,8 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
         CODEX_HOME: join(home, ".codex"),
         TMPDIR: tmpdir(),
         BUTLER_DATA: butlerData,
+        BUTLER_APP_FOREGROUND_LEASE: "1",
+        BUTLER_APP_BUNDLED_SUPERVISOR: "1",
         BUTLER_APP_SERVER_HOST: "127.0.0.1",
         BUTLER_APP_SERVER_PORT: String(port),
         BUTLER_METRICS_ENABLED: "0",

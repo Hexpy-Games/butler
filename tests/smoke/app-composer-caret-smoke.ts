@@ -1,10 +1,10 @@
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 // Real composer focus/selection through browser input; no provider calls needed.
 import { strict as assert } from "node:assert";
-import { chromium } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 
 const server = await createNativeAppServer({ config: { user: { name: "Smoke", language: "en" } } });
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await server.signIn(page);

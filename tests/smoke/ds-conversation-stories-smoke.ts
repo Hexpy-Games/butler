@@ -1,3 +1,4 @@
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 /**
  * Conversation DS story smoke: work progress rows, the current-status line,
  * reply inline images and attachments, checked on DS Viewer showcase stories
@@ -14,7 +15,7 @@
  */
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { chromium, type Locator, type Page } from "playwright";
+import { type Locator, type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 
 const root = process.cwd();
@@ -28,7 +29,7 @@ function assert(condition: unknown, message: string): asserts condition {
 
 async function openStory(page: Page, baseUrl: string, entry: string, story: string, width = "app"): Promise<Locator> {
   const params = new URLSearchParams({ visual: "design-system", page: entry, theme: "light", locale: "en", width });
-  await page.goto(`${baseUrl}?${params.toString()}`, { waitUntil: "networkidle" });
+  await page.goto(`${baseUrl}?${params.toString()}`, { waitUntil: "load" });
   const scope = page.locator(`[data-ds-story="${story}"]`).first();
   await scope.waitFor({ state: "visible" });
   await scope.scrollIntoViewIfNeeded();
@@ -196,7 +197,7 @@ async function checkAttachments(page: Page, baseUrl: string): Promise<void> {
 }
 
 const server = await createNativeAppServer({ uiRoot });
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await server.signIn(page);

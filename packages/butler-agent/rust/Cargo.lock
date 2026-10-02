@@ -1026,6 +1026,7 @@ dependencies = [
  "rustix 1.1.5",
  "same-file",
  "security-framework",
+ "serde",
  "serde_json",
  "sysinfo",
  "thiserror 2.0.20",
@@ -1034,6 +1035,7 @@ dependencies = [
  "windows-native-keyring-store",
  "zbus-secret-service-keyring-store",
  "zeroize",
+ "zip",
 ]
 
 [[package]]

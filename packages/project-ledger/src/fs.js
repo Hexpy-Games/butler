@@ -123,8 +123,22 @@ function defaultLedgerRoot(project) {
   return join(butlerData, "project-ledger", "projects", safeProjectSegment(id));
 }
 
+// Root selection is stable within one CLI operation. Discard the selection
+// afterwards so later commands observe registrations and storage changes.
+const operationRoots = new Map();
+
+export function withResolvedLedgerRoot(project, operation) {
+  const key = resolve(project);
+  if (operationRoots.has(key)) return operation();
+  const root = ledgerRoot(key);
+  operationRoots.set(key, root);
+  try { return operation(); }
+  finally { operationRoots.delete(key); }
+}
+
 export function ledgerRoot(project) {
   const resolvedProject = resolve(project);
+  if (operationRoots.has(resolvedProject)) return operationRoots.get(resolvedProject);
   if (isLedgerRoot(resolvedProject)) return resolvedProject;
   const externalFromPath = externalLedgerRootFromProjectPath(resolvedProject);
   if (externalFromPath) return externalFromPath;

@@ -7,6 +7,7 @@ mod conversation_metrics;
 mod cycle_metrics;
 mod developer_log;
 mod install;
+mod log_redaction;
 mod log_tail;
 mod mcp_tasks;
 mod metric_files;

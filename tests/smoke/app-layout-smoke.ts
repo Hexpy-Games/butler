@@ -1,9 +1,11 @@
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { Buffer } from "node:buffer";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { chromium, type Locator, type Page } from "playwright";
+import { type Locator, type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
+import { installWallpaperFrameSampler } from "../support/wallpaper-frame-sampler.ts";
 import {
   clientTurnIdFromMessageId,
   mergeSessionSummaryForPendingTurn,
@@ -47,6 +49,19 @@ async function waitForMotionToSettle(page: Page): Promise<void> {
       animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
 }
 
+/** Observe a reversal after its committed transition has advanced, still before it settles. */
+async function scrimDuringMotion(page: Page, direction: "up" | "down", before: number): Promise<number> {
+  const value = await page.waitForFunction(({ direction, before }) => {
+    const node = document.querySelector('[data-slot="adaptive-shell-scrim"]');
+    if (!node) return false;
+    const opacity = Number(getComputedStyle(node).opacity);
+    const moving = node.getAnimations().some((animation) => animation.playState === "running");
+    return moving && opacity > 0 && opacity < 1 &&
+      (direction === "up" ? opacity > before : opacity < before) ? opacity : false;
+  }, { direction, before });
+  return await value.jsonValue() as number;
+}
+
 async function screenshot(page: Page, name: string): Promise<string> {
   const path = join(screenshotDir, name);
   await page.screenshot({ path, fullPage: false });
@@ -72,6 +87,14 @@ async function expectLocatorCount(
 
 // The composer is a Lexical contenteditable, not a textarea.
 const composerEditor = '[contenteditable="true"]';
+
+/** Focus first so Lexical's caret restoration cannot replace Playwright's DOM selection. */
+async function fillComposer(locator: Locator, text: string): Promise<void> {
+  await locator.focus();
+  await locator.press("ControlOrMeta+A");
+  await locator.press("Backspace");
+  if (text) await locator.pressSequentially(text);
+}
 
 async function readInputValue(locator: Locator): Promise<string> {
   return locator.evaluate((element) =>
@@ -357,12 +380,13 @@ await server.api("/settings", {
 // Space sidebar session rows expose their title as the row's aria-label.
 const smokeSessionRowSelector = `${testClass("tree-row")}[aria-label="Desktop client polish"]`;
 
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 const page = await browser.newPage({
   viewport: { width: 1440, height: 900 },
   deviceScaleFactor: 1,
 });
 await server.signIn(page);
+await page.addInitScript(installWallpaperFrameSampler);
 const firstRunStateJson = JSON.stringify(legacyFirstRunCompleteRecord());
 await page.addInitScript(
   ({ key, value }) => {
@@ -999,7 +1023,10 @@ try {
     (node) => getComputedStyle(node).backgroundColor,
   );
   await searchButton.hover();
-  await page.waitForTimeout(80);
+  await page.waitForFunction(({ selector, before }) => {
+    const node = Array.from(document.querySelectorAll("button, [role=button]")).find((node) => node.getAttribute("aria-label") === selector);
+    return node?.matches(":hover") && getComputedStyle(node).backgroundColor !== before;
+  }, { selector: appCopy.space.search, before: searchBgBefore });
   const searchBgAfter = await searchButton.evaluate(
     (node) => getComputedStyle(node).backgroundColor,
   );
@@ -1204,7 +1231,18 @@ try {
   await page
     .getByRole("button", { name: appCopy.titlebar.hideRightPanel })
     .click();
-  await page.waitForTimeout(90);
+  // Sample 90ms of the real close transition, after React has committed it.
+  // Wall-clock sleep can otherwise measure the unchanged opening pose.
+  await page.waitForFunction((selector) => {
+    const slot = document.querySelector(selector);
+    if (slot?.getAttribute("data-open") !== "false") return false;
+    const motion = slot.getAnimations().find((animation) =>
+      animation instanceof CSSTransition && animation.transitionProperty === "transform");
+    if (!motion) return false;
+    motion.pause();
+    motion.currentTime = 90;
+    return true;
+  }, testClass("right-panel-slot"));
   const closingSlotBox = await rightPanelSlot.boundingBox();
   const closingInspectorBox = await page
     .locator(testClass("right-inspector"))
@@ -1234,6 +1272,11 @@ try {
       closingInspectorState.transform === "none",
     `right panel content should keep stable width while the slot clips it: box=${JSON.stringify(closingInspectorBox)} state=${JSON.stringify(closingInspectorState)}`,
   );
+  await rightPanelSlot.evaluate((slot) => {
+    for (const animation of slot.getAnimations()) {
+      if (animation.playState === "paused") animation.play();
+    }
+  });
   await page.waitForTimeout(260);
   const closedInspectorCount = await page
     .locator(testClass("right-inspector"))
@@ -1521,7 +1564,7 @@ try {
   );
   screenshots.push(await screenshot(page, "narrow-conversation.png"));
   await page.getByRole("button", { name: "Show sidebar" }).click();
-  await page.waitForTimeout(240);
+  await waitForMotionToSettle(page);
   const narrowSidebarBox = await page
     .locator(testClass("sidebar-slot"))
     .boundingBox();
@@ -1534,13 +1577,14 @@ try {
     .first();
   const firstCompactNavRowBox = await firstCompactNavRow.boundingBox();
   const firstCompactNavMetrics = await firstCompactNavRow.evaluate((element) => {
-    const icon = element.querySelector("svg")?.getBoundingClientRect();
+    const svg = element.querySelector("svg");
+    const icon = svg ? getComputedStyle(svg) : null;
     const label = element.querySelector<HTMLElement>(
       '[data-slot="nav-row-label"]',
     );
     return {
-      iconHeight: icon?.height ?? 0,
-      iconWidth: icon?.width ?? 0,
+      iconHeight: icon ? Number.parseFloat(icon.height) : 0,
+      iconWidth: icon ? Number.parseFloat(icon.width) : 0,
       labelFontSize: label
         ? Number.parseFloat(getComputedStyle(label).fontSize)
         : 0,
@@ -1713,20 +1757,11 @@ try {
     `narrow scrim should remain compositor-stable across repeated fades: ${JSON.stringify({ scrimCycles, scrimLayerState })}`,
   );
   await page.getByRole("button", { name: "Show sidebar" }).click();
-  await page.waitForTimeout(80);
-  const interruptedOpenOpacity = await narrowScrim.evaluate((element) =>
-    Number(getComputedStyle(element).opacity),
-  );
+  const interruptedOpenOpacity = await scrimDuringMotion(page, "up", 0);
   await page.mouse.click(385, 420);
-  await page.waitForTimeout(40);
-  const interruptedCloseOpacity = await narrowScrim.evaluate((element) =>
-    Number(getComputedStyle(element).opacity),
-  );
+  const interruptedCloseOpacity = await scrimDuringMotion(page, "down", interruptedOpenOpacity);
   await page.getByRole("button", { name: "Show sidebar" }).click();
-  await page.waitForTimeout(40);
-  const interruptedReopenOpacity = await narrowScrim.evaluate((element) =>
-    Number(getComputedStyle(element).opacity),
-  );
+  const interruptedReopenOpacity = await scrimDuringMotion(page, "up", interruptedCloseOpacity);
   assert(
     interruptedCloseOpacity < interruptedOpenOpacity &&
       interruptedReopenOpacity > interruptedCloseOpacity,
@@ -1862,11 +1897,21 @@ try {
 
   await page.locator(`${testClass("composer-card")} ${composerEditor}`).focus();
   await page
-    .getByRole("button", { name: appCopy.permissions.fullAccess })
+    .getByRole("button", { name: `${appCopy.composer.permission}: ${appCopy.permissions.askFirst}`, exact: true })
     .waitFor({ state: "visible" });
   await page
-    .getByRole("button", { name: appCopy.permissions.fullAccess })
+    .getByRole("button", { name: `${appCopy.composer.permission}: ${appCopy.permissions.askFirst}`, exact: true })
     .click();
+  await page.locator(testClass("composer-menu")).waitFor({ state: "visible" });
+  // The fixture follows the safe Ask first default. Exercise the public menu
+  // before measuring Full access, including its prefixed accessible name.
+  await page.getByRole("button", {
+    name: `${appCopy.permissions.fullAccess} ${appCopy.permissions.fullAccessDesc}`, exact: true,
+  }).click();
+  await page.locator(testClass("composer-menu")).waitFor({ state: "hidden" });
+  await page.getByRole("button", {
+    name: `${appCopy.composer.permission}: ${appCopy.permissions.fullAccess}`, exact: true,
+  }).click();
   await page.locator(testClass("composer-menu")).waitFor({ state: "visible" });
   const permissionMenuLayout = await page
     .locator(testClass("composer-menu"))
@@ -1934,6 +1979,7 @@ try {
       permissionMenuLayout.width <= 340,
     `permission menu should be a flat compact two-line list without visible title hierarchy or doubled padding: ${JSON.stringify(permissionMenuLayout)}`,
   );
+  await waitForMotionToSettle(page);
   await page.mouse.click(80, 80);
   await page.waitForTimeout(400);
   await expectLocatorCount(
@@ -1944,7 +1990,7 @@ try {
   );
   await page.locator(`${testClass("composer-card")} ${composerEditor}`).focus();
   await page
-    .getByRole("button", { name: appCopy.permissions.fullAccess })
+    .getByRole("button", { name: `${appCopy.composer.permission}: ${appCopy.permissions.fullAccess}`, exact: true })
     .click();
   await page.locator(testClass("composer-menu")).waitFor({ state: "visible" });
   await page
@@ -3052,7 +3098,7 @@ try {
       const fluidStyle = fluid ? getComputedStyle(fluid) : null;
       const titlebarStyle = titlebar ? getComputedStyle(titlebar) : null;
       const workspaceStyle = workspace ? getComputedStyle(workspace) : null;
-      const measureFluidFrame = () => {
+      const measureFluidFrame = async () => {
         if (!(fluid instanceof HTMLCanvasElement)) {
           return {
             activeCells: 0,
@@ -3062,26 +3108,7 @@ try {
             visibleCoverage: 0,
           };
         }
-        const webgl = fluid.getContext("webgl2") ?? fluid.getContext("webgl");
-        const canvas2d = webgl ? null : fluid.getContext("2d");
-        const width = webgl?.drawingBufferWidth ?? fluid.width;
-        const height = webgl?.drawingBufferHeight ?? fluid.height;
-        let pixels: Uint8Array | Uint8ClampedArray | undefined;
-        if (webgl) {
-          const buffer = new Uint8Array(width * height * 4);
-          webgl.readPixels(
-            0,
-            0,
-            width,
-            height,
-            webgl.RGBA,
-            webgl.UNSIGNED_BYTE,
-            buffer,
-          );
-          pixels = buffer;
-        } else {
-          pixels = canvas2d?.getImageData(0, 0, width, height).data;
-        }
+        const { width, height, pixels } = await window.__readWallpaperFrame(fluid);
         if (!pixels?.length || !width || !height) {
           return {
             activeCells: 0,
@@ -3146,8 +3173,9 @@ try {
       // 8s window reached visible >= 0.06 and 4+ tinted cells. Sample an 8s
       // window and assert on its peak liquid and mean tone instead.
       for (let index = 0; index < 8; index += 1) {
-        fluidSamples.push(measureFluidFrame());
-        await new Promise((resolve) => setTimeout(resolve, 1_000));
+        const started = performance.now();
+        fluidSamples.push(await measureFluidFrame());
+        await new Promise((resolve) => setTimeout(resolve, Math.max(0, 1_000 - (performance.now() - started))));
       }
       const fluidMean = (key: "averageTone" | "grayCoverage") =>
         fluidSamples.reduce((total, sample) => total + sample[key], 0) /
@@ -3586,22 +3614,11 @@ try {
       if (!(canvas instanceof HTMLCanvasElement)) {
         return { changedCoverageMax: 0, spreadMax: 0 };
       }
-      const webgl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
-      const width = webgl?.drawingBufferWidth ?? canvas.width;
-      const height = webgl?.drawingBufferHeight ?? canvas.height;
       const samples: Array<{ changedCoverage: number; spread: number }> = [];
       for (let sample = 0; sample < 5; sample += 1) {
         await new Promise((resolve) => setTimeout(resolve, 80));
-        const pixels = new Uint8Array(width * height * 4);
-        webgl?.readPixels(
-          0,
-          0,
-          width,
-          height,
-          webgl.RGBA,
-          webgl.UNSIGNED_BYTE,
-          pixels,
-        );
+        const { pixels } = await window.__readWallpaperFrame(canvas);
+        if (!pixels) throw new Error("Wallpaper has no rendered pixels");
         let changedPixels = 0;
         let minTone = 255;
         let maxTone = 0;
@@ -3641,7 +3658,7 @@ try {
     .locator(testClass("new-chat-empty-state"))
     .waitFor({ state: "visible" });
   const composerInput = page.locator(`${testClass("composer-card")} ${composerEditor}`);
-  await composerInput.fill("synthetic draft for new chat");
+  await fillComposer(composerInput, "synthetic draft for new chat");
   const showSidebarForDraftCheck = page.getByRole("button", {
     name: "Show sidebar",
   });
@@ -3652,7 +3669,7 @@ try {
     .locator(smokeSessionRowSelector)
     .first();
   await draftProjectSession.click();
-  await composerInput.fill("synthetic draft for project session");
+  await fillComposer(composerInput, "synthetic draft for project session");
   await page
     .getByRole("button", { name: appCopy.space.newChat, exact: true })
     .first()
@@ -3693,7 +3710,7 @@ try {
     "synthetic draft for new chat",
     "new-chat draft should survive another session reload",
   );
-  await composerInput.fill("");
+  await fillComposer(composerInput, "");
   const draftComposerBox = await page
     .locator(testClass("composer-card"))
     .boundingBox();
@@ -3723,7 +3740,7 @@ try {
       composerFocusAfterPoll.value === "composer focus",
     `composer-focus-survives-summary-poll failed: ${JSON.stringify(composerFocusAfterPoll)}`,
   );
-  await composerInput.fill("");
+  await fillComposer(composerInput, "");
   await composerInput.fill("IME draft");
   await composerInput.dispatchEvent("compositionstart");
   await page.keyboard.press("Meta+Enter");
@@ -3796,28 +3813,14 @@ try {
       turnActivityText.includes("Bash"),
     `turn-activity-during-send failed: ${turnActivityText}`,
   );
-  const currentStatusGeometry = await timelineActivity
-    .locator(testClass("turn-current-status-slot"))
-    .first()
-    .evaluate((element) => {
-      const line = element.querySelector("p");
-      if (!line) return null;
-      const original = line.textContent;
-      const beforeHeight = element.getBoundingClientRect().height;
-      line.textContent = "A deliberately long current operation label ".repeat(20);
-      const afterHeight = element.getBoundingClientRect().height;
-      const clipped = line.scrollWidth > line.clientWidth;
-      line.textContent = original;
-      return { beforeHeight, afterHeight, clipped };
-    });
-  assert(
-    currentStatusGeometry !== null &&
-      Math.abs(
-        currentStatusGeometry.beforeHeight - currentStatusGeometry.afterHeight,
-      ) < 0.5 &&
-      currentStatusGeometry.clipped,
-    `current status must stay one clipped line: ${JSON.stringify(currentStatusGeometry)}`,
-  );
+  // This stub deliberately holds the native turn before progress arrives, so
+  // the panel is TurnActivityPending rather than CurrentTurnStatus. The same
+  // long-label height/clipping assertion runs on RollingStatusLine in
+  // ds-conversation-stories-smoke.ts; no synthetic native progress is injected.
+  await page.locator(`${testClasses("message", "assistant", "turn-activity-message")} ${testClass("turn-activity-pending")}`).waitFor({
+    state: "visible",
+    timeout: turnActivityTimeoutMs,
+  });
   releaseSmokeResponderProgress?.();
   // Tool rows, their keyboard disclosure and muted detail tone are checked on the
   // WorkActivityBlock story (tests/smoke/ds-conversation-stories-smoke.ts); the
@@ -3880,6 +3883,7 @@ try {
     .waitFor({ state: "visible" });
   // Let the menu finish its entrance animation before dismissing it.
   await page.waitForTimeout(250);
+  await waitForMotionToSettle(page);
   await page.mouse.click(80, 80);
   await page.waitForTimeout(400);
   await expectLocatorCount(
@@ -4192,6 +4196,13 @@ try {
       screenshots,
     }),
   );
+} catch (error) {
+  await page.screenshot({ path: join(screenshotDir, "failure.png") }).catch(() => {});
+  console.error("layout failure", {
+    stubCalls: server.stubModelCalls.length,
+    conversation: await page.locator(testClass("conversation-scroll")).innerText().catch(() => "unavailable"),
+  });
+  throw error;
 } finally {
   await browser.close();
   await server.stop();

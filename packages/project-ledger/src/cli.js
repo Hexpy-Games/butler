@@ -1,3 +1,5 @@
+import { withResolvedLedgerRoot } from "./fs.js";
+import { projectRoot } from "./args.js";
 import { parseArgs } from "./args.js";
 import { commandShouldFail, handle } from "./commands.js";
 import { createEnvelope, errorFromUnknown } from "./errors.js";
@@ -163,7 +165,10 @@ export function main(argv, executableName = "project-ledger") {
     const { positionals, options } = parseArgs(rootHelpRequested ? [] : normalized.argv.slice(1));
     if (normalized.short) options.short = true;
     if (options.help) command = "help";
-    const data = handle(command, positionals, options);
+    const execute = () => handle(command, positionals, options);
+    const data = command === "record"
+      ? withResolvedLedgerRoot(projectRoot(options), execute)
+      : execute();
     const failed = commandShouldFail(command, options, data);
 
     const silent = options.silent ?? false;

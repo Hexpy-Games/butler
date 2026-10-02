@@ -1,7 +1,8 @@
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 // Browser smoke: memory preparation never gates setup; Settings owns a labeled status section.
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { chromium, type Page } from "playwright";
+import { type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { assertFirstRunContrast, assertFirstRunLayout } from "../support/first-run-visual.ts";
 import { onboardingCompletedPatch } from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
@@ -10,7 +11,7 @@ import { firstRunCopy } from "../../packages/butler-app/client/ui/src/app/firstR
 
 const output = resolve(".tmp/firstrun-ds");
 mkdirSync(output, { recursive: true });
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 const server = await createNativeAppServer({ onboardingComplete: false });
 let textNodes = 0;
 let minimumContrast = Infinity;

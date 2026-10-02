@@ -6,6 +6,11 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// Local hostile archives and signed bundle fixtures for native E2Es.
+#[cfg(feature = "test-support")]
+#[path = "app_update/fixtures.rs"]
+pub mod test_support;
+
 /// Install a verified package after `parent` exits, then launch the replacement.
 /// Only the installed bundle/image is replaced; the data directory is untouched.
 pub fn install(
@@ -32,131 +37,19 @@ fn wait_for_parent(parent: u32) -> Result<(), String> {
 }
 
 #[cfg(target_os = "macos")]
-fn install_platform(
-    artifact: &Path,
-    executable: &Path,
-    parent: u32,
-    arguments: &[OsString],
-) -> Result<(), String> {
-    let bundle = executable
-        .ancestors()
-        .nth(3)
-        .filter(|p| p.extension().is_some_and(|e| e == "app"))
-        .ok_or("Installed App bundle is unavailable.")?;
-    let container = bundle.parent().ok_or("App directory is unavailable.")?;
-    let staging = container.join(format!(".butler-update-{}", std::process::id()));
-    crate::secure_fs::create_private_dir(&staging).map_err(|e| e.to_string())?;
-    let result = activate_mac(artifact, executable, bundle, &staging, parent, arguments);
-    let _ = crate::secure_fs::remove_tree(&staging);
-    result
-}
-
+mod mac;
 #[cfg(target_os = "macos")]
-fn activate_mac(
-    artifact: &Path,
-    executable: &Path,
-    bundle: &Path,
-    staging: &Path,
-    parent: u32,
-    arguments: &[OsString],
-) -> Result<(), String> {
-    run(Command::new("ditto")
-        .args(["-x", "-k"])
-        .arg(artifact)
-        .arg(staging))?;
-    let candidate = staging.join("Butler.app");
-    run(Command::new("codesign")
-        .args(["--verify", "--deep", "--strict"])
-        .arg(&candidate))?;
-    let team = |path: &Path| -> Result<Option<String>, String> {
-        let result = Command::new("codesign")
-            .args(["-dv", "--verbose=4"])
-            .arg(path)
-            .output()
-            .map_err(|e| e.to_string())?;
-        if !result.status.success() {
-            return Err("App signature is unavailable.".into());
-        }
-        Ok(String::from_utf8_lossy(&result.stderr)
-            .lines()
-            .find_map(|line| {
-                line.strip_prefix("TeamIdentifier=")
-                    .filter(|team| *team != "not set")
-                    .map(str::to_owned)
-            }))
-    };
-    if team(bundle)? != team(&candidate)? {
-        return Err("App signing team changed.".into());
-    }
-    crate::process_names::restore_archive_links(
-        &candidate.join("Contents/Resources/bundled-agent/bin/butler-agent"),
-    )
-    .map_err(|error| error.to_string())?;
-    run(Command::new("codesign")
-        .args(["--verify", "--deep", "--strict"])
-        .arg(&candidate))?;
-    // Developer ID previews are signed but not notarized. Only a verified,
-    // same-publisher candidate may have its download quarantine removed.
-    remove_quarantine(&candidate)?;
-    println!("app-update-ready");
-    await_activation()?;
-    wait_for_parent(parent)?;
-    let backup = staging.join("previous.app");
-    std::fs::rename(bundle, &backup).map_err(|e| e.to_string())?;
-    if let Err(error) = std::fs::rename(&candidate, bundle) {
-        let _ = std::fs::rename(&backup, bundle);
-        return Err(error.to_string());
-    }
-    match Command::new(executable).args(arguments).spawn() {
-        Ok(_) => Ok(()),
-        Err(error) => {
-            let _ = std::fs::rename(bundle, &candidate);
-            let _ = std::fs::rename(&backup, bundle);
-            let _ = Command::new(executable).args(arguments).spawn();
-            Err(error.to_string())
-        }
-    }
-}
+use mac::install as install_platform;
 
-#[cfg(target_os = "macos")]
-fn remove_quarantine(candidate: &Path) -> Result<(), String> {
-    let mut permissions = Vec::new();
-    let result = allow_attribute_writes(candidate, &mut permissions).and_then(|()| {
-        run(Command::new("xattr")
-            .args(["-dr", "com.apple.quarantine"])
-            .arg(candidate))
-    });
-    let mut restored = Ok(());
-    for (path, mode) in permissions.into_iter().rev() {
-        if let Err(error) = std::fs::set_permissions(path, mode) {
-            restored = Err(error.to_string());
-        }
+/// Complete a recorded packaged-App swap on startup. Other hosts need no recovery.
+pub fn recover(executable: &Path) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    return mac::recover(executable);
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = executable;
+        Ok(())
     }
-    result.and(restored)
-}
-
-#[cfg(target_os = "macos")]
-fn allow_attribute_writes(
-    path: &Path,
-    permissions: &mut Vec<(std::path::PathBuf, std::fs::Permissions)>,
-) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt;
-    let metadata = std::fs::symlink_metadata(path).map_err(|e| e.to_string())?;
-    if metadata.is_symlink() {
-        return Ok(());
-    }
-    let mode = metadata.permissions();
-    if mode.mode() & 0o200 == 0 {
-        permissions.push((path.to_owned(), mode.clone()));
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode.mode() | 0o200))
-            .map_err(|e| e.to_string())?;
-    }
-    if metadata.is_dir() {
-        for entry in std::fs::read_dir(path).map_err(|e| e.to_string())? {
-            allow_attribute_writes(&entry.map_err(|e| e.to_string())?.path(), permissions)?;
-        }
-    }
-    Ok(())
 }
 
 #[cfg(target_os = "linux")]

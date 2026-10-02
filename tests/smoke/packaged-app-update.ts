@@ -1,4 +1,5 @@
 /** Real packaged macOS .90 -> .91 update through Settings, with isolated DATA. */
+import { smokeBrowserArgs } from "../support/smoke-browser.ts";
 import { strict as assert } from "node:assert";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { chmodSync, cpSync, mkdirSync, readdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -125,6 +126,46 @@ async function serveUpdate(zip: string) {
   return server.port;
 }
 
+async function archiveAdmission(zip: string, installed: string) {
+  const executable = join(installed, "Contents/Resources/bundled-agent/bin/butler-agent");
+  const helper = spawn(executable, ["--installation-root", installed, "--resource-root", join(installed, "Contents/Resources/bundled-agent/resources"), "app-update-install", zip, join(installed, "Contents/MacOS/Butler"), "2147483647"], {
+    env, stdio: ["pipe", "pipe", "pipe"],
+  });
+  let diagnostic = "";
+  helper.stderr.on("data", bytes => { diagnostic += String(bytes); });
+  const exited = new Promise<number | null>((done) => helper.once("exit", done));
+  try {
+    await new Promise<void>((done, fail) => {
+      const timer = setTimeout(() => fail(new Error("Archive admission did not become ready")), 60_000);
+      let output = "";
+      helper.stdout.on("data", bytes => {
+        output += String(bytes);
+        if (output.includes("app-update-ready")) { clearTimeout(timer); done(); }
+      });
+      helper.once("exit", () => { clearTimeout(timer); fail(new Error(`Archive helper exited: ${diagnostic}`)); });
+      helper.once("error", fail);
+    });
+    const container = join(dir, "installed");
+    const staging = readdirSync(container).filter(name => name.startsWith(".butler-update."));
+    assert.equal(staging.length, 1);
+    const candidate = join(container, staging[0]!, "Butler.app");
+    verifyMacFrameworkLinks(candidate);
+    verifyMacPackageMetadata(candidate, to, true);
+    await run("codesign", ["--verify", "--deep", "--strict", "--verbose=4", candidate]);
+    await run("codesign", ["--verify", "--deep", "--strict", "--verbose=4", installed]);
+    helper.stdin.end();
+    assert.equal(await exited, 1, "EOF cancels admission without activating");
+    verifyMacPackageMetadata(installed, from, true);
+    assert.equal(readdirSync(container).filter(name => name.startsWith(".butler-update.")).length, 0);
+    console.log(JSON.stringify({ ok: true, smoke: "packaged-zip-native-admission", installed: from, candidate: to,
+      stagedSignatureVerified: true, frameworkLinksPreserved: true, rolesAndPermissionsVerified: true, cancelledBeforeExchange: true }));
+  } finally {
+    helper.stdin.end();
+    if (helper.exitCode === null && helper.signalCode === null) helper.kill("SIGTERM");
+    await exited;
+  }
+}
+
 async function smoke() {
   mkdirSync(home); mkdirSync(data);
   writeFileSync(join(data, "update-sentinel.txt"), "preserved");
@@ -138,8 +179,12 @@ async function smoke() {
   // Agent hard links and modes. Bun/Node cpSync can rewrite links to the source.
   await run("ditto", [first, installed]);
   verifyMacPackageMetadata(installed, from, true);
+  if (process.env.BUTLER_UPDATE_SMOKE_ARCHIVE_ONLY === "1") {
+    await archiveAdmission(zip, installed);
+    return;
+  }
   const debugPort = await freePort(), agentPort = await freePort();
-  child = spawn(join(installed, "Contents/MacOS/Butler"), [`--remote-debugging-port=${debugPort}`], { env: {
+  child = spawn(join(installed, "Contents/MacOS/Butler"), [`--remote-debugging-port=${debugPort}`, ...smokeBrowserArgs()], { env: {
     ...env, BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_APP_ELECTRON_USER_DATA_DIR: join(dir, "profile"),
     BUTLER_APP_UPDATE_MANIFEST: `http://127.0.0.1:${updatePort}/manifest.json`, BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
     BUTLER_E2E_TIER: "stub", BUTLER_E2E_EMBED_SOURCES: "http://127.0.0.1:9",

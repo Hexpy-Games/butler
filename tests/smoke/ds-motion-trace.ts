@@ -1,3 +1,4 @@
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 /**
  * Motion verification on the DS Viewer (DS spec Motion Contract):
  * - Chrome traces (CDP tracing) of overlay open/close and 25 chunks/s
@@ -24,18 +25,18 @@
 import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import { type Browser, type BrowserContext, type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 
 const root = process.cwd();
 const uiRoot = resolve(root, "packages", "butler-app", "client", "ui", "dist");
-const outArg = Bun.argv.find((arg) => arg.startsWith("--out="));
+const outArg = process.argv.find((arg) => arg.startsWith("--out="));
 const outDir = resolve(outArg ? outArg.slice("--out=".length) : join(root, ".tmp", "ds-motion"));
-const recordVideo = Bun.argv.includes("--video");
-const onlyOverlays = Bun.argv.includes("--only=overlays");
-const onlyHeroes = Bun.argv.includes("--only=heroes");
+const recordVideo = process.argv.includes("--video");
+const onlyOverlays = process.argv.includes("--only=overlays");
+const onlyHeroes = process.argv.includes("--only=heroes");
 /** Report numbers without asserting (used to measure an older build). */
-const reportOnly = Bun.argv.includes("--report-only");
+const reportOnly = process.argv.includes("--report-only");
 const FIRST_FRAME_MAX = 0.3;
 const tempDir = mkdtempSync(join(tmpdir(), "butler-ds-motion-"));
 const LONG_TASK_MS = 50;
@@ -668,8 +669,8 @@ async function recordVideos(browser: Browser, serverUrl: string, ids: Map<string
 
 function mainThread(events: TraceEvent[]): { pid: number; tid: number } {
   const meta = events.find((event) => event.ph === "M" && event.name === "thread_name" &&
-    (event.args as { name?: string } | undefined)?.name === "CrRendererMain" &&
-    events.some((other) => other.pid === event.pid && other.name === "RunTask"));
+    ["CrRendererMain", "Chrome_InProcRendererThread"].includes((event.args as { name?: string } | undefined)?.name ?? "") &&
+    events.some((other) => other.pid === event.pid && other.tid === event.tid && other.name === "RunTask"));
   assert(meta, "trace has no renderer main thread");
   return { pid: meta.pid, tid: meta.tid };
 }
@@ -831,7 +832,7 @@ async function measure(browser: Browser, serverUrl: string, ids: Map<string, str
 assert(existsSync(join(uiRoot, "index.html")), "UI dist is missing; build the UI first.");
 mkdirSync(outDir, { recursive: true });
 const server = await createNativeAppServer({ uiRoot });
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 try {
   const lookup = await browser.newPage();
   await server.signIn(lookup);

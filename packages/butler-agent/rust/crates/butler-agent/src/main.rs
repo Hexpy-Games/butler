@@ -7,5 +7,15 @@ async fn main() -> std::process::ExitCode {
         eprintln!("process_name_unavailable: {error}");
         return std::process::ExitCode::FAILURE;
     }
+    let recovery = tokio::task::spawn_blocking(|| {
+        let executable =
+            butler_platform::process_names::current_exe().map_err(|e| e.to_string())?;
+        butler_platform::app_update::recover(&executable)
+    })
+    .await;
+    if !matches!(recovery, Ok(Ok(()))) {
+        eprintln!("app_update_recovery_failed: {recovery:?}");
+        return std::process::ExitCode::FAILURE;
+    }
     butler_agent::main(std::env::args_os().skip(1).collect()).await
 }

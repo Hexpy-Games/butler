@@ -140,9 +140,11 @@ async fn app_update_does_not_follow_plain_http_redirect_outside_trusted_loopback
     };
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let port = listener.local_addr()?.port();
-    // A second server can be reached on another loopback IP, classified as
-    // untrusted by the updater's existing exact loopback allowlist.
-    let target = tokio::net::TcpListener::bind(("127.0.0.2", port)).await?;
+    // The unspecified address reaches this local listener but is outside the
+    // updater's exact loopback allowlist. No OS-specific loopback alias needed.
+    let target = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let target_port = target.local_addr()?.port();
+    drop(tokio::net::TcpStream::connect(("0.0.0.0", target_port)).await?);
     let hits = Arc::new(AtomicUsize::new(0));
     let seen = hits.clone();
     let app = axum::Router::new().fallback(move || {
@@ -157,7 +159,7 @@ async fn app_update_does_not_follow_plain_http_redirect_outside_trusted_loopback
         }
     });
     let target_task = tokio::spawn(async move { axum::serve(target, app).await });
-    let redirect = format!("http://127.0.0.2:{port}/manifest.json");
+    let redirect = format!("http://0.0.0.0:{target_port}/manifest.json");
     let app = axum::Router::new().fallback(move || {
         let redirect = redirect.clone();
         async move { axum::response::Redirect::temporary(&redirect) }

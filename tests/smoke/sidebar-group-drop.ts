@@ -1,8 +1,8 @@
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { strict as assert } from "node:assert";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { chromium } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import type { NavigationView, SessionSummary } from "../../packages/butler-app/client/ui/src/app/types.ts";
 import { LEGACY_FIRST_RUN_STORAGE_KEY as FIRST_RUN_STORAGE_KEY, legacyFirstRunCompleteRecord } from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
@@ -15,7 +15,7 @@ const navigation = () => server.api<NavigationView>("/navigation");
 await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko" }) });
 const source = (await server.api<{ session: SessionSummary }>("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: "사죽이 이야기" }) })).session;
 const target = (await server.api<{ session: SessionSummary }>("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: "죽랑이 이야기 이어가기" }) })).session;
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 try {
   const page = await browser.newPage({ viewport: { width: 1200, height: 700 } });
   await server.signIn(page);

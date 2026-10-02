@@ -1,4 +1,5 @@
-import { chromium, webkit, type Browser, type BrowserContext, type Page } from "playwright";
+import { launchSmokeBrowser, smokeBrowserArgs } from "./smoke-browser.ts";
+import { webkit, type Browser, type BrowserContext, type Page } from "playwright";
 
 // DS Viewer on phones (shared by the viewer smoke and the static ds-site smoke): the app's
 // AdaptiveShell drawer (opaque surface over a scrim, modal focus, Escape/scrim/toggle/navigate
@@ -16,10 +17,11 @@ function assert(condition: unknown, message: string): asserts condition {
 
 /** WebKit (iOS Safari fidelity) when Playwright has it installed, else Chromium. */
 export async function launchMobileBrowser(): Promise<{ browser: Browser; engine: string }> {
+  if (smokeBrowserArgs().length) return { browser: await launchSmokeBrowser(), engine: "chromium" };
   try {
     return { browser: await webkit.launch({ headless: true }), engine: "webkit" };
   } catch {
-    return { browser: await chromium.launch({ headless: true }), engine: "chromium" };
+    return { browser: await launchSmokeBrowser(), engine: "chromium" };
   }
 }
 

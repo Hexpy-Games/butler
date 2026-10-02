@@ -203,9 +203,9 @@ sign_app() {
   local app=${1%/} list files bundles f b agent agent_inode=""
   [ -d "$app/Contents" ] || die "not an app bundle: $app"
   [ -f "$entitlements" ] || die "entitlements missing: $entitlements"
-  list=$(mktemp)
-  files=$(mktemp)
-  bundles=$(mktemp)
+  list=$(mktemp "$tmp_dir/butler-sign-list.XXXXXX")
+  files=$(mktemp "$tmp_dir/butler-sign-files.XXXXXX")
+  bundles=$(mktemp "$tmp_dir/butler-sign-bundles.XXXXXX")
   agent=$app/Contents/Resources/bundled-agent/bin/butler-agent
   if [ -f "$agent" ]; then agent_inode=$(stat -f '%d:%i' "$agent"); fi
 
@@ -261,7 +261,7 @@ notarize() {
     die "notary API key env is incomplete"
   fi
   local auth=(--key "$BUTLER_NOTARY_KEY_PATH" --key-id "$BUTLER_NOTARY_KEY_ID" --issuer "$BUTLER_NOTARY_ISSUER_ID")
-  work=$(mktemp -d)
+  work=$(mktemp -d "$tmp_dir/butler-sign-work.XXXXXX")
   case "$path" in
     *.dmg|*.zip|*.pkg) sub=$path ;;
     *) sub=$work/$(basename "$path").zip; ditto -c -k --keepParent "$path" "$sub" ;;

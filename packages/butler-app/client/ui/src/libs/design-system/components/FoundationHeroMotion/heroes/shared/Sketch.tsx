@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import type { Box, Key, Track } from "../../heroTimeline";
 import { select } from "./Reveal";
 import s from "./shared.module.css";
+import { StrokeReveal, strokeTracks } from "./StrokeReveal";
 
 /** A box the blueprint draws, with the corner radius of the real element (px). */
 export type SketchBox = Box & { r: number };
@@ -25,12 +26,12 @@ const SIDES = ["t", "r", "b", "l"] as const;
 export function Sketch({ id, boxes }: { id: string; boxes: SketchBox[] }) {
   return (
     <span className={s.sketch} aria-hidden="true">
-      <svg className={s.sketchSvg}>
+      <>
         {boxes.map((box, i) => (i === 0 ? null : (
-          <rect className={s.sketchOutline} data-t={`sk-${id}-${i}-rr`} height={box.h} key={i} rx={Math.min(box.r, box.w / 2, box.h / 2)} ry={Math.min(box.r, box.w / 2, box.h / 2)} width={box.w} x={box.x} y={box.y}
-            style={{ "--dash": `${outlineLength(box)}px` } as CSSProperties} />
+          <StrokeReveal name={`sk-${id}-${i}-rr`} key={i}><rect className={s.sketchOutline} height={box.h} rx={Math.min(box.r, box.w / 2, box.h / 2)} ry={Math.min(box.r, box.w / 2, box.h / 2)} width={box.w} x={box.x} y={box.y}
+            /></StrokeReveal>
         )))}
-      </svg>
+      </>
       {boxes.flatMap((box, i) => SIDES.map((side) => {
         const horizontal = side === "t" || side === "b";
         const style = horizontal
@@ -49,13 +50,10 @@ export function Sketch({ id, boxes }: { id: string; boxes: SketchBox[] }) {
  * the surface fills in, then retract and fade. Everything resets by `close`.
  */
 export function sketchTracks(id: string, boxes: SketchBox[], start: number, retract: number, close: number): Track[] {
-  const outlines = boxes.flatMap((box, i): Track[] => (i === 0 ? [] : [{
-    select: select(`sk-${id}-${i}-rr`),
-    keys: [
+  const outlines = boxes.flatMap((box, i): Track[] => (i === 0 ? [] : strokeTracks(`sk-${id}-${i}-rr`, [
       { at: 0, dash: outlineLength(box), o: 0 }, { at: start + i * 0.35 + 0.5, o: 0.8 }, { at: start + i * 0.35 + 1.9, dash: 0, ease: "decelerate" },
       { at: retract + 0.6 + i * 0.1, o: 0.8 }, { at: retract + 1.4 + i * 0.1, o: 0, ease: "accelerate" }, { at: close, dash: outlineLength(box), o: 0 },
-    ],
-  }]));
+    ])));
   return [...outlines, ...boxes.flatMap((_, i) => SIDES.map((side, j): Track => {
     const at = start + i * 0.35 + j * 0.15;
     const axis = side === "t" || side === "b" ? "sx" : "sy";
