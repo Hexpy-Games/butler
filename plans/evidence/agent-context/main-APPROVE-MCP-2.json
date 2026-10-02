@@ -1,0 +1,195 @@
+{
+  "id": "APPROVE-MCP-2",
+  "category": "approval",
+  "turn_id": "turn-f791a0aa-6f32-4817-821b-ccd6a00af186",
+  "pass": false,
+  "failures": [
+    "missing tool class ['call_mcp_tool']"
+  ],
+  "request_tokens": [
+    {
+      "instructions": 4051,
+      "tools": 8552,
+      "input": 285,
+      "serialized": 13174
+    },
+    {
+      "instructions": 4051,
+      "tools": 8552,
+      "input": 742,
+      "serialized": 13631
+    },
+    {
+      "instructions": 4051,
+      "tools": 8552,
+      "input": 995,
+      "serialized": 13884
+    },
+    {
+      "instructions": 4051,
+      "tools": 8552,
+      "input": 1269,
+      "serialized": 14158
+    }
+  ],
+  "turn": {
+    "id": "turn-f791a0aa-6f32-4817-821b-ccd6a00af186",
+    "chat_id": "general",
+    "user_message_id": "client-e5f998d1-c20a-4d8d-89c8-8b7f12594c11",
+    "state": "waiting_for_form",
+    "safe_status_label": "Waiting for your response",
+    "retryable": false,
+    "cancellable": true,
+    "attempt": 1,
+    "created_at": "2026-10-02T14:08:07.356Z",
+    "updated_at": "2026-10-02T14:08:29.599Z",
+    "cursor": 1,
+    "execution_controls": {
+      "schema_version": "butler.turn-execution-controls.v1",
+      "turn_id": "turn-f791a0aa-6f32-4817-821b-ccd6a00af186",
+      "session_id": "general",
+      "model_ref": "openai/gpt-6-luna",
+      "reasoning_effort": "low",
+      "access_mode": "ask_first",
+      "plan_mode": false,
+      "source": "global_default",
+      "session_control_revision": 0,
+      "catalog_generation": "d8f01b508890844542e44766d99b17c033f4eab865a627d1be9384f9d7d522a4",
+      "resolved_at": "2026-10-02T14:08:07.356Z",
+      "model_fallback": {
+        "enabled": false,
+        "models": []
+      },
+      "integrity_hash": "ec5667ca0c10fe6d107b051d7aa5886f1ddfa4b4a4472a786df151ae3f9d00a7"
+    }
+  },
+  "messages": [
+    {
+      "id": "client-e5f998d1-c20a-4d8d-89c8-8b7f12594c11",
+      "chat_id": "general",
+      "turn_id": "turn-f791a0aa-6f32-4817-821b-ccd6a00af186",
+      "role": "user",
+      "text": "Call e2e_echo on MCP server e2e.",
+      "status": "sent",
+      "created_at": "2026-10-02T14:08:07.356Z",
+      "updated_at": "2026-10-02T14:08:07.356Z",
+      "retryable": false,
+      "cursor": 1
+    },
+    {
+      "id": "message-stream-turn-f791a0aa-6f32-4817-821b-ccd6a00af186",
+      "chat_id": "general",
+      "turn_id": "turn-f791a0aa-6f32-4817-821b-ccd6a00af186",
+      "role": "assistant",
+      "text": "`e2e_echo` takes no arguments and returns the fixture’s per-run token. May I call it now?",
+      "status": "streaming",
+      "created_at": "2026-10-02T14:08:15.757Z",
+      "updated_at": "2026-10-02T14:08:27.769Z",
+      "retryable": false,
+      "cursor": 2
+    }
+  ],
+  "calls": [
+    {
+      "name": "start_work",
+      "wire_name": "start_work",
+      "args": {
+        "objective": "Call the e2e_echo operation on the e2e MCP server"
+      },
+      "status": "completed",
+      "error": null
+    },
+    {
+      "name": "tool_search",
+      "wire_name": "tool_search",
+      "args": {
+        "category": "mcp",
+        "limit": 5,
+        "provider": "mcp",
+        "query": "e2e MCP server e2e_echo"
+      },
+      "status": "completed",
+      "error": null
+    },
+    {
+      "name": "tool_describe",
+      "wire_name": "tool_describe",
+      "args": {
+        "ids": [
+          "mcp:e2e:e2e_echo"
+        ]
+      },
+      "status": "completed",
+      "error": null
+    },
+    {
+      "name": "ask_user",
+      "wire_name": "ask_user",
+      "args": {
+        "questions": [
+          {
+            "allow_custom": false,
+            "eyebrow": "Approval",
+            "id": "approve_echo",
+            "kind": "single",
+            "options": [
+              {
+                "description": "Make the call now.",
+                "id": "approve",
+                "label": "Approve"
+              },
+              {
+                "description": "Leave it untouched.",
+                "id": "deny",
+                "label": "Do not call"
+              }
+            ],
+            "title": "Call e2e_echo on the e2e server?"
+          }
+        ]
+      },
+      "status": "awaiting_authority",
+      "error": null
+    }
+  ],
+  "approvals": [
+    {
+      "request_ref": "question-ref-aed57ff1c7977fc16b3523c17cd4a07607b0ef3382d3ec743cc5f69bfcb4e7d3",
+      "category": "ask_user",
+      "reason": "Answer questions",
+      "executable": "ask_user",
+      "command_count": 1,
+      "scope": {
+        "title": "",
+        "description": ""
+      },
+      "source_turn_id": "turn-f791a0aa-6f32-4817-821b-ccd6a00af186",
+      "source_session_id": "butler/app-general",
+      "source_call_id": "74c28d5eb9552ff1b71fafe2fe11754707484813bc16bfae886e53684d16cd4f",
+      "questions": {
+        "questions": [
+          {
+            "id": "approve_echo",
+            "eyebrow": "Approval",
+            "title": "Call e2e_echo on the e2e server?",
+            "kind": "single",
+            "options": [
+              {
+                "id": "approve",
+                "label": "Approve",
+                "description": "Make the call now."
+              },
+              {
+                "id": "deny",
+                "label": "Do not call",
+                "description": "Leave it untouched."
+              }
+            ],
+            "allow_custom": false
+          }
+        ]
+      },
+      "question_state": "pending"
+    }
+  ]
+}

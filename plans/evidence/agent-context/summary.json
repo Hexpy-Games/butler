@@ -1,0 +1,169 @@
+{
+  "main": {
+    "passed": 91,
+    "total": 102,
+    "categories": {
+      "approval": {
+        "passed": 10,
+        "total": 12,
+        "failures": [
+          "APPROVE-SHELL-1",
+          "APPROVE-MCP-2"
+        ]
+      },
+      "ask_user": {
+        "passed": 6,
+        "total": 6,
+        "failures": []
+      },
+      "delegation": {
+        "passed": 9,
+        "total": 9,
+        "failures": []
+      },
+      "files": {
+        "passed": 12,
+        "total": 12,
+        "failures": []
+      },
+      "language": {
+        "passed": 6,
+        "total": 6,
+        "failures": []
+      },
+      "long_context": {
+        "passed": 1,
+        "total": 6,
+        "failures": [
+          "LONG-PERSONA-1",
+          "LONG-PERSONA-2",
+          "LONG-RULE-2",
+          "LONG-PERSONA-3",
+          "LONG-RULE-3"
+        ]
+      },
+      "mcp": {
+        "passed": 6,
+        "total": 6,
+        "failures": []
+      },
+      "memory": {
+        "passed": 8,
+        "total": 9,
+        "failures": [
+          "MEMORY-EXACT-2"
+        ]
+      },
+      "persona_eol": {
+        "passed": 6,
+        "total": 6,
+        "failures": []
+      },
+      "recovery": {
+        "passed": 6,
+        "total": 6,
+        "failures": []
+      },
+      "rules": {
+        "passed": 9,
+        "total": 9,
+        "failures": []
+      },
+      "schedules": {
+        "passed": 6,
+        "total": 9,
+        "failures": [
+          "SCHEDULE-CREATE-1",
+          "SCHEDULE-CREATE-2",
+          "SCHEDULE-CREATE-3"
+        ]
+      },
+      "shell": {
+        "passed": 6,
+        "total": 6,
+        "failures": []
+      }
+    },
+    "first_request_tokens_mean": 13769.803921568628,
+    "request_tokens_total": 4174300
+  },
+  "after": {
+    "passed": 98,
+    "total": 102,
+    "categories": {
+      "approval": {
+        "passed": 12,
+        "total": 12,
+        "failures": []
+      },
+      "ask_user": {
+        "passed": 6,
+        "total": 6,
+        "failures": []
+      },
+      "delegation": {
+        "passed": 9,
+        "total": 9,
+        "failures": []
+      },
+      "files": {
+        "passed": 12,
+        "total": 12,
+        "failures": []
+      },
+      "language": {
+        "passed": 6,
+        "total": 6,
+        "failures": []
+      },
+      "long_context": {
+        "passed": 6,
+        "total": 6,
+        "failures": []
+      },
+      "mcp": {
+        "passed": 6,
+        "total": 6,
+        "failures": []
+      },
+      "memory": {
+        "passed": 8,
+        "total": 9,
+        "failures": [
+          "MEMORY-EXACT-2"
+        ]
+      },
+      "persona_eol": {
+        "passed": 6,
+        "total": 6,
+        "failures": []
+      },
+      "recovery": {
+        "passed": 6,
+        "total": 6,
+        "failures": []
+      },
+      "rules": {
+        "passed": 9,
+        "total": 9,
+        "failures": []
+      },
+      "schedules": {
+        "passed": 6,
+        "total": 9,
+        "failures": [
+          "SCHEDULE-CREATE-1",
+          "SCHEDULE-CREATE-2",
+          "SCHEDULE-CREATE-3"
+        ]
+      },
+      "shell": {
+        "passed": 6,
+        "total": 6,
+        "failures": []
+      }
+    },
+    "first_request_tokens_mean": 10649.245098039215,
+    "request_tokens_total": 3437289
+  }
+}

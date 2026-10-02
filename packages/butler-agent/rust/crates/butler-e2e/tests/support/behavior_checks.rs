@@ -39,18 +39,19 @@ pub(super) fn calls(s: &Scenario, turn: &str) -> Result<Vec<Value>, HarnessError
     let db = sql(rusqlite::Connection::open(
         s.sandbox.data.join("agent-runtime/btcc.sqlite"),
     ))?;
-    let mut query = sql(db.prepare("SELECT tool_name, arguments_json, status, error_code FROM btcc_guided_tool_calls WHERE turn_id=?1 ORDER BY turn_sequence, call_id"))?;
+    let mut query = sql(db.prepare("SELECT tool_name, arguments_json, status, error_code, result_json FROM btcc_guided_tool_calls WHERE turn_id=?1 ORDER BY turn_sequence, call_id"))?;
     let rows = sql(query.query_map([turn], |row| {
         Ok((
             row.get::<_, String>(0)?,
             row.get::<_, String>(1)?,
             row.get::<_, String>(2)?,
             row.get::<_, Option<String>>(3)?,
+            row.get::<_, Option<String>>(4)?,
         ))
     }))?;
     let mut out = Vec::new();
     for row in rows {
-        let (name, args, status, error) = sql(row)?;
+        let (name, args, status, error, result) = sql(row)?;
         let args: Value = serde_json::from_str(&args)?;
         let effective = if name == "tool_call" {
             args["id"]
@@ -61,10 +62,45 @@ pub(super) fn calls(s: &Scenario, turn: &str) -> Result<Vec<Value>, HarnessError
             &name
         };
         out.push(
-            json!({"name":effective,"wire_name":name,"args":args,"status":status,"error":error}),
+            json!({"name":effective,"wire_name":name,"args":args,"status":status,"error":error,"result":result.and_then(|r| serde_json::from_str::<Value>(&r).ok())}),
         );
     }
     Ok(out)
+}
+
+pub(super) fn add_wire_calls(calls: &mut Vec<Value>, requests: &[Value]) {
+    let mut seen = std::collections::BTreeSet::new();
+    for request in requests {
+        for item in request["input"].as_array().into_iter().flatten() {
+            if item["type"] == "function_call_output" {
+                if let Ok(result) =
+                    serde_json::from_str::<Value>(item["output"].as_str().unwrap_or("{}"))
+                {
+                    calls
+                        .push(json!({"name":"__feedback","result":result,"wire_observation":true}));
+                }
+                continue;
+            }
+            if item["type"] != "function_call" || !seen.insert(item["call_id"].to_string()) {
+                continue;
+            }
+            let Ok(args) =
+                serde_json::from_str::<Value>(item["arguments"].as_str().unwrap_or("{}"))
+            else {
+                continue;
+            };
+            let name = item["name"].as_str().unwrap_or_default();
+            let effective = if name == "tool_call" {
+                args["id"]
+                    .as_str()
+                    .and_then(|id| id.strip_prefix("native:"))
+                    .unwrap_or("call_mcp_tool")
+            } else {
+                name
+            };
+            calls.push(json!({"name":effective,"args":args,"wire_observation":true}));
+        }
+    }
 }
 
 pub(super) fn check(
@@ -87,11 +123,20 @@ pub(super) fn check(
         errors.push(format!("state expected {state}, got {}", turn["state"]));
     }
     if let Some(tool) = case["tool"].as_str() {
-        let matched: Vec<_> = calls.iter().filter(|c| c["name"] == tool).collect();
+        let matched: Vec<_> = calls
+            .iter()
+            .filter(|c| {
+                c["name"] == tool
+                    || case["tool_alternatives"]
+                        .as_array()
+                        .is_some_and(|tools| tools.contains(&c["name"]))
+            })
+            .collect();
         if matched.is_empty() {
             errors.push(format!("missing tool {tool}"));
         }
         if let Some(arg) = case["argument_contains"].as_str()
+            && !approvals.iter().any(|a| a.to_string().contains(arg))
             && !matched.iter().any(|c| {
                 c["args"]
                     .to_string()
@@ -112,6 +157,11 @@ pub(super) fn check(
     }
     if let Some(text) = case["reply_contains"].as_str()
         && !reply.contains(text)
+    {
+        errors.push(format!("reply missing {text}"));
+    }
+    if let Some(text) = case["reply_contains_insensitive"].as_str()
+        && !reply.to_lowercase().contains(&text.to_lowercase())
     {
         errors.push(format!("reply missing {text}"));
     }
@@ -155,11 +205,16 @@ pub(super) fn check(
         }
     }
     if case["requires_error"] == true
-        && !calls
-            .iter()
-            .any(|c| c["error"].is_string() || c["status"] == "failed")
+        && !calls.iter().any(|c| {
+            c["error"].is_string() || c["status"] == "failed" || c["result"]["ok"] == false
+        })
     {
         errors.push("fault was not exercised".into());
+    }
+    if let Some(code) = case["expected_error_code"].as_str()
+        && !calls.iter().any(|c| c["result"]["error"]["code"] == code)
+    {
+        errors.push(format!("missing injected error {code}"));
     }
     if let Some(text) = case["memory_contains"].as_str() {
         let root = s.sandbox.data.join("cognition/memory/rules");

@@ -169,7 +169,7 @@
       "request_service_restart"
     ],
     "tool": "tool_search",
-    "argument_contains": "steward"
+    "reply_contains_insensitive": "steward"
   },
   {
     "id": "DELEGATE-WORKER",
@@ -203,7 +203,11 @@
       "request_service_restart"
     ],
     "tool": "list_mcp_capabilities",
-    "fixture": "mcp"
+    "fixture": "mcp",
+    "tool_alternatives": [
+      "tool_search"
+    ],
+    "argument_contains": "mcp"
   },
   {
     "id": "APPROVE-WRITE",
@@ -219,20 +223,26 @@
     "file_absent": [
       "made.txt"
     ],
-    "approval": true
+    "approval": true,
+    "tool_alternatives": [
+      "run_command"
+    ]
   },
   {
     "id": "APPROVE-SHELL",
     "category": "approval",
-    "prompt": "Run printf shell-proof in the shell.",
+    "prompt": "Run the shell command printf made-by-tool > made.txt.",
     "forbidden": [
       "request_service_restart"
     ],
     "tool": "run_command",
-    "argument_contains": "printf",
+    "argument_contains": "made.txt",
     "access": "ask_first",
     "state": "waiting_for_form",
-    "approval": true
+    "approval": true,
+    "file_absent": [
+      "made.txt"
+    ]
   },
   {
     "id": "APPROVE-MCP",
@@ -373,7 +383,8 @@
     "file_equals": {
       "made.txt": "made-by-tool"
     },
-    "requires_error": true
+    "requires_error": true,
+    "expected_error_code": "invalid_arguments"
   },
   {
     "id": "RECOVER-READ",
@@ -386,6 +397,7 @@
     "argument_contains": "notes.txt",
     "fault": "read_file",
     "reply_contains": "iris-42",
-    "requires_error": true
+    "requires_error": true,
+    "expected_error_code": "invalid_arguments"
   }
 ]

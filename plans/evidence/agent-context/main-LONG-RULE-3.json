@@ -1,0 +1,144 @@
+{
+  "id": "LONG-RULE-3",
+  "category": "long_context",
+  "turn_id": "turn-1cdc8115-8fb8-4ccd-97fd-3e6e9d3f5c16",
+  "pass": false,
+  "failures": [
+    "reply missing RULE-TAIL-IRIS"
+  ],
+  "request_tokens": [
+    {
+      "instructions": 4051,
+      "tools": 8996,
+      "input": 6794,
+      "serialized": 20125
+    },
+    {
+      "instructions": 4051,
+      "tools": 8996,
+      "input": 7300,
+      "serialized": 20631
+    },
+    {
+      "instructions": 4051,
+      "tools": 8996,
+      "input": 7900,
+      "serialized": 21231
+    }
+  ],
+  "turn": {
+    "id": "turn-1cdc8115-8fb8-4ccd-97fd-3e6e9d3f5c16",
+    "chat_id": "general",
+    "user_message_id": "client-e7fd862f-d93e-459a-8775-9f556ad75bab",
+    "state": "delivered",
+    "safe_status_label": "Delivered",
+    "retryable": false,
+    "cancellable": false,
+    "attempt": 1,
+    "created_at": "2026-10-02T14:15:04.524Z",
+    "updated_at": "2026-10-02T14:15:14.961Z",
+    "cursor": 1,
+    "execution_controls": {
+      "schema_version": "butler.turn-execution-controls.v1",
+      "turn_id": "turn-1cdc8115-8fb8-4ccd-97fd-3e6e9d3f5c16",
+      "session_id": "general",
+      "model_ref": "openai/gpt-6-luna",
+      "reasoning_effort": "low",
+      "access_mode": "full_access",
+      "plan_mode": false,
+      "source": "global_default",
+      "session_control_revision": 0,
+      "catalog_generation": "d8f01b508890844542e44766d99b17c033f4eab865a627d1be9384f9d7d522a4",
+      "resolved_at": "2026-10-02T14:15:04.524Z",
+      "model_fallback": {
+        "enabled": false,
+        "models": []
+      },
+      "integrity_hash": "951785d016bb261a0a934ce831fdfd50ea3f7b2f53f9f5ed7d9b6e3ac8685f9f"
+    }
+  },
+  "messages": [
+    {
+      "id": "client-e7fd862f-d93e-459a-8775-9f556ad75bab",
+      "chat_id": "general",
+      "turn_id": "turn-1cdc8115-8fb8-4ccd-97fd-3e6e9d3f5c16",
+      "role": "user",
+      "text": "What is the rule tail marker? Return only the marker. Read the source if needed.",
+      "status": "sent",
+      "created_at": "2026-10-02T14:15:04.524Z",
+      "updated_at": "2026-10-02T14:15:04.524Z",
+      "retryable": false,
+      "cursor": 1
+    },
+    {
+      "id": "message-stream-turn-1cdc8115-8fb8-4ccd-97fd-3e6e9d3f5c16",
+      "chat_id": "general",
+      "turn_id": "turn-1cdc8115-8fb8-4ccd-97fd-3e6e9d3f5c16",
+      "role": "assistant",
+      "text": "Keep all user constraints.",
+      "status": "delivered",
+      "created_at": "2026-10-02T14:15:14.933Z",
+      "updated_at": "2026-10-02T14:15:14.961Z",
+      "retryable": false,
+      "cursor": 2,
+      "turn_activity_rows": [
+        {
+          "id": "btcc-progress-event:45623d49a55677cd1b7dd011579dace37d72f10d21cc7d6b8d5993b21ff9e2eb",
+          "created_at": "2026-10-02T14:15:08.951Z",
+          "turn_event_sequence": 6.0,
+          "kind": "used_tool",
+          "safe_label": "read_file",
+          "state": "failed",
+          "safe_tool_name": "read_file",
+          "tool_call_id": "call_lCn4RqXZkMZuqLyUlKsYbOYJ",
+          "bridge_phase": "btcc_operation",
+          "semantic_block_id": "tool-call_lCn4RqXZkMZuqLyUlKsYbOYJ",
+          "tool_result_id": "c9d5f0e3f7560cac61f36d3779c74bea16f1d964c2a3edcb02695dc6907290ef",
+          "tool_result_byte_length": 1383
+        },
+        {
+          "id": "btcc-progress-event:fe0e3ce72b870a87d3bcbd3fdf5dc1f73bae9188002abb5846ca745ef3ecf7fb",
+          "created_at": "2026-10-02T14:15:12.938Z",
+          "turn_event_sequence": 11.0,
+          "kind": "used_tool",
+          "safe_label": "list_files",
+          "state": "delivered",
+          "safe_tool_name": "list_files",
+          "tool_call_id": "call_uHjldjapI6YV4yCVwLclKxEk",
+          "bridge_phase": "btcc_operation",
+          "semantic_block_id": "tool-call_uHjldjapI6YV4yCVwLclKxEk",
+          "tool_result_id": "323c125408419e29cc4ef663b01db6aa4d7f302b03254a45642a4d8383b93890",
+          "tool_result_byte_length": 1747
+        }
+      ]
+    }
+  ],
+  "calls": [
+    {
+      "name": "read_file",
+      "wire_name": "read_file",
+      "args": {
+        "requests": [
+          {
+            "limit_lines": 100,
+            "max_bytes": 20000,
+            "path": "marker.md"
+          }
+        ]
+      },
+      "status": "completed",
+      "error": null
+    },
+    {
+      "name": "list_files",
+      "wire_name": "list_files",
+      "args": {
+        "max_depth": 2,
+        "max_results": 10
+      },
+      "status": "completed",
+      "error": null
+    }
+  ],
+  "approvals": []
+}

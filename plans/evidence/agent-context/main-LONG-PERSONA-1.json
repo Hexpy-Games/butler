@@ -1,0 +1,108 @@
+{
+  "id": "LONG-PERSONA-1",
+  "category": "long_context",
+  "turn_id": "turn-5d188d1e-e32b-4dd0-a517-ef70f7c02b15",
+  "pass": false,
+  "failures": [
+    "reply missing PERSONA-TAIL-IRIS"
+  ],
+  "request_tokens": [
+    {
+      "instructions": 4197,
+      "tools": 8996,
+      "input": 290,
+      "serialized": 13705
+    },
+    {
+      "instructions": 4197,
+      "tools": 8996,
+      "input": 674,
+      "serialized": 14089
+    }
+  ],
+  "turn": {
+    "id": "turn-5d188d1e-e32b-4dd0-a517-ef70f7c02b15",
+    "chat_id": "general",
+    "user_message_id": "client-f1b50e8b-06d5-4cf7-8e6b-871f95ec580e",
+    "state": "delivered",
+    "safe_status_label": "Delivered",
+    "retryable": false,
+    "cancellable": false,
+    "attempt": 1,
+    "created_at": "2026-10-02T14:02:45.080Z",
+    "updated_at": "2026-10-02T14:02:53.148Z",
+    "cursor": 1,
+    "execution_controls": {
+      "schema_version": "butler.turn-execution-controls.v1",
+      "turn_id": "turn-5d188d1e-e32b-4dd0-a517-ef70f7c02b15",
+      "session_id": "general",
+      "model_ref": "openai/gpt-6-luna",
+      "reasoning_effort": "low",
+      "access_mode": "full_access",
+      "plan_mode": false,
+      "source": "global_default",
+      "session_control_revision": 0,
+      "catalog_generation": "d8f01b508890844542e44766d99b17c033f4eab865a627d1be9384f9d7d522a4",
+      "resolved_at": "2026-10-02T14:02:45.080Z",
+      "model_fallback": {
+        "enabled": false,
+        "models": []
+      },
+      "integrity_hash": "91cf366ed0d8e619d63da06a30985801ef521af5320ec402a5de0c0c25939204"
+    }
+  },
+  "messages": [
+    {
+      "id": "client-f1b50e8b-06d5-4cf7-8e6b-871f95ec580e",
+      "chat_id": "general",
+      "turn_id": "turn-5d188d1e-e32b-4dd0-a517-ef70f7c02b15",
+      "role": "user",
+      "text": "What is the persona tail marker? Return only the marker. Read the full persona source if needed.",
+      "status": "sent",
+      "created_at": "2026-10-02T14:02:45.080Z",
+      "updated_at": "2026-10-02T14:02:45.080Z",
+      "retryable": false,
+      "cursor": 1
+    },
+    {
+      "id": "message-stream-turn-5d188d1e-e32b-4dd0-a517-ef70f7c02b15",
+      "chat_id": "general",
+      "turn_id": "turn-5d188d1e-e32b-4dd0-a517-ef70f7c02b15",
+      "role": "assistant",
+      "text": "Historical garden notes.",
+      "status": "delivered",
+      "created_at": "2026-10-02T14:02:52.964Z",
+      "updated_at": "2026-10-02T14:02:53.148Z",
+      "retryable": false,
+      "cursor": 2,
+      "turn_activity_rows": [
+        {
+          "id": "btcc-progress-event:573dc9309dc2c166c9796b57dce9b241c33934331284c39d652ceb710519c723",
+          "created_at": "2026-10-02T14:02:49.511Z",
+          "turn_event_sequence": 6.0,
+          "kind": "used_tool",
+          "safe_label": "load_skill",
+          "state": "delivered",
+          "safe_tool_name": "load_skill",
+          "tool_call_id": "call_csTluUMCvHym6RHi5wCZDDeq",
+          "bridge_phase": "btcc_operation",
+          "semantic_block_id": "tool-call_csTluUMCvHym6RHi5wCZDDeq",
+          "tool_result_id": "7787a696201fb75f0f7babe83e91ac418b9797dc571eb963989f318b54e0a946",
+          "tool_result_byte_length": 1381
+        }
+      ]
+    }
+  ],
+  "calls": [
+    {
+      "name": "load_skill",
+      "wire_name": "load_skill",
+      "args": {
+        "name": "persona"
+      },
+      "status": "completed",
+      "error": null
+    }
+  ],
+  "approvals": []
+}

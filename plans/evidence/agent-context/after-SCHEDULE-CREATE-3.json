@@ -1,0 +1,142 @@
+{
+  "id": "SCHEDULE-CREATE-3",
+  "category": "schedules",
+  "turn_id": "turn-35ff73b5-6e14-4379-9ded-51d8cb8098f3",
+  "pass": false,
+  "failures": [
+    "missing tool class ['create_automation']",
+    "create_automation: missing argument class 2099"
+  ],
+  "request_tokens": [
+    {
+      "instructions": 2312,
+      "tools": 7645,
+      "input": 307,
+      "serialized": 10524
+    },
+    {
+      "instructions": 2312,
+      "tools": 7645,
+      "input": 1186,
+      "serialized": 11403
+    },
+    {
+      "instructions": 2312,
+      "tools": 7645,
+      "input": 1599,
+      "serialized": 11816
+    }
+  ],
+  "turn": {
+    "id": "turn-35ff73b5-6e14-4379-9ded-51d8cb8098f3",
+    "chat_id": "general",
+    "user_message_id": "client-6a1dfdfe-dab7-4bf2-8ef5-0e956fdd6527",
+    "state": "delivered",
+    "safe_status_label": "Delivered",
+    "retryable": false,
+    "cancellable": false,
+    "attempt": 1,
+    "created_at": "2026-10-02T14:12:16.033Z",
+    "updated_at": "2026-10-02T14:12:24.788Z",
+    "cursor": 1,
+    "execution_controls": {
+      "schema_version": "butler.turn-execution-controls.v1",
+      "turn_id": "turn-35ff73b5-6e14-4379-9ded-51d8cb8098f3",
+      "session_id": "general",
+      "model_ref": "openai/gpt-6-luna",
+      "reasoning_effort": "low",
+      "access_mode": "full_access",
+      "plan_mode": false,
+      "source": "global_default",
+      "session_control_revision": 0,
+      "catalog_generation": "d8f01b508890844542e44766d99b17c033f4eab865a627d1be9384f9d7d522a4",
+      "resolved_at": "2026-10-02T14:12:16.033Z",
+      "model_fallback": {
+        "enabled": false,
+        "models": []
+      },
+      "integrity_hash": "14f7be40a34b652f4414506c6733a60892b561fba87f98ba72debeb2581e8c85"
+    }
+  },
+  "messages": [
+    {
+      "id": "client-6a1dfdfe-dab7-4bf2-8ef5-0e956fdd6527",
+      "chat_id": "general",
+      "turn_id": "turn-35ff73b5-6e14-4379-9ded-51d8cb8098f3",
+      "role": "user",
+      "text": "Create a one-time schedule for 2099-01-01 at 09:00 UTC titled Iris check, with prompt Say iris. Do not run it now.",
+      "status": "sent",
+      "created_at": "2026-10-02T14:12:16.033Z",
+      "updated_at": "2026-10-02T14:12:16.033Z",
+      "retryable": false,
+      "cursor": 1
+    },
+    {
+      "id": "message-stream-turn-35ff73b5-6e14-4379-9ded-51d8cb8098f3",
+      "chat_id": "general",
+      "turn_id": "turn-35ff73b5-6e14-4379-9ded-51d8cb8098f3",
+      "role": "assistant",
+      "text": "I can’t create the schedule in this session because the schedule-creation action isn’t available here. I haven’t run the prompt or created anything.",
+      "status": "delivered",
+      "created_at": "2026-10-02T14:12:23.984Z",
+      "updated_at": "2026-10-02T14:12:24.788Z",
+      "retryable": false,
+      "cursor": 2,
+      "turn_activity_rows": [
+        {
+          "id": "btcc-progress-event:686e33e68d3769f0549f2f73bc4560d2686d2a5a2dac554c6adc1c818c9a3a36",
+          "created_at": "2026-10-02T14:12:19.465Z",
+          "turn_event_sequence": 6.0,
+          "kind": "used_tool",
+          "safe_label": "tool_search",
+          "state": "delivered",
+          "safe_tool_name": "tool_search",
+          "tool_call_id": "call_w1KBoIFMLEt5SGtVeCIZJq93",
+          "bridge_phase": "btcc_operation",
+          "semantic_block_id": "tool-call_w1KBoIFMLEt5SGtVeCIZJq93",
+          "tool_result_id": "ee9bb030bca5ce9b01b7f1dd239cb1f217efbf48e9820f916667da50306019d0",
+          "tool_result_byte_length": 3048
+        },
+        {
+          "id": "btcc-progress-event:c0ef8beaa9a90187dd831eda77c8f1496d2b12705a0a2a63f5a6602ac8306f6c",
+          "created_at": "2026-10-02T14:12:21.961Z",
+          "turn_event_sequence": 12.0,
+          "kind": "used_tool",
+          "safe_label": "tool_describe",
+          "state": "delivered",
+          "safe_tool_name": "tool_describe",
+          "tool_call_id": "call_PSi83lqdKoZDA7uiSLtOpoB8",
+          "bridge_phase": "btcc_operation",
+          "semantic_block_id": "tool-call_PSi83lqdKoZDA7uiSLtOpoB8",
+          "tool_result_id": "18f124472a7dcb6a823c902d23a04d7d049b09af6873af49d0ac063181b6c452",
+          "tool_result_byte_length": 1399
+        }
+      ]
+    }
+  ],
+  "calls": [
+    {
+      "name": "tool_search",
+      "wire_name": "tool_search",
+      "args": {
+        "category": "automation",
+        "limit": 10,
+        "query": "create one-time schedule scheduled reminder prompt title exact UTC, do not execute now"
+      },
+      "status": "completed",
+      "error": null
+    },
+    {
+      "name": "tool_describe",
+      "wire_name": "tool_describe",
+      "args": {
+        "ids": [
+          "native:create_automation"
+        ]
+      },
+      "status": "completed",
+      "error": null
+    }
+  ],
+  "approvals": []
+}

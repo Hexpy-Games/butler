@@ -1,0 +1,142 @@
+{
+  "id": "SCHEDULE-CREATE-2",
+  "category": "schedules",
+  "turn_id": "turn-e8048049-b4c0-4e81-ba31-0b7a60db9979",
+  "pass": false,
+  "failures": [
+    "missing tool class ['create_automation']",
+    "create_automation: missing argument class 2099"
+  ],
+  "request_tokens": [
+    {
+      "instructions": 4051,
+      "tools": 8996,
+      "input": 307,
+      "serialized": 13638
+    },
+    {
+      "instructions": 4051,
+      "tools": 8996,
+      "input": 1182,
+      "serialized": 14513
+    },
+    {
+      "instructions": 4051,
+      "tools": 8996,
+      "input": 1599,
+      "serialized": 14930
+    }
+  ],
+  "turn": {
+    "id": "turn-e8048049-b4c0-4e81-ba31-0b7a60db9979",
+    "chat_id": "general",
+    "user_message_id": "client-5d8236ad-572d-47c9-8925-79d48168f49f",
+    "state": "delivered",
+    "safe_status_label": "Delivered",
+    "retryable": false,
+    "cancellable": false,
+    "attempt": 1,
+    "created_at": "2026-10-02T14:04:58.110Z",
+    "updated_at": "2026-10-02T14:05:13.694Z",
+    "cursor": 1,
+    "execution_controls": {
+      "schema_version": "butler.turn-execution-controls.v1",
+      "turn_id": "turn-e8048049-b4c0-4e81-ba31-0b7a60db9979",
+      "session_id": "general",
+      "model_ref": "openai/gpt-6-luna",
+      "reasoning_effort": "low",
+      "access_mode": "full_access",
+      "plan_mode": false,
+      "source": "global_default",
+      "session_control_revision": 0,
+      "catalog_generation": "d8f01b508890844542e44766d99b17c033f4eab865a627d1be9384f9d7d522a4",
+      "resolved_at": "2026-10-02T14:04:58.110Z",
+      "model_fallback": {
+        "enabled": false,
+        "models": []
+      },
+      "integrity_hash": "a42aa8781e7ace9c0e0dde1f63b8c6d40296efe96474ceb42ae870b99cc8bcb8"
+    }
+  },
+  "messages": [
+    {
+      "id": "client-5d8236ad-572d-47c9-8925-79d48168f49f",
+      "chat_id": "general",
+      "turn_id": "turn-e8048049-b4c0-4e81-ba31-0b7a60db9979",
+      "role": "user",
+      "text": "Create a one-time schedule for 2099-01-01 at 09:00 UTC titled Iris check, with prompt Say iris. Do not run it now.",
+      "status": "sent",
+      "created_at": "2026-10-02T14:04:58.110Z",
+      "updated_at": "2026-10-02T14:04:58.110Z",
+      "retryable": false,
+      "cursor": 1
+    },
+    {
+      "id": "message-stream-turn-e8048049-b4c0-4e81-ba31-0b7a60db9979",
+      "chat_id": "general",
+      "turn_id": "turn-e8048049-b4c0-4e81-ba31-0b7a60db9979",
+      "role": "assistant",
+      "text": "I can’t create the schedule from this session: the scheduling action isn’t available here. I haven’t run “Say iris” or created anything. The requested schedule is **Iris check**, set for **January 1, 2099 at 09:00 UTC**, with the prompt **“Say iris.”**",
+      "status": "delivered",
+      "created_at": "2026-10-02T14:05:12.019Z",
+      "updated_at": "2026-10-02T14:05:13.694Z",
+      "retryable": false,
+      "cursor": 2,
+      "turn_activity_rows": [
+        {
+          "id": "btcc-progress-event:81d30d15ce8c1585287021ff8902b707cac0d5e5a88e7f8ee7bd1c513f7f2245",
+          "created_at": "2026-10-02T14:05:03.042Z",
+          "turn_event_sequence": 6.0,
+          "kind": "used_tool",
+          "safe_label": "tool_search",
+          "state": "delivered",
+          "safe_tool_name": "tool_search",
+          "tool_call_id": "call_HGwsuAEi32OJWYS4pFieml50",
+          "bridge_phase": "btcc_operation",
+          "semantic_block_id": "tool-call_HGwsuAEi32OJWYS4pFieml50",
+          "tool_result_id": "ee9bb030bca5ce9b01b7f1dd239cb1f217efbf48e9820f916667da50306019d0",
+          "tool_result_byte_length": 3048
+        },
+        {
+          "id": "btcc-progress-event:79a4793d2ca4ea8d054072fcc4ad8ccf14cadbf4bbcd3bbb5ff9fdac2ff1f00f",
+          "created_at": "2026-10-02T14:05:10.018Z",
+          "turn_event_sequence": 12.0,
+          "kind": "used_tool",
+          "safe_label": "tool_describe",
+          "state": "delivered",
+          "safe_tool_name": "tool_describe",
+          "tool_call_id": "call_4mlfV6Jdjhoh3wbJmlGmnHKN",
+          "bridge_phase": "btcc_operation",
+          "semantic_block_id": "tool-call_4mlfV6Jdjhoh3wbJmlGmnHKN",
+          "tool_result_id": "18f124472a7dcb6a823c902d23a04d7d049b09af6873af49d0ac063181b6c452",
+          "tool_result_byte_length": 1399
+        }
+      ]
+    }
+  ],
+  "calls": [
+    {
+      "name": "tool_search",
+      "wire_name": "tool_search",
+      "args": {
+        "category": "automation",
+        "limit": 10,
+        "query": "create one-time schedule scheduled task prompt run_at schedule title"
+      },
+      "status": "completed",
+      "error": null
+    },
+    {
+      "name": "tool_describe",
+      "wire_name": "tool_describe",
+      "args": {
+        "ids": [
+          "native:create_automation"
+        ]
+      },
+      "status": "completed",
+      "error": null
+    }
+  ],
+  "approvals": []
+}

@@ -1,0 +1,76 @@
+{
+  "id": "LONG-RULE-2",
+  "category": "long_context",
+  "turn_id": "turn-d294dbb4-07da-40ea-a062-37787579b809",
+  "pass": false,
+  "failures": [
+    "reply missing RULE-TAIL-IRIS"
+  ],
+  "request_tokens": [
+    {
+      "instructions": 4051,
+      "tools": 8996,
+      "input": 6789,
+      "serialized": 20121
+    }
+  ],
+  "turn": {
+    "id": "turn-d294dbb4-07da-40ea-a062-37787579b809",
+    "chat_id": "general",
+    "user_message_id": "client-2463d1a1-0374-4043-80d2-37fffddb1374",
+    "state": "delivered",
+    "safe_status_label": "Delivered",
+    "retryable": false,
+    "cancellable": false,
+    "attempt": 1,
+    "created_at": "2026-10-02T14:09:05.796Z",
+    "updated_at": "2026-10-02T14:09:09.008Z",
+    "cursor": 1,
+    "execution_controls": {
+      "schema_version": "butler.turn-execution-controls.v1",
+      "turn_id": "turn-d294dbb4-07da-40ea-a062-37787579b809",
+      "session_id": "general",
+      "model_ref": "openai/gpt-6-luna",
+      "reasoning_effort": "low",
+      "access_mode": "full_access",
+      "plan_mode": false,
+      "source": "global_default",
+      "session_control_revision": 0,
+      "catalog_generation": "d8f01b508890844542e44766d99b17c033f4eab865a627d1be9384f9d7d522a4",
+      "resolved_at": "2026-10-02T14:09:05.796Z",
+      "model_fallback": {
+        "enabled": false,
+        "models": []
+      },
+      "integrity_hash": "4bfce84751f6b6c732dda0f12c82a31ee5ce8323cd9fc74e722da0254503d086"
+    }
+  },
+  "messages": [
+    {
+      "id": "client-2463d1a1-0374-4043-80d2-37fffddb1374",
+      "chat_id": "general",
+      "turn_id": "turn-d294dbb4-07da-40ea-a062-37787579b809",
+      "role": "user",
+      "text": "What is the rule tail marker? Return only the marker. Read the source if needed.",
+      "status": "sent",
+      "created_at": "2026-10-02T14:09:05.796Z",
+      "updated_at": "2026-10-02T14:09:05.796Z",
+      "retryable": false,
+      "cursor": 1
+    },
+    {
+      "id": "message-stream-turn-d294dbb4-07da-40ea-a062-37787579b809",
+      "chat_id": "general",
+      "turn_id": "turn-d294dbb4-07da-40ea-a062-37787579b809",
+      "role": "assistant",
+      "text": "The marker isn’t visible in the provided source.",
+      "status": "delivered",
+      "created_at": "2026-10-02T14:09:08.765Z",
+      "updated_at": "2026-10-02T14:09:09.008Z",
+      "retryable": false,
+      "cursor": 2
+    }
+  ],
+  "calls": [],
+  "approvals": []
+}

@@ -1,0 +1,110 @@
+{
+  "id": "SCHEDULE-CREATE-2",
+  "category": "schedules",
+  "turn_id": "turn-4f8dc91e-cecb-40b2-9e16-6bcf4cd3d4f1",
+  "pass": false,
+  "failures": [
+    "missing tool class ['create_automation']",
+    "create_automation: missing argument class 2099"
+  ],
+  "request_tokens": [
+    {
+      "instructions": 2312,
+      "tools": 7645,
+      "input": 303,
+      "serialized": 10518
+    },
+    {
+      "instructions": 2312,
+      "tools": 7645,
+      "input": 1175,
+      "serialized": 11390
+    }
+  ],
+  "turn": {
+    "id": "turn-4f8dc91e-cecb-40b2-9e16-6bcf4cd3d4f1",
+    "chat_id": "general",
+    "user_message_id": "client-22aa182a-2710-4ca9-8dde-cd9fa9dca140",
+    "state": "delivered",
+    "safe_status_label": "Delivered",
+    "retryable": false,
+    "cancellable": false,
+    "attempt": 1,
+    "created_at": "2026-10-02T14:06:11.603Z",
+    "updated_at": "2026-10-02T14:06:22.231Z",
+    "cursor": 1,
+    "execution_controls": {
+      "schema_version": "butler.turn-execution-controls.v1",
+      "turn_id": "turn-4f8dc91e-cecb-40b2-9e16-6bcf4cd3d4f1",
+      "session_id": "general",
+      "model_ref": "openai/gpt-6-luna",
+      "reasoning_effort": "low",
+      "access_mode": "full_access",
+      "plan_mode": false,
+      "source": "global_default",
+      "session_control_revision": 0,
+      "catalog_generation": "d8f01b508890844542e44766d99b17c033f4eab865a627d1be9384f9d7d522a4",
+      "resolved_at": "2026-10-02T14:06:11.603Z",
+      "model_fallback": {
+        "enabled": false,
+        "models": []
+      },
+      "integrity_hash": "af04c1f64e6db36941fe7d89e7530505cf4119e1d91608ee84d3aa3ea860d1c8"
+    }
+  },
+  "messages": [
+    {
+      "id": "client-22aa182a-2710-4ca9-8dde-cd9fa9dca140",
+      "chat_id": "general",
+      "turn_id": "turn-4f8dc91e-cecb-40b2-9e16-6bcf4cd3d4f1",
+      "role": "user",
+      "text": "Create a one-time schedule for 2099-01-01 at 09:00 UTC titled Iris check, with prompt Say iris. Do not run it now.",
+      "status": "sent",
+      "created_at": "2026-10-02T14:06:11.603Z",
+      "updated_at": "2026-10-02T14:06:11.603Z",
+      "retryable": false,
+      "cursor": 1
+    },
+    {
+      "id": "message-stream-turn-4f8dc91e-cecb-40b2-9e16-6bcf4cd3d4f1",
+      "chat_id": "general",
+      "turn_id": "turn-4f8dc91e-cecb-40b2-9e16-6bcf4cd3d4f1",
+      "role": "assistant",
+      "text": "I couldn’t create the schedule because the scheduling action isn’t available in this session. Nothing was run. The requested schedule is **Iris check** for **2099-01-01 at 09:00 UTC**, with the prompt **“Say iris.”**",
+      "status": "delivered",
+      "created_at": "2026-10-02T14:06:19.921Z",
+      "updated_at": "2026-10-02T14:06:22.231Z",
+      "retryable": false,
+      "cursor": 2,
+      "turn_activity_rows": [
+        {
+          "id": "btcc-progress-event:46240b7624a02164333139d093a753405d7d203add1d0892410c99b5ebb664cd",
+          "created_at": "2026-10-02T14:06:16.623Z",
+          "turn_event_sequence": 6.0,
+          "kind": "used_tool",
+          "safe_label": "tool_search",
+          "state": "delivered",
+          "safe_tool_name": "tool_search",
+          "tool_call_id": "call_UEFC0vojw9eKs3SEZVPVkNSL",
+          "bridge_phase": "btcc_operation",
+          "semantic_block_id": "tool-call_UEFC0vojw9eKs3SEZVPVkNSL",
+          "tool_result_id": "2fbb4866a8a220a5e4ea41293b1f0aa60e2c4e6cb720e0d52cfb74c7dd53d12e",
+          "tool_result_byte_length": 3048
+        }
+      ]
+    }
+  ],
+  "calls": [
+    {
+      "name": "tool_search",
+      "wire_name": "tool_search",
+      "args": {
+        "category": "automation",
+        "query": "create schedule one-time scheduled task prompt title run time UTC"
+      },
+      "status": "completed",
+      "error": null
+    }
+  ],
+  "approvals": []
+}

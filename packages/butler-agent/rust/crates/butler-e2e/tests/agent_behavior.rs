@@ -28,6 +28,12 @@ fn scenarios() -> Result<Vec<Value>, HarnessError> {
     let cases: Vec<Value> =
         serde_json::from_str(include_str!("../fixtures/agent-behavior/scenarios.json"))?;
     assert!(cases.len() >= 30);
+    if let Ok(ids) = std::env::var("BUTLER_BEHAVIOR_IDS") {
+        return Ok(cases
+            .into_iter()
+            .filter(|case| ids.split(',').any(|id| case["id"] == id))
+            .collect());
+    }
     Ok(cases)
 }
 
@@ -51,7 +57,7 @@ async fn evaluate(
         use butler_e2e::e2e::faults::{ArgsMutation, Fault, Transform};
         s.provider()?.inject(Fault::first_call(
             case["prompt"].as_str().unwrap(),
-            Transform::MutateToolArgs(ArgsMutation::WrongTypes),
+            Transform::MutateToolArgs(ArgsMutation::Truncate),
         ))?;
     }
     live::spend_turn()?;
@@ -71,7 +77,7 @@ async fn evaluate(
         )
         .await?;
     let messages = s.gw.messages(&chat).await?;
-    let calls = checks::calls(&s, &turn_id)?;
+    let mut calls = checks::calls(&s, &turn_id)?;
     let approvals = s.gw.approval_requests(&chat).await?;
     let requests: Vec<_> = s
         .provider()?
@@ -80,6 +86,7 @@ async fn evaluate(
         .filter(|r| r["tools"].is_array())
         .collect();
     assert!(!requests.is_empty(), "live request capture missing");
+    checks::add_wire_calls(&mut calls, &requests);
     let failures = checks::check(case, &s, &turn, &messages, &calls, &approvals)?;
     let sizes: Vec<_> = requests.iter().map(checks::tokens).collect();
     let result = json!({"id":id,"category":case["category"],"turn_id":turn_id,"pass":failures.is_empty(),

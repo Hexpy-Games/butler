@@ -1,0 +1,102 @@
+[
+  {
+    "session": "fresh",
+    "tokens": {
+      "instructions": 4051,
+      "tools": 8996,
+      "input": 270,
+      "serialized": 13600
+    },
+    "tools": 35
+  },
+  {
+    "session": "ko",
+    "tokens": {
+      "instructions": 4051,
+      "tools": 8996,
+      "input": 274,
+      "serialized": 13604
+    },
+    "tools": 35
+  },
+  {
+    "session": "persona",
+    "tokens": {
+      "instructions": 3738,
+      "tools": 8996,
+      "input": 267,
+      "serialized": 13222
+    },
+    "tools": 35
+  },
+  {
+    "session": "eol",
+    "tokens": {
+      "instructions": 3736,
+      "tools": 8996,
+      "input": 268,
+      "serialized": 13240
+    },
+    "tools": 35
+  },
+  {
+    "session": "rules",
+    "tokens": {
+      "instructions": 4051,
+      "tools": 8996,
+      "input": 303,
+      "serialized": 13634
+    },
+    "tools": 35
+  },
+  {
+    "session": "duplicates",
+    "tokens": {
+      "instructions": 4051,
+      "tools": 8996,
+      "input": 342,
+      "serialized": 13670
+    },
+    "tools": 35
+  },
+  {
+    "session": "project",
+    "tokens": {
+      "instructions": 4114,
+      "tools": 9836,
+      "input": 418,
+      "serialized": 14675
+    },
+    "tools": 39
+  },
+  {
+    "session": "long_persona",
+    "tokens": {
+      "instructions": 4197,
+      "tools": 8996,
+      "input": 269,
+      "serialized": 13683
+    },
+    "tools": 35
+  },
+  {
+    "session": "long_rules",
+    "tokens": {
+      "instructions": 4051,
+      "tools": 8996,
+      "input": 6782,
+      "serialized": 20112
+    },
+    "tools": 35
+  },
+  {
+    "session": "mcp",
+    "tokens": {
+      "instructions": 4051,
+      "tools": 8996,
+      "input": 276,
+      "serialized": 13605
+    },
+    "tools": 35
+  }
+]

@@ -1,0 +1,113 @@
+{
+  "id": "MEMORY-EXACT-2",
+  "category": "memory",
+  "turn_id": "turn-614834ec-54f5-47b0-93dc-984735a40100",
+  "pass": false,
+  "failures": [
+    "missing tool class ['query_memory']",
+    "query_memory: missing argument class iris"
+  ],
+  "request_tokens": [
+    {
+      "instructions": 2312,
+      "tools": 7645,
+      "input": 279,
+      "serialized": 10496
+    },
+    {
+      "instructions": 2312,
+      "tools": 7645,
+      "input": 463,
+      "serialized": 10680
+    }
+  ],
+  "turn": {
+    "id": "turn-614834ec-54f5-47b0-93dc-984735a40100",
+    "chat_id": "general",
+    "user_message_id": "client-5d1a2d41-9752-43af-88e5-4c3230e8a4f6",
+    "state": "delivered",
+    "safe_status_label": "Delivered",
+    "retryable": false,
+    "cancellable": false,
+    "attempt": 1,
+    "created_at": "2026-10-02T14:06:59.796Z",
+    "updated_at": "2026-10-02T14:07:05.784Z",
+    "cursor": 1,
+    "execution_controls": {
+      "schema_version": "butler.turn-execution-controls.v1",
+      "turn_id": "turn-614834ec-54f5-47b0-93dc-984735a40100",
+      "session_id": "general",
+      "model_ref": "openai/gpt-6-luna",
+      "reasoning_effort": "low",
+      "access_mode": "full_access",
+      "plan_mode": false,
+      "source": "global_default",
+      "session_control_revision": 0,
+      "catalog_generation": "d8f01b508890844542e44766d99b17c033f4eab865a627d1be9384f9d7d522a4",
+      "resolved_at": "2026-10-02T14:06:59.796Z",
+      "model_fallback": {
+        "enabled": false,
+        "models": []
+      },
+      "integrity_hash": "8630cbb5727a6a31bfea39178aa58e3e07ad9af033a9fdb4c189e7b6c176c646"
+    }
+  },
+  "messages": [
+    {
+      "id": "client-5d1a2d41-9752-43af-88e5-4c3230e8a4f6",
+      "chat_id": "general",
+      "turn_id": "turn-614834ec-54f5-47b0-93dc-984735a40100",
+      "role": "user",
+      "text": "Use an exact memory query to find explicit memories containing iris.",
+      "status": "sent",
+      "created_at": "2026-10-02T14:06:59.796Z",
+      "updated_at": "2026-10-02T14:06:59.796Z",
+      "retryable": false,
+      "cursor": 1
+    },
+    {
+      "id": "message-stream-turn-614834ec-54f5-47b0-93dc-984735a40100",
+      "chat_id": "general",
+      "turn_id": "turn-614834ec-54f5-47b0-93dc-984735a40100",
+      "role": "assistant",
+      "text": "I found no explicit memories containing “iris” in the current session.",
+      "status": "delivered",
+      "created_at": "2026-10-02T14:07:05.681Z",
+      "updated_at": "2026-10-02T14:07:05.784Z",
+      "retryable": false,
+      "cursor": 2,
+      "turn_activity_rows": [
+        {
+          "id": "btcc-progress-event:692f9444dbdea7fa02b7f128664c638f6625523d01a035a9a364d66e4e3e6439",
+          "created_at": "2026-10-02T14:07:03.682Z",
+          "turn_event_sequence": 6.0,
+          "kind": "used_tool",
+          "safe_label": "recall_memory",
+          "state": "delivered",
+          "safe_tool_name": "recall_memory",
+          "tool_call_id": "call_6s2SW3jmgUBBX4AWplftFqTS",
+          "bridge_phase": "btcc_operation",
+          "semantic_block_id": "tool-call_6s2SW3jmgUBBX4AWplftFqTS",
+          "tool_result_id": "0fc5e878f843aa36bbb3a7faf7af090f7800d0f96d76cd2c364fceba7867f5ca",
+          "tool_result_byte_length": 269
+        }
+      ]
+    }
+  ],
+  "calls": [
+    {
+      "name": "recall_memory",
+      "wire_name": "recall_memory",
+      "args": {
+        "cue": "iris",
+        "include_internal": false,
+        "include_vector": false,
+        "limit": 10,
+        "scope": "current_session"
+      },
+      "status": "completed",
+      "error": null
+    }
+  ],
+  "approvals": []
+}

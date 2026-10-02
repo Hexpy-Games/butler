@@ -1,0 +1,76 @@
+{
+  "id": "LONG-PERSONA-3",
+  "category": "long_context",
+  "turn_id": "turn-457e345c-ddff-4708-8a68-9740e8cdfa66",
+  "pass": false,
+  "failures": [
+    "reply missing PERSONA-TAIL-IRIS"
+  ],
+  "request_tokens": [
+    {
+      "instructions": 4197,
+      "tools": 8996,
+      "input": 282,
+      "serialized": 13697
+    }
+  ],
+  "turn": {
+    "id": "turn-457e345c-ddff-4708-8a68-9740e8cdfa66",
+    "chat_id": "general",
+    "user_message_id": "client-a8406ab1-adde-4b82-833d-a13c72d27f86",
+    "state": "delivered",
+    "safe_status_label": "Delivered",
+    "retryable": false,
+    "cancellable": false,
+    "attempt": 1,
+    "created_at": "2026-10-02T14:15:03.547Z",
+    "updated_at": "2026-10-02T14:15:06.799Z",
+    "cursor": 1,
+    "execution_controls": {
+      "schema_version": "butler.turn-execution-controls.v1",
+      "turn_id": "turn-457e345c-ddff-4708-8a68-9740e8cdfa66",
+      "session_id": "general",
+      "model_ref": "openai/gpt-6-luna",
+      "reasoning_effort": "low",
+      "access_mode": "full_access",
+      "plan_mode": false,
+      "source": "global_default",
+      "session_control_revision": 0,
+      "catalog_generation": "d8f01b508890844542e44766d99b17c033f4eab865a627d1be9384f9d7d522a4",
+      "resolved_at": "2026-10-02T14:15:03.547Z",
+      "model_fallback": {
+        "enabled": false,
+        "models": []
+      },
+      "integrity_hash": "4f9a1d8b9da709db7fc5d808cbfc0dd1d11f992105bb9754937339ab06b683c9"
+    }
+  },
+  "messages": [
+    {
+      "id": "client-a8406ab1-adde-4b82-833d-a13c72d27f86",
+      "chat_id": "general",
+      "turn_id": "turn-457e345c-ddff-4708-8a68-9740e8cdfa66",
+      "role": "user",
+      "text": "What is the persona tail marker? Return only the marker. Read the full persona source if needed.",
+      "status": "sent",
+      "created_at": "2026-10-02T14:15:03.547Z",
+      "updated_at": "2026-10-02T14:15:03.547Z",
+      "retryable": false,
+      "cursor": 1
+    },
+    {
+      "id": "message-stream-turn-457e345c-ddff-4708-8a68-9740e8cdfa66",
+      "chat_id": "general",
+      "turn_id": "turn-457e345c-ddff-4708-8a68-9740e8cdfa66",
+      "role": "assistant",
+      "text": "I can’t determine the marker from the persona text shown; it ends with “His…” and doesn’t include a clear tail marker.",
+      "status": "delivered",
+      "created_at": "2026-10-02T14:15:06.326Z",
+      "updated_at": "2026-10-02T14:15:06.799Z",
+      "retryable": false,
+      "cursor": 2
+    }
+  ],
+  "calls": [],
+  "approvals": []
+}
