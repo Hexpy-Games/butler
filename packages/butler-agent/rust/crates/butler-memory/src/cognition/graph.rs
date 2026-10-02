@@ -2,9 +2,8 @@
 
 mod apply;
 mod cache_quantum;
+mod cache_validation;
 mod cache_work;
-mod readiness;
-pub(in crate::cognition) use readiness::{CacheReadinessRow, StageReadiness, VectorReadinessRow};
 mod candidates;
 mod consolidate;
 mod failure;
@@ -15,7 +14,6 @@ mod input;
 mod internal_supersession;
 mod invalidation;
 mod jobs;
-mod operator_repair;
 mod plan;
 mod probe;
 mod progress_adapters;
@@ -23,7 +21,6 @@ mod projection;
 mod recall;
 mod recall_index;
 mod registration;
-mod retry_failed;
 mod schema;
 mod stage_state;
 mod stages;
@@ -33,7 +30,6 @@ pub(in crate::cognition) use typed_lifecycle::TypedLifecycleInput;
 mod vector_optimize;
 mod vector_quantum;
 mod vector_registration;
-mod vector_representative;
 
 use butler_platform::sqlite;
 use std::path::Path;
@@ -53,11 +49,6 @@ pub(in crate::cognition) use stage_state::StageWrite;
 pub use stage_state::{StageState, StageStatus};
 
 pub(in crate::cognition) use jobs::{CatchupState, PendingSemanticJob};
-pub(in crate::cognition) use operator_repair::CandidateInputRepairRequest;
-pub use operator_repair::{
-    CandidateInputRepairResult, ProjectionModelPolicy, ProjectionModelPolicyInput,
-    ProjectionModelSlot, RepairMode, RepairReceipt,
-};
 pub(in crate::cognition) use plan::NormalizedPlan;
 pub(in crate::cognition) use projection::{
     ClaimProjectionWindowInput, ClaimedProjectionWindow, PreviousWindowState,
@@ -67,8 +58,6 @@ pub(in crate::cognition) use recall::{
     RecallEpisodeRow, RecallMention, RelationshipState, TemporalSelection,
 };
 pub(super) use registration::{GraphRegistration, RegistrationInput};
-pub use retry_failed::RetryFailedCounts;
-pub(in crate::cognition) use retry_failed::VectorRepairRequest;
 pub(in crate::cognition) use stages::ExtractionStageResult;
 pub(super) use typed_registration::TypedRegistrationInput;
 pub(in crate::cognition) use vector_quantum::ClaimedVectorUnit;
@@ -88,28 +77,6 @@ pub(super) struct GraphRepository {
 }
 
 impl GraphRepository {
-    pub(in crate::cognition) fn retry_failed(
-        &mut self,
-        generation_id: &str,
-        now: &str,
-    ) -> CognitionResult<RetryFailedCounts> {
-        retry_failed::retry_failed(self.connection_mut()?, generation_id, now)
-    }
-
-    pub(in crate::cognition) fn repair_selected_invalid_vectors(
-        &mut self,
-        generation_id: &str,
-        embedding_version: &str,
-        request: &VectorRepairRequest,
-    ) -> CognitionResult<usize> {
-        retry_failed::repair_selected_invalid_vectors(
-            self.connection_mut()?,
-            generation_id,
-            embedding_version,
-            request,
-        )
-    }
-
     pub(in crate::cognition) fn consolidate(
         &mut self,
         now_ms: i64,
