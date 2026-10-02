@@ -1,5 +1,6 @@
 //! Active-generation serving facts from read-only Cognition and Profile owners.
 
+use butler_platform::sqlite;
 use std::{
     fs::File,
     io::{BufRead, BufReader},
@@ -29,7 +30,7 @@ pub(super) fn read(
     let Ok(handle) = resolve_active_generation(data_root, paths) else {
         return unavailable(data_root, paths, now, "generation_unavailable", profile);
     };
-    let Ok(db) = Connection::open_with_flags(&handle.graph_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    let Ok(db) = sqlite::open_with_flags(&handle.graph_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
     else {
         return unavailable(data_root, paths, now, "serving_store_unavailable", profile);
     };
@@ -368,7 +369,7 @@ fn unavailable(
         |_| crate::cognition::generation::HotCacheHealth::unavailable("generation_unavailable", 0),
         |handle| {
             let revision =
-                Connection::open_with_flags(&handle.graph_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                sqlite::open_with_flags(&handle.graph_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
                     .ok()
                     .and_then(|db| graph_revision(&db).ok().flatten())
                     .unwrap_or(-1);

@@ -36,6 +36,7 @@ pub use source::{
 pub use text_projection::{ToolParts, text_for_message, text_for_part};
 pub use types::*;
 
+use butler_platform::sqlite;
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -260,7 +261,7 @@ fn run_connection_lane(
                 .with_source(error)
             })?;
         }
-        let mut connection = Connection::open(path).map_err(ConversationError::sqlite)?;
+        let mut connection = sqlite::open(path).map_err(ConversationError::sqlite)?;
         connection
             .busy_timeout(Duration::from_millis(5_000))
             .map_err(ConversationError::sqlite)?;

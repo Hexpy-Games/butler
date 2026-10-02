@@ -1037,6 +1037,7 @@ dependencies = [
  "libproc",
  "nix",
  "rpassword",
+ "rusqlite",
  "rustix 1.1.5",
  "same-file",
  "security-framework",

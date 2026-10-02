@@ -1,3 +1,4 @@
+use butler_platform::sqlite;
 use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
@@ -29,7 +30,7 @@ struct AppMessage {
 /// App ingress evidence: the App message bound to the candidate, with its
 /// turn's execution controls. `None` means the evidence is unavailable.
 fn read_existing(path: &Path, candidate: &HistoricalOriginCandidate) -> Option<SourceEvidence> {
-    let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
+    let db = sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
     if !has_conversation_columns(&db)? {
         return None;
     }

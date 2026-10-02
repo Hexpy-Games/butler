@@ -4,6 +4,7 @@
 //! onboarding record marked complete and a config selecting a model. The
 //! reasoning effort is then set through `PATCH /settings`, as the App does.
 
+use butler_platform::sqlite;
 use std::fs;
 use std::path::Path;
 
@@ -110,7 +111,7 @@ pub fn legacy(data: &Path, model: &str, app_now: &str) -> Result<(), HarnessErro
         Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/F3-legacy/app-server.sql"),
     )?;
     fs::create_dir_all(data.join("app-server"))?;
-    let connection = rusqlite::Connection::open(data.join("app-server/butler-client.sqlite"))
+    let connection = sqlite::open(data.join("app-server/butler-client.sqlite"))
         .map_err(|error| super::harness_error(format!("legacy fixture: {error}")))?;
     connection
         .execute_batch(&sql)

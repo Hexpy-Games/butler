@@ -58,6 +58,7 @@ pub use work::{
     PersistedWorkTurnScope, SessionPlanObservation, SessionWorkRepository, WorkStatusObservation,
 };
 
+use butler_platform::sqlite;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread::JoinHandle;
@@ -292,7 +293,7 @@ fn run_connection_lane(
                     .with_source(error)
             })?;
         }
-        let mut connection = Connection::open(path).map_err(StorageError::sqlite)?;
+        let mut connection = sqlite::open(path).map_err(StorageError::sqlite)?;
         configure(&connection, profile)?;
         validate_activation(&connection, activation)?;
         schema::create_current(&connection).map_err(StorageError::sqlite)?;

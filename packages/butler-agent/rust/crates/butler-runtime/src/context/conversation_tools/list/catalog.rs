@@ -1,4 +1,5 @@
-use rusqlite::{Connection, OpenFlags};
+use butler_platform::sqlite;
+use rusqlite::OpenFlags;
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
@@ -26,7 +27,7 @@ pub(super) fn read(data_root: &Path, ids: &[String]) -> (HashMap<String, Label>,
         return (labels, Vec::new());
     };
     let operation = || -> rusqlite::Result<()> {
-        let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+        let db = sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
         db.busy_timeout(std::time::Duration::from_secs(5))?;
         let columns = db
             .prepare("PRAGMA table_info(chats)")?

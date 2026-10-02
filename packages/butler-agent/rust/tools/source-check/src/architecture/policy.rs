@@ -11,8 +11,9 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // butler-platform: the only OS-specific code. Independent facades; each
         // keeps its per-OS implementations as private children. The private
         // Windows process table serves instance identity and liveness.
+        // SQLite owns only the host VFS choice; DB state and schema stay in callers.
         "command_sandbox" | "cpu" | "desktop" | "launcher" | "network" | "process_table"
-        | "secure_fs" | "stdio" | "time_zone" | "user_dirs" => &[],
+        | "secure_fs" | "sqlite" | "stdio" | "time_zone" | "user_dirs" => &[],
         "process_control" => &["process_table"],
         // Process naming owns verified executable aliases; instance queries
         // consume that identity without coupling general filesystem paths to it.

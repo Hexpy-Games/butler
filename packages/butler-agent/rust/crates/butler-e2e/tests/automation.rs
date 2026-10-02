@@ -7,6 +7,7 @@
     reason = "test assertions"
 )]
 
+use butler_platform::sqlite;
 use std::time::Duration;
 
 use butler_e2e::e2e::HarnessError;
@@ -151,7 +152,7 @@ async fn auto_02_internal_failure_is_logged_and_private() -> Result<(), HarnessE
     butler_e2e::gate!();
     let s = Setup::new("AUTO-02")?.start().await?;
     let id = create(&s).await?;
-    let db = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))
+    let db = sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite"))
         .expect("open isolated App database");
     db.execute_batch(
         "CREATE TRIGGER fail_schedule_run BEFORE INSERT ON app_automation_runs

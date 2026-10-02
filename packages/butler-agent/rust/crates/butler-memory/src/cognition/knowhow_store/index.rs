@@ -1,6 +1,7 @@
 //! The KnowHow SQLite index (`index.sqlite`), rebuilt atomically from the
 //! valid entries and the source-quality summaries.
 
+use butler_platform::sqlite;
 use std::{
     fs::{self, OpenOptions},
     path::Path,
@@ -22,7 +23,7 @@ pub(super) fn rebuild(root: &Path, quality: &[SourceQualitySummary]) -> Cognitio
     let temporary = root.join(format!("index.sqlite.tmp-{}", uuid::Uuid::new_v4()));
     let result = (|| {
         create_private_file(&temporary)?;
-        let mut database = Connection::open(&temporary).map_err(|source| {
+        let mut database = sqlite::open(&temporary).map_err(|source| {
             error(CognitionCode::MemoryKnowhowIndexWriteFailed).with_source(source)
         })?;
         create_schema(&database)?;

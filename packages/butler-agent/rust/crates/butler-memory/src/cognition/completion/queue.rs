@@ -1,11 +1,12 @@
 //! The memory sync queue: idempotent appends, reads and removal of processed entries.
 
 use crate::lenient::JsonField;
+use butler_platform::sqlite;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 
-use rusqlite::{Connection, ErrorCode, params};
+use rusqlite::{ErrorCode, params};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -24,7 +25,7 @@ pub(super) fn append(
     let path = parent.join("sync.jsonl");
     fs::create_dir_all(&parent).map_err(io_error)?;
     let lock_path = path.with_extension("jsonl.coord.sqlite");
-    let db = Connection::open(lock_path).map_err(sqlite_error)?;
+    let db = sqlite::open(lock_path).map_err(sqlite_error)?;
     db.busy_timeout(std::time::Duration::ZERO)
         .map_err(sqlite_error)?;
     db.execute_batch("BEGIN EXCLUSIVE").map_err(|error| {
@@ -130,7 +131,7 @@ fn append_idempotent(
     let path = parent.join("sync.jsonl");
     fs::create_dir_all(&parent).map_err(io_error)?;
     let lock_path = path.with_extension("jsonl.coord.sqlite");
-    let db = Connection::open(lock_path).map_err(sqlite_error)?;
+    let db = sqlite::open(lock_path).map_err(sqlite_error)?;
     db.busy_timeout(std::time::Duration::ZERO)
         .map_err(sqlite_error)?;
     db.execute_batch("BEGIN EXCLUSIVE").map_err(|error| {
@@ -229,7 +230,7 @@ pub(super) fn peek(root: &Path) -> CognitionResult<Option<Value>> {
 pub(super) fn ack(root: &Path, expected: &str) -> CognitionResult<bool> {
     let path = root.join("queue/sync.jsonl");
     let lock_path = path.with_extension("jsonl.coord.sqlite");
-    let db = Connection::open(lock_path).map_err(sqlite_error)?;
+    let db = sqlite::open(lock_path).map_err(sqlite_error)?;
     db.busy_timeout(std::time::Duration::ZERO)
         .map_err(sqlite_error)?;
     db.execute_batch("BEGIN EXCLUSIVE").map_err(sqlite_error)?;

@@ -11,6 +11,7 @@ publish.workspace = true
 [dependencies]
 # Quotes paths inside macOS sandbox profiles.
 serde_json.workspace = true
+rusqlite.workspace = true
 thiserror.workspace = true
 # Shutdown requests (host stop signals) and the stdin lease are awaited on the
 # service's runtime.

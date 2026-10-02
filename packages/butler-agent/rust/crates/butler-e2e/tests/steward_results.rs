@@ -14,6 +14,7 @@
     reason = "test assertions"
 )]
 
+use butler_platform::sqlite;
 use std::time::{Duration, Instant};
 
 use butler_e2e::e2e::HarnessError;
@@ -147,8 +148,7 @@ async fn a_result_queued_behind_a_running_turn_keeps_its_marker() -> Result<(), 
         queue.text
     );
     let stored: Vec<String> = {
-        let db = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))
-            .unwrap();
+        let db = sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
         let mut statement = db
             .prepare(
                 "SELECT json_extract(control_resolution_json,'$.subsession_result.result_id') \
@@ -235,8 +235,7 @@ async fn retry_after_dispatch_ready(s: &Scenario) -> Result<(), HarnessError> {
 }
 
 fn seed_failed_result_turn(s: &Scenario) {
-    let db =
-        rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
+    let db = sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
     let controls = json!({"subsession_result": {
         "relation_id": RELATION, "result_id": "steward-result-5", "safe_title": "Atlas"}});
     let fault = json!({"event": {"kind": "runtime.fault", "payload": {
@@ -288,8 +287,7 @@ async fn stored_result_rows_are_hidden_without_a_migration() -> Result<(), Harne
 }
 
 fn seed_stored_rows(s: &Scenario) {
-    let db =
-        rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
+    let db = sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
     let controls = json!({"subsession_result": {
         "relation_id": RELATION, "result_id": "steward-result-3", "safe_title": "Atlas"}});
     db.execute_batch(&format!(

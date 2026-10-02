@@ -1,5 +1,6 @@
 use super::helpers::*;
 use butler_e2e::e2e::{HarnessError, scenario::Setup};
+use butler_platform::sqlite;
 use rusqlite::{Connection, OpenFlags};
 use std::{
     path::Path,
@@ -52,7 +53,7 @@ async fn paired_devices_have_zero_idle_writes_and_request_driven_last_seen()
     let before_list = devices(&app).await?;
     assert_eq!(before_list.as_array().unwrap().len(), 3);
     let id = cookies[0].split('.').nth(1).unwrap();
-    let db = Connection::open_with_flags(
+    let db = sqlite::open_with_flags(
         s.sandbox.data.join("app-server/butler-client.sqlite"),
         OpenFlags::SQLITE_OPEN_READ_ONLY,
     )

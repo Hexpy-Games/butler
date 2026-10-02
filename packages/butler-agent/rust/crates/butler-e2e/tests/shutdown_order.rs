@@ -14,6 +14,7 @@ use butler_e2e::e2e::{
     scenario::{Scenario, Setup, accepted_turn_id},
     stop_intent::{control_command, instance_record, intent_path},
 };
+use butler_platform::sqlite;
 use serde_json::json;
 use std::time::{Duration, Instant};
 
@@ -144,7 +145,7 @@ async fn sigterm_during_store_open_never_publishes_ready() -> Result<(), Harness
     }
     let mut s = Setup::new("SHUTDOWN-STARTUP")?.start().await?;
     s.agent.terminate().await?;
-    let lock = rusqlite::Connection::open(s.sandbox.data.join("runtime/session-store.sqlite"))
+    let lock = sqlite::open(s.sandbox.data.join("runtime/session-store.sqlite"))
         .map_err(|e| HarnessError(e.to_string()))?;
     lock.execute_batch("BEGIN EXCLUSIVE")
         .map_err(|e| HarnessError(e.to_string()))?;
@@ -295,7 +296,7 @@ async fn unannounced_sigterm_has_a_deadline_even_when_storage_is_blocked()
         return Ok(());
     }
     let (mut s, turn_id) = streaming_scenario("SHUTDOWN-DEADLINE").await?;
-    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))
+    let db = sqlite::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))
         .map_err(|e| HarnessError(e.to_string()))?;
     db.execute_batch("BEGIN IMMEDIATE")
         .map_err(|e| HarnessError(e.to_string()))?;

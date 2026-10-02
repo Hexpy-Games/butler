@@ -1,6 +1,7 @@
 //! Read-only readiness validation for a previously activated current manifest.
 
 use butler_core::json;
+use butler_platform::sqlite;
 use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
@@ -11,7 +12,7 @@ use super::{StorageError, StorageResult, canonical_schema, error, integrity, ref
 use crate::btcc::StorageCode;
 
 pub(crate) fn read_activated(path: &Path) -> StorageResult<String> {
-    let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    let db = sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(StorageError::sqlite)?;
     let expected = manifest_id();
     let (receipt_id, receipt_raw) = marker_row(

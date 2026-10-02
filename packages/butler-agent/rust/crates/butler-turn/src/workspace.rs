@@ -53,6 +53,7 @@ pub use status::{StatusSessionIdentity, read_active_butler_session};
 
 pub use bindings::*;
 
+use butler_platform::sqlite;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread::JoinHandle;
@@ -265,7 +266,7 @@ fn run_connection_lane(
                 .with_source(error)
             })?;
         }
-        let connection = Connection::open(path).map_err(WorkspaceError::sqlite)?;
+        let connection = sqlite::open(path).map_err(WorkspaceError::sqlite)?;
         connection
             .busy_timeout(Duration::from_millis(5_000))
             .map_err(WorkspaceError::sqlite)?;

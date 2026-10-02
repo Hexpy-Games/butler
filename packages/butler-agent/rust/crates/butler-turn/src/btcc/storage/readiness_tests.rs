@@ -1,6 +1,6 @@
+use butler_platform::sqlite;
 use std::time::Duration;
 
-use rusqlite::Connection;
 use tokio_util::sync::CancellationToken;
 
 use super::repository::BtccRepositories;
@@ -15,7 +15,7 @@ async fn write_probe_waits_for_external_lock_and_restores_owner_state() {
         .await
         .expect("open storage");
     let repositories = BtccRepositories::new(storage, None);
-    let external = Connection::open(&fixture.path).expect("external test connection");
+    let external = sqlite::open(&fixture.path).expect("external test connection");
     external
         .execute_batch("BEGIN IMMEDIATE")
         .expect("hold external write lock");

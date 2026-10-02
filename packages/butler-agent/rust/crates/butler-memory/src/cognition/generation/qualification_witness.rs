@@ -6,6 +6,7 @@
 //! recorded has changed since `open`.
 
 use crate::cognition::CognitionCode;
+use butler_platform::sqlite;
 use std::{fs, path::Path};
 
 use butler_platform::secure_fs::{self, FileId, FileTime};
@@ -76,11 +77,8 @@ impl LiveWitness {
         )?;
         let canonical_identity = identity(&canonical_path)?
             .ok_or_else(|| error(CognitionCode::MemoryInventoryChanged))?;
-        let canonical =
-            Connection::open_with_flags(&canonical_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-                .map_err(|source| {
-                    error(CognitionCode::MemoryInventoryChanged).with_source(source)
-                })?;
+        let canonical = sqlite::open_with_flags(&canonical_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|source| error(CognitionCode::MemoryInventoryChanged).with_source(source))?;
         let canonical_data_version =
             data_version(&canonical, CognitionCode::MemoryInventoryChanged)?;
         Ok(Self {
@@ -274,11 +272,10 @@ impl CandidateWitness {
             paths.push(snapshot);
         }
         ensure_data_authority(data_root, &paths)?;
-        let graph =
-            Connection::open_with_flags(&handle.graph_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-                .map_err(|source| {
-                    error(CognitionCode::MemoryGenerationChanged).with_source(source)
-                })?;
+        let graph = sqlite::open_with_flags(&handle.graph_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|source| {
+            error(CognitionCode::MemoryGenerationChanged).with_source(source)
+        })?;
         let table = open_table(&lance).await?;
         let initial = facts(&graph, table.as_ref(), handle).await?;
         Ok(Self {

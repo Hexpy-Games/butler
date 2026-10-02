@@ -1,7 +1,8 @@
 //! Measure idle only after startup and the delivered turn's memory work settle.
 use butler_e2e::e2e::{HarnessError, scenario::Scenario, stop_intent::instance_record};
 use butler_platform::process_control::usage;
-use rusqlite::{Connection, OpenFlags};
+use butler_platform::sqlite;
+use rusqlite::OpenFlags;
 use serde_json::Value;
 use std::{
     collections::BTreeMap,
@@ -39,7 +40,7 @@ fn settled(data: &Path, turn: &str) -> bool {
     let Some(graph) = graph(data) else {
         return false;
     };
-    let Ok(db) = Connection::open_with_flags(graph, OpenFlags::SQLITE_OPEN_READ_ONLY) else {
+    let Ok(db) = sqlite::open_with_flags(graph, OpenFlags::SQLITE_OPEN_READ_ONLY) else {
         return false;
     };
     let complete: i64 = db.query_row("SELECT COUNT(*) FROM memory_projection_jobs j JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id WHERE c.source_key=?1 AND json_extract(j.semantic_graph_state,'$.state')='complete' AND json_extract(j.hot_cache_state,'$.state')='complete'", [format!("conversation_turn:{turn}")], |row| row.get(0)).unwrap();

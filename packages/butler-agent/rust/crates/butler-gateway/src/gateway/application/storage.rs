@@ -5,6 +5,7 @@ mod error;
 mod schema;
 mod tuning;
 
+use butler_platform::sqlite;
 pub(super) use cached::CachedSql;
 pub(super) use error::{AppStorageCode, AppStorageError};
 use std::{
@@ -219,7 +220,7 @@ fn run_connection_lane(
                 .with_source(error)
             })?;
         }
-        let mut connection = Connection::open(path).map_err(AppStorageError::sqlite)?;
+        let mut connection = sqlite::open(path).map_err(AppStorageError::sqlite)?;
         tuning::configure(&connection)?;
         schema::migrate(&mut connection, butler_data.map(PathBuf::as_path))?;
         schema::seed(&connection, initialized_at)?;

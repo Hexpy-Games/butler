@@ -1,5 +1,6 @@
 //! The rebuildable SQLite index over the box item manifests.
 
+use butler_platform::sqlite;
 use std::{fs, path::Path};
 
 use rusqlite::{Connection, Transaction, params};
@@ -51,7 +52,7 @@ fn build(root: &Path, temporary: &Path) -> CognitionResult<BoxIndexReport> {
     let index_path = root.join("index.sqlite");
     let report_path = root.join("index-rebuild-report.json");
     index_io::create_private_file(temporary)?;
-    let mut database = Connection::open(temporary)
+    let mut database = sqlite::open(temporary)
         .map_err(|source| error(CognitionCode::MemoryBoxIndexWriteFailed).with_source(source))?;
     create_schema(&database)?;
     let mut indexing = Indexing::default();
@@ -159,7 +160,7 @@ fn open_index(root: &Path) -> CognitionResult<Connection> {
     if !canonical_index.starts_with(&canonical_root) {
         return Err(error(CognitionCode::MemoryBoxIndexPathUnsafe));
     }
-    Connection::open_with_flags(&canonical_index, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+    sqlite::open_with_flags(&canonical_index, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|source| error(CognitionCode::MemoryBoxIndexReadFailed).with_source(source))
 }
 

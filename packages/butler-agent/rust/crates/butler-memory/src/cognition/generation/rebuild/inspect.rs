@@ -1,6 +1,8 @@
 //! Inspecting a rebuild candidate: its graph counts, vector counts and typed cursor, read without taking the writer lock.
 
 use super::*;
+use butler_platform::sqlite;
+use rusqlite::Connection;
 
 /// Vector unit counts of a candidate graph.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
@@ -97,7 +99,7 @@ pub fn inspect(
             cache: None,
         });
     }
-    let db = Connection::open_with_flags(&graph, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    let db = sqlite::open_with_flags(&graph, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
     let counts = GraphCounts(&db);
     let typed_cursor = stored_typed_cursor(&db, manifest.canonical_snapshot_id.as_deref())?;

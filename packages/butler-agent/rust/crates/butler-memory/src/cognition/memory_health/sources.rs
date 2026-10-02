@@ -8,7 +8,7 @@ use std::{
     path::Path,
 };
 
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::OpenFlags;
 use serde::Deserialize;
 
 use crate::cognition::{CognitionPathEnvironment, CognitionResult};
