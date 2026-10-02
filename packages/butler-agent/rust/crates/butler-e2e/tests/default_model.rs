@@ -102,9 +102,20 @@ async fn connected_provider_routine_shares_connection_without_saving_a_model()
         .await?;
     let (_, turn) = s.turn("general", "Reply with one word.").await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
-    let requests = server.chat_requests();
-    assert_eq!(requests.len(), 1);
-    assert_eq!(requests[0]["model"], "qwen3.7-plus");
+    // Completion starts semantic extraction asynchronously. Assert both wire
+    // paths after that request exists, rather than racing its arrival.
+    let requests = requests_after_extraction(&server).await;
+    assert_eq!(requests.iter().filter(|r| r["tools"].is_array()).count(), 1);
+    assert!(
+        requests.iter().all(|r| r["model"] == "qwen3.7-plus"),
+        "{requests:#?}"
+    );
+    assert!(
+        requests
+            .iter()
+            .all(|r| r["tools"].is_array() || is_extraction(r)),
+        "unexpected provider request: {requests:#?}"
+    );
     let saved: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
     assert_eq!(
         saved["models"], config["models"],
@@ -112,4 +123,24 @@ async fn connected_provider_routine_shares_connection_without_saving_a_model()
     );
     assert!(saved["system"]["butlerModel"].is_null());
     s.finish().await
+}
+
+fn is_extraction(request: &Value) -> bool {
+    request["response_format"]["json_schema"]["name"] == "memory_meaning_v4"
+}
+
+async fn requests_after_extraction(
+    server: &butler_e2e::e2e::fake_servers::FakeServer,
+) -> Vec<Value> {
+    tokio::time::timeout(std::time::Duration::from_secs(30), async {
+        loop {
+            let requests = server.chat_requests();
+            if requests.iter().any(is_extraction) {
+                return requests;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("completed turn did not start semantic extraction")
 }
