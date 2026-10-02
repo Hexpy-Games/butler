@@ -1,0 +1,44 @@
+name: Package unsigned Windows App
+description: Consume the Windows Agent archive and emit Squirrel and portable artifacts
+inputs:
+  owner-runner:
+    required: false
+    default: "false"
+    description: Use installed build tools without changing the owner host
+  version:
+    required: false
+    default: ""
+    description: Exact App version override for disposable update smoke packages
+runs:
+  using: composite
+  steps:
+    - uses: oven-sh/setup-bun@v2
+      if: inputs.owner-runner != 'true'
+    - uses: actions/setup-node@v4
+      if: inputs.owner-runner != 'true'
+      with:
+        node-version: 24
+    - name: Package the exact App and bundled Agent version
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        if ('${{ inputs.version }}') { $env:GITHUB_REF_NAME = 'v${{ inputs.version }}' }
+        $profileRoot = if ($env:OWNER_JOB_ROOT) { $env:OWNER_JOB_ROOT } else { $env:RUNNER_TEMP }
+        $profile = Join-Path $profileRoot ([guid]::NewGuid())
+        New-Item -ItemType Directory $profile | Out-Null
+        $env:HOME = Join-Path $profile 'home'
+        $env:BUTLER_DATA = Join-Path $profile 'data'
+        New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+        try {
+          bun install --frozen-lockfile --ignore-scripts
+          if ($LASTEXITCODE) { throw 'Dependency installation failed' }
+          $archives = @(Get-ChildItem dist/release/agent/butler-agent-*-windows-x64.zip)
+          if ($archives.Count -ne 1) { throw 'Expected one Windows Agent archive' }
+          $expected = (Get-Content ($archives[0].FullName + '.sha256')).Split(' ')[0]
+          if ((Get-FileHash $archives[0].FullName -Algorithm SHA256).Hash.ToLower() -ne $expected) { throw 'Agent checksum mismatch' }
+          Expand-Archive $archives[0].FullName (Join-Path $profile 'agent')
+          $env:BUTLER_NATIVE_AGENT_EXECUTABLE = Join-Path $profile 'agent/butler-agent.exe'
+          $env:BUTLER_NATIVE_UI_DIST = Join-Path $profile 'agent/resources/app-client/dist'
+          bun run packages/butler-app/scripts/windows/package-release.ts
+          if ($LASTEXITCODE) { throw 'Windows packaging failed' }
+        } finally { Remove-Item -Recurse -Force $profile }

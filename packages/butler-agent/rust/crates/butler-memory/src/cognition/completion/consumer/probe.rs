@@ -22,6 +22,13 @@ pub(super) struct ProbeReader {
 }
 
 impl ProbeReader {
+    pub(super) async fn obsolete_alias_index(
+        self: &Arc<Self>,
+        path: &Path,
+    ) -> CognitionResult<Option<String>> {
+        self.with(path, GraphRepository::obsolete_alias_index).await
+    }
+
     /// Emit once per serving identity/refusal transition, without idle writes.
     pub(super) fn identity_refused(
         &self,

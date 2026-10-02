@@ -305,13 +305,44 @@ jobs:
             }
           }
 
+  app-windows:
+    name: Package unsigned Windows Squirrel App
+    needs: agent-windows-build
+    if: contains(github.ref_name, '-preview.')
+    runs-on: ${{ inputs.runner == 'hosted' && 'windows-latest' || fromJSON('["self-hosted", "butler-win"]') }}
+    concurrency:
+      group: windows-app-release-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: agent-windows-x64
+          path: dist/release/agent
+      - uses: ./.github/actions/windows-owner-setup
+        if: inputs.runner != 'hosted'
+        with:
+          workflow: win-installer-release
+      - uses: ./.github/actions/package-windows-app
+        with:
+          owner-runner: ${{ inputs.runner != 'hosted' }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-windows-x64
+          path: dist/release/app-windows/*
+          if-no-files-found: error
+      - name: Verify owner registration and clean job profile
+        if: always() && inputs.runner != 'hosted'
+        shell: pwsh
+        run: ./deploy/windows-owner-cleanup.ps1
+
   # Runs after the macOS job, whose single-platform manifests it replaces with
   # the merged ones (the update manifest lists one artifact per platform).
   agent-release:
-    name: Publish Agent archives, merged manifests and installers
+    name: Publish successful Agent archives, merged manifests and installers
     runs-on: ubuntu-latest
     needs: [native-release, agent-linux, agent-windows]
-    if: ${{ always() && !cancelled() && needs.native-release.result == 'success' && needs.agent-linux.result == 'success' && (needs.agent-windows.result == 'success' || (needs.agent-windows.result == 'skipped' && !contains(github.ref_name, '-preview.'))) }}
+    if: ${{ always() && !cancelled() }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -339,8 +370,13 @@ jobs:
       - name: Merge the Agent manifests
         run: |
           set -euo pipefail
-          inputs=(dist/agent/agent-darwin-arm64 dist/agent/agent-linux-x64 dist/agent/agent-linux-arm64)
-          if [[ "$GITHUB_REF_NAME" == *-preview.* ]]; then inputs+=(dist/agent/agent-windows-x64); fi
+          inputs=()
+          for directory in dist/agent/agent-*; do
+            if [ -f "$directory/agent-release-manifest.json" ] && [ -f "$directory/agent-update-manifest.json" ]; then
+              inputs+=("$directory")
+            fi
+          done
+          test "${#inputs[@]}" -gt 0
           python3 packages/butler-agent/rust/scripts/release-standalone-agent.py merge \
             --output dist/agent/merged "${inputs[@]}"
 
@@ -351,21 +387,16 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           files=(
-            dist/agent/agent-linux-x64/butler-agent-*-linux-x64.tar.gz
-            dist/agent/agent-linux-arm64/butler-agent-*-linux-arm64.tar.gz
+            dist/agent/agent-*/butler-agent-*.tar.gz
+            dist/agent/agent-*/butler-agent-*.zip
+            dist/agent/agent-*/butler-agent-*.zip.sha256
             dist/agent/merged/agent-release-manifest.json
             dist/agent/merged/agent-update-manifest.json
             deploy/install.sh
+            deploy/install.ps1
           )
-          expected=5
-          if [[ "$GITHUB_REF_NAME" == *-preview.* ]]; then
-            files+=(dist/agent/agent-windows-x64/butler-agent-*-windows-x64.zip
-                    dist/agent/agent-windows-x64/butler-agent-*-windows-x64.zip.sha256 deploy/install.ps1)
-            expected=8
-          fi
-          if [ "${#files[@]}" -ne "$expected" ]; then
-            printf 'Expected %s Agent release files, got %s\n' "$expected" "${#files[@]}" >&2
-            exit 1
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --draft --title "$GITHUB_REF_NAME" --notes "Butler release $GITHUB_REF_NAME"
           fi
           gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
 
@@ -381,7 +412,8 @@ jobs:
   app-linux-release:
     name: Attach Linux App packages to the draft release
     runs-on: ubuntu-latest
-    needs: [native-release, app-linux]
+    needs: [agent-release, app-linux]
+    if: ${{ always() && !cancelled() && needs.agent-release.result == 'success' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -401,99 +433,61 @@ jobs:
           # Archive names retain the exact release tag version.
           version="${GITHUB_REF_NAME#v}"
           cd dist/release/app-linux
-          files=(
-            "butler-app-${version}-linux-x64.deb"
-            "butler-app-${version}-linux-arm64.deb"
-            "butler-app-${version}-archlinux-x64.pkg.tar.zst"
-          )
-          for file in "${files[@]}"; do
-            test -f "$file"
-            sha256sum -c "$file.sha256"
-          done
+          shopt -s nullglob
+          files=(butler-app-*.deb butler-app-*.pkg.tar.zst)
+          test "${#files[@]}" -gt 0
+          for file in "${files[@]}"; do sha256sum -c "$file.sha256"; done
           gh release upload "$GITHUB_REF_NAME" "${files[@]}" "${files[@]/%/.sha256}" --clobber
 
-      - name: Publish the App updater manifest for all released platforms
+  app-manifests:
+    name: Publish successful Windows artifacts and merged App update manifest
+    runs-on: ubuntu-latest
+    needs: [native-release, agent-release, app-linux-release, app-windows]
+    if: ${{ always() && !cancelled() && needs.agent-release.result == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        if: needs.app-windows.result == 'success'
+        with:
+          name: app-windows-x64
+          path: dist/release/app-windows
+      - name: Merge only published platforms
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
-          trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
-          gh release download "$GITHUB_REF_NAME" --pattern app-update-manifest.json --dir "$BUTLER_DATA"
-          python3 deploy/app/merge-update-manifest.py \
-            --mac-manifest "$BUTLER_DATA/app-update-manifest.json" \
-            --linux-dir dist/release/app-linux --version "${GITHUB_REF_NAME#v}" \
-            --base-url "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME" \
-            --output "$HOME/app-update-manifest.json"
-          gh release upload "$GITHUB_REF_NAME" "$HOME/app-update-manifest.json" --clobber
+          task_home="$(mktemp -d)"
+          task_data="$(mktemp -d)"
+          export HOME="$task_home" BUTLER_DATA="$task_data"
+          trap 'rm -rf "$task_home" "$task_data"' EXIT
+          mkdir -p dist/release/published
+          gh release download "$GITHUB_REF_NAME" --dir dist/release/published
+          inputs=()
+          if [ -f dist/release/published/app-update-manifest.json ]; then
+            inputs+=(--mac-manifest dist/release/published/app-update-manifest.json)
+          fi
+          if compgen -G 'dist/release/published/butler-app-*-linux-*.deb' > /dev/null; then
+            inputs+=(--linux-dir dist/release/published)
+          fi
+          if [ -f dist/release/app-windows/app-update-manifest.json ]; then
+            inputs+=(--windows-dir dist/release/app-windows)
+            shopt -s nullglob
+            files=(dist/release/app-windows/*.exe dist/release/app-windows/*.nupkg dist/release/app-windows/*.zip dist/release/app-windows/RELEASES dist/release/app-windows/*.sha256)
+            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+          fi
+          if [ "${#inputs[@]}" -eq 0 ]; then exit 0; fi
+          python3 deploy/app/merge-update-manifest.py "${inputs[@]}" \
+            --version "${GITHUB_REF_NAME#v}" \
+            --base-url "https://github.com/$GH_REPO/releases/download/$GITHUB_REF_NAME" \
+            --output "$task_data/app-update-manifest.json"
+          gh release upload "$GITHUB_REF_NAME" "$task_data/app-update-manifest.json" --clobber
 
   release-checksums:
-    name: Publish consolidated release checksums
-    runs-on: ubuntu-latest
-    needs: [native-release, agent-release, app-linux-release]
-    steps:
-      - name: Build consolidated checksum asset from published outputs
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          tag="${GITHUB_REF_NAME}"
-          version="${tag#v}"
-          mkdir -p dist/release/checksums/assets
-          gh release download "$tag" \
-            --dir dist/release/checksums/assets \
-            --clobber
-          shopt -s nullglob
-          files=(
-            dist/release/checksums/assets/butler-agent-*-darwin-arm64.tar.gz
-            dist/release/checksums/assets/butler-agent-*-linux-x64.tar.gz
-            dist/release/checksums/assets/butler-agent-*-linux-arm64.tar.gz
-            dist/release/checksums/assets/install.sh
-            dist/release/checksums/assets/agent-release-manifest.json
-            dist/release/checksums/assets/agent-update-manifest.json
-            dist/release/checksums/assets/butler-app-*-darwin-arm64.dmg
-            dist/release/checksums/assets/butler-app-*-darwin-arm64.dmg.sha256
-            dist/release/checksums/assets/butler-app-*-darwin-arm64.zip
-            dist/release/checksums/assets/butler-app-*-darwin-arm64.zip.sha256
-            dist/release/checksums/assets/app-release-manifest.json
-            dist/release/checksums/assets/app-update-manifest.json
-            dist/release/checksums/assets/butler-app-*-linux-x64.deb
-            dist/release/checksums/assets/butler-app-*-linux-x64.deb.sha256
-            dist/release/checksums/assets/butler-app-*-linux-arm64.deb
-            dist/release/checksums/assets/butler-app-*-linux-arm64.deb.sha256
-            dist/release/checksums/assets/butler-app-*-archlinux-x64.pkg.tar.zst
-            dist/release/checksums/assets/butler-app-*-archlinux-x64.pkg.tar.zst.sha256
-          )
-          expected=18
-          if [[ "$tag" == *-preview.* ]]; then
-            files+=(dist/release/checksums/assets/butler-agent-*-windows-x64.zip
-                    dist/release/checksums/assets/butler-agent-*-windows-x64.zip.sha256
-                    dist/release/checksums/assets/install.ps1)
-            expected=21
-          fi
-          if [ "${#files[@]}" -ne "$expected" ]; then
-            printf 'Expected %s current release outputs, got %s\n' "$expected" "${#files[@]}" >&2
-            exit 1
-          fi
-          checksum_file="dist/release/checksums/butler-${version}-SHA256SUMS"
-          (
-            cd dist/release/checksums/assets
-            for file in "${files[@]}"; do
-              sha256sum "$(basename "$file")"
-            done
-          ) > "$checksum_file"
-          checksum_count="$(wc -l < "$checksum_file" | tr -d ' ')"
-          if [ "$checksum_count" -ne "$expected" ]; then
-            printf 'Expected %s checksummed release outputs, got %s\n' "$expected" "$checksum_count" >&2
-            exit 1
-          fi
-          gh release upload "$tag" "$checksum_file" --clobber
+    needs: [agent-release, app-manifests]
+    if: ${{ always() && !cancelled() && needs.agent-release.result == 'success' }}
+    uses: ./.github/workflows/release-checksums.yml
 
-  # The release stays a draft until every asset above exists; only now does
-  # /releases/latest (and so install.sh) see it. A tag with a hyphen is a
-  # preview and is marked as a prerelease, which /releases/latest skips.
   publish-release:
     name: Publish the GitHub Release
     runs-on: ubuntu-latest

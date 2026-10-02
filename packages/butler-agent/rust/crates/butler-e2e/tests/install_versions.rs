@@ -69,7 +69,7 @@ fn active_version(launch: &Launch) -> Result<String, HarnessError> {
 #[test]
 fn ins_07_prune_and_rollback_choose_the_right_versions() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (sandbox, launch) = sandbox("INS-07")?;
+    let (mut sandbox, launch) = sandbox("INS-07")?;
     let home = sandbox.root.join("agent-home");
     let fixtures = sandbox.root.join("fixtures");
     let install = |archive: &Archive| {
@@ -152,5 +152,6 @@ fn ins_07_prune_and_rollback_choose_the_right_versions() -> Result<(), HarnessEr
     assert_eq!(error_code(&ambiguous)?, "install_version_ambiguous");
     ok(&rollback(&["--to", &stubs[4].dir, "--yes"])?)?;
     assert_eq!(active_version(&launch)?, "1.0.5");
+    sandbox.mark_success();
     Ok(())
 }

@@ -127,3 +127,9 @@ function secretRowFromView(secret: McpServerView["env"][number]): McpSecretRowSt
     redacted: secret.redacted,
   };
 }
+
+export function mcpServerIdError(id: string): "required" | "invalid" | null {
+  if (!id.trim()) return "required";
+  return /^[A-Za-z0-9._-]{1,80}$/u.test(id) && id.replace(/-/gu, "")
+    ? null : "invalid";
+}

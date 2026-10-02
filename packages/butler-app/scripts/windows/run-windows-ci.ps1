@@ -5,6 +5,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$env:HOME = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid())
+$env:BUTLER_DATA = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid())
+New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
 $root = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
 Set-Location $root
 

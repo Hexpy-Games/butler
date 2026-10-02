@@ -144,6 +144,11 @@ async fn runtime_readiness_waits_for_inbound_poll_loop() -> Result<(), HarnessEr
 
     assert!(s.gw.healthy().await);
     assert!(!s.gw.executor_ready().await);
+    assert!(
+        butler_e2e::e2e::readiness::ready_record(&s.sandbox.data, &s.gw)
+            .await
+            .is_none()
+    );
     let refused =
         s.gw.post(
             "/messages",
@@ -163,21 +168,10 @@ async fn runtime_readiness_waits_for_inbound_poll_loop() -> Result<(), HarnessEr
         b"release",
     )
     .await?;
-    let deadline = Instant::now() + Duration::from_secs(10);
-    loop {
-        let ready = s.gw.get("/runtime-readiness").await?;
-        assert_eq!(ready.status, 200);
-        if ready.data()["btcc_executor_ready"].as_bool() == Some(true) {
-            assert!(
-                ready.data()["authenticated_gateway_ready"]
-                    .as_bool()
-                    .unwrap()
-            );
-            break;
-        }
-        assert!(Instant::now() < deadline, "poll loop did not become ready");
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
+    butler_e2e::e2e::readiness::wait_ready(&s.sandbox.data, &s.gw, Duration::from_secs(10), |_| {
+        true
+    })
+    .await?;
     assert!(s.gw.executor_ready().await);
     s.finish().await
 }

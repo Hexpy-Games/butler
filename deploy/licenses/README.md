@@ -8,7 +8,12 @@ in its original runtime; our packagers do not duplicate them.
 
 `catalog.json` keeps reviewed license IDs, source evidence hashes, attribution
 and links, without full texts. Generation validates locked input fingerprints,
-production npm closure and vendored asset fingerprints. Every one of the 848 inventory components remains
+production npm closure and vendored third-party notice sources. Fingerprints cover
+Cargo/Bun lockfiles, Cargo and packaging manifests, the generator/collector and
+their embedded config/allowlist, the static-ORT lock, and parsed model identity
+constants. Rust comments, first-party code, prompts and unrelated asset bytes do
+not invalidate the inventory. Added/removed manifests or notice sources do.
+Staleness errors list the changed input paths and one refresh command. Every one of the 885 inventory components remains
 disclosed with name, version, SPDX expression (or the supplier's explicit
 LicenseRef), upstream link(s), and available copyright attribution lines.
 Supplier collections remain collection entries; individual supplier versions and
@@ -58,7 +63,7 @@ exceptions remain enforced; the owner accepted those exceptions.
 The renderer build emits `THIRD_PARTY_NOTICES.txt.gz`. Gzip is deterministic and
 built-in `DecompressionStream` expands it only when the viewer is opened. Closing
 the viewer releases its parsed disclosures. Startup and idle perform no reads
-and hold no inventory data. The smoke asserts the complete 848-item list and
+and hold no inventory data. The smoke asserts the complete 885-item list and
 measures opening time and retained browser heap, plus responsive search/expand.
 App and DS-site builds also emit `THIRD_PARTY_NOTICES.txt` with the bundled
 Pretendard and IBM Plex Mono OFL texts, preserving the readable font notices

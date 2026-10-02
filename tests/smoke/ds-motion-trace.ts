@@ -12,7 +12,8 @@
  * - Thinking mark: working marks run without long tasks and stop drawing when
  *   offscreen or under reduced motion.
  * - Foundations chapter heroes (FoundationHeroMotion): each hero runs only
- *   CSS animations of transform/opacity, holds the frame rate with no long
+ *   CSS animations of transform/opacity and documented specimen properties,
+ *   including Sketch SVG contour drawing; holds the frame rate with no long
  *   task and a small main-thread cost per frame, pauses offscreen and in a
  *   hidden tab, and has no animation under reduced motion.
  * - Optional `--video`: Playwright recordings of each motion in light and dark
@@ -501,15 +502,23 @@ async function openHero(page: Page, serverUrl: string, pageId: string, theme: st
   return hero;
 }
 
-type HeroAnimations = { state: string | null; count: number; running: number; cssOnly: boolean; properties: string[] };
+type HeroAnimations = { state: string | null; count: number; running: number; cssOnly: boolean; properties: string[]; outlineDashOnly: boolean };
 
 function heroAnimations(hero: ReturnType<Page["locator"]>): Promise<HeroAnimations> {
   return hero.evaluate((node) => {
     const list = node.getAnimations({ subtree: true });
     const properties = new Set<string>();
+    let outlineDashOnly = true;
     for (const animation of list) {
       for (const frame of (animation.effect as KeyframeEffect).getKeyframes()) {
-        for (const key of Object.keys(frame)) if (!["offset", "computedOffset", "easing", "composite"].includes(key)) properties.add(key);
+        for (const key of Object.keys(frame)) {
+          if (["offset", "computedOffset", "easing", "composite"].includes(key)) continue;
+          properties.add(key);
+          if (key === "strokeDashoffset") {
+            const target = (animation.effect as KeyframeEffect).target;
+            outlineDashOnly &&= target instanceof SVGRectElement && /^sk-.+-rr$/u.test(target.getAttribute("data-t") ?? "");
+          }
+        }
       }
     }
     return {
@@ -518,6 +527,7 @@ function heroAnimations(hero: ReturnType<Page["locator"]>): Promise<HeroAnimatio
       running: list.filter((animation) => animation.playState === "running").length,
       cssOnly: list.every((animation) => animation instanceof CSSAnimation),
       properties: [...properties].sort(),
+      outlineDashOnly,
     };
   });
 }
@@ -592,7 +602,9 @@ async function measureHeroes(page: Page, serverUrl: string) {
     if (reportOnly) continue;
     assert(playingAnimations.state === "playing" && playingAnimations.running > 0, `${variant} hero is not playing: ${JSON.stringify(playingAnimations)}`);
     assert(playingAnimations.cssOnly, `${variant} hero runs a non-CSS animation`);
-    const allowed = ["transform", "opacity", ...(HERO_SPECIMEN_PROPERTIES[variant] ?? [])];
+    // Chapter blueprints draw only their SVG rect contours (the documented
+    // Sketch contract). This paint-only allowance never exempts layout checks.
+    const allowed = ["transform", "opacity", ...(playingAnimations.outlineDashOnly ? ["strokeDashoffset"] : []), ...(HERO_SPECIMEN_PROPERTIES[variant] ?? [])];
     assert(playingAnimations.properties.every((property) => allowed.includes(property)),
       `${variant} hero animates ${playingAnimations.properties.join(", ")}; only ${allowed.join(", ")}`);
     assert(windows.every((stats) => stats.longTasks === 0), `${variant} hero produced ${playing.longTasks} task(s) over ${LONG_TASK_MS}ms (max ${playing.maxTaskMs}ms)`);

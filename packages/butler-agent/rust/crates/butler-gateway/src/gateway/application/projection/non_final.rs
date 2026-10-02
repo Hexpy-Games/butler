@@ -10,7 +10,7 @@ mod values;
 
 use operations::*;
 use progress::*;
-use runtime_progress::*;
+pub(in crate::gateway::application) use runtime_progress::row_from_runtime_event;
 use runtime_values::*;
 use values::*;
 

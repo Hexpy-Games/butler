@@ -19,6 +19,7 @@ fn memory_graph_schema_is_pinned() {
     schema_matches_actual_bun_ensure_schema_surface_and_is_idempotent();
     legacy_graph_requires_the_existing_explicit_migration();
     historical_canonical_source_ids_become_nullable_without_data_rewrite();
+    super::super::index_retirement::assert_interrupted_retirement();
 }
 
 fn schema_matches_actual_bun_ensure_schema_surface_and_is_idempotent() {

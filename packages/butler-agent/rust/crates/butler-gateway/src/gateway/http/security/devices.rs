@@ -1,4 +1,4 @@
-//! Loaded once, write-through credentials; no background polling or timers.
+//! Loaded once, write-through credentials; one-shot expiry after authentication.
 use super::super::HttpError;
 use crate::gateway::{
     GatewayApplication, PairedDevice,
@@ -12,16 +12,21 @@ use std::{
     collections::HashMap,
     sync::{
         Arc,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
+    time::Duration,
 };
 use tokio_util::sync::CancellationToken;
+
+/// Fixed lifetime from issuance; activity never renews a captured credential.
+const SESSION_TTL: u64 = 30 * 24 * 60 * 60;
 
 struct Entry {
     device: PairedDevice,
     seen: AtomicU64,
     persisted: AtomicU64,
     closed: CancellationToken,
+    expiry_scheduled: AtomicBool,
 }
 
 pub(in crate::gateway::http) struct DeviceRegistry {
@@ -49,6 +54,7 @@ impl DeviceRegistry {
                     seen: AtomicU64::new(device.last_seen_at),
                     persisted: AtomicU64::new(device.last_seen_at),
                     closed: shutdown.child_token(),
+                    expiry_scheduled: AtomicBool::new(false),
                     device,
                 });
                 (entry.device.id.clone(), entry)
@@ -101,11 +107,12 @@ impl DeviceRegistry {
             seen: AtomicU64::new(now),
             persisted: AtomicU64::new(now),
             closed: self.shutdown.child_token(),
+            expiry_scheduled: AtomicBool::new(false),
         });
         let mut entries = self.entries.write();
         Arc::make_mut(&mut entries).insert(id.clone(), entry);
         let cookie = HeaderValue::from_str(&format!(
-            "{}=v2.{id}.{secret}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000",
+            "{}=v2.{id}.{secret}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_TTL}",
             self.cookie_name
         ))
         .map_err(|_| HttpError::public(500, "session_unavailable", "Session unavailable."))?;
@@ -145,13 +152,35 @@ impl DeviceRegistry {
                     && !entry.closed.is_cancelled()
                 {
                     let now = self.now();
+                    if now >= entry.device.created_at.saturating_add(SESSION_TTL) {
+                        entry.closed.cancel();
+                        continue;
+                    }
                     entry.seen.fetch_max(now, Ordering::Relaxed);
+                    Self::schedule_expiry(entry.clone(), now);
                     self.touch(entry.clone(), now);
                     return Some(entry.closed.clone());
                 }
             }
         }
         None
+    }
+
+    fn schedule_expiry(entry: Arc<Entry>, now: u64) {
+        if entry.expiry_scheduled.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let remaining = entry
+            .device
+            .created_at
+            .saturating_add(SESSION_TTL)
+            .saturating_sub(now);
+        tokio::spawn(async move {
+            tokio::select! {
+                () = entry.closed.cancelled() => {},
+                () = tokio::time::sleep(Duration::from_secs(remaining)) => entry.closed.cancel(),
+            }
+        });
     }
 
     fn touch(&self, entry: Arc<Entry>, now: u64) {

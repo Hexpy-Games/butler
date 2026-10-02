@@ -17,7 +17,7 @@ use super::{
     WorkingContextBudgetInput, canonical_conversation_session_id, trim_text_to_token_budget,
 };
 
-mod algorithm;
+pub(in crate::context) mod algorithm;
 pub(crate) mod storage;
 
 use algorithm::{build_summary, compaction_window, estimate_tokens, joined_message_text};

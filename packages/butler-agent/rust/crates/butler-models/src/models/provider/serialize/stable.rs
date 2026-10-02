@@ -49,37 +49,15 @@ pub(in crate::models::provider) fn identity(
     request: &ModelRoundRequest<'_>,
     config: &ProviderRequestConfig,
 ) -> Result<Option<Value>, ModelRoundError> {
+    // This byte-prefix identity is defined for OpenAI Responses only. Other
+    // carriers still use phase-grouped tools, without a fabricated cache contract.
+    if config.metadata.provider_id != "openai" {
+        return Ok(None);
+    }
     let Some(stable) = request.stable_provider_cache_prefix else {
         return Ok(None);
     };
-    let route = request
-        .route_context
-        .ok_or_else(|| invariant("stable_provider_prefix_route_context_missing"))?;
-    if route.get("schemaVersion").and_then(Value::as_str) != Some("butler.model-route-request.v1")
-        || !route
-            .get("routeDigest")
-            .and_then(Value::as_str)
-            .is_some_and(digest)
-        || !route
-            .get("cursor")
-            .and_then(Value::as_f64)
-            .is_some_and(safe_integer)
-        || !route
-            .get("modelRef")
-            .and_then(Value::as_str)
-            .is_some_and(|value| {
-                !butler_core::public_text::trim_js_whitespace(value).is_empty()
-                    && value.len() <= 200
-            })
-        || route
-            .get("toolSurfaceDigest")
-            .is_some_and(|value| !value.as_str().is_some_and(digest))
-    {
-        return Err(invariant("stable_provider_prefix_route_context_invalid"));
-    }
-    if route.get("modelRef").and_then(Value::as_str) != Some(request.model) {
-        return Err(invariant("stable_provider_prefix_route_model_mismatch"));
-    }
+    let route = request_route(request)?;
     let prior_continuation = request
         .continuation
         .filter(|value| value.get("provider").and_then(Value::as_str) == Some("openai"));
@@ -204,6 +182,38 @@ pub(in crate::models::provider) fn identity(
         }
     }
     Ok(Some(identity))
+}
+
+fn request_route<'a>(request: &ModelRoundRequest<'a>) -> Result<&'a Value, ModelRoundError> {
+    let route = request
+        .route_context
+        .ok_or_else(|| invariant("stable_provider_prefix_route_context_missing"))?;
+    if route.get("schemaVersion").and_then(Value::as_str) != Some("butler.model-route-request.v1")
+        || !route
+            .get("routeDigest")
+            .and_then(Value::as_str)
+            .is_some_and(digest)
+        || !route
+            .get("cursor")
+            .and_then(Value::as_f64)
+            .is_some_and(safe_integer)
+        || !route
+            .get("modelRef")
+            .and_then(Value::as_str)
+            .is_some_and(|value| {
+                !butler_core::public_text::trim_js_whitespace(value).is_empty()
+                    && value.len() <= 200
+            })
+        || route
+            .get("toolSurfaceDigest")
+            .is_some_and(|value| !value.as_str().is_some_and(digest))
+    {
+        return Err(invariant("stable_provider_prefix_route_context_invalid"));
+    }
+    if route.get("modelRef").and_then(Value::as_str) != Some(request.model) {
+        return Err(invariant("stable_provider_prefix_route_model_mismatch"));
+    }
+    Ok(route)
 }
 
 fn invariant(code: &'static str) -> ModelRoundError {

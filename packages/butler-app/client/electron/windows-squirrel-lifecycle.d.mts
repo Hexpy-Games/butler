@@ -72,6 +72,8 @@ export function manageWindowsSquirrelShortcut(input: {
   name: string;
   target: string;
   workingDirectory: string;
+  desktopPath?: string;
+  writeShortcut?: (path: string, options: Record<string, unknown>) => boolean;
   runPowerShell?: (
     command: string,
     args: string[],

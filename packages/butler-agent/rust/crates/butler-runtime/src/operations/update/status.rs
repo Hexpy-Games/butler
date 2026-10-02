@@ -171,7 +171,9 @@ fn error_is_calm(code: &str) -> bool {
     code.starts_with("update_manifest_")
         || matches!(
             code,
-            "update_signature_unsupported" | "update_http_unavailable"
+            "update_signature_unsupported"
+                | "update_http_unavailable"
+                | "update_artifact_source_invalid"
         )
 }
 

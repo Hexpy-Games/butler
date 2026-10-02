@@ -45,6 +45,63 @@ fn log_tail_is_bounded_and_redacts_source_credentials() {
             .unwrap();
     assert!(!safe.contains("private"), "{safe}");
     assert!(!safe.contains("sk-fake"), "{safe}");
+    for sensitive in [
+        "Bearer fixture+suffix/remaining=",
+        "Cookie: butler_session_123=v2.fixture.fixture-cookie; other=fixture-other",
+        "Set-Cookie: butler_session_123=v2.fixture.fixture-cookie; Path=/; HttpOnly",
+        r#"Cookie: quoted="fixture-cookie"; other=fixture-other"#,
+        r#"Set-Cookie: quoted="fixture-cookie"; Path=/"#,
+        r#"{"cookie":"quoted=\"fixture-cookie\"; other=fixture-other","count":42}"#,
+        r#"{'cookie':"quoted=\"fixture-cookie\"; other=fixture-other","count":42}"#,
+        r#"{"cookie":"v2.fixture.fixture-cookie","pairing_code":"12349876"}"#,
+        "pairing code: 12349876",
+        "pairing code: 1234 9876",
+        "code=1234 9876",
+        "connection code: ABCD EFGH JKLM NPQR",
+        "url=http://localhost/connect?code=ABCD-EFGH-JKLM-NPQR",
+        "path=/home/fixture-owner/data",
+        "path=/Users/fixture-owner/data",
+        r"path=C:\Users\fixture-owner\data",
+        r#"{"path":"C:\\Users\\fixture-owner\\data"}"#,
+        r#"path="C:\Users\fixture owner\data""#,
+        "path=/Users/fixture owner/data",
+        r#"path="/Users/fixture owner""#,
+        r#"path="C:\Users\fixture owner""#,
+        r"path=\\wsl.localhost\Ubuntu\home\fixture-owner\data",
+    ] {
+        let input = format!("[native-app] unavailable {sensitive}");
+        let safe = super::export_line(&input).unwrap();
+        for secret in [
+            "fixture+suffix",
+            "remaining",
+            "fixture-cookie",
+            "fixture-other",
+            "12349876",
+            "1234 9876",
+            "9876",
+            "ABCD EFGH JKLM NPQR",
+            "EFGH",
+            "JKLM",
+            "NPQR",
+            "ABCD-EFGH-JKLM-NPQR",
+            "fixture-owner",
+            "fixture owner",
+        ] {
+            assert!(
+                !safe.contains(secret),
+                "export leaked a fixture credential or username"
+            );
+        }
+        assert!(safe.contains("[native-app] unavailable"));
+        if sensitive.contains(r#""count""#) {
+            assert!(safe.contains(r#""count":42"#), "JSON fields were lost");
+        }
+    }
+    let safe = super::export_line(
+        "[service-lifecycle] event=exit pid=12349876 code=SIGKILL count=12349876",
+    )
+    .unwrap();
+    assert!(safe.contains("pid=12349876 code=SIGKILL count=12349876"));
     let exits = (1..=7).map(|i| super::LogEntry { file: String::new(),
         text: format!("2026-10-02T00:00:0{i}Z [service-lifecycle] event=exit version=0.1.0-preview.5+abc pid={i} code=crash Service exited unexpectedly.") }).collect::<Vec<_>>();
     let summary = super::log_summary(

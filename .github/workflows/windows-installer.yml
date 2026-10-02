@@ -1,0 +1,97 @@
+name: Windows Squirrel install and update
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: windows-installer-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    name: Build Windows Squirrel artifacts
+    runs-on: [self-hosted, butler-win]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/windows-owner-setup
+        with:
+          workflow: win-installer
+      - uses: ./.github/actions/build-windows-agent
+        with:
+          owner-runner: 'true'
+          profile: ci-fast
+          cache-key: windows-installer
+          version: 0.1.0-preview.90
+          artifact-base-url: http://127.0.0.1/unused
+      - uses: ./.github/actions/package-windows-app
+        with:
+          owner-runner: 'true'
+          version: 0.1.0-preview.90
+      - name: Preserve the first packages
+        shell: pwsh
+        run: |
+          Move-Item dist/release/app-windows dist/release/app-windows-first
+          Move-Item dist/release/agent dist/release/agent-first
+      - uses: ./.github/actions/build-windows-agent
+        with:
+          owner-runner: 'true'
+          profile: ci-fast
+          cache-key: windows-installer
+          version: 0.1.0-preview.91
+          artifact-base-url: http://127.0.0.1/unused
+      - uses: ./.github/actions/package-windows-app
+        with:
+          owner-runner: 'true'
+          version: 0.1.0-preview.91
+      - name: Compile existing public update E2Es without running them
+        shell: pwsh
+        run: ./deploy/windows-installer-contracts.ps1 -Mode Build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-preview
+          path: |
+            dist/release/app-windows-first/
+            dist/release/app-windows/
+            dist/release/agent-first/
+            dist/release/installer-contracts/
+          if-no-files-found: error
+          compression-level: 0
+      - name: Verify owner registration and clean job profile
+        if: always()
+        shell: pwsh
+        run: ./deploy/windows-owner-cleanup.ps1
+
+  verify:
+    name: Verify Windows install update uninstall
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-installer-preview
+          path: dist/release
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Run existing public update E2Es from built artifacts
+        shell: pwsh
+        run: ./deploy/windows-installer-contracts.ps1 -Mode Verify
+      - name: Prove Squirrel ordering and real install/update/uninstall
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $profile = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+          New-Item -ItemType Directory $profile | Out-Null
+          $env:HOME = Join-Path $profile 'home'
+          $env:BUTLER_DATA = Join-Path $profile 'data'
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          try {
+            bun install --frozen-lockfile --ignore-scripts
+            if ($LASTEXITCODE) { throw 'Dependency installation failed' }
+            ./packages/butler-app/scripts/windows/verify-squirrel-version.ps1 -Squirrel packages/butler-app/client/electron/node_modules/electron-winstaller/vendor/Squirrel.exe
+            bun run packages/butler-app/scripts/windows/installer-smoke.ts dist/release/app-windows-first dist/release/app-windows
+            if ($LASTEXITCODE) { throw 'Installer/update smoke failed' }
+          } finally { Remove-Item -Recurse -Force $profile }

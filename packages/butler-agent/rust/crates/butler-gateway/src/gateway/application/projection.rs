@@ -7,6 +7,7 @@ mod final_candidate;
 mod final_result;
 mod final_turn_events;
 mod non_final;
+pub(in crate::gateway::application) use non_final::row_from_runtime_event;
 mod owner;
 mod staging;
 mod terminal_records;

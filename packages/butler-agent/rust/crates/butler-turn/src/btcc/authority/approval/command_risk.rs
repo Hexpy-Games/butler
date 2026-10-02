@@ -6,37 +6,19 @@ pub(super) fn command_risk(line: &str) -> ApprovalRisk {
     // Fail closed on shell evaluation, redirection, quoting and control syntax.
     if line
         .chars()
-        .any(|c| c.is_control() || "|&;<>$`\\\"'(){}".contains(c))
+        .any(|c| c.is_control() || "|&;<>$`\\\"'(){}*?[]~!%^".contains(c))
     {
         return ApprovalRisk::High;
     }
     let words: Vec<_> = line.split_ascii_whitespace().collect();
     let low = match words.as_slice() {
-        ["ls" | "cat" | "head" | "tail" | "wc", ..] | ["pwd"] => true,
-        ["git", "status", args @ ..] => args.iter().all(|arg| {
-            matches!(
-                *arg,
-                "--short"
-                    | "-s"
-                    | "--branch"
-                    | "-b"
-                    | "--porcelain"
-                    | "--porcelain=v1"
-                    | "--porcelain=v2"
-            )
-        }),
-        ["git", "diff", args @ ..] => args.iter().all(|arg| {
-            matches!(
-                *arg,
-                "--stat"
-                    | "--name-only"
-                    | "--name-status"
-                    | "--cached"
-                    | "--staged"
-                    | "--no-ext-diff"
-                    | "--no-textconv"
-            )
-        }),
+        ["ls" | "cat" | "head" | "tail" | "wc" | "pwd"] => true,
+        // File operands require filesystem knowledge (including symlinks),
+        // which this lexical classifier cannot prove. Git also executes
+        // configured external diffs, textconv and filesystem monitors.
+        ["ls", args @ ..] => args
+            .iter()
+            .all(|arg| matches!(*arg, "-a" | "-l" | "-h" | "-la" | "-al" | "--all")),
         _ => false,
     };
     if low {
@@ -51,15 +33,7 @@ pub(super) mod pinned {
     use super::*;
 
     pub(in crate::btcc::authority) fn assert_command_risks() {
-        for line in [
-            "ls",
-            "ls -la src",
-            "cat README.md",
-            "pwd",
-            "git status",
-            "git status --short",
-            "git diff --stat",
-        ] {
+        for line in ["ls", "ls -la", "pwd"] {
             assert_eq!(command_risk(line), ApprovalRisk::Low, "{line}");
         }
         for line in [
@@ -79,6 +53,19 @@ pub(super) mod pinned {
             "",
             "npm test",
             "git push",
+            "ls -la src",
+            "cat README.md",
+            "cat ../private",
+            "cat /etc/passwd",
+            "cat symlink-to-private",
+            "ls ~",
+            "ls %USERPROFILE%",
+            "ls !USERPROFILE!",
+            "ls *",
+            "git status",
+            "git status --short",
+            "git diff",
+            "git diff --stat",
             "git -c alias.status=!sh status",
             "git diff --output=file",
             "git diff --ext-diff",

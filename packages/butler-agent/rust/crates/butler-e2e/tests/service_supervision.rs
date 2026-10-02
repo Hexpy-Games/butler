@@ -107,18 +107,13 @@ fn managed_fixture(s: &mut Scenario) -> Result<ManagerTask, HarnessError> {
 }
 
 async fn ready(s: &Scenario, old_pid: u32) -> Result<Value, HarnessError> {
-    let deadline = Instant::now() + Duration::from_secs(30);
-    loop {
-        if let Some(record) = instance_record(&s.sandbox.data)
-            && record["pid"] != old_pid
-            && record["state"] == "ready"
-            && s.gw.healthy().await
-        {
-            return Ok(record);
-        }
-        assert!(Instant::now() < deadline, "service did not return");
-        tokio::time::sleep(Duration::from_millis(25)).await;
-    }
+    butler_e2e::e2e::readiness::wait_ready(
+        &s.sandbox.data,
+        &s.gw,
+        Duration::from_secs(30),
+        |record| record["pid"] != old_pid,
+    )
+    .await
 }
 
 async fn assert_failed_and_drained(s: &Scenario, id: &str) -> Result<(), HarnessError> {
@@ -266,6 +261,35 @@ async fn cli_supervisor_caps_crashes_and_a_new_start_recovers() -> Result<(), Ha
         supervisor
     );
     assert!(s.gw.healthy().await);
+    drop(cleanup);
+    s.finish().await
+}
+
+#[tokio::test]
+async fn cli_supervisor_rejects_stop_intent_for_another_instance() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut s = Setup::new("SERVICE-STALE-STOP")?.start().await?;
+    s.agent.terminate().await?;
+    let cleanup = StopOnDrop(s.agent.launch.clone());
+    let start = s.agent.cli_async(&["start", "--json"]).await?;
+    assert_eq!(start.code, Some(0));
+    let record = instance_record(&s.sandbox.data).unwrap();
+    let pid = u32::try_from(record["pid"].as_u64().unwrap()).unwrap();
+    fs::write(
+        s.sandbox.data.join("state/agent-stop-intent.json"),
+        json!({
+            "schema":"butler.agent-stop-intent.v1", "pid":pid,
+            "instance_id":uuid::Uuid::new_v4().to_string(), "reason":"stop",
+            "requested_by":"cli", "respawn_by":null, "requested_at":"2026-10-02T00:00:00Z"
+        })
+        .to_string(),
+    )?;
+    instance::terminate(pid, record["process_start"].as_str().unwrap())
+        .map_err(|error| HarnessError(error.to_string()))?;
+    let next = ready(&s, pid).await?;
+    assert_eq!(next["cli_supervisor_pid"], record["cli_supervisor_pid"]);
+    let stop = s.agent.cli_async(&["stop", "--json"]).await?;
+    assert_eq!(stop.code, Some(0));
     drop(cleanup);
     s.finish().await
 }

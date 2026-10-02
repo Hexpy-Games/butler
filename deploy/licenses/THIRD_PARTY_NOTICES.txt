@@ -5733,6 +5733,13 @@ License: https://github.com/RoaringBitmap/roaring-rs/blob/0ce3fc8b55b193ce220253
 Copyright (c) 2016 The roaring-rs developers.
 
 ===== COMPONENT =====
+roxmltree 0.20.0
+MIT OR Apache-2.0
+License: https://github.com/RazrFalcon/roxmltree/blob/6dffb22cb4113a168928ca9a2eec3c2961820a98/LICENSE-APACHE
+License: https://github.com/RazrFalcon/roxmltree/blob/6dffb22cb4113a168928ca9a2eec3c2961820a98/LICENSE-MIT
+Copyright (c) 2018 Yevhenii Reizner
+
+===== COMPONENT =====
 rpassword 7.5.4
 Apache-2.0
 License: https://github.com/conradkleinespel/rpassword/blob/11515101cf108ce825dcd5ef5bac703a591f36c1/LICENSE-APACHE

@@ -119,6 +119,7 @@ test("Project Ledger mutations recover an exact dead process claim", async () =>
   }
 });
 
+// test-category: security
 test("Project Ledger core record commands create show and update generic records", async () => {
   const project = tempProject();
   const restoreButlerData = useTestButlerData(project);
@@ -165,6 +166,16 @@ test("Project Ledger core record commands create show and update generic records
     });
     expect(shown.body).toContain("# Core Reference");
     expect(readFileSync(join(ledgerProjectRoot(project), "ledger.jsonl"), "utf8")).toContain("reference_updated");
+
+    // Storage authority is resolved again on the next command, including after
+    // a failed read; the command-scoped path cache must never leak across roots.
+    process.env.BUTLER_DATA = join(project, "other-data");
+    expect(() => handle("record", ["show"], { project, id: "REF-CORE" })).toThrow();
+    handle("init", [], { project, id: "demo", name: "Other Project" });
+    handle("record", ["create"], { project, kind: "reference", id: "REF-CORE", title: "Other Reference" });
+    expect(handle("record", ["show"], { project, id: "REF-CORE" }).title).toBe("Other Reference");
+    process.env.BUTLER_DATA = testButlerData(project);
+    expect(handle("record", ["show"], { project, id: "REF-CORE" }).title).toBe("Updated Core Reference");
   } finally {
     restoreButlerData();
     rmSync(project, { recursive: true, force: true });

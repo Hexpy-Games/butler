@@ -139,7 +139,7 @@ fn ins_14_a_systemd_user_job_stays_supervised() -> Result<(), HarnessError> {
         eprintln!("SKIPPED (no systemd --user manager, or BUTLER_E2E_SYSTEMD is not 1)");
         return Ok(());
     }
-    let (sandbox, mut launch) = sandbox("INS-14")?;
+    let (mut sandbox, mut launch) = sandbox("INS-14")?;
     launch.use_data_folder_token();
     // The one scenario that uses the real manager says so.
     launch.set_env("BUTLER_SERVICE_MANAGER", "on");
@@ -234,5 +234,6 @@ fn ins_14_a_systemd_user_job_stays_supervised() -> Result<(), HarnessError> {
             .contains(&format!("/{}/", v2.dir)),
         "{last}"
     );
+    sandbox.mark_success();
     Ok(())
 }

@@ -8,12 +8,12 @@ use butler_turn::conversation::{
     ConversationMessageWithParts, ConversationPartKind, ConversationRole,
 };
 
-pub(super) struct CompactionWindow<'a> {
-    pub(super) to_summarize: &'a [ConversationMessageWithParts],
-    pub(super) preserved: &'a [ConversationMessageWithParts],
+pub(in crate::context) struct CompactionWindow<'a> {
+    pub(in crate::context) to_summarize: &'a [ConversationMessageWithParts],
+    pub(in crate::context) preserved: &'a [ConversationMessageWithParts],
 }
 
-pub(super) fn compaction_window(
+pub(in crate::context) fn compaction_window(
     messages: &[ConversationMessageWithParts],
     preserve_last_messages: usize,
 ) -> CompactionWindow<'_> {
@@ -45,7 +45,9 @@ pub(super) fn compaction_window(
             group.has_result |= part.kind == ConversationPartKind::ToolResult;
         }
     }
-    for group in groups.values() {
+    let mut groups = groups.values().collect::<Vec<_>>();
+    groups.sort_by_key(|group| std::cmp::Reverse(group.indexes.first().copied()));
+    for group in groups {
         let Some(first) = group.indexes.first().copied() else {
             continue;
         };
@@ -68,7 +70,7 @@ struct ToolGroup {
     has_result: bool,
 }
 
-pub(super) fn build_summary(
+pub(in crate::context) fn build_summary(
     messages: &[ConversationMessageWithParts],
     budget: &ContextBudgetSnapshot<'_>,
     chunk_budget: f64,
@@ -216,7 +218,7 @@ fn object_string(value: &serde_json::Value, key: &str) -> Option<String> {
         .map(str::to_owned)
 }
 
-pub(super) fn joined_message_text(messages: &[ConversationMessageWithParts]) -> String {
+pub(in crate::context) fn joined_message_text(messages: &[ConversationMessageWithParts]) -> String {
     messages
         .iter()
         .map(message_text)
@@ -224,7 +226,7 @@ pub(super) fn joined_message_text(messages: &[ConversationMessageWithParts]) -> 
         .join("\n")
 }
 
-pub(super) fn estimate_tokens(
+pub(in crate::context) fn estimate_tokens(
     budget: &ContextBudgetSnapshot<'_>,
     text: &str,
 ) -> ContextResult<f64> {
