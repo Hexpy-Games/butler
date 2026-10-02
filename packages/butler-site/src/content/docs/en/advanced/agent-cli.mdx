@@ -20,10 +20,10 @@ Butler Agent CLI is a command-line tool that installs and runs the Butler runtim
 
 ## Install
 
-To use Butler without the app, for example on a server or a remote PC, run the one-line install script. The current version is the `0.1.0-preview.4` preview, so download the script from the preview release and pass the same version with `--version`.
+To use Butler without the app, for example on a server or a remote PC, run the one-line install script. The current version is the `0.1.0-preview.5` preview, so download the script from the preview release and pass the same version with `--version`.
 
 ```bash
-curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/install.sh | sh -s -- --version 0.1.0-preview.4
+curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/install.sh | sh -s -- --version 0.1.0-preview.5
 ```
 
 If you have Node.js, you can run the same installation with npx.
@@ -46,7 +46,7 @@ It is safe to run the same command again. A version that is already installed is
 Add options after `sh -s --` (with npx, after `install`).
 
 ```bash
-curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/install.sh | sh -s -- --version 0.1.0-preview.4 --no-start
+curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/install.sh | sh -s -- --version 0.1.0-preview.5 --no-start
 ```
 
 | Option | Description |
@@ -80,7 +80,7 @@ If you cannot use the install script, extract the archive yourself. The archive 
 ```bash
 set -euo pipefail
 VERSION=X.Y.Z # The Agent archive version. For a preview release, leave out "-preview.N" (for example, 0.1.0).
-RELEASE=X.Y.Z # The release tag without the "v" (for example, 0.1.0-preview.4). Same as VERSION for a stable release.
+RELEASE=X.Y.Z # The release tag without the "v" (for example, 0.1.0-preview.5). Same as VERSION for a stable release.
 PLATFORM=darwin-arm64 # One of darwin-arm64, linux-x64 or linux-arm64.
 ARCHIVE="butler-agent-${VERSION}-${PLATFORM}.tar.gz"
 RELEASE_URL="https://github.com/Hexpy-Games/butler/releases/download/v${RELEASE}"
