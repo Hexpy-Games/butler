@@ -16,9 +16,14 @@ pub(crate) struct Task {
 pub(crate) fn render(def: &Definition, sid: &str, shell: &str) -> Result<String, Error> {
     super::validate(def)?;
     let root = def.program.parent().ok_or(Error::InvalidValue)?;
+    let initial_dir = shell
+        .rsplit_once(['\\', '/'])
+        .map(|(directory, _)| directory)
+        .filter(|directory| !directory.is_empty())
+        .ok_or(Error::InvalidValue)?;
     let metadata = json!({"program": def.program, "args": def.args, "env": def.env,
         "data": def.working_dir, "sid": sid, "shell": shell});
-    let command = script(def);
+    let command = script(def, root);
     let encoded = STANDARD.encode(
         command
             .encode_utf16()
@@ -41,11 +46,11 @@ pub(crate) fn render(def: &Definition, sid: &str, shell: &str) -> Result<String,
         sid = escape(sid),
         shell = escape(shell),
         arguments = escape(&arguments),
-        root = escape(&root.to_string_lossy())
+        root = escape(initial_dir)
     ))
 }
 
-fn script(def: &Definition) -> String {
+fn script(def: &Definition, root: &std::path::Path) -> String {
     let mut script = "$ErrorActionPreference='Stop';".to_owned();
     for (key, value) in &def.env {
         script.push_str(&format!(
@@ -54,6 +59,12 @@ fn script(def: &Definition) -> String {
             quote(value)
         ));
     }
+    // Scheduler expands %VAR% in WorkingDirectory. Start beside PowerShell,
+    // then set the Agent directory literally inside the encoded action.
+    script.push_str(&format!(
+        "Set-Location -LiteralPath {};",
+        quote(&root.to_string_lossy())
+    ));
     script.push_str(&format!("& {}", quote(&def.program.to_string_lossy())));
     for arg in &def.args {
         script.push(' ');

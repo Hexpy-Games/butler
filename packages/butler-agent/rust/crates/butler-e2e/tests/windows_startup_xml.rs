@@ -50,6 +50,9 @@ fn windows_task_xml_roundtrip_and_foreign_detection() -> Result<(), Box<dyn std:
     assert!(xml.contains("<Hidden>true</Hidden>"));
     assert!(xml.contains("<RestartOnFailure>"));
     assert!(xml.contains("-WindowStyle Hidden -EncodedCommand"));
+    assert!(xml.contains(
+        "<WorkingDirectory>C:\\Windows\\System32\\WindowsPowerShell\\v1.0</WorkingDirectory>"
+    ));
     let encoded = xml
         .split("-EncodedCommand ")
         .nth(1)
@@ -67,6 +70,13 @@ fn windows_task_xml_roundtrip_and_foreign_detection() -> Result<(), Box<dyn std:
     .unwrap();
     assert!(script.contains("'C:\\미리 보기\\'' & %DATA% !'"));
     assert!(script.contains("SetEnvironmentVariable('BUTLER_DATA','C:\\'' & %DATA% !','Process')"));
+    let directory = definition
+        .program
+        .parent()
+        .unwrap()
+        .to_string_lossy()
+        .replace('\'', "''");
+    assert!(script.contains(&format!("Set-Location -LiteralPath '{directory}';")));
     assert!(script.ends_with(";exit $LASTEXITCODE"));
     assert!(test_support::task_owned(&xml, &xml, SID));
     let scheduler = xml

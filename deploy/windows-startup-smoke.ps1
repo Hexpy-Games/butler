@@ -35,11 +35,13 @@ try {
     if ($definition.Principal.RunLevel -ne 0 -or $triggerUser -ne $sid -or
         !$definition.Settings.Hidden -or !$definition.Settings.Enabled -or
         $definition.Settings.RestartInterval -ne 'PT1M' -or $definition.Settings.RestartCount -ne 3 -or
-        [IO.Path]::GetFullPath($xml.Task.Actions.Exec.WorkingDirectory) -ne [IO.Path]::GetFullPath($env:BUTLER_E2E_INSTALLED_ROOT)) {
+        [IO.Path]::GetFullPath($xml.Task.Actions.Exec.WorkingDirectory) -ne (Split-Path $xml.Task.Actions.Exec.Command)) {
         throw 'Task definition contract failed'
     }
     $encoded = ($xml.Task.Actions.Exec.Arguments -split '-EncodedCommand ')[1]
     $script = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($encoded))
+    $literalRoot = [IO.Path]::GetFullPath($env:BUTLER_E2E_INSTALLED_ROOT).Replace("'", "''")
+    if (!$script.Contains("Set-Location -LiteralPath '$literalRoot';")) { throw 'Task lost its literal Agent directory' }
     foreach ($key in @('HOME','LOCALAPPDATA','APPDATA','BUTLER_AGENT_HOME')) {
         if (!$script.Contains("SetEnvironmentVariable('$key',")) { throw "Missing task profile binding: $key" }
     }
