@@ -82,6 +82,14 @@ async function readInputValue(locator: Locator): Promise<string> {
   );
 }
 
+async function replaceDraft(locator: Locator, text: string): Promise<void> {
+  // Lexical restores its selection on focus; select after that restoration.
+  await locator.focus();
+  await locator.press("ControlOrMeta+A");
+  await locator.press("Backspace");
+  if (text) await locator.pressSequentially(text);
+}
+
 async function expectInputValue(
   locator: Locator,
   expected: string,
@@ -1860,10 +1868,8 @@ try {
     "refused image should use the brief toast, not a composer error",
   );
 
-  // The product defaults to ask-first; this fixture explicitly exercises the
-  // full-access -> ask-first transition below.
-  await page.locator(testClass("access-button")).click();
-  await page.locator(testClass("composer-menu")).getByRole("button", { name: appCopy.permissions.fullAccess }).click();
+  // Focusing expands the compact composer and exposes its permission control.
+  // Preserve the initial Ask first default before selecting Full access.
   await page.locator(`${testClass("composer-card")} ${composerEditor}`).focus();
   await page
     .getByRole("button", { name: `${appCopy.composer.permission}: ${appCopy.permissions.askFirst}`, exact: true })
@@ -1874,7 +1880,8 @@ try {
   await page.locator(testClass("composer-menu")).waitFor({ state: "visible" });
   // The fixture follows the safe Ask first default. Exercise the public menu
   // before measuring Full access, including its prefixed accessible name.
-  await page.getByRole("button", { name: appCopy.permissions.fullAccess, exact: true }).click();
+  await page.locator(testClass("composer-menu")).getByRole("button")
+    .filter({ has: page.getByText(appCopy.permissions.fullAccess, { exact: true }) }).click();
   await page.locator(testClass("composer-menu")).waitFor({ state: "hidden" });
   await page.getByRole("button", {
     name: `${appCopy.composer.permission}: ${appCopy.permissions.fullAccess}`, exact: true,
@@ -3653,7 +3660,7 @@ try {
     .locator(testClass("new-chat-empty-state"))
     .waitFor({ state: "visible" });
   const composerInput = page.locator(`${testClass("composer-card")} ${composerEditor}`);
-  await composerInput.fill("synthetic draft for new chat");
+  await replaceDraft(composerInput, "synthetic draft for new chat");
   const showSidebarForDraftCheck = page.getByRole("button", {
     name: "Show sidebar",
   });
@@ -3664,7 +3671,7 @@ try {
     .locator(smokeSessionRowSelector)
     .first();
   await draftProjectSession.click();
-  await composerInput.fill("synthetic draft for project session");
+  await replaceDraft(composerInput, "synthetic draft for project session");
   await page
     .getByRole("button", { name: appCopy.space.newChat, exact: true })
     .first()
@@ -3705,7 +3712,7 @@ try {
     "synthetic draft for new chat",
     "new-chat draft should survive another session reload",
   );
-  await composerInput.fill("");
+  await replaceDraft(composerInput, "");
   const draftComposerBox = await page
     .locator(testClass("composer-card"))
     .boundingBox();
@@ -3735,8 +3742,8 @@ try {
       composerFocusAfterPoll.value === "composer focus",
     `composer-focus-survives-summary-poll failed: ${JSON.stringify(composerFocusAfterPoll)}`,
   );
-  await composerInput.fill("");
-  await composerInput.fill("IME draft");
+  await replaceDraft(composerInput, "");
+  await replaceDraft(composerInput, "IME draft");
   await composerInput.dispatchEvent("compositionstart");
   await page.keyboard.press("Meta+Enter");
   await page.waitForTimeout(240);
@@ -3747,7 +3754,7 @@ try {
     "cmd enter should not send while IME composition is active",
   );
   await composerInput.dispatchEvent("compositionend");
-  await composerInput.fill("## Smoke request\n\n- show markdown");
+  await replaceDraft(composerInput, "## Smoke request\n\n- show markdown");
   const messageAcceptedResponse = page.waitForResponse(
     (response) =>
       response.url() === `${server.url}messages` &&
