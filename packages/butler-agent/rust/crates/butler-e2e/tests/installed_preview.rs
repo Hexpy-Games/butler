@@ -6,16 +6,11 @@
     reason = "test assertions"
 )]
 
-use std::sync::{
-    Arc,
-    atomic::{AtomicUsize, Ordering},
-};
 use std::time::Duration;
 
-use axum::{Json, Router, response::IntoResponse, routing::post};
 use butler_e2e::e2e::{
     HarnessError,
-    config::ModelChoice,
+    cassette::{Cassette, Chunk, Exchange, MatchKey, Meta, RequestRecord, ResponseRecord},
     gateway::turn_state,
     scenario::{Access, Setup, accepted_turn_id},
 };
@@ -27,31 +22,11 @@ const ANSWER: &str = "Windows preview ready.";
 #[tokio::test]
 async fn installed_release_delivers_one_stub_chat_turn() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let requests = Arc::new(AtomicUsize::new(0));
-    let seen = requests.clone();
-    let router = Router::new().route(
-        "/v1/responses",
-        post(move |Json(body): Json<Value>| {
-            let seen = seen.clone();
-            async move {
-                assert!(body.to_string().contains(PROMPT));
-                seen.fetch_add(1, Ordering::SeqCst);
-                Json(reply()).into_response()
-            }
-        }),
-    );
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let address = listener.local_addr()?;
-    let server = tokio::spawn(async move { axum::serve(listener, router).await });
     let mut setup = Setup::new("INSTALLED-PREVIEW")?
         .data_folder_token()
         .access(Access::AskFirst)
-        .model(ModelChoice {
-            model: "openai/gpt-6-luna".into(),
-            effort: Some("low".into()),
-        })
+        .stub_cassette(conversation_stub())
         .env("OPENAI_API_KEY", "e2e-not-a-real-key")
-        .env("OPENAI_BASE_URL", format!("http://{address}/v1"))
         .env("BUTLER_E2E_APP_NOW", chrono::Utc::now().to_rfc3339());
     if let Some(root) = std::env::var_os("BUTLER_E2E_INSTALLED_ROOT") {
         let root = std::path::PathBuf::from(root);
@@ -81,7 +56,7 @@ async fn installed_release_delivers_one_stub_chat_turn() -> Result<(), HarnessEr
         turn_state(&terminal),
         "delivered",
         "provider_calls={}, terminal={terminal}",
-        requests.load(Ordering::SeqCst)
+        s.provider()?.served()
     );
     let messages = s.gw.messages("general").await?;
     assert_eq!(messages.len(), 2);
@@ -89,9 +64,35 @@ async fn installed_release_delivers_one_stub_chat_turn() -> Result<(), HarnessEr
     assert_eq!(messages[0]["text"], PROMPT);
     assert_eq!(messages[1]["role"], "assistant");
     assert_eq!(messages[1]["text"], ANSWER);
-    assert_eq!(requests.load(Ordering::SeqCst), 1);
+    // Wait for completed extraction usage, not a guessed background delay.
+    let extraction_count = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let monitor = s.gw.get("/usage-monitor?since_hours=1").await?;
+            assert_eq!(monitor.status, 200, "{}", monitor.text);
+            let count: u64 = monitor.data()["model"]["byScopeUsage"]
+                .as_object()
+                .unwrap()
+                .iter()
+                .filter(|(scope, _)| scope.starts_with("memory-extract:"))
+                .map(|(_, usage)| usage["requestCount"].as_u64().unwrap())
+                .sum();
+            if count > 0 && count == s.provider()?.memory_requests().len() as u64 {
+                return Ok::<_, HarnessError>(count);
+            }
+        }
+    })
+    .await
+    .map_err(|_| {
+        butler_e2e::e2e::harness_error("background extraction usage did not complete")
+    })??;
+    assert_eq!(s.provider()?.served(), 1);
+    assert_eq!(s.provider()?.requests().len(), 1);
+    assert_eq!(
+        s.provider()?.memory_requests().len() as u64,
+        extraction_count
+    );
+    eprintln!("conversation calls: 1; completed extraction calls: {extraction_count}");
     s.finish().await?;
-    server.abort();
     Ok(())
 }
 
@@ -116,4 +117,37 @@ fn reply() -> Value {
         "output":[{"type":"message","id":"msg_preview","role":"assistant","status":"completed",
             "content":[{"type":"output_text","text":ANSWER,"annotations":[]}]}],
         "usage":{"input_tokens":100,"output_tokens":4,"total_tokens":104}})
+}
+
+fn conversation_stub() -> Cassette {
+    Cassette {
+        scenario: "INSTALLED-PREVIEW".into(),
+        meta: Meta {
+            provider: "openai".into(),
+            model: "openai/gpt-6-luna".into(),
+            effort: Some("low".into()),
+            ..Meta::default()
+        },
+        exchanges: vec![Exchange {
+            request: RequestRecord {
+                method: "POST".into(),
+                path: "/v1/responses".into(),
+                key: MatchKey {
+                    path: "/v1/responses".into(),
+                    model: "gpt-6-luna".into(),
+                    effort: Some("low".into()),
+                    user_request: PROMPT.into(),
+                    round: vec![],
+                },
+            },
+            response: ResponseRecord {
+                status: 200,
+                headers: vec![("content-type".into(), "application/json".into())],
+                chunks: vec![Chunk {
+                    delay_ms: 0,
+                    text: reply().to_string(),
+                }],
+            },
+        }],
+    }
 }
