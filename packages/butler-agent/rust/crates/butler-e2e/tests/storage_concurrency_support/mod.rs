@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::path::Path;
 
 pub(super) fn seed(path: &Path) {
-    let db = Connection::open(path).unwrap();
+    let db = butler_platform::sqlite::open(path).unwrap();
     db.execute_batch(
         "PRAGMA synchronous=OFF; BEGIN;
       WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<599)
@@ -30,7 +30,7 @@ pub(super) fn verify_rows(
     request: &str,
     answer: &str,
 ) {
-    let db = Connection::open(path).unwrap();
+    let db = butler_platform::sqlite::open(path).unwrap();
     for (session, turn) in sessions.iter().zip(turns) {
         let mut query = db
             .prepare("SELECT role,text FROM messages WHERE chat_id=?1 ORDER BY rowid")

@@ -6,8 +6,8 @@ use std::{path::Path, sync::Arc};
 use tokio::sync::Semaphore;
 
 const CONNECTIONS: usize = 2;
-// Keep the entire pool's page caches within 16 MiB.
-const PAGE_CACHE_KIB: &str = "-8192";
+// Keep the entire pool's page caches within 8 MiB.
+const PAGE_CACHE_KIB: &str = "-4096";
 
 pub(super) struct ReadPool {
     available: Mutex<Vec<Connection>>,
@@ -18,8 +18,9 @@ impl ReadPool {
     pub(super) fn open(path: &Path) -> StorageResult<Self> {
         let mut available = Vec::with_capacity(CONNECTIONS);
         for _ in 0..CONNECTIONS {
-            let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-                .map_err(StorageError::sqlite)?;
+            let connection =
+                butler_platform::sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                    .map_err(StorageError::sqlite)?;
             connection
                 .busy_timeout(std::time::Duration::from_secs(5))
                 .map_err(StorageError::sqlite)?;

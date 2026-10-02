@@ -13,7 +13,9 @@ impl Watch {
         ] {
             let path = data.join(name);
             assert!(path.is_file(), "missing idle database: {}", path.display());
-            let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+            let db =
+                butler_platform::sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                    .unwrap();
             let version = data_version(&db);
             databases.push((db, version));
         }

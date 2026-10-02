@@ -17,8 +17,9 @@ impl ReadPool {
     pub(super) fn open(path: &Path) -> StorageResult<Self> {
         let mut available = Vec::with_capacity(CONNECTIONS);
         for _ in 0..CONNECTIONS {
-            let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-                .map_err(AppStorageError::sqlite)?;
+            let connection =
+                butler_platform::sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                    .map_err(AppStorageError::sqlite)?;
             super::tuning::configure_read(&connection)?;
             available.push(connection);
         }

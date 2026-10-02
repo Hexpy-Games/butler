@@ -11,6 +11,8 @@ use super::{AppStorageError, StorageResult};
 const CACHED_STATEMENTS: usize = 256;
 /// Bound resident pages to 8 MiB; indexed foreground reads need no large cache.
 const PAGE_CACHE_KIB: i64 = -8_192;
+/// Two readers keep an aggregate 8 MiB cache, separate from the writer.
+const READ_PAGE_CACHE_KIB: i64 = -4_096;
 /// Startup sweeps otherwise leave mapped database pages resident indefinitely.
 /// Use the bounded page cache for reads instead.
 const MMAP_BYTES: i64 = 0;
@@ -71,7 +73,7 @@ pub(super) fn configure_read(connection: &Connection) -> StorageResult<()> {
     connection.set_prepared_statement_cache_capacity(CACHED_STATEMENTS);
     for (name, value) in [
         ("query_only", "ON".to_owned()),
-        ("cache_size", PAGE_CACHE_KIB.to_string()),
+        ("cache_size", READ_PAGE_CACHE_KIB.to_string()),
         ("mmap_size", MMAP_BYTES.to_string()),
         ("temp_store", "MEMORY".to_owned()),
     ] {
