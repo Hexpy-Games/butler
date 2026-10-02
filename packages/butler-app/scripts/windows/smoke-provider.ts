@@ -8,7 +8,9 @@ const contract = JSON.parse(readFileSync(new URL(
 /** Same strict synthetic-conversation fixture as butler-e2e/provider/memory.rs. */
 export function smokeProviderReply(body: any, prompt: string, answer: string,
   calls: { chat: number; memory: number; memorySpeakers: Set<string> }, observeMeaning?: (input: any) => void): Response {
-  assert.ok(JSON.stringify(body).includes(prompt), "Unexpected stub prompt");
+  assert.ok(JSON.stringify(body).includes(prompt), `Unexpected synthetic stub prompt: ${JSON.stringify({
+    format: body.text?.format?.name ?? null, input: body.input,
+  })}`);
   const format = body.text?.format;
   let text = answer;
   if (format?.name === "memory_meaning_v4") {
