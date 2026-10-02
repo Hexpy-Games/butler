@@ -1037,6 +1037,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "butler-real-recall-bench"
+version = "0.0.0"
+dependencies = [
+ "butler-core",
+ "butler-gateway",
+ "butler-memory",
+ "butler-platform",
+ "butler-turn",
+ "chrono",
+ "futures-util",
+ "parking_lot",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
 name = "butler-runtime"
 version = "0.0.0"
 dependencies = [
