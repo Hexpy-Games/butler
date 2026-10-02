@@ -3,10 +3,11 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
+import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
 
 export function powershell(script: string, env = process.env): string {
   const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
-    env, encoding: "utf8", windowsHide: true,
+    env: windowsPowerShellEnvironment(env), encoding: "utf8", windowsHide: true,
   });
   assert.equal(result.status, 0, `PowerShell failed: ${result.stderr}`);
   return result.stdout.trim();

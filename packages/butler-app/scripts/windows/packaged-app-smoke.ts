@@ -6,6 +6,7 @@ import { createServer } from "node:net";
 import { classifyAppForegroundActiveWork } from "../../client/electron/app-foreground-quit.mjs";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
 import { smokeProviderReply } from "./smoke-provider.ts";
+import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
 
 if (process.platform !== "win32") throw new Error("Packaged smoke requires Windows");
 if (!process.env.BUTLER_SMOKE_PROFILE_ROOT) throw new Error("Run through deploy/windows-portable-smoke.ps1");
@@ -32,8 +33,8 @@ const launcher = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Com
   "& ([scriptblock]::Create([IO.File]::ReadAllText($env:BUTLER_SMOKE_LAUNCH_SCRIPT))) " +
   "-Electron $launch.Electron -AppRoot $launch.AppRoot -Profile $launch.Profile " +
   "-PidFile $launch.PidFile -ExitFile $launch.ExitFile -DebugPort $launch.DebugPort",
-], { stdio: "ignore", env: {
-  ...process.env, PSModuleAnalysisCachePath: join(root, "powershell-module-cache"),
+], { stdio: "ignore", env: windowsPowerShellEnvironment(process.env, {
+  PSModuleAnalysisCachePath: join(root, "powershell-module-cache"),
   BUTLER_SMOKE_LAUNCH_SCRIPT: resolve("packages/butler-app/scripts/windows/launch-electron-smoke.ps1"),
   BUTLER_SMOKE_LAUNCH_INPUT: JSON.stringify({ Electron: join(packageRoot, "Butler.exe"), AppRoot: packageRoot,
     Profile: join(root, "profile"), PidFile: pidFile, ExitFile: exitFile, DebugPort: debugPort }),
@@ -43,7 +44,7 @@ const launcher = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Com
   BUTLER_E2E_TIER: "stub", BUTLER_APP_DISABLE_SHELL_REGISTRATION: "1",
   OPENAI_API_KEY: "e2e-not-real", OPENAI_BASE_URL: `http://127.0.0.1:${stub.port}/v1`,
   BUTLER_PROVIDER_QUOTA_POLLING: "0", BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
-} });
+}) });
 let cdp: ElectronPage | null = null;
 try {
   await waitFor(() => existsSync(pidFile), "Electron launch PID");
@@ -59,7 +60,9 @@ try {
   const processes = processTree(appPid);
   for (const pid of processes) owned.add(pid);
   const parent = spawnSync("powershell.exe", ["-NoProfile", "-Command",
-    `(Get-CimInstance Win32_Process -Filter 'ProcessId = ${agentPid}').ParentProcessId`], { encoding: "utf8" });
+    `(Get-CimInstance Win32_Process -Filter 'ProcessId = ${agentPid}').ParentProcessId`], {
+    encoding: "utf8", env: windowsPowerShellEnvironment(),
+  });
   assert(parent.status === 0 && Number(parent.stdout.trim()) === appPid, "Agent is not the App child");
   const auth = readJson("app/runtime/auth/local-agent-auth.json");
   assert(typeof auth?.token === "string", "Local authentication missing");
@@ -168,7 +171,9 @@ if (!$key) { 'absent'; exit 0 }
     [ordered]@{ name = $_; kind = [string]$item.GetValueKind($_); value = $item.GetValue($_) }
   }) }
 } | ConvertTo-Json -Depth 6 -Compress`;
-  const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8" });
+  const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
+    encoding: "utf8", env: windowsPowerShellEnvironment(),
+  });
   assert(result.status === 0, "Could not inspect protocol registration");
   return result.stdout.trim();
 }
@@ -203,7 +208,9 @@ async function portAvailable(port: number): Promise<boolean> {
 }
 function processTree(pid: number): number[] {
   const result = spawnSync("powershell.exe", ["-NoProfile", "-Command",
-    "$all = @(Get-CimInstance Win32_Process); $ids = @(" + pid + "); do { $next = @($all | Where-Object { $_.ParentProcessId -in $ids -and $_.ProcessId -notin $ids } | ForEach-Object { $_.ProcessId }); $ids += $next } while ($next.Count); ConvertTo-Json -Compress -InputObject @($ids)"], { encoding: "utf8" });
+    "$all = @(Get-CimInstance Win32_Process); $ids = @(" + pid + "); do { $next = @($all | Where-Object { $_.ParentProcessId -in $ids -and $_.ProcessId -notin $ids } | ForEach-Object { $_.ProcessId }); $ids += $next } while ($next.Count); ConvertTo-Json -Compress -InputObject @($ids)"], {
+    encoding: "utf8", env: windowsPowerShellEnvironment(),
+  });
   assert(result.status === 0, "Process tree query failed");
   return JSON.parse(result.stdout);
 }
