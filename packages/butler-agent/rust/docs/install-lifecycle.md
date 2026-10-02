@@ -280,8 +280,9 @@ already read it that way. INS-03 runs both App shapes.
   replacement (`sh` script; `.cmd` on Windows).
 - `service_registration::{install, uninstall, status, is_owned_by, render,
   definition_path, manager, job, start, stop, restart}` with
-  `Activation::{Load, FilesOnly}`: launchd, systemd `--user`; Task Scheduler
-  reports `Error::Unsupported`. `job()` says whether the manager has the job
+  `Activation::{Load, FilesOnly}`: launchd, systemd `--user`, and per-user
+  Windows Task Scheduler logon tasks. Windows verifies ownership through
+  `schtasks /Query /XML` before replacing or removing a task. `job()` says whether the manager has the job
   loaded and which pid it runs; `start`/`stop`/`restart` are requests to the
   manager.
 - `secure_fs::remove_tree`: removal without following links, after making the

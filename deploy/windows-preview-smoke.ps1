@@ -137,10 +137,6 @@ try {
     Assert-PrivateAcl "$env:BUTLER_DATA/app/runtime/auth/local-agent-auth.json"
     Assert-PrivateAcl "$env:BUTLER_DATA/app/runtime/auth/local-admin.json"
     Assert-PrivateAcl "$env:BUTLER_DATA/state/app-gateway/project-folder-token-secret"
-    if (!$OwnerHost) {
-        $startup = (& $launcher startup enable --json | ConvertFrom-Json)
-        if ($startup.ok -or ($startup | ConvertTo-Json -Depth 10) -notmatch 'not supported on Windows yet') { throw 'Startup did not report the preview limitation' }
-    }
     # Windows PowerShell 5.1 waits for descendants of piped native commands.
     & $launcher restart
     if ($LASTEXITCODE -ne 0) { throw 'Restart failed' }
