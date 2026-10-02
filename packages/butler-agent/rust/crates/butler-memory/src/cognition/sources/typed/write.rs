@@ -188,7 +188,7 @@ struct RulePaths {
 
 impl RulePaths {
     fn new(data_root: &Path, memory_root: &Path, record_id: &str) -> CognitionResult<Self> {
-        let root = memory_root.join("rules");
+        let root = crate::cognition::explicit_memory_rules_root(memory_root);
         let paths = Self {
             text: root.join(format!("{record_id}.md")),
             binding: root.join(format!("{record_id}.source.json")),

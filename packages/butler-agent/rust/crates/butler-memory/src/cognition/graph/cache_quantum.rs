@@ -40,6 +40,7 @@ pub(in crate::cognition) struct ClaimedCacheJob {
     pub source_kind: String,
     pub owner_nonce: String,
     pub attempt: i64,
+    pub source_current: bool,
 }
 
 /// One window summary ready to be written to the cache.
@@ -50,19 +51,6 @@ pub(in crate::cognition) struct CacheWindow {
 }
 
 impl GraphRepository {
-    pub(in crate::cognition) fn valid_cache_entry_ids(
-        &self,
-        generation: &str,
-    ) -> CognitionResult<HashSet<String>> {
-        let mut query=self.connection()?.prepare("SELECT o.entry_id FROM memory_hot_cache_outcomes o JOIN memory_projection_jobs j ON j.generation=o.generation JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision WHERE o.generation=?1 AND o.admitted=1 AND json_extract(j.hot_cache_state,'$.state')='complete' AND EXISTS (SELECT 1 FROM json_each(j.hot_cache_receipt_json,'$.entries') e WHERE json_extract(e.value,'$.source_id')=o.entry_id) ORDER BY o.entry_id").map_err(db_error)?;
-        let rows = query
-            .query_map([generation], |row| row.get::<_, String>(0))
-            .map_err(db_error)?
-            .collect::<Result<HashSet<_>, _>>()
-            .map_err(db_error)?;
-        Ok(rows)
-    }
-
     pub(in crate::cognition) fn claim_cache_job(
         &mut self,
         now: &str,
@@ -70,24 +58,29 @@ impl GraphRepository {
         let connection = self.connection_mut()?;
         recover(connection)?;
         let tx = connection.transaction().map_err(db_error)?;
-        let selected = tx.query_row(
-            "SELECT j.job_id,j.episode_id,j.revision,j.generation,c.summary,c.summary_status,c.project_id,
-                    c.conversation_session_id,COALESCE(c.conversation_start,c.created_at),c.source_key,c.source_hash,
-                    j.extraction_version,COALESCE((SELECT s.source_kind FROM memory_chunk_sources s WHERE s.episode_id=j.episode_id AND s.revision=j.revision ORDER BY s.source_id LIMIT 1),''),j.hot_cache_attempt_count
-             FROM memory_projection_jobs j JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision
-             WHERE json_extract(j.hot_cache_state,'$.state')='pending' AND (c.summary_status='complete'
-                    OR json_extract(j.semantic_graph_state,'$.state') IN ('complete','failed')
-                    OR (json_extract(j.semantic_graph_state,'$.state')='partial' AND COALESCE(json_extract(j.semantic_graph_state,'$.pending_units'),0)=0))
-                    AND (j.hot_cache_next_attempt_at IS NULL OR j.hot_cache_next_attempt_at<=?1)
-             ORDER BY j.last_served_at IS NOT NULL,j.last_served_at,j.created_at,j.job_id LIMIT 1",
-            [now],
-            |row| Ok(ClaimedCacheJob {
-                job_id:row.get(0)?,episode_id:row.get(1)?,revision:row.get(2)?,generation:row.get(3)?,
-                summary:row.get(4)?,summary_status:row.get(5)?,project_id:row.get(6)?,session_id:row.get(7)?,
-                source_time:row.get(8)?,source_key:row.get(9)?,source_hash:row.get(10)?,
-                extraction_version:row.get(11)?,source_kind:row.get(12)?,owner_nonce:String::new(),attempt:row.get(13)?,
-            }),
-        ).optional().map_err(db_error)?;
+        let selected = tx
+            .query_row(super::cache_work::CLAIM_SQL, [now], |row| {
+                Ok(ClaimedCacheJob {
+                    job_id: row.get(0)?,
+                    episode_id: row.get(1)?,
+                    revision: row.get(2)?,
+                    generation: row.get(3)?,
+                    summary: row.get(4)?,
+                    summary_status: row.get(5)?,
+                    project_id: row.get(6)?,
+                    session_id: row.get(7)?,
+                    source_time: row.get(8)?,
+                    source_key: row.get(9)?,
+                    source_hash: row.get(10)?,
+                    extraction_version: row.get(11)?,
+                    source_kind: row.get(12)?,
+                    owner_nonce: String::new(),
+                    attempt: row.get(13)?,
+                    source_current: row.get(14)?,
+                })
+            })
+            .optional()
+            .map_err(db_error)?;
         let Some(mut job) = selected else {
             tx.commit().map_err(db_error)?;
             return Ok(None);
@@ -107,7 +100,7 @@ impl GraphRepository {
         &self,
         job: &ClaimedCacheJob,
     ) -> CognitionResult<()> {
-        let exists = self.connection()?.query_row("SELECT 1 FROM memory_projection_jobs j JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision WHERE j.job_id=?1 AND j.revision=?2 AND j.generation=?3 AND j.hot_cache_owner_nonce=?4 AND json_extract(j.hot_cache_state,'$.state')='running'",
+        let exists = self.connection()?.query_row("SELECT 1 FROM memory_projection_jobs j JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id WHERE j.job_id=?1 AND j.revision=?2 AND j.generation=?3 AND j.hot_cache_owner_nonce=?4 AND json_extract(j.hot_cache_state,'$.state')='running'",
             params![job.job_id,job.revision,job.generation,job.owner_nonce], |_| Ok(())).optional().map_err(db_error)?;
         exists.ok_or_else(|| error(CognitionCode::MemorySourceChanged))
     }
@@ -168,6 +161,14 @@ impl GraphRepository {
         if tx.execute("UPDATE memory_projection_jobs SET hot_cache_state=?1,hot_cache_receipt_json=?2,hot_cache_next_attempt_at=NULL,hot_cache_owner_pid=NULL,hot_cache_owner_nonce=NULL,hot_cache_started_at=NULL WHERE job_id=?3 AND hot_cache_owner_nonce=?4 AND json_extract(hot_cache_state,'$.state')='running'",
             params![StageWrite::complete(1).json()?,to_json(receipt)?,job.job_id,job.owner_nonce]).map_err(db_error)? != 1 { return Err(error(CognitionCode::MemoryCacheJobChanged)); }
         tx.commit().map_err(db_error)
+    }
+
+    pub(in crate::cognition) fn repend_cache_job(
+        &mut self,
+        job: &ClaimedCacheJob,
+    ) -> CognitionResult<()> {
+        self.connection_mut()?.execute("UPDATE memory_projection_jobs SET hot_cache_state=?1,hot_cache_attempt_count=MAX(0,hot_cache_attempt_count-1),hot_cache_owner_pid=NULL,hot_cache_owner_nonce=NULL,hot_cache_started_at=NULL WHERE job_id=?2 AND hot_cache_owner_nonce=?3", params![StageWrite::pending().json()?,job.job_id,job.owner_nonce]).map_err(db_error)?;
+        Ok(())
     }
 
     pub(in crate::cognition) fn fail_cache_job(
@@ -374,7 +375,7 @@ fn to_json(value: &impl serde::Serialize) -> CognitionResult<String> {
 }
 
 fn recover(connection: &Connection) -> CognitionResult<()> {
-    let mut statement=connection.prepare("SELECT job_id,hot_cache_owner_pid FROM memory_projection_jobs WHERE json_extract(hot_cache_state,'$.state')='running'").map_err(db_error)?;
+    let mut statement=connection.prepare("SELECT job_id,hot_cache_owner_pid FROM memory_projection_jobs WHERE json_valid(hot_cache_state) AND json_extract(hot_cache_state,'$.state')='running' LIMIT 1").map_err(db_error)?;
     let rows = statement
         .query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, Option<i64>>(1)?))

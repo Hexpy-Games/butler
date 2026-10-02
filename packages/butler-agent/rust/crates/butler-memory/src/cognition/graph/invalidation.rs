@@ -349,7 +349,7 @@ fn mark_derivatives(connection: &Connection, node: &str, canonical: &str) -> Cog
         connection.execute("UPDATE memory_vector_units SET state='pending',error_code=NULL,next_attempt_at=NULL WHERE record_kind='node' AND owner_id=?1",[id]).map_err(db_error)?;
     }
     let pending = StageWrite::pending().json()?;
-    connection.execute("UPDATE memory_projection_jobs SET hot_cache_state=?1 WHERE job_id IN (SELECT DISTINCT job_id FROM memory_vector_units WHERE owner_id IN (?2,?3))",params![pending,node,canonical]).map_err(db_error)?;
+    connection.execute("UPDATE memory_projection_jobs SET hot_cache_state=?1,hot_cache_next_attempt_at=NULL,hot_cache_attempt_count=0 WHERE job_id IN (SELECT j.job_id FROM memory_evidence e JOIN memory_projection_jobs j ON j.episode_id=e.episode_id AND j.revision=e.revision WHERE e.node_id IN (?2,?3))",params![pending,node,canonical]).map_err(db_error)?;
     Ok(())
 }
 fn digest(bytes: impl AsRef<[u8]>) -> String {
