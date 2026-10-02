@@ -65,6 +65,8 @@ enum Mode {
     },
 }
 
+type ChatResponder = fn(&Value) -> Option<ResponseRecord>;
+
 type MemoryResponder = fn(&Value) -> ResponseRecord;
 
 struct State {
@@ -81,6 +83,7 @@ struct State {
     requests: Mutex<Vec<Value>>,
     memory_requests: Mutex<Vec<Value>>,
     memory_responder: Mutex<Option<MemoryResponder>>,
+    chat_responder: Mutex<Option<ChatResponder>>,
     holds: Mutex<hold::Holds>,
 }
 
@@ -156,6 +159,7 @@ impl Provider {
             requests: Mutex::new(Vec::new()),
             memory_requests: Mutex::new(Vec::new()),
             memory_responder: Mutex::new(None),
+            chat_responder: Mutex::new(None),
             holds: Mutex::new(hold::Holds::default()),
         });
         let shared = state.clone();
@@ -228,6 +232,11 @@ impl Provider {
     }
 
     /// Override only the validated synthetic memory contract, for semantic E2Es.
+    /// Deterministic stub model that can choose a response from the actual prompt.
+    pub fn set_chat_responder(&self, responder: ChatResponder) {
+        *lock(&self.state.chat_responder) = Some(responder);
+    }
+
     pub fn set_memory_responder(&self, responder: MemoryResponder) {
         *lock(&self.state.memory_responder) = Some(responder);
     }
@@ -383,6 +392,12 @@ async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
     }
     match &state.mode {
         Mode::Replay(cassette) => {
+            if !memory
+                && let Some(response) =
+                    lock(&state.chat_responder).and_then(|respond| respond(&json))
+            {
+                return replay(&state, &response, None);
+            }
             if let Some(response) = replay_recorded(&state, cassette, &key) {
                 return response;
             }

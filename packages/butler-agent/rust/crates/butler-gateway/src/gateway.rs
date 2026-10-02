@@ -42,7 +42,7 @@ pub use application::{
     AppCancellation, AppChatKind, AppChatSummary, AppContextBudgetFacts, AppContextReadFacts,
     AppContextReadPort, AppContextReadQuery, AppContextUsage, AppCreateProjectRequest,
     AppCreateProjectResult, AppCreateSessionInput, AppCreateSessionRequest, AppCreateSessionResult,
-    AppDeveloperLogsQuery, AppExecutorReadiness, AppFileDownload, AppFileUpload, AppFileWrite,
+    AppDeveloperLogsQuery, AppExecutorReadiness, AppFeedbackCommand, AppFeedbackPort, AppFileDownload, AppFileUpload, AppFileWrite,
     AppIdentityClock, AppLedgerSourceRequest, AppMemoryCommand, AppMemoryPort,
     AppMessageFileSnapshot, AppMessageFileStorage, AppModelCatalogCommand, AppModelCatalogPort,
     AppModelFallbackFacts, AppModelMetadata, AppMonitorPage, AppMonitoringPort,
@@ -76,7 +76,7 @@ pub use application::{
     AppWorkStatusConversationFact, AppWorkStreamQuery, AppWorkStreamReader,
     AppWorkStreamTurnOutcome, AppWorkerActivityQuery, AppWorkerActivitySourcePage,
     AppWorkspaceMode, ArtifactFileCandidate, ArtifactMaterializationRequest, ClaimedNativeSnapshot,
-    EnqueueReceipt, MaterializedResponderFile, MemoryEventSink, OperationOutputChunk,
+    EnqueueReceipt, GatewayFeedback, MaterializedResponderFile, MemoryEventSink, OperationOutputChunk,
     OperationOutputView, ProjectSnapshot, ResolvedNativeAssets, TranscriptExport,
     VisualAdmissionRequest,
 };
@@ -207,6 +207,7 @@ pub trait GatewayApplication:
     GatewayMutationCommands
     + GatewayProjectDashboard
     + GatewaySessionControls
+    + GatewayFeedback
     + GatewayDevices
     + GatewayWallpapers
     + Send

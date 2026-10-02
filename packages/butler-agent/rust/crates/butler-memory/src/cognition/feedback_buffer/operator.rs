@@ -148,14 +148,29 @@ impl FeedbackBufferService {
         T: Send + 'static,
         F: FnOnce(PathBuf) -> CognitionResult<T> + Send + 'static,
     {
-        let cognition_root = self.paths.cognition_root(&self.data_root);
-        let path = cognition_root.join("feedback/feedback.md");
-        let quality_path = cognition_root.join("feedback/quality-operations.jsonl");
-        let lock_path = self.paths.consolidation_lock(&self.data_root);
-        mutable_paths::ensure_data_authority(
-            &self.data_root,
-            &[&cognition_root, &path, &quality_path, &lock_path],
-        )?;
+        let data = self.data_root.clone();
+        let paths = self.paths.clone();
+        let (path, lock_path) = tokio::task::spawn_blocking(move || {
+            let cognition_root = paths.cognition_root(&data);
+            let path = cognition_root.join("feedback/feedback.md");
+            let quality_path = cognition_root.join("feedback/quality-operations.jsonl");
+            let lock_path = paths.consolidation_lock(&data);
+            mutable_paths::ensure_data_authority(
+                &data,
+                &[
+                    &cognition_root,
+                    &path,
+                    &quality_path,
+                    &lock_path,
+                    &cognition_root.join("feedback/pending"),
+                    &cognition_root.join("feedback/generation"),
+                    &cognition_root.join("feedback/enabled"),
+                ],
+            )?;
+            Ok::<_, CognitionError>((path, lock_path))
+        })
+        .await
+        .map_err(store_error)??;
         let lease = self
             .coordinator
             .acquire(
@@ -187,7 +202,7 @@ fn feedback_path(service: &FeedbackBufferService) -> PathBuf {
         .join("feedback/feedback.md")
 }
 
-pub(super) fn read_entries(path: &Path) -> CognitionResult<Vec<FeedbackEntry>> {
+pub(crate) fn read_entries(path: &Path) -> CognitionResult<Vec<FeedbackEntry>> {
     let source = match File::open(path) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -233,7 +248,7 @@ fn push_entry(record: &[u8], fallback_iso: &str, entries: &mut Vec<FeedbackEntry
     entries.push(parse_entry(&block, fallback_iso));
 }
 
-fn write_entries(path: &Path, entries: &[FeedbackEntry]) -> CognitionResult<()> {
+pub(super) fn write_entries(path: &Path, entries: &[FeedbackEntry]) -> CognitionResult<()> {
     let parent = path
         .parent()
         .ok_or_else(|| operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed))?;
@@ -258,7 +273,7 @@ fn write_entries(path: &Path, entries: &[FeedbackEntry]) -> CognitionResult<()> 
     })
 }
 
-fn create_private_dir(path: &Path) -> CognitionResult<()> {
+pub(super) fn create_private_dir(path: &Path) -> CognitionResult<()> {
     let mut builder = fs::DirBuilder::new();
     builder.recursive(true);
     butler_platform::secure_fs::owner_only_dirs(&mut builder);
@@ -276,7 +291,7 @@ fn create_private_dir(path: &Path) -> CognitionResult<()> {
         })
 }
 
-fn entry_value(entry: &FeedbackEntry) -> Value {
+pub(super) fn entry_value(entry: &FeedbackEntry) -> Value {
     let mut extra_fields = Map::new();
     for (key, value) in &entry.extra_fields {
         extra_fields.insert(key.clone(), Value::String(value.clone()));
@@ -335,4 +350,8 @@ fn now_iso() -> String {
 
 fn operator_error(code: CognitionCode) -> CognitionError {
     CognitionError::new(code, "Cognition feedback operator operation failed")
+}
+
+fn store_error(source: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
+    operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
 }

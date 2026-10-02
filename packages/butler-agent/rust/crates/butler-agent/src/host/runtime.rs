@@ -179,13 +179,13 @@ impl AgentRuntime {
             bindings: stores.bindings.clone(),
             embedding: embedding.clone(),
         }));
-        let context_maintenance = Arc::new(ContextMaintenance::new(
-            paths.data_root.clone(),
-            tool_output.clone(),
-            metric_files.clone(),
-            date_parser.clone(),
-            daily_cognition,
-        ));
+        let context_maintenance = ContextMaintenance::for_cognition(
+            &paths.data_root,
+            &tool_output,
+            &metric_files,
+            &date_parser,
+            &daily_cognition,
+        );
         let command = Arc::new(crate::host::guided::command::GuidedCommand::new(
             commands.clone(),
             tool_output.clone(),
@@ -452,6 +452,8 @@ impl AgentRuntime {
             skills: skills.clone(),
             mcp_client,
             context_maintenance,
+            daily_cognition,
+            feedback: memory_writes.feedback.clone(),
             profile,
         })
     }

@@ -52,6 +52,8 @@ pub(crate) struct AgentRuntime {
     pub memory_writes: Arc<butler_memory::cognition::RememberedRuleOwner>,
     pub memory_management: Arc<butler_memory::management::MemoryManagement>,
     pub profile: Arc<butler_memory::profile::ProfileService>,
+    pub feedback: Arc<butler_memory::cognition::FeedbackBufferService>,
+    pub(in crate::host) daily_cognition: Arc<crate::host::memory_jobs::daily::DailyCognitionJobs>,
     pub(super) host: BtccHost,
 }
 

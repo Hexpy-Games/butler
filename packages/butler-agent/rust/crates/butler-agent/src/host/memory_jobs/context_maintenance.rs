@@ -35,6 +35,22 @@ pub(crate) struct ContextMaintenance {
 }
 
 impl ContextMaintenance {
+    pub(in crate::host) fn for_cognition(
+        data: &std::path::Path,
+        output: &ToolOutput,
+        metrics: &Arc<MetricFiles>,
+        timezone: &Arc<DateParser>,
+        daily: &Arc<DailyCognitionJobs>,
+    ) -> Arc<Self> {
+        Arc::new(Self::new(
+            data.to_owned(),
+            output.clone(),
+            metrics.clone(),
+            timezone.clone(),
+            daily.clone(),
+        ))
+    }
+
     pub(in crate::host) fn new(
         data_root: PathBuf,
         tool_output: ToolOutput,

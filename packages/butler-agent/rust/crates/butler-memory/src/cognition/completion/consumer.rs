@@ -2,6 +2,7 @@
 
 mod blocking;
 mod catchup;
+mod feedback;
 mod probe;
 mod process;
 use super::wake;
@@ -159,7 +160,12 @@ impl MemorySyncConsumer {
         tokio::spawn(async move {
             let _token = token;
             let _permit = permit;
-            let _ = sender.send(process::poll(input).await);
+            let result = match feedback::drain(&input).await {
+                Ok(Some(result)) => Ok(result),
+                Ok(None) => process::poll(input).await,
+                Err(error) => Err(error),
+            };
+            let _ = sender.send(result);
         });
         receiver.await.map_err(|source| {
             CognitionError::new(

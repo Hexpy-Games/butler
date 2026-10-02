@@ -277,6 +277,7 @@ impl GuidedTools {
                     | ToolName::QueryMemory
                     | ToolName::RecallMemory
                     | ToolName::IngestTaskMemory
+                    | ToolName::RecordUserFeedback
                     | ToolName::UpdateExplicitMemory
                     | ToolName::ForgetExplicitMemory
                     | ToolName::AnalyzeAttachedImage

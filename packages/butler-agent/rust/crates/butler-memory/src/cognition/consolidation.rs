@@ -6,4 +6,4 @@ mod result;
 mod types;
 
 pub use engine::{CycleEventSink, CycleService, PhaseError, PhaseExecutor, RunCycle};
-pub use types::{CycleStatus, Phase};
+pub use types::{CycleStatus, Phase, RateBudget};

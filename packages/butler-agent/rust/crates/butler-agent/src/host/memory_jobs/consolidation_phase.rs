@@ -35,7 +35,7 @@ impl PhaseExecutor for CyclePhases {
         Box::pin(async move {
             match phase {
                 Phase::Preflight => Ok(butler_core::json::json_object!({ "ok": true })),
-                Phase::FeedbackTriage => self.profile.feedback_triage(),
+                Phase::FeedbackTriage => self.profile.feedback_triage(cancellation).await,
                 Phase::ProfileConsolidation => self.profile.consolidate(run_id, cancellation).await,
                 Phase::BoxIndex => self
                     .box_store

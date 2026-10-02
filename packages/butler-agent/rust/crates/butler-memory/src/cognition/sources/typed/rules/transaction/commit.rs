@@ -7,6 +7,9 @@ pub(super) fn complete(
 ) -> CognitionResult<RememberedRuleReceipt> {
     let root = owner.root();
     authorize(owner, intent, &root)?;
+    if !super::super::feedback::valid(owner, intent)? {
+        return Err(failure("feedback_revision_changed"));
+    }
     butler_platform::secure_fs::create_private_dir_all(&root.join("handles"))
         .map_err(failure_source)?;
     write_json(
@@ -63,6 +66,7 @@ fn receipt(
         },
     )?;
     owner.checkpoint("receipt", operation_id(&intent.request))?;
+    super::super::feedback::resolve(owner, intent, &result.rule)?;
     fs::remove_file(root.join("pending.json")).map_err(failure_source)?;
     butler_platform::secure_fs::sync_path(root).map_err(failure_source)?;
     Ok(result)

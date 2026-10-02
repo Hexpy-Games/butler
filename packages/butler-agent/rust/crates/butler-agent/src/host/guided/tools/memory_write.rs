@@ -1,4 +1,5 @@
 //! Public memory-write adapters using the current Turn's canonical provenance.
+mod feedback;
 mod services;
 pub(crate) use services::MemoryWriteServices;
 
@@ -26,6 +27,7 @@ pub(super) fn supports(name: &str) -> bool {
             ToolName::IngestTaskMemory
                 | ToolName::UpdateExplicitMemory
                 | ToolName::ForgetExplicitMemory
+                | ToolName::RecordUserFeedback
         )
     )
 }
@@ -57,6 +59,9 @@ pub(super) async fn execute(
     }
     let result = match call.name.as_str() {
         "ingest_task_memory" => ingest(owner, &call.arguments),
+        "record_user_feedback" => {
+            feedback::record(owner, invocation, &call.arguments, call_id).await
+        }
         "update_explicit_memory" => update(owner, invocation, &call.arguments, call_id).await,
         "forget_explicit_memory" => forget(owner, invocation, &call.arguments, call_id).await,
         // Dispatch routes only supported names here.
