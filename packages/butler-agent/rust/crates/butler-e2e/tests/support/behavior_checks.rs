@@ -170,17 +170,27 @@ pub(super) fn check(
     {
         errors.push(format!("reply differs from {text}"));
     }
-    if case["language"] == "ko"
-        && !reply
+    if case["language"] == "ko" {
+        let prose = reply
+            .split('`')
+            .enumerate()
+            .filter(|(index, _)| index % 2 == 0)
+            .map(|(_, part)| {
+                part.replace(case["argument_contains"].as_str().unwrap_or_default(), "")
+                    .replace(case["reply_contains"].as_str().unwrap_or_default(), "")
+            })
+            .collect::<String>();
+        let hangul = prose
             .chars()
-            .any(|c| ('\u{ac00}'..='\u{d7a3}').contains(&c))
-    {
-        errors.push("reply lacks Korean".into());
+            .filter(|c| ('\u{ac00}'..='\u{d7a3}').contains(c))
+            .count();
+        let latin = prose.chars().filter(char::is_ascii_alphabetic).count();
+        if hangul < 5 || latin > hangul {
+            errors.push("reply is not primarily Korean prose".into());
+        }
     }
     for (path, content) in case["file_equals"].as_object().into_iter().flatten() {
-        if fs::read_to_string(s.sandbox.data.join(path))
-            .unwrap_or_default()
-            .trim()
+        if fs::read_to_string(s.sandbox.data.join(path)).unwrap_or_default()
             != content.as_str().unwrap()
         {
             errors.push(format!("file content differs: {path}"));

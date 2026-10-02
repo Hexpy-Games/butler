@@ -1,7 +1,9 @@
 """Rescore captured evidence without model retries. Usage: script RAW_ROOT REPORT_DIR."""
 import collections
 import json
+import hashlib
 import pathlib
+import re
 import statistics
 import sys
 
@@ -57,6 +59,12 @@ for version in ("main", "after"):
         if "harness_error" not in row:
             directory = f"revised-{version}" if identity in replaced else version
             requests = json.loads((raw / directory / f'{row["id"]}-requests.json').read_text())
+            for path, content in case.get("file_equals", {}).items():
+                outputs = [json.loads(item["output"]).get("output", {}) for request in requests for item in request.get("input", []) if item.get("type") == "function_call_output"]
+                digest = hashlib.sha256(content.encode()).hexdigest()
+                exact = any(output.get("ok") and output.get("path") == path and output.get("after_sha256") == digest and output.get("bytes") == len(content.encode()) for output in outputs)
+                if not exact:
+                    row["failures"].append(f"missing exact durable write receipt: {path}")
             if "expected_error_code" in case:
                 outputs = [json.loads(item["output"]) for request in requests for item in request.get("input", []) if item.get("type") == "function_call_output"]
                 exercised = any(output.get("error", {}).get("code") == case["expected_error_code"] for output in outputs)
@@ -67,6 +75,14 @@ for version in ("main", "after"):
             reply = "\n".join(m["text"] for m in row["messages"] if m["role"] == "assistant")
             if marker and marker.lower() not in reply.lower():
                 row["failures"].append(f"reply missing {marker}")
+            if case.get("language") == "ko":
+                prose = re.sub(r"`[^`]*`", "", reply)
+                for field in ("argument_contains", "reply_contains"):
+                    prose = prose.replace(case.get(field, ""), "")
+                hangul = len(re.findall("[가-힣]", prose))
+                latin = len(re.findall("[a-zA-Z]", prose))
+                if hangul < 5 or latin > hangul:
+                    row["failures"].append("reply is not primarily Korean prose")
             row["pass"] = not row["failures"]
         results.append(row)
     assert len(results) == 102
