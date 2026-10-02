@@ -320,7 +320,7 @@ impl GraphRecallReader {
         rollback.and(close)
     }
 
-    fn connection(&self) -> CognitionResult<&Connection> {
+    pub(in crate::cognition) fn connection(&self) -> CognitionResult<&Connection> {
         self.connection.as_ref().ok_or_else(|| {
             CognitionError::new(CognitionCode::MemoryGraphClosed, "memory_graph_closed")
         })

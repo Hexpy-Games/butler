@@ -113,17 +113,18 @@ pub(super) async fn render_context_estimate(
     resources: &Path,
     data_root: &Path,
     models: &StatusModels,
+    memory_paths: &[std::path::PathBuf],
 ) -> String {
     let system_prompt = rough_tokens_text(&read_joined(&[
         resources.join("prompts/butler.md"),
         resources.join("eol.md"),
         data_root.join("personas/active.md"),
     ]));
-    let memory = rough_tokens_text(&read_joined(&[
-        data_root.join("memory/user-profile.md"),
-        data_root.join("memory/hot/cache.md"),
-        data_root.join("memory/rules/INDEX.md"),
-    ]));
+    let memory_paths = memory_paths.to_owned();
+    let memory =
+        tokio::task::spawn_blocking(move || rough_tokens_text(&read_joined(&memory_paths)))
+            .await
+            .unwrap_or_default();
     let status_facts = context::read_status_conversation_facts(data_root, "butler/main");
     let model_ref = match &status_facts.active_session {
         context::StatusFact::Available(Some(session)) if !session.model_ref.trim().is_empty() => {

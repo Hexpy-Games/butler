@@ -1,7 +1,10 @@
-//! Read-only adapter for the retained MCP tool's legacy graph database.
+//! Read-only adapter for the retained MCP tool's serving graph.
 
-use crate::lenient::JsonField;
+mod serving;
+
+use crate::cognition::{CognitionPathEnvironment, active_memory_descriptor_exists};
 use butler_platform::sqlite;
+
 use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags, params};
@@ -17,17 +20,14 @@ struct Entity {
     hops: Option<u32>,
 }
 
-/// Failures reading the legacy graph for the MCP graph tool. `Display` is the
+/// Failures reading the serving graph for the retained MCP graph tool. `Display` is the
 /// text returned to the tool caller.
 #[derive(Debug, thiserror::Error)]
 pub enum LegacyGraphReadError {
     /// The active-generation descriptor could not be read or parsed.
     #[error("memory_generation_unavailable: {0}")]
     GenerationUnavailable(#[source] Box<dyn std::error::Error + Send + Sync>),
-    /// A v2 memory generation is active, so the legacy graph is retired.
-    #[error("legacy_memory_writer_disabled_for_v2")]
-    WriterDisabled,
-    /// The legacy graph database could not be queried.
+    /// The serving graph database could not be queried.
     #[error(transparent)]
     Sqlite(#[from] rusqlite::Error),
     /// A stored entity or the response could not be encoded or decoded.
@@ -35,7 +35,8 @@ pub enum LegacyGraphReadError {
     Json(#[from] serde_json::Error),
 }
 
-/// Answers the MCP graph query from the legacy graph, as JSON text.
+/// Answers the MCP query from the active generation, or the legacy graph when
+/// no descriptor exists. This read-only adapter grants no writer authority.
 pub fn read_mcp_legacy_graph(
     data_root: &Path,
     query: &str,
@@ -44,7 +45,12 @@ pub fn read_mcp_legacy_graph(
     max_hops: u32,
 ) -> Result<String, LegacyGraphReadError> {
     let memory_root = data_root.join("cognition/memory");
-    reject_generation_writer(&memory_root)?;
+    let paths = CognitionPathEnvironment::default();
+    if active_memory_descriptor_exists(data_root, &paths)
+        .map_err(|error| LegacyGraphReadError::GenerationUnavailable(error.into()))?
+    {
+        return serving::read(data_root, &paths, query, entity_type, project, max_hops);
+    }
     let db_path = memory_root.join("db/graph.sqlite");
     if !db_path.exists() {
         return Ok(json!({"entities": [], "relationships": []}).to_string());
@@ -81,21 +87,6 @@ pub fn read_mcp_legacy_graph(
     Ok(serde_json::to_string_pretty(
         &json!({"entities": entities, "relationships": relationships}),
     )?)
-}
-
-fn reject_generation_writer(memory_root: &Path) -> Result<(), LegacyGraphReadError> {
-    let descriptor = memory_root.join("active-generation.json");
-    let bytes = match std::fs::read(descriptor) {
-        Ok(bytes) => bytes,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => return Err(LegacyGraphReadError::GenerationUnavailable(error.into())),
-    };
-    let value: Value = serde_json::from_slice(&bytes)
-        .map_err(|error| LegacyGraphReadError::GenerationUnavailable(error.into()))?;
-    if value.field("schema") == "butler.memory-active-generation.v2" {
-        return Err(LegacyGraphReadError::WriterDisabled);
-    }
-    Ok(())
 }
 
 fn find_entities(
@@ -213,6 +204,7 @@ mod tests {
         root
     }
 
+    // test-category: format-pin
     #[test]
     fn legacy_graph_search_and_bidirectional_hops_use_read_only_schema() {
         let root = root();
@@ -232,6 +224,70 @@ mod tests {
         assert_eq!(value["entities"][0]["properties"]["k"], 1);
         assert_eq!(value["relationships"][0]["hops"], 1);
         assert!(fs::metadata(path).unwrap().len() > 0);
+        serving_graph_format(&root);
         fs::remove_dir_all(root).unwrap();
+    }
+    fn serving_graph_format(root: &std::path::Path) {
+        let id = uuid::Uuid::new_v4().to_string();
+        let memory = root.join("cognition/memory");
+        let generation = memory.join("generations").join(&id);
+        fs::create_dir_all(&generation).unwrap();
+        fs::write(
+            generation.join("manifest.json"),
+            include_str!("generation/fixtures/format/empty-manifest.json").replace("<EMPTY>", &id),
+        )
+        .unwrap();
+        fs::write(
+            memory.join("active-generation.json"),
+            include_str!("generation/fixtures/format/empty-descriptor.json")
+                .replace("<EMPTY>", &id),
+        )
+        .unwrap();
+        let path = generation.join("graph.sqlite");
+        crate::cognition::graph::GraphRepository::create_fresh(&path, "2026-10-02T00:00:00.000Z")
+            .unwrap();
+        let db = Connection::open(&path).unwrap();
+        db.execute_batch(
+            "INSERT INTO memory_nodes(id,type,label_original,identity_scope,project_id,created_at)
+             VALUES ('a','concept','Garden','project','garden','now'),
+                    ('b','tool','Watering','project','garden','now'),
+                    ('c','tool','Private tool','project','other','now');
+             INSERT INTO edges(edge_id,source_node_id,target_node_id,rel_type)
+             VALUES ('ab','a','b','uses'),('bc','b','c','uses');
+             INSERT INTO memory_chunks(memory_chunk_id,source_key,current_revision,project_id,
+               origin_kind,status,source_hash,created_at,updated_at)
+             VALUES ('chunk','key','r1','garden','user_input','active','hash','now','now');
+             INSERT INTO memory_chunk_sources(source_id,episode_id,revision,source_kind,part_id,
+               scalar_pointer,byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis)
+             VALUES ('s','chunk','r1','conversation','p','/text',0,6,'hash','user','user_input','now','user_statement');
+             INSERT INTO memory_aliases(node_id,surface_original,nfc_key,folded_key,source_id,resolution_kind)
+             VALUES ('a','Garden','Garden','garden','s','exact');
+             INSERT INTO memory_alias_postings(gram,node_id,source_id,surface_original,identity_scope,project_id)
+             VALUES ('ard','a','s','Garden','project','garden');"
+        ).unwrap();
+        drop(db);
+        let before = fs::read(&path).unwrap();
+        let output =
+            read_mcp_legacy_graph(root, "GARD", Some("concept"), Some("garden"), 2).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(
+            value["entities"],
+            serde_json::json!([
+                {"id":"a","type":"concept","name":"Garden","project":"garden","properties":{}},
+                {"id":"b","type":"tool","name":"Watering","project":"garden","properties":{},"hops":1}
+            ])
+        );
+        assert_eq!(
+            value["relationships"],
+            serde_json::json!([
+                {"from":"a","to":"b","hops":1}
+            ])
+        );
+        assert_eq!(fs::read(path).unwrap(), before);
+        let excluded = read_mcp_legacy_graph(root, "garden", Some("person"), None, 2).unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&excluded).unwrap()["entities"],
+            serde_json::json!([])
+        );
     }
 }

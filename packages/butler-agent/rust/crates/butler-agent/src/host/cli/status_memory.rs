@@ -27,3 +27,21 @@ pub(super) fn line(value: &Value) -> String {
         total as f64 / 1_000_000.0
     )
 }
+
+/// Only the explicit index and the serving generation's cache; no graph reads.
+pub(super) async fn estimate_paths(root: &Path) -> Vec<std::path::PathBuf> {
+    let root = root.to_owned();
+    tokio::task::spawn_blocking(move || {
+        let paths = butler_memory::cognition::CognitionPathEnvironment {
+            cognition_home: std::env::var("BUTLER_COGNITION_HOME").ok(),
+            memory_home: std::env::var("BUTLER_COGNITION_MEMORY_HOME").ok(),
+        };
+        let mut files = vec![paths.explicit_rules_root(&root).join("INDEX.md")];
+        if let Ok(generation) = butler_memory::cognition::resolve_active_generation(&root, &paths) {
+            files.push(generation.root.join("hot/cache.md"));
+        }
+        files
+    })
+    .await
+    .unwrap_or_default()
+}

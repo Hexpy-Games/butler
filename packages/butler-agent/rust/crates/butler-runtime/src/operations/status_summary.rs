@@ -63,6 +63,7 @@ pub async fn read_metrics_status(
     since_ts: Option<f64>,
     models: &StatusModels,
     resources: &Path,
+    memory_paths: &[std::path::PathBuf],
 ) -> MetricsStatus {
     let enabled = operational::metrics_enabled(data_root);
     let operational = operational::read_summary(data_root, since_ts, enabled);
@@ -71,7 +72,8 @@ pub async fn read_metrics_status(
     let transcript_activity = monitor.transcript_activity(data_root);
     let usage = monitor.read(data_root, None, since_ts, None);
     let context = context::read_context_monitor(data_root, models).await;
-    let context_estimate = context::render_context_estimate(resources, data_root, models).await;
+    let context_estimate =
+        context::render_context_estimate(resources, data_root, models, memory_paths).await;
     let health = health::read_health(data_root, &transcript_activity);
     MetricsStatus {
         value: json!({
