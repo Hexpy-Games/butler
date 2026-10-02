@@ -9,6 +9,7 @@ on:
       - .github/actions/rust-agent-setup/**
       - .github/actions/windows-owner-setup/**
       - deploy/windows-owner-cleanup.ps1
+      - deploy/windows-protocol-snapshot.ps1
       - deploy/windows-e2e-artifacts.ps1
       - packages/butler-agent/**
       - packages/butler-npm/**

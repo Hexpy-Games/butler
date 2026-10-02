@@ -14,7 +14,12 @@ try {
             $acl = [System.Security.AccessControl.FileSecurity]::new()
             $inherit = [System.Security.AccessControl.InheritanceFlags]::None
         }
-        $acl.SetOwner($sid)
+        $existing = if ($directory) { [System.IO.Directory]::GetAccessControl($path) }
+        else { [System.IO.File]::GetAccessControl($path) }
+        $owner = $existing.GetOwner([System.Security.Principal.SecurityIdentifier]).Value
+        # Writing the current owner requests WRITE_OWNER unnecessarily,
+        # which a non-elevated token can lack even when it can replace the DACL.
+        if ($owner -ne $sid.Value) { $acl.SetOwner($sid) }
         $acl.SetAccessRuleProtection($true, $false)
         $rule = [System.Security.AccessControl.FileSystemAccessRule]::new(
             $sid, 'FullControl', $inherit, 'None', 'Allow')
