@@ -86,6 +86,9 @@ impl ContextBudgetSnapshot<'_> {
             .or_else(|| positive_integer(system.and_then(|v| v.get("contextWindowTokens"))))
             .or(metadata_window)
             .unwrap_or(DEFAULT_CONTEXT_WINDOW_TOKENS);
+        let window = metadata_window
+            .filter(|value| value.is_finite() && *value > 0.0)
+            .map_or(window, |capacity| window.min(capacity));
         let reserve = |override_value: Option<&Value>,
                        environment: &Option<String>,
                        key: &str,

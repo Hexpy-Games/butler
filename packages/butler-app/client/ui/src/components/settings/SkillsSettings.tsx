@@ -1,5 +1,6 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useRef, useState } from "react";
+import { notifyError } from "@/app/notifications.ts";
 import { api, importSkillZip } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -54,9 +55,15 @@ export function SkillsSettings() {
   }
   async function onFile(file: File | undefined) {
     if (!file) return;
-    await importSkillZip(file, importProjectId);
-    setImportProjectId(undefined);
-    await refresh();
+    try {
+      await importSkillZip(file, importProjectId);
+      await refresh();
+    } catch (error) {
+      notifyError(error, appCopy.interfaceFeedback.importFailed);
+    } finally {
+      if (inputRef.current) inputRef.current.value = "";
+      setImportProjectId(undefined);
+    }
   }
   async function createSkillChat(project?: SkillProjectView) {
     const result = await api<CreateSessionResult>("/sessions", {

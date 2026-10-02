@@ -19,7 +19,7 @@ refuses to build or locate an Agent when no tier is selected.
 
 ```sh
 # stub tier: replays committed cassettes, live tests show as ignored
-BUTLER_E2E_TIER=stub cargo test -p butler-e2e
+BUTLER_E2E_TIER=stub crates/butler-e2e/scripts/isolated-run.sh cargo test -p butler-e2e -- --test-threads=8
 
 # live tier against the owner's test-only subscription login (~/.butler-e2e-auth)
 BUTLER_E2E_TIER=live cargo test -p butler-e2e --test live -- --ignored --test-threads=1
@@ -27,6 +27,9 @@ BUTLER_E2E_TIER=live cargo test -p butler-e2e --test live -- --ignored --test-th
 # re-record cassettes for one test file (live provider, clean traffic)
 BUTLER_E2E_TIER=live BUTLER_E2E_RECORD=1 cargo test -p butler-e2e --test turn
 ```
+
+Use `scripts/isolated-run.sh` for every local test/check command. It preserves Cargo
+caches, creates private HOME and BUTLER_DATA under TMPDIR, and removes both on exit.
 
 The harness builds `butler-agent` itself (`cargo build -p butler-agent`) unless
 `BUTLER_E2E_BIN` names a binary or `BUTLER_E2E_SKIP_BUILD=1`.
@@ -54,7 +57,7 @@ of agent stdout/stderr. The readiness deadline remains 90 seconds.
 | `BUTLER_E2E_RECORD=1` | record mode |
 | `BUTLER_E2E_CASSETTES` | cassette root (default `crates/butler-e2e/cassettes`) |
 | `BUTLER_E2E_LIVE_MAX_TURNS` | live spend guard (default 60) |
-| `BUTLER_E2E_KEEP_DATA=1` | keep scenario sandboxes (logs, data dir) |
+| Failure retention | successful sandboxes are deleted; last five failures are kept under `$TMPDIR/butler-e2e/failures`, with paths printed |
 | `BUTLER_E2E_REPORT` | file that collects live `PASSED`/`SKIPPED` lines |
 
 The live tier passes the test profile to the agent as an absolute
@@ -265,3 +268,22 @@ preserved. The new helper-contract E2E additionally proves that equality with a
 zero budget fails only in the perf tier and that arguments are evaluated once.
 The schedule contention's 5 s minimum hold and forced refresh's minimum network
 delay are functional assertions retained in both shared and perf runs.
+
+## Harness hygiene checks
+
+`harness_hygiene` checks success cleanup, the five-failure retention bound, and
+cleanup of the isolated command runner. Scenario tests call `finish()` only
+once their assertions pass; CLI-only setups mark their sandbox successful.
+A panic also retains a sandbox. The former unlimited `BUTLER_E2E_KEEP_DATA`
+override no longer keeps successful runs.
+
+Readiness requires the authenticated gateway, executor PID, and ready instance
+nonce to agree. Deliberately held-dispatch tests inspect the served gateway
+before executor readiness; normal startup and replacement waits use the full
+predicate.
+
+After `cargo nextest archive -p butler-e2e --archive-file /tmp/e2e.tar.zst`,
+run `scripts/archive-relocation.sh /tmp/e2e.tar.zst` from the Rust workspace
+(with `BUTLER_E2E_TIER=stub` and `BUTLER_E2E_BIN` naming the built agent).
+It extracts to a new directory, verifies the fixture executable belongs to the
+archive, and runs the unchanged hung-MCP shutdown assertions there.

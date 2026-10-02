@@ -3,6 +3,7 @@ import { useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import {
+  ButtonContainer,
   Eye,
   IconButton,
   Play,
@@ -14,6 +15,7 @@ import { workActivityToolsFromRows } from "./toolchainUtils.tsx";
 import type { AnchoredStewardProgress } from "./stewardParentProgressProjection.ts";
 import {
   stewardProgressStatus,
+  stewardCurrentActivityTitle,
   stewardToolRows,
 } from "./stewardProgressPresentation.ts";
 
@@ -47,7 +49,7 @@ export function StewardParentProgress({
           <Typo.Label as="span" minWidth="0" title={child.title} truncate>
             {child.title}
           </Typo.Label>
-          <Stack align="row" gap="xs">
+          <ButtonContainer size="icon-sm">
             {turn?.retryable && !child.active_turn && !child.result ? (
               <IconButton
                 opticalAlign="top-end"
@@ -71,10 +73,11 @@ export function StewardParentProgress({
             >
               <Eye size="md" />
             </IconButton>
-          </Stack>
+          </ButtonContainer>
         </Stack>
         <Typo.Caption data-test-class="steward-progress-status">
           {stewardProgressStatus(child)}
+          {child.active_turn ? ` · ${stewardCurrentActivityTitle(child)}` : ""}
         </Typo.Caption>
         <Stack
           align="row"

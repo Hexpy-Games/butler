@@ -66,7 +66,7 @@ pub use briefing::{
 };
 pub use completion::{
     CompletionNotice, CompletionPublisher, MemorySyncConsumer, MemorySyncPoll,
-    TypedMemorySourceNotice, signal_memory_work,
+    TypedMemorySourceNotice, VECTOR_BACKLOG_CAP, VECTOR_MAX_AGE_HOURS, signal_memory_work,
 };
 pub use configured_cycle::{
     ConfiguredCycleOptions, ConfiguredCycleResult, ConfiguredCycleService, ConfiguredPhase,

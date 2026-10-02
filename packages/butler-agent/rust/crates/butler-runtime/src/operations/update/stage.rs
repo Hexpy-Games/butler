@@ -72,6 +72,9 @@ pub(super) async fn download_to_label(
     sha256: &str,
     label: &str,
 ) -> Result<String, UpdateError> {
+    if !super::source::secure_source(url) {
+        return Err(UpdateCode::UpdateArtifactSourceInvalid.into());
+    }
     let target = target(data, installation, label).await?;
     let temp = TempFile(unique_temp(&target));
     let mut output = OpenOptions::new()

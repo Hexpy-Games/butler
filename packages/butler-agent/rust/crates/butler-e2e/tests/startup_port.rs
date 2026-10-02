@@ -132,7 +132,7 @@ fn run_bounded(launch: &Launch, limit: Duration) -> Result<(Option<i32>, String)
 #[tokio::test]
 async fn harness_argv_port_zero_binds_an_ephemeral_listener() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let sandbox = Sandbox::new("SVC-01-PORT-ARGV")?;
+    let mut sandbox = Sandbox::new("SVC-01-PORT-ARGV")?;
     let launch = Launch::new(&sandbox)?;
     let mut command = tokio::process::Command::from(launch.command());
     command
@@ -146,9 +146,15 @@ async fn harness_argv_port_zero_binds_an_ephemeral_listener() -> Result<(), Harn
     let deadline = Instant::now() + Duration::from_secs(30);
     let record = loop {
         if let Some(record) = butler_e2e::e2e::stop_intent::instance_record(&sandbox.data)
-            .filter(|record| record["state"] == "ready")
+            && let Some(endpoint) = record["app_endpoint"].as_str()
         {
-            break record;
+            let gateway =
+                butler_e2e::e2e::gateway::Gateway::new(endpoint.to_owned(), launch.token.clone());
+            if let Some(ready) =
+                butler_e2e::e2e::readiness::ready_record(&sandbox.data, &gateway).await
+            {
+                break ready;
+            }
         }
         assert!(
             child.try_wait()?.is_none(),
@@ -167,5 +173,6 @@ async fn harness_argv_port_zero_binds_an_ephemeral_listener() -> Result<(), Harn
     // exercise the shared zero semantics; this proves the argv bind itself.
     child.kill().await?;
     child.wait().await?;
+    sandbox.mark_success();
     Ok(())
 }

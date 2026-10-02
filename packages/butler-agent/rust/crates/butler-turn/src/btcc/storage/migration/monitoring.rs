@@ -24,11 +24,10 @@ fn activity_indexes(db: &Connection) -> rusqlite::Result<()> {
         CASE WHEN child_session_id GLOB 'worker-*' THEN 'worker' ELSE 'steward' END) END \
         FROM btcc_subsession_delegations d WHERE d.relation_id=btcc_session_relations.relation_id), \
         activity_terminal=EXISTS(SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=btcc_session_relations.relation_id)";
-    let identity = "UPDATE btcc_session_relations SET activity_worker_id=activity_role||'-'|| \
-        CASE WHEN activity_terminal=1 AND length((SELECT task_id FROM btcc_subsession_delegations d WHERE d.relation_id=btcc_session_relations.relation_id))>0 THEN (SELECT task_id FROM btcc_subsession_delegations d \
-        WHERE d.relation_id=btcc_session_relations.relation_id) ELSE relation_id END";
+    let identity =
+        "UPDATE btcc_session_relations SET activity_worker_id=activity_role||'-'||relation_id";
     db.execute_batch(&format!(
-        "{update} WHERE activity_worker_id IS NULL; {identity} WHERE activity_worker_id IS NULL;"
+        "{update} WHERE activity_worker_id IS NULL; {identity} WHERE activity_worker_id != activity_role||'-'||relation_id OR activity_worker_id IS NULL;"
     ))?;
     for table in ["btcc_subsession_delegations", "btcc_steward_results"] {
         for (op, rows) in [
@@ -46,7 +45,7 @@ fn activity_indexes(db: &Connection) -> rusqlite::Result<()> {
                 }
             }
 
-            db.execute_batch(&format!("CREATE TRIGGER IF NOT EXISTS activity_{table}_{op} AFTER {op} ON {table} BEGIN {body} END;"))?;
+            db.execute_batch(&format!("DROP TRIGGER IF EXISTS activity_{table}_{op}; CREATE TRIGGER activity_{table}_{op} AFTER {op} ON {table} BEGIN {body} END;"))?;
         }
     }
     db.execute_batch("CREATE INDEX IF NOT EXISTS idx_btcc_activity_page \

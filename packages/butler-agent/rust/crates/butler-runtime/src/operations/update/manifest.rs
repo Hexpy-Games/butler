@@ -48,6 +48,12 @@ pub(super) async fn load_artifact(
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .map(str::to_ascii_lowercase);
+    if url
+        .as_deref()
+        .is_some_and(|url| !super::source::secure_source(url))
+    {
+        return Err(UpdateCode::UpdateArtifactSourceInvalid.into());
+    }
     if sha256.as_deref().is_some_and(|digest| {
         digest.len() != 64 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit())
     }) {
@@ -109,6 +115,9 @@ pub(super) async fn read_manifest(
     shutdown: &CancellationToken,
     source: &str,
 ) -> Result<Vec<u8>, UpdateError> {
+    if !super::source::secure_source(source) {
+        return Err(UpdateCode::UpdateManifestSourceInvalid.into());
+    }
     if source.starts_with("http://") || source.starts_with("https://") {
         let response = tokio::select! {
             () = shutdown.cancelled() => return Err(UpdateCode::UpdateCancelled.into()),

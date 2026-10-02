@@ -69,3 +69,59 @@ fn counter(text: &str, name: &str) -> io::Result<u64> {
         .and_then(|value| value.parse().ok())
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing process counter"))
 }
+
+/// Private embedding children of this parent; unsupported platforms return None.
+pub fn embedding_children(parent: u32) -> io::Result<Option<Vec<u32>>> {
+    #[cfg(target_os = "linux")]
+    {
+        // Linux attributes children to the spawning thread, which may be a Tokio worker.
+        let mut children = std::collections::BTreeSet::new();
+        for task in std::fs::read_dir(format!("/proc/{parent}/task"))? {
+            let task = task?;
+            if let Ok(pids) = std::fs::read_to_string(task.path().join("children")) {
+                children.extend(
+                    pids.split_whitespace()
+                        .filter_map(|pid| pid.parse::<u32>().ok()),
+                );
+            }
+        }
+        let mut workers = Vec::new();
+        for pid in children {
+            if std::fs::read(format!("/proc/{pid}/cmdline")).is_ok_and(|args| {
+                args.split(|byte| *byte == 0)
+                    .any(|arg| arg == b"--private-embedding-worker")
+            }) {
+                workers.push(pid);
+            }
+        }
+        Ok(Some(workers))
+    }
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+        let mut system = System::new();
+        system.refresh_processes_specifics(
+            ProcessesToUpdate::All,
+            true,
+            ProcessRefreshKind::nothing().with_cmd(UpdateKind::Always),
+        );
+        let workers = system
+            .processes()
+            .iter()
+            .filter_map(|(pid, process)| {
+                (process.parent() == Some(Pid::from_u32(parent))
+                    && process
+                        .cmd()
+                        .iter()
+                        .any(|arg| arg == "--private-embedding-worker"))
+                .then_some(pid.as_u32())
+            })
+            .collect();
+        Ok(Some(workers))
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    {
+        let _ = parent;
+        Ok(None)
+    }
+}

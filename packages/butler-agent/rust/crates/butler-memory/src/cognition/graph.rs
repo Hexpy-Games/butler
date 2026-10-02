@@ -10,6 +10,7 @@ mod failure;
 mod identity_decision;
 pub(in crate::cognition) use failure::{ProviderCall, RepairBudget};
 pub(in crate::cognition) mod index;
+mod index_retirement;
 mod input;
 mod internal_supersession;
 mod invalidation;

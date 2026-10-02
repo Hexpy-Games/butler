@@ -5,6 +5,18 @@
 use butler_platform::instance::{self as platform, IdentityError};
 use butler_platform::process_control::{Liveness, liveness};
 
+/// A CLI supervisor supplies a fresh identity before spawning each child so
+/// exit handling can compare stop intents even after the record is removed.
+pub(crate) const CLI_SUPERVISOR_NONCE: &str = "BUTLER_CLI_SUPERVISOR_NONCE";
+
+pub(crate) fn instance_nonce() -> String {
+    std::env::var(CLI_SUPERVISOR_NONCE)
+        .ok()
+        .and_then(|value| uuid::Uuid::parse_str(&value).ok())
+        .unwrap_or_else(uuid::Uuid::new_v4)
+        .to_string()
+}
+
 /// Whether a process's executable as the OS reports it (`observed`) is the
 /// recorded one (`expected`): the same file, whatever name the OS used.
 pub(crate) fn executable_matches(expected: &str, observed: &str) -> bool {

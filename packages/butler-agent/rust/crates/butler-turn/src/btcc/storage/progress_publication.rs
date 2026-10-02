@@ -29,6 +29,45 @@ pub struct StorageProgressPublication {
 }
 
 impl StorageProgressPublication {
+    /// Public progress facts of an exact persisted child turn, in source order.
+    pub async fn read_child_progress_events(&self, turn_id: String) -> StorageResult<Vec<Value>> {
+        self.storage
+            .execute(move |db| {
+                let mut statement = db.prepare_cached(
+                "SELECT p.event_id,p.turn_sequence,p.event_json FROM btcc_progress_events p \
+                 JOIN btcc_turns t ON t.turn_id=p.turn_id AND t.session_id=p.session_id \
+                 WHERE p.turn_id=?1 AND EXISTS(SELECT 1 FROM btcc_session_relations r \
+                 WHERE r.child_session_id=t.session_id) ORDER BY p.turn_sequence,p.event_id"
+            ).map_err(StorageError::sqlite)?;
+                let rows = statement
+                    .query_map([turn_id], |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, u64>(1)?,
+                            row.get::<_, String>(2)?,
+                        ))
+                    })
+                    .map_err(StorageError::sqlite)?;
+                let mut events = Vec::new();
+                for row in rows {
+                    let (id, sequence, raw) = row.map_err(StorageError::sqlite)?;
+                    let Ok(mut event) = serde_json::from_str::<Value>(&raw) else {
+                        continue;
+                    };
+                    if event.get("visibility").and_then(Value::as_str) != Some("public") {
+                        continue;
+                    }
+                    let Some(object) = event.as_object_mut() else {
+                        continue;
+                    };
+                    object.insert("id".into(), id.into());
+                    object.insert("turnSequence".into(), sequence.into());
+                    events.push(event);
+                }
+                Ok(events)
+            })
+            .await
+    }
     /// A publisher over the store.
     pub fn new(storage: BtccStorage) -> Self {
         Self { storage }

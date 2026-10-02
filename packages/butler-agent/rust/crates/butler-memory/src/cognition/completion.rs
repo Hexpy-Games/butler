@@ -8,7 +8,7 @@ mod queue;
 mod typed_notice;
 mod wake;
 
-pub use consumer::{MemorySyncConsumer, MemorySyncPoll};
+pub use consumer::{MemorySyncConsumer, MemorySyncPoll, VECTOR_BACKLOG_CAP, VECTOR_MAX_AGE_HOURS};
 pub use typed_notice::TypedMemorySourceNotice;
 pub use wake::signal_memory_work;
 

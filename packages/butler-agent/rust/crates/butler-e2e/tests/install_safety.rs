@@ -31,7 +31,7 @@ use tar::EntryType;
 #[test]
 fn ins_03_version_reads_the_bundled_payload_manifest() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (sandbox, launch) = sandbox("INS-03")?;
+    let (mut sandbox, launch) = sandbox("INS-03")?;
     for (name, installation, payload) in [
         (
             "package",
@@ -87,6 +87,7 @@ fn ins_03_version_reads_the_bundled_payload_manifest() -> Result<(), HarnessErro
             assert_eq!(check["status"], "pass", "{name}: {check}");
         }
     }
+    sandbox.mark_success();
     Ok(())
 }
 
@@ -96,7 +97,7 @@ fn ins_03_version_reads_the_bundled_payload_manifest() -> Result<(), HarnessErro
 #[test]
 fn ins_04_hostile_archives_install_nothing() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (sandbox, launch) = sandbox("INS-04")?;
+    let (mut sandbox, launch) = sandbox("INS-04")?;
     let home = sandbox.root.join("agent-home");
     let archives = sandbox.root.join("archives");
     fs::create_dir_all(&archives)?;
@@ -250,6 +251,7 @@ fn ins_04_hostile_archives_install_nothing() -> Result<(), HarnessError> {
             .args(["install", "--from", &text.display().to_string(), "--json"]))?;
     assert_eq!(error_code(&output)?, "install_archive_format_unsupported");
     assert_nothing_installed(&home, "plain");
+    sandbox.mark_success();
     Ok(())
 }
 
@@ -273,7 +275,7 @@ fn assert_nothing_installed(home: &Path, case: &str) {
 #[test]
 fn ins_05_a_busy_agent_home_is_not_modified() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (sandbox, launch) = sandbox("INS-05")?;
+    let (mut sandbox, launch) = sandbox("INS-05")?;
     let home = sandbox.root.join("agent-home");
     fs::create_dir_all(&home)?;
     let archive = sandbox.root.join("empty.tar.gz");
@@ -299,6 +301,7 @@ fn ins_05_a_busy_agent_home_is_not_modified() -> Result<(), HarnessError> {
     drop(lock);
     // The lock is free: the empty archive now fails on its content instead.
     assert_eq!(error_code(&install()?)?, "install_manifest_invalid");
+    sandbox.mark_success();
     Ok(())
 }
 
@@ -307,7 +310,7 @@ fn ins_05_a_busy_agent_home_is_not_modified() -> Result<(), HarnessError> {
 #[test]
 fn ins_06_update_selects_only_this_platform() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (sandbox, mut launch) = sandbox("INS-06")?;
+    let (mut sandbox, mut launch) = sandbox("INS-06")?;
     fs::write(
         sandbox.install.join("native-agent-manifest.json"),
         serde_json::json!({
@@ -356,5 +359,6 @@ fn ins_06_update_selects_only_this_platform() -> Result<(), HarnessError> {
         release_platform().as_str(),
         "{value}"
     );
+    sandbox.mark_success();
     Ok(())
 }

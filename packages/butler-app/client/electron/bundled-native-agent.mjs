@@ -1,5 +1,6 @@
-import { constants, accessSync, existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { constants, accessSync, linkSync, rmSync, existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { processRoleFileNames } from "./scripts/process-role-names.mjs";
 import { preferNewerAgent, resolveCliInstalledAgent } from "./cli-installed-native-agent.mjs";
 
 const manifestName = "native-agent-manifest.json";
@@ -23,12 +24,12 @@ export function resolveBundledNativeAgentCommand({
   return {
     ...installation,
     stdio: ["pipe", "inherit", "inherit"],
-    detached: true,
+    detached: platform !== "win32",
     foregroundHost: true,
-    containmentKind: "posix_process_group",
+    containmentKind: platform === "win32" ? "direct_child" : "posix_process_group",
     containmentVerified: true,
     ownerDeathGuaranteed: false,
-    recordsProcessGroupId: true,
+    recordsProcessGroupId: platform !== "win32",
     env: {
       ...installation.env,
       BUTLER_APP_FOREGROUND_LEASE: "1",
@@ -42,23 +43,22 @@ export function resolveBundledNativeAgentInstallation({
   execPath = process.execPath,
   platform = process.platform,
 } = {}) {
+  if (platform === "win32") resourcesPath = join(dirname(resolve(execPath)), "resources");
   if (!resourcesPath) return null;
   const payloadRoot = join(resourcesPath, "bundled-agent");
   if (!existsSync(payloadRoot)) return null;
-  if (platform === "win32") {
-    throw new Error("Bundled native Agent host is not available on Windows.");
-  }
-  const binary = join(payloadRoot, "bin", "butler-agent");
+  const binary = join(payloadRoot, "bin", platform === "win32" ? "butler-agent.exe" : "butler-agent");
   const resourceRoot = join(payloadRoot, "resources");
   requireFile(binary, "Bundled native Agent executable is missing.");
   requireDirectory(resourceRoot, "Bundled native Agent resources are missing.");
-  accessSync(binary, constants.X_OK);
+  if (platform !== "win32") accessSync(binary, constants.X_OK);
 
   const installationRoot = platform === "darwin"
     ? macAppRoot(execPath)
     : dirname(resolve(execPath));
   requireInside(installationRoot, binary);
   requireInside(installationRoot, resourceRoot);
+  if (platform === "win32") restoreWindowsRoleLinks(binary);
   return {
     command: binary,
     args: [
@@ -97,7 +97,7 @@ export function resolveNativeAgentInstallation({
   const configuredBinary = resolve(configured);
   requireFile(configuredBinary, "Native Agent executable is missing.");
   const binary = realpathSync(configuredBinary);
-  accessSync(binary, constants.X_OK);
+  if (platform !== "win32") accessSync(binary, constants.X_OK);
   const binaryDirectory = dirname(binary);
   const installationRoot = basename(binaryDirectory) === "bin"
     ? dirname(binaryDirectory)
@@ -148,5 +148,20 @@ function readVersion(payloadRoot) {
       : null;
   } catch {
     return null;
+  }
+}
+
+// ZIP extraction materializes hardlinks as copies. Recreate the three NTFS
+// aliases before spawning; Rust verifies file identity when executing a role.
+function restoreWindowsRoleLinks(binary) {
+  const source = statSync(binary, { bigint: true });
+  for (const name of processRoleFileNames("win32")) {
+    const alias = join(dirname(binary), name);
+    if (existsSync(alias)) {
+      const metadata = statSync(alias, { bigint: true });
+      if (metadata.ino === source.ino && metadata.dev === source.dev) continue;
+      rmSync(alias);
+    }
+    linkSync(binary, alias);
   }
 }

@@ -364,9 +364,13 @@ impl ToolPort for GuidedTools {
                 LoopPhase::Working => self.binding.surface.clone(),
                 LoopPhase::FinalReport => Vec::new(),
             };
+            let encoded = serde_json::to_string(&tools).map_err(|error| {
+                BtccError::relayed("guided_tool_surface_invalid", error.to_string())
+                    .with_source(error)
+            })?;
             Ok(ToolSurface {
                 tools,
-                digest: None,
+                digest: Some(butler_turn::btcc::digest_identity(&encoded)),
             })
         })
     }

@@ -357,7 +357,7 @@ impl SummaryPort for RoundSummary<'_> {
                 butler_data: self.butler_data,
             })?;
             let max_output_tokens =
-                summary_output_tokens(&model, capacity.as_ref(), request.max_output_bytes);
+                summary_output_tokens(capacity.as_ref(), request.max_output_bytes);
             let messages = [user_message(request.text)];
             let reasoning = self.invocation.model_execution.selected_reasoning_effort();
             let usage = UsageAttribution {
@@ -420,14 +420,12 @@ fn user_message(content: &str) -> ModelRoundMessage {
 }
 
 fn summary_output_tokens(
-    model: &str,
     capacity: Option<&butler_turn::btcc::ContextSizing<'_>>,
     max_output_bytes: usize,
 ) -> Option<f64> {
-    if model.starts_with("local/") && capacity.and_then(|value| value.max_output_tokens).is_none() {
-        return None;
-    }
-    let requested = (max_output_bytes as f64 / 4.0).floor().max(16_384.0);
+    // Apply the same hard output cap to local and hosted models. A byte/token
+    // estimate is only a generation hint; serialized output is bounded in code.
+    let requested = (max_output_bytes as f64 / 4.0).floor().max(1.0);
     let context = capacity
         .map(|value| (value.max_message_bytes / 8.0).floor())
         .unwrap_or(f64::INFINITY);
@@ -441,5 +439,7 @@ fn summary_output_tokens(
     )
 }
 
+#[cfg(test)]
+mod regression_tests;
 #[cfg(test)]
 mod tests;

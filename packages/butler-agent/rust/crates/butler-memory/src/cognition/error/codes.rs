@@ -71,6 +71,7 @@ wire_codes! {
         EmbedTokenizationFailed = "embed_tokenization_failed",
         EmbedTokenizerLimitUnavailable = "embed_tokenizer_limit_unavailable",
         EmbedTokenizerUnavailable = "embed_tokenizer_unavailable",
+        EmbedWorkerCold = "embed_worker_cold",
         EmbedWorkerProtocolInvalid = "embed_worker_protocol_invalid",
         EmbedWorkerUnavailable = "embed_worker_unavailable",
         ExplicitMemoryRecordIdInvalid = "explicit_memory_record_id_invalid",

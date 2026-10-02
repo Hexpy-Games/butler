@@ -1,6 +1,7 @@
 name: macOS App package
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - ".github/workflows/macos-app-package.yml"

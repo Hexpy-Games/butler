@@ -66,6 +66,7 @@ embed_response_too_large
 embed_tokenization_failed
 embed_tokenizer_limit_unavailable
 embed_tokenizer_unavailable
+embed_worker_cold
 embed_worker_protocol_invalid
 embed_worker_unavailable
 explicit_memory_record_id_invalid

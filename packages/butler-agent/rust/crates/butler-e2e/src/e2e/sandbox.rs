@@ -7,9 +7,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::binary::{agent_binary, resource_source};
-use super::config::flag;
+mod retention;
 use super::executable;
 use super::{HarnessError, harness_error};
+pub use retention::FAILURE_LIMIT;
 
 pub struct Sandbox {
     pub root: PathBuf,
@@ -20,18 +21,22 @@ pub struct Sandbox {
     pub workspace: PathBuf,
     pub home: PathBuf,
     pub logs: PathBuf,
-    keep: bool,
+    directory: retention::Directory,
 }
 
 impl Sandbox {
     /// Creates a fresh sandbox under the system temp dir. The directory is
-    /// removed on drop unless `BUTLER_E2E_KEEP_DATA=1`.
+    /// removed on success; the last five failures are retained and printed.
     pub fn new(scenario: &str) -> Result<Self, HarnessError> {
         let base = std::env::temp_dir().join("butler-e2e");
         fs::create_dir_all(&base)?;
         // Canonical path: macOS temp dirs are symlinks, and the product resolves them.
         let base = base.canonical()?;
         let root = create_root(&base, scenario)?;
+        let directory = retention::Directory {
+            path: root.clone(),
+            success: false,
+        };
         let install = root.join("install");
         let resources = install.join("resources");
         let binary = install
@@ -66,7 +71,7 @@ impl Sandbox {
             install,
             binary,
             resources,
-            keep: flag("BUTLER_E2E_KEEP_DATA"),
+            directory,
         };
         for dir in [
             &sandbox.data,
@@ -77,6 +82,11 @@ impl Sandbox {
             fs::create_dir_all(dir)?;
         }
         Ok(sandbox)
+    }
+
+    /// Call only after every assertion and fallible teardown has succeeded.
+    pub fn mark_success(&mut self) {
+        self.directory.success = true;
     }
 
     pub fn codex_home(&self) -> PathBuf {
@@ -109,16 +119,6 @@ fn create_root(base: &Path, scenario: &str) -> Result<PathBuf, HarnessError> {
     Err(harness_error(
         "could not allocate a unique E2E sandbox directory",
     ))
-}
-
-impl Drop for Sandbox {
-    fn drop(&mut self) {
-        if self.keep {
-            eprintln!("BUTLER_E2E_KEEP_DATA: kept {}", self.root.display());
-        } else {
-            let _ = fs::remove_dir_all(&self.root);
-        }
-    }
 }
 
 pub fn copy_tree(from: &Path, to: &Path) -> Result<(), HarnessError> {

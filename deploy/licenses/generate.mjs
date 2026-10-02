@@ -1,10 +1,11 @@
 import { gzipSync } from "node:zlib";
-import { createHash } from "node:crypto";
-import { readFileSync, mkdirSync, writeFileSync, readdirSync } from "node:fs";
+import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+import { root, modelConstants, verifyInputs } from "./inputs.mjs";
+export { root, sha256, inputDigest } from "./inputs.mjs";
+
 export const allowlist = new Set([
   "MIT", "MIT-0", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC",
   "0BSD", "Unlicense", "CC0-1.0", "Unicode-3.0", "Unicode-DFS-2016",
@@ -17,36 +18,6 @@ export const reviewedCopyleft = new Set([
   "rust:dtoa-short@0.3.5", "rust:selectors@0.38.0", "rust:option-ext@0.2.0",
   "native:Eigen@1d8b82b0740839c0de7f1242a3585e3390ff5f33",
 ]);
-
-export function sha256(value) {
-  return createHash("sha256").update(value).digest("hex");
-}
-
-export function inputDigest(file) {
-  const content = readFileSync(join(root, file));
-  // npm publishing stamps its release version before prepack. Versions do not
-  // change the installer dependency closure; all other fields remain guarded.
-  if (file === "packages/butler-npm/package.json") {
-    const manifest = JSON.parse(content);
-    delete manifest.version;
-    return sha256(JSON.stringify(Object.fromEntries(Object.entries(manifest).sort(([a], [b]) => a.localeCompare(b, "en")))));
-  }
-  return sha256(content);
-}
-
-export function directoryDigest(directory) {
-  const entries = [];
-  const visit = (path, prefix = "") => {
-    for (const entry of readdirSync(path, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name, "en"))) {
-      const label = `${prefix}${entry.name}`;
-      if (entry.isDirectory()) visit(join(path, entry.name), `${label}/`);
-      else if (entry.isFile()) entries.push([label, sha256(readFileSync(join(path, entry.name)))]);
-      else throw new Error(`Unsupported vendored asset: ${label}`);
-    }
-  };
-  visit(join(root, directory));
-  return sha256(JSON.stringify(entries));
-}
 
 export function readLock() {
   return JSON.parse(readFileSync(join(root, "bun.lock"), "utf8").replace(/,\s*([}\]])/g, "$1"));
@@ -145,18 +116,13 @@ export function validateLicense(component) {
 }
 
 export function generate(catalog = JSON.parse(readFileSync(join(root, "deploy/licenses/catalog.json"), "utf8"))) {
-  for (const [file, digest] of Object.entries(catalog.inputs)) {
-    if (inputDigest(file) !== digest) throw new Error(`Notices inventory is stale: ${file}; refresh catalog`);
-  }
-  for (const [directory, digest] of Object.entries(catalog.assets)) {
-    if (directoryDigest(directory) !== digest) throw new Error(`Vendored asset inventory is stale: ${directory}; review and refresh catalog`);
-  }
+  verifyInputs(catalog);
   const wrapper = JSON.parse(readFileSync(join(root, "packages/butler-npm/package.json"), "utf8"));
   if (Object.keys(wrapper.dependencies ?? {}).length) throw new Error("npm wrapper dependencies must be added to bun.lock and inventoried before packaging");
   verifyProductionInventory(catalog);
   const model = catalog.components.find((entry) => entry.id.startsWith("model:Xenova/bge-m3"));
   const assets = readFileSync(join(root, "packages/butler-agent/rust/crates/butler-agent/src/host/embedding/worker/assets.rs"), "utf8");
-  if (!assets.includes(`const REVISION: &str = "${model.version}";`)) throw new Error("Embedding download revision differs from disclosed model");
+  if (modelConstants(assets, ["REVISION"]).REVISION !== model.version) throw new Error("Embedding download revision differs from disclosed model");
   const sections = catalog.components.map((component) => {
     validateLicense(component);
     if (!component.links?.length || component.links.some((link) => {

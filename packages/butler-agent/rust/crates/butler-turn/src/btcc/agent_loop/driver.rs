@@ -21,8 +21,8 @@ use super::continuation::{
 };
 use super::contracts::{
     AgentLoopEvent, AuthorityDecision, BatchDisposition, CandidateDisposition, ModelRoundMessage,
-    ModelRoundRole, ModelRoundTool, ModelRoundToolCall, PreparedPolicy, SemanticTurn,
-    TextCallDisposition, ToolResult, ToolSurface,
+    ModelRoundTool, ModelRoundToolCall, PreparedPolicy, SemanticTurn, TextCallDisposition,
+    ToolResult, ToolSurface,
 };
 use super::guided_ports::{GuidedInvocation, TurnContextProjection};
 use super::model_round::run_model_round;
@@ -157,6 +157,10 @@ async fn run_iteration(
         }
     };
     reject_text_tool_calls(input, state, &reply, iteration).await?;
+    if reply.calls.is_empty() && !reply.text_call_names.is_empty() {
+        discard_round_text(prepared);
+        return Ok(Step::Continue);
+    }
     if reply.calls.is_empty() {
         return settle_answer(input, state, prepared, reply.text, iteration).await;
     }
@@ -230,8 +234,7 @@ fn discard_round_text(prepared: &PreparedPolicy) {
     }
 }
 
-/// Tool calls written as text are a contract failure; the journal records
-/// them and decides the error. A text-only assistant message is dropped first.
+/// Preserve prose tool calls as evidence and ask the model for the native format.
 async fn reject_text_tool_calls(
     input: &Invocation<'_>,
     state: &mut State,
@@ -240,13 +243,6 @@ async fn reject_text_tool_calls(
 ) -> Result<(), AgentLoopError> {
     if reply.text_call_names.is_empty() {
         return Ok(());
-    }
-    let last_is_assistant = state
-        .messages
-        .last()
-        .is_some_and(|message| message.role == ModelRoundRole::Assistant);
-    if reply.calls.is_empty() && last_is_assistant {
-        state.messages.pop();
     }
     let disposition = input
         .policy
@@ -260,11 +256,18 @@ async fn reject_text_tool_calls(
         .await
         .map_err(propagated)?;
     match disposition {
+        TextCallDisposition::Continue(observation) => {
+            let observation = state.feedback(&observation);
+            state
+                .messages
+                .push(ModelRoundMessage::user(observation, None));
+            Ok(())
+        }
         TextCallDisposition::Fail(error) => Err(propagated(error)),
     }
 }
 
-/// Handles a reply without tool calls: synthesis, one empty-reply recovery,
+/// Handles a reply without tool calls: synthesis, actionable empty-reply feedback,
 /// then the Work review that accepts the answer or sends the model back.
 async fn settle_answer(
     input: &Invocation<'_>,
@@ -277,13 +280,15 @@ async fn settle_answer(
         discard_round_text(prepared);
         text = synthesized;
     }
-    if text.is_empty() && !state.empty_recovery_used {
+    if text.is_empty() {
         discard_round_text(prepared);
         state.empty_recovery_used = true;
-        state.messages.push(ModelRoundMessage::user(
-            "Your previous response was empty. Continue and provide the required result.".into(),
-            None,
-        ));
+        let observation = state.feedback(
+            "Your previous response was empty. Continue and provide the required result.",
+        );
+        state
+            .messages
+            .push(ModelRoundMessage::user(observation, None));
         return Ok(Step::Continue);
     }
     let review = input
@@ -300,6 +305,7 @@ async fn settle_answer(
             }
             discard_round_text(prepared);
             state.phase = super::contracts::LoopPhase::Working;
+            let observation = state.feedback(&observation);
             state
                 .messages
                 .push(ModelRoundMessage::user(observation, None));

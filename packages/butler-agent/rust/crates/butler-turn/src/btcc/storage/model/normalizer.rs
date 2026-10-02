@@ -55,6 +55,7 @@ pub(super) fn normalize(value: &Value) -> StorageResult<Value> {
             },
         );
     }
+    retain_response_identity(&mut out);
     if let Some(v) = source.get("usage") {
         if v.is_null() {
             out.insert("usage".into(), Value::Null);
@@ -81,6 +82,27 @@ pub(super) fn normalize(value: &Value) -> StorageResult<Value> {
         out.insert("providerIdentity".into(), provider_identity(v)?);
     }
     Ok(Value::Object(out))
+}
+
+fn retain_response_identity(out: &mut Map<String, Value>) {
+    // Older accepted responses omitted this typed field. The validated
+    // bounded watermark is the exact original response ordinal, not a new id.
+    let ordinal = out
+        .get("continuation")
+        .filter(|value| value.get("provider").and_then(Value::as_str) == Some("openai"))
+        .and_then(|value| value.get("deliveredThroughOrdinal"))
+        .and_then(Value::as_u64)
+        .filter(|value| *value <= 1_000_000);
+    if let Some(ordinal) = ordinal
+        && let Some(message) = out
+            .get_mut("assistantMessage")
+            .and_then(Value::as_object_mut)
+    {
+        message.insert(
+            "continuationItemId".into(),
+            format!("turn-item-{ordinal}").into(),
+        );
+    }
 }
 
 // Passthrough: provider payload, opaque to BTCC.
@@ -159,7 +181,7 @@ fn assistant(v: &Value, provider_data: ProviderData) -> StorageResult<Value> {
     for k in ["role", "content"] {
         n.insert(k.into(), o[k].clone());
     }
-    for k in ["toolCallId", "name"] {
+    for k in ["toolCallId", "name", "continuationItemId"] {
         if o.get(k).is_some_and(Value::is_string) {
             n.insert(k.into(), o[k].clone());
         }

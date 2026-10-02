@@ -171,7 +171,7 @@ runs:
           nextest_success_output_args=(--success-output="$TEST_SUCCESS_OUTPUT")
         fi
         if [ -n "$ARCHIVE_FILE" ]; then
-          cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
+          crates/butler-e2e/scripts/isolated-run.sh cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
             run --no-fail-fast --retries 0 --archive-file "$ARCHIVE_FILE" \
             --extract-to "$PWD" \
             ${nextest_partition_args[@]+"${nextest_partition_args[@]}"} \
@@ -180,7 +180,7 @@ runs:
             -E "$filterset" \
             2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
         else
-          cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
+          crates/butler-e2e/scripts/isolated-run.sh cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
             run ${nextest_profile_args[@]+"${nextest_profile_args[@]}"} --locked --no-fail-fast --retries 0 -p butler-e2e \
             ${nextest_partition_args[@]+"${nextest_partition_args[@]}"} \
             ${nextest_threads_args[@]+"${nextest_threads_args[@]}"} \
@@ -201,7 +201,7 @@ runs:
         BUTLER_E2E_SKIP_BUILD: "1"
         BUTLER_E2E_BIN: ${{ inputs.agent-binary }}
         BUTLER_E2E_EMBEDDING_ASSETS: ${{ runner.temp }}/e2e-models/bge-m3
-      run: cargo test --release --locked -p butler-e2e --test idle_resources -- --nocapture --test-threads=1
+      run: crates/butler-e2e/scripts/isolated-run.sh cargo test --release --locked -p butler-e2e --test idle_resources -- --nocapture --test-threads=1
 
     - name: Report IDLE-DISK counters
       if: >-
@@ -215,7 +215,7 @@ runs:
         BUTLER_E2E_SKIP_BUILD: "1"
       run: |
         mkdir -p target/e2e-tmp
-        TMPDIR="$PWD/target/e2e-tmp" cargo test --locked -p butler-e2e --test idle_disk -- --nocapture
+        TMPDIR="$PWD/target/e2e-tmp" crates/butler-e2e/scripts/isolated-run.sh cargo test --locked -p butler-e2e --test idle_disk -- --nocapture
 
     - name: Summarize
       if: always()

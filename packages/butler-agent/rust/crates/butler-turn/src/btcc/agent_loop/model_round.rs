@@ -309,7 +309,9 @@ async fn accept_response(
         Some(&completed_model_ref),
     )
     .await;
-    identify_response(response, response_item_id);
+    if let Some(ordinal) = identify_response(response, response_item_id) {
+        state.next_item_ordinal = state.next_item_ordinal.max(ordinal.saturating_add(1));
+    }
     emit(
         input.observer,
         &AgentLoopEvent::ModelResponse {

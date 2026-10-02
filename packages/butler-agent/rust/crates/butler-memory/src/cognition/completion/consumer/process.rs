@@ -11,8 +11,10 @@ use tokio_util::sync::CancellationToken;
 
 use super::{MemorySyncPoll, catchup, paused};
 mod cache;
+mod index_retirement;
+mod projection;
 mod typed;
-mod vector;
+pub(super) mod vector;
 use crate::cognition::generation::{resolve_active_generation, resolve_generation};
 use crate::cognition::registration::{ProjectSemanticWindowInput, ProjectionSourceNotice};
 use crate::cognition::sources::read_typed_record;
@@ -38,6 +40,8 @@ pub(super) struct Input {
     pub unclean_start: Arc<AtomicBool>,
     pub catchup_progress: Arc<Mutex<Option<(PathBuf, crate::cognition::graph::CatchupState)>>>,
     pub probe: Arc<super::probe::ProbeReader>,
+    pub vector_batch: Arc<AtomicBool>,
+    pub daily_batch: bool,
     pub shutdown: CancellationToken,
 }
 
@@ -106,23 +110,22 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
     if input.shutdown.is_cancelled() {
         return Ok(MemorySyncPoll::Deferred);
     }
+    if input.daily_batch {
+        return super::vector_schedule::daily(&input).await;
+    }
     let owned = input.clone();
     if super::blocking::run(move || paused(&owned)).await? {
         return Ok(MemorySyncPoll::Deferred);
     }
     if input.target.is_some() {
-        let (projected, generation) = project_next(&input).await?;
-        let cached = cache::process(&input, generation.as_ref()).await?;
-        let vectorized = if let Some(embedding) = &input.embedding {
-            vector::process(&input, embedding.as_ref()).await?
-        } else {
-            false
-        };
-        return Ok(if projected || cached || vectorized {
+        return Ok(if projection::process(&input).await? {
             MemorySyncPoll::Processed
         } else {
             MemorySyncPoll::Idle
         });
+    }
+    if index_retirement::process(&input).await? {
+        return Ok(MemorySyncPoll::Processed);
     }
     let root = input.environment.memory_root(&input.data_root);
     let mut processed = false;
@@ -154,22 +157,14 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
     if let Some(error) = queue_error {
         return Err(error);
     }
-    let (projected, generation) = project_next(&input).await?;
-    let cached = cache::process(&input, generation.as_ref()).await?;
-    let vectorized = if let Some(embedding) = &input.embedding {
-        vector::process(&input, embedding.as_ref()).await?
+    let projected = projection::process(&input).await?;
+    Ok(if processed || caught_up || projected {
+        MemorySyncPoll::Processed
+    } else if queued {
+        MemorySyncPoll::Deferred
     } else {
-        false
-    };
-    Ok(
-        if processed || caught_up || projected || cached || vectorized {
-            MemorySyncPoll::Processed
-        } else if queued {
-            MemorySyncPoll::Deferred
-        } else {
-            MemorySyncPoll::Idle
-        },
-    )
+        MemorySyncPoll::Idle
+    })
 }
 
 /// Registers the conversation turn a v3 request names once its completion

@@ -14,6 +14,10 @@ use sha2::{Digest, Sha256};
 use std::path::Path;
 #[path = "support/memory_fixture.rs"]
 mod memory_fixture;
+#[allow(
+    dead_code,
+    reason = "shared memory fixture also supports batch-only scenarios"
+)]
 #[path = "memory/stubs.rs"]
 mod memory_stubs;
 
@@ -32,14 +36,20 @@ async fn existing_folder(javascript: bool) -> Result<(), HarnessError> {
     let mut cassette = Cassette::load("MEM-01")?;
     let remember = cassette.exchanges[0].request.key.user_request.clone();
     let ask = "How do I unlock my bicycle security cable? Call recall_memory with cue bicycle security cable combination.";
-    let mut call = cassette.exchanges[0].clone();
-    call.request.key.user_request = ask.into();
-    call.response = memory_response(&json!({"type":"function_call","id":"fc_recall",
-        "call_id":"call_recall","name":"recall_memory","status":"completed",
-        "arguments":json!({"cue":"bicycle security cable combination"}).to_string()}));
-    let mut answer = cassette.exchanges[1].clone();
-    answer.request.key.user_request = ask.into();
-    cassette.exchanges.extend([call, answer]);
+    let warm = "What is my bike lock code? Call recall_memory with cue bike lock code.";
+    for (request, cue) in [
+        (warm, "bike lock code"),
+        (ask, "bicycle security cable combination"),
+    ] {
+        let mut call = cassette.exchanges[0].clone();
+        call.request.key.user_request = request.into();
+        call.response = memory_response(&json!({"type":"function_call","id":"fc_recall",
+            "call_id":"call_recall","name":"recall_memory","status":"completed",
+            "arguments":json!({"cue":cue}).to_string()}));
+        let mut answer = cassette.exchanges[1].clone();
+        answer.request.key.user_request = request.into();
+        cassette.exchanges.extend([call, answer]);
+    }
     memory_stubs::extraction(&mut cassette, ask)?;
     let setup = Setup::new("MEM-EXISTING")?
         .stub_cassette(cassette)
@@ -66,8 +76,18 @@ async fn existing_folder(javascript: bool) -> Result<(), HarnessError> {
     let (_, turn) = s
         .turn("general", &remember.replace("{{NONCE}}", &code))
         .await?;
-    assert_eq!(turn_state(&turn), "delivered");
-    memory_stubs::vectors_complete(&s.sandbox.data).await?;
+    assert_eq!(
+        turn_state(&turn),
+        "delivered",
+        "{turn}; misses={:?}",
+        s.provider()?.misses()
+    );
+    memory_stubs::text_complete(&s.sandbox.data, 1).await?;
+    // A cold recall admits the pending vector batch; the next recall must still
+    // prove vector retrieval against the unchanged historical generation.
+    let (_, cold) = s.turn("general", warm).await?;
+    assert_eq!(turn_state(&cold), "delivered");
+    memory_stubs::vectors_complete(&s.sandbox.data, 2).await?;
     let chat =
         s.gw.post(
             "/sessions",
@@ -78,7 +98,12 @@ async fn existing_folder(javascript: bool) -> Result<(), HarnessError> {
     let session = chat.data()["session"]["id"].as_str().unwrap().to_owned();
     let first = s.provider()?.requests().len();
     let (turn_id, turn) = s.turn(&session, ask).await?;
-    assert_eq!(turn_state(&turn), "delivered");
+    assert_eq!(
+        turn_state(&turn),
+        "delivered",
+        "{turn}; misses={:?}",
+        s.provider()?.misses()
+    );
     let rows = tool_rows(&s.gw.messages(&session).await?, &turn_id);
     let row = rows
         .iter()

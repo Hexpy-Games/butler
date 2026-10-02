@@ -182,18 +182,6 @@ fn command_palette(
             .filter(|item| matches(&item.title))
             .map(schedule_result),
     );
-    for section in SETTINGS_COMMANDS {
-        if matches(section) {
-            let slug = section
-                .to_lowercase()
-                .replace(|character: char| !character.is_ascii_alphanumeric(), "-");
-            let slug = slug.trim_matches('-');
-            results.push(
-                json!({"id":format!("settings:{slug}"),"kind":"settings","title":section,
-                "subtitle":"Settings","route":format!("settings:{section}")}),
-            );
-        }
-    }
     let rank = |title: &str| {
         let title = normalize(title);
         if title == needle {
@@ -238,15 +226,3 @@ fn schedule_result(automation: &super::automations::AutomationSummary) -> Value 
         "schedule_type":automation.schedule_type,"next_run_at":automation.next_run_at,
         "route":format!("automation:{}",automation.id)})
 }
-
-const SETTINGS_COMMANDS: &[&str] = &[
-    "General",
-    "Appearance",
-    "Memory",
-    "Server/Bridge",
-    "Models/Access",
-    "Privacy/Data",
-    "Diagnostics",
-    "System events",
-    "Archived",
-];

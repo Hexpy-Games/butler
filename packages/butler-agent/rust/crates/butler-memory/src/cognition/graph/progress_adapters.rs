@@ -21,6 +21,14 @@ impl GraphRepository {
         super::probe::has_recoverable_windows(self.connection()?)
     }
 
+    pub(in crate::cognition) fn vector_batch_due(
+        &self,
+        cutoff: &str,
+        cap: usize,
+    ) -> CognitionResult<bool> {
+        super::probe::vector_batch_due(self.connection()?, cutoff, cap)
+    }
+
     pub(in crate::cognition) fn has_vector_work(&self, now: &str) -> CognitionResult<bool> {
         super::probe::has_vector_work(self.connection()?, now)
     }

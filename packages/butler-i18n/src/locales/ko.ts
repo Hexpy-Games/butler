@@ -1086,6 +1086,15 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     copy: "복사",
   },
   settings: {
+    deleteSchedule: name => `예약 작업 "${name}"을 삭제합니다.`,
+    deleteMcpServer: name => `MCP 서버 "${name}"과 저장된 인증 정보를 삭제합니다.`,
+    mcpEnabled: "사용 중", mcpDisabled: "사용 안 함",
+    mcpIdRequired: "서버 ID를 입력합니다.",
+    mcpIdInvalid: "영문·숫자·점·밑줄·하이픈 1~80자로 입력합니다.",
+    mcpIdPreview: id => `저장 ID: ${id}`,
+    mcpSaveFailed: "서버를 저장하지 못했습니다.", mcpActionFailed: "서버 작업에 실패했습니다.",
+    mcpCommandRequired: "명령을 입력합니다.", mcpUrlRequired: "URL을 입력합니다.",
+
     title: "설정",
     back: "돌아가기",
     saving: "저장 중",
@@ -1890,7 +1899,6 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     empty: "일치하는 항목이 없습니다. 다른 이름이나 제목으로 검색해 보세요.",
     failed: "검색하지 못했습니다. 연결을 확인하고 다시 시도해 주세요.",
     kindLabels: { chat: "대화", project: "프로젝트", project_session: "프로젝트 대화", group: "스페이스", automation: "예약 작업", settings: "설정" },
-    settingsSections: { general: "일반", appearance: "모양", "server-bridge": "서버", "models-access": "모델 및 접근 권한", "privacy-data": "개인정보 및 데이터", diagnostics: "진단", "system-events": "시스템 이벤트", archived: "아카이브" },
   },
   feedback: {
     retry: "다시 시도",

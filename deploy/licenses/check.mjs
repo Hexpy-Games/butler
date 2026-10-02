@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { verifyRendererModules } from "./verify-renderer.mjs";
 import { generate, root, validateLicense, productionPackages, verifyProductionInventory } from "./generate.mjs";
+import "./check-fingerprint.mjs";
 
 // test-category: pure-logic
 const first = generate();

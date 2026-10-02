@@ -86,7 +86,7 @@ async fn remote_cli_manages_live_security() -> Result<(), HarnessError> {
 #[test]
 fn remote_cli_reports_stopped_service_without_starting() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let setup = Setup::new("CLI-REMOTE-OFF")?;
+    let mut setup = Setup::new("CLI-REMOTE-OFF")?;
     let launch = Launch::new(&setup.sandbox)?;
     let output = launch
         .command()
@@ -108,5 +108,6 @@ fn remote_cli_reports_stopped_service_without_starting() -> Result<(), HarnessEr
             .join("app/runtime/auth/local-admin.json")
             .exists()
     );
+    setup.sandbox.mark_success();
     Ok(())
 }

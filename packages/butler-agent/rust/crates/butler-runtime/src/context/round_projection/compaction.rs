@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, sync::Arc};
+use std::sync::Arc;
 
 use butler_turn::btcc::{
     BtccError, ContextCompactionRecord, ContextProjectionError, ContextProjectionRebaseIdentity,
@@ -136,27 +136,8 @@ impl CompactionState {
                 .floor()
                 .max(0.0),
         );
-        let mut boundary = active.map_or(1, |record| record.covered_units);
-        let mut upper = units.len().saturating_sub(1);
-        while boundary < upper {
-            let middle = usize::midpoint(boundary, upper);
-            let dummy = ContextCompactionRecord {
-                source_digest: String::new(),
-                covered_units: middle,
-                summary: Arc::from(""),
-            };
-            let candidate_pressure = {
-                let candidate = project(messages, units, Some(&dummy)).ok_or_else(|| {
-                    ContextProjectionError::Contract(error("summary_projection_missing"))
-                })?;
-                measure(&candidate)?
-            };
-            if candidate_pressure + summary_budget as f64 > max_bytes * TARGET_RATIO {
-                boundary = middle + 1;
-            } else {
-                upper = middle;
-            }
-        }
+        let boundary =
+            summary_boundary(messages, units, active, summary_budget, max_bytes, measure)?;
         let resize = active
             .map(|record| json_string_bytes(record.summary.as_ref()))
             .transpose()
@@ -181,36 +162,11 @@ impl CompactionState {
             &mut next_summary,
         )
         .await?;
-        loop {
-            let candidate = ContextCompactionRecord {
-                source_digest: String::new(),
-                covered_units: boundary,
-                summary: Arc::from(next_summary.as_str()),
-            };
-            let candidate_fits = {
-                let candidate_messages =
-                    project(messages, units, Some(&candidate)).ok_or_else(|| {
-                        ContextProjectionError::Contract(error("summary_projection_missing"))
-                    })?;
-                measure(&candidate_messages)? <= max_bytes
-            };
-            if candidate_fits {
-                break;
-            }
-            let prompt = summary::shorten_prompt(&next_summary, summary_budget);
-            let source_digest = digest(&prompt);
-            next_summary = trim_summary(
-                &summary
-                    .summarize(SummaryRequest {
-                        text: &prompt,
-                        max_output_bytes: summary_budget,
-                        source_digest: &source_digest,
-                    })
-                    .await
-                    .map_err(ContextProjectionError::Model)?,
-            )
-            .map_err(ContextProjectionError::Contract)?;
-        }
+        // Model output cannot enforce a byte budget. Shrink the serialized
+        // summary deterministically; never ask the model repeatedly to shorten it.
+        next_summary = fit_summary(&next_summary, summary_budget)?;
+        let (boundary, next_summary) =
+            fitting_summary(messages, units, boundary, next_summary, max_bytes, measure)?;
         let record = Arc::new(ContextCompactionRecord {
             source_digest: source_digest(messages, units, boundary)
                 .map_err(ContextProjectionError::Contract)?,
@@ -223,6 +179,65 @@ impl CompactionState {
     }
 }
 
+fn fitting_summary(
+    messages: &[ModelRoundMessage],
+    units: &[AtomicUnit],
+    boundary: usize,
+    summary: String,
+    max_bytes: f64,
+    measure: &(dyn Fn(&[ModelRoundMessage]) -> Result<f64, ContextProjectionError> + Send + Sync),
+) -> Result<(usize, String), ContextProjectionError> {
+    // Even a tiny window must carry an explicit retrieval marker. Never make
+    // historical context disappear by returning only the mandatory messages.
+    for (boundary, summary) in [(boundary, summary), (units.len(), String::new())] {
+        let candidate = ContextCompactionRecord {
+            source_digest: String::new(),
+            covered_units: boundary,
+            summary: Arc::from(summary.as_str()),
+        };
+        let projected = project(messages, units, Some(&candidate))
+            .ok_or_else(|| ContextProjectionError::Contract(error("summary_projection_missing")))?;
+        if measure(&projected)? <= max_bytes {
+            return Ok((boundary, summary));
+        }
+    }
+    Err(ContextProjectionError::Contract(error(
+        "current_context_exceeds_model_capacity",
+    )))
+}
+
+fn summary_boundary(
+    messages: &[ModelRoundMessage],
+    units: &[AtomicUnit],
+    active: Option<&ContextCompactionRecord>,
+    summary_budget: usize,
+    max_bytes: f64,
+    measure: &(dyn Fn(&[ModelRoundMessage]) -> Result<f64, ContextProjectionError> + Send + Sync),
+) -> Result<usize, ContextProjectionError> {
+    let mut boundary = active.map_or(1, |record| record.covered_units);
+    let mut upper = units.len().saturating_sub(1);
+    while boundary < upper {
+        let middle = usize::midpoint(boundary, upper);
+        let dummy = ContextCompactionRecord {
+            source_digest: String::new(),
+            covered_units: middle,
+            summary: Arc::from(""),
+        };
+        let candidate_pressure = {
+            let candidate = project(messages, units, Some(&dummy)).ok_or_else(|| {
+                ContextProjectionError::Contract(error("summary_projection_missing"))
+            })?;
+            measure(&candidate)?
+        };
+        if candidate_pressure + summary_budget as f64 > max_bytes * TARGET_RATIO {
+            boundary = middle + 1;
+        } else {
+            upper = middle;
+        }
+    }
+    Ok(boundary)
+}
+
 async fn summarize_history(
     producer: &dyn SummaryPort,
     history: &str,
@@ -230,62 +245,87 @@ async fn summarize_history(
     max_bytes: f64,
     current: &mut String,
 ) -> Result<(), ContextProjectionError> {
-    let sizing = producer.sizing().map_err(ContextProjectionError::Model)?;
+    let fallback = "Earlier history was elided. Retrieve the original requests and results with list_operation_results and read_operation_results.";
+    let Ok(sizing) = producer.sizing() else {
+        *current = fallback.into();
+        return Ok(());
+    };
     let chunk_budget = butler_core::json::saturating_usize(
-        max_bytes
-            .min(sizing.as_ref().map_or(max_bytes, |sizing| sizing.max_bytes))
-            .mul_add(0.5, 0.0)
-            .floor()
-            .max(0.0),
+        max_bytes.min(sizing.as_ref().map_or(max_bytes, |s| s.max_bytes)) * 0.5,
     );
-    let mut chunks: VecDeque<_> = summary::utf8_ranges(history, chunk_budget).into();
-    if chunks.is_empty() {
-        chunks.push_back(0..0);
+    // A single bounded summary request. Preserve the most recent historical
+    // segment; the mandatory original request and live Work remain verbatim.
+    let ranges = summary::utf8_ranges(history, chunk_budget);
+    let mut range = ranges.last().cloned().unwrap_or(0..0);
+    loop {
+        let excerpt = if range.start > 0 {
+            format!(
+                "[Historical excerpt; {} earlier bytes elided. Retrieve the complete original through list_operation_results and read_operation_results.]\n{}",
+                range.start,
+                &history[range.clone()]
+            )
+        } else {
+            history[range.clone()].to_owned()
+        };
+        let prompt = summary::prompt(current, &excerpt, summary_budget);
+        let fits = match sizing.as_ref() {
+            Some(sizing) => {
+                (sizing.measure)(&prompt).map_err(ContextProjectionError::Contract)?
+                    <= sizing.max_bytes
+            }
+            None => prompt.len() as f64 <= max_bytes,
+        };
+        if fits {
+            let source_digest = digest(&prompt);
+            *current = match producer
+                .summarize(SummaryRequest {
+                    text: &prompt,
+                    max_output_bytes: summary_budget,
+                    source_digest: &source_digest,
+                })
+                .await
+            {
+                Ok(text) if !text.trim().is_empty() => text.trim().to_owned(),
+                _ => fallback.into(),
+            };
+            return Ok(());
+        }
+        if range.len() <= 4 {
+            *current = fallback.into();
+            return Ok(());
+        }
+        let mut start = range.start + range.len().div_ceil(2);
+        while !history.is_char_boundary(start) {
+            start += 1;
+        }
+        range.start = start;
     }
-    while let Some(mut range) = chunks.pop_front() {
-        loop {
-            let prompt = summary::prompt(current, &history[range.clone()], summary_budget);
-            let fits = match sizing.as_ref() {
-                Some(sizing) => {
-                    (sizing.measure)(&prompt).map_err(ContextProjectionError::Contract)?
-                        <= sizing.max_bytes
-                }
-                None => true,
-            };
-            if fits {
-                let source_digest = digest(&prompt);
-                *current = trim_summary(
-                    &producer
-                        .summarize(SummaryRequest {
-                            text: &prompt,
-                            max_output_bytes: summary_budget,
-                            source_digest: &source_digest,
-                        })
-                        .await
-                        .map_err(ContextProjectionError::Model)?,
-                )
-                .map_err(ContextProjectionError::Contract)?;
-                break;
-            }
-            if range.len() <= 4 {
-                return Err(ContextProjectionError::Contract(error(
-                    "summary_required_context_exceeds_model_capacity",
-                )));
-            }
-            let split_budget = range.len() / 2;
-            let pieces = summary::utf8_ranges(&history[range.clone()], split_budget);
-            let Some(first) = pieces.first().cloned() else {
-                return Err(ContextProjectionError::Contract(error(
-                    "summary_required_context_exceeds_model_capacity",
-                )));
-            };
-            for piece in pieces.iter().skip(1).rev() {
-                chunks.push_front(range.start + piece.start..range.start + piece.end);
-            }
-            range = range.start + first.start..range.start + first.end;
+}
+
+fn fit_summary(value: &str, budget: usize) -> Result<String, ContextProjectionError> {
+    let marker = " [summary elided; read_operation_results]";
+    let mut low = 0;
+    let boundaries: Vec<_> = value
+        .char_indices()
+        .map(|(i, _)| i)
+        .chain(std::iter::once(value.len()))
+        .collect();
+    let mut high = boundaries.len() - 1;
+    if json_string_bytes(value).map_err(ContextProjectionError::Contract)? <= budget {
+        return Ok(value.to_owned());
+    }
+    let mut fitted = String::new();
+    while low < high {
+        let middle = low + (high - low).div_ceil(2);
+        let candidate = format!("{}{marker}", &value[..boundaries[middle]]);
+        if json_string_bytes(&candidate).map_err(ContextProjectionError::Contract)? <= budget {
+            fitted = candidate;
+            low = middle;
+        } else {
+            high = middle - 1;
         }
     }
-    Ok(())
+    Ok(fitted)
 }
 
 fn project(
@@ -301,10 +341,12 @@ fn project(
             output.extend(messages[unit.range.clone()].iter().cloned());
         } else if !inserted {
             inserted = true;
-            let mut summary = summary_message(format!(
-                "{SUMMARY_PREFIX}{}{SUMMARY_SUFFIX}",
-                record.summary
-            ));
+            let content = if record.summary.is_empty() {
+                "[Earlier history elided. Retrieve original requests and results through list_operation_results and read_operation_results.]".into()
+            } else {
+                format!("{SUMMARY_PREFIX}{}{SUMMARY_SUFFIX}", record.summary)
+            };
+            let mut summary = summary_message(content);
             summary.continuation_item_id = messages[unit.range.start].continuation_item_id.clone();
             output.push(summary);
         }
@@ -411,15 +453,6 @@ fn view<'a>(
     projected: Option<&'a Vec<ModelRoundMessage>>,
 ) -> &'a [ModelRoundMessage] {
     projected.map_or(messages, Vec::as_slice)
-}
-
-fn trim_summary(value: &str) -> Result<String, BtccError> {
-    let trimmed = butler_core::public_text::trim_js_whitespace(value);
-    if trimmed.is_empty() {
-        Err(error("context_summary_empty_response"))
-    } else {
-        Ok(trimmed.to_owned())
-    }
 }
 
 fn json_string_bytes(value: &str) -> Result<usize, BtccError> {
