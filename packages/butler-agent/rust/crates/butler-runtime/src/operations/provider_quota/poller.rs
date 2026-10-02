@@ -253,15 +253,17 @@ impl ProviderQuotaPoller {
         match error {
             QuotaFetchError::Schema => {
                 let count = self.schema_mismatches.fetch_add(1, Ordering::Relaxed) + 1;
-                eprintln!("[provider-quota] provider={provider} schema_mismatch count={count}");
+                butler_core::diagnostic!(
+                    "[provider-quota] provider={provider} schema_mismatch count={count}"
+                );
             }
             QuotaFetchError::Http { status } | QuotaFetchError::Unauthorized { status } => {
-                eprintln!(
+                butler_core::diagnostic!(
                     "[provider-quota] provider={provider} failed={} status={status} retry_in_ms={delay}",
                     error.code()
                 );
             }
-            _ => eprintln!(
+            _ => butler_core::diagnostic!(
                 "[provider-quota] provider={provider} failed={} retry_in_ms={delay}",
                 error.code()
             ),

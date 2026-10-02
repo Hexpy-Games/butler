@@ -12,6 +12,7 @@ use crate::host::service::instance::{
 
 mod lifecycle;
 mod registration;
+mod supervisor;
 
 #[expect(
     clippy::struct_excessive_bools,
@@ -201,6 +202,12 @@ async fn run_service(
     data: Option<String>,
     options: &Options,
 ) -> ExitCode {
+    if std::env::var(supervisor::VARIABLE).as_deref() == Ok("1") {
+        return match supervisor::run(&installation, data.as_deref()).await {
+            Ok(code) => code,
+            Err(error) => report_error("service supervisor", options.json, error.message()),
+        };
+    }
     match crate::host::service::entrypoint::run_native_service_with_options(
         installation,
         data,
@@ -216,7 +223,12 @@ async fn run_service(
                     json!({"ok":true,"command":"service run","data":{"sessionId":session}})
                 );
             } else if let Some(session) = session.filter(|_| !options.quiet) {
-                println!("{session}");
+                println!(
+                    "{}",
+                    butler_core::diagnostics::timestamped(&format!(
+                        "[native-butler] stopped session_id={session}"
+                    ))
+                );
             }
             ExitCode::SUCCESS
         }
@@ -378,7 +390,7 @@ fn report_error(command: &str, json_output: bool, message: &str) -> ExitCode {
             json!({"ok":false,"command":command,"error":{"code":"native_service_cli_failed","message":message}})
         );
     } else {
-        eprintln!("{message}");
+        eprintln!("{}", butler_core::diagnostics::timestamped(message));
     }
     ExitCode::from(1)
 }

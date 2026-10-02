@@ -107,7 +107,7 @@ pub(super) async fn one(item: ClaimedInboundEvent, deps: DispatchDependencies) -
     } = deps;
     // Owner decision: a turn a crashed process was running is not resumed;
     // it runs only when its session was never bound (BTCC never started it).
-    if interrupted::by_crash(&item.record)
+    if needs_interruption_report(&item.record)
         && let Some(poll) = interrupted::settle(
             &item,
             &queue,
@@ -146,9 +146,8 @@ pub(super) async fn one(item: ClaimedInboundEvent, deps: DispatchDependencies) -
     }
 }
 
-/// Settles an item whose execution failed: an item no replacement can run
-/// fails, an item already replaced once ends failed with retry available,
-/// any other interrupted item is parked for the process replacement.
+/// Publish a truthful retryable failure after execution has unwound. BTCC's
+/// flight and execution permit are released; no process replacement is needed.
 async fn failed(
     item: &ClaimedInboundEvent,
     error: &super::IngressError,
@@ -166,7 +165,16 @@ async fn failed(
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
     {
-        eprintln!("[native-btcc] interrupted code={}", error.message);
+        let envelope = Envelope::from_record(&item.record).ok();
+        let turn_id = envelope
+            .as_ref()
+            .map(bind::routed_turn_id)
+            .unwrap_or("unknown");
+        butler_core::diagnostic!(
+            "[native-btcc] interrupted turn_id={turn_id} session_id={} capability=turn_execution code={} Turn interrupted; retry is available.",
+            session_key(&item.record),
+            error.message
+        );
     }
     let replaced = interrupted::replaced_once(&item.record);
     if let Some(code) = rejected::safe_code(error) {
@@ -188,11 +196,12 @@ async fn failed(
         // The turn never started, so its report is unavailable: no second replacement.
         return rejected::reject(item, queue, bindings, delivery, subsessions, error.code).await;
     }
-    let _ = queue.park_async(item.clone(), error.code.to_owned()).await;
-    IngressPoll {
-        interrupted: 1,
-        ..Default::default()
+    if let Some(poll) =
+        interrupted::settle(item, queue, bindings, delivery, "runtime-interrupted").await
+    {
+        return poll;
     }
+    rejected::reject(item, queue, bindings, delivery, subsessions, error.code).await
 }
 
 /// A BTCC error as a queue error: a rejection no replacement process can
@@ -231,7 +240,7 @@ async fn handled(
     if let Some(turn_id) = executed.eligible_turn_id
         && let Err(error) = restart_handoff.after_final(&turn_id).await
     {
-        eprintln!("[native-restart] handoff code={error}");
+        butler_core::diagnostic!("[native-restart] handoff code={error}");
     }
     IngressPoll {
         handled: 1,
