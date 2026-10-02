@@ -1,3 +1,4 @@
+import { smokeBrowserArgs } from "./browser-launch";
 // App smoke: complete shipped wallpaper list, cold/reopen navigation, real CDP trace, stub model only.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -11,7 +12,7 @@ const widths = Bun.argv.includes("--mobile-only") ? [375] : [1280, 375];
 const custom = Bun.argv.includes("--custom-only");
 mkdirSync(out, { recursive: true });
 const server = await createNativeAppServer();
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ args: smokeBrowserArgs(), headless: true });
 writeFileSync(`${out}/environment.json`, JSON.stringify({ browser: browser.version(), viewportHeight: 900, deviceScaleFactor: 1, custom, ownerScale: Bun.argv.includes("--owner-scale") }, null, 2));
 const expected = ["none", "live:butler.bloom", "live:butler.silk", "live:butler.riso-flow", "live:butler.lamina", "live:butler.diatom", "live:butler.dusk", "live:butler.shoreline", "live:butler.photo-clouds", "live:butler.photo-daisies", "live:butler.stipple"];
 

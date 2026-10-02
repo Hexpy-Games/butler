@@ -566,6 +566,8 @@ export interface SettingsView {
     | "modifier_enter_send_enter_newline"
     | "enter_send_shift_enter_newline";
   appearance_theme: "system" | "light" | "dark";
+  /** false follows the OS; true forces the DS reduced-motion path. */
+  reduce_motion: boolean;
   main_screen_theme: "none" | "bloom" | "silk";
   main_screen_theme_preset:
     | "monochrome"

@@ -148,7 +148,7 @@ test("subscribeReducedMotion reports the media query and the data-motion scope",
   const body = { dataset: {} as Record<string, string> };
   class FakeObserver {
     constructor(private readonly callback: () => void) {}
-    observe() { observers.push(this.callback); }
+    observe() { if (!observers.includes(this.callback)) observers.push(this.callback); }
     disconnect() { observers.splice(observers.indexOf(this.callback), 1); }
   }
   Object.assign(globalThis, {

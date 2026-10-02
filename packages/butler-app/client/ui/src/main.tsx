@@ -1,3 +1,4 @@
+import { startApp } from "@/app/startApp";
 import React, { Suspense, lazy } from "react";
 import { createRoot } from "react-dom/client";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
@@ -21,7 +22,7 @@ const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Butler UI root element is missing.");
 
 // Every wallpaper (new chat, dashboards, picker thumbnails) loads images and user modules through the gateway.
-createRoot(rootElement).render(
+void startApp(() => createRoot(rootElement).render(
   <ErrorBoundary>
     <WallpaperModulesProvider>
       {visualMode === "thinking-mark"
@@ -34,4 +35,4 @@ createRoot(rootElement).render(
     </WallpaperModulesProvider>
     <AppConfirmationDialog />
   </ErrorBoundary>,
-);
+), visualMode);

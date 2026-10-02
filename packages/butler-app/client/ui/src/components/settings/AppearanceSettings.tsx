@@ -44,6 +44,13 @@ export function AppearanceSettings() {
           ]}
         />
         <SettingsSwitch
+          settingId="reduce-motion"
+          label={fields.reduceMotion}
+          description={settingsCopy.descriptions.reduceMotion}
+          checked={draft.reduce_motion}
+          onChange={(value) => update({ reduce_motion: value }, setSettings)}
+        />
+        <SettingsSwitch
           settingId="translucent-sidebar"
           label={fields.translucentSidebar}
           checked={draft.translucent_sidebar}

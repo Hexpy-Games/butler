@@ -29,7 +29,13 @@ token-driven animations become an opacity fade. JS-driven loops read timing
 with `motionDuration()` and `easeProgress()` and follow reduced motion with
 `subscribeReducedMotion()`; canvas engines and their
 intrinsic simulation constants are allowlisted in `lint:motion`
-(`CANVAS_MOTION_ENGINES`). Product code never declares
+(`CANVAS_MOTION_ENGINES`). App and viewer force reduction with
+`setReducedMotionOverride(true)` on the document root; `false` follows the OS.
+Vite's `reduced-motion-css` PostCSS plugin generates `@scope` counterparts
+from the existing OS media rules, so lazy CSS modules also honour the override.
+This is shared by Electron and browser builds (CSS `@scope` support required);
+`matchMedia` continues to report the OS and DS helpers report the effective preference.
+Product code never declares
 transitions, animations or keyframes (`bun run lint:motion`).
 
 ## Product Code Constraints

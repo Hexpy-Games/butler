@@ -43,6 +43,7 @@ export const EMPTY_SETTINGS: SettingsView = {
   follow_up_behavior: "queue",
   multiline_send_behavior: "modifier_enter_send_enter_newline",
   appearance_theme: "system",
+  reduce_motion: false,
   main_screen_theme: "bloom",
   main_screen_theme_preset: "monochrome",
   main_screen_theme_custom_colors: [

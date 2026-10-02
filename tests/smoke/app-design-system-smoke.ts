@@ -1,3 +1,4 @@
+import { smokeBrowserArgs } from "./browser-launch";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -453,9 +454,11 @@ assert(
 );
 
 const server = await createNativeAppServer({ uiRoot });
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ args: smokeBrowserArgs(), headless: true });
 
 try {
+  const page = await browser.newPage({ deviceScaleFactor: 1 });
+  await server.signIn(page);
   for (const viewport of [
     { label: "mobile-320", width: 320, height: 740 },
     { label: "mobile-375", width: 375, height: 812 },
@@ -463,13 +466,9 @@ try {
     { label: "mobile-430", width: 430, height: 932 },
     { label: "desktop", width: 1280, height: 900 },
   ]) {
-    const page = await browser.newPage({
-      viewport: { width: viewport.width, height: viewport.height },
-      deviceScaleFactor: 1,
-    });
-    await server.signIn(page);
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await assertWorkbench(page, server.url, viewport.label);
-    await page.close();
+
   }
   console.log("app-design-system-smoke: ok");
 } finally {

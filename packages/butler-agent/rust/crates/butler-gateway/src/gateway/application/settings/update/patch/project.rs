@@ -245,6 +245,7 @@ fn project_simple_fields(
         "follow_up_behavior",
         "multiline_send_behavior",
         "appearance_theme",
+        "reduce_motion",
         "main_screen_theme",
         "main_screen_theme_preset",
         "main_screen_theme_custom_colors",

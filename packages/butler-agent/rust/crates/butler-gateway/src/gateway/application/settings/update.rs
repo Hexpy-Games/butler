@@ -108,6 +108,7 @@ pub(super) fn event_payload(projection: &Value) -> Map<String, Value> {
         "max_simultaneous_workers",
         "access_mode",
         "appearance_theme",
+        "reduce_motion",
         "main_screen_theme",
         "main_screen_theme_preset",
         "main_screen_theme_custom_colors",

@@ -1,3 +1,4 @@
+import { reducedMotionCss } from "./scripts/reduced-motion-css";
 import { gzipSync } from "node:zlib";
 import path from "node:path";
 import { homedir } from "node:os";
@@ -77,6 +78,7 @@ function thirdPartyNotices(): Plugin {
 }
 
 export default defineConfig({
+  css: { postcss: { plugins: [reducedMotionCss()] } },
   cacheDir: path.join(
     process.env.BUTLER_DATA || path.join(homedir(), ".butler"), "cache", "vite",
     createHash("sha256").update(srcRoot).digest("hex").slice(0, 12),

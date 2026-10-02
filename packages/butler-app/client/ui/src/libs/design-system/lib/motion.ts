@@ -59,9 +59,16 @@ function tokenValue(name: string): string {
   }
 }
 
-/** The DS Viewer's motion toggle scopes reduced motion with `data-motion="reduced"` on <body>. */
+/** App and viewer share one root override; false leaves the OS preference in charge. */
+export function setReducedMotionOverride(reduced: boolean): void {
+  if (typeof document === "undefined") return;
+  if (reduced) document.documentElement.dataset.motion = "reduced";
+  else delete document.documentElement.dataset.motion;
+}
+
+/** Also accept the legacy viewer body scope. */
 function reducedMotionScope(): boolean {
-  return typeof document !== "undefined" && document.body?.dataset?.motion === "reduced";
+  return typeof document !== "undefined" && (document.documentElement?.dataset?.motion === "reduced" || document.body?.dataset?.motion === "reduced");
 }
 
 export function prefersReducedMotion(): boolean {
@@ -83,6 +90,9 @@ export function subscribeReducedMotion(callback: (reduced: boolean) => void): ()
   const body = typeof document === "undefined" ? null : document.body;
   const observer = body && typeof MutationObserver === "function" ? new MutationObserver(notify) : null;
   observer?.observe(body as Node, { attributes: true, attributeFilter: ["data-motion"] });
+  if (observer && document.documentElement) {
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-motion"] });
+  }
   return () => {
     media.removeEventListener("change", notify);
     observer?.disconnect();

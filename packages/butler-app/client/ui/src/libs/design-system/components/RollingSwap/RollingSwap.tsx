@@ -1,3 +1,4 @@
+import { prefersReducedMotion } from "../../lib/motion";
 import {
   useLayoutEffect,
   useRef,
@@ -62,10 +63,4 @@ export function RollingSwap({
       </div>
     </div>
   );
-}
-
-function prefersReducedMotion(): boolean {
-  return typeof window !== "undefined" &&
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
