@@ -43,9 +43,9 @@ const onboardingFallback: BriefingFallbackCopy = {
     suggestions: [
       {
         id: "butler-onboarding",
-        title: "버틀러와 알아가기",
+        title: "온보딩 시작하기",
         description: "버틀러를 사용하기에 앞서 기본적인 설정을 진행합니다.",
-        text: "버틀러를 사용하기에 앞서 기본적인 설정을 진행하자.",
+        text: "온보딩 해줘.",
       },
     ],
   };

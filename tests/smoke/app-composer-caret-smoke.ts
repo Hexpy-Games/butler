@@ -40,10 +40,34 @@ try {
   assert.equal(await editor.innerText(), "안녕하세요 hello\n두 번째 줄X", "shortcut focuses multiline draft at end");
   // Chromium CDP drives real composition events and Lexical's IME handling.
   const cdp = await page.context().newCDPSession(page);
-  await cdp.send("Input.imeSetComposition", { text: "한", selectionStart: 1, selectionEnd: 1 });
+  await editor.evaluate(element => {
+    (window as unknown as { compositionEvents: string[] }).compositionEvents = [];
+    for (const name of ["compositionstart", "compositionupdate", "compositionend"]) {
+      element.addEventListener(name, event => (window as unknown as { compositionEvents: string[] }).compositionEvents.push(`${name}:${(event as CompositionEvent).data}`));
+    }
+  });
+  for (const text of ["ㅎ", "하", "한"]) {
+    await cdp.send("Input.imeSetComposition", { text, selectionStart: text.length, selectionEnd: text.length });
+    const caret = await editor.evaluate(element => {
+      const selection = window.getSelection()!;
+      const node = selection.focusNode!;
+      const end = (node.textContent ?? "").replace(/\u200b$/u, "").length;
+      const glyph = document.createRange();
+      glyph.setStart(node, end - 1); glyph.setEnd(node, end);
+      const rect = glyph.getBoundingClientRect();
+      const caret = selection.getRangeAt(0).cloneRange(); caret.collapse(false);
+      return { offset: selection.focusOffset, end, delta: caret.getBoundingClientRect().left - rect.right };
+    });
+    assert.equal(caret.offset, caret.end, `selection follows ${text}`);
+    assert(Math.abs(caret.delta) < 1, `caret follows composing glyph ${text}: ${JSON.stringify(caret)}`);
+  }
   await page.keyboard.press("ControlOrMeta+Shift+E");
   await cdp.send("Input.insertText", { text: "한" });
   assert.equal(await editor.innerText(), "안녕하세요 hello\n두 번째 줄X한", "shortcut does not disturb Korean composition");
+  const compositionEvents = await page.evaluate(() => (window as unknown as { compositionEvents: string[] }).compositionEvents);
+  assert(compositionEvents.some(event => event.startsWith("compositionstart:")));
+  assert(compositionEvents.includes("compositionupdate:한"));
+  assert(compositionEvents.includes("compositionend:한"));
   await cdp.detach();
   await editor.fill("안녕하세요 hello");
   const point = await editor.evaluate(element => {

@@ -43,9 +43,9 @@ const onboardingFallback: BriefingFallbackCopy = {
     suggestions: [
       {
         id: "butler-onboarding",
-        title: "Get acquainted with Butler",
+        title: "Start onboarding",
         description: "Set up the basics before using Butler.",
-        text: "Let's set up the basics before I start using Butler.",
+        text: "Help me with onboarding.",
       },
     ],
   };
