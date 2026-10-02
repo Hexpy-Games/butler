@@ -255,7 +255,7 @@ fn memory_response(item: &Value) -> butler_e2e::e2e::cassette::ResponseRecord {
 #[tokio::test]
 async fn mem_03_bootstrap_does_not_hold_service_readiness() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let s = Setup::new("MEM-03")?
+    let mut s = Setup::new("MEM-03")?
         .env("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP", "1")
         .start()
         .await?;
@@ -265,6 +265,23 @@ async fn mem_03_bootstrap_does_not_hold_service_readiness() -> Result<(), Harnes
         .join("cognition/memory/active-generation.json");
     assert!(!descriptor.exists(), "bootstrap ran despite hold");
     assert!(s.gw.healthy().await, "bootstrap blocked readiness");
+    let intent_path = descriptor.with_file_name("fresh-initialization.json");
+    let intent: Value = serde_json::from_slice(&std::fs::read(&intent_path)?)?;
+    let generation = descriptor
+        .parent()
+        .unwrap()
+        .join("generations")
+        .join(intent["generation_id"].as_str().unwrap());
+    // Simulate interruption after the reserved generation directory is made.
+    std::fs::create_dir_all(&generation)?;
+    std::fs::write(generation.join("retained.txt"), b"retained")?;
+    // Windows App shutdown can terminate the first Agent after readiness but
+    // before publication. The next launch must retain the fresh reservation.
+    s.crash_and_restart().await?;
+    assert!(
+        !descriptor.exists(),
+        "bootstrap ran despite hold after restart"
+    );
     std::fs::write(
         s.sandbox.data.join("state/e2e-memory-bootstrap-release"),
         b"",
@@ -279,6 +296,13 @@ async fn mem_03_bootstrap_does_not_hold_service_readiness() -> Result<(), Harnes
     }
     let active: Value = serde_json::from_slice(&std::fs::read(&descriptor)?)?;
     assert!(active["generation_id"].is_string(), "{active}");
+    assert_eq!(active["generation_id"], intent["generation_id"]);
+    assert_eq!(std::fs::read(generation.join("retained.txt"))?, b"retained");
+    assert!(generation.join("graph.sqlite").exists());
+    assert!(
+        !intent_path.exists(),
+        "published reservation was not retired"
+    );
     s.finish().await
 }
 

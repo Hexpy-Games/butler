@@ -2,7 +2,7 @@
 import { strict as assert } from "node:assert";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
@@ -124,6 +124,8 @@ try {
     leftoverProcesses: 0, durationMs: Date.now() - started }));
 } catch (error) {
   console.error(JSON.stringify({ phase, renderer: page ? await page.diagnostics().catch(() => null) : null,
+    providerCalls: { chat: calls.chat, memory: calls.memory, speakers: [...calls.memorySpeakers].sort() },
+    memoryState: memoryState(),
     instanceState: readJson(join(data, "app/runtime/foreground/instance.json"))?.state,
     lastExit: readJson(join(data, "app/runtime/foreground/last-exit.json")),
     packages: [from, to].map(version => ({ version,
@@ -137,9 +139,32 @@ try {
   page?.close();
   ownedProcesses(data, owned);
   for (const pid of owned) if (alive(pid)) { try { process.kill(pid, "SIGKILL"); } catch {} }
+  await waitFor(() => [...owned].every(pid => !alive(pid)), "failed installer owned process cleanup");
   if (!uninstalled && existsSync(updater)) run(updater, ["--uninstall", "--silent"]);
   server.stop(true);
   rmSync(root, { recursive: true, force: true });
+}
+
+function memoryState() {
+  try { return readMemoryState(); }
+  catch (error) { return { diagnosticError: error instanceof Error ? error.name : "unavailable" }; }
+}
+
+function readMemoryState() {
+  const memory = join(data, "cognition/memory");
+  const queue = join(memory, "queue/sync.jsonl");
+  return {
+    active: readJson(join(memory, "active-generation.json")),
+    files: existsSync(memory) ? readdirSync(memory, { recursive: true }).map(String).sort() : [],
+    queuedSources: existsSync(queue) ? readFileSync(queue, "utf8").split("\n").filter(Boolean).map(line => {
+      const entry = JSON.parse(line);
+      return { schema: entry.schema_version, kind: entry.source?.kind, jobId: entry.job_id };
+    }) : [],
+    schedules: ["session-sync", "consolidation-cycle"].map(id => {
+      const state = readJson(join(data, `state/scheduler/${id}.json`));
+      return { id, status: state?.status, lastRunDate: state?.lastRunDate, lastRunAt: state?.lastRunAt };
+    }),
+  };
 }
 
 async function oneClickLaunch() {

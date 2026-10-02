@@ -2,6 +2,7 @@
 
 pub(super) mod durable;
 mod empty;
+mod intent;
 
 use crate::cognition::CognitionCode;
 use std::{path::PathBuf, sync::Arc};
@@ -78,23 +79,29 @@ fn initialize_locked(
         &environment.cognition_root(data_root),
         &memory_root,
     )?;
-    write_empty_generation(&memory_root, now, unicode_version, icu_version)
+    write_empty_generation(
+        &memory_root,
+        &uuid::Uuid::new_v4().to_string(),
+        now,
+        unicode_version,
+        icu_version,
+    )
 }
 
 fn write_empty_generation(
     memory_root: &std::path::Path,
+    generation_id: &str,
     now: &str,
     unicode_version: &str,
     icu_version: &str,
 ) -> CognitionResult<()> {
-    let generation_id = uuid::Uuid::new_v4().to_string();
-    let root = memory_root.join("generations").join(&generation_id);
+    let root = memory_root.join("generations").join(generation_id);
     durable::create_dir(&root)?;
     GraphRepository::create_fresh(&root.join("graph.sqlite"), now)?;
     let inventory_hash = format!("{:x}", Sha256::digest(b"[\"memory-source-inventory\"]"));
     let manifest = GenerationManifest::new(
         NewManifest {
-            generation_id: &generation_id,
+            generation_id,
             format: GenerationFormat::V2,
             state: GenerationState::Active,
             origin: InitializationOrigin::Empty,
@@ -108,7 +115,7 @@ fn write_empty_generation(
         }),
     );
     durable::write_json(&root.join("manifest.json"), &manifest)?;
-    let active = ActiveDescriptor::new(&generation_id, None, now, ProjectionMode::Running);
+    let active = ActiveDescriptor::new(generation_id, None, now, ProjectionMode::Running);
     durable::write_json(&memory_root.join("active-generation.json"), &active)
 }
 
@@ -122,7 +129,7 @@ pub struct FreshMemoryGeneration {
     data_root: PathBuf,
     environment: CognitionPathEnvironment,
     lease: CognitionWriteLease,
-    now_iso: Arc<dyn Fn() -> String + Send + Sync>,
+    intent: intent::Intent,
     unicode_version: String,
     icu_version: String,
 }
@@ -139,30 +146,11 @@ pub async fn prepare_fresh_memory_generation(
 ) -> CognitionResult<Option<FreshMemoryGeneration>> {
     let root = data_root.clone();
     let paths = environment.clone();
-    let fresh = tokio::task::spawn_blocking(move || {
-        // Existing conversation stores are never fresh, even when empty. Do
-        // not open SQLite readers (which can create WAL sidecars) or scan rows.
-        if butler_turn::conversation::conversation_store_path(&root).exists()
-            || empty::has_entries(&paths.memory_root(&root))?
-            || empty::has_entries(&root.join("tasks"))?
-            || empty::has_entries(&paths.cognition_root(&root).join("box"))?
-        {
-            return Ok(false);
-        }
-        if empty::has_entries(&paths.cognition_root(&root).join("rules"))? {
-            return Ok(false);
-        }
-        let feedback = paths.cognition_root(&root).join("feedback/feedback.md");
-        match std::fs::metadata(feedback) {
-            Ok(metadata) => Ok(metadata.len() == 0),
-            Err(source) if source.kind() == std::io::ErrorKind::NotFound => Ok(true),
-            Err(source) => {
-                Err(error(CognitionCode::MemoryInitializationSourceUnreadable).with_source(source))
-            }
-        }
-    })
-    .await
-    .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))??;
+    let fresh = tokio::task::spawn_blocking(move || intent::eligible(&root, &paths))
+        .await
+        .map_err(|source| {
+            error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
+        })??;
     if !fresh {
         return Ok(None);
     }
@@ -176,11 +164,17 @@ pub async fn prepare_fresh_memory_generation(
         .await
         .map_err(CognitionError::from)?
         .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
+    let memory_root = environment.memory_root(&data_root);
+    let intent = tokio::task::spawn_blocking(move || intent::reserve(&memory_root, &now_iso()))
+        .await
+        .map_err(|source| {
+            error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
+        })??;
     Ok(Some(FreshMemoryGeneration {
         data_root,
         environment,
         lease,
-        now_iso,
+        intent,
         unicode_version,
         icu_version,
     }))
@@ -193,17 +187,22 @@ impl FreshMemoryGeneration {
             let root = self.environment.memory_root(&self.data_root);
             // Source producers may have started since preflight. Their new
             // sources will be caught up by the consumer after publication.
-            let result = empty::has_entries(&root).and_then(|occupied| {
-                if occupied {
-                    return Ok(());
+            let result = (|| {
+                if !root
+                    .join("active-generation.json")
+                    .try_exists()
+                    .map_err(durable::io_error)?
+                {
+                    write_empty_generation(
+                        &root,
+                        &self.intent.generation_id,
+                        &self.intent.created_at,
+                        &self.unicode_version,
+                        &self.icu_version,
+                    )?;
                 }
-                write_empty_generation(
-                    &root,
-                    &(self.now_iso)(),
-                    &self.unicode_version,
-                    &self.icu_version,
-                )
-            });
+                intent::finish(&root)
+            })();
             let released = self
                 .lease
                 .release(result.is_ok())
