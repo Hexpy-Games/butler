@@ -62,6 +62,16 @@ impl ProbeReader {
             .await
     }
 
+    pub(super) async fn cache_work(
+        self: &Arc<Self>,
+        path: &Path,
+        now: &str,
+    ) -> CognitionResult<bool> {
+        let now = now.to_owned();
+        self.with(path, move |graph| graph.has_cache_work(&now))
+            .await
+    }
+
     /// Whether a vector claim would find a unit to embed or recover.
     pub(super) async fn vector_work(
         self: &Arc<Self>,
