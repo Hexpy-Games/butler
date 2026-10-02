@@ -8,7 +8,9 @@ mod inventory;
 pub use cleanup::{CleanupItem, CleanupResult};
 mod measurement;
 mod project;
+mod reset;
 mod safety;
+pub use crate::cognition::ResetResult;
 
 use crate::{
     cognition::{CognitionPathEnvironment, MemoryHealthService},

@@ -13,6 +13,7 @@ use super::{MemorySyncPoll, catchup, paused};
 mod cache;
 mod index_retirement;
 mod projection;
+mod reset_suppression;
 mod typed;
 pub(super) mod vector;
 use crate::cognition::generation::{resolve_active_generation, resolve_generation};
@@ -238,6 +239,9 @@ async fn register_turn(
         resolve_active_generation(&owned.data_root, &owned.environment)
     })
     .await?;
+    if reset_suppression::ack(input, root, job_id, turn).await? {
+        return Ok(true);
+    }
     let registered = input
         .registration
         .register_conversation_source(RegisterConversationSourceInput {
@@ -260,6 +264,9 @@ async fn register_turn(
     let registered = match registered {
         Ok(outcome) => outcome,
         Err(error) if error.code() == "memory_source_ineligible" => {
+            if reset_suppression::ack(input, root, job_id, turn).await? {
+                return Ok(true);
+            }
             return super::blocking::ack(root, job_id).await;
         }
         Err(error) => {

@@ -7,7 +7,7 @@ mod typed_lifecycle;
 mod types;
 
 use parking_lot::Mutex;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -56,6 +56,18 @@ const OPERATION_LIMIT: usize = 4;
 
 type Clock = Arc<dyn Fn() -> String + Send + Sync>;
 type GraphPool = Arc<Mutex<Option<(PathBuf, Vec<GraphRepository>)>>>;
+type IdlePool = std::sync::Weak<Mutex<Option<(PathBuf, Vec<GraphRepository>)>>>;
+static IDLE_POOLS: std::sync::LazyLock<Mutex<HashMap<PathBuf, IdlePool>>> =
+    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+pub(in crate::cognition) fn retire_idle_graphs(path: &std::path::Path) {
+    let mut pools = IDLE_POOLS.lock();
+    if let Some(pool) = pools.remove(path).and_then(|pool| pool.upgrade()) {
+        let mut pool = pool.lock();
+        if pool.as_ref().is_some_and(|(current, _)| current == path) {
+            *pool = None;
+        }
+    }
+}
 
 /// Registers conversation and typed sources in a memory generation and projects them into the
 /// graph.
@@ -334,6 +346,16 @@ fn close_state(state: Box<OperationState>) -> CognitionResult<()> {
         ..
     } = *state;
     canonical.close().map_err(CognitionError::from)?;
+    let mut pools = IDLE_POOLS.lock();
+    if handle
+        .reader_pin
+        .as_ref()
+        .is_some_and(super::generation::pins::GenerationPin::is_retiring)
+    {
+        return graph.close();
+    }
+    pools.retain(|_, pool| pool.strong_count() > 0);
+    pools.insert(handle.graph_path.clone(), Arc::downgrade(&graph_pool));
     let mut pool = graph_pool.lock();
     match pool.as_mut() {
         Some((path, graphs)) if path == &handle.graph_path => graphs.push(graph),

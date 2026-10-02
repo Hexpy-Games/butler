@@ -424,7 +424,7 @@ impl AgentRuntime {
         });
         let (memory_management, memory_acquisition) =
             Self::memory_owners(&paths.data_root, &environment.cognition_paths, coordinator);
-        Ok(Self {
+        Self::finish_startup(Self {
             memory_writes: Arc::new(memory_writes.rules.clone()),
             memory_management,
             memory_acquisition,
@@ -484,5 +484,17 @@ impl AgentRuntime {
                 data_root.to_path_buf(),
             )),
         )
+    }
+}
+
+impl AgentRuntime {
+    fn finish_startup(runtime: Self) -> Result<Self, BtccError> {
+        crate::host::memory_jobs::recover_resets(
+            runtime.memory_management.clone(),
+            runtime.profile.clone(),
+            runtime.memory_writes.clone(),
+            runtime.service_shutdown.child_token(),
+        );
+        Ok(runtime)
     }
 }

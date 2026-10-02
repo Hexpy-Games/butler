@@ -103,6 +103,7 @@ pub(super) mod tests {
         let mut db = rusqlite::Connection::open_in_memory().unwrap();
         super::super::schema::ensure(&mut db, "2026-10-02T00:00:00Z").unwrap();
         let graph = GraphRepository {
+            _reader_pin: None,
             connection: Some(db),
         };
         assert!(!graph.cache_index_ready().unwrap());

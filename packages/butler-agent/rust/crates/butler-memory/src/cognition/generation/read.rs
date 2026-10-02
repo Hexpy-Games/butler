@@ -83,7 +83,12 @@ pub fn resolve_generation(
     } else {
         snapshot_source_root(snapshot.as_deref())?
     };
+    let reader_pin = super::pins::pin(&root);
+    if active && read_descriptor(&memory_root)?.generation_id != generation_id {
+        return Err(error(CognitionCode::MemoryGenerationChanged));
+    }
     Ok(MemoryGenerationHandle {
+        reader_pin: Some(reader_pin),
         generation_id,
         graph_path: root.join("graph.sqlite"),
         root,

@@ -410,3 +410,37 @@ impl SourceClass {
 fn invalid(code: CognitionCode) -> CognitionError {
     CognitionError::new(code, code.as_str())
 }
+
+/// Preserves surviving structured blocks byte-for-byte during an explicit reset.
+pub(in crate::cognition::generation) fn reset_body(
+    body: &str,
+    episodes: &HashSet<String>,
+) -> Result<String, CognitionError> {
+    let mut result = String::new();
+    let mut end = 0;
+    for block in scan_semantic_blocks(body) {
+        let text = body
+            .get(block.start..block.end)
+            .ok_or_else(|| invalid(CognitionCode::HotCacheEntryInvalid))?;
+        let metadata = structured_metadata(text)
+            .ok_or_else(|| invalid(CognitionCode::HotCacheEntryInvalid))?;
+        let entry: HotCacheEntryView = serde_json::from_str(metadata)
+            .map_err(|source| invalid(CognitionCode::HotCacheEntryInvalid).with_source(source))?;
+        let episode = entry
+            .episode_id
+            .ok_or_else(|| invalid(CognitionCode::HotCacheEntryInvalid))?;
+        result.push_str(
+            body.get(end..block.start)
+                .ok_or_else(|| invalid(CognitionCode::HotCacheEntryInvalid))?,
+        );
+        if episodes.contains(&episode) {
+            result.push_str(text);
+        }
+        end = block.end;
+    }
+    result.push_str(
+        body.get(end..)
+            .ok_or_else(|| invalid(CognitionCode::HotCacheEntryInvalid))?,
+    );
+    Ok(result)
+}

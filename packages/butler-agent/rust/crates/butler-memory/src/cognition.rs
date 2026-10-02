@@ -143,3 +143,10 @@ pub(crate) type PhaseExecutionFuture<'a> = Pin<
 pub(crate) use project_capsule::capsule_path;
 
 mod admission;
+
+pub(crate) use generation::pins::pinned as generation_reader_pinned;
+pub use generation::reset::ResetResult;
+pub(crate) use generation::reset::{
+    begin as begin_conversation_reset, receipt as reset_receipt, run as reset_conversations,
+    save_leased as save_reset_receipt,
+};

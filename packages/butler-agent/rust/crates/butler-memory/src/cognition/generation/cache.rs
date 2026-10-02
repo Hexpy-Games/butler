@@ -313,3 +313,10 @@ fn now() -> String {
 fn error(code: CognitionCode) -> CognitionError {
     CognitionError::new(code, code.as_str())
 }
+
+pub(in crate::cognition::generation) fn reset_body(
+    body: &str,
+    episodes: &std::collections::HashSet<String>,
+) -> CognitionResult<String> {
+    format::reset_body(body, episodes)
+}
