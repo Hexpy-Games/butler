@@ -130,7 +130,10 @@ pub(super) fn next_item_id(ordinal: &mut u64) -> String {
     id
 }
 
-pub(super) fn identify_response(response: &mut super::contracts::ModelRoundResult, id: String) {
+pub(super) fn identify_response(
+    response: &mut super::contracts::ModelRoundResult,
+    id: String,
+) -> Option<u64> {
     let message = response.assistant_message.get_or_insert_with(|| {
         assistant_message(
             response.text.clone().unwrap_or_default(),
@@ -138,7 +141,13 @@ pub(super) fn identify_response(response: &mut super::contracts::ModelRoundResul
             response.raw.clone(),
         )
     });
-    message.continuation_item_id = Some(id);
+    // An accepted replay keeps its original transcript identity. Recovery can
+    // render fewer steering observations than the original execution.
+    message
+        .continuation_item_id
+        .get_or_insert(id)
+        .strip_prefix("turn-item-")
+        .and_then(|value| value.parse::<u64>().ok())
 }
 
 // Passthrough: provider payload, opaque to BTCC.

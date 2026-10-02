@@ -46,7 +46,11 @@ pub(super) fn decode(
         request_segment_kind: None,
         operation_result_reference: None,
         operation_result_call_id: None,
-        continuation_item_id: None,
+        continuation_item_id: request
+            .bounded_continuation
+            .and_then(|value| value.get("responseItemId"))
+            .and_then(Value::as_str)
+            .map(str::to_owned),
     });
     let continuation =
         (provider == "openai").then(|| openai_continuation(&response, request, legacy_projection));

@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from "react";
+import { stewardHarnessSummary } from "./stewardHarnessSummary.ts";
 import { appCopy } from "@/app/copy.ts";
 import {
   AdaptivePanelResizeHandle,
@@ -30,8 +31,6 @@ import {
   HARNESS_PROJECT_DASHBOARD,
   HARNESS_SS03_NAVIGATION,
   HARNESS_SS03_OBSERVER_VIEW,
-  HARNESS_SS03_STEWARD_STATES,
-  HARNESS_SS03_SUMMARY,
   HARNESS_SUMMARY,
 } from "@/app/fixtures.ts";
 import { appShellTheme, isDraftChatId, projectDraftId } from "@/app/utils.ts";
@@ -104,8 +103,7 @@ export function VisualHarness() {
   const harnessSummary = useMemo(
     () => ss03Surface
       // `steward=finalizing|delivered` swaps in that #307 Steward child state.
-      ? HARNESS_SS03_STEWARD_STATES[new URLSearchParams(window.location.search).get("steward") ?? ""] ??
-        HARNESS_SS03_SUMMARY
+      ? stewardHarnessSummary(new URLSearchParams(window.location.search).get("steward") ?? "")
       : worktreeSurface
         ? {
             ...HARNESS_SUMMARY,

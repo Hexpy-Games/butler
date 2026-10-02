@@ -11,6 +11,8 @@ use butler_e2e::e2e::scenario::{Scenario, Setup};
 use serde_json::{Value, json};
 #[path = "subsession_legacy/activity.rs"]
 mod activity;
+#[path = "subsession_legacy/presentation.rs"]
+mod presentation;
 
 /// SUB-LEGACY-01 — a session whose delegations predate the typed packet
 /// (no `child_role`/`access_mode`, `routingHints.stewardId`, no envelope
@@ -30,6 +32,7 @@ async fn sub_legacy_01_pre_typed_delegations_are_read() -> Result<(), HarnessErr
     let hint = session["session_hint"].as_str().unwrap().to_owned();
     s.agent.terminate().await?;
     seed_legacy_delegations(&s, &hint);
+    presentation::seed(&s);
     seed_stuck_handoff_message(&s, &chat);
     s.gw = s.agent.start_again().await?;
 
@@ -62,6 +65,7 @@ async fn sub_legacy_01_pre_typed_delegations_are_read() -> Result<(), HarnessErr
         );
         assert_eq!(children(workers, "session_id"), ["worker-legacy-c"]);
         assert_steward_turn_shape(stewards);
+        presentation::assert_child(&stewards[1]);
     }
     for details in [
         &view.data()["context"],
@@ -78,9 +82,9 @@ async fn sub_legacy_01_pre_typed_delegations_are_read() -> Result<(), HarnessErr
     assert_eq!(
         ids,
         [
+            "steward-relation-a",
             "steward-relation-b",
             "steward-relation-f",
-            "steward-task-a",
             "worker-relation-c"
         ],
         "{}",
@@ -88,6 +92,7 @@ async fn sub_legacy_01_pre_typed_delegations_are_read() -> Result<(), HarnessErr
     );
 
     activity::assert_pages(&s, &chat, activity.data()).await?;
+    presentation::assert_waiting_children(&mut s, &chat).await?;
     s.agent.terminate().await?;
     assert_unreadable_pending_row_closed(&s);
     s.finish().await
