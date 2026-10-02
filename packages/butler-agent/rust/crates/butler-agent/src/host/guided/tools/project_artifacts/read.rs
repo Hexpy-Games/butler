@@ -1,9 +1,12 @@
 //! Handles authorize exact registered content through the existing guarded reader.
+use super::{
+    GuidedTools,
+    query::{self, Handle, Request},
+};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use butler_turn::btcc::GuidedInvocation;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use butler_turn::btcc::GuidedInvocation;
-use super::{GuidedTools, query::{self, Handle, Request}};
 
 const PAGE_BYTES: usize = 18_000;
 
@@ -50,19 +53,54 @@ pub(super) async fn execute(
     content(project, &artifact, &bytes, offset)
 }
 
-fn content(project: &str, artifact: &query::Artifact, bytes: &[u8], offset: usize) -> Result<Value, String> {
-    if offset > bytes.len() { return Err("invalid_cursor".into()); }
+fn content(
+    project: &str,
+    artifact: &query::Artifact,
+    bytes: &[u8],
+    offset: usize,
+) -> Result<Value, String> {
+    if offset > bytes.len() {
+        return Err("invalid_cursor".into());
+    }
     let mut end = bytes.len().min(offset.saturating_add(PAGE_BYTES));
     let text = std::str::from_utf8(bytes).ok();
     if let Some(text) = text {
-        if !text.is_char_boundary(offset) { return Err("invalid_cursor".into()); }
-        while !text.is_char_boundary(end) { end -= 1; }
+        if !text.is_char_boundary(offset) {
+            return Err("invalid_cursor".into());
+        }
+        while !text.is_char_boundary(end) {
+            end -= 1;
+        }
+        // JSON escaping can expand control-heavy text sixfold. Page complete
+        // characters within the existing provider budget, preserving exact bytes.
+        let mut encoded_bytes = 0;
+        for (index, ch) in text[offset..end].char_indices() {
+            encoded_bytes += match ch {
+                '\"' | '\\' | '\n' | '\r' | '\t' | '\u{08}' | '\u{0c}' => 2,
+                ch if ch <= '\u{1f}' => 6,
+                ch => ch.len_utf8(),
+            };
+            if encoded_bytes > 30 * 1024 {
+                end = offset + index;
+                break;
+            }
+        }
     }
     let next = if end < bytes.len() {
-        Some(URL_SAFE_NO_PAD.encode(serde_json::to_vec(&Cursor {
-            project: project.into(), id: artifact.id.clone(), revision: artifact.revision.clone(), offset: end,
-        }).map_err(|_| "invalid_cursor")?))
-    } else { None };
+        Some(
+            URL_SAFE_NO_PAD.encode(
+                serde_json::to_vec(&Cursor {
+                    project: project.into(),
+                    id: artifact.id.clone(),
+                    revision: artifact.revision.clone(),
+                    offset: end,
+                })
+                .map_err(|_| "invalid_cursor")?,
+            ),
+        )
+    } else {
+        None
+    };
     let mut result = artifact.value.clone();
     result["ok"] = json!(true);
     result["total_bytes"] = json!(bytes.len());
@@ -77,10 +115,17 @@ fn content(project: &str, artifact: &query::Artifact, bytes: &[u8], offset: usiz
 }
 
 fn offset(project: &str, handle: &Handle, raw: Option<&str>) -> Result<usize, String> {
-    let Some(raw) = raw.filter(|s| !s.is_empty()) else { return Ok(0); };
-    if raw.len() > 4096 { return Err("invalid_cursor".into()); }
-    let c: Cursor = URL_SAFE_NO_PAD.decode(raw).ok()
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok()).ok_or("invalid_cursor")?;
+    let Some(raw) = raw.filter(|s| !s.is_empty()) else {
+        return Ok(0);
+    };
+    if raw.len() > 4096 {
+        return Err("invalid_cursor".into());
+    }
+    let c: Cursor = URL_SAFE_NO_PAD
+        .decode(raw)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .ok_or("invalid_cursor")?;
     if c.project != project || c.id != handle.id || c.revision != handle.revision {
         return Err("invalid_cursor".into());
     }

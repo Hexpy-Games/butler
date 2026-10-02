@@ -375,6 +375,7 @@ pub(super) fn phase_allows(phase: GuidedPhase, tool: &GuidedCatalogTool) -> bool
         return false;
     }
     phase != GuidedPhase::Direct
+        || tool.name == ToolName::ProjectArtifacts
         || !matches!(
             tool.category.as_deref(),
             Some("project" | "command" | "file" | "work")
