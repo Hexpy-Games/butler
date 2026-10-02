@@ -1,5 +1,9 @@
 param([Parameter(Mandatory = $true)][string]$PackageRoot)
 $ErrorActionPreference = 'Stop'
+$saved = @{}
+foreach ($name in @('HOME','BUTLER_DATA','LOCALAPPDATA','APPDATA','TEMP','TMP','BUTLER_SMOKE_PROFILE_ROOT')) {
+    $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+}
 $root = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid())
 New-Item -ItemType Directory "$root/home","$root/data","$root/tmp","$root/local","$root/roaming" | Out-Null
 $env:HOME = "$root/home"
@@ -19,5 +23,10 @@ try {
         if ((Get-Content "$root/protocol-before.json" -Raw) -cne (Get-Content "$root/protocol-after.json" -Raw)) {
             throw 'Portable smoke changed owner protocol registration'
         }
-    } finally { Remove-Item -Recurse -Force $root }
+    } finally {
+        try { Remove-Item -Recurse -Force $root }
+        finally {
+            foreach ($name in $saved.Keys) { [Environment]::SetEnvironmentVariable($name, $saved[$name], 'Process') }
+        }
+    }
 }

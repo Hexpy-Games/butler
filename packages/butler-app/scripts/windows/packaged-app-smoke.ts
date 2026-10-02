@@ -17,11 +17,13 @@ const owned = new Set<number>();
 const priorProtocol = protocolRegistration();
 const answer = "Windows Electron ready.";
 let calls = 0;
+const requests: unknown[] = [];
 const stub = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
   if (new URL(request.url).pathname !== "/v1/responses") return new Response(null, { status: 404 });
   const body = await request.json();
   assert(JSON.stringify(body).includes("Reply with Windows Electron ready."), "Unexpected stub prompt");
   calls++;
+  requests.push({ model: body.model, stream: body.stream, format: body.text?.format?.name, input: body.input?.slice(-2) });
   return Response.json({ id: "resp_windows", object: "response", status: "completed", model: "gpt-6-luna",
     output: [{ type: "message", id: "msg_windows", role: "assistant", status: "completed",
       content: [{ type: "output_text", text: answer, annotations: [] }] }],
@@ -89,7 +91,7 @@ try {
   const messages = (await api("/messages?chat_id=general")).data.messages;
   assert(messages.length === 2 && messages[0].role === "user" && messages[0].text === prompt &&
     messages[1].role === "assistant" && messages[1].text === answer && calls === 1,
-    `Stub chat content/order/count mismatch: ${JSON.stringify({ calls, messages: messages.map((message: any) => ({
+    `Stub chat content/order/count mismatch: ${JSON.stringify({ calls, requests, messages: messages.map((message: any) => ({
       role: message.role, text: message.text,
     })) })}`);
   cdp = await electronPage(debugPort);
