@@ -56,6 +56,15 @@ impl Gateway {
             .is_ok_and(|reply| reply.status == 200 && reply.data()["ok"] == true)
     }
 
+    /// Health and instance readiness precede the first inbound dispatch poll.
+    pub async fn executor_ready(&self) -> bool {
+        self.get("/runtime-readiness").await.is_ok_and(|reply| {
+            reply.status == 200
+                && reply.data()["authenticated_gateway_ready"] == true
+                && reply.data()["btcc_executor_ready"] == true
+        })
+    }
+
     pub async fn get(&self, path: &str) -> Result<Reply, HarnessError> {
         self.send(reqwest::Method::GET, path, None).await
     }

@@ -182,6 +182,13 @@ turns the manager on, and only when `BUTLER_E2E_SYSTEMD=1` (the Linux CI job
 sets it after probing for a user manager). INS-15 needs Node and reports
 SKIPPED without it.
 
+Agent startup and restart wait for `/runtime-readiness` executor readiness as
+well as health and the current PID's instance record. The dispatch-readiness
+scenario deliberately holds the executor and observes the earlier health-only
+state. Shutdown ordering and record-write fault hooks run in the stub tier in
+both debug and release builds, so strict release budgets exercise the same
+injected product operations.
+
 ## Idle resources at owner scale (PERF-IDLE)
 
 `idle_resources` uses the PERF-01 App seed with larger event bodies, 30,000
