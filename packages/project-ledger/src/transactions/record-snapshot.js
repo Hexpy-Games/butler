@@ -1,3 +1,4 @@
+import { ownsProjectLedgerMutation } from "../mutation-lock.js";
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
@@ -55,6 +56,13 @@ export function publicationReadVersion(root) {
 
 /** Until receipt publication releases the claim, readers see the before-image set. */
 export function readCommittedProjectLedgerRecords(root, paths) {
+  // Our exact mutation claim excludes publication. Read the complete current
+  // set once; optimistic before-image validation is for concurrent readers.
+  if (ownsProjectLedgerMutation(root)) {
+    return (typeof paths === "function" ? paths() : paths).map((path) => ({
+      path, raw: readOptional(recordPath(root, path)),
+    }));
+  }
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const version = publicationReadVersion(root);
     try {

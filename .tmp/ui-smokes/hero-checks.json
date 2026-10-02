@@ -1,0 +1,418 @@
+{
+  "results": {
+    "color": {
+      "animations": 460,
+      "properties": [
+        "opacity",
+        "strokeDashoffset",
+        "transform"
+      ],
+      "fps": 56,
+      "frameCostMs": 4.16,
+      "playing": {
+        "windowMs": 2005,
+        "longTasks": 0,
+        "maxTaskMs": 15.1,
+        "mainThreadBusyPct": 23.3,
+        "layouts": 0,
+        "layoutMs": 0,
+        "paints": 0,
+        "paintMs": 0,
+        "styleRecalcs": 120
+      },
+      "still": {
+        "windowMs": 2002,
+        "longTasks": 0,
+        "maxTaskMs": 0.3,
+        "mainThreadBusyPct": 0,
+        "layouts": 0,
+        "layoutMs": 0,
+        "paints": 0,
+        "paintMs": 0,
+        "styleRecalcs": 0
+      },
+      "offscreen": "paused",
+      "hidden": "paused",
+      "reduced": {
+        "state": "still",
+        "animations": 0
+      }
+    },
+    "typography": {
+      "animations": 433,
+      "properties": [
+        "fontWeight",
+        "opacity",
+        "strokeDashoffset",
+        "transform"
+      ],
+      "fps": 41,
+      "frameCostMs": 9.9,
+      "playing": {
+        "windowMs": 2012,
+        "longTasks": 0,
+        "maxTaskMs": 14,
+        "mainThreadBusyPct": 40.7,
+        "layouts": 0,
+        "layoutMs": 0,
+        "paints": 181,
+        "paintMs": 75.1,
+        "styleRecalcs": 122
+      },
+      "still": {
+        "windowMs": 2008,
+        "longTasks": 0,
+        "maxTaskMs": 0.7,
+        "mainThreadBusyPct": 0.1,
+        "layouts": 0,
+        "layoutMs": 0,
+        "paints": 0,
+        "paintMs": 0,
+        "styleRecalcs": 0
+      },
+      "offscreen": "paused",
+      "hidden": "paused",
+      "reduced": {
+        "state": "still",
+        "animations": 0
+      }
+    },
+    "spacing": {
+      "animations": 177,
+      "properties": [
+        "opacity",
+        "transform"
+      ],
+      "fps": 61,
+      "frameCostMs": 2.95,
+      "playing": {
+        "windowMs": 2006,
+        "longTasks": 0,
+        "maxTaskMs": 5.3,
+        "mainThreadBusyPct": 18.1,
+        "layouts": 0,
+        "layoutMs": 0,
+        "paints": 0,
+        "paintMs": 0,
+        "styleRecalcs": 119
+      },
+      "still": {
+        "windowMs": 2004,
+        "longTasks": 0,
+        "maxTaskMs": 0.7,
+        "mainThreadBusyPct": 0.1,
+        "layouts": 0,
+        "layoutMs": 0,
+        "paints": 0,
+        "paintMs": 0,
+        "styleRecalcs": 0
+      },
+      "offscreen": "paused",
+      "hidden": "paused",
+      "reduced": {
+        "state": "still",
+        "animations": 0
+      }
+    },
+    "sizing": {
+      "animations": 63,
+      "properties": [
+        "height",
+        "opacity",
+        "strokeDashoffset",
+        "transform",
+        "width"
+      ],
+      "fps": 61,
+      "frameCostMs": 0.97,
+      "playing": {
+        "windowMs": 2004,
+        "longTasks": 0,
+        "maxTaskMs": 2.8,
+        "mainThreadBusyPct": 6,
+        "layouts": 0,
+        "layoutMs": 0,
+        "paints": 0,
+        "paintMs": 0,
+        "styleRecalcs": 121
+      },
+      "still": {
+        "windowMs": 2009,
+        "longTasks": 0,
+        "maxTaskMs": 0.6,
+        "mainThreadBusyPct": 0.1,
+        "layouts": 0,
+        "layoutMs": 0,
+        "paints": 0,
+        "paintMs": 0,
+        "styleRecalcs": 0
+      },
+      "offscreen": "paused",
+      "hidden": "paused",
+      "reduced": {
+        "state": "still",
+        "animations": 0
+      }
+    },
+    "radius": {
+      "animations": 88,
+      "properties": [
+        "borderBottomLeftRadius",
+        "borderBottomRightRadius",
+        "borderTopLeftRadius",
+        "borderTopRightRadius",
+        "height",
+        "opacity",
+        "strokeDashoffset",
+        "transform",
+        "width"
+      ],
+      "fps": 60,
+      "frameCostMs": 1.88,
+      "playing": {
+        "windowMs": 2008,
+        "longTasks": 0,
+        "maxTaskMs": 3.3,
+        "mainThreadBusyPct": 11.4,
+        "layouts": 0,
+        "layoutMs": 0,
+        "paints": 0,
+        "paintMs": 0,
+        "styleRecalcs": 120
+      },
+      "still": {
+        "windowMs": 2007,
+        "longTasks": 0,
+        "maxTaskMs": 0.9,
+        "mainThreadBusyPct": 0.1,
+        "layouts": 0,
+        "layoutMs": 0,
+        "paints": 0,
+        "paintMs": 0,
+        "styleRecalcs": 0
+      },
+      "offscreen": "paused",
+      "hidden": "paused",
+      "reduced": {
+        "state": "still",
+        "animations": 0
+      }
+    },
+    "iconography": {
+      "animations": 612,
+      "properties": [
+        "opacity",
+        "strokeDashoffset",
+        "transform"
+      ],
+      "fps": 61,
+      "frameCostMs": 8.16,
+      "playing": {
+        "windowMs": 2010,
+        "longTasks": 0,
+        "maxTaskMs": 16.2,
+        "mainThreadBusyPct": 49.9,
+        "layouts": 0,
+        "layoutMs": 0,
+        "paints": 64,
+        "paintMs": 13.5,
+        "styleRecalcs": 121
+      },
+      "still": {
+        "windowMs": 2009,
+        "longTasks": 0,
+        "maxTaskMs": 1,
+        "mainThreadBusyPct": 0.1,
+        "layouts": 0,
+        "layoutMs": 0,
+        "paints": 0,
+        "paintMs": 0,
+        "styleRecalcs": 0
+      },
+      "offscreen": "paused",
+      "hidden": "paused",
+      "reduced": {
+        "state": "still",
+        "animations": 0
+      }
+    },
+    "focus": {
+      "animations": 65,
+      "properties": [
+        "borderBottomLeftRadius",
+        "borderBottomRightRadius",
+        "borderTopLeftRadius",
+        "borderTopRightRadius",
+        "height",
+        "opacity",
+        "strokeDashoffset",
+        "transform",
+        "width"
+      ],
+      "fps": 61,
+      "frameCostMs": 1.57,
+      "playing": {
+        "windowMs": 2008,
+        "longTasks": 0,
+        "maxTaskMs": 6.1,
+        "mainThreadBusyPct": 14.1,
+        "layouts": 18,
+        "layoutMs": 7.8,
+        "paints": 30,
+        "paintMs": 5.1,
+        "styleRecalcs": 124
+      },
+      "still": {
+        "windowMs": 2007,
+        "longTasks": 0,
+        "maxTaskMs": 48.4,
+        "mainThreadBusyPct": 4.5,
+        "layouts": 0,
+        "layoutMs": 0,
+        "paints": 0,
+        "paintMs": 0,
+        "styleRecalcs": 0
+      },
+      "offscreen": "paused",
+      "hidden": "paused",
+      "reduced": {
+        "state": "still",
+        "animations": 0
+      }
+    },
+    "motion": {
+      "animations": 148,
+      "properties": [
+        "backgroundPositionX",
+        "backgroundPositionY",
+        "opacity",
+        "transform"
+      ],
+      "fps": 51,
+      "frameCostMs": 0,
+      "playing": {
+        "windowMs": 2007,
+        "longTasks": 0,
+        "maxTaskMs": 12.1,
+        "mainThreadBusyPct": 35.6,
+        "layouts": 124,
+        "layoutMs": 88.8,
+        "paints": 360,
+        "paintMs": 213.8,
+        "styleRecalcs": 124
+      },
+      "still": {
+        "windowMs": 2017,
+        "longTasks": 0,
+        "maxTaskMs": 18.7,
+        "mainThreadBusyPct": 59.4,
+        "layouts": 122,
+        "layoutMs": 194.1,
+        "paints": 242,
+        "paintMs": 547.1,
+        "styleRecalcs": 122
+      },
+      "offscreen": "paused",
+      "hidden": "paused",
+      "reduced": {
+        "state": "still",
+        "animations": 0
+      }
+    },
+    "z-index": {
+      "animations": 85,
+      "properties": [
+        "opacity",
+        "transform"
+      ],
+      "fps": 50,
+      "frameCostMs": 1.66,
+      "playing": {
+        "windowMs": 2004,
+        "longTasks": 0,
+        "maxTaskMs": 5.2,
+        "mainThreadBusyPct": 13.3,
+        "layouts": 0,
+        "layoutMs": 0,
+        "paints": 0,
+        "paintMs": 0,
+        "styleRecalcs": 102
+      },
+      "still": {
+        "windowMs": 2009,
+        "longTasks": 0,
+        "maxTaskMs": 26,
+        "mainThreadBusyPct": 5,
+        "layouts": 0,
+        "layoutMs": 0,
+        "paints": 0,
+        "paintMs": 0,
+        "styleRecalcs": 0
+      },
+      "offscreen": "paused",
+      "hidden": "paused",
+      "reduced": {
+        "state": "still",
+        "animations": 0
+      }
+    },
+    "layout": {
+      "animations": 57,
+      "properties": [
+        "height",
+        "opacity",
+        "transform",
+        "width"
+      ],
+      "fps": 58,
+      "frameCostMs": 2.24,
+      "playing": {
+        "windowMs": 2008,
+        "longTasks": 0,
+        "maxTaskMs": 8.5,
+        "mainThreadBusyPct": 13.1,
+        "layouts": 0,
+        "layoutMs": 0,
+        "paints": 0,
+        "paintMs": 0,
+        "styleRecalcs": 102
+      },
+      "still": {
+        "windowMs": 2010,
+        "longTasks": 0,
+        "maxTaskMs": 0.7,
+        "mainThreadBusyPct": 0.1,
+        "layouts": 0,
+        "layoutMs": 0,
+        "paints": 0,
+        "paintMs": 0,
+        "styleRecalcs": 0
+      },
+      "offscreen": "paused",
+      "hidden": "paused",
+      "reduced": {
+        "state": "still",
+        "animations": 0
+      }
+    }
+  },
+  "failures": [
+    "color hero produced tasks over 50ms: [{\"windowMs\":2010,\"longTasks\":1,\"maxTaskMs\":69.6,\"mainThreadBusyPct\":56.8,\"layouts\":0,\"layoutMs\":0,\"paints\":0,\"paintMs\":0,\"styleRecalcs\":107},{\"windowMs\":2005,\"longTasks\":0,\"maxTaskMs\":15.1,\"mainThreadBusyPct\":23.3,\"layouts\":0,\"layoutMs\":0,\"paints\":0,\"paintMs\":0,\"styleRecalcs\":120}]",
+    "color hero costs 4.16ms of main thread per frame (max 0.5ms)",
+    "typography hero dropped the page to 41fps",
+    "typography hero costs 9.9ms of main thread per frame (max 1ms)",
+    "spacing hero costs 2.95ms of main thread per frame (max 0.5ms)",
+    "sizing hero animates height, opacity, strokeDashoffset, transform, width; only transform, opacity, strokeDashoffset",
+    "sizing hero costs 0.97ms of main thread per frame (max 0.5ms)",
+    "radius hero animates borderBottomLeftRadius, borderBottomRightRadius, borderTopLeftRadius, borderTopRightRadius, height, opacity, strokeDashoffset, transform, width; only transform, opacity, strokeDashoffset",
+    "radius hero costs 1.88ms of main thread per frame (max 0.5ms)",
+    "iconography hero costs 8.16ms of main thread per frame (max 0.5ms)",
+    "focus hero animates borderBottomLeftRadius, borderBottomRightRadius, borderTopLeftRadius, borderTopRightRadius, height, opacity, strokeDashoffset, transform, width; only transform, opacity, strokeDashoffset",
+    "focus hero laid out 18 time(s) while playing (0 still)",
+    "focus hero costs 1.57ms of main thread per frame (max 0.5ms)",
+    "motion hero animates backgroundPositionX, backgroundPositionY, opacity, transform; only transform, opacity, strokeDashoffset",
+    "z-index hero costs 1.66ms of main thread per frame (max 0.5ms)",
+    "layout hero animates height, opacity, transform, width; only transform, opacity, strokeDashoffset",
+    "layout hero costs 2.24ms of main thread per frame (max 0.5ms)"
+  ]
+}

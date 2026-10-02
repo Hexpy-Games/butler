@@ -13,6 +13,12 @@ import { basename, dirname, join } from "node:path";
 import { ensureDir, ledgerRoot } from "./fs.js";
 
 const heldMutationLocks = new Set();
+let mutationProcessOwner;
+
+/** A held local mutation excludes every publication writer for this root. */
+export function ownsProjectLedgerMutation(root) {
+  return heldMutationLocks.has(join(dirname(root), ".project-ledger-locks", `${basename(root)}.lock`));
+}
 
 export function mutationLockPath(project) {
   const root = ledgerRoot(project);
@@ -96,7 +102,10 @@ function quarantineExactDeadClaim(path, expected) {
 }
 
 function currentMutationOwner() {
-  const observed = observeProcessStartedAtMs(process.pid);
+  // Process identity is stable for the lifetime of this command. Resolving it
+  // once avoids spawning ps for each independent mutation/index refresh.
+  mutationProcessOwner ??= { startedAt: observeProcessStartedAtMs(process.pid) };
+  const observed = mutationProcessOwner.startedAt;
   const startedAtMs = typeof observed === "number"
     ? observed
     : Math.floor((Date.now() - process.uptime() * 1_000) / 1_000) * 1_000;

@@ -1,0 +1,161 @@
+{
+  "baseline": "Original Chromium user-agent inline margins replayed with margin-inline:revert; after uses current production CSS",
+  "measurements": [
+    {
+      "name": "Wallpaper",
+      "width": 1440,
+      "phase": "before",
+      "geometry": [
+        {
+          "marginLeft": "2px",
+          "marginRight": "2px",
+          "rightOverflowPx": 0
+        },
+        {
+          "marginLeft": "2px",
+          "marginRight": "2px",
+          "rightOverflowPx": 0
+        }
+      ]
+    },
+    {
+      "name": "Wallpaper",
+      "width": 1440,
+      "phase": "after",
+      "geometry": [
+        {
+          "marginLeft": "0px",
+          "marginRight": "0px",
+          "rightOverflowPx": 0
+        },
+        {
+          "marginLeft": "0px",
+          "marginRight": "0px",
+          "rightOverflowPx": 0
+        }
+      ]
+    },
+    {
+      "name": "WallpaperPicker",
+      "width": 1440,
+      "phase": "before",
+      "geometry": [
+        {
+          "marginLeft": "2px",
+          "marginRight": "2px",
+          "rightOverflowPx": 0
+        },
+        {
+          "marginLeft": "2px",
+          "marginRight": "2px",
+          "rightOverflowPx": 0
+        },
+        {
+          "marginLeft": "2px",
+          "marginRight": "2px",
+          "rightOverflowPx": 0
+        }
+      ]
+    },
+    {
+      "name": "WallpaperPicker",
+      "width": 1440,
+      "phase": "after",
+      "geometry": [
+        {
+          "marginLeft": "0px",
+          "marginRight": "0px",
+          "rightOverflowPx": 0
+        },
+        {
+          "marginLeft": "0px",
+          "marginRight": "0px",
+          "rightOverflowPx": 0
+        },
+        {
+          "marginLeft": "0px",
+          "marginRight": "0px",
+          "rightOverflowPx": 0
+        }
+      ]
+    },
+    {
+      "name": "Wallpaper",
+      "width": 375,
+      "phase": "before",
+      "geometry": [
+        {
+          "marginLeft": "2px",
+          "marginRight": "2px",
+          "rightOverflowPx": 0
+        },
+        {
+          "marginLeft": "2px",
+          "marginRight": "2px",
+          "rightOverflowPx": 0
+        }
+      ]
+    },
+    {
+      "name": "Wallpaper",
+      "width": 375,
+      "phase": "after",
+      "geometry": [
+        {
+          "marginLeft": "0px",
+          "marginRight": "0px",
+          "rightOverflowPx": 0
+        },
+        {
+          "marginLeft": "0px",
+          "marginRight": "0px",
+          "rightOverflowPx": 0
+        }
+      ]
+    },
+    {
+      "name": "WallpaperPicker",
+      "width": 375,
+      "phase": "before",
+      "geometry": [
+        {
+          "marginLeft": "2px",
+          "marginRight": "2px",
+          "rightOverflowPx": 0
+        },
+        {
+          "marginLeft": "2px",
+          "marginRight": "2px",
+          "rightOverflowPx": 0
+        },
+        {
+          "marginLeft": "2px",
+          "marginRight": "2px",
+          "rightOverflowPx": 0
+        }
+      ]
+    },
+    {
+      "name": "WallpaperPicker",
+      "width": 375,
+      "phase": "after",
+      "geometry": [
+        {
+          "marginLeft": "0px",
+          "marginRight": "0px",
+          "rightOverflowPx": 0
+        },
+        {
+          "marginLeft": "0px",
+          "marginRight": "0px",
+          "rightOverflowPx": 0
+        },
+        {
+          "marginLeft": "0px",
+          "marginRight": "0px",
+          "rightOverflowPx": 0
+        }
+      ]
+    }
+  ]
+}

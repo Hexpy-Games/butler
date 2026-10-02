@@ -82,24 +82,40 @@ try {
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 820 } });
+    let connected!: () => void;
+    const hmrConnected = new Promise<void>((resolveConnected) => { connected = resolveConnected; });
+    page.on("websocket", (socket) => socket.on("framereceived", ({ payload }) => {
+      if (payload.toString() === '{"type":"connected"}') connected();
+    }));
     await page.goto(`${uiUrl}/?visual=components`, { waitUntil: "networkidle" });
+    await page.locator(sidebarSelector).waitFor({ state: "attached" });
+    // Fresh app data starts with the sidebar collapsed. Exercise HMR on its
+    // visible surface through the same control a user opens it with.
+    await page.getByRole("button", { name: "Show sidebar", exact: true }).click();
     await page.locator(sidebarSelector).waitFor({ state: "visible" });
     await page.waitForFunction((selector) => {
       const sidebar = document.querySelector(selector);
       return sidebar && getComputedStyle(sidebar).getPropertyValue("--butler-hmr-smoke").trim() === "";
     }, sidebarSelector);
 
+    // HTTP/DOM readiness does not establish the HMR websocket subscription.
+    let connectionTimer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([hmrConnected, new Promise<never>((_, reject) => {
+        connectionTimer = setTimeout(() => reject(new Error("Vite HMR did not connect")), 10_000);
+      })]);
+    } finally { clearTimeout(connectionTimer); }
     writeFileSync(cssPath, `${originalCss}\n:global([data-test-class~="app-sidebar"]) {\n  --butler-hmr-smoke: pass;\n}\n`, "utf8");
     await page.waitForFunction((selector) => {
       const sidebar = document.querySelector(selector);
       return sidebar && getComputedStyle(sidebar).getPropertyValue("--butler-hmr-smoke").trim() === "pass";
-    }, sidebarSelector, { timeout: 10_000 });
+    }, sidebarSelector, { timeout: 10_000 }).catch((error) => { throw new Error("CSS-module HMR did not apply", { cause: error }); });
 
     writeFileSync(cssPath, originalCss, "utf8");
     await page.waitForFunction((selector) => {
       const sidebar = document.querySelector(selector);
       return sidebar && getComputedStyle(sidebar).getPropertyValue("--butler-hmr-smoke").trim() === "";
-    }, sidebarSelector, { timeout: 10_000 });
+    }, sidebarSelector, { timeout: 10_000 }).catch((error) => { throw new Error("CSS-module HMR did not remove", { cause: error }); });
 
     console.log(JSON.stringify({
       ok: true,

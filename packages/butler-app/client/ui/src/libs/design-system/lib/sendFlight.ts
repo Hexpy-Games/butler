@@ -147,13 +147,12 @@ export function flySendBubble(target: HTMLElement): SendFlight | null {
   const check = () => {
     frame = 0;
     if (!animation || !target.isConnected || !anchor) return;
+    // A queued RAF can arrive after the window under load. Check before
+    // reading layout, rather than only deciding whether to queue another RAF.
+    if (performance.now() - startedAt >= RETARGET_WINDOW_MS) return;
     const anchorBox = anchor.getBoundingClientRect();
     const left = anchorBox.left + offsetLeft;
     const top = anchorBox.top + offsetTop;
-    // The eased progress gives the translate the bubble is drawn with.
-    const progress = animation.effect?.getComputedTiming().progress ?? 0;
-    const tx = fromX * (1 - progress);
-    const ty = fromY * (1 - progress);
     if (frames === 0 && (top + box.height <= 0 || top >= window.innerHeight)) {
       animation.cancel();
       animation = animateMotion(target, [
@@ -163,6 +162,11 @@ export function flySendBubble(target: HTMLElement): SendFlight | null {
       return;
     }
     if (Math.abs(left - layoutLeft) > 0.5 || Math.abs(top - layoutTop) > 0.5) {
+      // Sampling compositor timing can dirty the following paint. Only read
+      // it when the row actually moves and needs new keyframes.
+      const progress = animation.effect?.getComputedTiming().progress ?? 0;
+      const tx = fromX * (1 - progress);
+      const ty = fromY * (1 - progress);
       // Where the bubble was on screen before the list moved it: the scroll
       // shifts the element (and its translate) with the content, so the
       // position seen after the scroll is not where the flight was drawn.
@@ -172,7 +176,7 @@ export function flySendBubble(target: HTMLElement): SendFlight | null {
       layoutTop = top;
       const elapsed = animation.currentTime;
       // The computed progress already has the decelerate easing applied.
-      const remaining = 1 - (animation.effect?.getComputedTiming().progress ?? 0);
+      const remaining = 1 - progress;
       if (remaining > 0.05) {
         animation.cancel();
         animation = fly(Math.round((drawnLeft - left) / remaining), Math.round((drawnTop - top) / remaining));

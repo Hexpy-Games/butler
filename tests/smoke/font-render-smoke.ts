@@ -43,7 +43,7 @@ const LOAD_PROBE = `(async () => {
     bytes: fonts.reduce((total, entry) => total + (entry.encodedBodySize || entry.transferSize || 0), 0),
     family: getComputedStyle(document.body).fontFamily,
     pretendardLoaded: [...document.fonts].filter((face) => face.family.includes("Pretendard Variable") && face.status === "loaded").length,
-    check: document.fonts.check('14px "Pretendard Variable"', "Butler 버틀러"),
+    check: document.fonts.check('14px "Pretendard Variable"', document.documentElement.lang.startsWith("ko") ? "버틀러" : "Butler"),
   };
 })()`;
 
@@ -190,7 +190,7 @@ async function electronMode(): Promise<void> {
       return result.result?.value as T;
     };
     for (let attempt = 0; attempt < 150; attempt += 1) {
-      if (await evaluate<boolean>("document.readyState === 'complete' && Boolean(document.querySelector('#root > *'))").catch(() => false)) break;
+      if (await evaluate<boolean>("document.readyState === 'complete' && Boolean(document.querySelector('[data-test-class~=composer-card]'))").catch(() => false)) break;
       await wait(200);
     }
     const load = await evaluate<FontLoad>(LOAD_PROBE);

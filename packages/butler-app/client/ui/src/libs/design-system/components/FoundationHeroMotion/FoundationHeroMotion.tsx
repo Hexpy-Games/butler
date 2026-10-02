@@ -33,7 +33,7 @@ const FEATURE_PLACEHOLDER = { inlineSize: "100%", aspectRatio: "16 / 9", maxBloc
 
 /**
  * A chapter hero: a calm looping motion graphic drawn from the live tokens of
- * its foundation. CSS animations on transform and opacity only; they pause
+ * its foundation. Transform/opacity moves and dashed SVG outline drawing pause
  * offscreen or in a hidden tab and become a still poster under reduced motion.
  * Decorative: the chapter title and lead carry the meaning. The graphics load
  * on first use, so only this shell sits in the app bundle.

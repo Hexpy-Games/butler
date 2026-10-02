@@ -129,14 +129,14 @@ const commandLedgerRoots = new Map();
 export function withLedgerRoot(project, command) {
   const key = resolve(project);
   if (commandLedgerRoots.has(key)) return command();
-  commandLedgerRoots.set(key, ledgerRoot(key));
+  commandLedgerRoots.set(key, { root: ledgerRoot(key) });
   try { return command(); }
   finally { commandLedgerRoots.delete(key); }
 }
 
 export function ledgerRoot(project) {
   const cached = commandLedgerRoots.get(resolve(project));
-  if (cached !== undefined) return cached;
+  if (cached !== undefined) return cached.root;
   return resolveLedgerRoot(project);
 }
 
@@ -157,6 +157,13 @@ function resolveLedgerRoot(project) {
 }
 
 export function ledgerDisplayPrefix(project) {
+  const cached = commandLedgerRoots.get(resolve(project));
+  if (!cached) return resolveLedgerDisplayPrefix(project);
+  cached.prefix ??= resolveLedgerDisplayPrefix(project);
+  return cached.prefix;
+}
+
+function resolveLedgerDisplayPrefix(project) {
   const resolvedProject = resolve(project);
   const root = ledgerRoot(resolvedProject);
   const repoLocal = repoLocalLedgerRoot(resolvedProject);

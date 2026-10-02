@@ -6,6 +6,7 @@
 }
 
 .stack {
+  position: relative;
   display: inline-grid;
   justify-items: end;
 }
@@ -13,6 +14,13 @@
 .sizer,
 .value {
   grid-area: 1 / 1;
+}
+
+.value {
+  /* Formatted intermediate values (36K → 184K via 38.6K) must not
+     enlarge the endpoint sizers and reflow the metric while counting. */
+  position: absolute;
+  inset-inline-end: 0;
 }
 
 .sizer {

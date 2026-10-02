@@ -293,6 +293,7 @@ async function measureSendFlight(page: Page, serverUrl: string, ids: Map<string,
     // can use the shorter --motion-slow (220ms) flight.
     return windowStats(events, thread, start + 80_000, start + 160_000);
   });
+  writeFileSync(join(outDir, "send-flight-trace.json"), JSON.stringify({ events, thread }));
   const whole = windowStats(events, thread, markTs(events, "flight-0"), markTs(events, `flight-${rounds - 1}`) + 700_000);
   const mainThreadFrames = windows.reduce((sum, stats) => sum + stats.layouts + stats.paints, 0);
   assert(whole.longTasks === 0, `send flight produced ${whole.longTasks} task(s) over ${LONG_TASK_MS}ms (max ${whole.maxTaskMs}ms)`);
@@ -516,8 +517,8 @@ function heroAnimations(hero: ReturnType<Page["locator"]>): Promise<HeroAnimatio
           if (["offset", "computedOffset", "easing", "composite"].includes(key)) continue;
           properties.add(key);
           const part = target?.getAttribute("data-t");
-          const valid = key === "strokeDashoffset" ? target instanceof SVGElement
-            : key === "fontWeight" ? target?.tagName.toLowerCase() === "text" : true;
+          const valid = key === "strokeDashoffset" ? target instanceof SVGGraphicsElement && Boolean(part) && getComputedStyle(target).strokeDasharray !== "none"
+            : key === "fontWeight" ? target?.tagName.toLowerCase() === "text" && Boolean(part) : true;
           if (!valid) invalidTargets.push(`${key}:${part ?? target?.tagName}`);
         }
       }
@@ -554,6 +555,10 @@ async function frameRate(page: Page, ms: number): Promise<number> {
 async function measureHeroes(page: Page, serverUrl: string) {
   const browser = page.context().browser()!;
   const results: Record<string, unknown> = {};
+  const failures: string[] = [];
+  const validate = (condition: unknown, message: string) => {
+    if (!condition) failures.push(message);
+  };
   for (const [variant, pageId] of HERO_PAGES) {
     const hero = await openHero(page, serverUrl, pageId, "light");
     const playingAnimations = await heroAnimations(hero);
@@ -608,23 +613,25 @@ async function measureHeroes(page: Page, serverUrl: string) {
       playing, still, offscreen: offscreen.state, hidden, reduced: { state: reduced.state, animations: reduced.count },
     };
     if (reportOnly) continue;
-    assert(playingAnimations.state === "playing" && playingAnimations.running > 0, `${variant} hero is not playing: ${JSON.stringify(playingAnimations)}`);
-    assert(playingAnimations.cssOnly, `${variant} hero runs a non-CSS animation`);
+    validate(playingAnimations.state === "playing" && playingAnimations.running > 0, `${variant} hero is not playing: ${JSON.stringify(playingAnimations)}`);
+    validate(playingAnimations.cssOnly, `${variant} hero runs a non-CSS animation`);
     const allowed = ["transform", "opacity", "strokeDashoffset", ...(HERO_SPECIMEN_PROPERTIES[variant] ?? [])];
-    assert(playingAnimations.invalidTargets.length === 0, `${variant} hero animates outside its specimen: ${playingAnimations.invalidTargets.join(", ")}`);
-    assert(playingAnimations.properties.every((property) => allowed.includes(property)),
+    validate(playingAnimations.invalidTargets.length === 0, `${variant} hero animates outside its specimen: ${playingAnimations.invalidTargets.join(", ")}`);
+    validate(playingAnimations.properties.every((property) => allowed.includes(property)),
       `${variant} hero animates ${playingAnimations.properties.join(", ")}; only ${allowed.join(", ")}`);
-    assert(windows.every((stats) => stats.longTasks === 0), `${variant} hero produced tasks over ${LONG_TASK_MS}ms: ${JSON.stringify(windows)}`);
+    validate(windows.every((stats) => stats.longTasks === 0), `${variant} hero produced tasks over ${LONG_TASK_MS}ms: ${JSON.stringify(windows)}`);
     // The Motion page runs its own demos; the hero adds no layout beyond the still control.
     // (Frame counts of two 2s windows differ by a frame or two.)
-    assert(variant === "typography" || playing.layouts <= still.layouts * 1.05 + 2, `${variant} hero laid out ${playing.layouts} time(s) while playing (${still.layouts} still)`);
-    assert(fps >= 50, `${variant} hero dropped the page to ${fps}fps`);
+    validate(variant === "typography" || playing.layouts <= still.layouts * 1.05 + 2, `${variant} hero laid out ${playing.layouts} time(s) while playing (${still.layouts} still)`);
+    validate(fps >= 50, `${variant} hero dropped the page to ${fps}fps`);
     const budget = HERO_FRAME_BUDGET_OVERRIDE_MS[variant] ?? HERO_FRAME_BUDGET_MS;
-    assert(frameCostMs <= budget, `${variant} hero costs ${frameCostMs}ms of main thread per frame (max ${budget}ms)`);
-    assert(offscreen.state === "paused" && offscreen.running === 0, `${variant} hero kept running offscreen: ${JSON.stringify(offscreen)}`);
-    assert(hidden === "paused", `${variant} hero kept playing in a hidden tab (${hidden})`);
-    assert(reduced.state === "still" && reduced.count === 0, `${variant} hero animates under reduced motion: ${JSON.stringify(reduced)}`);
+    validate(frameCostMs <= budget, `${variant} hero costs ${frameCostMs}ms of main thread per frame (max ${budget}ms)`);
+    validate(offscreen.state === "paused" && offscreen.running === 0, `${variant} hero kept running offscreen: ${JSON.stringify(offscreen)}`);
+    validate(hidden === "paused", `${variant} hero kept playing in a hidden tab (${hidden})`);
+    validate(reduced.state === "still" && reduced.count === 0, `${variant} hero animates under reduced motion: ${JSON.stringify(reduced)}`);
   }
+  writeFileSync(join(outDir, "hero-checks.json"), JSON.stringify({ results, failures }, null, 2));
+  assert(failures.length === 0, failures.join("\n"));
   return results;
 }
 
@@ -848,8 +855,17 @@ async function measure(browser: Browser, serverUrl: string, ids: Map<string, str
     assert(fade.cls - control.cls < 0.01, `chunk fade adds layout shift: ${fade.cls} vs ${control.cls} without it`);
     assert(fade.settledChunkSpans === 0, "settled streamed text should render without chunk spans");
     results.m6 = await measureNumberAndMeter(page, serverUrl, ids);
-    results.sendFlight = await measureSendFlight(page, serverUrl, ids);
-    results.heroes = await measureHeroes(page, serverUrl);
+    // Finish both expensive motion audits and preserve every assertion failure.
+    const failures: string[] = [];
+    for (const [name, run] of [
+      ["sendFlight", () => measureSendFlight(page, serverUrl, ids)],
+      ["heroes", () => measureHeroes(page, serverUrl)],
+    ] as const) {
+      try { results[name] = await run(); }
+      catch (error) { failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`); }
+    }
+    writeFileSync(join(outDir, "motion-checks.json"), JSON.stringify({ results, failures }, null, 2));
+    assert(failures.length === 0, failures.join("\n"));
   } finally {
     await context.close();
   }

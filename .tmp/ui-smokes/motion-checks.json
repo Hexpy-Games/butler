@@ -1,0 +1,270 @@
+{
+  "results": {
+    "overlayEnter": {
+      "menu": {
+        "name": "_menu-enter_y0b0g_1",
+        "durationMs": 140,
+        "firstFrame60Hz": 0.232,
+        "observedFirstFrame": {
+          "ms": 16.6,
+          "progress": 0.231
+        }
+      },
+      "contextMenu": {
+        "name": "_context-menu-enter_14v5y_1",
+        "durationMs": 140,
+        "firstFrame60Hz": 0.232,
+        "observedFirstFrame": {
+          "ms": 16.7,
+          "progress": 0.232
+        }
+      },
+      "popover": {
+        "name": "_popover-enter_1v63b_1",
+        "durationMs": 160,
+        "firstFrame60Hz": 0.172,
+        "observedFirstFrame": {
+          "ms": 16.7,
+          "progress": 0.173
+        }
+      },
+      "tooltip": {
+        "name": "_tooltip-enter_1kzyn_1",
+        "durationMs": 140,
+        "firstFrame60Hz": 0.232,
+        "observedFirstFrame": {
+          "ms": 16.7,
+          "progress": 0.234
+        }
+      },
+      "select": {
+        "name": "_select-enter_79is1_1",
+        "durationMs": 140,
+        "firstFrame60Hz": 0.232,
+        "observedFirstFrame": {
+          "ms": 16.7,
+          "progress": 0.232
+        }
+      },
+      "toast": {
+        "name": "transition:opacity",
+        "durationMs": 160,
+        "firstFrame60Hz": 0.172,
+        "observedFirstFrame": {
+          "ms": 16.7,
+          "progress": 0.173
+        }
+      },
+      "dialog": {
+        "name": "_dialog-enter_yg0yf_1",
+        "durationMs": 160,
+        "firstFrame60Hz": 0.172,
+        "observedFirstFrame": {
+          "ms": 16.7,
+          "progress": 0.172
+        }
+      }
+    },
+    "thinkingMark": {
+      "workingMarksOnPage": 18,
+      "working": {
+        "windowMs": 2005,
+        "longTasks": 0,
+        "maxTaskMs": 9.5,
+        "mainThreadBusyPct": 29.2,
+        "layouts": 120,
+        "layoutMs": 40.1,
+        "paints": 240,
+        "paintMs": 93.8,
+        "styleRecalcs": 120
+      },
+      "stillControl": {
+        "windowMs": 2004,
+        "longTasks": 0,
+        "maxTaskMs": 34.6,
+        "mainThreadBusyPct": 20.8,
+        "layouts": 124,
+        "layoutMs": 64.5,
+        "paints": 234,
+        "paintMs": 153.3,
+        "styleRecalcs": 124
+      },
+      "fps": {
+        "pageFps": 60,
+        "slowestMarkFps": 62,
+        "marks": 5
+      },
+      "visibleDrawsPerSecond": 300,
+      "offscreenDrawsPerSecond": 0,
+      "reducedDrawsPerSecond": 0,
+      "reducedBreathe": "on"
+    },
+    "menu": {
+      "openAnimation": {
+        "windowMs": 120,
+        "longTasks": 0,
+        "maxTaskMs": 1.3,
+        "mainThreadBusyPct": 4.8,
+        "layouts": 0,
+        "layoutMs": 0,
+        "paints": 14,
+        "paintMs": 3,
+        "styleRecalcs": 7
+      },
+      "closeAnimation": {
+        "windowMs": 90,
+        "longTasks": 0,
+        "maxTaskMs": 2.1,
+        "mainThreadBusyPct": 5.6,
+        "layouts": 1,
+        "layoutMs": 0.1,
+        "paints": 2,
+        "paintMs": 0.4,
+        "styleRecalcs": 7
+      },
+      "whole": {
+        "windowMs": 841,
+        "longTasks": 0,
+        "maxTaskMs": 12.5,
+        "mainThreadBusyPct": 4.1,
+        "layouts": 5,
+        "layoutMs": 0.9,
+        "paints": 27,
+        "paintMs": 4.9,
+        "styleRecalcs": 28
+      }
+    },
+    "dialog": {
+      "openAnimation": {
+        "windowMs": 120,
+        "longTasks": 0,
+        "maxTaskMs": 1.1,
+        "mainThreadBusyPct": 5.1,
+        "layouts": 0,
+        "layoutMs": 0,
+        "paints": 14,
+        "paintMs": 3.7,
+        "styleRecalcs": 8
+      },
+      "closeAnimation": {
+        "windowMs": 90,
+        "longTasks": 0,
+        "maxTaskMs": 4.2,
+        "mainThreadBusyPct": 12.7,
+        "layouts": 1,
+        "layoutMs": 0.1,
+        "paints": 6,
+        "paintMs": 1.1,
+        "styleRecalcs": 11
+      },
+      "whole": {
+        "windowMs": 847,
+        "longTasks": 0,
+        "maxTaskMs": 18.5,
+        "mainThreadBusyPct": 6.2,
+        "layouts": 4,
+        "layoutMs": 1.7,
+        "paints": 47,
+        "paintMs": 10.6,
+        "styleRecalcs": 42
+      }
+    },
+    "streaming": {
+      "windowMs": 4002,
+      "longTasks": 0,
+      "maxTaskMs": 4.5,
+      "mainThreadBusyPct": 7.1,
+      "layouts": 76,
+      "layoutMs": 33.1,
+      "paints": 166,
+      "paintMs": 54.3,
+      "styleRecalcs": 232,
+      "cls": 0.0014,
+      "settledChunkSpans": 0,
+      "chunksPerSecond": 25
+    },
+    "streamingWithoutChunkFade": {
+      "windowMs": 4004,
+      "longTasks": 0,
+      "maxTaskMs": 6.4,
+      "mainThreadBusyPct": 7.5,
+      "layouts": 76,
+      "layoutMs": 48.4,
+      "paints": 166,
+      "paintMs": 91.3,
+      "styleRecalcs": 11,
+      "cls": 0,
+      "settledChunkSpans": 0
+    },
+    "chunkFadeCost": {
+      "mainThreadBusyPct": -0.4,
+      "layoutMs": -15.3,
+      "paintMs": -37,
+      "cls": 0.0014
+    },
+    "m6": {
+      "animatedNumberWidthJitterPx": 0,
+      "samples": 21,
+      "progressFill": {
+        "transitionProperty": "transform",
+        "transform": "matrix(0.18, 0, 0, 1, 0, 0)",
+        "inlineWidth": ""
+      }
+    },
+    "sendFlight": {
+      "animationFrames": [
+        {
+          "windowMs": 80,
+          "longTasks": 0,
+          "maxTaskMs": 0.1,
+          "mainThreadBusyPct": 0.6,
+          "layouts": 0,
+          "layoutMs": 0,
+          "paints": 0,
+          "paintMs": 0,
+          "styleRecalcs": 0
+        },
+        {
+          "windowMs": 80,
+          "longTasks": 0,
+          "maxTaskMs": 0.1,
+          "mainThreadBusyPct": 0.4,
+          "layouts": 0,
+          "layoutMs": 0,
+          "paints": 0,
+          "paintMs": 0,
+          "styleRecalcs": 0
+        },
+        {
+          "windowMs": 80,
+          "longTasks": 0,
+          "maxTaskMs": 0.1,
+          "mainThreadBusyPct": 0.4,
+          "layouts": 0,
+          "layoutMs": 0,
+          "paints": 0,
+          "paintMs": 0,
+          "styleRecalcs": 0
+        }
+      ],
+      "whole": {
+        "windowMs": 2132,
+        "longTasks": 0,
+        "maxTaskMs": 3.3,
+        "mainThreadBusyPct": 3.1,
+        "layouts": 12,
+        "layoutMs": 4.1,
+        "paints": 58,
+        "paintMs": 38.2,
+        "styleRecalcs": 36
+      },
+      "travel": {
+        "flying": "fly",
+        "travelledPx": 137
+      }
+    }
+  },
+  "failures": [
+    "heroes: color hero produced tasks over 50ms: [{\"windowMs\":2010,\"longTasks\":1,\"maxTaskMs\":69.6,\"mainThreadBusyPct\":56.8,\"layouts\":0,\"layoutMs\":0,\"paints\":0,\"paintMs\":0,\"styleRecalcs\":107},{\"windowMs\":2005,\"longTasks\":0,\"maxTaskMs\":15.1,\"mainThreadBusyPct\":23.3,\"layouts\":0,\"layoutMs\":0,\"paints\":0,\"paintMs\":0,\"styleRecalcs\":120}]\ncolor hero costs 4.16ms of main thread per frame (max 0.5ms)\ntypography hero dropped the page to 41fps\ntypography hero costs 9.9ms of main thread per frame (max 1ms)\nspacing hero costs 2.95ms of main thread per frame (max 0.5ms)\nsizing hero animates height, opacity, strokeDashoffset, transform, width; only transform, opacity, strokeDashoffset\nsizing hero costs 0.97ms of main thread per frame (max 0.5ms)\nradius hero animates borderBottomLeftRadius, borderBottomRightRadius, borderTopLeftRadius, borderTopRightRadius, height, opacity, strokeDashoffset, transform, width; only transform, opacity, strokeDashoffset\nradius hero costs 1.88ms of main thread per frame (max 0.5ms)\niconography hero costs 8.16ms of main thread per frame (max 0.5ms)\nfocus hero animates borderBottomLeftRadius, borderBottomRightRadius, borderTopLeftRadius, borderTopRightRadius, height, opacity, strokeDashoffset, transform, width; only transform, opacity, strokeDashoffset\nfocus hero laid out 18 time(s) while playing (0 still)\nfocus hero costs 1.57ms of main thread per frame (max 0.5ms)\nmotion hero animates backgroundPositionX, backgroundPositionY, opacity, transform; only transform, opacity, strokeDashoffset\nz-index hero costs 1.66ms of main thread per frame (max 0.5ms)\nlayout hero animates height, opacity, transform, width; only transform, opacity, strokeDashoffset\nlayout hero costs 2.24ms of main thread per frame (max 0.5ms)"
+  ]
+}

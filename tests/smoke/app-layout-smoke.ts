@@ -37,6 +37,31 @@ const testClasses = (...names: string[]) => names.map(testClass).join("");
 const sidebarVisibleWidth = (box: { x: number; width: number } | null) =>
   box ? Math.max(0, box.x + box.width) : 0;
 
+// Seek the real CSS transition at the existing 90ms sample point. Remote
+// Playwright round trips must not move a mid-close sample to the exit frame.
+async function closingTrackSample(button: import("playwright").Locator, slotSelector: string) {
+  return button.evaluate(async (element, selector) => {
+    (element as HTMLElement).click();
+    await Promise.resolve();
+    const slot = document.querySelector(selector)!;
+    const animations = slot.getAnimations();
+    const slide = animations.find((a) => a instanceof CSSTransition && a.transitionProperty === "transform");
+    if (!slide) throw new Error("closing track has no transform transition");
+    for (const animation of animations) animation.pause();
+    await Promise.all(animations.map((animation) => animation.ready));
+    for (const animation of animations) animation.currentTime = 90;
+    const box = (node: Element) => { const rect = node.getBoundingClientRect(); return { x: rect.x, y: rect.y, width: rect.width, height: rect.height }; };
+    const inspector = slot.querySelector('[data-test-class~="right-inspector"]');
+    const style = inspector ? getComputedStyle(inspector) : null;
+    const result = {
+      slot: box(slot), inspector: inspector ? box(inspector) : null,
+      state: style ? { opacity: style.opacity, transform: style.transform, width: inspector!.getBoundingClientRect().width } : null,
+    };
+    for (const animation of animations) animation.play();
+    return result;
+  }, slotSelector);
+}
+
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
@@ -1210,29 +1235,12 @@ try {
     openRightPanelToggleState.background === "rgba(0, 0, 0, 0)",
     `right panel toggle should not show selected ghosting while open: ${JSON.stringify(openRightPanelToggleState)}`,
   );
-  await page
-    .getByRole("button", { name: appCopy.titlebar.hideRightPanel })
-    .click();
-  await page.waitForFunction((selector) => {
-    const slot = document.querySelector(selector);
-    return slot?.getAnimations().some((animation) => animation instanceof CSSTransition && animation.transitionProperty === "transform");
-  }, testClass("right-panel-slot"));
-  await rightPanelSlot.evaluate((slot) => {
-    const motion = slot.getAnimations().find((animation) => animation instanceof CSSTransition && animation.transitionProperty === "transform")!;
-    motion.pause();
-    motion.currentTime = Number(motion.effect!.getTiming().duration) / 2;
-  });
-  const closingSlotBox = await rightPanelSlot.boundingBox();
-  const closingInspectorBox = await page
-    .locator(testClass("right-inspector"))
-    .boundingBox();
-  const closingInspectorState = await page
-    .locator(testClass("right-inspector"))
-    .evaluate((element) => ({
-      opacity: getComputedStyle(element).opacity,
-      transform: getComputedStyle(element).transform,
-      width: element.getBoundingClientRect().width,
-    }));
+  const closing = await closingTrackSample(
+    page.getByRole("button", { name: appCopy.titlebar.hideRightPanel }), testClass("right-panel-slot"),
+  );
+  const closingSlotBox = closing.slot;
+  const closingInspectorBox = closing.inspector;
+  const closingInspectorState = closing.state!;
   // The docked inspector keeps its width and slides out on the compositor
   // (useInspectorTrackMotion): mid-close it is partly off the right edge.
   const rightEdge = page.viewportSize()?.width ?? 0;
@@ -1787,11 +1795,9 @@ try {
 
   const sidebarWidthBeforeToggle =
     (await page.locator(testClass("sidebar-slot")).boundingBox())?.width ?? 0;
-  await page.getByRole("button", { name: "Hide sidebar" }).click();
-  await page.waitForTimeout(90);
-  const sidebarMidToggleBox = await page
-    .locator(testClass("sidebar-slot"))
-    .boundingBox();
+  const sidebarMidToggleBox = (await closingTrackSample(
+    page.getByRole("button", { name: "Hide sidebar" }), testClass("sidebar-slot"),
+  )).slot;
   assert(
     sidebarMidToggleBox &&
       sidebarVisibleWidth(sidebarMidToggleBox) > 8 &&
