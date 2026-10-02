@@ -39,9 +39,12 @@ pub(super) fn build_rules_content(rules_dir: &Path) -> ContextResult<Option<Stri
         return Ok(None);
     };
     let mut blocks = Vec::new();
+    let mut seen = std::collections::HashSet::new();
     for relative in parse_rule_links(&index) {
         let resolved_relative = relative.trim_start_matches('/');
-        if let Some(content) = read_text_if_exists(&rules_dir.join(resolved_relative))? {
+        if seen.insert(resolved_relative.to_owned())
+            && let Some(content) = read_text_if_exists(&rules_dir.join(resolved_relative))?
+        {
             blocks.push(format!("### {relative}\n\n{content}"));
         }
     }
@@ -76,7 +79,7 @@ pub(super) fn bounded_persona(value: &str) -> String {
         return value.to_owned();
     }
     format!(
-        "{}\n...",
+        "{}\n[Persona excerpt elided; read_file personas/active.md for the full configured voice]",
         butler_core::public_text::trim_js_whitespace_end(prefix_utf16(value, 3_000))
     )
 }

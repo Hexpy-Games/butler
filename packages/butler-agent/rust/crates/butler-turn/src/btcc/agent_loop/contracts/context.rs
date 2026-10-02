@@ -130,5 +130,6 @@ pub struct ReplayPreparation {
 /// The journal's verdict on tool calls written as text.
 #[derive(Clone, Debug, PartialEq)]
 pub enum TextCallDisposition {
+    Continue(String),
     Fail(BtccError),
 }

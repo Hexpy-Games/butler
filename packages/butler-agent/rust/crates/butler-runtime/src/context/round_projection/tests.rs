@@ -19,7 +19,7 @@ use butler_turn::btcc::{
     ContextCompactionRecord, ModelRoundError, ModelRoundMessage, ModelRoundRole, ModelRoundToolCall,
 };
 
-fn message(role: ModelRoundRole, content: &str) -> ModelRoundMessage {
+pub(super) fn message(role: ModelRoundRole, content: &str) -> ModelRoundMessage {
     ModelRoundMessage {
         role,
         content: Arc::from(content),
@@ -35,7 +35,7 @@ fn message(role: ModelRoundRole, content: &str) -> ModelRoundMessage {
     }
 }
 
-struct UnusedSummary;
+pub(super) struct UnusedSummary;
 
 impl SummaryPort for UnusedSummary {
     fn sizing(&self) -> Result<Option<SummarySizing<'_>>, ModelRoundError> {
@@ -108,6 +108,7 @@ async fn summary_creation_and_reuse_keep_one_record_owner() {
     assert_eq!(producer.0.load(Ordering::Relaxed), summary_calls);
 }
 
+// test-category: pure-logic
 #[tokio::test]
 async fn fitting_all_mandatory_pressure_returns_without_saved_identity() {
     let messages = [message(ModelRoundRole::User, "request")];
@@ -124,6 +125,7 @@ async fn fitting_all_mandatory_pressure_returns_without_saved_identity() {
     assert!(projected.identity.is_none());
     assert!(projected.save_record.is_none());
     assert_eq!(projected.messages.expect("saved projection"), messages);
+    super::regression_tests::bounded_deterministic_summaries().await;
 }
 
 /// Format pin: context-message writers keep the persisted digest's field

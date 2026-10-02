@@ -1,4 +1,5 @@
 use serde_json::Value;
+use std::collections::BTreeMap;
 use tokio_util::sync::CancellationToken;
 
 use crate::btcc::AgentLoopError;
@@ -24,6 +25,8 @@ pub(super) struct State {
     pub model_round_index: u32,
     pub iteration: u32,
     pub empty_recovery_used: bool,
+    // Independent of projected messages, so compaction never resets repetition facts.
+    pub feedback_counts: BTreeMap<String, u64>,
     pub phase: LoopPhase,
     pub resumed_batch: Option<AuthorityBatch>,
     pub resumed_call: Option<ModelRoundToolCall>,
@@ -45,6 +48,7 @@ impl State {
             model_round_index: 0,
             iteration: 0,
             empty_recovery_used: false,
+            feedback_counts: BTreeMap::new(),
             phase: LoopPhase::Working,
             resumed_batch: None,
             resumed_call: prepared.resumed_tool_call.take(),
@@ -78,6 +82,7 @@ impl State {
             model_round_index: restored.model_round_index,
             iteration: restored.iteration,
             empty_recovery_used: restored.empty_response_recovery_used,
+            feedback_counts: BTreeMap::new(),
             phase: LoopPhase::Working,
             resumed_batch: Some(restored.batch),
             resumed_call: prepared.resumed_tool_call.take(),
@@ -85,6 +90,15 @@ impl State {
             used_tools,
             runtime_failure: None,
         }
+    }
+
+    pub(super) fn feedback(&mut self, observation: &str) -> String {
+        let key = crate::btcc::digest_identity(observation);
+        let count = self.feedback_counts.entry(key).or_default();
+        *count = count.saturating_add(1);
+        format!(
+            "{observation}\nThis identical feedback has occurred {count} times in this execution. Try a different approach if the previous one failed."
+        )
     }
 
     /// Starts the next iteration and returns the index of the one starting.

@@ -27,6 +27,10 @@ pub(super) fn decode(
     let mut text_tool_call_names = Vec::new();
     if provider == "local" {
         (text, calls, text_tool_call_names) = local::decode(&response, request);
+    } else if calls.is_empty()
+        && let Some(text) = text.as_deref()
+    {
+        text_tool_call_names = local::rejected_text_calls(text, request);
     }
     let identity = reported
         .filter(|value| !butler_core::public_text::trim_js_whitespace(value).is_empty())
@@ -48,8 +52,9 @@ pub(super) fn decode(
         operation_result_call_id: None,
         continuation_item_id: None,
     });
-    let continuation =
+    let mut continuation =
         (provider == "openai").then(|| openai_continuation(&response, request, legacy_projection));
+    retain_rejected_text(&mut continuation, text.as_deref(), &text_tool_call_names);
     ModelRoundResult {
         text,
         tool_calls: calls,
@@ -63,6 +68,24 @@ pub(super) fn decode(
     }
 }
 
+fn retain_rejected_text(continuation: &mut Option<Value>, text: Option<&str>, names: &[String]) {
+    if names.is_empty() {
+        return;
+    }
+    if let Some(items) = continuation
+        .as_mut()
+        .and_then(|value| value.get_mut("statelessInput"))
+        .and_then(Value::as_array_mut)
+        && let Some(text) = text
+    {
+        // Codex stateless replay must retain the rejected assistant attempt too.
+        // Stateful Responses already retains it through previous_response_id.
+        items.push(
+            serde_json::json!({"role":"assistant","content":[{"type":"output_text","text":text}]}),
+        );
+    }
+}
+
 fn openai_continuation(
     response: &Value,
     request: &ModelRoundRequest<'_>,
@@ -70,6 +93,9 @@ fn openai_continuation(
 ) -> Value {
     let mut output = Map::new();
     output.insert("provider".into(), "openai".into());
+    if let Some(digest) = request.tool_surface_digest {
+        output.insert("toolSurfaceDigest".into(), digest.into());
+    }
     output.insert(
         "responseId".into(),
         response
