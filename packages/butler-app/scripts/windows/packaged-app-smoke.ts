@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createServer } from "node:net";
+import { classifyAppForegroundActiveWork } from "../../client/electron/app-foreground-quit.mjs";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
 
 if (process.platform !== "win32") throw new Error("Packaged smoke requires Windows");
@@ -90,6 +91,12 @@ try {
   assert(await cdp.expression("typeof window.butlerApp?.quitApp === 'function'"), "Sandbox preload missing");
   await cdp.reload();
   assert((await api("/health")).data.ok === true, "Reloaded portable Agent is unhealthy");
+  const navigation = (await api("/navigation")).data;
+  const workerActivity = (await api("/worker-activity")).data;
+  const queues = await Promise.all(navigation.chats.map(async (chat: { id: string }) =>
+    (await api(`/session-queue?session_id=${encodeURIComponent(chat.id)}`)).data));
+  const activeWork = classifyAppForegroundActiveWork({ navigation, workerActivity, queues });
+  assert(activeWork.classification === "no_active_work", `Delivered chat still classified as active work: ${activeWork.classification} / ${activeWork.reasons.join(",")}`);
   for (const pid of processTree(appPid)) owned.add(pid);
   await cdp.expression("setTimeout(() => window.butlerApp.quitApp({confirmed:true}), 50); true");
   await waitFor(() => existsSync(exitFile), "App quit");
@@ -100,7 +107,7 @@ try {
     readJson("app/runtime/foreground/instance.json")?.clean_exit === true, "Unclean foreground shutdown");
   assert(protocolRegistration() === priorProtocol, "Portable App changed the protocol registration");
   console.log(JSON.stringify({ ok: true, windowCreated: true, agentChild: true, authenticatedHealth: 200,
-    reloadVerified: true, stubTurns: 1, providerCalls: calls, messages: messages.length, processesChecked: owned.size,
+    reloadVerified: true, deliveredWorkSettled: true, stubTurns: 1, providerCalls: calls, messages: messages.length, processesChecked: owned.size,
     quitExit: 0, leftoverProcesses: 0, portReleased: true, protocolUnchanged: true, rawTextIncluded: false }));
 } finally {
   cdp?.close();
