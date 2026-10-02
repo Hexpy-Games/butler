@@ -37,9 +37,24 @@ impl GatewayFeedback for super::AppApplication {
         command: AppFeedbackCommand,
         cancellation: CancellationToken,
     ) -> ApplicationFuture<Value> {
-        match &self.dependencies.feedback {
+        let changed = !matches!(command, AppFeedbackCommand::List);
+        let this = self.clone_handle();
+        let result = match &self.dependencies.feedback {
             Some(port) => port.execute(command, cancellation),
             None => Box::pin(async { Err(crate::gateway::GatewayApplicationError::internal()) }),
-        }
+        };
+        Box::pin(async move {
+            let value = result.await?;
+            if changed {
+                let now = this.dependencies.identity_clock.now_iso();
+                let subscribers = this.subscribers.clone();
+                this.storage.execute(move |db| {
+                    super::events::append(db, &subscribers, "memory.operation", None,
+                        serde_json::Map::from_iter([("kind".into(), serde_json::json!("recent_feedback"))]), &now)
+                        .map(|_| ())
+                }).await.map_err(super::app_error)?;
+            }
+            Ok(value)
+        })
     }
 }

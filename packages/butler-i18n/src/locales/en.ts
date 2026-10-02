@@ -1199,6 +1199,15 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       learning: "How much Butler picks up about you from your chats.",
     },
     memory: {
+      feedback: {
+        title: "Recent feedback", description: "Recent corrections that guide replies for a while.",
+        empty: "No recent feedback", thisChat: "This chat", chatEnds: "Until this chat ends",
+        noExpiry: "No expiry", expired: "Expired", tomorrow: "Expires tomorrow",
+        inDays: (days: number) => `Expires in ${days} days`, onDate: (date: string) => `Expires ${date}`,
+        deleteTitle: "Delete this feedback?", deleted: "Feedback deleted", reset: "Reset",
+        resetTitle: "Reset recent feedback?", resetDetail: "Removes all recent feedback, including pending entries. Instructions and chats are kept.",
+        resetDone: "Recent feedback reset", changeFailed: "Couldn't update feedback",
+      },
       linkLabel: "Memory",
       linkDescription: "See what Butler remembers and remove what you don't want.",
       linkOpen: "Manage",
