@@ -78,8 +78,13 @@ export function DesignSystemViewer() {
   const activeId = page.kind === "item" ? page.entry.id : pageId;
   useEffect(() => {
     if (!initialAnchor) return undefined;
-    const timer = window.setTimeout(() => scrollToAnchor(scrollRef.current, initialAnchor), 120);
-    return () => window.clearTimeout(timer);
+    let active = true;
+    let frame = requestAnimationFrame(() => {
+      void document.fonts.ready.then(() => {
+        if (active) frame = requestAnimationFrame(() => scrollToAnchor(scrollRef.current, initialAnchor));
+      });
+    });
+    return () => { active = false; cancelAnimationFrame(frame); };
     // Only the anchor from the initial URL.
   }, []);
 

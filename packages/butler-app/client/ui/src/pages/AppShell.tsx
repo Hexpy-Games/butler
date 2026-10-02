@@ -58,8 +58,14 @@ import { FirstRunSetup } from "@/components/first-run/FirstRunSetup.tsx";
 import { notifyStatus } from "@/app/notifications.ts";
 import { useOnboardingGate } from "@/hooks/useOnboardingGate.ts";
 import { useOnboardingStore } from "@/stores/onboardingStore.ts";
+import { LegacyDataRecovery } from "@/components/first-run/LegacyDataRecovery.tsx";
 
 export function AppShell() {
+  if (window.butlerApp?.startupIssue === "legacy-data") return <LegacyDataRecovery />;
+  return <AppOnboardingShell />;
+}
+
+function AppOnboardingShell() {
   useAppLocale();
   const { gate, markComplete } = useOnboardingGate();
   const rerunOpen = useOnboardingStore((state) => state.rerunOpen);

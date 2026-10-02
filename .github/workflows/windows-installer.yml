@@ -95,3 +95,20 @@ jobs:
             bun run packages/butler-app/scripts/windows/installer-smoke.ts dist/release/app-windows-first dist/release/app-windows
             if ($LASTEXITCODE) { throw 'Installer/update smoke failed' }
           } finally { Remove-Item -Recurse -Force $profile }
+      - name: Prove legacy-data refusal and desktop recovery
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $profile = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+          New-Item -ItemType Directory $profile | Out-Null
+          $env:HOME = Join-Path $profile 'home'
+          $env:BUTLER_DATA = Join-Path $profile 'data'
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          try {
+            $archive = @(Get-ChildItem dist/release/app-windows-first/*-windows-x64-portable.zip)
+            if ($archive.Count -ne 1) { throw 'Expected one portable App archive' }
+            Expand-Archive $archive[0].FullName (Join-Path $profile 'portable')
+            $app = Join-Path $profile 'portable/Butler-win32-x64/Butler.exe'
+            bun run packages/butler-app/scripts/windows/legacy-data-smoke.ts $app
+            if ($LASTEXITCODE) { throw 'Legacy-data recovery smoke failed' }
+          } finally { Remove-Item -Recurse -Force $profile }
