@@ -123,7 +123,24 @@ function defaultLedgerRoot(project) {
   return join(butlerData, "project-ledger", "projects", safeProjectSegment(id));
 }
 
+const commandLedgerRoots = new Map();
+
+/** Resolve storage authority once per synchronous command, never across commands. */
+export function withLedgerRoot(project, command) {
+  const key = resolve(project);
+  if (commandLedgerRoots.has(key)) return command();
+  commandLedgerRoots.set(key, ledgerRoot(key));
+  try { return command(); }
+  finally { commandLedgerRoots.delete(key); }
+}
+
 export function ledgerRoot(project) {
+  const cached = commandLedgerRoots.get(resolve(project));
+  if (cached !== undefined) return cached;
+  return resolveLedgerRoot(project);
+}
+
+function resolveLedgerRoot(project) {
   const resolvedProject = resolve(project);
   if (isLedgerRoot(resolvedProject)) return resolvedProject;
   const externalFromPath = externalLedgerRootFromProjectPath(resolvedProject);
