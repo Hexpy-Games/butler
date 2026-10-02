@@ -109,6 +109,18 @@ impl ProbeReader {
             .await
     }
 
+    pub(super) async fn vector_batch_due(
+        self: &Arc<Self>,
+        path: &Path,
+        cutoff: &str,
+    ) -> CognitionResult<bool> {
+        let cutoff = cutoff.to_owned();
+        self.with(path, move |graph| {
+            graph.vector_batch_due(&cutoff, super::VECTOR_BACKLOG_CAP)
+        })
+        .await
+    }
+
     /// Whether a vector claim would find a unit to embed or recover.
     pub(super) async fn vector_work(
         self: &Arc<Self>,

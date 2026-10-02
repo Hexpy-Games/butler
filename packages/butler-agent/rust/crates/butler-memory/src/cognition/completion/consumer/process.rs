@@ -14,7 +14,7 @@ mod cache;
 mod index_retirement;
 mod projection;
 mod typed;
-mod vector;
+pub(super) mod vector;
 use crate::cognition::generation::{resolve_active_generation, resolve_generation};
 use crate::cognition::registration::{ProjectSemanticWindowInput, ProjectionSourceNotice};
 use crate::cognition::sources::read_typed_record;
@@ -40,6 +40,8 @@ pub(super) struct Input {
     pub unclean_start: Arc<AtomicBool>,
     pub catchup_progress: Arc<Mutex<Option<(PathBuf, crate::cognition::graph::CatchupState)>>>,
     pub probe: Arc<super::probe::ProbeReader>,
+    pub vector_batch: Arc<AtomicBool>,
+    pub daily_batch: bool,
     pub shutdown: CancellationToken,
 }
 
@@ -107,6 +109,9 @@ struct DeadLetter<'a> {
 pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
     if input.shutdown.is_cancelled() {
         return Ok(MemorySyncPoll::Deferred);
+    }
+    if input.daily_batch {
+        return super::vector_schedule::daily(&input).await;
     }
     let owned = input.clone();
     if super::blocking::run(move || paused(&owned)).await? {

@@ -47,11 +47,10 @@ impl GenerationVectorAdapter {
         request: &RecallRequest,
         deadline: i64,
     ) -> CognitionResult<RecallVectorMatches> {
-        let expected = generation
-            .embedding
-            .as_ref()
-            .ok_or_else(|| error(CognitionCode::VectorUnavailable))?;
-        compatibility::preflight(expected)?;
+        let expected = generation.embedding.as_ref();
+        if let Some(expected) = expected {
+            compatibility::preflight(expected)?;
+        }
         let source = if request.vector_queries.is_empty() {
             vec![request.cue.clone()]
         } else {
@@ -87,6 +86,8 @@ impl GenerationVectorAdapter {
                 CancellationToken::new(),
             )
             .await?;
+        // Warming a fresh generation lets the consumer bind its first vector identity.
+        let expected = expected.ok_or_else(|| error(CognitionCode::VectorUnavailable))?;
         compatibility::query_identity(expected, &response.metadata)?;
         let mut matches =
             search_generation_vectors(&self.data_root, generation, request, &response.embeddings)
@@ -106,6 +107,15 @@ impl GenerationVectorAdapter {
 }
 
 impl RecallVectorPort for GenerationVectorAdapter {
+    fn warm<'a>(
+        &'a self,
+        generation: &'a MemoryGenerationHandle,
+        request: &'a RecallRequest,
+        deadline_at: i64,
+    ) -> RecallVectorFuture<'a> {
+        Box::pin(self.query(generation, request, deadline_at))
+    }
+
     fn search<'a>(
         &'a self,
         generation: &'a MemoryGenerationHandle,
@@ -119,6 +129,10 @@ impl RecallVectorPort for GenerationVectorAdapter {
 impl CognitionVectorSearch for GenerationVectorAdapter {
     fn search<'a>(&'a self, input: CandidateSearchInput<'a>) -> VectorSearchFuture<'a> {
         Box::pin(async move {
+            // Semantic projection must not load a model during ordinary conversation.
+            if !self.embedding.is_warm() {
+                return Err(error(CognitionCode::VectorUnavailable));
+            }
             let generation =
                 resolve_projection_generation(&self.data_root, &self.paths, input.generation_id)?;
             if generation.source_root != input.source_root
@@ -139,7 +153,7 @@ impl CognitionVectorSearch for GenerationVectorAdapter {
                         mode: EmbeddingMode::CheckedCls,
                         resplit: true,
                         max_embeddings: Some(4),
-                        request_class: EmbeddingRequestClass::Interactive,
+                        request_class: EmbeddingRequestClass::WarmInteractive,
                         deadline_at_epoch_ms: Some(input.deadline_epoch_millis),
                     },
                     CancellationToken::new(),

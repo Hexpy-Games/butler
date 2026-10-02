@@ -360,22 +360,26 @@ pub(super) fn fail(
     }
     let tx = connection.transaction().map_err(db_error)?;
     for unit in units {
-        let retryable = unit.attempt_count < 3
-            && matches!(
-                code,
-                "memory_embedding_unavailable"
-                    | "embed_asset_download_failed"
-                    | "embed_request_deadline"
-                    | "embed_queue_full"
-                    | "memory_write_busy"
-                    | "memory_vector_io_transient"
-            );
-        let next_attempt = retryable.then(|| {
+        // A warm-only request lost its worker before invocation. Keep it pending
+        // without an error, retry delay or consumed provider attempt.
+        let deferred = code == "embed_worker_cold";
+        let retryable = deferred
+            || unit.attempt_count < 3
+                && matches!(
+                    code,
+                    "memory_embedding_unavailable"
+                        | "embed_asset_download_failed"
+                        | "embed_request_deadline"
+                        | "embed_queue_full"
+                        | "memory_write_busy"
+                        | "memory_vector_io_transient"
+                );
+        let next_attempt = (retryable && !deferred).then(|| {
             let delay = if unit.attempt_count == 1 { 30 } else { 120 };
             (chrono::Utc::now() + chrono::Duration::seconds(delay))
                 .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
         });
-        tx.execute("UPDATE memory_vector_units SET state=?1,error_code=?2,next_attempt_at=?3,owner_pid=NULL,owner_nonce=NULL,started_at=NULL,outcome_known=1 WHERE unit_id=?4 AND owner_nonce=?5", params![if retryable {"pending"} else {"failed"},code,next_attempt,unit.unit_id,unit.owner_nonce]).map_err(db_error)?;
+        tx.execute("UPDATE memory_vector_units SET state=?1,error_code=?2,next_attempt_at=?3,owner_pid=NULL,owner_nonce=NULL,started_at=NULL,outcome_known=1,attempt_count=CASE WHEN ?6 THEN MAX(0,attempt_count-1) ELSE attempt_count END,provider_invoked=CASE WHEN ?6 THEN 0 ELSE provider_invoked END,invocation_ref=CASE WHEN ?6 THEN NULL ELSE invocation_ref END WHERE unit_id=?4 AND owner_nonce=?5", params![if retryable {"pending"} else {"failed"},if deferred { None } else { Some(code) },next_attempt,unit.unit_id,unit.owner_nonce,deferred]).map_err(db_error)?;
     }
     if let Some(first) = units.first() {
         refresh(&tx, &first.job_id, now)?;

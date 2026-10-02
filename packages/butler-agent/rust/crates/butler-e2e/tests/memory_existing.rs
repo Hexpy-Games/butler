@@ -67,7 +67,12 @@ async fn existing_folder(javascript: bool) -> Result<(), HarnessError> {
         .turn("general", &remember.replace("{{NONCE}}", &code))
         .await?;
     assert_eq!(turn_state(&turn), "delivered");
-    memory_stubs::vectors_complete(&s.sandbox.data).await?;
+    memory_stubs::text_complete(&s.sandbox.data, 1).await?;
+    // A cold recall admits the pending vector batch; the next recall must still
+    // prove vector retrieval against the unchanged historical generation.
+    let (_, cold) = s.turn("general", ask).await?;
+    assert_eq!(turn_state(&cold), "delivered");
+    memory_stubs::vectors_complete(&s.sandbox.data, 2).await?;
     let chat =
         s.gw.post(
             "/sessions",
