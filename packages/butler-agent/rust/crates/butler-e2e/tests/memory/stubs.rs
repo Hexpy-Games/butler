@@ -63,3 +63,25 @@ fn meaning() -> ResponseRecord {
             .collect(),
     }
 }
+
+pub(super) async fn vectors_complete(
+    data: &std::path::Path,
+) -> Result<(), butler_e2e::e2e::HarnessError> {
+    let descriptor: serde_json::Value = serde_json::from_slice(&std::fs::read(
+        data.join("cognition/memory/active-generation.json"),
+    )?)?;
+    let graph = data
+        .join("cognition/memory/generations")
+        .join(descriptor["generation_id"].as_str().unwrap())
+        .join("graph.sqlite");
+    tokio::time::timeout(std::time::Duration::from_secs(90), async {
+        loop {
+            let db = rusqlite::Connection::open_with_flags(&graph, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+            let ready: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM memory_vector_units WHERE state='complete') AND NOT EXISTS(SELECT 1 FROM memory_vector_units WHERE state IN ('pending','running','failed'))", [], |row| row.get(0)).unwrap();
+            if ready { return; }
+            drop(db);
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    }).await.expect("vector batch must drain");
+    Ok(())
+}

@@ -168,6 +168,10 @@ pub(crate) struct ServingHealth {
     pub stage_units: StageUnits,
     /// Age of the oldest unfinished work.
     pub oldest_pending_age_ms: Option<i64>,
+    /// Current vector units still missing.
+    pub memories_without_vectors: Option<i64>,
+    /// Oldest current unfinished vector unit.
+    pub oldest_vector_pending_at: Option<String>,
     /// Current windows that failed to resolve their source.
     pub source_resolution_failures: Option<i64>,
     /// Superseded windows that failed to resolve their source.
