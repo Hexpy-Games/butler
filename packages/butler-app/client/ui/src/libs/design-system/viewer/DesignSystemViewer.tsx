@@ -12,6 +12,7 @@ import { PATTERN_IDS } from "./patterns";
 import { useNavDrawer } from "./useNavDrawer";
 import { useViewerTheme } from "./useViewerTheme";
 import { useViewerUrlState } from "./useViewerUrlState";
+import { useInitialAnchor } from "./useInitialAnchor";
 import { ViewerCommandPalette } from "./ViewerCommandPalette";
 import { ViewerContent } from "./ViewerContent";
 import { VIEWER_SEARCH_ID, ViewerSidebar } from "./ViewerSidebar";
@@ -76,12 +77,7 @@ export function DesignSystemViewer() {
   // The anchor of the latest navigation: pages open what it points at (a collapsed token table).
   const [anchor, setAnchor] = useState(initialAnchor);
   const activeId = page.kind === "item" ? page.entry.id : pageId;
-  useEffect(() => {
-    if (!initialAnchor) return undefined;
-    const timer = window.setTimeout(() => scrollToAnchor(scrollRef.current, initialAnchor), 120);
-    return () => window.clearTimeout(timer);
-    // Only the anchor from the initial URL.
-  }, []);
+  useInitialAnchor(scrollRef, initialAnchor);
 
   // The open drawer is modal: Escape, scrim and toggle close it; the page behind is inert.
   const modal = drawer && navOpen;

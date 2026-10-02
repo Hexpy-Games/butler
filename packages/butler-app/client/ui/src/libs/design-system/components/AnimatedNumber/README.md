@@ -1,5 +1,7 @@
 # AnimatedNumber
 
+Only the hidden endpoint sizers determine width. The visible interpolated value is positioned within that width, so intermediate glyph metrics cannot resize the counter; its text remains fully painted.
+
 ## What is this component
 AnimatedNumber shows a number that counts from its previous value to a new one over `--motion-deliberate` with the decelerate easing. It is the DS way to animate metric and usage counts.
 
