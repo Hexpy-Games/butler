@@ -79,6 +79,10 @@ runs:
         $env:BUTLER_DATA = Join-Path $profileRoot ([guid]::NewGuid())
         New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
         $env:RUSTFLAGS = '-C target-feature=+crt-static'
+        if ('${{ inputs.profile }}' -eq 'release') {
+          $env:CARGO_PROFILE_RELEASE_LTO = 'thin'
+          $env:CARGO_PROFILE_RELEASE_CODEGEN_UNITS = '1'
+        }
         cargo build --locked --profile ${{ inputs.profile }} --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         $binary = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/${{ inputs.profile }}/butler-agent.exe"

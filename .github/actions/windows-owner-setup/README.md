@@ -10,7 +10,7 @@ archive and output hashes before adopting an existing ORT tree. Cleanup removes
 only the job's temporary profile and checks the owner's protocol key unchanged.
 
 Branch previews use `ci-fast` (release optimization, no LTO, 16 codegen units).
-Tags use `release` (thin LTO, one codegen unit). If the PC is offline, select the
+Windows tags use `release` with action-scoped thin LTO and one codegen unit. If the PC is offline, select the
 release tag in Actions → Butler Release → Run workflow, set `runner` to `hosted`.
 The hosted fallback builds the same release profile and native dependency recipe.
 Do not dispatch on a branch: this workflow publishes release assets.
