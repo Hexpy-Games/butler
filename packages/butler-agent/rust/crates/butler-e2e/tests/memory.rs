@@ -182,6 +182,42 @@ async fn mem_02_fresh_memory_is_usable_in_another_chat_after_restart() -> Result
     s.finish().await
 }
 
+/// MEM-03: recall expansion/scope guidance reaches the calling model.
+#[tokio::test]
+async fn mem_03_recall_optional_arguments_require_user_intent() -> Result<(), HarnessError> {
+    use butler_e2e::e2e::cassette::Cassette;
+    butler_e2e::gate!();
+    let code = nonce();
+    let mut cassette = Cassette::load("MEM-01")?;
+    let message = cassette.exchanges[0]
+        .request
+        .key
+        .user_request
+        .replace("{{NONCE}}", &code);
+    memory_stubs::extraction(&mut cassette, "")?;
+    let s = Setup::new("MEM-03")?
+        .stub_cassette(cassette)
+        .placeholder("NONCE", &code)
+        .start()
+        .await?;
+    let (_, turn) = s.turn("general", &message).await?;
+    assert_eq!(turn_state(&turn), "delivered", "{turn}");
+    let requests = s.provider()?.requests();
+    let recall = requests
+        .iter()
+        .filter_map(|request| request["tools"].as_array())
+        .flatten()
+        .find(|tool| tool["name"] == "recall_memory")
+        .expect("recall tool must be exposed to the calling model");
+    let properties = &recall["parameters"]["properties"];
+    let seeds = properties["seed_phrases"]["description"].as_str().unwrap();
+    assert!(seeds.contains("explicitly supplies") && seeds.contains("do not infer"));
+    let scope = properties["scope"]["description"].as_str().unwrap();
+    assert!(scope.contains("explicitly asks") && scope.contains("caller's"));
+    assert_eq!(recall["parameters"]["required"], serde_json::json!(["cue"]));
+    s.finish().await
+}
+
 // Synthetic local stub response; no recording or live provider call.
 fn memory_response(item: &Value) -> butler_e2e::e2e::cassette::ResponseRecord {
     use butler_e2e::e2e::cassette::{Chunk, ResponseRecord};
