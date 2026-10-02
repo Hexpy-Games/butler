@@ -22,6 +22,7 @@ if ($LASTEXITCODE) { throw 'Source comparison failed' }
 $allowed = @(
     '.github/workflows/windows-installer.yml', '.github/workflows/release.yml',
     'deploy/windows-installer-reuse.ps1', 'deploy/app/publish-release-artifacts.sh',
+    'deploy/windows-startup-smoke.ps1', 'deploy/windows-task-xml-probe.ps1',
     'plans/windows-wave2.md',
     'packages/butler-app/scripts/windows/installer-smoke.ts',
     'packages/butler-app/scripts/windows/installer-smoke-support.ts',

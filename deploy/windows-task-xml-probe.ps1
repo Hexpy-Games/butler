@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$ArchiveDirectory)
+param([Parameter(Mandatory)][string]$ArchiveDirectory, [switch]$StartupContract)
 if ($env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:RUNNER_OS -ne 'Windows') {
     throw 'Task Scheduler contract requires disposable hosted Windows'
 }
@@ -58,6 +58,12 @@ try {
     & "$PSScriptRoot/install.ps1" --no-start
     if ($LASTEXITCODE) { throw 'Isolated PowerShell installation failed' }
     $launcher = "$env:LOCALAPPDATA/Butler/bin/butler.exe"
+    $env:BUTLER_E2E_INSTALLED_ROOT = "$env:LOCALAPPDATA/Butler/agent/$env:BUTLER_VERSION"
+    if ($StartupContract) {
+        & "$PSScriptRoot/windows-startup-smoke.ps1" -Launcher $launcher
+        if ($LASTEXITCODE) { throw 'Installed Task Scheduler contract failed' }
+        return
+    }
     $state = & $launcher startup status --json | ConvertFrom-Json
     if (!$state.ok -or $state.data.state -ne 'disabled') { throw 'A preexisting task must not be touched' }
     $local = & $launcher startup enable --files-only --json | ConvertFrom-Json
@@ -99,7 +105,7 @@ try {
     Start-Sleep -Seconds 3
     $task = $scheduler.GetFolder('\').GetTask($name)
     [ordered]@{ phase = 'original-start'; result = $task.LastTaskResult; state = $task.State;
-        dataRecord = Test-Path "$env:BUTLER_DATA/state/service-instance.json" } | ConvertTo-Json -Compress
+        dataRecord = Test-Path "$env:BUTLER_DATA/state/butler-agent-native-service.json" } | ConvertTo-Json -Compress
     # Same exact encoded action, with only the Scheduler's initial directory
     # moved out of a path containing a literal environment-variable spelling.
     [xml]$safeDirectory = $unicode
@@ -110,7 +116,7 @@ try {
     Start-Sleep -Seconds 3
     $task = $scheduler.GetFolder('\').GetTask($name)
     [ordered]@{ phase = 'system-directory-start'; result = $task.LastTaskResult; state = $task.State;
-        dataRecord = Test-Path "$env:BUTLER_DATA/state/service-instance.json" } | ConvertTo-Json -Compress
+        dataRecord = Test-Path "$env:BUTLER_DATA/state/butler-agent-native-service.json" } | ConvertTo-Json -Compress
     $scheduler.GetFolder('\').RegisterTask($name, $unicode, 6, $sid, $null, 3, $null) | Out-Null
 } finally {
     if ($registered) {
@@ -122,5 +128,6 @@ try {
     $after = (& reg query HKCU\Software\Classes\butler /s 2>$null) -join "`n"
     Remove-Item $root -Recurse -Force
     if ($before -cne $after) { throw 'Protocol registration changed' }
+    $global:LASTEXITCODE = 0
 }
 $global:LASTEXITCODE = 0

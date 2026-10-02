@@ -40,8 +40,20 @@ try {
     }
     $encoded = ($xml.Task.Actions.Exec.Arguments -split '-EncodedCommand ')[1]
     $script = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($encoded))
-    $literalRoot = [IO.Path]::GetFullPath($env:BUTLER_E2E_INSTALLED_ROOT).Replace("'", "''")
-    if (!$script.Contains("Set-Location -LiteralPath '$literalRoot';")) { throw 'Task lost its literal Agent directory' }
+    $tokens = $null; $parseErrors = $null
+    $tree = [Management.Automation.Language.Parser]::ParseInput($script, [ref]$tokens, [ref]$parseErrors)
+    $locations = @($tree.FindAll({ param($node)
+        $node -is [Management.Automation.Language.CommandAst] -and $node.GetCommandName() -eq 'Set-Location'
+    }, $true))
+    if ($parseErrors.Count -or $locations.Count -ne 1 -or $locations[0].CommandElements.Count -ne 3 -or
+        $locations[0].CommandElements[1].ParameterName -ne 'LiteralPath' -or
+        $locations[0].CommandElements[2] -isnot [Management.Automation.Language.StringConstantExpressionAst]) {
+        throw 'Task must set exactly one literal Agent directory'
+    }
+    $observedRoot = $locations[0].CommandElements[2].Value
+    $literalRoot = [IO.Path]::GetFullPath($env:BUTLER_E2E_INSTALLED_ROOT)
+    [ordered]@{ literalAgentDirectory = $observedRoot; installedDirectory = $literalRoot } | ConvertTo-Json -Compress
+    if ([IO.Path]::GetFullPath($observedRoot) -ne $literalRoot) { throw 'Task lost its literal Agent directory' }
     foreach ($key in @('HOME','LOCALAPPDATA','APPDATA','BUTLER_AGENT_HOME')) {
         if (!$script.Contains("SetEnvironmentVariable('$key',")) { throw "Missing task profile binding: $key" }
     }
@@ -79,11 +91,21 @@ try {
     if ($LASTEXITCODE -eq 0) { throw 'Uninstall retained task' }
     'PASS Task Scheduler: XML, enable/run, disable/delete, foreign preservation, uninstall'
 } finally {
+    # An assertion can fail while the just-started task is still publishing
+    # its service receipt. Own only PIDs of this test's unique Agent binary.
+    $expectedExecutable = [IO.Path]::GetFullPath((Join-Path $env:BUTLER_E2E_INSTALLED_ROOT 'butler-agent.exe'))
+    $owned = @(Get-CimInstance Win32_Process | Where-Object {
+        $_.ExecutablePath -and [IO.Path]::GetFullPath($_.ExecutablePath) -eq $expectedExecutable
+    } | ForEach-Object { Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue })
+    if (Test-Path $Launcher) { & $Launcher stop --json | Out-Null }
     if ($testOwnsName) {
         & schtasks /End /TN $name 2>$null | Out-Null
         & schtasks /Delete /TN $name /F 2>$null | Out-Null
     }
-    if (Test-Path $Launcher) { & $Launcher stop --json | Out-Null }
+    foreach ($process in $owned) {
+        if (!$process.HasExited) { $process.Kill() }
+        $process.WaitForExit()
+    }
     $protocolAfter = (& reg query HKCU\Software\Classes\butler /s 2>$null) -join "`n"
     if ($protocolBefore -cne $protocolAfter) { throw 'Protocol registry changed' }
 }

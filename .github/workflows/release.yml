@@ -14,6 +14,11 @@ on:
         required: false
         type: boolean
         default: false
+      task-startup-contract:
+        description: Run the full startup contract against the immutable Windows Agent archive
+        required: false
+        type: boolean
+        default: false
       runner:
         type: choice
         options: [self, hosted]
@@ -72,7 +77,12 @@ jobs:
           path: artifacts
       - name: Compare imported XML and enforce ownership
         shell: pwsh
-        run: ./deploy/windows-task-xml-probe.ps1 -ArchiveDirectory "$pwd/artifacts"
+        run: |
+          if ('${{ inputs.task-startup-contract }}' -eq 'true') {
+            ./deploy/windows-task-xml-probe.ps1 -ArchiveDirectory "$pwd/artifacts" -StartupContract
+          } else {
+            ./deploy/windows-task-xml-probe.ps1 -ArchiveDirectory "$pwd/artifacts"
+          }
 
   native-release:
     if: startsWith(github.ref, 'refs/tags/v')
