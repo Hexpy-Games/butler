@@ -1,6 +1,6 @@
 //! Platform-owned App package activation after the Electron host drains its Agent.
 use std::{ffi::OsString, path::Path};
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 use std::{
     process::Command,
     time::{Duration, Instant},
@@ -20,7 +20,7 @@ pub fn install(
     install_platform(artifact, executable, parent, arguments)
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 fn wait_for_parent(parent: u32) -> Result<(), String> {
     let deadline = Instant::now() + Duration::from_secs(60);
     while crate::process_control::liveness(parent) != crate::process_control::Liveness::Gone {
@@ -213,7 +213,7 @@ fn install_platform(_: &Path, _: &Path, _: u32, _: &[OsString]) -> Result<(), St
     Err("App activation is unavailable on this platform.".into())
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 fn run(command: &mut Command) -> Result<(), String> {
     let result = command.output().map_err(|e| e.to_string())?;
     if result.status.success() {
@@ -229,7 +229,7 @@ fn run(command: &mut Command) -> Result<(), String> {
 
 /// Read the host's commit signal only after its confirmation and drain succeed.
 /// Closing the pipe cancels preparation without activating a package.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 fn await_activation() -> Result<(), String> {
     use std::io::BufRead;
     let mut signal = String::new();
