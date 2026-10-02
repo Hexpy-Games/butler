@@ -316,13 +316,18 @@ impl McpServer {
         if !(1..=4).contains(&hops) {
             return CallToolResult::error(vec![ContentBlock::text("hops must be between 1 and 4")]);
         }
-        let output = graph::query(
-            &self.data_root,
-            &args.query,
-            args.entity_type.as_ref().map(GraphEntityType::as_str),
-            args.project.as_deref(),
-            hops,
-        );
+        let data_root = self.data_root.clone();
+        let output = tokio::task::spawn_blocking(move || {
+            graph::query(
+                &data_root,
+                &args.query,
+                args.entity_type.as_ref().map(GraphEntityType::as_str),
+                args.project.as_deref(),
+                hops,
+            )
+        })
+        .await
+        .unwrap_or_else(|_| "Graph unavailable: graph_read_failed".into());
         text_result(output)
     }
 

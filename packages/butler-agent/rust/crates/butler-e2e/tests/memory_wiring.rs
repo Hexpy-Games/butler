@@ -95,7 +95,25 @@ async fn wiring_mcp_graph_accepts_fresh_generation() -> Result<(), HarnessError>
     assert!(!setup.sandbox.data.join("cognition").exists());
     let s = setup.start().await?;
     bootstrap(&s.sandbox.data).await;
+    let descriptor: Value = serde_json::from_slice(&std::fs::read(
+        s.sandbox
+            .data
+            .join("cognition/memory/active-generation.json"),
+    )?)?;
+    let graph_path = s
+        .sandbox
+        .data
+        .join("cognition/memory/generations")
+        .join(descriptor["generation_id"].as_str().unwrap())
+        .join("graph.sqlite");
+    let before = std::fs::read(&graph_path)?;
     let reply = mcp_graph(&s).await?;
+    assert_eq!(
+        std::fs::read(&graph_path)?,
+        before,
+        "MCP mutated the serving graph"
+    );
+    assert!(!s.sandbox.data.join("cognition/memory/db").exists());
     assert!(reply["error"].is_null(), "MCP protocol error: {reply}");
     let text = reply["result"]["content"][0]["text"]
         .as_str()
