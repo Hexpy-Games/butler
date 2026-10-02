@@ -85,6 +85,15 @@ fn field(node: Node<'_, '_>, name: &str) -> Option<String> {
     Some(child(node, name)?.text().unwrap_or_default().to_owned())
 }
 
+fn field_or(node: Node<'_, '_>, name: &str, default: &str) -> Option<String> {
+    let mut nodes = node.children().filter(|n| n.has_tag_name((NS, name)));
+    match (nodes.next(), nodes.next()) {
+        (None, None) => Some(default.to_owned()),
+        (Some(first), None) => Some(first.text().unwrap_or_default().to_owned()),
+        _ => None,
+    }
+}
+
 fn only_element<'a, 'input>(node: Node<'a, 'input>, name: &str) -> Option<Node<'a, 'input>> {
     let mut children = node.children().filter(Node::is_element);
     let first = children.next()?;
@@ -116,7 +125,7 @@ pub(crate) fn parse(xml: &str) -> Option<Task> {
     if fingerprint != fingerprint_of(&expected_doc)? {
         return None;
     }
-    let enabled = match field(child(task, "Settings")?, "Enabled")?.as_str() {
+    let enabled = match field_or(child(task, "Settings")?, "Enabled", "true")?.as_str() {
         "true" => true,
         "false" => false,
         _ => return None,
@@ -143,9 +152,9 @@ fn fingerprint(task: Node<'_, '_>) -> Option<Vec<String>> {
         field(action, "WorkingDirectory")?,
         field(principal, "UserId")?,
         field(principal, "LogonType")?,
-        field(principal, "RunLevel")?,
+        field_or(principal, "RunLevel", "LeastPrivilege")?,
         field(trigger, "UserId")?,
-        field(trigger, "Enabled")?,
+        field_or(trigger, "Enabled", "true")?,
     ])
 }
 
@@ -154,6 +163,28 @@ pub(crate) fn same_owner(local: &str, remote: &str, sid: &str) -> bool {
         return false;
     };
     local.sid == sid && remote.sid == sid && local.fingerprint == remote.fingerprint
+}
+
+/// The scheduler exports a logon SID as the current token's account name.
+/// Only an account independently read from that token may be mapped back.
+pub(crate) fn normalize_current_user(xml: &str, sid: &str, account: &str) -> Option<String> {
+    let document = Document::parse(xml).ok()?;
+    let task = document.root_element();
+    let principal = only_element(child(task, "Principals")?, "Principal")?;
+    let trigger = only_element(child(task, "Triggers")?, "LogonTrigger")?;
+    let mut ranges = Vec::new();
+    for node in [principal, trigger] {
+        let user = child(node, "UserId")?;
+        if user.text()?.eq_ignore_ascii_case(account) {
+            ranges.push(user.first_child().filter(Node::is_text)?.range());
+        }
+    }
+    ranges.sort_by_key(|range| std::cmp::Reverse(range.start));
+    let mut normalized = xml.to_owned();
+    for range in ranges {
+        normalized.replace_range(range, sid);
+    }
+    Some(normalized)
 }
 
 /// schtasks imports XML as Unicode, including its declaration and BOM.

@@ -89,6 +89,11 @@ fn owned(sid: &str) -> Result<Option<String>, Error> {
     let Some(remote) = query(sid)? else {
         return Ok(None);
     };
+    let identity = powershell(
+        "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);[Security.Principal.WindowsIdentity]::GetCurrent().Name",
+    )?;
+    let account = String::from_utf8_lossy(&identity.stdout);
+    let remote = task_xml::normalize_current_user(&remote, sid, account.trim()).unwrap_or(remote);
     let local = read_local()?.unwrap_or_default();
     if !task_xml::same_owner(&local, &remote, sid) {
         return Err(Error::Foreign(PathBuf::from(task_name(sid))));

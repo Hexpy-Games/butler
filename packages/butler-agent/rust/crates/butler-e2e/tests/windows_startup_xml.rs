@@ -69,6 +69,44 @@ fn windows_task_xml_roundtrip_and_foreign_detection() -> Result<(), Box<dyn std:
     assert!(script.contains("SetEnvironmentVariable('BUTLER_DATA','C:\\'' & %DATA% !','Process')"));
     assert!(script.ends_with(";exit $LASTEXITCODE"));
     assert!(test_support::task_owned(&xml, &xml, SID));
+    let scheduler = xml
+        .replace("<RunLevel>LeastPrivilege</RunLevel>", "")
+        .replace("<Enabled>true</Enabled>", "")
+        .replace(
+            &format!("<UserId>{SID}</UserId></LogonTrigger>"),
+            "<UserId>HOST\\runner</UserId></LogonTrigger>",
+        );
+    assert!(!test_support::task_owned(&xml, &scheduler, SID));
+    assert!(test_support::task_owned_for_account(
+        &xml,
+        &scheduler,
+        SID,
+        "host\\Runner"
+    ));
+    assert!(!test_support::task_owned_for_account(
+        &xml,
+        &scheduler,
+        SID,
+        "HOST\\other"
+    ));
+    for foreign in [
+        scheduler.replace(
+            "</Principal>",
+            "<RunLevel>HighestAvailable</RunLevel></Principal>",
+        ),
+        scheduler.replace("</LogonTrigger>", "<Enabled>false</Enabled></LogonTrigger>"),
+        scheduler.replace(
+            "</Settings>",
+            "<Enabled>true</Enabled><Enabled>false</Enabled></Settings>",
+        ),
+    ] {
+        assert!(!test_support::task_owned_for_account(
+            &xml,
+            &foreign,
+            SID,
+            "HOST\\runner"
+        ));
+    }
     assert!(xml.starts_with("<?xml version=\"1.0\" encoding=\"UTF-16\"?>"));
     let mut unicode = test_support::task_bytes(&xml);
     assert!(unicode.starts_with(&[0xff, 0xfe, b'<', 0, b'?', 0]));

@@ -67,6 +67,12 @@ pub fn task_bytes(xml: &str) -> Vec<u8> {
     super::task_xml::encode(xml)
 }
 
+/// Verifies scheduler aliases only against an independently established account.
+pub fn task_owned_for_account(local: &str, remote: &str, sid: &str, account: &str) -> bool {
+    super::task_xml::normalize_current_user(remote, sid, account)
+        .is_some_and(|remote| super::task_xml::same_owner(local, &remote, sid))
+}
+
 /// Copies the invoking profile into a Windows task, with no manager calls.
 /// Returns false on hosts whose service definitions already inherit HOME.
 pub fn task_profile(definition: &mut Definition) -> bool {

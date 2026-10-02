@@ -25,10 +25,16 @@ try {
     if ((Invoke-Startup status).state -ne 'enabled') { throw 'Startup not enabled' }
     [xml]$xml = (& schtasks /Query /TN $name /XML) -join "`n"
     if ($LASTEXITCODE -ne 0) { throw 'Task XML query failed' }
-    if ($xml.Task.Principals.Principal.RunLevel -ne 'LeastPrivilege' -or
-        $xml.Task.Triggers.LogonTrigger.UserId -ne $sid -or
-        $xml.Task.Settings.Hidden -ne 'true' -or
-        !$xml.Task.Settings.RestartOnFailure -or
+    $scheduler = New-Object -ComObject Schedule.Service
+    $scheduler.Connect()
+    $definition = $scheduler.GetFolder('\').GetTask($name).Definition
+    $triggerUser = $definition.Triggers.Item(1).UserId
+    if (!$triggerUser.StartsWith('S-1-')) {
+        $triggerUser = ([Security.Principal.NTAccount]$triggerUser).Translate([Security.Principal.SecurityIdentifier]).Value
+    }
+    if ($definition.Principal.RunLevel -ne 0 -or $triggerUser -ne $sid -or
+        !$definition.Settings.Hidden -or !$definition.Settings.Enabled -or
+        $definition.Settings.RestartInterval -ne 'PT1M' -or $definition.Settings.RestartCount -ne 3 -or
         [IO.Path]::GetFullPath($xml.Task.Actions.Exec.WorkingDirectory) -ne [IO.Path]::GetFullPath($env:BUTLER_E2E_INSTALLED_ROOT)) {
         throw 'Task definition contract failed'
     }
