@@ -67,6 +67,7 @@ struct GraphFacts {
     inventory: (usize, Option<f64>, &'static str),
     stages: Stages,
     oldest_age: Option<i64>,
+    oldest_vector: Option<String>,
     failures: i64,
     historical_failures: i64,
     mismatch: i64,
@@ -108,13 +109,15 @@ impl GraphFacts {
                 "SELECT COALESCE(json_extract(j.hot_cache_state,'$.state'),'failed'),COUNT(*) FROM memory_projection_jobs j JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision GROUP BY 1",
             )?,
         };
-        let oldest = db.query_row("SELECT MIN(created_at) FROM (SELECT j.created_at FROM memory_projection_windows w JOIN memory_projection_jobs j ON j.job_id=w.job_id JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision WHERE w.state IN ('pending','planned','running','failed') UNION ALL SELECT j.created_at FROM memory_vector_units u JOIN memory_projection_jobs j ON j.job_id=u.job_id JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision WHERE u.state IN ('pending','running','failed') UNION ALL SELECT j.created_at FROM memory_projection_jobs j JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision WHERE COALESCE(json_extract(j.hot_cache_state,'$.state'),'pending') NOT IN ('complete','not_configured'))",[],|row|row.get::<_,Option<String>>(0))?;
+        let oldest = db.query_row("SELECT MIN(created_at), MIN(CASE WHEN is_vector=1 THEN created_at END) FROM (SELECT j.created_at, 0 AS is_vector FROM memory_projection_windows w JOIN memory_projection_jobs j ON j.job_id=w.job_id JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision WHERE w.state IN ('pending','planned','running','failed') UNION ALL SELECT j.created_at, 1 AS is_vector FROM memory_vector_units u JOIN memory_projection_jobs j ON j.job_id=u.job_id JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision WHERE u.state IN ('pending','running','failed') UNION ALL SELECT j.created_at, 0 AS is_vector FROM memory_projection_jobs j JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision WHERE COALESCE(json_extract(j.hot_cache_state,'$.state'),'pending') NOT IN ('complete','not_configured'))",[],|row|Ok((row.get::<_,Option<String>>(0)?,row.get::<_,Option<String>>(1)?)))?;
         Ok(Self {
             registered,
             current,
             inventory,
             stages,
+            oldest_vector: oldest.1,
             oldest_age: oldest
+                .0
                 .as_deref()
                 .and_then(butler_core::js_date::parse_iso_millis)
                 .map(|at| now.saturating_sub(at).max(0)),
@@ -163,6 +166,13 @@ impl GraphFacts {
                 known_coverage_percent: self.inventory.1,
                 coverage_reason: "inventory_incomplete",
             },
+            memories_without_vectors: Some(
+                self.stages.node_vectors.pending
+                    + self.stages.node_vectors.failed
+                    + self.stages.episode_vectors.pending
+                    + self.stages.episode_vectors.failed,
+            ),
+            oldest_vector_pending_at: self.oldest_vector,
             stages: self.stages,
             stage_units: STAGE_UNITS,
             oldest_pending_age_ms: self.oldest_age,
@@ -397,6 +407,8 @@ fn unavailable(
         stages: Stages::default(),
         stage_units: STAGE_UNITS,
         oldest_pending_age_ms: None,
+        memories_without_vectors: None,
+        oldest_vector_pending_at: None,
         source_resolution_failures: None,
         historical_source_resolution_failures: None,
         embedding_version_mismatch: None,

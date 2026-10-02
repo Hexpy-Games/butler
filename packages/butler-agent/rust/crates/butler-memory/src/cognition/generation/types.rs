@@ -62,13 +62,6 @@ impl GenerationEmbedding {
             Self::Native(value) => &value.version,
         }
     }
-
-    pub(crate) fn native_identity(&self) -> Option<&EmbeddingIdentity> {
-        match self {
-            Self::JavaScript(_) => None,
-            Self::Native(value) => Some(value),
-        }
-    }
 }
 
 impl From<EmbeddingIdentity> for GenerationEmbedding {

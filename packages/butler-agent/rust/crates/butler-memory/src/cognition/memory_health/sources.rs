@@ -85,9 +85,18 @@ pub(super) fn read(
     let stores = LegacyStores::read(data_root, paths, now)?;
     let maintenance =
         maintenance::read(&paths.cognition_root(data_root).join("consolidation"), now)?;
-    let diagnostics = diagnostics(&stores, &maintenance);
+    let mut diagnostics = diagnostics(&stores, &maintenance);
     let gate = writer_gate(coordinator, &paths.consolidation_lock(data_root));
     let serving = super::serving::read(data_root, paths, now, profile);
+    if let Some(count) = serving.memories_without_vectors.filter(|count| *count > 0) {
+        diagnostics.push(format!(
+            "{count} memories without vectors; oldest {}",
+            serving
+                .oldest_vector_pending_at
+                .as_deref()
+                .unwrap_or("unknown")
+        ));
+    }
     let maintenance_status = maintenance.status;
     Ok(MemoryHealthReport {
         memory_chunks_count: stores.memory_chunks,
