@@ -1,4 +1,4 @@
-//! Stub chat and config replacement under a data directory beyond MAX_PATH.
+//! Chat, config and CLI lifecycle beyond MAX_PATH and the SQLite staging budget.
 #![allow(clippy::unwrap_used, reason = "test assertions")]
 
 use butler_e2e::e2e::HarnessError;
@@ -17,7 +17,13 @@ async fn chat_and_config_survive_restart_under_long_data_path() -> Result<(), Ha
     for _ in 0..5 {
         data = data.join("long-data-directory-component-012345678901234567890123456789");
     }
-    assert!(data.to_string_lossy().chars().count() > 280);
+    // Reproduce the macOS CI failure: the old coordinator staging basename
+    // made a 415-byte data path exceed SQLite's 512-byte Unix VFS budget.
+    let bytes = data.as_os_str().as_encoded_bytes().len();
+    if bytes < 415 {
+        data = data.join("d".repeat(415 - bytes - 1));
+    }
+    assert!(data.as_os_str().as_encoded_bytes().len() >= 415);
     std::fs::create_dir_all(&data)?;
     setup.sandbox.data = data;
     setup
@@ -28,6 +34,11 @@ async fn chat_and_config_survive_restart_under_long_data_path() -> Result<(), Ha
         "BUTLER_DATA path length: {}",
         s.sandbox.data.to_string_lossy().chars().count()
     );
+    let status = s.agent.cli(&["status", "--json"])?;
+    assert_eq!(status.code, Some(0), "{status:?}");
+    let started = s.agent.cli(&["start", "--json"])?;
+    assert_eq!(started.code, Some(0), "{started:?}");
+    assert_eq!(started.json()?["data"]["alreadyRunning"], true);
     let (_, turn) = s.turn("general", "Write the numbers from one to twelve as English words, separated by single spaces, and nothing else.").await?;
     assert_eq!(turn_state(&turn), "delivered");
     let messages = s.gw.messages("general").await?;
@@ -54,5 +65,9 @@ async fn chat_and_config_survive_restart_under_long_data_path() -> Result<(), Ha
         std::fs::read(s.sandbox.data.join("butler.config.json"))?,
         config
     );
+    let stopped = s.agent.cli_reaping(&["stop", "--json"]).await?;
+    assert_eq!(stopped.code, Some(0), "{stopped:?}");
+    assert!(!s.agent.is_running());
+    assert!(!s.gw.healthy().await);
     s.finish().await
 }

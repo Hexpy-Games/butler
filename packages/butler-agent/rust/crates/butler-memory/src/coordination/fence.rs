@@ -193,9 +193,9 @@ pub(super) fn initialize_coordinator(
         return Ok(false);
     }
     create_parent(&path)?;
-    let mut temp_name = path.as_os_str().to_owned();
-    temp_name.push(format!(".init-{pid}-{}", host.new_uuid()));
-    let temp = PathBuf::from(temp_name);
+    // Keep the unique staging database beside its destination, without
+    // repeating the destination basename and exhausting the VFS path budget.
+    let temp = path.with_file_name(format!(".init-{pid}-{}", host.new_uuid()));
     let result = (|| {
         let connection = sqlite::open(&temp).map_err(CoordinationError::gate_io)?;
         connection
