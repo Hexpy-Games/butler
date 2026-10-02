@@ -1,3 +1,4 @@
+# test-category: format-pin
 # Pure format/comparer proof using the exact updater shipped by electron-winstaller.
 param([Parameter(Mandatory=$true)][string]$Squirrel)
 $ErrorActionPreference = 'Stop'
