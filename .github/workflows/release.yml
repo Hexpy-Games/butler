@@ -9,6 +9,11 @@ on:
         description: Diagnose an immutable Windows preview Agent archive on disposable Windows
         required: false
         type: string
+      macos-process-contract:
+        description: Verify process identity while an exited child is unreaped
+        required: false
+        type: boolean
+        default: false
       runner:
         type: choice
         options: [self, hosted]
@@ -19,6 +24,37 @@ permissions:
   contents: write
 
 jobs:
+  macos-process-contract:
+    if: inputs.macos-process-contract
+    name: Verify macOS unreaped process identity
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.91.0
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/butler-agent/rust
+          shared-key: macos-process-identity
+      - name: Prove live identity and unreaped exit behavior
+        working-directory: packages/butler-agent/rust
+        run: |
+          export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
+          isolated=$(mktemp -d)
+          trap 'rm -rf "$isolated"' EXIT
+          mkdir "$isolated/home" "$isolated/data"
+          HOME="$isolated/home" BUTLER_DATA="$isolated/data" cargo test --locked -j 8 -p butler-platform --test contract instance_lock_is_released_when_its_identified_holder_is_terminated -- --nocapture --test-threads=1
+      - name: Check platform contracts
+        working-directory: packages/butler-agent/rust
+        run: |
+          export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
+          isolated=$(mktemp -d)
+          trap 'rm -rf "$isolated"' EXIT
+          mkdir "$isolated/home" "$isolated/data"
+          HOME="$isolated/home" BUTLER_DATA="$isolated/data" cargo clippy --locked -j 8 -p butler-platform --all-targets -- -D warnings
+
   task-xml-contract:
     if: inputs.task-xml-build-run
     name: Verify imported Windows Task Scheduler XML

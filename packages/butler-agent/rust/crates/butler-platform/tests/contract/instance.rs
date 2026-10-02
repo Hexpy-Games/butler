@@ -96,7 +96,19 @@ fn instance_lock_is_released_when_its_identified_holder_is_terminated() {
                 Err(StopError::Gone)
             ));
             terminate(pid, &started).unwrap();
+            #[cfg(target_os = "macos")]
+            let zombie = unreaped_identity(pid, &started);
             let status = holder.wait().unwrap();
+            #[cfg(target_os = "macos")]
+            {
+                assert_eq!(zombie.start.unwrap(), None, "an unreaped exit is not live");
+                assert_eq!(
+                    zombie.executable.unwrap(),
+                    None,
+                    "a zombie has no executable"
+                );
+                assert!(matches!(zombie.termination, Err(StopError::Gone)));
+            }
             assert_eq!(
                 terminating_signal(status),
                 SIGNALS.then_some(ExitSignal::Kill)
@@ -106,6 +118,33 @@ fn instance_lock_is_released_when_its_identified_holder_is_terminated() {
         other => panic!("the holder's identity: {other:?}"),
     }
     InstanceLock::try_exclusive(open_lock_file(&path)).unwrap();
+}
+
+#[cfg(target_os = "macos")]
+struct UnreapedIdentity {
+    start: Result<Option<String>, butler_platform::instance::IdentityError>,
+    executable: Result<Option<String>, butler_platform::instance::IdentityError>,
+    termination: Result<(), StopError>,
+}
+
+#[cfg(target_os = "macos")]
+fn unreaped_identity(pid: u32, started: &str) -> UnreapedIdentity {
+    // Leave our child unreaped until the kernel reports its zombie state.
+    super::eventually("unreaped holder exit", || {
+        std::process::Command::new("ps")
+            .args(["-p", &pid.to_string(), "-o", "stat="])
+            .output()
+            .is_ok_and(|output| {
+                String::from_utf8_lossy(&output.stdout)
+                    .trim()
+                    .starts_with('Z')
+            })
+    });
+    UnreapedIdentity {
+        start: process_start(pid),
+        executable: process_executable(pid),
+        termination: terminate(pid, started),
+    }
 }
 
 /// macOS names a hard-linked executable by its most recent lookup, so the
