@@ -10,6 +10,7 @@
   "files": [
     "bin",
     "install.sh",
+    "install.ps1",
     "THIRD_PARTY_NOTICES.txt",
     "THIRD_PARTY_NOTICES.txt.gz"
   ],

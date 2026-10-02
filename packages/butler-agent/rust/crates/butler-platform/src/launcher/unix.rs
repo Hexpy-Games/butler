@@ -7,6 +7,13 @@ use std::path::{Path, PathBuf};
 
 /// The executable name in release archives.
 pub(super) const AGENT_BINARY: &str = "butler-agent";
+pub(super) const STANDALONE_LAUNCHER: &str = "butler";
+
+pub(super) fn standalone_launcher_is_expected(root: &Path) -> bool {
+    let launcher = root.join(STANDALONE_LAUNCHER);
+    fs::symlink_metadata(&launcher).is_ok_and(|metadata| metadata.file_type().is_symlink())
+        && fs::read_link(launcher).is_ok_and(|target| target == Path::new(AGENT_BINARY))
+}
 
 /// Release artifacts name macOS `darwin`; other Unix hosts by Rust's name.
 pub(super) const RELEASE_OS: &str = if cfg!(target_os = "macos") {
@@ -38,4 +45,8 @@ pub(super) fn system_program_dirs() -> Vec<PathBuf> {
         .into_iter()
         .map(PathBuf::from)
         .collect()
+}
+
+pub(super) fn canonical_command_executable(path: PathBuf) -> io::Result<PathBuf> {
+    Ok(path)
 }

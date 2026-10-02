@@ -223,8 +223,9 @@ pub fn sync_path(path: impl AsRef<Path>) -> io::Result<()> {
     sys::sync_path(path.as_ref())
 }
 
-/// Atomically replaces `path` with a new file, only the owner's where
-/// [`OWNER_ONLY`]: `write` fills a fresh temporary file next to `path`, which
+/// Atomically replaces `path` with a private file: Unix creation modes or
+/// Windows ACLs restrict the empty staging file before `write` fills it. The
+/// temporary file next to `path` is
 /// is synced, renamed over `path`, and the rename is synced where
 /// [`DIRECTORY_SYNC`]. On failure before the rename, the temporary file is
 /// removed and `path` is untouched; an entry this call did not create is
@@ -244,7 +245,16 @@ pub fn replace_private<E>(
     options.write(true).create_new(true);
     let _ = owner_only(&mut options);
     let mut file = options.open(&temporary).map_err(&io_error)?;
-    let written = write(&mut file).and_then(|()| {
+    // On ACL hosts an existing parent may still have explicit broad ACEs.
+    // Restrict the empty staging file before any secret content is written.
+    let private = if OWNER_ONLY {
+        Ok(())
+    } else {
+        restrict_file(&temporary)
+            .unwrap_or(Ok(()))
+            .map_err(&io_error)
+    };
+    let written = private.and_then(|()| write(&mut file)).and_then(|()| {
         file.sync_all().map_err(&io_error)?;
         drop(file);
         rename(&temporary, path).map_err(&io_error)

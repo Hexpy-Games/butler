@@ -1,22 +1,13 @@
-//! Windows: no owner-only permissions, no-follow opens, file ids, directory
-//! syncs or atomic directory exchange yet. Each of these reports `None` or
-//! `Unsupported`; directories and files are still created, and renames are
-//! retried while another process briefly holds a file.
-//!
-//! Files get no owner-only mode of their own: they inherit the access list of
-//! their folder. A folder [`protect_folder`] restricted (and every folder
-//! [`create_private_dir_all`] creates) grants full control to the current
-//! account and the system only, through `icacls` by absolute path, so no
-//! unsafe Win32 calls are needed. [`is_private`] reads a list back the same
-//! way. [`OWNER_ONLY`] stays `false`: it describes per-file modes, which
-//! Windows lacks, and `is_owner_only` cannot tell from metadata.
+//! Windows private DACLs grant only the current user. No SYSTEM or
+//! Administrators ACE is needed for this per-user background process.
+//! No-follow opens, file ids, directory syncs and atomic directory exchange
+//! remain unavailable. OWNER_ONLY describes Unix metadata modes, not ACLs.
 
 use std::fs::{self, DirBuilder, File, Metadata, OpenOptions};
 use std::io;
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::{ExchangeError, FileIdentity, FileMode, FileTime, Writability};
@@ -41,9 +32,13 @@ pub(super) fn create_private_dir_all(path: &Path) -> io::Result<()> {
         .ancestors()
         .take_while(|folder| !folder.exists())
         .last();
-    fs::create_dir_all(path)?;
     match top {
-        Some(top) => grant(top, true),
+        Some(top) => {
+            // Protect before creating descendants, so they inherit only our ACL.
+            fs::create_dir_all(top)?;
+            grant(top, true)?;
+            fs::create_dir_all(path)
+        }
         None => Ok(()),
     }
 }
@@ -57,94 +52,41 @@ pub(super) fn protect_folder(path: &Path) -> Option<io::Result<()>> {
     Some(grant(path, true))
 }
 
-/// The account that runs this process: `whoami /user` names it and its SID.
-struct Account {
-    name: String,
-    sid: String,
-}
-
-fn account() -> Option<&'static Account> {
-    static ACCOUNT: OnceLock<Option<Account>> = OnceLock::new();
-    ACCOUNT
-        .get_or_init(|| {
-            let output = system_tool("whoami")
-                .args(["/user", "/fo", "csv", "/nh"])
-                .output()
-                .ok()
-                .filter(|output| output.status.success())?;
-            let text = String::from_utf8_lossy(&output.stdout).into_owned();
-            let mut fields = text.trim().split("\",\"");
-            let name = fields.next()?.trim_start_matches('"').to_owned();
-            let sid = fields.next()?.trim_end_matches('"').to_owned();
-            sid.starts_with("S-1-").then_some(Account { name, sid })
-        })
-        .as_ref()
-}
-
-/// A tool of the Windows system folder, by absolute path and without a
-/// console window.
-fn system_tool(name: &str) -> Command {
+/// Replace the DACL rather than adding grants: unrelated explicit ACEs must
+/// disappear too. SID-based inspection avoids localized icacls display text.
+fn acl(path: &Path, operation: &str) -> io::Result<String> {
     let root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
-    let mut command = Command::new(PathBuf::from(root).join("System32").join(name));
-    command.creation_flags(CREATE_NO_WINDOW);
-    command
-}
-
-/// `CREATE_NO_WINDOW`.
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-/// The local system account, which keeps access so services and backups work.
-const SYSTEM_SID: &str = "S-1-5-18";
-
-/// Removes the inherited access list of `path` and grants full control to
-/// the current account and the system only; a folder's grant is inherited by
-/// what is created in it (`icacls`, so no unsafe Win32 calls are needed).
-fn grant(path: &Path, folder: bool) -> io::Result<()> {
-    let account = account().ok_or_else(|| io::Error::other("the current account is unknown"))?;
-    let rights = if folder { "(OI)(CI)F" } else { "F" };
-    let output = system_tool("icacls")
-        .arg(path)
-        .args(["/inheritance:r", "/grant:r"])
-        .arg(format!("*{}:{rights}", account.sid))
-        .arg(format!("*{SYSTEM_SID}:{rights}"))
+    let powershell = PathBuf::from(root).join("System32/WindowsPowerShell/v1.0");
+    let output = Command::new(powershell.join("powershell.exe"))
+        .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command"])
+        .arg(include_str!("windows/acl.ps1"))
+        .env("BUTLER_ACL_PATH", path)
+        .env("BUTLER_ACL_OPERATION", operation)
+        // A pwsh parent exports modules incompatible with Windows PowerShell.
+        // Only load this host's trusted, built-in ACL cmdlets.
+        .env("PSModulePath", powershell.join("Modules"))
+        .creation_flags(0x0800_0000)
         .output()?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(io::Error::other(format!(
-            "icacls could not restrict the folder: {}",
-            String::from_utf8_lossy(&output.stdout).trim()
-        )))
+    if !output.status.success() {
+        // The script only inspects ACL metadata, never file contents or tokens.
+        return Err(io::Error::other(format!(
+            "Windows private ACL operation failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
     }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
-/// Reads the access list with `icacls`: private when only the current
-/// account and the system are on it.
+fn grant(path: &Path, _folder: bool) -> io::Result<()> {
+    acl(path, "protect").map(|_| ())
+}
+
 pub(super) fn is_private(path: &Path) -> Option<bool> {
-    let account = account()?;
-    let output = system_tool("icacls").arg(path).output().ok()?;
-    if !output.status.success() {
-        return None;
+    match acl(path, "inspect").ok()?.as_str() {
+        "True" => Some(true),
+        "False" => Some(false),
+        _ => None,
     }
-    let text = String::from_utf8_lossy(&output.stdout).into_owned();
-    let shown = path.display().to_string();
-    let mut entries = 0;
-    for line in text.lines() {
-        let line = line.trim();
-        let line = line.strip_prefix(shown.as_str()).unwrap_or(line).trim();
-        let Some((who, rights)) = line.split_once(":(") else {
-            continue;
-        };
-        if !rights.contains(')') {
-            continue;
-        }
-        entries += 1;
-        let who = who.trim();
-        let system = who.eq_ignore_ascii_case("NT AUTHORITY\\SYSTEM") || who == SYSTEM_SID;
-        if !(system || who.eq_ignore_ascii_case(&account.name) || who == account.sid) {
-            return Some(false);
-        }
-    }
-    (entries > 0).then_some(true)
 }
 
 pub(super) fn owner_only_dirs(_builder: &mut DirBuilder) -> Option<&mut DirBuilder> {
@@ -170,16 +112,16 @@ pub(super) fn set_file_mode(_path: &Path, _mode: FileMode) -> Option<io::Result<
     None
 }
 
-pub(super) fn restrict_file(_path: &Path) -> Option<io::Result<()>> {
-    None
+pub(super) fn restrict_file(path: &Path) -> Option<io::Result<()>> {
+    Some(grant(path, false))
 }
 
 pub(super) fn restrict_open_file(_file: &File) -> Option<io::Result<()>> {
     None
 }
 
-pub(super) fn restrict_directory(_path: &Path) -> Option<io::Result<()>> {
-    None
+pub(super) fn restrict_directory(path: &Path) -> Option<io::Result<()>> {
+    Some(grant(path, true))
 }
 
 pub(super) fn is_owner_only(_metadata: &Metadata) -> Option<bool> {

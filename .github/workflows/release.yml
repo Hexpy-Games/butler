@@ -104,12 +104,13 @@ jobs:
             --artifact-url "$artifact_url"
           bun run release:agent:smoke -- --artifact-url "$artifact_url"
 
-      # The darwin-arm64 entries of the multi-platform Agent manifests.
-      - name: Keep the darwin-arm64 Agent manifests for the merge
+      # Preserve the validated Agent payload even if later App steps fail.
+      - name: Keep the darwin-arm64 Agent archive and manifests for the merge
         uses: actions/upload-artifact@v4
         with:
           name: agent-darwin-arm64
           path: |
+            dist/release/agent/butler-agent-*-darwin-arm64.tar.gz
             dist/release/agent/agent-release-manifest.json
             dist/release/agent/agent-update-manifest.json
           if-no-files-found: error
@@ -241,12 +242,47 @@ jobs:
           path: dist/release/agent/*
           if-no-files-found: error
 
+  windows-native:
+    if: contains(github.ref_name, '-preview.')
+    uses: ./.github/workflows/windows-native-deps.yml
+
+  agent-windows:
+    name: Build unsigned Windows x64 Agent preview
+    needs: windows-native
+    if: contains(github.ref_name, '-preview.')
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/windows-release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/build-windows-agent
+        with:
+          cache-key: package-windows-x64
+          native-deps-artifact: windows-native-deps
+          artifact-base-url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
+      - name: Smoke the installed archive
+        shell: pwsh
+        run: |
+          try { ./deploy/windows-preview-smoke.ps1 }
+          finally {
+            if ($env:WINDOWS_PREVIEW_TEMP_ROOT -and (Test-Path $env:WINDOWS_PREVIEW_TEMP_ROOT)) {
+              Remove-Item $env:WINDOWS_PREVIEW_TEMP_ROOT -Recurse -Force
+            }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-windows-x64
+          path: dist/release/agent/*
+          if-no-files-found: error
+
   # Runs after the macOS job, whose single-platform manifests it replaces with
   # the merged ones (the update manifest lists one artifact per platform).
   agent-release:
-    name: Publish Linux Agent archives, merged manifests and the installer
+    name: Publish successful Agent archives, merged manifests and installers
     runs-on: ubuntu-latest
-    needs: [native-release, agent-linux]
+    needs: [native-release, agent-linux, agent-windows]
+    if: ${{ always() && !cancelled() }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -274,8 +310,15 @@ jobs:
       - name: Merge the Agent manifests
         run: |
           set -euo pipefail
+          inputs=()
+          for directory in dist/agent/agent-*; do
+            if [ -f "$directory/agent-release-manifest.json" ] && [ -f "$directory/agent-update-manifest.json" ]; then
+              inputs+=("$directory")
+            fi
+          done
+          test "${#inputs[@]}" -gt 0
           python3 packages/butler-agent/rust/scripts/release-standalone-agent.py merge \
-            --output dist/agent/merged dist/agent/agent-darwin-arm64 dist/agent/agent-linux-x64 dist/agent/agent-linux-arm64
+            --output dist/agent/merged "${inputs[@]}"
 
       - name: Publish to the GitHub Release
         env:
@@ -284,16 +327,16 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           files=(
-            dist/agent/agent-linux-x64/butler-agent-*-linux-x64.tar.gz
-            dist/agent/agent-linux-arm64/butler-agent-*-linux-arm64.tar.gz
+            dist/agent/agent-*/butler-agent-*.tar.gz
+            dist/agent/agent-*/butler-agent-*.zip
+            dist/agent/agent-*/butler-agent-*.zip.sha256
             dist/agent/merged/agent-release-manifest.json
             dist/agent/merged/agent-update-manifest.json
             deploy/install.sh
+            deploy/install.ps1
           )
-          if [ "${#files[@]}" -ne 5 ]; then
-            printf 'Expected 5 Agent release files, got %s\n' "${#files[@]}" >&2
-            printf '%s\n' "${files[@]}" >&2
-            exit 1
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --draft --title "$GITHUB_REF_NAME" --notes "Butler release $GITHUB_REF_NAME"
           fi
           gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
 
@@ -359,6 +402,7 @@ jobs:
     name: Publish consolidated release checksums
     runs-on: ubuntu-latest
     needs: [native-release, agent-release, app-linux-release]
+    if: ${{ always() && !cancelled() && needs.agent-release.result == 'success' }}
     steps:
       - name: Build consolidated checksum asset from published outputs
         env:
@@ -377,6 +421,9 @@ jobs:
             dist/release/checksums/assets/butler-agent-*-darwin-arm64.tar.gz
             dist/release/checksums/assets/butler-agent-*-linux-x64.tar.gz
             dist/release/checksums/assets/butler-agent-*-linux-arm64.tar.gz
+            dist/release/checksums/assets/butler-agent-*-windows-x64.zip
+            dist/release/checksums/assets/butler-agent-*-windows-x64.zip.sha256
+            dist/release/checksums/assets/install.ps1
             dist/release/checksums/assets/install.sh
             dist/release/checksums/assets/agent-release-manifest.json
             dist/release/checksums/assets/agent-update-manifest.json
@@ -393,11 +440,7 @@ jobs:
             dist/release/checksums/assets/butler-app-*-archlinux-x64.pkg.tar.zst
             dist/release/checksums/assets/butler-app-*-archlinux-x64.pkg.tar.zst.sha256
           )
-          if [ "${#files[@]}" -ne 18 ]; then
-            printf 'Expected 18 current release outputs, got %s\n' "${#files[@]}" >&2
-            printf '%s\n' "${files[@]}" >&2
-            exit 1
-          fi
+          test "${#files[@]}" -gt 0
           checksum_file="dist/release/checksums/butler-${version}-SHA256SUMS"
           (
             cd dist/release/checksums/assets
@@ -405,15 +448,9 @@ jobs:
               sha256sum "$(basename "$file")"
             done
           ) > "$checksum_file"
-          checksum_count="$(wc -l < "$checksum_file" | tr -d ' ')"
-          if [ "$checksum_count" -ne 18 ]; then
-            printf 'Expected 18 checksummed release outputs, got %s\n' "$checksum_count" >&2
-            cat "$checksum_file" >&2
-            exit 1
-          fi
           gh release upload "$tag" "$checksum_file" --clobber
 
-  # The release stays a draft until every asset above exists; only now does
+  # Publish the successful outputs after all platform jobs finish. Only now does
   # /releases/latest (and so install.sh) see it. A tag with a hyphen is a
   # preview and is marked as a prerelease, which /releases/latest skips.
   publish-release:
