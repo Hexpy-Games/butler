@@ -6,7 +6,7 @@ use tokio_util::sync::CancellationToken;
 
 use butler_ledger::project_ledger::ProjectLedger;
 use butler_memory::cognition::{
-    BoxStoreService, CognitionPathEnvironment, ConfiguredCycleOptions, ConfiguredCycleResult,
+    CognitionPathEnvironment, ConfiguredCycleOptions, ConfiguredCycleResult,
     ConfiguredCycleService, CycleService, CycleStatus, FeedbackBufferService,
     GraphConsolidationService, KnowHowService, LegacyMetadataIntegrityService, MemoryHealthService,
     MemorySyncConsumer, ProjectCapsuleService, RunCycle, VectorOptimizeService,
@@ -81,11 +81,6 @@ impl DailyCognitionJobs {
             paths.clone(),
             coordinator.clone(),
         ));
-        let box_store = Arc::new(BoxStoreService::new(
-            data_root.clone(),
-            paths.clone(),
-            coordinator.clone(),
-        ));
         let knowhow = Arc::new(KnowHowService::new(
             data_root.clone(),
             paths.clone(),
@@ -112,7 +107,6 @@ impl DailyCognitionJobs {
             legacy_metadata: Arc::new(LegacyMetadataIntegrityService::new(
                 &data_root.clone(),
                 paths.clone(),
-                box_store.clone(),
                 feedback.clone(),
             )),
             feedback,
@@ -122,7 +116,6 @@ impl DailyCognitionJobs {
                 paths.clone(),
                 coordinator.clone(),
             )),
-            box_store,
         });
         let generic = CycleService::new(
             data_root.clone(),
