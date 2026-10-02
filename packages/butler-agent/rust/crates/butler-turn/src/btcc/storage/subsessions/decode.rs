@@ -198,7 +198,7 @@ fn decode_or_report(raw: &RawDelegation) -> Option<StoredSubsessionDelegation> {
     decode(raw)
         .inspect_err(|error| {
             // Only the relation id and the error class: never row content.
-            eprintln!(
+            butler_core::diagnostic!(
                 "[native-btcc] undecodable subsession delegation relation={} class={:?}",
                 raw.relation_id,
                 error.classify()

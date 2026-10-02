@@ -253,7 +253,7 @@ async fn wait_or_force_stop(
         // A signal sent straight to a supervised process looks like a crash
         // to its manager, which would relaunch it: the manager stops it.
         request(butler_platform::service_registration::stop).await?;
-    } else if manager_unreachable(data_root).await {
+    } else if current.cli_supervisor_pid.is_none() && manager_unreachable(data_root).await {
         // The job is this DATA's but the manager does not answer, so the
         // service may be running under it: a kill could be answered by a
         // relaunch. Nothing is forced.

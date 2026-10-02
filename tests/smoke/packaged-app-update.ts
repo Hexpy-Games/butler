@@ -5,10 +5,12 @@ import { chmodSync, cpSync, mkdirSync, readdirSync, mkdtempSync, readFileSync, r
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { electronPage, type ElectronPage } from "../support/electron-page-cdp.ts";
-import { prepareBundledAgentResource } from "../../packages/butler-app/scripts/release/package-app-release.ts";
+import { createMacZip, prepareBundledAgentResource } from "../../packages/butler-app/scripts/release/package-app-release.ts";
+import { verifyMacFrameworkLinks, verifyMacPackageMetadata } from "../../deploy/app/native-mac-package-smoke.ts";
 import { stageElectronPackageSource } from "../../packages/butler-app/scripts/release/electron-package-source.ts";
 import { normalizeMacBundle, signMacBundle } from "../../packages/butler-app/scripts/release/native-mac-signing.ts";
 import { freePort } from "../support/native-app-server.ts";
+import { FIRST_RUN_CONSENT_VERSION } from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
 
 const root = process.cwd();
 const dir = mkdtempSync(join(tmpdir(), "butler-packaged-update-"));
@@ -70,7 +72,7 @@ async function packageVersion(version: string) {
 
 async function connect(port: number) {
   const page = await electronPage(port);
-  await page.waitForFunction(() => Boolean(window.butlerApp));
+  await page.waitForFunction(() => document.readyState === "complete" && Boolean(window.butlerApp));
   const instance = JSON.parse(readFileSync(join(data, "app/runtime/foreground/instance.json"), "utf8"));
   ownedPids.add(instance.app_pid);
   return { browser: page, page };
@@ -83,6 +85,10 @@ async function clickNamed(page: ElectronPage, name: string) {
 }
 
 async function proof(page: ElectronPage, version: string, sessionId?: string) {
+  const installed = join(dir, "installed/Butler.app");
+  verifyMacPackageMetadata(installed, version, true);
+  await run("codesign", ["--verify", "--deep", "--strict", installed]);
+  console.log(`STRUCTURE ${version}: ${JSON.stringify(verifyMacFrameworkLinks(installed))}, Agent links read-only, signature valid`);
   const facts = await page.evaluate(async () => {
     const bridge = window.butlerApp as Record<string, (...args: unknown[]) => Promise<unknown>>;
     return { info: await bridge.getAppInfo(), health: await bridge.health(), sessions: await bridge.listSessions(), settings: await bridge.getSettings(), updates: await bridge.getUpdates() };
@@ -98,13 +104,7 @@ async function proof(page: ElectronPage, version: string, sessionId?: string) {
   console.log(`PROOF ${JSON.stringify({ version: facts.info.version, bundledAgent: facts.updates.components[0].current_version, health: facts.health, dataPreserved: true, sessionPreserved: Boolean(sessionId), previews: facts.settings.update_previews })}`);
 }
 
-async function smoke() {
-  mkdirSync(home); mkdirSync(data);
-  writeFileSync(join(data, "update-sentinel.txt"), "preserved");
-  const first = await packageVersion(from), second = await packageVersion(to);
-  await run("xattr", ["-w", "com.apple.quarantine", "0081;66000000;ButlerSmoke;", second]);
-  const zip = join(dir, "update.zip");
-  await run("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", second, zip]);
+async function serveUpdate(zip: string) {
   const sha256 = new Bun.CryptoHasher("sha256").update(await Bun.file(zip).arrayBuffer()).digest("hex");
   server = Bun.serve({ hostname: "127.0.0.1", port: 0, idleTimeout: 0, fetch(request) {
     if (new URL(request.url).pathname === "/v1/chat/completions") {
@@ -122,22 +122,37 @@ async function smoke() {
     models: { local: [{ model_id: "stub", display_name: "Stub", server_url: `http://127.0.0.1:${server.port}`,
       context_window_tokens: 128000 }] },
   }));
+  return server.port;
+}
+
+async function smoke() {
+  mkdirSync(home); mkdirSync(data);
+  writeFileSync(join(data, "update-sentinel.txt"), "preserved");
+  const first = await packageVersion(from), second = await packageVersion(to);
+  await run("xattr", ["-w", "com.apple.quarantine", "0081;66000000;ButlerSmoke;", second]);
+  const zip = join(dir, "update.zip");
+  createMacZip(second, zip);
+  const updatePort = await serveUpdate(zip);
   const installed = join(dir, "installed/Butler.app");
-  cpSync(first, installed, { recursive: true });
+  // Match installation from the release DMG: preserve relative framework links,
+  // Agent hard links and modes. Bun/Node cpSync can rewrite links to the source.
+  await run("ditto", [first, installed]);
+  verifyMacPackageMetadata(installed, from, true);
   const debugPort = await freePort(), agentPort = await freePort();
   child = spawn(join(installed, "Contents/MacOS/Butler"), [`--remote-debugging-port=${debugPort}`], { env: {
     ...env, BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_APP_ELECTRON_USER_DATA_DIR: join(dir, "profile"),
-    BUTLER_APP_UPDATE_MANIFEST: `http://127.0.0.1:${server.port}/manifest.json`, BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
+    BUTLER_APP_UPDATE_MANIFEST: `http://127.0.0.1:${updatePort}/manifest.json`, BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
     BUTLER_E2E_TIER: "stub", BUTLER_E2E_EMBED_SOURCES: "http://127.0.0.1:9",
   }, stdio: ["ignore", "pipe", "pipe"] });
   child.stdout!.on("data", bytes => logs.push(String(bytes))); child.stderr!.on("data", bytes => logs.push(String(bytes)));
   child.on("exit", (code, signal) => logs.push(`App exited: code=${code}, signal=${signal}\n`));
+  console.log(`LAUNCH ${from}: ${installed}`);
   let connected = await connect(debugPort); browser = connected.browser;
   const page = connected.page;
-  await page.evaluate(async () => {
-    const bridge = window.butlerApp as Record<string, (...args: unknown[]) => Promise<unknown>>;
-    await bridge.updateSettings({ language: "en", onboarding: { consent_version: 1, accepted_at: new Date().toISOString(), completed_at: new Date().toISOString() } });
-  });
+  const completedAt = new Date().toISOString();
+  await page.expression(`window.butlerApp.updateSettings(${JSON.stringify({ language: "en", onboarding: {
+    consent_version: FIRST_RUN_CONSENT_VERSION, accepted_at: completedAt, completed_at: completedAt,
+  } })})`);
   await page.reload();
   await proof(page, from);
   const created = await page.evaluate(async () => (window.butlerApp!.createSession as (v: unknown) => Promise<{ session: { id: string } }>)({ kind: "chat", title: "Update keeps this chat" }));
@@ -171,6 +186,7 @@ async function smoke() {
     if (child!.exitCode !== null) { child!.removeListener("exit", exited); exited(child!.exitCode); }
   });
   await browser.close(); browser = null;
+  console.log(`RELAUNCH ${to}: ${installed}`);
   connected = await connect(debugPort); browser = connected.browser;
   await proof(connected.page, to, session.id);
   await connected.page.evaluate(() => (window.butlerApp!.quitApp as (v: unknown) => Promise<unknown>)({ confirmed: true }));
@@ -203,5 +219,17 @@ function makeWritable(path: string) {
 
 try { await smoke(); } catch (error) {
   try { console.error(readFileSync(join(data, "updates/app-install.log"), "utf8")); } catch { /* Helper not started. */ }
-  console.error(logs.join("").slice(-8000)); console.error(error); throw error;
+  console.error("Electron main-process log:\n" + logs.join(""));
+  for (const name of ["startup-progress.json", "startup-failure.json", "last-exit.json"]) {
+    try { console.error(`${name}: ${readFileSync(join(data, "app/runtime/foreground", name), "utf8")}`); } catch { /* Not published. */ }
+  }
+  const bundle = join(dir, "installed/Butler.app");
+  for (const [command, args] of [
+    ["codesign", ["-dv", "--verbose=4", bundle]],
+    ["spctl", ["-a", "-vv", bundle]],
+  ] as const) {
+    const result = spawnSync(command, [...args], { env, encoding: "utf8" });
+    console.error(`${command} (informational, status=${result.status}):\n${result.stdout}${result.stderr}`);
+  }
+  console.error(error); throw error;
 } finally { await cleanup(); }

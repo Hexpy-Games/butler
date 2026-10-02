@@ -46,6 +46,7 @@ fn main() {
     ] {
         println!("cargo:rerun-if-changed={path}");
     }
+    println!("cargo:rustc-env=BUTLER_BUILD_ID=source-archive");
     let Ok(manifest) = env::var("CARGO_MANIFEST_DIR") else {
         return;
     };
@@ -55,6 +56,7 @@ fn main() {
     };
     let root = root.trim();
     let root = Path::new(root);
+    emit_build_id(root);
     for git_path in ["HEAD", "index"] {
         if let Some(path) = output(root, &["rev-parse", "--git-path", git_path]) {
             let path = Path::new(path.trim());
@@ -100,4 +102,15 @@ fn version_from_tag(tag: &str) -> Option<String> {
     let version = tag.strip_prefix('v').unwrap_or(tag);
     semver::Version::parse(version).ok()?;
     Some(version.to_owned())
+}
+
+fn emit_build_id(root: &Path) {
+    let revision =
+        output(root, &["rev-parse", "--short=12", "HEAD"]).unwrap_or_else(|| "unknown".into());
+    let dirty = output(root, &["status", "--porcelain"]).is_some_and(|s| !s.trim().is_empty());
+    println!(
+        "cargo:rustc-env=BUTLER_BUILD_ID={}{}",
+        revision.trim(),
+        if dirty { ".dirty" } else { "" }
+    );
 }

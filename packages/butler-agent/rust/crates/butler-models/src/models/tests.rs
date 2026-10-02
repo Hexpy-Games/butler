@@ -9,7 +9,7 @@ fn input(registered_models: Vec<ModelProviderMetadata>) -> ModelCatalogSnapshotI
         extra_models: Vec::new(),
         registered_models,
         credential_views: Vec::new(),
-        default_model_ref: Some(DEFAULT_MODEL_REF.into()),
+        default_model_ref: Some(LEGACY_DEFAULT_MODEL.into()),
         generated_at: "2026-09-14T00:00:00.000Z".into(),
     }
 }

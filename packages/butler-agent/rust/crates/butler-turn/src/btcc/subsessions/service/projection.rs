@@ -62,7 +62,7 @@ impl SubsessionService {
         // An undecodable child row projects as no relation instead of failing.
         let relation = match self.repository.by_child(session_id.into()).await {
             Err(error) if error.code() == StorageCode::SubsessionPacketInvalid.as_str() => {
-                eprintln!("[native-btcc] undecodable subsession child row ignored");
+                butler_core::diagnostic!("[native-btcc] undecodable subsession child row ignored");
                 None
             }
             other => other.map_err(BtccError::from)?,

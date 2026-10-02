@@ -160,9 +160,12 @@ impl DailyCognitionJobs {
             .catchup_once(cancellation)
             .await
             .map_err(|error| error.code().to_owned())?;
-        println!(
+        butler_core::diagnostic!(
             "[session-sync] available={} scanned={} ingested={} wrapped={}",
-            result.available, result.scanned, result.ingested, result.wrapped,
+            result.available,
+            result.scanned,
+            result.ingested,
+            result.wrapped,
         );
         Ok(())
     }
@@ -191,7 +194,7 @@ impl DailyCognitionJobs {
             CycleStatus::Completed | CycleStatus::DeferredRateLimited | CycleStatus::LockHeld
         );
         let completed = generic_ok && configured.exit_code == 0;
-        println!(
+        butler_core::diagnostic!(
             "[consolidation-cycle] status={} generic={:?} genericPhases={} configuredPhases={} configuredErrors={}",
             if completed {
                 "completed"

@@ -134,7 +134,7 @@ jobs:
           if ($LASTEXITCODE -or $run.status -ne 'completed' -or $run.head_branch -ne $env:EXPECTED_BRANCH -or $run.path -ne '.github/workflows/windows-installer.yml') { throw 'Unexpected source run' }
           git fetch origin $run.head_sha
           if ($LASTEXITCODE) { throw 'Source revision unavailable' }
-          git diff --exit-code $run.head_sha HEAD -- VERSION package.json bun.lock packages/butler-agent packages/butler-app/client packages/butler-app/scripts/release packages/butler-app/scripts/windows/package-release.ts deploy/licenses
+          git diff --exit-code $run.head_sha HEAD -- VERSION package.json bun.lock packages/butler-agent packages/butler-app/client packages/butler-app/scripts/release packages/butler-app/scripts/windows/package-release.ts deploy/licenses .github/actions/build-windows-agent .github/actions/package-windows-app
           if ($LASTEXITCODE) { throw 'Product changed: rebuild packages instead of reusing them' }
           Write-Output "Verified unchanged product sources from run $env:ARTIFACT_RUN ($($run.head_sha))"
       - uses: actions/download-artifact@v4

@@ -59,42 +59,8 @@ pub(crate) async fn run_native_service_with_options(
     .map_err(crate::host::HostError::from)
 }
 
-#[derive(Clone, Copy)]
-struct ServiceLogMode {
-    stderr: bool,
-    quiet: bool,
-}
-
-impl ServiceLogMode {
-    fn desktop() -> Self {
-        Self {
-            stderr: false,
-            quiet: false,
-        }
-    }
-
-    fn cli(quiet: bool) -> Self {
-        Self {
-            stderr: true,
-            quiet,
-        }
-    }
-
-    fn write(self, message: &str) {
-        if !self.quiet {
-            self.problem(message);
-        }
-    }
-
-    /// Writes even in quiet mode: a problem the operator must see.
-    fn problem(self, message: &str) {
-        if self.stderr {
-            eprintln!("{message}");
-        } else {
-            println!("{message}");
-        }
-    }
-}
+mod logs;
+use logs::ServiceLogMode;
 
 async fn run(
     installation: ResolvedInstallation,
@@ -105,7 +71,18 @@ async fn run(
     // Before the instance record exists: a stop can only target this process
     // once the record is published, and it must never find the signal's
     // default action (death by SIGTERM) in place.
-    let stop = StopSignal::listen().map_err(io)?;
+    let version = super::diagnostics::version(&installation);
+    super::diagnostics::lifecycle(&version, "start", "service_start", "Service is starting.");
+    let stop = StopSignal::listen(version.clone()).map_err(|source| {
+        let error = io(source);
+        super::diagnostics::lifecycle(
+            &version,
+            "exit",
+            error.code(),
+            "Service could not install shutdown handling.",
+        );
+        error
+    })?;
     let (ready, initialized) = tokio::sync::oneshot::channel();
     let service = Box::pin(run_until_stopped(
         installation,
@@ -116,7 +93,22 @@ async fn run(
         ready,
     ));
     let result = startup::until_ready(service, initialized, &stop).await;
-    stop.settle(result, |line| logs.problem(line))
+    let result = stop.settle(result, |line| logs.problem(line));
+    let code = result
+        .as_ref()
+        .err()
+        .map_or("requested_stop", BtccError::code);
+    super::diagnostics::lifecycle(
+        &version,
+        "exit",
+        code,
+        if result.is_ok() {
+            "Service stopped on request."
+        } else {
+            "Service exited unexpectedly; its supervisor must restart it."
+        },
+    );
+    result
 }
 
 async fn run_until_stopped(
@@ -291,7 +283,6 @@ async fn serve(
     let (app_endpoint, listener, ready) = app;
     let admission::Admission {
         session_id,
-        model,
         progress,
         queue,
         dispatcher,
@@ -328,7 +319,7 @@ async fn serve(
         let _ = gateway.close().await;
         return Err(error);
     }
-    logs.write(&format!("[native-butler] ready model={model}"));
+    log_effective_model(&gateway, logs).await?;
     let _ = ready.send(());
     let subsessions = runtime.subsessions.repository();
     let result = poll_service(
@@ -478,5 +469,17 @@ async fn recover_inbound_queue(
         .await
         .map_err(|error| failure("inbound_queue_worker_failed", error.to_string()))?
         .map_err(|error| failure(error.code(), error.message()))?;
+    Ok(())
+}
+
+async fn log_effective_model(
+    gateway: &AppGatewayLifecycle,
+    logs: ServiceLogMode,
+) -> Result<(), BtccError> {
+    let model = gateway.effective_default_model().await?;
+    let provider = butler_models::models::parse_model_ref(&model).provider_id;
+    logs.write(&format!(
+        "[native-butler] ready model={model} provider={provider}"
+    ));
     Ok(())
 }

@@ -58,15 +58,21 @@ pub use provider::{
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use catalog::model_identity_key;
 pub use catalog::{
-    ApiKeyBilling, CredentialStorage, CredentialView, HostedApiShape, ImageLimitField,
-    ImageLimitSources, ImageProbeEvidence, LocalModelConfig, LocalModelPlatform, LocalModelSource,
-    ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelPreset, ModelPricing,
-    ModelProviderMetadata, ModelTier, NextPrices, ParsedModelRef, ParsedModelRefSource,
-    PromptPriceTier, ProviderAuthMethod, ProviderPresets, ReasoningEffort,
+    ANTHROPIC_ADAPTIVE_MODELS, ANTHROPIC_BUDGET_MODEL, KIMI_ADAPTIVE_MODEL,
+    OPENAI_DYNAMIC_PLAIN_MODEL, OPENAI_EXPLICIT_CACHE_MODELS, OPENCODE_THINKING_MODEL,
+    ZAI_IMAGE_MODEL, ZAI_THINKING_REFS,
+};
+pub use catalog::{
+    ApiKeyBilling, CredentialStorage, CredentialView, DEFAULT_PROVIDER, HostedApiShape,
+    ImageLimitField, ImageLimitSources, ImageProbeEvidence, LEGACY_DEFAULT_MODEL, LocalModelConfig,
+    LocalModelPlatform, LocalModelSource, ModelCatalogSnapshot, ModelCatalogSnapshotInput,
+    ModelPreset, ModelPricing, ModelProviderMetadata, ModelTier, NextPrices, ParsedModelRef,
+    ParsedModelRefSource, PromptPriceTier, ProviderAuthMethod, ProviderPresets, ReasoningEffort,
     RegisteredHostedModelConfig, RequestTokens, TokenEstimate, TokenEstimateInput,
-    TokenEstimatorKind, TokenPrices, default_hosted_provider_api_base_url,
-    normalize_hosted_api_base_url, normalize_local_model_config, normalize_registered_hosted_model,
-    parse_model_ref, registered_hosted_model_metadata, upgrade_routine_preset,
+    TokenEstimatorKind, TokenPrices, configured_default_model,
+    default_hosted_provider_api_base_url, default_model_at, normalize_hosted_api_base_url,
+    normalize_local_model_config, normalize_registered_hosted_model, parse_model_ref,
+    registered_hosted_model_metadata, upgrade_routine_preset,
 };
 
 use std::borrow::Cow;
@@ -93,22 +99,6 @@ pub use configuration::{
     generate_pkce_verifier, pkce_challenge,
 };
 pub use status::{StatusModels, auth_status_with_environment, open_status_models};
-
-pub const DEFAULT_MODEL_REF: &str = "openai/gpt-5.5";
-
-pub const CLI_FALLBACK_OPENAI_MODELS: &[&str] = &[
-    "gpt-5.5-codex",
-    "gpt-6-astra",
-    "gpt-5.6-sol",
-    "gpt-5.6-terra",
-    "gpt-5.6-luna",
-    "gpt-5.5",
-    "gpt-5.4",
-    "gpt-5.4-mini",
-    "gpt-5.4-nano",
-    "gpt-5-codex",
-    "gpt-5",
-];
 
 /// Process-owned immutable catalog data and lazily allocated tokenizer.
 pub struct ModelCatalog {

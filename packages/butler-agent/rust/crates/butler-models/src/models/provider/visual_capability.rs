@@ -4,7 +4,7 @@ use crate::models::{ModelProviderMetadata, ProviderVisualCapabilityPort};
 use butler_turn::btcc::ModelRoundError;
 
 const ZAI_PROVIDER: &str = "zai";
-const ZAI_MODEL: &str = "glm-5.2";
+const ZAI_MODEL: &str = crate::models::ZAI_IMAGE_MODEL;
 const ZAI_CARRIER: &str = "zai_mcp_vision";
 
 pub(super) async fn refresh_current_zai_capability(

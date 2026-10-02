@@ -252,7 +252,7 @@ fn run_connection_lane(
             if !connection.is_autocommit()
                 && let Err(error) = connection.execute_batch("ROLLBACK")
             {
-                eprintln!("[app-sqlite] panic rollback failed: {error}");
+                butler_core::diagnostic!("[app-sqlite] panic rollback failed: {error}");
             }
         }
     }

@@ -383,7 +383,7 @@ impl AppApplication {
             .projection(app_session_hint(session_id), None)
             .await;
         let mut projection = projection.unwrap_or_else(|error| {
-            eprintln!(
+            butler_core::diagnostic!(
                 "[gateway] session view without subsessions: {error} cause={:?}",
                 std::error::Error::source(&error).map(ToString::to_string)
             );

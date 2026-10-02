@@ -48,6 +48,7 @@ const env = { ...process.env, HOME: join(root, "home"), BUTLER_DATA: data,
   BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"), BUTLER_APP_SMOKE_DEBUG_PORT: String(debugPort),
   BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_E2E_TIER: "stub", BUTLER_PROVIDER_QUOTA_POLLING: "0",
   OPENAI_API_KEY: "e2e-not-real", OPENAI_BASE_URL: `http://127.0.0.1:${server.port}/v1`,
+  ELECTRON_ENABLE_LOGGING: "1", ELECTRON_LOG_FILE: join(root, "electron.log"),
   BUTLER_APP_UPDATE_MANIFEST: `http://127.0.0.1:${server.port}/manifest.json`, BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
 };
 const installed = join(powershell("[Environment]::GetFolderPath('LocalApplicationData')", env), "butler-app");
@@ -65,13 +66,17 @@ try {
   assertShortcuts(shortcuts, true);
   shellProof();
   // Silent Squirrel installation does not necessarily start the first-run app.
-  const app = spawn(stub, [], { env, stdio: "ignore" });
+  const app = spawn(stub, [], { env, stdio: ["ignore", "pipe", "pipe"] });
+  const appLog: string[] = [];
+  for (const stream of [app.stdout, app.stderr]) stream?.on("data", chunk => appLog.push(String(chunk)));
+  app.on("exit", (code, signal) => console.log(JSON.stringify({ appExit: { code, signal }, phase, log: appLog.join("") })));
   if (app.pid) owned.add(app.pid);
   page = await electronPage(debugPort);
   await bridge(page, "updateSettings", { language: "en", onboarding: {
     consent_version: 1, accepted_at: new Date().toISOString(), completed_at: new Date().toISOString(),
   } });
   phase = "silent install reload";
+  console.log(JSON.stringify({ beforeReload: await bridge(page, "getAppInfo"), appPid: app.pid, instance: readJson(join(data, "app/runtime/foreground/instance.json"))?.app_pid }));
   await page.reload();
   await proof(from);
   const session = (await bridge(page, "createSession", { kind: "chat", title: "Update retains chat" })).session;
@@ -113,10 +118,12 @@ try {
 } catch (error) {
   console.error(JSON.stringify({ phase, renderer: page ? await page.diagnostics().catch(() => null) : null,
     instanceState: readJson(join(data, "app/runtime/foreground/instance.json"))?.state,
+    lastExit: readJson(join(data, "app/runtime/foreground/last-exit.json")),
     packages: [from, to].map(version => ({ version,
-      preloadExists: existsSync(join(resolve(dirname(agentPath(version)), "../../.."), "resources/app/preload.cjs")),
+      asarExists: existsSync(join(resolve(dirname(agentPath(version)), "../.."), "app.asar")),
       agentExists: existsSync(agentPath(version)),
     })) }));
+  if (existsSync(env.ELECTRON_LOG_FILE)) console.error(readFileSync(env.ELECTRON_LOG_FILE, "utf8"));
   if (existsSync(join(data, "updates/app-install.log"))) console.error(readFileSync(join(data, "updates/app-install.log"), "utf8"));
   throw error;
 } finally {
@@ -132,6 +139,9 @@ async function oneClickLaunch() {
   run(join(release, `ButlerSetup-${from}-x64.exe`), []);
   await waitFor(() => Boolean(readJson(join(data, "app/runtime/foreground/instance.json"))?.app_pid), "normal Setup auto-launch");
   page = await electronPage(debugPort);
+  await proof(from);
+  phase = "normal install reload";
+  await page.reload();
   await proof(from);
   ownedProcesses(data, owned);
   await page.expression("setTimeout(() => window.butlerApp.quitApp({confirmed:true}), 50); true");

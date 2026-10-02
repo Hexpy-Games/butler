@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use serde_json::Map;
 
-use crate::models::{DEFAULT_MODEL_REF, ModelCatalogError};
+use crate::models::ModelCatalogError;
 use butler_core::locale::LocaleCollation;
 
 use super::{
@@ -111,7 +111,7 @@ pub(super) fn resolve_model_metadata(
     let requested = model_ref
         .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
-        .unwrap_or(DEFAULT_MODEL_REF);
+        .unwrap_or("");
     let parsed = parse_model_ref(requested);
     find_model_metadata(Some(&parsed.input), models)
         .unwrap_or_else(|| unavailable(parsed, "missing"))
@@ -216,7 +216,11 @@ pub(super) fn build_view(
             .chain(input.configured_local.iter())
             .chain(input.extra_models.iter()),
     );
-    let default = resolve_model_metadata(input.default_model_ref.as_deref(), &lookup);
+    let preset = static_data.default_preset(None);
+    let default = resolve_model_metadata(
+        input.default_model_ref.as_deref().or(Some(&preset.model)),
+        &lookup,
+    );
     let registered = input
         .registered_models
         .iter()
@@ -231,11 +235,15 @@ pub(super) fn build_view(
     } else {
         &input.registered_models
     };
+    let default_effort = static_data
+        .routine_preset(&default.provider_id)
+        .filter(|preset| preset.model == default.model_ref)
+        .map_or(default.default_reasoning_effort, |preset| preset.effort);
     Ok(ModelCatalogView {
         generation: super::generation::generation(generation_models, collation)?,
         generated_at: input.generated_at.clone(),
         default_model_ref: default.model_ref,
-        default_reasoning_effort: default.default_reasoning_effort,
+        default_reasoning_effort: default_effort,
         providers: provider_views(&models, static_data),
         models,
         registered_models: registered,

@@ -13,8 +13,21 @@ pub(crate) struct StaticCatalog {
 
 impl StaticCatalog {
     pub(crate) fn load() -> Result<Self, ModelCatalogError> {
-        serde_json::from_str(include_str!("static-catalog.json"))
-            .map_err(ModelCatalogError::Catalog)
+        let catalog: Self = serde_json::from_str(include_str!("static-catalog.json"))
+            .map_err(ModelCatalogError::Catalog)?;
+        let preset = catalog
+            .routine_preset(super::DEFAULT_PROVIDER)
+            .ok_or_else(|| {
+                ModelCatalogError::rejected("Catalog default provider has no routine preset.")
+            })?;
+        if !lookup::find_model_metadata(Some(&preset.model), &catalog.models)
+            .is_some_and(|model| model.runtime_supported)
+        {
+            return Err(ModelCatalogError::rejected(
+                "Catalog default routine model is unavailable.",
+            ));
+        }
+        Ok(catalog)
     }
 
     /// The provider's static `presets.routine`.

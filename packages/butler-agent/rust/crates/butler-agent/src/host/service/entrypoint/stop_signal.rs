@@ -7,7 +7,7 @@
 //! the signal. Every other source of a stop (the shutdown flag, the App
 //! releasing its lease, and on Windows the control endpoint's `service_stop`
 //! command) requests the same [`StopSignal`]. A requested stop exits 0; an exit
-//! nobody asked for (a crash, a failure, a turn that needs a new process)
+//! nobody asked for (a crash or unrecoverable infrastructure failure)
 //! exits non-zero. Supervisors depend on it: the App reads the stop intent,
 //! and launchd (`KeepAlive: {SuccessfulExit: false}`) and systemd
 //! (`Restart=on-failure`) restart only an Agent that exits non-zero.
@@ -41,6 +41,7 @@ pub(super) struct StopSignal {
 }
 
 struct Inner {
+    version: String,
     requested: watch::Sender<bool>,
     /// DATA and the instance nonce, once the instance record is published.
     instance: OnceLock<(PathBuf, String, ResolvedInstallation)>,
@@ -51,10 +52,11 @@ struct Inner {
 
 impl StopSignal {
     /// Starts listening for the host's stop requests (SIGTERM and SIGINT).
-    pub(super) fn listen() -> std::io::Result<Self> {
+    pub(super) fn listen(version: String) -> std::io::Result<Self> {
         let mut requests = shutdown_requests()?;
         let stop = Self {
             inner: Arc::new(Inner {
+                version,
                 requested: watch::Sender::new(false),
                 instance: OnceLock::new(),
                 writer: OnceLock::new(),
@@ -92,6 +94,12 @@ impl StopSignal {
     /// Records a stop request.
     pub(super) fn request(&self) {
         if !self.inner.requested.send_replace(true) {
+            super::super::diagnostics::lifecycle(
+                &self.inner.version,
+                "stop",
+                "requested_stop",
+                "Service is stopping on request.",
+            );
             super::super::shutdown_trace::event("stop_requested");
             self.inner.cancellation.cancel();
             exit_after_grace(self.inner.clone());
@@ -188,7 +196,9 @@ fn exit_after_grace(inner: Arc<Inner>) {
             if inner.completed.load(Ordering::Acquire) {
                 return;
             }
-            eprintln!("[native-butler] stop deadline reached; cleaning up before exit");
+            butler_core::diagnostic!(
+                "[native-butler] stop deadline reached; cleaning up before exit"
+            );
             super::super::shutdown_trace::event("deadline_cleanup:begin");
             super::super::shutdown_trace::event("deadline_mcp:begin");
             butler_models::mcp_client::stop_mcp_children();
@@ -198,6 +208,12 @@ fn exit_after_grace(inner: Arc<Inner>) {
                 let _ = writer.close_on_deadline(Duration::from_millis(500));
                 super::super::shutdown_trace::event("deadline_transcript:end");
             }
+            super::super::diagnostics::lifecycle(
+                &inner.version,
+                "exit",
+                "shutdown_deadline",
+                "Service reached its shutdown deadline and completed forced cleanup.",
+            );
             if let Some((data_root, nonce, installation)) = inner.instance.get() {
                 crate::host::service::instance::release_record(data_root, installation, nonce);
             }
@@ -205,6 +221,6 @@ fn exit_after_grace(inner: Arc<Inner>) {
             std::process::exit(0);
         });
     if spawned.is_err() {
-        eprintln!("[native-butler] stop grace timer unavailable");
+        butler_core::diagnostic!("[native-butler] stop grace timer unavailable");
     }
 }

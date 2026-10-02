@@ -12,6 +12,8 @@
 // Every public item says what it is for.
 #![deny(missing_docs)]
 
+pub mod diagnostics;
+
 /// Declares a domain's closed set of wire error codes.
 ///
 /// Each variant maps one-to-one to the snake_case string that is persisted in

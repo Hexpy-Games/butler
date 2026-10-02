@@ -73,12 +73,12 @@ impl From<GatewayApplicationError> for HttpError {
                 message,
             },
             GatewayApplicationError::Internal { source } => {
-                eprintln!("[gateway] internal request failure");
+                butler_core::diagnostic!("[gateway] internal request failure");
                 let mut cause = source
                     .as_deref()
                     .map(|error| error as &dyn std::error::Error);
                 while let Some(error) = cause {
-                    eprintln!("[gateway] caused by: {error}");
+                    butler_core::diagnostic!("[gateway] caused by: {error}");
                     cause = error.source();
                 }
                 Self::Internal

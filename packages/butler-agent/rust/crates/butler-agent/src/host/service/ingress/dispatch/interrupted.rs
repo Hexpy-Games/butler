@@ -25,8 +25,8 @@ pub(super) fn by_crash(record: &QueuedInboundEvent) -> bool {
         && plain_turn(record)
 }
 
-/// An item already parked once for process replacement after an
-/// interruption: whatever its kind, it is replaced at most once.
+/// Report-only provenance after a runtime interruption, including legacy
+/// records parked by a previous version for process replacement.
 pub(super) fn replaced_once(record: &QueuedInboundEvent) -> bool {
     metadata_flag(record, "recoveredFromRuntimeInterruption")
 }
@@ -93,7 +93,7 @@ pub(super) async fn settle(
         }
         Err(error) => error,
     };
-    eprintln!(
+    butler_core::diagnostic!(
         "[native-btcc] interruption report unavailable code={}",
         error.code
     );
@@ -121,7 +121,14 @@ pub(super) async fn settle(
                 // close: the next process must report it, never rerun the turn.
                 let _ = queue.park_async(item.clone(), error.code.to_owned()).await;
             } else {
-                let _ = queue.defer_async(item.clone(), error.code.to_owned()).await;
+                // Retain report-only provenance while allowing this same process
+                // to retry delivery after the normal queue backoff.
+                let mut deferred = item.clone();
+                deferred
+                    .record
+                    .metadata
+                    .insert("recoveredFromRuntimeInterruption".into(), true.into());
+                let _ = queue.defer_async(deferred, error.code.to_owned()).await;
             }
             Some(IngressPoll::default())
         }
@@ -141,6 +148,18 @@ pub(super) async fn report(
         Some(code) => action::rejected(item, &envelope, &binding, code)?,
         None => action::crash_interrupted(item, &envelope, &binding)?,
     };
+    #[cfg(debug_assertions)]
+    if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
+        && let Some(data) = std::env::var_os("BUTLER_DATA")
+        && tokio::fs::remove_file(std::path::PathBuf::from(data).join("e2e-interrupt-report"))
+            .await
+            .is_ok()
+    {
+        return Err(IngressError::new(
+            "inbound_delivery_interrupted",
+            "Injected transient delivery failure",
+        ));
+    }
     if delivery.deliver(binding.session_id.clone(), report).await? {
         Ok(())
     } else {

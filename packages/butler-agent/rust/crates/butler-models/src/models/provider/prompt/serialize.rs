@@ -112,10 +112,7 @@ fn responses(
     });
     let explicit = request.cache_boundary.is_some()
         && !codex
-        && matches!(
-            config.wire_model.as_str(),
-            "gpt-5.6-sol" | "gpt-5.6-terra" | "gpt-5.6-luna"
-        );
+        && crate::models::OPENAI_EXPLICIT_CACHE_MODELS.contains(&config.wire_model.as_str());
     let input = if let Some(boundary) = &request.cache_boundary {
         if request.prompt != format!("{}{}", boundary.stable_prefix, boundary.dynamic_suffix) {
             return Err(invocation(

@@ -62,6 +62,7 @@ async function connect(url: string): Promise<ElectronPage> {
   async function diagnostics() {
     return { errors, page: await expression("({url:location.href,ready:document.readyState,preload:Boolean(window.butlerApp)})").catch(() => null) };
   }
+  await send("Page.enable", {});
   async function waitForFunction(fn: () => unknown) {
     const deadline = Date.now() + 30_000;
     while (Date.now() < deadline) {
@@ -73,7 +74,21 @@ async function connect(url: string): Promise<ElectronPage> {
   return {
     expression, waitForFunction, diagnostics,
     evaluate: fn => expression(`(${fn.toString()})()`),
-    reload: async () => { await send("Page.reload", {}); await waitForFunction(() => Boolean(window.butlerApp)); },
+    reload: async () => {
+      // The preload bridge exists before navigation completes. Reloading then
+      // aborts main's initial loadURL and makes startup fail with ERR_ABORTED.
+      await waitForFunction(() => document.readyState === "complete" && Boolean(window.butlerApp));
+      const loaded = new Promise<void>((done, fail) => {
+        const timer = setTimeout(() => { socket.removeEventListener("message", onMessage); fail(new Error("Electron reload did not finish.")); }, 30_000);
+        const onMessage = (event: MessageEvent) => {
+          if (JSON.parse(String(event.data)).method !== "Page.loadEventFired") return;
+          clearTimeout(timer); socket.removeEventListener("message", onMessage); done();
+        };
+        socket.addEventListener("message", onMessage);
+      });
+      await Promise.all([loaded, send("Page.reload", {})]);
+      await waitForFunction(() => document.readyState === "complete" && Boolean(window.butlerApp));
+    },
     close: () => socket.close(),
   };
 }

@@ -88,6 +88,13 @@ fn activate_mac(
     if team(bundle)? != team(&candidate)? {
         return Err("App signing team changed.".into());
     }
+    crate::process_names::restore_archive_links(
+        &candidate.join("Contents/Resources/bundled-agent/bin/butler-agent"),
+    )
+    .map_err(|error| error.to_string())?;
+    run(Command::new("codesign")
+        .args(["--verify", "--deep", "--strict"])
+        .arg(&candidate))?;
     // Developer ID previews are signed but not notarized. Only a verified,
     // same-publisher candidate may have its download quarantine removed.
     remove_quarantine(&candidate)?;

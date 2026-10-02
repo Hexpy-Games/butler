@@ -1,7 +1,7 @@
 {
   "inputs": {
     "bun.lock": "6da68de704dbc47dea3ae850efa02a7e7ccf9691a5778c73fb77a8bb1687a84e",
-    "packages/butler-agent/rust/Cargo.lock": "9bba0d4e03f05daf8812a66be071d02288a8aaf8ce817583d1e12b927d1f52e3",
+    "packages/butler-agent/rust/Cargo.lock": "8baa56a5953d16002c8db127ff640b7ddcb779187db74f3ae22d2f39b7394d59",
     "packages/butler-agent/rust/Cargo.toml": "f93e0f6eb7ff452ebd4d3e86c9e5ed3ea627dfac9da153ca28057b0bba8def5a",
     "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "7bc16915e7c3ff9c8f67ac2f1021a763760f6f4f67d8f241f284ae606bd104d5",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
@@ -20,7 +20,7 @@
     "packages/butler-agent/rust/rust-toolchain.toml": "57dc91c7ef18e7f2f5b5b52265f2eb79c240359fbdebdf3d2f9661de3143a2e6",
     "packages/butler-agent/rust/scripts/prepare-static-ort.py": "2af557c1b4be83892da20c8ac9f559de9455ea7fc3245e661ccfefb228c0690f",
     "packages/butler-agent/rust/scripts/static-ort.lock.json": "a1aee730fc0773ca02d23bad8da95c0efe56a07ded67dc36d251f475a90369b2",
-    "packages/butler-agent/rust/tools/source-check/Cargo.toml": "3f172c1b0e2c9b29f791e762ad45c0c2abccdb8c033aef4cee3f4d697674fa48",
+    "packages/butler-agent/rust/tools/source-check/Cargo.toml": "e50cffe7e1c5a79f1fe76bf689eb65fb682a29cd8425ae3609c35cfa1f56603c",
     "packages/butler-app/client/electron/package.json": "14f7a3652d55d9e2d46d6b074057b57381d16452877f378fd1e9f39c6e24ec99",
     "packages/butler-app/client/ui/package.json": "8de8e3279db1471ff1277c48cf9de373a9e1d8b13a9751941435c07f7820b178",
     "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos/NOTICE": "3d1d0a9fe82fdc1492422398bfac65d2205a9326eebf619e238b84e9b6376d36",

@@ -42,7 +42,7 @@ pub(in crate::gateway::application) async fn sync_chat_once(
         Some(value) if reusable => value,
         found => {
             if found.is_some() {
-                eprintln!(
+                butler_core::diagnostic!(
                     "[gateway] transcript checkpoint no longer matches its file; projecting {chat_id} from the start"
                 );
             }

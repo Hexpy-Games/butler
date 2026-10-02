@@ -122,7 +122,7 @@ pub(super) fn migrate(
     )
     .map_err(AppStorageError::sqlite)?;
     tx.commit().map_err(AppStorageError::sqlite)?;
-    eprintln!("[schedule-migration] imported {count} legacy records; source files retained");
+    report_import(count);
     Ok(())
 }
 
@@ -215,4 +215,10 @@ fn unique_id(db: &Connection, original: &str) -> Result<String, AppStorageError>
 
 fn import_error(error: impl std::error::Error + Send + Sync + 'static) -> AppStorageError {
     AppStorageError::new(AppStorageCode::AppSchemaJsonFailed, error.to_string()).with_source(error)
+}
+
+fn report_import(count: usize) {
+    butler_core::diagnostic!(
+        "[schedule-migration] imported {count} legacy records; source files retained"
+    );
 }
