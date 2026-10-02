@@ -1,4 +1,7 @@
-use butler_e2e::e2e::{HarnessError, cassette::{Cassette, Chunk, ResponseRecord}};
+use butler_e2e::e2e::{
+    HarnessError,
+    cassette::{Cassette, Chunk, ResponseRecord},
+};
 use serde_json::{Value, json};
 
 pub(super) const PROMPT: &str = "다운로드 폴더 정리해줘";
@@ -11,10 +14,14 @@ pub(super) fn cassette(command: &str) -> Result<Cassette, HarnessError> {
         e.request.key.user_request = PROMPT.into();
         e.request.key.model = "gpt-6-luna".into();
     }
-    c.exchanges[0].response = response(&json!({"type":"function_call","id":"fc_command","call_id":"call_command","name":"run_command",
-        "arguments":json!({"command":command,"state_effect":"read_only","timeout_ms":30000}).to_string(),"status":"completed"}));
-    c.exchanges[1].response = response(&json!({"type":"message","id":"msg_answer","role":"assistant","status":"completed",
-        "content":[{"type":"output_text","text":ANSWER,"annotations":[]}]}));
+    c.exchanges[0].response = response(
+        &json!({"type":"function_call","id":"fc_command","call_id":"call_command","name":"run_command",
+        "arguments":json!({"command":command,"state_effect":"read_only","timeout_ms":30000}).to_string(),"status":"completed"}),
+    );
+    c.exchanges[1].response = response(
+        &json!({"type":"message","id":"msg_answer","role":"assistant","status":"completed",
+        "content":[{"type":"output_text","text":ANSWER,"annotations":[]}]}),
+    );
     Ok(c)
 }
 
@@ -33,8 +40,22 @@ fn response(item: &Value) -> ResponseRecord {
     }
     events.push(json!({"type":"response.output_item.done","output_index":0,"item":item}));
     events.push(json!({"type":"response.completed","response":completed}));
-    ResponseRecord { status:200, headers:vec![], chunks:events.into_iter().enumerate().map(|(i,mut event)| {
-        event["sequence_number"]=json!(i);
-        Chunk {delay_ms:0,text:format!("event: {}\ndata: {event}\n\n",event["type"].as_str().unwrap_or_default())}
-    }).collect() }
+    ResponseRecord {
+        status: 200,
+        headers: vec![],
+        chunks: events
+            .into_iter()
+            .enumerate()
+            .map(|(i, mut event)| {
+                event["sequence_number"] = json!(i);
+                Chunk {
+                    delay_ms: 0,
+                    text: format!(
+                        "event: {}\ndata: {event}\n\n",
+                        event["type"].as_str().unwrap_or_default()
+                    ),
+                }
+            })
+            .collect(),
+    }
 }
