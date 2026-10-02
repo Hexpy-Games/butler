@@ -96,7 +96,7 @@ try {
     # Exercise the packed npm entry point as well as the PowerShell one-liner path.
     Push-Location packages/butler-npm
     try {
-        npm pack --pack-destination $root | Out-Null
+        npm.cmd pack --pack-destination $root | Out-Null
         if ($LASTEXITCODE -ne 0) { throw 'npm pack failed' }
     } finally { Pop-Location }
     $package = (Get-ChildItem "$root/hexpygames-butler-*.tgz").FullName

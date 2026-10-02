@@ -54,7 +54,7 @@ runs:
         New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
         bun install --frozen-lockfile --ignore-scripts
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        npm --prefix packages/butler-app/client/ui run build
+        npm.cmd --prefix packages/butler-app/client/ui run build
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     - name: Build unsigned release executable
       shell: pwsh
