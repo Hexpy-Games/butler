@@ -44,7 +44,24 @@ impl GatewayFeedback for super::AppApplication {
             None => Box::pin(async { Err(crate::gateway::GatewayApplicationError::internal()) }),
         };
         Box::pin(async move {
-            let value = result.await?;
+            let mut value = result.await?;
+            if !changed {
+                value = this.storage.execute(move |db| {
+                    use rusqlite::OptionalExtension;
+                    if let Some(entries) = value["entries"].as_array_mut() {
+                        for entry in entries {
+                            if let Some(id) = entry["scope"].as_str().and_then(|scope| scope.strip_prefix("project:")) {
+                                let name: Option<String> = db.query_row(
+                                    "SELECT display_name FROM projects WHERE id=?1 OR ledger_project_id=?1 LIMIT 1",
+                                    [id], |row| row.get(0),
+                                ).optional().map_err(super::AppStorageError::sqlite)?;
+                                entry["project_name"] = serde_json::json!(name);
+                            }
+                        }
+                    }
+                    Ok(value)
+                }).await.map_err(super::app_error)?;
+            }
             if changed {
                 let now = this.dependencies.identity_clock.now_iso();
                 let subscribers = this.subscribers.clone();

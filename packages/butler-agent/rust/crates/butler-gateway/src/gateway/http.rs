@@ -231,9 +231,6 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
         return model_catalog::route(state, request, &uri).await;
     }
     if personalization::settings_path(&uri) {
-        return personalization::route(state, request, &uri).await;
-    }
-    if owner_memory::matches(uri.path()) {
         return owner_memory::route(state, request, &uri).await;
     }
     if matches!(

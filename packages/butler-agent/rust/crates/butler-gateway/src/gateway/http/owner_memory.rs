@@ -2,11 +2,6 @@
 use super::{HttpError, HttpState};
 use axum::{body::Body, http::Uri, response::Response};
 use std::sync::Arc;
-pub(super) fn matches(path: &str) -> bool {
-    path == "/personalization"
-        || path.starts_with("/personalization/")
-        || path.starts_with("/memory/feedback")
-}
 pub(super) async fn route(
     state: Arc<HttpState>,
     request: axum::http::Request<Body>,

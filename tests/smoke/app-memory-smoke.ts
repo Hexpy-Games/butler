@@ -6,7 +6,7 @@ import { createNativeAppServer } from "../support/native-app-server.ts";
 import { LEGACY_FIRST_RUN_STORAGE_KEY, legacyFirstRunCompleteRecord } from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
 import { checkProfileInstructionSeparation, checkMemoryRefreshDuringRead } from "../support/memory-profile-acceptance.ts";
 
-import { feedbackStates, seedFeedback, checkFeedback, feedbackFlow } from "../support/feedback-page-fixtures.ts";
+import { feedbackStates, seedFeedback, checkFeedback, feedbackFlow, auditFeedback } from "../support/feedback-page-fixtures.ts";
 const feedback = Boolean(process.env.BUTLER_FEEDBACK_SHOTS);
 const output = process.env.BUTLER_MEMORY_SHOTS ?? resolve(".tmp/memory-shots");
 mkdirSync(output, { recursive: true });
@@ -136,7 +136,7 @@ try {
       await page.waitForFunction(() => document.getAnimations().every((a) => a.effect?.getTiming().iterations === Infinity || a.playState !== "running"));
       const beforeIdle = reads;
       if (state === "populated") { await page.waitForTimeout(1000); assert(reads === beforeIdle && reads === 1, `one opening check, no polling: ${reads}`); }
-      const checks = await audit(page);
+      const checks = { ...await audit(page), feedback: feedback ? await auditFeedback(page) : undefined };
       assert(!checks.horizontalScroll && checks.text.every((row) => row.fullText && row.wraps), `overflow or truncated text: ${JSON.stringify(checks)}`);
       assert(checks.toastFonts.every((font) => font.includes("Pretendard")), `toast must use bundled font: ${JSON.stringify(checks.toastFonts)}`);
       const file = `${feedback ? "feedback" : "memory"}-${locale}-${theme}-${width}-${state}.png`;

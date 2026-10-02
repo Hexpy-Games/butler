@@ -9,7 +9,7 @@ src/host/app/runtime_ports/personalization.rs	AppPersonalization::execute_inner	
 src/host/app/runtime_ports/personalization.rs	AppPersonalization::update	97
 src/host/app/runtime_ports/session_workspaces.rs	<AppSessionWorkspaces as AppSessionWorkspaceProvisioner>::provision	90
 src/host/app/runtime_ports/topic_branch.rs	<AppBranchSummarizerAdapter as AppBranchSummarizer>::summarize	89
-src/host/app/server.rs	AppServer::open_with_artifacts	141
+src/host/app/server.rs	AppServer::open_with_artifacts	136
 src/host/cli/oauth_login.rs	run_native_oauth_login_with_data	129
 src/host/embedding/worker.rs	handle	85
 src/host/guided/activity.rs	new_group	99
@@ -60,8 +60,7 @@ src/host/memory_jobs/recall_metrics.rs	<RecallMetrics as RecallMetricSink>::reco
 src/host/memory_jobs/transcript_sync.rs	LegacySessionSync::run	194
 src/host/memory_jobs/transcript_sync/hot.rs	LegacyHot::save	125
 src/host/memory_jobs/transcript_sync/hot.rs	commit	91
-src/host/runtime.rs	AgentRuntime::open	397
-src/host/runtime/environment.rs	ProcessEnvironment::capture	82
+src/host/runtime.rs	AgentRuntime::open	396
 src/host/service/ingress/bind.rs	bind_and_request	136
 src/host/service/ingress/bind.rs	control_request	81
 src/host/service/ingress/bind/internal_subsession.rs	bind	87

@@ -63,3 +63,25 @@ export async function feedbackFlow(page: Page, locale: string, counts: () => { r
   if (counts().deletes !== 1 || counts().resets !== 1) throw new Error("Page must issue exact owner routes");
   console.log(`feedback page flow: delete=1 reset=1 idle reads=0 total reads=${counts().reads}`);
 }
+export async function auditFeedback(page: Page) {
+  const proof = await page.evaluate(() => {
+    const section = document.querySelector<HTMLElement>('[data-settings-section-id="recent-feedback"]')!;
+    const surface = section.querySelector<HTMLElement>("[data-kind]")!;
+    const css = getComputedStyle(surface);
+    const parent = getComputedStyle(section.closest('[data-slot="settings-detail"]') ?? section.parentElement!);
+    const rows = [...section.querySelectorAll<HTMLElement>('[data-test-class="feedback-row"]')];
+    const horizontal = [...section.querySelectorAll<HTMLElement>("*")].some((node) => node.clientWidth > 0 && node.scrollWidth > node.clientWidth + 1 && ["auto", "scroll"].includes(getComputedStyle(node).overflowX));
+    const scrolls = [...document.querySelectorAll<HTMLElement>("[data-scroll-top], [data-scroll-bottom]")];
+    const fades = scrolls.filter((node) => node.scrollHeight > node.clientHeight + 1).map((node) => ({ top: node.dataset.atStart, bottom: node.dataset.atEnd, mask: getComputedStyle(node).maskImage }));
+    return {
+      cardBackground: css.backgroundColor, pageBackground: parent.backgroundColor, inset: css.padding,
+      rowInsets: rows.every((row) => row.getBoundingClientRect().left > surface.getBoundingClientRect().left && row.getBoundingClientRect().right < surface.getBoundingClientRect().right),
+      horizontalScroll: horizontal, fades,
+      noticeAlignment: "DS Notice uses a start-aligned message stack",
+      labels: "Title and description precede the card; Reset wraps below them on mobile",
+      iconSlot: "No row glyphs; busy Spinner uses Button iconStart",
+    };
+  });
+  if (proof.cardBackground === "rgba(0, 0, 0, 0)" || !proof.rowInsets || proof.horizontalScroll || proof.inset === "0px") throw new Error(`Feedback DS audit failed: ${JSON.stringify(proof)}`);
+  return proof;
+}

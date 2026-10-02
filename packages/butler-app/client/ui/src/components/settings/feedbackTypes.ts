@@ -2,13 +2,13 @@ import { appCopy, getAppLocale } from "@/app/copy.ts";
 import type { MemoryProject } from "./memoryTypes";
 export interface FeedbackEntry {
   feedback_id: string; text: string; scope: string; state: string;
-  updated_at: string; expires_at: string | null;
+  project_name?: string | null; updated_at: string; expires_at: string | null;
 }
 export function feedbackScope(item: FeedbackEntry, projects: MemoryProject[]) {
   const copy = appCopy.settings.memory;
   if (item.scope === "global") return copy.allChats;
   if (item.scope.startsWith("session:")) return copy.feedback.thisChat;
-  return projects.find((project) => project.id === item.scope.slice(8) || project.ledger_project_id === item.scope.slice(8))?.display_name || copy.project;
+  return item.project_name || projects.find((project) => project.id === item.scope.slice(8) || project.ledger_project_id === item.scope.slice(8))?.display_name || copy.project;
 }
 export function feedbackExpiry(item: FeedbackEntry) {
   const copy = appCopy.settings.memory.feedback;
