@@ -24,7 +24,8 @@ test("palette exposes loading, empty, failed and retried results without keeping
     expect(dom.window.document.body.textContent).toContain(appCopy.commandPalette.loading);
     await wait();
     await act(async () => pending[0]!.resolve({ results: [] }));
-    expect(dom.window.document.body.textContent).toContain(appCopy.commandPalette.empty);
+    expect(dom.window.document.querySelectorAll('[role="option"]')).toHaveLength(14);
+    expect(dom.window.document.body.textContent).toContain(appCopy.settings.sections.skills);
     const input = dom.window.document.querySelector("input")!;
     await act(async () => {
       Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")!.set!.call(input, "new query");

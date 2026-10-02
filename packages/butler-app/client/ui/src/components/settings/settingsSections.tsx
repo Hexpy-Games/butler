@@ -123,6 +123,16 @@ function matchesSettingsSearchValue(value: string, query: string): boolean {
   return normalizeSettingsSearchValue(value).includes(query);
 }
 
+export function matchesSettingsSection(
+  section: SettingsSectionDescriptor,
+  query: string,
+  fallback: string[] = [],
+): boolean {
+  const normalizedQuery = normalizeSettingsSearchValue(query);
+  return [section.label, section.description, ...section.aliases, ...fallback]
+    .some((value) => matchesSettingsSearchValue(value, normalizedQuery));
+}
+
 export function filterSettingsSectionGroups(
   groups: SettingsSectionGroupDescriptor[],
   query: string,
@@ -137,9 +147,7 @@ export function filterSettingsSectionGroups(
       return {
         ...group,
         sections: group.sections.filter((section) =>
-          [section.label, section.description, ...section.aliases].some((value) =>
-            matchesSettingsSearchValue(value, normalizedQuery),
-          ),
+          matchesSettingsSection(section, normalizedQuery),
         ),
       };
     })
