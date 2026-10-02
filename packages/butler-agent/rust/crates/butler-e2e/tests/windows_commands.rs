@@ -34,8 +34,17 @@ async fn run(case: &str, command: &str) -> Result<Value, HarnessError> {
         .iter()
         .find(|r| r["safe_tool_name"] == "run_command")
         .expect("command tool row");
-    let text = s.gw.operation_output(&id, row).await?;
-    let output: Value = serde_json::from_str(&text)?;
+    assert_eq!(row["state"], "delivered", "{row}");
+    let requests = s.provider()?.requests();
+    let text = requests
+        .iter()
+        .filter_map(|request| request["input"].as_array())
+        .flatten()
+        .find(|item| item["type"] == "function_call_output")
+        .expect("model receives command result")["output"]
+        .as_str()
+        .expect("command result JSON");
+    let output: Value = serde_json::from_str(text)?;
     eprintln!("{case}: {output}");
     assert_eq!(
         std::fs::read_to_string(downloads.join("보고서.txt"))?,
@@ -50,6 +59,17 @@ async fn run(case: &str, command: &str) -> Result<Value, HarnessError> {
             .iter()
             .any(|m| m["role"] == "assistant" && m["text"] == stub::ANSWER)
     );
+    assert_eq!(std::fs::read_dir(&downloads)?.count(), 2);
+    if case == "WIN-DOWNLOADS" {
+        let stdout = output["stdout"].as_str().unwrap_or_default();
+        assert_eq!(
+            stdout.lines().map(str::trim).collect::<Vec<_>>(),
+            vec!["보고서.txt", "사진.png"]
+        );
+        let requests = s.provider()?.requests();
+        assert!(requests.last().unwrap().to_string().contains("보고서.txt"));
+        assert!(requests.last().unwrap().to_string().contains("사진.png"));
+    }
     assert_eq!(s.provider()?.served(), 2);
     s.finish().await?;
     Ok(output)
@@ -91,7 +111,7 @@ async fn windows_command_tool_native_matrix() -> Result<(), HarnessError> {
         ),
         (
             "WIN-NODE",
-            r#"node -e "console.log('안녕하세요')""#,
+            r#"node -e "console.log('안녕하세요'); console.log(require('fs').readdirSync(process.env.USERPROFILE+'/Downloads'))""#,
             "안녕하세요",
         ),
         (
@@ -154,5 +174,21 @@ async fn command_tool_still_refuses_ledger_writes() -> Result<(), HarnessError> 
     .await?;
     assert_eq!(output["error"], "protected_path", "{output}");
     assert_eq!(output["exit_code"], 1, "{output}");
+    Ok(())
+}
+
+#[tokio::test]
+async fn windows_ledger_case_alias_is_still_protected() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        !butler_platform::command_sandbox::POSIX_SHELL,
+        "Windows case aliases"
+    );
+    let output = run(
+        "LEDGER-CASE",
+        r"echo changed > .PROJECT-LEDGER\records.json",
+    )
+    .await?;
+    assert_eq!(output["error"], "protected_path", "{output}");
     Ok(())
 }
