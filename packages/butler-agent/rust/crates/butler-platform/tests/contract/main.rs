@@ -103,3 +103,27 @@ fn eventually(what: &str, mut condition: impl FnMut() -> bool) {
         std::thread::sleep(Duration::from_millis(10));
     }
 }
+
+// test-category: security
+#[test]
+fn capabilities_match_the_host() {
+    use butler_platform::secure_fs::{
+        DIRECTORY_SYNC, FILE_IDS, NO_FOLLOW, OWNER_ONLY, PERMISSION_MODES,
+    };
+    let unix = cfg!(unix);
+    assert_eq!(OWNER_ONLY, unix);
+    assert_eq!(PERMISSION_MODES, unix);
+    assert_eq!(NO_FOLLOW, unix);
+    assert_eq!(FILE_IDS, unix);
+    assert_eq!(DIRECTORY_SYNC, unix);
+
+    let addresses = butler_platform::network::external_addresses();
+    assert_eq!(
+        addresses.is_some(),
+        butler_platform::network::INTERFACE_ADDRESSES
+    );
+    let addresses = addresses.unwrap();
+    assert!(!addresses.is_empty(), "host has no non-loopback address");
+    assert!(addresses.iter().all(|ip| !ip.is_loopback()));
+    assert!(addresses.windows(2).all(|pair| pair[0] < pair[1]));
+}

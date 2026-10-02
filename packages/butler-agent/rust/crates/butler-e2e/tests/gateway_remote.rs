@@ -126,6 +126,12 @@ async fn sec_09_lan_access_binds_and_unbinds_without_restart() -> Result<(), Har
     assert_eq!(stored["config"]["remoteAccessEnabled"], true, "{stored}");
     let lan = lan_listeners(&view);
     let urls = view["lan_urls"].as_array().unwrap();
+    if std::env::var_os("BUTLER_E2E_REQUIRE_LAN").is_some() {
+        assert!(
+            !lan.is_empty(),
+            "LAN smoke requires a bound listener: {view}"
+        );
+    }
     if lan.is_empty() {
         eprintln!("SEC-09: this machine has no LAN address; LAN listener checks skipped");
         assert!(urls.is_empty(), "{view}");
@@ -327,6 +333,9 @@ fn lan_addresses() -> Vec<std::net::IpAddr> {
             std::net::IpAddr::V6(ip) => ip.segments()[0] & 0xfe00 == 0xfc00,
         })
         .collect();
+    if std::env::var_os("BUTLER_E2E_REQUIRE_LAN").is_some() {
+        assert!(!addresses.is_empty(), "LAN smoke requires a LAN address");
+    }
     addresses.sort();
     addresses
 }

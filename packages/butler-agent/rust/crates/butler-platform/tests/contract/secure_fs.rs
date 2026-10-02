@@ -14,16 +14,6 @@ use butler_platform::secure_fs::{
 
 use super::scratch;
 
-#[test]
-fn capabilities_match_the_host() {
-    let unix = cfg!(unix);
-    assert_eq!(OWNER_ONLY, unix);
-    assert_eq!(PERMISSION_MODES, unix);
-    assert_eq!(NO_FOLLOW, unix);
-    assert_eq!(FILE_IDS, unix);
-    assert_eq!(DIRECTORY_SYNC, unix);
-}
-
 // test-category: security
 #[test]
 fn replace_private_swaps_in_a_complete_owner_only_file() {
