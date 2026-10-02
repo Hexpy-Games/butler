@@ -86,8 +86,9 @@ fn field(node: Node<'_, '_>, name: &str) -> Option<String> {
 }
 
 fn only_element<'a, 'input>(node: Node<'a, 'input>, name: &str) -> Option<Node<'a, 'input>> {
-    let children = node.children().filter(Node::is_element).collect::<Vec<_>>();
-    (children.len() == 1 && children[0].has_tag_name((NS, name))).then(|| children[0])
+    let mut children = node.children().filter(Node::is_element);
+    let first = children.next()?;
+    (children.next().is_none() && first.has_tag_name((NS, name))).then_some(first)
 }
 
 pub(crate) fn parse(xml: &str) -> Option<Task> {
@@ -153,4 +154,25 @@ pub(crate) fn same_owner(local: &str, remote: &str, sid: &str) -> bool {
         return false;
     };
     local.sid == sid && remote.sid == sid && local.fingerprint == remote.fingerprint
+}
+
+/// Decodes schtasks' Unicode output without silently dropping invalid bytes.
+pub(crate) fn decode(bytes: &[u8]) -> Result<String, Error> {
+    if bytes.starts_with(&[0xff, 0xfe]) || bytes.get(1) == Some(&0) {
+        let offset = usize::from(bytes.starts_with(&[0xff, 0xfe])) * 2;
+        let bytes = bytes.get(offset..).ok_or(Error::InvalidValue)?;
+        if bytes.len() % 2 != 0 {
+            return Err(Error::InvalidValue);
+        }
+        let words = bytes
+            .chunks_exact(2)
+            .map(|chunk| chunk.try_into().map(u16::from_le_bytes))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| Error::InvalidValue)?;
+        String::from_utf16(&words).map_err(|_| Error::InvalidValue)
+    } else {
+        std::str::from_utf8(bytes)
+            .map(|text| text.trim_start_matches('\u{feff}').to_owned())
+            .map_err(|_| Error::InvalidValue)
+    }
 }

@@ -66,22 +66,7 @@ fn query(sid: &str) -> Result<Option<String>, Error> {
     let name = task_name(sid);
     let output = run("schtasks.exe", &["/Query", "/TN", &name, "/XML"])?;
     if output.status.success() {
-        // schtasks emits UTF-16LE on some hosts, UTF-8 on others.
-        let bytes = &output.stdout;
-        let text = if bytes.starts_with(&[0xff, 0xfe]) || bytes.get(1) == Some(&0) {
-            let offset = usize::from(bytes.starts_with(&[0xff, 0xfe])) * 2;
-            String::from_utf16_lossy(
-                &bytes[offset..]
-                    .chunks_exact(2)
-                    .map(|b| u16::from_le_bytes([b[0], b[1]]))
-                    .collect::<Vec<_>>(),
-            )
-        } else {
-            String::from_utf8_lossy(bytes)
-                .trim_start_matches('\u{feff}')
-                .to_owned()
-        };
-        return Ok(Some(text));
+        return Ok(Some(task_xml::decode(&output.stdout)?));
     }
     // Never interpret access-denied or other scheduler failures as absence.
     let probe = format!(

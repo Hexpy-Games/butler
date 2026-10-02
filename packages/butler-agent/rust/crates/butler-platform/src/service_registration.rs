@@ -247,16 +247,15 @@ fn activation_allowed(activation: Activation) -> Activation {
 }
 
 /// The definition on disk, if there is one: its program and `--data`. Reads
-/// the file only; the manager is not asked.
+/// the file on Unix; on Windows verifies the scheduler XML against it.
 ///
 /// # Errors
 ///
 /// The failure to read the file.
 pub fn registered() -> Result<Option<Registered>, Error> {
     #[cfg(windows)]
-    let text = match sys::registered_text()? {
-        Some(text) => text,
-        None => return Ok(None),
+    let Some(text) = sys::registered_text()? else {
+        return Ok(None);
     };
     #[cfg(not(windows))]
     let text = match std::fs::read_to_string(definition_path()?) {

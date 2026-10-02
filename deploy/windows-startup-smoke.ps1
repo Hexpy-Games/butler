@@ -7,6 +7,7 @@ $ErrorActionPreference = 'Stop'
 $protocolBefore = (& reg query HKCU\Software\Classes\butler /s 2>$null) -join "`n"
 $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $name = "ButlerAgent-$sid"
+$testOwnsName = $false
 function Invoke-Startup([string]$Action) {
     $result = & $Launcher startup $Action --json | ConvertFrom-Json
     if ($LASTEXITCODE -ne 0 -or !$result.ok) { throw "startup $Action failed" }
@@ -14,6 +15,7 @@ function Invoke-Startup([string]$Action) {
 }
 try {
     if ((Invoke-Startup status).state -ne 'disabled') { throw 'Initial startup state' }
+    $testOwnsName = $true
     Invoke-Startup enable | Out-Null
     if ((Invoke-Startup status).state -ne 'enabled') { throw 'Startup not enabled' }
     [xml]$xml = (& schtasks /Query /TN $name /XML) -join "`n"
@@ -59,8 +61,10 @@ try {
     if ($LASTEXITCODE -eq 0) { throw 'Uninstall retained task' }
     'PASS Task Scheduler: XML, enable/run, disable/delete, foreign preservation, uninstall'
 } finally {
-    & schtasks /End /TN $name 2>$null | Out-Null
-    & schtasks /Delete /TN $name /F 2>$null | Out-Null
+    if ($testOwnsName) {
+        & schtasks /End /TN $name 2>$null | Out-Null
+        & schtasks /Delete /TN $name /F 2>$null | Out-Null
+    }
     if (Test-Path $Launcher) { & $Launcher stop --json | Out-Null }
     $protocolAfter = (& reg query HKCU\Software\Classes\butler /s 2>$null) -join "`n"
     if ($protocolBefore -cne $protocolAfter) { throw 'Protocol registry changed' }

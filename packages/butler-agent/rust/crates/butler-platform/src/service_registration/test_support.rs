@@ -56,3 +56,8 @@ pub fn task_arguments(xml: &str) -> Option<Vec<String>> {
 pub fn task_enabled(xml: &str) -> Option<bool> {
     Some(super::task_xml::parse(xml)?.enabled)
 }
+
+/// Decodes a scheduler XML query without contacting the host.
+pub fn task_text(bytes: &[u8]) -> Result<String, super::Error> {
+    super::task_xml::decode(bytes)
+}
