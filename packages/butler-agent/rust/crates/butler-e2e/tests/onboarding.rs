@@ -280,6 +280,21 @@ async fn onb_02_provider_401_fails_without_retry_storm() -> Result<(), HarnessEr
         .replay_only()
         .start()
         .await?;
+    // The maintenance owner must use the same fixture date as App admission.
+    let marker = s
+        .sandbox
+        .data
+        .join("state/scheduler/context-maintenance.json");
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while !marker.exists() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "maintenance did not settle"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let maintenance: serde_json::Value = serde_json::from_slice(&std::fs::read(marker)?)?;
+    assert_eq!(maintenance["lastRunDate"], "2026-09-27", "{maintenance}");
     let exchange = s.provider()?.exchange_for("connected", 0)?;
     s.provider()?.inject(Fault::always(
         exchange,
@@ -290,10 +305,10 @@ async fn onb_02_provider_401_fails_without_retry_storm() -> Result<(), HarnessEr
         .turn("general", "Reply with exactly the word: connected")
         .await?;
     assert_eq!(turn_state(&turn), "failed", "{turn}");
-    assert!(
-        started.elapsed() < Duration::from_secs(30),
-        "401 not terminal in time: {:?}",
-        started.elapsed()
+    butler_e2e::assert_wall_clock_budget!(
+        started.elapsed(),
+        Duration::from_secs(30),
+        "401 not terminal in time"
     );
     assert!(
         s.provider()?.served() <= 3,
@@ -343,7 +358,6 @@ async fn onb_03_installer_language_persists() -> Result<(), HarnessError> {
 
 /// ONB-03 — The installer language also sets the answer language.
 #[tokio::test]
-#[ignore = "product gap: ONB-03-LANG — `PATCH /settings {language:\"ko\"}` (what first-run setup sends) stores only user.language: GET /personalization keeps response_language \"en\", and `butler personalization get user.responseLanguage --json` ignores the key and prints the profile without any response language"]
 async fn onb_03_installer_language_sets_response_language() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("ONB-03")?

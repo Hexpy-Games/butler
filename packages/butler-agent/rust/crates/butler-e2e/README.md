@@ -13,7 +13,9 @@ Spec: `SCENARIOS.md`, `PROVIDER_CONFIG.md` (E2E strategy notes).
 Scenarios are opt-in: without `BUTLER_E2E_TIER` every scenario returns
 immediately (so `cargo test --workspace` in the unit-test CI does not run
 the stub tier twice; the `e2e` workflow runs it). Only the cassette lint
-always runs.
+always runs. Source-check requires every Agent scenario to enter through
+`butler_e2e::gate!()` before any executable statement; the binary helper also
+refuses to build or locate an Agent when no tier is selected.
 
 ```sh
 # stub tier: replays committed cassettes, live tests show as ignored
@@ -180,6 +182,15 @@ turns the manager on, and only when `BUTLER_E2E_SYSTEMD=1` (the Linux CI job
 sets it after probing for a user manager). INS-15 needs Node and reports
 SKIPPED without it.
 
+Agent startup and restart wait for `/runtime-readiness` executor readiness as
+well as health and the current PID's instance record. The dispatch-readiness
+scenario deliberately holds the executor and observes the earlier health-only
+state. Shutdown ordering, record-write faults and memory bootstrap holds run
+in the stub tier in both debug and release builds, so strict budgets exercise the same
+injected product operations. App and maintenance owners also honor the same
+stub fixture clock in both profiles; a fixture day must not become a due daily
+job on the host's real date.
+
 ## Idle resources at owner scale (PERF-IDLE)
 
 `idle_resources` uses the PERF-01 App seed with larger event bodies, 30,000
@@ -204,3 +215,51 @@ Use `cargo test` for this several-minute measurement, independently of the
 normal stub CI suite. The procfs boundary lives in `butler-platform`; other
 platforms report the measurement unavailable. Linux RSS is deliberately stricter
 than private heap size, but it is not macOS `phys_footprint`.
+
+
+## Wall-clock budgets in CI
+
+Functional scenarios keep their original names and run in shared stub jobs on
+Linux x64, Linux arm64 and macOS. `assert_wall_clock_budget!` always prints the
+measurement and checks the strict upper bound only with `BUTLER_E2E_PERF=1`.
+Content, ordering, latest-state and minimum injected-delay assertions remain
+unconditional. Nontermination remains bounded by the existing nextest watchdog.
+
+The dedicated Linux release job sets that flag and runs with one test thread.
+`.github/scripts/e2e-perf-filter.py` selects `perf_*` tests plus whole binaries
+containing the helper (including helper modules), and prints every budget's
+source location before execution. The contention binary is also retained for its
+minimum lock-hold assertion. PERF-IDLE uses its documented separate release
+`cargo test` runner, because its five-minute sampling exceeds nextest's existing
+watchdog. No budget or timeout is increased.
+
+Budgets before PR #441's revision and after this correction (strict `<` bounds):
+
+| Scenario / measurement | Budget | Before perf job | After perf job |
+| --- | --- | --- | --- |
+| ONB-02 provider 401 terminal | 30 s | enforced | enforced |
+| PRJ-06 missing/hanging Git dashboard | 8 s | enforced | enforced |
+| SETUP-03 local server probes | 5 s | enforced | enforced |
+| SETUP-10 stray OAuth callback | 5 s | enforced | enforced |
+| TURN-03 stop mid-stream | 10 s | enforced | enforced |
+| TURN-05 stalled stream terminal | 40 s | enforced | enforced |
+| Shutdown streaming / hung MCP / startup / blocked storage / record write (5) | 8 s each | enforced | enforced |
+| Shutdown blocked control read (both orders) | 2 s | excluded | enforced |
+| PROJ-DEVICE checkpoint revisit | 150 s | enforced | enforced |
+| PROJ-BACKLOG complete projection | 150 s | excluded | enforced |
+| Side-chat complete projection | 150 s | excluded | enforced |
+| USE-07 reads: pending, initial, repeat, polling, refreshed (5) | 1 s each | enforced | enforced |
+| USE-06 24h / session / all-time cold reads (3) | 90 s each | enforced | enforced |
+| USE-06 warm / new transcripts / appended rows / all-time reads (7) | 300 ms each | enforced | enforced |
+| PERF-01 retention settles | 120 s | enforced | enforced |
+| PERF-01 session-view p95 | 150 ms | enforced | enforced |
+| PERF-01 owner-scale delivery | empty delivery × 3 + 2 s | enforced | enforced |
+| PERF-ASK-USER session-view p95 | 150 ms | enforced | enforced |
+| PERF-IDLE memory, each of 3 windows | 100 MB | skipped (stub tier) | enforced |
+| PERF-IDLE rchar / disk reads, each of 3 windows | 1 MB each | skipped (stub tier) | enforced |
+
+Thus 31 upper wall-clock assertion sites become 34, with every previous bound
+preserved. The new helper-contract E2E additionally proves that equality with a
+zero budget fails only in the perf tier and that arguments are evaluated once.
+The schedule contention's 5 s minimum hold and forced refresh's minimum network
+delay are functional assertions retained in both shared and perf runs.

@@ -46,13 +46,13 @@ async fn wait_retention_settled(s: &Scenario) -> Duration {
                        (SELECT 1 FROM app_terminal_turn_projections p WHERE p.turn_id=t.id))",
         );
         if pending == 0 {
+            butler_e2e::assert_wall_clock_budget!(
+                started.elapsed(),
+                Duration::from_secs(120),
+                "retention left"
+            );
             return started.elapsed();
         }
-        assert!(
-            started.elapsed() < Duration::from_secs(120),
-            "retention left {pending} items after {:?}",
-            started.elapsed()
-        );
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }
@@ -84,6 +84,13 @@ async fn session_view_p95(s: &Scenario, latest_turn: &str) -> Result<Duration, H
         assert_eq!(view["latest_turn"]["id"], latest_turn);
         assert_eq!(view["latest_turn"]["state"], "delivered");
         assert!(view["active_turn"].is_null());
+        for field in [
+            "pending_questions",
+            "question_answers",
+            "authority_requests",
+        ] {
+            assert_eq!(view[field], serde_json::json!([]), "{field}: {view}");
+        }
         assert_eq!(view["message_window"]["complete"], true);
         assert_eq!(view["message_window"]["has_more"], false);
         let messages = view["messages"].as_array().unwrap();
@@ -99,6 +106,10 @@ async fn session_view_p95(s: &Scenario, latest_turn: &str) -> Result<Duration, H
         }));
     }
     samples.sort();
+    eprintln!(
+        "PERF-01 session-view p50 {:?}; p95 {:?}",
+        samples[9], samples[18]
+    );
     Ok(samples[18])
 }
 
@@ -147,14 +158,12 @@ async fn perf_01_owner_scale_delivery_and_restart() -> Result<(), HarnessError> 
         "PERF-01 empty turn {empty:?}; owner-scale start {first_ready:?}, turn {at_scale:?}, \
          session-view p95 {view_p95:?}, retention settled {settled:?} after the turn"
     );
-    assert!(
-        view_p95 < Duration::from_millis(150),
-        "session-view p95 {view_p95:?}"
-    );
+    butler_e2e::assert_wall_clock_budget!(view_p95, Duration::from_millis(150), "session-view p95");
     // The projection of a delivered turn does not scale with the events table.
-    assert!(
-        at_scale < empty * 3 + Duration::from_secs(2),
-        "delivery took {at_scale:?} at scale, {empty:?} on an empty database"
+    butler_e2e::assert_wall_clock_budget!(
+        at_scale,
+        empty * 3 + Duration::from_secs(2),
+        "delivery took"
     );
 
     // Only the turns that needed work were compacted; the rest kept their rows.

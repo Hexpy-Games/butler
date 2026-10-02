@@ -160,4 +160,19 @@ test("a structured request reads as a plain question with its examples in full, 
   // The pending attachment above a folded-away request says the same thing.
   await act(async () => { current!.onComposeMessage(); });
   expect(container.textContent).toContain("'Desktop'의 파일 24개를 수정할까요?");
+  const { normalizeApprovalSummary } = await import("@/app/approvalRequest.ts");
+  const command = `printf '%s' '${"approval-detail-".repeat(40)}'`;
+  for (const truncated of [false, true]) {
+    await act(async () => { root?.unmount(); });
+    dom?.window.close();
+    const approval = normalizeApprovalSummary({ action_kind: "run_command", count: 1, risk: "high",
+      targets: [{ kind: "outside", path: "elsewhere" }], examples: [command], examples_truncated: [truncated] })!;
+    const rendered = await renderDecision([{ ...renameCard, approval }]);
+    expect(rendered.container.textContent).toContain("작업 폴더 밖에서 명령을 실행할까요?");
+    const lines = rendered.container.querySelector('[data-slot="composer-decision-details"]')!;
+    expect(lines.querySelector("p")?.textContent).toBe(truncated ? `${command}…` : command);
+    expect(rendered.container.querySelector('[data-test-class="approval-risk"][data-tone="danger"]')?.textContent)
+      .toBe("위험 높음");
+    expect(decisionButtons(rendered.container)).toEqual(["거절", "이번만 허용", ""]);
+  }
 });

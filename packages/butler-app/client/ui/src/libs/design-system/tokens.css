@@ -38,6 +38,7 @@
   --menu-group-label-line-height: var(--line-height-compact);
   --menu-group-label-padding: var(--space-sm) var(--space-2) var(--space-xs);
   --scroll-fade-size: 14px;
+  --textarea-max-lines: 6;
   --focus-ring-width: 2px;
   /* Layering scale: tooltips and popovers opened inside dialogs stay above them. */
   --z-sticky: 50;
@@ -382,6 +383,9 @@
 
   --color-surface-base: var(--grayscale-01);
   --color-surface-raised: rgba(255, 255, 255, 0.96);
+  --color-surface-raised-opaque: rgb(
+    from var(--color-surface-raised) r g b / 1
+  );
   --color-surface-overlay: rgba(255, 255, 255, 0.98);
 
   --color-disabled-bg: var(--grayscale-02);
@@ -826,6 +830,9 @@
 
   --color-surface-base: var(--grayscale-11);
   --color-surface-raised: rgba(35, 36, 39, 0.96);
+  --color-surface-raised-opaque: rgb(
+    from var(--color-surface-raised) r g b / 1
+  );
   --color-surface-overlay: rgba(37, 38, 41, 0.98);
 
   --color-disabled-bg: rgba(255, 255, 255, 0.08);
@@ -957,6 +964,9 @@
   --color-info-border: var(--blue-02);
   --color-info-text: var(--blue-07);
   --color-surface-raised: rgba(255, 255, 255, 0.96);
+  --color-surface-raised-opaque: rgb(
+    from var(--color-surface-raised) r g b / 1
+  );
   --color-surface-overlay: rgba(255, 255, 255, 0.98);
   --color-text-primary: var(--neutral-light-text-primary);
   --color-text-secondary: var(--neutral-light-text-secondary);

@@ -11,7 +11,8 @@ fn graph() -> Connection {
                  CREATE TABLE memory_chunks(memory_chunk_id TEXT PRIMARY KEY,current_revision TEXT,status TEXT,origin_kind TEXT);\
                  CREATE TABLE memory_chunk_sources(source_id TEXT PRIMARY KEY,episode_id TEXT,conversation_message_id TEXT,source_kind TEXT,role TEXT,origin_kind TEXT);\
                  CREATE TABLE memory_evidence(node_id TEXT,source_id TEXT,episode_id TEXT,revision TEXT);\
-                 CREATE TABLE memory_claims(node_id TEXT PRIMARY KEY,source_class TEXT);",
+                 CREATE TABLE memory_claims(node_id TEXT PRIMARY KEY,source_class TEXT);\
+                 CREATE TABLE memory_projection_jobs(episode_id TEXT,hot_cache_state TEXT,hot_cache_next_attempt_at TEXT,hot_cache_attempt_count INTEGER);",
             )
             .unwrap();
     connection

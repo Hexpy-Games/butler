@@ -257,7 +257,7 @@ impl MemorySyncConsumer {
         }
         self.tasks.wait().await;
         if let Err(error) = self.probe.close().await {
-            eprintln!("[memory-sync-close] {}", error.code());
+            butler_core::diagnostic!("[memory-sync-close] {}", error.code());
         }
     }
 

@@ -9,6 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   Inline,
+  IconSlot,
   Notice,
   Spinner,
   Stack,
@@ -17,27 +18,38 @@ import {
 import { exportFirstRunSetupDiagnostics, localizeSetupDiagnostics } from "@/app/firstRunSetup.ts";
 import { notifyStatus } from "@/app/notifications.ts";
 import { readinessFailureCode, readinessProgress } from "@/app/setupReadiness.ts";
+import { MemoryModelStatus } from "./MemoryModelStatus";
 import type { FirstRunFlow } from "./useFirstRunFlow";
 
 /** Subtle background-preparation line; a failure turns into an inline notice with Try again. */
-export function FirstRunPrepStatus({ flow, align = "center" }: { flow: FirstRunFlow; align?: "center" | "start" }) {
+export function FirstRunPrepStatus({ flow, align = "start" }: { flow: FirstRunFlow; align?: "center" | "start" }) {
+  return <Stack gap="sm">
+    <PreparationLine flow={flow} align={align} />
+    <MemoryModelStatus model={flow.readiness.memory_model} language={flow.language} retry={flow.retryPreparation} />
+  </Stack>;
+}
+
+function PreparationLine({ flow, align = "start" }: { flow: FirstRunFlow; align?: "center" | "start" }) {
   const { copy, readiness } = flow;
   if (readiness.status === "failed") return <FirstRunPrepFailure flow={flow} />;
   if (readiness.status === "ready") {
     return (
-      <Inline data-test-class="first-run-prep" justify={align} role="status">
-        <CheckIcon size="sm" />
-        <Typo.Caption tone="success">{copy.prepReady}</Typo.Caption>
-      </Inline>
+      <Typo.Caption as="div" data-test-class="first-run-prep" role="status">
+        <Inline justify={align} cross="start" wrap={false}>
+          <IconSlot size="sm" minHeight="line" aria-hidden="true"><CheckIcon size="sm" /></IconSlot>
+          <Typo.Caption tone="success">{copy.prepReady}</Typo.Caption>
+        </Inline>
+      </Typo.Caption>
     );
   }
   const progress = readinessProgress(readiness);
   return (
-    <Inline data-test-class="first-run-prep" justify={align} role="status">
-      <Spinner size={14} />
-      <Typo.Caption tone="secondary">{copy.prepWorking}</Typo.Caption>
-      {progress ? <Typo.Caption numeric="tabular" tone="tertiary">{`${progress.done}/${progress.total}`}</Typo.Caption> : null}
-    </Inline>
+    <Typo.Caption as="div" data-test-class="first-run-prep" role="status">
+      <Inline justify={align} cross="start" wrap={false}>
+        <IconSlot size="sm" minHeight="line" aria-hidden="true"><Spinner size={14} /></IconSlot>
+        <Typo.Caption tone="secondary" numeric="tabular">{copy.prepWorking}{progress ? ` · ${progress.done}/${progress.total}` : ""}</Typo.Caption>
+      </Inline>
+    </Typo.Caption>
   );
 }
 

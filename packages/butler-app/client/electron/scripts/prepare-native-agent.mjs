@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { gunzipSync } from "node:zlib";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -71,6 +72,8 @@ rmSync(payloadRoot, { recursive: true, force: true });
 const binaryRoot = join(payloadRoot, "bin");
 mkdirSync(binaryRoot, { recursive: true });
 copyFileSync(sourceBinary, join(binaryRoot, "butler-agent"));
+const roleLinks = spawnSync(join(binaryRoot, "butler-agent"), ["--prepare-process-links"], { stdio: "inherit" });
+if (roleLinks.status !== 0 && roleLinks.status !== 2) throw new Error("Could not prepare Agent process role links.");
 cpSync(
   join(repositoryRoot, "packages", "butler-agent", "resources"),
   join(payloadRoot, "resources"),
@@ -81,10 +84,16 @@ const uiDistRoot = resolve(
     join(repositoryRoot, "packages", "butler-app", "client", "ui", "dist"),
 );
 requireFile(join(uiDistRoot, "index.html"));
+requireFile(join(uiDistRoot, "THIRD_PARTY_NOTICES.txt.gz"));
+if (!gunzipSync(readFileSync(join(uiDistRoot, "THIRD_PARTY_NOTICES.txt.gz"))).equals(readFileSync(join(repositoryRoot, "deploy/licenses/THIRD_PARTY_NOTICES.txt")))) {
+  throw new Error("Renderer notices are stale; rebuild the App renderer.");
+}
 cpSync(uiDistRoot, join(payloadRoot, "resources", "app-client", "dist"), { recursive: true });
-const version = readCargoVersion(join(rustRoot, "crates", "butler-agent", "Cargo.toml"));
+const baseVersion = readCargoVersion(join(rustRoot, "crates", "butler-agent", "Cargo.toml"));
+const tagVersion = process.env.GITHUB_REF_NAME?.replace(/^v/u, "");
+const version = tagVersion && /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(tagVersion) ? tagVersion : `${baseVersion}-dev`;
 const appVersion = process.env.BUTLER_PACKAGED_APP_VERSION?.trim() ||
-  JSON.parse(readFileSync(join(electronRoot, "package.json"), "utf8")).version?.trim();
+  version;
 if (!appVersion) throw new Error("Packaged App version is required for the native Agent payload.");
 writeFileSync(
   join(payloadRoot, "native-agent-manifest.json"),
@@ -219,8 +228,9 @@ function requireFile(path) {
 }
 
 function setReadOnly(root) {
+  const executableDirectory = join(root, "bin");
   for (const path of walk(root).filter((path) => statSync(path).isFile())) {
-    chmodSync(path, path.endsWith(join("bin", "butler-agent")) ? 0o555 : 0o444);
+    chmodSync(path, dirname(path) === executableDirectory ? 0o555 : 0o444);
   }
   for (const path of walk(root).filter((path) => statSync(path).isDirectory()).reverse()) {
     chmodSync(path, 0o555);

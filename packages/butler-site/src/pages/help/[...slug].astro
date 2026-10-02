@@ -1,28 +1,11 @@
 ---
-import { render } from "astro:content";
-import DocPage from "../../ds/web/DocPage/DocPage.astro";
-import { alternates, loadNav, publishedEntries } from "../../site/docs";
-import { mdxComponents } from "../../site/mdxComponents";
+import { publishedEntries } from "../../site/docs";
+import ManualPage from "../../site/ManualPage.astro";
 import { docSlug } from "../../site/nav";
 
 export async function getStaticPaths() {
   const entries = await publishedEntries("ko");
   return entries.map((entry) => ({ params: { slug: docSlug(entry.id) }, props: { entry } }));
 }
-
-const { entry } = Astro.props;
-const slug = docSlug(entry.id);
-const { Content, headings } = await render(entry);
-const nav = await loadNav("ko", slug);
 ---
-<DocPage
-  alternates={await alternates(slug)}
-  description={entry.data.description}
-  headings={headings}
-  locale="ko"
-  nav={nav}
-  slug={slug}
-  title={entry.data.title}
->
-  <Content components={mdxComponents} />
-</DocPage>
+<ManualPage entry={Astro.props.entry} locale="ko" />

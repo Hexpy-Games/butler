@@ -75,8 +75,9 @@ async fn setup_03_local_model_servers_are_detected() -> Result<(), HarnessError>
     let started = Instant::now();
     let reply = s.gw.get("/setup/local-model-servers").await?;
     assert_eq!(reply.status, 200, "{}", reply.text);
-    assert!(
-        started.elapsed() < Duration::from_secs(5),
+    butler_e2e::assert_wall_clock_budget!(
+        started.elapsed(),
+        Duration::from_secs(5),
         "probes are not short"
     );
     let servers = reply.data()["servers"].as_array().unwrap().clone();

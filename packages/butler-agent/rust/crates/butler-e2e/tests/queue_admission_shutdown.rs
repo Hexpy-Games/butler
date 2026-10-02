@@ -1,4 +1,4 @@
-//! Shutdown must finish an App queue admission that has already claimed input.
+//! Shutdown preserves an App admission between durable Turn creation and enqueue.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -17,6 +17,7 @@ use serde_json::json;
 use std::time::{Duration, Instant};
 
 const LONG: &str = "Write the numbers from one to twelve as English words, separated by single spaces, and nothing else.";
+const HELD_MESSAGE: &str = "client-00000000-0000-4000-8000-000000000002";
 const WAITING: &str = "Reply with exactly the word: waiting";
 
 #[tokio::test]
@@ -24,6 +25,8 @@ async fn q_02_shutdown_finishes_an_in_flight_queue_admission() -> Result<(), Har
     butler_e2e::gate!();
     let mut s = Setup::new("Q-02-ADMISSION-SHUTDOWN")?
         .cassette("Q-02")
+        .env("BUTLER_E2E_TIER", "stub")
+        .env("BUTLER_E2E_HOLD_QUEUE_MESSAGE", HELD_MESSAGE)
         .start()
         .await?;
     s.provider()?.set_pacing(Pacing {
@@ -31,85 +34,57 @@ async fn q_02_shutdown_finishes_an_in_flight_queue_admission() -> Result<(), Har
         cap_ms: 300,
         min_ms: 200,
     });
-    s.agent.terminate().await?;
-    let db = Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
-    // Keep accept_turn's SQL in flight after its durable queue claim. The old
-    // dispatcher drops the awaiting admission on shutdown; SQL still commits
-    // a thinking turn, but the native enqueue never runs. This fixture uses
-    // portable SQLite work, not a product timeout or a live model.
-    db.execute_batch("CREATE TRIGGER slow_queued_admission AFTER UPDATE OF state ON turns
-        WHEN NEW.state='thinking' AND EXISTS (
-            SELECT 1 FROM messages WHERE id=NEW.user_message_id AND text='Reply with exactly the word: waiting')
-        BEGIN
-            SELECT sum(n) FROM (WITH RECURSIVE slow(n) AS (
-                VALUES(0) UNION ALL SELECT n+1 FROM slow WHERE n<8000000
-            ) SELECT n FROM slow);
-        END;").unwrap();
-    s.gw = s.agent.start_again().await?;
     let first = accepted_turn_id(&s.gw.say("general", LONG).await?)?;
     let queued =
         s.gw.post(
             "/session-queue",
             json!({"chat_id":"general", "text":WAITING,
-        "client_message_id":uuid::Uuid::new_v4().to_string()}),
+        "client_message_id":HELD_MESSAGE}),
         )
         .await?;
     assert_eq!(queued.status, 202, "{}", queued.text);
     s.gw.wait_terminal("general", &first, Duration::from_secs(10))
         .await?;
-    let deadline = Instant::now() + Duration::from_secs(20);
-    loop {
-        let claimed: bool = db
-            .query_row(
-                "SELECT EXISTS(SELECT 1 FROM session_queued_messages
-            WHERE text=?1 AND state='dispatching')",
-                [WAITING],
-                |row| row.get(0),
-            )
-            .unwrap();
-        if claimed {
-            break;
-        }
+    let held = s.sandbox.data.join("e2e-queue-admission-held");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !held.exists() {
         assert!(
             Instant::now() < deadline,
-            "queued admission never claimed input: {:?}",
-            db.prepare(
-                "SELECT state, COALESCE(safe_error_code, ''), text FROM session_queued_messages"
-            )
-            .unwrap()
-            .query_map([], |row| Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?
-            )))
-            .unwrap()
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap()
+            "queue admission never reached barrier"
         );
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
-    // The claim is committed before accept_turn starts its slow SQL statement.
-    tokio::time::sleep(Duration::from_millis(100)).await;
-    let published: bool = db
+    let turns = s.gw.turns("general").await?;
+    assert_eq!(turns.len(), 2, "barrier must follow durable Turn creation");
+    let held_turn = turns
+        .iter()
+        .find(|turn| turn["user_message_id"] == HELD_MESSAGE)
+        .unwrap();
+    assert_eq!(turn_state(held_turn), "thinking");
+    let held_turn_id = held_turn["id"].as_str().unwrap().to_owned();
+    s.agent.terminate().await?;
+    let db = Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
+    let pending: (String, Option<String>, Option<String>) = db
         .query_row(
-            "SELECT EXISTS(SELECT 1 FROM messages WHERE text=?1 AND role='user')",
+            "SELECT state,safe_error_code,turn_id FROM session_queued_messages WHERE text=?1",
             [WAITING],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .unwrap();
-    assert!(
-        !published,
-        "fixture missed the in-flight admission transaction"
+    assert_eq!(
+        pending.0, "queued",
+        "shutdown must release in-flight admission"
     );
-    s.agent.terminate().await?;
-    db.execute_batch("DROP TRIGGER slow_queued_admission")
-        .unwrap();
+    assert!(pending.1.is_none());
+    assert_eq!(pending.2.as_deref(), Some(held_turn_id.as_str()));
     drop(db);
+    s.agent.launch.set_env("BUTLER_E2E_HOLD_QUEUE_MESSAGE", "");
     s.gw = s.agent.start_again().await?;
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         let turns = s.gw.turns("general").await?;
         if turns.len() == 2 && turns.iter().all(|turn| turn_state(turn) == "delivered") {
+            assert!(turns.iter().any(|turn| turn["id"] == held_turn_id));
             break;
         }
         assert!(

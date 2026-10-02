@@ -548,7 +548,13 @@ async function main(): Promise<void> {
   );
   await cdp.send("Emulation.setEmulatedMedia", { features: [] });
 
-  await clickButton(cdp, "동의하고 계속");
+  await clickButton(cdp, "시작하기");
+  await waitForHeading(cdp, "시작하기 전에 확인해 주세요");
+  await clickButton(cdp, "동의하지 않음");
+  await waitForHeading(cdp, "반갑습니다");
+  assert(await evaluateBoolean(cdp, "document.activeElement?.id === 'first-run-start'"), "Decline focuses Start");
+  await clickButton(cdp, "시작하기");
+  await clickButton(cdp, "동의하고 시작");
   await waitForHeading(cdp, "어떤 AI와 일할까요?");
   await expectNoForbiddenCopy(cdp);
   const topCards = await evaluateString(
@@ -573,6 +579,8 @@ async function main(): Promise<void> {
   await clickButton(cdp, "연결");
   await waitForText(cdp, stubModelId);
   await clickButton(cdp, "이 모델로 시작");
+  await waitForExpression(cdp, "document.querySelector('#first-run-reply-language')?.disabled === false", "reply language choice");
+  await clickButton(cdp, "시작");
   await waitForExpression(
     cdp,
     `document.querySelector(${JSON.stringify(firstRunSelector)}) === null && document.querySelector('[data-test-class="workspace"]') !== null`,

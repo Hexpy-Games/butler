@@ -1,4 +1,3 @@
-import { useAppLocale } from "@/app/copy.ts";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
@@ -14,6 +13,7 @@ import {
   UPDATE_COMPONENTS,
   UpdateComponentRow,
 } from "./UpdateComponentRow";
+import { UpdatePreviewSwitch } from "./UpdatePreviewSwitch";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 
 /** The last status read, so reopening the page shows it at once. */
@@ -24,7 +24,6 @@ export function resetUpdatesSettingsCache(): void {
 }
 
 export function UpdatesSettings() {
-  useAppLocale();
   const copy = appCopy.settings;
   const [view, setView] = useState<UpdateStatusView | null>(lastView);
   const [loading, setLoading] = useState(false);
@@ -97,6 +96,7 @@ export function UpdatesSettings() {
 
   return (
     <SettingsPage>
+      <UpdatePreviewSwitch disabled={loading || applying !== null} onChanged={check} />
       <SettingsSection
         id="updates"
         kind="list"

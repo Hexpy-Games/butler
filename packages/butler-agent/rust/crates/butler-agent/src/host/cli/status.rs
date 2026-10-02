@@ -104,9 +104,16 @@ pub(crate) async fn run_native_status_cli(
             .await;
             let model = models.status_value(&metrics.model_telemetry());
             let services = service_health(&data_root);
-            let text = operations::render_status_context(&metrics, &models, &services);
+            let previews = update_previews(&models.configuration).await;
+            let version = env!("BUTLER_RELEASE_VERSION");
+            let memory_model = super::status_memory::read(&data_root, &installation).await;
+            let text = format!(
+                "Butler {version}\nupdate.previews: {previews}\n{}\n{}",
+                operations::render_status_context(&metrics, &models, &services),
+                super::status_memory::line(&memory_model)
+            );
             (
-                json!({ "status": metrics.value, "services": services, "model": model }),
+                json!({ "version": version, "update": {"previews": previews}, "status": metrics.value, "services": services, "model": model, "memoryModel": memory_model }),
                 text,
             )
         }
@@ -253,7 +260,7 @@ fn service_health(data_root: &Path) -> Value {
         ),
         (Ok(Some(record)), Ok(locked)) => {
             let matches = service_instance::process_matches(&record).unwrap_or(false);
-            let current_executable = std::env::current_exe()
+            let current_executable = butler_platform::process_names::current_exe()
                 .ok()
                 .and_then(|path| path.canonical().ok());
             let executable_matches = current_executable.as_ref().is_some_and(|path| {
@@ -323,4 +330,15 @@ fn report_error(command: &str, json_output: bool, message: &str) -> ExitCode {
         eprintln!("{message}");
     }
     ExitCode::from(1)
+}
+
+async fn update_previews(configuration: &butler_models::models::ModelConfiguration) -> bool {
+    configuration
+        .read()
+        .await
+        .map(|read| read.config)
+        .unwrap_or_default()
+        .pointer("/update/previews")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
 }

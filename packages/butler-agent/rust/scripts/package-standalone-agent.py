@@ -40,7 +40,7 @@ def main() -> int:
     parser.add_argument("--payload", required=True, type=Path, help="prepared native payload directory")
     parser.add_argument("--output", required=True, type=Path, help="standalone .tar.gz destination")
     parser.add_argument("--artifact-url", help="published URL for the independently installed archive")
-    parser.add_argument("--channel", default="stable", help="update channel in the Agent manifest")
+    parser.add_argument("--channel", default=("preview" if "-preview." in os.environ.get("GITHUB_REF_NAME", "") else "stable"), help="update channel in the Agent manifest")
     args = parser.parse_args()
     if not args.channel.strip():
         parser.error("Agent update channel is empty")
@@ -70,7 +70,16 @@ def main() -> int:
         binary = stage / "butler-agent"
         shutil.copyfile(binary_source, binary)
         binary.chmod(0o555)
+        renderer_notices = resources_source / "app-client/dist/THIRD_PARTY_NOTICES.txt.gz"
+        expected = subprocess.check_output(["node", "--input-type=module", "-e",
+            f"import {{generate}} from '{Path(__file__).resolve().parents[4]}/deploy/licenses/generate.mjs'; process.stdout.write(generate());"])
+        if not renderer_notices.is_file() or gzip.decompress(renderer_notices.read_bytes()) != expected:
+            raise SystemExit("prepared payload renderer notices are missing or stale")
         shutil.copytree(resources_source, stage / "resources", symlinks=True)
+        (stage / "THIRD_PARTY_NOTICES.txt").write_text(
+            "Complete human-readable notices: resources/app-client/dist/THIRD_PARTY_NOTICES.txt.gz\n"
+            "Read with: gzip -dc resources/app-client/dist/THIRD_PARTY_NOTICES.txt.gz\n"
+            "Or open Settings > About > Open source licenses in the browser UI.\n", encoding="utf-8")
         make_read_only(stage / "resources")
         (stage / "butler").symlink_to("butler-agent")
         standalone_manifest = {
@@ -116,6 +125,9 @@ def binary_signing(binary: Path) -> dict | None:
         None,
     )
     if not team or team == "not set":
+        if (result.returncode == 0 and os.environ.get("BUTLER_SIGN_IDENTITY") == "-"
+                and re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+-preview\..+", os.environ.get("GITHUB_REF_NAME", ""))):
+            return {"teamId": "", "notarized": False}
         return None
     return {"teamId": team, "notarized": os.environ.get("BUTLER_AGENT_NOTARIZED") == "1"}
 

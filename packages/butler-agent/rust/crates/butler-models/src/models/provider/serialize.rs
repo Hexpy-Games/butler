@@ -414,7 +414,7 @@ fn chat(
             "qwen" => {
                 body.insert("enable_thinking".into(), true.into());
             }
-            "kimi" if model == "kimi-k3" => {
+            "kimi" if model == crate::models::KIMI_ADAPTIVE_MODEL => {
                 body.insert("reasoning_effort".into(), reasoning.into());
             }
             "kimi" => {
@@ -424,7 +424,7 @@ fn chat(
         }
     } else if metadata.provider_id == "qwen" {
         body.insert("enable_thinking".into(), false.into());
-    } else if metadata.provider_id == "kimi" && model != "kimi-k3" {
+    } else if metadata.provider_id == "kimi" && model != crate::models::KIMI_ADAPTIVE_MODEL {
         body.insert("thinking".into(), serde_json::json!({"type":"disabled"}));
     }
     if metadata.provider_id == "local" {

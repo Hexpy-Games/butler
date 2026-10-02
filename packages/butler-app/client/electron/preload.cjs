@@ -896,6 +896,12 @@ const butlerApp = Object.freeze({
       { method: "POST" },
     );
   },
+  answerUserQuestions: ({ response, sessionId, requestRef } = {}) => {
+    const params = new URLSearchParams({ session_id: sessionId ?? "general" });
+    return requestJson(`/authority-requests/${encodeURIComponent(requestRef ?? "")}/answer?${params.toString()}`, {
+      method: "POST", body: JSON.stringify(response),
+    });
+  },
   modifyAuthorityRequest: ({ alternative, sessionId, requestRef } = {}) => {
     const params = new URLSearchParams({ session_id: sessionId ?? "general" });
     return requestJson(
@@ -1132,7 +1138,11 @@ const butlerApp = Object.freeze({
     }),
   // Envelopes keep the code and status of the gateway's local-only rule.
   getSecurity: () => requestSecurity("getSecurity"),
-  revealConnectionCode: () => requestSecurity("revealConnectionCode"),
+  issuePairingCode: () => requestSecurity("issuePairingCode"),
+  getPairingStatus: () => requestSecurity("getPairingStatus"),
+  listPairedDevices: () => requestSecurity("listPairedDevices"),
+  revokePairedDevice: ({ deviceId } = {}) => requestSecurity("revokePairedDevice", { deviceId }),
+  revokeAllPairedDevices: () => requestSecurity("revokeAllPairedDevices"),
   // Main re-reads the token after a rotation.
   rotateConnectionCode: () => requestSecurity("rotateConnectionCode"),
   listArchives: ({ limit, offset } = {}) => {

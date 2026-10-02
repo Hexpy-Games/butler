@@ -14,7 +14,7 @@ use tokio_util::sync::CancellationToken;
 use crate::host::EmbeddingOwner;
 use butler_memory::cognition::GenerationVectorAdapter;
 use butler_memory::cognition::{
-    CognitionError, CognitionPathEnvironment, CognitionRegistrationService,
+    CognitionError, CognitionPathEnvironment, CognitionRegistrationService, FreshMemoryGeneration,
 };
 use butler_memory::cognition::{MemorySyncConsumer, MemorySyncPoll};
 use butler_memory::cognition::{active_memory_descriptor_exists, resolve_active_generation};
@@ -31,20 +31,31 @@ pub(in crate::host) struct MemorySync {
     task: Mutex<Option<JoinHandle<()>>>,
 }
 
+pub(in crate::host) struct MemorySyncStartup<'a> {
+    pub data_root: &'a Path,
+    pub paths: &'a CognitionPathEnvironment,
+    pub unclean_previous_exit: bool,
+    pub fresh: Option<FreshMemoryGeneration>,
+}
+
 impl MemorySync {
     pub(in crate::host) fn consumer(&self) -> Arc<MemorySyncConsumer> {
         self.consumer.clone()
     }
 
     pub(in crate::host) fn open(
-        data_root: &Path,
-        paths: &CognitionPathEnvironment,
+        startup: MemorySyncStartup<'_>,
         coordinator: Arc<CognitionWriteCoordinator>,
         provider: Arc<ModelProvider>,
-        unclean_previous_exit: bool,
         embedding: Arc<EmbeddingOwner>,
         vector: Arc<GenerationVectorAdapter>,
     ) -> Result<Self, BtccError> {
+        let MemorySyncStartup {
+            data_root,
+            paths,
+            unclean_previous_exit,
+            fresh,
+        } = startup;
         let clock: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
         if active_memory_descriptor_exists(data_root, paths).map_err(error)? {
             resolve_active_generation(data_root, paths).map_err(error)?;
@@ -73,6 +84,7 @@ impl MemorySync {
             data_root.to_path_buf(),
             paths.clone(),
             shutdown.clone(),
+            fresh,
         ));
         Ok(Self {
             consumer,
@@ -116,7 +128,30 @@ async fn poll(
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
     shutdown: CancellationToken,
+    fresh: Option<FreshMemoryGeneration>,
 ) {
+    if let Some(fresh) = fresh {
+        if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
+            && std::env::var("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP").as_deref() == Ok("1")
+        {
+            while !tokio::fs::try_exists(data_root.join("state/e2e-memory-bootstrap-release"))
+                .await
+                .unwrap_or(false)
+            {
+                tokio::select! {
+                    () = shutdown.cancelled() => return,
+                    () = tokio::time::sleep(Duration::from_millis(20)) => {},
+                }
+            }
+        }
+        if shutdown.is_cancelled() {
+            return;
+        }
+        if let Err(error) = fresh.initialize().await {
+            eprintln!("[native-memory-bootstrap] {}", error.code());
+            return;
+        }
+    }
     let mut idle_polls = 0_u32;
     loop {
         if shutdown.is_cancelled() {
@@ -151,7 +186,7 @@ async fn poll(
             Err(error) => {
                 // Diagnostic codes only. The durable queue retains failed work;
                 // paths, prompts, credentials and raw provider errors stay private.
-                eprintln!("[native-memory-sync] {}", error.code());
+                butler_core::diagnostic!("[native-memory-sync] {}", error.code());
                 idle_polls = idle_polls.saturating_add(1);
                 backoff(idle_polls, DEFERRED_CAP)
             }

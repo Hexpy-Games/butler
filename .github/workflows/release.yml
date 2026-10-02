@@ -54,13 +54,14 @@ jobs:
 
       - name: Install app client dependencies
         run: |
-          bun install --frozen-lockfile
-          npm --prefix packages/butler-app/client/electron ci
-          npm --prefix packages/butler-app/client/ui ci
+          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          bun install --frozen-lockfile --ignore-scripts
 
       # The renderer ships in the Agent's resources (app-client/dist).
       - name: Build the App renderer
-        run: npm --prefix packages/butler-app/client/ui run build
+        run: |
+          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          npm --prefix packages/butler-app/client/ui run build
 
       - name: Prepare the native Agent payload
         run: node packages/butler-app/client/electron/scripts/prepare-native-agent.mjs darwin arm64 "$BUTLER_NATIVE_AGENT_PAYLOAD"
@@ -81,7 +82,9 @@ jobs:
         timeout-minutes: 60
         run: |
           deploy/macos/sign-and-notarize.sh agent "$BUTLER_NATIVE_AGENT_PAYLOAD/bin/butler-agent"
-          echo "BUTLER_AGENT_NOTARIZED=1" >> "$GITHUB_ENV"
+          notarized=1
+          if [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-preview\..+$ ]]; then notarized=0; fi
+          echo "BUTLER_AGENT_NOTARIZED=$notarized" >> "$GITHUB_ENV"
 
       - name: Select the versioned Agent archive path
         run: |
@@ -118,6 +121,9 @@ jobs:
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
           notes_file=".github/releases/${tag}.md"
+          if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-preview\..+$ ]]; then
+            notes_file=".github/releases/${tag%%-preview.*}-preview.md"
+          fi
           notes_args=(--notes "Butler Agent release $tag")
           if [ -f "$notes_file" ]; then
             notes_args=(--notes-file "$notes_file")
@@ -304,6 +310,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [native-release, app-linux]
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download the Linux App packages
         uses: actions/download-artifact@v4
         with:
@@ -317,9 +325,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          # Like the Agent archives, preview tags use the base component version.
+          # Archive names retain the exact release tag version.
           version="${GITHUB_REF_NAME#v}"
-          version="${version%%-*}"
           cd dist/release/app-linux
           files=(
             "butler-app-${version}-linux-x64.deb"
@@ -331,6 +338,22 @@ jobs:
             sha256sum -c "$file.sha256"
           done
           gh release upload "$GITHUB_REF_NAME" "${files[@]}" "${files[@]/%/.sha256}" --clobber
+
+      - name: Publish the App updater manifest for all released platforms
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
+          gh release download "$GITHUB_REF_NAME" --pattern app-update-manifest.json --dir "$BUTLER_DATA"
+          python3 deploy/app/merge-update-manifest.py \
+            --mac-manifest "$BUTLER_DATA/app-update-manifest.json" \
+            --linux-dir dist/release/app-linux --version "${GITHUB_REF_NAME#v}" \
+            --base-url "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME" \
+            --output "$HOME/app-update-manifest.json"
+          gh release upload "$GITHUB_REF_NAME" "$HOME/app-update-manifest.json" --clobber
 
   release-checksums:
     name: Publish consolidated release checksums
@@ -430,21 +453,13 @@ jobs:
           node-version: 22.23.3
           registry-url: https://registry.npmjs.org
 
-      # The first publish of a package always becomes `latest`, whatever --tag
-      # says, so a preview must not be the first one.
+      - name: Verify the published Agent release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash deploy/npm/verify-release.sh "$GITHUB_REF_NAME"
+
       - name: Publish with provenance
-        working-directory: packages/butler-npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
-        run: |
-          set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
-          dist_tag=latest
-          case "$version" in *-*) dist_tag=next ;; esac
-          name="$(node -p 'require("./package.json").name')"
-          if [ "$dist_tag" = next ] && ! npm view "$name" dist-tags.latest >/dev/null 2>&1; then
-            printf '%s has no stable release yet; publish a stable version first so `latest` is not a preview.\n' "$name" >&2
-            exit 1
-          fi
-          npm version "$version" --no-git-tag-version --allow-same-version
-          npm publish --access public --provenance --tag "$dist_tag"
+        run: bash deploy/npm/publish.sh "$GITHUB_REF_NAME"

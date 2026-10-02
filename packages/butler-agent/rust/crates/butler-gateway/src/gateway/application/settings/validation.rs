@@ -1,6 +1,7 @@
 use serde_json::Value;
 
 const UPDATE_KEYS: &[&str] = &[
+    "update_previews",
     "server_url",
     "language",
     "timezone",
@@ -35,6 +36,12 @@ pub(super) fn is_request(value: &Value) -> bool {
         return false;
     };
     if !input.keys().all(|key| UPDATE_KEYS.contains(&key.as_str())) {
+        return false;
+    }
+    if input
+        .get("update_previews")
+        .is_some_and(|value| !value.is_boolean())
+    {
         return false;
     }
     if input.get("context_window_tokens").is_some_and(|value| {

@@ -5,6 +5,7 @@ use std::{ffi::OsString, process::ExitCode};
 use serde_json::json;
 
 mod checks;
+mod log_bundle;
 use checks::{
     Check, check_value, credentials_check, data_check, digest_check, executable_check,
     owned_service_check, resources_check, version_check,
@@ -30,6 +31,7 @@ struct Options {
     check: Option<String>,
     json: bool,
     quiet: bool,
+    collect_logs: bool,
     positionals: Vec<String>,
 }
 
@@ -59,6 +61,19 @@ pub(crate) fn run(installation: &ResolvedInstallation, args: &[OsString]) -> Exi
         Ok(data) => data,
         Err(error) => return report_error(options.json, "unsafe_path", error.message(), 1),
     };
+    if options.collect_logs {
+        return match log_bundle::collect(&data, installation) {
+            Ok(path) => {
+                println!(
+                    "{}",
+                    json!({"ok":true,"command":"butler doctor --collect-logs",
+                    "data":{"bundle":path},"privacy":{"rawTextIncluded":false,"secretsIncluded":false}})
+                );
+                ExitCode::SUCCESS
+            }
+            Err(error) => report_error(options.json, "log_export_failed", error.message(), 1),
+        };
+    }
     let checks = run_checks(options.check.as_deref(), installation, &data);
     let healthy = checks.iter().all(|check| check.status == "pass");
     let report = json!({
@@ -185,7 +200,8 @@ fn parse(args: &[OsString]) -> Result<Options, (&'static str, String)> {
                     "--home is unsupported; use --data".into(),
                 ));
             }
-            "--fix" | "--collect-logs" | "--github" => {
+            "--collect-logs" => options.collect_logs = true,
+            "--fix" | "--github" => {
                 return Err((
                     "unsupported_logical_operation",
                     "doctor is read-only and does not perform repairs or external uploads".into(),

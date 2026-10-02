@@ -10,6 +10,7 @@ use serde_json::Number;
 use tokio_util::sync::CancellationToken;
 
 use super::{MemorySyncPoll, catchup, paused};
+mod cache;
 mod typed;
 mod vector;
 use crate::cognition::generation::{resolve_active_generation, resolve_generation};
@@ -110,13 +111,14 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
         return Ok(MemorySyncPoll::Deferred);
     }
     if input.target.is_some() {
-        let projected = project_next(&input).await?;
+        let (projected, generation) = project_next(&input).await?;
+        let cached = cache::process(&input, generation.as_ref()).await?;
         let vectorized = if let Some(embedding) = &input.embedding {
             vector::process(&input, embedding.as_ref()).await?
         } else {
             false
         };
-        return Ok(if projected || vectorized {
+        return Ok(if projected || cached || vectorized {
             MemorySyncPoll::Processed
         } else {
             MemorySyncPoll::Idle
@@ -143,7 +145,7 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
         Ok(caught_up) => caught_up,
         Err(catchup_error) => match queue_error {
             Some(queue_error) => {
-                eprintln!("[native-memory-sync-catchup] {}", catchup_error.code());
+                butler_core::diagnostic!("[native-memory-sync-catchup] {}", catchup_error.code());
                 return Err(queue_error);
             }
             None => return Err(catchup_error),
@@ -152,19 +154,22 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
     if let Some(error) = queue_error {
         return Err(error);
     }
-    let projected = project_next(&input).await?;
+    let (projected, generation) = project_next(&input).await?;
+    let cached = cache::process(&input, generation.as_ref()).await?;
     let vectorized = if let Some(embedding) = &input.embedding {
         vector::process(&input, embedding.as_ref()).await?
     } else {
         false
     };
-    Ok(if processed || caught_up || projected || vectorized {
-        MemorySyncPoll::Processed
-    } else if queued {
-        MemorySyncPoll::Deferred
-    } else {
-        MemorySyncPoll::Idle
-    })
+    Ok(
+        if processed || caught_up || projected || cached || vectorized {
+            MemorySyncPoll::Processed
+        } else if queued {
+            MemorySyncPoll::Deferred
+        } else {
+            MemorySyncPoll::Idle
+        },
+    )
 }
 
 /// Registers the conversation turn a v3 request names once its completion
@@ -347,14 +352,16 @@ fn dead_letter_sync(
         .map_err(dlq)
 }
 
-pub(super) async fn project_next(input: &Input) -> CognitionResult<bool> {
+pub(super) async fn project_next(
+    input: &Input,
+) -> CognitionResult<(bool, Option<crate::cognition::MemoryGenerationHandle>)> {
     if input.shutdown.is_cancelled() {
-        return Ok(false);
+        return Ok((false, None));
     }
     let owned = input.clone();
     let handle = match super::blocking::run(move || resolve_input_generation(&owned)).await {
         Ok(handle) => handle,
-        Err(error) if error.code() == "memory_generation_unavailable" => return Ok(false),
+        Err(error) if error.code() == "memory_generation_unavailable" => return Ok((false, None)),
         Err(error) => return Err(error),
     };
     // Recovery takes the write lease, so it runs only when a window is held
@@ -380,7 +387,7 @@ pub(super) async fn project_next(input: &Input) -> CognitionResult<bool> {
         .pending_job(&handle.graph_path, &(input.clock)())
         .await?;
     let Some(pending) = pending else {
-        return Ok(false);
+        return Ok((false, Some(handle)));
     };
     let job_id = pending.job_id.clone();
     let owned = input.clone();
@@ -394,7 +401,7 @@ pub(super) async fn project_next(input: &Input) -> CognitionResult<bool> {
                 .target
                 .clone()
                 .unwrap_or(MemoryGenerationTarget::Active {
-                    expected_generation: handle.generation_id,
+                    expected_generation: handle.generation_id.clone(),
                 }),
             job_id,
             notice,
@@ -403,7 +410,7 @@ pub(super) async fn project_next(input: &Input) -> CognitionResult<bool> {
             wait_class: CognitionWaitClass::Background,
         })
         .await?;
-    Ok(projected.is_some())
+    Ok((projected.is_some(), Some(handle)))
 }
 
 /// The source notice of a pending semantic job, checked against the

@@ -26,6 +26,15 @@ pub(super) struct QueueWake {
 }
 
 impl QueueWake {
+    #[cfg(debug_assertions)]
+    pub(super) async fn stopped(&self) {
+        self.cancellation.cancelled().await;
+    }
+
+    pub(super) fn is_stopping(&self) -> bool {
+        self.cancellation.is_cancelled()
+    }
+
     pub(super) async fn chat(&self, chat_id: String) -> Result<(), GatewayApplicationError> {
         // Terminal projection still settles claims after queue admission stops.
         // Persisted waiting input will be dispatched by the next process.
@@ -77,9 +86,8 @@ enum Command {
 }
 
 impl QueueDispatcher {
-    pub(super) fn start() -> (Self, QueueWake) {
+    pub(super) fn start(cancellation: CancellationToken) -> (Self, QueueWake) {
         let (sender, receiver) = mpsc::channel(COMMAND_CAPACITY);
-        let cancellation = CancellationToken::new();
         let task = tokio::spawn(run(receiver, cancellation.clone()));
         let owner = Self {
             inner: Arc::new(Inner {
@@ -225,8 +233,10 @@ async fn recover_and_drain(
     app: &AppApplication,
     only_chat: Option<&str>,
 ) -> Result<(), GatewayApplicationError> {
-    if cancellation.is_cancelled() {
-        return Err(GatewayApplicationError::internal());
+    tokio::select! {
+        biased;
+        () = cancellation.cancelled() => return Ok(()),
+        ready = app.dependencies.executor_readiness.wait_ready() => ready?,
     }
     app.recover_expired().await?;
     let chats = if let Some(chat) = only_chat {
@@ -310,7 +320,7 @@ async fn drain_chat(
                 },
             )
             .await
-            && !matches!(error, GatewayApplicationError::Public { ref code, .. } if code == "queued_message_claim_lost")
+            && !matches!(error, GatewayApplicationError::Public { ref code, .. } if code == "queued_message_claim_lost" || code == "service_stopping")
         {
             let _ = app
                 .fail_dispatch(&claim, "queued_message_dispatch_failed")
@@ -363,7 +373,7 @@ fn queued_chats(db: &mut Connection) -> Result<Vec<String>, AppStorageError> {
         .map_err(AppStorageError::sqlite)
 }
 fn session_has_active_turn(db: &mut Connection, chat: &str) -> Result<bool, AppStorageError> {
-    db.query_row_cached("SELECT 1 FROM turns WHERE chat_id=?1 AND state IN ('accepted','thinking','streaming','waiting_for_form','waiting_for_tool','cancelling','retrying') LIMIT 1", [chat], |_| Ok(()))
+    db.query_row_cached("SELECT 1 FROM turns t WHERE chat_id=?1 AND NOT EXISTS (SELECT 1 FROM session_queued_messages q WHERE q.chat_id=t.chat_id AND q.turn_id=t.id AND q.state='queued' AND q.state IN ('queued','dispatching')) AND state IN ('accepted','thinking','streaming','waiting_for_form','waiting_for_tool','cancelling','retrying') LIMIT 1", [chat], |_| Ok(()))
         .optional().map(|row| row.is_some()).map_err(AppStorageError::sqlite)
 }
 async fn next_deadline(app: &AppApplication) -> Result<Option<Duration>, GatewayApplicationError> {

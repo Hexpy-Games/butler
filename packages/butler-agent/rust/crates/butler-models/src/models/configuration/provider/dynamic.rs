@@ -10,19 +10,18 @@ use super::{
 use crate::models::{ModelConfigurationEnvironment, ParsedModelRefSource, parse_model_ref};
 
 pub(super) const AUTO_CODEX_LATEST: &str = "auto:codex-latest";
-const DEFAULT_OPENAI_MODEL: &str = "gpt-5.5-codex";
 
 pub(super) fn configured_model(
     environment: &ModelConfigurationEnvironment,
     config: &Value,
-) -> String {
+) -> Option<String> {
     if let Some(model) = environment
         .openai_model
         .as_deref()
         .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
     {
-        return model.to_owned();
+        return Some(model.to_owned());
     }
     if let Some(model) = config
         .pointer("/system/openaiModel")
@@ -30,7 +29,7 @@ pub(super) fn configured_model(
         .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
     {
-        return model.to_owned();
+        return Some(model.to_owned());
     }
     let legacy = config
         .pointer("/system/workerModel")
@@ -42,13 +41,15 @@ pub(super) fn configured_model(
         .filter(|value| !value.is_empty())
     {
         let parsed = parse_model_ref(model);
-        return if parsed.source == ParsedModelRefSource::Namespaced {
-            parsed.model_id
-        } else {
-            model.to_owned()
-        };
+        return Some(
+            if parsed.source == ParsedModelRefSource::Namespaced && parsed.provider_id == "openai" {
+                parsed.model_id
+            } else {
+                model.to_owned()
+            },
+        );
     }
-    DEFAULT_OPENAI_MODEL.to_owned()
+    None
 }
 
 pub(super) fn configured_reasoning(
@@ -178,7 +179,7 @@ fn score(model: &str) -> (f64, i32) {
 
 fn selectable(model: &str) -> bool {
     let lower = model.to_ascii_lowercase();
-    if lower == "gpt-5.6" {
+    if lower == crate::models::OPENAI_DYNAMIC_PLAIN_MODEL {
         return true;
     }
     let Some(tail) = lower.strip_prefix("gpt-") else {

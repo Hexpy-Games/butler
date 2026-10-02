@@ -52,6 +52,38 @@ pub fn diagnostics_enabled_readonly(database_path: &Path) -> bool {
         == Some(true)
 }
 
+/// Stored App language, without creating a database or selecting a fallback.
+pub fn stored_ui_language_readonly(
+    database_path: &Path,
+) -> Result<Option<String>, crate::gateway::GatewayApplicationError> {
+    stored_ui_language(database_path)
+        .map_err(crate::gateway::GatewayApplicationError::internal_from)
+}
+
+fn stored_ui_language(database_path: &Path) -> Result<Option<String>, AppStorageError> {
+    if !database_path.exists() {
+        return Ok(None);
+    }
+    let db = Connection::open_with_flags(database_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(AppStorageError::sqlite)?;
+    let exists: bool = db
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='app_settings')",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(AppStorageError::sqlite)?;
+    if !exists {
+        return Ok(None);
+    }
+    Ok(read_json(&db, SETTINGS_KEY)?.and_then(|settings| {
+        settings
+            .get("language")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+    }))
+}
+
 pub(super) struct ResolvedControls {
     pub resolution: ControlResolution,
     pub persisted: Value,
@@ -107,10 +139,10 @@ pub(super) fn resolve_for_message_send(
     let message_override = has_message_override(request);
     if message_override {
         merge_message_controls(&mut controls, request);
-        assert_selectable(&controls.model, available_models(facts))?;
-        controls = normalize_controls(controls, available_models(facts));
+        assert_selectable(&controls.model, &available_models(facts))?;
+        controls = normalize_controls(controls, &available_models(facts));
     }
-    assert_selectable(&controls.model, available_models(facts))?;
+    assert_selectable(&controls.model, &available_models(facts))?;
     let revision = revision(db, &revision_key)?;
     let source = if message_override {
         ControlSource::MessageOverride

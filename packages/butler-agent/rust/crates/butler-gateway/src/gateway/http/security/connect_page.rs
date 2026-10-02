@@ -1,5 +1,5 @@
 //! The connection-code screen a browser sees without a session: one field
-//! for the connection code from Settings → Security (or a one-time code
+//! for the short code from `butler remote pair` (or a one-time code
 //! `butler open` prints), and no username/password prompt (no
 //! `WWW-Authenticate` challenge).
 
@@ -32,7 +32,7 @@ button { margin-top: 12px; width: 100%; padding: 10px 12px; border: 0; border-ra
 <body>
 <main>
 <h1>Connect to Butler</h1>
-<p>Enter the connection code. Copy it from Settings → Security in the Butler app.</p>
+<p>Enter the pairing code shown by <code>butler remote pair</code> on the computer running Butler.</p>
 "#;
 
 const PAGE_FORM: &str = r#"<form method="post" action="/connect">
@@ -46,6 +46,11 @@ const PAGE_FORM: &str = r#"<form method="post" action="/connect">
 "#;
 
 const REJECTED: &str = "<p class=\"error\" role=\"alert\">That code is not valid.</p>\n";
+const REQUEST_DENIED: &str =
+    "<p class=\"error\" role=\"alert\">This connection request is not allowed.</p>\n";
+const RATE_LIMITED: &str =
+    "<p class=\"error\" role=\"alert\">Too many attempts. Please wait and try again.</p>\n";
+const FAILED: &str = "<p class=\"error\" role=\"alert\">Unable to connect. Please try again.</p>\n";
 
 /// Why the page is shown.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -56,27 +61,50 @@ pub(in crate::gateway::http) enum ConnectPage {
     SessionRequired,
     /// A code that is unknown, used or expired.
     Rejected,
+    /// A Host, Origin or Fetch Metadata check refused the form request.
+    RequestDenied,
+    /// The form request exceeded a rate limit.
+    RateLimited,
+    /// Another form request error, such as an oversized body.
+    Failed,
 }
 
 impl ConnectPage {
-    /// The HTML response (never cached, no referrer, not framable).
+    /// The HTML response (never cached, same-origin referrer, not framable).
     pub(in crate::gateway::http) fn response(self) -> Response {
-        let notice = if self == Self::Rejected { REJECTED } else { "" };
-        let mut response = Response::new(Body::from(format!("{PAGE_HEAD}{notice}{PAGE_FORM}")));
-        *response.status_mut() = match self {
-            Self::Ask => StatusCode::OK,
-            Self::SessionRequired | Self::Rejected => StatusCode::UNAUTHORIZED,
+        self.response_with_status(self.status())
+    }
+
+    pub(in crate::gateway::http) fn response_with_status(self, status: StatusCode) -> Response {
+        let notice = match self {
+            Self::Rejected => REJECTED,
+            Self::RequestDenied => REQUEST_DENIED,
+            Self::RateLimited => RATE_LIMITED,
+            Self::Failed => FAILED,
+            Self::Ask | Self::SessionRequired => "",
         };
+        let mut response = Response::new(Body::from(format!("{PAGE_HEAD}{notice}{PAGE_FORM}")));
+        *response.status_mut() = status;
         let headers = response.headers_mut();
         for (name, value) in [
             (header::CONTENT_TYPE, "text/html; charset=utf-8"),
             (header::CACHE_CONTROL, "no-store"),
-            (header::REFERRER_POLICY, "no-referrer"),
+            (header::REFERRER_POLICY, "same-origin"),
             (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
             (header::CONTENT_SECURITY_POLICY, CONTENT_SECURITY_POLICY),
         ] {
             headers.insert(name, HeaderValue::from_static(value));
         }
         response
+    }
+
+    fn status(self) -> StatusCode {
+        match self {
+            Self::Ask => StatusCode::OK,
+            Self::SessionRequired | Self::Rejected => StatusCode::UNAUTHORIZED,
+            Self::RequestDenied => StatusCode::FORBIDDEN,
+            Self::RateLimited => StatusCode::TOO_MANY_REQUESTS,
+            Self::Failed => StatusCode::INTERNAL_SERVER_ERROR,
+        }
     }
 }

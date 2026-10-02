@@ -6,6 +6,27 @@ use serde_json::json;
 use super::*;
 
 impl AppApplication {
+    /// Keep the linked Turn/message identity, but release only this admission's
+    /// exact claim. A queued link is excluded from active-turn gating on restart.
+    pub(super) async fn park_dispatch(
+        &self,
+        claim: &QueueClaim,
+    ) -> Result<(), GatewayApplicationError> {
+        let claim = claim.clone();
+        let now = self.dependencies.identity_clock.now_iso();
+        let subscribers = self.subscribers.clone();
+        self.storage.execute(move |db| {
+            let tx = db.transaction().map_err(AppStorageError::sqlite)?;
+            let changed = tx.execute("UPDATE session_queued_messages SET state='queued',safe_error_code=NULL,claim_id=NULL,claim_owner=NULL,claimed_at=NULL,lease_expires_at=NULL,updated_at=?1 WHERE id=?2 AND chat_id=?3 AND state='dispatching' AND claim_id=?4",
+                params![now,claim.queued_message_id,claim.chat_id,claim.claim_id]).map_err(AppStorageError::sqlite)?;
+            if changed == 1 {
+                events::append(&tx, &subscribers, "session_queue.changed", None,
+                    service::map(&json!({"session_id":claim.chat_id,"queued_message_id":claim.queued_message_id,"action":"recovered","recovery_reason":"service_stopping"}))?, &now)?;
+            }
+            tx.commit().map_err(AppStorageError::sqlite)
+        }).await.map_err(app_error)
+    }
+
     pub(super) async fn recover_expired(&self) -> Result<(), GatewayApplicationError> {
         let now = self.dependencies.identity_clock.now_iso();
         let rows = self

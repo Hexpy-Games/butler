@@ -1,14 +1,17 @@
-//! First-use acquisition for the four files consumed by the native BGE-M3 engine.
+//! Background acquisition for the four files consumed by the native BGE-M3 engine.
 //! Complete existing caches stay untouched; only missing files use this frozen revision.
 
 use std::{
     fs::{self, File},
-    io::{Read, Write},
+    io::Read,
     path::{Path, PathBuf},
 };
 
-use futures_util::StreamExt;
-use reqwest::{Client, StatusCode, header};
+use reqwest::Client;
+
+mod background;
+mod download;
+pub(crate) use background::Acquisition;
 use sha2::{Digest, Sha256};
 
 use butler_memory::cognition::ensure_data_authority;
@@ -19,55 +22,75 @@ const STAGING: &str = ".native-embedding-acquire";
 
 // Xenova/bge-m3 at REVISION, https://huggingface.co/Xenova/bge-m3/tree/REVISION.
 // SHA-256 values are of file bytes, including the small Git blobs whose Hub ETags are SHA-1.
+#[derive(serde::Deserialize)]
 struct Asset {
-    relative: &'static str,
+    relative: String,
     bytes: u64,
-    sha256: &'static str,
+    sha256: String,
 }
 
-const ASSETS: [Asset; 4] = [
-    Asset {
-        relative: "tokenizer.json",
-        bytes: 17_082_821,
-        sha256: "6710678b12670bc442b99edc952c4d996ae309a7020c1fa0096dd245c2faf790",
-    },
-    Asset {
-        relative: "tokenizer_config.json",
-        bytes: 1_173,
-        sha256: "7e4c1cc848840aeccdd763458c18dd525eb0f795c992e00ebe9c28554e7db2d4",
-    },
-    Asset {
-        relative: "config.json",
-        bytes: 770,
-        sha256: "734a79bf12d388c1467a4e3ab625f45de7f6906cffcfb93a1eca1787504bed95",
-    },
-    Asset {
-        relative: "onnx/model_quantized.onnx",
-        bytes: 569_694_530,
-        sha256: "0826f8c1ab9edf1801db86c61919d4d108e8bfc0b809ec823ad366882ff0b77d",
-    },
-];
+fn pinned_assets() -> Vec<Asset> {
+    vec![
+        Asset {
+            relative: "tokenizer.json".to_owned(),
+            bytes: 17_082_821,
+            sha256: "6710678b12670bc442b99edc952c4d996ae309a7020c1fa0096dd245c2faf790".to_owned(),
+        },
+        Asset {
+            relative: "tokenizer_config.json".to_owned(),
+            bytes: 1_173,
+            sha256: "7e4c1cc848840aeccdd763458c18dd525eb0f795c992e00ebe9c28554e7db2d4".to_owned(),
+        },
+        Asset {
+            relative: "config.json".to_owned(),
+            bytes: 770,
+            sha256: "734a79bf12d388c1467a4e3ab625f45de7f6906cffcfb93a1eca1787504bed95".to_owned(),
+        },
+        Asset {
+            relative: "onnx/model_quantized.onnx".to_owned(),
+            bytes: 569_694_530,
+            sha256: "0826f8c1ab9edf1801db86c61919d4d108e8bfc0b809ec823ad366882ff0b77d".to_owned(),
+        },
+    ]
+}
 
 pub(super) async fn ensure(data_root: &Path) -> Result<(), &'static str> {
     let root = data_root.join(MODEL_ROOT);
-    if ASSETS
-        .iter()
-        .all(|asset| root.join(asset.relative).is_file())
-    {
-        // The engine validates usability and derives identity from these actual bytes.
-        cleanup_complete_staging(data_root, &root)?;
-        return Ok(());
+    let ready = tokio::task::spawn_blocking(move || complete(&root, &pinned_assets()))
+        .await
+        .map_err(|_| "embed_asset_unavailable")?;
+    if ready {
+        Ok(())
+    } else {
+        // Acquisition belongs to the service, never to a chat's inference worker.
+        Err("embed_asset_pending")
     }
-    let client = Client::builder()
-        .build()
-        .map_err(|_| "embed_asset_download_failed")?;
-    acquire(data_root, &root, &ASSETS, &client, |asset| {
-        format!(
-            "https://huggingface.co/Xenova/bge-m3/resolve/{REVISION}/{}",
-            asset.relative
-        )
-    })
-    .await
+}
+
+fn complete(root: &Path, assets: &[Asset]) -> bool {
+    assets
+        .iter()
+        .all(|asset| root.join(&asset.relative).is_file())
+}
+
+/// Offline status uses fixed-size metadata probes, never reads or writes model bytes.
+pub(crate) fn cached_status(data_root: &Path) -> serde_json::Value {
+    let assets = pinned_assets();
+    let root = data_root.join(MODEL_ROOT);
+    let ready = complete(&root, &assets);
+    let total: u64 = assets.iter().map(|asset| asset.bytes).sum();
+    let done: u64 = assets
+        .iter()
+        .map(|asset| {
+            if root.join(&asset.relative).is_file() {
+                asset.bytes
+            } else {
+                fs::metadata(part_path(&root.join(STAGING), asset))
+                    .map_or(0, |meta| meta.len().min(asset.bytes))
+            }
+        })
+        .sum();
+    serde_json::json!({"state": if ready { "ready" } else { "queued" }, "bytes_done":done, "bytes_total":total})
 }
 
 fn cleanup_complete_staging(data_root: &Path, root: &Path) -> Result<(), &'static str> {
@@ -86,8 +109,12 @@ fn cleanup_complete_staging(data_root: &Path, root: &Path) -> Result<(), &'stati
         .truncate(false)
         .open(lock_path)
         .map_err(|_| "embed_asset_unavailable")?;
-    lock.lock().map_err(|_| "embed_asset_unavailable")?;
-    for asset in &ASSETS {
+    match lock.try_lock() {
+        Ok(()) => {}
+        Err(std::fs::TryLockError::WouldBlock) => return Ok(()),
+        Err(_) => return Err("embed_asset_unavailable"),
+    }
+    for asset in &pinned_assets() {
         let part = part_path(&staging, asset);
         ensure_data_authority(data_root, &[&part]).map_err(|_| "embed_asset_path_unsafe")?;
         reject_symlink(&part)?;
@@ -105,13 +132,24 @@ async fn acquire(
     root: &Path,
     assets: &[Asset],
     client: &Client,
-    url: impl Fn(&Asset) -> String,
+    sources: &[String],
+    progress: &mut impl FnMut(&str, u64),
 ) -> Result<(), &'static str> {
+    let (_lock, staging) = prepare(data_root, root, assets).await?;
+    download_missing(root, &staging, assets, client, sources, progress).await?;
+    publish_staged(data_root, root, &staging, assets)
+}
+
+async fn prepare(
+    data_root: &Path,
+    root: &Path,
+    assets: &[Asset],
+) -> Result<(File, PathBuf), &'static str> {
     let staging = root.join(STAGING);
     let lock_path = root.join(".native-embedding-acquire.lock");
     let mut guarded: Vec<PathBuf> = vec![root.to_owned(), staging.clone(), lock_path.clone()];
     for asset in assets {
-        guarded.push(root.join(asset.relative));
+        guarded.push(root.join(&asset.relative));
         guarded.push(part_path(&staging, asset));
     }
     ensure_data_authority(
@@ -127,7 +165,15 @@ async fn acquire(
         .truncate(false)
         .open(&lock_path)
         .map_err(|_| "embed_asset_unavailable")?;
-    lock.lock().map_err(|_| "embed_asset_unavailable")?;
+    loop {
+        match lock.try_lock() {
+            Ok(()) => break,
+            Err(std::fs::TryLockError::WouldBlock) => {
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
+            Err(_) => return Err("embed_asset_unavailable"),
+        }
+    }
     // The OS releases the lock if the worker is killed. Only our four named
     // partials are ever inspected or removed; no directory-wide cleanup runs.
     ensure_data_authority(
@@ -138,28 +184,60 @@ async fn acquire(
     reject_symlink(&staging)?;
     fs::create_dir_all(&staging).map_err(|_| "embed_asset_unavailable")?;
     for asset in assets {
-        let final_path = root.join(asset.relative);
+        let final_path = root.join(&asset.relative);
         reject_symlink(&final_path)?;
         if final_path.exists() && !matches_asset(&final_path, asset)? {
             return Err("embed_asset_version_conflict");
         }
     }
+    Ok((lock, staging))
+}
+
+async fn download_missing(
+    root: &Path,
+    staging: &Path,
+    assets: &[Asset],
+    client: &Client,
+    sources: &[String],
+    progress: &mut impl FnMut(&str, u64),
+) -> Result<(), &'static str> {
     for asset in assets {
-        let final_path = root.join(asset.relative);
+        let final_path = root.join(&asset.relative);
         if final_path.is_file() {
             continue;
         }
-        let part = part_path(&staging, asset);
+        let part = part_path(staging, asset);
         reject_symlink(&part)?;
-        download(client, &url(asset), asset, &part).await?;
+        let baseline = assets
+            .iter()
+            .filter(|other| other.relative != asset.relative)
+            .map(|other| {
+                if root.join(&other.relative).is_file() {
+                    other.bytes
+                } else {
+                    fs::metadata(part_path(staging, other))
+                        .map_or(0, |meta| meta.len().min(other.bytes))
+                }
+            })
+            .sum::<u64>();
+        download::with_retries(client, sources, asset, &part, baseline, progress).await?;
     }
+    Ok(())
+}
+
+fn publish_staged(
+    data_root: &Path,
+    root: &Path,
+    staging: &Path,
+    assets: &[Asset],
+) -> Result<(), &'static str> {
     // Do not expose any new final path until every missing staged file is verified.
     for asset in assets {
-        let final_path = root.join(asset.relative);
+        let final_path = root.join(&asset.relative);
         if final_path.is_file() {
             continue;
         }
-        let part = part_path(&staging, asset);
+        let part = part_path(staging, asset);
         if let Some(parent) = final_path.parent() {
             fs::create_dir_all(parent).map_err(|_| "embed_asset_unavailable")?;
         }
@@ -219,96 +297,3 @@ fn hash_file(path: &Path) -> Result<String, &'static str> {
         digest.update(&chunk[..count]);
     }
 }
-
-async fn download(
-    client: &Client,
-    url: &str,
-    asset: &Asset,
-    part: &Path,
-) -> Result<(), &'static str> {
-    let existing = match fs::metadata(part) {
-        Ok(metadata) if metadata.is_file() && metadata.len() <= asset.bytes => metadata.len(),
-        Ok(_) => {
-            fs::remove_file(part).map_err(|_| "embed_asset_unavailable")?;
-            0
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => 0,
-        Err(_) => return Err("embed_asset_unavailable"),
-    };
-    if existing == asset.bytes {
-        if matches_asset(part, asset)? {
-            return Ok(());
-        }
-        fs::remove_file(part).map_err(|_| "embed_asset_unavailable")?;
-    }
-    let start = if existing == asset.bytes { 0 } else { existing };
-    let mut request = client.get(url).header(header::ACCEPT_ENCODING, "identity");
-    if start > 0 {
-        request = request.header(header::RANGE, format!("bytes={start}-"));
-    }
-    let response = request
-        .send()
-        .await
-        .map_err(|_| "embed_asset_download_failed")?;
-    if start > 0 {
-        if response.status() != StatusCode::PARTIAL_CONTENT
-            || !valid_range(response.headers(), start, asset.bytes)
-        {
-            return Err("embed_asset_range_invalid");
-        }
-    } else if response.status() != StatusCode::OK {
-        return Err("embed_asset_download_failed");
-    }
-    let mut file = File::options()
-        .create(true)
-        .write(true)
-        .append(start > 0)
-        .truncate(start == 0)
-        .open(part)
-        .map_err(|_| "embed_asset_unavailable")?;
-    let mut received = start;
-    let mut stream = response.bytes_stream();
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|_| "embed_asset_download_failed")?;
-        received = received
-            .checked_add(chunk.len() as u64)
-            .filter(|count| *count <= asset.bytes)
-            .ok_or("embed_asset_download_failed")?;
-        file.write_all(&chunk)
-            .map_err(|_| "embed_asset_unavailable")?;
-    }
-    if received != asset.bytes {
-        return Err("embed_asset_download_failed");
-    }
-    file.sync_all().map_err(|_| "embed_asset_unavailable")?;
-    drop(file);
-    if !matches_asset(part, asset)? {
-        fs::remove_file(part).map_err(|_| "embed_asset_unavailable")?;
-        return Err("embed_asset_hash_mismatch");
-    }
-    Ok(())
-}
-
-fn valid_range(headers: &header::HeaderMap, start: u64, total: u64) -> bool {
-    let Some(raw) = headers
-        .get(header::CONTENT_RANGE)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("bytes "))
-    else {
-        return false;
-    };
-    let Some((range, length)) = raw.split_once('/') else {
-        return false;
-    };
-    let Some((first, last)) = range.split_once('-') else {
-        return false;
-    };
-    matches!(
-        (first.parse::<u64>(), last.parse::<u64>(), length.parse::<u64>()),
-        (Ok(first), Ok(last), Ok(length))
-            if first == start && last >= first && last < total && length == total
-    )
-}
-
-#[cfg(test)]
-mod tests;

@@ -6,11 +6,11 @@ use super::*;
 use super::{
     admission_identity::{input_digest, serialize_optional, stable_client_id},
     queue::QueueReservation,
-    service::{accept_turn, assert_scope},
+    service::assert_scope,
 };
 use crate::gateway::MessageContentPart;
 use crate::gateway::application::storage::AppStorageCode;
-use butler_turn::btcc::{ControlResolution, ExecutionControls};
+use butler_turn::btcc::ControlResolution;
 
 pub(super) struct ResolvedAppAdmission {
     pub text: String,
@@ -246,111 +246,5 @@ impl AppApplication {
             return self.queued_result(chat_id, client_id).await;
         };
         self.start_turn(claim, prepared).await
-    }
-
-    pub(super) async fn start_turn(
-        &self,
-        claim: QueueClaim,
-        prepared: ResolvedAppAdmission,
-    ) -> Result<MessageSendResult, GatewayApplicationError> {
-        let linked = self.claimed_dispatch(&claim).await?;
-        let queue_replay = linked.is_some();
-        let (message_id, turn_id) = if let Some(linked) = linked {
-            (linked.message_id, linked.turn_id)
-        } else {
-            let turn_id = format!("turn-{}", self.dependencies.identity_clock.new_uuid());
-            let message_id = self.claimed_client_message_id(&claim).await?;
-            let now = self.dependencies.identity_clock.now_iso();
-            let controls =
-                ExecutionControls::create(&turn_id, &claim.chat_id, prepared.controls, &now)
-                    .map_err(|source| {
-                        public(
-                            500,
-                            "turn_execution_controls_invalid",
-                            "Turn controls are unavailable.",
-                        )
-                        .with_source(source)
-                    })?;
-            controls.verify().map_err(|source| {
-                public(
-                    500,
-                    "turn_execution_controls_invalid",
-                    "Turn controls are unavailable.",
-                )
-                .with_source(source)
-            })?;
-            let controls_value = controls.as_json().clone();
-            let claim_db = claim.clone();
-            let turn_db = turn_id.clone();
-            let message_db = message_id.clone();
-            let now_db = now.clone();
-            let text = prepared.text.clone();
-            let controls_json = stringify(&controls_value)?;
-            self.storage
-                .execute(move |connection| {
-                    accept_turn(
-                        connection,
-                        &claim_db,
-                        &turn_db,
-                        &message_db,
-                        &text,
-                        &controls_json,
-                        &now_db,
-                    )
-                })
-                .await
-                .map_err(app_error)?;
-            self.publish_acceptance(&claim.chat_id, &message_id, &turn_id)
-                .await?;
-            (message_id, turn_id)
-        };
-        let native = self.prepare_claimed_native(&claim).await?;
-        let receipt = match self
-            .dependencies
-            .native_ingress
-            .enqueue(native.clone())
-            .await
-        {
-            Ok(receipt) => receipt,
-            Err(_) => {
-                if self.fence_claim(&claim, &turn_id).await? {
-                    match self.dependencies.native_ingress.find(native).await? {
-                        Some(receipt) => receipt,
-                        None => {
-                            self.fail_dispatch(&claim, "app_transport_enqueue_failed")
-                                .await?;
-                            return Err(public(
-                                503,
-                                "app_transport_enqueue_failed",
-                                "The message could not be queued.",
-                            ));
-                        }
-                    }
-                } else {
-                    return Err(public(
-                        409,
-                        "queued_message_claim_lost",
-                        "The queued message claim was lost.",
-                    ));
-                }
-            }
-        };
-        if !queue_replay {
-            self.publish_native_queued(&claim, &turn_id, &receipt)
-                .await?;
-        }
-        let messages = self.message_page(claim.chat_id.clone(), 0.0, 200).await?;
-        let turns = self.turn_page(claim.chat_id.clone(), 0.0).await?;
-        Ok(MessageSendResult {
-            accepted: messages
-                .messages
-                .into_iter()
-                .find(|item| item.id == message_id),
-            queued: None,
-            reply: None,
-            replies: Vec::new(),
-            turn: turns.turns.into_iter().find(|item| item.id == turn_id),
-            next_cursor: butler_core::json::saturating_u64(messages.next_cursor),
-        })
     }
 }

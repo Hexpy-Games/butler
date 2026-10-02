@@ -294,6 +294,10 @@ fn run_connection_lane(
         schema::migrate_legacy_schedules(&mut connection, butler_data.map(PathBuf::as_path))?;
         tuning::analyze_at_open(&connection)?;
         super::monitoring::materialized::refresh(&connection)?;
+        // Recovery and startup seeding precede normal runtime checkpoints.
+        connection
+            .pragma_update(None, "wal_autocheckpoint", 1000)
+            .map_err(AppStorageError::sqlite)?;
         event_outbox::install(&connection, metrics.clone());
         metrics::configure(&connection)?;
         Ok(connection)
@@ -310,9 +314,6 @@ fn run_connection_lane(
     }
     lane::run(&mut connection, receiver)?;
     metrics.save(path)?;
-    // Statistics are an optimization: a failure must not fail the close.
-    let _best_effort = tuning::optimize(&connection);
-    tuning::checkpoint(&connection)?;
     close_connection(connection)
 }
 
@@ -323,9 +324,11 @@ fn close_connection(connection: Connection) -> StorageResult<()> {
             "App SQLite transaction remained open at close",
         ));
     }
-    connection
-        .close()
-        .map_err(|(_, error)| AppStorageError::sqlite(error))
+    tuning::prepare_close(&connection)?;
+    crate::gateway::shutdown_trace::measure_sync("app_sqlite_connection_close", || {
+        connection.close()
+    })
+    .map_err(|(_, error)| AppStorageError::sqlite(error))
 }
 
 async fn join_failed_initialization(thread: JoinHandle<StorageResult<()>>) {

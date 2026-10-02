@@ -7,6 +7,7 @@ import type { SettingsView as SettingsData } from "@/app/types.ts";
 import { SettingsPage, SettingsSection, SettingsSelect, SettingsSwitch } from "./SettingsFormComponents";
 import { SettingsSearchableSelect } from "./SettingsSearchableSelect";
 import { NativeNotificationStatusPanel } from "./NativeNotificationStatusPanel";
+import { MemoryModelPreparation } from "./MemoryModelPreparation";
 import { RerunSetupField } from "./RerunSetupField";
 import { SearchBehaviorFields, SearchProviderFields } from "./SearchSettings";
 
@@ -110,6 +111,9 @@ export function GeneralSettings() {
         description={sectionDescriptions.notificationPermission}
       >
         <NativeNotificationStatusPanel />
+      </SettingsSection>
+      <SettingsSection id="memory-model" kind="status" title={appCopy.firstRun.memoryModel.label}>
+        <MemoryModelPreparation />
       </SettingsSection>
       <SettingsSection id="app-behavior" kind="form" title={sections.appBehavior}>
         <SettingsSwitch

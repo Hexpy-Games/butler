@@ -1,5 +1,6 @@
+import { stageElectronPackageSource } from "../../packages/butler-app/scripts/release/electron-package-source.ts";
 import { afterEach, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -17,7 +18,8 @@ afterEach(() => {
   for (const path of roots.splice(0)) rmSync(path, { recursive: true, force: true });
 });
 
-test("native mac release gate rejects missing real package input", () => {
+// test-category: format-pin
+test("native mac release validates inputs and stages the runtime shell", () => {
   const root = mkdtempSync(join(tmpdir(), "butler-native-mac-gate-"));
   roots.push(root);
   const packageDir = join(root, "packages", "butler-app", "client", "electron");
@@ -25,10 +27,40 @@ test("native mac release gate rejects missing real package input", () => {
   writeFileSync(join(packageDir, "package.json"), JSON.stringify({ version: "1.2.3" }));
   writeFileSync(join(root, "VERSION"), "9.8.7");
   const manifest = createNativeMacReleaseManifest(root);
-  expect(manifest.version).toBe("1.2.3");
-  expect(manifest.bundledAgentVersion).toBe("9.8.7");
+  expect(manifest.version).toBe("1.2.3-dev");
+  expect(manifest.bundledAgentVersion).toBe("9.8.7-dev");
   expect(validateNativeMacReleaseManifest(root, manifest)).toContain(
     "native mac release input missing: packages/butler-app/client/electron/main.mjs",
+  );
+  // Stage the runtime shell from an installed Bun workspace without copying
+  // development symlinks that Electron's npm-oriented pruner cannot traverse.
+  for (const name of ["node_modules", "dist", ".native-agent-payload", "assets"]) {
+    mkdirSync(join(packageDir, name));
+    writeFileSync(join(packageDir, name, "fixture"), name);
+  }
+  writeFileSync(join(packageDir, "main.mjs"), "import { app } from 'electron';");
+  const staged = stageElectronPackageSource(root, join(root, "electron-source"));
+  expect(readFileSync(join(staged, "main.mjs"), "utf8")).toBe("import { app } from 'electron';");
+  expect(readFileSync(join(staged, "assets/fixture"), "utf8")).toBe("assets");
+  for (const name of ["node_modules", "dist", ".native-agent-payload"]) {
+    expect(existsSync(join(staged, name))).toBe(false);
+  }
+  const previousTag = process.env.GITHUB_REF_NAME;
+  try {
+    process.env.GITHUB_REF_NAME = "v0.1.0-preview.99";
+    const preview = createNativeMacReleaseManifest(root);
+    expect(preview.version).toBe("0.1.0-preview.99");
+    expect(preview.bundledAgentVersion).toBe("0.1.0-preview.99");
+    const previewSource = stageElectronPackageSource(root, join(root, "preview-source"));
+    expect(JSON.parse(readFileSync(join(previewSource, "package.json"), "utf8")).version)
+      .toBe("0.1.0-preview.99");
+  } finally {
+    if (previousTag === undefined) delete process.env.GITHUB_REF_NAME;
+    else process.env.GITHUB_REF_NAME = previousTag;
+  }
+  writeFileSync(join(packageDir, "package.json"), JSON.stringify({ dependencies: { unexpected: "1" } }));
+  expect(() => stageElectronPackageSource(root, join(root, "invalid-source"))).toThrow(
+    "Electron runtime dependencies require an inventoried packaging layout",
   );
 });
 

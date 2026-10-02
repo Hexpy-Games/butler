@@ -9,6 +9,7 @@ on:
   pull_request:
     paths:
       - "deploy/macos/**"
+      - "packages/butler-app/scripts/release/**"
       - ".github/workflows/macos-signing.yml"
   workflow_dispatch:
 
@@ -25,11 +26,21 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - run: shellcheck deploy/macos/*.sh
+      - run: |
+          HOME=$(mktemp -d)
+          BUTLER_DATA=$(mktemp -d)
+          export HOME BUTLER_DATA
+          shellcheck deploy/macos/*.sh
+          deploy/macos/policy-selftest.sh
 
   selftest:
     name: no-identity and ad-hoc self-test
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      - run: deploy/macos/selftest.sh
+      - uses: oven-sh/setup-bun@v2
+      - run: |
+          HOME=$(mktemp -d)
+          BUTLER_DATA=$(mktemp -d)
+          export HOME BUTLER_DATA
+          deploy/macos/selftest.sh

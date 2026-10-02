@@ -29,6 +29,15 @@ Read [plans/README.md](plans/README.md) first. It holds the repo rules: test pol
 
 Newest first. The coordinator adds an entry whenever a mistake repeats. Each entry gives the rule, then what happened.
 
+- **2026-10-01: Search open issues before filing one.** Run `gh issue list --search "<test name or file>"` and comment on a matching issue instead of opening a duplicate.
+  - What happened: the same seven Linux Bun failures were filed four times (#352, #371, #388, #394).
+
+- **2026-10-01: Run the existing tests that cover the paths you touched, not only your new tests.** Before pushing, find tests that exercise the files/behaviors you changed (`rg` for the module, config file, CLI command or data-dir writes) and run them.
+  - What happened: lang-eol-defaults ran only its 17 new E2Es and missed the config durability test and MIG-01 (a refused legacy data dir was modified); pairing changed the CLI surface without running cli_surface.
+
+- **2026-10-01: Shutdown paths: test the full queue (active turn plus queued follow-ups), not only the active turn.**
+  - What happened: Q-02 left a follow-up permanently failed after restart; queue recovery raced executor readiness and shutdown errors had no pending recovery path.
+
 - **2026-09-30: running checks against the real home dir.** Isolate every check and test run (see Isolation).
   - What happened: `bun run check` ran without a temp `HOME`/`BUTLER_DATA`, and the Project Ledger tests tried to write under `~/.butler`. The sandbox blocked it twice (tasks sync-329 and ratchet-324).
   - The same test gap had earlier left about 1,400 fixture dirs (720 MB) in the owner's real `~/.butler/project-ledger/projects/`.

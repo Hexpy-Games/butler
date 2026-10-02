@@ -76,41 +76,21 @@ pub(crate) async fn load_agent_artifact(
     // Only the artifact built for this host is ever selected: never one that
     // names no platform, or a platform this host cannot run.
     let host_platform = butler_platform::launcher::release_platform();
-    let selected = candidates
-        .iter()
-        .copied()
-        .find(|artifact| string(artifact, "platform") == Some(host_platform.as_str()))
-        .ok_or(UpdateCode::UpdateManifestAgentPlatformMissing)?;
+    let selected = super::super::channel::newest(
+        candidates
+            .iter()
+            .copied()
+            .filter(|v| super::super::channel::eligible(v, channel == Some("preview")))
+            .filter(|artifact| string(artifact, "platform") == Some(host_platform.as_str())),
+    )
+    .ok_or(UpdateCode::UpdateManifestAgentPlatformMissing)?;
     validate_source_contract(selected)?;
     let version = required_version(selected)?;
     let actual_channel = string(selected, "channel").or(channel).unwrap_or("stable");
     let platform = host_platform.as_str();
     let url = string_any(selected, &["artifact_url", "downloadUrl", "url"]);
     let sha256 = string(selected, "sha256").map(str::to_ascii_lowercase);
-    if sha256
-        .as_deref()
-        .is_some_and(|digest| !valid_sha256(digest))
-    {
-        return Err(UpdateCode::UpdateManifestSha256Invalid.into());
-    }
-    if let Some(integrity) = selected.get("integrity") {
-        if string(integrity, "digestAlgorithm") != Some("sha256") {
-            return Err(UpdateCode::UpdateManifestIncompatible.into());
-        }
-        if string(integrity, "signature").is_some() {
-            return Err(UpdateCode::UpdateSignatureUnsupported.into());
-        }
-        if string(integrity, "digest").is_some_and(|digest| {
-            sha256
-                .as_deref()
-                .is_none_or(|sha| !digest.eq_ignore_ascii_case(sha))
-        }) {
-            return Err(UpdateCode::UpdateManifestIncompatible.into());
-        }
-    }
-    if string(selected, "signature").is_some() {
-        return Err(UpdateCode::UpdateSignatureUnsupported.into());
-    }
+    validate_integrity(selected, sha256.as_deref())?;
     Ok(AgentArtifact {
         version: version.into(),
         channel: actual_channel.into(),
@@ -233,6 +213,29 @@ fn string_any<'a>(value: &'a Value, keys: &[&str]) -> Option<&'a str> {
 
 fn valid_sha256(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn validate_integrity(selected: &Value, sha256: Option<&str>) -> Result<(), UpdateError> {
+    if sha256.is_some_and(|digest| !valid_sha256(digest)) {
+        return Err(UpdateCode::UpdateManifestSha256Invalid.into());
+    }
+    if let Some(integrity) = selected.get("integrity") {
+        if string(integrity, "digestAlgorithm") != Some("sha256") {
+            return Err(UpdateCode::UpdateManifestIncompatible.into());
+        }
+        if string(integrity, "signature").is_some() {
+            return Err(UpdateCode::UpdateSignatureUnsupported.into());
+        }
+        if string(integrity, "digest")
+            .is_some_and(|digest| sha256.is_none_or(|sha| !digest.eq_ignore_ascii_case(sha)))
+        {
+            return Err(UpdateCode::UpdateManifestIncompatible.into());
+        }
+    }
+    if string(selected, "signature").is_some() {
+        return Err(UpdateCode::UpdateSignatureUnsupported.into());
+    }
+    Ok(())
 }
 
 #[cfg(test)]

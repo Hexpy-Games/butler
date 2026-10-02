@@ -114,25 +114,7 @@ async fn load(
                 .and_then(nonempty)
         })
         .map(str::to_owned);
-    let fallback = read.config.pointer("/user/modelFallback");
-    let config_model_fallback = AppModelFallbackFacts {
-        enabled: fallback
-            .and_then(|value| value.get("enabled"))
-            .and_then(Value::as_bool)
-            == Some(true),
-        models: fallback
-            .and_then(|value| value.get("models"))
-            .and_then(Value::as_array)
-            .map(|array| {
-                array
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .map(str::to_owned)
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default()
-            .into(),
-    };
+    let config_model_fallback = model_fallback(&read.config);
     let extractor = profile
         .read_extractor_model()
         .await
@@ -143,6 +125,8 @@ async fn load(
     let web_search = read.config.get("webSearch").unwrap_or(&Value::Null);
     let planning = web_search.get("planning").unwrap_or(&Value::Null);
     let native_settings = serde_json::json!({
+        "routine_default": {"model": catalog.default_model_ref, "effort": catalog.default_reasoning_effort},
+        "update_previews": read.config.pointer("/update/previews").and_then(Value::as_bool).unwrap_or(false),
         "bridge_mode": bridge_mode,
         "server_url": server_url,
         "config_user": {
@@ -299,5 +283,27 @@ fn reasoning_effort(source: ModelReasoningEffort) -> BtccReasoningEffort {
         ModelReasoningEffort::High => BtccReasoningEffort::High,
         ModelReasoningEffort::Xhigh => BtccReasoningEffort::Xhigh,
         ModelReasoningEffort::Max => BtccReasoningEffort::Max,
+    }
+}
+
+fn model_fallback(config: &Value) -> AppModelFallbackFacts {
+    let fallback = config.pointer("/user/modelFallback");
+    AppModelFallbackFacts {
+        enabled: fallback
+            .and_then(|value| value.get("enabled"))
+            .and_then(Value::as_bool)
+            == Some(true),
+        models: fallback
+            .and_then(|value| value.get("models"))
+            .and_then(Value::as_array)
+            .map(|array| {
+                array
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+            .into(),
     }
 }

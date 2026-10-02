@@ -1,14 +1,14 @@
-//! Source-backed hot cache for a separate building generation.
+//! Source-backed hot cache for active and building generations.
 //!
-//! [`advance`] claims one pending cache job of the candidate, writes each of
-//! its window summaries into `hot/cache.md` through [`format::render`], and
-//! records a [`receipt::CacheJobReceipt`]. When nothing is pending it first
-//! requeues complete jobs whose retained entries went missing.
+//! [`advance`] claims one pending job, renders its windows in memory, and
+//! publishes changed bytes once before recording a durable receipt. Rebuilds
+//! also reconcile missing retained entries at their quiescent boundary.
 
 mod format;
 #[cfg(test)]
 mod format_pin;
 mod health;
+mod publication;
 pub(in crate::cognition) mod receipt;
 pub(in crate::cognition) use format::{
     Authority, HotCacheEntryView, Salience, Scope, SourceBackedHotCacheEntry, SourceClass,
@@ -18,16 +18,14 @@ pub(in crate::cognition) use health::{HotCacheHealth, read as read_hot_cache_hea
 
 use crate::cognition::CognitionCode;
 use std::{
-    collections::HashSet,
-    fs::{self, OpenOptions},
-    io::Write,
+    fs,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
 use tokio_util::sync::CancellationToken;
 
-use crate::cognition::graph::{CacheWindow, ClaimedCacheJob, GraphRepository};
+use crate::cognition::graph::{ClaimedCacheJob, GraphRepository};
 use crate::cognition::sources::read_typed_record;
 use crate::cognition::{
     CognitionError, CognitionPathEnvironment, CognitionResult, ConversationSourceNotice,
@@ -36,11 +34,8 @@ use crate::cognition::{
 };
 use crate::coordination::CognitionWriteCoordinator;
 use butler_turn::conversation::ConversationSourceReader;
-use receipt::{
-    CacheJobReceipt, CacheWriteReceipt, EntryOutcome, ExcludedEntryReceipt, ReceiptScope,
-};
 
-/// Advances one cache job of a building candidate. Returns `false` when no
+/// Advances one cache job of an active or building generation. Returns `false` when no
 /// job was pending.
 pub async fn advance(
     data_root: &Path,
@@ -49,12 +44,29 @@ pub async fn advance(
     target: &MemoryGenerationTarget,
     cancellation: &CancellationToken,
 ) -> CognitionResult<bool> {
+    advance_at(
+        data_root,
+        environment,
+        coordinator,
+        target,
+        cancellation,
+        now(),
+    )
+    .await
+}
+
+/// The live consumer supplies its application clock, also used by projection.
+pub(in crate::cognition) async fn advance_at(
+    data_root: &Path,
+    environment: &CognitionPathEnvironment,
+    coordinator: Arc<CognitionWriteCoordinator>,
+    target: &MemoryGenerationTarget,
+    cancellation: &CancellationToken,
+    now: String,
+) -> CognitionResult<bool> {
     if cancellation.is_cancelled() {
         return Err(error(CognitionCode::MemoryOperationAborted));
     }
-    let MemoryGenerationTarget::Rebuild { .. } = target else {
-        return Err(error(CognitionCode::MemoryGenerationChanged));
-    };
     let handle = resolve_generation(data_root, environment, target)?;
     let lock = environment.consolidation_lock(data_root);
     let cache = handle.root.join("hot/cache.md");
@@ -69,8 +81,11 @@ pub async fn advance(
             &handle.root.join("hot/cache.md.lock"),
         ],
     )?;
-    let lease =
-        super::stage::acquire(&coordinator, &lock, "rebuild_hot_cache", cancellation).await?;
+    let purpose = match target {
+        MemoryGenerationTarget::Active { .. } => "active_hot_cache",
+        MemoryGenerationTarget::Rebuild { .. } => "rebuild_hot_cache",
+    };
+    let lease = super::stage::acquire(&coordinator, &lock, purpose, cancellation).await?;
     let step = CacheStep {
         data_root: data_root.to_owned(),
         environment: environment.clone(),
@@ -78,6 +93,7 @@ pub async fn advance(
         lock,
         cache,
         cancellation: cancellation.clone(),
+        now,
     };
     super::stage::leased(
         lease,
@@ -95,6 +111,7 @@ struct CacheStep {
     lock: PathBuf,
     cache: PathBuf,
     cancellation: CancellationToken,
+    now: String,
 }
 
 impl CacheStep {
@@ -107,37 +124,32 @@ impl CacheStep {
         }
         let current = resolve_generation(&self.data_root, &self.environment, &self.target)?;
         assert_mutation_authority(&self.data_root, &self.environment, &self.target, &current)?;
-        run_claimed(&self.data_root, &current, &self.cache, &self.cancellation)
+        run_claimed(&self, &current)
     }
 }
 
-fn run_claimed(
-    data_root: &Path,
-    handle: &MemoryGenerationHandle,
-    cache: &Path,
-    cancellation: &CancellationToken,
-) -> CognitionResult<bool> {
+fn run_claimed(step: &CacheStep, handle: &MemoryGenerationHandle) -> CognitionResult<bool> {
     let mut graph = GraphRepository::open(&handle.graph_path)?;
-    let now = now();
-    let mut job = graph.claim_cache_job(&now)?;
-    if job.is_none() {
+    graph.ensure_cache_index(&step.cancellation)?;
+    let now = &step.now;
+    let mut job = graph.claim_cache_job(now)?;
+    if job.is_none() && matches!(step.target, MemoryGenerationTarget::Rebuild { .. }) {
         // A full retained-cache scan is needed at the quiescent boundary, not
         // before each pending job in a large rebuild.
-        reconcile_missing(&mut graph, handle, cache)?;
-        job = graph.claim_cache_job(&now)?;
+        reconcile_missing(&mut graph, handle, &step.cache)?;
+        job = graph.claim_cache_job(now)?;
     }
     let Some(job) = job else {
         graph.close()?;
         return Ok(false);
     };
     let writer = JobWriter {
-        data_root,
+        step,
         handle,
-        cache,
         job: &job,
-        now: &now,
+        now,
     };
-    let produced = if cancellation.is_cancelled() {
+    let produced = if step.cancellation.is_cancelled() {
         Err(error(CognitionCode::MemoryOperationAborted))
     } else {
         writer.write(&mut graph)
@@ -148,7 +160,11 @@ fn run_claimed(
         } else {
             "hot_cache_io_failed"
         };
-        let _ = graph.fail_cache_job(&job, code);
+        if step.cancellation.is_cancelled() {
+            let _ = graph.repend_cache_job(&job);
+        } else {
+            let _ = graph.fail_cache_job(&job, code);
+        }
     }
     let closed = graph.close();
     produced.and_then(|()| {
@@ -159,9 +175,8 @@ fn run_claimed(
 
 /// Writes one claimed job's windows and completes it.
 struct JobWriter<'a> {
-    data_root: &'a Path,
+    step: &'a CacheStep,
     handle: &'a MemoryGenerationHandle,
-    cache: &'a Path,
     job: &'a ClaimedCacheJob,
     now: &'a str,
 }
@@ -172,87 +187,66 @@ impl JobWriter<'_> {
         if job.generation != handle.generation_id {
             return Err(error(CognitionCode::MemoryGenerationChanged));
         }
-        assert_source_current(handle, job)?;
+        if job.source_current {
+            assert_source_current(handle, job, &self.step.data_root, self.now)?;
+        }
         graph.assert_cache_job_current(job)?;
-        let windows = graph.cache_windows(job)?;
-        let mut valid = graph.valid_cache_entry_ids(&handle.generation_id)?;
-        if job.summary_status != "complete" || job.summary.trim().is_empty() {
-            let receipt =
-                CacheJobReceipt::no_summary(&job.generation, &job.episode_id, &job.revision);
-            return graph.complete_cache_job(job, &receipt, &[]);
-        }
-        if windows.is_empty() {
-            return graph.complete_cache_job(job, &CacheJobReceipt::no_window_summary(), &[]);
-        }
-        let mut receipts = Vec::new();
-        let mut outcomes = Vec::new();
-        for window in windows {
-            let written = self.write_window(graph, &window, &mut valid)?;
-            outcomes.push(EntryOutcome {
-                entry_id: window.entry_id.clone(),
-                admitted: written.receipt.admitted,
-                reason: None,
-                receipt: written.receipt.clone(),
-            });
-            for excluded in written.excluded {
-                valid.remove(&excluded.id);
-                outcomes.push(EntryOutcome {
-                    entry_id: excluded.id,
-                    admitted: false,
-                    reason: Some(excluded.reason),
-                    receipt: written.receipt.clone(),
-                });
-            }
-            receipts.push(written.receipt);
-        }
-        assert_source_current(handle, job)?;
-        graph.assert_cache_job_current(job)?;
-        graph.complete_cache_job(job, &CacheJobReceipt::written(receipts), &outcomes)
-    }
-
-    /// Revalidates the window entry against the snapshot and writes it.
-    /// Replaying a written block after a crash is harmless; the job receipt
-    /// stays pending until the same gate has verified the actual file.
-    fn write_window(
-        &self,
-        graph: &GraphRepository,
-        window: &CacheWindow,
-        valid: &mut HashSet<String>,
-    ) -> CognitionResult<Written> {
-        let handle = self.handle;
-        let canonical = handle
-            .canonical_snapshot_path
-            .as_deref()
-            .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
-        let reader = ConversationSourceReader::open(canonical)
+        let windows = if job.source_current
+            && job.summary_status == "complete"
+            && !job.summary.trim().is_empty()
+        {
+            graph.cache_windows(job)?
+        } else {
+            Vec::new()
+        };
+        let existing = publication::read(&self.step.cache)?;
+        let mut views = physical_entries(&existing);
+        views.extend(windows.iter().map(|window| window.entry.view()));
+        let canonical = canonical_path(handle, &self.step.data_root);
+        let reader = ConversationSourceReader::open(&canonical)
             .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
-        let candidate = graph.valid_rebuild_cache_entries(
+        let valid = graph.valid_rebuild_cache_entries(
             &handle.generation_id,
-            &[window.entry.view()],
+            &views,
             &handle.source_root,
             &reader,
             self.now,
-        );
-        let closed = reader
+        )?;
+        reader
             .close()
-            .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source));
-        let candidate = candidate.and_then(|value| {
-            closed?;
-            Ok(value)
-        })?;
-        if candidate.contains(&window.entry_id) {
-            valid.insert(window.entry_id.clone());
-        } else {
-            valid.remove(&window.entry_id);
+            .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
+        let rendered =
+            publication::render_job(&existing, &windows, &valid, job, &self.step.cache, self.now)?;
+        if job.source_current {
+            assert_source_current(handle, job, &self.step.data_root, self.now)?;
         }
-        let written = write_entry(self.data_root, self.cache, &window.entry, valid, self.job)?;
-        if written.receipt.admitted {
-            valid.insert(window.entry_id.clone());
-        } else {
-            valid.remove(&window.entry_id);
+        graph.assert_cache_job_current(job)?;
+        self.authority()?;
+        // This is the publication boundary. Once begun, finish durably on this
+        // leased blocking task; the consumer close path waits for it.
+        if self.step.cancellation.is_cancelled() {
+            return Err(error(CognitionCode::MemoryOperationAborted));
         }
-        Ok(written)
+        publication::publish(&self.step.data_root, &self.step.cache, &existing, &rendered)?;
+        self.authority()?;
+        graph.complete_cache_job(job, &rendered.receipt, &rendered.outcomes)
     }
+
+    fn authority(&self) -> CognitionResult<()> {
+        assert_mutation_authority(
+            &self.step.data_root,
+            &self.step.environment,
+            &self.step.target,
+            self.handle,
+        )
+    }
+}
+
+fn canonical_path(handle: &MemoryGenerationHandle, data_root: &Path) -> PathBuf {
+    handle
+        .canonical_snapshot_path
+        .clone()
+        .unwrap_or_else(|| butler_turn::conversation::conversation_store_path(data_root))
 }
 
 fn reconcile_missing(
@@ -299,6 +293,8 @@ fn reconcile_missing(
 fn assert_source_current(
     handle: &MemoryGenerationHandle,
     job: &ClaimedCacheJob,
+    data_root: &Path,
+    as_of: &str,
 ) -> CognitionResult<()> {
     if let Some((kind, id)) = job.source_key.split_once(':')
         && matches!(kind, "task_report" | "explicit_record")
@@ -315,13 +311,10 @@ fn assert_source_current(
         }
         return Ok(());
     }
-    let canonical = handle
-        .canonical_snapshot_path
-        .as_ref()
-        .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
-    let reader = ConversationSourceReader::open(canonical)
+    let canonical = canonical_path(handle, data_root);
+    let reader = ConversationSourceReader::open(&canonical)
         .map_err(|source| error(CognitionCode::MemorySourceChanged).with_source(source))?;
-    let outcome = assert_conversation_current(&reader, job);
+    let outcome = assert_conversation_current(&reader, job, as_of);
     let closed = reader
         .close()
         .map_err(|source| error(CognitionCode::MemorySourceChanged).with_source(source));
@@ -331,6 +324,7 @@ fn assert_source_current(
 fn assert_conversation_current(
     reader: &ConversationSourceReader,
     job: &ClaimedCacheJob,
+    as_of: &str,
 ) -> CognitionResult<()> {
     let session = job
         .session_id
@@ -357,109 +351,8 @@ fn assert_conversation_current(
     } else {
         return Err(error(CognitionCode::MemorySourceChanged));
     };
-    assert_conversation_source_current(reader, notice, &job.revision, &now())
+    assert_conversation_source_current(reader, notice, &job.revision, as_of)
         .map_err(|source| error(CognitionCode::MemorySourceChanged).with_source(source))
-}
-
-struct Written {
-    receipt: CacheWriteReceipt,
-    excluded: Vec<format::ExcludedEntry>,
-}
-
-fn write_entry(
-    data_root: &Path,
-    path: &Path,
-    entry: &SourceBackedHotCacheEntry,
-    valid: &HashSet<String>,
-    job: &ClaimedCacheJob,
-) -> CognitionResult<Written> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| error(CognitionCode::HotCacheIoFailed))?;
-    fs::create_dir_all(parent).map_err(io_failed)?;
-    let existing = match fs::read_to_string(path) {
-        Ok(value) => value,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(_) => return Err(error(CognitionCode::HotCacheIoFailed)),
-    };
-    let rendered = format::render(
-        &existing,
-        Some(entry),
-        valid,
-        chrono::Utc::now().timestamp_millis(),
-    )?;
-    replace_file(data_root, path, parent, &rendered.body)?;
-    if !rendered.audit.is_empty() {
-        append_audit(data_root, path, &rendered.audit)?;
-    }
-    let receipt = CacheWriteReceipt {
-        schema_version: "butler.hot-cache-write-receipt.v1",
-        source_id: entry.entry_id.clone(),
-        scope: if job.project_id.is_some() {
-            ReceiptScope::Project
-        } else {
-            ReceiptScope::Global
-        },
-        project_id: job.project_id.clone(),
-        path: path.display().to_string(),
-        replayed: rendered.replayed,
-        compacted: rendered.compacted,
-        bytes: rendered.body.len(),
-        generation_id: job.generation.clone(),
-        episode_id: job.episode_id.clone(),
-        source_revision: job.revision.clone(),
-        excluded_entries: rendered
-            .excluded
-            .iter()
-            .map(|item| ExcludedEntryReceipt {
-                entry_id: item.id.clone(),
-                reason: item.reason,
-            })
-            .collect(),
-        admitted: rendered.admitted,
-    };
-    Ok(Written {
-        receipt,
-        excluded: rendered.excluded,
-    })
-}
-
-/// Atomically replaces the cache file and syncs its directory.
-fn replace_file(data_root: &Path, path: &Path, parent: &Path, body: &str) -> CognitionResult<()> {
-    let temp = parent.join(format!(".cache-{}.tmp", uuid::Uuid::new_v4()));
-    ensure_data_authority(data_root, &[path, parent, &temp])?;
-    let written: CognitionResult<()> = (|| {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temp)
-            .map_err(io_failed)?;
-        file.write_all(body.as_bytes()).map_err(io_failed)?;
-        file.sync_all().map_err(io_failed)?;
-        fs::rename(&temp, path).map_err(io_failed)?;
-        butler_platform::secure_fs::sync_path(parent).map_err(io_failed)
-    })();
-    if written.is_err() {
-        let _ = fs::remove_file(&temp);
-    }
-    written
-}
-
-/// Appends legacy and unparseable blocks removed from the cache to its audit file.
-fn append_audit(data_root: &Path, path: &Path, audit: &str) -> CognitionResult<()> {
-    let audit_path = path.with_extension("md.audit.md");
-    ensure_data_authority(data_root, &[&audit_path])?;
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(audit_path)
-        .map_err(io_failed)?;
-    file.write_all(audit.as_bytes()).map_err(io_failed)?;
-    file.sync_all().map_err(io_failed)
-}
-
-fn io_failed(source: std::io::Error) -> CognitionError {
-    error(CognitionCode::HotCacheIoFailed).with_source(source)
 }
 
 fn now() -> String {

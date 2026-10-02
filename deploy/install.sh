@@ -147,9 +147,8 @@ resolve_version() {
 download() {
   base="${BUTLER_INSTALL_BASE_URL:-https://github.com/$REPO/releases/download/v$version}"
   base="${base%/}"
-  # Prerelease tags name the release, while the Agent archive keeps the base
-  # Cargo version (for example, tag v0.1.0-preview.1 contains Agent 0.1.0).
-  archive_version="${version%%-*}"
+  # Archives and payloads identify with the full tag, including preview.N.
+  archive_version="$version"
   archive="butler-agent-$archive_version-$platform.tar.gz"
   sums="butler-$version-SHA256SUMS"
   info "installing Butler $version ($platform)"
@@ -196,6 +195,14 @@ verify_staging() {
     cat "$tmp/doctor.out" >&2
     die "the downloaded agent failed its self-check; nothing was installed"
   }
+  chmod u+w "$staging"
+  if "$staging/butler-agent" --prepare-process-links >"$tmp/process-links.out" 2>&1; then
+    :
+  else
+    status=$?
+    # Older Agents reject this private command (exit 2); keep their layout.
+    [ "$status" = 2 ] || die "could not prepare process role links"
+  fi
 }
 
 # --- place and activate --------------------------------------------------------
@@ -299,6 +306,7 @@ finish() {
     die "the butler command failed its self-check"
   fi
   info "installed $dir at $AGENT_HOME"
+  info "Memory model downloads in the background when Butler starts."
   if [ "$start" = 1 ]; then
     "$launcher" start </dev/null || die "installed, but Butler did not start; try: butler start"
     [ -z "$old" ] || [ "$old" = "$dir" ] || info "if Butler was already running, apply the update with: butler restart"

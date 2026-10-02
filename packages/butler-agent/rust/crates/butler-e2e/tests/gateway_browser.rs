@@ -15,8 +15,11 @@ use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::gateway::Gateway;
 use butler_e2e::e2e::media;
 use butler_e2e::e2e::scenario::{Scenario, Setup};
-use reqwest::header::HeaderMap;
+use reqwest::{Method, header::HeaderMap};
 use serde_json::json;
+
+#[path = "gateway_browser/connect.rs"]
+mod connect;
 
 /// The policy every message file except a PDF is served under.
 const SANDBOXED_FILE_POLICY: &str = "sandbox; default-src 'none'";
@@ -164,6 +167,16 @@ async fn sec_05_one_time_link_sets_a_cookie_and_cannot_be_reused() -> Result<(),
         set_cookie.contains("HttpOnly") && set_cookie.contains("SameSite=Strict"),
         "{set_cookie}"
     );
+    assert!(set_cookie.contains("=v2."));
+    let app = butler_e2e::e2e::security::AdminClient::new(
+        s.gw.clone(),
+        s.agent.launch.admin_credential().unwrap(),
+    );
+    let devices = app
+        .send(Method::GET, "/security/devices", None, &[])
+        .await?;
+    assert_eq!(devices.data().as_array().unwrap().len(), 1);
+    assert_eq!(devices.data()[0]["name"], "This computer · browser");
     let cookie = set_cookie.split(';').next().unwrap().to_owned();
     let reused = browser.get(&link).send().await?;
     assert_eq!(reused.status().as_u16(), 401, "link reused");

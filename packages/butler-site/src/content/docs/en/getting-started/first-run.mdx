@@ -1,0 +1,225 @@
+---
+title: "First run"
+description: "Start on the welcome screen, agree on the consent screen, then choose an AI to work with and connect it."
+section: getting-started
+order: 2
+status: published
+---
+
+The first time you open Butler, first-run setup appears instead of the main screen. Start on the welcome screen, agree on the consent screen and connect one AI to work with. Then Butler is ready to use.
+
+## Setup steps
+
+<Steps>
+  1. On the welcome screen, click **Get started**.
+  2. Read the consent screen and click **Agree and start**.
+  3. On the **Which AI should Butler use?** screen, choose an AI.
+  4. Sign in or paste an API key to connect to the AI you chose.
+  5. When the connection finishes, choose the **Reply language** and click **Start**.
+  6. The new conversation screen opens.
+</Steps>
+
+Meanwhile, Butler gets ready in the background. You can move on to the next screen without waiting for it to finish.
+
+## Welcome screen
+
+The welcome screen shows a title, a description, the interface language picker and the **Get started** button. Click **Learn more** to open this page in your browser.
+
+## Consent
+
+Click **Get started** to open the consent screen. It tells you that Butler is free and open source, that it changes files and runs commands, how AI providers handle data, and where data is stored locally. Butler is provided "as is", and what Butler does on your computer at your direction is your responsibility.
+
+Click **Agree and start** to save the consent version and time and move to the [Choose an AI](#choose-an-ai) screen. Click **Decline** to return to the welcome screen without saving consent. You cannot use Butler without agreeing.
+
+<a id="ai-providers" />
+
+## AI providers and data
+
+When you use an AI provider, the conversation in your request and the context needed to process it are sent to that provider. The context can include file contents included in the request, memories and tool results. Each provider's terms of use and privacy policy apply to what is sent. Butler is not responsible for how a provider handles data.
+
+| Provider | Official pages |
+| --- | --- |
+| OpenAI | [Privacy policy](https://openai.com/policies/privacy-policy/) · [Terms of use](https://openai.com/policies/terms-of-use/) |
+| Anthropic | [Privacy policy](https://www.anthropic.com/legal/privacy) · [Terms of use](https://www.anthropic.com/legal/consumer-terms) |
+| Google | [Privacy policy](https://policies.google.com/privacy) · [Terms of use](https://policies.google.com/terms) |
+
+When you use a local model that runs on this computer, model requests are processed on this computer. Butler itself stores conversations, memory and settings only in `~/.butler` on this computer. When you connect from a remote App, the storage location is the computer where Butler Agent runs, not the computer where the browser runs.
+
+## Language
+
+In **Interface language** on the welcome screen, choose **한국어** or **English**.
+
+- At first, the picker follows the system language. If Korean is among the system's preferred languages, Korean is selected. If it is not, English is selected.
+- When you change the language, the setup screens switch to that language right away.
+- The language you choose is saved as the app language when you finish setup. You can change it later in **Language** under **Settings → General**.
+
+## Getting Butler ready
+
+When the welcome screen opens, Butler starts getting ready in the background. There is nothing to click. While it gets ready, **Getting Butler ready** and the number of finished steps appear under **Get started**. When it finishes, **Ready** appears.
+
+If Butler cannot get ready, the reason it stopped appears under the **Butler couldn't start.** message, and you cannot click **Get started**. Click **Try again** to run the preparation again. **More** has these menu items.
+
+- **Reset and restart** — Stops the running Butler Agent, resets its state and starts it again.
+- **Copy info for a bug report** — Copies the result of each preparation step and the error details to the clipboard. Paste them when you report a problem.
+- **Quit** — Quits the app.
+
+For an explanation of each reason, see [Troubleshooting](/en/help/troubleshooting/#butler-agent-does-not-get-ready).
+
+### Memory model
+
+While Butler gets ready, it also downloads the memory model that its memory features use. During the download, **Downloading memory model** and the progress appear under the preparation status. When the download finishes, **Verifying memory model** appears, and then the line disappears. The same line appears on the **Which AI should Butler use?** screen.
+
+- You can continue setup while the memory model downloads.
+- If the download fails, **Couldn't download the memory model** and the reason appear. Click **Retry** to download it again.
+- After setup, check the status in **Memory model** under **Settings → General**.
+
+## Choose an AI
+
+On the **Which AI should Butler use?** screen, choose one AI for Butler to use. Commonly used services appear at the top.
+
+- **ChatGPT** — Sign in with your ChatGPT account. It needs no API key, so it has the **No key needed** tag.
+- **Claude** — Connect with an Anthropic API key.
+- **Gemini** — Connect with a Google AI Studio key.
+- **This computer** — Appears when Ollama or LM Studio is running. It uses a model that runs on this Mac and has the **Free · Private** tag.
+
+Click **8 more services** to expand the remaining services. Once they are expanded, the button changes to **Show less**.
+
+| Service | How to connect |
+| --- | --- |
+| **OpenAI API** | OpenAI API key |
+| **Grok** | xAI API key |
+| **Qwen** | Qwen Cloud API key |
+| **Kimi** | Moonshot API key |
+| **Z.AI Coding Plan** | Coding Plan key |
+| **Z.AI API** | Z.AI API key |
+| **OpenCode Go** | OpenCode Go key |
+| **Other (OpenAI-compatible)** | Server address you enter yourself |
+
+- Butler looks for servers running on the default ports (Ollama `11434`, LM Studio `1234`).
+- If both servers are off, **This computer** appears dimmed at the top of the expanded list. Start a server, then click the item to look again.
+- If the server has no downloaded models, **No models downloaded yet** appears and you cannot choose it.
+- If you are not connected to the internet, a notice appears and you can choose only **This computer**.
+- Click **Back** to return to the consent screen.
+
+If Butler is not ready yet, **Connects as soon as Butler is ready** appears. If you choose and connect an AI at this point, setup waits on the **Starting as soon as Butler is ready** screen and then continues.
+
+## Connect
+
+On a connection screen, click **Other services** to return to the AI list. If the connection cannot finish, the **Couldn't finish connecting. Try again.** message appears. Click **Try again**.
+
+### ChatGPT
+
+<Steps>
+  1. Click **ChatGPT**. A sign-in page opens in your browser, and Butler shows the **Sign in with your browser** screen.
+  2. In the browser, sign in with your ChatGPT account.
+  3. Return to Butler. When you finish signing in, Butler continues the connection automatically.
+</Steps>
+
+- If the browser does not open, click **Browser didn't open? Copy link** to copy the address, then paste it into your browser.
+- To stop signing in, click **Cancel**. Sign-in is also cancelled if you do not finish within 5 minutes.
+- On the **Sign-in was cancelled** or **Couldn't sign in** screen, click **Try again** to sign in again, or **Pick another** to choose a different AI.
+
+### Services that connect with an API key
+
+**Claude**, **Gemini**, **OpenAI API**, **Grok**, **Qwen**, **Kimi**, **Z.AI Coding Plan**, **Z.AI API** and **OpenCode Go** connect with an API key.
+
+<Steps>
+  1. Click the service. A screen named after the service opens, such as **Connect Claude**.
+  2. If you do not have a key, click **Get a key** and create one on the service's key page.
+  3. Paste the key into the **API key** field. Butler checks the key with the service right away.
+  4. When the check finishes, **Connected** appears and the connection continues. There is no button to click.
+</Steps>
+
+- **Get a key** appears only for services whose key page is known.
+- If the service has no model list to check the key against, Butler saves the key without checking it and shows **Saved**.
+- If the key cannot be used, the reason appears under the field. For errors that another try may fix, such as a network error or a request limit, **Try again** appears with it.
+- A checked key is saved right away. For where it is stored, see [Cloud models](/en/help/models/cloud/#where-credentials-are-stored).
+
+### This computer
+
+<Steps>
+  1. Click **This computer**. The **Models on this computer** screen shows the models found in Ollama and LM Studio.
+  2. Choose the model to use. The first model is selected at first.
+  3. Click **Start with this model**.
+</Steps>
+
+The first response from a local model can be a little slow. The model you connect is registered as a [Custom model](/en/help/models/custom/).
+
+### Other (OpenAI-compatible)
+
+<Steps>
+  1. Expand **8 more services** and click **Other (OpenAI-compatible)**.
+  2. On the **OpenAI-compatible server** screen, enter the server address in **Server address**.
+  3. If the server needs authentication, enter the key in the **API key (optional)** field.
+  4. Click **Connect**. The models found on the server appear.
+  5. Choose the model to use and click **Start with this model**.
+</Steps>
+
+The model you connect is registered as a [Custom model](/en/help/models/custom/).
+
+## Reply language
+
+When the connection finishes, **Reply language** appears below the connection screen. It is the language Butler replies in, and you set it separately from the interface language.
+
+<Steps>
+  1. In **Reply language**, choose **한국어** or **English**.
+  2. Click **Start**. Setup finishes and the new conversation screen opens.
+</Steps>
+
+- You can change the reply language later in **Response language** under **Settings → Personalization**.
+- If you already chose a reply language, setup finishes without this step.
+
+## Default model
+
+The model you connect becomes Butler's default model, and Worker profiles use the same model.
+
+- If you choose ChatGPT or a service that connects with an API key, Butler uses the model set for everyday work for that service. Reasoning effort is medium (**Medium**).
+- For **This computer** or **Other (OpenAI-compatible)**, Butler uses the model you chose.
+
+Change the model and reasoning effort later in **Butler model** under **Settings → Models**. See [Cloud models](/en/help/models/cloud/#choose-the-default-model).
+
+## After setup
+
+The main screen opens and shows the new conversation screen. The service you connected appears in a notification such as **Connected to ChatGPT**.
+
+Until you finish the first-conversation onboarding, the new conversation screen shows the **Pleased to meet you. It will be my honor to serve.** greeting and the **Get acquainted with Butler** suggestion. Click the suggestion, and Butler asks in the conversation for basic information such as your name, what to call you and how it should respond, one question at a time. You can skip any question you do not want to answer.
+
+You can change **Butler nickname**, **My name**, **Preferred address** and **Persona preset** later in **Settings → Personalization**. See [Personalization](/en/help/personalization/).
+
+## Run setup again
+
+You can go through the welcome screen and the AI connection again later. The models you registered and your conversations stay as they are.
+
+<Steps>
+  1. In **Settings → General → App behavior**, click **Run again** next to **Run setup again**.
+  2. On the welcome screen, click **Get started**. To leave without changing anything, click **Cancel**.
+  3. On the consent screen, click **Agree and start**.
+  4. Choose an AI and connect it. The AI you use now has the **In use** tag. If you already chose a [reply language](#reply-language), setup finishes as soon as the connection does.
+</Steps>
+
+- If you choose the AI you use now again, and it is ChatGPT or a service that connects with an API key, Butler keeps the model, reasoning effort and Worker profile settings.
+- If you choose a different AI, the [default model](#default-model) changes to the new AI's model.
+
+## Notes
+
+<Notice tone="info">
+  You cannot skip first-run setup. If you close the app partway through, setup starts again from the welcome screen the next time you open it.
+</Notice>
+
+<Notice tone="info">
+  If the consent notice changes, the consent screen appears again the next time you open Butler, even if you already finished setup. Click **Agree and start** to go to the AI connection screen.
+</Notice>
+
+<Notice tone="info">
+  On a newly installed Butler, new conversations start with the **Ask first** permission. Butler asks for approval before it edits files or runs commands. It saves your answers from the first-conversation onboarding without asking. If you switch to **Full access**, Butler reads and writes files and runs commands without asking. Change the default in **Access** under **Settings → Models**. See [Conversations and the composer](/en/help/basics/conversation/#permission).
+</Notice>
+
+## Related pages
+
+<CardGrid>
+  <DocCard slug="basics/conversation" />
+  <DocCard slug="models/cloud" />
+  <DocCard slug="models/custom" />
+  <DocCard slug="personalization" />
+  <DocCard slug="troubleshooting" />
+</CardGrid>

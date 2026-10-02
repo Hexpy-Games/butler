@@ -142,6 +142,22 @@ async fn runtime_readiness_waits_for_inbound_poll_loop() -> Result<(), HarnessEr
         "{startup_log}"
     );
 
+    assert!(s.gw.healthy().await);
+    assert!(!s.gw.executor_ready().await);
+    let refused =
+        s.gw.post(
+            "/messages",
+            serde_json::json!({
+                "chat_id":"general", "text":"executor barrier", "client_message_id":"held-dispatch"
+            }),
+        )
+        .await?;
+    assert_eq!(refused.status, 503, "{}", refused.text);
+    assert_eq!(
+        refused.error_code(),
+        Some("app_transport_executor_unavailable")
+    );
+
     tokio::fs::write(
         s.sandbox.data.join("e2e-dispatch-ready-release"),
         b"release",
@@ -162,6 +178,7 @@ async fn runtime_readiness_waits_for_inbound_poll_loop() -> Result<(), HarnessEr
         assert!(Instant::now() < deadline, "poll loop did not become ready");
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
+    assert!(s.gw.executor_ready().await);
     s.finish().await
 }
 

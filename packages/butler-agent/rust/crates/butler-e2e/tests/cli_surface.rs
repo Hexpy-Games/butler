@@ -7,6 +7,8 @@
 )]
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::scenario::Setup;
+use sha2::Digest;
+use std::io::Read;
 
 #[test]
 fn cli_surface_exposes_only_user_commands() -> Result<(), HarnessError> {
@@ -28,6 +30,13 @@ fn cli_surface_exposes_only_user_commands() -> Result<(), HarnessError> {
         "restart",
         "status",
         "open",
+        "remote.status",
+        "remote.enable",
+        "remote.disable",
+        "remote.pair",
+        "remote.devices",
+        "remote.hosts.add",
+        "remote.hosts.remove",
         "doctor",
         "update",
         "rollback",
@@ -60,11 +69,19 @@ fn cli_surface_exposes_only_user_commands() -> Result<(), HarnessError> {
         "config.set",
         "help",
         "version",
+        "--version",
     ];
     assert_eq!(actual, expected);
+    let version_flag = entries
+        .iter()
+        .find(|entry| entry["id"] == "--version")
+        .unwrap();
+    assert_eq!(version_flag["aliases"], serde_json::json!(["-V"]));
+    assert_eq!(version_flag["supportsJson"], false);
     let usage = help["data"]["usage"].as_str().unwrap();
     assert!(usage.contains("예약 작업") && usage.contains("schedule"));
     assert!(usage.contains("npx @hexpygames/butler install"));
+    assert!(usage.contains("butler --version, -V"));
     for args in [
         vec!["context", "status"],
         vec!["maintenance", "context"],
@@ -100,6 +117,41 @@ fn cli_surface_exposes_only_user_commands() -> Result<(), HarnessError> {
             .exists()
     );
     skills_import_and_list(&setup.sandbox, &launch)?;
+    std::fs::remove_dir_all(&setup.sandbox.data)?;
+    let mut binary = std::fs::File::open(&launch.binary)?;
+    let mut digest = sha2::Sha256::new();
+    let mut buffer = vec![0_u8; 64 * 1024];
+    loop {
+        let read = binary.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        digest.update(&buffer[..read]);
+    }
+    let binary_hash = format!("{:x}", digest.finalize());
+    let format =
+        regex::Regex::new(r"^butler \d+\.\d+\.\d+(?:-[A-Za-z0-9.+-]+)? \([0-9a-f]{8}\)\n$")
+            .unwrap();
+    let mut version_outputs = Vec::new();
+    for flag in ["--version", "-V"] {
+        let mut command = launch.env_command(&launch.binary);
+        let output = command
+            .current_dir(&setup.sandbox.root)
+            .env_remove("BUTLER_DATA")
+            .arg(flag)
+            .output()?;
+        assert!(output.status.success(), "{flag}: {output:?}");
+        assert!(output.stderr.is_empty(), "{flag}: {:?}", output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+        assert!(format.is_match(&stdout), "{flag}: {stdout:?}");
+        assert!(
+            stdout.contains(&format!(" ({})\n", &binary_hash[..8])),
+            "{flag}: {stdout:?}"
+        );
+        version_outputs.push(stdout);
+    }
+    assert_eq!(version_outputs[0], version_outputs[1]);
+    assert!(!setup.sandbox.data.exists(), "version flags created data");
     Ok(())
 }
 

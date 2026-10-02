@@ -47,6 +47,7 @@ fn consume(connection: &mut Connection, input: TypedLifecycleInput<'_>) -> Cogni
         }
         TypedMemoryLifecycle::Current => return Err(source_changed()),
     }
+    transaction.execute("UPDATE memory_projection_jobs SET hot_cache_state=?1,hot_cache_next_attempt_at=NULL,hot_cache_attempt_count=0 WHERE episode_id IN (SELECT memory_chunk_id FROM memory_chunks WHERE source_key=?2 AND status!='active')", params![super::StageWrite::pending().json()?,source_key]).map_err(db_error)?;
     let state = lifecycle_state_json(&input)?;
     transaction
         .execute(

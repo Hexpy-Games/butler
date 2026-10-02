@@ -75,6 +75,8 @@
   gap: var(--space-sm);
 }
 
+/* Below the desktop breakpoint the language switch stays in the titlebar; the theme toggle moves to the drawer. */
+.compactLanguage,
 .searchIcon {
   display: none;
 }
@@ -93,7 +95,9 @@
     display: none;
   }
 
+  .compactLanguage,
   .searchIcon {
     display: inline-flex;
+    flex: none;
   }
 }

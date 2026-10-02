@@ -35,6 +35,7 @@ pub use mcp_tasks::{
 };
 pub use metric_files::MetricFiles;
 pub use observability::{LogEntry, LogFile, LogFollower, redact_log_line, tail_log_entries};
+pub use observability::{export_line, log_is_error, log_summary};
 pub use prompt_metrics::PromptUsageMetrics;
 pub use provider_quota::{
     ProviderQuotaFetcher, ProviderQuotaPoller, ProviderQuotaStore, ProviderQuotaUpdate,

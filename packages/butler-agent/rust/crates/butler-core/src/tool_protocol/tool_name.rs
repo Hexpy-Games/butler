@@ -100,6 +100,7 @@ tool_names! {
     RecordWorkReview = "record_work_review",
     RenderProjectDashboard = "render_project_dashboard",
     ReplaceWorkPlan = "replace_work_plan",
+    AskUser = "ask_user",
     RequestServiceRestart = "request_service_restart",
     RunCommand = "run_command",
     RunDueAutomations = "run_due_automations",

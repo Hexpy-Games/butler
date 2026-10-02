@@ -2,8 +2,11 @@
 
 mod boundary;
 mod contracts;
+mod defaults;
+pub(crate) use defaults::ensure_reply_language;
 pub(super) mod environment;
 mod mcp_owner;
+mod memory_bootstrap;
 pub(super) mod models;
 mod monitoring;
 mod owners;
@@ -15,8 +18,8 @@ mod subsession_queue;
 mod web_owner;
 use super::{AcceptedPlanProducer, ActiveAppEndpoint, CognitionPrompt, ConversationObserver};
 use super::{
-    EmbeddingOwner, GuidedCatalog, GuidedPreparation, GuidedTurnFactoryAdapter,
-    ProfileConversationSources, ResolvedInstallation, SystemIdentity, SystemPromptClock,
+    GuidedCatalog, GuidedPreparation, GuidedTurnFactoryAdapter, ResolvedInstallation,
+    SystemIdentity, SystemPromptClock,
 };
 use crate::host::memory_jobs::context_maintenance::ContextMaintenance;
 use crate::host::memory_jobs::daily::{DailyCognitionJobs, DailyCognitionOwners};
@@ -27,15 +30,13 @@ use boundary::{setup, validate_data_installation_boundary};
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
 use butler_ledger::project_ledger::{ProjectLedger, ProjectWork};
-use butler_memory::cognition::GenerationVectorAdapter;
 use butler_memory::cognition::{CognitionPromptReader, CompletionPublisher, ExactMemoryQuery};
 use butler_memory::cognition::{MemoryRecall, ProjectCapsuleService};
-use butler_memory::coordination::CognitionWriteCoordinator;
-use butler_memory::profile::{PersonaPresets, ProfileService};
+use butler_memory::profile::ProfileService;
 use butler_models::models::ModelConfigurationClock;
 use butler_runtime::context::{
     ContextBudgetOwner, ContextConversation, ConversationSessionReference, ConversationTools,
-    PromptAssembler, PromptDependencies, PromptPaths, ToolOutput,
+    PromptAssembler, PromptDependencies, ToolOutput,
 };
 use butler_runtime::operations::MetricFiles;
 use butler_turn::btcc;
@@ -47,7 +48,6 @@ use butler_turn::btcc::{
     StorageEffectJournal, StorageProgressPublication, ToolJournalRepository,
     TurnFacadeDependencies, TurnModelExecutionFactory,
 };
-use butler_turn::conversation::conversation_store_path;
 use butler_turn::workspace::{
     Commands, SessionWorkspaceRecovery, SessionWorktrees, WorkspaceFiles, WorkspaceMutations,
 };
@@ -86,17 +86,10 @@ impl AgentRuntime {
         )?;
         let models = self::models::with_moved_credentials(process_services.models).await;
         let web_access = process_services.web_access;
-        let prompt_clock = Arc::new(SystemPromptClock::new().map_err(setup)?);
-        let date_parser = Arc::new(super::DateParser::from_process().map_err(setup)?);
+        let (prompt_clock, date_parser) = process_clocks()?;
         let metric_files = Arc::new(MetricFiles::new(paths.data_root.clone()));
-        let coordinator =
-            Arc::new(CognitionWriteCoordinator::new(Arc::new(SystemIdentity)).map_err(setup)?);
-        let embedding = Arc::new(EmbeddingOwner::new(paths.data_root.clone()).map_err(setup)?);
-        let vectors = Arc::new(GenerationVectorAdapter::new(
-            paths.data_root.clone(),
-            environment.cognition_paths.clone(),
-            embedding.clone(),
-        ));
+        let (coordinator, embedding, vectors, fresh_memory) =
+            memory_bootstrap::open(&paths, &environment.cognition_paths).await?;
         let files = WorkspaceFiles::new(4);
         let image_files = Arc::new(butler_gateway::gateway::AppImageFiles::new(
             &paths.data_root,
@@ -109,6 +102,8 @@ impl AgentRuntime {
         let (skills, capabilities, catalog) = skills_owner::open(&paths, &files, &mutations)?;
         stores::check_startup(stop)?;
         let stores = RuntimeStores::open(&paths.data_root, collation.clone(), stop).await?;
+        let response_language =
+            defaults::initialize(&paths, &app_database_path, &installation).await?;
         let (work_streams, observer) = boundary::open_observer(
             &paths.data_root,
             &environment.cognition_paths,
@@ -120,6 +115,7 @@ impl AgentRuntime {
             observer: &observer,
             work_streams: &work_streams,
             stores: &stores,
+            fresh: fresh_memory,
             stop,
         }
         .open(
@@ -131,7 +127,6 @@ impl AgentRuntime {
             vectors.clone(),
         )
         .await?;
-        let cognition_root = environment.cognition_paths.cognition_root(&paths.data_root);
         let capsule_service = Arc::new(ProjectCapsuleService::new(
             paths.data_root.clone(),
             environment.cognition_paths.clone(),
@@ -142,18 +137,15 @@ impl AgentRuntime {
             environment.cognition_paths.clone(),
             2,
         ));
-        let profile = Arc::new(ProfileService::new(
-            paths.data_root.clone(),
-            cognition_root.clone(),
-            Arc::new(PersonaPresets::new(paths.resource_root.clone())),
+        let profile = defaults::open_profile(
+            &paths,
+            environment.cognition_paths.cognition_root(&paths.data_root),
             writes,
             coordinator.clone(),
-            Arc::new(SystemIdentity),
-            Arc::new(ProfileConversationSources::new(conversation_store_path(
-                &paths.data_root,
-            ))),
             models.provider.clone(),
-        ));
+            &response_language,
+        )
+        .await?;
         let project_ledger = ProjectLedger::with_collation(&paths.data_root, 2, collation.clone());
         let plans = AcceptedPlanProducer::from_ledger(project_ledger.clone());
         let project_tools = Arc::new(crate::host::guided::project_tools::GuidedProjectTools::new(
@@ -236,11 +228,7 @@ impl AgentRuntime {
             2,
         ));
         let prompt = Arc::new(PromptAssembler::new(
-            PromptPaths {
-                resource_root: paths.resource_root.clone(),
-                data_root: paths.data_root.clone(),
-                cognition_root,
-            },
+            boundary::prompt_paths(&paths, &environment.cognition_paths),
             environment.prompt,
             PromptDependencies {
                 profile: profile.clone(),
@@ -440,6 +428,10 @@ impl AgentRuntime {
             host: owner,
         });
         Ok(Self {
+            memory_acquisition: Arc::new(
+                crate::host::embedding::worker::assets::Acquisition::start(paths.data_root.clone()),
+            ),
+            service_shutdown: stop.clone(),
             btcc: assembly.btcc,
             host: assembly.host,
             bindings,
@@ -466,4 +458,12 @@ impl AgentRuntime {
             profile,
         })
     }
+}
+
+/// Capture both process time sources before opening any persistent store.
+fn process_clocks() -> Result<(Arc<SystemPromptClock>, Arc<super::DateParser>), BtccError> {
+    Ok((
+        Arc::new(SystemPromptClock::new().map_err(setup)?),
+        Arc::new(super::DateParser::from_process().map_err(setup)?),
+    ))
 }

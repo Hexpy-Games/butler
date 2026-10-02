@@ -42,6 +42,9 @@
 //!    whose start time was compared through it, stays open, so the id cannot
 //!    name another process in between.
 
+mod locale;
+pub use locale::system_locale;
+
 use std::fs::{File, TryLockError};
 use std::io;
 
@@ -178,7 +181,13 @@ pub fn process_start(pid: u32) -> Result<Option<String>, IdentityError> {
 /// Windows (without a needless `\\?\` prefix). `None` when no process has
 /// the id.
 pub fn process_executable(pid: u32) -> Result<Option<String>, IdentityError> {
-    sys::process_executable(pid)
+    sys::process_executable(pid)?
+        .map(|path| {
+            crate::process_names::canonical_identity(path.into())
+                .map(|path| path.to_string_lossy().into_owned())
+                .map_err(|error| IdentityError::Unavailable(Some(error)))
+        })
+        .transpose()
 }
 
 /// Whether `observed` (a [`process_executable`] value) is the executable

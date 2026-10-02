@@ -146,14 +146,14 @@ pub(super) fn inherited_controls(
             .unwrap_or(settings.plan_mode),
     };
     if let Some(stored_model) = stored_model
-        .filter(|_| explicit && selectable(&candidate.model, available_models(facts)).is_none())
+        .filter(|_| explicit && selectable(&candidate.model, &available_models(facts)).is_none())
     {
         let normalized = normalize_controls(
             Controls {
                 model: settings.model.clone(),
                 ..candidate
             },
-            available_models(facts),
+            &available_models(facts),
         );
         return Controls {
             model: stored_model.to_owned(),
@@ -165,7 +165,7 @@ pub(super) fn inherited_controls(
             ..normalized
         };
     }
-    normalize_controls(candidate, available_models(facts))
+    normalize_controls(candidate, &available_models(facts))
 }
 
 pub(super) fn merge_message_controls(controls: &mut Controls, request: &MessageSendRequest) {

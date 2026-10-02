@@ -126,9 +126,7 @@ pub(super) fn read(
     let defaults = ui_defaults();
     // The defaults hold every fixed value (gateway_profile, profile_label).
     let mut output = defaults.as_object().cloned().unwrap_or_default();
-    if let Some(mode) = native.get("bridge_mode") {
-        output.insert("bridge_mode".into(), mode.clone());
-    }
+    project_native_preferences(&native, &mut output);
     output.insert(KEY.into(), onboarding_view(&stored));
     output.insert(
         "server_url".into(),
@@ -329,4 +327,19 @@ fn stored_settings(
         .unwrap_or_default();
     super::worker_profiles::canonicalize(&mut stored, facts, &controls.model, &controls.reasoning);
     Ok(stored)
+}
+
+fn project_native_preferences(native: &Map<String, Value>, output: &mut Map<String, Value>) {
+    if let Some(mode) = native.get("bridge_mode") {
+        output.insert("bridge_mode".into(), mode.clone());
+    }
+    output.insert(
+        "update_previews".into(),
+        json!(
+            native
+                .get("update_previews")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        ),
+    );
 }

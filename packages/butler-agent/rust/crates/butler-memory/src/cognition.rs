@@ -94,18 +94,18 @@ pub use extraction::{CandidateSearchInput, CognitionVectorSearch, VectorSearchFu
 pub use feedback_buffer::{FeedbackBufferService, FeedbackTarget};
 pub use generation::{
     AcceptanceBinding, ActiveDescriptor, BuildInventory, CandidateInputRepairRequest,
-    CanonicalSnapshot, CutoverStamp, EmbeddingSlot, GenerationEmbedding, GenerationFormat,
-    GenerationManifest, GenerationReadiness, GenerationState, InitializationOrigin,
-    MemoryGenerationHandle, MemoryGenerationTarget, ProjectionMode, RebuildInspection,
-    RetriedGeneration, RollbackOutcome, RollbackStep, SemanticCounts, StageCounts, VectorCounts,
-    activate_memory_rebuild, active_memory_descriptor_exists, advance_rebuild_cache,
-    assert_mutation_authority, assert_rebuild_sources_registered, bind_native_embedding_identity,
-    compute_rebuild_readiness, initialize_empty_memory_generation, inspect_memory_rebuild,
-    prepare_memory_rebuild, read_build_inventory, rebuild_typed_cursor,
-    reconcile_rebuild_vector_representatives, record_rebuild_readiness,
-    refresh_memory_rebuild_snapshot, repair_memory_candidate_inputs, resolve_active_generation,
-    resolve_generation, retry_failed_memory_generation, rollback_memory_rebuild,
-    set_extractor_memory_generation, validate_memory_rebuild,
+    CanonicalSnapshot, CutoverStamp, EmbeddingSlot, FreshMemoryGeneration, GenerationEmbedding,
+    GenerationFormat, GenerationManifest, GenerationReadiness, GenerationState,
+    InitializationOrigin, MemoryGenerationHandle, MemoryGenerationTarget, ProjectionMode,
+    RebuildInspection, RetriedGeneration, RollbackOutcome, RollbackStep, SemanticCounts,
+    StageCounts, VectorCounts, activate_memory_rebuild, active_memory_descriptor_exists,
+    advance_rebuild_cache, assert_mutation_authority, assert_rebuild_sources_registered,
+    bind_native_embedding_identity, compute_rebuild_readiness, initialize_empty_memory_generation,
+    inspect_memory_rebuild, prepare_fresh_memory_generation, prepare_memory_rebuild,
+    read_build_inventory, rebuild_typed_cursor, reconcile_rebuild_vector_representatives,
+    record_rebuild_readiness, refresh_memory_rebuild_snapshot, repair_memory_candidate_inputs,
+    resolve_active_generation, resolve_generation, retry_failed_memory_generation,
+    rollback_memory_rebuild, set_extractor_memory_generation, validate_memory_rebuild,
 };
 pub use generation_vectors::GenerationVectorAdapter;
 pub use graph::{
@@ -122,7 +122,7 @@ pub use memory_recall::{MemoryRecall, RecallVectorFuture, RecallVectorPort};
 pub use memory_recall::{RecallMetric, RecallMetricSink};
 pub use migration::CognitionNamespaceMigrationService;
 pub use mutable_paths::ensure_data_authority;
-pub use paths::CognitionPathEnvironment;
+pub use paths::{CognitionPathEnvironment, explicit_memory_rules_root};
 pub use project_capsule::ProjectCapsuleService;
 pub use prompt::{CapsulePresence, CognitionPromptReader};
 pub(crate) use recall::RecallRequest;

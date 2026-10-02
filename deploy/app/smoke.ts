@@ -1,4 +1,6 @@
 #!/usr/bin/env bun
+import { isPreviewRelease } from "../../packages/butler-app/scripts/release/preview-policy.ts";
+import { verifyMacPackageMetadata } from "./native-mac-package-smoke.ts";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
@@ -69,7 +71,7 @@ if (nativeMac) {
       item?.activationPolicy !== "user-installs-app-package" ||
       item?.rollbackPolicy !== "not-managed-by-butler" ||
       updateManifest.artifacts.length !== 1 ||
-      updateManifest.artifacts[0]?.sha256 !== item.sha256 ||
+      updateManifest.artifacts[0]?.sha256 !== item.updaterSha256 ||
       updateManifest.artifacts[0]?.staging_policy !== item.stagingPolicy ||
       updateManifest.artifacts[0]?.activation_policy !== item.activationPolicy ||
       updateManifest.artifacts[0]?.rollback_policy !== item.rollbackPolicy) {
@@ -202,6 +204,7 @@ function verifyMacDmg(path: string, mode: MacReleaseSmokeMode, closure: NativeMa
     }
     const appPath = join(mountPoint, "Butler.app");
     if (closure) verifyNativeMacBundle(appPath, closure);
+    if (closure) verifyMacPackageMetadata(appPath, releaseManifest.version, true);
     verifyMacCodeSignature(appPath, "Mac App DMG Butler.app");
     if (mode === "production") {
       verifyMacStapling(appPath, "Mac App DMG Butler.app");
@@ -234,6 +237,8 @@ function verifyMacZip(path: string, mode: MacReleaseSmokeMode, closure: NativeMa
     const appPath = join(extractDir, "Butler.app");
     if (!existsSync(appPath)) throw new Error("Mac App zip is missing Butler.app");
     if (closure) verifyNativeMacBundle(appPath, closure);
+    // ZIP stores copies; the verified App update activation restores hard links.
+    if (closure) verifyMacPackageMetadata(appPath, releaseManifest.version, false);
     verifyMacCodeSignature(appPath, "Mac App ZIP Butler.app");
     if (mode === "production") {
       verifyMacStapling(appPath, "Mac App ZIP Butler.app");
@@ -269,11 +274,11 @@ function verifyMacCodeSignature(appPath: string, label = "Mac App"): void {
 }
 
 function verifyMacStapling(path: string, label: string): void {
-  const validate = spawnSync("xcrun", ["stapler", "validate", path], { encoding: "utf8" });
-  if (validate.status !== 0) {
-    throw new Error(
-      `${label} notarization staple validation failed: ${validate.stderr.trim() || validate.stdout.trim() || "unknown error"}`,
-    );
+  if (!isPreviewRelease()) {
+    const validate = spawnSync("xcrun", ["stapler", "validate", path], { encoding: "utf8" });
+    if (validate.status !== 0) {
+      throw new Error(`${label} notarization staple validation failed: ${validate.stderr.trim() || validate.stdout.trim() || "unknown error"}`);
+    }
   }
   // Team ID, hardened runtime, timestamp and the Gatekeeper assessment.
   const trust = spawnSync(

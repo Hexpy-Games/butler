@@ -25,6 +25,14 @@ impl AppReadiness {
 }
 
 impl AppExecutorReadiness for AppReadiness {
+    fn wait_ready(&self) -> butler_gateway::gateway::ApplicationFuture<()> {
+        let receipt = self.receipt.clone();
+        Box::pin(async move {
+            receipt.wait_dispatch_ready().await;
+            Ok(())
+        })
+    }
+
     fn readiness(&self) -> Result<RuntimeReadinessView, GatewayApplicationError> {
         let published = self
             .receipt

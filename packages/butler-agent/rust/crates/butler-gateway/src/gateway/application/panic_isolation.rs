@@ -8,5 +8,5 @@ pub(super) fn report(owner: &str, payload: &(dyn std::any::Any + Send)) {
         .copied()
         .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
         .unwrap_or("non-string panic payload");
-    eprintln!("[{owner}] caught operation panic: {message}");
+    butler_core::diagnostic!("[{owner}] caught operation panic: {message}");
 }

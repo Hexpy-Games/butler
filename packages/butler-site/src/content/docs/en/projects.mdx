@@ -1,0 +1,126 @@
+---
+title: "Projects"
+description: "Work with the project dashboard and project records."
+section: projects
+order: 1
+status: published
+---
+
+A project is a set of conversations that share a work folder. As Butler works in project conversations, it keeps Work, plans, Tasks, specifications and reports as project records, and the project dashboard gathers these records in one view.
+
+## Create a project
+
+<Steps>
+  1. In the sidebar, open the menu (⋯) next to the **Space** heading and choose **New project**.
+  2. In the **Create a project** dialog, enter a **Project name**.
+  3. Click **Create**. The project is added to the space and a new project conversation opens.
+</Steps>
+
+The project folder is created under the **Default project folder** in **Settings → Server**, with the project name as its name. If a folder with that name already exists, a number is added after the name.
+
+## Start a project conversation
+
+- From the project row's menu in the sidebar, choose **New conversation**.
+- Click **New conversation** next to the project dashboard title.
+- Send a message from the composer at the bottom of the project dashboard. The message starts a new project conversation.
+
+In a project that is a Git repository, you can choose **Local** or **Worktree** in the composer before you send the first message. If the project is not a Git repository, this choice does not appear. See [Workspace](/en/help/basics/conversation/#workspace).
+
+Click a project row in the sidebar to expand or collapse its list of conversations. To move an existing conversation into a project, see [Sidebar and spaces](/en/help/basics/sidebar-and-spaces/#move-and-reorder-items).
+
+## Open the dashboard
+
+Open it in one of these ways.
+
+- Click the **Project dashboard** icon button on the project row in the sidebar.
+- From the project row's menu, choose **Project dashboard**.
+- Click a project pinned to favorites.
+
+The top of the dashboard shows the project name and description, with the **Overview**, **Work**, **Materials**, **History** and **Statistics** tabs below. The dashboard refreshes automatically while it is open.
+
+### Project description
+
+Click the **Edit description** button next to the description, write the project description yourself and click **Save**. For a project without a description, Butler fills one in when it creates the first summary.
+
+## Overview
+
+- **Project status** — Shows the current state, which Butler summarizes from a selection of the project records. Expand **View N source records** to open the documents the summary used. If the summary cannot be created, click **Try again**.
+- **Execution completed**, **Open work**, **Blocked work** — Show the number of work items registered in the project records.
+- **Remaining work** — Shows up to four unfinished Work items as cards. Click a card to open its document. Click the button below to go to the **Work** tab.
+- **Important materials** — Shows pinned materials, and the plans, specifications and latest reports linked to remaining work.
+- **Worth exploring next** — Shows up to three next questions that Butler suggests. Click **Ask about this** to put the suggestion and its source documents into the dashboard composer.
+
+## Work
+
+View the work registered in the project records as a board.
+
+<Steps>
+  1. At the top, choose the board type: **Work**, **Plan** or **Task**.
+  2. On the **Plan** or **Task** board, you can narrow the scope by choosing a parent Work in the **All Work** selector.
+  3. Click a card to open its document. Click the conversation name linked on a card to go to that conversation.
+</Steps>
+
+The columns are, in order, **Planned**, **Active**, **Review**, **Blocked work**, **Done** and **Other**. On the **Plan** board, **Active plan** appears in place of **Active**. Each card also shows the progress count of its child Tasks and plan steps, and **Show more** appears in a column that has more items to load.
+
+## Materials
+
+- **Important materials** — Shows pinned documents.
+- **Project documents** — Shows the other specifications, plans, reports and similar documents in the project records. Each document shows its type and the date it was last changed.
+- **Published results** — Shows result files delivered in project conversations. Each file shows which conversation it came from and the date.
+
+Use the **Pin material** button on a document or result row to pin it to **Important materials**, and **Unpin material** to remove it. Click the **Ask about this** button on a result row to attach that file to the dashboard composer.
+
+## History
+
+Shows what happened in the project records and conversations as a timeline by date. Each entry shows its time and kind (**Created**, **Updated**, **Completion recorded**, **Review recorded**, **Disposition recorded**, **Tool result registered**, **Published reply**). Click an entry to open its document, or click the linked conversation name to go to that conversation.
+
+## Statistics
+
+At the top, choose the period: **Last 7 days**, **Last 30 days** or **Last 90 days**. The default is **Last 30 days**, and dates use this device's time zone.
+
+- **Work overview** — Choose **Work** or **Task** to view.
+  - **How work changed** — Shows the work registered and the work recorded as completed during the period.
+  - **Where work remains** — Shows the number of items in each stage of the current board: planned, in progress, in review and blocked. Click a stage to list its items.
+  - **Work to revisit** — Shows up to five items that have gone a long time since their last update. Blocked items come first.
+- **Project activity** — Shows the amount of activity by date. Click a date to list that day's records.
+- **Where activity went** — Lists items in order of most changes.
+- **Materials and results** — Shows documents registered or changed and attachments delivered. Switch between **By type** and **Changes**.
+- **Butler request outcomes**, **Request elapsed time** — Show the outcomes of requests that finished in project conversations and how long they took.
+- **Model usage** — This screen does not total tokens or cost per project. Check usage in [**Usage**](/en/help/settings/#usage) in Settings.
+
+## View a document
+
+Click a document or card on the dashboard to open a read-only document window.
+
+- The top of the document window shows **Document type**, **Document status**, **Last updated** and **Source location**.
+- Expand **Source details** to see identifying information such as the ID and revision.
+- Click **Reference in conversation** to add the document to the dashboard composer as a reference. If the composer is empty, a default question is filled in with it.
+- For a long document, click **Show more** at the end to load the rest.
+
+## Manage a project
+
+From the project row's menu in the sidebar, you can do the following.
+
+- **Rename** — Enter a new name in the **Rename project** dialog and click **Save**.
+- **Pin** / **Unpin** — Pins the project to **Favorites** in the sidebar, or unpins it.
+- **Archive** — Hides the project and its conversations from the list. Restore it from **Archives** in Settings.
+- **Delete project** — Click **Delete** in the confirmation dialog to permanently delete the project from Butler.
+
+## Notes
+
+<Notice tone="warning">
+  **Delete project** cannot be undone. Deleting a project does not delete the local project folder.
+</Notice>
+
+<Notice tone="info">
+  The dashboard only shows the project records. You cannot edit Work or documents on the dashboard. **Project status** and **Worth exploring next** are model summaries of selected records, and are not newly verified results. Creating a summary counts toward model usage.
+</Notice>
+
+## Related pages
+
+<CardGrid>
+  <DocCard slug="basics/sidebar-and-spaces" />
+  <DocCard slug="basics/conversation" />
+  <DocCard slug="scheduled-tasks" />
+  <DocCard slug="settings" />
+</CardGrid>

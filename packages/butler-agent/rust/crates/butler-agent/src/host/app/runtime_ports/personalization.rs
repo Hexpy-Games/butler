@@ -133,6 +133,9 @@ impl AppPersonalization {
 
     async fn read_view(&self, locale: &str) -> Result<Value, GatewayApplicationError> {
         self.validate_read_destinations()?;
+        crate::host::runtime::ensure_reply_language(&self.data_root, locale)
+            .await
+            .map_err(GatewayApplicationError::internal_from)?;
         let documents = self
             .profile
             .read_personalization_documents()
@@ -172,6 +175,9 @@ impl AppPersonalization {
             "eol": documents.eol,
             "updated_at": self.clock.now_iso(),
             "response_language": response_language,
+            "response_language_explicit": user.value.get("responseLanguage").is_some()
+                && user.value.get("responseLanguageDefaultSource").and_then(Value::as_str)
+                    .is_none_or(|source| source == "explicit"),
             "persona_presets": presets,
             "profile": {
                 "butler_nickname": profile.butler_nickname,

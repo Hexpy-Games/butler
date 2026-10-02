@@ -34,8 +34,9 @@ async fn perf_idle_owner_scale_reads_and_footprint() -> Result<(), HarnessError>
         process_usage::sample(std::process::id())?.is_some(),
         "process resource counters unavailable"
     );
-    let mut s = Setup::new("PERF-IDLE")?.start().await?;
-    memory_fixture::initialize_empty(&s.sandbox.data)?;
+    let setup = Setup::new("PERF-IDLE")?;
+    memory_fixture::initialize_empty(&setup.sandbox.data)?;
+    let mut s = setup.start().await?;
     s.agent.terminate().await?;
     let app = s.sandbox.data.join("app-server/butler-client.sqlite");
     app_seed::seed_owner_scale(&Connection::open(&app).unwrap(), 3_000);

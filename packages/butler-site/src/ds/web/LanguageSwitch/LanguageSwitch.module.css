@@ -36,8 +36,3 @@ a.option:focus-visible {
   background: var(--selection-strong);
   color: var(--text-primary);
 }
-
-.unavailable {
-  color: var(--interactive-disabled-fg);
-  cursor: var(--interactive-disabled-cursor);
-}

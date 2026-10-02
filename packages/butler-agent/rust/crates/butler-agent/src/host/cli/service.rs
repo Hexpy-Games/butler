@@ -12,6 +12,7 @@ use crate::host::service::instance::{
 
 mod lifecycle;
 mod registration;
+mod supervisor;
 
 #[expect(
     clippy::struct_excessive_bools,
@@ -201,6 +202,12 @@ async fn run_service(
     data: Option<String>,
     options: &Options,
 ) -> ExitCode {
+    if std::env::var(supervisor::VARIABLE).as_deref() == Ok("1") {
+        return match supervisor::run(&installation, data.as_deref()).await {
+            Ok(code) => code,
+            Err(error) => report_error("service supervisor", options.json, error.message()),
+        };
+    }
     match crate::host::service::entrypoint::run_native_service_with_options(
         installation,
         data,
@@ -216,7 +223,12 @@ async fn run_service(
                     json!({"ok":true,"command":"service run","data":{"sessionId":session}})
                 );
             } else if let Some(session) = session.filter(|_| !options.quiet) {
-                println!("{session}");
+                println!(
+                    "{}",
+                    butler_core::diagnostics::timestamped(&format!(
+                        "[native-butler] stopped session_id={session}"
+                    ))
+                );
             }
             ExitCode::SUCCESS
         }
@@ -256,16 +268,24 @@ pub(super) async fn stop_running(
     .await
 }
 
-pub(crate) fn spawn_restart_handoff(
+pub(crate) async fn spawn_restart_handoff(
     installation: &ResolvedInstallation,
     data_root: &Path,
     expected: &RestartIdentity,
     intent_id: &str,
 ) -> Result<(), crate::host::HostError> {
-    if lifecycle::asked_of_manager(data_root, expected) {
-        return Ok(());
-    }
-    lifecycle::spawn_restart_handoff(installation, data_root, expected, intent_id)
+    let installation = installation.clone();
+    let data_root = data_root.to_path_buf();
+    let expected = expected.clone();
+    let intent_id = intent_id.to_owned();
+    tokio::task::spawn_blocking(move || {
+        if lifecycle::asked_of_manager(&data_root, &expected) {
+            return Ok(());
+        }
+        lifecycle::spawn_restart_handoff(&installation, &data_root, &expected, &intent_id)
+    })
+    .await
+    .map_err(crate::host::HostError::from_error)?
 }
 
 fn parse(args: &[OsString]) -> Result<(Options, Action), crate::host::HostError> {
@@ -370,7 +390,7 @@ fn report_error(command: &str, json_output: bool, message: &str) -> ExitCode {
             json!({"ok":false,"command":command,"error":{"code":"native_service_cli_failed","message":message}})
         );
     } else {
-        eprintln!("{message}");
+        eprintln!("{}", butler_core::diagnostics::timestamped(message));
     }
     ExitCode::from(1)
 }

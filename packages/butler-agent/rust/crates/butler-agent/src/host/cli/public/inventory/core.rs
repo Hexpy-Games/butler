@@ -38,8 +38,57 @@ pub(super) const ROUTES: &[Entry] = &[
         "core"
     ),
     route!(
+        "remote.status",
+        "butler remote status [--json]",
+        "원격 접근 상태를 봅니다. / Show remote access.",
+        "core",
+        true
+    ),
+    route!(
+        "remote.enable",
+        "butler remote enable",
+        "원격 접근을 켭니다. / Enable remote access.",
+        "core",
+        false
+    ),
+    route!(
+        "remote.disable",
+        "butler remote disable",
+        "원격 접근을 끕니다. / Disable remote access.",
+        "core",
+        false
+    ),
+    route!(
+        "remote.pair",
+        "butler remote pair",
+        "기기를 연결합니다. / Pair a device.",
+        "core",
+        false
+    ),
+    route!(
+        "remote.devices",
+        "butler remote devices [--json] [--revoke ID|--revoke-all]",
+        "연결된 기기를 관리합니다. / Manage paired devices.",
+        "core",
+        true
+    ),
+    route!(
+        "remote.hosts.add",
+        "butler remote hosts add HOST",
+        "허용 호스트를 추가합니다. / Add an allowed host.",
+        "core",
+        false
+    ),
+    route!(
+        "remote.hosts.remove",
+        "butler remote hosts remove HOST",
+        "허용 호스트를 제거합니다. / Remove an allowed host.",
+        "core",
+        false
+    ),
+    route!(
         "doctor",
-        "butler doctor [--check NAME] [--data PATH]",
+        "butler doctor [--check NAME|--collect-logs] [--data PATH]",
         "설치와 서비스를 점검합니다. / Diagnose installation and service.",
         "core"
     ),
@@ -228,5 +277,13 @@ pub(super) const ROUTES: &[Entry] = &[
         "butler version [--json]",
         "버전을 봅니다. / Show version.",
         "core"
+    ),
+    route!(
+        "--version",
+        "butler --version, -V",
+        "릴리스 버전과 빌드 ID를 봅니다. / Show release version and build ID.",
+        "core",
+        false,
+        &["-V"]
     ),
 ];

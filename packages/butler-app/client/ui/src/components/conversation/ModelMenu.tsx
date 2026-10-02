@@ -1,5 +1,5 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import {
   FilteredSelectPopover,
   Popover,
@@ -20,7 +20,7 @@ import {
 } from "@/app/utils.ts";
 import { ComposerModelStatusButton } from "./ComposerModelStatusButton.tsx";
 
-export function ModelMenu() {
+export const ModelMenu = memo(function ModelMenu() {
   useAppLocale();
   const modelMenuOpen = useComposerStore((store) => store.modelMenuOpen);
   const setModelMenuOpen = useComposerStore((store) => store.setModelMenuOpen);
@@ -141,4 +141,4 @@ export function ModelMenu() {
       </PopoverContent>
     </Popover>
   );
-}
+});

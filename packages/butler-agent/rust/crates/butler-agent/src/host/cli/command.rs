@@ -15,6 +15,7 @@ type Recognizer = fn(&[OsString]) -> bool;
 /// Every command family the `butler-agent` executable accepts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Command {
+    AppUpdate,
     Public,
     ServiceControl,
     Doctor,
@@ -22,6 +23,7 @@ pub enum Command {
     Settings,
     Observability,
     Schedule,
+    Remote,
     Update,
     Status,
     Open,
@@ -35,13 +37,17 @@ impl Command {
     /// Classifies command arguments (installation options already removed).
     pub fn classify(args: &[OsString]) -> Self {
         use crate::host::cli;
-        let families: [(Recognizer, Self); 10] = [
+        if args.first().is_some_and(|arg| arg == "app-update-install") {
+            return Self::AppUpdate;
+        }
+        let families: [(Recognizer, Self); 11] = [
             (cli::public::recognizes, Self::Public),
             (cli::service::recognizes, Self::ServiceControl),
             (cli::doctor::recognizes, Self::Doctor),
             (cli::settings::recognizes, Self::Settings),
             (cli::observability::recognizes, Self::Observability),
             (cli::schedule::recognizes, Self::Schedule),
+            (cli::remote::recognizes, Self::Remote),
             (cli::update::recognizes, Self::Update),
             (cli::status::recognizes, Self::Status),
             (cli::open::recognizes, Self::Open),
@@ -71,13 +77,24 @@ impl Command {
     ) -> ExitCode {
         use crate::host::cli;
         match self {
+            Self::AppUpdate => cli::app_update::run(&args),
             Self::Public => cli::public::run(&installation, &args),
             Self::ServiceControl => cli::service::run_native_service_cli(installation, args).await,
-            Self::Doctor => cli::doctor::run(&installation, &args),
+            Self::Doctor => {
+                tokio::task::spawn_blocking(move || cli::doctor::run(&installation, &args))
+                    .await
+                    .unwrap_or_else(|_| {
+                        butler_core::diagnostic!(
+                            "[native-doctor] code=doctor_worker_failed Diagnostic worker failed."
+                        );
+                        ExitCode::FAILURE
+                    })
+            }
             Self::Mcp => Box::pin(crate::host::mcp::run(installation, args)).await,
             Self::Settings => cli::settings::run(installation, args).await,
             Self::Observability => cli::observability::run(installation, args).await,
             Self::Schedule => cli::schedule::run(&installation, &args).await,
+            Self::Remote => cli::remote::run(&installation, &args).await,
             Self::Update => Box::pin(cli::update::run(installation, args)).await,
             Self::Status => cli::status::run_native_status_cli(installation, args).await,
             Self::Open => cli::open::run(&installation, &args).await,
@@ -100,12 +117,14 @@ impl Command {
                 match crate::host::service::entrypoint::run_native_service(installation).await {
                     Ok(session) => {
                         if let Some(session) = session {
-                            println!("{session}");
+                            butler_core::diagnostic!(
+                                "[native-butler] stopped session_id={session}"
+                            );
                         }
                         ExitCode::SUCCESS
                     }
                     Err(error) => {
-                        eprintln!("{error}");
+                        butler_core::diagnostic!("[native-service] failed: {error}");
                         ExitCode::FAILURE
                     }
                 }
@@ -121,10 +140,24 @@ impl Command {
 /// The executable entry: the private embedding worker, or installation
 /// resolution followed by one classified command.
 pub async fn main(args: Vec<OsString>) -> ExitCode {
+    if args.len() == 1 && args[0] == "--prepare-process-links" {
+        let result = butler_platform::process_names::current_exe()
+            .and_then(|binary| butler_platform::process_names::prepare(&binary));
+        return match result {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("process_links_unavailable: {error}");
+                ExitCode::FAILURE
+            }
+        };
+    }
     // Internal child mode. It must not resolve installation resources or start
     // the service before the first private embedding request.
     if args.len() == 1 && args[0] == "--private-embedding-worker" {
         return crate::host::embedding::worker::run().await;
+    }
+    if matches!(args.as_slice(), [flag] if flag == "--version" || flag == "-V") {
+        return print_version();
     }
     let (installation, command_args) = match installation(&args) {
         Ok(value) => value,
@@ -136,6 +169,23 @@ pub async fn main(args: Vec<OsString>) -> ExitCode {
     Command::classify(&command_args)
         .run(installation, command_args)
         .await
+}
+
+fn print_version() -> ExitCode {
+    let Ok(executable) = std::env::current_exe().and_then(std::fs::canonicalize) else {
+        eprintln!("Could not read Butler build ID.");
+        return ExitCode::FAILURE;
+    };
+    let Ok(digest) = butler_runtime::operations::sha256_file(&executable) else {
+        eprintln!("Could not read Butler build ID.");
+        return ExitCode::FAILURE;
+    };
+    let Some(build_id) = digest.get(..8) else {
+        eprintln!("Could not read Butler build ID.");
+        return ExitCode::FAILURE;
+    };
+    println!("butler {} ({build_id})", env!("BUTLER_RELEASE_VERSION"));
+    ExitCode::SUCCESS
 }
 
 fn printed(stdout: &str, stderr: &str, exit_code: u8) -> ExitCode {
@@ -174,7 +224,8 @@ fn installation(
     let installation = match (root, resources) {
         (None, None) => ResolvedInstallation::standalone()?,
         (Some(root), Some(resources)) => ResolvedInstallation::desktop(
-            std::env::current_exe().map_err(crate::host::HostError::from_error)?,
+            butler_platform::process_names::current_exe()
+                .map_err(crate::host::HostError::from_error)?,
             root,
             resources,
         )?,

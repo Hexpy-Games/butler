@@ -13,7 +13,13 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // Windows process table serves instance identity and liveness.
         "command_sandbox" | "cpu" | "desktop" | "launcher" | "network" | "process_table"
         | "secure_fs" | "stdio" | "time_zone" | "user_dirs" => &[],
-        "instance" | "process_control" => &["process_table"],
+        "process_control" => &["process_table"],
+        // Process naming owns verified executable aliases; instance queries
+        // consume that identity without coupling general filesystem paths to it.
+        "instance" => &["process_table", "process_names"],
+        "process_names" => &["launcher", "secure_fs"],
+        // Package activation waits for its parent and restores verified ZIP role links.
+        "app_update" => &["process_control", "process_names", "secure_fs"],
         // The credential store's owner-only fallback file is a secure_fs file.
         "secrets" => &["secure_fs"],
         // The `butler` command launcher is a runnable file under the user's
@@ -21,7 +27,10 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // with secure_fs; login-start definitions live under the user's home.
         "command_launcher" => &["launcher", "user_dirs"],
         "install_link" => &["secure_fs"],
-        "service_registration" => &["instance", "user_dirs"],
+        // Manager definitions own private log destinations; E2E fixtures publish executables.
+        "service_registration" => &["instance", "user_dirs", "secure_fs", "launcher"],
+        // Timestamp formatting and the operational diagnostic macro are a leaf.
+        "diagnostics" => &[],
         // butler-core: leaf codecs and mirrors; JSON sanitizes public text.
         "configuration" | "js_date" | "json_lines" | "locale" | "public_text" | "segmentation"
         | "tool_protocol" => &[],

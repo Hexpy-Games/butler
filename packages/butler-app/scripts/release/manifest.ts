@@ -22,12 +22,16 @@ export function readAppComponentVersions(root: string): AppComponentVersions {
     join(root, "packages", "butler-app", "client", "electron", "package.json"),
     "utf8",
   )) as { version?: unknown };
+  const tag = process.env.GITHUB_REF_NAME?.replace(/^v/u, "");
+  if (tag && /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u.test(tag)) {
+    return { app: tag, bundledAgent: tag };
+  }
   const agentVersionPath = join(root, "VERSION");
   return {
-    app: String(electronPkg.version ?? ""),
+    app: `${String(electronPkg.version ?? "0.1.0").split("-")[0]}-dev`,
     bundledAgent: existsSync(agentVersionPath)
-      ? readFileSync(agentVersionPath, "utf8").trim()
-      : String(electronPkg.version ?? ""),
+      ? `${readFileSync(agentVersionPath, "utf8").trim().split("-")[0]}-dev`
+      : `${String(electronPkg.version ?? "0.1.0").split("-")[0]}-dev`,
   };
 }
 

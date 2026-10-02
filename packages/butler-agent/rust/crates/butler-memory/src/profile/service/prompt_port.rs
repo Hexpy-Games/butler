@@ -9,6 +9,7 @@ impl butler_runtime::context::ProfilePromptPort for ProfileService {
         _: &'a butler_runtime::context::PromptProjectionInput<'a>,
     ) -> butler_runtime::context::ContextFuture<'a, Option<String>> {
         Box::pin(async move {
+            self.ensure_default_eol().await.map_err(context_error)?;
             self.read_personalization_profile()
                 .await
                 .map(|value| naming::render(&value))

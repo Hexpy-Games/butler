@@ -1,14 +1,21 @@
 ---
+import type { Locale } from "../../../site/sections";
+import { ui } from "../../../site/ui";
 import { Computer, Moon, Sun } from "../../components/Icons";
 import styles from "./ThemeToggle.module.css";
 
+interface Props {
+  locale: Locale;
+}
+
+const copy = ui(Astro.props.locale).theme;
 const options = [
-  { value: "system", label: "시스템 테마", Icon: Computer },
-  { value: "light", label: "밝은 테마", Icon: Sun },
-  { value: "dark", label: "어두운 테마", Icon: Moon },
+  { value: "system", label: copy.system, Icon: Computer },
+  { value: "light", label: copy.light, Icon: Sun },
+  { value: "dark", label: copy.dark, Icon: Moon },
 ] as const;
 ---
-<div class={styles.group} role="group" aria-label="테마">
+<div class={styles.group} role="group" aria-label={copy.label}>
   {options.map(({ value, label, Icon }) => (
     <button
       aria-label={label}

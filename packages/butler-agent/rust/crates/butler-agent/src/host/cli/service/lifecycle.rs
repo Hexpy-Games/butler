@@ -175,13 +175,18 @@ async fn start_service_admitted(
 ) -> Result<Value, crate::host::HostError> {
     let data_root = &config.data_root;
     refuse_live_legacy_process(data_root)?;
-    let active = active_service(data_root)?;
+    let active = match active_service(data_root)? {
+        Some(record) => Some(record),
+        None => super::supervisor::existing(data_root).await?,
+    };
     if let Some(record) = active {
         drop(admission);
         let ready = wait_until_ready(config, None, Some(record.nonce.clone())).await?;
         return Ok(start_result(&ready, false));
     }
-    if managed::job_is_ours(data_root) {
+    if managed::job_is_ours(data_root)
+        && butler_platform::service_registration::job().is_ok_and(|job| job.reachable)
+    {
         // This DATA's login job is registered: it, not this process, runs the
         // service, so it stays under the manager (which loads the job again
         // if it was unloaded).
@@ -193,24 +198,15 @@ async fn start_service_admitted(
     }
     let mut spawned = spawn_service(installation, data_root)?;
     let registered = match wait_until_registered(data_root, &mut spawned).await {
-        Ok(record) if record.pid == spawned.id() => record,
-        Ok(_) => {
-            cleanup_spawned(spawned).await;
-            return Err("native_service_start_identity_changed".into());
-        }
+        Ok(record) => record,
         Err(message) => {
             cleanup_spawned(spawned).await;
             return Err(message);
         }
     };
     drop(admission);
-    let expected_pid = spawned.id();
-    match wait_until_ready(config, Some(&mut spawned), Some(registered.nonce)).await {
-        Ok(record) if record.pid == expected_pid => Ok(start_result(&record, true)),
-        Ok(_) => {
-            cleanup_spawned(spawned).await;
-            Err("native_service_start_identity_changed".into())
-        }
+    match wait_until_ready(config, None, Some(registered.nonce)).await {
+        Ok(record) => Ok(start_result(&record, true)),
         Err(message) => {
             cleanup_spawned(spawned).await;
             Err(message)
@@ -339,7 +335,7 @@ fn spawn_service(
     data_root: &Path,
 ) -> Result<Child, crate::host::HostError> {
     validate_write_destinations(data_root, installation)?;
-    let executable = std::env::current_exe()
+    let executable = butler_platform::process_names::current_exe()
         .map_err(|source| {
             crate::host::HostError::new("native_service_executable_unavailable").with_source(source)
         })?
@@ -355,6 +351,7 @@ fn spawn_service(
     let stderr = log_file(&logs.join("butler-agent-service.stderr.log"), installation)?;
     let mut command = Command::new(executable);
     command
+        .env(super::supervisor::VARIABLE, "1")
         .arg("--installation-root")
         .arg(installation.root())
         .arg("--resource-root")

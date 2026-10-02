@@ -1,4 +1,7 @@
 #!/usr/bin/env bun
+import { normalizeMacBundle, signMacBundle, runMacSigning, verifyMacBundleIcon } from "./native-mac-signing.ts";
+import { isPreviewRelease } from "./preview-policy.ts";
+import { stageElectronPackageSource } from "./electron-package-source.ts";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
@@ -62,12 +65,8 @@ export interface BundledAgentResource {
 
 const ELECTRON_ROOT = join("packages", "butler-app", "client", "electron");
 const APP_RENDERER_DIST = join("packages", "butler-app", "client", "ui", "dist");
-const MAC_SIGN_SCRIPT = join(ELECTRON_ROOT, "scripts", "adhoc-sign-mac.mjs");
-const MAC_SIGNING_SCRIPT = join("deploy", "macos", "sign-and-notarize.sh");
-const MAC_NORMALIZE_SCRIPT = join(ELECTRON_ROOT, "scripts", "normalize-mac-bundle.mjs");
 const MAC_APP_BUNDLE_IDENTIFIER = "com.hexpy.butler";
 const MAC_HELPER_BUNDLE_IDENTIFIER = "com.hexpy.butler.helper";
-const MAC_APP_ICON_RESOURCE = join("Contents", "Resources", "butler.icns");
 
 export function appReleaseIconPath(root: string): string {
   return join(resolve(root), ELECTRON_ROOT, "assets", "butler.icns");
@@ -117,7 +116,8 @@ function createNativeMacReleasePackage(options: AppReleasePackageOptions): AppRe
     item.updaterSha256 = artifact.updaterSha256;
     item.dependencyClosure = artifact.nativeClosure;
     const teamId = process.env.BUTLER_SIGN_TEAM_ID?.trim();
-    if (process.env.BUTLER_SIGN_IDENTITY?.trim() && teamId) item.signing = { teamId, notarized: true };
+    if (process.env.BUTLER_SIGN_IDENTITY?.trim() && teamId) item.signing = { teamId, notarized: !isPreviewRelease() };
+    if (isPreviewRelease() && !teamId) item.signing = { teamId: "", notarized: false };
     if (!item.dependencyClosure) throw new Error("signed native mac App closure is missing");
     const releaseManifestPath = join(outDir, "app-release-manifest.json");
     writeJson(releaseManifestPath, manifest);
@@ -127,8 +127,9 @@ function createNativeMacReleasePackage(options: AppReleasePackageOptions): AppRe
       bundled_agent_version: manifest.bundledAgentVersion, updater_owner: "butler-app",
       artifacts: [{
         component: "app", product: "butler-app", platform: "darwin-arm64", version: manifest.version,
-        app_version: manifest.version, channel: "stable", artifact_url: item.downloadUrl,
-        sha256: item.sha256, payload_format: "platform-app-package", update_policy: "app-user-action",
+        app_version: manifest.version, channel: isPreviewRelease() ? "preview" : "stable",
+        artifact_url: artifactDownloadUrl(options.artifactBaseUrl, artifact.updaterArtifactPath, artifact.updaterArtifactName),
+        sha256: artifact.updaterSha256, payload_format: "platform-app-package", update_policy: "app-user-action",
         restart_policy: "restart-app", updater_owner: "butler-app",
         bundled_agent_version: manifest.bundledAgentVersion,
         staging_policy: item.stagingPolicy,
@@ -184,7 +185,7 @@ function packagePlatform(input: {
   const appBundle = join(packagedDir, "Butler.app");
   if (!existsSync(appBundle)) throw new Error(`mac app bundle not found: ${appBundle}`);
   normalizeMacBundle(input.root, appBundle);
-  verifyMacBundleIcon(input.root, appBundle);
+  verifyMacBundleIcon(appReleaseIconPath(input.root), appBundle);
   signMacBundle(input.root, appBundle);
   const nativeClosure = closureFromNativeMacBundle(appBundle, input.manifest);
   verifyNativeMacBundle(appBundle, nativeClosure);
@@ -226,18 +227,10 @@ function runElectronPackager(
   bundledAgentResourceDir: string,
 ): void {
   const packagerOverride = process.env.BUTLER_APP_PACKAGER?.trim();
-  const packagerCli = join(
-    root,
-    ELECTRON_ROOT,
-    "node_modules",
-    "@electron",
-    "packager",
-    "bin",
-    "electron-packager.mjs",
-  );
+  const packagerCli = join(root, ELECTRON_ROOT, "node_modules", "@electron", "packager", "bin", "electron-packager.mjs");
   if (!packagerOverride && !existsSync(packagerCli)) {
     throw new Error(
-      "Electron packager is missing; run npm --prefix packages/butler-app/client/electron ci",
+      "Electron packager is missing; run bun install --frozen-lockfile --ignore-scripts",
     );
   }
   const iconPath = appReleaseIconPath(root);
@@ -258,11 +251,13 @@ function runElectronPackager(
   });
   const packagerIconPath = appReleasePackagerIconPath(outDir);
   copyFileSync(iconPath, packagerIconPath);
+  const electronVersion = JSON.parse(readFileSync(join(root, ELECTRON_ROOT, "package.json"), "utf8")).devDependencies.electron;
   const packagerArguments = [
-    join(root, ELECTRON_ROOT),
+    stageElectronPackageSource(root, join(outDir, "electron-source")),
     "Butler",
     "--platform=darwin",
     "--arch=arm64",
+    `--electron-version=${electronVersion}`,
     "--overwrite",
     `--out=${outDir}`,
     `--icon=${packagerIconPath}`,
@@ -289,6 +284,11 @@ function runElectronPackager(
       }`,
     );
   }
+  const notices = spawnSync(process.env.BUTLER_NODE || "node", [
+    join(root, "deploy/licenses/package-app.mjs"),
+    join(outDir, "Butler-darwin-arm64/Butler.app"),
+  ], { cwd: root, stdio: "inherit" });
+  if (notices.status !== 0) throw new Error("App notices packaging failed");
 }
 
 export function prepareBundledAgentResource(
@@ -338,104 +338,14 @@ export function prepareBundledAgentResource(
   return { resourceDir };
 }
 
-function verifyMacBundleIcon(root: string, appBundle: string): void {
-  const sourceIcon = appReleaseIconPath(root);
-  const packagedIcon = join(appBundle, MAC_APP_ICON_RESOURCE);
-  if (!existsSync(packagedIcon)) {
-    throw new Error(`packaged mac app icon resource is missing: ${packagedIcon}`);
-  }
-  const sourceHash = sha256File(sourceIcon);
-  const packagedHash = sha256File(packagedIcon);
-  if (sourceHash !== packagedHash) {
-    throw new Error(
-      `packaged mac app icon does not match Butler icon: expected ${sourceHash}, got ${packagedHash}`,
-    );
-  }
-  const plistPath = join(appBundle, "Contents", "Info.plist");
-  const iconFile = readPlistString(plistPath, "CFBundleIconFile");
-  if (iconFile !== "butler.icns") {
-    throw new Error(`packaged mac app icon plist is wrong: expected butler.icns, got ${iconFile || "missing"}`);
-  }
-  const iconName = readPlistString(plistPath, "CFBundleIconName");
-  if (iconName !== "butler") {
-    throw new Error(`packaged mac app icon name is wrong: expected butler, got ${iconName || "missing"}`);
-  }
-  const bundleId = readPlistString(plistPath, "CFBundleIdentifier");
-  if (bundleId !== MAC_APP_BUNDLE_IDENTIFIER) {
-    throw new Error(`packaged mac app bundle id is wrong: expected ${MAC_APP_BUNDLE_IDENTIFIER}, got ${bundleId || "missing"}`);
-  }
-}
-
-function readPlistString(plistPath: string, key: string): string | null {
-  const result = spawnSync("/usr/libexec/PlistBuddy", [
-    "-c",
-    `Print :${key}`,
-    plistPath,
-  ], {
-    encoding: "utf8",
-  });
-  if (result.status !== 0) return null;
-  return result.stdout.trim() || null;
-}
-
-function normalizeMacBundle(root: string, appBundle: string): void {
-  const result = spawnSync("node", [join(root, MAC_NORMALIZE_SCRIPT), appBundle], {
-    cwd: root,
-    encoding: "utf8",
-  });
-  if (result.status !== 0) {
-    throw new Error(
-      `mac bundle metadata normalization failed: ${
-        result.stderr.trim() || result.stdout.trim() || "unknown error"
-      }`,
-    );
-  }
-}
-
-function signMacBundle(root: string, appBundle: string): void {
-  if (process.env.BUTLER_SIGN_IDENTITY?.trim()) {
-    runMacSigning(root, "sign-app", appBundle);
-    return;
-  }
-  if (process.env.BUTLER_APP_REQUIRE_PRODUCTION_SIGNING === "1") {
-    throw new Error("BUTLER_SIGN_IDENTITY is required for production macOS releases");
-  }
-  const result = spawnSync("node", [join(root, MAC_SIGN_SCRIPT), appBundle], {
-    cwd: root,
-    encoding: "utf8",
-  });
-  if (result.status !== 0) {
-    throw new Error(
-      `mac ad-hoc signing failed: ${
-        result.stderr.trim() || result.stdout.trim() || "unknown error"
-      }`,
-    );
-  }
-}
-
-/** Developer ID signing, notarization and stapling; a logged no-op without BUTLER_SIGN_IDENTITY. */
-function runMacSigning(root: string, command: "sign-app" | "sign-dmg" | "notarize", path: string): void {
-  const result = spawnSync(join(root, MAC_SIGNING_SCRIPT), [command, path], {
-    cwd: root,
-    encoding: "utf8",
-  });
-  if (result.stdout.trim()) process.stdout.write(result.stdout);
-  if (result.status !== 0) {
-    throw new Error(`mac ${command} failed: ${result.stderr.trim() || result.stdout.trim() || "unknown error"}`);
-  }
-}
-
-function createMacDmg(input: { appBundle: string; artifactPath: string }): void {
+export function createMacDmg(input: { appBundle: string; artifactPath: string }): void {
   const workDir = mkdtempSync(join(tmpdir(), "butler-app-dmg-"));
   try {
     const staging = join(workDir, "Butler");
     mkdirSync(staging, { recursive: true });
-    cpSync(input.appBundle, join(staging, "Butler.app"), {
-      dereference: false,
-      errorOnExist: false,
-      force: true,
-      recursive: true,
-    });
+    // ditto preserves role hard links and relative framework symlinks.
+    const copy = spawnSync("ditto", [input.appBundle, join(staging, "Butler.app")], { encoding: "utf8" });
+    if (copy.status !== 0) throw new Error(`mac App staging failed: ${copy.stderr.trim()}`);
     symlinkSync("/Applications", join(staging, "Applications"));
     rmSync(input.artifactPath, { force: true });
     const result = spawnSync("hdiutil", [
@@ -458,7 +368,7 @@ function createMacDmg(input: { appBundle: string; artifactPath: string }): void 
   }
 }
 
-function createMacZip(appBundle: string, artifactPath: string): void {
+export function createMacZip(appBundle: string, artifactPath: string): void {
   rmSync(artifactPath, { force: true });
   const result = spawnSync("ditto", [
     "-c",

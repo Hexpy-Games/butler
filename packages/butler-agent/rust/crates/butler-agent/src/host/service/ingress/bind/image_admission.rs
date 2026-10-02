@@ -23,7 +23,7 @@ pub(super) fn admits_zai_image_tool(envelope: &Envelope) -> bool {
     let tuple = &admission.tuple;
     let capability = &admission.capability;
     if tuple.provider_id != "zai"
-        || tuple.model_id != "glm-5.2"
+        || tuple.model_id != butler_models::models::ZAI_IMAGE_MODEL
         || tuple.carrier_protocol != "zai_mcp_vision"
         || capability.model_support != "supported"
         || capability.route_health != "healthy"

@@ -43,6 +43,10 @@ impl SearchProvider for OpenAIWebSearchProvider {
     ) -> futures_util::future::BoxFuture<'a, Result<SearchOutput, WebAccessError>> {
         async move {
             let started = Instant::now();
+            let catalog = butler_models::models::ModelCatalog::new().map_err(|error|
+                WebAccessError::new(WebAccessCode::WebSearchProviderModelMissing, error.to_string()))?;
+            let default_model = butler_models::models::parse_model_ref(
+                &catalog.default_preset(&Value::Null, &Value::Null).model).model_id;
             let mut tool = json!({"type":"web_search"});
             if !input.allowed_domains.is_empty() {
                 tool["filters"] = json!({"allowed_domains":input.allowed_domains});
@@ -52,7 +56,7 @@ impl SearchProvider for OpenAIWebSearchProvider {
                 "/v1/responses",
             )?;
             let request = access.client().post(endpoint).bearer_auth(&self.api_key).json(&json!({
-                "model":self.model.as_deref().filter(|value| !value.trim().is_empty()).unwrap_or("gpt-5"),
+                "model":self.model.as_deref().filter(|value| !value.trim().is_empty()).unwrap_or(&default_model),
                 "instructions":"Use web search. Return one short source-backed overview with citations and the supporting sources.",
                 "tools":[tool],
                 "tool_choice":"auto",

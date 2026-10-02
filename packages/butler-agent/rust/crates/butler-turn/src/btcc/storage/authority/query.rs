@@ -81,7 +81,7 @@ fn many(
     sql_text: &str,
     parameters: &[&dyn ToSql],
 ) -> AuthorityResult<Vec<AuthorityRecord>> {
-    let mut statement = db.prepare(sql_text).map_err(sql)?;
+    let mut statement = db.prepare_cached(sql_text).map_err(sql)?;
     statement
         .query_map(parameters, hydrate)
         .map_err(sql)?
@@ -152,10 +152,13 @@ pub(super) fn list_pending(db: &Connection, owner: &str) -> AuthorityResult<Vec<
     many(
         db,
         &format!(
-            "{ROW} WHERE owner_session_id=?1 AND decision='pending' AND close_reason IS NULL \
-        AND source_call_id IS NOT NULL AND EXISTS (SELECT 1 FROM btcc_turns turn \
+            "SELECT * FROM ({ROW} WHERE owner_session_id=?1 AND close_reason IS NULL \
+        AND decision='pending' AND source_call_id IS NOT NULL AND EXISTS (SELECT 1 FROM btcc_turns turn \
         WHERE turn.turn_id=source_turn_id AND turn.suspension_reason='authority_pending') \
-        ORDER BY created_at ASC"
+        UNION ALL {ROW} INDEXED BY idx_btcc_questions_deferred WHERE owner_session_id=?1 AND capability='ask_user' AND decision='modified' \
+        AND close_reason IS NULL AND outcome_receipt_json IS NULL \
+        AND json_extract(CASE WHEN capability='ask_user' THEN private_alternative_input END,'$.status')='deferred') \
+        ORDER BY CASE WHEN decision='pending' THEN 0 ELSE 1 END, created_at ASC"
         ),
         &[&owner],
     )
@@ -165,12 +168,12 @@ pub(super) fn list_decided(db: &Connection) -> AuthorityResult<Vec<AuthorityReco
         db,
         &format!(
             "{ROW} WHERE decision IN ('allowed','denied','modified') \
-        AND source_call_id IS NOT NULL AND EXISTS (SELECT 1 FROM btcc_turns turn \
+        AND ((source_call_id IS NOT NULL AND EXISTS (SELECT 1 FROM btcc_turns turn \
         WHERE turn.turn_id=source_turn_id AND turn.suspension_reason='authority_pending') \
-        AND EXISTS (SELECT 1 FROM btcc_guided_works work \
+        AND (capability='ask_user' OR EXISTS (SELECT 1 FROM btcc_guided_works work \
         WHERE work.work_id=btcc_authority_requests.source_work_id \
         AND work.session_id=btcc_authority_requests.source_session_id \
-        AND work.status IN ('open','blocked')) ORDER BY updated_at ASC"
+        AND work.status IN ('open','blocked')))) OR (capability='ask_user' AND outcome='pending' AND outcome_receipt_json IS NOT NULL)) AND close_reason IS NULL ORDER BY updated_at ASC"
         ),
         &[],
     )
@@ -270,4 +273,23 @@ fn stored_enum<T>(
             format!("unknown stored value: {text}").into(),
         )
     })
+}
+
+pub(super) fn question_history(
+    db: &Connection,
+    owner: &str,
+    turns: &[String],
+) -> AuthorityResult<Vec<AuthorityRecord>> {
+    let mut records = Vec::new();
+    for turn in turns {
+        let column = if turn.starts_with("question-ref-") {
+            "request_ref"
+        } else {
+            "source_turn_id"
+        };
+        records.extend(many(db, &format!("{ROW} WHERE owner_session_id=?1 AND capability='ask_user' AND {column}=?2 AND decision='modified' AND close_reason IS NULL ORDER BY created_at"), &[&owner, &turn])?);
+    }
+    let mut seen = std::collections::HashSet::new();
+    records.retain(|r| seen.insert(r.request_ref.clone()));
+    Ok(records)
 }

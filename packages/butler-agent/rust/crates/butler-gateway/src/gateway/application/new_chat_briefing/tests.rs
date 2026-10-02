@@ -11,8 +11,43 @@ use std::{fs, path::Path};
 
 use serde_json::{Value, json};
 
-use super::generated_view;
+use super::{fallback, generated_view};
 use butler_memory::cognition::{self, BriefingScope};
+
+fn assert_general_fallback_uses_everyday_cards_in_both_locales() {
+    let expected = [
+        (
+            "ko",
+            json!([
+                {"id":"organize-download-folder","title":"다운로드 폴더 정리하기","description":"이 컴퓨터의 파일을 살펴보고 옮기기 전에 묻습니다.","text":"다운로드 폴더를 종류별로 정리해줘. 옮기기 전에 계획부터 보여줘."},
+                {"id":"summarize-document","title":"문서 요약하기","description":"첨부하거나 붙여 넣은 문서의 핵심을 정리합니다.","text":"이 내용을 핵심만 요약해줘: "},
+                {"id":"draft-reply","title":"답장 초안 쓰기","description":"짧은 메모를 바탕으로 답장 초안을 씁니다.","text":"이 메모로 답장 초안을 써줘: "},
+                {"id":"morning-briefing","title":"매일 아침 브리핑 받기","description":"날씨·뉴스·일정을 8시에 전하는 예약 작업을 만듭니다.","text":"매일 아침 8시에 날씨와 뉴스, 오늘 일정을 알려주는 예약 작업을 만들어줘."}
+            ]),
+        ),
+        (
+            "en",
+            json!([
+                {"id":"organize-download-folder","title":"Downloads folder cleanup","description":"Butler checks files on this computer and asks before moving them.","text":"Sort my Downloads folder by type. Show me the plan before moving anything."},
+                {"id":"summarize-document","title":"Document summary","description":"Attach or paste a document to get the key points.","text":"Summarize this in a few key points: "},
+                {"id":"draft-reply","title":"Reply draft","description":"Turn a short note into a clear reply.","text":"Draft a reply from this note: "},
+                {"id":"morning-briefing","title":"Morning briefing","description":"Create a daily 8 AM schedule for weather, news, and today's plans.","text":"Create a daily 8 AM schedule with weather, news, and today's plans."}
+            ]),
+        ),
+    ];
+    for (locale, suggestions) in expected {
+        let value = fallback(
+            "general",
+            locale,
+            "2026-10-01T00:00:00Z",
+            "8:00 AM",
+            None,
+            None,
+            None,
+        );
+        assert_eq!(value["suggestions"], suggestions, "{locale}");
+    }
+}
 
 fn cards(count: usize) -> Vec<Value> {
     (0..count)
@@ -50,8 +85,10 @@ fn write(root: &Path, relative: &str, artifact: &Value) {
     fs::write(path, serde_json::to_vec_pretty(artifact).unwrap()).unwrap();
 }
 
+// test-category: format-pin
 #[test]
 fn generated_view_keeps_its_bytes() {
+    assert_general_fallback_uses_everyday_cards_in_both_locales();
     let root = std::env::temp_dir().join(format!("butler-briefing-view-{}", uuid::Uuid::new_v4()));
     write(&root, "general.json", &artifact("general", None, true));
     let mut project = artifact("project", Some(("project-1", "Project One")), false);

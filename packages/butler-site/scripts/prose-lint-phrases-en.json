@@ -1,0 +1,101 @@
+{
+  "$comment": "Banned phrases for English docs prose. Single source of truth for scripts/lint-prose-en.ts and skills/butler-docs-writing/references/english.md (a test keeps the two in sync). Patterns are case-insensitive. Each example must trigger its own id and no other phrase.",
+  "phrases": [
+    {
+      "id": "seamless",
+      "pattern": "\\bseamless(?:ly)?\\b",
+      "message": "marketing word 'seamless'; state what happens",
+      "example": "Butler connects seamlessly to the server."
+    },
+    {
+      "id": "robust",
+      "pattern": "\\brobust(?:ly)?\\b",
+      "message": "marketing word 'robust'; state the concrete behavior",
+      "example": "Butler has a robust retry policy."
+    },
+    {
+      "id": "powerful",
+      "pattern": "\\bpowerful\\b",
+      "message": "marketing word 'powerful'; state the concrete capability",
+      "example": "The command palette is a powerful search."
+    },
+    {
+      "id": "leverage",
+      "pattern": "\\bleverag(?:e|es|ed|ing)\\b",
+      "message": "'leverage'; write 'use'",
+      "example": "Leverage skills to add steps."
+    },
+    {
+      "id": "utilize",
+      "pattern": "\\butiliz(?:e|es|ed|ing)\\b",
+      "message": "'utilize'; write 'use'",
+      "example": "Utilize the sidebar to switch."
+    },
+    {
+      "id": "in-order-to",
+      "pattern": "\\bin order to\\b",
+      "message": "'in order to'; write 'to'",
+      "example": "Open Settings in order to add a model."
+    },
+    {
+      "id": "worth-noting",
+      "pattern": "\\bworth noting\\b|\\bimportant to note\\b|\\bit should be noted\\b|\\bplease note\\b",
+      "message": "signpost ('it's worth noting'); state the fact, or use a Notice",
+      "example": "It's worth noting that the key stays on this computer."
+    },
+    {
+      "id": "easily",
+      "pattern": "\\beasily\\b|\\beffortless(?:ly)?\\b|\\bsimply\\b",
+      "message": "empty adverb ('easily', 'simply'); delete it",
+      "example": "You can easily switch models."
+    },
+    {
+      "id": "intensifier",
+      "pattern": "\\bvery\\b|\\breally\\b|\\bextremely\\b|\\bincredibly\\b",
+      "message": "intensifier ('very', 'really'); delete it or give the number",
+      "example": "Search is very fast."
+    },
+    {
+      "id": "various",
+      "pattern": "\\bvarious\\b|\\ba (?:wide )?(?:variety|range) of\\b",
+      "message": "vague 'various'; name the actual items or delete it",
+      "example": "Butler supports various models."
+    },
+    {
+      "id": "hype",
+      "pattern": "\\bcutting-edge\\b|\\bstate-of-the-art\\b|\\bgame-chang\\w+|\\brevolutionary\\b|\\bcomprehensive\\b|\\bstreamlin\\w+|\\bsupercharg\\w+",
+      "message": "hype word; state the concrete behavior",
+      "example": "A comprehensive list of settings follows."
+    },
+    {
+      "id": "delve",
+      "pattern": "\\bdelv(?:e|es|ed|ing)\\b|\\bdeep dive\\b|\\bdive into\\b",
+      "message": "'delve' / 'dive into'; start with the task",
+      "example": "Delve into the settings reference."
+    },
+    {
+      "id": "not-only-but",
+      "pattern": "\\bnot (?:just|only|merely|simply)\\b[^.?!]*\\bbut\\b|\\bisn't (?:just|only)\\b",
+      "message": "'not X but Y' framing; say Y",
+      "example": "Projects are not only folders but also dashboards."
+    },
+    {
+      "id": "meta-intro",
+      "pattern": "\\blet's\\b|\\bwe(?:'ll| will) (?:look|explore|cover|walk|see)\\b|\\bin this (?:guide|article|tutorial)\\b",
+      "message": "meta intro ('in this guide', 'let's'); delete it and start with the task",
+      "example": "In this guide you add a model."
+    },
+    {
+      "id": "summary-closer",
+      "pattern": "\\bin conclusion\\b|\\bin summary\\b|\\bto summarize\\b|\\bto sum up\\b",
+      "message": "essay closer ('in summary'); manuals end on the last step",
+      "example": "In summary, the model is registered."
+    },
+    {
+      "id": "chatbot-residue",
+      "pattern": "\\bhope this helps\\b|\\bfeel free to\\b|\\blet me know\\b|\\bhappy to help\\b|\\bgreat question\\b",
+      "message": "chatbot leftover ('feel free to', 'hope this helps'); delete it",
+      "example": "Feel free to change the name."
+    }
+  ]
+}

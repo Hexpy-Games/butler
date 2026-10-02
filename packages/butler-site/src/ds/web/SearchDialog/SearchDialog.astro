@@ -1,4 +1,6 @@
 ---
+import type { Locale } from "../../../site/sections";
+import { ui } from "../../../site/ui";
 import { Kbd } from "../../components/Kbd";
 import { Search } from "../../components/Icons";
 import styles from "./SearchDialog.module.css";
@@ -6,20 +8,30 @@ import styles from "./SearchDialog.module.css";
 interface Props {
   /** Site base path; the Pagefind bundle lives at <base>pagefind/. */
   base: string;
+  locale: Locale;
 }
 
-const { base } = Astro.props;
+const { base, locale } = Astro.props;
+const copy = ui(locale).search;
 ---
-<dialog aria-label="문서 검색" class={styles.dialog} data-base={base} data-search-dialog>
+<dialog
+  aria-label={copy.label}
+  class={styles.dialog}
+  data-base={base}
+  data-copy-empty={copy.empty}
+  data-copy-loading={copy.loading}
+  data-copy-unavailable={copy.unavailable}
+  data-search-dialog
+>
   <div class={styles.field}>
     <Search />
     <input
       aria-controls="search-results"
-      aria-label="문서 검색"
+      aria-label={copy.label}
       autocomplete="off"
       class={styles.input}
       data-search-input
-      placeholder="문서 검색"
+      placeholder={copy.label}
       spellcheck="false"
       type="search"
     />
@@ -29,9 +41,9 @@ const { base } = Astro.props;
     <ul class={styles.list} data-search-list></ul>
   </div>
   <div class={styles.footer} aria-hidden="true">
-    <span class={styles.hint}><Kbd keys={["↑", "↓"]} size="sm" /> 이동</span>
-    <span class={styles.hint}><Kbd keys={["↵"]} size="sm" /> 열기</span>
-    <span class={styles.hint}><Kbd keys={["esc"]} size="sm" /> 닫기</span>
+    <span class={styles.hint}><Kbd keys={["↑", "↓"]} size="sm" /> {copy.move}</span>
+    <span class={styles.hint}><Kbd keys={["↵"]} size="sm" /> {copy.open}</span>
+    <span class={styles.hint}><Kbd keys={["esc"]} size="sm" /> {copy.close}</span>
   </div>
   <template data-search-item>
     <li>

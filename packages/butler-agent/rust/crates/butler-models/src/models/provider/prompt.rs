@@ -28,7 +28,7 @@ async fn run(
     lifecycle: ProviderPromptLifecycle<'_>,
 ) -> Result<ProviderPromptResult, ModelRoundError> {
     cancelled(&request)?;
-    let effective_model = provider.config.effective_prompt_model(request.model)?;
+    let effective_model = effective_model(provider, request.model).await?;
     if let Some(intent) = lifecycle.invocation_intent {
         intent.invoked().await?;
     }
@@ -274,4 +274,18 @@ fn cancelled(request: &ProviderPromptRequest<'_>) -> Result<(), ModelRoundError>
     } else {
         Ok(())
     }
+}
+
+async fn effective_model(
+    provider: &ModelProvider,
+    requested: Option<&str>,
+) -> Result<String, ModelRoundError> {
+    let config = provider.config.clone();
+    let requested = requested.map(str::to_owned);
+    tokio::task::spawn_blocking(move || config.effective_prompt_model(requested.as_deref()))
+        .await
+        .map_err(|error| ModelRoundError::InvocationFailure {
+            code: Some("model_configuration_read_failed".into()),
+            message: error.to_string(),
+        })?
 }

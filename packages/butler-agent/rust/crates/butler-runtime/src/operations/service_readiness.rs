@@ -15,6 +15,7 @@ pub struct ServiceReadiness {
     pid: u32,
     ready_at: String,
     dispatch_ready: AtomicBool,
+    dispatch_wake: tokio::sync::Notify,
 }
 
 impl ServiceReadiness {
@@ -47,12 +48,27 @@ impl ServiceReadiness {
             pid,
             ready_at: now_iso.into(),
             dispatch_ready: AtomicBool::new(false),
+            dispatch_wake: tokio::sync::Notify::new(),
         })
     }
 
     /// Mark the point when the inbound dispatcher can accept turns.
     pub fn mark_dispatch_ready(&self) {
         self.dispatch_ready.store(true, Ordering::Release);
+        self.dispatch_wake.notify_waiters();
+    }
+
+    /// Await the initial inbound poll without a timer or file reads.
+    pub async fn wait_dispatch_ready(&self) {
+        loop {
+            let ready = self.dispatch_wake.notified();
+            tokio::pin!(ready);
+            ready.as_mut().enable();
+            if self.dispatch_ready() {
+                return;
+            }
+            ready.await;
+        }
     }
 
     pub fn dispatch_ready(&self) -> bool {

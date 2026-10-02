@@ -44,6 +44,10 @@ pub(crate) struct InstanceRecord {
     schema: String,
     pub(crate) nonce: String,
     pub(crate) pid: u32,
+    #[serde(default)]
+    pub(crate) cli_supervisor_pid: Option<u32>,
+    #[serde(default)]
+    pub(crate) version: Option<String>,
     pub(crate) process_start: String,
     pub(crate) executable: String,
     pub(crate) state: String,
@@ -133,9 +137,7 @@ impl InstanceGuard {
                 "native_service_instance_ambiguous: a recorded service process is alive without the DATA lock".into(),
             );
         }
-        let unclean_previous_exit = previous
-            .as_ref()
-            .is_some_and(|previous| !stop_announced_for(data_root, previous.pid, &previous.nonce));
+        let unclean_previous_exit = report_previous_exit(data_root, previous.as_ref());
 
         let executable = executable.canonical().map_err(|source| {
             crate::host::HostError::new("native_service_executable_unavailable").with_source(source)
@@ -152,6 +154,10 @@ impl InstanceGuard {
             schema: INSTANCE_SCHEMA.into(),
             nonce: uuid::Uuid::new_v4().to_string(),
             pid,
+            cli_supervisor_pid: std::env::var("BUTLER_CLI_SUPERVISOR_PID")
+                .ok()
+                .and_then(|pid| pid.parse().ok()),
+            version: Some(super::diagnostics::version(installation)),
             process_start,
             executable: executable.to_string_lossy().into_owned(),
             state: "starting".into(),
@@ -287,21 +293,41 @@ fn release_record_at(
     nonce: &str,
     wait: bool,
 ) {
+    super::shutdown_trace::event(if wait {
+        "instance_release:begin"
+    } else {
+        "deadline_instance_release:begin"
+    });
     let Some(data_root) = record_path.parent().and_then(Path::parent) else {
+        super::shutdown_trace::event("instance_release:invalid_path");
         return;
     };
     if validate_write_destinations(data_root, installation).is_err() {
+        super::shutdown_trace::event("instance_release:invalid_destination");
         return;
     }
     let lock_path = record_update_lock_path(data_root);
     let lock = if wait {
         acquire_record_update_lock(&lock_path).ok()
     } else {
-        open_lock(&lock_path, false)
-            .ok()
-            .and_then(|file| InstanceLock::try_exclusive(file).ok())
+        match record::acquire_record_update_lock_until(
+            &lock_path,
+            std::time::Duration::from_secs(1),
+        ) {
+            Ok(lock) => lock,
+            Err(_) => {
+                super::shutdown_trace::event("instance_release:record_lock_failed");
+                return;
+            }
+        }
     };
     let Some(_record_update_lock) = lock else {
+        if !wait {
+            butler_core::diagnostic!(
+                "[native-butler] record_lock_unavailable: deadline release budget expired"
+            );
+        }
+        super::shutdown_trace::event("instance_release:record_lock_unavailable");
         return;
     };
     if read_record_at(record_path)
@@ -309,7 +335,15 @@ fn release_record_at(
         .flatten()
         .is_some_and(|current| current.nonce == nonce)
     {
-        let _ = fs::remove_file(record_path);
+        match fs::remove_file(record_path) {
+            Ok(()) => super::shutdown_trace::event("instance_release:removed"),
+            Err(error) => super::shutdown_trace::event(&format!(
+                "instance_release:remove_failed:{:?}",
+                error.kind()
+            )),
+        }
+    } else {
+        super::shutdown_trace::event("instance_release:record_missing_changed_or_unreadable");
     }
 }
 
@@ -443,3 +477,16 @@ fn admission_lock_path(data_root: &Path) -> PathBuf {
 
 #[cfg(test)]
 pub(crate) mod tests;
+
+fn report_previous_exit(data_root: &Path, previous: Option<&InstanceRecord>) -> bool {
+    let unclean_previous_exit = previous
+        .is_some_and(|previous| !stop_announced_for(data_root, previous.pid, &previous.nonce));
+    if unclean_previous_exit
+        && let Some(previous) = previous
+        && previous.cli_supervisor_pid.is_none()
+    {
+        super::diagnostics::previous_exit(previous);
+    }
+
+    unclean_previous_exit
+}

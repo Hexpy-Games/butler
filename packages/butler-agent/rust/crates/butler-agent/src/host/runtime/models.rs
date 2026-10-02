@@ -115,10 +115,10 @@ pub(crate) async fn with_moved_credentials(models: ProcessModels) -> ProcessMode
     match models.configuration.migrate_provider_credentials().await {
         Ok(report) => {
             if let Some(line) = report.log_line() {
-                eprintln!("{line}");
+                eprintln!("{}", butler_core::diagnostics::timestamped(&line));
             }
         }
-        Err(error) => eprintln!("[native-credentials] migration failed: {error}"),
+        Err(error) => butler_core::diagnostic!("[native-credentials] migration failed: {error}"),
     }
     models
 }

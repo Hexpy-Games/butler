@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use crate::host::installation::ResolvedInstallation;
 use crate::host::runtime::storage_bootstrap::is_unsupported_legacy_data;
-use butler_models::models::{DEFAULT_MODEL_REF, parse_model_ref};
+use butler_models::models::{default_model_at, parse_model_ref};
 use butler_turn::btcc::BtccError;
 use butler_turn::workspace::StoredSessionBinding;
 use local_credentials::CredentialFiles;
@@ -50,14 +50,9 @@ impl ServiceConfiguration {
                     .with_source(message)
             })?;
         let config = read_butler_config(&data_root);
-        let configured = source_model(&config).unwrap_or("");
-        let provider_model = if butler_core::public_text::trim_js_whitespace(configured).is_empty()
-        {
-            DEFAULT_MODEL_REF
-        } else {
-            configured
-        };
-        let provider_id = parse_model_ref(provider_model).provider_id;
+        let default_binding_model_ref = default_model_at(&data_root)
+            .map_err(|error| BtccError::relayed("default_model_unavailable", error.to_string()))?;
+        let provider_id = parse_model_ref(&default_binding_model_ref).provider_id;
         if !matches!(
             provider_id.as_str(),
             "openai"
@@ -76,12 +71,6 @@ impl ServiceConfiguration {
                 format!("provider_adapter_not_registered:{provider_id}"),
             ));
         }
-        let fallback_model = source_model(&config).unwrap_or("openai/gpt-5.5-codex");
-        let default_binding_model_ref = if fallback_model.contains('/') {
-            fallback_model.to_owned()
-        } else {
-            format!("{provider_id}/{fallback_model}")
-        };
         let projects = config
             .get("projects")
             .and_then(Value::as_array)
@@ -165,11 +154,4 @@ fn read_butler_config(data_root: &Path) -> Value {
         .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
         .unwrap_or_else(|| Value::Object(Default::default()))
-}
-
-fn source_model(config: &Value) -> Option<&str> {
-    ["/system/butlerModel", "/system/defaultModel"]
-        .into_iter()
-        .filter_map(|pointer| config.pointer(pointer).and_then(Value::as_str))
-        .find(|value| !value.is_empty())
 }

@@ -270,7 +270,9 @@ pub(crate) async fn worker_activity(
             .subsession_projection(session.session_hint.clone())
             .await
         else {
-            eprintln!("[gateway] worker activity skipped a session without subsessions");
+            butler_core::diagnostic!(
+                "[gateway] worker activity skipped a session without subsessions"
+            );
             continue;
         };
         append_relation_workers(

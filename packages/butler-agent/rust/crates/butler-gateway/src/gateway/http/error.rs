@@ -47,6 +47,16 @@ impl HttpError {
     pub(super) fn invalid_json() -> Self {
         Self::public(400, "invalid_json", "Request body must be JSON.")
     }
+
+    pub(super) fn status(&self) -> StatusCode {
+        match self {
+            Self::Public { status, .. } => {
+                StatusCode::from_u16(*status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
+            }
+            Self::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
+            Self::Internal => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
 }
 
 impl From<GatewayApplicationError> for HttpError {
@@ -63,12 +73,12 @@ impl From<GatewayApplicationError> for HttpError {
                 message,
             },
             GatewayApplicationError::Internal { source } => {
-                eprintln!("[gateway] internal request failure");
+                butler_core::diagnostic!("[gateway] internal request failure");
                 let mut cause = source
                     .as_deref()
                     .map(|error| error as &dyn std::error::Error);
                 while let Some(error) = cause {
-                    eprintln!("[gateway] caused by: {error}");
+                    butler_core::diagnostic!("[gateway] caused by: {error}");
                     cause = error.source();
                 }
                 Self::Internal

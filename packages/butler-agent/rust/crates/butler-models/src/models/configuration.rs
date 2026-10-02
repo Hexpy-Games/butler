@@ -6,6 +6,7 @@ mod credential_admin;
 mod credential_migration;
 mod credential_vault;
 mod credentials;
+mod defaults;
 mod discovery;
 mod environment;
 mod key_check;
@@ -64,9 +65,7 @@ use butler_core::locale::LocaleCollation;
 
 use credentials::{CREDENTIALS_FILE, CredentialRecord};
 use environment::merge_private_auth_environment;
-use read::{
-    app_default, array, configured_default, first_by_key, read_object, read_object_sync, text,
-};
+use read::{array, configured_default, first_by_key, read_object, read_object_sync, text};
 use secret_store::ProviderSecrets;
 
 pub trait ModelConfigurationClock: Send + Sync {
@@ -131,6 +130,7 @@ pub struct ModelConfigurationRead {
     pub registered: Vec<RegisteredHostedModelConfig>,
     credentials: Vec<CredentialRecord>,
     local_credentials: HashMap<String, String>,
+    default_connection: Option<RegisteredHostedModelConfig>,
 }
 
 pub struct ModelMetadataRead {
@@ -160,7 +160,13 @@ impl ModelConfigurationRead {
 impl ModelConfiguration {
     /// Context and Turn admission need model facts without credential I/O.
     pub async fn read_metadata(&self) -> Result<ModelMetadataRead, ModelCatalogError> {
-        let config = read_object(&self.data_root.join("butler.config.json")).await;
+        let config_path = self.data_root.join("butler.config.json");
+        let credential_path = self.data_root.join(CREDENTIALS_FILE);
+        let (config, credentials) =
+            tokio::join!(read_object(&config_path), read_object(&credential_path));
+        let default = configured_default(&config)
+            .map(str::to_owned)
+            .unwrap_or_else(|| self.catalog.default_preset(&config, &credentials).model);
         let local = self.local_models(&config);
         // Config is read on every request. With no configured local models,
         // the catalog input is exactly the immutable empty-input catalog
@@ -179,7 +185,7 @@ impl ModelConfiguration {
                 extra_models: Vec::new(),
                 registered_models: Vec::new(),
                 credential_views: Vec::new(),
-                default_model_ref: None,
+                default_model_ref: Some(default),
                 generated_at: self.clock.now_iso(),
             },
             &self.collation,
@@ -254,6 +260,16 @@ impl ModelConfiguration {
             &self.registration_catalog,
             self.clock.as_ref(),
         );
+        let default_preset = self.catalog.default_preset(&config, &credential_file);
+        let default_connection = defaults::routine_registration(
+            &default_preset.model,
+            &registered,
+            &credentials,
+            &self.registration_catalog,
+        );
+        let default_model = configured_default(&config)
+            .map(str::to_owned)
+            .unwrap_or(default_preset.model);
         drop(credential_file);
         let credential_views = credentials
             .iter()
@@ -278,7 +294,7 @@ impl ModelConfiguration {
                 extra_models: local_metadata,
                 registered_models: registered_metadata,
                 credential_views,
-                default_model_ref: app_default(&config).map(str::to_owned),
+                default_model_ref: Some(default_model),
                 generated_at: self.clock.now_iso(),
             },
             &self.collation,
@@ -290,6 +306,7 @@ impl ModelConfiguration {
             registered,
             credentials,
             local_credentials,
+            default_connection,
         })
     }
 
@@ -328,7 +345,11 @@ impl ModelConfiguration {
                 extra_models: local_metadata,
                 registered_models: registered_metadata,
                 credential_views: Vec::new(),
-                default_model_ref: app_default(&config).map(str::to_owned),
+                default_model_ref: Some(
+                    configured_default(&config)
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| self.default_model_from(root).model),
+                ),
                 generated_at: self.clock.now_iso(),
             },
             &self.collation,

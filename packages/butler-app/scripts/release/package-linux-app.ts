@@ -12,6 +12,8 @@
  * A prebuilt agent passed in BUTLER_NATIVE_AGENT_EXECUTABLE skips the cargo
  * build (see prepare-native-agent.mjs).
  */
+import { stageElectronPackageSource } from "./electron-package-source.ts";
+import { archPackageVersion, debPackageVersion } from "./package-versions.ts";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
@@ -123,12 +125,13 @@ function packageElectronApp(root: string, workDir: string, platform: LinuxAppPla
   cpSync(rendererDist, rendererDir, { recursive: true });
   const packagerCli = join(root, ELECTRON_ROOT, "node_modules", "@electron", "packager", "bin", "electron-packager.mjs");
   if (!existsSync(packagerCli)) {
-    throw new Error("Electron packager is missing; run npm --prefix packages/butler-app/client/electron ci");
+    throw new Error("Electron packager is missing; run bun install --frozen-lockfile --ignore-scripts");
   }
+  const electronVersion = JSON.parse(readFileSync(join(root, ELECTRON_ROOT, "package.json"), "utf8")).devDependencies.electron;
   const packageOut = join(workDir, "electron");
   run(process.env.BUTLER_NODE || "node", [
-    packagerCli, join(root, ELECTRON_ROOT), "Butler", "--platform=linux", `--arch=${arch}`, "--overwrite",
-    `--out=${packageOut}`, `--icon=${join(root, ELECTRON_ROOT, "assets", "icon.png")}`,
+    packagerCli, stageElectronPackageSource(root, join(workDir, "electron-source")), "Butler", "--platform=linux", `--arch=${arch}`, "--overwrite",
+    `--out=${packageOut}`, `--electron-version=${electronVersion}`, `--icon=${join(root, ELECTRON_ROOT, "assets", "icon.png")}`,
     `--extra-resource=${agentDir}`, `--extra-resource=${rendererDir}`,
     "--ignore=^/(dist|.native-agent-payload)($|/)", "--quiet",
   ], { cwd: root });
@@ -137,6 +140,8 @@ function packageElectronApp(root: string, workDir: string, platform: LinuxAppPla
   if (!existsSync(join(packagedDir, "Butler")) || !existsSync(agentBinary)) {
     throw new Error(`electron package is incomplete: ${packagedDir}`);
   }
+  run(process.env.BUTLER_NODE || "node", [join(root, ELECTRON_ROOT, "scripts", "prepare-process-links.mjs"), agentBinary], { cwd: root });
+  run(process.env.BUTLER_NODE || "node", [join(root, "deploy/licenses/package-app.mjs"), packagedDir], { cwd: root });
   return { root, platform, version: versions.app, packagedDir, agentBinary, appBinary: join(packagedDir, "Butler"), epoch };
 }
 
@@ -147,6 +152,10 @@ function stagePackageRoot(staged: StagedApp, packageRoot: string, format: LinuxP
   mkdirSync(join(target, ".."), { recursive: true });
   cpSync(staged.packagedDir, target, { recursive: true, dereference: false });
   normalizeModes(target);
+  run(process.env.BUTLER_NODE || "node", [
+    join(staged.root, ELECTRON_ROOT, "scripts", "prepare-process-links.mjs"),
+    join(target, "resources", "bundled-agent", "bin", "butler-agent"),
+  ], { cwd: staged.root });
   // Electron's sandbox helper must be setuid root; both formats install as root.
   chmodSync(join(target, "chrome-sandbox"), 0o4755);
   const binDir = join(packageRoot, "usr", "bin");
@@ -190,7 +199,7 @@ function createPacman(staged: StagedApp, workDir: string, artifactPath: string):
     cwd: buildDir,
     env: { ...process.env, PKGEXT: ".pkg.tar.zst", PKGDEST: buildDir },
   });
-  const built = join(buildDir, `${PACKAGE_NAME}-${staged.version}-1-x86_64.pkg.tar.zst`);
+  const built = join(buildDir, `${PACKAGE_NAME}-${archPackageVersion(staged.version)}-1-x86_64.pkg.tar.zst`);
   if (!existsSync(built)) throw new Error(`pacman package was not created: ${built}`);
   copyFileSync(built, artifactPath);
 }
@@ -236,7 +245,7 @@ function compareVersions(left: number[], right: number[]): number {
 
 function debControl(staged: StagedApp): string {
   return `Package: ${PACKAGE_NAME}
-Version: ${staged.version}
+Version: ${debPackageVersion(staged.version)}
 Section: utils
 Priority: optional
 Architecture: ${DEB_ARCHITECTURES[staged.platform]}
@@ -251,7 +260,7 @@ Description: Butler desktop app
 
 function pkgbuild(staged: StagedApp, installDir: string): string {
   return `pkgname=${PACKAGE_NAME}
-pkgver=${staged.version}
+pkgver=${archPackageVersion(staged.version)}
 pkgrel=1
 pkgdesc='Butler desktop app with the bundled native Butler Agent'
 arch=('x86_64')

@@ -328,7 +328,7 @@ impl GatewayApplication for AppApplication {
         &self,
         input: AppAuthorityDecisionInput,
     ) -> ApplicationFuture<AppAuthorityDecision> {
-        self.dependencies.authority_handoff.decide(input)
+        self.authority_decide_future(input)
     }
     fn refresh_message_projection(&self, chat_id: String) -> ApplicationFuture<()> {
         let owner = self.projection.clone();

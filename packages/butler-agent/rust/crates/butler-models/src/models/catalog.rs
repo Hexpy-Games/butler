@@ -1,3 +1,4 @@
+mod defaults;
 mod facts;
 mod generation;
 mod local;
@@ -6,6 +7,7 @@ mod presets;
 mod pricing;
 mod registered;
 mod static_data;
+mod wire_policy;
 
 use std::sync::Arc;
 
@@ -16,6 +18,9 @@ use butler_core::locale::LocaleCollation;
 
 use super::{ModelCatalogError, tokenizer::TokenizerOwner};
 
+pub use defaults::{
+    DEFAULT_PROVIDER, LEGACY_DEFAULT_MODEL, configured_default_model, default_model_at,
+};
 pub use facts::{ImageLimitField, ImageLimitSources, ModelTier};
 pub use local::{
     LocalModelConfig, LocalModelPlatform, LocalModelSource, normalize_local_model_config,
@@ -31,6 +36,7 @@ pub use registered::{
 };
 pub(super) use registered::{hosted_provider, safe_label as normalize_display_label};
 pub(super) use static_data::StaticCatalog;
+pub use wire_policy::*;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -330,7 +336,12 @@ impl ModelCatalogSnapshot {
         lookup::find_model_metadata(model_ref, &self.static_catalog.models)
     }
     pub fn resolve_model_metadata(&self, model_ref: Option<&str>) -> ModelProviderMetadata {
-        lookup::resolve_model_metadata(model_ref, &self.lookup_models)
+        lookup::resolve_model_metadata(
+            model_ref
+                .filter(|value| !value.trim().is_empty())
+                .or(Some(&self.view.default_model_ref)),
+            &self.lookup_models,
+        )
     }
     /// The provider's static routine preset (`presets.routine`).
     pub fn routine_preset(&self, provider_id: &str) -> Option<ModelPreset> {

@@ -9,7 +9,10 @@ mod contracts;
 mod errors;
 mod event_outbox;
 mod events;
+use crate::gateway::shutdown_trace::measure as measure_shutdown;
+
 use errors::app_error;
+mod devices;
 #[cfg(debug_assertions)]
 mod faults;
 mod gateway_dashboard_impl;
@@ -33,6 +36,7 @@ mod progress_view;
 mod project_sources;
 mod projection;
 mod projects;
+mod question_followup;
 mod queue;
 mod queue_dispatcher;
 mod queue_view;
@@ -52,7 +56,8 @@ mod session_views;
 mod sessions;
 mod settings;
 mod setup;
-pub use settings::diagnostics_enabled_readonly;
+mod turn_dispatch;
+pub use settings::{diagnostics_enabled_readonly, stored_ui_language_readonly};
 mod shell;
 mod space;
 mod storage;
@@ -137,9 +142,10 @@ pub use sessions::{
 pub(crate) use setup::test_setup_port;
 pub use setup::{
     AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
-    LocalModelServersView, OauthFlowStatus, OauthFlowView, ProviderKeyVerificationView,
-    ReplacedCredentialView, SETUP_READINESS_EVENT, SavedCredentialView, SetupReadinessStatus,
-    SetupReadinessStep, SetupReadinessView, SetupStepError, SetupStepStatus,
+    LocalModelServersView, MemoryModelProgress, OauthFlowStatus, OauthFlowView,
+    ProviderKeyVerificationView, ReplacedCredentialView, SETUP_READINESS_EVENT,
+    SavedCredentialView, SetupReadinessStatus, SetupReadinessStep, SetupReadinessView,
+    SetupStepError, SetupStepStatus,
 };
 pub use space::{AppSpaceCommand, AppSpaceMutationResult, AppSpaceOrigin};
 use storage::{AppStorage, AppStorageError, CachedSql};
@@ -224,7 +230,8 @@ impl AppApplication {
         let dependencies = Arc::new(dependencies);
         let subscribers = EventSubscribers::default();
         let retention_cursor = latest_event_cursor(&storage).await?;
-        let (queue_dispatcher, queue_wake) = queue_dispatcher::QueueDispatcher::start();
+        let (queue_dispatcher, queue_wake) =
+            queue_dispatcher::QueueDispatcher::start(dependencies.service_shutdown.child_token());
         let (automation_wake, automation_queued) = automations::signals();
         let automation_scheduler = automations::AutomationScheduler::start(automation_wake.clone());
         let automation_runs = automations::AutomationRunOwner::start();
@@ -313,7 +320,12 @@ impl AppApplication {
         self.recover_turn_cancellations().await?;
         self.watch_wallpaper_modules().await;
         // Failed authority retries remain durable for the next startup.
-        let _ = self.dependencies.authority_handoff.retry_decided().await;
+        if let Ok(followups) = self.dependencies.authority_handoff.retry_decided().await {
+            for (owner, request_ref, input) in followups {
+                let session = owner.strip_prefix("butler/app-").unwrap_or(&owner);
+                let _ = question_followup::send(self, session, &request_ref, &input).await;
+            }
+        }
         self.setup_readiness.start(
             self.dependencies.setup.readiness(),
             self.storage.clone(),
@@ -350,21 +362,31 @@ impl AppApplication {
 
     pub async fn close(&self) -> Result<(), GatewayApplicationError> {
         self.cancel_updates();
-        self.project_dashboard_briefing.close().await;
-        let dispatch = self.stop_dispatch().await;
-        self.transcript_exports.close().await;
-        self.queue_mutations.close().await;
-        self.session_creation.close().await;
-        self.project_creation.close().await;
-        self.session_branches.close().await;
-        self.space_mutations.close().await;
-        self.wallpapers.close().await;
-        let projection = self.projection.close().await;
+        measure_shutdown(
+            "app_project_dashboard_briefing_join",
+            self.project_dashboard_briefing.close(),
+        )
+        .await;
+        let dispatch = measure_shutdown("app_dispatcher", self.stop_dispatch()).await;
+        measure_shutdown(
+            "app_transcript_exports_join",
+            self.transcript_exports.close(),
+        )
+        .await;
+        measure_shutdown("app_queue_mutations_join", self.queue_mutations.close()).await;
+        measure_shutdown("app_session_creation_join", self.session_creation.close()).await;
+        measure_shutdown("app_project_creation_join", self.project_creation.close()).await;
+        measure_shutdown("app_session_branches_join", self.session_branches.close()).await;
+        measure_shutdown("app_space_mutations_join", self.space_mutations.close()).await;
+        measure_shutdown("app_wallpapers_join", self.wallpapers.close()).await;
+        let projection = measure_shutdown("app_projection_join", self.projection.close()).await;
         let retention = match &self.retention {
-            Some(retention) => retention.close().await,
+            Some(retention) => measure_shutdown("app_retention_join", retention.close()).await,
             None => Ok(()),
         };
-        let storage = self.storage.close().await.map_err(app_error);
+        let storage = measure_shutdown("app_storage_join", self.storage.close())
+            .await
+            .map_err(app_error);
         dispatch.and(projection).and(retention).and(storage)
     }
 

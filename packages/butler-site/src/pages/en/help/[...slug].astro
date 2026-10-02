@@ -1,0 +1,11 @@
+---
+import { publishedEntries } from "../../../site/docs";
+import ManualPage from "../../../site/ManualPage.astro";
+import { docSlug } from "../../../site/nav";
+
+export async function getStaticPaths() {
+  const entries = await publishedEntries("en");
+  return entries.map((entry) => ({ params: { slug: docSlug(entry.id) }, props: { entry } }));
+}
+---
+<ManualPage entry={Astro.props.entry} locale="en" />

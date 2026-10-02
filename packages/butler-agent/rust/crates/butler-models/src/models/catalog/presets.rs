@@ -12,7 +12,7 @@ use super::{ModelTier, ReasoningEffort, parse_model_ref};
 /// A default model choice: a catalog model ref and the effort to run it at.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ModelPreset {
-    /// Namespaced model ref, e.g. `openai/gpt-6-sol`.
+    /// Namespaced model ref, e.g. `openai/gpt-6.1-sol`.
     pub model: String,
     /// Reasoning effort the preset runs at.
     pub effort: ReasoningEffort,

@@ -11,6 +11,7 @@ on:
     paths:
       - ".github/workflows/install-smoke.yml"
       - ".github/workflows/release.yml"
+      - ".github/workflows/npm-publish.yml"
       - ".github/workflows/linux-packages.yml"
       - "packages/butler-app/scripts/release/**"
       - ".github/actions/build-agent-archive/**"
@@ -39,6 +40,14 @@ jobs:
       - name: Lint the shell scripts
         run: shellcheck -s sh deploy/install.sh deploy/install-smoke.sh
 
+      - name: Test and lint npm publish decisions
+        run: |
+          HOME="$(mktemp -d)"
+          BUTLER_DATA="$(mktemp -d)"
+          export HOME BUTLER_DATA
+          shellcheck deploy/npm/*.sh
+          bash deploy/npm/publish.test.sh
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -52,7 +61,7 @@ jobs:
           npm publish --dry-run --access public
           files="$(tar -tzf "$RUNNER_TEMP"/hexpygames-butler-*.tgz | LC_ALL=C sort)"
           echo "$files"
-          test "$files" = "$(printf '%s\n' package/README.md package/bin/butler-install.js package/install.sh package/package.json | LC_ALL=C sort)"
+          test "$files" = "$(printf '%s\n' package/README.md package/THIRD_PARTY_NOTICES.txt package/THIRD_PARTY_NOTICES.txt.gz package/bin/butler-install.js package/install.sh package/package.json | LC_ALL=C sort)"
 
       - name: Keep the tarball for the smoke
         uses: actions/upload-artifact@v4

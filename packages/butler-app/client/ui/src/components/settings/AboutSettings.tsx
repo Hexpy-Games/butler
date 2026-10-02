@@ -7,9 +7,10 @@ import { useButlerStore } from "@/app/store.ts";
 import type { AppInfoView, SettingsView } from "@/app/types.ts";
 import { KeyValueRow, SettingsField, Switch, Typo } from "@/butler-ds";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
+import { OpenSourceLicenses } from "./OpenSourceLicenses";
 
 export function AboutSettings() {
-  useAppLocale();
+  const locale = useAppLocale();
   const [info, setInfo] = useState<AppInfoView | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -98,6 +99,9 @@ export function AboutSettings() {
         />
         <KeyValueRow data-setting-id="app-protocol" data-test-class="about-app-protocol" label={fields.appProtocol}
           value={info?.protocol_version ?? "-"} />
+      </SettingsSection>
+      <SettingsSection id="open-source" kind="info" title={locale === "ko-KR" ? "라이선스" : "Licenses"}>
+        <OpenSourceLicenses />
       </SettingsSection>
       <SettingsSection id="developer" kind="form" title={sections.developer}>
         <SettingsField

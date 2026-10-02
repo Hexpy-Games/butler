@@ -8,25 +8,28 @@ use super::super::ResolvedInstallation;
 use butler_models::models;
 use butler_models::models::McpModelTarget;
 
-pub(super) fn list() -> CallToolResult {
-    let lines = [
-        "Available models:",
-        "",
-        "Aliases:",
-        "  gpt-6-astra",
-        "  gpt-5.6-sol",
-        "  gpt-5.6-terra",
-        "  gpt-5.6-luna",
-        "  gpt-5.5-codex",
-        "  gpt-5.5",
-        "  gpt-5.4",
-        "  gpt-5.4-mini",
-        "  auto:codex-latest",
-        "",
-        "Legacy (full IDs):",
-    ]
-    .join("\n");
-    success(lines)
+pub(super) async fn list(data_root: &Path) -> CallToolResult {
+    let status = match models::open_status_models(data_root.to_path_buf()).await {
+        Ok(status) => status,
+        Err(error) => return tool_error(error.to_string()),
+    };
+    match status.configuration.read().await {
+        Ok(read) => success(format!(
+            "Available models:\n{}\nauto:codex-latest",
+            read.catalog
+                .view()
+                .models
+                .iter()
+                .chain(read.catalog.view().registered_models.iter())
+                .filter(|model| model.runtime_supported && model.enabled != Some(false))
+                .map(|model| model.model_ref.as_str())
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .collect::<Vec<_>>()
+                .join("\n")
+        )),
+        Err(error) => tool_error(error.to_string()),
+    }
 }
 
 pub(super) async fn details_or_set(

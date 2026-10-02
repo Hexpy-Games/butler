@@ -54,7 +54,7 @@ function Focus({ context, tone }: { context: ShowcaseRenderContext; tone: "light
   const copy = focusLabels[context.locale];
   return (
     <SetupWizardShell embedded title="Butler" tone={tone} variant="focus">
-      <SetupWizardContent>
+      <SetupWizardContent surface="solid">
         <Typo.H3 as="h1" align="center">{copy.title}</Typo.H3>
         <Typo.Body align="center">{copy.body}</Typo.Body>
         <Button size="lg" stretch>{copy.agree}</Button>

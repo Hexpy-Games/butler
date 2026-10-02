@@ -135,7 +135,7 @@ pub(super) fn project_suspended(
     let authority_pending =
         metadata.get("suspension").and_then(Value::as_str) == Some("authority_pending");
     let (state, label, cancellable) = if authority_pending {
-        ("waiting_for_form", "Waiting for approval", 1)
+        ("waiting_for_form", "Waiting for your response", 1)
     } else {
         ("delivered", "", 0)
     };

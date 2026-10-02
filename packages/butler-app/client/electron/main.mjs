@@ -12,6 +12,7 @@ import {
   protocol,
   shell,
 } from "electron";
+import { prepareAppPackageUpdate } from "./app-package-update.mjs";
 import { getDesktopCopy } from "./i18n/desktop-copy.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import { createHmac, randomUUID } from "node:crypto";
@@ -1075,7 +1076,10 @@ function prepareAppRendererProtocol() {
   if (!appRendererProtocolReady) {
     protocol.handle(
       APP_RENDERER_SCHEME,
-      createAppRendererProtocolHandler({ distRoot: staticRendererDistRoot }),
+      createAppRendererProtocolHandler({
+        distRoot: staticRendererDistRoot,
+        noticesFile: app.isPackaged ? join(process.resourcesPath, "bundled-agent/resources/app-client/dist/THIRD_PARTY_NOTICES.txt.gz") : null,
+      }),
     );
     appRendererProtocolReady = migrateRendererStorageToAppOrigin();
   }
@@ -1140,7 +1144,7 @@ function appInfoView() {
   const pkg = readPackageJson(packagePath);
   return {
     name: safeString(pkg.productName) || appDisplayName,
-    version: safeString(pkg.version) || "0.0.0",
+    version: app.isPackaged ? safeString(pkg.version) || "0.1.0-dev" : `${safeString(pkg.version)?.split("-")[0] || "0.1.0"}-dev`,
     repository_url: appRepositoryUrl,
     protocol_version: appProtocolVersion,
     developer_mode_available: true,
@@ -1166,7 +1170,6 @@ async function readSetupSettings() {
 }
 
 function configureAppIdentity() {
-  const pkg = readPackageJson(packagePath);
   app.setName(appDisplayName);
   if (isWindows) {
     app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);
@@ -1174,7 +1177,7 @@ function configureAppIdentity() {
   }
   app.setAboutPanelOptions({
     applicationName: appDisplayName,
-    applicationVersion: safeString(pkg.version) || "0.0.0",
+    applicationVersion: appInfoView().version,
   });
 }
 
@@ -2354,6 +2357,7 @@ async function runAppUpdateQuit(quitAndInstall) {
           raw_text_included: false,
         };
       }
+      isQuitting = true;
       finalQuitAllowed = true;
       return stopResult;
     },
@@ -2576,9 +2580,22 @@ ipcMain.handle("butler:open-update-artifact", async (_event, input = {}) => {
       },
     };
   }
-  const error = await shell.openPath(artifactPath);
-  if (error) throw new Error(error);
-  return { opened: true };
+  const helper = await prepareAppPackageUpdate({ artifactPath, dataRoot: butlerDataRoot,
+    installation: currentNativeAgentInstallation(), executable: process.execPath, parent: process.pid,
+    externalServerUrl: explicitServerUrl, arguments: process.argv.slice(1) });
+  let update;
+  try {
+    update = await runAppUpdateQuit(() => {
+      helper.activate();
+      finalQuitAllowed = true;
+      app.quit();
+    });
+  } catch (error) {
+    helper.cancel();
+    throw error;
+  }
+  if (!update.update_started) helper.cancel();
+  return { opened: update.update_started, update };
 });
 
 function safeUpdateArtifactPath(value) {

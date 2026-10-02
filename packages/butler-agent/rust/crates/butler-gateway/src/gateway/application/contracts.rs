@@ -60,6 +60,10 @@ pub trait AppNativeAssetResolver: Send + Sync + 'static {
     fn resolve(&self, snapshot: ClaimedNativeSnapshot) -> ApplicationFuture<ResolvedNativeAssets>;
 }
 pub trait AppExecutorReadiness: Send + Sync + 'static {
+    /// Resolves when native dispatch is initialized, without polling.
+    fn wait_ready(&self) -> ApplicationFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
     fn readiness(&self) -> Result<RuntimeReadinessView, GatewayApplicationError>;
 }
 pub trait AppAdmissionAuthority: Send + Sync + 'static {
@@ -152,6 +156,7 @@ pub struct AppAuthorityDecision {
     pub request_ref: String,
     pub decision: String,
     pub admitted: bool,
+    pub question_followup: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -164,10 +169,16 @@ pub struct AppAuthorityDecisionInput {
 }
 
 pub trait AppAuthorityHandoff: Send + Sync + 'static {
+    fn session_requests(
+        &self,
+        owner_session_id: String,
+        turns: Vec<String>,
+    ) -> ApplicationFuture<(Vec<Value>, Vec<Value>)>;
     fn list(&self, owner_session_id: String) -> ApplicationFuture<AppAuthorityPage>;
     fn revoke(&self, owner_session_id: String, grant_ref: String) -> ApplicationFuture<()>;
     fn decide(&self, input: AppAuthorityDecisionInput) -> ApplicationFuture<AppAuthorityDecision>;
-    fn retry_decided(&self) -> ApplicationFuture<()>;
+    fn retry_decided(&self) -> ApplicationFuture<Vec<(String, String, String)>>;
+    fn settle_question_followup(&self, request_ref: String) -> ApplicationFuture<()>;
     fn close_self_session(
         &self,
         runtime_session_id: String,
@@ -246,6 +257,8 @@ pub struct VisualAdmissionRequest {
     pub files: Vec<AppMessageFileSnapshot>,
 }
 pub struct AppApplicationDependencies {
+    /// Process stop fences queue admission before active turns are interrupted.
+    pub service_shutdown: tokio_util::sync::CancellationToken,
     pub updates: Arc<butler_runtime::operations::AppUpdateService>,
     pub skills: Arc<butler_runtime::skills::Skills>,
     pub mcp_client: Arc<butler_models::mcp_client::McpClient>,

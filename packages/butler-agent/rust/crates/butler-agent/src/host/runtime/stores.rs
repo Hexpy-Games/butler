@@ -134,11 +134,12 @@ async fn open_btcc(
     stop: &tokio_util::sync::CancellationToken,
 ) -> Result<BtccStorage, BtccError> {
     let root = data_root.to_owned();
-    let bootstrap =
-        tokio::task::spawn_blocking(move || prepare_btcc_storage(&root, env!("CARGO_PKG_VERSION")))
-            .await
-            .map_err(|e| error("storage_bootstrap_worker_failed", e))?
-            .map_err(|e| error("storage_bootstrap_failed", e))?;
+    let bootstrap = tokio::task::spawn_blocking(move || {
+        prepare_btcc_storage(&root, env!("BUTLER_RELEASE_VERSION"))
+    })
+    .await
+    .map_err(|e| error("storage_bootstrap_worker_failed", e))?
+    .map_err(|e| error("storage_bootstrap_failed", e))?;
     check_startup(stop)?;
     let host_id = SystemIdentity
         .hostname()

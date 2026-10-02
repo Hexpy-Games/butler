@@ -54,7 +54,7 @@ gateway or Electron runtime.
 ## macOS Release Signing And Notarization
 
 `.github/workflows/release.yml` (`v*` tags) signs and notarizes the macOS
-artifacts with the Hexpy Games Developer ID. All logic lives in
+artifacts with the configured Developer ID for stable tags. All logic lives in
 `deploy/macos/sign-and-notarize.sh`; PR CI and local builds stay ad-hoc signed
 because every command is a logged no-op without `BUTLER_SIGN_IDENTITY`.
 
@@ -76,8 +76,27 @@ frameworks/helpers deepest first, then `Butler.app`, no `--deep`) with the
 hardened runtime and a secure timestamp, the App is notarized and stapled, then
 the DMG is signed, notarized and stapled; `cleanup` (`if: always()`) deletes the
 keychain and key. The GitHub Release is created as a draft and published only
-after the App is notarized and smoked. A bare CLI binary cannot be stapled, so
+after the App passes its signing policy and smoke checks. A bare CLI binary cannot be stapled, so
 the Agent is gated on `codesign --check-notarization` (online ticket). Missing or partial secrets fail the release.
+
+Owner decision (2026-10-01): tags matching `vX.Y.Z-preview.*` are unofficial
+previews. Certificate setup runs independently of the notary credentials. If it
+fails, setup removes partial credentials and selects `codesign -s -`. Previews
+never validate or use the notary API key, submit to notarization, staple, or
+require Gatekeeper's notarized verdict. Signature validity, payload closure,
+smoke tests, SHA-256 sidecars and all 18 consolidated checksum entries remain
+required. Stable tags retain mandatory Developer ID signing and notarization;
+certificate, notary or staple failures stop publication.
+
+The macOS App updater uses the runtime's `operations/update.rs` and
+`operations/update/manifest.rs`: its default URL is GitHub `/releases/latest`,
+which excludes prereleases. An explicitly supplied preview manifest can be
+staged after SHA-256 verification; `signing.notarized` is release metadata, not
+an updater acceptance condition. App activation remains manual
+(`user-installs-app-package`), so macOS may require right-click → Open or
+Privacy & Security → Open Anyway. The zip contains the same signed App as the
+DMG. The Agent updater likewise checks archive integrity, not notarization.
+CLI installs via curl or npx do not use the App's Gatekeeper open flow.
 
 Entitlements (`deploy/macos/electron.entitlements.plist`) apply only to
 `Butler.app` and the Electron helper apps: `allow-jit` (V8
@@ -85,7 +104,7 @@ MAP_JIT). The Agent, dylibs and the menu bar helper
 get none.
 
 Manifests record `signing: { teamId, notarized }` per artifact (`null` for
-ad-hoc builds). `integrity.signature` stays reserved for a detached signature.
+local ad-hoc builds; an empty `teamId` and `notarized: false` for ad-hoc previews). `integrity.signature` stays reserved for a detached signature.
 `release:app:smoke` and `release:agent:smoke` re-check Team ID, hardened
 runtime, timestamp, staple and `spctl` when signing is on.
 `.github/workflows/macos-signing.yml` runs shellcheck and an ad-hoc self-test

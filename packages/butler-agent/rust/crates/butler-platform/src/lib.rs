@@ -45,6 +45,7 @@
 // Every public item says what it is for.
 #![deny(missing_docs)]
 
+pub mod app_update;
 pub mod command_launcher;
 pub mod command_sandbox;
 pub mod cpu;
@@ -54,6 +55,7 @@ pub mod instance;
 pub mod launcher;
 pub mod network;
 pub mod process_control;
+pub mod process_names;
 pub mod secrets;
 pub mod secure_fs;
 pub mod service_registration;

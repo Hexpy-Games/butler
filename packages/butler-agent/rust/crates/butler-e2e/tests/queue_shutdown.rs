@@ -74,7 +74,14 @@ async fn q_02_shutdown_interrupts_active_turn_and_resumes_queue() -> Result<(), 
     assert_eq!(queued.status, 202, "{}", queued.text);
     assert!(!TERMINAL.contains(&turn_state(&s.gw.turn("general", &running).await?.unwrap())));
     let started = Instant::now();
+    // Hold the next process's first inbound poll: FIFO recovery must wait for
+    // executor readiness rather than claiming and permanently failing input.
+    s.agent.launch.set_env("BUTLER_E2E_TIER", "stub");
+    s.agent
+        .launch
+        .set_env("BUTLER_E2E_HOLD_DISPATCH_READY", "1");
     s.restart().await?;
+    assert_pending_before_readiness(&s).await?;
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         let view = s.gw.get("/session-queue?chat_id=general").await?;
@@ -129,4 +136,31 @@ async fn q_02_shutdown_interrupts_active_turn_and_resumes_queue() -> Result<(), 
     assert!(!s.agent.logs().contains("app_sqlite_owner_closed"));
     eprintln!("active shutdown and queue drain: {:?}", started.elapsed());
     s.finish().await
+}
+
+async fn assert_pending_before_readiness(s: &Scenario) -> Result<(), HarnessError> {
+    let held = s.sandbox.data.join("e2e-dispatch-ready-held");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !held.exists() {
+        assert!(
+            Instant::now() < deadline,
+            "initial dispatch never reached barrier"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let view = s.gw.get("/session-queue?chat_id=general").await?;
+    let items = view.data()["queued_messages"].as_array().unwrap();
+    assert_eq!(items.len(), 2, "{}", view.text);
+    assert_eq!(items[0]["safe_error_code"], "turn_interrupted");
+    assert_eq!(items[1]["state"], "queued", "{}", view.text);
+    assert!(items[1]["turn_id"].is_null(), "{}", view.text);
+    assert!(items[1]["safe_error_code"].is_null(), "{}", view.text);
+    assert_eq!(view.data()["paused"], false);
+    assert_eq!(s.provider()?.served(), 1);
+    tokio::fs::write(
+        s.sandbox.data.join("e2e-dispatch-ready-release"),
+        b"release",
+    )
+    .await?;
+    Ok(())
 }

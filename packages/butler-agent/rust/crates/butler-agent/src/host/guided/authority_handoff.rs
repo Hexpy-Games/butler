@@ -87,6 +87,21 @@ impl AuthorityHandoff {
 }
 
 impl AppAuthorityHandoff for AuthorityHandoff {
+    fn session_requests(
+        &self,
+        owner_session_id: String,
+        turns: Vec<String>,
+    ) -> ApplicationFuture<(Vec<serde_json::Value>, Vec<serde_json::Value>)> {
+        let authority = self.authority.clone();
+        Box::pin(async move {
+            let (requests, answers) = authority
+                .session_requests(owner_session_id, turns)
+                .await
+                .map_err(authority_error)?;
+            Ok((public_values(requests)?, public_values(answers)?))
+        })
+    }
+
     fn close_self_session(
         &self,
         runtime_session_id: String,
@@ -158,29 +173,56 @@ impl AppAuthorityHandoff for AuthorityHandoff {
                 })
                 .await
                 .map_err(authority_error)?;
-            owner.enqueue(&decision.request_ref).await?;
+            if decision.question_followup.is_none() {
+                owner.enqueue(&decision.request_ref).await?;
+            }
             Ok(AppAuthorityDecision {
                 request_ref: decision.request_ref,
                 decision: decision.decision.as_str().into(),
                 admitted: true,
+                question_followup: decision.question_followup,
             })
         })
     }
 
-    fn retry_decided(&self) -> ApplicationFuture<()> {
+    fn retry_decided(&self) -> ApplicationFuture<Vec<(String, String, String)>> {
         let owner = self.clone();
         Box::pin(async move {
+            let mut followups = Vec::new();
             for decision in owner
                 .authority
                 .list_decided()
                 .await
                 .map_err(authority_error)?
             {
-                owner.enqueue(&decision.request_ref).await?;
+                if let Some(input) = decision.question_followup {
+                    followups.push((decision.owner_session_id, decision.request_ref, input));
+                } else {
+                    owner.enqueue(&decision.request_ref).await?;
+                }
             }
-            Ok(())
+            Ok(followups)
         })
     }
+    fn settle_question_followup(&self, request_ref: String) -> ApplicationFuture<()> {
+        let authority = self.authority.clone();
+        Box::pin(async move {
+            authority
+                .settle_question_followup(request_ref)
+                .await
+                .map_err(authority_error)
+        })
+    }
+}
+
+fn public_values<T: serde::Serialize>(
+    values: Vec<T>,
+) -> Result<Vec<serde_json::Value>, GatewayApplicationError> {
+    values
+        .into_iter()
+        .map(serde_json::to_value)
+        .collect::<Result<_, _>>()
+        .map_err(GatewayApplicationError::internal_from)
 }
 
 #[expect(
@@ -192,6 +234,11 @@ fn authority_error(error: AuthorityError) -> GatewayApplicationError {
         "authority_modify_input_missing" | "authority_modify_input_too_large" => {
             (400, error.code(), "Modify instruction is invalid.")
         }
+        "question_answer_invalid" => (
+            400,
+            "question_answer_invalid",
+            "Choose an answer and try again.",
+        ),
         "authority_modify_identity_mismatch" => (
             409,
             error.code(),

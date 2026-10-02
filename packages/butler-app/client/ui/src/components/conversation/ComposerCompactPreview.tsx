@@ -2,6 +2,7 @@ import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { ComposerCardCompactPreview } from "@/butler-ds";
 import { useComposerStore } from "./composerStore";
+import { focusComposer } from "./editor/focusComposer";
 
 export function ComposerCompactPreview() {
   useAppLocale();
@@ -16,7 +17,7 @@ export function ComposerCompactPreview() {
   const engage = () => {
     setEngaged(true);
     window.requestAnimationFrame(() => {
-      textAreaRef?.current?.focus({ preventScroll: true });
+      focusComposer(textAreaRef?.current, "restore");
     });
   };
 

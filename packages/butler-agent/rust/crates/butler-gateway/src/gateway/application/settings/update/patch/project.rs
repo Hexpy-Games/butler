@@ -14,32 +14,11 @@ pub(super) fn project(
 ) -> Value {
     let mut output = current.as_object().cloned().unwrap_or_default();
     let patch = patch.as_object().cloned().unwrap_or_default();
-    for key in [
-        "server_url",
-        "language",
-        "timezone",
-        "access_mode",
-        "plan_mode_default",
-        "follow_up_behavior",
-        "multiline_send_behavior",
-        "appearance_theme",
-        "main_screen_theme",
-        "main_screen_theme_preset",
-        "main_screen_theme_custom_colors",
-        "translucent_sidebar",
-        "smart_grouping_enabled",
-        "diagnostics_enabled",
-        "desktop_tray_enabled",
-        "max_simultaneous_workers",
-    ] {
-        if let Some(value) = patch.get(key) {
-            output.insert(key.into(), value.clone());
-        }
-    }
+    project_simple_fields(&mut output, &patch);
     let previous_model = current
         .get("model")
         .and_then(Value::as_str)
-        .unwrap_or("openai/gpt-5.5");
+        .unwrap_or(default_model(facts));
     let requested_model = patch
         .get("model")
         .and_then(Value::as_str)
@@ -94,7 +73,7 @@ pub(super) fn project(
     worker_profiles::canonicalize(
         &mut stored,
         facts,
-        output["model"].as_str().unwrap_or("openai/gpt-5.5"),
+        output["model"].as_str().unwrap_or(previous_model),
         output["reasoning_effort"]
             .as_str()
             .and_then(reasoning)
@@ -250,4 +229,39 @@ fn workspace_label(path: &Path) -> String {
         .filter(|value| !value.is_empty())
         .unwrap_or("Project")
         .to_owned()
+}
+
+fn project_simple_fields(
+    output: &mut serde_json::Map<String, Value>,
+    patch: &serde_json::Map<String, Value>,
+) {
+    for key in [
+        "update_previews",
+        "server_url",
+        "language",
+        "timezone",
+        "access_mode",
+        "plan_mode_default",
+        "follow_up_behavior",
+        "multiline_send_behavior",
+        "appearance_theme",
+        "main_screen_theme",
+        "main_screen_theme_preset",
+        "main_screen_theme_custom_colors",
+        "translucent_sidebar",
+        "smart_grouping_enabled",
+        "diagnostics_enabled",
+        "desktop_tray_enabled",
+        "max_simultaneous_workers",
+    ] {
+        if let Some(value) = patch.get(key) {
+            output.insert(key.into(), value.clone());
+        }
+    }
+}
+
+fn default_model(facts: &AppSettingsFacts) -> &str {
+    facts.native_settings["routine_default"]["model"]
+        .as_str()
+        .unwrap_or(butler_models::models::LEGACY_DEFAULT_MODEL)
 }

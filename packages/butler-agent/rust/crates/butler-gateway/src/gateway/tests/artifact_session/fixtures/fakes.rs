@@ -65,6 +65,7 @@ pub(super) fn test_dependencies() -> AppApplicationDependencies {
     let root =
         std::env::temp_dir().join(format!("butler-artifact-skills-{}", uuid::Uuid::new_v4()));
     AppApplicationDependencies {
+        service_shutdown: tokio_util::sync::CancellationToken::new(),
         updates: Arc::new(
             butler_runtime::operations::AppUpdateService::new(
                 root.join("update-data"),
@@ -392,6 +393,14 @@ impl AppQueueOwnerLiveness for TestLiveness {
 struct TestAuthority;
 
 impl AppAuthorityHandoff for TestAuthority {
+    fn session_requests(
+        &self,
+        _: String,
+        _: Vec<String>,
+    ) -> ApplicationFuture<(Vec<serde_json::Value>, Vec<serde_json::Value>)> {
+        Box::pin(async { Ok((vec![], vec![])) })
+    }
+
     fn close_self_session(&self, _: String, _: String) -> ApplicationFuture<()> {
         Box::pin(async { Ok(()) })
     }
@@ -414,11 +423,15 @@ impl AppAuthorityHandoff for TestAuthority {
                 request_ref: input.request_ref,
                 decision: "allowed".into(),
                 admitted: true,
+                question_followup: None,
             })
         })
     }
 
-    fn retry_decided(&self) -> ApplicationFuture<()> {
+    fn retry_decided(&self) -> ApplicationFuture<Vec<(String, String, String)>> {
+        Box::pin(async { Ok(vec![]) })
+    }
+    fn settle_question_followup(&self, _: String) -> ApplicationFuture<()> {
         Box::pin(async { Ok(()) })
     }
 }

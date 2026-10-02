@@ -24,20 +24,8 @@ pub(super) fn text(value: Option<&Value>) -> Option<&str> {
         .filter(|value| !value.is_empty())
 }
 
-/// Runtime routing uses nullish precedence before string validation.
 pub(super) fn configured_default(config: &Value) -> Option<&str> {
-    text(
-        config
-            .pointer("/system/butlerModel")
-            .filter(|value| !value.is_null())
-            .or_else(|| config.pointer("/system/defaultModel")),
-    )
-}
-
-/// App listing's existing default reader validates each candidate separately.
-pub(super) fn app_default(config: &Value) -> Option<&str> {
-    text(config.pointer("/system/butlerModel"))
-        .or_else(|| text(config.pointer("/system/defaultModel")))
+    crate::models::configured_default_model(config)
 }
 
 pub(super) async fn read_object(path: &Path) -> Value {
