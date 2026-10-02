@@ -215,6 +215,9 @@ async fn run(baseline: bool, measure_latency: bool) -> Result<ScenarioMetrics, H
     if baseline {
         setup = setup.env("BUTLER_E2E_STORAGE_BASELINE", "1");
     }
+    if baseline && let Some(binary) = std::env::var_os("BUTLER_E2E_STORAGE_MAIN_BIN") {
+        butler_e2e::e2e::executable::copy(std::path::Path::new(&binary), &setup.sandbox.binary)?;
+    }
     let mut s = setup.start().await?;
     s.agent.terminate().await?;
     let path = s.sandbox.data.join("app-server/butler-client.sqlite");
@@ -279,6 +282,11 @@ async fn eight_streams_keep_exact_content_and_bounded_storage_work() -> Result<(
         after.commits as f64 / SESSIONS as f64,
         after.wal_bytes / u64::try_from(SESSIONS).unwrap()
     );
+    assert_storage_work(&before, &after);
+    Ok(())
+}
+
+fn assert_storage_work(before: &ScenarioMetrics, after: &ScenarioMetrics) {
     let sessions = u64::try_from(SESSIONS).unwrap();
     assert!(after.commits < before.commits, "commits did not decrease");
     assert!(
@@ -290,21 +298,38 @@ async fn eight_streams_keep_exact_content_and_bounded_storage_work() -> Result<(
         after.wal_bytes.div_ceil(sessions) <= MAX_WAL_BYTES_PER_TURN,
         "WAL bytes per turn exceeded {MAX_WAL_BYTES_PER_TURN}"
     );
-    Ok(())
 }
 
 #[tokio::test]
 async fn perf_storage_concurrency_eight_streams_keep_exact_content_with_bounded_persistence_and_reads()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    let before = run(true, true).await?;
     let metrics = run(false, true).await?;
+    assert_storage_work(&before, &metrics);
+    eprintln!(
+        "STORAGE PERF before commits/turn={:.1} WAL bytes/turn={} session-view p95={}us; after commits/turn={:.1} WAL bytes/turn={}",
+        before.commits as f64 / SESSIONS as f64,
+        before.wal_bytes / SESSIONS as u64,
+        before.view_p95_us.unwrap(),
+        metrics.commits as f64 / SESSIONS as f64,
+        metrics.wal_bytes / SESSIONS as u64,
+    );
     let persist_p95_us = metrics.persist_p95_us.unwrap();
     let view_p95_us = metrics.view_p95_us.unwrap();
     eprintln!(
         "STORAGE PERF N=8 x 200; persist p95={persist_p95_us}us; session-view p95={view_p95_us}us"
     );
-    assert!(persist_p95_us < 10_000, "persist p95 {persist_p95_us}us");
-    assert!(view_p95_us < 20_000, "view p95 {view_p95_us}us");
+    butler_e2e::assert_wall_clock_budget!(
+        Duration::from_micros(persist_p95_us),
+        Duration::from_millis(10),
+        "storage persist p95"
+    );
+    butler_e2e::assert_wall_clock_budget!(
+        Duration::from_micros(view_p95_us),
+        Duration::from_millis(20),
+        "storage session-view p95"
+    );
     Ok(())
 }
 

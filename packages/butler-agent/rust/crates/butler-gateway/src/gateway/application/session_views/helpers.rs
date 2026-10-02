@@ -192,3 +192,25 @@ pub(super) fn insert_turns<T: serde::Serialize>(
     view.insert("latest_turn".into(), serialize_option(latest)?);
     Ok(())
 }
+
+/// Message content, paging metadata and errors come from the same snapshot.
+pub(super) fn insert_messages(
+    view: &mut Map<String, Value>,
+    messages: &crate::gateway::MessageListView,
+    has_more: bool,
+    event_cursor: u64,
+) -> Result<(), GatewayApplicationError> {
+    let next = butler_core::json::saturating_u64(messages.next_cursor);
+    let first = messages.messages.first().map(|message| message.cursor);
+    view.insert(
+        "messages".into(),
+        serde_json::to_value(&messages.messages).map_err(json_error)?,
+    );
+    insert_message_window(view, next, first, has_more);
+    view.insert("errors".into(), json!(safe_errors(&messages.messages)));
+    view.insert(
+        "cursors".into(),
+        json!({"messages": next, "events": event_cursor}),
+    );
+    Ok(())
+}

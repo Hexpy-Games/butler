@@ -217,6 +217,25 @@ platforms report the measurement unavailable. Linux RSS is deliberately stricter
 than private heap size, but it is not macOS `phys_footprint`.
 
 
+## Storage concurrency comparison
+
+`storage_concurrency` seeds a 1.3 GB App DB with 600 chats and 300,000 events,
+then streams eight turns with 200 deltas each. The perf test checks exact rows,
+ordered deltas, complete messages and current committed views while reporting
+commits per turn, WAL bytes per turn, persistence p95 and session-view p95.
+Run with a release agent, `BUTLER_E2E_TIER=stub`, `BUTLER_E2E_PERF=1` and one
+test thread. Storage instrumentation and stream controls are opt-in on the
+stub/perf tiers in both build profiles.
+
+The before run normally disables read pools and App delta/transaction batching.
+`BUTLER_E2E_STORAGE_MAIN_BIN` instead selects a separately built main agent for
+that run. That binary needs the same opt-in commit/WAL/operation counters and
+raw-delta/eight-stream controls; its storage implementation stays unchanged.
+Both runs disable automatic checkpoints while counting WAL bytes, so the WAL
+measurement includes all retained frames rather than only the last checkpoint
+cycle. `idle_resources` additionally observes App and BTCC `data_version` over
+all three owner-scale idle windows and requires zero commits.
+
 ## Wall-clock budgets in CI
 
 Functional scenarios keep their original names and run in shared stub jobs on

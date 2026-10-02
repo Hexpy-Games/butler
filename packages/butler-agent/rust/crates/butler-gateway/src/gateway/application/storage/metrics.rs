@@ -65,10 +65,16 @@ impl Metrics {
     }
 }
 pub(in crate::gateway::application) fn baseline() -> bool {
-    cfg!(debug_assertions) && std::env::var_os("BUTLER_E2E_STORAGE_BASELINE").is_some()
+    matches!(
+        std::env::var("BUTLER_E2E_TIER").as_deref(),
+        Ok("stub" | "perf")
+    ) && std::env::var_os("BUTLER_E2E_STORAGE_BASELINE").is_some()
 }
 fn enabled() -> bool {
-    cfg!(debug_assertions) && std::env::var_os("BUTLER_E2E_STORAGE_METRICS").is_some()
+    matches!(
+        std::env::var("BUTLER_E2E_TIER").as_deref(),
+        Ok("stub" | "perf")
+    ) && std::env::var_os("BUTLER_E2E_STORAGE_METRICS").is_some()
 }
 pub(super) fn configure(db: &Connection) -> StorageResult<()> {
     if enabled() {

@@ -112,7 +112,11 @@ impl super::BtccStorage {
         T: Send + 'static,
         F: FnOnce(&Connection) -> StorageResult<T> + Send + 'static,
     {
-        if cfg!(debug_assertions) && std::env::var_os("BUTLER_E2E_STORAGE_BASELINE").is_some() {
+        if matches!(
+            std::env::var("BUTLER_E2E_TIER").as_deref(),
+            Ok("stub" | "perf")
+        ) && std::env::var_os("BUTLER_E2E_STORAGE_BASELINE").is_some()
+        {
             return self.execute(move |db| operation(db)).await;
         }
         match &self.inner.readers {

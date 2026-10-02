@@ -28,14 +28,14 @@ src/gateway/application/projects/dashboard/statistics/ledger.rs	apply_history	13
 src/gateway/application/retry.rs	AppApplication::retry_turn_owned	100
 src/gateway/application/retry/source.rs	retry_snapshot	112
 src/gateway/application/send.rs	AppApplication::send_with_attachment_source	170
-src/gateway/application/session_branches/reservation.rs	AppApplication::reserve_branch	128
+src/gateway/application/session_branches/reservation.rs	AppApplication::reserve_branch	126
 src/gateway/application/session_queue_mutations.rs	AppApplication::create_session_queue_inner	130
 src/gateway/application/session_queue_mutations.rs	AppApplication::update_session_queue_inner	214
 src/gateway/application/session_relocation.rs	AppApplication::perform_relocation	166
-src/gateway/application/session_relocation/records.rs	reserve	83
+src/gateway/application/session_relocation/records.rs	reserve	81
 src/gateway/application/settings/update/patch/project.rs	project	202
 src/gateway/application/settings/update/patch/sanitize.rs	sanitize	210
-src/gateway/application/settings/view.rs	read	254
+src/gateway/application/settings/view.rs	read	252
 src/gateway/application/shell.rs	command_palette	169
 src/gateway/application/snapshot_input.rs	claimed_snapshot	120
 src/gateway/application/space/commands.rs	execute	125

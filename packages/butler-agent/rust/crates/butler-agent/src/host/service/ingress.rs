@@ -278,8 +278,10 @@ async fn waiting_sessions(authority: &PrincipalAuthority) -> Result<HashSet<Stri
 }
 
 fn dispatch_capacity() -> usize {
-    #[cfg(debug_assertions)]
-    if let Some(capacity) = std::env::var("BUTLER_E2E_INGRESS_CAPACITY")
+    if matches!(
+        std::env::var("BUTLER_E2E_TIER").as_deref(),
+        Ok("stub" | "perf")
+    ) && let Some(capacity) = std::env::var("BUTLER_E2E_INGRESS_CAPACITY")
         .ok()
         .and_then(|value| value.parse::<usize>().ok())
         .filter(|value| (1..=16).contains(value))

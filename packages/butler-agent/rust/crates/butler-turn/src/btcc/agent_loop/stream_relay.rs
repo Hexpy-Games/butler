@@ -218,5 +218,8 @@ async fn emit(progress: &dyn AgentLoopProgress, frames: Vec<Frame>) {
 }
 
 fn uncoalesced() -> bool {
-    cfg!(debug_assertions) && std::env::var_os("BUTLER_E2E_STREAM_UNCOALESCED").is_some()
+    matches!(
+        std::env::var("BUTLER_E2E_TIER").as_deref(),
+        Ok("stub" | "perf")
+    ) && std::env::var_os("BUTLER_E2E_STREAM_UNCOALESCED").is_some()
 }

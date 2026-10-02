@@ -1,9 +1,8 @@
 //! Canonical App session reads composed with BTCC child projections.
 
 mod helpers;
-mod snapshot;
-
 mod questions;
+mod snapshot;
 mod steward_children;
 mod turn_projection;
 
@@ -54,8 +53,6 @@ impl AppApplication {
             latest_message,
         )?;
         let active_turn_view = active.and(latest_turn_view.as_ref()).cloned();
-        let next_cursor = butler_core::json::saturating_u64(messages.next_cursor);
-        let first_cursor = messages.messages.first().map(|message| message.cursor);
         let mut view = Map::new();
         insert_session_identity(&mut view, &session, view_status(latest));
         questions::insert(
@@ -71,11 +68,7 @@ impl AppApplication {
             active_turn_view.as_ref(),
             latest_turn_view.as_ref(),
         )?;
-        view.insert(
-            "messages".into(),
-            serde_json::to_value(&messages.messages).map_err(json_error)?,
-        );
-        insert_message_window(&mut view, next_cursor, first_cursor, message_page.has_more);
+        insert_messages(&mut view, &messages, message_page.has_more, event_cursor)?;
         copy(&mut view, "workers", &subsessions);
         copy(&mut view, "steward_children", &subsessions);
         view.insert("work_streams".into(), work_streams);
@@ -89,11 +82,6 @@ impl AppApplication {
         );
         view.insert("context".into(), context.view);
         view.insert("usage".into(), usage);
-        view.insert("errors".into(), json!(safe_errors(&messages.messages)));
-        view.insert(
-            "cursors".into(),
-            json!({"messages":next_cursor,"events":event_cursor}),
-        );
         insert_timestamps(
             &mut view,
             &self.dependencies.identity_clock.now_iso(),
