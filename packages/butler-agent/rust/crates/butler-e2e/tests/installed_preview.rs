@@ -55,8 +55,9 @@ async fn installed_release_delivers_one_stub_chat_turn() -> Result<(), HarnessEr
     assert_eq!(
         turn_state(&terminal),
         "delivered",
-        "provider_calls={}, terminal={terminal}",
-        s.provider()?.served()
+        "provider_calls={}, misses={:?}, terminal={terminal}",
+        s.provider()?.served(),
+        s.provider()?.misses()
     );
     let messages = s.gw.messages("general").await?;
     assert_eq!(messages.len(), 2);
@@ -131,9 +132,9 @@ fn conversation_stub() -> Cassette {
         exchanges: vec![Exchange {
             request: RequestRecord {
                 method: "POST".into(),
-                path: "/v1/responses".into(),
+                path: "/responses".into(),
                 key: MatchKey {
-                    path: "/v1/responses".into(),
+                    path: "/responses".into(),
                     model: "gpt-6-luna".into(),
                     effort: Some("low".into()),
                     user_request: PROMPT.into(),
