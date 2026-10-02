@@ -28,6 +28,7 @@ const env = { ...windowsPowerShellEnvironment(), HOME: home, USERPROFILE: home, 
   BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
 };
 let page: ElectronPage | null = null;
+let phase = "legacy launch";
 const registryBefore = protocolRegistry();
 const started = Date.now();
 try {
@@ -38,7 +39,9 @@ try {
   const app = spawn(executable, [], { env, stdio: "ignore" });
   assert.ok(app.pid, "Desktop did not spawn");
   owned.add(app.pid);
+  ownedProcesses(data, owned);
   page = await electronPage(debugPort);
+  phase = "recovery copy";
   await page.waitForFunction(() => Boolean(document.querySelector('[data-test-class~="legacy-data-recovery"]')));
   assert.equal(await page.expression("window.butlerApp.startupIssue"), "legacy-data");
   for (const [locale, title, body, buttons] of [
@@ -59,6 +62,7 @@ try {
   }
   assert.deepEqual(snapshot(data), original, "Recovery screen wrote into legacy data");
   assert.ok(!existsSync(join(data, "app/runtime/foreground/instance.json")), "Agent started against legacy data");
+  phase = "folder and restart";
   assert.deepEqual(await bridge(page, "recoverLegacyData", "open-folder"), { ok: true });
   renameSync(data, join(home, ".butler-0.0.20"));
   await click(page, "Restart");
@@ -67,10 +71,12 @@ try {
   await waitFor(() => existsSync(join(data, "app/runtime/foreground/instance.json")), "fresh Agent instance");
   ownedProcesses(data, owned);
   page = await electronPage(debugPort);
+  phase = "fresh Agent health";
   await waitFor(async () => (await bridge(page!, "health")).ok === true, "fresh Agent ready");
   assert.equal(await page.expression("window.butlerApp.startupIssue"), null);
   assert.deepEqual(snapshot(join(home, ".butler-0.0.20")), original, "Restart changed preserved legacy data");
   ownedProcesses(data, owned);
+  phase = "recovery quit";
   await page.expression("setTimeout(() => window.butlerApp.quitApp({confirmed:true}), 50); true");
   page.close(); page = null;
   await waitFor(() => [...owned].every(pid => !alive(pid)), "recovery App and Agent stopped");
@@ -78,10 +84,16 @@ try {
   console.log(JSON.stringify({ ok: true, legacyDataPreserved: true, recoveryCopy: ["ko", "en"],
     folderAction: true, restartToFreshAgent: true, protocolRegistryUnchanged: true, leftoverProcesses: 0,
     durationMs: Date.now() - started }));
+} catch (error) {
+  console.error(error);
+  console.error(JSON.stringify({ phase, page: await page?.diagnostics(),
+    owned: [...owned].map(pid => ({ pid, alive: alive(pid) })) }));
+  throw error;
 } finally {
   page?.close();
   ownedProcesses(data, owned);
   for (const pid of owned) if (alive(pid)) { try { process.kill(pid, "SIGKILL"); } catch {} }
+  await waitFor(() => [...owned].every(pid => !alive(pid)), "legacy smoke process cleanup");
   rmSync(root, { recursive: true, force: true });
   assert.equal(protocolRegistry(), registryBefore, "Protocol registry changed during legacy smoke");
 }
