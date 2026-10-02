@@ -37,12 +37,18 @@ impl AppApplication {
         let context_session = session.clone();
         let latest = latest_with_progress.as_ref().map(|(turn, _)| turn);
         let active = latest.filter(|turn| active_state(&turn.state));
-        let ((), branch, context, subsessions, work_streams) = tokio::try_join!(
+        let ((), branch, context, subsessions, work_streams, (pending, answers, approvals)) = tokio::try_join!(
             self.load_session_skills(&mut session),
             self.session_branch(&context_session),
             self.project_context(context_session.clone(), context_records),
             async { Ok::<_, GatewayApplicationError>(self.parent_subsessions(&session_id).await) },
             self.session_work_streams(&context_session, active.map(|turn| turn.id.clone())),
+            questions::read(
+                self,
+                &context_session.session_hint,
+                &message_page.view.messages,
+                active.map(|turn| turn.id.as_str())
+            ),
         )?;
         let messages = message_page.view;
         let usage = serde_json::to_value(&context.usage).map_err(json_error)?;
@@ -55,14 +61,9 @@ impl AppApplication {
         let active_turn_view = active.and(latest_turn_view.as_ref()).cloned();
         let mut view = Map::new();
         insert_session_identity(&mut view, &session, view_status(latest));
-        questions::insert(
-            self,
-            &mut view,
-            &session.session_hint,
-            &messages.messages,
-            active.map(|turn| turn.id.as_str()),
-        )
-        .await?;
+        view.insert("pending_questions".into(), pending);
+        view.insert("authority_requests".into(), approvals);
+        view.insert("question_answers".into(), answers);
         insert_turns(
             &mut view,
             active_turn_view.as_ref(),

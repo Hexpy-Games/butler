@@ -187,16 +187,21 @@ impl BtccStorage {
         })
     }
 
-    pub(super) async fn execute<T, F>(&self, operation: F) -> StorageResult<T>
+    pub(super) fn execute<T, F>(
+        &self,
+        operation: F,
+    ) -> impl std::future::Future<Output = StorageResult<T>> + Send + '_
     where
         T: Send + 'static,
         F: FnOnce(&mut Connection) -> StorageResult<T> + Send + 'static,
     {
         self.execute_with_owner(move |connection, _owner| operation(connection))
-            .await
     }
 
-    async fn execute_with_owner<T, F>(&self, operation: F) -> StorageResult<T>
+    fn execute_with_owner<T, F>(
+        &self,
+        operation: F,
+    ) -> impl std::future::Future<Output = StorageResult<T>> + Send + '_
     where
         T: Send + 'static,
         F: FnOnce(&mut Connection, &RuntimeOwner) -> StorageResult<T> + Send + 'static,
@@ -206,22 +211,15 @@ impl BtccStorage {
             let result = operation(connection, owner);
             let _ignored_cancelled_caller = completion_tx.send(result);
         });
-        let lane = self.inner.lane.lock().await;
-        let sender = lane.sender.as_ref().ok_or_else(|| {
-            StorageError::new(
-                StorageCode::SqliteOwnerClosed,
-                "BTCC SQLite owner is closing or closed",
-            )
-        })?;
-        let permit = sender.reserve().await.map_err(|source| {
-            StorageError::new(
-                StorageCode::SqliteOwnerClosed,
-                "BTCC SQLite execution lane has closed",
-            )
-            .with_source(source)
-        })?;
-        permit.send(job);
-        drop(lane);
+        self.complete(job, completion_rx)
+    }
+
+    async fn complete<T: Send + 'static>(
+        &self,
+        job: DatabaseOperation,
+        completion_rx: oneshot::Receiver<StorageResult<T>>,
+    ) -> StorageResult<T> {
+        self.admit(job).await?;
         completion_rx.await.map_err(|source| {
             StorageError::new(
                 StorageCode::SqliteOperationCompletionLost,
@@ -360,6 +358,11 @@ fn run_connection_lane(
 }
 
 fn configure(connection: &Connection, profile: StorageProfile) -> StorageResult<()> {
+    // The writer no longer serves request reads. Bound its page cache so adding
+    // independent readers does not retain SQLite's default 2 MiB writer cache.
+    connection
+        .pragma_update(None, "cache_size", -512)
+        .map_err(StorageError::sqlite)?;
     connection
         .busy_timeout(Duration::from_millis(5_000))
         .map_err(StorageError::sqlite)?;

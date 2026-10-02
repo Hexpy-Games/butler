@@ -13,6 +13,11 @@ pub(in crate::gateway::application) struct Records {
     pub turn_count: u64,
     pub file_count: u64,
 }
+pub(in crate::gateway::application) struct ViewFacts {
+    pub messages: Vec<MessageRecord>,
+    pub latest_turn: Option<TurnRecord>,
+    pub artifacts: Vec<SessionArtifactSummary>,
+}
 pub(in crate::gateway::application) fn read(
     db: &Connection,
     session: &str,
@@ -20,12 +25,28 @@ pub(in crate::gateway::application) fn read(
     subscribers: &EventSubscribers,
     now: &str,
 ) -> Result<Records, AppStorageError> {
-    Ok(Records {
+    let view = ViewFacts {
         messages: read_model::list_message_page(db, session, None, None, 16)?
             .view
             .messages,
         latest_turn: read_model::latest_turn(db, session)?,
         artifacts: read_model::list_artifacts(db, session)?,
+    };
+    read_metadata(db, session, facts, subscribers, now, view)
+}
+
+pub(in crate::gateway::application) fn read_metadata(
+    db: &Connection,
+    session: &str,
+    facts: &AppSettingsFacts,
+    subscribers: &EventSubscribers,
+    now: &str,
+    view: ViewFacts,
+) -> Result<Records, AppStorageError> {
+    Ok(Records {
+        messages: view.messages,
+        latest_turn: view.latest_turn,
+        artifacts: view.artifacts,
         controls: settings::session_context_settings(db, subscribers, facts, session, now)?,
         turn_count: db
             .query_row(

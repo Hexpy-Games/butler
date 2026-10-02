@@ -2,60 +2,87 @@
 use super::{StorageError, StorageResult};
 use parking_lot::Mutex;
 use rusqlite::{Connection, OpenFlags};
-use std::{path::Path, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::sync::Semaphore;
 
 const CONNECTIONS: usize = 2;
-// Keep the entire pool's page caches within 2 MiB.
-const PAGE_CACHE_KIB: &str = "-1024";
+// Keep the entire pool's page caches within 1 MiB, leaving room for schemas.
+const PAGE_CACHE_KIB: &str = "-512";
 
 type ReadOperation = Box<dyn FnOnce(&Connection) -> StorageResult<()> + Send>;
 
+struct CachedReader {
+    connection: Connection,
+    last_used: Instant,
+}
+const SPARE_RETENTION: Duration = Duration::from_secs(10);
+
 pub(super) struct ReadPool {
-    available: Mutex<Vec<Connection>>,
+    path: PathBuf,
+    available: Mutex<Vec<CachedReader>>,
     permits: Arc<Semaphore>,
     gate: Arc<tokio::sync::RwLock<()>>,
 }
 impl ReadPool {
     pub(super) fn open(path: &Path) -> StorageResult<Self> {
         let mut available = Vec::with_capacity(CONNECTIONS);
-        for _ in 0..CONNECTIONS {
-            let connection =
-                butler_platform::sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-                    .map_err(StorageError::sqlite)?;
-            connection
-                .busy_timeout(std::time::Duration::from_secs(5))
-                .map_err(StorageError::sqlite)?;
-            for (name, value) in [
-                ("query_only", "ON"),
-                ("cache_size", PAGE_CACHE_KIB),
-                ("mmap_size", "0"),
-                ("temp_store", "MEMORY"),
-            ] {
-                connection
-                    .pragma_update(None, name, value)
-                    .map_err(StorageError::sqlite)?;
-            }
-            available.push(connection);
-        }
+        // Validate one reader now; opening an unused spare retains its schema.
+        available.push(CachedReader {
+            connection: Self::connection(path)?,
+            last_used: Instant::now(),
+        });
         Ok(Self {
+            path: path.to_owned(),
             available: Mutex::new(available),
             permits: Arc::new(Semaphore::new(CONNECTIONS)),
             gate: Arc::default(),
         })
     }
-    pub(super) async fn read<T, F>(self: &Arc<Self>, operation: F) -> StorageResult<T>
+    fn connection(path: &Path) -> StorageResult<Connection> {
+        let connection =
+            butler_platform::sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .map_err(StorageError::sqlite)?;
+        connection
+            .busy_timeout(std::time::Duration::from_secs(5))
+            .map_err(StorageError::sqlite)?;
+        for (name, value) in [
+            ("query_only", "ON"),
+            ("cache_size", PAGE_CACHE_KIB),
+            ("mmap_size", "0"),
+            ("temp_store", "MEMORY"),
+        ] {
+            connection
+                .pragma_update(None, name, value)
+                .map_err(StorageError::sqlite)?;
+        }
+        Ok(connection)
+    }
+    pub(super) fn read<T, F>(
+        self: &Arc<Self>,
+        operation: F,
+    ) -> impl std::future::Future<Output = StorageResult<T>> + Send + '_
     where
         T: Send + 'static,
         F: FnOnce(&Connection) -> StorageResult<T> + Send + 'static,
     {
         let (sender, receiver) = tokio::sync::oneshot::channel();
-        self.dispatch(Box::new(move |db| {
+        let operation: ReadOperation = Box::new(move |db| {
             let value = operation(db)?;
             let _sent = sender.send(value);
             Ok(())
-        }))
-        .await?;
+        });
+        self.complete(operation, receiver)
+    }
+    async fn complete<T: Send + 'static>(
+        self: &Arc<Self>,
+        operation: ReadOperation,
+        receiver: tokio::sync::oneshot::Receiver<T>,
+    ) -> StorageResult<T> {
+        self.dispatch(operation).await?;
         receiver.await.map_err(|error| {
             StorageError::new(
                 super::StorageCode::SqliteOperationCompletionLost,
@@ -77,9 +104,11 @@ impl ReadPool {
             })?;
         let pool = self.clone();
         tokio::task::spawn_blocking(move || {
-            let connection = pool.available.lock().pop().ok_or_else(|| {
-                StorageError::new(super::StorageCode::SqliteOwnerClosed, "read pool closed")
-            })?;
+            let cached = pool.available.lock().pop();
+            let connection = match cached {
+                Some(reader) => reader.connection,
+                None => Self::connection(&pool.path)?,
+            };
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 let transaction = connection
                     .unchecked_transaction()
@@ -88,7 +117,15 @@ impl ReadPool {
                 transaction.commit().map_err(StorageError::sqlite)?;
                 Ok(())
             }));
-            pool.available.lock().push(connection);
+            // Maintenance keeps one reader hot. Retire an unused spare on this
+            // blocking worker; a concurrent burst can open its second reader.
+            let mut readers = pool.available.lock();
+            readers.retain(|reader| reader.last_used.elapsed() < SPARE_RETENTION);
+            readers.push(CachedReader {
+                connection,
+                last_used: Instant::now(),
+            });
+            drop(readers);
             drop(permit);
             drop(guard);
             match result {

@@ -37,7 +37,17 @@ pub(super) async fn read(
             )?;
             let latest_with_progress = read_model::latest_turn(db, &id)?
                 .map(|turn| {
-                    let progress = progress_view::read(db, &turn.id)?.ok_or_else(|| {
+                    let progress = match message_page
+                        .view
+                        .turn_progress
+                        .as_ref()
+                        .and_then(|progress| progress.get(&turn.id))
+                        .cloned()
+                    {
+                        Some(progress) => Some(progress),
+                        None => progress_view::read(db, &turn.id)?,
+                    }
+                    .ok_or_else(|| {
                         AppStorageError::new(
                             AppStorageCode::AppProjectionMissing,
                             "Turn progress is unavailable.",
@@ -47,8 +57,19 @@ pub(super) async fn read(
                 })
                 .transpose()?;
             let artifacts = read_model::list_artifacts(db, &id)?;
-            let context_records =
-                context_details::records::read(db, &id, &facts, &subscribers, &now)?;
+            let messages = context_messages(db, &id, &page, &message_page)?;
+            let context_records = context_details::records::read_metadata(
+                db,
+                &id,
+                &facts,
+                &subscribers,
+                &now,
+                context_details::records::ViewFacts {
+                    messages,
+                    latest_turn: latest_with_progress.as_ref().map(|(turn, _)| turn.clone()),
+                    artifacts: artifacts.clone(),
+                },
+            )?;
             let event_cursor = events::latest(db)?;
             let automation_targets = automations::read_targets(db, &id)?;
             Ok(Snapshot {
@@ -63,4 +84,25 @@ pub(super) async fn read(
         })
         .await
         .map_err(app_error)
+}
+
+// Reuse only a window that contains the exact latest context messages. Older
+// cursors and small incomplete pages still query that window in this snapshot.
+fn context_messages(
+    db: &rusqlite::Connection,
+    id: &str,
+    page: &AppSessionViewPage,
+    messages: &read_model::SessionMessagePage,
+) -> Result<Vec<crate::gateway::MessageRecord>, AppStorageError> {
+    if page.after_cursor.is_none()
+        && page.before_cursor.is_none()
+        && (page.limit >= 16 || !messages.has_more)
+    {
+        let messages = &messages.view.messages;
+        Ok(messages[messages.len().saturating_sub(16)..].to_vec())
+    } else {
+        Ok(read_model::list_message_page(db, id, None, None, 16)?
+            .view
+            .messages)
+    }
 }

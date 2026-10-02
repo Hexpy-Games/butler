@@ -9,10 +9,12 @@ use super::{AppStorageError, StorageResult};
 
 /// Compiled statements the lane keeps for `prepare_cached`.
 const CACHED_STATEMENTS: usize = 256;
-/// Fund the reader caches from the previous 8 MiB writer allocation.
-/// Short coalesced writes keep their indexed working set within 4 MiB.
-const PAGE_CACHE_KIB: i64 = -4_096;
-/// Two indexed readers keep an aggregate 2 MiB cache, separate from the writer.
+/// Reserve room for reader schemas and compiled statements as well as pages.
+/// The writer and both indexed readers share 3 MiB of page-cache allowance,
+/// below the previous 8 MiB writer allocation; responses retain every field.
+const PAGE_CACHE_KIB: i64 = -1_024;
+/// Concurrent views need two indexed 1 MiB caches; bounded coalesced writes
+/// use the remaining 1 MiB without increasing the combined allowance.
 const READ_PAGE_CACHE_KIB: i64 = -1_024;
 /// Startup sweeps otherwise leave mapped database pages resident indefinitely.
 /// Use the bounded page cache for reads instead.

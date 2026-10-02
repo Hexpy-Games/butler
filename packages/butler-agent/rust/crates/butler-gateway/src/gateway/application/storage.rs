@@ -129,7 +129,10 @@ impl AppStorage {
         }
     }
 
-    pub(super) async fn execute<T, F>(&self, operation: F) -> StorageResult<T>
+    pub(super) fn execute<T, F>(
+        &self,
+        operation: F,
+    ) -> impl std::future::Future<Output = StorageResult<T>> + Send + '_
     where
         T: Send + 'static,
         F: FnOnce(&mut Connection) -> StorageResult<T> + Send + 'static,
@@ -142,6 +145,27 @@ impl AppStorage {
             self.inspect,
             self.barrier,
         );
+        self.complete(job, completion_rx)
+    }
+
+    async fn complete<T: Send + 'static>(
+        &self,
+        job: lane::Operation,
+        completion_rx: oneshot::Receiver<StorageResult<T>>,
+    ) -> StorageResult<T> {
+        self.admit(job).await?;
+        completion_rx.await.map_err(|source| {
+            AppStorageError::new(
+                AppStorageCode::AppSqliteOperationCompletionLost,
+                "App SQLite operation ended without a result",
+            )
+            .with_source(source)
+        })?
+    }
+
+    // Queue reservation and close ordering do not depend on the query or result
+    // type. Share this state machine instead of compiling it for every SQL job.
+    async fn admit(&self, job: lane::Operation) -> StorageResult<()> {
         let lane = self.inner.lane.lock().await;
         let sender = lane.sender.as_ref().ok_or_else(|| {
             AppStorageError::new(
@@ -158,13 +182,7 @@ impl AppStorage {
         })?;
         permit.send(job);
         drop(lane);
-        completion_rx.await.map_err(|source| {
-            AppStorageError::new(
-                AppStorageCode::AppSqliteOperationCompletionLost,
-                "App SQLite operation ended without a result",
-            )
-            .with_source(source)
-        })?
+        Ok(())
     }
 
     pub(super) async fn inspect<T, F>(&self, operation: F) -> StorageResult<T>
