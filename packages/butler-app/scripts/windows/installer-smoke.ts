@@ -56,6 +56,7 @@ const shortcuts = [join(env.APPDATA, "Microsoft/Windows/Start Menu/Programs/Butl
 const started = Date.now();
 try {
   prepare();
+  await oneClickLaunch();
   run(join(release, `ButlerSetup-${from}-x64.exe`), ["--silent"]);
   await waitFor(() => existsSync(stub) && existsSync(updater), "per-user install");
   await waitFor(() => shortcuts.every(path => existsSync(path)), "Start Menu and Desktop shortcuts");
@@ -98,10 +99,11 @@ try {
   assertShortcuts(shortcuts, false);
   assert.equal(powershell("Test-Path 'HKCU:\\Software\\Classes\\butler'", env), "False");
   assert.equal(powershell("[bool](Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -ErrorAction SilentlyContinue).'com.squirrel.butler-app.Butler'", env), "False");
+  assert.equal(powershell("[bool](Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run' -ErrorAction SilentlyContinue).'com.squirrel.butler-app.Butler'", env), "False");
   assert.equal(readFileSync(join(data, "sentinel.txt"), "utf8"), "retained");
   assert.ok(existsSync(join(data, "butler.config.json")));
   console.log(JSON.stringify({ ok: true, from, to, shellIntegration: true, stubCalls: calls,
-    exactAgent: true, chatPreserved: true, rollbackRetained: true, uninstallPreservesData: true,
+    normalInstallLaunch: true, exactAgent: true, chatPreserved: true, rollbackRetained: true, uninstallPreservesData: true,
     leftoverProcesses: 0, durationMs: Date.now() - started }));
 } catch (error) {
   if (existsSync(join(data, "updates/app-install.log"))) console.error(readFileSync(join(data, "updates/app-install.log"), "utf8"));
@@ -113,6 +115,20 @@ try {
   if (!uninstalled && existsSync(updater)) run(updater, ["--uninstall", "--silent"]);
   server.stop(true);
   rmSync(root, { recursive: true, force: true });
+}
+
+async function oneClickLaunch() {
+  run(join(release, `ButlerSetup-${from}-x64.exe`), []);
+  await waitFor(() => Boolean(readJson(join(data, "app/runtime/foreground/instance.json"))?.app_pid), "normal Setup auto-launch");
+  page = await electronPage(debugPort);
+  await proof(from);
+  ownedProcesses(data, owned);
+  await page.expression("setTimeout(() => window.butlerApp.quitApp({confirmed:true}), 50); true");
+  page.close(); page = null;
+  await waitFor(() => [...owned].every(pid => !alive(pid)), "normal installation App quit");
+  run(updater, ["--uninstall", "--silent"]);
+  await waitFor(() => !existsSync(stub), "normal installation removed");
+  console.log("PASS normal Setup installs and automatically launches the healthy App");
 }
 
 function prepare() {
@@ -127,8 +143,8 @@ function prepare() {
 }
 
 function run(command: string, args: string[]) {
-  const child = spawnSync(command, args, { env, encoding: "utf8" });
-  assert.equal(child.status, 0, `${command}: ${child.stderr}`);
+  const child = spawnSync(command, args, { env, stdio: "ignore" });
+  assert.equal(child.status, 0, `${command}: exit ${child.status}`);
 }
 
 function agentPath(version: string): string {

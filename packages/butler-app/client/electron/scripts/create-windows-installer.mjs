@@ -2,7 +2,9 @@
 import { windowsPackageVersion } from "./windows-package-version.mjs";
 import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { cpSync, copyFileSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { windowsPowerShellEnvironment } from "../windows-powershell-environment.mjs";
 
 if (process.platform !== "win32" || process.arch !== "x64") {
@@ -78,24 +80,43 @@ if (signingOptions) {
   }
 }
 
-await createWindowsInstaller({
-  appDirectory: resolve(appDirectory),
-  outputDirectory: resolve(outputDirectory),
-  authors: "Hexpy Games",
-  owners: "Hexpy Games",
-  description: "Butler dedicated desktop client",
-  title: "Butler",
-  name: "butler-app",
-  exe: "Butler.exe",
-  version: windowsPackageVersion(version),
-  noDelta: true,
-  setupExe,
-  setupIcon: resolve(setupIcon),
-  iconUrl:
-    "https://raw.githubusercontent.com/Hexpy-Games/butler/main/packages/butler-app/client/electron/assets/butler.ico",
-  noMsi: true,
-  ...(signingOptions ?? {}),
-});
+// Squirrel's bundled executable still looks for 7z.exe; wininstaller 5.4.4
+// ships architecture-suffixed helpers. Stage the matching pair without
+// mutating package-manager files or relying on an installed system 7-Zip.
+const toolsRoot = mkdtempSync(join(tmpdir(), "butler-squirrel-tools-"));
+const vendor = join(toolsRoot, "vendor");
+const priorTemp = process.env.SQUIRREL_TEMP;
+try {
+  const bundledVendor = join(dirname(require.resolve("electron-winstaller/package.json")), "vendor");
+  cpSync(bundledVendor, vendor, { recursive: true });
+  for (const extension of ["exe", "dll"]) {
+    copyFileSync(join(vendor, `7z-x64.${extension}`), join(vendor, `7z.${extension}`));
+  }
+  process.env.SQUIRREL_TEMP = join(toolsRoot, "temp");
+  await createWindowsInstaller({
+    vendorDirectory: vendor,
+    appDirectory: resolve(appDirectory),
+    outputDirectory: resolve(outputDirectory),
+    authors: "Hexpy Games",
+    owners: "Hexpy Games",
+    description: "Butler dedicated desktop client",
+    title: "Butler",
+    name: "butler-app",
+    exe: "Butler.exe",
+    version: windowsPackageVersion(version),
+    noDelta: true,
+    setupExe,
+    setupIcon: resolve(setupIcon),
+    iconUrl:
+      "https://raw.githubusercontent.com/Hexpy-Games/butler/main/packages/butler-app/client/electron/assets/butler.ico",
+    noMsi: true,
+    ...(signingOptions ?? {}),
+  });
+} finally {
+  if (priorTemp === undefined) delete process.env.SQUIRREL_TEMP;
+  else process.env.SQUIRREL_TEMP = priorTemp;
+  rmSync(toolsRoot, { recursive: true, force: true });
+}
 
 function requiredOption(name) {
   const index = process.argv.indexOf(name);
