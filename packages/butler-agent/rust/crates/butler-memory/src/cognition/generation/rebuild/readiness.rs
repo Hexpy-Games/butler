@@ -360,16 +360,6 @@ fn stored_counts(stage: &StageReadiness) -> (SemanticCounts, StageCounts, StageC
     (semantic, vectors, cache)
 }
 
-/// Exact live source hash/count check shared by readiness and qualification.
-/// It runs before either command enters the short manifest commit gate.
-pub(in crate::cognition::generation) fn assert_live_inventory_matches_candidate(
-    data_root: &Path,
-    handle: &MemoryGenerationHandle,
-    cancellation: &CancellationToken,
-) -> CognitionResult<()> {
-    verified_live_inventory(data_root, handle, cancellation).map(|_| ())
-}
-
 fn verified_live_inventory(
     data_root: &Path,
     handle: &MemoryGenerationHandle,

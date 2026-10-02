@@ -155,9 +155,8 @@ async fn generation_files_and_results_keep_their_pre_typing_bytes() {
     pin_descriptor_swap_guards(&coordinator, &environment).await;
     let data = Root::new();
     let rebuild = pin_prepared_rebuild(&data.0, &coordinator, &environment).await;
-    let (readiness, recorded_text) =
-        pin_readiness(&data.0, &coordinator, &environment, &rebuild).await;
-    pin_qualification_and_activation(&data.0, &rebuild, &readiness, &recorded_text);
+    pin_readiness(&data.0, &coordinator, &environment, &rebuild).await;
+    pin_historical_documents();
 }
 
 /// Empty initialization: manifest and descriptor.
@@ -299,39 +298,6 @@ async fn pin_readiness(
     (readiness, recorded_text)
 }
 
-/// Qualification and activation writers.
-fn pin_qualification_and_activation(
-    data: &Path,
-    rebuild: &Rebuild,
-    readiness: &super::GenerationReadiness,
-    recorded_text: &str,
-) {
-    let Rebuild {
-        prepared,
-        normalize,
-        ..
-    } = rebuild;
-    let mut qualified: super::GenerationManifest = serde_json::from_str(recorded_text).unwrap();
-    super::qualification_service::qualify_manifest(
-        &mut qualified,
-        readiness,
-        &super::qualification::ValidatedEvidence {
-            acceptance_sha256: "a".repeat(64),
-            verification_generation_id: "33333333-3333-3333-3333-333333333333".into(),
-            implementation_commit: "b".repeat(40),
-            files: Vec::new(),
-        },
-        &prepared.generation_id,
-        &prepared.source_inventory_hash,
-    );
-    let qualified_path = data.join("qualified.json");
-    super::initialize::durable::write_json(&qualified_path, &qualified).unwrap();
-    pin(
-        "qualified-manifest.json",
-        &normalize.apply(&read(&qualified_path)),
-    );
-}
-
 /// The retained offline CAS rejects changed descriptor metadata and manifest bytes.
 async fn pin_descriptor_swap_guards(
     coordinator: &Coordinator,
@@ -404,4 +370,29 @@ async fn pin_descriptor_swap_guards(
         next
     );
     lease.release(true).unwrap();
+}
+
+/// Existing qualified manifests and descriptors remain readable without their writers.
+fn pin_historical_documents() {
+    for name in ["qualified-manifest.json", "activated-descriptor.json"] {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/cognition/generation/fixtures/format")
+            .join(name);
+        let original = read(&path);
+        let parsed = if name.ends_with("manifest.json") {
+            serde_json::to_value(
+                serde_json::from_str::<super::GenerationManifest>(&original).unwrap(),
+            )
+            .unwrap()
+        } else {
+            serde_json::to_value(
+                serde_json::from_str::<super::ActiveDescriptor>(&original).unwrap(),
+            )
+            .unwrap()
+        };
+        assert_eq!(
+            parsed,
+            serde_json::from_str::<serde_json::Value>(&original).unwrap()
+        );
+    }
 }

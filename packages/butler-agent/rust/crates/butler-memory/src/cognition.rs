@@ -104,7 +104,7 @@ pub use generation::{
     read_build_inventory, rebuild_typed_cursor, reconcile_rebuild_vector_representatives,
     record_rebuild_readiness, refresh_memory_rebuild_snapshot, repair_memory_candidate_inputs,
     resolve_active_generation, resolve_generation, retry_failed_memory_generation,
-    set_extractor_memory_generation, validate_memory_rebuild,
+    set_extractor_memory_generation,
 };
 pub use generation_vectors::GenerationVectorAdapter;
 pub use graph::{

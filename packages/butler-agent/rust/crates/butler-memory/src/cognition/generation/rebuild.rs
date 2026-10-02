@@ -23,7 +23,6 @@ pub use build_inventory::{
     read as read_build_inventory, typed_cursor as rebuild_typed_cursor,
 };
 pub(in crate::cognition) use inventory::MemorySourceInventory;
-pub(in crate::cognition::generation) use readiness::assert_live_inventory_matches_candidate;
 pub use readiness::{compute as compute_rebuild_readiness, record as record_rebuild_readiness};
 pub use refresh::refresh_if_changed as refresh_memory_rebuild_snapshot;
 use rusqlite::{OpenFlags, OptionalExtension, params};

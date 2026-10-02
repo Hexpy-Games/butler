@@ -209,11 +209,6 @@ impl GenerationReadiness {
             sha256: None,
         }
     }
-
-    /// Whether `other` describes the same readiness and evidence.
-    pub(crate) fn same_as(&self, other: &Self) -> bool {
-        self.sha256 == other.sha256 && self.evidence_sha256 == other.evidence_sha256
-    }
 }
 
 /// Binds a qualified manifest to its stored acceptance evidence.

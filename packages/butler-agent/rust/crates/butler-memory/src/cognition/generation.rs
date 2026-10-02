@@ -4,8 +4,6 @@ mod authority;
 pub(in crate::cognition) mod cache;
 mod initialize;
 mod manifest;
-mod qualification;
-mod qualification_service;
 mod qualification_witness;
 mod read;
 mod rebuild;
@@ -32,7 +30,6 @@ pub use manifest::{
     GenerationManifest, GenerationReadiness, GenerationState, InitializationOrigin, ProjectionMode,
     SemanticCounts, StageCounts,
 };
-pub use qualification_service::validate as validate_memory_rebuild;
 pub(crate) use read::resolve_projection_generation;
 pub use read::{active_memory_descriptor_exists, resolve_active_generation, resolve_generation};
 pub(in crate::cognition) use rebuild::MemorySourceInventory;
