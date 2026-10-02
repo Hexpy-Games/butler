@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { chromium } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
+import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -15,7 +16,9 @@ try {
   const page = await context.newPage();
   await page.goto(server.url);
   await page.getByLabel("인터페이스 언어").waitFor();
-  await page.getByRole("button", { name: "동의하고 계속", exact: true }).click();
+  const copy = getAppCopy("ko-KR").firstRun;
+  await page.getByRole("button", { name: copy.start, exact: true }).click();
+  await page.getByRole("button", { name: copy.agree, exact: true }).click();
   await page.getByRole("button", { name: "다른 서비스 8개", exact: true }).click();
   await page.locator('[data-card-id="other"]').click();
   const config = JSON.parse(readFileSync(join(server.butlerData, "butler.config.json"), "utf8"));

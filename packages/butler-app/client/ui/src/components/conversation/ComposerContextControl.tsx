@@ -1,4 +1,5 @@
 import { memo, useRef, useState, type MouseEvent } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { ContextDonutButton, Popover, PopoverContent, PopoverTrigger } from "@/butler-ds";
 import { useButlerStore } from "@/app/store.ts";
@@ -15,18 +16,15 @@ import type { QuotaLoader, UsageLoader } from "./useConversationUsage";
  */
 export const ComposerContextControl = memo(function ComposerContextControl({ load, loadQuota }: { load?: UsageLoader; loadQuota?: QuotaLoader }) {
   useAppLocale();
-  const context = useComposerStore((store) => store.context);
-  const models = useComposerStore((store) => store.models);
-  const activeModel = useComposerStore((store) => store.activeModel);
+  const hasContext = useComposerStore((store) => Boolean(store.context));
+  const ratio = useComposerStore((store) => store.context?.ratio ?? 0);
   const open = useComposerStore((store) => store.contextPopoverOpen);
   const setOpen = useComposerStore((store) => store.setContextPopoverOpen);
-  const settings = useButlerStore((store) => store.settings);
-  const activeChatId = useButlerStore((store) => store.activeChatId);
-  const openSettings = useButlerStore((store) => store.openSettings);
+  const theme = useButlerStore(useShallow((store) => appShellTheme(store.settings)));
   const [pinned, setPinned] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  if (!context) return null;
+  if (!hasContext) return null;
 
   const close = () => {
     setPinned(false);
@@ -43,14 +41,12 @@ export const ComposerContextControl = memo(function ComposerContextControl({ loa
     setPinned(true);
     setOpen(true);
   };
-  const mode = usageAuthMode(contextModel(models, context, activeModel), context);
-
   return (
     <Popover open={open} onOpenChange={(next) => (next ? setOpen(true) : close())}>
       <PopoverTrigger asChild>
         <ContextDonutButton
           data-test-class="context-donut-button"
-          ratio={context.ratio ?? 0}
+          ratio={ratio}
           onClick={togglePin}
           onPointerEnter={() => setOpen(true)}
           onPointerLeave={() => {
@@ -63,7 +59,7 @@ export const ComposerContextControl = memo(function ComposerContextControl({ loa
         data-test-class="context-popover"
         data-pinned={pinned ? "true" : undefined}
         align="center"
-        theme={appShellTheme(settings)}
+        theme={theme}
         side="top"
         sideOffset={10}
         width="narrow"
@@ -72,18 +68,25 @@ export const ComposerContextControl = memo(function ComposerContextControl({ loa
           if (pinned) triggerRef.current?.focus();
         }}
       >
-        <ContextUsagePopover
-          context={context}
+        <ComposerUsageContent
           load={load}
           loadQuota={loadQuota}
-          mode={mode}
-          sessionId={context.session_id ?? activeChatId}
-          onDetails={() => {
-            close();
-            openSettings("usage");
-          }}
+          onClose={close}
         />
       </PopoverContent>
     </Popover>
   );
 });
+
+/** Full context refreshes the usage content; the closed ring subscribes only to its ratio. */
+function ComposerUsageContent({ load, loadQuota, onClose }: { load?: UsageLoader; loadQuota?: QuotaLoader; onClose: () => void }) {
+  const context = useComposerStore((store) => store.context);
+  const models = useComposerStore((store) => store.models);
+  const activeModel = useComposerStore((store) => store.activeModel);
+  const activeChatId = useButlerStore((store) => store.activeChatId);
+  const openSettings = useButlerStore((store) => store.openSettings);
+  if (!context) return null;
+  const mode = usageAuthMode(contextModel(models, context, activeModel), context);
+  return <ContextUsagePopover context={context} load={load} loadQuota={loadQuota} mode={mode}
+    sessionId={context.session_id ?? activeChatId} onDetails={() => { onClose(); openSettings("usage"); }} />;
+}

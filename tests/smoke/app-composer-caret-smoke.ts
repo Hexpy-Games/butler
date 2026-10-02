@@ -46,6 +46,11 @@ try {
   assert.equal(await editor.innerText(), "안녕하세요 hello\n두 번째 줄X한", "shortcut does not disturb Korean composition");
   await cdp.detach();
   await editor.fill("안녕하세요 hello");
+  await blur();
+  await padding();
+  // Collapse/reopen moves the card; locate text after the real expansion settles.
+  await page.waitForFunction(() => document.getAnimations().every((animation) =>
+    animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
   const point = await editor.evaluate(element => {
     const range = document.createRange();
     const text = document.createTreeWalker(element, NodeFilter.SHOW_TEXT).nextNode()!;
@@ -53,8 +58,6 @@ try {
     const rect = range.getBoundingClientRect();
     return { x: rect.left + 1, y: rect.top + rect.height / 2 };
   });
-  await blur();
-  await padding();
   await page.mouse.click(point.x, point.y);
   const offset = await editor.evaluate(element => {
     const selection = window.getSelection()!;

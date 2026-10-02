@@ -18,7 +18,7 @@
  * - Optional `--video`: Playwright recordings of each motion in light and dark
  *   (with `--only=heroes`: one loop of every chapter hero instead).
  *
- * Usage: bun run tests/smoke/ds-motion-trace.ts [--video] [--out=DIR] [--only=overlays|heroes] [--report-only]
+ * Usage: bun run tests/smoke/ds-motion-trace.ts [--video] [--out=DIR] [--only=overlays|heroes|send-flight] [--report-only]
  * Needs a built UI (`npm --prefix packages/butler-app/client/ui run build`).
  */
 import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -34,6 +34,7 @@ const outDir = resolve(outArg ? outArg.slice("--out=".length) : join(root, ".tmp
 const recordVideo = Bun.argv.includes("--video");
 const onlyOverlays = Bun.argv.includes("--only=overlays");
 const onlyHeroes = Bun.argv.includes("--only=heroes");
+const onlySendFlight = Bun.argv.includes("--only=send-flight");
 /** Report numbers without asserting (used to measure an older build). */
 const reportOnly = Bun.argv.includes("--report-only");
 const FIRST_FRAME_MAX = 0.3;
@@ -296,6 +297,7 @@ async function measureSendFlight(page: Page, serverUrl: string, ids: Map<string,
   writeFileSync(join(outDir, "send-flight-trace.json"), JSON.stringify({ events, thread }));
   const whole = windowStats(events, thread, markTs(events, "flight-0"), markTs(events, `flight-${rounds - 1}`) + 700_000);
   const mainThreadFrames = windows.reduce((sum, stats) => sum + stats.layouts + stats.paints, 0);
+  writeFileSync(join(outDir, "send-flight-trace.json"), JSON.stringify({ windows, whole, travel, events }));
   assert(whole.longTasks === 0, `send flight produced ${whole.longTasks} task(s) over ${LONG_TASK_MS}ms (max ${whole.maxTaskMs}ms)`);
   assert(mainThreadFrames === 0, `send flight travel frames ran Layout/Paint ${mainThreadFrames} time(s); it must run on the compositor`);
   assert(travel.flying === "fly" && travel.travelledPx > 20, `send flight did not run: ${JSON.stringify(travel)}`);
@@ -802,6 +804,10 @@ async function measure(browser: Browser, serverUrl: string, ids: Map<string, str
   const page = await context.newPage();
   const results: Record<string, unknown> = {};
   try {
+    if (onlySendFlight) {
+      results.sendFlight = await measureSendFlight(page, serverUrl, ids);
+      return results;
+    }
     if (onlyHeroes) {
       results.heroes = await measureHeroes(page, serverUrl);
       return results;

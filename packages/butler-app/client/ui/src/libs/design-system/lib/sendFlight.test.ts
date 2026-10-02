@@ -187,6 +187,12 @@ test("retargeting stops after its time window whatever the frame rate", async ()
   row.append(bubble);
   const realPerformanceNow = performance.now.bind(performance);
   let clock = 0;
+  let lateReads = 0;
+  const rowBox = row.getBoundingClientRect.bind(row);
+  row.getBoundingClientRect = () => {
+    if (clock >= 64) lateReads += 1;
+    return rowBox();
+  };
   performance.now = () => clock;
   const scheduled: FrameRequestCallback[] = [];
   globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => { scheduled.push(callback); return scheduled.length; }) as typeof requestAnimationFrame;
@@ -201,6 +207,7 @@ test("retargeting stops after its time window whatever the frame rate", async ()
       frames += 1;
     }
     expect(frames).toBeLessThanOrEqual(4);
+    expect(lateReads).toBe(0);
   } finally {
     performance.now = realPerformanceNow;
   }
