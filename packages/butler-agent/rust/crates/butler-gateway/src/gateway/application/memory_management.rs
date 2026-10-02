@@ -4,7 +4,7 @@ use serde_json::{Map, Value};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
-/// Authenticated owner requests, excluding all reset operations.
+/// Authenticated memory owner requests.
 pub enum AppMemoryCommand {
     /// Complete instruction list from the instruction owner.
     Instructions,
@@ -26,6 +26,24 @@ pub enum AppMemoryCommand {
         operation_id: String,
         inventory_revision: u64,
     },
+    /// Reset conversation memory while preserving other kinds.
+    ResetChat {
+        operation_id: String,
+        inventory_revision: u64,
+    },
+    /// Reset one project's summary, conversation projection and bound instructions.
+    ResetProject {
+        operation_id: String,
+        inventory_revision: u64,
+        project_id: String,
+    },
+    /// Reset profile content while preserving consent and settings.
+    ResetProfile {
+        operation_id: String,
+        inventory_revision: u64,
+    },
+    /// Durable reset receipt for reconnect.
+    ResetStatus { operation_id: String },
     /// Initial/reconnect receipt read.
     Status { operation_id: String },
     /// Cancel reclamation; already reclaimed bytes remain reclaimed.

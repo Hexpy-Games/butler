@@ -8,7 +8,6 @@ use axum::{
     http::{Method, StatusCode, Uri},
     response::Response,
 };
-use serde_json::Value;
 use std::sync::Arc;
 
 pub(super) async fn route(
@@ -35,30 +34,27 @@ pub(super) async fn route(
         }
         (&Method::GET, "/memory/inventory") => (AppMemoryCommand::Inventory, StatusCode::OK),
         (&Method::POST, "/memory/inventory/check") => (AppMemoryCommand::Check, StatusCode::OK),
-        (&Method::POST, "/memory/cleanup") => {
-            let bytes = read_body_with_limit(request.into_body(), 4096).await?;
-            let input: Value =
-                serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
-            let object = input.as_object().ok_or_else(invalid)?;
-            if object.len() != 2 {
-                return Err(invalid());
-            }
-            let id = object
-                .get("operation_id")
-                .and_then(Value::as_str)
-                .ok_or_else(invalid)?
-                .to_owned();
-            let revision = object
-                .get("inventory_revision")
-                .and_then(Value::as_u64)
-                .ok_or_else(invalid)?;
+        (&Method::POST, path @ ("/memory/reset/profile" | "/memory/reset/chat-memory")) => {
+            (reset_request(request, path).await?, StatusCode::ACCEPTED)
+        }
+        (&Method::POST, path) if path.starts_with("/memory/reset/projects/") => {
+            (project_reset(request, path).await?, StatusCode::ACCEPTED)
+        }
+        (&Method::DELETE, path) if path.starts_with("/memory/reset/") => (
+            AppMemoryCommand::Cancel {
+                operation_id: reset_id(path)?,
+            },
+            StatusCode::OK,
+        ),
+        (&Method::GET, path) if path.starts_with("/memory/reset/") => {
+            let id = reset_id(path)?;
             (
-                AppMemoryCommand::Cleanup {
-                    operation_id: id,
-                    inventory_revision: revision,
-                },
-                StatusCode::ACCEPTED,
+                AppMemoryCommand::ResetStatus { operation_id: id },
+                StatusCode::OK,
             )
+        }
+        (&Method::POST, "/memory/cleanup") => {
+            (cleanup_request(request).await?, StatusCode::ACCEPTED)
         }
         (&Method::GET, path) if path.starts_with("/memory/cleanup/") => (
             AppMemoryCommand::Status {
@@ -133,4 +129,70 @@ async fn delete_instruction(
         project_id: input.project_id,
         operation_id: input.operation_id,
     })
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ResetInput {
+    operation_id: String,
+    inventory_revision: u64,
+}
+
+async fn cleanup_request(
+    request: axum::http::Request<Body>,
+) -> Result<AppMemoryCommand, HttpError> {
+    let bytes = read_body_with_limit(request.into_body(), 4096).await?;
+    let input: ResetInput =
+        serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
+    Ok(AppMemoryCommand::Cleanup {
+        operation_id: input.operation_id,
+        inventory_revision: input.inventory_revision,
+    })
+}
+
+async fn reset_request(
+    request: axum::http::Request<Body>,
+    path: &str,
+) -> Result<AppMemoryCommand, HttpError> {
+    let bytes = read_body_with_limit(request.into_body(), 4096).await?;
+    let input: ResetInput = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
+    if path == "/memory/reset/profile" {
+        Ok(AppMemoryCommand::ResetProfile {
+            operation_id: input.operation_id,
+            inventory_revision: input.inventory_revision,
+        })
+    } else {
+        Ok(AppMemoryCommand::ResetChat {
+            operation_id: input.operation_id,
+            inventory_revision: input.inventory_revision,
+        })
+    }
+}
+
+async fn project_reset(
+    request: axum::http::Request<Body>,
+    path: &str,
+) -> Result<AppMemoryCommand, HttpError> {
+    let project_id = path
+        .strip_prefix("/memory/reset/projects/")
+        .ok_or_else(invalid)?;
+    if project_id.is_empty() || project_id.contains('/') {
+        return Err(invalid());
+    }
+    let bytes = read_body_with_limit(request.into_body(), 4096).await?;
+    let input: ResetInput = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
+    Ok(AppMemoryCommand::ResetProject {
+        operation_id: input.operation_id,
+        inventory_revision: input.inventory_revision,
+        project_id: project_id.into(),
+    })
+}
+
+fn reset_id(path: &str) -> Result<String, HttpError> {
+    let id = path.strip_prefix("/memory/reset/").ok_or_else(invalid)?;
+    if uuid::Uuid::parse_str(id).is_ok_and(|value| value.to_string() == id) {
+        Ok(id.into())
+    } else {
+        Err(invalid())
+    }
 }

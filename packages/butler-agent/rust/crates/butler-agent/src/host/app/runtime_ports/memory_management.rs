@@ -8,6 +8,7 @@ use butler_memory::{
 };
 mod actions;
 mod instructions;
+mod resets;
 use serde_json::{Value, json};
 use std::{
     collections::HashMap,
@@ -19,6 +20,7 @@ use tokio_util::sync::CancellationToken;
 pub(crate) struct AppMemoryManagement {
     owner: Arc<MemoryManagement>,
     instructions: Arc<RememberedRuleOwner>,
+    profile: Arc<butler_memory::profile::ProfileService>,
     shutdown: CancellationToken,
     clock: Arc<dyn AppIdentityClock>,
     jobs: Arc<Mutex<HashMap<String, CancellationToken>>>,
@@ -29,12 +31,14 @@ impl AppMemoryManagement {
     pub(crate) fn new(
         owner: Arc<MemoryManagement>,
         instructions: Arc<RememberedRuleOwner>,
+        profile: Arc<butler_memory::profile::ProfileService>,
         shutdown: CancellationToken,
         clock: Arc<dyn AppIdentityClock>,
     ) -> Self {
         Self {
             owner,
             instructions,
+            profile,
             shutdown,
             clock,
             jobs: Arc::new(Mutex::new(HashMap::new())),
@@ -49,6 +53,7 @@ impl AppMemoryManagement {
         Self::new(
             runtime.memory_management.clone(),
             runtime.memory_writes.clone(),
+            runtime.profile.clone(),
             runtime.service_shutdown.clone(),
             clock,
         )
@@ -81,6 +86,10 @@ impl AppMemoryManagement {
             AppMemoryCommand::Project { project_id } => {
                 self.project(project_id, cancellation).await
             }
+            command @ (AppMemoryCommand::ResetChat { .. }
+            | AppMemoryCommand::ResetProfile { .. }
+            | AppMemoryCommand::ResetProject { .. }
+            | AppMemoryCommand::ResetStatus { .. }) => self.reset_command(command, sink).await,
             AppMemoryCommand::Inventory => self.inventory(self.owner.inventory(), false).await,
             AppMemoryCommand::Check => {
                 self.inventory(

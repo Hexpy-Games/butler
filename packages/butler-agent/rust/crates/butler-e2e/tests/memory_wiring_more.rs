@@ -202,18 +202,11 @@ async fn wiring_more_correction_supersedes_previous_rule_in_next_prompt() -> Res
     let (greeting_turn, turn) = s.turn(&chat, &ask).await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
     let requests = s.provider()?.requests();
-    let prompt = requests[first..]
+    let request = requests[first..]
         .iter()
         .find(|r| r["reasoning"]["effort"] == "max")
-        .unwrap()["input"]
-        .to_string();
-    let section = prompt
-        .split("## Active Rules")
-        .nth(1)
-        .unwrap()
-        .split("\\n## ")
-        .next()
         .unwrap();
+    let section = support::instruction_section(request);
     assert_eq!(
         section, immediate_section,
         "unchanged rules changed prompt bytes across restart"
@@ -223,7 +216,6 @@ async fn wiring_more_correction_supersedes_previous_rule_in_next_prompt() -> Res
     eprintln!(
         "WIRING-MORE-CORRECTION active_bindings={active} old_in_prompt={old} new_in_prompt={new}"
     );
-    support::conversation_vectors(&s.sandbox.data, &greeting_turn).await;
     let recalled = support::tool(
         &s,
         &chat,
@@ -231,6 +223,8 @@ async fn wiring_more_correction_supersedes_previous_rule_in_next_prompt() -> Res
         "recall_memory",
     )
     .await?;
+    // Ordinary turns leave vectors deferred; this recall starts the owned batch.
+    support::conversation_vectors(&s.sandbox.data, &greeting_turn).await;
     assert_eq!(recalled["ok"], true, "{recalled}");
     let typed = support::typed_evidence(&recalled);
     assert!(

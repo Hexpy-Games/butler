@@ -231,17 +231,28 @@ pub(crate) async fn active_section(
     let (_, turn) = s.turn(chat, user).await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
     let requests = s.provider()?.requests();
-    let prompt = requests[first..]
+    let request = requests[first..]
         .iter()
         .find(|r| r["reasoning"]["effort"] == "max")
-        .unwrap()["input"]
-        .to_string();
-    Ok(prompt
+        .unwrap();
+    Ok(instruction_section(request))
+}
+
+pub(crate) fn instruction_section(request: &Value) -> String {
+    let prompt = request["input"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|item| item["content"].as_array().into_iter().flatten())
+        .filter_map(|part| part["text"].as_str())
+        .find(|text| text.contains("## Active Rules"))
+        .unwrap_or_default();
+    prompt
         .split("## Active Rules")
         .nth(1)
-        .and_then(|section| section.split("\\n## ").next())
+        .and_then(|section| section.split("\n\n## ").next())
         .unwrap_or_default()
-        .to_owned())
+        .to_owned()
 }
 
 /// Wait for the post-restart public turn's complete vector receipt, not elapsed time.
