@@ -60,13 +60,13 @@ pub(super) async fn open(
 pub(super) fn rule_owner(
     paths: &RuntimePaths,
     environment: &CognitionPathEnvironment,
-    coordinator: Arc<CognitionWriteCoordinator>,
+    coordinator: &Arc<CognitionWriteCoordinator>,
     stop: &tokio_util::sync::CancellationToken,
 ) -> crate::host::guided::tools::MemoryWriteServices {
     let services = crate::host::guided::tools::MemoryWriteServices::new(
         &paths.data_root,
         environment,
-        coordinator,
+        coordinator.clone(),
         Arc::new(|| SystemIdentity.now_iso()),
     );
     services.recover_at_startup(stop.clone());

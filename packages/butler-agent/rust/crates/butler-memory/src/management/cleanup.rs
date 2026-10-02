@@ -8,7 +8,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::{fs, io, path::Path, sync::Arc};
 use tokio_util::sync::CancellationToken;
-mod plan;
+pub(super) mod plan;
 mod trash;
 
 /// One artifact outcome; paths are relative names, never memory content.

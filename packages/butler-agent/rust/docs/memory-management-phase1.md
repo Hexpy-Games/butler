@@ -283,3 +283,29 @@ refusal effective before any startup writes.
 Formatting, clippy with warnings denied, source-check and licence generation
 verification passed. No dependencies or licence fingerprint changed. Windows
 allocation and rename behavior were not executed on this Linux host.
+
+## Settings instructions adapter
+
+The App adds authenticated routes using the same protocol envelope:
+
+- GET `/memory/instructions`: `{instructions: [{handle, text, project_id,
+  revision, scope: {kind: "all"} | {kind: "project", project_name: string | null}}]}`.
+  Text is complete. A missing registered display name is null, with deletion still
+  available. Listing delegates to `RememberedRuleOwner::list()` without adoption writes.
+- DELETE `/memory/instructions/<handle>`: `{expected_revision, project_id: string | null,
+  operation_id: UUID}`. The owner checks the exact revision and immutable binding;
+  success returns `{rule, operation_id, state: "forgotten", replayed}`. Stale revisions
+  return 409. The operation ID replays the durable owner receipt. Settings deletion
+  passes no conversation session/message, so both scopes work without a chat turn.
+- GET `/memory/projects/<App project ID>`: resolves the canonical project identity and
+  returns `{project_id, summary_bytes, conversations?, instructions, updated_at}`.
+  No summary is null; unavailable measurements are omitted. Only the selected capsule
+  and indexed project conversation rows are read. Instruction counts use the same owner.
+
+Explicit inventory Check measures unused storage with the existing cleanup eligibility
+analysis and exposes `automatic.health.reclaimable_bytes` (null when unknown).
+Instruction count is read from the owner and cached against the inventory revision;
+normal inventory GET does not read instruction files. Its opening view includes an
+`operation` receipt when a cleanup job is running. Cleanup changes keep using
+`memory.operation`; Settings instruction deletion sends `{kind: "instructions"}`
+through that transport. Profile deletion does not touch this owner.

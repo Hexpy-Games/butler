@@ -7,6 +7,7 @@ mod cleanup;
 mod inventory;
 pub use cleanup::{CleanupItem, CleanupResult};
 mod measurement;
+mod project;
 mod safety;
 
 use crate::{

@@ -182,16 +182,7 @@ fn command_palette(
             .filter(|item| matches(&item.title))
             .map(schedule_result),
     );
-    for section in [
-        "General",
-        "Appearance",
-        "Server/Bridge",
-        "Models/Access",
-        "Privacy/Data",
-        "Diagnostics",
-        "System events",
-        "Archived",
-    ] {
+    for section in SETTINGS_COMMANDS {
         if matches(section) {
             let slug = section
                 .to_lowercase()
@@ -247,3 +238,15 @@ fn schedule_result(automation: &super::automations::AutomationSummary) -> Value 
         "schedule_type":automation.schedule_type,"next_run_at":automation.next_run_at,
         "route":format!("automation:{}",automation.id)})
 }
+
+const SETTINGS_COMMANDS: &[&str] = &[
+    "General",
+    "Appearance",
+    "Memory",
+    "Server/Bridge",
+    "Models/Access",
+    "Privacy/Data",
+    "Diagnostics",
+    "System events",
+    "Archived",
+];

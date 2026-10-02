@@ -2,7 +2,12 @@ use butler_gateway::gateway::{
     AppIdentityClock, AppMemoryCommand, AppMemoryPort, ApplicationFuture, GatewayApplicationError,
     MemoryEventSink,
 };
-use butler_memory::management::MemoryManagement;
+use butler_memory::{
+    cognition::{RememberedRuleOwner, RememberedRuleTarget},
+    management::MemoryManagement,
+};
+mod actions;
+mod instructions;
 use serde_json::{Value, json};
 use std::{
     collections::HashMap,
@@ -13,23 +18,40 @@ use tokio_util::sync::CancellationToken;
 #[derive(Clone)]
 pub(crate) struct AppMemoryManagement {
     owner: Arc<MemoryManagement>,
+    instructions: Arc<RememberedRuleOwner>,
     shutdown: CancellationToken,
     clock: Arc<dyn AppIdentityClock>,
     jobs: Arc<Mutex<HashMap<String, CancellationToken>>>,
+    instruction_count: Arc<Mutex<Option<(u64, u64)>>>,
 }
 
 impl AppMemoryManagement {
     pub(crate) fn new(
         owner: Arc<MemoryManagement>,
+        instructions: Arc<RememberedRuleOwner>,
         shutdown: CancellationToken,
         clock: Arc<dyn AppIdentityClock>,
     ) -> Self {
         Self {
             owner,
+            instructions,
             shutdown,
             clock,
             jobs: Arc::new(Mutex::new(HashMap::new())),
+            instruction_count: Arc::new(Mutex::new(None)),
         }
+    }
+
+    pub(crate) fn for_runtime(
+        runtime: &crate::host::runtime::AgentRuntime,
+        clock: Arc<dyn AppIdentityClock>,
+    ) -> Self {
+        Self::new(
+            runtime.memory_management.clone(),
+            runtime.memory_writes.clone(),
+            runtime.service_shutdown.clone(),
+            clock,
+        )
     }
 
     async fn execute_inner(
@@ -39,13 +61,37 @@ impl AppMemoryManagement {
         cancellation: CancellationToken,
     ) -> Result<Value, GatewayApplicationError> {
         match command {
-            AppMemoryCommand::Inventory => encode(self.owner.inventory()),
-            AppMemoryCommand::Check => encode(
-                self.owner
-                    .refresh(self.clock.now_iso(), cancellation)
-                    .await
-                    .map_err(error)?,
-            ),
+            AppMemoryCommand::Instructions => self.list_instructions().await,
+            AppMemoryCommand::DeleteInstruction {
+                handle,
+                expected_revision,
+                project_id,
+                operation_id,
+            } => {
+                self.delete_instruction(
+                    handle,
+                    expected_revision,
+                    project_id,
+                    operation_id,
+                    sink,
+                    cancellation,
+                )
+                .await
+            }
+            AppMemoryCommand::Project { project_id } => {
+                self.project(project_id, cancellation).await
+            }
+            AppMemoryCommand::Inventory => self.inventory(self.owner.inventory(), false).await,
+            AppMemoryCommand::Check => {
+                self.inventory(
+                    self.owner
+                        .refresh(self.clock.now_iso(), cancellation)
+                        .await
+                        .map_err(error)?,
+                    true,
+                )
+                .await
+            }
             AppMemoryCommand::Status { operation_id } => encode(
                 self.owner
                     .cleanup_status(operation_id)
@@ -69,27 +115,8 @@ impl AppMemoryManagement {
                 operation_id,
                 inventory_revision,
             } => {
-                let receipt = self
-                    .owner
-                    .begin_cleanup(operation_id.clone(), inventory_revision)
+                self.start_cleanup(operation_id, inventory_revision, sink)
                     .await
-                    .map_err(error)?;
-                if receipt.phase == "complete" {
-                    return encode(receipt);
-                }
-                let token = self.shutdown.child_token();
-                {
-                    let mut jobs = self
-                        .jobs
-                        .lock()
-                        .map_err(|_| GatewayApplicationError::internal())?;
-                    if jobs.contains_key(&operation_id) {
-                        return encode(receipt);
-                    }
-                    jobs.insert(operation_id.clone(), token.clone());
-                }
-                tokio::spawn(self.drive(operation_id, inventory_revision, token, sink));
-                encode(receipt)
             }
         }
     }

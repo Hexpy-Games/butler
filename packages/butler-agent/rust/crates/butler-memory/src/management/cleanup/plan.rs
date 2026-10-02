@@ -2,7 +2,7 @@ use super::{CleanupItem, files, safety};
 use std::{fs, io, path::Path};
 use tokio_util::sync::CancellationToken;
 
-pub(super) fn analyze(
+pub(in crate::management) fn analyze(
     memory: &Path,
     active: &str,
     descriptor: &[u8],

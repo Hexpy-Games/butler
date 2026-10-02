@@ -244,3 +244,5 @@ fn unavailable_lease(cancellation: &CancellationToken, deadline: i64) -> Cogniti
 pub(super) fn error(code: CognitionCode) -> CognitionError {
     CognitionError::new(code, code.as_str())
 }
+
+pub(crate) use source::capsule_path;

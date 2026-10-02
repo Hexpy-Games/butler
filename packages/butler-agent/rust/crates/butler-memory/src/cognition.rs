@@ -153,3 +153,5 @@ pub(crate) type PhaseExecutionFuture<'a> = Pin<
             + 'a,
     >,
 >;
+
+pub(crate) use project_capsule::capsule_path;

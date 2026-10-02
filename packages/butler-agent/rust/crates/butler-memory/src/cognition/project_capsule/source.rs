@@ -163,7 +163,7 @@ pub(super) fn read_text(data_root: &Path, path: &Path) -> CognitionResult<String
         .unwrap_or_default())
 }
 
-pub(super) fn capsule_path(memory_root: &Path, project_id: &str) -> PathBuf {
+pub(crate) fn capsule_path(memory_root: &Path, project_id: &str) -> PathBuf {
     let safe = sanitize_project_memory_id(project_id);
     memory_root.join("projects").join(format!("{safe}.md"))
 }

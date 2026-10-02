@@ -49,6 +49,7 @@ pub(crate) struct AgentRuntime {
     pub skills: Arc<Skills>,
     pub mcp_client: Arc<butler_models::mcp_client::McpClient>,
     pub context_maintenance: Arc<ContextMaintenance>,
+    pub memory_writes: Arc<butler_memory::cognition::RememberedRuleOwner>,
     pub memory_management: Arc<butler_memory::management::MemoryManagement>,
     pub profile: Arc<butler_memory::profile::ProfileService>,
     pub(super) host: BtccHost,

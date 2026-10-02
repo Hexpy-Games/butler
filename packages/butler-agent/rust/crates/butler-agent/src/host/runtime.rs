@@ -240,12 +240,8 @@ impl AgentRuntime {
         let context_compactions = documents.context_compactions();
         let repositories = Arc::new(documents.clone());
         let now: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
-        let memory_writes = memory_bootstrap::rule_owner(
-            &paths,
-            &environment.cognition_paths,
-            coordinator.clone(),
-            stop,
-        );
+        let memory_writes =
+            memory_bootstrap::rule_owner(&paths, &environment.cognition_paths, &coordinator, stop);
         let preparation = Arc::new(DefaultTurnPreparation::new(
             stores.bindings.clone(),
             stores.conversations.clone(),
@@ -349,7 +345,7 @@ impl AgentRuntime {
             tool_artifacts,
             memory_query: memory_query.clone(),
             memory_recall: memory_recall.clone(),
-            memory_writes,
+            memory_writes: memory_writes.clone(),
             conversation_reference: conversation_reference.clone(),
             conversation_tools: conversation_tools.clone(),
             compactions: ContextCompactionRepository::new(stores.btcc.clone()),
@@ -429,6 +425,7 @@ impl AgentRuntime {
         let (memory_management, memory_acquisition) =
             Self::memory_owners(&paths.data_root, &environment.cognition_paths, coordinator);
         Ok(Self {
+            memory_writes: Arc::new(memory_writes.rules.clone()),
             memory_management,
             memory_acquisition,
             service_shutdown: stop.clone(),

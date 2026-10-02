@@ -22,7 +22,7 @@ use butler_turn::btcc::BtccError;
 use crate::host::app::dashboard::AppDashboardLedger;
 use crate::host::app::dashboard_briefing::AppDashboardBriefing;
 use crate::host::app::plan_decision::AppPlanDecisionLedger;
-use crate::host::app::runtime_ports::AppRuntimeInfo;
+use crate::host::app::runtime_ports::{AppMemoryManagement, AppRuntimeInfo};
 use crate::host::app::runtime_ports::{AppSetup, AppSetupParts};
 use crate::host::service::configuration::AppServiceConfiguration;
 use crate::host::{
@@ -167,9 +167,8 @@ impl AppServer {
                 installation.clone(),
                 data_root.to_path_buf(),
             )),
-            memory_management: Arc::new(crate::host::app::runtime_ports::AppMemoryManagement::new(
-                runtime.memory_management.clone(),
-                runtime.service_shutdown.clone(),
+            memory_management: Arc::new(AppMemoryManagement::for_runtime(
+                runtime,
                 identity_clock.clone(),
             )),
             personalization: Arc::new(crate::host::AppPersonalization::new(

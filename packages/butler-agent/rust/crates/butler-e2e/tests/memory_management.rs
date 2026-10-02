@@ -90,7 +90,7 @@ async fn inventory_and_explicit_cleanup_preserve_memory_and_replay_receipts()
     } = seed_dormant(&s)?;
     let measured = s.gw.post("/memory/inventory/check", json!({})).await?;
     assert_eq!(measured.status, 200, "{}", measured.text);
-    assert_eq!(measured.data()["kinds"][0]["item_count"], Value::Null);
+    assert_eq!(measured.data()["kinds"][0]["item_count"], 1);
     assert!(
         measured.data()["kinds"][0]["allocated_bytes"]
             .as_u64()
@@ -411,6 +411,10 @@ fn seed_dormant(s: &Scenario) -> Result<CleanupFixture, HarnessError> {
     let graph_before = std::fs::read(generation.join("graph.sqlite"))?;
     std::fs::create_dir_all(memory.join("rules"))?;
     std::fs::write(memory.join("rules/kept.md"), "Keep concise explanations.")?;
+    std::fs::write(
+        memory.join("rules/INDEX.md"),
+        "- [Keep concise explanations.](kept.md)\n",
+    )?;
     std::fs::create_dir_all(memory.join(format!("generations/{ORPHAN}")))?;
     let retired = memory.join(format!("generations/{RETIRED}"));
     std::fs::create_dir_all(retired.join("source-snapshot/runtime"))?;

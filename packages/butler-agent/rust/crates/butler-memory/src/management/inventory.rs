@@ -78,6 +78,13 @@ pub(super) fn measure(
             "automatic" => {
                 card.allocated_bytes = automatic_bytes;
                 card.health = health.clone();
+                if let Some(health) = card.health.as_object_mut() {
+                    health.insert(
+                        "reclaimable_bytes".into(),
+                        serde_json::to_value(reclaimable(root, paths, token)?)
+                            .map_err(io::Error::other)?,
+                    );
+                }
                 read_automatic(root, paths, card)?;
             }
             _ => {}
@@ -164,4 +171,32 @@ fn read_automatic(
         json!(missing),
     );
     Ok(())
+}
+
+fn reclaimable(
+    root: &Path,
+    paths: &CognitionPathEnvironment,
+    token: &CancellationToken,
+) -> io::Result<Option<u64>> {
+    let memory = paths.memory_root(root);
+    if !memory.join("active-generation.json").exists() {
+        return Ok(None);
+    }
+    let active = super::safety::active(root, paths)?;
+    let descriptor = std::fs::read(memory.join("active-generation.json"))?;
+    let manifest = std::fs::read(active.root.join("manifest.json"))?;
+    super::cleanup::plan::analyze(
+        &memory,
+        &active.generation_id,
+        &descriptor,
+        &manifest,
+        token,
+    )?
+    .into_iter()
+    .filter(|item| item.reason == "unpublished_empty_generation")
+    .try_fold(Some(0_u64), |total, item| {
+        Ok(total
+            .zip(item.allocated_bytes)
+            .map(|(a, b)| a.saturating_add(b)))
+    })
 }
