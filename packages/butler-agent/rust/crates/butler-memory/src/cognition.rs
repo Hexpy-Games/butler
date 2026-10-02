@@ -4,7 +4,6 @@
 
 use std::{future::Future, pin::Pin};
 
-mod box_store;
 mod briefing;
 mod completion;
 mod configured_cycle;
@@ -49,16 +48,13 @@ pub(crate) use crate::cognition::legacy::lance_writer::{LegacyLanceWriter, Legac
 pub use crate::cognition::legacy::memory_import::{
     LegacyMemoryImportChunk, LegacyMemoryImportPlan, LegacyMemoryImportService,
 };
-pub use crate::cognition::legacy::metadata::{
-    LegacyMetadataIntegrityService, MissingBoxRef, MissingFeedbackRef,
-};
+pub use crate::cognition::legacy::metadata::{LegacyMetadataIntegrityService, MissingFeedbackRef};
 pub use crate::cognition::legacy::recall::{LegacyRecallRequest, recall_legacy};
 pub use crate::cognition::legacy::session_sync::{
     LegacySessionOffsets, append_legacy_session_diagnostic, index_legacy_transcript_query,
     legacy_hot_prefix, normalize_session_id_for_storage, prepare_legacy_transcript,
     read_legacy_new_lines,
 };
-pub use box_store::BoxStoreService;
 pub use briefing::{
     BriefingGenerationCode, BriefingGenerationError, BriefingGenerationService,
     BriefingInputFuture, BriefingInputSnapshot, BriefingInputSource, BriefingPersona,

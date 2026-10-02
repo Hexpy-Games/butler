@@ -18,8 +18,6 @@ pub enum Phase {
     ProfileConsolidation,
     /// Write the new-chat briefings.
     NewChatBriefing,
-    /// Rebuild the box item index.
-    BoxIndex,
     /// Check memory metadata links.
     MemoryMetadataIntegrity,
     /// Aggregate source quality feedback.
@@ -28,24 +26,20 @@ pub enum Phase {
     KnowhowRevision,
     /// Record memory health.
     MemoryHealth,
-    /// Apply box retention.
-    BoxRetention,
     /// Summarize the cycle metrics.
     MetricsSummary,
 }
 
 impl Phase {
-    pub(crate) const ALL: [Self; 11] = [
+    pub(crate) const ALL: [Self; 9] = [
         Self::Preflight,
         Self::FeedbackTriage,
         Self::ProfileConsolidation,
         Self::NewChatBriefing,
-        Self::BoxIndex,
         Self::MemoryMetadataIntegrity,
         Self::SourceQualityAggregation,
         Self::KnowhowRevision,
         Self::MemoryHealth,
-        Self::BoxRetention,
         Self::MetricsSummary,
     ];
 
@@ -56,12 +50,10 @@ impl Phase {
             Self::FeedbackTriage => "feedback_triage",
             Self::ProfileConsolidation => "profile_consolidation",
             Self::NewChatBriefing => "new_chat_briefing",
-            Self::BoxIndex => "box_index",
             Self::MemoryMetadataIntegrity => "memory_metadata_integrity",
             Self::SourceQualityAggregation => "source_quality_aggregation",
             Self::KnowhowRevision => "knowhow_revision",
             Self::MemoryHealth => "memory_health",
-            Self::BoxRetention => "box_retention",
             Self::MetricsSummary => "metrics_summary",
         }
     }
