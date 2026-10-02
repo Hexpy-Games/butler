@@ -207,17 +207,23 @@ function shellProof() {
 }
 
 async function shellFeatures(sessionId: string) {
+  phase = "login toggle";
   for (const enabled of [true, false, true]) {
     assert.equal((await bridge(page!, "setLoginSettings", { openAtLogin: enabled })).openAtLogin, enabled);
     const value = powershell("[string](Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -ErrorAction SilentlyContinue).'com.squirrel.butler-app.Butler'", env);
     assert.equal(value.includes(stub), enabled);
   }
-  await page!.expression("window.close(); true");
+  phase = "close to tray";
+  const closeButton = "document.querySelector('[data-test-class=\"app-window-close\"]')";
+  await waitFor(async () => await page!.expression(`Boolean(${closeButton})`), "native close button");
+  await page!.expression(`${closeButton}.click(); true`);
   await waitFor(async () => await page!.expression("document.visibilityState === 'hidden'"), "close to tray");
   assert.equal((await bridge(page!, "health")).ok, true);
+  phase = "native notification";
   const notification = await bridge(page!, "testDesktopNotification");
   assert.equal(notification.shown, true); assert.equal(notification.status.last_error, null);
   assert.ok(notification.status.last_shown_at, "Native notification show event missing");
+  phase = "deep link";
   await page!.expression("window.__navigation = null; window.butlerApp.onNativeNavigation(value => window.__navigation = value); true");
   powershell("Start-Process $env:BUTLER_DEEP_LINK", { ...env, BUTLER_DEEP_LINK: `butler://session/${sessionId}` });
   await waitFor(async () => await page!.expression(`window.__navigation?.sessionId === ${JSON.stringify(sessionId)}`), "registered deep link dispatch");

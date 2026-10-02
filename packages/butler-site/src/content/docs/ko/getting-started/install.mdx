@@ -8,7 +8,7 @@ status: published
 
 ## 지원 환경
 
-현재 배포는 0.1.0 프리뷰입니다. 정식 0.1.0은 추후 출시합니다.
+현재 버전은 `0.1.0-preview.5` 프리뷰이며, 정식 0.1.0은 출시 예정입니다.
 
 - Apple Silicon(M 시리즈 칩) Mac, macOS 12 이상
 - Linux x64 / arm64: DEB 패키지
@@ -31,8 +31,8 @@ status: published
 >
   <TabPanel value="macos">
     <Steps>
-      1. [0.1.0 preview.4 릴리스](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.4)를 엽니다.
-      2. [macOS DMG](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-darwin-arm64.dmg)를 내려받습니다.
+      1. [0.1.0 preview.5 릴리스](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.5)를 엽니다.
+      2. [macOS DMG](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/butler-app-0.1.0-preview.5-darwin-arm64.dmg)를 내려받습니다.
       3. DMG를 열고 `Butler.app`을 응용 프로그램 폴더로 끌어다 놓습니다.
     </Steps>
   </TabPanel>
@@ -46,16 +46,16 @@ status: published
   </TabPanel>
   <TabPanel value="linux">
     <Steps>
-      1. [DEB x64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-linux-x64.deb), [DEB arm64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-linux-arm64.deb) 또는 [Arch x64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/butler-app-0.1.0-archlinux-x64.pkg.tar.zst)를 내려받습니다.
+      1. [DEB x64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/butler-app-0.1.0-preview.5-linux-x64.deb), [DEB arm64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/butler-app-0.1.0-preview.5-linux-arm64.deb) 또는 [Arch x64](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/butler-app-0.1.0-preview.5-archlinux-x64.pkg.tar.zst)를 내려받습니다.
       2. 내려받은 폴더에서 배포판에 맞는 명령으로 설치합니다.
       3. 앱 목록에서 Butler를 엽니다.
     </Steps>
 
     ```bash
     # Debian / Ubuntu (x64; arm64는 파일명을 바꿉니다)
-    sudo apt install ./butler-app-0.1.0-linux-x64.deb
+    sudo apt install ./butler-app-0.1.0-preview.5-linux-x64.deb
     # Arch Linux (x64)
-    sudo pacman -U ./butler-app-0.1.0-archlinux-x64.pkg.tar.zst
+    sudo pacman -U ./butler-app-0.1.0-preview.5-archlinux-x64.pkg.tar.zst
     ```
   </TabPanel>
 </Tabs>
@@ -63,6 +63,8 @@ status: published
 <Notice tone="warning">
   이전 릴리스에는 지금은 쓰지 않는 TypeScript/Bun Agent가 들어 있을 수 있습니다. 네이티브 Agent가 포함된 릴리스를 받습니다.
 </Notice>
+
+`0.1.0-preview.5` 앱을 설치한 뒤 **미리보기 버전 받기**를 켜면 다음 프리뷰를 **설정 → 업데이트**에서 받을 수 있습니다. `butler --version`으로 정확한 버전을 확인합니다.
 
 ### 파일 확인 (선택)
 
@@ -95,7 +97,7 @@ macOS 프리뷰 빌드는 서명되어 있지만 Apple 공증(notarization)을 �
 헤드리스 Agent는 Apple Silicon macOS와 glibc 기반 Linux x64 / arm64를 지원합니다.
 
 ```bash
-curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.4/install.sh | sh -s -- --version 0.1.0-preview.4
+curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/install.sh | sh -s -- --version 0.1.0-preview.5
 # Node.js 사용 시
 npx @hexpygames/butler install
 ```
