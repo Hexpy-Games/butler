@@ -186,7 +186,7 @@ impl Launch {
     /// A command for `program` (an installed Agent, or its launcher) with the
     /// scenario's isolated environment and no installation options.
     pub fn env_command(&self, program: &Path) -> Command {
-        let mut command = environment::isolated_command(program, &self.data, &self.home);
+        let mut command = environment::isolated_command(program, &self.home);
         command
             .env("CODEX_HOME", self.home.join(".codex"))
             .env("TMPDIR", &self.tmp)
