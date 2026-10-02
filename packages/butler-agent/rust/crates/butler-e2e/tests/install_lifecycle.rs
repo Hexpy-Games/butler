@@ -17,7 +17,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::agent::{CliOutput, Launch};
@@ -155,15 +155,10 @@ fn failed(output: &CliOutput) -> Result<String, HarnessError> {
         .to_owned())
 }
 
-fn ready_record(world: &World) -> Value {
-    let deadline = Instant::now() + Duration::from_secs(60);
-    loop {
-        if let Some(record) = world.record().filter(|record| record["state"] == "ready") {
-            return record;
-        }
-        assert!(Instant::now() < deadline, "no ready service record");
-        std::thread::sleep(Duration::from_millis(100));
-    }
+async fn ready_record(world: &World) -> Value {
+    butler_e2e::e2e::readiness::wait_launch_ready(&world.launch, Duration::from_secs(60))
+        .await
+        .unwrap()
 }
 
 fn runs_from(record: &Value, dir: &str) -> bool {
@@ -218,7 +213,7 @@ async fn ins_02_install_update_rollback_uninstall() -> Result<(), HarnessError> 
 
     // start: the service runs from the installed version.
     ok(&world.butler(&["start", "--json"])?)?;
-    let first = ready_record(&world);
+    let first = ready_record(&world).await;
     assert!(runs_from(&first, &v1.dir), "{first}");
 
     // update --apply: the service restarts once, on the new version.
@@ -236,7 +231,7 @@ async fn ins_02_install_update_rollback_uninstall() -> Result<(), HarnessError> 
     assert_eq!(world.pointer("current").as_deref(), Some(v2.dir.as_str()));
     assert_eq!(world.pointer("previous").as_deref(), Some(v1.dir.as_str()));
     assert_role_links(&world.agent_home, &v2.dir)?;
-    let second = ready_record(&world);
+    let second = ready_record(&world).await;
     assert!(runs_from(&second, &v2.dir), "{second}");
     assert_ne!(
         second["nonce"], first["nonce"],
@@ -248,7 +243,7 @@ async fn ins_02_install_update_rollback_uninstall() -> Result<(), HarnessError> 
     );
     // No unintended restart follows: the instance stays the same.
     std::thread::sleep(Duration::from_secs(3));
-    let settled = ready_record(&world);
+    let settled = ready_record(&world).await;
     assert_eq!(
         settled["nonce"], second["nonce"],
         "the service restarted again"
@@ -278,7 +273,7 @@ async fn ins_02_install_update_rollback_uninstall() -> Result<(), HarnessError> 
     assert_eq!(rolled["data"]["service"]["restarted"], true, "{rolled}");
     assert_eq!(world.pointer("current").as_deref(), Some(v1.dir.as_str()));
     assert_role_links(&world.agent_home, &v1.dir)?;
-    let third = ready_record(&world);
+    let third = ready_record(&world).await;
     assert!(runs_from(&third, &v1.dir), "{third}");
     let version = ok(&world.butler(&["version", "--json"])?)?;
     assert_eq!(version["data"]["version"], "0.0.1");
@@ -338,6 +333,7 @@ async fn ins_02_install_update_rollback_uninstall() -> Result<(), HarnessError> 
         !world.sandbox.data.exists(),
         "the data folder survived --purge-data"
     );
+    world.sandbox.mark_success();
     Ok(())
 }
 
@@ -412,7 +408,7 @@ async fn ins_08_update_restarts_an_app_supervised_service_on_the_new_version()
     app.resources = current.join("resources");
     app.use_app_supervisor()?;
     let (mut agent, _gateway) = butler_e2e::e2e::agent::Agent::start(app.clone()).await?;
-    let first = ready_record(&world);
+    let first = ready_record(&world).await;
     assert!(runs_from(&first, &v1.dir), "{first}");
     assert_eq!(first["app_supervised"], true, "{first}");
 
@@ -425,7 +421,7 @@ async fn ins_08_update_restarts_an_app_supervised_service_on_the_new_version()
         stderr: output.stderr,
     })?;
     assert_eq!(updated["data"]["service"]["restarted"], true, "{updated}");
-    let second = ready_record(&world);
+    let second = ready_record(&world).await;
     assert!(runs_from(&second, &v2.dir), "{second}");
     assert_eq!(second["app_supervised"], true, "{second}");
     assert_ne!(
@@ -437,6 +433,7 @@ async fn ins_08_update_restarts_an_app_supervised_service_on_the_new_version()
         "stop intent left over"
     );
     std::thread::sleep(Duration::from_secs(3));
-    assert_eq!(ready_record(&world)["nonce"], second["nonce"]);
+    assert_eq!(ready_record(&world).await["nonce"], second["nonce"]);
+    world.sandbox.mark_success();
     Ok(())
 }

@@ -107,18 +107,13 @@ fn managed_fixture(s: &mut Scenario) -> Result<ManagerTask, HarnessError> {
 }
 
 async fn ready(s: &Scenario, old_pid: u32) -> Result<Value, HarnessError> {
-    let deadline = Instant::now() + Duration::from_secs(30);
-    loop {
-        if let Some(record) = instance_record(&s.sandbox.data)
-            && record["pid"] != old_pid
-            && record["state"] == "ready"
-            && s.gw.healthy().await
-        {
-            return Ok(record);
-        }
-        assert!(Instant::now() < deadline, "service did not return");
-        tokio::time::sleep(Duration::from_millis(25)).await;
-    }
+    butler_e2e::e2e::readiness::wait_ready(
+        &s.sandbox.data,
+        &s.gw,
+        Duration::from_secs(30),
+        |record| record["pid"] != old_pid,
+    )
+    .await
 }
 
 async fn assert_failed_and_drained(s: &Scenario, id: &str) -> Result<(), HarnessError> {

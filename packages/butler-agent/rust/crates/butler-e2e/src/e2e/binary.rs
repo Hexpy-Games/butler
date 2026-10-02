@@ -15,8 +15,15 @@ use super::{HarnessError, harness_error};
 
 static BINARY: OnceLock<Result<PathBuf, String>> = OnceLock::new();
 
+/// Cargo/nextest supplies the manifest directory remapped to the runtime workspace.
+pub fn manifest_dir() -> PathBuf {
+    std::env::var_os("CARGO_MANIFEST_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
+}
+
 pub fn workspace_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+    manifest_dir().join("../..")
 }
 
 /// `packages/butler-agent/resources` as shipped next to the binary.
@@ -80,4 +87,27 @@ fn locate() -> Result<PathBuf, String> {
             binary.display()
         ))
     }
+}
+
+/// Nextest remaps non-test executables when consuming an archive. Prefer its
+/// runtime path; cargo test puts this fixture next to the deps directory.
+pub fn mcp_fixture_binary() -> Result<PathBuf, HarnessError> {
+    if let Some(path) = nonempty("NEXTEST_BIN_EXE_e2e-mcp-fixture")
+        .or_else(|| nonempty("NEXTEST_BIN_EXE_e2e_mcp_fixture"))
+    {
+        return Ok(PathBuf::from(path));
+    }
+    let executable = std::env::current_exe()?;
+    let profile = executable
+        .parent()
+        .and_then(Path::parent)
+        .ok_or_else(|| harness_error("test executable has no profile directory"))?;
+    let path = profile.join(format!("e2e-mcp-fixture{}", std::env::consts::EXE_SUFFIX));
+    if !path.is_file() {
+        return Err(harness_error(format!(
+            "MCP fixture missing: {}",
+            path.display()
+        )));
+    }
+    Ok(path)
 }

@@ -12,7 +12,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 #[tokio::test]
 async fn archived_process_roles_restore_only_identical_files() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let sandbox = Sandbox::new("PROC-ZIP")?;
+    let mut sandbox = Sandbox::new("PROC-ZIP")?;
     process_names::prepare(&sandbox.binary)?;
     let aliases = [Role::Memory, Role::Restart, Role::Update]
         .map(|role| sandbox.binary.with_file_name(role.file_name()));
@@ -55,6 +55,7 @@ async fn archived_process_roles_restore_only_identical_files() -> Result<(), Har
         std::fs::metadata(&aliases[0])?.len(),
         std::fs::metadata(&sandbox.binary)?.len()
     );
+    sandbox.mark_success();
     Ok(())
 }
 
@@ -63,7 +64,7 @@ async fn process_roles_preserve_worker_protocol_and_executable_identity() -> Res
 {
     // Like every Agent E2E, run only after the explicit tier has prepared its binary.
     butler_e2e::gate!();
-    let sandbox = Sandbox::new("PROC-01")?;
+    let mut sandbox = Sandbox::new("PROC-01")?;
     let launch = Launch::new(&sandbox)?;
     for (role, full_name, linux_comm) in [
         (Role::Memory, "butler-agent (memory)", "butler-memory"),
@@ -131,6 +132,7 @@ async fn process_roles_preserve_worker_protocol_and_executable_identity() -> Res
         assert!(process_names::executable(&sandbox.binary, Role::Memory).is_err());
         assert_eq!(std::fs::read(&alias)?, b"foreign");
     }
+    sandbox.mark_success();
     Ok(())
 }
 
