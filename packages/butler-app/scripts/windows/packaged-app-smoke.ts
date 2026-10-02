@@ -35,7 +35,7 @@ const launcher = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Com
   "-Electron $launch.Electron -AppRoot $launch.AppRoot -Profile $launch.Profile " +
   "-PidFile $launch.PidFile -ExitFile $launch.ExitFile -DebugPort $launch.DebugPort",
 ], { stdio: "ignore", env: {
-  ...process.env,
+  ...process.env, PSModuleAnalysisCachePath: join(root, "powershell-module-cache"),
   BUTLER_SMOKE_LAUNCH_SCRIPT: resolve("packages/butler-app/scripts/windows/launch-electron-smoke.ps1"),
   BUTLER_SMOKE_LAUNCH_INPUT: JSON.stringify({ Electron: join(packageRoot, "Butler.exe"), AppRoot: packageRoot,
     Profile: join(root, "profile"), PidFile: pidFile, ExitFile: exitFile, DebugPort: debugPort }),
