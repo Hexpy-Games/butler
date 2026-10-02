@@ -159,3 +159,6 @@ try {
     $protocolAfter = (& reg query HKCU\Software\Classes\butler /s 2>$null) -join "`n"
     if ($protocolBefore -cne $protocolAfter) { throw 'Owner protocol registry changed' }
 }
+# An absent protocol key returns 1 from reg.exe. Every smoke failure throws;
+# only a completed smoke returns success to the caller's LASTEXITCODE check.
+$global:LASTEXITCODE = 0
