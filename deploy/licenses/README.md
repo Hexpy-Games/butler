@@ -8,7 +8,12 @@ in its original runtime; our packagers do not duplicate them.
 
 `catalog.json` keeps reviewed license IDs, source evidence hashes, attribution
 and links, without full texts. Generation validates locked input fingerprints,
-production npm closure and vendored asset fingerprints. Every one of the 848 inventory components remains
+production npm closure and vendored third-party notice sources. Fingerprints cover
+Cargo/Bun lockfiles, Cargo and packaging manifests, the generator/collector and
+their embedded config/allowlist, the static-ORT lock, and parsed model identity
+constants. Rust comments, first-party code, prompts and unrelated asset bytes do
+not invalidate the inventory. Added/removed manifests or notice sources do.
+Staleness errors list the changed input paths and one refresh command. Every one of the 848 inventory components remains
 disclosed with name, version, SPDX expression (or the supplier's explicit
 LicenseRef), upstream link(s), and available copyright attribution lines.
 Supplier collections remain collection entries; individual supplier versions and
