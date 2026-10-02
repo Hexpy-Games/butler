@@ -8,7 +8,7 @@ import { createNativeAppServer } from "../support/native-app-server";
 import { getAppCopy } from "../../packages/butler-i18n/src";
 import { LEGACY_FIRST_RUN_STORAGE_KEY, legacyFirstRunCompleteRecord } from "../../packages/butler-app/client/ui/src/app/onboarding";
 
-const copy = getAppCopy("ko-KR");
+let copy = getAppCopy("ko-KR");
 const screenshots = resolve(".tmp/settings-bugs");
 mkdirSync(screenshots, { recursive: true });
 const server = await createNativeAppServer({ uiRoot: resolve("packages/butler-app/client/ui/dist") });
@@ -40,9 +40,9 @@ async function openSection(page: Page, query: string, label: string) {
 }
 
 async function paletteChecks(page: Page, prefix: string) {
-  for (const [query, id] of [["모델", "models"], ["models", "models"], ["스킬", "skills"], ["mcp", "mcp"]] as const) {
+  for (const [query, id] of [[copy.settings.sections.models, "models"], ["models", "models"], [copy.settings.sections.skills, "skills"], ["mcp", "mcp"]] as const) {
     const dialog = await search(page, query);
-    const result = dialog.getByRole("option").filter({ hasText: copy.settings.sections[id] });
+    const result = dialog.getByRole("option").filter({ has: page.getByText(copy.settings.sections[id], { exact: true }) });
     await result.waitFor();
     await dialog.getByText(copy.commandPalette.loading, { exact: true }).waitFor({ state: "hidden" });
     if (query === "models") {
@@ -73,7 +73,7 @@ async function paletteChecks(page: Page, prefix: string) {
   await page.route("**/app-info", async (route) => {
     const response = await route.fetch();
     const payload = await response.json();
-    payload.data.developer_mode_enabled = true;
+    (payload.data ?? payload).developer_mode_enabled = true;
     await route.fulfill({ response, json: payload });
   });
   await page.reload();
@@ -89,7 +89,7 @@ async function paletteChecks(page: Page, prefix: string) {
 }
 
 async function skillChecks(page: Page, prefix: string) {
-  await openSection(page, "스킬", copy.settings.sections.skills);
+  await openSection(page, copy.settings.sections.skills, copy.settings.sections.skills);
   await page.getByRole("button", { name: copy.settings.actions.importSkill, exact: true }).click();
   let imports = 0;
   page.on("request", (request) => { if (request.url().includes("/skills/import")) imports += 1; });
@@ -227,11 +227,12 @@ async function scheduleChecks(page: Page, prefix: string) {
   assert.equal(deletes, 1, "confirmation deletes once");
 }
 
-async function runCase(width: number, theme: "light" | "dark") {
-  await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: theme }) });
+async function runCase(width: number, theme: "light" | "dark", language: "ko" | "en" = "ko") {
+  copy = getAppCopy(language === "ko" ? "ko-KR" : "en-US");
+  await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language, appearance_theme: theme }) });
   await server.api("/mcp-servers", { method: "POST", body: JSON.stringify({ id: "settings-smoke", display_name: "검증 서버", enabled: true, transport: "stdio", command: "false" }) });
   await server.api("/automations", { method: "POST", body: JSON.stringify({ title: "삭제 검증", prompt_body: "stub only", target_session_id: "general", interval_seconds: 86400 }) });
-  const context = await browser.newContext({ viewport: { width, height: 900 }, locale: "ko-KR", colorScheme: theme });
+  const context = await browser.newContext({ viewport: { width, height: 900 }, locale: language === "ko" ? "ko-KR" : "en-US", colorScheme: theme });
   await server.signIn(context);
   const page = await context.newPage();
   const errors: string[] = [];
@@ -241,7 +242,7 @@ async function runCase(width: number, theme: "light" | "dark") {
   });
   await page.goto(server.url);
   await page.locator('[data-test-class~="composer-card"]').waitFor();
-  const prefix = `${width}-ko-${theme}`;
+  const prefix = `${width}-${language}-${theme}`;
   await paletteChecks(page, prefix);
   await skillChecks(page, prefix);
   await mcpChecks(page, prefix);
@@ -290,10 +291,11 @@ try {
     await server.api("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: `models regression ${index}` }) });
   }
   for (const width of [375, 1280]) for (const theme of ["light", "dark"] as const) await runCase(width, theme);
+  await runCase(1280, "light", "en");
   await englishChecks();
   assert.equal(server.stubModelCalls.length, 0, "settings need no model calls");
-  writeFileSync(resolve(screenshots, "manifest.json"), `${JSON.stringify({ screenshots: evidence, cases: 5, modelCalls: 0 }, null, 2)}\n`);
-  console.log(JSON.stringify({ ok: true, cases: 5, screenshots: evidence.length, modelCalls: 0 }));
+  writeFileSync(resolve(screenshots, "manifest.json"), `${JSON.stringify({ screenshots: evidence, cases: 6, modelCalls: 0 }, null, 2)}\n`);
+  console.log(JSON.stringify({ ok: true, cases: 6, screenshots: evidence.length, modelCalls: 0 }));
 } finally {
   await browser.close();
   await server.stop();
