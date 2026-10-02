@@ -307,7 +307,8 @@ fn ask_first_admits_the_attached_image_tool() {
 /// Security boundary (#236): on the production (legacy) surface, ask-first
 /// authorizes the required tools of its approval-free actions (onboarding,
 /// memory save) and MCP calls, which ask at dispatch; it never authorizes a
-/// required tool outside those actions. Read-only authorizes none of them.
+/// required tool outside those actions or schedule writes. Read-only authorizes no writes.
+// test-category: security
 #[test]
 fn ask_first_authorizes_approval_free_actions_and_approval_gated_mcp() {
     let catalog = catalog();
@@ -321,7 +322,7 @@ fn ask_first_authorizes_approval_free_actions_and_approval_gated_mcp() {
     // (access, authorized approval-free tools, call_mcp_tool, create_automation)
     let cases = [
         ("full_access", true, true, true),
-        ("ask_first", true, true, false),
+        ("ask_first", true, true, true),
         ("read_only", false, false, false),
     ];
     for (access, exempt, mcp, automation) in cases {
@@ -344,6 +345,35 @@ fn ask_first_authorizes_approval_free_actions_and_approval_gated_mcp() {
         }
         assert_eq!(authorized("call_mcp_tool"), mcp, "{access}");
         assert_eq!(authorized("create_automation"), automation, "{access}");
+        // Ordinary sessions authorize discovery without adding visible schemas.
+        for flag in ["off", "on"] {
+            let mut ordinary = phase_turn(access, &json!({}));
+            ordinary.context["executionPolicy"]["trackingMode"] = "local".into();
+            let selection = select_phase(GuidedPhaseInput {
+                turn: &ordinary,
+                catalog,
+                phase_surface_flag: flag,
+                operation_replay_flag: "off",
+                default_workspace: "/tmp",
+            })
+            .unwrap();
+            for name in [
+                "create_automation",
+                "update_automation",
+                "delete_automation",
+                "list_automations",
+            ] {
+                assert_eq!(
+                    selection.authorized_names.iter().any(|tool| tool == name),
+                    name == "list_automations" || access != "read_only",
+                    "{access} {flag} {name}"
+                );
+                assert!(
+                    !has_provider_tool(&selection.provider_tools, name),
+                    "{access} {flag} {name}"
+                );
+            }
+        }
     }
 }
 
