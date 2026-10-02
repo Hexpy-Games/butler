@@ -8,6 +8,7 @@ mod execute;
 mod feedback;
 mod image;
 mod memory_write;
+pub(crate) use memory_write::MemoryWriteServices;
 mod message;
 mod monitoring;
 mod occurrence;
@@ -99,8 +100,7 @@ pub(crate) struct GuidedTools {
     file_effects: crate::host::GuidedFileEffects,
     query: Arc<ExactMemoryQuery>,
     recall: Arc<MemoryRecall>,
-    memory_paths: butler_memory::cognition::CognitionPathEnvironment,
-    memory_publisher: Arc<butler_memory::cognition::CompletionPublisher>,
+    memory_writes: MemoryWriteServices,
     conversations: Arc<ConversationSessionReference>,
     conversation_tools: Arc<butler_runtime::context::ConversationTools>,
     project: Arc<crate::host::guided::project_tools::GuidedProjectTools>,
@@ -168,8 +168,7 @@ impl GuidedTools {
         file_effects: crate::host::GuidedFileEffects,
         query: Arc<ExactMemoryQuery>,
         recall: Arc<MemoryRecall>,
-        memory_paths: butler_memory::cognition::CognitionPathEnvironment,
-        memory_publisher: Arc<butler_memory::cognition::CompletionPublisher>,
+        memory_writes: MemoryWriteServices,
         conversations: Arc<ConversationSessionReference>,
         conversation_tools: Arc<butler_runtime::context::ConversationTools>,
         project: Arc<crate::host::guided::project_tools::GuidedProjectTools>,
@@ -229,8 +228,7 @@ impl GuidedTools {
             file_effects,
             query,
             recall,
-            memory_paths,
-            memory_publisher,
+            memory_writes,
             conversations,
             conversation_tools,
             project,

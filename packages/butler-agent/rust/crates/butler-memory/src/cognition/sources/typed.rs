@@ -10,10 +10,7 @@ pub use rules::{
     list_remembered_rules,
 };
 
-pub use write::{
-    ExplicitMemoryUpdateInput, ExplicitMemoryUpdateResult, TaskMemoryIngestionResult,
-    ingest_task_outcome_memory, update_explicit_memory,
-};
+pub use write::{ExplicitMemoryUpdateInput, TaskMemoryIngestionResult, ingest_task_outcome_memory};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

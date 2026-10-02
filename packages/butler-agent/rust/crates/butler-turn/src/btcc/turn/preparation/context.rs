@@ -74,6 +74,7 @@ pub(super) async fn snapshot(
         execution_policy(binding, subsession, controls)?,
     );
     insert_request_refs(&mut context, binding, request);
+    insert_rule_snapshot(&mut context, assembly);
     if !request.message.attachments.is_empty() {
         context.insert(
             "attachments".into(),
@@ -434,4 +435,14 @@ fn strings(values: Vec<String>) -> Value {
 }
 fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> BtccError {
     BtccError::detected(BtccCode::BtccJsonError, error.to_string()).with_source(error)
+}
+
+fn insert_rule_snapshot(context: &mut Map<String, Value>, assembly: &ContextAssembly) {
+    if let Some(snapshot) = sections(assembly)
+        .find(|section| section.id == "rules")
+        .and_then(|section| section.source.as_ref())
+        .and_then(|source| source.get("rememberedRuleSnapshot"))
+    {
+        context.insert("rememberedRuleSnapshot".into(), snapshot.clone());
+    }
 }

@@ -55,3 +55,20 @@ pub(super) async fn open(
     ));
     Ok((coordinator, embedding, vectors, fresh))
 }
+
+/// Compose the rule owner and request targeted recovery without delaying admission.
+pub(super) fn rule_owner(
+    paths: &RuntimePaths,
+    environment: &CognitionPathEnvironment,
+    coordinator: Arc<CognitionWriteCoordinator>,
+    stop: &tokio_util::sync::CancellationToken,
+) -> crate::host::guided::tools::MemoryWriteServices {
+    let services = crate::host::guided::tools::MemoryWriteServices::new(
+        &paths.data_root,
+        environment,
+        coordinator,
+        Arc::new(|| SystemIdentity.now_iso()),
+    );
+    services.recover_at_startup(stop.clone());
+    services
+}

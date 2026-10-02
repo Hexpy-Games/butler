@@ -114,6 +114,21 @@ struct Cognition {
     rich: bool,
 }
 impl CognitionPromptPort for Cognition {
+    fn remembered_rules<'a>(
+        &'a self,
+        _: &'a PromptProjectionInput<'a>,
+        _: &'a std::path::Path,
+    ) -> ContextFuture<'a, Vec<RememberedRuleProjection>> {
+        Box::pin(async {
+            Ok(vec![RememberedRuleProjection {
+                handle: "RTEST".into(),
+                text: "rule body\n".into(),
+                project_id: None,
+                revision: "fixture".into(),
+            }])
+        })
+    }
+
     fn scoped_feedback<'a>(
         &'a self,
         _: &'a PromptProjectionInput<'a>,

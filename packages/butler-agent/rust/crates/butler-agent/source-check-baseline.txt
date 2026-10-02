@@ -22,7 +22,7 @@ src/host/guided/command/effect.rs	<CommandEffectAdapter as EffectAdapter>::dispa
 src/host/guided/command/evidence.rs	capability_receipts	85
 src/host/guided/command/output.rs	from_streams	175
 src/host/guided/command/output/assemble.rs	assemble	149
-src/host/guided/factory.rs	<GuidedTurnFactoryAdapter as GuidedTurnFactory>::bind_pre_model	225
+src/host/guided/factory.rs	<GuidedTurnFactoryAdapter as GuidedTurnFactory>::bind_pre_model	224
 src/host/guided/file_effects/edit.rs	decode	115
 src/host/guided/file_effects/edit.rs	recover	149
 src/host/guided/file_effects/edit/legacy.rs	recover	90
@@ -36,7 +36,7 @@ src/host/guided/prompt.rs	<GuidedPrompt as PromptPort>::render	186
 src/host/guided/prompt/documents.rs	read	113
 src/host/guided/prompt/prior_tool/semantic.rs	facts	93
 src/host/guided/prompt/work_context.rs	render	267
-src/host/guided/tools.rs	GuidedTools::new	99
+src/host/guided/tools.rs	GuidedTools::new	97
 src/host/guided/tools/discovery.rs	search	82
 src/host/guided/tools/discovery/invoke.rs	run	134
 src/host/guided/tools/discovery/invoke.rs	run_mcp	115
@@ -45,7 +45,7 @@ src/host/guided/tools/effect.rs	execute	120
 src/host/guided/tools/effect/authority.rs	gate	124
 src/host/guided/tools/effect/ledger_input.rs	prepare	94
 src/host/guided/tools/effect/topic_conversation.rs	TopicConversationEffect::request	97
-src/host/guided/tools/execute.rs	execute	141
+src/host/guided/tools/execute.rs	execute	137
 src/host/guided/tools/image.rs	admitted_image	96
 src/host/guided/tools/image.rs	execute	100
 src/host/guided/tools/message/preview.rs	fit	85

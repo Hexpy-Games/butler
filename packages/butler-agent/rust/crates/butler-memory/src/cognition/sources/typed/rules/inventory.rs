@@ -28,7 +28,7 @@ pub(super) struct Entry {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub(super) struct Inventory {
-    // Scoped maps include retired handles so allocation can never reuse one.
+    // Only active rows are read by prompts. Handle reservations are targeted files.
     pub scopes: BTreeMap<String, BTreeMap<String, Entry>>,
 }
 
@@ -59,7 +59,7 @@ impl Inventory {
                 root.parent().ok_or_else(|| failure("invalid_rule_root"))?,
                 id,
             )?;
-            let handle = inventory.allocate(id)?;
+            let handle = inventory.allocate(root, id)?;
             inventory.put(Entry {
                 handle,
                 content_hash: binding
@@ -78,12 +78,18 @@ impl Inventory {
         Ok(inventory)
     }
 
-    pub(super) fn allocate(&self, id: &str) -> CognitionResult<String> {
+    pub(super) fn allocate(&self, root: &Path, id: &str) -> CognitionResult<String> {
         // Stable for read-only legacy rows; collision checking also includes tombstones.
         let digest = sha256(format!("rule-handle:{id}").as_bytes()).to_uppercase();
         for length in (10..=64).step_by(2) {
             let handle = format!("R{}", &digest[..length]);
-            if self.find(&handle).is_none_or(|row| row.record_id == id) {
+            let reserved: Option<Entry> =
+                read_json(&root.join("handles").join(format!("{handle}.json")))?;
+            if self
+                .find(&handle)
+                .or(reserved.as_ref())
+                .is_none_or(|row| row.record_id == id)
+            {
                 return Ok(handle);
             }
         }
@@ -95,10 +101,15 @@ impl Inventory {
     }
 
     pub(super) fn put(&mut self, row: Entry) {
-        self.scopes
+        let rows = self
+            .scopes
             .entry(scope(row.project_id.as_deref()))
-            .or_default()
-            .insert(row.handle.clone(), row);
+            .or_default();
+        if row.state == "active" {
+            rows.insert(row.handle.clone(), row);
+        } else {
+            rows.remove(&row.handle);
+        }
     }
 }
 

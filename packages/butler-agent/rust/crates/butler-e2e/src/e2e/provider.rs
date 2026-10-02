@@ -63,6 +63,8 @@ enum Mode {
     },
 }
 
+type MemoryResponder = fn(&Value) -> ResponseRecord;
+
 struct State {
     mode: Mode,
     placeholders: Mutex<Placeholders>,
@@ -76,6 +78,7 @@ struct State {
     library: Mutex<Vec<(String, ResponseRecord)>>,
     requests: Mutex<Vec<Value>>,
     memory_requests: Mutex<Vec<Value>>,
+    memory_responder: Mutex<Option<MemoryResponder>>,
 }
 
 pub struct Provider {
@@ -149,6 +152,7 @@ impl Provider {
             library: Mutex::new(Vec::new()),
             requests: Mutex::new(Vec::new()),
             memory_requests: Mutex::new(Vec::new()),
+            memory_responder: Mutex::new(None),
         });
         let shared = state.clone();
         let app = axum::Router::new().fallback(move |request: Request<Body>| {
@@ -217,6 +221,11 @@ impl Provider {
 
     pub fn set_pacing(&self, pacing: Pacing) {
         *lock(&self.state.pacing) = pacing;
+    }
+
+    /// Override only the validated synthetic memory contract, for semantic E2Es.
+    pub fn set_memory_responder(&self, responder: MemoryResponder) {
+        *lock(&self.state.memory_responder) = Some(responder);
     }
 
     pub fn add_placeholder(&self, name: &str, value: impl Into<String>) {
@@ -360,7 +369,9 @@ async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
                 return response;
             }
             if memory {
-                return replay(&state, &memory::response(), None);
+                let response = lock(&state.memory_responder)
+                    .map_or_else(memory::response, |responder| responder(&json));
+                return replay(&state, &response, None);
             }
             // A declared stall may target a request whose live round was
             // cut off by a crash during recording: hold it open, answer nothing.

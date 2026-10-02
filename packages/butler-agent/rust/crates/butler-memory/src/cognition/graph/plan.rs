@@ -402,7 +402,7 @@ fn validate_basis(input: &ExtractInput, basis: &str, quotes: &[QuoteRef]) -> Cog
         .collect::<HashMap<_, _>>();
     for quote in quotes {
         if let Some(role) = current.get(quote.unit_ref.as_str())
-            && ((basis == "user_statement" && *role != "user")
+            && ((basis == "user_statement" && !matches!(*role, "user" | "explicit"))
                 || (basis == "assistant_statement" && *role != "assistant"))
         {
             return Err(error(CognitionCode::MemoryExtractInvalidBasis));

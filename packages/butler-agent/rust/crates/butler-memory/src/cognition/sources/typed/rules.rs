@@ -38,6 +38,9 @@ pub struct RememberedRuleReceipt {
     pub state: String,
     /// This request replayed a completed operation.
     pub replayed: bool,
+    /// Current semantic projection readiness; omitted for forgotten rules.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recall_state: Option<String>,
 }
 
 /// Process-owned rule mutation service using the shared consolidation lease.
@@ -63,6 +66,17 @@ impl RememberedRuleOwner {
             coordinator,
             publisher,
         }
+    }
+
+    /// List complete active rows for the authenticated settings adapter.
+    pub async fn list(&self) -> CognitionResult<Vec<RememberedRule>> {
+        let owner = self.clone();
+        tokio::task::spawn_blocking(move || {
+            owner.authority()?;
+            list_remembered_rules(&owner.root(), None)
+        })
+        .await
+        .map_err(failure_source)?
     }
 
     /// Remember a new rule. Targeted changes are enabled only after exclusion wiring.
@@ -170,7 +184,14 @@ impl RememberedRuleOwner {
             let result = if cancellation.is_cancelled() {
                 Err(failure("rule_write_cancelled"))
             } else {
-                transaction::run(&owner, request)
+                transaction::run(&owner, request).and_then(|result| {
+                    result
+                        .map(|mut receipt| {
+                            receipt.recall_state = owner.recall_state(&receipt)?;
+                            Ok(receipt)
+                        })
+                        .transpose()
+                })
             };
             let released = lease.release(result.is_ok()).map_err(CognitionError::from);
             result.and_then(|value| released.map(|()| value))
@@ -181,6 +202,28 @@ impl RememberedRuleOwner {
 
     fn root(&self) -> PathBuf {
         crate::cognition::explicit_memory_rules_root(&self.environment.memory_root(&self.data_root))
+    }
+
+    fn recall_state(&self, receipt: &RememberedRuleReceipt) -> CognitionResult<Option<String>> {
+        if receipt.state != "active" {
+            return Ok(None);
+        }
+        let inventory = Inventory::read(&self.root())?;
+        let mut ready = false;
+        if let Some(row) = inventory.find(&receipt.rule) {
+            let binding = read_binding(
+                &self.environment.memory_root(&self.data_root),
+                &row.record_id,
+            )?;
+            if binding.is_some_and(|binding| binding.operation_id == receipt.operation_id) {
+                let generation = resolve_active_generation(&self.data_root, &self.environment)?;
+                let graph = crate::cognition::graph::GraphRepository::open(&generation.graph_path)?;
+                let state = graph.rule_projection_ready(&row.record_id, &row.revision);
+                let closed = graph.close();
+                ready = state.and_then(|state| closed.map(|()| state))?;
+            }
+        }
+        Ok(Some(if ready { "ready" } else { "pending" }.into()))
     }
 
     fn authority(&self) -> CognitionResult<()> {
@@ -197,6 +240,7 @@ impl RememberedRuleOwner {
             &self.data_root,
             &[
                 &self.root(),
+                &self.root().join("handles"),
                 &self.environment.consolidation_lock(&self.data_root),
             ],
         )

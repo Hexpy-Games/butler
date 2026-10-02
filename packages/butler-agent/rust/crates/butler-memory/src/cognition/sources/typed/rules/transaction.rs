@@ -52,6 +52,7 @@ pub(super) fn run(
     let path = root
         .join("operations")
         .join(format!("{}.json", sha256(operation.as_bytes())));
+    ensure_data_authority(&owner.data_root, &[&path])?;
     if let Some(receipt) = read_json::<Receipt>(&path)? {
         if serde_json::to_value(&receipt.request).map_err(failure_source)?
             != serde_json::to_value(&request).map_err(failure_source)?
@@ -78,7 +79,8 @@ pub(super) fn run(
         &owner.data_root,
         &[&root.join("operations"), &root.join("pending.json")],
     )?;
-    fs::create_dir_all(root.join("operations")).map_err(failure_source)?;
+    butler_platform::secure_fs::create_private_dir_all(&root.join("operations"))
+        .map_err(failure_source)?;
     butler_platform::secure_fs::sync_path(&root).map_err(failure_source)?;
     write_json(&root.join("pending.json"), &intent)?;
     complete(owner, &intent).map(Some)
@@ -99,7 +101,7 @@ fn prepare(owner: &RememberedRuleOwner, request: Request) -> CognitionResult<Int
         Request::Forget { target, .. } => Some(target),
     };
     let entry = target
-        .map(|target| select(&inventory, target, &request))
+        .map(|target| select(&root, &inventory, target, &request))
         .transpose()?;
     let id = entry
         .as_ref()
@@ -124,7 +126,9 @@ fn prepare(owner: &RememberedRuleOwner, request: Request) -> CognitionResult<Int
             .ok_or_else(|| failure("rule_text_missing"))?,
     };
     let entry = Entry {
-        handle: entry.map(|r| r.handle).unwrap_or(inventory.allocate(&id)?),
+        handle: entry
+            .map(|r| r.handle)
+            .unwrap_or(inventory.allocate(&root, &id)?),
         record_id: id,
         revision: binding.revision.clone(),
         content_hash: binding.content_hash.clone(),
@@ -152,7 +156,7 @@ fn binding(
 ) -> CognitionResult<ExplicitRuleBinding> {
     let (text, project, session, message, state) = match request {
         Request::Remember { input, .. } => {
-            if input.text.trim().is_empty() {
+            if butler_core::public_text::trim_js_whitespace(&input.text).is_empty() {
                 return Err(failure("rule_text_required"));
             }
             (
@@ -224,6 +228,9 @@ fn complete(
         &owner.data_root,
         &[
             &root.join("archive").join(&intent.entry.record_id),
+            &root
+                .join("handles")
+                .join(format!("{}.json", intent.entry.handle)),
             &root.join("operations"),
             &root.join("pending.json"),
             &root.join("manifest.json"),
@@ -231,6 +238,14 @@ fn complete(
             &root.join(format!("{}.md", intent.entry.record_id)),
             &root.join(format!("{}.source.json", intent.entry.record_id)),
         ],
+    )?;
+    butler_platform::secure_fs::create_private_dir_all(&root.join("handles"))
+        .map_err(failure_source)?;
+    write_json(
+        &root
+            .join("handles")
+            .join(format!("{}.json", intent.entry.handle)),
+        &intent.entry,
     )?;
     archive(&root, intent)?;
     super::super::write::write_atomic(
@@ -255,6 +270,7 @@ fn complete(
         operation_id: intent.binding.operation_id.clone(),
         state: intent.binding.state.clone(),
         replayed: false,
+        recall_state: (intent.entry.state == "active").then(|| "pending".into()),
     };
     write_json(
         &root
@@ -275,7 +291,7 @@ fn archive(root: &std::path::Path, intent: &Intent) -> CognitionResult<()> {
         return Ok(());
     };
     let path = root.join("archive").join(&intent.entry.record_id);
-    fs::create_dir_all(&path).map_err(failure_source)?;
+    butler_platform::secure_fs::create_private_dir_all(&path).map_err(failure_source)?;
     let revision = intent
         .previous
         .as_ref()
@@ -291,7 +307,11 @@ fn archive(root: &std::path::Path, intent: &Intent) -> CognitionResult<()> {
 
 fn write_index(root: &std::path::Path, intent: &Intent) -> CognitionResult<()> {
     let filename = format!("{}.md", intent.entry.record_id);
-    let prior = fs::read_to_string(root.join("INDEX.md")).unwrap_or_default();
+    let prior = match fs::read_to_string(root.join("INDEX.md")) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(failure_source(error)),
+    };
     let replacement = format!(
         "- [{}]({filename})",
         super::super::write::compact(&intent.text, 80)
@@ -336,12 +356,12 @@ fn revision(
 }
 
 fn select(
+    root: &std::path::Path,
     inventory: &Inventory,
     target: &RememberedRuleTarget,
     request: &Request,
 ) -> CognitionResult<Entry> {
-    let entry = inventory
-        .find(&target.handle)
+    let entry = selected_entry(root, inventory, &target.handle)?
         .ok_or_else(|| failure("rule_handle_unknown"))?;
     if entry.project_id != target.project_id {
         return Err(failure("rule_binding_mismatch"));
@@ -352,7 +372,7 @@ fn select(
     if entry.state != "active" && matches!(request, Request::Remember { .. }) {
         return Err(failure("rule_forgotten"));
     }
-    Ok(entry.clone())
+    Ok(entry)
 }
 
 /// Apply source lifecycle under the same lease as the source commit, before success.
@@ -411,7 +431,7 @@ fn already_forgotten(
         return Ok(None);
     };
     let inventory = Inventory::read(root)?;
-    let Some(entry) = inventory.find(&target.handle) else {
+    let Some(entry) = selected_entry(root, &inventory, &target.handle)? else {
         return Ok(None);
     };
     if entry.project_id != target.project_id {
@@ -425,5 +445,23 @@ fn already_forgotten(
         operation_id: operation_id.clone(),
         state: "forgotten".into(),
         replayed: true,
+        recall_state: None,
     }))
+}
+
+fn selected_entry(
+    root: &std::path::Path,
+    inventory: &Inventory,
+    handle: &str,
+) -> CognitionResult<Option<Entry>> {
+    if !(11..=65).contains(&handle.len())
+        || !handle.starts_with('R')
+        || !handle[1..].bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err(failure("rule_handle_invalid"));
+    }
+    if let Some(entry) = inventory.find(handle) {
+        return Ok(Some(entry.clone()));
+    }
+    read_json(&root.join("handles").join(format!("{handle}.json")))
 }
