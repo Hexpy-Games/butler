@@ -13,6 +13,7 @@ mod effects;
 mod error;
 mod hydration;
 mod legacy_cutover;
+mod lifecycle;
 mod migration;
 mod model;
 mod operation_input;
@@ -60,6 +61,7 @@ pub use work::{
 };
 
 use butler_platform::sqlite;
+use lifecycle::{join_failed_initialization, join_owner_thread};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread::JoinHandle;
@@ -462,26 +464,6 @@ fn storage_marker(
 fn parse_marker(value: &str, code: StorageCode) -> StorageResult<Value> {
     serde_json::from_str(value)
         .map_err(|error| StorageError::new(code, error.to_string()).with_source(error))
-}
-
-/// Joins the SQLite owner thread off the async runtime; a panic is reported
-/// with its own code (the payload is not an error).
-async fn join_owner_thread(thread: JoinHandle<StorageResult<()>>) -> StorageResult<()> {
-    let joined = tokio::task::spawn_blocking(move || thread.join())
-        .await
-        .map_err(|error| {
-            StorageError::new(StorageCode::SqliteJoinFailed, error.to_string()).with_source(error)
-        })?;
-    joined.map_err(|_panic_payload| {
-        StorageError::new(
-            StorageCode::SqliteThreadPanicked,
-            "BTCC SQLite owner thread panicked",
-        )
-    })?
-}
-
-async fn join_failed_initialization(thread: JoinHandle<StorageResult<()>>) {
-    let _ignored_initialization_result = tokio::task::spawn_blocking(move || thread.join()).await;
 }
 
 #[cfg(test)]

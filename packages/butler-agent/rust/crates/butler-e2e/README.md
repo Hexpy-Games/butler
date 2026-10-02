@@ -236,7 +236,11 @@ raw-delta/eight-stream controls; its storage implementation stays unchanged.
 Both runs disable automatic checkpoints while counting WAL bytes, so the WAL
 measurement includes all retained frames rather than only the last checkpoint
 cycle. `idle_resources` additionally observes App and BTCC `data_version` over
-all three owner-scale idle windows and requires zero commits.
+all three idle windows and requires zero commits. Its fixture contains 5,000
+turns, 200,000 App events, 30,000 native messages, 30,000 completed memory jobs
+and more than 300 MB of metrics. These fixtures do not model the full 7 GB BTCC
+DB or the 2,440-transcript corpus listed in `plans/README.md`; report the measured
+fixture scope with the results.
 
 ## Wall-clock budgets in CI
 

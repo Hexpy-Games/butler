@@ -280,7 +280,7 @@ async fn flush_session(
         context
             .storage
             .execute(move |db| {
-                non_final::batch::run(|| {
+                non_final::batch::run(db, |db| {
                     for delta in &deltas {
                         persist(db, &chat_id, delta, &subscribers)?;
                     }

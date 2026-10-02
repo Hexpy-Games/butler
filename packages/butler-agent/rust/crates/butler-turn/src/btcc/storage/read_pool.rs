@@ -6,8 +6,8 @@ use std::{path::Path, sync::Arc};
 use tokio::sync::Semaphore;
 
 const CONNECTIONS: usize = 2;
-// Keep the entire pool's page caches within 8 MiB.
-const PAGE_CACHE_KIB: &str = "-4096";
+// Keep the entire pool's page caches within 2 MiB.
+const PAGE_CACHE_KIB: &str = "-1024";
 
 pub(super) struct ReadPool {
     available: Mutex<Vec<Connection>>,

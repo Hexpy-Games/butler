@@ -23,7 +23,7 @@ impl AppApplication {
         &self,
     ) -> Result<Option<String>, GatewayApplicationError> {
         self.storage
-            .execute(|db| records::next_due(db))
+            .read(records::next_due)
             .await
             .map_err(app_error)
     }
@@ -34,7 +34,7 @@ impl AppApplication {
         include_deleted: bool,
     ) -> Result<AutomationListView, GatewayApplicationError> {
         self.storage
-            .execute(move |db| {
+            .read(move |db| {
                 Ok(AutomationListView {
                     automations: records::list(db, target_session_id.as_deref(), include_deleted)?
                         .into_iter()
@@ -51,7 +51,7 @@ impl AppApplication {
         id: String,
     ) -> Result<AutomationDetailView, GatewayApplicationError> {
         self.storage
-            .execute(move |db| {
+            .read(move |db| {
                 Ok(AutomationDetailView {
                     automation: detail(records::active(db, &id)?),
                 })
@@ -197,7 +197,7 @@ impl AppApplication {
         id: String,
     ) -> Result<AutomationRunListView, GatewayApplicationError> {
         self.storage
-            .execute(move |db| {
+            .read(move |db| {
                 Ok(AutomationRunListView {
                     runs: records::runs(db, &id)?,
                 })

@@ -9,10 +9,11 @@ use super::{AppStorageError, StorageResult};
 
 /// Compiled statements the lane keeps for `prepare_cached`.
 const CACHED_STATEMENTS: usize = 256;
-/// Bound resident pages to 8 MiB; indexed foreground reads need no large cache.
-const PAGE_CACHE_KIB: i64 = -8_192;
-/// Two readers keep an aggregate 8 MiB cache, separate from the writer.
-const READ_PAGE_CACHE_KIB: i64 = -4_096;
+/// Fund the reader caches from the previous 8 MiB writer allocation.
+/// Short coalesced writes keep their indexed working set within 4 MiB.
+const PAGE_CACHE_KIB: i64 = -4_096;
+/// Two indexed readers keep an aggregate 2 MiB cache, separate from the writer.
+const READ_PAGE_CACHE_KIB: i64 = -1_024;
 /// Startup sweeps otherwise leave mapped database pages resident indefinitely.
 /// Use the bounded page cache for reads instead.
 const MMAP_BYTES: i64 = 0;

@@ -87,18 +87,24 @@ fn append(target: &StreamTarget<'_>, stream: &str, delta: &str) -> Result<(), Ap
         now,
         ..
     } = *target;
-    // These facts cannot change during a delta-only operation. The SQL writes
-    // and every message/event payload still retain each delta and timestamp.
-    let prior = super::batch::stream_message(chat, turn);
-    if prior.is_none() && !open(db, turn)? {
+    // A delta-only operation cannot settle the turn. Retain every published
+    // update in its cache and persist the final row before committing.
+    if let Some(mut message) = super::batch::stream_message(chat, turn) {
+        if super::batch::stream(turn).as_deref() == Some(stream) {
+            message.text.push_str(delta);
+        } else {
+            message.text = delta.to_owned();
+        }
+        message.updated_at = now.to_owned();
+        super::batch::remember(&message);
+        super::batch::remember_stream(turn, stream);
+        return updated(target, &message.id);
+    }
+    if !open(db, turn)? {
         return Ok(());
     }
-    let continues = match super::batch::stream(turn) {
-        Some(current) => current == stream,
-        None => {
-            draft(db, turn)?.is_some_and(|(current, discarded)| current == stream && !discarded)
-        }
-    };
+    let continues =
+        draft(db, turn)?.is_some_and(|(current, discarded)| current == stream && !discarded);
     db.execute_cached(
         "INSERT INTO turn_stream_drafts(turn_id,stream_id,discarded,updated_at) VALUES(?1,?2,0,?3) \
          ON CONFLICT(turn_id) DO UPDATE SET stream_id=excluded.stream_id,discarded=0,\
@@ -106,15 +112,8 @@ fn append(target: &StreamTarget<'_>, stream: &str, delta: &str) -> Result<(), Ap
         params![turn, stream, now],
     )
     .map_err(AppStorageError::sqlite)?;
-    let latest = match &prior {
-        Some(message) => Some((
-            message.id.clone(),
-            matches!(&message.status, crate::gateway::MessageStatus::Streaming),
-        )),
-        None => latest(db, chat, turn)?.map(|(id, status)| (id, status == "streaming")),
-    };
-    let id = match latest {
-        Some((id, true)) => {
+    let id = match latest(db, chat, turn)? {
+        Some((id, status)) if status == "streaming" => {
             let sql = if continues {
                 "UPDATE messages SET text=text||?1,updated_at=?2 WHERE id=?3"
             } else {
@@ -137,15 +136,6 @@ fn append(target: &StreamTarget<'_>, stream: &str, delta: &str) -> Result<(), Ap
         }
     };
     super::batch::remember_stream(turn, stream);
-    if let Some(mut message) = prior {
-        if continues {
-            message.text.push_str(delta);
-        } else {
-            message.text = delta.to_owned();
-        }
-        message.updated_at = now.to_owned();
-        super::batch::remember(&message);
-    }
     updated(target, &id)
 }
 

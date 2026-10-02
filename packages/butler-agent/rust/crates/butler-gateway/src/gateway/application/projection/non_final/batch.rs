@@ -1,5 +1,9 @@
-//! Reuse immutable projection facts only within one delta-only SQL operation.
-use crate::gateway::MessageRecord;
+//! Reuse projection facts only within one delta-only SQL operation.
+use crate::gateway::{
+    MessageRecord,
+    application::storage::{AppStorageError, CachedSql},
+};
+use rusqlite::{Connection, params};
 use std::{cell::RefCell, collections::HashMap};
 
 #[derive(Default)]
@@ -15,9 +19,35 @@ impl Drop for Reset {
         FACTS.with(|facts| *facts.borrow_mut() = self.0.take());
     }
 }
-pub(in crate::gateway::application::projection) fn run<T>(operation: impl FnOnce() -> T) -> T {
+pub(in crate::gateway::application::projection) fn run<T>(
+    db: &mut Connection,
+    operation: impl FnOnce(&mut Connection) -> Result<T, AppStorageError>,
+) -> Result<T, AppStorageError> {
     let _reset = Reset(FACTS.with(|facts| facts.replace(Some(Facts::default()))));
-    operation()
+    let value = operation(db)?;
+    persist_messages(db)?;
+    Ok(value)
+}
+
+// Intermediate message updates are published in full; only the last row state
+// is externally visible at commit. Persist the final cached state before commit.
+fn persist_messages(db: &Connection) -> Result<(), AppStorageError> {
+    FACTS.with(|facts| {
+        let facts = facts.borrow();
+        let Some(facts) = facts.as_ref() else { return Ok(()) };
+        for message in facts.messages.values() {
+            db.execute_cached("UPDATE messages SET text=?1,updated_at=?2 WHERE id=?3",
+                params![message.text, message.updated_at, message.id])
+                .map_err(AppStorageError::sqlite)?;
+            if let Some(turn) = &message.turn_id
+                && let Some(stream) = facts.streams.get(turn)
+            {
+                db.execute_cached("UPDATE turn_stream_drafts SET stream_id=?1,discarded=0,updated_at=?2 WHERE turn_id=?3",
+                    params![stream, message.updated_at, turn]).map_err(AppStorageError::sqlite)?;
+            }
+        }
+        Ok(())
+    })
 }
 pub(super) fn message(id: &str) -> Option<MessageRecord> {
     FACTS.with(|facts| facts.borrow().as_ref()?.messages.get(id).cloned())
