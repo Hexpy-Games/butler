@@ -185,8 +185,8 @@ SKIPPED without it.
 Agent startup and restart wait for `/runtime-readiness` executor readiness as
 well as health and the current PID's instance record. The dispatch-readiness
 scenario deliberately holds the executor and observes the earlier health-only
-state. Shutdown ordering and record-write fault hooks run in the stub tier in
-both debug and release builds, so strict release budgets exercise the same
+state. Shutdown ordering, record-write faults and memory bootstrap holds run
+in the stub tier in both debug and release builds, so strict budgets exercise the same
 injected product operations. App and maintenance owners also honor the same
 stub fixture clock in both profiles; a fixture day must not become a due daily
 job on the host's real date.
