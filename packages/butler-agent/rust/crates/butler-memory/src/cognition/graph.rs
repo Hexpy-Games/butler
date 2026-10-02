@@ -2,9 +2,8 @@
 
 mod apply;
 mod cache_quantum;
+mod cache_validation;
 mod cache_work;
-mod readiness;
-pub(in crate::cognition) use readiness::{CacheReadinessRow, StageReadiness, VectorReadinessRow};
 mod candidates;
 mod consolidate;
 mod failure;

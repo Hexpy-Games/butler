@@ -21,14 +21,30 @@ pub(in crate::cognition) struct CanonicalInventoryEntry {
     pub episode_id: String,
     pub revision: String,
     pub source_unit_count: usize,
+    #[allow(
+        dead_code,
+        reason = "live canonical recall inventory retained outside generation simplification"
+    )]
     pub source_ids: Vec<String>,
+    #[allow(
+        dead_code,
+        reason = "live canonical recall inventory retained outside generation simplification"
+    )]
     pub source_hashes: Vec<String>,
+    #[allow(
+        dead_code,
+        reason = "live canonical recall inventory retained outside generation simplification"
+    )]
     pub origin_kinds: Vec<String>,
 }
 
 #[derive(Debug)]
 pub(in crate::cognition) struct CanonicalInventory {
     pub entries: Vec<CanonicalInventoryEntry>,
+    #[allow(
+        dead_code,
+        reason = "live canonical recall inventory retained outside generation simplification"
+    )]
     pub exclusions: IndexMap<String, usize>,
     pub partial: bool,
     pub available: bool,

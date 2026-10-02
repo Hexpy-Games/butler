@@ -4,9 +4,7 @@ mod authority;
 pub(in crate::cognition) mod cache;
 mod initialize;
 mod manifest;
-mod qualification_witness;
 mod read;
-mod rebuild;
 mod stage;
 pub(in crate::cognition) mod swap;
 mod types;
@@ -28,8 +26,6 @@ pub use manifest::{
 };
 pub(crate) use read::resolve_projection_generation;
 pub use read::{active_memory_descriptor_exists, resolve_active_generation, resolve_generation};
-pub(in crate::cognition) use rebuild::MemorySourceInventory;
-pub use rebuild::{compute_rebuild_readiness, record_rebuild_readiness};
 pub use types::{GenerationEmbedding, MemoryGenerationHandle, MemoryGenerationTarget};
 
 mod embedding_binding;

@@ -1,6 +1,6 @@
 //! Cognition: extraction of memories from conversations into the memory graph
 //! (SQLite) and vectors (LanceDB), recall for turn context, consolidation, and
-//! the memory generations that rebuilds produce and cut over.
+//! the serving memory generation.
 
 use std::{future::Future, pin::Pin};
 
@@ -98,8 +98,8 @@ pub use generation::{
     GenerationState, InitializationOrigin, MemoryGenerationHandle, MemoryGenerationTarget,
     ProjectionMode, SemanticCounts, StageCounts, active_memory_descriptor_exists,
     advance_rebuild_cache, assert_mutation_authority, bind_native_embedding_identity,
-    compute_rebuild_readiness, initialize_empty_memory_generation, prepare_fresh_memory_generation,
-    record_rebuild_readiness, resolve_active_generation, resolve_generation,
+    initialize_empty_memory_generation, prepare_fresh_memory_generation, resolve_active_generation,
+    resolve_generation,
 };
 pub use generation_vectors::GenerationVectorAdapter;
 pub use graph::{GraphProgress, JobOutcome, StageState, StageStatus};

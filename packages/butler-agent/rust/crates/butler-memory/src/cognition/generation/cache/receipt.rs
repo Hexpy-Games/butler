@@ -1,5 +1,5 @@
 //! Receipts a cache job stores in `hot_cache_receipt_json` and per-entry
-//! outcome rows, with the lenient views readiness and health read them with.
+//! outcome rows, with the lenient views health reads them with.
 
 use serde::{Deserialize, Serialize};
 
@@ -161,14 +161,6 @@ pub(in crate::cognition) struct EntryOutcome {
 /// Lenient view of a stored job receipt.
 #[derive(Debug, Default, Deserialize)]
 pub(in crate::cognition) struct JobReceiptView {
-    #[serde(default, deserialize_with = "lenient::option")]
-    pub outcome: Option<String>,
-    #[serde(default, deserialize_with = "lenient::option")]
-    pub reason: Option<String>,
-    #[serde(default, deserialize_with = "lenient::option")]
-    pub generation: Option<String>,
-    #[serde(default, deserialize_with = "lenient::option")]
-    pub source_revision: Option<String>,
     /// `None` when not an array; `Some(None)` items are unreadable entries.
     #[serde(default, deserialize_with = "lenient::items")]
     pub entries: Option<Vec<Option<WriteReceiptView>>>,
@@ -186,14 +178,6 @@ impl JobReceiptView {
 /// Lenient view of one stored write receipt.
 #[derive(Debug, Default, Deserialize)]
 pub(in crate::cognition) struct WriteReceiptView {
-    #[serde(default, deserialize_with = "lenient::option")]
-    pub source_id: Option<String>,
-    #[serde(default, deserialize_with = "lenient::option")]
-    pub generation_id: Option<String>,
-    #[serde(default, deserialize_with = "lenient::option")]
-    pub source_revision: Option<String>,
-    #[serde(default, deserialize_with = "lenient::option")]
-    pub admitted: Option<bool>,
     #[serde(default, deserialize_with = "lenient::items")]
     pub excluded_entries: Option<Vec<Option<ExcludedEntryView>>>,
 }
@@ -201,8 +185,6 @@ pub(in crate::cognition) struct WriteReceiptView {
 /// Lenient view of one excluded entry.
 #[derive(Debug, Default, Deserialize)]
 pub(in crate::cognition) struct ExcludedEntryView {
-    #[serde(default, deserialize_with = "lenient::option")]
-    pub entry_id: Option<String>,
     #[serde(default, deserialize_with = "lenient::option")]
     pub reason: Option<String>,
 }
