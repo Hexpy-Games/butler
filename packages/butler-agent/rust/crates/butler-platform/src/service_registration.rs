@@ -21,6 +21,9 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
+#[cfg(feature = "test-support")]
+pub mod test_support;
+
 #[cfg(unix)]
 mod launchd;
 #[cfg(unix)]
@@ -224,6 +227,7 @@ pub fn definition_path() -> Result<PathBuf, Error> {
 /// The failure to write the file, or the manager's refusal.
 pub fn install(definition: &Definition, activation: Activation) -> Result<Registration, Error> {
     validate(definition)?;
+    crate::secure_fs::create_private_dir_all(&definition.working_dir.join("logs"))?;
     sys::install(definition, activation_allowed(activation))
 }
 

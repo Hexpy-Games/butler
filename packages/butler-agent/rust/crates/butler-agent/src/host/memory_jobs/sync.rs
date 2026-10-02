@@ -131,7 +131,6 @@ async fn poll(
     fresh: Option<FreshMemoryGeneration>,
 ) {
     if let Some(fresh) = fresh {
-        #[cfg(debug_assertions)]
         if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
             && std::env::var("BUTLER_E2E_HOLD_MEMORY_BOOTSTRAP").as_deref() == Ok("1")
         {
@@ -187,7 +186,7 @@ async fn poll(
             Err(error) => {
                 // Diagnostic codes only. The durable queue retains failed work;
                 // paths, prompts, credentials and raw provider errors stay private.
-                eprintln!("[native-memory-sync] {}", error.code());
+                butler_core::diagnostic!("[native-memory-sync] {}", error.code());
                 idle_polls = idle_polls.saturating_add(1);
                 backoff(idle_polls, DEFERRED_CAP)
             }

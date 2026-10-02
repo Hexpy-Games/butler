@@ -70,7 +70,6 @@ pub(super) fn write_record(
                 crate::host::HostError::new("native_service_instance_state_unavailable")
                     .with_source(source)
             })?;
-        #[cfg(debug_assertions)]
         hold_shutdown_write(record);
         super::super::shutdown_trace::measure_sync("instance_file_rename", || {
             fs::rename(&temporary, path)
@@ -112,7 +111,6 @@ pub(super) fn instance_record_path(data_root: &Path) -> PathBuf {
 }
 
 /// Stub-only reproduction of a slow fsync while the record lock is held.
-#[cfg(debug_assertions)]
 fn hold_shutdown_write(record: &InstanceRecord) {
     if std::env::var("BUTLER_E2E_TIER").as_deref() != Ok("stub")
         || record.state != "ready"

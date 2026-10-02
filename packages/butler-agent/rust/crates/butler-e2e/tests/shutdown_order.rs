@@ -41,12 +41,13 @@ async fn stop_interrupts_a_thirty_second_stream_before_closing_storage() -> Resu
         true
     );
     while s.agent.is_running() {
-        assert!(
-            started.elapsed() < Duration::from_secs(8),
-            "stop exceeded grace"
-        );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
+    butler_e2e::assert_wall_clock_budget!(
+        started.elapsed(),
+        Duration::from_secs(8),
+        "stop exceeded grace"
+    );
     assert!(s.agent.reap().unwrap().success());
     eprintln!("stream shutdown: {:?}", started.elapsed());
     assert!(!s.agent.logs().contains("app_sqlite_owner_closed"));
@@ -121,7 +122,11 @@ async fn stop_reaps_a_hung_mcp_server_and_releases_the_instance() -> Result<(), 
         "hung MCP shutdown: {:?}, child={alive:?}",
         started.elapsed()
     );
-    assert!(started.elapsed() < Duration::from_secs(8));
+    butler_e2e::assert_wall_clock_budget!(
+        started.elapsed(),
+        Duration::from_secs(8),
+        "shutdown_order: started.elapsed()"
+    );
     assert_eq!(
         alive,
         butler_platform::process_control::Liveness::Gone,
@@ -161,15 +166,16 @@ async fn sigterm_during_store_open_never_publishes_ready() -> Result<(), Harness
     butler_platform::instance::request_stop(pid).map_err(|e| HarnessError(e.to_string()))?;
     let started = Instant::now();
     while s.agent.is_running() {
-        assert!(
-            started.elapsed() < Duration::from_secs(8),
-            "startup stop missed deadline"
-        );
         if let Some(record) = instance_record(&s.sandbox.data) {
             assert_ne!(record["state"], "ready");
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
+    butler_e2e::assert_wall_clock_budget!(
+        started.elapsed(),
+        Duration::from_secs(8),
+        "startup stop missed deadline"
+    );
     assert!(s.agent.reap().unwrap().success());
     assert!(instance_record(&s.sandbox.data).is_none());
     lock.execute_batch("ROLLBACK")
@@ -222,10 +228,10 @@ async fn control_read_shutdown(order: &str) -> Result<(), HarnessError> {
     {
         eprintln!("{line}");
     }
-    assert!(
-        started.elapsed() < Duration::from_secs(2),
-        "control shutdown exceeded 2s; {}",
-        diagnostics::snapshot(&s, started)
+    butler_e2e::assert_wall_clock_budget!(
+        started.elapsed(),
+        Duration::from_secs(2),
+        "control shutdown exceeded 2s"
     );
     assert!(
         instance_record(&s.sandbox.data).is_none(),
@@ -303,13 +309,13 @@ async fn unannounced_sigterm_has_a_deadline_even_when_storage_is_blocked()
     butler_platform::instance::request_stop(s.agent.pid().unwrap())
         .map_err(|e| HarnessError(e.to_string()))?;
     while s.agent.is_running() {
-        assert!(
-            started.elapsed() < Duration::from_secs(8),
-            "unannounced stop missed deadline; {}",
-            diagnostics::snapshot(&s, started)
-        );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
+    butler_e2e::assert_wall_clock_budget!(
+        started.elapsed(),
+        Duration::from_secs(8),
+        "unannounced stop missed deadline"
+    );
     let exit_observed = started.elapsed();
     let status = s.agent.reap().unwrap();
     eprintln!(
@@ -363,7 +369,11 @@ async fn deadline_waits_for_an_in_progress_record_write() -> Result<(), HarnessE
     s.agent.terminate().await?;
     let logs = s.agent.logs();
     eprintln!("record race shutdown: {:?}; {logs}", started.elapsed());
-    assert!(started.elapsed() < Duration::from_secs(8));
+    butler_e2e::assert_wall_clock_budget!(
+        started.elapsed(),
+        Duration::from_secs(8),
+        "shutdown_order: started.elapsed()"
+    );
     assert!(logs.contains("record_write_hold:begin"));
     assert!(logs.contains("stop deadline reached"));
     assert!(

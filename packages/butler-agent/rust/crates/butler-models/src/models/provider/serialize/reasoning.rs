@@ -31,23 +31,21 @@ pub(super) fn anthropic(
 ) -> Option<Map<String, Value>> {
     let effort = effort(request);
     let mut output = Map::new();
-    let claude5 = ["claude-fable-5", "claude-opus-5", "claude-sonnet-5"]
-        .iter()
-        .any(|base| {
-            model == *base
-                || model
-                    .strip_prefix(base)
-                    .and_then(|suffix| suffix.strip_prefix('-'))
-                    .is_some_and(|version| {
-                        !version.is_empty() && version.bytes().all(|byte| byte.is_ascii_digit())
-                    })
-        });
+    let claude5 = crate::models::ANTHROPIC_ADAPTIVE_MODELS.iter().any(|base| {
+        model == *base
+            || model
+                .strip_prefix(base)
+                .and_then(|suffix| suffix.strip_prefix('-'))
+                .is_some_and(|version| {
+                    !version.is_empty() && version.bytes().all(|byte| byte.is_ascii_digit())
+                })
+    });
     if claude5 {
         output.insert("thinking".into(), serde_json::json!({"type":"adaptive"}));
         if let Some(effort) = effort {
             output.insert("output_config".into(), serde_json::json!({"effort":effort}));
         }
-    } else if model == "claude-haiku-4-5" {
+    } else if model == crate::models::ANTHROPIC_BUDGET_MODEL {
         output.insert(
             "thinking".into(),
             effort.map_or_else(

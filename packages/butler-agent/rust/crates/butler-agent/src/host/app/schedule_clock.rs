@@ -1,10 +1,9 @@
-//! Deterministic App clock for stub E2E boundary scenarios, absent in releases.
+//! Deterministic App clock for stub E2E boundary scenarios in either profile.
 use crate::host::SystemIdentity;
 use butler_gateway::gateway::AppIdentityClock;
 use std::sync::Arc;
 
 pub(in crate::host) fn clock() -> Arc<dyn AppIdentityClock> {
-    #[cfg(debug_assertions)]
     if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
         && let Ok(now) = std::env::var("BUTLER_E2E_APP_NOW")
         && chrono::DateTime::parse_from_rfc3339(&now).is_ok()
@@ -14,9 +13,7 @@ pub(in crate::host) fn clock() -> Arc<dyn AppIdentityClock> {
     Arc::new(SystemIdentity)
 }
 
-#[cfg(debug_assertions)]
 struct FixedClock(String);
-#[cfg(debug_assertions)]
 impl AppIdentityClock for FixedClock {
     fn new_uuid(&self) -> String {
         uuid::Uuid::new_v4().to_string()

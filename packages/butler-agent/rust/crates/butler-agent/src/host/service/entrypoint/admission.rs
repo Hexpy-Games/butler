@@ -15,7 +15,6 @@ use crate::host::{AgentRuntime, ProgressPublisher, ServiceConfiguration, require
 
 pub(super) struct Admission {
     pub session_id: String,
-    pub model: String,
     pub progress: Arc<ProgressPublisher>,
     pub queue: Arc<InboundQueue>,
     pub dispatcher: IngressDispatcher,
@@ -47,7 +46,7 @@ pub(super) async fn prepare(
             .map_err(|e| failure(e.code(), e.message()))?;
     }
     config.persist_session_pointer(&binding.session_id)?;
-    let model = require_model_ref(&binding)?.to_owned();
+    require_model_ref(&binding)?;
     let progress = Arc::new(ProgressPublisher::new(
         runtime.progress.clone(),
         writer.clone(),
@@ -80,7 +79,6 @@ pub(super) async fn prepare(
     stop.check_startup()?;
     Ok(Admission {
         session_id: binding.session_id,
-        model,
         progress,
         queue,
         dispatcher,

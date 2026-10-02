@@ -173,7 +173,7 @@ async fn timed(gw: &Gateway, path: &str) -> Result<(Duration, Value), HarnessErr
 }
 
 #[tokio::test]
-async fn use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), HarnessError> {
+async fn perf_use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let setup = Setup::new("USE-06")?;
     let mut expected = write_usage_log(&setup.sandbox.data, chrono_now())?;
@@ -183,7 +183,7 @@ async fn use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), HarnessErro
     // A window and a session answer without reading the transcripts: the
     // first read parses the log once, every later one is warm.
     let (cold, day) = timed(&s.gw, "/usage-monitor?since_hours=24").await?;
-    assert!(cold < COLD, "24h cold {cold:?}");
+    butler_e2e::assert_wall_clock_budget!(cold, COLD, "24h cold");
     assert_eq!(day["model"]["requestCount"], expected.recent_rows, "{day}");
     assert_eq!(day["tools"]["calls"], 0, "no transcript scan for a window");
     assert!(
@@ -197,10 +197,10 @@ async fn use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), HarnessErro
         worst = worst.max(took);
     }
     eprintln!("USE-06 24h: cold {cold:?}, warm worst {worst:?}");
-    assert!(worst < WARM, "24h warm {worst:?}");
+    butler_e2e::assert_wall_clock_budget!(worst, WARM, "24h warm");
 
     let (first, session) = timed(&s.gw, "/usage-monitor?session_id=general").await?;
-    assert!(first < COLD, "session cold {first:?}");
+    butler_e2e::assert_wall_clock_budget!(first, COLD, "session cold");
     assert_eq!(session["filters"]["sessionId"], "general");
     assert_eq!(session["model"]["requestCount"], SESSION_ROWS, "{session}");
     assert_eq!(
@@ -229,7 +229,7 @@ async fn use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), HarnessErro
         worst = worst.max(timed(&s.gw, "/usage-monitor?session_id=general").await?.0);
     }
     eprintln!("USE-06 session: cold {first:?}, warm worst {worst:?}");
-    assert!(worst < WARM, "session warm {worst:?}");
+    butler_e2e::assert_wall_clock_budget!(worst, WARM, "session warm");
 
     // Adding transcripts changes neither answer's speed: they are not read.
     let transcripts = s.sandbox.data.join("transcripts");
@@ -244,14 +244,14 @@ async fn use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), HarnessErro
         )?;
     }
     let (took, _) = timed(&s.gw, "/usage-monitor?since_hours=24").await?;
-    assert!(took < WARM, "24h after new transcripts {took:?}");
+    butler_e2e::assert_wall_clock_budget!(took, WARM, "24h after new transcripts");
     let (took, _) = timed(&s.gw, "/usage-monitor?session_id=general").await?;
-    assert!(took < WARM, "session after new transcripts {took:?}");
+    butler_e2e::assert_wall_clock_budget!(took, WARM, "session after new transcripts");
 
     // All-time: the first read scans every transcript; the second is a
     // cache hit, and a grown transcript costs only its new lines.
     let (cold, all) = timed(&s.gw, "/usage-monitor").await?;
-    assert!(cold < COLD, "all-time cold {cold:?}");
+    butler_e2e::assert_wall_clock_budget!(cold, COLD, "all-time cold");
     assert_eq!(all["model"]["requestCount"], ROWS, "{all}");
     assert_work_costs(&all, &expected);
     assert_eq!(
@@ -266,7 +266,7 @@ async fn use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), HarnessErro
         all["tools"]["calls"]
     );
     let (warm, again) = timed(&s.gw, "/usage-monitor").await?;
-    assert!(warm < WARM, "all-time second read {warm:?} (cold {cold:?})");
+    butler_e2e::assert_wall_clock_budget!(warm, WARM, "all-time second read");
     assert_eq!(again["tools"], all["tools"]);
     assert_eq!(again["model"], all["model"]);
     assert_eq!(again["cost"], all["cost"]);
@@ -285,7 +285,7 @@ async fn use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), HarnessErro
     grown.write_all(lines.as_bytes())?;
     drop(grown);
     let (took, grew) = timed(&s.gw, "/usage-monitor").await?;
-    assert!(took < WARM, "all-time after an append {took:?}");
+    butler_e2e::assert_wall_clock_budget!(took, WARM, "all-time after an append");
     assert_eq!(
         grew["tools"]["calls"],
         all["tools"]["calls"].as_u64().unwrap() + 2
@@ -306,7 +306,7 @@ async fn use_06_usage_monitor_is_fast_at_owner_scale() -> Result<(), HarnessErro
     )?;
     drop(log);
     let (took, session) = timed(&s.gw, "/usage-monitor?session_id=general").await?;
-    assert!(took < WARM, "session after an appended row {took:?}");
+    butler_e2e::assert_wall_clock_budget!(took, WARM, "session after an appended row");
     assert_eq!(session["model"]["requestCount"], SESSION_ROWS + 1);
     assert_eq!(
         session["cost"]["byWork"]["conversation"]["requestCount"],

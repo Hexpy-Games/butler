@@ -80,10 +80,10 @@ async fn turn_05_broken_stream_never_delivers_partial_text() -> Result<(), Harne
             "{kind}: {turn}"
         );
         if *kind == "stall" {
-            assert!(
-                started.elapsed() < Duration::from_secs(40),
-                "stall not bounded: {:?}",
-                started.elapsed()
+            butler_e2e::assert_wall_clock_budget!(
+                started.elapsed(),
+                Duration::from_secs(40),
+                "stall not bounded"
             );
         }
         assert_no_partial_answer(&s.gw, kind, &turn_id, &state).await?;

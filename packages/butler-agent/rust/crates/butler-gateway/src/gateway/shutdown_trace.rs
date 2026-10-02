@@ -15,7 +15,7 @@ fn emit(phase: &str, edge: &str) {
     let unix_us = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |time| time.as_micros());
-    eprintln!(
+    butler_core::diagnostic!(
         "[native-shutdown] unix_us={unix_us} elapsed_us={} phase={phase} edge={edge}",
         elapsed.as_micros()
     );

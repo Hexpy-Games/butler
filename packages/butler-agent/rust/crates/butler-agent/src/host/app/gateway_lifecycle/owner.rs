@@ -50,6 +50,18 @@ pub(crate) struct AppGatewayLifecycle {
 }
 
 impl AppGatewayLifecycle {
+    pub(crate) async fn effective_default_model(&self) -> Result<String, BtccError> {
+        let current = self.current.lock().await;
+        if let Some(server) = current.as_ref() {
+            return server.effective_default_model().await;
+        }
+        self.runtime
+            .models
+            .configuration
+            .effective_default_model()
+            .map_err(|error| BtccError::relayed("default_model_unavailable", error.to_string()))
+    }
+
     pub(crate) fn new(
         runtime: Arc<AgentRuntime>,
         service: &ServiceConfiguration,

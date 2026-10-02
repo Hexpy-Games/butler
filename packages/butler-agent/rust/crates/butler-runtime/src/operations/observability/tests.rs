@@ -10,6 +10,7 @@ fn fixture(name: &str) -> PathBuf {
     path
 }
 
+// test-category: pure-logic
 #[test]
 fn log_tail_is_bounded_and_redacts_source_credentials() {
     let root = fixture("log-tail-test");
@@ -34,6 +35,38 @@ fn log_tail_is_bounded_and_redacts_source_credentials() {
     );
     assert_eq!(entries[1].text, "last");
     assert!(!format!("{entries:?}").contains("token_value"));
+    assert_eq!(
+        super::export_line("[native-model] prompt=private conversation"),
+        None
+    );
+    assert_eq!(super::export_line("private conversation text"), None);
+    let safe =
+        super::export_line("[native-app] unavailable token=private refresh_token=private sk-fake")
+            .unwrap();
+    assert!(!safe.contains("private"), "{safe}");
+    assert!(!safe.contains("sk-fake"), "{safe}");
+    let exits = (1..=7).map(|i| super::LogEntry { file: String::new(),
+        text: format!("2026-10-02T00:00:0{i}Z [service-lifecycle] event=exit version=0.1.0-preview.5+abc pid={i} code=crash Service exited unexpectedly.") }).collect::<Vec<_>>();
+    let summary = super::log_summary(
+        "Version: preview\nOS: Linux\nInstall kind: standalone\nService manager present: false",
+        &exits,
+    );
+    assert_eq!(
+        summary
+            .lines()
+            .filter(|line| line.starts_with("2026-"))
+            .count(),
+        5
+    );
+    assert!(!summary.contains("pid=1 "));
+    assert!(summary.contains("Last error: 2026-10-02T00:00:07Z"));
+    assert!(super::log_summary("Version: preview", &[]).contains("none recorded"));
+    assert!(super::log_is_error(
+        "[service-lifecycle] event=exit code=SIGKILL Service was terminated by a signal."
+    ));
+    assert!(!super::log_is_error(
+        "[service-lifecycle] event=exit code=requested_stop Service stopped on request."
+    ));
     fs::remove_dir_all(root).unwrap();
 }
 

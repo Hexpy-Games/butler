@@ -45,6 +45,19 @@ test("native mac release validates inputs and stages the runtime shell", () => {
   for (const name of ["node_modules", "dist", ".native-agent-payload"]) {
     expect(existsSync(join(staged, name))).toBe(false);
   }
+  const previousTag = process.env.GITHUB_REF_NAME;
+  try {
+    process.env.GITHUB_REF_NAME = "v0.1.0-preview.99";
+    const preview = createNativeMacReleaseManifest(root);
+    expect(preview.version).toBe("0.1.0-preview.99");
+    expect(preview.bundledAgentVersion).toBe("0.1.0-preview.99");
+    const previewSource = stageElectronPackageSource(root, join(root, "preview-source"));
+    expect(JSON.parse(readFileSync(join(previewSource, "package.json"), "utf8")).version)
+      .toBe("0.1.0-preview.99");
+  } finally {
+    if (previousTag === undefined) delete process.env.GITHUB_REF_NAME;
+    else process.env.GITHUB_REF_NAME = previousTag;
+  }
   writeFileSync(join(packageDir, "package.json"), JSON.stringify({ dependencies: { unexpected: "1" } }));
   expect(() => stageElectronPackageSource(root, join(root, "invalid-source"))).toThrow(
     "Electron runtime dependencies require an inventoried packaging layout",

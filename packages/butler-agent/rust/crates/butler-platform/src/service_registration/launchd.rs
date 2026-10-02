@@ -27,6 +27,19 @@ pub(super) fn render(definition: &Definition) -> String {
         lines.push(format!("    <string>{}</string>", xml(value)));
     }
     lines.push("  </array>".to_owned());
+    for (key, name) in [
+        ("StandardOutPath", "stdout"),
+        ("StandardErrorPath", "stderr"),
+    ] {
+        lines.push(format!("  <key>{key}</key>"));
+        lines.push(format!(
+            "  <string>{}</string>",
+            xml(&definition
+                .working_dir
+                .join(format!("logs/butler-agent-service.{name}.log"))
+                .to_string_lossy())
+        ));
+    }
     lines.push("  <key>EnvironmentVariables</key>".to_owned());
     lines.push("  <dict>".to_owned());
     let fixed_path = ("PATH".to_owned(), JOB_PATH.to_owned());

@@ -5,6 +5,7 @@ mod discovery;
 mod dispatch;
 mod effect;
 mod execute;
+mod feedback;
 mod image;
 mod memory_write;
 mod message;

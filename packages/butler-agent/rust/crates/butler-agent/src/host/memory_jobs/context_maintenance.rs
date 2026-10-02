@@ -78,7 +78,7 @@ impl ContextMaintenance {
                         if let Err(error) =
                             run_tick(&data_root, &tool_output, &metrics, now_ms, &day, minute).await
                         {
-                            eprintln!("[context-maintenance] {error}");
+                            butler_core::diagnostic!("[context-maintenance] {error}");
                         }
                         {
                             if cancellation.is_cancelled() {
@@ -95,7 +95,7 @@ impl ContextMaintenance {
                             ))
                             .await
                             {
-                                eprintln!("[session-sync] {error}");
+                                butler_core::diagnostic!("[session-sync] {error}");
                             }
                             if cancellation.is_cancelled() {
                                 break;
@@ -111,11 +111,13 @@ impl ContextMaintenance {
                             )
                             .await
                             {
-                                eprintln!("[consolidation-cycle] {error}");
+                                butler_core::diagnostic!("[consolidation-cycle] {error}");
                             }
                         }
                     }
-                    Err(error) => eprintln!("[context-maintenance] {}", error.code()),
+                    Err(error) => {
+                        butler_core::diagnostic!("[context-maintenance] {}", error.code());
+                    }
                 }
                 tokio::select! {
                     () = cancellation.cancelled() => break,
@@ -178,7 +180,7 @@ pub(crate) async fn run_tick(
     }
     write_state(&state_path, &state).map_err(crate::host::HostError::from_error)?;
     result.map(|(artifacts, retained)| {
-        println!(
+        butler_core::diagnostic!(
             "[context-maintenance] artifacts scanned={} deleted={} bytesDeleted={} remainingBytes={} metrics scanned={} kept={} deleted={} parseErrors={}",
             artifacts.scanned,
             artifacts.deleted,
@@ -240,9 +242,10 @@ fn write_state(path: &std::path::Path, state: &Value) -> std::io::Result<()> {
 
 fn current_epoch_millis() -> i64 {
     // Daily jobs and App fixtures must share the same clock in stub E2E.
-    #[cfg(debug_assertions)]
-    if let Ok(now) =
-        chrono::DateTime::parse_from_rfc3339(&crate::host::app::schedule_clock::clock().now_iso())
+    if std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
+        && let Ok(now) = chrono::DateTime::parse_from_rfc3339(
+            &crate::host::app::schedule_clock::clock().now_iso(),
+        )
     {
         return now.timestamp_millis();
     }

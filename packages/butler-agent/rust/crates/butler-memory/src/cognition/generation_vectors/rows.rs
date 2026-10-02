@@ -7,8 +7,8 @@ use std::{
 
 use crate::cognition::CognitionCode;
 use arrow_array::{
-    Array, ArrayRef, FixedSizeListArray, RecordBatch, RecordBatchIterator, StringArray,
-    types::Float32Type,
+    Array, ArrayRef, FixedSizeListArray, Float32Array, RecordBatch, RecordBatchIterator,
+    StringArray,
 };
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use futures_util::TryStreamExt;
@@ -131,7 +131,7 @@ impl GenerationVectorStore {
             )?;
             let schema = schema();
             let table = open_or_create(&root, &schema).await?;
-            check_schema(&table, &schema).await?;
+            let schema = check_schema(&table, &schema).await?;
             // One versioned write replaces the rows of any key already stored.
             // Started SDK writes are awaited to completion while the caller holds the lease.
             let mut upsert = table.merge_insert(&["vector_key"]);
@@ -323,26 +323,31 @@ async fn open_or_create(root: &Path, schema: &SchemaRef) -> CognitionResult<Tabl
     }
 }
 
-async fn check_schema(table: &Table, expected: &SchemaRef) -> CognitionResult<()> {
+async fn check_schema(table: &Table, expected: &SchemaRef) -> CognitionResult<SchemaRef> {
     let actual = table
         .schema()
         .await
         .map_err(|source| error(CognitionCode::MemoryVectorStoreUnavailable).with_source(source))?;
     if actual.fields().len() != expected.fields().len()
-        || actual.fields().iter().zip(expected.fields()).any(|(a, b)| {
-            a.name() != b.name()
-                || a.data_type() != b.data_type()
-                || a.is_nullable() != b.is_nullable()
-        })
+        || actual
+            .fields()
+            .iter()
+            .zip(expected.fields())
+            .any(|(a, b)| a.name() != b.name() || !a.data_type().equals_datatype(b.data_type()))
     {
         return Err(error(CognitionCode::MemoryVectorSchemaMismatch));
     }
-    Ok(())
+    // JS Arrow fields are nullable and its vector child has a different name.
+    // These do not change the stored values; retain the existing table schema.
+    Ok(actual)
 }
 
 fn batch(rows: &[GenerationVectorRow], schema: SchemaRef) -> CognitionResult<RecordBatch> {
     let strings = |f: fn(&GenerationVectorRow) -> &str| -> ArrayRef {
         Arc::new(StringArray::from_iter_values(rows.iter().map(f)))
+    };
+    let DataType::FixedSizeList(child, dimension) = schema.field(15).data_type() else {
+        return Err(error(CognitionCode::MemoryVectorSchemaMismatch));
     };
     let arrays: Vec<ArrayRef> = vec![
         strings(|r| &r.vector_key),
@@ -364,13 +369,16 @@ fn batch(rows: &[GenerationVectorRow], schema: SchemaRef) -> CognitionResult<Rec
         strings(|r| &r.source_observed_at),
         strings(|r| &r.source_refs_json),
         Arc::new(StringArray::from_iter_values(rows.iter().map(|_| ""))),
-        Arc::new(
-            FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
+        Arc::new(FixedSizeListArray::new(
+            child.clone(),
+            *dimension,
+            Arc::new(Float32Array::from(
                 rows.iter()
-                    .map(|r| Some(r.vector.iter().copied().map(Some).collect::<Vec<_>>())),
-                i32::try_from(DIMENSION).unwrap_or(i32::MAX),
-            ),
-        ),
+                    .flat_map(|row| row.vector.iter().copied())
+                    .collect::<Vec<_>>(),
+            )),
+            None,
+        )),
     ];
     RecordBatch::try_new(schema, arrays)
         .map_err(|source| error(CognitionCode::MemoryVectorRowsInvalid).with_source(source))
