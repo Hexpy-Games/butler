@@ -4,6 +4,7 @@ use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use rusqlite::Connection;
@@ -33,6 +34,7 @@ pub(super) struct CoordinatorInner {
     /// Signalled whenever a lease of this process ends, so an in-process
     /// waiter retries at once instead of on a timer.
     pub(super) released: Notify,
+    inventory_revision: AtomicU64,
 }
 
 #[derive(Clone)]
@@ -62,8 +64,22 @@ impl CognitionWriteCoordinator {
                 hostname,
                 local: Mutex::new(HashMap::new()),
                 released: Notify::new(),
+                inventory_revision: AtomicU64::new(0),
             }),
         })
+    }
+
+    /// In-memory inventory invalidation epoch; reading it performs no I/O.
+    pub fn inventory_revision(&self) -> u64 {
+        self.inner
+            .inventory_revision
+            .load(Ordering::Acquire)
+            .saturating_add(super::inventory::published_revision())
+    }
+
+    /// Invalidates management measurements after a mutation outside a lease.
+    pub fn invalidate_inventory(&self) {
+        self.inner.inventory_revision.fetch_add(1, Ordering::AcqRel);
     }
 
     pub(crate) fn try_acquire(
@@ -192,6 +208,7 @@ impl CoordinatorInner {
                 owner: owner.clone(),
             },
         );
+        self.inventory_revision.fetch_add(1, Ordering::AcqRel);
         Ok(Some(CognitionWriteLease {
             inner: self.clone(),
             lock_path: request.lock_path.clone(),
@@ -322,6 +339,8 @@ impl CognitionWriteLease {
         let Some(connection) = self.connection.take() else {
             return Ok(());
         };
+        // Even a failed writer may have changed a sibling file before rollback.
+        self.inner.inventory_revision.fetch_add(1, Ordering::AcqRel);
         let completion = connection.execute_batch(if commit { "COMMIT" } else { "ROLLBACK" });
         let completion_error = completion.err();
         if completion_error.is_some() && commit {

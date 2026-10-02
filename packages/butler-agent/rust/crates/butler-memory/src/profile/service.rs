@@ -182,14 +182,21 @@ impl ProfileService {
     ) -> ProfileResult<ProfilingConsentSnapshot> {
         let root = self.data_root.clone();
         let host = self.host.clone();
-        self.run(move || storage::write_consent(&root, mode, None, None, &host.now_iso()))
-            .await
+        self.coordinator.invalidate_inventory();
+        let result = self
+            .run(move || storage::write_consent(&root, mode, None, None, &host.now_iso()))
+            .await;
+        self.coordinator.invalidate_inventory();
+        result
     }
 
     /// Removes every candidate, stable entry and projection.
     pub async fn clear_profiling_data(&self) -> ProfileResult<ClearProfilingResult> {
         let root = self.data_root.clone();
-        self.run(move || storage::clear(&root)).await
+        self.coordinator.invalidate_inventory();
+        let result = self.run(move || storage::clear(&root)).await;
+        self.coordinator.invalidate_inventory();
+        result
     }
 
     /// The profile extractor model.

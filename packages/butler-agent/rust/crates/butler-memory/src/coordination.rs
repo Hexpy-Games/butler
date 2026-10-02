@@ -4,6 +4,8 @@ mod coordinator;
 mod error;
 mod fence;
 mod inspect;
+mod inventory;
+pub(crate) use inventory::signal_inventory_change;
 mod types;
 
 pub use coordinator::{CognitionWriteCoordinator, CognitionWriteLease};
