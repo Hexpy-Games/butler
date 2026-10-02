@@ -179,7 +179,7 @@ pub(super) fn status() -> Result<Status, Error> {
 }
 
 pub(super) fn is_owned_by(directory: &Path) -> Result<bool, Error> {
-    let remote = match owned(&sid()?) {
+    let remote = match registered_text() {
         Ok(remote) => remote,
         Err(Error::Foreign(_)) => return Ok(false),
         Err(e) => return Err(e),

@@ -147,10 +147,10 @@ fn status() -> Result<(Value, String), Error> {
         }
         Err(error) => return Err(error),
     };
-    let state = if status.loaded == Some(true) {
-        "enabled"
-    } else {
-        "disabled"
+    let state = match status.loaded {
+        Some(true) => "enabled",
+        Some(false) => "disabled",
+        None => "unknown",
     };
     let human = format!(
         "{}: {}, {}, {}, {}",

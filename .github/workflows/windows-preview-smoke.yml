@@ -268,7 +268,7 @@ jobs:
           }
           "Verified all 11 compiled harnesses: $($actual -join ',')"
       - name: Task Scheduler installed artifact E2E (disposable runner only)
-        working-directory: .\
+        working-directory: .
         run: |
           $root = $env:WINDOWS_PREVIEW_TEMP_ROOT
           $env:HOME = "$root/home/미리 보기 %USERPROFILE% !"
