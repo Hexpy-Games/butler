@@ -1,9 +1,12 @@
 $ErrorActionPreference = 'Stop'
 try {
+    # PowerShell 5.1 providers impose MAX_PATH; the .NET APIs accept extended paths.
+    [AppContext]::SetSwitch('Switch.System.IO.UseLegacyPathHandling', $false)
+    [AppContext]::SetSwitch('Switch.System.IO.BlockLongPaths', $false)
     $path = $env:BUTLER_ACL_PATH
+    $directory = [System.IO.Directory]::Exists($path)
     $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
     if ($env:BUTLER_ACL_OPERATION -eq 'protect') {
-        $directory = [System.IO.Directory]::Exists($path)
         if ($directory) {
             $acl = [System.Security.AccessControl.DirectorySecurity]::new()
             $inherit = [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
@@ -16,9 +19,11 @@ try {
         $rule = [System.Security.AccessControl.FileSystemAccessRule]::new(
             $sid, 'FullControl', $inherit, 'None', 'Allow')
         $acl.AddAccessRule($rule)
-        Set-Acl -LiteralPath $path -AclObject $acl
+        if ($directory) { [System.IO.Directory]::SetAccessControl($path, $acl) }
+        else { [System.IO.File]::SetAccessControl($path, $acl) }
     } else {
-        $acl = Get-Acl -LiteralPath $path
+        $acl = if ($directory) { [System.IO.Directory]::GetAccessControl($path) }
+        else { [System.IO.File]::GetAccessControl($path) }
         $rules = $acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
         # Elevated tokens may default new inherited children to Administrators
         # ownership. Built-in privileged owners grant no data access here;

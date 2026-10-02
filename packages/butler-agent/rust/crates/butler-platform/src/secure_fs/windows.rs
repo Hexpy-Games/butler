@@ -61,7 +61,7 @@ fn acl(path: &Path, operation: &str) -> io::Result<String> {
     let output = Command::new(powershell.join("powershell.exe"))
         .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command"])
         .arg(include_str!("windows/acl.ps1"))
-        .env("BUTLER_ACL_PATH", path)
+        .env("BUTLER_ACL_PATH", fs::canonicalize(path)?)
         .env("BUTLER_ACL_OPERATION", operation)
         // A pwsh parent exports modules incompatible with Windows PowerShell.
         // Only load this host's trusted, built-in ACL cmdlets.
