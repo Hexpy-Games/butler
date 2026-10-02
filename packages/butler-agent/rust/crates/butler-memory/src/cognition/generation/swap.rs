@@ -1,4 +1,5 @@
-//! Durable compare-and-swap for the active generation descriptor.
+//! Durable active-descriptor CAS retained for the offline directory swap in issue #435.
+#![allow(dead_code, reason = "reserved for alias-postings issue #435")]
 //!
 //! [`capture_active_descriptor`] observes the descriptor; a transition commits
 //! only while the full descriptor (compared as `JSON.stringify` output) and the
@@ -18,11 +19,8 @@ use crate::{
     coordination::CognitionWriteLease,
 };
 
-use super::super::initialize::durable;
-use super::super::manifest::{
-    ACTIVE_DESCRIPTOR_SCHEMA, ActiveDescriptor, GenerationFormat, GenerationManifest,
-    GenerationState, ProjectionMode,
-};
+use super::initialize::durable;
+use super::manifest::{ACTIVE_DESCRIPTOR_SCHEMA, ActiveDescriptor, ProjectionMode};
 
 /// A validated descriptor and the exact form it was observed in.
 #[derive(Clone, Debug)]
@@ -123,77 +121,6 @@ pub(super) fn commit_descriptor_transition(
     DescriptorCapture::of(next_descriptor)
 }
 
-/// Repairs only the manifest states named by the descriptor installed by a
-/// successful CAS. Repeating this after a partial write is safe and idempotent.
-pub(super) fn reconcile_committed_manifest_states(
-    data_root: &Path,
-    environment: &CognitionPathEnvironment,
-    lease: &CognitionWriteLease,
-    committed: &DescriptorCapture,
-) -> CognitionResult<()> {
-    assert_cutover_lease(data_root, environment, lease)?;
-    let expected = &committed.fields;
-    validate_descriptor(expected)?;
-    let Some(previous_generation_id) = expected.previous_generation_id.as_deref() else {
-        return Err(error(CognitionCode::MemoryGenerationChanged));
-    };
-    if previous_generation_id == expected.generation_id {
-        return Err(error(CognitionCode::MemoryGenerationChanged));
-    }
-
-    let memory_root = environment.memory_root(data_root);
-    let descriptor_path = active_descriptor_path(&memory_root);
-    let target_manifest_path = manifest_path(&memory_root, &expected.generation_id)?;
-    let previous_manifest_path = manifest_path(&memory_root, previous_generation_id)?;
-    let lock = environment.consolidation_lock(data_root);
-    let paths = [
-        memory_root.as_path(),
-        &descriptor_path,
-        &target_manifest_path,
-        &previous_manifest_path,
-        &lock,
-    ];
-    ensure_data_authority(data_root, &paths)?;
-
-    let current = read_descriptor(&descriptor_path)?;
-    if current.fields != *expected || current.stringified != committed.stringified {
-        return Err(error(CognitionCode::MemoryGenerationChanged));
-    }
-
-    let mut target_manifest = read_manifest(&target_manifest_path, &expected.generation_id)?;
-    let mut previous_manifest = read_manifest(&previous_manifest_path, previous_generation_id)?;
-    validate_manifest_pair(
-        &target_manifest,
-        &expected.generation_id,
-        &previous_manifest,
-        previous_generation_id,
-        expected.projection_mode,
-    )?;
-
-    ensure_data_authority(data_root, &paths)?;
-    if target_manifest.state != Some(GenerationState::Active) {
-        target_manifest.state = Some(GenerationState::Active);
-        durable::write_json(&target_manifest_path, &target_manifest)?;
-    }
-
-    // The descriptor remains the authority even when a process stopped between
-    // its CAS and either manifest update. Do not touch other generations.
-    ensure_data_authority(
-        data_root,
-        &[
-            &memory_root,
-            &descriptor_path,
-            &previous_manifest_path,
-            &lock,
-        ],
-    )?;
-    if previous_manifest.state != Some(GenerationState::Retired) {
-        previous_manifest.state = Some(GenerationState::Retired);
-        durable::write_json(&previous_manifest_path, &previous_manifest)?;
-    }
-    Ok(())
-}
-
 fn assert_cutover_lease(
     data_root: &Path,
     environment: &CognitionPathEnvironment,
@@ -232,57 +159,6 @@ fn validate_descriptor(descriptor: &ActiveDescriptor) -> CognitionResult<()> {
             .is_some_and(|previous| !valid_generation_id(previous))
     {
         return Err(error(CognitionCode::MemoryGenerationUnavailable));
-    }
-    Ok(())
-}
-
-fn read_manifest(path: &Path, expected_id: &str) -> CognitionResult<GenerationManifest> {
-    let manifest = GenerationManifest::read(path, CognitionCode::MemoryGenerationUnavailable)?;
-    if !manifest.is_for(expected_id) || manifest.format.is_none() || manifest.state.is_none() {
-        return Err(error(CognitionCode::MemoryGenerationChanged));
-    }
-    Ok(manifest)
-}
-
-/// The descriptor transition must be one this module knows how to finish.
-fn validate_manifest_pair(
-    target: &GenerationManifest,
-    target_id: &str,
-    previous: &GenerationManifest,
-    previous_id: &str,
-    projection_mode: ProjectionMode,
-) -> CognitionResult<()> {
-    let target_is_v2 = target.format == Some(GenerationFormat::V2);
-    let running = projection_mode == ProjectionMode::Running;
-    let target_transition_known = match target.state {
-        // A retired target can be resumed for source-equivalent build; when
-        // unchanged qualification is still bound, rollback may reuse it.
-        Some(GenerationState::Building) => {
-            target_is_v2
-                && running
-                && target.required_acceptance_passed == Some(true)
-                && target
-                    .readiness
-                    .as_ref()
-                    .is_some_and(|readiness| readiness.ready)
-                && target.acceptance_binding.is_some()
-        }
-        // A ready v2 candidate is activated, an active target is an already
-        // applied retry, and a retired target is a rollback candidate.
-        Some(GenerationState::Ready) => target_is_v2 && running,
-        Some(GenerationState::Active | GenerationState::Retired) => {
-            target.format.map(ProjectionMode::for_format) == Some(projection_mode)
-        }
-        None => false,
-    };
-    if target_id == previous_id
-        || !target_transition_known
-        || !matches!(
-            previous.state,
-            Some(GenerationState::Active | GenerationState::Retired)
-        )
-    {
-        return Err(error(CognitionCode::MemoryGenerationChanged));
     }
     Ok(())
 }

@@ -2,7 +2,6 @@
 
 mod authority;
 pub(in crate::cognition) mod cache;
-mod cutover;
 mod initialize;
 mod manifest;
 mod qualification;
@@ -15,6 +14,7 @@ mod repair_inputs;
 mod retry_failed;
 mod set_extractor;
 mod stage;
+pub(in crate::cognition) mod swap;
 mod types;
 
 pub use crate::cognition::generation::embedding_binding::bind_native_embedding_identity;
@@ -23,10 +23,6 @@ pub use cache::advance as advance_rebuild_cache;
 pub(in crate::cognition) use cache::{
     HotCacheEntryView, HotCacheHealth, physical_entries as physical_hot_cache_entries,
     read_hot_cache_health,
-};
-pub use cutover::{
-    CutoverStamp, RollbackOutcome, RollbackStep, activate as activate_memory_rebuild,
-    rollback as rollback_memory_rebuild,
 };
 pub use initialize::{
     FreshMemoryGeneration, initialize_empty_memory_generation, prepare_fresh_memory_generation,

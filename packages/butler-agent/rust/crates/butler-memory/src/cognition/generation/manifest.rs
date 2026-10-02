@@ -66,16 +66,6 @@ pub enum ProjectionMode {
     Paused,
 }
 
-impl ProjectionMode {
-    /// The mode a generation of `format` serves with.
-    pub(crate) fn for_format(format: GenerationFormat) -> Self {
-        match format {
-            GenerationFormat::V2 => Self::Running,
-            GenerationFormat::Legacy => Self::Paused,
-        }
-    }
-}
-
 /// The stored `embedding` field of a manifest.
 #[derive(Clone, Debug, PartialEq)]
 pub enum EmbeddingSlot {
@@ -218,18 +208,6 @@ impl GenerationReadiness {
             ready,
             sha256: None,
         }
-    }
-
-    /// True when every stage is settled: nothing unaccounted, pending, or failed.
-    pub(crate) fn settled(&self) -> bool {
-        self.ready
-            && self.unaccounted == 0
-            && self.semantic.pending == 0
-            && self.semantic.failed == 0
-            && self.vectors.pending == 0
-            && self.vectors.failed == 0
-            && self.cache.pending == 0
-            && self.cache.failed == 0
     }
 
     /// Whether `other` describes the same readiness and evidence.

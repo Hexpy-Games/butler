@@ -152,6 +152,7 @@ async fn generation_files_and_results_keep_their_pre_typing_bytes() {
     let coordinator = Arc::new(CognitionWriteCoordinator::new(Arc::new(Host)).unwrap());
     let environment = CognitionPathEnvironment::default();
     pin_empty_generation(&coordinator, &environment).await;
+    pin_descriptor_swap_guards(&coordinator, &environment).await;
     let data = Root::new();
     let rebuild = pin_prepared_rebuild(&data.0, &coordinator, &environment).await;
     let (readiness, recorded_text) =
@@ -187,7 +188,6 @@ async fn pin_empty_generation(coordinator: &Coordinator, environment: &Cognition
 /// A prepared rebuild next to its legacy baseline.
 struct Rebuild {
     prepared: super::rebuild::PreparedRebuild,
-    legacy_id: String,
     root: PathBuf,
     normalize: Normalizer,
 }
@@ -254,7 +254,6 @@ async fn pin_prepared_rebuild(
     );
     Rebuild {
         prepared,
-        legacy_id,
         root,
         normalize,
     }
@@ -309,7 +308,6 @@ fn pin_qualification_and_activation(
 ) {
     let Rebuild {
         prepared,
-        legacy_id,
         normalize,
         ..
     } = rebuild;
@@ -332,16 +330,78 @@ fn pin_qualification_and_activation(
         "qualified-manifest.json",
         &normalize.apply(&read(&qualified_path)),
     );
-    let next = super::cutover::next_descriptor_for_pin(
-        &prepared.generation_id,
-        legacy_id,
+}
+
+/// The retained offline CAS rejects changed descriptor metadata and manifest bytes.
+async fn pin_descriptor_swap_guards(
+    coordinator: &Coordinator,
+    environment: &CognitionPathEnvironment,
+) {
+    use super::swap::{
+        TransitionGuard, capture_active_descriptor, commit_descriptor_transition, next_descriptor,
+    };
+    use sha2::{Digest, Sha256};
+    let data = Root::new();
+    let handle = super::initialize_empty_memory_generation(
+        data.0.clone(),
+        environment.clone(),
+        coordinator.clone(),
+        Arc::new(|| NOW.to_owned()),
+        "17.0.0".into(),
+        "ICU4X 1.4.0".into(),
+    )
+    .await
+    .unwrap();
+    let manifest = handle.root.join("manifest.json");
+    let bytes = fs::read(&manifest).unwrap();
+    let hash = format!("{:x}", Sha256::digest(&bytes));
+    let expected = capture_active_descriptor(&data.0, environment).unwrap();
+    let next = next_descriptor(
+        &handle.generation_id,
+        &handle.generation_id,
         NOW,
         super::ProjectionMode::Running,
     );
-    let next_path = data.join("next-descriptor.json");
-    super::initialize::durable::write_json(&next_path, &next).unwrap();
-    pin(
-        "activated-descriptor.json",
-        &normalize.apply(&read(&next_path)),
+    let guard = TransitionGuard {
+        expected: &expected,
+        target_generation_id: &handle.generation_id,
+        target_manifest_sha256: &hash,
+    };
+    let lease = super::stage::acquire(
+        coordinator,
+        &environment.consolidation_lock(&data.0),
+        "cutover",
+        &CancellationToken::new(),
+    )
+    .await
+    .unwrap();
+    let descriptor_path = environment
+        .memory_root(&data.0)
+        .join("active-generation.json");
+    let descriptor_bytes = fs::read(&descriptor_path).unwrap();
+    let mut changed: serde_json::Value = serde_json::from_slice(&descriptor_bytes).unwrap();
+    changed["unknown"] = serde_json::json!(true);
+    fs::write(&descriptor_path, serde_json::to_vec(&changed).unwrap()).unwrap();
+    assert_eq!(
+        commit_descriptor_transition(&data.0, environment, &lease, &guard, &next)
+            .unwrap_err()
+            .code(),
+        "memory_generation_changed"
     );
+    fs::write(&descriptor_path, &descriptor_bytes).unwrap();
+    fs::write(&manifest, [bytes.as_slice(), b"\n"].concat()).unwrap();
+    assert_eq!(
+        commit_descriptor_transition(&data.0, environment, &lease, &guard, &next)
+            .unwrap_err()
+            .code(),
+        "memory_generation_changed"
+    );
+    fs::write(&manifest, &bytes).unwrap();
+    assert_eq!(
+        commit_descriptor_transition(&data.0, environment, &lease, &guard, &next)
+            .unwrap()
+            .fields,
+        next
+    );
+    lease.release(true).unwrap();
 }
