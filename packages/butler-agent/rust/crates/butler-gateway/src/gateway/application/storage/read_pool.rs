@@ -5,7 +5,8 @@ use rusqlite::{Connection, OpenFlags};
 use std::{path::Path, sync::Arc};
 use tokio::sync::Semaphore;
 
-const CONNECTIONS: usize = 4;
+// Two readers bound aggregate page-cache memory while writes remain independent.
+const CONNECTIONS: usize = 2;
 
 pub(super) struct ReadPool {
     available: Mutex<Vec<Connection>>,

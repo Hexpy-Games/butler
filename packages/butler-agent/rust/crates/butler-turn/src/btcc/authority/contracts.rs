@@ -450,11 +450,6 @@ pub(crate) trait AuthorityRepository {
     fn insert(&mut self, record: &AuthorityRecord) -> AuthorityResult<()>;
     fn find_ref(&mut self, request_ref: &str) -> AuthorityResult<Option<AuthorityRecord>>;
     fn list_pending(&mut self, owner: &str) -> AuthorityResult<Vec<AuthorityRecord>>;
-    fn question_history(
-        &mut self,
-        owner: &str,
-        turns: &[String],
-    ) -> AuthorityResult<Vec<AuthorityRecord>>;
     fn list_decided(&mut self) -> AuthorityResult<Vec<AuthorityRecord>>;
     fn source_work_eligible(&mut self, session: &str, work: &str) -> AuthorityResult<bool>;
     fn decide(&mut self, write: DecisionWrite) -> AuthorityResult<Option<AuthorityRecord>>;

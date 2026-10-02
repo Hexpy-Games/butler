@@ -13,6 +13,9 @@ use std::{
 };
 
 const WINDOW: Duration = Duration::from_millis(100);
+// Eight concurrent sessions must get a turn on the lane within the existing
+// persist budget; a chunk must remain shorter than its 2ms drain window.
+const CHUNK_DELTAS: usize = 4;
 #[derive(Default)]
 pub(super) struct Buffer(Mutex<HashMap<String, Session>>);
 #[derive(Clone)]
@@ -266,8 +269,8 @@ async fn flush_session(
     chat: &str,
     session: Arc<Session>,
 ) -> Result<(), GatewayApplicationError> {
-    for offset in (0..session.deltas.len().max(1)).step_by(8) {
-        let end = (offset + 8).min(session.deltas.len());
+    for offset in (0..session.deltas.len().max(1)).step_by(CHUNK_DELTAS) {
+        let end = (offset + CHUNK_DELTAS).min(session.deltas.len());
         let deltas = session.deltas[offset..end].to_vec();
         let last = end == session.deltas.len();
         let pending = session.clone();

@@ -87,11 +87,18 @@ fn append(target: &StreamTarget<'_>, stream: &str, delta: &str) -> Result<(), Ap
         now,
         ..
     } = *target;
-    if !open(db, turn)? {
+    // These facts cannot change during a delta-only operation. The SQL writes
+    // and every message/event payload still retain each delta and timestamp.
+    let prior = super::batch::stream_message(chat, turn);
+    if prior.is_none() && !open(db, turn)? {
         return Ok(());
     }
-    let continues =
-        draft(db, turn)?.is_some_and(|(current, discarded)| current == stream && !discarded);
+    let continues = match super::batch::stream(turn) {
+        Some(current) => current == stream,
+        None => {
+            draft(db, turn)?.is_some_and(|(current, discarded)| current == stream && !discarded)
+        }
+    };
     db.execute_cached(
         "INSERT INTO turn_stream_drafts(turn_id,stream_id,discarded,updated_at) VALUES(?1,?2,0,?3) \
          ON CONFLICT(turn_id) DO UPDATE SET stream_id=excluded.stream_id,discarded=0,\
@@ -99,8 +106,15 @@ fn append(target: &StreamTarget<'_>, stream: &str, delta: &str) -> Result<(), Ap
         params![turn, stream, now],
     )
     .map_err(AppStorageError::sqlite)?;
-    let id = match latest(db, chat, turn)? {
-        Some((id, status)) if status == "streaming" => {
+    let latest = match &prior {
+        Some(message) => Some((
+            message.id.clone(),
+            matches!(&message.status, crate::gateway::MessageStatus::Streaming),
+        )),
+        None => latest(db, chat, turn)?.map(|(id, status)| (id, status == "streaming")),
+    };
+    let id = match latest {
+        Some((id, true)) => {
             let sql = if continues {
                 "UPDATE messages SET text=text||?1,updated_at=?2 WHERE id=?3"
             } else {
@@ -122,6 +136,16 @@ fn append(target: &StreamTarget<'_>, stream: &str, delta: &str) -> Result<(), Ap
             id
         }
     };
+    super::batch::remember_stream(turn, stream);
+    if let Some(mut message) = prior {
+        if continues {
+            message.text.push_str(delta);
+        } else {
+            message.text = delta.to_owned();
+        }
+        message.updated_at = now.to_owned();
+        super::batch::remember(&message);
+    }
     updated(target, &id)
 }
 
@@ -296,19 +320,9 @@ fn latest(
 }
 
 fn updated(target: &StreamTarget<'_>, id: &str) -> Result<(), AppStorageError> {
-    let message = if let Some(mut message) = super::batch::message(id) {
+    let message = if let Some(message) = super::batch::message(id) {
         // This operation contains only stream deltas: attachments, identity,
         // status and terminal decorations cannot change between these rows.
-        let (text, updated): (String, String) = target
-            .db
-            .query_row_cached(
-                "SELECT text,updated_at FROM messages WHERE id=?1",
-                [id],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )
-            .map_err(AppStorageError::sqlite)?;
-        message.text = text;
-        message.updated_at = updated;
         message
     } else {
         let Some(message) = read_model::list_messages(target.db, target.chat, 0.0, 200)?

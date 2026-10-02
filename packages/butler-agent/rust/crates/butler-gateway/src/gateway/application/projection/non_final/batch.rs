@@ -6,6 +6,7 @@ use std::{cell::RefCell, collections::HashMap};
 struct Facts {
     messages: HashMap<String, MessageRecord>,
     sequences: HashMap<(String, String), u64>,
+    streams: HashMap<String, String>,
 }
 thread_local! { static FACTS: RefCell<Option<Facts>> = const { RefCell::new(None) }; }
 struct Reset(Option<Facts>);
@@ -25,6 +26,27 @@ pub(super) fn remember(message: &MessageRecord) {
     FACTS.with(|facts| {
         if let Some(facts) = facts.borrow_mut().as_mut() {
             facts.messages.insert(message.id.clone(), message.clone());
+        }
+    });
+}
+pub(super) fn stream_message(chat: &str, turn: &str) -> Option<MessageRecord> {
+    FACTS.with(|facts| {
+        facts
+            .borrow()
+            .as_ref()?
+            .messages
+            .values()
+            .find(|message| message.chat_id == chat && message.turn_id.as_deref() == Some(turn))
+            .cloned()
+    })
+}
+pub(super) fn stream(turn: &str) -> Option<String> {
+    FACTS.with(|facts| facts.borrow().as_ref()?.streams.get(turn).cloned())
+}
+pub(super) fn remember_stream(turn: &str, stream: &str) {
+    FACTS.with(|facts| {
+        if let Some(facts) = facts.borrow_mut().as_mut() {
+            facts.streams.insert(turn.to_owned(), stream.to_owned());
         }
     });
 }

@@ -5,7 +5,9 @@ use rusqlite::{Connection, OpenFlags};
 use std::{path::Path, sync::Arc};
 use tokio::sync::Semaphore;
 
-const CONNECTIONS: usize = 4;
+const CONNECTIONS: usize = 2;
+// Keep the entire pool's page caches within 16 MiB.
+const PAGE_CACHE_KIB: &str = "-8192";
 
 pub(super) struct ReadPool {
     available: Mutex<Vec<Connection>>,
@@ -23,7 +25,7 @@ impl ReadPool {
                 .map_err(StorageError::sqlite)?;
             for (name, value) in [
                 ("query_only", "ON"),
-                ("cache_size", "-8192"),
+                ("cache_size", PAGE_CACHE_KIB),
                 ("mmap_size", "0"),
                 ("temp_store", "MEMORY"),
             ] {

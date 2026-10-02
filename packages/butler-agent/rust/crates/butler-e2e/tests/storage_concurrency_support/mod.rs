@@ -65,10 +65,40 @@ pub(super) fn verify_rows(
             .collect::<Vec<_>>();
         assert_eq!(texts.len(), deltas);
         assert_eq!(texts.concat().trim_end(), answer);
+        verify_message_updates(&db, turn, &texts);
         assert!(
             values
                 .iter()
                 .any(|v| v["event"]["kind"] == "turn.completed")
         );
+    }
+}
+
+fn verify_message_updates(db: &Connection, turn: &str, deltas: &[&str]) {
+    let mut query = db.prepare("SELECT payload_json,created_at FROM events WHERE turn_id=?1 AND type='message.updated' ORDER BY id").unwrap();
+    let updates = query
+        .query_map([turn], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(updates.len(), deltas.len());
+    let mut text = String::new();
+    let mut identity = None;
+    for ((payload, created_at), delta) in updates.iter().zip(deltas) {
+        text.push_str(delta);
+        let mut message = serde_json::from_str::<Value>(payload).unwrap()["message"].clone();
+        assert_eq!(message["text"], text);
+        assert_eq!(message["updated_at"], *created_at);
+        assert_eq!(message["role"], "assistant");
+        assert_eq!(message["status"], "streaming");
+        let fields = message.as_object_mut().unwrap();
+        fields.remove("text");
+        fields.remove("updated_at");
+        match &identity {
+            Some(expected) => assert_eq!(&message, expected),
+            None => identity = Some(message),
+        }
     }
 }
