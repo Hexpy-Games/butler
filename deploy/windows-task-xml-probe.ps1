@@ -20,6 +20,24 @@ $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $name = "ButlerAgent-$sid"
 $registered = $false
 $server = $null
+function Capture-NativeXml([string]$Name) {
+    $info = [Diagnostics.ProcessStartInfo]::new('schtasks.exe', "/Query /TN $Name /XML")
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.RedirectStandardOutput = $true
+    $process = [Diagnostics.Process]::Start($info)
+    $buffer = [IO.MemoryStream]::new()
+    try {
+        $process.StandardOutput.BaseStream.CopyTo($buffer)
+        $process.WaitForExit()
+        if ($process.ExitCode) { throw 'Captured export failed' }
+        $bytes = $buffer.ToArray()
+        $encoding = if ($bytes[1] -eq 0 -or ($bytes[0] -eq 255 -and $bytes[1] -eq 254)) {
+            [Text.Encoding]::Unicode
+        } else { [Text.Encoding]::UTF8 }
+        return $encoding.GetString($bytes).TrimStart([char]0xfeff)
+    } finally { $buffer.Dispose(); $process.Dispose() }
+}
 try {
     $zip = @(Get-ChildItem "$ArchiveDirectory/butler-agent-*-windows-x64.zip")
     if ($zip.Count -ne 1) { throw 'Expected one Agent archive' }
@@ -52,12 +70,15 @@ try {
     $scheduler = New-Object -ComObject Schedule.Service
     $scheduler.Connect()
     $unicode = $scheduler.GetFolder('\').GetTask($name).Xml
+    $captured = Capture-NativeXml $name
     [ordered]@{ consoleExportMatchesUnicode = $remote.Trim() -eq $unicode.Trim();
+        capturedExportMatchesUnicode = $captured.Trim() -eq $unicode.Trim();
         currentAccount = [Security.Principal.WindowsIdentity]::GetCurrent().Name } | ConvertTo-Json -Compress
     foreach ($item in @(
         @{ Kind = 'local'; Xml = [IO.File]::ReadAllText($local.data.definition) },
         @{ Kind = 'scheduler'; Xml = $remote },
-        @{ Kind = 'unicode-api'; Xml = $unicode }
+        @{ Kind = 'unicode-api'; Xml = $unicode },
+        @{ Kind = 'captured-native'; Xml = $captured }
     )) {
         [xml]$document = $item.Xml
         $fields = [ordered]@{ kind = $item.Kind; root = $document.DocumentElement.LocalName }
@@ -80,3 +101,4 @@ try {
     Remove-Item $root -Recurse -Force
     if ($before -cne $after) { throw 'Protocol registration changed' }
 }
+$global:LASTEXITCODE = 0
