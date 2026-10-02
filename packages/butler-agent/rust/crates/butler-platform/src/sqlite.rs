@@ -47,3 +47,20 @@ fn extended_file_path(path: &Path) -> std::io::Result<std::path::PathBuf> {
         .unwrap_or(Path::new("."));
     Ok(std::fs::canonicalize(parent)?.join(name))
 }
+
+/// Sync committed WAL bytes and their directory entry without copying pages to
+/// the main DB. Callers retain their own checkpoint and close policy.
+pub fn sync_wal(connection: &Connection) -> std::io::Result<()> {
+    let Some(path) = connection.path().filter(|path| !path.is_empty()) else {
+        return Ok(());
+    };
+    let wal = std::path::PathBuf::from(format!("{path}-wal"));
+    match crate::secure_fs::sync_path(&wal) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        result => result?,
+    }
+    if let Some(parent) = wal.parent() {
+        crate::secure_fs::sync_directory(parent).unwrap_or(Ok(()))?;
+    }
+    Ok(())
+}

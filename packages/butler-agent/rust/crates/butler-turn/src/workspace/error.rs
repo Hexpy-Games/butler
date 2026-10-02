@@ -44,6 +44,7 @@ wire_codes! {
         WorktreeCleanupFailed = "worktree_cleanup_failed",
         WorktreePreparationFailed = "worktree_preparation_failed",
         WorktreeTargetOccupied = "worktree_target_occupied",
+        SqliteWalSyncFailed = "sqlite_wal_sync_failed",
     }
 }
 

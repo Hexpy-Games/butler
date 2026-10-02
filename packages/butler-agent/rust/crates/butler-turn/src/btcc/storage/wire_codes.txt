@@ -236,3 +236,4 @@ wake_request_conflict
 wake_trigger_conflict
 work_scope_project_projection_incomplete
 work_scope_turn_binding_ambiguous
+sqlite_wal_sync_failed

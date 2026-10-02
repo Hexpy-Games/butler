@@ -36,3 +36,4 @@ memory_origin_classification_conflict
 memory_origin_evidence_unavailable
 memory_origin_outbox_identity_invalid
 memory_source_changed
+sqlite_wal_sync_failed

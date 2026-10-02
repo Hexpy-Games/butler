@@ -306,6 +306,18 @@ fn run_connection_lane(
             "Workspace transaction remained open at close",
         ));
     }
+    // NORMAL commits are durable once the WAL is synced. Keep it for recovery
+    // instead of copying and syncing the same pages again at final close.
+    sqlite::sync_wal(&connection).map_err(|error| {
+        WorkspaceError::new(WorkspaceCode::SqliteWalSyncFailed, error.to_string())
+            .with_source(error)
+    })?;
+    connection
+        .set_db_config(
+            rusqlite::config::DbConfig::SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE,
+            true,
+        )
+        .map_err(WorkspaceError::sqlite)?;
     connection
         .close()
         .map_err(|(_, error)| WorkspaceError::sqlite(error))
