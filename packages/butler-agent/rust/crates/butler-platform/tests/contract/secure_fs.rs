@@ -14,16 +14,7 @@ use butler_platform::secure_fs::{
 
 use super::scratch;
 
-#[test]
-fn capabilities_match_the_host() {
-    let unix = cfg!(unix);
-    assert_eq!(OWNER_ONLY, unix);
-    assert_eq!(PERMISSION_MODES, unix);
-    assert_eq!(NO_FOLLOW, unix);
-    assert_eq!(FILE_IDS, unix);
-    assert_eq!(DIRECTORY_SYNC, unix);
-}
-
+// test-category: security
 #[test]
 fn replace_private_swaps_in_a_complete_owner_only_file() {
     let directory = scratch("replace");
@@ -35,11 +26,20 @@ fn replace_private_swaps_in_a_complete_owner_only_file() {
 
     replace_private(
         &path,
-        |file| file.write_all(b"after"),
+        |file| {
+            let staged = fs::read_dir(&directory)
+                .unwrap()
+                .map(|entry| entry.unwrap().path())
+                .find(|entry| *entry != path && *entry != neighbor)
+                .unwrap();
+            assert_eq!(is_private(&staged), Some(true));
+            file.write_all(b"after")
+        },
         std::convert::identity,
     )
     .unwrap();
     assert_eq!(fs::read_to_string(&path).unwrap(), "after");
+    assert_eq!(is_private(&path), Some(true));
     let after = fs::metadata(&path).unwrap();
     assert_eq!(is_owner_only(&after), OWNER_ONLY.then_some(true));
     // A replaced file is a new file, which readers can tell apart.
@@ -66,10 +66,34 @@ fn replace_private_swaps_in_a_complete_owner_only_file() {
     names.sort();
     assert_eq!(names, ["config.json", "neighbor.tmp"]);
     assert_eq!(fs::read_to_string(&neighbor).unwrap(), "someone else's");
-    assert_eq!(sync_directory(&directory).is_some(), DIRECTORY_SYNC);
+    let synced = sync_directory(&directory).transpose().unwrap();
+    if DIRECTORY_SYNC {
+        assert!(synced.is_some());
+    }
+    // Both creating and replacing a synced file must survive reopening it.
+    let mut long = directory.clone();
+    for _ in 0..5 {
+        long = long.join("long-component-0123456789012345678901234567890123456789");
+    }
+    fs::create_dir_all(&long).unwrap();
+    let durable = long.join("durable.json");
+    assert!(durable.to_string_lossy().chars().count() > 280);
+    for bytes in [
+        b"first".as_slice(),
+        b"replacement with more bytes".as_slice(),
+    ] {
+        replace_private(
+            &durable,
+            |file| file.write_all(bytes),
+            std::convert::identity,
+        )
+        .unwrap();
+        assert_eq!(fs::read(&durable).unwrap(), bytes);
+    }
     fs::remove_dir_all(directory).unwrap();
 }
 
+// test-category: security
 #[test]
 fn private_directories_and_files_are_owner_only_where_supported() {
     let directory = scratch("private");
@@ -102,11 +126,11 @@ fn private_directories_and_files_are_owner_only_where_supported() {
 
     let restricted = nested.join("restricted");
     fs::write(&restricted, "x").unwrap();
-    assert_eq!(
-        restrict_file(&restricted).transpose().unwrap(),
-        OWNER_ONLY.then_some(())
-    );
+    assert_eq!(restrict_file(&restricted).transpose().unwrap(), Some(()));
     assert_eq!(is_owner_only(&fs::metadata(&restricted).unwrap()), private);
+    assert_eq!(is_private(&restricted), Some(true));
+    #[cfg(windows)]
+    remove_unrelated_explicit_aces(&elsewhere, &restricted);
 
     let file = fs::File::create(nested.join("open")).unwrap();
     assert_eq!(
@@ -114,10 +138,7 @@ fn private_directories_and_files_are_owner_only_where_supported() {
         OWNER_ONLY.then_some(())
     );
     assert_eq!(is_owner_only(&file.metadata().unwrap()), private);
-    assert_eq!(
-        restrict_directory(&nested).transpose().unwrap(),
-        OWNER_ONLY.then_some(())
-    );
+    assert_eq!(restrict_directory(&nested).transpose().unwrap(), Some(()));
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -202,4 +223,23 @@ fn no_follow_opens_refuse_a_symbolic_link() {
     }
     assert_eq!(fs::read_to_string(&target).unwrap(), "secret");
     fs::remove_dir_all(directory).unwrap();
+}
+
+#[cfg(windows)]
+fn remove_unrelated_explicit_aces(folder: &std::path::Path, file: &std::path::Path) {
+    let root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
+    for path in [folder, file] {
+        let output =
+            std::process::Command::new(std::path::PathBuf::from(&root).join("System32/icacls.exe"))
+                .arg(path)
+                .args(["/grant", "*S-1-1-0:(R)"])
+                .output()
+                .unwrap();
+        assert!(output.status.success());
+        assert_eq!(is_private(path), Some(false));
+    }
+    protect_folder(folder).transpose().unwrap();
+    restrict_file(file).transpose().unwrap();
+    assert_eq!(is_private(folder), Some(true));
+    assert_eq!(is_private(file), Some(true));
 }

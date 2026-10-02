@@ -10,6 +10,7 @@ mod tests;
 mod typed_snapshot;
 
 use crate::cognition::CognitionCode;
+use butler_platform::sqlite;
 use std::{
     fs::{self, File},
     path::{Path, PathBuf},
@@ -25,7 +26,7 @@ pub(in crate::cognition) use inventory::MemorySourceInventory;
 pub(in crate::cognition::generation) use readiness::assert_live_inventory_matches_candidate;
 pub use readiness::{compute as compute_rebuild_readiness, record as record_rebuild_readiness};
 pub use refresh::refresh_if_changed as refresh_memory_rebuild_snapshot;
-use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
+use rusqlite::{OpenFlags, OptionalExtension, params};
 use serde::Serialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -328,7 +329,7 @@ fn vacuum_snapshot(source: &Path, target: &Path) -> CognitionResult<()> {
         .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
     durable::create_dir(parent)?;
     let snapshot_changed = |source| error(CognitionCode::MemorySnapshotChanged).with_source(source);
-    let db = Connection::open_with_flags(source, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    let db = sqlite::open_with_flags(source, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(snapshot_changed)?;
     let path = target
         .to_str()

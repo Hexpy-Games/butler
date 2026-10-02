@@ -30,6 +30,8 @@ BUTLER_E2E_TIER=live BUTLER_E2E_RECORD=1 cargo test -p butler-e2e --test turn
 
 The harness builds `butler-agent` itself (`cargo build -p butler-agent`) unless
 `BUTLER_E2E_BIN` names a binary or `BUTLER_E2E_SKIP_BUILD=1`.
+`BUTLER_E2E_WORKSPACE_ROOT` selects the Rust workspace containing resources,
+fixtures and cassettes when running a compiled harness on a different machine.
 
 Port 0 is test-harness-only, accepted through `BUTLER_APP_SERVER_PORT` or
 `--port=0`; a zero in `gateways/app.json` falls back to 18765. A zero override reports

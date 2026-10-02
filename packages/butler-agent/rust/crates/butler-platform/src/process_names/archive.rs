@@ -29,7 +29,13 @@ pub fn restore_archive_links(binary: &Path) -> io::Result<()> {
         writable.set_mode(original.mode() | 0o200);
     }
     #[cfg(windows)]
-    writable.set_readonly(false);
+    {
+        #[allow(
+            clippy::permissions_set_readonly_false,
+            reason = "Windows has only the read-only attribute; Unix uses its owner write bit above"
+        )]
+        writable.set_readonly(false);
+    }
     fs::set_permissions(directory, writable)?;
     let result = (|| {
         for alias in aliases {

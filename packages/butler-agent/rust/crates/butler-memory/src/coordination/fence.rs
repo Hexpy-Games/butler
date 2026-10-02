@@ -1,5 +1,6 @@
 //! The coordinator database and its binding to the legacy lock fence.
 
+use butler_platform::sqlite;
 use std::ffi::OsString;
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -48,8 +49,8 @@ pub(super) fn coordinator_path(path: &Path) -> PathBuf {
 }
 
 pub(super) fn open_readonly(path: &Path) -> CoordinationResult<Connection> {
-    let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(sqlite_error)?;
+    let connection =
+        sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(sqlite_error)?;
     connection
         .busy_timeout(Duration::ZERO)
         .map_err(sqlite_error)?;
@@ -57,8 +58,8 @@ pub(super) fn open_readonly(path: &Path) -> CoordinationResult<Connection> {
 }
 
 pub(super) fn open_readwrite(path: &Path) -> CoordinationResult<Connection> {
-    let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)
-        .map_err(sqlite_error)?;
+    let connection =
+        sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE).map_err(sqlite_error)?;
     connection
         .busy_timeout(Duration::ZERO)
         .map_err(sqlite_error)?;
@@ -192,11 +193,11 @@ pub(super) fn initialize_coordinator(
         return Ok(false);
     }
     create_parent(&path)?;
-    let mut temp_name = path.as_os_str().to_owned();
-    temp_name.push(format!(".init-{pid}-{}", host.new_uuid()));
-    let temp = PathBuf::from(temp_name);
+    // Keep the unique staging database beside its destination, without
+    // repeating the destination basename and exhausting the VFS path budget.
+    let temp = path.with_file_name(format!(".init-{pid}-{}", host.new_uuid()));
     let result = (|| {
-        let connection = Connection::open(&temp).map_err(CoordinationError::gate_io)?;
+        let connection = sqlite::open(&temp).map_err(CoordinationError::gate_io)?;
         connection
             .busy_timeout(Duration::ZERO)
             .map_err(CoordinationError::gate_io)?;

@@ -44,6 +44,7 @@ wire_codes! {
         MemoryOriginEvidenceUnavailable = "memory_origin_evidence_unavailable",
         MemoryOriginOutboxIdentityInvalid = "memory_origin_outbox_identity_invalid",
         MemorySourceChanged = "memory_source_changed",
+        SqliteWalSyncFailed = "sqlite_wal_sync_failed",
     }
 }
 

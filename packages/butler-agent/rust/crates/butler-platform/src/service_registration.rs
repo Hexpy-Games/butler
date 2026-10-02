@@ -158,7 +158,7 @@ pub struct Registered {
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// This host has no supported service manager yet.
-    #[error("service registration is not supported on this platform yet")]
+    #[error("{}", unsupported_message())]
     Unsupported,
     /// The user's home directory is unknown.
     #[error("the home directory is unavailable")]
@@ -398,4 +398,11 @@ pub fn status() -> Result<Status, Error> {
 /// The failure to read the definition; a missing one is not owned.
 pub fn is_owned_by(directory: &Path) -> Result<bool, Error> {
     sys::is_owned_by(directory)
+}
+
+fn unsupported_message() -> &'static str {
+    match sys::MANAGER {
+        Manager::TaskScheduler => "Startup is not supported on Windows yet",
+        _ => "service registration is not supported on this platform yet",
+    }
 }

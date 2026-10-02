@@ -190,6 +190,18 @@ pub fn detach(command: &mut Command) -> &mut Command {
     sys::detach(command)
 }
 
+/// Keep a detached child from retaining this controller's inherited output
+/// pipes in addition to its explicitly redirected streams. Unix is unchanged.
+pub fn prepare_detached_spawn() -> io::Result<()> {
+    sys::prepare_detached_spawn()
+}
+
+/// Prevent a background child with redirected streams from allocating a Windows
+/// console. Unix keeps the existing process-group and signal behavior.
+pub fn hide_console(command: &mut Command) -> &mut Command {
+    sys::hide_console(command)
+}
+
 /// A stop request the host delivered to this process.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShutdownRequest {

@@ -32,6 +32,7 @@
 //! - [`network`]: the machine's own interface addresses.
 //! - [`cpu`]: how many performance cores the machine has.
 //! - [`desktop`]: whether a browser can open, and opening a link in it.
+//! - [`sqlite`]: file database opens with the host's path-capable VFS.
 //! - [`stdio`]: this process's stdin and stdout as one async stream.
 //!
 //! macOS and Linux implement the behavior Butler shipped with. Windows
@@ -59,6 +60,7 @@ pub mod process_names;
 pub mod secrets;
 pub mod secure_fs;
 pub mod service_registration;
+pub mod sqlite;
 pub mod stdio;
 pub mod time_zone;
 pub mod user_dirs;

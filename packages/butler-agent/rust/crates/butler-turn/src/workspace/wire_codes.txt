@@ -36,3 +36,4 @@ workspace_upsert_lost
 worktree_cleanup_failed
 worktree_preparation_failed
 worktree_target_occupied
+sqlite_wal_sync_failed

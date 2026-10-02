@@ -155,6 +155,7 @@ fn verify_alias(binary: &Path, alias: &Path) -> io::Result<()> {
 /// # Errors
 /// Refuses a role filename that is not the same file as the original binary.
 pub(crate) fn canonical_identity(path: PathBuf) -> io::Result<PathBuf> {
+    let path = crate::launcher::canonical_command_executable(path)?;
     if !ROLES.iter().any(|role| {
         path.file_name()
             .is_some_and(|name| name == role.file_name())

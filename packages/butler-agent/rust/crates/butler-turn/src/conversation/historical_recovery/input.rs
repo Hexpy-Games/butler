@@ -1,6 +1,7 @@
+use butler_platform::sqlite;
 use std::{fs, path::Path};
 
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::OpenFlags;
 use serde_json::{Map, Value};
 
 use super::super::{ConversationError, ConversationResult};
@@ -89,7 +90,7 @@ pub fn read_historical_app_rows(
     if !path.exists() {
         return Ok(Vec::new());
     }
-    let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    let connection = sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|source| input_error("Unable to open app projection input").with_source(source))?;
     let rows = (|| {
         let table: bool = connection

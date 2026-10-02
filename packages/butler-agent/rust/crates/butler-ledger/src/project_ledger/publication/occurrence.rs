@@ -1,6 +1,7 @@
 //! Durable v2 occurrence and attempt admission. The SQLite shard is only a
 //! short-lived cross-process admission lock; the JSON occurrence is authority.
 
+use butler_platform::sqlite;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -384,7 +385,7 @@ fn open_shard(
     if is_symlink(&shard)? {
         return Err(ProjectWorkPublicationError::Uncertain { source: None });
     }
-    let connection = Connection::open(&shard).map_err(|source| io().with_source(source))?;
+    let connection = sqlite::open(&shard).map_err(|source| io().with_source(source))?;
     secure_fs::restrict_file(&shard)
         .transpose()
         .map_err(|source| io().with_source(source))?;

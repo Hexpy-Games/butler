@@ -1,6 +1,7 @@
 //! Verify and enumerate the immutable prepare snapshot before any build work.
 
 use crate::cognition::CognitionCode;
+use butler_platform::sqlite;
 use std::path::Path;
 
 use tokio_util::sync::CancellationToken;
@@ -115,8 +116,8 @@ pub fn assert_registered(
     handle: &crate::cognition::MemoryGenerationHandle,
     inventory: &BuildInventory,
 ) -> CognitionResult<()> {
-    use rusqlite::{Connection, OptionalExtension, params};
-    let connection = Connection::open_with_flags(
+    use rusqlite::{OptionalExtension, params};
+    let connection = sqlite::open_with_flags(
         &handle.graph_path,
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
     )

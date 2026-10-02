@@ -1,0 +1,110 @@
+name: Build unsigned Windows Agent
+description: Build and package the x64 browser-UI Agent preview
+inputs:
+  artifact-base-url:
+    required: true
+    description: Published archive base URL
+  cache-key:
+    required: true
+    description: Cargo cache key
+  cargo-target-dir:
+    required: false
+    default: "../../../target/windows-release"
+    description: Cargo target directory relative to the Rust workspace
+  native-deps-artifact:
+    required: false
+    default: ""
+    description: Verified static runtime prepared separately in this workflow
+  profile:
+    required: false
+    default: release
+    description: Cargo profile (release for tags, ci-fast for previews)
+  owner-runner:
+    required: false
+    default: 'false'
+    description: Use installed tools and persistent verified native cache
+runs:
+  using: composite
+  steps:
+    - uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+    - uses: actions/download-artifact@v4
+      if: inputs.native-deps-artifact != ''
+      with:
+        name: ${{ inputs.native-deps-artifact }}
+        path: ${{ runner.temp }}/windows-native-artifact
+    - name: Restore native tree with its verified library layout
+      if: inputs.native-deps-artifact != ''
+      shell: bash
+      run: |
+        set -euo pipefail
+        root="$(cygpath -u "$RUNNER_TEMP")"
+        mkdir -p "$root/ort-cache/native-deps"
+        MSYS=winsymlinks:nativestrict tar -xf "$root/windows-native-artifact/windows-native-deps.tar.zst" \
+          -C "$root/ort-cache/native-deps" --use-compress-program 'zstd -d'
+    - uses: ./.github/actions/rust-agent-setup
+      if: inputs.owner-runner != 'true'
+      with:
+        native-deps: static-ort
+        cache-key: ${{ inputs.cache-key }}-target-v1
+        cargo-target-dir: ${{ inputs.cargo-target-dir }}
+        prepared-static-ort: ${{ inputs.native-deps-artifact != '' }}
+    - uses: oven-sh/setup-bun@v2
+      if: inputs.owner-runner != 'true'
+    - uses: actions/setup-node@v4
+      if: inputs.owner-runner != 'true'
+      with:
+        node-version: 22
+    - name: Build renderer
+      working-directory: ${{ github.workspace }}
+      shell: pwsh
+      run: |
+        $profileRoot = if ($env:OWNER_JOB_ROOT) { $env:OWNER_JOB_ROOT } else { $env:RUNNER_TEMP }
+        $env:HOME = Join-Path $profileRoot ([guid]::NewGuid())
+        $env:BUTLER_DATA = Join-Path $profileRoot ([guid]::NewGuid())
+        New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+        bun install --frozen-lockfile --ignore-scripts
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        npm.cmd --prefix packages/butler-app/client/ui run build
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    - name: Build unsigned release executable
+      shell: pwsh
+      working-directory: packages/butler-agent/rust
+      run: |
+        $env:CARGO_HOME = "$env:USERPROFILE/.cargo"
+        $env:RUSTUP_HOME = "$env:USERPROFILE/.rustup"
+        $profileRoot = if ($env:OWNER_JOB_ROOT) { $env:OWNER_JOB_ROOT } else { $env:RUNNER_TEMP }
+        $env:HOME = Join-Path $profileRoot ([guid]::NewGuid())
+        $env:BUTLER_DATA = Join-Path $profileRoot ([guid]::NewGuid())
+        New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+        $env:RUSTFLAGS = '-C target-feature=+crt-static'
+        if ('${{ inputs.profile }}' -eq 'release') {
+          $env:CARGO_PROFILE_RELEASE_LTO = 'thin'
+          $env:CARGO_PROFILE_RELEASE_CODEGEN_UNITS = '1'
+        }
+        cargo build --locked --profile ${{ inputs.profile }} --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        $binary = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/${{ inputs.profile }}/butler-agent.exe"
+        # A runner has development DLLs installed. Refuse a dependency they hide.
+        $imports = & dumpbin /dependents $binary
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        $imports | Write-Output
+        foreach ($line in $imports) {
+          if ($line.Trim() -match '(?i)^(onnxruntime|vcruntime|msvcp|concrt|ucrtbase).*\.dll$') {
+            throw 'Agent has an unpackaged runtime dependency'
+          }
+        }
+    - name: Package ZIP and shared Agent manifests
+      working-directory: ${{ github.workspace }}
+      shell: pwsh
+      run: |
+        $profileRoot = if ($env:OWNER_JOB_ROOT) { $env:OWNER_JOB_ROOT } else { $env:RUNNER_TEMP }
+        $env:HOME = Join-Path $profileRoot ([guid]::NewGuid())
+        $env:BUTLER_DATA = Join-Path $profileRoot ([guid]::NewGuid())
+        New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+        python packages/butler-agent/rust/scripts/package-windows-agent.py `
+          --binary "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/${{ inputs.profile }}/butler-agent.exe" `
+          --resources packages/butler-agent/resources --renderer packages/butler-app/client/ui/dist `
+          --output dist/release/agent --artifact-base-url '${{ inputs.artifact-base-url }}'
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

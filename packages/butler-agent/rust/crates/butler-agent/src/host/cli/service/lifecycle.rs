@@ -286,7 +286,19 @@ pub(super) async fn acquire_admission(
 ) -> Result<AdmissionLock, crate::host::HostError> {
     let end = Instant::now() + Duration::from_secs(3);
     loop {
-        match AdmissionLock::acquire(data_root, installation) {
+        let admission = if butler_platform::secure_fs::OWNER_ONLY {
+            AdmissionLock::acquire(data_root, installation)
+        } else {
+            let data = data_root.to_path_buf();
+            let installation = installation.clone();
+            tokio::task::spawn_blocking(move || AdmissionLock::acquire(&data, &installation))
+                .await
+                .map_err(|source| {
+                    crate::host::HostError::new("service_start_admission_failed")
+                        .with_source(source)
+                })?
+        };
+        match admission {
             Ok(lock) => return Ok(lock),
             Err(error)
                 if error.message() == "service_start_admission_busy" && Instant::now() < end =>
@@ -362,6 +374,7 @@ fn spawn_service(
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr));
+    process_control::prepare_detached_spawn().map_err(crate::host::HostError::from_error)?;
     process_control::detach(&mut command);
     command.spawn().map_err(|source| {
         crate::host::HostError::new("native_service_spawn_failed").with_source(source)

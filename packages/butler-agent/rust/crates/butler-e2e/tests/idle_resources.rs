@@ -11,7 +11,7 @@ mod memory_fixture;
 
 use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use butler_platform::process_control::usage as process_usage;
-use rusqlite::Connection;
+use butler_platform::sqlite;
 use std::time::Duration;
 
 #[path = "app_storage_scale/seed.rs"]
@@ -39,7 +39,7 @@ async fn perf_idle_owner_scale_reads_and_footprint() -> Result<(), HarnessError>
     let mut s = setup.start().await?;
     s.agent.terminate().await?;
     let app = s.sandbox.data.join("app-server/butler-client.sqlite");
-    app_seed::seed_owner_scale(&Connection::open(&app).unwrap(), 3_000);
+    app_seed::seed_owner_scale(&sqlite::open(&app).unwrap(), 3_000);
     let expected = seed::owner_scale(&s.sandbox.data)?;
     s.gw = s.agent.start_again().await?;
     let pid = s.agent.pid().unwrap();

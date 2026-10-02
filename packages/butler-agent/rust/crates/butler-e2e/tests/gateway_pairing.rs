@@ -207,3 +207,50 @@ async fn sec_14_pairing_codes_are_bounded_single_use_and_post_only() -> Result<(
     )?;
     s.finish().await
 }
+
+/// Pair a browser through a real LAN listener, then list it through the local API.
+#[tokio::test]
+async fn lan_pairing_code_connect_and_list_device() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("LAN-PAIRING")?
+        .data_folder_token()
+        .start()
+        .await?;
+    let app = admin(&s);
+    let view = app.set_remote(true).await?;
+    let address = view["bind_addresses"]
+        .as_array()
+        .unwrap()
+        .get(1)
+        .expect("LAN pairing requires a bound LAN listener")
+        .as_str()
+        .unwrap();
+    let base = format!("http://{address}");
+    assert!(
+        view["lan_urls"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!(base))
+    );
+    let remote = butler_e2e::e2e::gateway::Gateway::new(base, s.gw.token.clone());
+    let browser = browser();
+    let pin = issue(&app).await?;
+    let response = connect(&remote, &browser, pin["code"].as_str().unwrap()).await?;
+    assert_eq!(response.status().as_u16(), 303);
+    let cookie = cookie_pair(&response);
+    assert_eq!(read(&remote, &browser, &cookie).await?, 200);
+    let listed = devices(&app).await?;
+    assert_eq!(listed.as_array().unwrap().len(), 1);
+    assert_eq!(listed[0]["name"], "Remote device · browser");
+    assert_eq!(
+        listed[0]["ip"],
+        address
+            .parse::<std::net::SocketAddr>()
+            .unwrap()
+            .ip()
+            .to_string()
+    );
+    assert_no_secrets(&s, &[pin["code"].as_str().unwrap(), &cookie])?;
+    app.set_remote(false).await?;
+    s.finish().await
+}

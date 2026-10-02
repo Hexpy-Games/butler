@@ -25,6 +25,7 @@ TARGETS = {
     "aarch64-apple-darwin": "macOS App/Agent",
     "x86_64-unknown-linux-gnu": "Linux x64 DEB/Arch/Agent",
     "aarch64-unknown-linux-gnu": "Linux arm64 DEB/Agent",
+    "x86_64-pc-windows-msvc": "Unsigned Windows x64 Agent preview",
 }
 SIBLING_LICENSES = {}
 

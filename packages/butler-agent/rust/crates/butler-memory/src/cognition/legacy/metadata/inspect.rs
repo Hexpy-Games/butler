@@ -1,5 +1,6 @@
 //! Reading one legacy memory chunk with the references that point at it.
 
+use butler_platform::sqlite;
 use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
@@ -81,7 +82,7 @@ pub(super) fn read_chunk_with_refs(
         return Ok(None);
     }
     ensure_data_authority(data_root, &[path])?;
-    let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    let db = sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|source| metadata_error().with_source(source))?;
     db.busy_timeout(std::time::Duration::from_secs(5))
         .map_err(|source| metadata_error().with_source(source))?;
