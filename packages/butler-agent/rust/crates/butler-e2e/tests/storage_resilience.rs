@@ -1,6 +1,7 @@
 //! Public schedule requests survive lane/owner faults and classify contention.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test assertions")]
 
+use butler_platform::sqlite;
 use std::time::{Duration, Instant};
 
 use butler_e2e::e2e::{
@@ -108,7 +109,7 @@ async fn schedule_write_contention_is_retryable() -> Result<(), HarnessError> {
         .start()
         .await?;
     let id = create(&s).await?;
-    let db = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))
+    let db = sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite"))
         .expect("open isolated App database");
     db.busy_timeout(Duration::ZERO)
         .expect("lock without waiting");
@@ -124,6 +125,7 @@ async fn schedule_write_contention_is_retryable() -> Result<(), HarnessError> {
         reply.status,
         reply.text
     );
+    // Minimum fixture hold proves contention; this is a functional invariant.
     assert!(held.elapsed() >= Duration::from_secs(5));
     assert_eq!(reply.status, 503, "{}", reply.text);
     assert_eq!(reply.error_code(), Some("storage_busy"));

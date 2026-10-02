@@ -108,6 +108,7 @@ impl<'ast> Visit<'ast> for Finder {
 #[cfg(test)]
 mod tests {
     use super::{FileTests, tests};
+    use crate::wall_clock::raw_budget_assertions;
 
     /// Pure-logic table: test functions are counted in every module, and a
     /// marker counts only directly above its test with a known category.
@@ -157,5 +158,40 @@ mod tests {
             );
         }
         assert!(tests("fn broken( {").is_err());
+
+        let budget = "#[tokio::test]\nasync fn scenario() { assert!(started.elapsed() < Duration::from_millis(10)); }";
+        assert_eq!(
+            raw_budget_assertions(budget).unwrap(),
+            vec![(2, "scenario".to_owned())]
+        );
+        let tiered = "#[tokio::test]\nasync fn perf_scenario() { assert!(p95 < Duration::from_millis(10)); }";
+        assert_eq!(
+            raw_budget_assertions(tiered).unwrap(),
+            vec![(2, "perf_scenario".to_owned())]
+        );
+        for body in [
+            "butler_e2e::assert_wall_clock_budget!(started.elapsed(), Duration::from_secs(1), \"budget\");",
+            "assert!(started.elapsed() >= Duration::from_secs(5));",
+        ] {
+            let source = format!("fn helper() {{ {body} }}");
+            assert!(raw_budget_assertions(&source).unwrap().is_empty());
+        }
+        for body in [
+            "assert!(started.elapsed() <= Duration::from_secs(1));",
+            "assert!(Duration::from_secs(1) > started.elapsed());",
+            "assert!(measured < Duration::from_secs(1));",
+            "assert_eq!(started.elapsed() < limit, true);",
+        ] {
+            let source = format!("fn helper() {{ {body} }}");
+            assert_eq!(raw_budget_assertions(&source).unwrap().len(), 1);
+        }
+        let elapsed_local = "#[tokio::test]\nasync fn scenario() { let elapsed = started.elapsed(); assert!(elapsed < deadline); }";
+        assert_eq!(
+            raw_budget_assertions(elapsed_local).unwrap(),
+            vec![(2, "scenario".to_owned())]
+        );
+        let diagnostic_only =
+            "#[tokio::test]\nasync fn scenario() { let _elapsed = started.elapsed(); }";
+        assert!(raw_budget_assertions(diagnostic_only).unwrap().is_empty());
     }
 }

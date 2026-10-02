@@ -13,6 +13,18 @@ inputs:
     description: Optional nextest test thread count.
     required: false
     default: ""
+  release-profile:
+    description: Build and run the E2E tests with Cargo's release profile.
+    required: false
+    default: "false"
+  exclude-perf:
+    description: Exclude perf_* wall-clock budget tests from this shared tier.
+    required: false
+    default: "true"
+  enforce-budgets:
+    description: Enforce budgets and select all binaries using the wall-clock helper.
+    required: false
+    default: "false"
   success-output:
     description: Optional nextest output mode for successful tests.
     required: false
@@ -96,6 +108,9 @@ runs:
         PARTITION: ${{ inputs.partition }}
         TEST_FILTERSET: ${{ inputs.filterset }}
         TEST_THREADS: ${{ inputs.test-threads }}
+        RELEASE_PROFILE: ${{ inputs.release-profile }}
+        EXCLUDE_PERF: ${{ inputs.exclude-perf }}
+        ENFORCE_BUDGETS: ${{ inputs.enforce-budgets }}
         TEST_SUCCESS_OUTPUT: ${{ inputs.success-output }}
         ARCHIVE_FILE: ${{ inputs.archive-file }}
         BUTLER_E2E_EMBEDDING_ASSETS: ${{ runner.temp }}/e2e-models/bge-m3
@@ -105,10 +120,39 @@ runs:
         BUTLER_E2E_SYSTEMD: ${{ steps.systemd.outputs.available }}
         BUTLER_E2E_REPORT: ${{ runner.temp }}/e2e-report.txt
       run: |
-        set -o pipefail
+        set -euo pipefail
+        if [ "$ENFORCE_BUDGETS" = 'true' ]; then
+          if [ "$TEST_THREADS" != '1' ] || [ "$EXCLUDE_PERF" != 'false' ]; then
+            echo "::error::enforce-budgets requires test-threads=1 and exclude-perf=false"
+            exit 2
+          fi
+          export BUTLER_E2E_PERF=1
+          TEST_FILTERSET="($(python3 "$GITHUB_WORKSPACE/.github/scripts/e2e-perf-filter.py")) and not binary(=idle_resources)"
+        elif [ "$ENFORCE_BUDGETS" = 'false' ]; then
+          export BUTLER_E2E_PERF=0
+        else
+          echo "::error::enforce-budgets must be true or false"
+          exit 2
+        fi
         filterset='not test(idle_disk_writes_and_cpu_stay_bounded)'
         if [ -n "$TEST_FILTERSET" ]; then
           filterset="($TEST_FILTERSET) and $filterset"
+        fi
+        if [ "$EXCLUDE_PERF" = 'true' ]; then
+          filterset="($filterset) and not test(/^perf_/)"
+        fi
+        # Bash 3.2 (macOS) treats empty arrays as unset with nounset.
+        # Presence-guarded expansions below preserve zero arguments and quoting.
+        nextest_profile_args=()
+        if [ "$RELEASE_PROFILE" = 'true' ]; then
+          if [ -n "$ARCHIVE_FILE" ]; then
+            echo "::error::release-profile requires tests to be built by this action"
+            exit 2
+          fi
+          nextest_profile_args=(--release)
+        elif [ "$RELEASE_PROFILE" != 'false' ]; then
+          echo "::error::release-profile must be true or false"
+          exit 2
         fi
         nextest_partition_args=()
         if [ -n "$PARTITION" ]; then
@@ -130,20 +174,34 @@ runs:
           cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
             run --no-fail-fast --retries 0 --archive-file "$ARCHIVE_FILE" \
             --extract-to "$PWD" \
-            "${nextest_partition_args[@]}" \
-            "${nextest_threads_args[@]}" \
-            "${nextest_success_output_args[@]}" \
+            ${nextest_partition_args[@]+"${nextest_partition_args[@]}"} \
+            ${nextest_threads_args[@]+"${nextest_threads_args[@]}"} \
+            ${nextest_success_output_args[@]+"${nextest_success_output_args[@]}"} \
             -E "$filterset" \
             2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
         else
           cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
-            run --locked --no-fail-fast --retries 0 -p butler-e2e \
-            "${nextest_partition_args[@]}" \
-            "${nextest_threads_args[@]}" \
-            "${nextest_success_output_args[@]}" \
+            run ${nextest_profile_args[@]+"${nextest_profile_args[@]}"} --locked --no-fail-fast --retries 0 -p butler-e2e \
+            ${nextest_partition_args[@]+"${nextest_partition_args[@]}"} \
+            ${nextest_threads_args[@]+"${nextest_threads_args[@]}"} \
+            ${nextest_success_output_args[@]+"${nextest_success_output_args[@]}"} \
             -E "$filterset" \
             2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
         fi
+
+    # PERF-IDLE takes five minutes by design; its documented cargo-test runner
+    # avoids nextest's three-minute per-test watchdog without changing budgets.
+    - name: Run PERF-IDLE resource budgets
+      if: inputs.enforce-budgets == 'true'
+      shell: bash
+      working-directory: packages/butler-agent/rust
+      env:
+        BUTLER_E2E_TIER: perf
+        BUTLER_E2E_PERF: "1"
+        BUTLER_E2E_SKIP_BUILD: "1"
+        BUTLER_E2E_BIN: ${{ inputs.agent-binary }}
+        BUTLER_E2E_EMBEDDING_ASSETS: ${{ runner.temp }}/e2e-models/bge-m3
+      run: cargo test --release --locked -p butler-e2e --test idle_resources -- --nocapture --test-threads=1
 
     - name: Report IDLE-DISK counters
       if: >-

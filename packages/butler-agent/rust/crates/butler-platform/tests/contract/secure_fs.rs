@@ -14,16 +14,7 @@ use butler_platform::secure_fs::{
 
 use super::scratch;
 
-#[test]
-fn capabilities_match_the_host() {
-    let unix = cfg!(unix);
-    assert_eq!(OWNER_ONLY, unix);
-    assert_eq!(PERMISSION_MODES, unix);
-    assert_eq!(NO_FOLLOW, unix);
-    assert_eq!(FILE_IDS, unix);
-    assert_eq!(DIRECTORY_SYNC, unix);
-}
-
+// test-category: security
 #[test]
 fn replace_private_swaps_in_a_complete_owner_only_file() {
     let directory = scratch("replace");
@@ -35,11 +26,20 @@ fn replace_private_swaps_in_a_complete_owner_only_file() {
 
     replace_private(
         &path,
-        |file| file.write_all(b"after"),
+        |file| {
+            let staged = fs::read_dir(&directory)
+                .unwrap()
+                .map(|entry| entry.unwrap().path())
+                .find(|entry| *entry != path && *entry != neighbor)
+                .unwrap();
+            assert_eq!(is_private(&staged), Some(true));
+            file.write_all(b"after")
+        },
         std::convert::identity,
     )
     .unwrap();
     assert_eq!(fs::read_to_string(&path).unwrap(), "after");
+    assert_eq!(is_private(&path), Some(true));
     let after = fs::metadata(&path).unwrap();
     assert_eq!(is_owner_only(&after), OWNER_ONLY.then_some(true));
     // A replaced file is a new file, which readers can tell apart.
@@ -66,7 +66,30 @@ fn replace_private_swaps_in_a_complete_owner_only_file() {
     names.sort();
     assert_eq!(names, ["config.json", "neighbor.tmp"]);
     assert_eq!(fs::read_to_string(&neighbor).unwrap(), "someone else's");
-    assert_eq!(sync_directory(&directory).is_some(), DIRECTORY_SYNC);
+    let synced = sync_directory(&directory).transpose().unwrap();
+    if DIRECTORY_SYNC {
+        assert!(synced.is_some());
+    }
+    // Both creating and replacing a synced file must survive reopening it.
+    let mut long = directory.clone();
+    for _ in 0..5 {
+        long = long.join("long-component-0123456789012345678901234567890123456789");
+    }
+    fs::create_dir_all(&long).unwrap();
+    let durable = long.join("durable.json");
+    assert!(durable.to_string_lossy().chars().count() > 280);
+    for bytes in [
+        b"first".as_slice(),
+        b"replacement with more bytes".as_slice(),
+    ] {
+        replace_private(
+            &durable,
+            |file| file.write_all(bytes),
+            std::convert::identity,
+        )
+        .unwrap();
+        assert_eq!(fs::read(&durable).unwrap(), bytes);
+    }
     fs::remove_dir_all(directory).unwrap();
 }
 

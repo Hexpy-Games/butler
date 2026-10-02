@@ -4,6 +4,7 @@
 //! onboarding record marked complete and a config selecting a model. The
 //! reasoning effort is then set through `PATCH /settings`, as the App does.
 
+use butler_platform::sqlite;
 use std::fs;
 use std::path::Path;
 
@@ -83,7 +84,8 @@ pub fn onboarding_complete(data: &Path) -> Result<(), HarnessError> {
 
 /// Copies a committed fixture tree (`crates/butler-e2e/fixtures/<name>`) into `data`.
 pub fn install_tree(name: &str, data: &Path) -> Result<(), HarnessError> {
-    let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+    let source = super::binary::workspace_root()
+        .join("crates/butler-e2e")
         .join("fixtures")
         .join(name);
     copy_tree(&source, data)
@@ -107,10 +109,12 @@ pub fn legacy(data: &Path, model: &str, app_now: &str) -> Result<(), HarnessErro
     ready(data, model, app_now)?;
     install_tree("F3-legacy/data", data)?;
     let sql = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/F3-legacy/app-server.sql"),
+        super::binary::workspace_root()
+            .join("crates/butler-e2e")
+            .join("fixtures/F3-legacy/app-server.sql"),
     )?;
     fs::create_dir_all(data.join("app-server"))?;
-    let connection = rusqlite::Connection::open(data.join("app-server/butler-client.sqlite"))
+    let connection = sqlite::open(data.join("app-server/butler-client.sqlite"))
         .map_err(|error| super::harness_error(format!("legacy fixture: {error}")))?;
     connection
         .execute_batch(&sql)
@@ -121,7 +125,9 @@ pub fn legacy(data: &Path, model: &str, app_now: &str) -> Result<(), HarnessErro
 /// The legacy fixture's expected-content manifest.
 pub fn legacy_manifest() -> Result<serde_json::Value, HarnessError> {
     Ok(serde_json::from_slice(&fs::read(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/F3-legacy/manifest.json"),
+        super::binary::workspace_root()
+            .join("crates/butler-e2e")
+            .join("fixtures/F3-legacy/manifest.json"),
     )?)?)
 }
 

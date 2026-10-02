@@ -7,6 +7,7 @@
     reason = "test assertions"
 )]
 
+use butler_platform::sqlite;
 use std::time::Duration;
 
 use butler_e2e::e2e::gateway::{TERMINAL, turn_state};
@@ -336,7 +337,7 @@ async fn sched_04_one_store_imports_and_shares_schedules() -> Result<(), Harness
         "API edited CLI schedule"
     );
     s.restart().await?;
-    let db = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))
+    let db = sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite"))
         .map_err(|error| HarnessError(error.to_string()))?;
     let count: i64 = db
         .query_row(

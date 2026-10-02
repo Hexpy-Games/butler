@@ -1,5 +1,6 @@
 //! The legacy entity graph extracted from hot-cache and transcript text.
 
+use butler_platform::sqlite;
 use std::{
     collections::HashMap,
     fs,
@@ -115,7 +116,7 @@ fn open_legacy_graph(data_root: &Path, memory_root: &Path) -> CognitionResult<Co
         &[&db_directory, &db_path, &wal_path, &shm_path, &journal_path],
     )?;
 
-    let connection = Connection::open(&db_path)
+    let connection = sqlite::open(&db_path)
         .map_err(|source| legacy(CognitionCode::MemoryGraphUnavailable).with_source(source))?;
     connection
         .execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")

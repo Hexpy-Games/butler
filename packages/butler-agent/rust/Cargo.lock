@@ -512,6 +512,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
+name = "atomicwrites"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ef1bb8d1b645fe38d51dfc331d720fb5fc2c94b440c76cc79c80ff265ca33e3"
+dependencies = [
+ "rustix 0.38.44",
+ "tempfile",
+ "windows-sys 0.52.0",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -815,6 +826,7 @@ dependencies = [
  "butler-turn",
  "bytes",
  "chrono",
+ "embed-manifest",
  "futures-util",
  "image",
  "indexmap 2.14.2",
@@ -1017,12 +1029,16 @@ name = "butler-platform"
 version = "0.0.0"
 dependencies = [
  "apple-native-keyring-store",
+ "atomicwrites",
  "dunce",
+ "filedescriptor",
  "iana-time-zone",
+ "if-addrs",
  "keyring-core",
  "libproc",
  "nix",
  "rpassword",
+ "rusqlite",
  "rustix 1.1.5",
  "same-file",
  "security-framework",
@@ -2498,6 +2514,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "252afb9ae5eaa683babdc6a068b3f5726eb19e05070c731f9b2a23a7c3e8ed34"
 
 [[package]]
+name = "embed-manifest"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94cdc65b1cf9e871453ce2f86f5aaec24ff2eaa36a1fa3e02e441dddc3613b99"
+
+[[package]]
 name = "encoding_rs"
 version = "0.8.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2635,6 +2657,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e6853b52649d4ac5c0bd02320cddc5ba956bdb407c4b75a2c6b75bf51500f8c"
 dependencies = [
  "simd-adler32",
+]
+
+[[package]]
+name = "filedescriptor"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e40758ed24c9b2eeb76c35fb0aebc66c626084edd827e07e1552279814c6682d"
+dependencies = [
+ "libc",
+ "thiserror 1.0.69",
+ "winapi",
 ]
 
 [[package]]
@@ -3503,6 +3536,16 @@ checksum = "cb68373c0d6620ef8105e855e7745e18b0d00d3bdb07fb532e434244cdb9a714"
 dependencies = [
  "icu_normalizer 2.3.0",
  "icu_properties 2.3.0",
+]
+
+[[package]]
+name = "if-addrs"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0a05c691e1fae256cf7013d99dad472dc52d5543322761f83ec8d47eab40d2b"
+dependencies = [
+ "libc",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

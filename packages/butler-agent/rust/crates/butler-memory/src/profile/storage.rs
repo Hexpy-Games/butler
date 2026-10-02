@@ -1,5 +1,6 @@
 //! The profile database: consent, candidates, stable entries and runtime projections.
 
+use butler_platform::sqlite;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -39,7 +40,7 @@ pub(super) fn open(data_root: &Path, access: Access) -> ProfileResult<Connection
     } else {
         OpenFlags::SQLITE_OPEN_READ_ONLY
     };
-    let db = Connection::open_with_flags(&path, flags).map_err(db_error)?;
+    let db = sqlite::open_with_flags(&path, flags).map_err(db_error)?;
     if create {
         db.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
             .map_err(db_error)?;

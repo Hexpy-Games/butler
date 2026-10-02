@@ -1,6 +1,7 @@
 //! Snapshot inventory from canonical Conversation and the source typed registry.
 
 use crate::cognition::CognitionCode;
+use butler_platform::sqlite;
 use std::{
     fs,
     path::Path,
@@ -8,7 +9,7 @@ use std::{
 };
 
 use indexmap::IndexMap;
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::OpenFlags;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -300,7 +301,7 @@ fn inventory_request(as_of: &str) -> RecallRequest {
 }
 
 fn canonical_revision(canonical_path: &Path) -> CognitionResult<i64> {
-    let connection = Connection::open_with_flags(canonical_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    let connection = sqlite::open_with_flags(canonical_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|source| error(CognitionCode::MemoryInventoryIncomplete).with_source(source))?;
     connection
         .query_row(

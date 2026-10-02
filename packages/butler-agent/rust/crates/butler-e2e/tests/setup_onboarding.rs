@@ -8,6 +8,7 @@
     reason = "test assertions"
 )]
 
+use butler_platform::sqlite;
 use std::time::Duration;
 
 use butler_e2e::e2e::HarnessError;
@@ -179,8 +180,7 @@ async fn setup_13_existing_install_keeps_its_default_model() -> Result<(), Harne
     // The App database as the release before #230 left it.
     s.agent.terminate().await?;
     {
-        let db = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))
-            .unwrap();
+        let db = sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
         db.execute(
             "DELETE FROM app_settings WHERE key='default-model-policy'",
             [],

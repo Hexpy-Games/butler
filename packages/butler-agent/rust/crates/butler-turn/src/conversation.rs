@@ -36,6 +36,7 @@ pub use source::{
 pub use text_projection::{ToolParts, text_for_message, text_for_part};
 pub use types::*;
 
+use butler_platform::sqlite;
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -260,7 +261,7 @@ fn run_connection_lane(
                 .with_source(error)
             })?;
         }
-        let mut connection = Connection::open(path).map_err(ConversationError::sqlite)?;
+        let mut connection = sqlite::open(path).map_err(ConversationError::sqlite)?;
         connection
             .busy_timeout(Duration::from_millis(5_000))
             .map_err(ConversationError::sqlite)?;
@@ -300,6 +301,18 @@ fn run_connection_lane(
             "Conversation transaction remained open at close",
         ));
     }
+    // NORMAL commits are durable once the WAL is synced. Keep it for recovery
+    // instead of copying and syncing the same pages again at final close.
+    sqlite::sync_wal(&connection).map_err(|error| {
+        ConversationError::new(ConversationCode::SqliteWalSyncFailed, error.to_string())
+            .with_source(error)
+    })?;
+    connection
+        .set_db_config(
+            rusqlite::config::DbConfig::SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE,
+            true,
+        )
+        .map_err(ConversationError::sqlite)?;
     connection
         .close()
         .map_err(|(_, error)| ConversationError::sqlite(error))

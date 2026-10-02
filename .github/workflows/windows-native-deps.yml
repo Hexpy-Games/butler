@@ -24,20 +24,17 @@ jobs:
           cache-key: windows-native-deps
       # Preserve the recipe's archives, output hashes and complete marker.
       # Consumers verify them again; a cold build stays out of the Agent job.
-      # upload-artifact traverses symlinks with Node stat, which cannot read
-      # FlatBuffers' Windows source-tree links. Tar preserves the full verified
-      # cache (including ort-sys' _deps link) without that traversal.
-      - name: Archive verified native dependency cache
+      - name: Archive native tree without following source links
         shell: bash
         run: |
           set -euo pipefail
-          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
-          cache_root="$(cygpath -u "$RUNNER_TEMP")"
-          tar -czf "$cache_root/windows-native-deps.tar.gz" -C "$cache_root/ort-cache" native-deps
+          root="$(cygpath -u "$RUNNER_TEMP")"
+          tar --posix -cf "$root/windows-native-deps.tar.zst" \
+            -C "$root/ort-cache/native-deps" --use-compress-program 'zstd -T0' .
       - uses: actions/upload-artifact@v4
         with:
           name: windows-native-deps
-          path: ${{ runner.temp }}/windows-native-deps.tar.gz
+          path: ${{ runner.temp }}/windows-native-deps.tar.zst
+          compression-level: 0
           if-no-files-found: error
           retention-days: 7
-          compression-level: 0

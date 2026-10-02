@@ -104,7 +104,7 @@ jobs:
       - name: Clippy all targets
         run: cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
       - name: Run tests
-        run: cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" run --workspace --locked --no-fail-fast
+        run: cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" run --workspace --locked --no-fail-fast -E 'not test(/^perf_/)'
       - name: Run doctests when present
         run: |
           if grep -rqE '^[[:space:]]*//[/!][[:space:]]*```' crates; then
@@ -116,6 +116,7 @@ jobs:
         uses: ./.github/actions/e2e-stub
         with:
           partition: 1/1
+          filterset: "not test(/^perf_/)"
           run-idle-disk: "true"
       - name: Assert runner home untouched
         if: always()
@@ -147,7 +148,7 @@ jobs:
       - name: Clippy all targets
         run: cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
       - name: Run tests
-        run: cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" run --workspace --locked --no-fail-fast
+        run: cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" run --workspace --locked --no-fail-fast -E 'not test(/^perf_/)'
       - name: Assert runner home untouched
         if: always()
         shell: bash

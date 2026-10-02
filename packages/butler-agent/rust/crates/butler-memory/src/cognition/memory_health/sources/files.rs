@@ -1,6 +1,7 @@
 //! Reading the legacy memory files: sizes and ages, JSONL and SQLite row counts, vector stats, registered projects and project refresh failures.
 
 use super::*;
+use butler_platform::sqlite;
 
 pub(super) fn scan_files(
     directory: &Path,
@@ -115,7 +116,7 @@ pub(super) fn count_sqlite_rows(path: &Path, table: &'static str) -> i64 {
     if !path.exists() {
         return 0;
     }
-    let Ok(database) = Connection::open_with_flags(
+    let Ok(database) = sqlite::open_with_flags(
         path,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
     ) else {

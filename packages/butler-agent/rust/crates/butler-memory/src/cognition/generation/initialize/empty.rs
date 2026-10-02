@@ -1,5 +1,6 @@
 //! The source's fresh-only gate. Existing source-bearing data requires rebuild.
 
+use butler_platform::sqlite;
 use std::{fs, path::Path};
 
 use rusqlite::{Connection, OpenFlags};
@@ -112,7 +113,7 @@ fn sqlite_has_rows(path: &Path) -> CognitionResult<bool> {
 }
 
 fn open(path: &Path) -> CognitionResult<Connection> {
-    Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|source| unreadable().with_source(source))
 }
 

@@ -1,10 +1,11 @@
 //! History compatibility and change invalidation through the real monitor route.
 use butler_e2e::e2e::{HarnessError, scenario::Scenario};
-use rusqlite::{Connection, params};
+use butler_platform::sqlite;
+use rusqlite::params;
 use serde_json::json;
 
 pub(super) async fn assert_history_labels(s: &Scenario) -> Result<(), HarnessError> {
-    let db = Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
+    let db = sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
     db.busy_timeout(std::time::Duration::from_secs(5)).unwrap();
     for (index, title) in ["Old report", "Table", "Code", "Note", "Old report"]
         .iter()

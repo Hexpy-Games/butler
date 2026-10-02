@@ -374,6 +374,7 @@ fn spawn_service(
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr));
+    process_control::prepare_detached_spawn().map_err(crate::host::HostError::from_error)?;
     process_control::detach(&mut command);
     command.spawn().map_err(|source| {
         crate::host::HostError::new("native_service_spawn_failed").with_source(source)

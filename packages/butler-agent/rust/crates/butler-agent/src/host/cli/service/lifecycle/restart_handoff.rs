@@ -85,6 +85,7 @@ pub(in crate::host::cli::service) fn spawn_restart_handoff(
         .stdin(Stdio::piped())
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr));
+    process_control::prepare_detached_spawn().map_err(crate::host::HostError::from_error)?;
     process_control::detach(&mut command);
     command.arg("--quiet");
     let mut child = command.spawn().map_err(|source| {

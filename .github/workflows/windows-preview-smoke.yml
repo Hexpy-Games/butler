@@ -3,13 +3,14 @@ name: Unsigned Windows preview smoke
 on:
   pull_request:
     paths:
-      - packages/butler-app/client/electron/**
-      - packages/butler-app/scripts/windows/**
-      - deploy/licenses/**
       - .github/workflows/windows-preview-smoke.yml
       - .github/workflows/windows-native-deps.yml
       - .github/actions/build-windows-agent/**
       - .github/actions/rust-agent-setup/**
+      - .github/actions/windows-owner-setup/**
+      - deploy/windows-owner-cleanup.ps1
+      - deploy/windows-protocol-snapshot.ps1
+      - deploy/windows-e2e-artifacts.ps1
       - packages/butler-agent/**
       - packages/butler-npm/**
       - deploy/install.ps1
@@ -26,101 +27,76 @@ defaults:
     shell: pwsh
     working-directory: packages/butler-agent/rust
 
-jobs:
-  native:
-    uses: ./.github/workflows/windows-native-deps.yml
+concurrency:
+  group: windows-preview-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-  release:
-    name: Installed unsigned Windows preview
-    needs: native
-    # Keep the expensive static-ORT build/cache alive during contract fixes.
-    concurrency:
-      group: windows-preview-release-${{ github.ref }}
-      cancel-in-progress: false
-    runs-on: windows-latest
+jobs:
+  build:
+    name: Build unsigned Windows preview
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, butler-win]
     timeout-minutes: 90
-    env:
-      CARGO_TARGET_DIR: ${{ github.workspace }}/target/windows-preview
-      BUTLER_E2E_TIER: stub
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/windows-owner-setup
+        with:
+          workflow: windows-preview
       - uses: ./.github/actions/build-windows-agent
         with:
-          cache-key: windows-preview-release
-          native-deps-artifact: windows-native-deps
+          owner-runner: 'true'
+          profile: ci-fast
+          cache-key: windows-preview
           artifact-base-url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
-      - name: Package unsigned Electron App and portable ZIP
-        working-directory: .
-        run: |
-          $env:HOME = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
-          $env:BUTLER_DATA = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
-          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          npm.cmd --prefix packages/butler-app/client/electron ci
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $env:BUTLER_NATIVE_AGENT_EXECUTABLE = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/butler-agent.exe"
-          npm.cmd --prefix packages/butler-app/client/electron run package:win
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Extract portable App and prove packaged foreground lifecycle
-        working-directory: .
-        run: |
-          $env:HOME = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
-          $env:BUTLER_DATA = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
-          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          $portable = Join-Path $env:RUNNER_TEMP 'portable-electron'
-          Expand-Archive -LiteralPath packages/butler-app/client/electron/dist/Butler-win32-x64-portable.zip -DestinationPath $portable
-          bun run packages/butler-app/scripts/windows/packaged-app-smoke.ts "$portable/Butler-win32-x64"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - uses: actions/upload-artifact@v4
-        with:
-          name: app-windows-x64-portable
-          path: packages/butler-app/client/electron/dist/Butler-win32-x64-portable.zip
-          if-no-files-found: error
-      - name: Install ZIP, authenticate browser UI and exercise lifecycle
-        working-directory: .
-        run: ./deploy/windows-preview-smoke.ps1
-      - name: Installed release stub chat
-        run: |
-          $env:CARGO_HOME = "$env:USERPROFILE/.cargo"
-          $env:RUSTUP_HOME = "$env:USERPROFILE/.rustup"
-          $env:HOME = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
-          $env:BUTLER_DATA = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
-          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          $env:BUTLER_E2E_BIN = "$env:BUTLER_E2E_INSTALLED_ROOT/butler-agent.exe"
-          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test installed_preview -- --nocapture
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
           name: agent-windows-x64
           path: dist/release/agent/*
           if-no-files-found: error
+      - name: Check owner registration and remove job profile
+        if: always()
+        working-directory: .
+        run: ./deploy/windows-owner-cleanup.ps1
 
-  # Fixed stub clocks/test hooks are intentionally absent from release builds.
   stub:
     name: Platform contracts and debug stub chat
-    concurrency:
-      group: windows-preview-contracts-${{ github.ref }}
-      cancel-in-progress: true
-    runs-on: windows-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, butler-win]
     timeout-minutes: 90
     env:
-      CARGO_TERM_COLOR: never
-      CARGO_TARGET_DIR: ${{ github.workspace }}/target/windows-stub
-      RUST_BACKTRACE: short
       BUTLER_E2E_TIER: stub
+      RUST_TEST_THREADS: 8
+      RUSTFLAGS: -C target-feature=+crt-static
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/rust-agent-setup
+      - uses: ./.github/actions/windows-owner-setup
         with:
-          native-deps: prebuilt-ort
-          cache-key: windows-preview-stub
+          workflow: windows-preview-stub
       - name: Isolate runtime and check directories
         run: |
-          $root = Join-Path $env:RUNNER_TEMP 'windows-stub'
+          $root = $env:OWNER_JOB_ROOT
           New-Item -ItemType Directory -Force "$root/logs" | Out-Null
           # Keep toolchain/cache locations while every check gets a fresh HOME.
           "CARGO_HOME=$env:USERPROFILE/.cargo" >> $env:GITHUB_ENV
           "RUSTUP_HOME=$env:USERPROFILE/.rustup" >> $env:GITHUB_ENV
           "PREVIEW_ROOT=$root" >> $env:GITHUB_ENV
+      - name: Windows formatting, clippy and source policy
+        run: |
+          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          cargo fmt --all -- --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          cargo clippy --locked --target x86_64-pc-windows-msvc -p butler-platform -p butler-e2e --tests -- -D warnings
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          cargo run --locked -p butler-source-check -- .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Diagnose original ACL writer and checker
         run: ../../../deploy/windows-acl-diagnosis.ps1
       - name: Platform and portable crate tests
@@ -138,8 +114,8 @@ jobs:
         with:
           name: unsigned-windows-contract-logs
           path: |
-            ${{ runner.temp }}/windows-stub/logs/acl*.log
-            ${{ runner.temp }}/windows-stub/logs/crate-tests.log
+            ${{ env.PREVIEW_ROOT }}/logs/acl*.log
+            ${{ env.PREVIEW_ROOT }}/logs/crate-tests.log
           if-no-files-found: warn
           retention-days: 14
       - name: Compile existing Windows E2E harness
@@ -150,7 +126,8 @@ jobs:
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e `
-            --test turn --test cli_surface --test queue_shutdown --test migration --test durable_configuration --test process_names --no-run 2>&1 |
+            --test installed_preview --test turn --test cli_surface --test queue_shutdown --test migration --test durable_configuration `
+            --test service_supervision --test service_diagnostics --test long_paths --test gateway_remote --test gateway_pairing --test cli_remote --no-run --message-format=json 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/harness-compile.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build debug agent for the stub harness
@@ -160,7 +137,7 @@ jobs:
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          cargo build --locked --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent 2>&1 |
+          cargo build --locked --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/debug-build.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Existing stub chat E2E
@@ -171,54 +148,132 @@ jobs:
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
           cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test turn `
-            turn_01_reply_is_delivered_persisted_and_survives_restart -- --exact --nocapture 2>&1 |
+            turn_01_reply_is_delivered_persisted_and_survives_restart -- --exact --test-threads=8 --nocapture 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/stub-chat.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Existing CLI E2E
+      - name: Stub chat and durable config under a long data path
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
         run: |
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
-          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test cli_surface -- --nocapture 2>&1 |
+          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test long_paths `
+            -- --test-threads=8 --nocapture 2>&1 |
+            Tee-Object "$env:PREVIEW_ROOT/logs/long-paths.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Export compiled verification harnesses
+        run: |
+          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Export
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-e2e
+          path: ${{ env.PREVIEW_ROOT }}/artifacts
+          if-no-files-found: error
+      - name: Check owner registration and remove job profile
+        if: always()
+        working-directory: .
+        run: ./deploy/windows-owner-cleanup.ps1
+
+  release:
+    name: Installed unsigned Windows preview
+    needs: [build, stub]
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      BUTLER_E2E_TIER: stub
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: agent-windows-x64
+          path: dist/release/agent
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-e2e
+          path: ${{ runner.temp }}/windows-verify/artifacts
+      - name: Isolate verification profile
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'windows-verify'
+          New-Item -ItemType Directory -Force "$root/logs" | Out-Null
+          "PREVIEW_ROOT=$root" >> $env:GITHUB_ENV
+          "BUTLER_E2E_WORKSPACE_ROOT=$env:GITHUB_WORKSPACE/packages/butler-agent/rust" >> $env:GITHUB_ENV
+      - name: Install ZIP, authenticate browser UI and exercise lifecycle
+        working-directory: .
+        run: ./deploy/windows-preview-smoke.ps1
+      - name: Installed release stub chat
+        run: |
+          $env:BUTLER_E2E_BIN = Join-Path $env:BUTLER_E2E_INSTALLED_ROOT 'butler-agent.exe'
+          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests installed_preview
+      - name: Existing CLI E2E
+        if: ${{ !cancelled() }}
+        run: |
+          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          $env:BUTLER_E2E_BIN = "$env:PREVIEW_ROOT/artifacts/butler-agent.exe"
+          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests cli_surface   |
             Tee-Object "$env:PREVIEW_ROOT/logs/cli-surface.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Existing active plus queued shutdown recovery E2E
-        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
+      - name: LAN listener, bind failures and API pairing smoke
+        if: ${{ !cancelled() }}
         run: |
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
-          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test queue_shutdown -- --nocapture 2>&1 |
-            Tee-Object "$env:PREVIEW_ROOT/logs/queue-shutdown.log"
+          $env:BUTLER_E2E_BIN = "$env:PREVIEW_ROOT/artifacts/butler-agent.exe"
+          $env:BUTLER_E2E_REQUIRE_LAN = '1'
+          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests gateway_remote,gateway_pairing,cli_remote   |
+            Tee-Object "$env:PREVIEW_ROOT/logs/lan-pairing.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Existing role-named worker protocol E2E
-        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
+      - name: Existing active plus queued shutdown recovery E2E
+        if: ${{ !cancelled() }}
         run: |
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
-          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test process_names -- --nocapture 2>&1 |
-            Tee-Object "$env:PREVIEW_ROOT/logs/process-names.log"
+          $env:BUTLER_E2E_BIN = "$env:PREVIEW_ROOT/artifacts/butler-agent.exe"
+          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests queue_shutdown   |
+            Tee-Object "$env:PREVIEW_ROOT/logs/queue-shutdown.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Existing data migration and configuration durability E2E
         run: |
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
-          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e `
-            --test migration --test durable_configuration -- --nocapture 2>&1 |
+          $env:BUTLER_E2E_BIN = "$env:PREVIEW_ROOT/artifacts/butler-agent.exe"
+          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests migration,durable_configuration   |
             Tee-Object "$env:PREVIEW_ROOT/logs/data-durability.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Upload diagnostic logs (no credentials or data directories)
+      - name: Unmanaged supervisor recovery and operational log export
+        run: |
+          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          $env:BUTLER_E2E_BIN = "$env:PREVIEW_ROOT/artifacts/butler-agent.exe"
+          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests service_supervision,service_diagnostics   |
+            Tee-Object "$env:PREVIEW_ROOT/logs/paths-supervision.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Require every hosted verification harness
+        if: ${{ !cancelled() }}
+        run: |
+          $expected = @('installed_preview','cli_surface','gateway_remote','gateway_pairing','cli_remote',
+            'queue_shutdown','migration','durable_configuration','service_supervision','service_diagnostics')
+          $actual = @(Get-Content "$env:PREVIEW_ROOT/logs/completed-harnesses.txt")
+          if ($actual.Count -ne $expected.Count -or (Compare-Object $expected $actual)) {
+            throw "Incomplete verification: completed=$($actual -join ',')"
+          }
+          "Verified all 10 compiled harnesses: $($actual -join ',')"
+      - name: Upload diagnostic logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: unsigned-windows-stub-logs
-          path: ${{ runner.temp }}/windows-stub/logs/*.log
-          if-no-files-found: warn
-          retention-days: 14
+          path: ${{ runner.temp }}/windows-verify/logs/*.log
+      - name: Remove temporary verification profiles
+        if: always()
+        run: |
+          if ($env:WINDOWS_PREVIEW_TEMP_ROOT -and (Test-Path $env:WINDOWS_PREVIEW_TEMP_ROOT)) {
+            Remove-Item $env:WINDOWS_PREVIEW_TEMP_ROOT -Recurse -Force
+          }
+          Remove-Item $env:PREVIEW_ROOT -Recurse -Force

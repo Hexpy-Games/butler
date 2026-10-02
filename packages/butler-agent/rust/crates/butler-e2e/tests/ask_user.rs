@@ -14,6 +14,7 @@ use butler_e2e::e2e::{
     gateway::turn_state,
     scenario::{Scenario, Setup, accepted_turn_id},
 };
+use butler_platform::sqlite;
 use serde_json::{Value, json};
 use std::time::Duration;
 
@@ -234,7 +235,7 @@ async fn measure_idle(s: &Scenario, question: &Value) -> Result<(), HarnessError
             "app-server/butler-client.sqlite",
         ]
         .map(|path| {
-            let db = rusqlite::Connection::open_with_flags(
+            let db = sqlite::open_with_flags(
                 data.join(path),
                 rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
             )

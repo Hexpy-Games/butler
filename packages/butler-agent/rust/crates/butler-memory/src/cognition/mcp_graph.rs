@@ -1,6 +1,7 @@
 //! Read-only adapter for the retained MCP tool's legacy graph database.
 
 use crate::lenient::JsonField;
+use butler_platform::sqlite;
 use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags, params};
@@ -48,7 +49,7 @@ pub fn read_mcp_legacy_graph(
     if !db_path.exists() {
         return Ok(json!({"entities": [], "relationships": []}).to_string());
     }
-    let connection = Connection::open_with_flags(
+    let connection = sqlite::open_with_flags(
         db_path,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )?;

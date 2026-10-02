@@ -1,6 +1,6 @@
 //! Immutable files selected once by the process entrypoint.
 
-use butler_platform::{launcher, secure_fs::Canonical as _};
+use butler_platform::secure_fs::Canonical as _;
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug)]
@@ -160,8 +160,10 @@ impl ResolvedInstallation {
             .as_str()
             .ok_or("installation_manifest_invalid")?;
         let expected_binary = match schema {
-            "butler.native-agent-install.v1" => launcher::AGENT_BINARY.to_owned(),
-            "butler.native-agent-payload.v1" => format!("bin/{}", launcher::AGENT_BINARY),
+            "butler.native-agent-install.v1" => butler_platform::launcher::AGENT_BINARY.to_owned(),
+            "butler.native-agent-payload.v1" => {
+                format!("bin/{}", butler_platform::launcher::AGENT_BINARY)
+            }
             _ => return Err("installation_manifest_invalid".into()),
         };
         if binary != expected_binary || resources != "resources" {
@@ -257,12 +259,12 @@ fn assert_test_data_root_is_isolated(resolved: &Path, owner: Option<&Path>, temp
 }
 
 /// Platforms a standalone installation (`butler.native-agent-install.v1`) may
-/// target, using the release archive's OS and architecture names.
+/// target, named as Node names them (`process.platform`, `process.arch`).
 const INSTALL_PLATFORMS: [(&str, &str); 4] = [
     ("darwin", "arm64"),
     ("linux", "x64"),
     ("linux", "arm64"),
-    ("windows", "x64"),
+    ("win32", "x64"),
 ];
 
 /// The standalone installation's own fields: platform, version, launcher and digests.
@@ -275,10 +277,10 @@ fn check_install_manifest(
         host_install_platform(),
     )?;
     if string_field(value, "version").is_none()
-        || value["launcher"].as_str() != Some(launcher::AGENT_LAUNCHER)
+        || value["launcher"].as_str() != Some(butler_platform::launcher::STANDALONE_LAUNCHER)
         || string_field(value, "binarySha256").is_none()
         || string_field(value, "resourcesSha256").is_none()
-        || !launcher::installed_launcher_is_expected(root)
+        || !butler_platform::launcher::standalone_launcher_is_expected(root)
     {
         return Err("installation_manifest_invalid".into());
     }
@@ -287,7 +289,7 @@ fn check_install_manifest(
 
 /// This host in install-manifest names.
 fn host_install_platform() -> (&'static str, &'static str) {
-    let platform = launcher::RELEASE_OS;
+    let platform = butler_platform::launcher::node_platform();
     let architecture = match std::env::consts::ARCH {
         "aarch64" => "arm64",
         "x86_64" => "x64",

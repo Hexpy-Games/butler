@@ -140,6 +140,26 @@ pub(super) fn target_liveness(target: i32) -> Liveness {
     }
 }
 
+pub(super) fn hide_console(command: &mut Command) -> &mut Command {
+    command.creation_flags(CREATE_NO_WINDOW)
+}
+
+pub(super) fn prepare_detached_spawn() -> io::Result<()> {
+    use filedescriptor::{FileDescriptor, StdioDescriptor};
+    // The safe wrapper duplicates without HANDLE_FLAG_INHERIT, installs that
+    // duplicate, then returns the original. Close the original immediately:
+    // Rust's spawn otherwise inherits it even when child stdio is redirected.
+    drop(
+        FileDescriptor::redirect_stdio(&std::io::stdout(), StdioDescriptor::Stdout)
+            .map_err(io::Error::other)?,
+    );
+    drop(
+        FileDescriptor::redirect_stdio(&std::io::stderr(), StdioDescriptor::Stderr)
+            .map_err(io::Error::other)?,
+    );
+    Ok(())
+}
+
 pub(super) fn detach(command: &mut Command) -> &mut Command {
     command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
 }

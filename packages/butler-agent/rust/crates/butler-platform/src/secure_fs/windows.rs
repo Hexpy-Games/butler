@@ -1,10 +1,11 @@
 //! Windows private DACLs grant only the current user. No SYSTEM or
 //! Administrators ACE is needed for this per-user background process.
-//! No-follow opens, file ids, directory syncs and atomic directory exchange
+//! No-follow opens, file ids and atomic directory exchange
 //! remain unavailable. OWNER_ONLY describes Unix metadata modes, not ACLs.
 
 use std::fs::{self, DirBuilder, File, Metadata, OpenOptions};
 use std::io;
+use std::os::windows::fs::OpenOptionsExt;
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -60,7 +61,7 @@ fn acl(path: &Path, operation: &str) -> io::Result<String> {
     let output = Command::new(powershell.join("powershell.exe"))
         .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command"])
         .arg(include_str!("windows/acl.ps1"))
-        .env("BUTLER_ACL_PATH", path)
+        .env("BUTLER_ACL_PATH", fs::canonicalize(path)?)
         .env("BUTLER_ACL_OPERATION", operation)
         // A pwsh parent exports modules incompatible with Windows PowerShell.
         // Only load this host's trusted, built-in ACL cmdlets.
@@ -140,13 +141,29 @@ pub(super) fn open_read_no_follow(path: &Path) -> io::Result<File> {
     File::open(path)
 }
 
-pub(super) fn sync_directory(_path: &Path) -> Option<io::Result<()>> {
-    None
+/// Directory handles require backup semantics. Some Windows filesystems
+/// refuse write access or FlushFileBuffers for directories; report that
+/// limitation rather than claiming the directory entries were flushed.
+pub(super) fn sync_directory(path: &Path) -> Option<io::Result<()>> {
+    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+    let result = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+        .open(path)
+        // File::sync_all calls FlushFileBuffers on Windows.
+        .and_then(|directory| directory.sync_all());
+    match result {
+        // ERROR_INVALID_FUNCTION, ACCESS_DENIED, INVALID_HANDLE,
+        // NOT_SUPPORTED: Windows may disallow directory flushing.
+        Err(error) if matches!(error.raw_os_error(), Some(1 | 5 | 6 | 50)) => None,
+        result => Some(result),
+    }
 }
 
 pub(super) fn sync_path(path: &Path) -> io::Result<()> {
     if fs::metadata(path)?.is_dir() {
-        return Ok(());
+        return sync_directory(path).unwrap_or(Ok(()));
     }
     OpenOptions::new().write(true).open(path)?.sync_all()
 }
@@ -156,9 +173,13 @@ pub(super) fn canonicalize(path: &Path) -> io::Result<PathBuf> {
 }
 
 pub(super) fn rename(from: &Path, to: &Path) -> io::Result<()> {
+    let from = move_path(from)?;
+    let to = move_path(to)?;
     let mut attempt = 1;
     loop {
-        match fs::rename(from, to) {
+        // The safe wrapper calls MoveFileExW with REPLACE_EXISTING | WRITE_THROUGH.
+        let result = atomicwrites::replace_atomic(&from, &to);
+        match result {
             Err(error) if attempt < RENAME_ATTEMPTS && is_transient(&error) => {
                 attempt += 1;
                 std::thread::sleep(RENAME_BACKOFF);
@@ -166,6 +187,26 @@ pub(super) fn rename(from: &Path, to: &Path) -> io::Result<()> {
             result => return result,
         }
     }
+}
+
+/// Canonicalize only the parent: the destination need not exist, and a
+/// rename must move a link itself. std canonicalization keeps the extended
+/// path prefix so MoveFileExW works beyond MAX_PATH even in test executables.
+fn move_path(path: &Path) -> io::Result<PathBuf> {
+    if path.as_os_str().as_encoded_bytes().contains(&0) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "path contains NUL",
+        ));
+    }
+    let parent = path
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let name = path.file_name().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidInput, "rename requires a file name")
+    })?;
+    Ok(fs::canonicalize(parent)?.join(name))
 }
 
 /// Another process has the file open without sharing its deletion (access

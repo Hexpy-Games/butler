@@ -17,6 +17,7 @@
     reason = "test assertions"
 )]
 
+use butler_platform::sqlite;
 use std::fmt::Write as _;
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -90,7 +91,7 @@ fn write_transcript(data: &Path, records: usize) -> (Vec<u8>, usize) {
 fn seed_checkpoint(data: &Path, bytes: &[u8], at: usize, trailing: &[u8], id_shift: u64) {
     let path = data.join(TRANSCRIPT);
     let (device, inode) = file_ids(&path);
-    let db = Connection::open(data.join(DATABASE)).unwrap();
+    let db = sqlite::open(data.join(DATABASE)).unwrap();
     db.execute(
         "INSERT OR REPLACE INTO app_transcript_projection_checkpoints(chat_id,session_id,\
          transcript_path,file_device,file_inode,projected_bytes,modified_at_ms,trailing_text,\
@@ -114,7 +115,7 @@ fn file_ids(path: &Path) -> (u64, u64) {
 }
 
 fn read_only(data: &Path) -> Connection {
-    Connection::open_with_flags(data.join(DATABASE), OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap()
+    sqlite::open_with_flags(data.join(DATABASE), OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap()
 }
 
 /// `(projected_bytes, trailing characters)` of the chat's checkpoint.
@@ -146,13 +147,14 @@ async fn wait_projected(
                 largest = largest.max(trailing);
             }
             if projected == size {
+                butler_e2e::assert_wall_clock_budget!(
+                    started.elapsed(),
+                    DEADLINE,
+                    "transcript not projected in"
+                );
                 return Ok((largest, started.elapsed()));
             }
         }
-        assert!(
-            started.elapsed() < DEADLINE,
-            "transcript not projected in {DEADLINE:?}; checkpoint {found:?}"
-        );
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
 }
@@ -239,9 +241,9 @@ async fn proj_device_change_resumes_at_the_recorded_offset() -> Result<(), Harne
             assert_eq!(stored.map(|(_, at)| at), i64::try_from(bytes.len()).ok());
             break;
         }
-        assert!(started.elapsed() < DEADLINE, "checkpoint not revisited");
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
+    butler_e2e::assert_wall_clock_budget!(started.elapsed(), DEADLINE, "checkpoint not revisited");
     assert_eq!(staged_actions(&s.sandbox.data), Vec::<String>::new());
     s.finish().await
 }
@@ -269,9 +271,13 @@ async fn side_checkpoints(
             .collect::<Result<_, _>>()
             .unwrap();
         if rows.len() == SIDE_CHATS.len() {
+            butler_e2e::assert_wall_clock_budget!(
+                started.elapsed(),
+                DEADLINE,
+                "side chats not projected"
+            );
             return Ok(rows);
         }
-        assert!(started.elapsed() < DEADLINE, "side chats not projected");
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
 }
@@ -287,7 +293,7 @@ async fn proj_terminal_settle_leaves_unrelated_checkpoints_alone() -> Result<(),
         .start()
         .await?;
     s.agent.terminate().await?;
-    let db = Connection::open(s.sandbox.data.join(DATABASE)).unwrap();
+    let db = sqlite::open(s.sandbox.data.join(DATABASE)).unwrap();
     let lines: String = (0..5).map(|index| record(index + 1)).collect();
     let transcript_bytes = i64::try_from(lines.len()).unwrap();
     for chat in SIDE_CHATS {

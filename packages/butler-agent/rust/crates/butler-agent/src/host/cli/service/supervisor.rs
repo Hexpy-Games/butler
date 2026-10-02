@@ -101,6 +101,7 @@ fn spawn() -> Result<(tokio::process::Child, Relay, Relay), crate::host::HostErr
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    butler_platform::process_control::hide_console(command.as_std_mut());
     let mut child = command.spawn().map_err(io)?;
     let stdout = child.stdout.take().ok_or("native_log_pipe_unavailable")?;
     let stderr = child.stderr.take().ok_or("native_log_pipe_unavailable")?;

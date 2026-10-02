@@ -65,7 +65,7 @@ def main():
             b'@echo off\r\nREM butler-native-launcher v1\r\n'
             b'"%~dp0butler-agent.exe" --installation-root "%~dp0." --resource-root "%~dp0resources" %*\r\n')
         manifest = dict(schema=packager.SCHEMA, version=version, appVersion=None,
-                        platform='windows', architecture='x64', binary='butler-agent.exe',
+                        platform='win32', architecture='x64', binary='butler-agent.exe',
                         resources='resources', launcher='butler.cmd',
                         binarySha256=packager.sha256_file(stage / 'butler-agent.exe'),
                         resourcesSha256=packager.sha256_tree(stage / 'resources'))

@@ -56,7 +56,7 @@ impl EmbeddingFailure {
 }
 
 /// What produced an embedding: model, runtime, tokenizer, pooling and their hashes. `version`
-/// hashes the rest, so vectors from different identities never mix.
+/// hashes the rest for provenance; serving compatibility compares vector-defining fields.
 #[derive(Clone, Deserialize, Serialize)]
 pub struct EmbeddingIdentity {
     /// Identity schema.

@@ -50,15 +50,12 @@ pub fn is_runnable_by_all(metadata: &Metadata) -> bool {
 /// The installed Agent executable's file name on this host.
 pub const AGENT_BINARY: &str = sys::AGENT_BINARY;
 
-/// The command launcher recorded in a standalone installation manifest.
-pub const AGENT_LAUNCHER: &str = sys::AGENT_LAUNCHER;
+/// The command launcher in a standalone release payload.
+pub const STANDALONE_LAUNCHER: &str = sys::STANDALONE_LAUNCHER;
 
-/// The OS name used by standalone release manifests.
-pub const RELEASE_OS: &str = sys::RELEASE_OS;
-
-/// Whether the installed launcher has the platform's exact managed layout.
-pub fn installed_launcher_is_expected(root: &Path) -> bool {
-    sys::installed_launcher_is_expected(root)
+/// Whether the payload launcher has the platform's exact executable binding.
+pub fn standalone_launcher_is_expected(root: &Path) -> bool {
+    sys::standalone_launcher_is_expected(root)
 }
 
 /// This host as Node's `process.platform` names it: `darwin`, `linux`,
@@ -81,4 +78,9 @@ pub fn release_platform() -> String {
         other => other,
     };
     format!("{}-{arch}", sys::RELEASE_OS)
+}
+
+/// Resolves the installed command alias to its verified original executable.
+pub(crate) fn canonical_command_executable(path: PathBuf) -> io::Result<PathBuf> {
+    sys::canonical_command_executable(path)
 }

@@ -2862,6 +2862,12 @@ Copyright (c) 2016 Alex Crichton
 Copyright (c) 2017 The Tokio Authors
 
 ===== COMPONENT =====
+atomicwrites 0.4.4
+MIT
+License: https://github.com/untitaker/rust-atomicwrites/blob/bfad85d09eabce6414285024fcdcb4d01830726b/LICENSE
+Copyright (c) 2015 Markus Unterwaditzer
+
+===== COMPONENT =====
 axum-core 0.5.6
 MIT
 License: https://github.com/tokio-rs/axum/blob/e710a97a5a8e1e2f629f78e0377d7ab17e597eaf/axum-core/LICENSE
@@ -3840,6 +3846,12 @@ License: https://github.com/image-rs/fdeflate/blob/c365c7e6ffa81feb2e1fb762eed72
 
 
 ===== COMPONENT =====
+filedescriptor 0.8.3
+MIT
+License: https://github.com/wezterm/wezterm/blob/4c619a44dc07ad611d28a8af0416f25462d6b3ad/filedescriptor/LICENSE.md
+Copyright (c) 2018 Wez Furlong
+
+===== COMPONENT =====
 filetime 0.2.29
 MIT OR Apache-2.0
 License: https://github.com/alexcrichton/filetime/blob/ab5ee65b5e4fe2de19dbe7d4fe08bc31e945949c/LICENSE-APACHE
@@ -4405,6 +4417,14 @@ Apache-2.0 OR MIT
 License: https://github.com/hsivonen/idna_adapter/blob/1d9782f32c9e29218542b4a9411a82b35ec5c8cb/LICENSE-APACHE
 License: https://github.com/hsivonen/idna_adapter/blob/1d9782f32c9e29218542b4a9411a82b35ec5c8cb/LICENSE-MIT
 Copyright (c) The rust-url developers
+
+===== COMPONENT =====
+if-addrs 0.15.0
+MIT OR BSD-3-Clause
+License: https://github.com/messense/if-addrs/blob/3cdbc8b7cfc70a328102bd8b1efdd3408c5d75b2/LICENSE-BSD
+License: https://github.com/messense/if-addrs/blob/3cdbc8b7cfc70a328102bd8b1efdd3408c5d75b2/LICENSE-MIT
+Copyright 2018 MaidSafe.net limited.
+Copyright 2020 messense
 
 ===== COMPONENT =====
 image-webp 0.2.4

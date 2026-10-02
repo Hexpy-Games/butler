@@ -182,6 +182,42 @@ async fn mem_02_fresh_memory_is_usable_in_another_chat_after_restart() -> Result
     s.finish().await
 }
 
+/// MEM-03: recall expansion/scope guidance reaches the calling model.
+#[tokio::test]
+async fn mem_03_recall_optional_arguments_require_user_intent() -> Result<(), HarnessError> {
+    use butler_e2e::e2e::cassette::Cassette;
+    butler_e2e::gate!();
+    let code = nonce();
+    let mut cassette = Cassette::load("MEM-01")?;
+    let message = cassette.exchanges[0]
+        .request
+        .key
+        .user_request
+        .replace("{{NONCE}}", &code);
+    memory_stubs::extraction(&mut cassette, "")?;
+    let s = Setup::new("MEM-03")?
+        .stub_cassette(cassette)
+        .placeholder("NONCE", &code)
+        .start()
+        .await?;
+    let (_, turn) = s.turn("general", &message).await?;
+    assert_eq!(turn_state(&turn), "delivered", "{turn}");
+    let requests = s.provider()?.requests();
+    let recall = requests
+        .iter()
+        .filter_map(|request| request["tools"].as_array())
+        .flatten()
+        .find(|tool| tool["name"] == "recall_memory")
+        .expect("recall tool must be exposed to the calling model");
+    let properties = &recall["parameters"]["properties"];
+    let seeds = properties["seed_phrases"]["description"].as_str().unwrap();
+    assert!(seeds.contains("explicitly supplies") && seeds.contains("do not infer"));
+    let scope = properties["scope"]["description"].as_str().unwrap();
+    assert!(scope.contains("explicitly asks") && scope.contains("caller's"));
+    assert_eq!(recall["parameters"]["required"], serde_json::json!(["cue"]));
+    s.finish().await
+}
+
 // Synthetic local stub response; no recording or live provider call.
 fn memory_response(item: &Value) -> butler_e2e::e2e::cassette::ResponseRecord {
     use butler_e2e::e2e::cassette::{Chunk, ResponseRecord};
@@ -277,4 +313,82 @@ async fn mem_04_bootstrap_preserves_nonfresh_memory() -> Result<(), HarnessError
         s.finish().await?;
     }
     Ok(())
+}
+
+#[tokio::test]
+async fn mem_05_vector_batch_finds_chat_a_fact_by_paraphrase_in_chat_b() -> Result<(), HarnessError>
+{
+    use butler_e2e::e2e::cassette::Cassette;
+    use serde_json::json;
+    butler_e2e::gate!();
+    let code = nonce();
+    let mut cassette = Cassette::load("MEM-01")?;
+    let remember = cassette.exchanges[0].request.key.user_request.clone();
+    let ask = "How do I unlock my bicycle security cable? Call recall_memory with cue bicycle security cable combination.";
+    let mut call = cassette.exchanges[0].clone();
+    call.request.key.user_request = ask.into();
+    call.response = memory_response(&json!({"type":"function_call","id":"fc_recall",
+        "call_id":"call_recall","name":"recall_memory","status":"completed",
+        "arguments":json!({"cue":"bicycle security cable combination"}).to_string()}));
+    let mut answer = cassette.exchanges[1].clone();
+    answer.request.key.user_request = ask.into();
+    cassette.exchanges.extend([call, answer]);
+    memory_stubs::extraction(&mut cassette, ask)?;
+    let setup = Setup::new("MEM-05")?
+        .stub_cassette(cassette)
+        .placeholder("NONCE", &code);
+    assert!(
+        fixtures::embedding_assets(&setup.sandbox.data)?,
+        "MEM-05 needs local embedding assets"
+    );
+    let s = setup.start().await?;
+    let (_, turn) = s
+        .turn("general", &remember.replace("{{NONCE}}", &code))
+        .await?;
+    assert_eq!(turn_state(&turn), "delivered", "{turn}");
+    memory_stubs::vectors_complete(&s.sandbox.data).await?;
+    let chat =
+        s.gw.post("/sessions", json!({"kind":"chat","title":"Memory B"}))
+            .await?;
+    assert_eq!(chat.status, 201, "{}", chat.text);
+    let first = s.provider()?.requests().len();
+    let (id, turn) = s
+        .turn(chat.data()["session"]["id"].as_str().unwrap(), ask)
+        .await?;
+    assert_eq!(turn_state(&turn), "delivered", "{turn}");
+    let rows = tool_rows(
+        &s.gw
+            .messages(chat.data()["session"]["id"].as_str().unwrap())
+            .await?,
+        &id,
+    );
+    let row = rows
+        .iter()
+        .find(|row| row.to_string().contains("recall_memory"))
+        .unwrap();
+    assert_eq!(row["state"], "delivered");
+    let requests = s.provider()?.requests();
+    let output = requests[first..]
+        .iter()
+        .filter_map(|request| request["input"].as_array())
+        .flatten()
+        .find(|item| item["type"] == "function_call_output")
+        .unwrap()["output"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let result: Value = serde_json::from_str(&output)?;
+    assert_eq!(result["ok"], true, "{output}");
+    assert!(
+        result["output"]["results"]
+            .as_array()
+            .unwrap_or_else(|| panic!("missing recall results: {output}"))
+            .iter()
+            .any(|item| item.to_string().contains(&code)
+                && item["channels"]
+                    .as_array()
+                    .is_some_and(|channels| channels.iter().any(|value| value == "vector"))),
+        "paraphrase missed the remembered fact in the vector lane: {output}"
+    );
+    s.finish().await
 }

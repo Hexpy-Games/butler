@@ -1,96 +1,84 @@
 name: Windows Squirrel install and update
 on:
   workflow_dispatch:
-    inputs:
-      artifact_run:
-        description: Reuse a completed run's packages only when product sources are identical
-        type: string
-        default: ''
-  pull_request:
-    paths:
-      - '.github/workflows/windows-installer.yml'
-      - '.github/workflows/release.yml'
-      - '.github/actions/package-windows-app/**'
-      - 'packages/butler-app/client/electron/**'
-      - 'packages/butler-app/scripts/windows/**'
-      - 'packages/butler-agent/rust/crates/butler-platform/src/app_update*'
-      - 'packages/butler-agent/rust/crates/butler-platform/src/app_update/**'
 permissions:
   contents: read
-  actions: read
 concurrency:
   group: windows-installer-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
-  native:
-    if: github.event_name != 'workflow_dispatch' || inputs.artifact_run == ''
-    uses: ./.github/workflows/windows-native-deps.yml
-  installer:
-    if: github.event_name != 'workflow_dispatch' || inputs.artifact_run == ''
-    needs: native
-    runs-on: windows-latest
+  build:
+    name: Build Windows Squirrel artifacts
+    runs-on: [self-hosted, butler-win]
     timeout-minutes: 120
-    env:
-      CARGO_TARGET_DIR: ${{ github.workspace }}/target/windows-installer
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/windows-owner-setup
+        with:
+          workflow: win-installer
       - uses: ./.github/actions/build-windows-agent
         with:
+          owner-runner: 'true'
+          profile: ci-fast
           cache-key: windows-installer
           version: 0.1.0-preview.90
-          native-deps-artifact: windows-native-deps
           artifact-base-url: http://127.0.0.1/unused
       - uses: ./.github/actions/package-windows-app
         with:
+          owner-runner: 'true'
           version: 0.1.0-preview.90
-      - name: Run existing public update, channel and process-role E2Es
+      - name: Preserve the first packages
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          $profile = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
-          New-Item -ItemType Directory $profile | Out-Null
-          $env:CARGO_HOME = "$env:USERPROFILE/.cargo"
-          $env:RUSTUP_HOME = "$env:USERPROFILE/.rustup"
-          $env:HOME = Join-Path $profile 'home'
-          $env:BUTLER_DATA = Join-Path $profile 'data'
-          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          $env:BUTLER_E2E_TIER = 'stub'
-          $env:BUTLER_E2E_SKIP_BUILD = '1'
-          $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/butler-agent.exe"
-          try {
-            Push-Location packages/butler-agent/rust
-            cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test updates --test update_channels --test process_names
-            if ($LASTEXITCODE) { throw 'Update E2E failed' }
-            Pop-Location
-          } finally { Remove-Item -Recurse -Force $profile }
-      - name: Preserve the first version and build the second Agent
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
           Move-Item dist/release/app-windows dist/release/app-windows-first
-          Remove-Item -Recurse -Force dist/release/agent
-          $env:CARGO_HOME = "$env:USERPROFILE/.cargo"
-          $env:RUSTUP_HOME = "$env:USERPROFILE/.rustup"
-          $profile = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
-          New-Item -ItemType Directory $profile | Out-Null
-          $env:HOME = Join-Path $profile 'home'
-          $env:BUTLER_DATA = Join-Path $profile 'data'
-          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          try {
-            $env:GITHUB_REF_NAME = 'v0.1.0-preview.91'
-            $env:RUSTFLAGS = '-C target-feature=+crt-static'
-            Push-Location packages/butler-agent/rust
-            cargo clippy --locked --target x86_64-pc-windows-msvc -p butler-platform -- -D warnings
-            if ($LASTEXITCODE) { throw 'Windows platform clippy failed' }
-            cargo build --locked --release --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent
-            if ($LASTEXITCODE) { throw 'Second Agent build failed' }
-            Pop-Location
-            python packages/butler-agent/rust/scripts/package-windows-agent.py --binary "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/butler-agent.exe" --resources packages/butler-agent/resources --renderer packages/butler-app/client/ui/dist --output dist/release/agent --artifact-base-url http://127.0.0.1/unused
-            if ($LASTEXITCODE) { throw 'Second Agent package failed' }
-          } finally { Remove-Item -Recurse -Force $profile }
+          Move-Item dist/release/agent dist/release/agent-first
+      - uses: ./.github/actions/build-windows-agent
+        with:
+          owner-runner: 'true'
+          profile: ci-fast
+          cache-key: windows-installer
+          version: 0.1.0-preview.91
+          artifact-base-url: http://127.0.0.1/unused
       - uses: ./.github/actions/package-windows-app
         with:
+          owner-runner: 'true'
           version: 0.1.0-preview.91
+      - name: Compile existing public update E2Es without running them
+        shell: pwsh
+        run: ./deploy/windows-installer-contracts.ps1 -Mode Build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-preview
+          path: |
+            dist/release/app-windows-first/
+            dist/release/app-windows/
+            dist/release/agent-first/
+            dist/release/installer-contracts/
+          if-no-files-found: error
+          compression-level: 0
+      - name: Verify owner registration and clean job profile
+        if: always()
+        shell: pwsh
+        run: ./deploy/windows-owner-cleanup.ps1
+
+  verify:
+    name: Verify Windows install update uninstall
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-installer-preview
+          path: dist/release
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Run existing public update E2Es from built artifacts
+        shell: pwsh
+        run: ./deploy/windows-installer-contracts.ps1 -Mode Verify
       - name: Prove Squirrel ordering and real install/update/uninstall
         shell: pwsh
         run: |
@@ -101,67 +89,9 @@ jobs:
           $env:BUTLER_DATA = Join-Path $profile 'data'
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           try {
-            ./packages/butler-app/scripts/windows/verify-squirrel-version.ps1 -Squirrel packages/butler-app/client/electron/node_modules/electron-winstaller/vendor/Squirrel.exe
-            bun run packages/butler-app/scripts/windows/installer-smoke.ts dist/release/app-windows-first dist/release/app-windows
-            if ($LASTEXITCODE) { throw 'Installer/update smoke failed' }
-          } finally { Remove-Item -Recurse -Force $profile }
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: windows-installer-preview
-          path: |
-            dist/release/app-windows-first/
-            dist/release/app-windows/
-          if-no-files-found: ignore
-
-  verify-packaged:
-    if: github.event_name == 'workflow_dispatch' && inputs.artifact_run != ''
-    runs-on: windows-latest
-    timeout-minutes: 20
-    env:
-      ARTIFACT_RUN: ${{ inputs.artifact_run }}
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-      EXPECTED_BRANCH: ${{ github.ref_name }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Require identical product sources before reusing verified packages
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          if ($env:ARTIFACT_RUN -notmatch '^\d+$') { throw 'Invalid source run' }
-          $run = gh api "repos/$env:GH_REPO/actions/runs/$env:ARTIFACT_RUN" | ConvertFrom-Json
-          if ($LASTEXITCODE -or $run.status -ne 'completed' -or $run.head_branch -ne $env:EXPECTED_BRANCH -or $run.path -ne '.github/workflows/windows-installer.yml') { throw 'Unexpected source run' }
-          git fetch origin $run.head_sha
-          if ($LASTEXITCODE) { throw 'Source revision unavailable' }
-          git diff --exit-code $run.head_sha HEAD -- VERSION package.json bun.lock packages/butler-agent packages/butler-app/client packages/butler-app/scripts/release packages/butler-app/scripts/windows/package-release.ts deploy/licenses .github/actions/build-windows-agent .github/actions/package-windows-app
-          if ($LASTEXITCODE) { throw 'Product changed: rebuild packages instead of reusing them' }
-          Write-Output "Verified unchanged product sources from run $env:ARTIFACT_RUN ($($run.head_sha))"
-      - uses: actions/download-artifact@v4
-        with:
-          name: windows-installer-preview
-          run-id: ${{ inputs.artifact_run }}
-          github-token: ${{ github.token }}
-          path: dist/reused
-      - uses: oven-sh/setup-bun@v2
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - name: Run the complete installer smoke against the same packaged bytes
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $profile = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
-          $env:HOME = Join-Path $profile 'home'
-          $env:BUTLER_DATA = Join-Path $profile 'data'
-          New-Item -ItemType Directory -Force $env:HOME,$env:BUTLER_DATA | Out-Null
-          try {
             bun install --frozen-lockfile --ignore-scripts
             if ($LASTEXITCODE) { throw 'Dependency installation failed' }
-            $first = @(Get-ChildItem dist/reused -Recurse -Filter ButlerSetup-0.1.0-preview.90-x64.exe)
-            $second = @(Get-ChildItem dist/reused -Recurse -Filter app-update-manifest.json | Where-Object { (Get-Content -Raw $_.FullName | ConvertFrom-Json).app_version -eq '0.1.0-preview.91' })
-            if ($first.Count -ne 1 -or $second.Count -ne 1) { throw 'Expected both exact package versions' }
             ./packages/butler-app/scripts/windows/verify-squirrel-version.ps1 -Squirrel packages/butler-app/client/electron/node_modules/electron-winstaller/vendor/Squirrel.exe
-            bun run packages/butler-app/scripts/windows/installer-smoke.ts $first[0].DirectoryName $second[0].DirectoryName
+            bun run packages/butler-app/scripts/windows/installer-smoke.ts dist/release/app-windows-first dist/release/app-windows
             if ($LASTEXITCODE) { throw 'Installer/update smoke failed' }
           } finally { Remove-Item -Recurse -Force $profile }

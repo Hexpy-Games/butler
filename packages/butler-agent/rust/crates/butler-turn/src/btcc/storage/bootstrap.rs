@@ -4,10 +4,11 @@ mod manifest;
 mod validate;
 
 use crate::btcc::StorageCode;
+use butler_platform::sqlite;
 use std::fs;
 use std::path::Path;
 
-use rusqlite::{Connection, params};
+use rusqlite::params;
 use serde_json::{Value, json};
 
 use super::{StorageError, StorageResult, migration, schema};
@@ -85,7 +86,7 @@ impl FreshStorage<'_> {
     /// Creates the current schema in the temporary file and records the
     /// fresh-install migration receipt, then syncs it.
     fn prepare(&self) -> StorageResult<()> {
-        let mut db = Connection::open(self.temp).map_err(StorageError::sqlite)?;
+        let mut db = sqlite::open(self.temp).map_err(StorageError::sqlite)?;
         schema::create_current(&db).map_err(StorageError::sqlite)?;
         migration::apply(&mut db).map_err(StorageError::sqlite)?;
         db.execute_batch(METADATA_SCHEMA)

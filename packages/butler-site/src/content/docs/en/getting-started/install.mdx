@@ -1,6 +1,6 @@
 ---
 title: "Install"
-description: "Download the Butler app from GitHub Releases, install it and open it for the first time."
+description: "Install the Butler app or Agent preview and complete first-run setup."
 section: getting-started
 order: 1
 status: published
@@ -13,10 +13,10 @@ The current version is `0.1.0-preview.5`, a preview. The stable 0.1.0 release is
 - Apple silicon (M-series) Mac, macOS 12 or later
 - Linux x64 / arm64: DEB package
 - Arch Linux x64: Arch package
-- Windows 11 x64: unsigned desktop preview
+- Windows x64 preview: unsigned Agent and browser UI
 
 <Notice tone="info">
-  Butler Agent is included in the app, so you do not install it separately. The bundled Agent runs only while Butler is open. The Windows desktop preview also includes the Agent.
+  On macOS and Linux, Butler Agent is included in the app. The bundled Agent runs only while Butler is open. Windows previews ship an unsigned Agent with a browser UI.
 </Notice>
 
 ## Download
@@ -37,12 +37,9 @@ The current version is `0.1.0-preview.5`, a preview. The stable 0.1.0 release is
     </Steps>
   </TabPanel>
   <TabPanel value="windows">
-    <Steps>
-      1. Open [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) and choose a Windows desktop preview.
-      2. Download `ButlerSetup-<version>-x64.exe` and double-click it.
-      3. If SmartScreen appears, choose **More info → Run anyway**. Preview builds are unsigned.
-      4. Butler installs for your account and opens automatically. No administrator permission or wizard is needed.
-    </Steps>
+    <Notice tone="info" title="Agent preview">
+      Windows x64 previews use an unsigned Agent and browser UI. Follow the Windows Agent instructions below.
+    </Notice>
   </TabPanel>
   <TabPanel value="linux">
     <Steps>
@@ -104,13 +101,21 @@ npx @hexpygames/butler install
 
 For the management commands, see [Butler Agent CLI](/en/help/advanced/agent-cli/).
 
-## Windows desktop preview
+## Windows x64 Agent preview
 
-The Squirrel installer installs under `%LOCALAPPDATA%\butler-app` and creates Start Menu and Desktop shortcuts. A portable ZIP is also available for running without installation; use Setup to enable in-app updates.
+Windows previews are unsigned and agent-only. Use the Windows ZIP and `install.ps1` from the same preview release that lists `windows-x64` in its Agent manifest. In PowerShell, replace `0.1.0-preview.N` with that release version:
 
-In **Settings → Updates**, enable preview updates and press **Update**. Butler downloads the selected version, closes its bundled Agent, and relaunches with the new App and Agent. Chats and settings stay in the same data folder. Squirrel retains the previous version for rollback.
+```powershell
+$env:BUTLER_VERSION = '0.1.0-preview.N'; irm "https://github.com/Hexpy-Games/butler/releases/download/v$env:BUTLER_VERSION/install.ps1" | iex
+butler open
+```
 
-To uninstall, open **Windows Settings → Apps → Installed apps → Butler → Uninstall**. The app, shortcuts, `butler://` handler and login startup entry are removed. Your Butler data folder is retained.
+The installer verifies SHA-256 checksums, installs under `%LOCALAPPDATA%\Butler`, adds `butler` to your user PATH, and starts the Agent. Open a new terminal if `butler` is not found. The UI runs in your browser. Use `butler start`, `stop`, `restart`, and `status` to manage the background process.
+
+- No autostart; run `butler start` after signing in.
+- LAN remote access and pairing are supported.
+- No command write sandbox; commands still require approval.
+- SmartScreen may warn about the unsigned preview. Choose **More info → Run anyway**.
 
 ## Related pages
 

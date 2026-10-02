@@ -1,7 +1,7 @@
 //! Fixed empty generation for service startup and idle scenarios.
 #![allow(clippy::unwrap_used, reason = "test fixture setup")]
 use butler_e2e::e2e::HarnessError;
-use rusqlite::Connection;
+use butler_platform::sqlite;
 use std::path::PathBuf;
 
 pub(super) fn initialize_empty(data: &std::path::Path) -> Result<PathBuf, HarnessError> {
@@ -9,7 +9,7 @@ pub(super) fn initialize_empty(data: &std::path::Path) -> Result<PathBuf, Harnes
     let root = memory.join("generations/00000000-0000-4000-8000-000000000222");
     std::fs::create_dir_all(&root)?;
     let graph = root.join("graph.sqlite");
-    let db = Connection::open(&graph).unwrap();
+    let db = sqlite::open(&graph).unwrap();
     db.execute_batch(include_str!("../../fixtures/F-memory-empty/graph.sql"))
         .unwrap();
     db.pragma_update(None, "journal_mode", "WAL").unwrap();
@@ -31,7 +31,7 @@ pub(super) fn initialize_empty(data: &std::path::Path) -> Result<PathBuf, Harnes
 fn initialize_coordinator(data: &std::path::Path) -> Result<(), HarnessError> {
     let locks = data.join("cognition/consolidation/locks");
     std::fs::create_dir_all(&locks)?;
-    let db = Connection::open(locks.join("consolidation.lock.coord.sqlite")).unwrap();
+    let db = sqlite::open(locks.join("consolidation.lock.coord.sqlite")).unwrap();
     db.execute_batch(
         "CREATE TABLE memory_write_gate (
          singleton INTEGER PRIMARY KEY CHECK(singleton=1),
