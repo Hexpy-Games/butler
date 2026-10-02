@@ -1,3 +1,4 @@
+import { gotoViewer } from "../support/viewer-layout.ts";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -25,8 +26,8 @@ function param(page: Page, name: string): string | null {
 }
 
 async function assertDeepLinks(page: Page, baseUrl: string, label: string): Promise<void> {
-  await page.goto(viewerUrl(baseUrl, { page: "components/Button", theme: "dark", locale: "ko", width: "375" }), {
-    waitUntil: "networkidle",
+  await gotoViewer(page, viewerUrl(baseUrl, { page: "components/Button", theme: "dark", locale: "ko", width: "375" }), {
+    waitUntil: "domcontentloaded",
   });
   await page.locator('[data-ds-detail="Button"]').waitFor({ state: "visible" });
   // The viewer controls live in the View options popover (titlebar); phones leave out the width presets.
@@ -63,7 +64,7 @@ async function assertDeepLinks(page: Page, baseUrl: string, label: string): Prom
   assert(!phone || !item.pressed.includes("375"), `${label}: phones must not offer width presets`);
   await closeViewOptions(page);
 
-  await page.goto(viewerUrl(baseUrl, { page: "navrow", theme: "side-by-side" }), { waitUntil: "networkidle" });
+  await gotoViewer(page, viewerUrl(baseUrl, { page: "navrow", theme: "side-by-side" }), { waitUntil: "domcontentloaded" });
   await page.locator('[data-ds-detail="NavRow"]').waitFor({ state: "visible" });
   const frames = await page.evaluate(() => [...document.querySelectorAll("[data-ds-story]")].map((story) =>
     [...story.querySelectorAll("[data-ds-theme]")].map((frame) => frame.getAttribute("data-ds-theme")).join(",")));
@@ -98,11 +99,11 @@ async function assertDeepLinks(page: Page, baseUrl: string, label: string): Prom
     ["motion", "[data-ds-motion-page]"],
     ["components/DoesNotExist", '[data-ds-not-found="components/DoesNotExist"]'],
   ] as const) {
-    await page.goto(viewerUrl(baseUrl, { page: pageId }), { waitUntil: "networkidle" });
+    await gotoViewer(page, viewerUrl(baseUrl, { page: pageId }), { waitUntil: "domcontentloaded" });
     await page.locator(selector).first().waitFor({ state: "visible" });
   }
 
-  await page.goto(viewerUrl(baseUrl, { page: "motion", motion: "reduced" }), { waitUntil: "networkidle" });
+  await gotoViewer(page, viewerUrl(baseUrl, { page: "motion", motion: "reduced" }), { waitUntil: "domcontentloaded" });
   await page.locator("[data-ds-motion-page]").waitFor({ state: "visible" });
   const motion = await page.evaluate(() => ({
     body: document.body.dataset.motion,
@@ -116,7 +117,7 @@ async function assertDeepLinks(page: Page, baseUrl: string, label: string): Prom
     new URLSearchParams(window.location.search).get("motion") === null);
   await closeViewOptions(page);
 
-  await page.goto(viewerUrl(baseUrl, { page: "components/Button#states" }), { waitUntil: "networkidle" });
+  await gotoViewer(page, viewerUrl(baseUrl, { page: "components/Button#states" }), { waitUntil: "domcontentloaded" });
   await page.locator('[data-ds-detail="Button"] [data-ds-states-matrix]').first().waitFor({ state: "visible" });
   await page.waitForFunction(() => {
     // The anchor lands at the top of the page scroller, below the titlebar row, not under it.
@@ -138,7 +139,7 @@ async function closeViewOptions(page: Page): Promise<void> {
 }
 
 async function assertSearch(page: Page, baseUrl: string, label: string): Promise<void> {
-  await page.goto(viewerUrl(baseUrl, { page: "overview" }), { waitUntil: "networkidle" });
+  await gotoViewer(page, viewerUrl(baseUrl, { page: "overview" }), { waitUntil: "domcontentloaded" });
   await page.locator("[data-ds-overview]").waitFor({ state: "visible" });
   await page.keyboard.press("/");
   await page.waitForFunction(() => document.activeElement?.id === "ds-viewer-search");
@@ -245,7 +246,7 @@ async function assertHeroTheme(browser: Awaited<ReturnType<typeof chromium.launc
       const label = `hero system=${colorScheme} viewer=${theme}`;
       const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, colorScheme });
       await server.signIn(page);
-      await page.goto(viewerUrl(baseUrl, { page: "overview", motion: "reduced", ...(theme === "system" ? {} : { theme }) }), { waitUntil: "networkidle" });
+      await gotoViewer(page, viewerUrl(baseUrl, { page: "overview", motion: "reduced", ...(theme === "system" ? {} : { theme }) }), { waitUntil: "domcontentloaded" });
       await page.locator('[data-ds-hero] canvas[data-test-class~="wallpaper"]').waitFor({ state: "attached" });
       await assertHero(page, label);
       if (theme === "light" || theme === "dark") {

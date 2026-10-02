@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
+import { waitForViewerLayout } from "../support/viewer-layout.ts";
 
 const root = process.cwd();
 const tempDir = mkdtempSync(join(tmpdir(), "butler-design-system-smoke-"));
@@ -14,9 +15,10 @@ function assert(condition: unknown, message: string): asserts condition {
 
 async function openViewerPage(page: Page, baseUrl: string, pageId: string): Promise<void> {
   await page.goto(`${baseUrl}?visual=design-system&page=${encodeURIComponent(pageId)}`, {
-    waitUntil: "networkidle",
+    waitUntil: "domcontentloaded",
   });
   await page.locator(`[data-ds-page="${pageId}"]`).waitFor({ state: "attached" });
+  await waitForViewerLayout(page);
 }
 
 async function assertNoHorizontalOverflow(page: Page, label: string): Promise<void> {

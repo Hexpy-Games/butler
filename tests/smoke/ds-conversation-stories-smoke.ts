@@ -1,3 +1,4 @@
+import { gotoViewer } from "../support/viewer-layout.ts";
 /**
  * Conversation DS story smoke: work progress rows, the current-status line,
  * reply inline images and attachments, checked on DS Viewer showcase stories
@@ -28,7 +29,7 @@ function assert(condition: unknown, message: string): asserts condition {
 
 async function openStory(page: Page, baseUrl: string, entry: string, story: string, width = "app"): Promise<Locator> {
   const params = new URLSearchParams({ visual: "design-system", page: entry, theme: "light", locale: "en", width });
-  await page.goto(`${baseUrl}?${params.toString()}`, { waitUntil: "networkidle" });
+  await gotoViewer(page, `${baseUrl}?${params.toString()}`, { waitUntil: "domcontentloaded" });
   const scope = page.locator(`[data-ds-story="${story}"]`).first();
   await scope.waitFor({ state: "visible" });
   await scope.scrollIntoViewIfNeeded();

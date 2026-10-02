@@ -1,3 +1,4 @@
+import { gotoViewer } from "../support/viewer-layout.ts";
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
@@ -158,7 +159,7 @@ function viewerPageId(name: string): string {
 async function viewerItems(page: Page, serverUrl: string): Promise<Map<string, string>> {
   const items = new Map<string, string>();
   for (const gallery of ["components", "blocks"]) {
-    await page.goto(viewerUrl(serverUrl, { page: gallery }), { waitUntil: "networkidle" });
+    await gotoViewer(page, viewerUrl(serverUrl, { page: gallery }), { waitUntil: "domcontentloaded" });
     await page.locator(`[data-ds-gallery="${gallery}"]`).waitFor({ state: "attached" });
     const cards = await page.locator("[data-ds-component]").evaluateAll((elements) =>
       elements.map((element) => [element.getAttribute("data-ds-component"), element.getAttribute("data-ds-item")]),
@@ -173,7 +174,7 @@ async function viewerItems(page: Page, serverUrl: string): Promise<Map<string, s
 const STEP_TIMEOUT_MS = 15_000;
 
 async function captureComponent(page: Page, url: string, componentName: string, outputPath: string): Promise<void> {
-  await page.goto(url, { waitUntil: "networkidle", timeout: STEP_TIMEOUT_MS });
+  await gotoViewer(page, url, { waitUntil: "domcontentloaded", timeout: STEP_TIMEOUT_MS });
   const component = page.locator(
     `[data-ds-detail="${componentName.replace(/"/gu, '\\"')}"] [data-ds-examples]`,
   );
@@ -228,7 +229,7 @@ async function renderViewport(
     const writtenPaths: string[] = [];
     for (const pageId of pageIds) {
       for (const theme of themes) {
-        await page.goto(viewerUrl(serverUrl, { page: pageId, theme, locale, motion: "reduced" }), { waitUntil: "networkidle" });
+        await gotoViewer(page, viewerUrl(serverUrl, { page: pageId, theme, locale, motion: "reduced" }), { waitUntil: "domcontentloaded" });
         await page.locator(`[data-ds-page="${pageId}"] main > *`).first().waitFor({ state: "visible" });
         if (await page.locator("[data-ds-not-found]").count()) throw new Error(`Unknown DS Viewer page: ${pageId}`);
         const suffix = `${themes.length > 1 ? `-${theme}` : ""}${locale === "ko" ? "-ko" : ""}${fullPage ? "-full" : ""}`;

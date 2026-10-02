@@ -27,7 +27,7 @@ export function Sketch({ id, boxes }: { id: string; boxes: SketchBox[] }) {
     <span className={s.sketch} aria-hidden="true">
       <svg className={s.sketchSvg}>
         {boxes.map((box, i) => (i === 0 ? null : (
-          <rect className={s.sketchOutline} data-t={`sk-${id}-${i}-rr`} height={box.h} key={i} rx={Math.min(box.r, box.w / 2, box.h / 2)} ry={Math.min(box.r, box.w / 2, box.h / 2)} width={box.w} x={box.x} y={box.y}
+          <rect data-hero-specimen="construction-outline" className={s.sketchOutline} data-t={`sk-${id}-${i}-rr`} height={box.h} key={i} rx={Math.min(box.r, box.w / 2, box.h / 2)} ry={Math.min(box.r, box.w / 2, box.h / 2)} width={box.w} x={box.x} y={box.y}
             style={{ "--dash": `${outlineLength(box)}px` } as CSSProperties} />
         )))}
       </svg>

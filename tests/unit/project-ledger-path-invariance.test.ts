@@ -20,6 +20,11 @@ afterEach(() => {
 
 test("record meaning is invariant across canonical and runtime publication roots", async () => {
   const { buildIndex } = await loadIndexer();
+  const fsModule = pathToFileURL(join(process.cwd(), "packages/project-ledger/src/fs.js")).href;
+  const { ledgerRoot, withLedgerRoot } = await import(fsModule) as {
+    ledgerRoot: (project: string) => string;
+    withLedgerRoot: <T>(project: string, operation: () => T) => T;
+  };
   const dataRoot = mkdtempSync(join(tmpdir(), "project-ledger-path-invariance-"));
   roots.push(dataRoot);
   const canonical = join(dataRoot, "project-ledger", "projects", "demo");
@@ -30,6 +35,32 @@ test("record meaning is invariant across canonical and runtime publication roots
 
   const canonicalIndex = buildIndex(canonical);
   const candidateIndex = buildIndex(candidate);
+
+  // test-category: pure-logic
+  // Root bindings last one operation; source reads within it remain current.
+  withLedgerRoot(canonical, () => {
+    expect(ledgerRoot(canonical)).toBe(canonical);
+    expect(withLedgerRoot(candidate, () => ledgerRoot(candidate))).toBe(candidate);
+    writeFileSync(join(canonical, "tasks", "LEGACY-DRAFT.md"), '---\nid: "LEGACY-DRAFT"\nstatus: active\n---\n# Legacy draft\n');
+    expect(buildIndex(canonical).records.find((record) => record.id === "LEGACY-DRAFT")?.status).toBe("active");
+  });
+  writeLedger(canonical);
+  const project = join(dataRoot, "source-project");
+  mkdirSync(project);
+  writeFileSync(join(project, "package.json"), '{"name":"demo"}');
+  const previousData = process.env.BUTLER_DATA;
+  try {
+    process.env.BUTLER_DATA = dataRoot;
+    expect(withLedgerRoot(project, () => ledgerRoot(project))).toBe(canonical);
+    const otherData = join(dataRoot, "other-data");
+    const otherRoot = join(otherData, "project-ledger", "projects", "demo");
+    writeLedger(otherRoot);
+    process.env.BUTLER_DATA = otherData;
+    expect(withLedgerRoot(project, () => ledgerRoot(project))).toBe(otherRoot);
+  } finally {
+    if (previousData === undefined) delete process.env.BUTLER_DATA;
+    else process.env.BUTLER_DATA = previousData;
+  }
 
   expect(recordSemantics(candidateIndex.records)).toEqual(recordSemantics(canonicalIndex.records));
   expect(issueSemantics(candidateIndex.issues)).toEqual(issueSemantics(canonicalIndex.issues));

@@ -1259,8 +1259,7 @@ try {
       closingInspectorState.transform === "none",
     `right panel content should keep stable width while the slot clips it: box=${JSON.stringify(closingInspectorBox)} state=${JSON.stringify(closingInspectorState)}`,
   );
-  await rightPanelSlot.evaluate((slot) => slot.getAnimations().forEach((animation) => animation.play()));
-  await waitForMotionToSettle(page);
+  await page.waitForTimeout(260);
   const closedInspectorCount = await page
     .locator(testClass("right-inspector"))
     .count();
@@ -3709,6 +3708,7 @@ try {
     "new-chat draft should survive another session reload",
   );
   await replaceComposerText(composerInput, "");
+  await expectInputValue(composerInput, "", "new-chat draft should be cleared before the focus check");
   const draftComposerBox = await page
     .locator(testClass("composer-card"))
     .boundingBox();
