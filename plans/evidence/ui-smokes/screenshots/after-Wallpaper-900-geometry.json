@@ -1,0 +1,384 @@
+[
+  {
+    "html": "<div class=\"_grid_17rz6_1 _columns-auto-fit_17rz6_36 _gap-md_17rz6_152\" data-columns=\"auto-fit\"><div role=\"group\" data-slot=\"field\" data-orientation=\"vertical\" class=\"_field_1ua07_22\"><div data-slot=\"field-label\" class=\"_title_1ua07_65\">Colors</div><div class=\"_stack_lsahs_1 _align-column_lsahs_28 _gap-sm_lsahs_41 _justify-start_lsahs_91 _cross-stretch_lsahs_128\"><div class=\"_group_1h157_1\" role=\"radiogroup\" aria-label=\"Colors\" data-size=\"sm\" data-slot=\"segmented-control\"><button class=\"_item_1h",
+    "client": 734,
+    "scroll": 734,
+    "rect": {
+      "x": 83,
+      "y": 938.53125,
+      "width": 734,
+      "height": 56.296875,
+      "top": 938.53125,
+      "right": 817,
+      "bottom": 994.828125,
+      "left": 83
+    },
+    "children": [
+      {
+        "rect": {
+          "x": 83,
+          "y": 938.53125,
+          "width": 734,
+          "height": 56.296875,
+          "top": 938.53125,
+          "right": 817,
+          "bottom": 994.828125,
+          "left": 83
+        },
+        "sizing": "border-box",
+        "width": "734px"
+      }
+    ]
+  },
+  {
+    "html": "<div class=\"_grid_17rz6_1 _columns-auto-fit_17rz6_36 _gap-md_17rz6_152\" data-columns=\"auto-fit\"><div role=\"group\" data-slot=\"field\" data-orientation=\"vertical\" class=\"_field_1ua07_22\"><div data-slot=\"field-label\" class=\"_title_1ua07_65\">Colors</div><div class=\"_stack_lsahs_1 _align-column_lsahs_28 _gap-sm_lsahs_41 _justify-start_lsahs_91 _cross-stretch_lsahs_128\"><div class=\"_group_1h157_1\" role=\"radiogroup\" aria-label=\"Colors\" data-size=\"sm\" data-slot=\"segmented-control\"><button class=\"_item_1h",
+    "client": 734,
+    "scroll": 734,
+    "rect": {
+      "x": 83,
+      "y": 1440.828125,
+      "width": 734,
+      "height": 56.296875,
+      "top": 1440.828125,
+      "right": 817,
+      "bottom": 1497.125,
+      "left": 83
+    },
+    "children": [
+      {
+        "rect": {
+          "x": 83,
+          "y": 1440.828125,
+          "width": 734,
+          "height": 56.296875,
+          "top": 1440.828125,
+          "right": 817,
+          "bottom": 1497.125,
+          "left": 83
+        },
+        "sizing": "border-box",
+        "width": "734px"
+      }
+    ]
+  },
+  {
+    "html": "<div class=\"_grid_17rz6_1 _columns-auto-fit_17rz6_36 _gap-md_17rz6_152\" data-columns=\"auto-fit\"><div role=\"group\" data-slot=\"field\" data-orientation=\"vertical\" class=\"_field_1ua07_22\"><div data-slot=\"field-label\" class=\"_title_1ua07_65\">Fit</div><div class=\"_group_1h157_1\" role=\"radiogroup\" aria-label=\"Fit\" data-size=\"sm\" data-slot=\"segmented-control\"><button class=\"_item_1h157_19\" type=\"button\" role=\"radio\" aria-checked=\"true\" data-state=\"on\" tabindex=\"0\">Fill</button><button class=\"_item_1h157",
+    "client": 734,
+    "scroll": 734,
+    "rect": {
+      "x": 83,
+      "y": 1938.875,
+      "width": 734,
+      "height": 124.59375,
+      "top": 1938.875,
+      "right": 817,
+      "bottom": 2063.46875,
+      "left": 83
+    },
+    "children": [
+      {
+        "rect": {
+          "x": 83,
+          "y": 1938.875,
+          "width": 361,
+          "height": 56.296875,
+          "top": 1938.875,
+          "right": 444,
+          "bottom": 1995.171875,
+          "left": 83
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      },
+      {
+        "rect": {
+          "x": 456,
+          "y": 1938.875,
+          "width": 361,
+          "height": 56.296875,
+          "top": 1938.875,
+          "right": 817,
+          "bottom": 1995.171875,
+          "left": 456
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      },
+      {
+        "rect": {
+          "x": 83,
+          "y": 2007.171875,
+          "width": 361,
+          "height": 56.296875,
+          "top": 2007.171875,
+          "right": 444,
+          "bottom": 2063.46875,
+          "left": 83
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      },
+      {
+        "rect": {
+          "x": 456,
+          "y": 2007.171875,
+          "width": 361,
+          "height": 56.296875,
+          "top": 2007.171875,
+          "right": 817,
+          "bottom": 2063.46875,
+          "left": 456
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      }
+    ]
+  },
+  {
+    "html": "<div class=\"_grid_17rz6_1 _columns-auto-fit_17rz6_36 _gap-md_17rz6_152\" data-columns=\"auto-fit\"><div role=\"group\" data-slot=\"field\" data-orientation=\"vertical\" class=\"_field_1ua07_22\"><div data-slot=\"field-label\" class=\"_title_1ua07_65\">Fit</div><div class=\"_group_1h157_1\" role=\"radiogroup\" aria-label=\"Fit\" data-size=\"sm\" data-slot=\"segmented-control\"><button class=\"_item_1h157_19\" type=\"button\" role=\"radio\" aria-checked=\"true\" data-state=\"on\" tabindex=\"0\">Fill</button><button class=\"_item_1h157",
+    "client": 734,
+    "scroll": 734,
+    "rect": {
+      "x": 83,
+      "y": 2467.46875,
+      "width": 734,
+      "height": 124.59375,
+      "top": 2467.46875,
+      "right": 817,
+      "bottom": 2592.0625,
+      "left": 83
+    },
+    "children": [
+      {
+        "rect": {
+          "x": 83,
+          "y": 2467.46875,
+          "width": 361,
+          "height": 56.296875,
+          "top": 2467.46875,
+          "right": 444,
+          "bottom": 2523.765625,
+          "left": 83
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      },
+      {
+        "rect": {
+          "x": 456,
+          "y": 2467.46875,
+          "width": 361,
+          "height": 56.296875,
+          "top": 2467.46875,
+          "right": 817,
+          "bottom": 2523.765625,
+          "left": 456
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      },
+      {
+        "rect": {
+          "x": 83,
+          "y": 2535.765625,
+          "width": 361,
+          "height": 56.296875,
+          "top": 2535.765625,
+          "right": 444,
+          "bottom": 2592.0625,
+          "left": 83
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      },
+      {
+        "rect": {
+          "x": 456,
+          "y": 2535.765625,
+          "width": 361,
+          "height": 56.296875,
+          "top": 2535.765625,
+          "right": 817,
+          "bottom": 2592.0625,
+          "left": 456
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      }
+    ]
+  },
+  {
+    "html": "<div class=\"_grid_17rz6_1 _columns-auto-fit_17rz6_36 _gap-md_17rz6_152\" data-columns=\"auto-fit\"><div role=\"group\" data-slot=\"field\" data-orientation=\"vertical\" class=\"_field_1ua07_22\"><div data-slot=\"field-label\" class=\"_title_1ua07_65\">Paper tone</div><span class=\"_root_fynmd_1\" data-slot=\"color-swatch-input\"><input aria-label=\"Paper tone\" class=\"_input_fynmd_12\" type=\"color\" value=\"#eeebe4\" style=\"\"></span></div><div role=\"group\" data-slot=\"field\" data-orientation=\"vertical\" class=\"_field_1ua0",
+    "client": 734,
+    "scroll": 734,
+    "rect": {
+      "x": 83,
+      "y": 2701.8125,
+      "width": 734,
+      "height": 192.890625,
+      "top": 2701.8125,
+      "right": 817,
+      "bottom": 2894.703125,
+      "left": 83
+    },
+    "children": [
+      {
+        "rect": {
+          "x": 83,
+          "y": 2701.8125,
+          "width": 361,
+          "height": 62.296875,
+          "top": 2701.8125,
+          "right": 444,
+          "bottom": 2764.109375,
+          "left": 83
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      },
+      {
+        "rect": {
+          "x": 456,
+          "y": 2701.8125,
+          "width": 361,
+          "height": 62.296875,
+          "top": 2701.8125,
+          "right": 817,
+          "bottom": 2764.109375,
+          "left": 456
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      },
+      {
+        "rect": {
+          "x": 83,
+          "y": 2776.109375,
+          "width": 361,
+          "height": 58.296875,
+          "top": 2776.109375,
+          "right": 444,
+          "bottom": 2834.40625,
+          "left": 83
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      },
+      {
+        "rect": {
+          "x": 456,
+          "y": 2776.109375,
+          "width": 361,
+          "height": 58.296875,
+          "top": 2776.109375,
+          "right": 817,
+          "bottom": 2834.40625,
+          "left": 456
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      },
+      {
+        "rect": {
+          "x": 83,
+          "y": 2846.40625,
+          "width": 361,
+          "height": 48.296875,
+          "top": 2846.40625,
+          "right": 444,
+          "bottom": 2894.703125,
+          "left": 83
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      }
+    ]
+  },
+  {
+    "html": "<div class=\"_grid_17rz6_1 _columns-auto-fit_17rz6_36 _gap-md_17rz6_152\" data-columns=\"auto-fit\"><div role=\"group\" data-slot=\"field\" data-orientation=\"vertical\" class=\"_field_1ua07_22\"><div data-slot=\"field-label\" class=\"_title_1ua07_65\">Paper tone</div><span class=\"_root_fynmd_1\" data-slot=\"color-swatch-input\"><input aria-label=\"Paper tone\" class=\"_input_fynmd_12\" type=\"color\" value=\"#2a2723\" style=\"\"></span></div><div role=\"group\" data-slot=\"field\" data-orientation=\"vertical\" class=\"_field_1ua0",
+    "client": 734,
+    "scroll": 734,
+    "rect": {
+      "x": 83,
+      "y": 2996.09375,
+      "width": 734,
+      "height": 192.890625,
+      "top": 2996.09375,
+      "right": 817,
+      "bottom": 3188.984375,
+      "left": 83
+    },
+    "children": [
+      {
+        "rect": {
+          "x": 83,
+          "y": 2996.09375,
+          "width": 361,
+          "height": 62.296875,
+          "top": 2996.09375,
+          "right": 444,
+          "bottom": 3058.390625,
+          "left": 83
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      },
+      {
+        "rect": {
+          "x": 456,
+          "y": 2996.09375,
+          "width": 361,
+          "height": 62.296875,
+          "top": 2996.09375,
+          "right": 817,
+          "bottom": 3058.390625,
+          "left": 456
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      },
+      {
+        "rect": {
+          "x": 83,
+          "y": 3070.390625,
+          "width": 361,
+          "height": 58.296875,
+          "top": 3070.390625,
+          "right": 444,
+          "bottom": 3128.6875,
+          "left": 83
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      },
+      {
+        "rect": {
+          "x": 456,
+          "y": 3070.390625,
+          "width": 361,
+          "height": 58.296875,
+          "top": 3070.390625,
+          "right": 817,
+          "bottom": 3128.6875,
+          "left": 456
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      },
+      {
+        "rect": {
+          "x": 83,
+          "y": 3140.6875,
+          "width": 361,
+          "height": 48.296875,
+          "top": 3140.6875,
+          "right": 444,
+          "bottom": 3188.984375,
+          "left": 83
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      }
+    ]
+  }
+]

@@ -1,0 +1,54 @@
+{
+  "sendFlight": {
+    "animationFrames": [
+      {
+        "windowMs": 80,
+        "longTasks": 0,
+        "maxTaskMs": 0,
+        "mainThreadBusyPct": 0.2,
+        "layouts": 0,
+        "layoutMs": 0,
+        "paints": 0,
+        "paintMs": 0,
+        "styleRecalcs": 0
+      },
+      {
+        "windowMs": 80,
+        "longTasks": 0,
+        "maxTaskMs": 0,
+        "mainThreadBusyPct": 0.2,
+        "layouts": 0,
+        "layoutMs": 0,
+        "paints": 0,
+        "paintMs": 0,
+        "styleRecalcs": 0
+      },
+      {
+        "windowMs": 80,
+        "longTasks": 0,
+        "maxTaskMs": 0,
+        "mainThreadBusyPct": 0.2,
+        "layouts": 0,
+        "layoutMs": 0,
+        "paints": 0,
+        "paintMs": 0,
+        "styleRecalcs": 0
+      }
+    ],
+    "whole": {
+      "windowMs": 2127,
+      "longTasks": 0,
+      "maxTaskMs": 4.6,
+      "mainThreadBusyPct": 2.7,
+      "layouts": 12,
+      "layoutMs": 3.9,
+      "paints": 58,
+      "paintMs": 25.1,
+      "styleRecalcs": 36
+    },
+    "travel": {
+      "flying": "fly",
+      "travelledPx": 137
+    }
+  }
+}

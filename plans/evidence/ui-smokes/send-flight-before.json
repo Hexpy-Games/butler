@@ -1,0 +1,52 @@
+{
+  "windows": [
+    {
+      "windowMs": 80,
+      "longTasks": 0,
+      "maxTaskMs": 2.2,
+      "mainThreadBusyPct": 3.1,
+      "layouts": 0,
+      "layoutMs": 0,
+      "paints": 2,
+      "paintMs": 1.9,
+      "styleRecalcs": 1
+    },
+    {
+      "windowMs": 80,
+      "longTasks": 0,
+      "maxTaskMs": 0.1,
+      "mainThreadBusyPct": 0.3,
+      "layouts": 0,
+      "layoutMs": 0,
+      "paints": 0,
+      "paintMs": 0,
+      "styleRecalcs": 0
+    },
+    {
+      "windowMs": 80,
+      "longTasks": 0,
+      "maxTaskMs": 0.1,
+      "mainThreadBusyPct": 0.3,
+      "layouts": 0,
+      "layoutMs": 0,
+      "paints": 0,
+      "paintMs": 0,
+      "styleRecalcs": 0
+    }
+  ],
+  "whole": {
+    "windowMs": 2163,
+    "longTasks": 0,
+    "maxTaskMs": 7.1,
+    "mainThreadBusyPct": 5.5,
+    "layouts": 12,
+    "layoutMs": 7.3,
+    "paints": 60,
+    "paintMs": 62.9,
+    "styleRecalcs": 37
+  },
+  "travel": {
+    "flying": "fly",
+    "travelledPx": 137
+  }
+}

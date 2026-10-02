@@ -1,0 +1,106 @@
+{
+  "after-MetricCard.png": {
+    "sha256": "92f94e2462637443eb6e637b1e64968f8eb3957ad06898dc1837d4816ab35262",
+    "bytes": 123153
+  },
+  "after-Wallpaper-1440-geometry.json": {
+    "sha256": "f1a85f0d4a424d7f554a8605947aa58937c7281255627d8c16e3809350bb8863",
+    "bytes": 11157
+  },
+  "after-Wallpaper-1440.png": {
+    "sha256": "a085c4e6e94eb23643824899ebb1edf386e4d21f0c028d5064af6f978bbdb5a0",
+    "bytes": 186135
+  },
+  "after-Wallpaper-375-geometry.json": {
+    "sha256": "3ad075b96d3b163e705cb7a2b18e281c89370cfac26b8e12387227ed8ea552ea",
+    "bytes": 11063
+  },
+  "after-Wallpaper-375.png": {
+    "sha256": "04d0c2beb8a3a70dc21c95908bb7c152801fa0aef471d8a3dfde8c5b7e4826cc",
+    "bytes": 66286
+  },
+  "after-Wallpaper-900-geometry.json": {
+    "sha256": "5adc3cd36baffe909f31b257f8794f5c4eceb2fa80aa0328f50e12956c2ce2bb",
+    "bytes": 11121
+  },
+  "after-Wallpaper-900.png": {
+    "sha256": "d6f765167ec78ff4acb30785168940b87466b6964a3fda20c9cc3f13239ba376",
+    "bytes": 103508
+  },
+  "after-WallpaperPicker-1440-geometry.json": {
+    "sha256": "a9af1885fc6619ed7276d172257ae3083844a27aeb226bb1604ff0229ed67622",
+    "bytes": 10389
+  },
+  "after-WallpaperPicker-1440.png": {
+    "sha256": "16e5e3f3c010b0b37b8757382260bb64ce34602cbadbae4790059533b808d64d",
+    "bytes": 321750
+  },
+  "after-WallpaperPicker-375-geometry.json": {
+    "sha256": "c902db8c0ae3487e4a74019b8a6d302f8fa8b46a8f4247319c9b673ff28affc1",
+    "bytes": 10316
+  },
+  "after-WallpaperPicker-375.png": {
+    "sha256": "6dfd05dc634ba12e1d5ab04740aec50ecd6bc4b409b3052224c281e2cc56315d",
+    "bytes": 76670
+  },
+  "after-WallpaperPicker-900-geometry.json": {
+    "sha256": "d650760650adcbe0eaffbbe11fa6d6a40b66364cd88dbd92cec09e2b755b491b",
+    "bytes": 10353
+  },
+  "after-WallpaperPicker-900.png": {
+    "sha256": "6eb9f6b898295e26660d893a05830223a46efe82a1f4e0f2776682138db0e123",
+    "bytes": 198329
+  },
+  "before-MetricCard.png": {
+    "sha256": "92f94e2462637443eb6e637b1e64968f8eb3957ad06898dc1837d4816ab35262",
+    "bytes": 123153
+  },
+  "before-Wallpaper-1440-geometry.json": {
+    "sha256": "25a7088eea779a4cef796630d6c65193f11505b7de9637253356ba045405b69e",
+    "bytes": 11157
+  },
+  "before-Wallpaper-1440.png": {
+    "sha256": "e26966fbb4f17acfde2356559489e2b617fb5046c2508bdbfbb28ba6d2c620d8",
+    "bytes": 185720
+  },
+  "before-Wallpaper-375-geometry.json": {
+    "sha256": "8041be6e0b2f4ea3a9631ae6ac63afaa9238e534e10fa3c12d493bed2444ee62",
+    "bytes": 11063
+  },
+  "before-Wallpaper-375.png": {
+    "sha256": "f908eae2c3d45086ab2bc52cd73454058e49d657370b74b751c6446bb24050de",
+    "bytes": 66462
+  },
+  "before-Wallpaper-900-geometry.json": {
+    "sha256": "e14a9e215bbce244a393c4772f18690dd4cd3e643e2b255cbe5d13e91d21a62e",
+    "bytes": 11121
+  },
+  "before-Wallpaper-900.png": {
+    "sha256": "0fd722f5ff9a9684df15fd962deab4c2d9fa83f741d3d78cfcc1628b5f69797a",
+    "bytes": 103514
+  },
+  "before-WallpaperPicker-1440-geometry.json": {
+    "sha256": "d3f6db5958ec57f7155087cdb6ea0f5f1bf65e4bddce9f957335588ef71a9d5c",
+    "bytes": 10389
+  },
+  "before-WallpaperPicker-1440.png": {
+    "sha256": "16e5e3f3c010b0b37b8757382260bb64ce34602cbadbae4790059533b808d64d",
+    "bytes": 321750
+  },
+  "before-WallpaperPicker-375-geometry.json": {
+    "sha256": "bc85bcaa5f1b340b5c719e3af34b8bf3dbbdd995f9c1e6c0767979c6b7210ff4",
+    "bytes": 10316
+  },
+  "before-WallpaperPicker-375.png": {
+    "sha256": "6dfd05dc634ba12e1d5ab04740aec50ecd6bc4b409b3052224c281e2cc56315d",
+    "bytes": 76670
+  },
+  "before-WallpaperPicker-900-geometry.json": {
+    "sha256": "5de0989bacf5fce9e7640d89b6ef01110a8d0aae26bbd9d78323beda2423d2ac",
+    "bytes": 10353
+  },
+  "before-WallpaperPicker-900.png": {
+    "sha256": "6eb9f6b898295e26660d893a05830223a46efe82a1f4e0f2776682138db0e123",
+    "bytes": 198329
+  }
+}

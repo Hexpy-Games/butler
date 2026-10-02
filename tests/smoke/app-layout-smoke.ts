@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, type Locator, type Page } from "playwright";
@@ -92,6 +92,21 @@ async function expectLocatorCount(
   for (let attempt = 0; actual !== count && attempt < 20; attempt += 1) {
     await new Promise((resolveWait) => setTimeout(resolveWait, 50));
     actual = await page.locator(selector).count();
+  }
+  if (actual !== count) {
+    const state = await page.evaluate(() => ({
+      viewport: { width: innerWidth, height: innerHeight },
+      hit: (() => {
+        const node = document.elementFromPoint(80, 80);
+        return { tag: node?.tagName, role: node?.getAttribute("role"), slot: node?.getAttribute("data-slot") };
+      })(),
+      menus: [...document.querySelectorAll<HTMLElement>('[data-test-class~="composer-menu"]')].map((menu) => ({
+        label: menu.getAttribute("aria-label"), rect: menu.getBoundingClientRect().toJSON(),
+        state: menu.closest('[data-slot="popover-content"]')?.getAttribute("data-state"),
+      })),
+    }));
+    writeFileSync(join(screenshotDir, "locator-count-failure.json"), JSON.stringify({ message, selector, actual, expected: count, state }, null, 2));
+    await page.screenshot({ path: join(screenshotDir, "locator-count-failure.png") });
   }
   assert(actual === count, `${message}: expected ${count}, got ${actual}`);
 }

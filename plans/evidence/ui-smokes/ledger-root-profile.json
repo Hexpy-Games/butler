@@ -1,0 +1,14 @@
+{
+  "main": {
+    "cli_operations": 37,
+    "root_calls": 2675,
+    "filesystem_resolutions": 2675,
+    "root_cpu_ms": 274.93557400000054
+  },
+  "fixed": {
+    "cli_operations": 37,
+    "root_calls": 1956,
+    "filesystem_resolutions": 37,
+    "root_cpu_ms": 31.72552800000003
+  }
+}

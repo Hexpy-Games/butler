@@ -1,0 +1,331 @@
+[
+  {
+    "html": "<div class=\"_grid_17rz6_1 _columns-auto-fit_17rz6_36 _gap-md_17rz6_152\" data-columns=\"auto-fit\"><div role=\"group\" data-slot=\"field\" data-orientation=\"vertical\" class=\"_field_1ua07_22\"><div data-slot=\"field-label\" class=\"_title_1ua07_65\">Colors</div><div class=\"_stack_lsahs_1 _align-column_lsahs_28 _gap-sm_lsahs_41 _justify-start_lsahs_91 _cross-stretch_lsahs_128\"><div class=\"_group_1h157_1\" role=\"radiogroup\" aria-label=\"Colors\" data-size=\"sm\" data-slot=\"segmented-control\"><button class=\"_item_1h",
+    "client": 734,
+    "scroll": 734,
+    "rect": {
+      "x": 83,
+      "y": 1994.625,
+      "width": 734,
+      "height": 56.296875,
+      "top": 1994.625,
+      "right": 817,
+      "bottom": 2050.921875,
+      "left": 83
+    },
+    "children": [
+      {
+        "rect": {
+          "x": 83,
+          "y": 1994.625,
+          "width": 734,
+          "height": 56.296875,
+          "top": 1994.625,
+          "right": 817,
+          "bottom": 2050.921875,
+          "left": 83
+        },
+        "sizing": "border-box",
+        "width": "734px"
+      }
+    ]
+  },
+  {
+    "html": "<div class=\"_grid_17rz6_1 _columns-auto-fit_17rz6_36 _gap-md_17rz6_152\" data-columns=\"auto-fit\"><div role=\"group\" data-slot=\"field\" data-orientation=\"vertical\" class=\"_field_1ua07_22\"><div data-slot=\"field-label\" class=\"_title_1ua07_65\">Colors</div><div class=\"_stack_lsahs_1 _align-column_lsahs_28 _gap-sm_lsahs_41 _justify-start_lsahs_91 _cross-stretch_lsahs_128\"><div class=\"_group_1h157_1\" role=\"radiogroup\" aria-label=\"Colors\" data-size=\"sm\" data-slot=\"segmented-control\"><button class=\"_item_1h",
+    "client": 734,
+    "scroll": 734,
+    "rect": {
+      "x": 83,
+      "y": 2773.703125,
+      "width": 734,
+      "height": 56.296875,
+      "top": 2773.703125,
+      "right": 817,
+      "bottom": 2830,
+      "left": 83
+    },
+    "children": [
+      {
+        "rect": {
+          "x": 83,
+          "y": 2773.703125,
+          "width": 734,
+          "height": 56.296875,
+          "top": 2773.703125,
+          "right": 817,
+          "bottom": 2830,
+          "left": 83
+        },
+        "sizing": "border-box",
+        "width": "734px"
+      }
+    ]
+  },
+  {
+    "html": "<div class=\"_grid_17rz6_1 _columns-auto-fit_17rz6_36 _gap-md_17rz6_152\" data-columns=\"auto-fit\"><div role=\"group\" data-slot=\"field\" data-orientation=\"vertical\" class=\"_field_1ua07_22\"><div data-slot=\"field-label\" class=\"_title_1ua07_65\">Fit</div><div class=\"_group_1h157_1\" role=\"radiogroup\" aria-label=\"Fit\" data-size=\"sm\" data-slot=\"segmented-control\"><button class=\"_item_1h157_19\" type=\"button\" role=\"radio\" aria-checked=\"true\" data-state=\"on\" tabindex=\"0\">Fill</button><button class=\"_item_1h157",
+    "client": 734,
+    "scroll": 736,
+    "rect": {
+      "x": 83,
+      "y": 3254.53125,
+      "width": 734,
+      "height": 118.59375,
+      "top": 3254.53125,
+      "right": 817,
+      "bottom": 3373.125,
+      "left": 83
+    },
+    "children": [
+      {
+        "rect": {
+          "x": 83,
+          "y": 3254.53125,
+          "width": 361,
+          "height": 56.296875,
+          "top": 3254.53125,
+          "right": 444,
+          "bottom": 3310.828125,
+          "left": 83
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      },
+      {
+        "rect": {
+          "x": 456,
+          "y": 3254.53125,
+          "width": 361,
+          "height": 56.296875,
+          "top": 3254.53125,
+          "right": 817,
+          "bottom": 3310.828125,
+          "left": 456
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      },
+      {
+        "rect": {
+          "x": 83,
+          "y": 3322.828125,
+          "width": 361,
+          "height": 50.296875,
+          "top": 3322.828125,
+          "right": 444,
+          "bottom": 3373.125,
+          "left": 83
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      },
+      {
+        "rect": {
+          "x": 456,
+          "y": 3322.828125,
+          "width": 361,
+          "height": 50.296875,
+          "top": 3322.828125,
+          "right": 817,
+          "bottom": 3373.125,
+          "left": 456
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      }
+    ]
+  },
+  {
+    "html": "<div class=\"_grid_17rz6_1 _columns-auto-fit_17rz6_36 _gap-md_17rz6_152\" data-columns=\"auto-fit\"><div role=\"group\" data-slot=\"field\" data-orientation=\"vertical\" class=\"_field_1ua07_22\"><div data-slot=\"field-label\" class=\"_title_1ua07_65\">Amount</div><input aria-label=\"Amount\" class=\"_slider_ulgzo_1\" data-slot=\"slider\" max=\"1\" min=\"0\" step=\"0.05\" type=\"range\" value=\"0.5\" style=\"--slider-value: 50%;\"></div><div role=\"group\" data-slot=\"field\" data-orientation=\"vertical\" class=\"_field_1ua07_22\"><div ",
+    "client": 734,
+    "scroll": 734,
+    "rect": {
+      "x": 83,
+      "y": 3385.125,
+      "width": 734,
+      "height": 50.296875,
+      "top": 3385.125,
+      "right": 817,
+      "bottom": 3435.421875,
+      "left": 83
+    },
+    "children": [
+      {
+        "rect": {
+          "x": 83,
+          "y": 3385.125,
+          "width": 361,
+          "height": 50.296875,
+          "top": 3385.125,
+          "right": 444,
+          "bottom": 3435.421875,
+          "left": 83
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      },
+      {
+        "rect": {
+          "x": 456,
+          "y": 3385.125,
+          "width": 361,
+          "height": 50.296875,
+          "top": 3385.125,
+          "right": 817,
+          "bottom": 3435.421875,
+          "left": 456
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      }
+    ]
+  },
+  {
+    "html": "<div class=\"_grid_17rz6_1 _columns-auto-fit_17rz6_36 _gap-md_17rz6_152\" data-columns=\"auto-fit\"><div role=\"group\" data-slot=\"field\" data-orientation=\"vertical\" class=\"_field_1ua07_22\"><div data-slot=\"field-label\" class=\"_title_1ua07_65\">Fit</div><div class=\"_group_1h157_1\" role=\"radiogroup\" aria-label=\"Fit\" data-size=\"sm\" data-slot=\"segmented-control\"><button class=\"_item_1h157_19\" type=\"button\" role=\"radio\" aria-checked=\"true\" data-state=\"on\" tabindex=\"0\">Fill</button><button class=\"_item_1h157",
+    "client": 734,
+    "scroll": 736,
+    "rect": {
+      "x": 83,
+      "y": 3822.203125,
+      "width": 734,
+      "height": 118.59375,
+      "top": 3822.203125,
+      "right": 817,
+      "bottom": 3940.796875,
+      "left": 83
+    },
+    "children": [
+      {
+        "rect": {
+          "x": 83,
+          "y": 3822.203125,
+          "width": 361,
+          "height": 56.296875,
+          "top": 3822.203125,
+          "right": 444,
+          "bottom": 3878.5,
+          "left": 83
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      },
+      {
+        "rect": {
+          "x": 456,
+          "y": 3822.203125,
+          "width": 361,
+          "height": 56.296875,
+          "top": 3822.203125,
+          "right": 817,
+          "bottom": 3878.5,
+          "left": 456
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      },
+      {
+        "rect": {
+          "x": 83,
+          "y": 3890.5,
+          "width": 361,
+          "height": 50.296875,
+          "top": 3890.5,
+          "right": 444,
+          "bottom": 3940.796875,
+          "left": 83
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      },
+      {
+        "rect": {
+          "x": 456,
+          "y": 3890.5,
+          "width": 361,
+          "height": 50.296875,
+          "top": 3890.5,
+          "right": 817,
+          "bottom": 3940.796875,
+          "left": 456
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      }
+    ]
+  },
+  {
+    "html": "<div class=\"_grid_17rz6_1 _columns-auto-fit_17rz6_36 _gap-md_17rz6_152\" data-columns=\"auto-fit\"><div role=\"group\" data-slot=\"field\" data-orientation=\"vertical\" class=\"_field_1ua07_22\"><div data-slot=\"field-label\" class=\"_title_1ua07_65\">Amount</div><input aria-label=\"Amount\" class=\"_slider_ulgzo_1\" data-slot=\"slider\" max=\"1\" min=\"0\" step=\"0.05\" type=\"range\" value=\"0.5\" style=\"--slider-value: 50%;\"></div><div role=\"group\" data-slot=\"field\" data-orientation=\"vertical\" class=\"_field_1ua07_22\"><div ",
+    "client": 734,
+    "scroll": 734,
+    "rect": {
+      "x": 83,
+      "y": 3952.796875,
+      "width": 734,
+      "height": 50.296875,
+      "top": 3952.796875,
+      "right": 817,
+      "bottom": 4003.09375,
+      "left": 83
+    },
+    "children": [
+      {
+        "rect": {
+          "x": 83,
+          "y": 3952.796875,
+          "width": 361,
+          "height": 50.296875,
+          "top": 3952.796875,
+          "right": 444,
+          "bottom": 4003.09375,
+          "left": 83
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      },
+      {
+        "rect": {
+          "x": 456,
+          "y": 3952.796875,
+          "width": 361,
+          "height": 50.296875,
+          "top": 3952.796875,
+          "right": 817,
+          "bottom": 4003.09375,
+          "left": 456
+        },
+        "sizing": "border-box",
+        "width": "361px"
+      }
+    ]
+  },
+  {
+    "html": "<div class=\"_grid_17rz6_1 _columns-auto-fit_17rz6_36 _gap-md_17rz6_152\" data-columns=\"auto-fit\"><div role=\"group\" data-slot=\"field\" data-orientation=\"vertical\" class=\"_field_1ua07_22\"><div data-slot=\"field-label\" class=\"_title_1ua07_65\">Colors</div><div class=\"_stack_lsahs_1 _align-column_lsahs_28 _gap-sm_lsahs_41 _justify-start_lsahs_91 _cross-stretch_lsahs_128\"><div class=\"_group_1h157_1\" role=\"radiogroup\" aria-label=\"Colors\" data-size=\"sm\" data-slot=\"segmented-control\"><button class=\"_item_1h",
+    "client": 832,
+    "scroll": 832,
+    "rect": {
+      "x": 34,
+      "y": 7659.453125,
+      "width": 832,
+      "height": 56.296875,
+      "top": 7659.453125,
+      "right": 866,
+      "bottom": 7715.75,
+      "left": 34
+    },
+    "children": [
+      {
+        "rect": {
+          "x": 34,
+          "y": 7659.453125,
+          "width": 832,
+          "height": 56.296875,
+          "top": 7659.453125,
+          "right": 866,
+          "bottom": 7715.75,
+          "left": 34
+        },
+        "sizing": "border-box",
+        "width": "832px"
+      }
+    ]
+  }
+]

@@ -1,0 +1,349 @@
+[
+  {
+    "check": "main layout baseline",
+    "result": "failed waiting for Full access",
+    "log": "ui-baseline-layout.log"
+  },
+  {
+    "check": "main overflow baseline",
+    "result": "failed: fourteen 2px cell overflows at the smoke viewports",
+    "log": "ui-baseline-overflow.log"
+  },
+  {
+    "check": "main motion baseline",
+    "result": "failed: Color property contract",
+    "log": "ui-baseline-motion.log"
+  },
+  {
+    "check": "frozen Bun install and final full repository check",
+    "result": "passed",
+    "log": "ui-final-complete-check.log"
+  },
+  {
+    "check": "final DS coverage/app-client design",
+    "result": "51 passed, 2 pre-existing skips, 3619 assertions",
+    "log": "ui-final-complete-check.log"
+  },
+  {
+    "check": "DS typecheck/design/CSS checks",
+    "result": "passed",
+    "log": "ui-final-design-checks.log"
+  },
+  {
+    "check": "Rust fmt",
+    "result": "passed",
+    "log": "ui-final-rust-format.log"
+  },
+  {
+    "check": "Rust source checker (Rust workspace root)",
+    "result": "passed, 0 violations",
+    "log": "ui-source-check.log"
+  },
+  {
+    "check": "all Ledger tests",
+    "result": "73 passed, 4 pre-existing skips, 989 assertions, 36.33s",
+    "log": "ui-ledger-all-final.log"
+  },
+  {
+    "check": "focused Ledger tests",
+    "result": "56 passed, 757 assertions, 30.40s",
+    "log": "ui-ledger-tests-final.log"
+  },
+  {
+    "check": "profiled Ledger CRUD",
+    "result": "passed, 131 assertions, case 1459.10ms, process 3.41s",
+    "log": "ledger-profile-final.log"
+  },
+  {
+    "check": "integrated layout",
+    "result": "passed",
+    "log": "ui-layout-integrated.log"
+  },
+  {
+    "check": "final layout",
+    "result": "failed: permission outside-click close; cause not demonstrated",
+    "log": "ui-layout-final-context.log"
+  },
+  {
+    "check": "layout diagnostic",
+    "result": "completed all checks and 24 screenshots, but same click point (80,80); does not clear previous failure",
+    "log": "ui-layout-outside-target.log"
+  },
+  {
+    "check": "final combined DS",
+    "result": "all preceding stages passed; Color CPU failed 3.08ms/frame vs 0.5ms",
+    "log": "ui-ds-flight-fixed-all.log"
+  },
+  {
+    "check": "all-chapter motion diagnostic",
+    "result": "completed all 10 chapters, report-only, not passing",
+    "log": "ui-hero-diagnostics.log"
+  },
+  {
+    "check": "strict send-flight after expiry fix",
+    "result": "passed, 3 windows, 0 Layout/Paint, 0 long tasks, 137px travel",
+    "log": "ui-send-flight-fixed-trace.log"
+  },
+  {
+    "check": "send-flight existing contracts",
+    "result": "10 passed, 32 assertions",
+    "log": "ui-send-flight-existing-contract.log"
+  },
+  {
+    "check": "context-popover/toolbar existing tests from repo root",
+    "result": "19 passed, 77 assertions",
+    "log": "ui-context-existing-root.log"
+  },
+  {
+    "check": "isolated Ledger closeout",
+    "result": "failed: fresh data has no initialized canonical project",
+    "log": "ui-ledger-closeout.log"
+  },
+  {
+    "check": "first-run Electron",
+    "result": "passed, 13 checks",
+    "log": "ui-first-run-final.log"
+  },
+  {
+    "check": "font assets/render web English/Korean and Electron",
+    "result": "passed",
+    "log": "ui-font-final.log"
+  },
+  {
+    "check": "app consent, security pairing, branch actions, steward pill, screen contracts",
+    "result": "passed; initial font probe failure subsequently corrected",
+    "log": "ui-browser-extras.log"
+  },
+  {
+    "check": "visual evidence integrity",
+    "result": "passed: 22 overflowing cells -> 0, same cell/child counts, identical settled MetricCard PNG",
+    "log": "ui-visual-evidence-check.log"
+  },
+  {
+    "check": "additional app smokes before fixes",
+    "runs": [
+      {
+        "name": "sidebar-drop",
+        "command": [
+          "bun",
+          "run",
+          "tests/smoke/sidebar-drop-zones-electron.ts"
+        ],
+        "exit_code": 0,
+        "seconds": 23.03
+      },
+      {
+        "name": "ask-user",
+        "command": [
+          "bun",
+          "run",
+          "tests/smoke/app-ask-user-smoke.ts"
+        ],
+        "exit_code": 0,
+        "seconds": 35.18
+      },
+      {
+        "name": "boot-reload",
+        "command": [
+          "bun",
+          "run",
+          "tests/smoke/app-boot-reload-smoke.ts"
+        ],
+        "exit_code": 0,
+        "seconds": 62.84
+      },
+      {
+        "name": "composer-caret",
+        "command": [
+          "bun",
+          "run",
+          "tests/smoke/app-composer-caret-smoke.ts"
+        ],
+        "exit_code": 1,
+        "seconds": 15.45
+      },
+      {
+        "name": "composer-refresh",
+        "command": [
+          "bun",
+          "run",
+          "tests/smoke/app-composer-refresh-smoke.ts"
+        ],
+        "exit_code": 1,
+        "seconds": 13.24
+      },
+      {
+        "name": "reply-language",
+        "command": [
+          "bun",
+          "run",
+          "tests/smoke/app-reply-language-smoke.ts"
+        ],
+        "exit_code": 1,
+        "seconds": 38.79
+      },
+      {
+        "name": "steward-refresh",
+        "command": [
+          "bun",
+          "run",
+          "tests/smoke/app-steward-refresh-smoke.ts"
+        ],
+        "exit_code": 0,
+        "seconds": 22.3
+      },
+      {
+        "name": "hmr",
+        "command": [
+          "bun",
+          "run",
+          "packages/butler-app/scripts/app-ui-hmr-smoke.ts"
+        ],
+        "exit_code": 1,
+        "seconds": 64.12
+      },
+      {
+        "name": "render",
+        "command": [
+          "bun",
+          "run",
+          "render",
+          "Wallpaper",
+          "WallpaperPicker",
+          "AnimatedNumber",
+          "--viewport=mobile"
+        ],
+        "exit_code": 0,
+        "seconds": 57.88
+      }
+    ]
+  },
+  {
+    "check": "intermediate validation including caught selector loop",
+    "runs": [
+      {
+        "name": "context-existing",
+        "command": [
+          "bun",
+          "test",
+          "src/components/conversation/ContextUsagePopover.test.tsx",
+          "src/components/conversation/ComposerToolbar.test.tsx"
+        ],
+        "exit_code": 1,
+        "seconds": 1.7
+      },
+      {
+        "name": "caret",
+        "command": [
+          "bun",
+          "run",
+          "tests/smoke/app-composer-caret-smoke.ts"
+        ],
+        "exit_code": 1,
+        "seconds": 31.47
+      },
+      {
+        "name": "refresh",
+        "command": [
+          "bun",
+          "run",
+          "tests/smoke/app-composer-refresh-smoke.ts"
+        ],
+        "exit_code": 1,
+        "seconds": 32.77
+      },
+      {
+        "name": "reply-language",
+        "command": [
+          "bun",
+          "run",
+          "tests/smoke/app-reply-language-smoke.ts"
+        ],
+        "exit_code": 1,
+        "seconds": 32.68
+      },
+      {
+        "name": "hmr",
+        "command": [
+          "bun",
+          "run",
+          "packages/butler-app/scripts/app-ui-hmr-smoke.ts"
+        ],
+        "exit_code": 1,
+        "seconds": 23.52
+      },
+      {
+        "name": "flight-trace",
+        "command": [
+          "bun",
+          "run",
+          "tests/smoke/ds-motion-trace.ts",
+          "--only=send-flight",
+          "--out=.tmp/ds-motion-flight"
+        ],
+        "exit_code": 1,
+        "seconds": 11.52
+      },
+      {
+        "name": "ds-site",
+        "command": [
+          "bun",
+          "run",
+          "ds-site:check"
+        ],
+        "exit_code": 0,
+        "seconds": 44.75
+      }
+    ]
+  },
+  {
+    "check": "corrected app smokes",
+    "runs": [
+      {
+        "name": "caret",
+        "command": [
+          "bun",
+          "run",
+          "tests/smoke/app-composer-caret-smoke.ts"
+        ],
+        "exit_code": 0,
+        "seconds": 5.51
+      },
+      {
+        "name": "refresh",
+        "command": [
+          "bun",
+          "run",
+          "tests/smoke/app-composer-refresh-smoke.ts"
+        ],
+        "exit_code": 0,
+        "seconds": 7.41
+      },
+      {
+        "name": "reply-language",
+        "command": [
+          "bun",
+          "run",
+          "tests/smoke/app-reply-language-smoke.ts"
+        ],
+        "exit_code": 0,
+        "seconds": 2.75
+      },
+      {
+        "name": "hmr",
+        "command": [
+          "bun",
+          "run",
+          "packages/butler-app/scripts/app-ui-hmr-smoke.ts"
+        ],
+        "exit_code": 0,
+        "seconds": 7.57
+      }
+    ]
+  },
+  {
+    "check": "final repository check including failure-only layout diagnostics",
+    "result": "passed",
+    "log": "ui-final-diagnostics-check.log"
+  }
+]
