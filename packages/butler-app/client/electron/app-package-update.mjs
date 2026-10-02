@@ -1,8 +1,10 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { closeSync, createReadStream, fstatSync, openSync, read, realpathSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { isAbsolute, relative, resolve } from "node:path";
+import { readFile, writeFile } from "node:fs/promises";
+import { basename, isAbsolute, relative, resolve } from "node:path";
+
+import { windowsPackageVersion } from "./scripts/windows-package-version.mjs";
 
 /** Reverify the DATA-staged package before letting the platform helper activate it. */
 export async function prepareAppPackageUpdate({ artifactPath, dataRoot, installation, executable, parent, externalServerUrl = null, arguments: launchArguments = [] }) {
@@ -13,6 +15,10 @@ export async function prepareAppPackageUpdate({ artifactPath, dataRoot, installa
   if (!within || within.startsWith("..") || isAbsolute(within) ||
       candidate !== realpathSync(resolve(dataRoot, staged.artifact_path))) {
     throw new Error("Update package is outside verified staging.");
+  }
+  if (candidate.endsWith(".nupkg") && basename(candidate) !==
+      `butler-app-${windowsPackageVersion(staged.available_version)}-full.nupkg`) {
+    throw new Error("Squirrel package differs from the selected App version.");
   }
   const hash = createHash("sha256");
   for await (const bytes of createReadStream(candidate)) hash.update(bytes);
@@ -27,6 +33,7 @@ export async function prepareAppPackageUpdate({ artifactPath, dataRoot, installa
   const child = spawn(installation.command, [
     ...installation.args, "app-update-install", candidate, executable, String(parent), ...launchArguments,
   ], { detached: true, stdio: ["pipe", log, log], env });
+  if (child.pid) await writeFile(resolve(dataRoot, "updates/app-install.pid"), String(child.pid), { mode: 0o600 });
   try { await new Promise((accept, reject) => {
     const buffer = Buffer.alloc(2048);
     let reading = false, tail = "";

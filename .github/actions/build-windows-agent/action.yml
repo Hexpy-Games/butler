@@ -1,6 +1,10 @@
 name: Build unsigned Windows Agent
 description: Build and package the x64 browser-UI Agent preview
 inputs:
+  version:
+    required: false
+    default: ""
+    description: Exact release version override for disposable update smoke builds
   artifact-base-url:
     required: true
     description: Published archive base URL
@@ -62,6 +66,7 @@ runs:
         $env:HOME = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
         $env:BUTLER_DATA = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
         New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+        if ('${{ inputs.version }}') { $env:GITHUB_REF_NAME = 'v${{ inputs.version }}' }
         $env:RUSTFLAGS = '-C target-feature=+crt-static'
         cargo build --locked --release --no-default-features --features static-ort --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

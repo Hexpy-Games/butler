@@ -20,6 +20,7 @@ const data = join(root, "data");
 const owned = new Set<number>();
 let page: ElectronPage | null = null;
 let calls = 0;
+let uninstalled = false;
 const manifest = readJson(join(second, "app-update-manifest.json"))!;
 const packageName = manifest.artifacts[0].artifact_url.split("/").at(-1);
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async request => {
@@ -92,6 +93,8 @@ try {
   page.close(); page = null;
   await waitFor(() => [...owned].every(pid => !alive(pid)), "owned App/Agent shutdown");
   run(updater, ["--uninstall", "--silent"]);
+  uninstalled = true;
+  await waitFor(() => !existsSync(stub) && !existsSync(agentPath(to)), "uninstalled App removed");
   assertShortcuts(shortcuts, false);
   assert.equal(powershell("Test-Path 'HKCU:\\Software\\Classes\\butler'", env), "False");
   assert.equal(powershell("[bool](Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -ErrorAction SilentlyContinue).'com.squirrel.butler-app.Butler'", env), "False");
@@ -107,7 +110,7 @@ try {
   page?.close();
   ownedProcesses(data, owned);
   for (const pid of owned) if (alive(pid)) { try { process.kill(pid, "SIGKILL"); } catch {} }
-  if (existsSync(updater)) run(updater, ["--uninstall", "--silent"]);
+  if (!uninstalled && existsSync(updater)) run(updater, ["--uninstall", "--silent"]);
   server.stop(true);
   rmSync(root, { recursive: true, force: true });
 }

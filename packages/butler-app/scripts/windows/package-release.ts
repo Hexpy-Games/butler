@@ -19,6 +19,10 @@ try {
   mkdirSync(out, { recursive: true });
   const payload = join(work, "bundled-agent");
   run("node", [join(electron, "scripts/prepare-native-agent.mjs"), "win32", "x64", payload]);
+  const built = spawnSync(join(payload, "bin/butler-agent.exe"), ["--version"], { encoding: "utf8", env: process.env });
+  if (built.status !== 0 || !built.stdout.startsWith(`butler ${version} (`)) {
+    throw new Error("Bundled Agent does not match the exact App version");
+  }
   const source = stageElectronPackageSource(root, join(work, "source"));
   const pkg = JSON.parse(readFileSync(join(source, "package.json"), "utf8"));
   const renderer = join(work, "app-client");

@@ -1,5 +1,10 @@
 name: Package unsigned Windows App
 description: Consume the Windows Agent archive and emit Squirrel and portable artifacts
+inputs:
+  version:
+    required: false
+    default: ""
+    description: Exact App version override for disposable update smoke packages
 runs:
   using: composite
   steps:
@@ -11,6 +16,7 @@ runs:
       shell: pwsh
       run: |
         $ErrorActionPreference = 'Stop'
+        if ('${{ inputs.version }}') { $env:GITHUB_REF_NAME = 'v${{ inputs.version }}' }
         $profile = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
         New-Item -ItemType Directory $profile | Out-Null
         $env:HOME = Join-Path $profile 'home'

@@ -24,15 +24,37 @@ jobs:
     timeout-minutes: 120
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/target/windows-installer
-      GITHUB_REF_NAME: v0.1.0-preview.90
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/build-windows-agent
         with:
           cache-key: windows-installer
+          version: 0.1.0-preview.90
           native-deps-artifact: windows-native-deps
           artifact-base-url: http://127.0.0.1/unused
       - uses: ./.github/actions/package-windows-app
+        with:
+          version: 0.1.0-preview.90
+      - name: Run existing public update and channel E2Es
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $profile = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+          New-Item -ItemType Directory $profile | Out-Null
+          $env:CARGO_HOME = "$env:USERPROFILE/.cargo"
+          $env:RUSTUP_HOME = "$env:USERPROFILE/.rustup"
+          $env:HOME = Join-Path $profile 'home'
+          $env:BUTLER_DATA = Join-Path $profile 'data'
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          $env:BUTLER_E2E_TIER = 'stub'
+          $env:BUTLER_E2E_SKIP_BUILD = '1'
+          $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/butler-agent.exe"
+          try {
+            Push-Location packages/butler-agent/rust
+            cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test updates --test update_channels
+            if ($LASTEXITCODE) { throw 'Update E2E failed' }
+            Pop-Location
+          } finally { Remove-Item -Recurse -Force $profile }
       - name: Preserve the first version and build the second Agent
         shell: pwsh
         run: |
@@ -57,9 +79,10 @@ jobs:
             Pop-Location
             python packages/butler-agent/rust/scripts/package-windows-agent.py --binary "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/butler-agent.exe" --resources packages/butler-agent/resources --renderer packages/butler-app/client/ui/dist --output dist/release/agent --artifact-base-url http://127.0.0.1/unused
             if ($LASTEXITCODE) { throw 'Second Agent package failed' }
-            'GITHUB_REF_NAME=v0.1.0-preview.91' >> $env:GITHUB_ENV
           } finally { Remove-Item -Recurse -Force $profile }
       - uses: ./.github/actions/package-windows-app
+        with:
+          version: 0.1.0-preview.91
       - name: Prove Squirrel ordering and real install/update/uninstall
         shell: pwsh
         run: |

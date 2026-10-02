@@ -161,31 +161,7 @@ export function manageWindowsSquirrelShortcut({
     throw windowsSquirrelError("windows_squirrel_shortcut_input_invalid");
   }
   if (action === "remove") {
-    // Squirrel cancels lifecycle hooks after roughly ten seconds. Avoid a
-    // PowerShell process launch for an idempotent file deletion during uninstall.
-    const appData = env.APPDATA?.trim();
-    if (!appData) {
-      throw windowsSquirrelError("windows_squirrel_shortcut_input_invalid");
-    }
-    const shortcutPath = win32.join(
-      appData,
-      "Microsoft",
-      "Windows",
-      "Start Menu",
-      "Programs",
-      name,
-    );
-    try {
-      removePath(shortcutPath);
-      if (desktopPath) removePath(win32.join(desktopPath, name));
-    } catch {
-      throw windowsSquirrelError("windows_squirrel_shortcut_failed");
-    }
-    if (pathExists(shortcutPath) ||
-        (desktopPath && pathExists(win32.join(desktopPath, name)))) {
-      throw windowsSquirrelError("windows_squirrel_shortcut_failed");
-    }
-    return true;
+    return removeWindowsShortcuts({ name, desktopPath, env, removePath, pathExists });
   }
   if (typeof writeShortcut === "function" && desktopPath && env.APPDATA) {
     const programs = win32.join(env.APPDATA, "Microsoft", "Windows", "Start Menu", "Programs");
@@ -198,6 +174,36 @@ export function manageWindowsSquirrelShortcut({
     }
     return true;
   }
+  return createWindowsShortcutWithPowerShell({ action, name, target, workingDirectory, runPowerShell, env });
+}
+
+function removeWindowsShortcuts({ name, desktopPath, env, removePath, pathExists }) {
+  const appData = env.APPDATA?.trim();
+  if (!appData) {
+    throw windowsSquirrelError("windows_squirrel_shortcut_input_invalid");
+  }
+  const shortcutPath = win32.join(
+    appData,
+    "Microsoft",
+    "Windows",
+    "Start Menu",
+    "Programs",
+    name,
+  );
+  try {
+    removePath(shortcutPath);
+    if (desktopPath) removePath(win32.join(desktopPath, name));
+  } catch {
+    throw windowsSquirrelError("windows_squirrel_shortcut_failed");
+  }
+  if (pathExists(shortcutPath) ||
+      (desktopPath && pathExists(win32.join(desktopPath, name)))) {
+    throw windowsSquirrelError("windows_squirrel_shortcut_failed");
+  }
+  return true;
+}
+
+function createWindowsShortcutWithPowerShell({ action, name, target, workingDirectory, runPowerShell, env }) {
   if (typeof runPowerShell !== "function") {
     throw windowsSquirrelError("windows_squirrel_shortcut_input_invalid");
   }

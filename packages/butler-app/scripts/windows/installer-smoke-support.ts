@@ -27,6 +27,11 @@ export async function waitFor(check: () => boolean | Promise<boolean>, label: st
 
 export function ownedProcesses(data: string, owned: Set<number>) {
   const instance = readJson(join(data, "app/runtime/foreground/instance.json"));
+  const helperPath = join(data, "updates/app-install.pid");
+  if (existsSync(helperPath)) {
+    const helper = Number(readFileSync(helperPath, "utf8"));
+    if (Number.isInteger(helper) && helper > 0) owned.add(helper);
+  }
   for (const pid of [instance?.app_pid, instance?.agent_host_pid]) {
     if (Number.isInteger(pid) && pid > 0) owned.add(pid);
   }
