@@ -103,3 +103,38 @@ earning its cost on this data. Query bootstrap does not account for session or
 episode dependence. External quality filtering and answer judging remain necessary.
 After verifying fingerprints, delete the private run copy and build target;
 retain the snapshot and private output for reproducibility.
+
+Field diagnosis supports private named arms without changing product arguments.
+Each query may supply `arms: [{name, vector, arguments, current_user_message?}]`;
+otherwise the original four arms run. The bound message defaults to the question,
+independently of `arguments.cue`. Execution stays sequential: concurrent graph
+reads can change deadline coverage and confound field comparisons.
+
+```sh
+python3 benchmarks/real-recall/arguments.py --queries "$OUT/queries.jsonl" --out "$OUT/args"
+"$CARGO_TARGET_DIR/debug/butler-real-recall-bench" "$COPY" "$OUT/args/ablation-queries.jsonl" "$OUT/args/ablation-results.jsonl"
+python3 benchmarks/real-recall/verify.py --out "$OUT/args" --queries "$OUT/args/ablation-queries.jsonl" --results "$OUT/args/ablation-results.jsonl"
+python3 benchmarks/real-recall/arguments.py --queries "$OUT/queries.jsonl" --out "$OUT/args" --results "$OUT/args/ablation-results.jsonl" --mapping "$OUT/args/ablation-map.json" --keep-queries "$OUT/keep.jsonl"
+```
+
+A `+field` arm adds only that model field to RAW; a `-field` arm resets only
+that field in MODEL. The preparation map reuses calls only when documented
+defaults make retrieval inputs equivalent, including vector query differences
+with no adapter installed. Every unique call retains its complete product
+payload; no old benchmark output is overwritten. Summaries use answer substring
+matching, not judgments of the old results. All 210 candidates run before the
+external keep set selects the reporting population.
+
+Regenerate only tool arguments for fixed questions with an updated exported
+schema; the existing Luna batch writer receives only question IDs/text and
+that schema, with at most four calls in flight:
+
+```sh
+python3 benchmarks/real-recall/arguments.py --queries "$OUT/queries.jsonl" --schema "$OUT/args/final/tool-schema.json" --out "$OUT/args/final"
+```
+
+Use `--reference-results` with the argument summarizer to compare a candidate
+run to four-arm controls. It reports paired candidate-minus-reference changes
+and candidate MODEL-minus-RAW gaps. Reference controls fill any omitted RAW
+arms explicitly in the saved analysis. Keep all new measurements and generated
+arguments under the private `args/` directory; do not commit their reports.

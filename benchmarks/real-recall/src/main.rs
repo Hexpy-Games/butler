@@ -62,30 +62,41 @@ async fn run_queries(
         let query: Value = serde_json::from_str(&line?)?;
         // Rotate arm order to balance warm-up and host load.
         let arms = ["A1", "B1", "A2", "B2"];
-        for offset in 0..4 {
-            let arm = arms[(index + offset) % 4];
-            let reader = if arm.starts_with('A') {
-                vector
-            } else {
-                novector
-            };
-            let arguments = if arm.ends_with('1') {
-                json!({"cue":query["query"]})
-            } else {
-                query["model_args"].clone()
-            };
+        let variants = query["arms"].as_array().cloned().unwrap_or_else(|| {
+            arms.iter()
+                .map(|arm| {
+                    json!({
+                        "name": arm, "vector": arm.starts_with('A'),
+                        "arguments": if arm.ends_with('1') {
+                            json!({"cue":query["query"]})
+                        } else { query["model_args"].clone() },
+                    })
+                })
+                .collect()
+        });
+        for offset in 0..variants.len() {
+            let variant = &variants[(index + offset) % variants.len()];
+            let arm = variant["name"].as_str().ok_or("arm name missing")?;
+            let use_vector = variant["vector"].as_bool().ok_or("vector flag missing")?;
+            let reader = if use_vector { vector } else { novector };
+            let arguments = variant["arguments"].clone();
             *trace.last.lock() = json!({"state":"not_attempted"});
             let start = Instant::now();
             let result = reader
                 .recall_tool(
                     binding(&query)?,
-                    query["query"].as_str().ok_or("query missing")?.into(),
+                    variant
+                        .get("current_user_message")
+                        .unwrap_or(&query["query"])
+                        .as_str()
+                        .ok_or("user message missing")?
+                        .into(),
                     format!("bench-{index}-{arm}"),
                     arguments,
                 )
                 .await;
             let elapsed = start.elapsed().as_secs_f64() * 1000.0;
-            let record = record(&query, arm, elapsed, result, trace)?;
+            let record = record(&query, arm, use_vector, elapsed, result, trace)?;
             serde_json::to_writer(&mut output, &record)?;
             writeln!(output)?;
             output.flush()?;
@@ -98,6 +109,7 @@ async fn run_queries(
 fn record(
     query: &Value,
     arm: &str,
+    use_vector: bool,
     elapsed: f64,
     result: Result<Value, butler_memory::cognition::CognitionError>,
     trace: &vector_trace::Trace,
@@ -135,7 +147,7 @@ fn record(
         })
         .collect();
     let mut lane = trace.last.lock().clone();
-    if arm.starts_with('B') {
+    if !use_vector {
         lane = json!({"state":"unavailable", "reason":"adapter_omitted"});
     } else if payload["coverage"]["vectors"]["state"] == "unavailable" && lane["state"] == "ran" {
         lane["search_status"] = json!("unavailable_or_timed_out");

@@ -12,13 +12,19 @@ from tempfile import TemporaryDirectory
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument('--queries', type=Path)
+    parser.add_argument('--results', type=Path)
     args = parser.parse_args()
     args.out = private_output(args.out)
-    queries = {r['id']:r for r in load(args.out/'queries.jsonl')}
-    rows = load(args.out/'results.jsonl')
-    assert len(rows)==len(queries)*4
-    assert Counter(r['id'] for r in rows)==Counter({k:4 for k in queries})
-    assert all(Counter(r['arm'] for r in rows if r['id']==k)==Counter({'A1':1,'B1':1,'A2':1,'B2':1}) for k in queries)
+    queries = {r['id']:r for r in load(args.queries or args.out/'queries.jsonl')}
+    rows = load(args.results or args.out/'results.jsonl')
+    expected = {key: Counter(arm['name'] for arm in query['arms'])
+                if 'arms' in query else Counter({'A1':1,'B1':1,'A2':1,'B2':1})
+                for key, query in queries.items()}
+    assert queries and all(expected.values()), 'empty queries or arm set'
+    assert all(count == 1 for arms in expected.values() for count in arms.values())
+    assert Counter(r['id'] for r in rows) == Counter({k:sum(v.values()) for k,v in expected.items()})
+    assert all(Counter(r['arm'] for r in rows if r['id']==key)==arms for key,arms in expected.items())
     for row in rows:
         assert row['query_id'] == row['id']
         assert len(row['payload_text']) <= 6000
@@ -33,7 +39,10 @@ def main():
                 ids = [r['episode_ref'] for r in payload['results']]
                 assert len(ids)==len(set(ids))
                 assert payload['status'] in ('complete','partial','unavailable')
-        if row['arm'].startswith('B'):
+        query = queries[row['id']]
+        vector = next((arm['vector'] for arm in query.get('arms', []) if arm['name']==row['arm']),
+                      row['arm'].startswith('A'))
+        if not vector:
             assert row['vector_lane']['state']=='unavailable'
     # test-category: pure-logic
     q = {'gold_episode_ids':['gold'],'expected_answer':'Ａ b','group':'DAILY','style':'vague'}
