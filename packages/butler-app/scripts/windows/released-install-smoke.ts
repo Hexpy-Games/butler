@@ -8,8 +8,8 @@ import { join, resolve } from "node:path";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
 import { FIRST_RUN_CONSENT_VERSION } from "../../client/ui/src/app/onboarding.ts";
-import { alive, assertShortcuts, bridge, ownedProcesses, powershell, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
-import { smokeProviderReply } from "./smoke-provider.ts";
+import { alive, assertShortcuts, bridge, ownedProcesses, powershell, readJson, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
+import { smokeProviderReply, type SmokeProviderCalls } from "./smoke-provider.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
 
 if (process.platform !== "win32" || process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_ENVIRONMENT !== "github-hosted") {
@@ -27,7 +27,7 @@ const owned = new Set<number>();
 const debugPort = await freePort();
 const agentPort = await freePort();
 let page: ElectronPage | null = null;
-const calls = { chat: 0, memory: 0, memorySpeakers: new Set<string>() };
+const calls: SmokeProviderCalls = { chat: 0, memory: 0, memorySpeakers: new Set<string>() };
 let uninstalled = false;
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async request => {
   assert.equal(new URL(request.url).pathname, "/v1/responses");
@@ -37,6 +37,7 @@ const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), BUTLE
   LOCALAPPDATA: join(root, "local"), APPDATA: join(root, "roaming"), BUTLER_SECRET_STORE: "file",
   BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"), BUTLER_APP_SMOKE_DEBUG_PORT: String(debugPort),
   BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_E2E_TIER: "stub", BUTLER_PROVIDER_QUOTA_POLLING: "0",
+  BUTLER_E2E_APP_NOW: "2026-10-03T20:00:00.000Z",
   OPENAI_API_KEY: "e2e-not-real", OPENAI_BASE_URL: `http://127.0.0.1:${server.port}/v1`,
   BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
 };
@@ -73,6 +74,7 @@ try {
   assert.equal(calls.chat, 1);
   await waitFor(() => calls.memory === 2, "released user and assistant meaning extractions");
   assert.deepEqual([...calls.memorySpeakers].sort(), ["assistant", "user"]);
+  await briefingProof();
   await waitFor(() => shortcuts.every(path => existsSync(path)), "released shortcuts");
   assertShortcuts(shortcuts, true);
   const stub = join(installed, "Butler.exe");
@@ -87,8 +89,10 @@ try {
   assertShortcuts(shortcuts, false);
   assert.equal(powershell("Test-Path 'HKCU:\\Software\\Classes\\butler'", env), "False");
   assert.equal(readFileSync(join(data, "sentinel.txt"), "utf8"), "released data retained\n");
+  await briefingProof();
   console.log(JSON.stringify({ ok: true, version, sha256: expected, normalInstallLaunch: true,
-    chatCalls: calls.chat, memoryCalls: calls.memory, shellIntegration: true, uninstallPreservesData: true, leftoverProcesses: 0,
+    chatCalls: calls.chat, memoryCalls: calls.memory, briefingCalls: calls.briefings!.size,
+    briefingSuggestions: 4, shellIntegration: true, uninstallPreservesData: true, leftoverProcesses: 0,
     durationMs: Date.now() - started }));
 } finally {
   page?.close();
@@ -102,4 +106,22 @@ try {
 function run(command: string, args: string[]) {
   const child = spawnSync(command, args, { env, stdio: "ignore" });
   assert.equal(child.status, 0, `${command}: exit ${child.status}`);
+}
+
+async function briefingProof() {
+  await waitFor(() => calls.briefings?.size === 1, "released scheduled briefing request");
+  const expected = [...calls.briefings!.values()][0]!;
+  const path = join(data, "cognition/consolidation/briefings", expected.generatedAt.slice(0, 10), "general.json");
+  await waitFor(() => readJson(path)?.source?.consolidation_run_id === expected.runId, "released durable briefing");
+  const actual = readJson(path)!;
+  assert.equal(actual.schema, "butler.cognition.new-chat-briefing.v1");
+  assert.equal(actual.scope, "general");
+  assert.equal(actual.locale, "en");
+  for (const field of ["moment", "title", "description", "suggestions", "title_variants"] as const) {
+    assert.deepEqual(actual[field], expected.reply[field]);
+  }
+  assert.equal(actual.source.generated_at, expected.generatedAt);
+  assert.equal(actual.source.model_ref, "openai/gpt-6-luna");
+  assert.equal(actual.source.persona_applied, true);
+  assert.equal(actual.raw_text_included, false);
 }
