@@ -94,8 +94,30 @@ try {
     $state = & $launcher startup status --json | ConvertFrom-Json
     if (!$state.ok -or $state.data.state -ne 'enabled') { throw 'Imported task failed ownership validation' }
     'PASS imported Task Scheduler XML retains the exact execution identity'
+    & schtasks /Run /TN $name | Out-Null
+    if ($LASTEXITCODE) { throw 'Task run request failed' }
+    Start-Sleep -Seconds 3
+    $task = $scheduler.GetFolder('\').GetTask($name)
+    [ordered]@{ phase = 'original-start'; result = $task.LastTaskResult; state = $task.State;
+        dataRecord = Test-Path "$env:BUTLER_DATA/state/service-instance.json" } | ConvertTo-Json -Compress
+    # Same exact encoded action, with only the Scheduler's initial directory
+    # moved out of a path containing a literal environment-variable spelling.
+    [xml]$safeDirectory = $unicode
+    $safeDirectory.Task.Actions.Exec.WorkingDirectory = $env:SystemRoot
+    $scheduler.GetFolder('\').RegisterTask($name, $safeDirectory.OuterXml, 6, $sid, $null, 3, $null) | Out-Null
+    & schtasks /Run /TN $name | Out-Null
+    if ($LASTEXITCODE) { throw 'Task comparison run request failed' }
+    Start-Sleep -Seconds 3
+    $task = $scheduler.GetFolder('\').GetTask($name)
+    [ordered]@{ phase = 'system-directory-start'; result = $task.LastTaskResult; state = $task.State;
+        dataRecord = Test-Path "$env:BUTLER_DATA/state/service-instance.json" } | ConvertTo-Json -Compress
+    $scheduler.GetFolder('\').RegisterTask($name, $unicode, 6, $sid, $null, 3, $null) | Out-Null
 } finally {
-    if ($registered) { & schtasks /Delete /TN $name /F | Out-Null }
+    if ($registered) {
+        & schtasks /End /TN $name 2>$null | Out-Null
+        if (Test-Path $launcher) { & $launcher stop --json | Out-Null }
+        & schtasks /Delete /TN $name /F | Out-Null
+    }
     if ($server -and !$server.HasExited) { Stop-Process -Id $server.Id -Force; $server.WaitForExit() }
     $after = (& reg query HKCU\Software\Classes\butler /s 2>$null) -join "`n"
     Remove-Item $root -Recurse -Force
