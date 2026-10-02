@@ -72,7 +72,7 @@ async function packageVersion(version: string) {
 
 async function connect(port: number) {
   const page = await electronPage(port);
-  await page.waitForFunction(() => Boolean(window.butlerApp));
+  await page.waitForFunction(() => document.readyState === "complete" && Boolean(window.butlerApp));
   const instance = JSON.parse(readFileSync(join(data, "app/runtime/foreground/instance.json"), "utf8"));
   ownedPids.add(instance.app_pid);
   return { browser: page, page };
@@ -146,6 +146,7 @@ async function smoke() {
   }, stdio: ["ignore", "pipe", "pipe"] });
   child.stdout!.on("data", bytes => logs.push(String(bytes))); child.stderr!.on("data", bytes => logs.push(String(bytes)));
   child.on("exit", (code, signal) => logs.push(`App exited: code=${code}, signal=${signal}\n`));
+  console.log(`LAUNCH ${from}: ${installed}`);
   let connected = await connect(debugPort); browser = connected.browser;
   const page = connected.page;
   const completedAt = new Date().toISOString();
@@ -185,6 +186,7 @@ async function smoke() {
     if (child!.exitCode !== null) { child!.removeListener("exit", exited); exited(child!.exitCode); }
   });
   await browser.close(); browser = null;
+  console.log(`RELAUNCH ${to}: ${installed}`);
   connected = await connect(debugPort); browser = connected.browser;
   await proof(connected.page, to, session.id);
   await connected.page.evaluate(() => (window.butlerApp!.quitApp as (v: unknown) => Promise<unknown>)({ confirmed: true }));
@@ -217,5 +219,17 @@ function makeWritable(path: string) {
 
 try { await smoke(); } catch (error) {
   try { console.error(readFileSync(join(data, "updates/app-install.log"), "utf8")); } catch { /* Helper not started. */ }
-  console.error(logs.join("").slice(-8000)); console.error(error); throw error;
+  console.error("Electron main-process log:\n" + logs.join(""));
+  for (const name of ["startup-progress.json", "startup-failure.json", "last-exit.json"]) {
+    try { console.error(`${name}: ${readFileSync(join(data, "app/runtime/foreground", name), "utf8")}`); } catch { /* Not published. */ }
+  }
+  const bundle = join(dir, "installed/Butler.app");
+  for (const [command, args] of [
+    ["codesign", ["-dv", "--verbose=4", bundle]],
+    ["spctl", ["-a", "-vv", bundle]],
+  ] as const) {
+    const result = spawnSync(command, [...args], { env, encoding: "utf8" });
+    console.error(`${command} (informational, status=${result.status}):\n${result.stdout}${result.stderr}`);
+  }
+  console.error(error); throw error;
 } finally { await cleanup(); }

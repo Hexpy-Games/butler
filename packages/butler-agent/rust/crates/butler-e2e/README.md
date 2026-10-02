@@ -13,7 +13,9 @@ Spec: `SCENARIOS.md`, `PROVIDER_CONFIG.md` (E2E strategy notes).
 Scenarios are opt-in: without `BUTLER_E2E_TIER` every scenario returns
 immediately (so `cargo test --workspace` in the unit-test CI does not run
 the stub tier twice; the `e2e` workflow runs it). Only the cassette lint
-always runs.
+always runs. Source-check requires every Agent scenario to enter through
+`butler_e2e::gate!()` before any executable statement; the binary helper also
+refuses to build or locate an Agent when no tier is selected.
 
 ```sh
 # stub tier: replays committed cassettes, live tests show as ignored

@@ -176,10 +176,11 @@ async fn retrying_a_failed_result_turn_keeps_it_off_the_chat() -> Result<(), Har
     let mut s = start().await?;
     s.agent.terminate().await?;
     seed_failed_result_turn(&s);
+    s.agent
+        .launch
+        .set_env("BUTLER_E2E_HOLD_DISPATCH_READY", "1");
     s.gw = s.agent.start_again().await?;
-
-    let retry = s.gw.post("/turns/t-fault/retry-current", json!({})).await?;
-    assert_eq!(retry.status, 202, "{}", retry.text);
+    retry_after_dispatch_ready(&s).await?;
     let turns = wait_turns(&s, 2).await?;
     let fresh = turns
         .iter()
@@ -203,6 +204,34 @@ async fn retrying_a_failed_result_turn_keeps_it_off_the_chat() -> Result<(), Har
         "the retry published a user message"
     );
     s.finish().await
+}
+
+/// Hold real dispatch readiness so this regression cannot depend on startup speed.
+async fn retry_after_dispatch_ready(s: &Scenario) -> Result<(), HarnessError> {
+    let held = s.sandbox.data.join("e2e-dispatch-ready-held");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !held.exists() {
+        assert!(Instant::now() < deadline, "dispatcher hold missing");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let retry = s.gw.post("/turns/t-fault/retry-current", json!({}));
+    tokio::pin!(retry);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(150), retry.as_mut())
+            .await
+            .is_err(),
+        "retry returned while dispatch was held"
+    );
+    let turns = s.gw.turns(CHAT).await?;
+    assert_eq!(turns.len(), 1, "retry admitted a turn before readiness");
+    assert_eq!(turn_state(&turns[0]), "runtime_fault");
+    std::fs::write(
+        s.sandbox.data.join("e2e-dispatch-ready-release"),
+        b"release",
+    )?;
+    let reply = retry.await?;
+    assert_eq!(reply.status, 202, "{}", reply.text);
+    Ok(())
 }
 
 fn seed_failed_result_turn(s: &Scenario) {

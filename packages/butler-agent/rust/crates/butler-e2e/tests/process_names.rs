@@ -11,6 +11,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 #[tokio::test]
 async fn archived_process_roles_restore_only_identical_files() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let sandbox = Sandbox::new("PROC-ZIP")?;
     process_names::prepare(&sandbox.binary)?;
     let aliases = [Role::Memory, Role::Restart, Role::Update]
