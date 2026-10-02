@@ -345,5 +345,282 @@
     "check": "final repository check including failure-only layout diagnostics",
     "result": "passed",
     "log": "ui-final-diagnostics-check.log"
+  },
+  {
+    "check": "combined ds",
+    "result": "failed: complete motion assertion summary retained",
+    "command": [
+      "bun",
+      "run",
+      "app:design-system:smoke"
+    ],
+    "seconds": 599.34,
+    "log": "ui-combined-ds.log",
+    "product_snapshot": "8d93b5870"
+  },
+  {
+    "check": "combined layout",
+    "result": "passed",
+    "command": [
+      "bun",
+      "run",
+      "tests/smoke/app-layout-smoke.ts"
+    ],
+    "seconds": 59.13,
+    "log": "ui-combined-layout.log",
+    "product_snapshot": "8d93b5870"
+  },
+  {
+    "check": "combined consent",
+    "result": "passed",
+    "command": [
+      "bun",
+      "run",
+      "tests/smoke/app-consent-smoke.ts"
+    ],
+    "seconds": 98.56,
+    "log": "ui-combined-consent.log",
+    "product_snapshot": "8d93b5870"
+  },
+  {
+    "check": "combined security",
+    "result": "passed",
+    "command": [
+      "bun",
+      "run",
+      "tests/smoke/app-security-pairing-smoke.ts"
+    ],
+    "seconds": 10.7,
+    "log": "ui-combined-security.log",
+    "product_snapshot": "8d93b5870"
+  },
+  {
+    "check": "combined branch",
+    "result": "passed",
+    "command": [
+      "bun",
+      "run",
+      "tests/smoke/app-branch-actions-smoke.ts"
+    ],
+    "seconds": 5.05,
+    "log": "ui-combined-branch.log",
+    "product_snapshot": "8d93b5870"
+  },
+  {
+    "check": "combined steward-pill",
+    "result": "passed",
+    "command": [
+      "bun",
+      "run",
+      "tests/smoke/app-steward-pill-smoke.ts"
+    ],
+    "seconds": 5.59,
+    "log": "ui-combined-steward-pill.log",
+    "product_snapshot": "8d93b5870"
+  },
+  {
+    "check": "combined screen-contracts",
+    "result": "passed",
+    "command": [
+      "bun",
+      "run",
+      "tests/smoke/app-screen-contracts-smoke.ts"
+    ],
+    "seconds": 3.38,
+    "log": "ui-combined-screen-contracts.log",
+    "product_snapshot": "8d93b5870"
+  },
+  {
+    "check": "combined first-run",
+    "result": "passed",
+    "command": [
+      "bun",
+      "run",
+      "tests/smoke/app-first-run-setup-smoke.ts"
+    ],
+    "seconds": 7.02,
+    "log": "ui-combined-first-run.log",
+    "product_snapshot": "8d93b5870"
+  },
+  {
+    "check": "combined fonts",
+    "result": "passed",
+    "command": [
+      "bun",
+      "run",
+      "app:font:smoke"
+    ],
+    "seconds": 18.48,
+    "log": "ui-combined-fonts.log",
+    "product_snapshot": "8d93b5870"
+  },
+  {
+    "check": "combined sidebar",
+    "result": "passed",
+    "command": [
+      "bun",
+      "run",
+      "tests/smoke/sidebar-drop-zones-electron.ts"
+    ],
+    "seconds": 24.37,
+    "log": "ui-combined-sidebar.log",
+    "product_snapshot": "8d93b5870"
+  },
+  {
+    "check": "combined ask-user",
+    "result": "passed",
+    "command": [
+      "bun",
+      "run",
+      "tests/smoke/app-ask-user-smoke.ts"
+    ],
+    "seconds": 22.54,
+    "log": "ui-combined-ask-user.log",
+    "product_snapshot": "8d93b5870"
+  },
+  {
+    "check": "combined boot-reload",
+    "result": "passed",
+    "command": [
+      "bun",
+      "run",
+      "tests/smoke/app-boot-reload-smoke.ts"
+    ],
+    "seconds": 17.37,
+    "log": "ui-combined-boot-reload.log",
+    "product_snapshot": "8d93b5870"
+  },
+  {
+    "check": "combined caret",
+    "result": "passed",
+    "command": [
+      "bun",
+      "run",
+      "tests/smoke/app-composer-caret-smoke.ts"
+    ],
+    "seconds": 7.99,
+    "log": "ui-combined-caret.log",
+    "product_snapshot": "8d93b5870"
+  },
+  {
+    "check": "combined refresh",
+    "result": "passed",
+    "command": [
+      "bun",
+      "run",
+      "tests/smoke/app-composer-refresh-smoke.ts"
+    ],
+    "seconds": 9.87,
+    "log": "ui-combined-refresh.log",
+    "product_snapshot": "8d93b5870"
+  },
+  {
+    "check": "combined reply-language",
+    "result": "passed",
+    "command": [
+      "bun",
+      "run",
+      "tests/smoke/app-reply-language-smoke.ts"
+    ],
+    "seconds": 8.03,
+    "log": "ui-combined-reply-language.log",
+    "product_snapshot": "8d93b5870"
+  },
+  {
+    "check": "combined steward-refresh",
+    "result": "passed",
+    "command": [
+      "bun",
+      "run",
+      "tests/smoke/app-steward-refresh-smoke.ts"
+    ],
+    "seconds": 20.77,
+    "log": "ui-combined-steward-refresh.log",
+    "product_snapshot": "8d93b5870"
+  },
+  {
+    "check": "combined hmr",
+    "result": "passed",
+    "command": [
+      "bun",
+      "run",
+      "app:ui:hmr:smoke"
+    ],
+    "seconds": 14.64,
+    "log": "ui-combined-hmr.log",
+    "product_snapshot": "8d93b5870"
+  },
+  {
+    "check": "combined ds-site",
+    "result": "passed",
+    "command": [
+      "bun",
+      "run",
+      "ds-site:check"
+    ],
+    "seconds": 47.47,
+    "log": "ui-combined-ds-site.log",
+    "product_snapshot": "8d93b5870"
+  },
+  {
+    "check": "combined render",
+    "result": "passed",
+    "command": [
+      "bun",
+      "run",
+      "render",
+      "Wallpaper",
+      "WallpaperPicker",
+      "AnimatedNumber",
+      "--viewport=mobile"
+    ],
+    "seconds": 37.23,
+    "log": "ui-combined-render.log",
+    "product_snapshot": "8d93b5870"
+  },
+  {
+    "check": "combined frozen install/repository check",
+    "result": "passed",
+    "log": "ui-combined-check.log"
+  },
+  {
+    "check": "combined native build",
+    "result": "passed: cargo -j8, 5m10s",
+    "log": "ui-combined-native-build.log"
+  },
+  {
+    "check": "combined Rust formatting/source checker",
+    "result": "passed",
+    "log": "ui-combined-rust.log"
+  },
+  {
+    "check": "cargo fmt from Rust workspace",
+    "result": "passed; initial root invocation had no Cargo.toml",
+    "log": "ui-combined-format-rust.log"
+  },
+  {
+    "check": "combined existing Ledger unit files",
+    "result": "73 passed, 4 existing skips, 989 assertions, 24.66s",
+    "log": "ui-combined-ledger.log"
+  },
+  {
+    "check": "combined existing context/toolbar/flight tests",
+    "result": "29 passed, 109 assertions, 8.19s",
+    "log": "ui-combined-components.log"
+  },
+  {
+    "check": "final combined frozen install/repository check after integration corrections",
+    "result": "passed",
+    "log": "ui-combined-final-check.log"
+  },
+  {
+    "check": "final combined screenshots and complete geometry comparison",
+    "result": "passed: 22 overflowing cells to zero; all cell/child counts match; MetricCard PNG identical",
+    "log": "ui-combined-visual-check.log"
+  },
+  {
+    "check": "final isolated canonical Ledger closeout",
+    "result": "failed: fresh data directory has no initialized project; owner data untouched",
+    "log": "ui-combined-ledger-closeout.log"
   }
 ]

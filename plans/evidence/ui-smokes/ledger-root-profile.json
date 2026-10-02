@@ -3,12 +3,13 @@
     "cli_operations": 37,
     "root_calls": 2675,
     "filesystem_resolutions": 2675,
-    "root_cpu_ms": 274.93557400000054
+    "root_elapsed_ms": 274.93557400000054
   },
   "fixed": {
     "cli_operations": 37,
     "root_calls": 1956,
     "filesystem_resolutions": 37,
-    "root_cpu_ms": 31.72552800000003
-  }
+    "root_elapsed_ms": 31.72552800000003
+  },
+  "measurement_note": "Cumulative performance.now() duration around ledgerRoot calls, not process CPU time; these measurements precede shared-branch integration."
 }

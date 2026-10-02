@@ -1,0 +1,199 @@
+{
+  "product_snapshot": "8d93b5870c3dc1ba2ac94b714702c22763e4a13d",
+  "runs": [
+    {
+      "name": "ds",
+      "command": [
+        "bun",
+        "run",
+        "app:design-system:smoke"
+      ],
+      "exit_code": 1,
+      "seconds": 599.34
+    },
+    {
+      "name": "layout",
+      "command": [
+        "bun",
+        "run",
+        "tests/smoke/app-layout-smoke.ts"
+      ],
+      "exit_code": 0,
+      "seconds": 59.13
+    },
+    {
+      "name": "consent",
+      "command": [
+        "bun",
+        "run",
+        "tests/smoke/app-consent-smoke.ts"
+      ],
+      "exit_code": 0,
+      "seconds": 98.56
+    },
+    {
+      "name": "security",
+      "command": [
+        "bun",
+        "run",
+        "tests/smoke/app-security-pairing-smoke.ts"
+      ],
+      "exit_code": 0,
+      "seconds": 10.7
+    },
+    {
+      "name": "branch",
+      "command": [
+        "bun",
+        "run",
+        "tests/smoke/app-branch-actions-smoke.ts"
+      ],
+      "exit_code": 0,
+      "seconds": 5.05
+    },
+    {
+      "name": "steward-pill",
+      "command": [
+        "bun",
+        "run",
+        "tests/smoke/app-steward-pill-smoke.ts"
+      ],
+      "exit_code": 0,
+      "seconds": 5.59
+    },
+    {
+      "name": "screen-contracts",
+      "command": [
+        "bun",
+        "run",
+        "tests/smoke/app-screen-contracts-smoke.ts"
+      ],
+      "exit_code": 0,
+      "seconds": 3.38
+    },
+    {
+      "name": "first-run",
+      "command": [
+        "bun",
+        "run",
+        "tests/smoke/app-first-run-setup-smoke.ts"
+      ],
+      "exit_code": 0,
+      "seconds": 7.02
+    },
+    {
+      "name": "fonts",
+      "command": [
+        "bun",
+        "run",
+        "app:font:smoke"
+      ],
+      "exit_code": 0,
+      "seconds": 18.48
+    },
+    {
+      "name": "sidebar",
+      "command": [
+        "bun",
+        "run",
+        "tests/smoke/sidebar-drop-zones-electron.ts"
+      ],
+      "exit_code": 0,
+      "seconds": 24.37
+    },
+    {
+      "name": "ask-user",
+      "command": [
+        "bun",
+        "run",
+        "tests/smoke/app-ask-user-smoke.ts"
+      ],
+      "exit_code": 0,
+      "seconds": 22.54
+    },
+    {
+      "name": "boot-reload",
+      "command": [
+        "bun",
+        "run",
+        "tests/smoke/app-boot-reload-smoke.ts"
+      ],
+      "exit_code": 0,
+      "seconds": 17.37
+    },
+    {
+      "name": "caret",
+      "command": [
+        "bun",
+        "run",
+        "tests/smoke/app-composer-caret-smoke.ts"
+      ],
+      "exit_code": 0,
+      "seconds": 7.99
+    },
+    {
+      "name": "refresh",
+      "command": [
+        "bun",
+        "run",
+        "tests/smoke/app-composer-refresh-smoke.ts"
+      ],
+      "exit_code": 0,
+      "seconds": 9.87
+    },
+    {
+      "name": "reply-language",
+      "command": [
+        "bun",
+        "run",
+        "tests/smoke/app-reply-language-smoke.ts"
+      ],
+      "exit_code": 0,
+      "seconds": 8.03
+    },
+    {
+      "name": "steward-refresh",
+      "command": [
+        "bun",
+        "run",
+        "tests/smoke/app-steward-refresh-smoke.ts"
+      ],
+      "exit_code": 0,
+      "seconds": 20.77
+    },
+    {
+      "name": "hmr",
+      "command": [
+        "bun",
+        "run",
+        "app:ui:hmr:smoke"
+      ],
+      "exit_code": 0,
+      "seconds": 14.64
+    },
+    {
+      "name": "ds-site",
+      "command": [
+        "bun",
+        "run",
+        "ds-site:check"
+      ],
+      "exit_code": 0,
+      "seconds": 47.47
+    },
+    {
+      "name": "render",
+      "command": [
+        "bun",
+        "run",
+        "render",
+        "Wallpaper",
+        "WallpaperPicker",
+        "AnimatedNumber",
+        "--viewport=mobile"
+      ],
+      "exit_code": 0,
+      "seconds": 37.23
+    }
+  ]
+}

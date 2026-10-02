@@ -102,5 +102,57 @@
   "before-WallpaperPicker-900.png": {
     "sha256": "6eb9f6b898295e26660d893a05830223a46efe82a1f4e0f2776682138db0e123",
     "bytes": 198329
+  },
+  "combined-after-MetricCard.png": {
+    "sha256": "92f94e2462637443eb6e637b1e64968f8eb3957ad06898dc1837d4816ab35262",
+    "bytes": 123153
+  },
+  "combined-after-Wallpaper-1440-geometry.json": {
+    "sha256": "f1a85f0d4a424d7f554a8605947aa58937c7281255627d8c16e3809350bb8863",
+    "bytes": 11157
+  },
+  "combined-after-Wallpaper-1440.png": {
+    "sha256": "e55b360e57227e61b68e88fd64c316281fabc7ddb94db0839441473d806630f0",
+    "bytes": 184673
+  },
+  "combined-after-Wallpaper-375-geometry.json": {
+    "sha256": "3ad075b96d3b163e705cb7a2b18e281c89370cfac26b8e12387227ed8ea552ea",
+    "bytes": 11063
+  },
+  "combined-after-Wallpaper-375.png": {
+    "sha256": "403d84e3b11e9bb48b48c12724244022f978fa0397b327cf626538e026255dce",
+    "bytes": 66510
+  },
+  "combined-after-Wallpaper-900-geometry.json": {
+    "sha256": "5adc3cd36baffe909f31b257f8794f5c4eceb2fa80aa0328f50e12956c2ce2bb",
+    "bytes": 11121
+  },
+  "combined-after-Wallpaper-900.png": {
+    "sha256": "ace00b11856abf8cc2343e073f07518ff9fbdaa5cc5482355dfefa9c1c0b5588",
+    "bytes": 104645
+  },
+  "combined-after-WallpaperPicker-1440-geometry.json": {
+    "sha256": "a9af1885fc6619ed7276d172257ae3083844a27aeb226bb1604ff0229ed67622",
+    "bytes": 10389
+  },
+  "combined-after-WallpaperPicker-1440.png": {
+    "sha256": "2c776b768ff8d1d22f55bd8a922031358831f8294dcd95d6b532685d57d12598",
+    "bytes": 321749
+  },
+  "combined-after-WallpaperPicker-375-geometry.json": {
+    "sha256": "c902db8c0ae3487e4a74019b8a6d302f8fa8b46a8f4247319c9b673ff28affc1",
+    "bytes": 10316
+  },
+  "combined-after-WallpaperPicker-375.png": {
+    "sha256": "7a14545f5a5f9ab6dbafea5e217d141ed700720b7c2accb1cbabd2eea060f9ec",
+    "bytes": 76672
+  },
+  "combined-after-WallpaperPicker-900-geometry.json": {
+    "sha256": "d650760650adcbe0eaffbbe11fa6d6a40b66364cd88dbd92cec09e2b755b491b",
+    "bytes": 10353
+  },
+  "combined-after-WallpaperPicker-900.png": {
+    "sha256": "6eb9f6b898295e26660d893a05830223a46efe82a1f4e0f2776682138db0e123",
+    "bytes": 198329
   }
 }
