@@ -392,3 +392,6 @@ async fn mem_05_vector_batch_finds_chat_a_fact_by_paraphrase_in_chat_b() -> Resu
     );
     s.finish().await
 }
+
+#[path = "memory/compact.rs"]
+mod compact;

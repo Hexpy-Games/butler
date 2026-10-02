@@ -44,6 +44,7 @@ pub struct MemoryRecall {
     operations: TaskTracker,
     lifecycle: Mutex<bool>,
     cursors: Arc<CursorStore>,
+    details: Arc<super::details::DetailStore>,
     vector_port: Option<Arc<dyn super::vector::RecallVectorPort>>,
     metrics: Option<Arc<dyn super::metrics::RecallMetricSink>>,
 }
@@ -75,6 +76,10 @@ impl MemoryRecall {
         operation_id: String,
         args: serde_json::Value,
     ) -> CognitionResult<serde_json::Value> {
+        if args.get("detail_handles").is_some() {
+            return self.expand_details(binding, args).await;
+        }
+        let detail_binding = binding.clone();
         let args: RecallToolArgs = crate::lenient::view(&args);
         let permit = self
             .admission
@@ -110,11 +115,50 @@ impl MemoryRecall {
             PreparedRecall::BindingFailure(failure) => return encode(&failure),
             PreparedRecall::Request(request) => *request,
         };
-        let mut value = encode(&self.recall(request).await?)?;
+        let response = self.recall(request).await?;
+        let mut value = encode(&response)?;
+        self.details.compact(
+            &mut value,
+            response.detail_pin.as_ref(),
+            &response.full_details,
+            &detail_binding,
+            (self.clock)(),
+        )?;
         if let Some(object) = value.as_object_mut() {
             object.insert("ok".into(), true.into());
         }
         Ok(value)
+    }
+
+    async fn expand_details(
+        &self,
+        binding: butler_turn::conversation::CanonicalMemoryReadBinding,
+        args: serde_json::Value,
+    ) -> CognitionResult<serde_json::Value> {
+        let permit = self
+            .admission
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|source| closed().with_source(source))?;
+        let token = self.operation_token()?;
+        let root = self.data_root.clone();
+        let environment = self.environment.clone();
+        let details = self.details.clone();
+        let now = (self.clock)();
+        tokio::task::spawn_blocking(move || {
+            let _token = token;
+            let _permit = permit;
+            super::details::expand(&root, &environment, &details, &binding, &args, now)
+        })
+        .await
+        .map_err(|source| {
+            CognitionError::new(
+                CognitionCode::RecallBindingFailed,
+                "Recall detail read failed",
+            )
+            .with_source(source)
+        })?
     }
 
     /// A recall owner over `data_root` admitting `read_concurrency`
@@ -138,6 +182,7 @@ impl MemoryRecall {
             operations: TaskTracker::new(),
             lifecycle: Mutex::new(false),
             cursors: Arc::new(CursorStore::default()),
+            details: Arc::new(super::details::DetailStore::default()),
             vector_port: None,
             metrics: None,
         }

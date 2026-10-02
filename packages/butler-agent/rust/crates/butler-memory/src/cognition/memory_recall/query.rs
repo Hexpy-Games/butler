@@ -136,11 +136,17 @@ fn pinned(
     let result = butler_core::js_date::format_iso_millis((clocks.now_millis)())
         .ok_or_else(|| CognitionError::new(CognitionCode::InvalidArguments, "invalid_arguments"))
         .and_then(|now_iso| {
-            body(Sources {
+            let mut response = body(Sources {
                 graph: &graph,
                 canonical: canonical.as_ref(),
                 now_iso: &now_iso,
-            })
+            })?;
+            response.detail_pin = Some(super::details::DetailPin::new(
+                read.generation,
+                &graph,
+                canonical.as_ref(),
+            )?);
+            Ok(response)
         });
     close_sources(graph, canonical, result)
 }
@@ -235,7 +241,7 @@ fn record_returned(
     }
 }
 
-fn open_sources(
+pub(super) fn open_sources(
     generation: &MemoryGenerationHandle,
 ) -> CognitionResult<(Option<ConversationSourceReader>, GraphRecallReader)> {
     let canonical_path = generation
@@ -264,11 +270,11 @@ fn open_sources(
     Ok((canonical, graph))
 }
 
-fn close_sources(
+pub(super) fn close_sources<T>(
     graph: GraphRecallReader,
     canonical: Option<ConversationSourceReader>,
-    result: CognitionResult<RecallResponse>,
-) -> CognitionResult<RecallResponse> {
+    result: CognitionResult<T>,
+) -> CognitionResult<T> {
     let graph_close = graph.close();
     let canonical_close = canonical
         .map(ConversationSourceReader::close)

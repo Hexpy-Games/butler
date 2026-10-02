@@ -50,6 +50,8 @@ struct ResponseView<'a> {
 impl ResponseView<'_> {
     fn into_owned(self) -> RecallResponse {
         RecallResponse {
+            detail_pin: None,
+            full_details: Vec::new(),
             status: self.status,
             results: self.results.to_vec(),
             coverage: self.coverage,
@@ -139,7 +141,11 @@ pub(super) fn initial(
     let (results, offsets, mut limits) = fit_minimum(request, &page.key, candidate_count, clocks)?;
     let results = upgrade_to_full(request, &page.key, results, &offsets, &mut limits, clocks)?;
     limits.deadline_hit = (clocks.now_millis)() >= request.deadline_at;
-    let response = build(request, &results, &page.key, limits).into_owned();
+    let mut response = build(request, &results, &page.key, limits).into_owned();
+    super::details::retain_full(
+        &mut response,
+        binding.candidates.iter().map(|item| &item.item),
+    )?;
     cursors.update(&page.key, &response);
     Ok(response)
 }
@@ -182,7 +188,8 @@ fn fit_minimum(
         offsets.push(index);
         limits.next_offset = index + 1;
         limits.deadline_hit = (clocks.now_millis)() >= request.deadline_at;
-        if envelope::bytes(&build(request, &results, key, limits))? > envelope::MAX_BYTES {
+        if envelope::bytes(&build(request, &results, key, limits), &results)? > envelope::MAX_BYTES
+        {
             results.pop();
             offsets.pop();
             limits.budget_hit = true;
@@ -218,7 +225,7 @@ fn upgrade_to_full(
         };
         let minimum = std::mem::replace(slot, full.item.clone());
         limits.deadline_hit = (clocks.now_millis)() >= request.deadline_at;
-        if envelope::bytes(&build(request, &results, key, *limits))? > envelope::MAX_BYTES
+        if envelope::bytes(&build(request, &results, key, *limits), &results)? > envelope::MAX_BYTES
             && let Some(slot) = results.get_mut(index)
         {
             *slot = minimum;

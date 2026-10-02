@@ -25,6 +25,7 @@ pub(super) fn learn_echo_ids(state: &State, request: &str) {
         [
             (r"guided-work-[0-9a-f]{64}".to_owned(), "ECHO_"),
             (r"guided-plan-[0-9a-f]{64}".to_owned(), "PLAN_ECHO_"),
+            (r"memory-detail:v1:[0-9a-f]{64}".to_owned(), "DETAIL_ECHO_"),
             // A streamed answer keeps its provisional id, `message-stream-<turn>`.
             (format!(r"\bmessage-(?:stream-turn-)?{UUID}"), "MSG_ECHO_"),
         ]
@@ -37,6 +38,9 @@ pub(super) fn learn_echo_ids(state: &State, request: &str) {
         .collect()
     });
     let mut placeholders = lock(&state.placeholders);
+    if let Some(args) = recall_read_args(request) {
+        placeholders.add("RECALL_READ_ARGS", args.to_string());
+    }
     for (pattern, prefix) in patterns {
         for found in pattern.find_iter(request) {
             let value = found.as_str();
@@ -55,6 +59,20 @@ pub(super) fn learn_echo_ids(state: &State, request: &str) {
             placeholders.add(&format!("{prefix}{next}"), value);
         }
     }
+}
+
+// Echo the complete source-read arguments from the first recalled result.
+fn recall_read_args(request: &str) -> Option<serde_json::Value> {
+    let request: serde_json::Value = serde_json::from_str(request).ok()?;
+    request["input"].as_array()?.iter().find_map(|item| {
+        if item["type"] != "function_call_output" {
+            return None;
+        }
+        let output: serde_json::Value = serde_json::from_str(item["output"].as_str()?).ok()?;
+        output["output"]["results"][0]["evidence"][0]
+            .get("read_args")
+            .cloned()
+    })
 }
 
 /// Takes the first matching fault. Tool-scoped argument mutations
