@@ -247,10 +247,8 @@ pub(super) fn inherit_profile(definition: &mut Definition) {
         if definition.env.iter().any(|(key, _)| key == name) {
             continue;
         }
-        if let Ok(value) = std::env::var(name) {
-            if !value.is_empty() {
-                definition.env.push((name.to_owned(), value));
-            }
+        if let Some(value) = std::env::var(name).ok().filter(|value| !value.is_empty()) {
+            definition.env.push((name.to_owned(), value));
         }
     }
 }
