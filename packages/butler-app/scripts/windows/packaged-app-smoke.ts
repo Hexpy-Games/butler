@@ -51,6 +51,7 @@ let cdp: ElectronPage | null = null;
 try {
   await waitFor(() => existsSync(pidFile), "Electron launch PID");
   const appPid = Number(readFileSync(pidFile, "utf8").trim());
+  assert(Number.isInteger(appPid) && appPid > 0, "Invalid Electron launch PID");
   owned.add(appPid);
   await waitFor(() => readJson("app/runtime/foreground/startup-progress.json")?.window_ready === true, "window created");
   const instance = readJson("app/runtime/foreground/instance.json");
@@ -109,18 +110,33 @@ try {
   console.log(JSON.stringify({ ok: true, windowCreated: true, agentChild: true, authenticatedHealth: 200,
     reloadVerified: true, deliveredWorkSettled: true, stubTurns: 1, providerCalls: calls, messages: messages.length, processesChecked: owned.size,
     quitExit: 0, leftoverProcesses: 0, portReleased: true, protocolUnchanged: true, rawTextIncluded: false }));
+} catch (error) {
+  console.error(error);
+  console.error(JSON.stringify({
+    windowReady: readJson("app/runtime/foreground/startup-progress.json")?.window_ready,
+    instanceState: readJson("app/runtime/foreground/instance.json")?.state,
+    launcherExitCode: launcher.exitCode,
+    appExitCode: existsSync(exitFile) ? readFileSync(exitFile, "utf8").trim() : null,
+  }));
+  throw error;
 } finally {
   cdp?.close();
   if (existsSync(pidFile)) {
     const appPid = Number(readFileSync(pidFile, "utf8").trim());
-    owned.add(appPid);
-    if (alive(appPid)) for (const pid of processTree(appPid)) owned.add(pid);
+    if (Number.isInteger(appPid) && appPid > 0) {
+      owned.add(appPid);
+      if (alive(appPid)) for (const pid of processTree(appPid)) owned.add(pid);
+    }
   }
   const instance = readJson("app/runtime/foreground/instance.json");
   if (instance?.agent_host_pid) owned.add(instance.agent_host_pid);
+  if (launcher.pid) {
+    owned.add(launcher.pid);
+    if (alive(launcher.pid)) for (const pid of processTree(launcher.pid)) owned.add(pid);
+  }
   for (const pid of owned) if (alive(pid)) { try { process.kill(pid, "SIGKILL"); } catch {} }
-  launcher.kill();
   stub.stop(true);
+  await waitFor(() => [...owned].every((pid) => !alive(pid)), "forced smoke process cleanup");
   rmSync(root, { recursive: true, force: true });
 }
 
