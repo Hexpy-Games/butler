@@ -121,13 +121,12 @@ impl Drop for Fixture {
 }
 
 /// Race: a rebuild's commit gate is check-then-act safe. A candidate that
-/// changes while readiness or the representative commit waits for the gate is
+/// changes while readiness waits for the gate is
 /// rejected.
 // test-category: race
 #[tokio::test]
 async fn rebuild_rejects_candidate_changes_during_gate_waits() {
     readiness_rejects_candidate_change_while_waiting_for_commit_gate().await;
-    representative_commit_rejects_changed_candidate_after_gate_wait().await;
 }
 
 async fn readiness_rejects_candidate_change_while_waiting_for_commit_gate() {
@@ -215,100 +214,4 @@ async fn readiness_rejects_candidate_change_while_waiting_for_commit_gate() {
             ["sha256"],
         serde_json::json!(current.sha256)
     );
-}
-
-async fn representative_commit_rejects_changed_candidate_after_gate_wait() {
-    let fixture = Fixture::new();
-    let canonical = fixture.0.join("runtime/conversation-store.sqlite");
-    let host = Arc::new(TestHost::default());
-    let store = AgentConversationStore::open(ConversationStoreConfig {
-        path: canonical,
-        identity_clock: host.clone(),
-        collation: host.clone(),
-    })
-    .await
-    .unwrap();
-    store.close().await.unwrap();
-    fs::write(
-        fixture.0.join("cognition/memory/active-generation.json"),
-        r#"{"schema":"butler.memory-active-generation.v2","generation_id":"11111111-1111-1111-1111-111111111111","projection_mode":"running"}"#,
-    )
-    .unwrap();
-    let coordinator = Arc::new(CognitionWriteCoordinator::new(host.clone()).unwrap());
-    let environment = CognitionPathEnvironment::default();
-    let prepared = prepare(
-        fixture.0.clone(),
-        environment.clone(),
-        coordinator.clone(),
-        CancellationToken::new(),
-        "2026-09-23T00:00:00.000Z".into(),
-        "17.0.0".into(),
-        "ICU4X 1.4.0".into(),
-    )
-    .await
-    .unwrap();
-    let target = crate::cognition::MemoryGenerationTarget::Rebuild {
-        generation_id: prepared.generation_id.clone(),
-        canonical_snapshot_id: prepared.canonical_snapshot_id,
-    };
-    let handle = crate::cognition::resolve_generation(&fixture.0, &environment, &target).unwrap();
-    let live = super::super::qualification_witness::LiveWitness::open(&fixture.0).unwrap();
-    let candidate =
-        super::super::qualification_witness::CandidateWitness::open(&fixture.0, &handle)
-            .await
-            .unwrap();
-    let lock = environment.consolidation_lock(&fixture.0);
-    let held = coordinator
-        .try_acquire(&CognitionWriteAcquire::immediate(
-            lock,
-            "test_held_representative_gate",
-        ))
-        .unwrap()
-        .unwrap();
-    let clock_before = host.clock_reads();
-    let row = crate::cognition::generation_vectors::GenerationVectorRow {
-        vector_key: "a".repeat(64),
-        generation: handle.generation_id.clone(),
-        record_kind: "node".into(),
-        owner_id: "node".into(),
-        owner_revision: "revision".into(),
-        source_revision: "source".into(),
-        embedding_chunk_id: "b".repeat(64),
-        embedding_version: "version".into(),
-        project_id: String::new(),
-        origin_kind: "user_input".into(),
-        source_kind: "conversation".into(),
-        conversation_session_id: None,
-        source_observed_at: "2026-09-23T00:00:00.000Z".into(),
-        source_refs_json: "[\"source\"]".into(),
-        vector: vec![0.0; 1024],
-    };
-    let cancellation = CancellationToken::new();
-    let pending =
-        super::super::reconcile::commit_prepared(super::super::reconcile::PreparedCommit {
-            data_root: &fixture.0,
-            environment: &environment,
-            coordinator,
-            target: &target,
-            cancellation: &cancellation,
-            handle: &handle,
-            live: &live,
-            candidate: &candidate,
-            prepared: vec![
-                crate::cognition::generation_vectors::PreparedRepresentative {
-                    row,
-                    affected_unit_ids: vec!["unit".into()],
-                },
-            ],
-        });
-    let change = async {
-        host.gate_reached_after(clock_before).await;
-        let cache = handle.root.join("hot/cache.md");
-        fs::create_dir_all(cache.parent().unwrap()).unwrap();
-        fs::write(cache, "changed while gate held\n").unwrap();
-        held.release(false).unwrap();
-    };
-    let (outcome, ()) = tokio::join!(pending, change);
-    assert_eq!(outcome.unwrap_err().code(), "memory_generation_changed");
-    assert!(!handle.root.join("butler.lance").exists());
 }

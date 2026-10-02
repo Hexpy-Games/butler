@@ -93,25 +93,19 @@ pub use exact_query::ExactMemoryQuery;
 pub use extraction::{CandidateSearchInput, CognitionVectorSearch, VectorSearchFuture};
 pub use feedback_buffer::{FeedbackBufferService, FeedbackTarget};
 pub use generation::{
-    AcceptanceBinding, ActiveDescriptor, BuildInventory, CandidateInputRepairRequest,
-    CanonicalSnapshot, EmbeddingSlot, FreshMemoryGeneration, GenerationEmbedding, GenerationFormat,
-    GenerationManifest, GenerationReadiness, GenerationState, InitializationOrigin,
-    MemoryGenerationHandle, MemoryGenerationTarget, ProjectionMode, RebuildInspection,
-    RetriedGeneration, SemanticCounts, StageCounts, VectorCounts, active_memory_descriptor_exists,
-    advance_rebuild_cache, assert_mutation_authority, assert_rebuild_sources_registered,
-    bind_native_embedding_identity, compute_rebuild_readiness, initialize_empty_memory_generation,
-    inspect_memory_rebuild, prepare_fresh_memory_generation, prepare_memory_rebuild,
-    read_build_inventory, rebuild_typed_cursor, reconcile_rebuild_vector_representatives,
-    record_rebuild_readiness, refresh_memory_rebuild_snapshot, repair_memory_candidate_inputs,
-    resolve_active_generation, resolve_generation, retry_failed_memory_generation,
-    set_extractor_memory_generation,
+    AcceptanceBinding, ActiveDescriptor, BuildInventory, CanonicalSnapshot, EmbeddingSlot,
+    FreshMemoryGeneration, GenerationEmbedding, GenerationFormat, GenerationManifest,
+    GenerationReadiness, GenerationState, InitializationOrigin, MemoryGenerationHandle,
+    MemoryGenerationTarget, ProjectionMode, RebuildInspection, SemanticCounts, StageCounts,
+    VectorCounts, active_memory_descriptor_exists, advance_rebuild_cache,
+    assert_mutation_authority, assert_rebuild_sources_registered, bind_native_embedding_identity,
+    compute_rebuild_readiness, initialize_empty_memory_generation, inspect_memory_rebuild,
+    prepare_fresh_memory_generation, prepare_memory_rebuild, read_build_inventory,
+    rebuild_typed_cursor, record_rebuild_readiness, refresh_memory_rebuild_snapshot,
+    resolve_active_generation, resolve_generation,
 };
 pub use generation_vectors::GenerationVectorAdapter;
-pub use graph::{
-    CandidateInputRepairResult, GraphProgress, JobOutcome, ProjectionModelPolicy,
-    ProjectionModelPolicyInput, ProjectionModelSlot, RepairMode, RepairReceipt, RetryFailedCounts,
-    StageState, StageStatus,
-};
+pub use graph::{GraphProgress, JobOutcome, StageState, StageStatus};
 pub use graph_consolidation::GraphConsolidationService;
 pub use hot_cache::{LegacyIndexService, extract_legacy_import_transcript};
 pub use knowhow_store::{FeedbackResolvePort, KnowHowService};
