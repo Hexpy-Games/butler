@@ -43,7 +43,7 @@ jobs:
       - uses: ./.github/actions/package-windows-app
         with:
           version: 0.1.0-preview.90
-      - name: Run existing public update and channel E2Es
+      - name: Run existing public update, channel and process-role E2Es
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -59,7 +59,7 @@ jobs:
           $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/butler-agent.exe"
           try {
             Push-Location packages/butler-agent/rust
-            cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test updates --test update_channels
+            cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test updates --test update_channels --test process_names
             if ($LASTEXITCODE) { throw 'Update E2E failed' }
             Pop-Location
           } finally { Remove-Item -Recurse -Force $profile }
