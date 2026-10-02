@@ -128,13 +128,7 @@ impl AppServer {
         })?;
         let settings = Arc::new(open_settings(runtime, data_root, address).await?);
         let setup = owners.start_setup(runtime, settings.clone(), installation, data_root);
-        let session_workspaces = Arc::new(AppSessionWorkspaces::new(
-            runtime.bindings.clone(),
-            runtime.session_worktrees.clone(),
-            runtime.workspace_recovery.clone(),
-            runtime.subsessions.clone(),
-            runtime.conversations.clone(),
-        ));
+        let session_workspaces = Arc::new(AppSessionWorkspaces::for_runtime(runtime));
         let dependencies = AppApplicationDependencies {
             service_shutdown: runtime.service_shutdown.clone(),
             updates: Arc::new(open_updates(data_root, installation)?),
@@ -172,6 +166,11 @@ impl AppServer {
                 settings,
                 installation.clone(),
                 data_root.to_path_buf(),
+            )),
+            memory_management: Arc::new(crate::host::app::runtime_ports::AppMemoryManagement::new(
+                runtime.memory_management.clone(),
+                runtime.service_shutdown.clone(),
+                identity_clock.clone(),
             )),
             personalization: Arc::new(crate::host::AppPersonalization::new(
                 runtime.profile.clone(),

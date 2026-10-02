@@ -29,6 +29,16 @@ pub(crate) struct AppSessionWorkspaces {
 }
 
 impl AppSessionWorkspaces {
+    pub(crate) fn for_runtime(runtime: &crate::host::AgentRuntime) -> Self {
+        Self::new(
+            runtime.bindings.clone(),
+            runtime.session_worktrees.clone(),
+            runtime.workspace_recovery.clone(),
+            runtime.subsessions.clone(),
+            runtime.conversations.clone(),
+        )
+    }
+
     pub(crate) fn new(
         bindings: SessionBindingStore,
         worktrees: SessionWorktrees,

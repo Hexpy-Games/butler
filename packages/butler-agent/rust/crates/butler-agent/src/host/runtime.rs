@@ -29,6 +29,7 @@ use crate::host::runtime::stores::RuntimeStores;
 use boundary::{setup, validate_data_installation_boundary};
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
+use butler_gateway::gateway::AppImageFiles;
 use butler_ledger::project_ledger::{ProjectLedger, ProjectWork};
 use butler_memory::cognition::{CognitionPromptReader, CompletionPublisher, ExactMemoryQuery};
 use butler_memory::cognition::{MemoryRecall, ProjectCapsuleService};
@@ -91,9 +92,7 @@ impl AgentRuntime {
         let (coordinator, embedding, vectors, fresh_memory) =
             memory_bootstrap::open(&paths, &environment.cognition_paths).await?;
         let files = WorkspaceFiles::new(4);
-        let image_files = Arc::new(butler_gateway::gateway::AppImageFiles::new(
-            &paths.data_root,
-        ));
+        let image_files = Arc::new(AppImageFiles::new(&paths.data_root));
         let attachment_context = Arc::new(butler_runtime::context::AttachmentContext::new(
             paths.data_root.clone(),
         ));
@@ -427,10 +426,11 @@ impl AgentRuntime {
             ),
             host: owner,
         });
+        let (memory_management, memory_acquisition) =
+            Self::memory_owners(&paths.data_root, &environment.cognition_paths, coordinator);
         Ok(Self {
-            memory_acquisition: Arc::new(
-                crate::host::embedding::worker::assets::Acquisition::start(paths.data_root.clone()),
-            ),
+            memory_management,
+            memory_acquisition,
             service_shutdown: stop.clone(),
             btcc: assembly.btcc,
             host: assembly.host,
@@ -466,4 +466,26 @@ fn process_clocks() -> Result<(Arc<SystemPromptClock>, Arc<super::DateParser>), 
         Arc::new(SystemPromptClock::new().map_err(setup)?),
         Arc::new(super::DateParser::from_process().map_err(setup)?),
     ))
+}
+
+impl AgentRuntime {
+    fn memory_owners(
+        data_root: &std::path::Path,
+        environment: &butler_memory::cognition::CognitionPathEnvironment,
+        coordinator: Arc<butler_memory::coordination::CognitionWriteCoordinator>,
+    ) -> (
+        Arc<butler_memory::management::MemoryManagement>,
+        Arc<crate::host::embedding::worker::assets::Acquisition>,
+    ) {
+        (
+            Arc::new(butler_memory::management::MemoryManagement::new(
+                data_root.to_path_buf(),
+                environment.clone(),
+                coordinator,
+            )),
+            Arc::new(crate::host::embedding::worker::assets::Acquisition::start(
+                data_root.to_path_buf(),
+            )),
+        )
+    }
 }
