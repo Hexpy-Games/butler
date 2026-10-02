@@ -53,3 +53,9 @@ sources match their producing revision.
 Latest Linux packaging and macOS packaged App update passed. Separate macOS
 stub E2E failures remain tracked in #437 and #442; no assertions or timeouts
 were weakened. Source checks retain the baseline. No release tag was created.
+
+Disposable run 36973557798 also passed login toggles, real close-to-tray,
+notification show acknowledgement and registered deep-link restoration.
+Settings then remained behind first-run consent: the fixture used version 1
+while the product requires FIRST_RUN_CONSENT_VERSION (2). Use that existing
+product constant, as the packaged macOS update smoke does.

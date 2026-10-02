@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
+import { FIRST_RUN_CONSENT_VERSION } from "../../client/ui/src/app/onboarding.ts";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
 import { alive, assertShortcuts, bridge, click, ownedProcesses, powershell, readJson, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
 
@@ -73,7 +74,7 @@ try {
   if (app.pid) owned.add(app.pid);
   page = await electronPage(debugPort);
   await bridge(page, "updateSettings", { language: "en", onboarding: {
-    consent_version: 1, accepted_at: new Date().toISOString(), completed_at: new Date().toISOString(),
+    consent_version: FIRST_RUN_CONSENT_VERSION, accepted_at: new Date().toISOString(), completed_at: new Date().toISOString(),
   } });
   phase = "silent install reload";
   console.log(JSON.stringify({ beforeReload: await bridge(page, "getAppInfo"), appPid: app.pid, instance: readJson(join(data, "app/runtime/foreground/instance.json"))?.app_pid }));
