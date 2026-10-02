@@ -27,14 +27,6 @@
   visibility: hidden;
 }
 
-/* Only the endpoint sizers own the track. Intermediate formatted glyphs can
-   be wider even with tabular numerals; they must not resize the counter. */
-.value {
-  position: absolute;
-  inset: 0;
-  text-align: end;
-}
-
 /* Visually hidden; the final value is what assistive tech reads. */
 .final {
   position: absolute;

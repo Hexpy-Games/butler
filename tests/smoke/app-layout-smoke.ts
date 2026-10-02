@@ -47,6 +47,8 @@ async function closingTrackSample(button: import("playwright").Locator, slotSele
     const animations = slot.getAnimations();
     const slide = animations.find((a) => a instanceof CSSTransition && a.transitionProperty === "transform");
     if (!slide) throw new Error("closing track has no transform transition");
+    const duration = Number(slide.effect?.getTiming().duration);
+    if (!(duration > 0 && duration <= 260)) throw new Error(`closing motion duration: ${duration}`);
     for (const animation of animations) animation.pause();
     await Promise.all(animations.map((animation) => animation.ready));
     for (const animation of animations) animation.currentTime = 90;
@@ -1274,7 +1276,7 @@ try {
       closingInspectorState.transform === "none",
     `right panel content should keep stable width while the slot clips it: box=${JSON.stringify(closingInspectorBox)} state=${JSON.stringify(closingInspectorState)}`,
   );
-  await page.waitForTimeout(260);
+  await waitForMotionToSettle(page);
   const closedInspectorCount = await page
     .locator(testClass("right-inspector"))
     .count();

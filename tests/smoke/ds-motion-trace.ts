@@ -294,10 +294,9 @@ async function measureSendFlight(page: Page, serverUrl: string, ids: Map<string,
     // can use the shorter --motion-slow (220ms) flight.
     return windowStats(events, thread, start + 80_000, start + 160_000);
   });
-  writeFileSync(join(outDir, "send-flight-trace.json"), JSON.stringify({ events, thread }));
   const whole = windowStats(events, thread, markTs(events, "flight-0"), markTs(events, `flight-${rounds - 1}`) + 700_000);
   const mainThreadFrames = windows.reduce((sum, stats) => sum + stats.layouts + stats.paints, 0);
-  writeFileSync(join(outDir, "send-flight-trace.json"), JSON.stringify({ windows, whole, travel, events }));
+  writeFileSync(join(outDir, "send-flight-trace.json"), JSON.stringify({ windows, whole, travel, events, thread }));
   assert(whole.longTasks === 0, `send flight produced ${whole.longTasks} task(s) over ${LONG_TASK_MS}ms (max ${whole.maxTaskMs}ms)`);
   assert(mainThreadFrames === 0, `send flight travel frames ran Layout/Paint ${mainThreadFrames} time(s); it must run on the compositor`);
   assert(travel.flying === "fly" && travel.travelledPx > 20, `send flight did not run: ${JSON.stringify(travel)}`);
