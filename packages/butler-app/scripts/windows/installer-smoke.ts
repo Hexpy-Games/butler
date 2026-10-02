@@ -22,7 +22,7 @@ const root = mkdtempSync(join(tmpdir(), "butler-installer-e2e-"));
 const data = join(root, "data");
 const owned = new Set<number>();
 let page: ElectronPage | null = null;
-const calls = { chat: 0, memory: 0 };
+const calls = { chat: 0, memory: 0, memorySpeakers: new Set<string>() };
 let uninstalled = false;
 let phase = "one-click install";
 const manifest = readJson(join(second, "app-update-manifest.json"))!;
@@ -110,7 +110,7 @@ try {
   assert.equal(powershell("[bool](Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run' -ErrorAction SilentlyContinue).'com.squirrel.butler-app.Butler'", env), "False");
   assert.equal(readFileSync(join(data, "sentinel.txt"), "utf8"), "retained");
   assert.ok(existsSync(join(data, "butler.config.json")));
-  assert.equal(calls.chat, 1); assert.equal(calls.memory, 1);
+  assert.equal(calls.chat, 1); assert.equal(calls.memory, 2);
   console.log(JSON.stringify({ ok: true, from, to, shellIntegration: true, stubCalls: calls.chat + calls.memory,
     chatCalls: calls.chat, memoryCalls: calls.memory,
     normalInstallLaunch: true, exactAgent: true, chatPreserved: true, rollbackRetained: true, uninstallPreservesData: true,
@@ -192,7 +192,8 @@ async function stubChat(chatId: string) {
   const messages = (await bridge(page!, "listMessages", { chatId })).messages;
   assert.equal(messages.length, 2); assert.equal(messages[0].role, "user");
   assert.equal(messages[1].text, "Windows update ready."); assert.equal(calls.chat, 1);
-  await waitFor(() => calls.memory === 1, "one successful meaning extraction");
+  await waitFor(() => calls.memory === 2, "both user and assistant meaning extractions");
+  assert.deepEqual([...calls.memorySpeakers].sort(), ["assistant", "user"]);
 }
 
 function shellProof() {

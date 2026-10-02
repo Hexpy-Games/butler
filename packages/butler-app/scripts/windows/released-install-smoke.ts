@@ -27,7 +27,7 @@ const owned = new Set<number>();
 const debugPort = await freePort();
 const agentPort = await freePort();
 let page: ElectronPage | null = null;
-const calls = { chat: 0, memory: 0 };
+const calls = { chat: 0, memory: 0, memorySpeakers: new Set<string>() };
 let uninstalled = false;
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async request => {
   assert.equal(new URL(request.url).pathname, "/v1/responses");
@@ -71,7 +71,8 @@ try {
   assert.equal(messages[0].role, "user");
   assert.equal(messages[1].text, "Windows release ready.");
   assert.equal(calls.chat, 1);
-  await waitFor(() => calls.memory === 1, "released meaning extraction");
+  await waitFor(() => calls.memory === 2, "released user and assistant meaning extractions");
+  assert.deepEqual([...calls.memorySpeakers].sort(), ["assistant", "user"]);
   await waitFor(() => shortcuts.every(path => existsSync(path)), "released shortcuts");
   assertShortcuts(shortcuts, true);
   const stub = join(installed, "Butler.exe");

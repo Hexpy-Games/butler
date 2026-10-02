@@ -18,7 +18,7 @@ const exitFile = join(root, "app.exit");
 const owned = new Set<number>();
 const priorProtocol = protocolRegistration();
 const answer = "Windows Electron ready.";
-const calls = { chat: 0, memory: 0 };
+const calls = { chat: 0, memory: 0, memorySpeakers: new Set<string>() };
 const stub = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
   if (new URL(request.url).pathname !== "/v1/responses") return new Response(null, { status: 404 });
   const body = await request.json();
@@ -91,7 +91,8 @@ try {
     `Stub chat content/order/count mismatch: ${JSON.stringify({ calls, messages: messages.map((message: any) => ({
       role: message.role, text: message.text,
     })) })}`);
-  await waitFor(() => calls.memory === 1, "one successful meaning extraction");
+  await waitFor(() => calls.memory === 2, "both user and assistant meaning extractions");
+  assert(JSON.stringify([...calls.memorySpeakers].sort()) === '["assistant","user"]', "Meaning source coverage mismatch");
   cdp = await electronPage(debugPort);
   assert(await cdp.expression("typeof window.butlerApp?.quitApp === 'function'"), "Sandbox preload missing");
   await cdp.reload();
