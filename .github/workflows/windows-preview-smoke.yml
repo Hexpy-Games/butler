@@ -62,7 +62,7 @@ jobs:
           $env:HOME = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test installed_preview -- --nocapture
+          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test installed_preview -- --test-threads=8 --nocapture
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
@@ -155,7 +155,7 @@ jobs:
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e `
             --test turn --test cli_surface --test queue_shutdown --test migration --test durable_configuration `
-            --test gateway_remote --test gateway_pairing --test cli_remote --no-run 2>&1 |
+            --test long_paths --test gateway_remote --test gateway_pairing --test cli_remote --no-run 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/harness-compile.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build debug agent for the stub harness
@@ -176,8 +176,19 @@ jobs:
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
           cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test turn `
-            turn_01_reply_is_delivered_persisted_and_survives_restart -- --exact --nocapture 2>&1 |
+            turn_01_reply_is_delivered_persisted_and_survives_restart -- --exact --test-threads=8 --nocapture 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/stub-chat.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Stub chat and durable config under a long data path
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
+        run: |
+          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
+          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test long_paths `
+            -- --test-threads=8 --nocapture 2>&1 |
+            Tee-Object "$env:PREVIEW_ROOT/logs/long-paths.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Existing CLI E2E
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
@@ -186,7 +197,7 @@ jobs:
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
-          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test cli_surface -- --nocapture 2>&1 |
+          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test cli_surface -- --test-threads=8 --nocapture 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/cli-surface.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: LAN listener, bind failures and API pairing smoke
@@ -208,7 +219,7 @@ jobs:
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
-          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test queue_shutdown -- --nocapture 2>&1 |
+          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test queue_shutdown -- --test-threads=8 --nocapture 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/queue-shutdown.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Existing data migration and configuration durability E2E

@@ -44,7 +44,8 @@ pub const NO_FOLLOW: bool = sys::NO_FOLLOW;
 /// Whether [`identity`] reports device and inode numbers ([`FileId`]).
 pub const FILE_IDS: bool = sys::FILE_IDS;
 
-/// Whether [`sync_directory`] can flush a directory.
+/// Whether directory flushing is guaranteed to be available on this host.
+/// Windows attempts it but can report unsupported for the filesystem.
 pub const DIRECTORY_SYNC: bool = sys::DIRECTORY_SYNC;
 
 /// Whether [`exchange_directories`] can swap two directories atomically.
@@ -209,7 +210,8 @@ pub fn open_read_no_follow(path: &Path) -> io::Result<File> {
 }
 
 /// Flushes the directory entries of `path` (a rename or a new file in it) to
-/// storage; `None` without [`DIRECTORY_SYNC`].
+/// storage; `None` when unsupported. Windows attempts a directory flush
+/// even though [`DIRECTORY_SYNC`] is false (support varies by filesystem).
 pub fn sync_directory(path: &Path) -> Option<io::Result<()>> {
     sys::sync_directory(path)
 }
@@ -217,8 +219,8 @@ pub fn sync_directory(path: &Path) -> Option<io::Result<()>> {
 /// Flushes the file or directory at `path` to storage: an fsync of a
 /// descriptor opened for reading on Unix. Windows flushes only through a
 /// handle opened for writing, so a file is opened that way there; a
-/// directory is left alone, as [`sync_directory`] does without
-/// [`DIRECTORY_SYNC`] (NTFS journals the renames and creations in it).
+/// directory flush is attempted where supported. Windows renames also
+/// request write-through independently of directory flush support.
 pub fn sync_path(path: impl AsRef<Path>) -> io::Result<()> {
     sys::sync_path(path.as_ref())
 }

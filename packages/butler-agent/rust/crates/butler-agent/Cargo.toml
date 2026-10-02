@@ -46,6 +46,7 @@ rmcp.workspace = true
 
 [build-dependencies]
 semver.workspace = true
+embed-manifest.workspace = true
 
 [dev-dependencies]
 butler-ledger = { path = "../butler-ledger", features = ["test-support"] }

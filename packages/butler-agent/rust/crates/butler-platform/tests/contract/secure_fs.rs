@@ -66,7 +66,30 @@ fn replace_private_swaps_in_a_complete_owner_only_file() {
     names.sort();
     assert_eq!(names, ["config.json", "neighbor.tmp"]);
     assert_eq!(fs::read_to_string(&neighbor).unwrap(), "someone else's");
-    assert_eq!(sync_directory(&directory).is_some(), DIRECTORY_SYNC);
+    let synced = sync_directory(&directory).transpose().unwrap();
+    if DIRECTORY_SYNC {
+        assert!(synced.is_some());
+    }
+    // Both creating and replacing a synced file must survive reopening it.
+    let mut long = directory.clone();
+    for _ in 0..5 {
+        long = long.join("long-component-0123456789012345678901234567890123456789");
+    }
+    fs::create_dir_all(&long).unwrap();
+    let durable = long.join("durable.json");
+    assert!(durable.to_string_lossy().chars().count() > 280);
+    for bytes in [
+        b"first".as_slice(),
+        b"replacement with more bytes".as_slice(),
+    ] {
+        replace_private(
+            &durable,
+            |file| file.write_all(bytes),
+            std::convert::identity,
+        )
+        .unwrap();
+        assert_eq!(fs::read(&durable).unwrap(), bytes);
+    }
     fs::remove_dir_all(directory).unwrap();
 }
 

@@ -34,6 +34,7 @@ if-addrs.workspace = true
 sysinfo.workspace = true
 win32job.workspace = true
 same-file = "1.0.6"
+atomicwrites.workspace = true
 
 [features]
 # Fixture values for tests of other crates (e.g. archive entry modes).

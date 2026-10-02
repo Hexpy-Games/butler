@@ -67,6 +67,8 @@ libproc = "=0.14.11"
 # Windows process table, Job Objects and path normalization (butler-platform).
 sysinfo = { version = "=0.37.2", default-features = false, features = ["system"] }
 win32job = "=2.0.3"
+atomicwrites = "=0.4.4"
+embed-manifest = "=1.5.0"
 dunce = "=1.0.5"
 iana-time-zone = "=0.1.65"
 # The OS credential store (#217, butler-platform `secrets`): the keyring-core
