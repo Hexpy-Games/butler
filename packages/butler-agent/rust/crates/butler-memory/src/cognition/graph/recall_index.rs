@@ -7,6 +7,21 @@ use super::db_error;
 use crate::cognition::CognitionResult;
 
 pub(super) fn install_and_backfill(connection: &Connection) -> CognitionResult<()> {
+    if super::alias_postings::installed(connection)? {
+        super::alias_postings::backfill(connection)?;
+        let legacy: bool = connection.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name='memory_alias_postings' AND type='table') AND (SELECT value FROM memory_state WHERE key='alias_postings_v2')!='reclaim'", [], |r| r.get(0)).map_err(db_error)?;
+        if !legacy {
+            return Ok(());
+        }
+    }
+    install_legacy(connection)?;
+    backfill_legacy(connection)
+}
+
+fn install_legacy(connection: &Connection) -> CognitionResult<()> {
+    if super::alias_postings::installed(connection)? {
+        return Ok(());
+    }
     connection.execute_batch(
         r"CREATE INDEX IF NOT EXISTS idx_alias_postings_gram_source ON memory_alias_postings(gram,node_id,source_id);
          CREATE INDEX IF NOT EXISTS idx_alias_postings_entity ON memory_alias_postings(node_id,gram,source_id,surface_original);
@@ -25,6 +40,10 @@ pub(super) fn install_and_backfill(connection: &Connection) -> CognitionResult<(
            WHEN NEW.identity_scope IS NOT OLD.identity_scope OR NEW.project_id IS NOT OLD.project_id BEGIN
            INSERT OR IGNORE INTO memory_alias_index_dirty SELECT node_id,source_id,surface_original FROM memory_aliases WHERE node_id=NEW.id; END;"
     ).map_err(db_error)?;
+    Ok(())
+}
+
+fn backfill_legacy(connection: &Connection) -> CognitionResult<()> {
     let ready = connection
         .query_row(
             "SELECT value FROM memory_state WHERE key='alias_postings_incremental_v1'",
@@ -54,12 +73,8 @@ pub(super) fn install_and_backfill(connection: &Connection) -> CognitionResult<(
         let (node, source, surface, folded, scope, project) = row.map_err(db_error)?;
         connection.execute("DELETE FROM memory_alias_postings WHERE node_id=?1 AND source_id=?2 AND surface_original=?3",params![node,source,surface]).map_err(db_error)?;
         if let (Some(folded), Some(scope)) = (folded, scope) {
-            let graphemes =
-                UnicodeSegmentation::graphemes(folded.as_str(), true).collect::<Vec<_>>();
-            for size in [2, 3] {
-                for group in graphemes.windows(size) {
-                    connection.execute("INSERT OR IGNORE INTO memory_alias_postings(gram,node_id,source_id,surface_original,identity_scope,project_id) VALUES(?1,?2,?3,?4,?5,?6)",params![group.concat(),node,source,surface,scope,project]).map_err(db_error)?;
-                }
+            for gram in grams(&folded) {
+                connection.execute("INSERT OR IGNORE INTO memory_alias_postings(gram,node_id,source_id,surface_original,identity_scope,project_id) VALUES(?1,?2,?3,?4,?5,?6)",params![gram,node,source,surface,scope,project]).map_err(db_error)?;
             }
         }
         connection.execute("DELETE FROM memory_alias_index_dirty WHERE node_id=?1 AND source_id=?2 AND surface_original=?3",params![node,source,surface]).map_err(db_error)?;
@@ -69,4 +84,20 @@ pub(super) fn install_and_backfill(connection: &Connection) -> CognitionResult<(
         connection.execute("INSERT INTO memory_state(key,value) VALUES('alias_postings_incremental_v1','complete')",[]).map_err(db_error)?;
     }
     Ok(())
+}
+
+/// The stored folded key is already canonical: keep its grapheme bytes verbatim.
+pub(super) fn grams(folded: &str) -> Vec<String> {
+    let graphemes = UnicodeSegmentation::graphemes(folded, true).collect::<Vec<_>>();
+    let mut seen = std::collections::HashSet::new();
+    let mut grams = Vec::new();
+    for size in [2, 3] {
+        for group in graphemes.windows(size) {
+            let gram = group.concat();
+            if seen.insert(gram.clone()) {
+                grams.push(gram);
+            }
+        }
+    }
+    grams
 }

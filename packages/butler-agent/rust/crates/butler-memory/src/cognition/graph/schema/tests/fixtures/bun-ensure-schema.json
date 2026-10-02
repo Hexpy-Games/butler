@@ -15,6 +15,14 @@
     "idx_vector_units_due",
     "idx_vector_units_state",
     "idx_windows_due",
+    "memory_alias_documents",
+    "memory_alias_documents_update",
+    "memory_alias_grams",
+    "memory_alias_grams_alias",
+    "memory_alias_index_delete",
+    "memory_alias_index_dirty",
+    "memory_alias_index_insert",
+    "memory_alias_index_update",
     "memory_alias_postings",
     "memory_aliases",
     "memory_chunk_graph_refs",
@@ -63,9 +71,7 @@
       "gram",
       "node_id",
       "source_id",
-      "surface_original",
-      "identity_scope",
-      "project_id"
+      "surface_original"
     ],
     "memory_aliases": [
       "node_id",
@@ -304,6 +310,21 @@
       "provider_invoked",
       "outcome_known",
       "invocation_ref"
+    ],
+    "memory_alias_documents": [
+      "id",
+      "node_id",
+      "source_id",
+      "surface_original"
+    ],
+    "memory_alias_grams": [
+      "gram",
+      "alias_id"
+    ],
+    "memory_alias_index_dirty": [
+      "node_id",
+      "source_id",
+      "surface_original"
     ]
   }
 }

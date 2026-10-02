@@ -61,7 +61,7 @@ def bind(query, mode, grams_json):
 def alias_id_frequencies(sql):
     """Same corpus and counts; resolve eligible alias IDs once, before gram probes."""
     sql, changed = re.subn(r"SELECT DISTINCT a.node_id,a.source_id FROM memory_aliases a",
-                          "SELECT DISTINCT a.id FROM alias_docs a", sql)
+                          "SELECT DISTINCT ad.id FROM memory_aliases a JOIN alias_docs ad ON ad.node_id=a.node_id AND ad.source_id=a.source_id AND ad.surface_original=a.surface_original", sql)
     assert changed == 1
     sql = sql.replace("FROM memory_alias_postings p", "FROM compact_postings p")
     sql = sql.replace("d.node_id=p.node_id AND d.source_id=p.source_id", "d.id=p.alias_id")

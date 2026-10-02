@@ -68,6 +68,9 @@ pub struct MemorySyncConsumer {
     unclean_start: Arc<AtomicBool>,
     catchup_progress: Arc<Mutex<Option<(PathBuf, crate::cognition::graph::CatchupState)>>>,
     probe: Arc<probe::ProbeReader>,
+    alias_postings_enabled: bool,
+    alias_reclaim_enabled: bool,
+    alias_postings_done: Arc<Mutex<std::collections::HashSet<PathBuf>>>,
 }
 
 impl MemorySyncConsumer {
@@ -95,6 +98,10 @@ impl MemorySyncConsumer {
             unclean_start: Arc::new(AtomicBool::new(false)),
             catchup_progress: Arc::new(Mutex::new(None)),
             probe: Arc::new(probe::ProbeReader::default()),
+            alias_postings_enabled: std::env::var("BUTLER_ALIAS_POSTINGS_V2").as_deref() == Ok("1"),
+            alias_reclaim_enabled: std::env::var("BUTLER_ALIAS_POSTINGS_RECLAIM").as_deref()
+                == Ok("1"),
+            alias_postings_done: Arc::new(Mutex::new(std::collections::HashSet::new())),
         }
     }
 
@@ -150,7 +157,11 @@ impl MemorySyncConsumer {
             unclean_start: self.unclean_start.clone(),
             catchup_progress: self.catchup_progress.clone(),
             probe: self.probe.clone(),
+            alias_postings_enabled: self.alias_postings_enabled,
+            alias_reclaim_enabled: self.alias_reclaim_enabled,
+            alias_postings_done: self.alias_postings_done.clone(),
             shutdown: self.shutdown.clone(),
+            tasks: self.tasks.clone(),
         };
         let (sender, receiver) = oneshot::channel();
         // Detached on purpose: the operation token/guard moved into the task keeps the
@@ -202,7 +213,11 @@ impl MemorySyncConsumer {
             unclean_start: self.unclean_start.clone(),
             catchup_progress: self.catchup_progress.clone(),
             probe: self.probe.clone(),
+            alias_postings_enabled: self.alias_postings_enabled,
+            alias_reclaim_enabled: self.alias_reclaim_enabled,
+            alias_postings_done: self.alias_postings_done.clone(),
             shutdown: operation.clone(),
+            tasks: self.tasks.clone(),
         };
         let (sender, receiver) = oneshot::channel();
         let cancellation = cancellation.clone();
@@ -307,13 +322,22 @@ fn queue_length(memory_root: &std::path::Path) -> u64 {
 
 fn paused(input: &process::Input) -> CognitionResult<bool> {
     let lock = input.environment.consolidation_lock(&input.data_root);
-    let state = input
+    let inspection = input
         .coordinator
         .inspect(&lock)
-        .map_err(CognitionError::from)?
-        .state;
+        .map_err(CognitionError::from)?;
+    // Foreground registrations must queue behind our short copy lease, not
+    // miss their whole poll quantum whenever it happens to overlap a batch.
+    if inspection.state == ConsolidationLockState::Held
+        && inspection
+            .owner
+            .as_ref()
+            .is_some_and(|owner| owner.purpose == "alias_postings_v2")
+    {
+        return Ok(false);
+    }
     Ok(matches!(
-        state,
+        inspection.state,
         ConsolidationLockState::Held
             | ConsolidationLockState::Busy
             | ConsolidationLockState::LegacyBlocked

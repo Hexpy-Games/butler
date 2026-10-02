@@ -1,9 +1,10 @@
 # Alias posting storage: issue #435
 
 Measured on 2026-10-02, branch `codex/alias-postings`, base `53fa0a313`.
-Scope: synthetic measurement, schema prototypes, and migration design. No runtime,
-recall ranking, expansion, startup, or shutdown code changes. Do not enable a
-migration from this document without reviewing the cutover and reclamation plan.
+Scope: synthetic measurements plus production compact storage and an opt-in
+background migration. Ranking and expansion are unchanged. Both migration and
+physical reclaim are disabled by default; qualification below is required before
+the owner enables either against live data.
 
 ## Reproduce and interpret the measurement
 
@@ -236,21 +237,21 @@ reverse posting index, with eligible alias-ID frequency probes as in
 node/source IDs unchanged.
 
 ```sql
-CREATE TABLE memory_alias_documents_v2(
+CREATE TABLE memory_alias_documents(
   id INTEGER PRIMARY KEY,
-  node_id TEXT NOT NULL REFERENCES memory_nodes(id),
-  source_id TEXT NOT NULL REFERENCES memory_chunk_sources(source_id),
+  node_id TEXT NOT NULL,
+  source_id TEXT NOT NULL,
   surface_original TEXT NOT NULL,
-  UNIQUE(node_id,source_id,surface_original)
+  UNIQUE(node_id,source_id,surface_original),
+  FOREIGN KEY(node_id,surface_original,source_id)
+    REFERENCES memory_aliases(node_id,surface_original,source_id) ON DELETE CASCADE
 );
-CREATE TABLE memory_alias_postings_v2(
+CREATE TABLE memory_alias_grams(
   gram TEXT NOT NULL,
-  alias_id INTEGER NOT NULL REFERENCES memory_alias_documents_v2(id)
-    ON DELETE CASCADE,
+  alias_id INTEGER NOT NULL REFERENCES memory_alias_documents(id) ON DELETE CASCADE,
   PRIMARY KEY(gram,alias_id)
 ) WITHOUT ROWID;
-CREATE INDEX idx_alias_postings_v2_alias
-  ON memory_alias_postings_v2(alias_id);
+CREATE INDEX memory_alias_grams_alias ON memory_alias_grams(alias_id);
 ```
 
 The fixture target occupies 34.84 MiB including the dictionary and its UNIQUE
@@ -262,9 +263,10 @@ smaller overall. This is an estimate, not a measurement of owner data or a
 promise that in-place shadow cutover shrinks graph.sqlite. Space is reclaimed
 only when the legacy allocation is retired in a physically compact file.
 
-The proposed dictionary node/source FKs above add integrity checks not present
-in the prototype's alias dictionary. Its posting FK is enforced during builds,
-but replacement probes use the reopened connection defaults described above.
+The production dictionary has a composite canonical-alias FK. Graph writers
+enforce foreign keys; deleting an alias cascades through its dictionary and grams.
+An UPDATE trigger removes the OLD dictionary even when identity changes. The
+prototype replacement measurements used the connection defaults described above.
 Per-alias write cost with all target FKs enabled and the agent's actual checkpoint
 policy must be included in bundled-SQLite qualification.
 
@@ -289,81 +291,111 @@ no gram rewrite in v2 because eligibility is obtained through live joins.
 Do not use SQLite's per-row update hook as the change journal for WITHOUT ROWID
 tables; it does not report their updates ([SQLite documentation](https://www.sqlite.org/withoutrowid.html)).
 
-## Online, resumable migration plan
+## Production rollout, cutover and reclaim
 
-This is a proposed implementation contract. The standalone SQL copy experiment
-does not implement the runtime lease, dirty journal, readiness or cutover.
+New and rebuilt graphs use compact storage directly. Existing v1 graphs are left
+unchanged by schema ensure, startup, readiness and ordinary reads. Migration is
+scheduled only after the existing memory consumer finds a serving generation.
+The consumer tracks the worker and cancels both queued lease waits and current
+SQL work on close. The worker acquires and releases the existing consolidation
+lease for each transaction, runs file/SQLite work on the blocking pool, and gives
+foreground waiters time between leases. Acquisition opens the existing coordinator
+read-write so SQLite can recover a hot DELETE journal after a killed lease holder;
+read-only inspection remains side-effect free. A copy-only connection stays open
+between batches; each batch still revalidates descriptor/mutation authority and
+closes any prior physical handle after a storage change. No transaction or read
+snapshot spans leases. Checkpoint-on-close is disabled on this connection, and
+its blocking-pool close is awaited on completion, failure or stop.
+Completed paths stay in an in-memory set;
+there is no completed-worker timer, recurring DB probe, checkpoint or marker write.
 
-1. After existing legacy-data validation and readiness, schedule an explicit
-   background operation behind a disabled feature/config gate. Refused legacy
-   data must not create a DB, WAL, migration marker, directory, lock, or trigger.
-   Preserve [storage_bootstrap.rs:44](../crates/butler-agent/src/host/runtime/storage_bootstrap.rs#L44)
-   and [graph/schema.rs:13](../crates/butler-memory/src/cognition/graph/schema.rs#L13)
-   refusals. MIG-01 at [migration.rs:24](../crates/butler-e2e/tests/migration.rs#L24)
-   must still assert an identical refused directory tree.
-2. Acquire the existing consolidation write lease in `Background` wait class,
-   with a CancellationToken, for one bounded step. Use the pattern in
-   [generation/stage.rs:47](../crates/butler-memory/src/cognition/generation/stage.rs#L47)
-   and its `spawn_blocking`/release wrapper at line 70; assert the lease/fence and
-   active generation before each mutation. Do not introduce a second lock or
-   hold the lease across the entire migration or sleep between batches.
-3. Persist format, source generation/revision, phase, last canonical alias
-   `(node_id,surface_original,source_id)` and completion state. The source alias
-   PK supports keyset pagination; never OFFSET or repeatedly scan all postings.
-   Install change-driven dirty capture for insert/update/delete of aliases and
-   folded text, including both old/new tuple keys. Canonical writer commits and
-   dirty capture must be atomic. Do not register timer-driven rescan/backfill.
-4. Create v2 shadow tables, keep legacy reads and writes authoritative, then
-   backfill keyset batches. The prototype uses 128 aliases (~6,850 postings) per
-   commit, but production needs an additional posting/byte bound and measured
-   foreground service budget. Persist the next cursor in the SAME transaction
-   as copied grams. Alias replacement/deletion before its turn is reconciled
-   from current canonical state under the lease. A rollback replays that batch.
-   Drain/coalesce dirty aliases in bounded batches with the same rules.
-5. Check cancellation between aliases and through rusqlite's progress handler
-   within SQL. Bound individual alias work too: if an alias exceeds a batch's
-   byte/gram allowance, stage its grams over resumable sub-batches and publish
-   its complete dictionary entry atomically when done. Never publish partial
-   grams or truncate an alias. Use zero/short busy waiting in background work,
-   yielding to foreground writes instead of the graph's normal 5-second timeout.
-6. Validate all aliases and both directions of posting equality in bounded
-   ordered/hash ranges, with per-range dirty revision checks. Reconcile latest
-   source revisions, deletes, scope and claims; verify all four SQL result sets,
-   tie ordering and latest-state recall against the legacy path. Do not run a
-   whole-graph EXCEPT scan under one production lease as the harness does.
-7. With a short final lease, ensure catch-up is empty/current, flip an atomic
-   format marker and route ALL reads/writes to v2 together. Coordinate with the
-   concurrent recall work; storage is below its ranker. Change
-   [apply.rs:87](../crates/butler-memory/src/cognition/graph/apply.rs#L87) and line
-   114's [install_and_backfill](../crates/butler-memory/src/cognition/graph/recall_index.rs#L9)
-   dispatch so it cannot recreate old indexes, triggers or pending backfills.
-   A reader transaction uses one schema version. Before cutover, cancellation
-   leaves v1 authoritative; after it, all writer paths must maintain v2.
-8. Logical cutover alone does not shrink a rowid database. Do not claim freed
-   pages as reduced file size and do not VACUUM, DROP large indexes, or delete
-   886k rows in startup/shutdown. Preferred physical reclamation is a new graph
-   generation built in the background without the legacy posting objects.
-   Copy other tables/indexes without changing canonical IDs or payloads, using
-   bounded PK batches and a durable change journal for EVERY copied graph table
-   (jobs/windows/vector state as well as aliases). Replay dirty keys and preserve
-   unknown schema/payload or fail safely before switching. Qualify the target
-   using the existing generation manifest/descriptor CAS pattern in
-   [cutover/activate.rs:147](../crates/butler-memory/src/cognition/generation/cutover/activate.rs#L147).
-   Readers pin their generation; retain the old file until no readers/writers
-   can reference it, then retire it outside readiness/shutdown. This makes the
-   physically compact file authoritative without a live whole-file VACUUM.
-9. Completed state unregisters the worker and journal/dual-maintenance triggers;
-   ordinary graph mutations only maintain v2. Reopen checks the completion
-   marker read-only. No timer, periodic checkpoint, marker refresh or idle
-   write. Shutdown cancels queued lease waits and in-flight batch work and
-   does not join an unbounded copy/reclaim operation.
+Exact migration switches, read once when the consumer is constructed:
 
-The physical-reclamation step still needs design review: journaling every graph
-writer, schema preservation, descriptor qualification, reader pins, and safe
-retirement have not been prototyped here. Automatic VACUUM is not a substitute:
-[SQLite VACUUM](https://www.sqlite.org/lang_vacuum.html) can require substantial
-temporary disk and a long operation, and changing existing auto_vacuum=NONE to
-incremental requires rebuilding first ([PRAGMA documentation](https://www.sqlite.org/pragma.html#pragma_auto_vacuum)).
+- `BUTLER_ALIAS_POSTINGS_V2=1`: enable copy and logical cutover of an existing v1
+  graph. Unset, `0`, and every other value leave migration disabled.
+- `BUTLER_ALIAS_POSTINGS_RECLAIM=1`: explicitly close the rollback window and
+  reclaim a graph that already completed its copy. This switch is separate and
+  disabled by default. It cannot initiate a copy by itself.
+
+For read rollback before reclaim, restart the current executable with
+`BUTLER_ALIAS_POSTINGS_READ_V1=1`. Reads use the still-maintained v1 table while
+foreground writes maintain both shapes. This switch also blocks reclaim. Unset
+it to return to v2 reads; it has no effect on fresh compact-only generations.
+Do not use an older executable as this read rollback: its writers cannot maintain
+v2. Restore a pre-migration backup before rolling back the executable.
+
+Dry run: use a complete isolated copy of DATA, with an isolated HOME/CODEX_HOME,
+private test port and stub/replay providers. Never launch the copy with the live
+service's paths, credentials or port. First run copy with the reclaim switch
+unset; compare full results and latest writes, then test reclaim separately.
+No owner DATA was used to develop or measure this implementation.
+
+The `alias_postings_v2` state is `copy`, `complete`, `reclaim`, or `fresh`.
+`alias_postings_v2_cursor` records the last completed canonical alias tuple in
+its PK order. A partial alias uses two small memory_state entries for its tuple
+and integer document ID. Its grams resume after MAX(gram) through the reverse
+index. The cursor, grams, partial markers and publication all commit together.
+Each batch has a 64-KiB input byte budget including conservative per-row overhead,
+not an alias-count budget. SQL cancellation rolls back the entire current batch.
+An individual dictionary identity or gram larger than that budget fails safely;
+no alias or gram is truncated, skipped or published partially.
+
+Before cutover, the read view combines fully copied v2 aliases with v1 aliases
+that lack a complete dictionary. The single partial dictionary is excluded from
+v2 and remains served in full by v1. UNION ALL partitions alias identities, so
+candidate DISTINCT/order and frequency multiplicity remain unchanged. EXPLAIN
+may scan the materialized **filtered union** after both posting branches have
+performed gram index probes; no base posting scan is allowed. After cutover the
+view is only v2. During copy, frequency queries use the complete, still-maintained
+v1 covering index; candidates read both partitions. This avoids rebuilding text
+posting identities merely to count them. At the same atomic flip, frequency
+queries switch to integer v2 IDs. All four queries retain complete results at
+every stage. Frequency CTEs keep canonical memory_aliases and resolve integer
+IDs once; their composite FK prevents stale dictionaries affecting eligibility.
+Every candidate ORDER BY still uses node/source/original surface text.
+
+Foreground apply consumes the existing memory_alias_index_dirty queue to
+maintain v2 and v1 in the same transaction. There is no second journal. The OLD
+document is removed on update; deletion cascades its postings. Scope stays live
+in canonical joins for both read shapes; installation removes the dead legacy
+scope trigger. Alias insert/update/delete maintenance remains dual through the
+rollback window.
+Cutover checks docs == aliases, matching v1/v2 posting counts and an empty dirty queue, swaps the read view and
+state atomically, and retains dual maintenance. Foreground dispatch detects the
+installed storage before installing legacy indexes, so reclaim cannot rebuild
+them inside a foreground apply.
+
+PASSIVE checkpoint results gate copying: when uncheckpointed WAL exceeds 4 MiB
+(computed from the actual page size), the worker pauses new copy transactions.
+Cache spilling and automatic checkpointing are disabled on its retained copy
+connection. Foreground writes remain independent; this bounds migration growth,
+not WAL generated by other writers. A pinned-reader E2E measures physical peak.
+
+Reclaim runs only on the serving generation. Under one lease per object it
+removes legacy maintenance, drops each of the four legacy indexes, then drops the
+legacy table. Secure deletion is disabled on this connection while freeing
+redundant allocation; the same text remains in canonical aliases and v2. These
+DROPs release allocation but do not claim a smaller live file.
+
+Under the final lease it calls the existing VACUUM INTO snapshot helper, syncs
+the compact graph and its directory, then uses the existing full descriptor/manifest
+CAS. An optional `storage_generation_id` selects only graph.sqlite in
+`.storage-<uuid>` under generations. Vectors, hot caches and manifests stay in
+the logical generation directory; no payload copying or projection work is needed.
+The logical generation ID and every projection/cache identity remain unchanged.
+Mutation authority checks the graph path too, rejecting a stale writer handle.
+Generation activation carries the old storage pointer into
+`previous_storage_generation_id`, and rollback restores it.
+Readers already holding the old graph can finish. The old graph is retained for
+owner retirement after readers drain; the generation's other files remain live.
+There are no projection jobs, model calls or in-place VACUUM in reclaim.
+The measured final lease duration, disk headroom and supported-platform behavior
+must pass qualification before enabling reclaim.
+
+Owner decisions: approve the isolated-copy evidence and supported-platform
+qualification before enabling copy; choose the rollback-window length; separately
+approve reclaim with enough space for compact graph and bounded WAL; arrange later retirement of old physical files. No switch is
+enabled by this branch, and no automatic retirement is implemented.
 
 ## Rewrite evidence, risks, and enablement gates
 
@@ -401,31 +433,68 @@ pinned-reader WAL; test cancellation/restart in each phase and generation
 cutover/reclamation; test startup readiness, active plus queued shutdown work,
 MIG-01/MIG-01b, and idle file/write stability after completion.
 
-Production migration/schema code is deliberately left unimplemented. The
-storage direction is promising; the physical online transition and full recall
-latency qualification are not yet unambiguous. This satisfies the task's
-doc-plus-benchmark stop condition and leaves recall changes to their session.
+Production migration and reclaim now exist behind the switches above. The
+measurements preceding this section are historical Python prototype evidence,
+not bundled-SQLite qualification. Current validation is recorded below. The owner
+must not enable based only on those historical size/latency numbers.
 
-## Checks and delivery
+## Production validation
 
-- Owner-scale harness: nine variants, 20 complete workloads each, first plus
-  three timed repetitions; eight variants passed recall equality, FTS-only
-  passed native correctness but intentionally failed recall equality.
-- Supplemental identity/Unicode probe: passed for all nine variants; it proves
-  FTS's combining-mark mismatch and retains full alias frequency multiplicity.
-- Evidence verification: all 180 records have plans and valid source references;
-  non-FTS-only result hashes exactly match baseline; latest-state results and
-  rollback/resume checks pass. All Python files/functions meet 500/80-line limits.
-- `cargo fmt --all`, `cargo clippy -j 8 -p butler-source-check -- -D warnings`,
-  and `cargo run -j 8 -p butler-source-check -- .`: passed from the Rust workspace
-  with its pinned Rust 1.91 toolchain and fresh HOME/BUTLER_DATA.
-- `bun install --frozen-lockfile --ignore-scripts && bun run check`: passed in
-  isolation with the host's existing Bun 1.3.11 binary added to PATH.
-- Initial command setup failures were corrected: root-directory Cargo selected
-  Rust 1.98 and scanned node_modules; Bun initially was absent from PATH. The
-  first fixture seed also had a SQL placeholder count error, fixed before the
-  complete baseline measurement. No tests/budgets were weakened or retried to
-  conceal a failure.
-- No agent/runtime crate was changed or built, and runtime E2Es including MIG-01
-  were not run. They remain explicit enablement requirements above. Delivery is
-  a pushed branch without a PR; coordinator CI is outside this task.
+Linux x86_64 / WSL, bundled SQLite 3.50.2, base `09ffe9679`:
+
+- `cargo fmt`, clippy (`butler-memory`, `butler-e2e`, all targets, `-D warnings`)
+  and source-check passed. All 117 existing memory library tests passed.
+- Stub/replay memory (6), idle memory (3), hot cache (1), migration (2),
+  projection backlog (3), queue admission/shutdown (2), shutdown order (6)
+  and shutdown WAL (2) passed: 25 total. MEM-05 used public local BGE-M3 assets, no model service.
+  MIG-01 ran with both switches enabled and preserved the refused folder.
+- The owner-scale perf E2E uses the wall-clock budget helper and checks complete
+  ordered results at each stage. The final measurement is recorded below.
+  The agent and harness compile bundled SQLite with
+  `--config 'profile.dev.package.libsqlite3-sys.opt-level=3'`; Rust stays in the
+  dev profile. This is the production SQLite library, not Python's SQLite.
+- Every timed query verifies full ordered row hashes, including source origins,
+  project/session/unassigned/selected scopes, active claims, conversation/event
+  time bases and registration. EXPLAIN requires a gram SEARCH on **both** base
+  posting branches during dual candidate reads. Three kill boundaries verify
+  all migration write targets, including recovery after a killed coordinator holder.
+  Completed copy/reclaim controls assert zero additional worker stages and graph
+  commits; a final full-graph integrity check verifies the
+  entire database separately from the migration wall timer.
+
+macOS and Windows are not qualified on this Linux host. Before enablement the
+coordinator must run these same gates there, plus cancellation during the
+separate reclaim snapshot/CAS and later generation activation/rollback after
+physical relocation. An owner DATA-copy dry run and safe retirement of retained
+old graph files remain owner steps. No live owner file or service was touched.
+
+Final owner fixture: 14,293 nodes, 16,561 aliases, 886,340 posting rows. All 18
+ordered result hashes match before/during/after, with v1 rollback, after physical
+cutover and after restart. Original wall-clock budgets remain enforced.
+
+| Measurement | Result |
+| --- | ---: |
+| Migration, including 5s pinned reader, three crashes and foreground apply | 43.106s (90s budget) |
+| Peak migration WAL | 4,754,512 bytes / 4.534 MiB (16 MiB test limit) |
+| Broad candidate query, v1 → v2 | 9.231 → 8.646ms; 665 complete rows |
+| Broad expanded-gram frequencies, v1 → v2 | 268.358 → 127.438ms; 19,297 complete rows |
+| Full foreground turn plus graph apply during copy | 1.253s (6s budget) |
+| Uncommitted-batch / queued-batch stop | 50.766 / 51.018ms (6s budgets) |
+| Maximum SQL batch / copy lease span | 365 / 374ms |
+| Maximum DROP stage lease span | 140ms; includes completion checks |
+| VACUUM INTO, sync and descriptor CAS lease span | 137ms |
+| Separate reclaim, including full result validation | 2.053s (30s budget) |
+| Active graph, old → compact file | 1,337.324 → 66.195 MiB |
+| Full-graph integrity check, outside migration timer | 10.994s; `ok` |
+| 5s idle controls after copy and reclaim | 0 graph commits; 0 additional worker stages |
+
+Lease spans include release and scheduling until the awaited leased stage returns,
+so they conservatively bound the acquired interval rather than reporting SQL body
+cost as lease time. The retained old 1,337-MiB file is **not** automatically deleted;
+total disk usage falls only after the owner retires it with readers drained.
+
+Intermediate runs exposed hot-journal recovery on the coordinator, synthetic gate
+starvation under SQLite's 100ms busy backoff, and repeated copy connection setup
+that exceeded the 90s budget under host load. Acquisition recovery, a fixture busy
+handler retaining the same 2s bound, and a retained copy connection address those
+causes. No timeout, response content, workload or performance budget was relaxed.

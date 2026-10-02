@@ -5,11 +5,14 @@ use parking_lot::Mutex;
 use std::sync::atomic::AtomicBool;
 use std::{path::PathBuf, sync::Arc, time::Instant};
 
-use serde::{Deserialize, Serialize};
 use serde_json::Number;
 use tokio_util::sync::CancellationToken;
 
 use super::{MemorySyncPoll, catchup, paused};
+mod alias_postings;
+mod request;
+use request::DeadLetter;
+pub(super) use request::{SyncRequest, SyncSource};
 mod cache;
 mod typed;
 mod vector;
@@ -22,7 +25,6 @@ use crate::cognition::{
     ConversationRegistrationOutcome, MemoryGenerationTarget, RegisterConversationSourceInput,
 };
 use crate::coordination::{CognitionWaitClass, CognitionWriteCoordinator};
-use crate::lenient::{Arg, Obj};
 use butler_turn::conversation::{ConversationSourceReader, conversation_store_path};
 
 #[derive(Clone)]
@@ -38,77 +40,26 @@ pub(super) struct Input {
     pub unclean_start: Arc<AtomicBool>,
     pub catchup_progress: Arc<Mutex<Option<(PathBuf, crate::cognition::graph::CatchupState)>>>,
     pub probe: Arc<super::probe::ProbeReader>,
+    pub alias_postings_enabled: bool,
+    pub alias_reclaim_enabled: bool,
+    pub alias_postings_done: Arc<Mutex<std::collections::HashSet<PathBuf>>>,
     pub shutdown: CancellationToken,
-}
-
-/// The head of `queue/sync.jsonl`, read leniently: every field keeps what
-/// was sent so mismatches and dead letters behave as on the raw request.
-#[derive(Clone, Debug, Default, Deserialize)]
-pub(super) struct SyncRequest {
-    #[serde(default)]
-    schema_version: Arg<String>,
-    #[serde(default)]
-    job_id: Arg<String>,
-    #[serde(default)]
-    source: Arg<Obj<SyncSource>>,
-}
-
-/// The source a sync request asks to register.
-#[derive(Clone, Debug, Default, Deserialize)]
-pub(super) struct SyncSource {
-    #[serde(default)]
-    pub kind: Arg<String>,
-    #[serde(default)]
-    pub record_kind: Arg<String>,
-    #[serde(default)]
-    pub record_id: Arg<String>,
-    #[serde(default)]
-    pub revision: Arg<String>,
-    #[serde(default)]
-    pub operation_id: Arg<String>,
-    #[serde(default)]
-    pub session_id: Arg<String>,
-    #[serde(default)]
-    pub turn_id: Arg<String>,
-    #[serde(default)]
-    pub outcome_generation: Arg<Number>,
-}
-
-impl SyncRequest {
-    /// The request's source; a source that is not an object reads as empty.
-    pub(super) fn source(&self) -> &SyncSource {
-        static EMPTY: SyncSource = SyncSource {
-            kind: Arg::Missing,
-            record_kind: Arg::Missing,
-            record_id: Arg::Missing,
-            revision: Arg::Missing,
-            operation_id: Arg::Missing,
-            session_id: Arg::Missing,
-            turn_id: Arg::Missing,
-            outcome_generation: Arg::Missing,
-        };
-        self.source.valid().map_or(&EMPTY, |Obj(source)| source)
-    }
-}
-
-/// A `queue/dead-letter.jsonl` line.
-#[derive(Serialize)]
-struct DeadLetter<'a> {
-    timestamp: &'a str,
-    session_id: &'a Arg<String>,
-    project: &'static str,
-    reason: &'a str,
-    exit_code: Option<u8>,
-    stderr_tail: &'a str,
+    pub tasks: tokio_util::task::TaskTracker,
 }
 
 pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
     if input.shutdown.is_cancelled() {
         return Ok(MemorySyncPoll::Deferred);
     }
+    // Start the independent storage stage before any semantic/provider work.
+    let migrated = alias_postings::kick(&input).await?;
     let owned = input.clone();
     if super::blocking::run(move || paused(&owned)).await? {
-        return Ok(MemorySyncPoll::Deferred);
+        return Ok(if migrated {
+            MemorySyncPoll::Processed
+        } else {
+            MemorySyncPoll::Deferred
+        });
     }
     if input.target.is_some() {
         let (projected, generation) = project_next(&input).await?;
@@ -118,7 +69,8 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
         } else {
             false
         };
-        return Ok(if projected || cached || vectorized {
+        let migrated = alias_postings::process(&input, generation.as_ref()) || migrated;
+        return Ok(if projected || cached || vectorized || migrated {
             MemorySyncPoll::Processed
         } else {
             MemorySyncPoll::Idle
@@ -161,8 +113,9 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
     } else {
         false
     };
+    let migrated = alias_postings::process(&input, generation.as_ref()) || migrated;
     Ok(
-        if processed || caught_up || projected || cached || vectorized {
+        if processed || caught_up || projected || cached || vectorized || migrated {
             MemorySyncPoll::Processed
         } else if queued {
             MemorySyncPoll::Deferred

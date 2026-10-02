@@ -2,7 +2,6 @@
 BEGIN TRANSACTION;
 CREATE TABLE edge_evidence(edge_id TEXT NOT NULL REFERENCES edges(edge_id),chunk_source_id TEXT NOT NULL REFERENCES memory_chunk_sources(source_id),basis TEXT NOT NULL,extraction_version TEXT NOT NULL,PRIMARY KEY(edge_id,chunk_source_id));
 CREATE TABLE edges(edge_id TEXT PRIMARY KEY,source_node_id TEXT NOT NULL REFERENCES memory_nodes(id),target_node_id TEXT NOT NULL REFERENCES memory_nodes(id),rel_type TEXT NOT NULL,claim_node_id TEXT REFERENCES memory_nodes(id),qualifiers TEXT NOT NULL DEFAULT '{}',valid_from TEXT,valid_to TEXT,status TEXT NOT NULL DEFAULT 'active',UNIQUE(source_node_id,target_node_id,rel_type,claim_node_id,qualifiers));
-CREATE TABLE memory_alias_postings(gram TEXT NOT NULL,node_id TEXT NOT NULL REFERENCES memory_nodes(id),source_id TEXT NOT NULL REFERENCES memory_chunk_sources(source_id),surface_original TEXT NOT NULL,identity_scope TEXT NOT NULL,project_id TEXT,PRIMARY KEY(gram,node_id,source_id,surface_original));
 CREATE TABLE memory_aliases(node_id TEXT NOT NULL REFERENCES memory_nodes(id),surface_original TEXT NOT NULL,nfc_key TEXT NOT NULL,folded_key TEXT NOT NULL,language_tags TEXT NOT NULL DEFAULT '[]',source_id TEXT NOT NULL REFERENCES memory_chunk_sources(source_id),resolution_kind TEXT NOT NULL,PRIMARY KEY(node_id,surface_original,source_id));
 CREATE TABLE memory_chunk_graph_refs(memory_chunk_id TEXT NOT NULL REFERENCES memory_chunks(memory_chunk_id),graph_ref_type TEXT NOT NULL,graph_ref_id TEXT NOT NULL,relation TEXT NOT NULL,PRIMARY KEY(memory_chunk_id,graph_ref_type,graph_ref_id,relation));
 CREATE TABLE memory_chunk_sources(source_id TEXT PRIMARY KEY,episode_id TEXT NOT NULL REFERENCES memory_chunks(memory_chunk_id),revision TEXT NOT NULL,source_kind TEXT NOT NULL,conversation_session_id TEXT,conversation_message_id TEXT,part_id TEXT NOT NULL,scalar_pointer TEXT NOT NULL,byte_start INTEGER NOT NULL,byte_end INTEGER NOT NULL,content_hash TEXT NOT NULL,role TEXT NOT NULL,origin_kind TEXT NOT NULL,observed_at TEXT NOT NULL,basis TEXT NOT NULL,UNIQUE(episode_id,revision,conversation_message_id,part_id,scalar_pointer,byte_start,byte_end));
@@ -33,3 +32,21 @@ CREATE INDEX idx_chunks_project_origin ON memory_chunks(project_id,origin_kind,c
 CREATE INDEX idx_jobs_state ON memory_projection_jobs(last_served_at,created_at,job_id);
 CREATE INDEX idx_vector_units_state ON memory_vector_units(state,job_id,record_kind,unit_id);
 COMMIT;
+
+
+
+CREATE TABLE memory_alias_documents(id INTEGER PRIMARY KEY,node_id TEXT NOT NULL,source_id TEXT NOT NULL,surface_original TEXT NOT NULL,UNIQUE(node_id,source_id,surface_original),FOREIGN KEY(node_id,surface_original,source_id) REFERENCES memory_aliases(node_id,surface_original,source_id) ON DELETE CASCADE);
+CREATE TABLE memory_alias_grams(gram TEXT NOT NULL,alias_id INTEGER NOT NULL REFERENCES memory_alias_documents(id) ON DELETE CASCADE,PRIMARY KEY(gram,alias_id)) WITHOUT ROWID;
+CREATE INDEX memory_alias_grams_alias ON memory_alias_grams(alias_id);
+CREATE TABLE IF NOT EXISTS memory_alias_index_dirty(node_id TEXT NOT NULL,source_id TEXT NOT NULL,surface_original TEXT NOT NULL,PRIMARY KEY(node_id,source_id,surface_original));
+CREATE TRIGGER memory_alias_documents_update BEFORE UPDATE ON memory_aliases BEGIN
+ DELETE FROM memory_alias_documents WHERE node_id=OLD.node_id AND source_id=OLD.source_id AND surface_original=OLD.surface_original; END;
+
+CREATE TRIGGER memory_alias_index_insert AFTER INSERT ON memory_aliases BEGIN
+ INSERT OR IGNORE INTO memory_alias_index_dirty VALUES(NEW.node_id,NEW.source_id,NEW.surface_original); END;
+CREATE TRIGGER memory_alias_index_update AFTER UPDATE ON memory_aliases BEGIN
+ INSERT OR IGNORE INTO memory_alias_index_dirty VALUES(NEW.node_id,NEW.source_id,NEW.surface_original); END;
+CREATE TRIGGER memory_alias_index_delete BEFORE DELETE ON memory_aliases BEGIN
+ DELETE FROM memory_alias_index_dirty WHERE node_id=OLD.node_id AND source_id=OLD.source_id AND surface_original=OLD.surface_original; END;
+CREATE VIEW memory_alias_postings AS SELECT p.gram,a.node_id,a.source_id,a.surface_original FROM memory_alias_grams p JOIN memory_alias_documents a ON a.id=p.alias_id;
+INSERT INTO memory_state VALUES('alias_postings_v2','fresh');

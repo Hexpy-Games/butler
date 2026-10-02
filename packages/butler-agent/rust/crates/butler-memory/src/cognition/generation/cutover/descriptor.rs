@@ -87,7 +87,22 @@ pub(super) fn commit_descriptor_transition(
 ) -> CognitionResult<DescriptorCapture> {
     assert_cutover_lease(data_root, environment, lease)?;
     validate_descriptor(&guard.expected.fields)?;
-    validate_descriptor(next_descriptor)?;
+    let mut next_descriptor = next_descriptor.clone();
+    if next_descriptor.generation_id != guard.expected.fields.generation_id {
+        if next_descriptor.previous_generation_id.as_deref()
+            == Some(&guard.expected.fields.generation_id)
+        {
+            next_descriptor.previous_storage_generation_id =
+                guard.expected.fields.storage_generation_id.clone();
+        }
+        if guard.expected.fields.previous_generation_id.as_deref()
+            == Some(&next_descriptor.generation_id)
+        {
+            next_descriptor.storage_generation_id =
+                guard.expected.fields.previous_storage_generation_id.clone();
+        }
+    }
+    validate_descriptor(&next_descriptor)?;
     if !valid_generation_id(guard.target_generation_id)
         || next_descriptor.generation_id != guard.target_generation_id
     {
@@ -119,8 +134,8 @@ pub(super) fn commit_descriptor_transition(
     // Recheck containment at the mutation boundary. The lease coordinates other
     // writers; this check keeps configured paths inside mutable DATA.
     ensure_data_authority(data_root, &paths)?;
-    durable::write_json(&descriptor_path, next_descriptor)?;
-    DescriptorCapture::of(next_descriptor)
+    durable::write_json(&descriptor_path, &next_descriptor)?;
+    DescriptorCapture::of(&next_descriptor)
 }
 
 /// Repairs only the manifest states named by the descriptor installed by a
@@ -224,7 +239,14 @@ fn read_descriptor(path: &Path) -> CognitionResult<DescriptorCapture> {
 }
 
 fn validate_descriptor(descriptor: &ActiveDescriptor) -> CognitionResult<()> {
-    if descriptor.schema != ACTIVE_DESCRIPTOR_SCHEMA
+    if [
+        descriptor.storage_generation_id.as_deref(),
+        descriptor.previous_storage_generation_id.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .any(|id| !valid_generation_id(id))
+        || descriptor.schema != ACTIVE_DESCRIPTOR_SCHEMA
         || !valid_generation_id(&descriptor.generation_id)
         || descriptor
             .previous_generation_id

@@ -1,5 +1,6 @@
 //! Existing-generation graph connection and durable registration repository.
 
+mod alias_postings;
 mod apply;
 mod cache_quantum;
 mod cache_work;

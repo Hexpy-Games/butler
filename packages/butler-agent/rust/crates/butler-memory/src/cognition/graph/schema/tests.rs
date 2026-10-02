@@ -2,6 +2,8 @@ use rusqlite::Connection;
 use serde::Deserialize;
 
 use super::*;
+#[path = "tests/alias_storage.rs"]
+mod alias_storage;
 
 #[derive(Deserialize)]
 struct Golden {
@@ -17,6 +19,7 @@ struct Golden {
 #[test]
 fn memory_graph_schema_is_pinned() {
     schema_matches_actual_bun_ensure_schema_surface_and_is_idempotent();
+    alias_storage::pin();
     legacy_graph_requires_the_existing_explicit_migration();
     historical_canonical_source_ids_become_nullable_without_data_rewrite();
 }

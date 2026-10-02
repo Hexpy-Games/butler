@@ -449,6 +449,12 @@ pub struct ActiveDescriptor {
     pub activated_at: String,
     /// Whether projection runs against it.
     pub projection_mode: ProjectionMode,
+    /// Optional physical graph storage; vectors, manifests and logical IDs stay stable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub storage_generation_id: Option<String>,
+    /// Physical graph of the previous generation, retained across rollback.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_storage_generation_id: Option<String>,
 }
 
 impl ActiveDescriptor {
@@ -465,6 +471,8 @@ impl ActiveDescriptor {
             previous_generation_id: previous_generation_id.map(str::to_owned),
             activated_at: activated_at.into(),
             projection_mode,
+            storage_generation_id: None,
+            previous_storage_generation_id: None,
         }
     }
 }
@@ -478,6 +486,12 @@ pub(crate) struct DescriptorView {
     pub generation_id: Option<String>,
     #[serde(default, deserialize_with = "lenient::option")]
     pub projection_mode: Option<ProjectionMode>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub storage_generation_id: Option<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub previous_generation_id: Option<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub previous_storage_generation_id: Option<String>,
 }
 
 fn error(code: CognitionCode) -> CognitionError {

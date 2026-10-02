@@ -18,6 +18,9 @@ use crate::cognition::{CognitionCode, CognitionError, CognitionPathEnvironment};
 pub(super) struct ServingGeneration {
     pub generation_id: String,
     pub projection_mode: Option<ProjectionMode>,
+    pub storage_generation_id: Option<String>,
+    pub previous_generation_id: Option<String>,
+    pub previous_storage_generation_id: Option<String>,
 }
 
 /// Whether a manifest read validates the bound embedding for runtime use.
@@ -37,17 +40,24 @@ pub fn resolve_generation(
 ) -> Result<MemoryGenerationHandle, CognitionError> {
     let memory_root = environment.memory_root(data_root);
     let active = matches!(target, MemoryGenerationTarget::Active { .. });
+    let descriptor = read_descriptor(&memory_root)?;
+    let mut storage_generation_id = None;
     let generation_id = match target {
         MemoryGenerationTarget::Active {
             expected_generation,
         } => {
-            let descriptor = read_descriptor(&memory_root)?;
             if descriptor.generation_id != *expected_generation {
                 return Err(error(CognitionCode::MemoryGenerationChanged));
             }
-            descriptor.generation_id
+            storage_generation_id = descriptor.storage_generation_id.clone();
+            descriptor.generation_id.clone()
         }
-        MemoryGenerationTarget::Rebuild { generation_id, .. } => generation_id.clone(),
+        MemoryGenerationTarget::Rebuild { generation_id, .. } => {
+            if descriptor.previous_generation_id.as_deref() == Some(generation_id) {
+                storage_generation_id = descriptor.previous_storage_generation_id.clone();
+            }
+            generation_id.clone()
+        }
     };
     safe_generation_id(&generation_id)?;
     let manifest_root = memory_root.join("generations").join(&generation_id);
@@ -77,6 +87,7 @@ pub fn resolve_generation(
         GenerationFormat::Legacy => memory_root.join("db"),
         GenerationFormat::V2 => manifest_root,
     };
+    let graph_path = physical_graph(&memory_root, &root, storage_generation_id.as_deref())?;
     let source_root = if active {
         data_root.to_owned()
     } else {
@@ -84,7 +95,7 @@ pub fn resolve_generation(
     };
     Ok(MemoryGenerationHandle {
         generation_id,
-        graph_path: root.join("graph.sqlite"),
+        graph_path,
         root,
         embedding,
         source_root,
@@ -216,6 +227,9 @@ pub(super) fn read_descriptor(memory_root: &Path) -> Result<ServingGeneration, C
     Ok(ServingGeneration {
         generation_id,
         projection_mode: view.projection_mode,
+        storage_generation_id: view.storage_generation_id,
+        previous_generation_id: view.previous_generation_id,
+        previous_storage_generation_id: view.previous_storage_generation_id,
     })
 }
 
@@ -273,4 +287,19 @@ pub(in crate::cognition::generation) fn safe_generation_id(
 
 pub(super) fn error(code: CognitionCode) -> CognitionError {
     CognitionError::new(code, code.as_str())
+}
+
+pub(super) fn physical_graph(
+    memory: &Path,
+    root: &Path,
+    storage_id: Option<&str>,
+) -> Result<PathBuf, CognitionError> {
+    if let Some(id) = storage_id {
+        safe_generation_id(id)?;
+        Ok(memory
+            .join("generations")
+            .join(format!(".storage-{id}/graph.sqlite")))
+    } else {
+        Ok(root.join("graph.sqlite"))
+    }
 }

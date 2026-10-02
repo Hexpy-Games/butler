@@ -1,8 +1,10 @@
 //! Immutable selection and fresh mutation authority for Cognition generations.
 
+pub(in crate::cognition) mod alias_postings;
 mod authority;
 pub(in crate::cognition) mod cache;
 mod cutover;
+pub(in crate::cognition) use cutover::reclaim_alias_postings;
 mod initialize;
 mod manifest;
 mod qualification;

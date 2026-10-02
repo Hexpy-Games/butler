@@ -7,7 +7,17 @@ use super::ensure_column;
 use crate::cognition::CognitionResult;
 
 pub(super) fn create(connection: &Connection) -> CognitionResult<()> {
+    let existing: bool = connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name='memory_aliases')",
+            [],
+            |r| r.get(0),
+        )
+        .map_err(db_error)?;
     connection.execute_batch(BASE_SCHEMA).map_err(db_error)?;
+    if !existing {
+        super::super::alias_postings::fresh(connection)?;
+    }
     ensure_claim_schema(connection)?;
     ensure_source_index_schema(connection)?;
     Ok(())
@@ -34,7 +44,6 @@ CREATE TABLE IF NOT EXISTS memory_chunk_sources(source_id TEXT PRIMARY KEY,episo
 CREATE TABLE IF NOT EXISTS memory_nodes(id TEXT PRIMARY KEY,type TEXT NOT NULL,label_original TEXT NOT NULL,identity_scope TEXT NOT NULL,project_id TEXT,canonical_node_id TEXT REFERENCES memory_nodes(id),created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS memory_aliases(node_id TEXT NOT NULL REFERENCES memory_nodes(id),surface_original TEXT NOT NULL,nfc_key TEXT NOT NULL,folded_key TEXT NOT NULL,language_tags TEXT NOT NULL DEFAULT '[]',source_id TEXT NOT NULL REFERENCES memory_chunk_sources(source_id),resolution_kind TEXT NOT NULL,PRIMARY KEY(node_id,surface_original,source_id));
 CREATE TABLE IF NOT EXISTS memory_evidence(node_id TEXT NOT NULL REFERENCES memory_nodes(id),source_id TEXT NOT NULL REFERENCES memory_chunk_sources(source_id),episode_id TEXT NOT NULL,revision TEXT NOT NULL,PRIMARY KEY(node_id,source_id));
-CREATE TABLE IF NOT EXISTS memory_alias_postings(gram TEXT NOT NULL,node_id TEXT NOT NULL REFERENCES memory_nodes(id),source_id TEXT NOT NULL REFERENCES memory_chunk_sources(source_id),surface_original TEXT NOT NULL,identity_scope TEXT NOT NULL,project_id TEXT,PRIMARY KEY(gram,node_id,source_id,surface_original));
 CREATE TABLE IF NOT EXISTS edges(edge_id TEXT PRIMARY KEY,source_node_id TEXT NOT NULL REFERENCES memory_nodes(id),target_node_id TEXT NOT NULL REFERENCES memory_nodes(id),rel_type TEXT NOT NULL,claim_node_id TEXT REFERENCES memory_nodes(id),qualifiers TEXT NOT NULL DEFAULT '{}',valid_from TEXT,valid_to TEXT,status TEXT NOT NULL DEFAULT 'active',UNIQUE(source_node_id,target_node_id,rel_type,claim_node_id,qualifiers));
 CREATE TABLE IF NOT EXISTS edge_evidence(edge_id TEXT NOT NULL REFERENCES edges(edge_id),chunk_source_id TEXT NOT NULL REFERENCES memory_chunk_sources(source_id),basis TEXT NOT NULL,extraction_version TEXT NOT NULL,PRIMARY KEY(edge_id,chunk_source_id));
 CREATE TABLE IF NOT EXISTS memory_projection_model_policy(id INTEGER PRIMARY KEY CHECK(id=1),primary_model TEXT NOT NULL,primary_effort TEXT NOT NULL,fallback_model TEXT NOT NULL,fallback_effort TEXT NOT NULL,active_slot TEXT NOT NULL CHECK(active_slot IN ('primary','fallback')),updated_at TEXT NOT NULL,last_transition_json TEXT);

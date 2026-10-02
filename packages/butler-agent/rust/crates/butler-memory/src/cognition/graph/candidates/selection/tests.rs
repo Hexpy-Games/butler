@@ -11,7 +11,7 @@ fn real_schema_selector_matches_bun_alias_lexical_fusion_golden() {
         CREATE TABLE memory_chunks(memory_chunk_id TEXT PRIMARY KEY,current_revision TEXT,status TEXT,project_id TEXT,conversation_session_id TEXT); \
         CREATE TABLE memory_chunk_sources(source_id TEXT PRIMARY KEY,episode_id TEXT,revision TEXT,source_kind TEXT,origin_kind TEXT,role TEXT,basis TEXT,observed_at TEXT,conversation_message_id TEXT); \
         CREATE TABLE memory_aliases(node_id TEXT,surface_original TEXT,nfc_key TEXT,folded_key TEXT,source_id TEXT); \
-        CREATE TABLE memory_alias_postings(gram TEXT,node_id TEXT,source_id TEXT,surface_original TEXT); \
+        CREATE TABLE memory_alias_documents(id INTEGER PRIMARY KEY,node_id TEXT,source_id TEXT,surface_original TEXT,UNIQUE(node_id,source_id,surface_original)); CREATE TABLE memory_alias_grams(gram TEXT,alias_id INTEGER,PRIMARY KEY(gram,alias_id)) WITHOUT ROWID; CREATE VIEW memory_alias_postings AS SELECT p.gram,a.node_id,a.source_id,a.surface_original FROM memory_alias_grams p JOIN memory_alias_documents a ON a.id=p.alias_id; \
         CREATE TABLE memory_claims(node_id TEXT,valid_from TEXT,valid_to TEXT); \
         CREATE TABLE memory_evidence(node_id TEXT,source_id TEXT);").unwrap();
     db.execute(
@@ -36,9 +36,10 @@ fn real_schema_selector_matches_bun_alias_lexical_fusion_golden() {
             rusqlite::params![id, surface, source],
         )
         .unwrap();
+        db.execute("INSERT INTO memory_alias_documents(node_id,source_id,surface_original) VALUES(?1,?2,?3)", rusqlite::params![id,source,surface]).unwrap();
         for gram in crate::cognition::lexical::folded_grams(surface) {
             db.execute(
-                "INSERT INTO memory_alias_postings VALUES(?1,?2,?3,?4)",
+                "INSERT INTO memory_alias_grams SELECT ?1,id FROM memory_alias_documents WHERE node_id=?2 AND source_id=?3 AND surface_original=?4",
                 rusqlite::params![gram, id, source, surface],
             )
             .unwrap();

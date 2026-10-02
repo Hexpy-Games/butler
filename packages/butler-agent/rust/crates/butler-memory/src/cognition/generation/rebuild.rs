@@ -324,6 +324,14 @@ fn stage_snapshot(
 /// Writes a consistent copy of the SQLite store at `source` to `target` with
 /// `VACUUM INTO`, then syncs the copy and its directory.
 fn vacuum_snapshot(source: &Path, target: &Path) -> CognitionResult<()> {
+    vacuum_snapshot_abortable(source, target, &CancellationToken::new())
+}
+
+pub(in crate::cognition::generation) fn vacuum_snapshot_abortable(
+    source: &Path,
+    target: &Path,
+    stop: &CancellationToken,
+) -> CognitionResult<()> {
     let parent = target
         .parent()
         .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
@@ -334,6 +342,8 @@ fn vacuum_snapshot(source: &Path, target: &Path) -> CognitionResult<()> {
     let path = target
         .to_str()
         .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
+    let cancellation = stop.clone();
+    db.progress_handler(1000, Some(move || cancellation.is_cancelled()));
     db.execute("VACUUM INTO ?1", params![path])
         .map_err(snapshot_changed)?;
     db.close().map_err(|(_, source)| snapshot_changed(source))?;

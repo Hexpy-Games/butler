@@ -1,6 +1,8 @@
 //! Source-bound memory generation cutover. The descriptor is the serving authority.
 
 mod activate;
+mod alias_reclaim;
+pub(in crate::cognition) use alias_reclaim::advance as reclaim_alias_postings;
 mod descriptor;
 mod qualification;
 mod rollback;

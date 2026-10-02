@@ -31,7 +31,9 @@ async fn mig_01_pre_btcc_data_dir_is_refused_without_writes() -> Result<(), Harn
         butler_e2e::e2e::fixtures::FIXTURE_TIME,
     )?;
     let before = tree(&data);
-    let launch = butler_e2e::e2e::agent::Launch::new(&setup.sandbox)?;
+    let mut launch = butler_e2e::e2e::agent::Launch::new(&setup.sandbox)?;
+    launch.set_env("BUTLER_ALIAS_POSTINGS_V2", "1");
+    launch.set_env("BUTLER_ALIAS_POSTINGS_RECLAIM", "1");
     let output = launch
         .command()
         .stdin(std::process::Stdio::null())

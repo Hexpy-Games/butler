@@ -115,6 +115,7 @@ impl Corpus {
             serde_json::to_string(query_grams).map_err(json_error)?,
         )];
         args.extend(self.args.iter().cloned());
+        let sql = crate::cognition::graph::alias_postings::query(db, &sql)?;
         let mut statement = db.prepare(&sql).map_err(db_error)?;
         let mut rows = statement.query(params_from_iter(args)).map_err(db_error)?;
         let mut documents = Vec::new();
@@ -153,6 +154,7 @@ impl Corpus {
         args.push(SqlValue::Text(
             serde_json::to_string(grams).map_err(json_error)?,
         ));
+        let sql = crate::cognition::graph::alias_postings::query(db, &sql)?;
         let mut statement = db.prepare(&sql).map_err(db_error)?;
         for row in statement
             .query_map(params_from_iter(args), |row| {

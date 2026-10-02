@@ -20,7 +20,17 @@ pub fn assert_mutation_authority(
     let descriptor = read_descriptor(&memory_root)?;
     let valid = match target {
         MemoryGenerationTarget::Active { .. } => {
+            let logical_root = memory_root
+                .join("generations")
+                .join(&descriptor.generation_id);
+            let graph = super::read::physical_graph(
+                &memory_root,
+                &logical_root,
+                descriptor.storage_generation_id.as_deref(),
+            )?;
             descriptor.generation_id == handle.generation_id
+                && handle.root == logical_root
+                && handle.graph_path == graph
                 && descriptor.projection_mode == Some(ProjectionMode::Running)
                 && manifest.format == Some(GenerationFormat::V2)
         }

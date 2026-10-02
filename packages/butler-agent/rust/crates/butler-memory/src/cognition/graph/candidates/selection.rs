@@ -123,6 +123,7 @@ fn lexical(
         LEFT JOIN memory_claims mc ON mc.node_id=e.id \
         WHERE p.gram IN (SELECT value FROM json_each(?3)) AND {ELIGIBLE} ORDER BY p.node_id,p.source_id,p.surface_original"
     );
+    let matched_sql = crate::cognition::graph::alias_postings::query(db, &matched_sql)?;
     let mut query = db.prepare(&matched_sql).map_err(db_error)?;
     let mut rows = query
         .query(params![project, as_of, grams_json])
@@ -183,6 +184,7 @@ fn document_frequencies(
         df.insert(gram.clone(), 0usize);
     }
     let encoded = serde_json::to_string(&all_grams).map_err(json_error)?;
+    let df_sql = crate::cognition::graph::alias_postings::query(db, &df_sql)?;
     let mut statement = db.prepare(&df_sql).map_err(db_error)?;
     for row in statement
         .query_map(params![project, as_of, encoded], |r| {
