@@ -116,7 +116,9 @@ pub(super) fn install(
     let previous = read_local()?;
     let shell = PathBuf::from(std::env::var_os("SystemRoot").ok_or(Error::InvalidValue)?)
         .join("System32/WindowsPowerShell/v1.0/powershell.exe");
-    let xml = task_xml::render(definition, &user, &shell.to_string_lossy())?;
+    let mut definition = definition.clone();
+    inherit_profile(&mut definition);
+    let xml = task_xml::render(&definition, &user, &shell.to_string_lossy())?;
     crate::secure_fs::create_private_dir_all(path.parent().ok_or(Error::InvalidValue)?)?;
     std::fs::write(&path, xml)?;
     if activation == Activation::Load {
@@ -235,5 +237,20 @@ pub(super) fn registered_text() -> Result<Option<String>, Error> {
         read_local()
     } else {
         owned(&sid()?)
+    }
+}
+
+// Scheduler actions inherit the user's login environment, not this terminal's
+// profile overrides. Preserve the profile used by the installing command.
+pub(super) fn inherit_profile(definition: &mut Definition) {
+    for name in ["HOME", "USERPROFILE", "LOCALAPPDATA", "APPDATA"] {
+        if definition.env.iter().any(|(key, _)| key == name) {
+            continue;
+        }
+        if let Ok(value) = std::env::var(name) {
+            if !value.is_empty() {
+                definition.env.push((name.to_owned(), value));
+            }
+        }
     }
 }

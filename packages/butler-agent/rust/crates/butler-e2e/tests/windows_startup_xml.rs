@@ -22,6 +22,29 @@ fn windows_task_xml_roundtrip_and_foreign_detection() -> Result<(), Box<dyn std:
         working_dir: "C:\\미리 보기\\' & %DATA% !".into(),
         env: vec![("BUTLER_DATA".into(), "C:\\' & %DATA% !".into())],
     };
+    let mut profile = definition.clone();
+    profile.env.push(("HOME".into(), "explicit-profile".into()));
+    if test_support::task_profile(&mut profile) {
+        assert!(
+            profile
+                .env
+                .iter()
+                .any(|(key, value)| key == "HOME" && value == "explicit-profile")
+        );
+        assert_eq!(
+            profile.env.iter().filter(|(key, _)| key == "HOME").count(),
+            1
+        );
+        for key in ["USERPROFILE", "LOCALAPPDATA", "APPDATA"] {
+            let expected = std::env::var(key).unwrap();
+            assert!(
+                profile
+                    .env
+                    .iter()
+                    .any(|(name, value)| name == key && value == &expected)
+            );
+        }
+    }
     let xml = test_support::task_xml(&definition, SID, SHELL).unwrap();
     assert!(xml.contains("<RunLevel>LeastPrivilege</RunLevel>"));
     assert!(xml.contains("<Hidden>true</Hidden>"));

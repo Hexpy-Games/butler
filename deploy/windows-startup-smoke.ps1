@@ -27,6 +27,11 @@ try {
         [IO.Path]::GetFullPath($xml.Task.Actions.Exec.WorkingDirectory) -ne [IO.Path]::GetFullPath($env:BUTLER_E2E_INSTALLED_ROOT)) {
         throw 'Task definition contract failed'
     }
+    $encoded = ($xml.Task.Actions.Exec.Arguments -split '-EncodedCommand ')[1]
+    $script = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($encoded))
+    foreach ($key in @('HOME','LOCALAPPDATA','APPDATA','BUTLER_AGENT_HOME')) {
+        if (!$script.Contains("SetEnvironmentVariable('$key',")) { throw "Missing task profile binding: $key" }
+    }
     # enable runs the job immediately; verify the real service, not just task existence.
     $deadline = [DateTime]::UtcNow.AddSeconds(30)
     do {

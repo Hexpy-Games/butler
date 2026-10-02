@@ -61,3 +61,18 @@ pub fn task_enabled(xml: &str) -> Option<bool> {
 pub fn task_text(bytes: &[u8]) -> Result<String, super::Error> {
     super::task_xml::decode(bytes)
 }
+
+/// Copies the invoking profile into a Windows task, with no manager calls.
+/// Returns false on hosts whose service definitions already inherit HOME.
+pub fn task_profile(definition: &mut Definition) -> bool {
+    #[cfg(windows)]
+    {
+        super::windows::inherit_profile(definition);
+        true
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = definition;
+        false
+    }
+}

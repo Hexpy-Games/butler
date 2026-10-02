@@ -77,7 +77,13 @@ fn install(
         return Err(refused("the Butler App supervises this service"));
     }
     let data_text = data_root.to_string_lossy().into_owned();
-    let mut env = vec![("BUTLER_DATA".to_owned(), data_text.clone())];
+    let mut env = vec![
+        ("BUTLER_DATA".to_owned(), data_text.clone()),
+        (
+            butler_platform::user_dirs::AGENT_HOME_VARIABLE.to_owned(),
+            home.root().to_string_lossy().into_owned(),
+        ),
+    ];
     // The service settings this command was run with are the job's.
     env.extend(JOB_SETTINGS.iter().filter_map(|name| {
         let value = std::env::var(name).ok().filter(|value| !value.is_empty())?;
