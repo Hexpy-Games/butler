@@ -96,10 +96,10 @@ fn instance_lock_is_released_when_its_identified_holder_is_terminated() {
                 Err(StopError::Gone)
             ));
             terminate(pid, &started).unwrap();
-            #[cfg(target_os = "macos")]
+            #[cfg(unix)]
             let zombie = unreaped_identity(pid, &started);
             let status = holder.wait().unwrap();
-            #[cfg(target_os = "macos")]
+            #[cfg(unix)]
             {
                 assert_eq!(zombie.start.unwrap(), None, "an unreaped exit is not live");
                 assert_eq!(
@@ -120,14 +120,14 @@ fn instance_lock_is_released_when_its_identified_holder_is_terminated() {
     InstanceLock::try_exclusive(open_lock_file(&path)).unwrap();
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(unix)]
 struct UnreapedIdentity {
     start: Result<Option<String>, butler_platform::instance::IdentityError>,
     executable: Result<Option<String>, butler_platform::instance::IdentityError>,
     termination: Result<(), StopError>,
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(unix)]
 fn unreaped_identity(pid: u32, started: &str) -> UnreapedIdentity {
     // Leave our child unreaped until the kernel reports its zombie state.
     super::eventually("unreaped holder exit", || {
