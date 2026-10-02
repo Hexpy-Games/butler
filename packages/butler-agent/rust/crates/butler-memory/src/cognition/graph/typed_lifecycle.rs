@@ -17,6 +17,17 @@ pub(in crate::cognition) struct TypedLifecycleInput<'a> {
 }
 
 impl GraphRepository {
+    /// Targeted semantic readiness for a committed active rule revision.
+    pub(in crate::cognition) fn rule_projection_ready(
+        &self,
+        record: &str,
+        revision: &str,
+    ) -> CognitionResult<bool> {
+        self.connection()?.query_row(
+            "SELECT EXISTS(SELECT 1 FROM memory_chunks c JOIN memory_projection_jobs j ON j.episode_id=c.memory_chunk_id AND j.revision=c.current_revision WHERE c.source_key=?1 AND c.current_revision=?2 AND c.status='active' AND json_extract(j.semantic_graph_state,'$.state')='complete')",
+            params![format!("explicit_record:{record}"),revision], |row| row.get(0)).map_err(db_error)
+    }
+
     pub(in crate::cognition) fn consume_typed_lifecycle(
         &mut self,
         input: TypedLifecycleInput<'_>,

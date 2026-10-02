@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use butler_turn::workspace::StoredSessionBinding;
 use serde_json::{Map, Value};
 
 use crate::context::{ContextError, ContextResult, prefix_utf16};
@@ -34,37 +35,48 @@ pub(super) fn read_config(data_root: &Path) -> ContextResult<Value> {
     Ok(serde_json::from_str(&text).unwrap_or_else(|_| Value::Object(Map::new())))
 }
 
-pub(super) fn build_rules_content(rules_dir: &Path) -> ContextResult<Option<String>> {
-    let Some(index) = read_text_if_exists(&rules_dir.join("INDEX.md"))? else {
-        return Ok(None);
+pub(super) async fn build_rules_section(
+    rules_dir: &Path,
+    binding: &StoredSessionBinding,
+    cognition: &dyn super::CognitionPromptPort,
+) -> ContextResult<Option<butler_turn::btcc::ContextSection>> {
+    let projection = super::PromptProjectionInput {
+        session_id: &binding.session_id,
+        project_id: binding.project_id.as_deref(),
     };
-    let mut blocks = Vec::new();
-    for relative in parse_rule_links(&index) {
-        let resolved_relative = relative.trim_start_matches('/');
-        if let Some(content) = read_text_if_exists(&rules_dir.join(resolved_relative))? {
-            blocks.push(format!("### {relative}\n\n{content}"));
-        }
+    let rules = cognition.remembered_rules(&projection, rules_dir).await?;
+    if rules.is_empty() {
+        return Ok(None);
     }
-    Ok((!blocks.is_empty()).then(|| blocks.join("\n\n---\n\n")))
-}
-
-fn parse_rule_links(index: &str) -> Vec<String> {
-    index
-        .split('\n')
-        .filter_map(|line| {
-            let mut offset = 0;
-            while let Some(open) = line[offset..].find('(') {
-                let start = offset + open + 1;
-                let close = line[start..].find(')')?;
-                let value = &line[start..start + close];
-                if value.ends_with(".md") {
-                    return Some(value.to_owned());
-                }
-                offset = start + close + 1;
-            }
-            None
+    let content = rules
+        .iter()
+        .map(|rule| {
+            format!(
+                "### [{}] · {}\n\n{}",
+                rule.handle,
+                if rule.project_id.is_some() {
+                    "This project"
+                } else {
+                    "All chats"
+                },
+                rule.text
+            )
         })
-        .collect()
+        .collect::<Vec<_>>()
+        .join("\n\n---\n\n");
+    let targets = rules.iter().map(|rule| serde_json::json!({
+        "handle":rule.handle, "expected_revision":rule.revision, "project_id":rule.project_id,
+    })).collect::<Vec<_>>();
+    let mut section = super::runtime::section(
+        "rules",
+        "Active Rules",
+        content,
+        "live_configuration",
+        "mandatory_hot_cache",
+        "user",
+    );
+    section.source = Some(serde_json::json!({"rememberedRuleSnapshot":targets}));
+    Ok(Some(section))
 }
 
 pub(super) fn active_persona(data_root: &Path) -> ContextResult<Option<String>> {

@@ -1,12 +1,14 @@
 //! Public memory-write adapters using the current Turn's canonical provenance.
+mod services;
+pub(crate) use services::MemoryWriteServices;
 
 use butler_core::tool_protocol::ToolName;
 use serde_json::{Map, Value, json};
 
 use butler_core::json::JsonDocument;
 use butler_memory::cognition::{
-    ExplicitMemoryUpdateInput, TaskMemoryIngestionResult, ingest_task_outcome_memory,
-    update_explicit_memory,
+    ExplicitMemoryUpdateInput, RememberedRuleReceipt, RememberedRuleTarget,
+    TaskMemoryIngestionResult, ingest_task_outcome_memory,
 };
 use butler_turn::btcc::{
     ApprovalExemptAction, GuidedInvocation, ModelRoundToolCall, ToolExecutionError,
@@ -20,16 +22,28 @@ use super::GuidedTools;
 pub(super) fn supports(name: &str) -> bool {
     matches!(
         ToolName::parse(name),
-        Some(ToolName::IngestTaskMemory | ToolName::UpdateExplicitMemory)
+        Some(
+            ToolName::IngestTaskMemory
+                | ToolName::UpdateExplicitMemory
+                | ToolName::ForgetExplicitMemory
+        )
     )
 }
 
-pub(super) fn execute(
+pub(super) async fn execute(
     owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    if call.name == ToolName::ForgetExplicitMemory
+        && owner.binding.access_mode != butler_turn::btcc::AccessMode::FullAccess
+    {
+        return encoded(&failure(
+            "memory_write_requires_full_access",
+            "Full access is required to forget a rule.",
+        ));
+    }
     if !owner
         .binding
         .access_mode
@@ -43,7 +57,8 @@ pub(super) fn execute(
     }
     let result = match call.name.as_str() {
         "ingest_task_memory" => ingest(owner, &call.arguments),
-        "update_explicit_memory" => update(owner, invocation, &call.arguments, call_id),
+        "update_explicit_memory" => update(owner, invocation, &call.arguments, call_id).await,
+        "forget_explicit_memory" => forget(owner, invocation, &call.arguments, call_id).await,
         // Dispatch routes only supported names here.
         _ => json!({"ok":false,"error":{"code":"unknown_tool",
             "message":"This tool is not a memory write tool."}}),
@@ -65,8 +80,8 @@ fn ingest(owner: &GuidedTools, args: &Map<String, Value>) -> Value {
     };
     match ingest_task_outcome_memory(
         &owner.binding.butler_data,
-        &owner.memory_paths,
-        &owner.memory_publisher,
+        &owner.memory_writes.paths,
+        &owner.memory_writes.publisher,
         task_id,
     ) {
         Ok(result) => task_result(result),
@@ -74,68 +89,150 @@ fn ingest(owner: &GuidedTools, args: &Map<String, Value>) -> Value {
     }
 }
 
-fn update(
+async fn update(
     owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
     args: &Map<String, Value>,
     call_id: &str,
 ) -> Value {
-    // Source binds canonical authorship before validating the model-facing
-    // update fields, and never uses caller-provided scope values.
     let (conversation_session_id, conversation_message_id) =
-        match canonical_authored_source(owner, invocation) {
+        match canonical_authored_source(owner, invocation).await {
             Ok(binding) => binding,
             Err(code) => return binding_failure(code),
         };
-    if args.get("kind").and_then(Value::as_str).map(str::trim) != Some("rule") {
-        return failure(
-            "update_explicit_memory_requires_kind_rule",
-            "update_explicit_memory requires kind rule",
-        );
-    }
-    let Some(text) = args.get("text").and_then(Value::as_str) else {
-        return failure(
-            "update_explicit_memory_requires_text",
-            "update_explicit_memory requires text",
-        );
+    let text = match remember_text(args) {
+        Ok(text) => text,
+        Err(error) => return error,
     };
-    if butler_core::public_text::trim_js_whitespace(text).is_empty() {
-        return failure(
-            "update_explicit_memory_requires_text",
-            "update_explicit_memory requires text",
-        );
-    }
-    let source = args
-        .get("source")
-        .and_then(Value::as_str)
-        .map(butler_core::public_text::trim_js_whitespace)
-        .filter(|value| !value.is_empty());
-    if source.is_none() {
-        return failure(
-            "update_explicit_memory_requires_source",
-            "update_explicit_memory requires source",
-        );
-    }
-
-    match update_explicit_memory(
-        &owner.binding.butler_data,
-        &owner.memory_paths,
-        &owner.memory_publisher,
-        &ExplicitMemoryUpdateInput {
-            text: text.to_owned(),
-            operation_id: Some(call_id.to_owned()),
-            project_id: owner.binding.memory.project_id.clone(),
-            conversation_session_id,
-            conversation_message_id,
-            ..ExplicitMemoryUpdateInput::default()
-        },
-    ) {
+    let input = ExplicitMemoryUpdateInput {
+        text: text.to_owned(),
+        operation_id: Some(call_id.to_owned()),
+        project_id: owner.binding.memory.project_id.clone(),
+        conversation_session_id,
+        conversation_message_id,
+    };
+    let result = if let Some(handle) = args.get("replaces") {
+        let target = match selected_target(owner, invocation, handle) {
+            Ok(target) => target,
+            Err(error) => return error,
+        };
+        owner
+            .memory_writes
+            .rules
+            .correct(target, input, invocation.cancellation.clone())
+            .await
+    } else {
+        owner
+            .memory_writes
+            .rules
+            .remember(input, invocation.cancellation.clone())
+            .await
+    };
+    match result {
         Ok(result) => explicit_result(&result),
         Err(error) => cognition_failure(error.code(), &error.message()),
     }
 }
 
-fn canonical_authored_source(
+async fn forget(
+    owner: &GuidedTools,
+    invocation: GuidedInvocation<'_>,
+    args: &Map<String, Value>,
+    call_id: &str,
+) -> Value {
+    if let Err(error) = require_source(args) {
+        return error;
+    }
+    let handle = args.get("rule").unwrap_or(&Value::Null);
+    let target = match selected_target(owner, invocation, handle) {
+        Ok(target) => target,
+        Err(error) => return error,
+    };
+    let (session, message) = match canonical_authored_source(owner, invocation).await {
+        Ok(binding) => binding,
+        Err(code) => return binding_failure(code),
+    };
+    match owner
+        .memory_writes
+        .rules
+        .forget(
+            target,
+            call_id.into(),
+            session,
+            message,
+            invocation.cancellation.clone(),
+        )
+        .await
+    {
+        Ok(receipt) => explicit_result(&receipt),
+        Err(error) => cognition_failure(error.code(), &error.message()),
+    }
+}
+
+fn remember_text(args: &Map<String, Value>) -> Result<&str, Value> {
+    if args.get("kind").and_then(Value::as_str).map(str::trim) != Some("rule") {
+        return Err(failure(
+            "update_explicit_memory_requires_kind_rule",
+            "Use kind rule.",
+        ));
+    }
+    let text = args
+        .get("text")
+        .and_then(Value::as_str)
+        .filter(|text| !butler_core::public_text::trim_js_whitespace(text).is_empty())
+        .ok_or_else(|| {
+            failure(
+                "update_explicit_memory_requires_text",
+                "Rule text is required.",
+            )
+        })?;
+    require_source(args)?;
+    Ok(text)
+}
+
+fn require_source(args: &Map<String, Value>) -> Result<(), Value> {
+    args.get("source")
+        .and_then(Value::as_str)
+        .filter(|text| !butler_core::public_text::trim_js_whitespace(text).is_empty())
+        .map(|_| ())
+        .ok_or_else(|| failure("memory_write_requires_source", "Source is required."))
+}
+
+fn selected_target(
+    owner: &GuidedTools,
+    invocation: GuidedInvocation<'_>,
+    handle: &Value,
+) -> Result<RememberedRuleTarget, Value> {
+    let handle = handle
+        .as_str()
+        .ok_or_else(|| failure("rule_handle_invalid", "Use an Active Rules handle."))?;
+    let snapshot = invocation
+        .turn
+        .context
+        .get("rememberedRuleSnapshot")
+        .and_then(Value::as_array);
+    let target = snapshot
+        .into_iter()
+        .flatten()
+        .find(|row| row.get("handle").and_then(Value::as_str) == Some(handle))
+        .ok_or_else(|| {
+            failure(
+                "rule_not_in_snapshot",
+                "Rule is outside this turn's Active Rules.",
+            )
+        })?;
+    let target: RememberedRuleTarget = serde_json::from_value(target.clone())
+        .map_err(|_| failure("rule_snapshot_invalid", "Rule snapshot is unavailable."))?;
+    if target.project_id != owner.binding.memory.project_id {
+        return Err(failure(
+            "rule_binding_mismatch",
+            "Use a chat in the rule's binding.",
+        ));
+    }
+    Ok(target)
+}
+
+async fn canonical_authored_source(
     owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
 ) -> Result<(Option<String>, Option<String>), &'static str> {
@@ -154,11 +251,17 @@ fn canonical_authored_source(
         turn_id: turn_id.to_owned(),
         project_id: owner.binding.memory.project_id.clone(),
     };
-    let snapshot = PublicMemorySnapshot::open(
-        &conversation_store_path(&owner.binding.butler_data),
-        &binding,
-    )
-    .map_err(|error| {
+    let path = conversation_store_path(&owner.binding.butler_data);
+    tokio::task::spawn_blocking(move || authored_source(&path, &binding))
+        .await
+        .map_err(|_| "backend_unavailable")?
+}
+
+fn authored_source(
+    path: &std::path::Path,
+    binding: &CanonicalMemoryReadBinding,
+) -> Result<(Option<String>, Option<String>), &'static str> {
+    let snapshot = PublicMemorySnapshot::open(path, binding).map_err(|error| {
         if error.code() == "invalid_scope" {
             "invalid_scope"
         } else {
@@ -194,14 +297,13 @@ fn task_result(result: TaskMemoryIngestionResult) -> Value {
     })
 }
 
-fn explicit_result(result: &butler_memory::cognition::ExplicitMemoryUpdateResult) -> Value {
-    json!({
-        "ok":true,
-        "record_id":result.record_id,
-        "revision":result.revision,
-        "operation_id":result.operation_id,
-        "replayed":result.replayed,
-    })
+fn explicit_result(result: &RememberedRuleReceipt) -> Value {
+    let mut value = json!({ "ok":true, "rule":result.rule, "operation_id":result.operation_id,
+        "state":result.state, "replayed":result.replayed });
+    if let Some(state) = &result.recall_state {
+        value["recall_state"] = json!(state);
+    }
+    value
 }
 
 fn binding_failure(code: &'static str) -> Value {

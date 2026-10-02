@@ -109,11 +109,26 @@ pub(super) fn read_coordinator_meta(
 pub(super) fn read_known_coordinator(
     lock_path: &Path,
 ) -> CoordinationResult<Option<CoordinatorMeta>> {
+    read_known(lock_path, false)
+}
+
+/// Acquisition may recover a hot SQLite journal left by a killed lease owner.
+pub(super) fn read_known_coordinator_for_acquire(
+    lock_path: &Path,
+) -> CoordinationResult<Option<CoordinatorMeta>> {
+    read_known(lock_path, true)
+}
+
+fn read_known(lock_path: &Path, writable: bool) -> CoordinationResult<Option<CoordinatorMeta>> {
     let path = coordinator_path(lock_path);
     if !path.exists() {
         return Ok(None);
     }
-    let connection = open_readonly(&path)?;
+    let connection = if writable {
+        open_readwrite(&path)?
+    } else {
+        open_readonly(&path)?
+    };
     let journal: String = connection
         .query_row("PRAGMA journal_mode", [], |row| row.get(0))
         .map_err(sqlite_error)?;

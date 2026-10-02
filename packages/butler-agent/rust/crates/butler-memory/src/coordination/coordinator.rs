@@ -13,7 +13,7 @@ use tokio::sync::Notify;
 use super::error::{CoordinationError, CoordinationResult, invalid, sqlite_error};
 use super::fence::{
     bind_coordinator_fence, coordinator_path, initialize_coordinator, is_busy, open_readwrite,
-    read_coordinator_meta, read_known_coordinator, write_owner,
+    read_coordinator_meta, read_known_coordinator_for_acquire, write_owner,
 };
 use super::types::{
     CognitionCoordinationHost, CognitionWaitClass, CognitionWriteAcquire,
@@ -225,17 +225,20 @@ impl CoordinatorInner {
     /// Initializes the coordinator database and binds it to the fence when
     /// needed; `false` when that is not possible right now.
     fn ensure_bound(&self, request: &CognitionWriteAcquire) -> CoordinationResult<bool> {
-        match busy_as_none(read_known_coordinator(&request.lock_path))? {
+        match busy_as_none(read_known_coordinator_for_acquire(&request.lock_path))? {
             None => return Ok(false),
             Some(Some(_)) => {}
             Some(None) => {
                 initialize_coordinator(&request.lock_path, self.pid, &self.host)?;
             }
         }
-        let initialized = match busy_as_none(read_known_coordinator(&request.lock_path))? {
-            None => return Ok(false),
-            Some(meta) => meta.ok_or_else(|| invalid("coordinator initialization unavailable"))?,
-        };
+        let initialized =
+            match busy_as_none(read_known_coordinator_for_acquire(&request.lock_path))? {
+                None => return Ok(false),
+                Some(meta) => {
+                    meta.ok_or_else(|| invalid("coordinator initialization unavailable"))?
+                }
+            };
         if initialized.fence_sha256.is_none()
             && !bind_coordinator_fence(&request.lock_path, &self.hostname, &self.host)?
         {
@@ -244,7 +247,7 @@ impl CoordinatorInner {
         if self.abandoned(request) {
             return Ok(false);
         }
-        let verified = match busy_as_none(read_known_coordinator(&request.lock_path))? {
+        let verified = match busy_as_none(read_known_coordinator_for_acquire(&request.lock_path))? {
             None => return Ok(false),
             Some(meta) => meta.ok_or_else(|| invalid("coordinator verification unavailable"))?,
         };

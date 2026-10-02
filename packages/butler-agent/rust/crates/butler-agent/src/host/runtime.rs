@@ -31,7 +31,7 @@ use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
 use butler_gateway::gateway::AppImageFiles;
 use butler_ledger::project_ledger::{ProjectLedger, ProjectWork};
-use butler_memory::cognition::{CognitionPromptReader, CompletionPublisher, ExactMemoryQuery};
+use butler_memory::cognition::{CognitionPromptReader, ExactMemoryQuery};
 use butler_memory::cognition::{MemoryRecall, ProjectCapsuleService};
 use butler_memory::profile::ProfileService;
 use butler_models::models::ModelConfigurationClock;
@@ -240,11 +240,12 @@ impl AgentRuntime {
         let context_compactions = documents.context_compactions();
         let repositories = Arc::new(documents.clone());
         let now: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
-        let memory_publisher = Arc::new(CompletionPublisher::new(
-            &paths.data_root,
+        let memory_writes = memory_bootstrap::rule_owner(
+            &paths,
             &environment.cognition_paths,
-            now.clone(),
-        ));
+            coordinator.clone(),
+            stop,
+        );
         let preparation = Arc::new(DefaultTurnPreparation::new(
             stores.bindings.clone(),
             stores.conversations.clone(),
@@ -348,8 +349,7 @@ impl AgentRuntime {
             tool_artifacts,
             memory_query: memory_query.clone(),
             memory_recall: memory_recall.clone(),
-            memory_paths: environment.cognition_paths.clone(),
-            memory_publisher,
+            memory_writes,
             conversation_reference: conversation_reference.clone(),
             conversation_tools: conversation_tools.clone(),
             compactions: ContextCompactionRepository::new(stores.btcc.clone()),

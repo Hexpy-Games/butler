@@ -50,6 +50,7 @@ tool_names! {
     DelegateToWorker = "delegate_to_worker",
     DeleteAutomation = "delete_automation",
     EditFile = "edit_file",
+    ForgetExplicitMemory = "forget_explicit_memory",
     GetContextMonitor = "get_context_monitor",
     GetMemoryHealth = "get_memory_health",
     GetUsageMonitor = "get_usage_monitor",

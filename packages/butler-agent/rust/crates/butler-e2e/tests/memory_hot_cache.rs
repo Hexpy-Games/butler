@@ -118,6 +118,25 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
     let refreshed_modified = std::fs::metadata(&cache)?.modified()?;
     assert_ne!(before, refreshed, "cache must refresh before restart");
     assert!(String::from_utf8_lossy(&refreshed).contains("blue iris"));
+    let status = s.agent.launch.command().arg("status").output()?;
+    assert!(status.status.success());
+    let status = String::from_utf8(status.stdout).unwrap();
+    let memory_tokens = status
+        .lines()
+        .find_map(|line| line.strip_prefix("memory: "))
+        .unwrap()
+        .replace(',', "")
+        .parse::<usize>()
+        .unwrap();
+    let cache_tokens = String::from_utf8_lossy(&refreshed)
+        .encode_utf16()
+        .count()
+        .div_ceil(4);
+    assert!(
+        memory_tokens >= cache_tokens,
+        "status omitted the active cache: {status}"
+    );
+
     let first_documents = hot_documents(&s.sandbox.data);
 
     // Restart drives the first maintenance tick immediately after readiness.

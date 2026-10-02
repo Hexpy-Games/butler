@@ -37,7 +37,7 @@ pub(super) async fn execute(
         .map_err(ToolExecutionError::Integrity)?;
     if record.is_some() {
         resume.lock().discard(&call_id);
-    } else if occurrence.provider_call_id.is_none() {
+    } else if occurrence.permits_signature_resume(&call.name) {
         let claimed = resume
             .lock()
             .claim(&effective_name, &presentation_args, catalog_id.as_deref())
@@ -105,11 +105,7 @@ pub(super) async fn execute(
                 if !GuidedTools::supports(&call.name)
                     || matches!(
                         ToolName::parse(effective_name.as_str()),
-                        Some(
-                            ToolName::UpdateOnboardingProfile
-                                | ToolName::IngestTaskMemory
-                                | ToolName::UpdateExplicitMemory
-                        )
+                        Some(ToolName::UpdateOnboardingProfile | ToolName::IngestTaskMemory)
                     ) =>
             {
                 return uncertain_mutation(&effective_name);

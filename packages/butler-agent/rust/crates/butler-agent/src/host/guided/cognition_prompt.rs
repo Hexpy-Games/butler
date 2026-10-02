@@ -5,7 +5,7 @@ use std::sync::Arc;
 use butler_memory::cognition::{CapsulePresence, CognitionError, CognitionPromptReader};
 use butler_runtime::context::{
     CognitionPromptPort, ContextError, ContextFuture, ProjectCapsuleStatus, PromptProjectionInput,
-    ScopedFeedbackProjection,
+    RememberedRuleProjection, ScopedFeedbackProjection,
 };
 use butler_turn::workspace::StoredSessionBinding;
 
@@ -24,6 +24,32 @@ fn error(error: CognitionError) -> ContextError {
 }
 
 impl CognitionPromptPort for CognitionPrompt {
+    fn remembered_rules<'a>(
+        &'a self,
+        input: &'a PromptProjectionInput<'a>,
+        rules_root: &'a std::path::Path,
+    ) -> ContextFuture<'a, Vec<RememberedRuleProjection>> {
+        let root = rules_root.to_owned();
+        let project = input.project_id.map(str::to_owned);
+        Box::pin(async move {
+            let rules = tokio::task::spawn_blocking(move || {
+                butler_memory::cognition::list_remembered_rules(&root, Some(project.as_deref()))
+            })
+            .await
+            .map_err(|source| ContextError::port("rule_read_failed", "Rule read failed", source))?
+            .map_err(error)?;
+            Ok(rules
+                .into_iter()
+                .map(|rule| RememberedRuleProjection {
+                    handle: rule.handle,
+                    text: rule.text,
+                    project_id: rule.project_id,
+                    revision: rule.revision,
+                })
+                .collect())
+        })
+    }
+
     fn scoped_feedback<'a>(
         &'a self,
         input: &'a PromptProjectionInput<'a>,

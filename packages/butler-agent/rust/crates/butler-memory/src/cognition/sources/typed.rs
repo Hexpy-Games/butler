@@ -3,12 +3,14 @@
 use crate::cognition::explicit_memory_rules_root as rule_root;
 use std::{fs, path::Path};
 
+mod rules;
 mod write;
-
-pub use write::{
-    ExplicitMemoryUpdateInput, ExplicitMemoryUpdateResult, TaskMemoryIngestionResult,
-    ingest_task_outcome_memory, update_explicit_memory,
+pub use rules::{
+    RememberedRule, RememberedRuleOwner, RememberedRuleReceipt, RememberedRuleTarget,
+    RuleCommitObserver, list_remembered_rules,
 };
+
+pub use write::{ExplicitMemoryUpdateInput, TaskMemoryIngestionResult, ingest_task_outcome_memory};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -246,6 +248,9 @@ pub(in crate::cognition) fn read_explicit_record(
     memory_root: &Path,
     record_id: &str,
 ) -> CognitionResult<Option<TypedMemoryRecord>> {
+    if rules::rule_pending(memory_root, record_id)? {
+        return Ok(None);
+    }
     let Some(binding) = read_binding(memory_root, record_id)? else {
         return Ok(None);
     };
