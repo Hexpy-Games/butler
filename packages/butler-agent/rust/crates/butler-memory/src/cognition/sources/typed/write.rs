@@ -21,7 +21,7 @@ use crate::cognition::{
 };
 
 /// An explicit rule to remember.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, serde::Deserialize, serde::Serialize)]
 pub struct ExplicitMemoryUpdateInput {
     /// Rule text.
     pub text: String,
@@ -235,7 +235,7 @@ impl RulePaths {
     }
 }
 
-fn explicit_rule_revision(
+pub(super) fn explicit_rule_revision(
     record_id: &str,
     content_hash: &str,
     project_id: Option<&str>,
@@ -255,7 +255,7 @@ fn explicit_rule_revision(
     Ok(sha256(encoded.as_bytes()))
 }
 
-fn compact(value: &str, limit: usize) -> String {
+pub(super) fn compact(value: &str, limit: usize) -> String {
     let collapsed = butler_core::json::Utf16Prefix::new(value, usize::MAX)
         .collapse_whitespace(butler_core::public_text::is_js_whitespace);
     if collapsed.len_utf16() <= limit {
@@ -268,7 +268,7 @@ fn compact(value: &str, limit: usize) -> String {
     )
 }
 
-fn validate_record_id(value: &str) -> CognitionResult<()> {
+pub(super) fn validate_record_id(value: &str) -> CognitionResult<()> {
     let path = Path::new(value);
     if value.is_empty()
         || value.contains(['/', '\\', '\0'])
@@ -281,7 +281,7 @@ fn validate_record_id(value: &str) -> CognitionResult<()> {
     Ok(())
 }
 
-fn write_atomic(path: &Path, bytes: &[u8]) -> CognitionResult<()> {
+pub(super) fn write_atomic(path: &Path, bytes: &[u8]) -> CognitionResult<()> {
     if path.parent().is_none() || path.file_name().is_none() {
         return Err(error(CognitionCode::MemoryDataPathUnsafe));
     }
@@ -313,7 +313,7 @@ fn append_durable(path: &Path, bytes: &[u8]) -> CognitionResult<()> {
     Ok(())
 }
 
-fn sha256(bytes: &[u8]) -> String {
+pub(super) fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 

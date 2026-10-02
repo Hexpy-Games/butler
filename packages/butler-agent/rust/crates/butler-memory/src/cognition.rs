@@ -136,9 +136,10 @@ pub(in crate::cognition) use sources::assert_conversation_source_current;
 
 pub use sources::{
     CognitionSourcePlan, CognitionSourceRow, ConversationSourceNotice, ExplicitMemoryUpdateInput,
-    ExplicitMemoryUpdateResult, PreparedConversationSource, TaskMemoryIngestionResult,
-    hydrate_conversation_source, ingest_task_outcome_memory, prepare_conversation_source,
-    read_prior_public_context, update_explicit_memory,
+    ExplicitMemoryUpdateResult, PreparedConversationSource, RememberedRule, RememberedRuleOwner,
+    RememberedRuleReceipt, RememberedRuleTarget, TaskMemoryIngestionResult,
+    hydrate_conversation_source, ingest_task_outcome_memory, list_remembered_rules,
+    prepare_conversation_source, read_prior_public_context, update_explicit_memory,
 };
 pub use vector_optimize::{VectorOptimizeOutcome, VectorOptimizeService};
 pub(crate) use windows::{

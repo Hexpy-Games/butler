@@ -3,7 +3,12 @@
 use crate::cognition::explicit_memory_rules_root as rule_root;
 use std::{fs, path::Path};
 
+mod rules;
 mod write;
+pub use rules::{
+    RememberedRule, RememberedRuleOwner, RememberedRuleReceipt, RememberedRuleTarget,
+    list_remembered_rules,
+};
 
 pub use write::{
     ExplicitMemoryUpdateInput, ExplicitMemoryUpdateResult, TaskMemoryIngestionResult,
