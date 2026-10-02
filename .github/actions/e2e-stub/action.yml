@@ -1,9 +1,18 @@
 name: E2E stub tier
 description: Run the real agent binary against replay cassettes on the current Rust job.
 inputs:
+  restore-embedding-model:
+    description: Restore the model only for jobs that exercise embedding.
+    default: "true"
+  run-systemd:
+    description: Probe the user manager only for jobs containing INS-14.
+    default: "true"
   partition:
     description: Nextest partition in m/n form.
     required: false
+    default: ""
+  filter-file:
+    description: File containing the producer-generated complete shard filter.
     default: ""
   filterset:
     description: Nextest filterset expression applied to the stub tier.
@@ -45,6 +54,7 @@ runs:
   using: composite
   steps:
     - name: Restore embedding model cache
+      if: inputs.restore-embedding-model == 'true'
       id: embedding-cache
       uses: actions/cache@v4
       with:
@@ -52,7 +62,7 @@ runs:
         key: bge-m3-4de13258303883538bd53b696b452bf8099f0858
 
     - name: Fetch embedding model
-      if: steps.embedding-cache.outputs.cache-hit != 'true'
+      if: inputs.restore-embedding-model == 'true' && steps.embedding-cache.outputs.cache-hit != 'true'
       shell: bash
       working-directory: ${{ runner.temp }}
       run: |
@@ -75,7 +85,7 @@ runs:
         LIST
 
     - name: Probe the systemd user manager
-      if: runner.os == 'Linux'
+      if: runner.os == 'Linux' && inputs.run-systemd == 'true'
       id: systemd
       shell: bash
       run: |
@@ -107,6 +117,7 @@ runs:
       env:
         PARTITION: ${{ inputs.partition }}
         TEST_FILTERSET: ${{ inputs.filterset }}
+        FILTER_FILE: ${{ inputs.filter-file }}
         TEST_THREADS: ${{ inputs.test-threads }}
         RELEASE_PROFILE: ${{ inputs.release-profile }}
         EXCLUDE_PERF: ${{ inputs.exclude-perf }}
@@ -127,28 +138,27 @@ runs:
             exit 2
           fi
           export BUTLER_E2E_PERF=1
-          TEST_FILTERSET="($(python3 "$GITHUB_WORKSPACE/.github/scripts/e2e-perf-filter.py")) and not binary(=idle_resources)"
+          TEST_FILTERSET="($(python3 "$GITHUB_WORKSPACE/.github/scripts/e2e-perf-filter.py")) and not test(/^idle_resources::/)"
         elif [ "$ENFORCE_BUDGETS" = 'false' ]; then
           export BUTLER_E2E_PERF=0
         else
           echo "::error::enforce-budgets must be true or false"
           exit 2
         fi
-        filterset='not test(idle_disk_writes_and_cpu_stay_bounded)'
+        if [ -n "$FILTER_FILE" ]; then
+          TEST_FILTERSET="$(cat "$FILTER_FILE")"
+        fi
+        filterset='package(=butler-e2e) and not test(idle_disk_writes_and_cpu_stay_bounded)'
         if [ -n "$TEST_FILTERSET" ]; then
           filterset="($TEST_FILTERSET) and $filterset"
         fi
         if [ "$EXCLUDE_PERF" = 'true' ]; then
-          filterset="($filterset) and not test(/^perf_/)"
+          filterset="($filterset) and not test(/(^|::)perf_/)"
         fi
         # Bash 3.2 (macOS) treats empty arrays as unset with nounset.
         # Presence-guarded expansions below preserve zero arguments and quoting.
         nextest_profile_args=()
         if [ "$RELEASE_PROFILE" = 'true' ]; then
-          if [ -n "$ARCHIVE_FILE" ]; then
-            echo "::error::release-profile requires tests to be built by this action"
-            exit 2
-          fi
           nextest_profile_args=(--release)
         elif [ "$RELEASE_PROFILE" != 'false' ]; then
           echo "::error::release-profile must be true or false"
@@ -156,11 +166,7 @@ runs:
         fi
         nextest_partition_args=()
         if [ -n "$PARTITION" ]; then
-          if [ -n "$ARCHIVE_FILE" ]; then
-            nextest_partition_args=(--partition "count:$PARTITION")
-          else
-            nextest_partition_args=(--partition "slice:$PARTITION")
-          fi
+          nextest_partition_args=(--partition "hash:$PARTITION")
         fi
         nextest_threads_args=()
         if [ -n "$TEST_THREADS" ]; then
@@ -170,17 +176,19 @@ runs:
         if [ -n "$TEST_SUCCESS_OUTPUT" ]; then
           nextest_success_output_args=(--success-output="$TEST_SUCCESS_OUTPUT")
         fi
+        isolate="$GITHUB_WORKSPACE/.github/scripts/isolated.py"
         if [ -n "$ARCHIVE_FILE" ]; then
-          cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
+          python3 "$isolate" cargo-nextest nextest list --archive-file "$ARCHIVE_FILE" --workspace-remap "$PWD" -E "$filterset" ${nextest_partition_args[@]+"${nextest_partition_args[@]}"}
+          python3 "$isolate" cargo-nextest nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
             run --no-fail-fast --retries 0 --archive-file "$ARCHIVE_FILE" \
-            --extract-to "$PWD" \
+            --workspace-remap "$PWD" \
             ${nextest_partition_args[@]+"${nextest_partition_args[@]}"} \
             ${nextest_threads_args[@]+"${nextest_threads_args[@]}"} \
             ${nextest_success_output_args[@]+"${nextest_success_output_args[@]}"} \
             -E "$filterset" \
             2>&1 | tee "$RUNNER_TEMP/e2e-stub.log"
         else
-          cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
+          python3 "$isolate" cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" \
             run ${nextest_profile_args[@]+"${nextest_profile_args[@]}"} --locked --no-fail-fast --retries 0 -p butler-e2e \
             ${nextest_partition_args[@]+"${nextest_partition_args[@]}"} \
             ${nextest_threads_args[@]+"${nextest_threads_args[@]}"} \
@@ -201,21 +209,33 @@ runs:
         BUTLER_E2E_SKIP_BUILD: "1"
         BUTLER_E2E_BIN: ${{ inputs.agent-binary }}
         BUTLER_E2E_EMBEDDING_ASSETS: ${{ runner.temp }}/e2e-models/bge-m3
-      run: cargo test --release --locked -p butler-e2e --test idle_resources -- --nocapture --test-threads=1
+        ARCHIVE_FILE: ${{ inputs.archive-file }}
+      run: |
+        if [ -n "$ARCHIVE_FILE" ]; then
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" python3 "$GITHUB_WORKSPACE/.github/scripts/run-idle-archive.py" "$ARCHIVE_FILE"
+        else
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --release --locked -p butler-e2e --test e2e idle_resources:: -- --nocapture --test-threads=1
+        fi
 
     - name: Report IDLE-DISK counters
       if: >-
         always() && inputs.run-idle-disk == 'true' &&
-        hashFiles('packages/butler-agent/rust/crates/butler-e2e/tests/idle_disk.rs') != ''
+        hashFiles('packages/butler-agent/rust/crates/butler-e2e/tests/e2e/idle_disk.rs') != ''
       shell: bash
       working-directory: packages/butler-agent/rust
       env:
+        ARCHIVE_FILE: ${{ inputs.archive-file }}
+        BUTLER_E2E_BIN: ${{ inputs.agent-binary }}
         BUTLER_E2E_EMBEDDING_ASSETS: ${{ runner.temp }}/e2e-models/bge-m3
         BUTLER_E2E_TIER: stub
         BUTLER_E2E_SKIP_BUILD: "1"
       run: |
-        mkdir -p target/e2e-tmp
-        TMPDIR="$PWD/target/e2e-tmp" cargo test --locked -p butler-e2e --test idle_disk -- --nocapture
+        isolate="$GITHUB_WORKSPACE/.github/scripts/isolated.py"
+        if [ -n "$ARCHIVE_FILE" ]; then
+          python3 "$isolate" cargo-nextest nextest run --archive-file "$ARCHIVE_FILE" --workspace-remap "$PWD" --no-fail-fast --retries 0 --nocapture -E 'test(idle_disk_writes_and_cpu_stay_bounded)'
+        else
+          python3 "$isolate" cargo test --locked -p butler-e2e --test e2e idle_disk:: -- --nocapture
+        fi
 
     - name: Summarize
       if: always()

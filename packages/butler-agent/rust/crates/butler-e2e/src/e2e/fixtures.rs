@@ -83,9 +83,7 @@ pub fn onboarding_complete(data: &Path) -> Result<(), HarnessError> {
 
 /// Copies a committed fixture tree (`crates/butler-e2e/fixtures/<name>`) into `data`.
 pub fn install_tree(name: &str, data: &Path) -> Result<(), HarnessError> {
-    let source = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name);
+    let source = super::binary::crate_root().join("fixtures").join(name);
     copy_tree(&source, data)
 }
 
@@ -106,9 +104,8 @@ pub fn stub_codex_auth(codex_home: &Path) -> Result<(), HarnessError> {
 pub fn legacy(data: &Path, model: &str, app_now: &str) -> Result<(), HarnessError> {
     ready(data, model, app_now)?;
     install_tree("F3-legacy/data", data)?;
-    let sql = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/F3-legacy/app-server.sql"),
-    )?;
+    let sql =
+        fs::read_to_string(super::binary::crate_root().join("fixtures/F3-legacy/app-server.sql"))?;
     fs::create_dir_all(data.join("app-server"))?;
     let connection = rusqlite::Connection::open(data.join("app-server/butler-client.sqlite"))
         .map_err(|error| super::harness_error(format!("legacy fixture: {error}")))?;
@@ -121,7 +118,7 @@ pub fn legacy(data: &Path, model: &str, app_now: &str) -> Result<(), HarnessErro
 /// The legacy fixture's expected-content manifest.
 pub fn legacy_manifest() -> Result<serde_json::Value, HarnessError> {
     Ok(serde_json::from_slice(&fs::read(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/F3-legacy/manifest.json"),
+        super::binary::crate_root().join("fixtures/F3-legacy/manifest.json"),
     )?)?)
 }
 

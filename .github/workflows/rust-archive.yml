@@ -1,0 +1,93 @@
+name: Shared Rust archive
+on:
+  workflow_call:
+    inputs:
+      runner:
+        type: string
+        default: ubuntu-24.04
+      platform:
+        type: string
+        default: linux-x64
+      clippy:
+        type: boolean
+        default: false
+      ort-mode:
+        type: string
+        default: prebuilt-ort
+permissions:
+  contents: read
+jobs:
+  build:
+    name: Build archives (${{ inputs.platform }})
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 150
+    env:
+      # Keep debug-test assertions and overflow checks in the shared optimized
+      # binary. Performance uses the same full payload and unchanged budgets.
+      CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "true"
+      CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS: "true"
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: sccache
+    defaults:
+      run:
+        working-directory: packages/butler-agent/rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mozilla-actions/sccache-action@v0.0.11
+      - uses: ./.github/actions/rust-agent-setup
+        with:
+          components: clippy
+          native-deps: ${{ inputs.ort-mode }}
+          cache-key: archive-${{ inputs.platform }}
+          cache-workspace-crates: "true"
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: Clippy production and test targets
+        if: inputs.clippy
+        run: |
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --workspace --lib --bins --locked --keep-going -- -D warnings
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
+      - name: Build the complete workspace once
+        env:
+          ORT_MODE: ${{ inputs.ort-mode }}
+          GITHUB_REF_NAME: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
+        run: |
+          args=()
+          if [ "$ORT_MODE" = static-ort ]; then
+            args=(--no-default-features --features butler-agent/static-ort)
+          fi
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --release --workspace --all-targets --locked -j 8 "${args[@]}"
+      - name: Archive tests and record every selection
+        env:
+          ORT_MODE: ${{ inputs.ort-mode }}
+          GITHUB_REF_NAME: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
+        run: |
+          isolate="$GITHUB_WORKSPACE/.github/scripts/isolated.py"
+          args=()
+          if [ "$ORT_MODE" = static-ort ]; then
+            args=(--no-default-features --features butler-agent/static-ort)
+          fi
+          mkdir -p "$RUNNER_TEMP/rust-archive"
+          python3 "$isolate" cargo nextest archive --release --workspace --locked "${args[@]}" --archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst"
+          python3 "$isolate" cargo nextest list --release --workspace --locked "${args[@]}" --message-format json > "$RUNNER_TEMP/rust-archive/list.json"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/balance-e2e.py" "$RUNNER_TEMP/rust-archive/list.json" "$RUNNER_TEMP/rust-archive"
+          cp target/release/butler-agent "$RUNNER_TEMP/rust-archive/butler-agent"
+      - name: Run doctests when present
+        env:
+          ORT_MODE: ${{ inputs.ort-mode }}
+        run: |
+          args=()
+          if [ "$ORT_MODE" = static-ort ]; then
+            args=(--no-default-features --features butler-agent/static-ort)
+          fi
+          if grep -rqE '^[[:space:]]*//[/!][[:space:]]*```' crates; then
+            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --release --workspace --doc --locked -j 8 "${args[@]}"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rust-${{ inputs.platform }}
+          path: ${{ runner.temp }}/rust-archive/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 1

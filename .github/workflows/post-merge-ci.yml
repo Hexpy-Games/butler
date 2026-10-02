@@ -81,79 +81,6 @@ jobs:
               - '.github/workflows/rust-quality.yml'
               - '.github/workflows/windows.yml'
 
-  macos-arm64:
-    name: Rust checks (macOS arm64)
-    needs: platform-paths
-    if: >-
-      always() && (github.event_name != 'pull_request' || needs.platform-paths.outputs.macos == 'true')
-    runs-on: macos-15
-    timeout-minutes: 180
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Rust and prebuilt ONNX Runtime
-        uses: ./.github/actions/rust-agent-setup
-        with:
-          components: clippy
-          native-deps: prebuilt-ort
-          cache-key: pr-macos-arm64
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-      - name: Clippy production targets
-        run: cargo clippy --workspace --lib --bins --locked --keep-going -- -D warnings
-      - name: Clippy all targets
-        run: cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
-      - name: Run tests
-        run: cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" run --workspace --locked --no-fail-fast -E 'not test(/^perf_/)'
-      - name: Run doctests when present
-        run: |
-          if grep -rqE '^[[:space:]]*//[/!][[:space:]]*```' crates; then
-            cargo test --workspace --doc --locked
-          fi
-      - name: Build the agent binary under test
-        run: cargo build --locked -p butler-agent --bin butler-agent
-      - name: Run E2E stub tier
-        uses: ./.github/actions/e2e-stub
-        with:
-          partition: 1/1
-          filterset: "not test(/^perf_/)"
-          run-idle-disk: "true"
-      - name: Assert runner home untouched
-        if: always()
-        shell: bash
-        run: test ! -e "$HOME/.butler"
-
-  linux-arm64:
-    name: Rust checks (Linux arm64)
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 180
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: sccache
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
-      - uses: ./.github/actions/rust-agent-setup
-        with:
-          components: clippy
-          native-deps: prebuilt-ort
-          cache-key: full-linux-arm64
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-      - name: Clippy production targets
-        run: cargo clippy --workspace --lib --bins --locked --keep-going -- -D warnings
-      - name: Clippy all targets
-        run: cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
-      - name: Run tests
-        run: cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" run --workspace --locked --no-fail-fast -E 'not test(/^perf_/)'
-      - name: Assert runner home untouched
-        if: always()
-        shell: bash
-        run: test ! -e "$HOME/.butler"
-
   windows-check:
     # Windows is not ported: the host and CLI are unix-only and main.rs prints
     # "not yet available". This compile check only reports how far the
@@ -222,18 +149,13 @@ jobs:
                   print("\n".join(f"| {count} | `{name}` |" for name, count in counter.most_common(limit)))
           PY
 
-  install-full:
-    name: Full install smoke
-    if: github.event_name != 'pull_request'
-    uses: ./.github/workflows/install-smoke.yml
-
   nightly-issue:
     name: Report main or nightly failure
     if: >-
       always() &&
       (github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) &&
       (contains(needs.*.result, 'failure') || needs.windows-check.outputs.compile == 'failure')
-    needs: [platform-paths, macos-arm64, linux-arm64, windows-check, install-full]
+    needs: [platform-paths, windows-check]
     runs-on: ubuntu-latest
     concurrency:
       group: ci-failure-report-${{ github.ref }}

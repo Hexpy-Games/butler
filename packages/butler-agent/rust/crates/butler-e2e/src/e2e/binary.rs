@@ -16,7 +16,14 @@ use super::{HarnessError, harness_error};
 static BINARY: OnceLock<Result<PathBuf, String>> = OnceLock::new();
 
 pub fn workspace_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+    std::env::var_os("NEXTEST_WORKSPACE_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."))
+}
+
+/// Harness sources in the checked-out workspace, respecting archive remapping.
+pub fn crate_root() -> PathBuf {
+    workspace_root().join("crates/butler-e2e")
 }
 
 /// `packages/butler-agent/resources` as shipped next to the binary.
@@ -80,4 +87,9 @@ fn locate() -> Result<PathBuf, String> {
             binary.display()
         ))
     }
+}
+
+/// Nextest remaps fixture executables while unpacking an archive.
+pub fn mcp_fixture_binary(cargo_path: &str) -> String {
+    std::env::var("NEXTEST_BIN_EXE_e2e_mcp_fixture").unwrap_or_else(|_| cargo_path.to_owned())
 }

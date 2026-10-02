@@ -174,7 +174,7 @@ fn wire_shape(provider: &str) -> &'static str {
 fn git_sha() -> String {
     std::process::Command::new("git")
         .args(["rev-parse", "--short=12", "HEAD"])
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .current_dir(crate::e2e::binary::crate_root())
         .output()
         .ok()
         .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
