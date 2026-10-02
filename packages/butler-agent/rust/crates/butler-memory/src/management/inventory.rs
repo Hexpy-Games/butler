@@ -193,7 +193,12 @@ fn reclaimable(
         token,
     )?
     .into_iter()
-    .filter(|item| item.reason == "unpublished_empty_generation")
+    .filter(|item| {
+        matches!(
+            item.reason.as_str(),
+            "unpublished_empty_generation" | "unreferenced_generation" | "unreferenced_artifact"
+        )
+    })
     .try_fold(Some(0_u64), |total, item| {
         Ok(total
             .zip(item.allocated_bytes)

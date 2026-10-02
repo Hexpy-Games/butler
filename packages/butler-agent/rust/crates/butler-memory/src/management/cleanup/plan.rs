@@ -11,7 +11,8 @@ pub(in crate::management) fn analyze(
 ) -> io::Result<Vec<CleanupItem>> {
     let mut items = Vec::new();
     let generations = memory.join("generations");
-    let references = manifest_references(&generations);
+    let references = manifest_references(&generations, active);
+    let pending = pending_reset(memory)?;
     for entry in fs::read_dir(&generations)? {
         safety::cancelled(token)?;
         let entry = entry?;
@@ -39,14 +40,22 @@ pub(in crate::management) fn analyze(
                 .is_some_and(|values| values.iter().any(|value| contains(value, &id)));
         let reason = if id == active {
             "active_generation"
+        } else if pending.as_deref() == Some(&id) {
+            "pending_reset_generation"
+        } else if crate::cognition::generation_reader_pinned(&path) {
+            "generation_reader_pinned"
         } else if references.is_none() {
             "manifest_reference_inventory_unavailable"
         } else if referenced {
             "descriptor_or_manifest_reference"
-        } else if empty && super::validate_id(&id).is_ok() {
-            "unpublished_empty_generation"
+        } else if super::validate_id(&id).is_ok() {
+            if empty {
+                "unpublished_empty_generation"
+            } else {
+                "unreferenced_generation"
+            }
         } else {
-            "generation_candidate_or_rollback_reader"
+            "invalid_generation_identity"
         };
         items.push(CleanupItem {
             name: format!("generations/{id}"),
@@ -67,25 +76,40 @@ pub(in crate::management) fn analyze(
             items.push(retained_artifact(memory, name, reason, token)?);
         }
     }
+    items.extend(super::nested::analyze(
+        memory, active, descriptor, manifest, token,
+    )?);
     items.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(items)
 }
 
-fn contains(bytes: &[u8], id: &str) -> bool {
-    bytes
-        .windows(id.len())
-        .any(|window| window == id.as_bytes())
+pub(super) fn contains(bytes: &[u8], id: &str) -> bool {
+    serde_json::from_slice::<serde_json::Value>(bytes).map_or(true, |value| references(&value, id))
+}
+fn references(value: &serde_json::Value, id: &str) -> bool {
+    match value {
+        serde_json::Value::String(text) => text.contains(id),
+        serde_json::Value::Array(values) => values.iter().any(|value| references(value, id)),
+        serde_json::Value::Object(values) => values.values().any(|value| references(value, id)),
+        _ => false,
+    }
 }
 
-fn manifest_references(generations: &Path) -> Option<Vec<Vec<u8>>> {
+fn manifest_references(generations: &Path, active: &str) -> Option<Vec<Vec<u8>>> {
     let mut references = Vec::new();
     for entry in fs::read_dir(generations).ok()? {
-        let path = entry.ok()?.path().join("manifest.json");
+        let entry = entry.ok()?;
+        if entry.file_name() == active {
+            continue;
+        }
+        let path = entry.path().join("manifest.json");
         crate::cognition::ensure_data_authority(generations, &[&path]).ok()?;
         match fs::read(path) {
             Ok(bytes) => {
-                serde_json::from_slice::<serde_json::Value>(&bytes).ok()?;
-                references.push(bytes);
+                let manifest = serde_json::from_slice::<serde_json::Value>(&bytes).ok()?;
+                if manifest.get("state").and_then(serde_json::Value::as_str) == Some("building") {
+                    references.push(bytes);
+                }
             }
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(_) => return None,
@@ -111,4 +135,30 @@ fn retained_artifact(
         outcome: "kept".into(),
         reason: reason.into(),
     })
+}
+
+fn pending_reset(memory: &Path) -> io::Result<Option<String>> {
+    let path = memory.join("management/reset-pending.json");
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    let id: String = serde_json::from_slice(&bytes).map_err(io::Error::other)?;
+    super::validate_id(&id)?;
+    let bytes = match fs::read(
+        memory
+            .join("management/resets")
+            .join(&id)
+            .join("receipt.json"),
+    ) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    let receipt: serde_json::Value = serde_json::from_slice(&bytes).map_err(io::Error::other)?;
+    Ok(
+        (receipt.get("phase").and_then(serde_json::Value::as_str) == Some("preparing"))
+            .then_some(id),
+    )
 }

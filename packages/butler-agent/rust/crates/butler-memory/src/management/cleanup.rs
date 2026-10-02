@@ -1,5 +1,4 @@
-//! Conservative cleanup under the shared lease. Valid generations remain readable
-//! by retained candidate/rollback APIs, so this phase keeps them all.
+//! Explicit reclamation of unreferenced generations under the shared lease.
 use super::{measurement::files, safety};
 use crate::{
     cognition::CognitionPathEnvironment,
@@ -8,6 +7,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::{fs, io, path::Path, sync::Arc};
 use tokio_util::sync::CancellationToken;
+mod nested;
 pub(super) mod plan;
 mod trash;
 
@@ -162,7 +162,10 @@ fn execute(
     )?;
     for candidate in candidates {
         safety::cancelled(token)?;
-        if candidate.reason == "unpublished_empty_generation" {
+        if matches!(
+            candidate.reason.as_str(),
+            "unpublished_empty_generation" | "unreferenced_generation" | "unreferenced_artifact"
+        ) {
             remove_empty(
                 &memory,
                 (&descriptor, &manifest, &handle.root),
@@ -189,7 +192,7 @@ fn remove_empty(
 ) -> io::Result<()> {
     let (descriptor, manifest, active) = protected;
     let source = memory.join(&item.name);
-    if fs::read_dir(&source)?.next().is_some() {
+    if item.reason == "unpublished_empty_generation" && fs::read_dir(&source)?.next().is_some() {
         item.reason = "artifact_changed".into();
         result.items.push(item);
         return Ok(());

@@ -67,7 +67,8 @@ pub fn resolve_generation(
         canonical_snapshot_id,
         ..
     } = target
-        && (format != GenerationFormat::V2
+        && (manifest.state != Some(GenerationState::Building)
+            || format != GenerationFormat::V2
             || manifest.canonical_snapshot_id.as_deref() != Some(canonical_snapshot_id)
             || snapshot.is_none())
     {

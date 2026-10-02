@@ -79,15 +79,14 @@ pub(super) fn finish_item(
     else {
         return Ok(());
     };
-    // Only this backend's empty, unpublished generation receipts grant deletion authority.
-    if item.reason != "unpublished_empty_generation" {
+    // Only validated unreferenced artefacts recorded by this backend grant deletion authority.
+    if !matches!(
+        item.reason.as_str(),
+        "unpublished_empty_generation" | "unreferenced_generation" | "unreferenced_artifact"
+    ) {
         return Err(io::Error::other("Unknown trash provenance"));
     }
-    let id = item
-        .name
-        .strip_prefix("generations/")
-        .ok_or_else(|| io::Error::other("Unknown trash provenance"))?;
-    validate_id(id)?;
+    super::nested::validate_name(&item.name)?;
     let trash = memory
         .join("management/operations")
         .join(&result.operation_id)
@@ -96,7 +95,12 @@ pub(super) fn finish_item(
     crate::cognition::ensure_data_authority(memory, &[&path]).map_err(io::Error::other)?;
     if path.exists() {
         // remove_dir deliberately refuses anything that acquired content after planning.
-        fs::remove_dir(&path)?;
+        if item.reason == "unpublished_empty_generation" {
+            fs::remove_dir(&path)?;
+        } else {
+            super::files(&path, token)?;
+            remove_tree(memory, &path, token)?;
+        }
         butler_platform::secure_fs::sync_path(&trash)?;
     } else if memory.join(&item.name).exists() {
         item.outcome = "kept".into();
@@ -107,5 +111,28 @@ pub(super) fn finish_item(
     result.bytes_reclaimed = result
         .bytes_reclaimed
         .saturating_add(item.allocated_bytes.unwrap_or(0));
+    Ok(())
+}
+
+fn remove_tree(memory: &Path, root: &Path, token: &CancellationToken) -> io::Result<()> {
+    let mut pending = vec![(root.to_owned(), false)];
+    while let Some((path, visited)) = pending.pop() {
+        safety::cancelled(token)?;
+        crate::cognition::ensure_data_authority(memory, &[&path]).map_err(io::Error::other)?;
+        let metadata = fs::symlink_metadata(&path)?;
+        if metadata.is_symlink() {
+            return Err(io::Error::other("Linked trash artifact"));
+        }
+        if metadata.is_dir() && !visited {
+            pending.push((path.clone(), true));
+            for entry in fs::read_dir(path)? {
+                pending.push((entry?.path(), false));
+            }
+        } else if metadata.is_dir() {
+            fs::remove_dir(path)?;
+        } else {
+            butler_platform::secure_fs::remove_tree(&path)?;
+        }
+    }
     Ok(())
 }

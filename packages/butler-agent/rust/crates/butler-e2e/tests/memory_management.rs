@@ -110,13 +110,7 @@ async fn inventory_and_explicit_cleanup_preserve_memory_and_replay_receipts()
     let result = completed(&s, &id).await?;
     assert_eq!(result["bytes_reclaimed"], orphan_bytes.unwrap_or(0));
     assert!(!memory.join(format!("generations/{ORPHAN}")).exists());
-    assert!(
-        memory
-            .join(format!(
-                "generations/{RETIRED}/source-snapshot/runtime/conversation-store.sqlite"
-            ))
-            .exists()
-    );
+    assert!(!memory.join(format!("generations/{RETIRED}")).exists());
     assert_eq!(
         std::fs::read(generation.join("graph.sqlite"))?,
         graph_before
@@ -430,7 +424,9 @@ fn seed_dormant(s: &Scenario) -> Result<CleanupFixture, HarnessError> {
     std::fs::write(memory.join("queue/dead-letter.jsonl"), "unresolved")?;
     let orphan_bytes = butler_platform::storage_size::allocated_bytes(
         &memory.join(format!("generations/{ORPHAN}")),
-    )?;
+    )?
+    .zip(butler_platform::storage_size::allocated_bytes(&retired)?)
+    .map(|(a, b)| a + b);
     Ok(CleanupFixture {
         memory,
         generation,
