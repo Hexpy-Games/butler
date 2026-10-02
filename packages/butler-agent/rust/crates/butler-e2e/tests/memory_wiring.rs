@@ -153,6 +153,8 @@ async fn wiring_status_counts_saved_explicit_memory() -> Result<(), HarnessError
     let index = std::fs::read_to_string(rules.join("INDEX.md"))?;
     assert!(index.contains("5317"), "explicit memory was not saved");
     let after = status_memory_tokens(&s)?;
+    assert!(!s.sandbox.data.join("memory/rules/INDEX.md").exists());
+    assert!(!s.sandbox.data.join("memory/hot/cache.md").exists());
     let minimum_added = index.encode_utf16().count().div_ceil(4) as u64;
     eprintln!(
         "WIRING-STATUS before={before} after={after} saved_rule_index_tokens={minimum_added}"
