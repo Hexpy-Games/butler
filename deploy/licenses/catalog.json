@@ -1,7 +1,7 @@
 {
   "inputs": {
     "bun.lock": "6da68de704dbc47dea3ae850efa02a7e7ccf9691a5778c73fb77a8bb1687a84e",
-    "packages/butler-agent/rust/Cargo.lock": "7ed83eaddc73b8e90cc7ded50d78f91e2792eb995c8f3fa44e44dade211ab226",
+    "packages/butler-agent/rust/Cargo.lock": "f65b9415bd6b39cdc5a0036923c459607745c62a0cb99631491796ceeb934226",
     "packages/butler-agent/rust/Cargo.toml": "d91219a84e8ebead27511e4b999557ba5684093c3841efd1f0d44cb1d06a3a70",
     "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "690fda7222f9512cf014e186be63dea93147e046ad1bdd40d62b145b3d29cc9b",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
@@ -13,7 +13,7 @@
     "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "0f8f2135454f2995bdb17e9eb72bf1e891ac3b862bbeffd03af75e2427525641",
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "95abb3064ab75a21c95efdb6fa5049c80c46abcfe62794330cab063d7d574820",
     "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "90781f4840f7705f2ac7a577abf1f4d8fdb90aaf8f7c6c25e7df9548ff6a9814",
-    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "645153b8c32018da92d2013df68fc0bfae44fae960a894a9791ae5b86139eab7",
+    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "267605fa2ebf23c2a74ef5aaa7ed028e97984bb24dd0a405f61ee49bafa6027a",
     "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "e8e6f6d7ef418db0e100f2560ee8fc5f17d567cc30fda2f12e409dff552d96e9",
     "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "fd97e7279fef8e91a95c908d368c5eb4548c40cf5d9d3fa277a8d49f71901b53",
     "packages/butler-agent/rust/crates/butler-turn/Cargo.toml": "67226f9ea15df5cbe76ccf0f8f7ac75bbc553130ac07a77b256fb05d9c75d3aa",
@@ -16060,6 +16060,28 @@
       "evidenceSha256": [
         "bb28c48e3e078166e91cfc2b6db7ffebb8a0973b9e23b3df060561292d8d69ec",
         "c77a4cf9da729987d0fe7ccd811e3bd27393914ddf3d23467c18cc22954513b3"
+      ]
+    },
+    {
+      "id": "rust:filedescriptor@0.8.3",
+      "name": "filedescriptor",
+      "version": "0.8.3",
+      "license": "MIT",
+      "source": "https://github.com/wezterm/wezterm/tree/4c619a44dc07ad611d28a8af0416f25462d6b3ad",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "files": [
+        "LICENSE.md"
+      ],
+      "links": [
+        "https://github.com/wezterm/wezterm/blob/4c619a44dc07ad611d28a8af0416f25462d6b3ad/filedescriptor/LICENSE.md"
+      ],
+      "copyright": [
+        "Copyright (c) 2018 Wez Furlong"
+      ],
+      "evidenceSha256": [
+        "191c46fcf52061382b1c51a70311eb9081381cc158e5899f3739473a9432185b"
       ]
     },
     {

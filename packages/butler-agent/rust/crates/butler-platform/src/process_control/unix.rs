@@ -123,6 +123,10 @@ pub(super) fn hide_console(command: &mut Command) -> &mut Command {
     command
 }
 
+pub(super) fn prepare_detached_spawn() -> io::Result<()> {
+    Ok(())
+}
+
 pub(super) fn detach(command: &mut Command) -> &mut Command {
     command.process_group(0)
 }

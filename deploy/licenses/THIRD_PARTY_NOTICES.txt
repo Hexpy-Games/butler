@@ -3846,6 +3846,12 @@ License: https://github.com/image-rs/fdeflate/blob/c365c7e6ffa81feb2e1fb762eed72
 
 
 ===== COMPONENT =====
+filedescriptor 0.8.3
+MIT
+License: https://github.com/wezterm/wezterm/blob/4c619a44dc07ad611d28a8af0416f25462d6b3ad/filedescriptor/LICENSE.md
+Copyright (c) 2018 Wez Furlong
+
+===== COMPONENT =====
 filetime 0.2.29
 MIT OR Apache-2.0
 License: https://github.com/alexcrichton/filetime/blob/ab5ee65b5e4fe2de19dbe7d4fe08bc31e945949c/LICENSE-APACHE
