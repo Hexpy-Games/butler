@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use butler_turn::workspace::StoredSessionBinding;
 use serde_json::{Map, Value};
 
 use crate::context::{ContextError, ContextResult, prefix_utf16};
@@ -34,18 +35,50 @@ pub(super) fn read_config(data_root: &Path) -> ContextResult<Value> {
     Ok(serde_json::from_str(&text).unwrap_or_else(|_| Value::Object(Map::new())))
 }
 
-pub(super) fn build_rules_content(rules_dir: &Path) -> ContextResult<Option<String>> {
+pub(super) async fn build_rules_content(
+    rules_dir: &Path,
+    binding: &StoredSessionBinding,
+) -> ContextResult<Option<String>> {
+    let rules_dir = rules_dir.to_owned();
+    let project_id = binding.project_id.clone();
+    tokio::task::spawn_blocking(move || read_rules_content(&rules_dir, project_id.as_deref()))
+        .await
+        .map_err(|error| {
+            ContextError::new(ContextCode::PromptFileReadError, "Rule read failed")
+                .with_source(error)
+        })?
+}
+
+fn read_rules_content(rules_dir: &Path, project_id: Option<&str>) -> ContextResult<Option<String>> {
     let Some(index) = read_text_if_exists(&rules_dir.join("INDEX.md"))? else {
         return Ok(None);
     };
     let mut blocks = Vec::new();
     for relative in parse_rule_links(&index) {
         let resolved_relative = relative.trim_start_matches('/');
-        if let Some(content) = read_text_if_exists(&rules_dir.join(resolved_relative))? {
+        let path = rules_dir.join(resolved_relative);
+        if !rule_applies(&path, project_id)? {
+            continue;
+        }
+        if let Some(content) = read_text_if_exists(&path)? {
             blocks.push(format!("### {relative}\n\n{content}"));
         }
     }
     Ok((!blocks.is_empty()).then(|| blocks.join("\n\n---\n\n")))
+}
+
+fn rule_applies(path: &Path, project_id: Option<&str>) -> ContextResult<bool> {
+    let Some(binding) = read_text_if_exists(&path.with_extension("source.json"))? else {
+        return Ok(true);
+    };
+    let binding: Value = serde_json::from_str(&binding).map_err(|error| {
+        ContextError::new(ContextCode::PromptFileReadError, "Invalid rule binding")
+            .with_source(error)
+    })?;
+    Ok(binding
+        .get("project_id")
+        .and_then(Value::as_str)
+        .is_none_or(|bound| Some(bound) == project_id))
 }
 
 fn parse_rule_links(index: &str) -> Vec<String> {
