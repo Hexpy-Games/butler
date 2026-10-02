@@ -138,3 +138,56 @@ run to four-arm controls. It reports paired candidate-minus-reference changes
 and candidate MODEL-minus-RAW gaps. Reference controls fill any omitted RAW
 arms explicitly in the saved analysis. Keep all new measurements and generated
 arguments under the private `args/` directory; do not commit their reports.
+
+## Stage and byte profiling without product edits
+
+`profile_stage.py --stage /absolute/private/empty-directory` copies the Rust
+workspace and this harness, then injects selected inclusive duration probes and
+SQLite PROFILE callbacks into that private copy. Build its benchmark with the
+usual isolated HOME/BUTLER_DATA and absolute CARGO_HOME/RUSTUP_HOME, at `-j 8`.
+Expanded SQL contains private bindings: keep all resulting JSON and logs outside
+the worktree. Never stage the private source copy or its data.
+
+Prepare `a1-queries.jsonl` and one `cold-query-NNN.jsonl` per kept question under
+the private output, using the existing explicit-arm format, raw cue and vectors.
+Warm mode uses one warmed embedding worker per sweep. Cold mode starts one
+process per question and advises Linux to discard cached pages of the copy;
+this does not guarantee physical cache eviction. The copy's native model asset
+stamp cache must be populated before sealing, otherwise repeated hashing adds a
+setup artifact to every cold call. Preserve and verify the snapshot fingerprint.
+
+```sh
+python3 benchmarks/real-recall/profile_run.py --binary "$BINARY" --copy "$COPY" --out "$PERF" --mode warm
+python3 benchmarks/real-recall/profile_run.py --binary "$BINARY" --copy "$COPY" --out "$PERF" --mode cold
+python3 benchmarks/real-recall/profile_summary.py --copy "$COPY" --out "$PERF" --sql
+python3 benchmarks/real-recall/profile_bytes.py --input "$OUT" --out "$PERF"
+python3 benchmarks/real-recall/profile_plot.py --out "$PERF"
+```
+
+All planned samples are retained when the nonempty or byte-budget quality
+assertion fails; the runner still exits unsuccessfully and records failures.
+`--resume` retains completed cold samples without rerunning them after an
+interruption. Structural consistency assertions remain fatal. Report failures
+alongside aggregate latency; an empty/deadline-cut response is not a speedup.
+Stage medians and shares are computed per call; inclusive helper timings must
+not be added to their parent stages. SQLite millisecond PROFILE records omit
+zero-duration statements, so their recorded counts are lower bounds.
+VM/full-scan counters can accumulate for reused compiled statements; use native
+replay result counts and plans rather than summing those counters as row counts.
+
+Byte analysis uses full saved payloads and external whole-page judgments.
+Reduced pages have an answer-substring proxy and conditional external bounds,
+not new external judgments. `profile_plot.py` optionally requires matplotlib
+and exports standalone SVG/PNG/PDF from numeric aggregates only.
+
+`recall-sql-profile ORIGINAL_DB SCRATCH_DB QUERIES OUTPUT` replays private
+SELECTs with the same bundled SQLite as the product. It adds an experimental
+partial index for incomplete vector units only to a distinct writable scratch
+copy, alternates three baseline/indexed runs, and compares every returned column
+and row order.
+`RECALL_PROFILE_NO_INDEX=1` instead compares two unchanged private copies, for
+example for conversation-store plans. Requests are `{label, sql}` JSON arrays;
+outputs contain query plans and numeric measurements, not returned values.
+The utility is a measurement experiment, not a migration or production fix.
+The default partial index orders `unit_id, job_id`; `RECALL_PROFILE_JOB_FIRST=1`
+tests the alternative `job_id, unit_id` order on another fresh scratch copy.
