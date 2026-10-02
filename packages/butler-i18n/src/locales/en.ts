@@ -1211,7 +1211,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       feedback: {
         title: "Recent feedback", description: "Recent corrections that guide replies for a while.",
         empty: "No recent feedback", thisChat: "This chat", chatEnds: "Until this chat ends",
-        noExpiry: "No expiry", expired: "Expired", tomorrow: "Expires tomorrow",
+        noExpiry: "No expiry", expired: "Expired", inHours: (hours: number) => `Expires in ${hours} ${hours === 1 ? "hour" : "hours"}`,
         inDays: (days: number) => `Expires in ${days} days`, onDate: (date: string) => `Expires ${date}`,
         deleteTitle: "Delete this feedback?", deleted: "Feedback deleted", reset: "Reset",
         resetTitle: "Reset recent feedback?", resetDetail: "Removes all recent feedback, including pending entries. Instructions and chats are kept.",

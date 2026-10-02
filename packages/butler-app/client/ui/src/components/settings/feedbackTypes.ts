@@ -13,9 +13,10 @@ export function feedbackScope(item: FeedbackEntry, projects: MemoryProject[]) {
 export function feedbackExpiry(item: FeedbackEntry) {
   const copy = appCopy.settings.memory.feedback;
   if (!item.expires_at) return item.scope.startsWith("session:") ? copy.chatEnds : copy.noExpiry;
-  const days = Math.ceil((Date.parse(item.expires_at) - Date.now()) / 86400000);
+  const remaining = Date.parse(item.expires_at) - Date.now();
+  const days = Math.ceil(remaining / 86400000);
   if (days <= 0) return copy.expired;
-  if (days === 1) return copy.tomorrow;
+  if (days === 1) return copy.inHours(Math.ceil(remaining / 3600000));
   if (days <= 30) return copy.inDays(days);
   return copy.onDate(new Intl.DateTimeFormat(getAppLocale(), { dateStyle: "medium" }).format(new Date(item.expires_at)));
 }

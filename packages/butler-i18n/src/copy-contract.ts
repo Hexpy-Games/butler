@@ -1035,7 +1035,7 @@ export interface AppCopy {
     memory: {
       feedback: {
         title: string; description: string; empty: string; thisChat: string; chatEnds: string;
-        noExpiry: string; expired: string; tomorrow: string;
+        noExpiry: string; expired: string; inHours: (hours: number) => string;
         inDays: (days: number) => string; onDate: (date: string) => string;
         deleteTitle: string; deleted: string; reset: string; resetTitle: string;
         resetDetail: string; resetDone: string; changeFailed: string;
