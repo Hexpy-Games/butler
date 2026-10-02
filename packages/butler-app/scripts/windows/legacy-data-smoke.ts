@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
-import { alive, bridge, click, ownedProcesses, waitFor } from "./installer-smoke-support.ts";
+import { alive, bridge, click, ownedProcesses, powershell, readJson, waitFor } from "./installer-smoke-support.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
 
 if (process.platform !== "win32" || process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_ENVIRONMENT !== "github-hosted") {
@@ -85,17 +85,42 @@ try {
     folderAction: true, restartToFreshAgent: true, protocolRegistryUnchanged: true, leftoverProcesses: 0,
     durationMs: Date.now() - started }));
 } catch (error) {
+  ownPortableProcesses();
   console.error(error);
   console.error(JSON.stringify({ phase, page: await page?.diagnostics(),
+    startup: readJson(join(data, "app/runtime/foreground/startup-progress.json")),
+    failure: readJson(join(data, "app/runtime/foreground/startup-failure.json")),
     owned: [...owned].map(pid => ({ pid, alive: alive(pid) })) }));
   throw error;
 } finally {
   page?.close();
+  ownPortableProcesses();
   ownedProcesses(data, owned);
   for (const pid of owned) if (alive(pid)) { try { process.kill(pid, "SIGKILL"); } catch {} }
   await waitFor(() => [...owned].every(pid => !alive(pid)), "legacy smoke process cleanup");
+  await waitFor(() => closeOpenedFolder() === 0, "legacy folder window closed");
   rmSync(root, { recursive: true, force: true });
   assert.equal(protocolRegistry(), registryBefore, "Protocol registry changed during legacy smoke");
+}
+
+function ownPortableProcesses() {
+  // Relaunch is reparented before the replacement writes its Agent receipt.
+  // This unique extracted executable belongs only to this disposable test.
+  const pids = JSON.parse(powershell(`ConvertTo-Json -Compress -InputObject @(
+    Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $env:BUTLER_LEGACY_EXECUTABLE } |
+      ForEach-Object { $_.ProcessId })`, { ...env, BUTLER_LEGACY_EXECUTABLE: executable }));
+  for (const pid of pids) owned.add(pid);
+}
+
+function closeOpenedFolder(): number {
+  // Close only the Explorer window opened on this test's isolated folder.
+  return Number(powershell(`$shell = New-Object -ComObject Shell.Application
+    $folder = $shell.NameSpace($env:BUTLER_LEGACY_FOLDER)
+    if (!$folder) { '0'; exit 0 }
+    $target = $folder.Self.Path
+    $windows = @($shell.Windows() | Where-Object { $_.Document.Folder.Self.Path -eq $target })
+    foreach ($window in $windows) { $window.Quit() }
+    $windows.Count`, { ...env, BUTLER_LEGACY_FOLDER: home }));
 }
 
 function protocolRegistry() {

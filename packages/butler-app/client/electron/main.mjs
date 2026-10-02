@@ -2252,6 +2252,10 @@ ipcMain.handle("butler:legacy-data-recovery", async (_event, action) => {
   if (!legacyDataBlocked) return { ok: false };
   if (action === "open-folder") return { ok: !(await shell.openPath(dirname(butlerDataRoot))) };
   if (action === "restart") {
+    // The preload endpoint is internal state, not an external-server override
+    // for the next App. Keep only an override supplied at the original launch.
+    if (explicitServerUrl) process.env.BUTLER_APP_SERVER_URL = explicitServerUrl;
+    else delete process.env.BUTLER_APP_SERVER_URL;
     app.relaunch();
     finalQuitAllowed = true;
     app.quit();
