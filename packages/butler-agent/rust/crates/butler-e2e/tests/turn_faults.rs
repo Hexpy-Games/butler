@@ -19,7 +19,7 @@ use serde_json::{Value, json};
 
 /// TURN-05 — Broken stream: truncation, reset, stall.
 #[tokio::test]
-async fn perf_turn_05_broken_stream_never_delivers_partial_text() -> Result<(), HarnessError> {
+async fn turn_05_broken_stream_never_delivers_partial_text() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("TURN-05")?
         .cassette("TURN-05")
@@ -80,10 +80,10 @@ async fn perf_turn_05_broken_stream_never_delivers_partial_text() -> Result<(), 
             "{kind}: {turn}"
         );
         if *kind == "stall" {
-            assert!(
-                started.elapsed() < Duration::from_secs(40),
-                "stall not bounded: {:?}",
-                started.elapsed()
+            butler_e2e::assert_wall_clock_budget!(
+                started.elapsed(),
+                Duration::from_secs(40),
+                "stall not bounded"
             );
         }
         assert_no_partial_answer(&s.gw, kind, &turn_id, &state).await?;

@@ -100,7 +100,7 @@ async fn automation_owner_panic_fails_only_one_request() -> Result<(), HarnessEr
 }
 
 #[tokio::test]
-async fn perf_schedule_write_contention_is_retryable() -> Result<(), HarnessError> {
+async fn schedule_write_contention_is_retryable() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("STORAGE-BUSY")?
         .cassette("TURN-01")
@@ -124,6 +124,7 @@ async fn perf_schedule_write_contention_is_retryable() -> Result<(), HarnessErro
         reply.status,
         reply.text
     );
+    // Minimum fixture hold proves contention; this is a functional invariant.
     assert!(held.elapsed() >= Duration::from_secs(5));
     assert_eq!(reply.status, 503, "{}", reply.text);
     assert_eq!(reply.error_code(), Some("storage_busy"));

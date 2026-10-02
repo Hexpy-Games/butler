@@ -262,7 +262,7 @@ async fn prj_05_repository_config_never_runs_programs() -> Result<(), HarnessErr
 /// PRJ-06 — without Git, or with a Git that hangs, the dashboard still
 /// answers in time: `is_repo` and `branch` from HEAD, the rest unknown.
 #[tokio::test]
-async fn perf_prj_06_missing_or_hanging_git_leaves_status_unknown() -> Result<(), HarnessError> {
+async fn prj_06_missing_or_hanging_git_leaves_status_unknown() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(
         butler_platform::command_sandbox::POSIX_SHELL,
@@ -301,10 +301,10 @@ async fn perf_prj_06_missing_or_hanging_git_leaves_status_unknown() -> Result<()
     init_repository(&folder)?;
     let started = std::time::Instant::now();
     assert_eq!(dashboard_git(&s, &id).await?, expected, "git hangs");
-    assert!(
-        started.elapsed() < std::time::Duration::from_secs(8),
-        "the dashboard waited {:?} for git",
-        started.elapsed()
+    butler_e2e::assert_wall_clock_budget!(
+        started.elapsed(),
+        std::time::Duration::from_secs(8),
+        "the dashboard waited"
     );
     s.finish().await
 }

@@ -68,15 +68,16 @@ async fn use_local_model(s: &Scenario, server_url: &str) -> Result<String, Harne
 /// chat models (embedding models left out); an absent server is listed as
 /// unreachable. The listed address registers as the server URL.
 #[tokio::test]
-async fn perf_setup_03_local_model_servers_are_detected() -> Result<(), HarnessError> {
+async fn setup_03_local_model_servers_are_detected() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let ollama = FakeServer::local_models(ChatBehavior::default()).await?;
     let s = with_local_server("SETUP-03", &ollama).await?;
     let started = Instant::now();
     let reply = s.gw.get("/setup/local-model-servers").await?;
     assert_eq!(reply.status, 200, "{}", reply.text);
-    assert!(
-        started.elapsed() < Duration::from_secs(5),
+    butler_e2e::assert_wall_clock_budget!(
+        started.elapsed(),
+        Duration::from_secs(5),
         "probes are not short"
     );
     let servers = reply.data()["servers"].as_array().unwrap().clone();

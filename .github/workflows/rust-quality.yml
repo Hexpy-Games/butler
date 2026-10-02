@@ -207,7 +207,7 @@ jobs:
       - name: Run wall-clock performance tests
         uses: ./.github/actions/e2e-stub
         with:
-          filterset: "test(/^perf_/)"
+          enforce-budgets: "true"
           test-threads: "1"
           release-profile: "true"
           exclude-perf: "false"

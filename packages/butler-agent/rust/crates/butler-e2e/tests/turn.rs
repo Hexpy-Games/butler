@@ -316,7 +316,7 @@ async fn turn_02_duplicate_submit_is_idempotent() -> Result<(), HarnessError> {
 
 /// TURN-03 — Stop mid-stream (owner: keep partial text, mark the turn stopped).
 #[tokio::test]
-async fn perf_turn_03_stop_mid_stream() -> Result<(), HarnessError> {
+async fn turn_03_stop_mid_stream() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("TURN-03")?.cassette("TURN-03").start().await?;
     if s.recording() {
@@ -349,7 +349,7 @@ async fn perf_turn_03_stop_mid_stream() -> Result<(), HarnessError> {
         s.gw.wait_terminal("general", &turn_id, Duration::from_secs(15))
             .await?;
     assert_eq!(turn_state(&turn), "cancelled", "{turn}");
-    assert!(stopped_at.elapsed() < Duration::from_secs(10));
+    butler_e2e::assert_wall_clock_budget!(stopped_at.elapsed(), Duration::from_secs(10), "stop");
 
     tokio::time::sleep(Duration::from_millis(1500)).await;
     let events = live.snapshot();

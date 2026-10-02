@@ -270,7 +270,7 @@ async fn assert_message_burst_is_rate_limited(gw: &Gateway) -> Result<(), Harnes
 /// ONB-02 (inject) — credential present, provider answers the recorded real
 /// 401: same user-facing class, bounded, no retry storm.
 #[tokio::test]
-async fn perf_onb_02_provider_401_fails_without_retry_storm() -> Result<(), HarnessError> {
+async fn onb_02_provider_401_fails_without_retry_storm() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     use butler_e2e::e2e::faults::{Fault, Transform};
     let s = Setup::new("ONB-02-401")?
@@ -290,10 +290,10 @@ async fn perf_onb_02_provider_401_fails_without_retry_storm() -> Result<(), Harn
         .turn("general", "Reply with exactly the word: connected")
         .await?;
     assert_eq!(turn_state(&turn), "failed", "{turn}");
-    assert!(
-        started.elapsed() < Duration::from_secs(30),
-        "401 not terminal in time: {:?}",
-        started.elapsed()
+    butler_e2e::assert_wall_clock_budget!(
+        started.elapsed(),
+        Duration::from_secs(30),
+        "401 not terminal in time"
     );
     assert!(
         s.provider()?.served() <= 3,

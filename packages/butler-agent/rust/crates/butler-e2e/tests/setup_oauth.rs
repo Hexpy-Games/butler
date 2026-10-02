@@ -196,7 +196,7 @@ async fn setup_09_sign_in_completes_with_the_flows_pkce() -> Result<(), HarnessE
 /// (any local page can reach the port). Declining in the browser (this
 /// flow's state with `error`) ends it as `failed`/`oauth_denied`.
 #[tokio::test]
-async fn perf_setup_10_stray_callbacks_are_ignored() -> Result<(), HarnessError> {
+async fn setup_10_stray_callbacks_are_ignored() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let token = FakeServer::oauth_token().await?;
     let (s, port) = with_callback_port("SETUP-10", &token).await?;
@@ -225,8 +225,9 @@ async fn perf_setup_10_stray_callbacks_are_ignored() -> Result<(), HarnessError>
     let started = Instant::now();
     let (status, page) = callback(port, &format!("code=e2e-code&state={state}")).await?;
     assert_eq!(status, 200, "{page}");
-    assert!(
-        started.elapsed() < Duration::from_secs(5),
+    butler_e2e::assert_wall_clock_budget!(
+        started.elapsed(),
+        Duration::from_secs(5),
         "the idle connection held it up"
     );
     assert_eq!(
