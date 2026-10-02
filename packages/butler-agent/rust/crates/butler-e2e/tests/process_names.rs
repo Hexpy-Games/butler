@@ -153,6 +153,7 @@ async fn verify_worker(sandbox: &Sandbox, launch: &Launch, role: Role) -> Result
     stdout.read_line(&mut line).await?;
     let response: serde_json::Value = serde_json::from_str(&line)?;
     assert_eq!(response["status"], "error");
+    assert_eq!(process_names::child_count(std::process::id(), role)?, 1);
     if let Some((observed, expected)) = process_names::observed_name(pid, role)? {
         assert_eq!(observed, expected);
         let args = std::process::Command::new("ps")

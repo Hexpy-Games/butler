@@ -34,6 +34,9 @@ impl FeedbackBufferService {
         let data = self.data_root.clone();
         let (generation, entries) = tokio::task::spawn_blocking(move || {
             mutable_paths::ensure_data_authority(&data, &[&root])?;
+            if !store::enabled(&root)? {
+                return Ok((store::generation(&root)?, vec![]));
+            }
             Ok::<_, crate::cognition::CognitionError>((
                 store::generation(&root)?,
                 store::snapshot(&root)?,
@@ -169,6 +172,9 @@ impl FeedbackBufferService {
             }) {
                 entry.status = FeedbackStatus::Discarded;
                 entry.expires_at = None;
+                entry
+                    .extra_fields
+                    .insert("retention_class".into(), "audit".into());
                 entry
                     .extra_fields
                     .insert("resolution_reason".into(), "already_represented".into());

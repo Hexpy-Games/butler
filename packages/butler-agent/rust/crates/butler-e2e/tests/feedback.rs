@@ -18,23 +18,28 @@ async fn feedback_scopes_cross_chat_and_restart_without_policy_truncation()
     let (id, a) = project(&s, "Feedback project").await?;
     let b = project_chat(&s, &id, "Second chat").await?;
     let (_, outside) = project(&s, "Other project").await?;
-    for (chat, user) in [
-        (&a, "Correct globally"),
-        (&a, "Correct project"),
-        (&a, "Correct session"),
-    ] {
-        let result = support::tool(&s, chat, user, "record_user_feedback").await?;
+    prompt(&s, &b).await?;
+    assert!(answer(&s, &b).await?.contains("DEFAULT answer"));
+    let result = support::tool(&s, &a, "Correct globally", "record_user_feedback").await?;
+    assert_eq!(result["ok"], true);
+    prompt(&s, &b).await?;
+    assert!(answer(&s, &b).await?.contains("GLOBAL answer"));
+    for user in ["Correct project", "Correct session"] {
+        let result = support::tool(&s, &a, user, "record_user_feedback").await?;
         assert_eq!(result["ok"], true, "{result}");
         assert!(result["feedback"].as_str().unwrap().starts_with("fb_"));
     }
     let in_a = prompt(&s, &a).await?;
     assert!(in_a.contains("SESSION feedback applies here."));
+    assert!(answer(&s, &a).await?.contains("SESSION answer"));
     let in_b = prompt(&s, &b).await?;
     assert!(
         in_b.contains("PROJECT feedback applies here.")
             && !in_b.contains("SESSION feedback applies here.")
     );
+    assert!(answer(&s, &b).await?.contains("PROJECT answer"));
     let other = prompt(&s, &outside).await?;
+    assert!(answer(&s, &outside).await?.contains("GLOBAL answer"));
     assert!(
         other.contains("Use the verified source, not stale results.")
             && !other.contains("PROJECT feedback applies here.")

@@ -49,7 +49,8 @@ pub(super) fn valid(owner: &RememberedRuleOwner, intent: &Intent) -> CognitionRe
         return Ok(true);
     };
     // A destination committed before reset belongs to the Instructions kind.
-    let inventory = Inventory::read(&owner.root())?;
+    let inventory = super::inventory::read_json::<Inventory>(&owner.root().join("manifest.json"))?
+        .unwrap_or_default();
     if inventory
         .scopes
         .values()

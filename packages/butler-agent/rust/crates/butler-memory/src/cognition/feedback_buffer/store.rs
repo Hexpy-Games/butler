@@ -32,7 +32,7 @@ pub(super) fn failure(source: impl std::error::Error + Send + Sync + 'static) ->
     .with_source(source)
 }
 
-pub(super) fn generation(root: &Path) -> CognitionResult<String> {
+pub(crate) fn generation(root: &Path) -> CognitionResult<String> {
     match fs::read_to_string(root.join("generation")) {
         Ok(value) => Ok(value),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok("0".into()),
@@ -77,21 +77,38 @@ pub(crate) fn snapshot(root: &Path) -> CognitionResult<Vec<FeedbackEntry>> {
 
 pub(crate) fn overlay(
     root: &Path,
+    entries: Vec<FeedbackEntry>,
+) -> CognitionResult<Vec<FeedbackEntry>> {
+    let known = entries
+        .iter()
+        .map(|entry| entry.feedback_id.clone())
+        .collect::<HashSet<_>>();
+    overlay_known(root, entries, &known)
+}
+
+pub(crate) fn overlay_known(
+    root: &Path,
     mut entries: Vec<FeedbackEntry>,
+    known: &HashSet<String>,
 ) -> CognitionResult<Vec<FeedbackEntry>> {
     let generation = generation(root)?;
     for entry in &mut entries {
+        if entry.status == super::FeedbackStatus::Active
+            && (!entry.extra_fields.contains_key("scope")
+                || entry.expires_at.as_deref().is_some_and(|value| {
+                    butler_core::js_date::parse_date_millis(value, &Some).is_none()
+                }))
+        {
+            entry.status = super::FeedbackStatus::NeedsClarification;
+        }
         if entry
             .extra_fields
             .get("reset_generation")
             .map_or(generation != "0", |g| g != &generation)
         {
-            entry.status = super::FeedbackStatus::Discarded;
-            entry.text.clear();
-            entry.extra_fields.shift_remove("text_json");
-            entry
-                .extra_fields
-                .insert("resolution_reason".into(), "owner_reset".into());
+            let updated = entry.updated_at.clone();
+            super::owner::erase(entry, "owner_reset");
+            entry.updated_at = updated;
         }
     }
     let mut ids = entries
@@ -105,6 +122,7 @@ pub(crate) fn overlay(
     for path in paths {
         for entry in read_entries(&path)? {
             if entry.extra_fields.get("reset_generation") == Some(&generation)
+                && !known.contains(&entry.feedback_id)
                 && ids.insert(entry.feedback_id.clone())
             {
                 entries.push(entry);
@@ -133,6 +151,10 @@ pub(crate) fn overlay(
                 .is_some_and(|class| class == "session_only")
         {
             entry.status = super::FeedbackStatus::Discarded;
+            entry.expires_at = None;
+            entry
+                .extra_fields
+                .insert("retention_class".into(), "audit".into());
             entry
                 .extra_fields
                 .insert("resolution_reason".into(), "session_end".into());
@@ -151,5 +173,23 @@ pub(super) fn drain(root: &Path) -> CognitionResult<usize> {
     for path in &paths {
         fs::remove_file(path).map_err(failure)?;
     }
+    sync_pending(root)?;
     Ok(paths.len())
+}
+
+/// Feature pause applies to prompt reads and new destination commits.
+pub(crate) fn enabled(root: &Path) -> CognitionResult<bool> {
+    match fs::read_to_string(root.join("enabled")) {
+        Ok(value) => Ok(value == "true"),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(true),
+        Err(error) => Err(failure(error)),
+    }
+}
+
+pub(super) fn sync_pending(root: &Path) -> CognitionResult<()> {
+    let path = root.join("pending");
+    if path.exists() {
+        butler_platform::secure_fs::sync_path(&path).map_err(failure)?;
+    }
+    Ok(())
 }

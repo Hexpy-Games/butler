@@ -26,6 +26,12 @@ async fn feedback_consolidation_promotes_once_and_retains_pinned_quality_hooks()
     let reply = s.gw.post("/memory/feedback/consolidate", json!({})).await?;
     assert_eq!(reply.status, 200, "{}", reply.text);
     assert_eq!(reply.data()["status"], "completed", "{}", reply.text);
+    let phases = reply.data()["phases"].as_array().unwrap();
+    assert_eq!(phases.len(), 2);
+    assert_eq!(phases[0]["phase"], "preflight");
+    assert_eq!(phases[1]["phase"], "feedback_triage");
+    assert_eq!(phases[1]["metrics"]["promoted_count"], 1);
+    assert_eq!(phases[1]["metrics"]["discarded_count"], 1);
     let root = s.sandbox.data.join("cognition/feedback");
     let text = std::fs::read_to_string(root.join("feedback.md"))?;
     assert!(

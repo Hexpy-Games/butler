@@ -5,6 +5,11 @@ use tokio_util::sync::CancellationToken;
 
 pub enum AppFeedbackCommand {
     Consolidate { input: Value },
+    List,
+    Edit { id: String, text: String },
+    Delete { id: String },
+    SetEnabled { enabled: bool },
+    Reset,
     EndSession { session_id: String },
 }
 

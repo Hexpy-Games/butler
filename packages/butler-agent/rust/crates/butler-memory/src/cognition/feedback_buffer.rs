@@ -2,6 +2,7 @@
 
 mod capture;
 mod lifecycle;
+mod owner;
 mod promotion;
 pub use promotion::{FeedbackPromotion, feedback_evidence_is_current};
 pub(crate) mod operator;

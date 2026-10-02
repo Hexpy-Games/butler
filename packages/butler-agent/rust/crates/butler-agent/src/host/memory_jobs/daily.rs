@@ -319,6 +319,7 @@ fn feedback_run(
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(false),
         rate_budget: Arc::new(move || budget.clone()),
+        stop_after: Some(butler_memory::cognition::Phase::FeedbackTriage),
         cancellation,
     })
 }

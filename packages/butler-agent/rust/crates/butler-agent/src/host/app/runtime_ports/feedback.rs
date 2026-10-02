@@ -20,6 +20,27 @@ impl AppFeedbackPort for AppFeedback {
         let feedback = self.feedback.clone();
         Box::pin(async move {
             match command {
+                AppFeedbackCommand::List => feedback
+                    .list_feedback()
+                    .await
+                    .map_err(GatewayApplicationError::internal_from),
+                AppFeedbackCommand::Edit { id, text } => feedback
+                    .edit_feedback(id, text)
+                    .await
+                    .map_err(GatewayApplicationError::internal_from),
+                AppFeedbackCommand::Delete { id } => feedback
+                    .delete_feedback(id)
+                    .await
+                    .map_err(GatewayApplicationError::internal_from),
+                AppFeedbackCommand::SetEnabled { enabled } => feedback
+                    .set_feedback_enabled(enabled)
+                    .await
+                    .map_err(GatewayApplicationError::internal_from),
+                AppFeedbackCommand::Reset => feedback
+                    .reset_feedback()
+                    .await
+                    .map(|count| serde_json::json!({"cleared_count":count}))
+                    .map_err(GatewayApplicationError::internal_from),
                 AppFeedbackCommand::EndSession { session_id } => feedback
                     .end_feedback_session(session_id)
                     .await

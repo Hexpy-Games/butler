@@ -25,7 +25,7 @@ impl FeedbackPromotion {
     }
 
     pub(crate) fn entry(&self, root: &Path) -> CognitionResult<FeedbackEntry> {
-        if store::generation(root)? != self.generation {
+        if store::generation(root)? != self.generation || !store::enabled(root)? {
             return Err(stale());
         }
         store::snapshot(root)?
@@ -120,9 +120,10 @@ pub fn feedback_evidence_is_current(
     let Some(id) = reference.strip_prefix("feedback:") else {
         return Ok(false);
     };
+    let enabled = store::enabled(root)?;
     Ok(store::snapshot(root)?.iter().any(|entry| {
         entry.feedback_id == id
-            && (entry.is_active_at(chrono::Utc::now().timestamp_millis())
+            && ((enabled && entry.is_active_at(chrono::Utc::now().timestamp_millis()))
                 || entry
                     .extra_fields
                     .get("destination_link")

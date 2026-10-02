@@ -196,6 +196,11 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
     let before_graph = signature(&graph);
     let before_wal = signature(&PathBuf::from(format!("{}-wal", graph.display())));
     let before_lock = signature(&lock);
+    let memory_workers_before = butler_platform::process_names::child_count(
+        s.agent.pid().unwrap(),
+        butler_platform::process_names::Role::Memory,
+    )?;
+    assert_eq!(memory_workers_before, 0);
     let idle_started = Instant::now();
     tokio::time::sleep(IDLE).await;
     let idle_window = idle_started.elapsed();
@@ -204,8 +209,13 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
     let graph_changed = signature(&graph) != before_graph;
     let wal_changed = signature(&PathBuf::from(format!("{}-wal", graph.display()))) != before_wal;
     let lock_changed = signature(&lock) != before_lock;
+    let memory_workers = butler_platform::process_names::child_count(
+        s.agent.pid().unwrap(),
+        butler_platform::process_names::Role::Memory,
+    )?;
+    assert_eq!(memory_workers, 0);
     eprintln!(
-        "MEM-IDLE idle_window={idle_window:?} graph_commits={graph_commits} graph_changed={graph_changed} wal_changed={wal_changed} lock_changed={lock_changed} leases={leases}"
+        "MEM-IDLE memory_workers={memory_workers} idle_window={idle_window:?} graph_commits={graph_commits} graph_changed={graph_changed} wal_changed={wal_changed} lock_changed={lock_changed} leases={leases}"
     );
     assert_eq!(graph_commits, 0, "graph transactions during idle");
     assert!(
@@ -213,7 +223,7 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
         "graph files changed during idle"
     );
     assert!(!lock_changed, "consolidation lock changed during idle");
-    assert!(leases <= 2, "too many idle leases: {leases}");
+    assert_eq!(leases, 0, "consolidation leases during idle");
     s.finish().await
 }
 

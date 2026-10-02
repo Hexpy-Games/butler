@@ -40,12 +40,7 @@ impl FeedbackBufferService {
                 })
                 .count();
             for entry in &mut entries {
-                entry.status = FeedbackStatus::Discarded;
-                entry.text.clear();
-                entry.extra_fields.shift_remove("text_json");
-                entry
-                    .extra_fields
-                    .insert("resolution_reason".into(), "owner_reset".into());
+                super::owner::erase(entry, "owner_reset");
             }
             operator::write_entries(&path, &entries)?;
             for file in store::pending(root)? {
@@ -56,6 +51,7 @@ impl FeedbackBufferService {
                     std::fs::remove_file(file).map_err(store::failure)?;
                 }
             }
+            store::sync_pending(root)?;
             Ok(count)
         })
         .await

@@ -8,24 +8,59 @@ use std::{collections::HashSet, path::Path};
 #[derive(Default)]
 pub(super) struct Cache {
     signature: Option<(u64, std::time::SystemTime)>,
-    entries: Vec<FeedbackEntry>,
+    generation: String,
+    scopes: std::collections::HashMap<String, Vec<FeedbackEntry>>,
+    known: HashSet<String>,
 }
 impl Cache {
-    fn read(&mut self, root: &Path) -> CognitionResult<Vec<FeedbackEntry>> {
+    fn read(
+        &mut self,
+        root: &Path,
+        session: &str,
+        project: Option<&str>,
+    ) -> CognitionResult<Vec<FeedbackEntry>> {
         let path = root.join("feedback.md");
+        let generation = store::generation(root)?;
         let signature = std::fs::metadata(&path)
             .ok()
             .and_then(|m| Some((m.len(), m.modified().ok()?)));
-        if signature != self.signature {
-            self.entries = crate::cognition::feedback_buffer::operator::read_entries(&path)?;
+        if signature != self.signature || generation != self.generation {
+            self.scopes.clear();
+            self.known.clear();
+            for entry in crate::cognition::feedback_buffer::operator::read_entries(&path)? {
+                self.known.insert(entry.feedback_id.clone());
+                if entry.status == FeedbackStatus::Active || entry.category == "session_end" {
+                    self.scopes
+                        .entry(entry.scope.clone())
+                        .or_default()
+                        .push(entry);
+                }
+            }
             self.signature = signature;
+            self.generation = generation;
         }
-        store::overlay(root, self.entries.clone())
+        let mut selected = Vec::new();
+        for scope in ["global", "user", "tool", "source", "style", "knowhow"]
+            .into_iter()
+            .map(str::to_owned)
+            .chain([format!("session:{session}")])
+            .chain(project.map(|id| format!("project:{id}")))
+        {
+            if let Some(entries) = self.scopes.get(&scope) {
+                selected.extend(entries.iter().cloned());
+            }
+        }
+        store::overlay_known(root, selected, &self.known)
     }
 }
 
 fn visible(entry: &FeedbackEntry, session: &str, project: Option<&str>, now: i64) -> bool {
-    if !entry.is_active_at(now)
+    if !entry.extra_fields.contains_key("scope")
+        || entry
+            .expires_at
+            .as_deref()
+            .is_some_and(|value| butler_core::js_date::parse_date_millis(value, &Some).is_none())
+        || !entry.is_active_at(now)
         || !matches!(
             entry.privacy_class,
             FeedbackPrivacyClass::Public | FeedbackPrivacyClass::Private
@@ -34,7 +69,7 @@ fn visible(entry: &FeedbackEntry, session: &str, project: Option<&str>, now: i64
         return false;
     }
     match entry.scope.as_str() {
-        "global" | "tool" | "source" | "style" | "knowhow" => true,
+        "global" | "user" | "tool" | "source" | "style" | "knowhow" => true,
         scope if scope.starts_with("session:") => {
             !session.is_empty() && scope == format!("session:{session}")
         }
@@ -52,12 +87,12 @@ pub(super) fn read(
     project: Option<&str>,
 ) -> CognitionResult<Vec<ScopedPromptFeedback>> {
     let root = data_root.join("feedback");
-    if std::fs::read_to_string(root.join("enabled")).is_ok_and(|value| value == "false") {
+    if !store::enabled(&root)? {
         return Ok(vec![]);
     }
     let now = chrono::Utc::now().timestamp_millis();
     let mut entries = cache
-        .read(&root)?
+        .read(&root, session, project)?
         .into_iter()
         .filter(|entry| visible(entry, session, project, now))
         .collect::<Vec<_>>();

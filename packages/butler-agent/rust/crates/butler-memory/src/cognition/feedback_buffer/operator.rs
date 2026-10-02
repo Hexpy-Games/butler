@@ -148,22 +148,29 @@ impl FeedbackBufferService {
         T: Send + 'static,
         F: FnOnce(PathBuf) -> CognitionResult<T> + Send + 'static,
     {
-        let cognition_root = self.paths.cognition_root(&self.data_root);
-        let path = cognition_root.join("feedback/feedback.md");
-        let quality_path = cognition_root.join("feedback/quality-operations.jsonl");
-        let lock_path = self.paths.consolidation_lock(&self.data_root);
-        mutable_paths::ensure_data_authority(
-            &self.data_root,
-            &[
-                &cognition_root,
-                &path,
-                &quality_path,
-                &lock_path,
-                &cognition_root.join("feedback/pending"),
-                &cognition_root.join("feedback/generation"),
-                &cognition_root.join("feedback/enabled"),
-            ],
-        )?;
+        let data = self.data_root.clone();
+        let paths = self.paths.clone();
+        let (path, lock_path) = tokio::task::spawn_blocking(move || {
+            let cognition_root = paths.cognition_root(&data);
+            let path = cognition_root.join("feedback/feedback.md");
+            let quality_path = cognition_root.join("feedback/quality-operations.jsonl");
+            let lock_path = paths.consolidation_lock(&data);
+            mutable_paths::ensure_data_authority(
+                &data,
+                &[
+                    &cognition_root,
+                    &path,
+                    &quality_path,
+                    &lock_path,
+                    &cognition_root.join("feedback/pending"),
+                    &cognition_root.join("feedback/generation"),
+                    &cognition_root.join("feedback/enabled"),
+                ],
+            )?;
+            Ok::<_, CognitionError>((path, lock_path))
+        })
+        .await
+        .map_err(store_error)??;
         let lease = self
             .coordinator
             .acquire(
@@ -343,4 +350,8 @@ fn now_iso() -> String {
 
 fn operator_error(code: CognitionCode) -> CognitionError {
     CognitionError::new(code, "Cognition feedback operator operation failed")
+}
+
+fn store_error(source: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
+    operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
 }

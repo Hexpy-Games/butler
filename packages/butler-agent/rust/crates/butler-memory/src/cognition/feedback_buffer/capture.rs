@@ -191,6 +191,10 @@ fn build_entry(
     }
     if let Some(handle) = input.represented_by {
         entry.status = FeedbackStatus::Discarded;
+        entry.expires_at = None;
+        entry
+            .extra_fields
+            .insert("retention_class".into(), "audit".into());
         entry
             .extra_fields
             .insert("resolution_reason".into(), "already_represented".into());
@@ -209,6 +213,10 @@ fn link_duplicate(entry: &mut FeedbackEntry, entries: &[FeedbackEntry]) {
             && e.text == entry.text
     }) {
         entry.status = FeedbackStatus::Discarded;
+        entry.expires_at = None;
+        entry
+            .extra_fields
+            .insert("retention_class".into(), "audit".into());
         entry
             .extra_fields
             .insert("resolution_reason".into(), "duplicate".into());

@@ -90,6 +90,18 @@ pub(super) fn stub() -> Result<Cassette, HarnessError> {
         "record_user_feedback",
         &json!({"text":"Reusable mandate: verify today's sources, with dates.","scope":"global","category":"correction","target_ref":"{{TARGET}}","retention_class":"working"}),
     );
+    support::add_call(
+        &mut cassette,
+        "Save older preference",
+        "update_explicit_memory",
+        &json!({"kind":"rule","text":"Prefer the old source by default.","source":"Save older preference"}),
+    );
+    support::add_call(
+        &mut cassette,
+        "Override older preference",
+        "record_user_feedback",
+        &json!({"text":"Use the verified new source for this question.","scope":"global","category":"correction","target_ref":"source:old","retention_class":"working"}),
+    );
     for n in 0..14 {
         support::add_call(
             &mut cassette,
@@ -170,10 +182,16 @@ pub(super) fn behavior(request: &Value) -> Option<butler_e2e::e2e::cassette::Res
         .skip(1)
         .collect::<Vec<_>>()
         .join(" ");
-    let text = if feedback.contains("PROJECT feedback applies here.") {
+    let text = if feedback.contains("Use the verified new source for this question.") {
+        "NEW SOURCE answer"
+    } else if feedback.contains("SESSION feedback applies here.") {
+        "SESSION answer"
+    } else if feedback.contains("PROJECT feedback applies here.") {
         "PROJECT answer"
-    } else {
+    } else if feedback.contains("Use the verified source, not stale results.") {
         "GLOBAL answer"
+    } else {
+        "DEFAULT answer"
     };
     Some(support::response(
         &json!({"type":"message","id":format!("msg_feedback{}",uuid::Uuid::new_v4().simple()),"role":"assistant","status":"completed","content":[{"type":"output_text","text":text,"annotations":[]}]}),
@@ -182,12 +200,22 @@ pub(super) fn behavior(request: &Value) -> Option<butler_e2e::e2e::cassette::Res
 
 pub(super) async fn prompt(s: &Scenario, chat: &str) -> Result<String, HarnessError> {
     let before = s.provider()?.requests().len();
-    let (_, turn) = s.turn(chat, "Check applicable feedback").await?;
+    let (id, turn) = s.turn(chat, "Check applicable feedback").await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
     let messages = s.gw.messages(chat).await?;
-    assert!(messages.iter().any(
-        |m| m.to_string().contains("PROJECT answer") || m.to_string().contains("GLOBAL answer")
-    ));
+    assert!(messages.iter().any(|message| {
+        message["turn_id"] == id
+            && message["role"] == "assistant"
+            && [
+                "PROJECT answer",
+                "GLOBAL answer",
+                "NEW SOURCE answer",
+                "SESSION answer",
+                "DEFAULT answer",
+            ]
+            .iter()
+            .any(|answer| message.to_string().contains(answer))
+    }));
     Ok(s.provider()?.requests()[before..]
         .iter()
         .find(|r| r["reasoning"]["effort"] == "max")
@@ -217,4 +245,15 @@ pub(super) async fn project_chat(
         .await?;
     assert_eq!(reply.status, 201, "{}", reply.text);
     Ok(reply.data()["session"]["id"].as_str().unwrap().to_owned())
+}
+
+pub(super) async fn answer(s: &Scenario, chat: &str) -> Result<String, HarnessError> {
+    Ok(s.gw
+        .messages(chat)
+        .await?
+        .iter()
+        .rev()
+        .find(|message| message["role"] == "assistant")
+        .unwrap()
+        .to_string())
 }
