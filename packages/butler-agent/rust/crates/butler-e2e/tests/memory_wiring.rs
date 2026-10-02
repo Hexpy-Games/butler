@@ -239,6 +239,22 @@ async fn wiring_project_rule_stays_out_of_general_prompt() -> Result<(), Harness
         "writer lost project provenance"
     );
     let first = s.provider()?.requests().len();
+    let (_, turn) = s.turn(chat, ask).await?;
+    assert_eq!(turn["state"], "delivered", "{turn}");
+    let requests = s.provider()?.requests();
+    let scoped = requests[first..]
+        .iter()
+        .find(|request| request["reasoning"]["effort"] == "max")
+        .expect("project chat made no foreground request")["input"]
+        .to_string();
+    assert!(
+        scoped
+            .split("## Active Rules")
+            .nth(1)
+            .and_then(|section| section.split("\\n## ").next())
+            .is_some_and(|section| section.contains("5317"))
+    );
+    let first = s.provider()?.requests().len();
     let (_, turn) = s.turn("general", ask).await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
     let requests = s.provider()?.requests();
