@@ -174,6 +174,57 @@ fn episode_ids(rows: &[Value]) -> Vec<Value> {
     rows.iter().map(|r| r["episode_ref"].clone()).collect()
 }
 #[tokio::test]
+async fn mem_judge_model_override_changes_on_next_recall() -> Result<(), HarnessError> {
+    use butler_e2e::e2e::fake_servers::{ChatBehavior, FakeServer, LOCAL_MODEL};
+    butler_e2e::gate!();
+    let s = setup().await?;
+    let baseline = recall(&s, "faster").await?;
+    let local = FakeServer::local_models(ChatBehavior {
+        answer: "{\"ranked\":[2]}".into(),
+        chunk_delay: std::time::Duration::ZERO,
+        ..Default::default()
+    })
+    .await?;
+    let registered =
+        s.gw.post(
+            "/model-catalog/local-models",
+            json!({
+                "provider_id":"local", "api_type":"openai_compatible", "platform":"ollama",
+                "server_url":local.base_url, "model_id":LOCAL_MODEL, "display_name":LOCAL_MODEL,
+                "context_window_tokens":131_072, "source":"discovered"
+            }),
+        )
+        .await?;
+    assert_eq!(registered.status, 201, "{}", registered.text);
+    let model = registered.data()["model"]["model_ref"].clone();
+    let settings =
+        s.gw.patch("/settings", json!({"recall_judge_model":model}))
+            .await?;
+    assert_eq!(settings.status, 200, "{}", settings.text);
+    let judged = recall(&s, "accurate").await?;
+    assert_eq!(judged[0]["episode_ref"], baseline[1]["episode_ref"]);
+    assert_eq!(local.chat_requests().len(), 1);
+    assert_eq!(local.chat_requests()[0]["model"], LOCAL_MODEL);
+    assert_eq!(
+        judge_count(&s),
+        0,
+        "Override must use the selected provider"
+    );
+    let settings =
+        s.gw.patch("/settings", json!({"recall_judge_model":"default"}))
+            .await?;
+    assert_eq!(settings.status, 200, "{}", settings.text);
+    let default = recall(&s, "accurate").await?;
+    assert_eq!(default[0]["episode_ref"], baseline[1]["episode_ref"]);
+    assert_eq!(
+        judge_count(&s),
+        1,
+        "Default must read the memory model again"
+    );
+    assert_eq!(local.chat_requests().len(), 1);
+    s.finish().await
+}
+#[tokio::test]
 async fn mem_judge_provider_failure_and_deadline_preserve_order() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = setup().await?;
