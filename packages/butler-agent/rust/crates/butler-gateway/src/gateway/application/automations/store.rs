@@ -23,7 +23,7 @@ impl AppApplication {
         &self,
     ) -> Result<Option<String>, GatewayApplicationError> {
         self.storage
-            .execute(|db| records::next_due(db))
+            .read(records::next_due)
             .await
             .map_err(app_error)
     }
@@ -34,7 +34,7 @@ impl AppApplication {
         include_deleted: bool,
     ) -> Result<AutomationListView, GatewayApplicationError> {
         self.storage
-            .execute(move |db| {
+            .read(move |db| {
                 Ok(AutomationListView {
                     automations: records::list(db, target_session_id.as_deref(), include_deleted)?
                         .into_iter()
@@ -51,7 +51,7 @@ impl AppApplication {
         id: String,
     ) -> Result<AutomationDetailView, GatewayApplicationError> {
         self.storage
-            .execute(move |db| {
+            .read(move |db| {
                 Ok(AutomationDetailView {
                     automation: detail(records::active(db, &id)?),
                 })
@@ -197,7 +197,7 @@ impl AppApplication {
         id: String,
     ) -> Result<AutomationRunListView, GatewayApplicationError> {
         self.storage
-            .execute(move |db| {
+            .read(move |db| {
                 Ok(AutomationRunListView {
                     runs: records::runs(db, &id)?,
                 })
@@ -211,14 +211,7 @@ impl AppApplication {
         session_id: String,
     ) -> Result<Value, GatewayApplicationError> {
         self.storage
-            .execute(move |db| {
-                let targets = records::list(db, Some(&session_id), false)?
-                    .into_iter()
-                    .map(records::summary)
-                    .map(target_summary)
-                    .collect::<Vec<_>>();
-                serde_json::to_value(targets).map_err(json_error)
-            })
+            .read(move |db| read_targets(db, &session_id))
             .await
             .map_err(app_error)
     }
@@ -390,4 +383,16 @@ async fn first_run(
         )
     };
     Ok(next)
+}
+
+pub(in crate::gateway::application) fn read_targets(
+    db: &rusqlite::Connection,
+    session: &str,
+) -> Result<Value, AppStorageError> {
+    let targets = records::list(db, Some(session), false)?
+        .into_iter()
+        .map(records::summary)
+        .map(target_summary)
+        .collect::<Vec<_>>();
+    serde_json::to_value(targets).map_err(json_error)
 }

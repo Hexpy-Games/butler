@@ -32,7 +32,7 @@ pub(super) async fn read_project(
     let key = project_id.to_owned();
     application
         .storage
-        .execute(move |db| read(db, &key))
+        .read(move |db| read(db, &key))
         .await
         .map_err(app_error)?
         .ok_or_else(project_not_found)

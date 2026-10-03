@@ -65,7 +65,7 @@ impl AppApplication {
         let (controls, revision) = self
             .storage
             .execute(move |db| {
-                let transaction = db.transaction().map_err(AppStorageError::sqlite)?;
+                let transaction = db.savepoint().map_err(AppStorageError::sqlite)?;
                 let snapshot = settings::update_session_controls(
                     &transaction,
                     &subscribers,

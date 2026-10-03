@@ -62,13 +62,6 @@ impl AuthorityRepository for SqliteAuthorityRepository<'_> {
     fn list_pending(&mut self, owner: &str) -> AuthorityResult<Vec<AuthorityRecord>> {
         query::list_pending(self.db, owner)
     }
-    fn question_history(
-        &mut self,
-        owner: &str,
-        turns: &[String],
-    ) -> AuthorityResult<Vec<AuthorityRecord>> {
-        query::question_history(self.db, owner, turns)
-    }
     fn list_decided(&mut self) -> AuthorityResult<Vec<AuthorityRecord>> {
         query::list_decided(self.db)
     }

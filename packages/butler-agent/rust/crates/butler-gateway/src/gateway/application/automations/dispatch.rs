@@ -106,7 +106,7 @@ impl AppApplication {
     ) -> Result<AutomationRunListView, GatewayApplicationError> {
         let queued = self
             .storage
-            .execute(|db| records::queued(db))
+            .read(records::queued)
             .await
             .map_err(app_error)?;
         self.automation_queued
@@ -136,7 +136,7 @@ impl AppApplication {
         let now = self.dependencies.identity_clock.now_iso();
         let due = self
             .storage
-            .execute(move |db| records::due(db, &now))
+            .read(move |db| records::due(db, &now))
             .await
             .map_err(app_error)?;
         for row in due {
@@ -150,7 +150,7 @@ impl AppApplication {
         target_id: String,
     ) -> Result<bool, GatewayApplicationError> {
         self.storage
-            .execute(move |db| session_has_active_turn(db, &target_id))
+            .read(move |db| session_has_active_turn(db, &target_id))
             .await
             .map_err(app_error)
     }

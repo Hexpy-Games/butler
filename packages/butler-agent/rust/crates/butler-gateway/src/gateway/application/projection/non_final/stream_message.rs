@@ -9,6 +9,7 @@
 //! or its answer candidate was sent back) stays visible until the next stream
 //! replaces it, but it is never kept as a stopped turn's partial answer.
 
+use crate::gateway::application::storage::CachedSql;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Map, Value, json};
 
@@ -86,12 +87,25 @@ fn append(target: &StreamTarget<'_>, stream: &str, delta: &str) -> Result<(), Ap
         now,
         ..
     } = *target;
+    // A delta-only operation cannot settle the turn. Retain every published
+    // update in its cache and persist the final row before committing.
+    if let Some(mut message) = super::batch::stream_message(chat, turn) {
+        if super::batch::stream(turn).as_deref() == Some(stream) {
+            message.text.push_str(delta);
+        } else {
+            message.text = delta.to_owned();
+        }
+        message.updated_at = now.to_owned();
+        super::batch::remember(&message);
+        super::batch::remember_stream(turn, stream);
+        return updated(target, &message.id);
+    }
     if !open(db, turn)? {
         return Ok(());
     }
     let continues =
         draft(db, turn)?.is_some_and(|(current, discarded)| current == stream && !discarded);
-    db.execute(
+    db.execute_cached(
         "INSERT INTO turn_stream_drafts(turn_id,stream_id,discarded,updated_at) VALUES(?1,?2,0,?3) \
          ON CONFLICT(turn_id) DO UPDATE SET stream_id=excluded.stream_id,discarded=0,\
          updated_at=excluded.updated_at",
@@ -105,14 +119,14 @@ fn append(target: &StreamTarget<'_>, stream: &str, delta: &str) -> Result<(), Ap
             } else {
                 "UPDATE messages SET text=?1,updated_at=?2 WHERE id=?3"
             };
-            db.execute(sql, params![delta, now, id])
+            db.execute_cached(sql, params![delta, now, id])
                 .map_err(AppStorageError::sqlite)?;
             id
         }
         Some(_) => return Ok(()),
         None => {
             let id = format!("message-stream-{turn}");
-            db.execute(
+            db.execute_cached(
                 "INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at,retryable) \
                  VALUES(?1,?2,?3,'assistant',?4,'streaming',?5,?5,0)",
                 params![id, chat, turn, delta, now],
@@ -121,6 +135,7 @@ fn append(target: &StreamTarget<'_>, stream: &str, delta: &str) -> Result<(), Ap
             id
         }
     };
+    super::batch::remember_stream(turn, stream);
     updated(target, &id)
 }
 
@@ -128,7 +143,7 @@ fn append(target: &StreamTarget<'_>, stream: &str, delta: &str) -> Result<(), Ap
 fn discard(target: &StreamTarget<'_>, stream: &str) -> Result<(), AppStorageError> {
     target
         .db
-        .execute(
+        .execute_cached(
             "UPDATE turn_stream_drafts SET discarded=1,updated_at=?1 \
              WHERE turn_id=?2 AND stream_id=?3",
             params![target.now, target.turn, stream],
@@ -162,10 +177,10 @@ pub(super) fn stop(
     }
     // A provisional message from before stream drafts existed has no draft.
     let answer = draft(db, turn)?.is_none_or(|(_, discarded)| !discarded);
-    db.execute("DELETE FROM turn_stream_drafts WHERE turn_id=?1", [turn])
+    db.execute_cached("DELETE FROM turn_stream_drafts WHERE turn_id=?1", [turn])
         .map_err(AppStorageError::sqlite)?;
     if answer {
-        db.execute(
+        db.execute_cached(
             "UPDATE messages SET status='cancelled',safe_error_code='turn_stopped',updated_at=?1 \
              WHERE id=?2",
             params![now, id],
@@ -173,7 +188,7 @@ pub(super) fn stop(
         .map_err(AppStorageError::sqlite)?;
         return updated(&target, &id);
     }
-    db.execute("DELETE FROM messages WHERE id=?1", [&id])
+    db.execute_cached("DELETE FROM messages WHERE id=?1", [&id])
         .map_err(AppStorageError::sqlite)?;
     events::append(
         db,
@@ -211,9 +226,9 @@ pub(super) fn settle_suspended(
     if status != "streaming" {
         return Ok(());
     }
-    db.execute("DELETE FROM turn_stream_drafts WHERE turn_id=?1", [turn])
+    db.execute_cached("DELETE FROM turn_stream_drafts WHERE turn_id=?1", [turn])
         .map_err(AppStorageError::sqlite)?;
-    db.execute(
+    db.execute_cached(
         "UPDATE messages SET status='delivered',updated_at=?1 WHERE id=?2",
         params![now, id],
     )
@@ -244,9 +259,9 @@ pub(in crate::gateway::application::projection) fn fail_unanswered(
     if status != "streaming" {
         return Ok(());
     }
-    db.execute("DELETE FROM turn_stream_drafts WHERE turn_id=?1", [turn])
+    db.execute_cached("DELETE FROM turn_stream_drafts WHERE turn_id=?1", [turn])
         .map_err(AppStorageError::sqlite)?;
-    db.execute(
+    db.execute_cached(
         "UPDATE messages SET status='failed',safe_error_code=?1,updated_at=?2 WHERE id=?3",
         params![code, now, id],
     )
@@ -256,7 +271,7 @@ pub(in crate::gateway::application::projection) fn fail_unanswered(
 
 fn open(db: &Connection, turn: &str) -> Result<bool, AppStorageError> {
     Ok(db
-        .query_row(
+        .query_row_cached(
             "SELECT 1 FROM turns WHERE id=?1 AND state IN \
              ('accepted','thinking','streaming','waiting_for_tool','retrying','cancelling')",
             [turn],
@@ -269,7 +284,7 @@ fn open(db: &Connection, turn: &str) -> Result<bool, AppStorageError> {
 
 /// The turn's current stream and whether it was discarded.
 fn draft(db: &Connection, turn: &str) -> Result<Option<(String, bool)>, AppStorageError> {
-    db.query_row(
+    db.query_row_cached(
         "SELECT stream_id,discarded FROM turn_stream_drafts WHERE turn_id=?1",
         [turn],
         |row| Ok((row.get(0)?, row.get::<_, i64>(1)? != 0)),
@@ -284,7 +299,7 @@ fn latest(
     chat: &str,
     turn: &str,
 ) -> Result<Option<(String, String)>, AppStorageError> {
-    db.query_row(
+    db.query_row_cached(
         "SELECT id,status FROM messages WHERE chat_id=?1 AND turn_id=?2 AND role='assistant' \
          ORDER BY rowid DESC LIMIT 1",
         params![chat, turn],
@@ -295,12 +310,20 @@ fn latest(
 }
 
 fn updated(target: &StreamTarget<'_>, id: &str) -> Result<(), AppStorageError> {
-    let Some(message) = read_model::list_messages(target.db, target.chat, 0.0, 200)?
-        .messages
-        .into_iter()
-        .find(|row| row.id == id)
-    else {
-        return Ok(());
+    let message = if let Some(message) = super::batch::message(id) {
+        // This operation contains only stream deltas: attachments, identity,
+        // status and terminal decorations cannot change between these rows.
+        message
+    } else {
+        let Some(message) = read_model::list_messages(target.db, target.chat, 0.0, 200)?
+            .messages
+            .into_iter()
+            .find(|message| message.id == id)
+        else {
+            return Ok(());
+        };
+        super::batch::remember(&message);
+        message
     };
     events::append(
         target.db,

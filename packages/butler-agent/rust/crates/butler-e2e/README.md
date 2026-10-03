@@ -217,10 +217,36 @@ BUTLER_E2E_TIER=perf BUTLER_E2E_BIN="$CARGO_TARGET_DIR/release/butler-agent" \
 ```
 
 Use `cargo test` for this several-minute measurement, independently of the
-normal stub CI suite. The procfs boundary lives in `butler-platform`; other
-platforms report the measurement unavailable. Linux RSS is deliberately stricter
-than private heap size, but it is not macOS `phys_footprint`.
+normal stub CI suite. Native counters live in `butler-platform`: Linux supplies
+procfs, macOS supplies footprint/disk I/O, and Windows supplies resident memory
+and `GetProcessIoCounters` via sysinfo. Windows I/O includes buffered/network
+transfers, a conservative storage upper bound; it is not a physical-disk-only
+counter. Unsupported systems report the measurement unavailable. Linux RSS is
+deliberately stricter than private heap size, but is not macOS `phys_footprint`.
 
+
+## Storage concurrency comparison
+
+`storage_concurrency` seeds a 1.3 GB App DB with 600 chats and 300,000 events,
+then streams eight turns with 200 deltas each. The perf test checks exact rows,
+ordered deltas, complete messages and current committed views while reporting
+commits per turn, WAL bytes per turn, persistence p95 and session-view p95.
+Run with a release agent, `BUTLER_E2E_TIER=stub`, `BUTLER_E2E_PERF=1` and one
+test thread. Storage instrumentation and stream controls are opt-in on the
+stub/perf tiers in both build profiles.
+
+The before run normally disables read pools and App delta/transaction batching.
+`BUTLER_E2E_STORAGE_MAIN_BIN` instead selects a separately built main agent for
+that run. That binary needs the same opt-in commit/WAL/operation counters and
+raw-delta/eight-stream controls; its storage implementation stays unchanged.
+Both runs disable automatic checkpoints while counting WAL bytes, so the WAL
+measurement includes all retained frames rather than only the last checkpoint
+cycle. `idle_resources` additionally observes App and BTCC `data_version` over
+all three idle windows and requires zero commits. Its fixture contains 5,000
+turns, 200,000 App events, 30,000 native messages, 30,000 completed memory jobs
+and more than 300 MB of metrics. These fixtures do not model the full 7 GB BTCC
+DB or the 2,440-transcript corpus listed in `plans/README.md`; report the measured
+fixture scope with the results.
 
 ## Wall-clock budgets in CI
 

@@ -174,10 +174,7 @@ struct Worker {
 
 impl Worker {
     async fn start(storage: AppStorage) -> Self {
-        let settled_through = storage
-            .execute(|db| sweep::read_watermark(db))
-            .await
-            .unwrap_or(0);
+        let settled_through = storage.read(sweep::read_watermark).await.unwrap_or(0);
         Self {
             storage,
             semantic_pending: VecDeque::new(),
@@ -229,7 +226,7 @@ impl Worker {
         };
         match self
             .storage
-            .execute(move |db| sweep::needing_work_page(db, cursor))
+            .read(move |db| sweep::needing_work_page(db, cursor))
             .await
         {
             Ok((turns, next)) => {
@@ -286,7 +283,7 @@ impl Worker {
         };
         match self
             .storage
-            .execute(move |db| sweep::scan_watermark_page(db, from))
+            .read(move |db| sweep::scan_watermark_page(db, from))
             .await
         {
             Ok((settled, true)) => self.watermark_scan = Some(settled),

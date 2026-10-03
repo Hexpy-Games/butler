@@ -103,7 +103,7 @@ async fn local_and_project_session_rows_follow_app_source() {
             .collect::<Vec<_>>(),
         vec!["project-chat", "my-chat", "general"]
     );
-    let chats = storage.execute(read::chats).await.unwrap();
+    let chats = storage.read(read::chats).await.unwrap();
     assert_eq!(
         chats
             .iter()

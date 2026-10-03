@@ -211,7 +211,7 @@ async fn commit(
     application
         .storage
         .execute(move |db| {
-            let tx = db.transaction().map_err(AppStorageError::sqlite)?;
+            let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
             let current: Option<i64> = tx
                 .query_row(
                     "SELECT dashboard_preferences_revision FROM projects WHERE id=?1",

@@ -48,7 +48,7 @@ impl AppApplication {
         let (claim, prepared) =
             self.storage
                 .execute(move |db| {
-                    let transaction = db.transaction().map_err(AppStorageError::sqlite)?;
+                    let transaction = db.savepoint().map_err(AppStorageError::sqlite)?;
                     let snapshot = retry_snapshot(&transaction, &operation_turn)?;
                     let (verified, controls) = verified_execution_controls(&snapshot)?;
                     let status_label = retry_status_label(verified.subsession_result.as_ref());

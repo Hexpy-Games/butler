@@ -1,11 +1,23 @@
 //! The `butler-agent` executable. All argument handling lives in
 //! [`butler_agent::Command`]; this file only starts the async runtime.
+//! Bound asynchronous worker/allocator overhead on large-core hosts; SQLite
+//! and other blocking work retain their separate bounded owners.
 
-#[tokio::main]
-async fn main() -> std::process::ExitCode {
+fn main() -> std::process::ExitCode {
     if let Err(error) = butler_platform::process_names::name_current() {
         eprintln!("process_name_unavailable: {error}");
         return std::process::ExitCode::FAILURE;
     }
-    butler_agent::main(std::env::args_os().skip(1).collect()).await
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(butler_platform::cpu::performance_cores().min(8))
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            eprintln!("async_runtime_unavailable: {error}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    runtime.block_on(butler_agent::main(std::env::args_os().skip(1).collect()))
 }

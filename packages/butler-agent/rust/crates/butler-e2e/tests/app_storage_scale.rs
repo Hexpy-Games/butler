@@ -81,6 +81,9 @@ async fn session_view_p95(s: &Scenario, latest_turn: &str) -> Result<Duration, H
         samples.push(started.elapsed());
         assert_eq!(reply.status, 200, "{}", reply.text);
         let view = reply.data();
+        if samples.len() == 20 {
+            assert_context_pages(s, view).await?;
+        }
         assert_eq!(view["session_id"], "general");
         assert_eq!(view["latest_turn"]["id"], latest_turn);
         assert_eq!(view["latest_turn"]["state"], "delivered");
@@ -112,6 +115,62 @@ async fn session_view_p95(s: &Scenario, latest_turn: &str) -> Result<Duration, H
         samples[9], samples[18]
     );
     Ok(samples[18])
+}
+
+// Paging changes the visible messages, while context still describes the
+// complete latest window and the current turn from the same committed state.
+async fn assert_context_pages(s: &Scenario, full: &serde_json::Value) -> Result<(), HarnessError> {
+    let latest = s.gw.get("/session-view?session_id=general&limit=1").await?;
+    assert_eq!(latest.status, 200);
+    assert_eq!(latest.data()["messages"].as_array().unwrap().len(), 1);
+    assert_eq!(latest.data()["message_window"]["has_more"], true);
+    let token = latest.data()["message_window"]["previous_cursor_token"]
+        .as_str()
+        .unwrap();
+    let older =
+        s.gw.get(&format!(
+            "/session-view?session_id=general&limit=1&before_cursor_token={token}"
+        ))
+        .await?;
+    assert_eq!(older.status, 200);
+    assert_eq!(older.data()["messages"].as_array().unwrap().len(), 1);
+    assert_ne!(older.data()["messages"], latest.data()["messages"]);
+    let token = older.data()["message_window"]["previous_cursor_token"]
+        .as_str()
+        .unwrap();
+    let prior_turn =
+        s.gw.get(&format!(
+            "/session-view?session_id=general&limit=1&before_cursor_token={token}"
+        ))
+        .await?;
+    assert_eq!(prior_turn.status, 200);
+    assert_eq!(prior_turn.data()["messages"].as_array().unwrap().len(), 1);
+    assert_ne!(
+        prior_turn.data()["messages"][0]["turn_id"],
+        full["latest_turn"]["id"]
+    );
+    let token = full["message_window"]["next_cursor_token"]
+        .as_str()
+        .unwrap();
+    let empty =
+        s.gw.get(&format!(
+            "/session-view?session_id=general&cursor_token={token}"
+        ))
+        .await?;
+    assert_eq!(empty.status, 200);
+    assert_eq!(empty.data()["messages"], serde_json::json!([]));
+    let mut context = full["context"].clone();
+    context.as_object_mut().unwrap().remove("updated_at");
+    for view in [latest.data(), older.data(), prior_turn.data(), empty.data()] {
+        let mut paged_context = view["context"].clone();
+        assert!(paged_context["updated_at"].is_string());
+        paged_context.as_object_mut().unwrap().remove("updated_at");
+        assert_eq!(paged_context, context);
+        for field in ["usage", "latest_turn", "artifacts", "automations"] {
+            assert_eq!(view[field], full[field], "paged {field}");
+        }
+    }
+    Ok(())
 }
 
 /// The projection rows retention wrote or rewrote, as `turn:compacted_at`.

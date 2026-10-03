@@ -2,6 +2,10 @@
 
 mod cached;
 mod error;
+mod lane;
+pub(super) mod metrics;
+mod operation;
+mod read_pool;
 mod schema;
 mod tuning;
 
@@ -9,7 +13,6 @@ use butler_platform::sqlite;
 pub(super) use cached::CachedSql;
 pub(super) use error::{AppStorageCode, AppStorageError};
 use std::{
-    panic::{AssertUnwindSafe, catch_unwind},
     path::PathBuf,
     sync::{Arc, Weak},
     thread::JoinHandle,
@@ -29,15 +32,20 @@ const OPTIMIZE_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 const OPTIMIZE_RETRY: Duration = Duration::from_secs(60);
 
 type StorageResult<T> = Result<T, AppStorageError>;
-type DatabaseOperation = Box<dyn FnOnce(&mut Connection) + Send + 'static>;
+type Completion = Box<dyn FnOnce(StorageResult<()>) + Send>;
+type DatabaseOperation = lane::Operation;
 
 #[derive(Clone)]
 pub(super) struct AppStorage {
     inner: Arc<StorageInner>,
+    inspect: bool,
+    barrier: bool,
 }
 
 struct StorageInner {
     lane: Mutex<LaneState>,
+    readers: Arc<read_pool::ReadPool>,
+    metrics: Arc<metrics::Metrics>,
     optimizer: SyncMutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
@@ -56,15 +64,19 @@ impl AppStorage {
     ) -> StorageResult<Self> {
         let (sender, receiver) = mpsc::channel(OPERATION_QUEUE_CAPACITY);
         let (initialized_tx, initialized_rx) = oneshot::channel();
+        let read_path = path.clone();
+        let metrics = Arc::new(metrics::Metrics::default());
+        let lane_metrics = metrics.clone();
         let thread = std::thread::Builder::new()
             .name("butler-app-sqlite".to_owned())
             .spawn(move || {
                 run_connection_lane(
-                    path,
+                    &path,
                     butler_data.as_ref(),
                     &initialized_at,
                     receiver,
                     initialized_tx,
+                    &lane_metrics,
                 )
             })
             .map_err(|error| {
@@ -76,7 +88,17 @@ impl AppStorage {
             })?;
         match initialized_rx.await {
             Ok(Ok(())) => {
+                let readers = match open_readers(read_path).await {
+                    Ok(readers) => readers,
+                    Err(error) => {
+                        drop(sender);
+                        join_failed_initialization(thread).await;
+                        return Err(error);
+                    }
+                };
                 let inner = Arc::new(StorageInner {
+                    readers: Arc::new(readers),
+                    metrics,
                     lane: Mutex::new(LaneState {
                         sender: Some(sender),
                         thread: Some(thread),
@@ -87,7 +109,11 @@ impl AppStorage {
                 });
                 *inner.optimizer.lock() =
                     Some(tokio::spawn(optimize_periodically(Arc::downgrade(&inner))));
-                Ok(Self { inner })
+                Ok(Self {
+                    inner,
+                    inspect: false,
+                    barrier: false,
+                })
             }
             Ok(Err(error)) => {
                 join_failed_initialization(thread).await;
@@ -103,22 +129,43 @@ impl AppStorage {
         }
     }
 
-    pub(super) async fn execute<T, F>(&self, operation: F) -> StorageResult<T>
+    pub(super) fn execute<T, F>(
+        &self,
+        operation: F,
+    ) -> impl std::future::Future<Output = StorageResult<T>> + Send + '_
     where
         T: Send + 'static,
         F: FnOnce(&mut Connection) -> StorageResult<T> + Send + 'static,
     {
         let (completion_tx, completion_rx) = oneshot::channel();
-        let job = Box::new(move |connection: &mut Connection| {
-            let result = super::monitoring::materialized::refresh(connection)
-                .and_then(|()| operation(connection))
-                .and_then(|value| {
-                    super::monitoring::materialized::refresh(connection).map(|()| value)
-                });
-            // Committed events reach subscribers before the caller sees the result.
-            event_outbox::flush();
-            let _cancelled_observer = completion_tx.send(result);
-        });
+        let job = operation::job(
+            operation,
+            completion_tx,
+            self.inner.metrics.clone(),
+            self.inspect,
+            self.barrier,
+        );
+        self.complete(job, completion_rx)
+    }
+
+    async fn complete<T: Send + 'static>(
+        &self,
+        job: lane::Operation,
+        completion_rx: oneshot::Receiver<StorageResult<T>>,
+    ) -> StorageResult<T> {
+        self.admit(job).await?;
+        completion_rx.await.map_err(|source| {
+            AppStorageError::new(
+                AppStorageCode::AppSqliteOperationCompletionLost,
+                "App SQLite operation ended without a result",
+            )
+            .with_source(source)
+        })?
+    }
+
+    // Queue reservation and close ordering do not depend on the query or result
+    // type. Share this state machine instead of compiling it for every SQL job.
+    async fn admit(&self, job: lane::Operation) -> StorageResult<()> {
         let lane = self.inner.lane.lock().await;
         let sender = lane.sender.as_ref().ok_or_else(|| {
             AppStorageError::new(
@@ -135,22 +182,60 @@ impl AppStorage {
         })?;
         permit.send(job);
         drop(lane);
-        completion_rx.await.map_err(|source| {
-            AppStorageError::new(
-                AppStorageCode::AppSqliteOperationCompletionLost,
-                "App SQLite operation ended without a result",
-            )
-            .with_source(source)
-        })?
+        Ok(())
+    }
+
+    pub(super) async fn inspect<T, F>(&self, operation: F) -> StorageResult<T>
+    where
+        T: Send + 'static,
+        F: FnOnce(&mut Connection) -> StorageResult<T> + Send + 'static,
+    {
+        Self {
+            inner: self.inner.clone(),
+            inspect: true,
+            barrier: false,
+        }
+        .execute(operation)
+        .await
+    }
+
+    pub(super) async fn exclusive<T, F>(&self, operation: F) -> StorageResult<T>
+    where
+        T: Send + 'static,
+        F: FnOnce(&mut Connection) -> StorageResult<T> + Send + 'static,
+    {
+        Self {
+            inner: self.inner.clone(),
+            inspect: true,
+            barrier: true,
+        }
+        .execute(operation)
+        .await
+    }
+
+    pub(super) async fn read<T, F>(&self, operation: F) -> StorageResult<T>
+    where
+        T: Send + 'static,
+        F: FnOnce(&Connection) -> StorageResult<T> + Send + 'static,
+    {
+        if metrics::baseline() {
+            return self.execute(move |db| operation(db)).await;
+        }
+        let result = self.inner.readers.read(operation).await;
+        if result.as_ref().is_err_and(AppStorageError::is_busy) {
+            self.inner.metrics.busy();
+        }
+        result
     }
 
     /// Copies available WAL pages without waiting for foreground readers.
     pub(super) async fn checkpoint(&self) -> StorageResult<()> {
-        self.execute(|connection| tuning::passive_checkpoint(connection))
+        self.exclusive(|connection| tuning::passive_checkpoint(connection))
             .await
     }
 
     pub(super) async fn close(&self) -> StorageResult<()> {
+        self.inner.readers.close().await;
         if let Some(optimizer) = self.inner.optimizer.lock().take() {
             optimizer.abort();
         }
@@ -204,11 +289,12 @@ impl Drop for StorageInner {
 }
 
 fn run_connection_lane(
-    path: PathBuf,
+    path: &std::path::Path,
     butler_data: Option<&PathBuf>,
     initialized_at: &str,
-    mut receiver: mpsc::Receiver<DatabaseOperation>,
+    receiver: mpsc::Receiver<DatabaseOperation>,
     initialized: oneshot::Sender<StorageResult<()>>,
+    metrics: &Arc<metrics::Metrics>,
 ) -> StorageResult<()> {
     let setup: StorageResult<Connection> = (|| {
         if let Some(parent) = path.parent() {
@@ -227,12 +313,12 @@ fn run_connection_lane(
         schema::migrate_legacy_schedules(&mut connection, butler_data.map(PathBuf::as_path))?;
         tuning::analyze_at_open(&connection)?;
         super::monitoring::materialized::refresh(&connection)?;
-        // Recover and seed before enabling normal runtime checkpoints. A large
-        // retained WAL must not be copied by the first startup transaction.
+        // Recovery and startup seeding precede normal runtime checkpoints.
         connection
             .pragma_update(None, "wal_autocheckpoint", 1000)
             .map_err(AppStorageError::sqlite)?;
-        event_outbox::install(&connection);
+        event_outbox::install(&connection, metrics.clone());
+        metrics::configure(&connection)?;
         Ok(connection)
     })();
     let mut connection = match setup {
@@ -245,18 +331,8 @@ fn run_connection_lane(
     if initialized.send(Ok(())).is_err() {
         return close_connection(connection);
     }
-    while let Some(operation) = receiver.blocking_recv() {
-        if let Err(payload) = catch_unwind(AssertUnwindSafe(|| operation(&mut connection))) {
-            super::panic_isolation::report("app-sqlite", payload.as_ref());
-            // RAII transactions roll back while unwinding. Raw BEGINs must
-            // also be cleared before another operation uses this connection.
-            if !connection.is_autocommit()
-                && let Err(error) = connection.execute_batch("ROLLBACK")
-            {
-                butler_core::diagnostic!("[app-sqlite] panic rollback failed: {error}");
-            }
-        }
-    }
+    lane::run(&mut connection, receiver)?;
+    metrics.save(path)?;
     close_connection(connection)
 }
 
@@ -314,9 +390,13 @@ async fn optimize_periodically(inner: Weak<StorageInner>) {
                 .as_ref()
                 .is_some_and(|sender| sender.capacity() == OPERATION_QUEUE_CAPACITY);
             if idle {
-                let storage = AppStorage { inner };
+                let storage = AppStorage {
+                    inner,
+                    inspect: true,
+                    barrier: false,
+                };
                 if storage
-                    .execute(|connection| tuning::optimize(connection))
+                    .exclusive(|connection| tuning::optimize(connection))
                     .await
                     .is_err()
                 {
@@ -328,4 +408,12 @@ async fn optimize_periodically(inner: Weak<StorageInner>) {
             tokio::time::sleep(OPTIMIZE_RETRY).await;
         }
     }
+}
+
+async fn open_readers(path: PathBuf) -> StorageResult<read_pool::ReadPool> {
+    tokio::task::spawn_blocking(move || read_pool::ReadPool::open(&path))
+        .await
+        .map_err(|error| {
+            AppStorageError::new(AppStorageCode::AppSqliteJoinFailed, error.to_string())
+        })?
 }

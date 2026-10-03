@@ -28,7 +28,7 @@ pub(super) async fn get(
             let project_key = project.id.clone();
             let artifact = application
                 .storage
-                .execute(move |db| super::artifacts::read_artifact(db, &project_key, &id))
+                .read(move |db| super::artifacts::read_artifact(db, &project_key, &id))
                 .await
                 .map_err(app_error)?;
             let Some(artifact) = artifact else {
@@ -60,7 +60,7 @@ pub(super) async fn get(
             let expected = query.revision.clone();
             let report = application
                 .storage
-                .execute(move |db| read_report(db, &project_key, &id, &expected))
+                .read(move |db| read_report(db, &project_key, &id, &expected))
                 .await
                 .map_err(source_error)?;
             return source_page(SourcePageInput {

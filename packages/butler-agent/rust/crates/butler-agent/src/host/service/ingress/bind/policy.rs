@@ -304,11 +304,13 @@ fn approval_free_tools(mode: &AccessMode, facts: &ApprovalFreeFacts<'_>) -> Vec<
     if super::image_admission::admits_zai_image_tool(facts.envelope) {
         selected.push(ToolName::AnalyzeAttachedImage);
     }
-    let mut tools: Vec<_> = selected
+    let tools: Vec<_> = selected
         .into_iter()
         .map(ToolName::as_str)
         .filter(|name| mode.exempts_tool(name))
         .collect();
+    #[cfg(debug_assertions)]
+    let mut tools = tools;
     #[cfg(debug_assertions)]
     if matches!(mode, AccessMode::FullAccess)
         && std::env::var_os("BUTLER_E2E_ENABLE_SCHEDULE_CREATE_TOOL").is_some()

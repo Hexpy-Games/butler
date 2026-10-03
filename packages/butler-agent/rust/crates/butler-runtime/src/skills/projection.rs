@@ -15,29 +15,20 @@ use butler_core::public_text::trim_js_whitespace;
 
 const MAX_SKILL_NAMES: usize = 48;
 
-pub(super) fn loaded_names(data: &Path, session: &str, turn: Option<&str>) -> Option<Vec<String>> {
-    let safe: String = session
-        .encode_utf16()
-        .map(|unit| match u8::try_from(unit) {
-            Ok(byte) if byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-') => {
-                char::from(byte)
-            }
-            _ => '_',
-        })
-        .collect();
-    let path = data.join("transcripts").join(format!("{safe}.jsonl"));
-    latest_names(&path, turn)
-}
-
-fn latest_names(path: &Path, turn: Option<&str>) -> Option<Vec<String>> {
+pub(super) fn latest_names_since(
+    path: &Path,
+    turn: Option<&str>,
+    cutoff: u64,
+) -> Option<Vec<String>> {
     let mut file = File::open(path).ok()?;
     let mut remaining = file.metadata().ok()?.len();
     let mut reversed = Vec::new();
     let mut oversize = false;
     let mut ended_with_newline = false;
     let mut chunk = vec![0_u8; 32 * 1024];
-    while remaining > 0 {
-        let count = usize::try_from(remaining.min(chunk.len() as u64)).unwrap_or(usize::MAX);
+    while remaining > cutoff {
+        let count =
+            usize::try_from((remaining - cutoff).min(chunk.len() as u64)).unwrap_or(usize::MAX);
         remaining -= count as u64;
         file.seek(SeekFrom::Start(remaining)).ok()?;
         file.read_exact(&mut chunk[..count]).ok()?;
@@ -66,6 +57,15 @@ fn latest_names(path: &Path, turn: Option<&str>) -> Option<Vec<String>> {
 }
 
 fn names_from_reversed(reversed: &[u8], turn: Option<&str>) -> Option<Vec<String>> {
+    // These are the only categories accepted below. Unicode escapes can
+    // encode them, so escaped records still take the complete JSON path.
+    if let Ok(text) = std::str::from_utf8(reversed)
+        && !text.contains("slliks")
+        && !text.contains("tluser_lanif")
+        && !text.contains("u\\")
+    {
+        return None;
+    }
     let value =
         serde_json::from_slice::<Value>(&reversed.iter().rev().copied().collect::<Vec<_>>())
             .ok()?;

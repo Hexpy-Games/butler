@@ -54,13 +54,13 @@ impl SubsessionService {
 
     /// The App projection of a session's subsessions.
     pub async fn app_projection(&self, session_id: &str) -> Result<Value, BtccError> {
-        let children = self
+        let relations = self
             .repository
-            .relations_for_parent(session_id.into())
+            .projection_relations(session_id.into())
             .await
             .map_err(BtccError::from)?;
         // An undecodable child row projects as no relation instead of failing.
-        let relation = match self.repository.by_child(session_id.into()).await {
+        let relation = match relations.own {
             Err(error) if error.code() == StorageCode::SubsessionPacketInvalid.as_str() => {
                 butler_core::diagnostic!("[native-btcc] undecodable subsession child row ignored");
                 None
@@ -68,7 +68,7 @@ impl SubsessionService {
             other => other.map_err(BtccError::from)?,
         };
         let mut summaries = Vec::new();
-        for child in children {
+        for child in relations.children {
             summaries.push(self.project_child(&child).await?);
         }
         let (stewards, workers): (Vec<_>, Vec<_>) = summaries

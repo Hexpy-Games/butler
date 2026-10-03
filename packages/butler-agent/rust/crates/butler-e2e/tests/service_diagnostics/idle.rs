@@ -146,7 +146,9 @@ fn stamps(root: &Path) -> Result<BTreeMap<PathBuf, (u64, SystemTime)>, HarnessEr
         if entry.file_type()?.is_dir() {
             files.extend(stamps(&entry.path())?);
         } else {
-            let metadata = entry.metadata()?;
+            // Directory enumeration caches NTFS attributes. Query the open
+            // file handle so prior writes cannot appear as new idle writes.
+            let metadata = fs::File::open(entry.path())?.metadata()?;
             files.insert(entry.path(), (metadata.len(), metadata.modified()?));
         }
     }

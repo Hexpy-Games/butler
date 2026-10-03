@@ -52,10 +52,7 @@ impl AppApplication {
     pub(super) async fn archive_sessions_owned(
         &self,
     ) -> Result<Vec<(String, AppSessionSummary)>, GatewayApplicationError> {
-        self.storage
-            .execute(read::archives)
-            .await
-            .map_err(app_error)
+        self.storage.read(read::archives).await.map_err(app_error)
     }
 
     pub(super) async fn project_workspace_path(
@@ -66,9 +63,7 @@ impl AppApplication {
             return Ok(None);
         };
         self.storage
-            .execute(move |db| {
-                read::workspace_project(db, &project_id).map(|row| row.workspace_path)
-            })
+            .read(move |db| read::workspace_project(db, &project_id).map(|row| row.workspace_path))
             .await
             .map(Some)
             .map_err(app_error)
@@ -206,9 +201,17 @@ impl AppApplication {
     ) -> Result<AppSessionSummary, GatewayApplicationError> {
         let mut session = self
             .storage
-            .execute(move |db| read::session(db, &id))
+            .read(move |db| read::session(db, &id))
             .await
             .map_err(app_error)?;
+        self.load_session_skills(&mut session).await?;
+        Ok(session)
+    }
+
+    pub(super) async fn load_session_skills(
+        &self,
+        session: &mut AppSessionSummary,
+    ) -> Result<(), GatewayApplicationError> {
         session.skills_used = self
             .dependencies
             .skills
@@ -221,11 +224,11 @@ impl AppApplication {
             .map_err(super::skill_error)?
             .pop()
             .unwrap_or_default();
-        Ok(session)
+        Ok(())
     }
 
     pub(crate) async fn list_chats(&self) -> Result<Vec<AppChatSummary>, GatewayApplicationError> {
-        self.storage.execute(read::chats).await.map_err(app_error)
+        self.storage.read(read::chats).await.map_err(app_error)
     }
 
     /// Source Work progress is projected by the required external Steward reader.
@@ -236,7 +239,7 @@ impl AppApplication {
     ) -> Result<Vec<AppSessionSummary>, GatewayApplicationError> {
         let mut sessions = self
             .storage
-            .execute(move |db| read::sessions(db, kind.as_deref(), project_id.as_deref()))
+            .read(move |db| read::sessions(db, kind.as_deref(), project_id.as_deref()))
             .await
             .map_err(app_error)?;
         let loaded = self
