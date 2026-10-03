@@ -402,7 +402,6 @@ jobs:
   diagnose-hosted:
     name: Isolated hosted PowerShell startup probe
     if: inputs.diagnose-powershell
-    needs: diagnose-native
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
