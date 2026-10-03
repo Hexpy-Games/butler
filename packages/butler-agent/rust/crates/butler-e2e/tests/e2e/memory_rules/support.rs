@@ -121,7 +121,7 @@ pub(crate) async fn projection(data: &Path, rule: &Value) {
         let db = Connection::open_with_flags(graph(data), OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
         let windows: Vec<(String, Option<String>)> = db.prepare("SELECT state,error_code FROM memory_projection_windows").unwrap().query_map([], |r| Ok((r.get(0)?, r.get(1)?))).unwrap().map(Result::unwrap).collect();
         assert!(!windows.iter().any(|(_, error)| error.is_some()), "projection failed: {windows:?}");
-        db.query_row("SELECT COUNT(*) FROM memory_projection_jobs j JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id WHERE c.source_key=?1 AND c.current_revision=?2 AND c.status='active' AND json_extract(j.semantic_graph_state,'$.state')='complete' AND json_extract(j.hot_cache_state,'$.state')='complete'", rusqlite::params![format!("explicit_record:{}",rule["record_id"].as_str().unwrap()),rule["revision"].as_str().unwrap()], |row| row.get::<_, i64>(0)).unwrap() > 0
+        db.query_row("SELECT COUNT(*) FROM memory_projection_jobs j JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision WHERE c.source_key=?1 AND c.current_revision=?2 AND c.status='active' AND json_extract(j.semantic_graph_state,'$.state')='complete' AND json_extract(j.hot_cache_state,'$.state')='complete'", rusqlite::params![format!("explicit_record:{}",rule["record_id"].as_str().unwrap()),rule["revision"].as_str().unwrap()], |row| row.get::<_, i64>(0)).unwrap() > 0
     }).await;
 }
 

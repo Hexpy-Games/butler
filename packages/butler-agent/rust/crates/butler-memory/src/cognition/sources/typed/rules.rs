@@ -174,6 +174,7 @@ impl RememberedRuleOwner {
         let owner = self.clone();
         tokio::task::spawn_blocking(move || {
             owner.authority()?;
+            journal::recover_capture_index(&owner.root())?;
             let _ = journal::overlay(&owner.root(), vec![])?;
             Ok::<_, CognitionError>(())
         })
@@ -307,6 +308,7 @@ impl RememberedRuleOwner {
             &[
                 &self.root(),
                 &self.root().join("handles"),
+                &self.root().join("capture-current"),
                 &self.environment.consolidation_lock(&self.data_root),
             ],
         )
@@ -329,5 +331,21 @@ pub(super) fn rule_pending(
     let pending: Option<transaction::Intent> = inventory::read_json(
         &crate::cognition::explicit_memory_rules_root(memory_root).join("pending.json"),
     )?;
-    Ok(pending.is_some_and(|pending| pending.entry.record_id == record_id))
+    let captured_change = match captured_revision(memory_root, record_id)? {
+        Some(revision) => {
+            read_binding(memory_root, record_id)?.is_none_or(|binding| binding.revision != revision)
+        }
+        None => false,
+    };
+    Ok(pending.is_some_and(|pending| pending.entry.record_id == record_id) || captured_change)
+}
+
+pub(super) fn captured_revision(
+    memory_root: &std::path::Path,
+    record_id: &str,
+) -> CognitionResult<Option<String>> {
+    journal::latest_capture_revision(
+        &crate::cognition::explicit_memory_rules_root(memory_root),
+        record_id,
+    )
 }

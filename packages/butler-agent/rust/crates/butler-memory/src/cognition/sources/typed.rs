@@ -288,6 +288,10 @@ pub(in crate::cognition) fn explicit_rule_lifecycle(
     operation_id: &str,
     revision: &str,
 ) -> CognitionResult<Option<ExplicitRuleLifecycle>> {
+    if rules::captured_revision(memory_root, record_id)?.is_some_and(|pending| pending != revision)
+    {
+        return Ok(Some(ExplicitRuleLifecycle::Superseded));
+    }
     let Some(binding) = read_binding(memory_root, record_id)? else {
         return Ok(None);
     };

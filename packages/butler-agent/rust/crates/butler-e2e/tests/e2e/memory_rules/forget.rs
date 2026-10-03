@@ -135,6 +135,14 @@ async fn rules_forget_and_correction_preserve_other_bindings_after_restart()
     for (chat, user) in [("general", GLOBAL), (ca.as_str(), A), (cb.as_str(), B)] {
         let output = support::tool(&s, chat, user, "update_explicit_memory").await?;
         assert_eq!(output["ok"], true, "{output}");
+        // A delivered capture can still be pending in the durable rule owner.
+        // Observe this exact handle's publication before checking all bindings.
+        support::until(|| {
+            support::active_rules(&s.sandbox.data)
+                .iter()
+                .any(|row| row["handle"] == output["rule"])
+        })
+        .await;
     }
     let rows = support::active_rules(&s.sandbox.data);
     assert_eq!(rows.len(), 3);

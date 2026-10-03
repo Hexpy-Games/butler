@@ -132,6 +132,12 @@ async fn wiring_more_correction_supersedes_previous_rule_in_next_prompt() -> Res
     )
     .await?;
     assert_eq!(output["ok"], true, "{output}");
+    support::until(|| {
+        support::active_rules(&s.sandbox.data)
+            .iter()
+            .any(|row| row["handle"] == output["rule"])
+    })
+    .await;
     let old = support::active_rules(&s.sandbox.data).pop().unwrap();
     support::projection(&s.sandbox.data, &old).await;
     let before = support::tool(
@@ -149,10 +155,18 @@ async fn wiring_more_correction_supersedes_previous_rule_in_next_prompt() -> Res
     );
     s.provider()?
         .add_placeholder("RULE", old["handle"].as_str().unwrap());
+    // Force the accepted-but-uncommitted path without depending on owner timing.
+    let lease = butler_platform::sqlite::open(
+        s.sandbox
+            .data
+            .join("cognition/consolidation/locks/consolidation.lock.coord.sqlite"),
+    )?;
+    lease.execute_batch("BEGIN IMMEDIATE")?;
     let output = support::tool(&s, &correction_chat, &correction, "update_explicit_memory").await?;
     assert_eq!(output["ok"], true, "{output}");
     assert_eq!(output["rule"], old["handle"]);
-    assert_eq!(output["recall_state"], "pending");
+    assert_eq!(output["state"], "pending");
+    assert!(output.get("recall_state").is_none());
     let immediate_section = support::active_section(&s, &correction_chat, &ask).await?;
     assert!(immediate_section.contains("8642") && !immediate_section.contains("5317"));
     assert_eq!(immediate_section.matches("8642").count(), 1);
@@ -173,6 +187,13 @@ async fn wiring_more_correction_supersedes_previous_rule_in_next_prompt() -> Res
             .all(|row| !row.to_string().contains("5317")),
         "{immediate}"
     );
+    lease.execute_batch("ROLLBACK")?;
+    support::until(|| {
+        support::active_rules(&s.sandbox.data)
+            .iter()
+            .any(|row| row["handle"] == old["handle"] && row["revision"] != old["revision"])
+    })
+    .await;
     let latest = support::active_rules(&s.sandbox.data).pop().unwrap();
     assert_eq!(latest["record_id"], old["record_id"]);
     assert_ne!(latest["revision"], old["revision"]);

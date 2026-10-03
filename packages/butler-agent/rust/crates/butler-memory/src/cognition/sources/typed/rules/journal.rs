@@ -25,6 +25,44 @@ fn path(root: &Path, operation: &str) -> PathBuf {
     root.join("captures")
         .join(format!("{}.json", sha256(operation.as_bytes())))
 }
+fn current_path(root: &Path, record: &str) -> PathBuf {
+    root.join("capture-current")
+        .join(format!("{}.json", sha256(record.as_bytes())))
+}
+fn index_capture(root: &Path, row: &Captured) -> CognitionResult<()> {
+    let operation = row
+        .submitted
+        .operation_id
+        .as_deref()
+        .ok_or_else(|| failure("rule_operation_required"))?;
+    butler_platform::secure_fs::create_private_dir_all(&root.join("capture-current"))
+        .map_err(failure_source)?;
+    write_json(&current_path(root, &row.entry.record_id), &operation)
+}
+pub(super) fn recover_capture_index(root: &Path) -> CognitionResult<()> {
+    for (_, row) in captures(root)? {
+        if current(root, &row)? {
+            index_capture(root, &row)?;
+        }
+    }
+    Ok(())
+}
+/// Exact record lookup; completed captures leave harmless pointers to absent files.
+pub(super) fn latest_capture_revision(
+    root: &Path,
+    record: &str,
+) -> CognitionResult<Option<String>> {
+    let Some(operation) = read_json::<String>(&current_path(root, record))? else {
+        return Ok(None);
+    };
+    let Some(row) = read_json::<Captured>(&path(root, &operation))? else {
+        return Ok(None);
+    };
+    if row.entry.record_id != record {
+        return Err(failure("rule_capture_index_mismatch"));
+    }
+    Ok(current(root, &row)?.then_some(row.entry.revision))
+}
 fn fence(root: &Path, project: Option<&str>) -> CognitionResult<String> {
     Ok(read_json(
         &root
@@ -323,6 +361,7 @@ fn capture_input(
     butler_platform::secure_fs::create_private_dir_all(&root.join("captures"))
         .map_err(failure_source)?;
     write_json(&file, &row)?;
+    index_capture(&root, &row)?;
     WORK.lock().insert(root);
     Ok(pending_receipt(&row.entry, operation, false))
 }
