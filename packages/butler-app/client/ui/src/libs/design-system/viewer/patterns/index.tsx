@@ -24,6 +24,14 @@ export interface PatternDefinition {
 
 export const PATTERNS: PatternDefinition[] = [
   {
+    id: "composer-decorations",
+    title: "Composer decorations",
+    summary: "Background themes for ComposerCard.",
+    rules: ["Keep the existing composer surface, input and controls."],
+    tokens: ["--management-page-veil", "--adaptive-composer-radius", "--pulse-duration"],
+    live: [],
+  },
+  {
     id: "tinted-glass",
     title: "Tinted glass",
     summary: "Floating surfaces (composer, popovers, tooltips, dialogs) are translucent glass over the conversation, tinted toward the theme so text stays readable.",

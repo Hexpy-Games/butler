@@ -1,0 +1,24 @@
+/* Only example geometry. ComposerCard owns every visible composer surface. */
+.example {
+  width: 100%;
+  max-width: var(--page-max-width-reading);
+  margin-inline: auto;
+}
+
+.example[data-width="375"] {
+  max-width: 375px;
+}
+
+.example[data-width="320"] {
+  max-width: 320px;
+}
+
+.example[data-width="430"] {
+  max-width: 430px;
+}
+
+.stage {
+  position: relative;
+  isolation: isolate;
+  padding: var(--space-4xl) 0 var(--space-lg);
+}

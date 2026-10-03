@@ -254,6 +254,11 @@ export interface CanvasMotionEngine {
 
 export const CANVAS_MOTION_ENGINES: readonly CanvasMotionEngine[] = [
   {
+    prefix: "libs/design-system/decorations/composer/",
+    justification: "Composer background only: the existing shoreline renderer and a fixed sprite pool share Wallpaper's 20fps/pixel policy, visibility/battery/reduced-motion signals and watchdog. Input pulses use --pulse-duration; no product motion or new timing literals.",
+    constants: {},
+  },
+  {
     prefix: "libs/design-system/components/ButlerThinkingMark/",
     justification: "Riso halftone thinking mark: a spring-driven morph and an orbiting-light simulation drawn per frame on a canvas.",
     constants: {

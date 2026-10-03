@@ -1,5 +1,6 @@
 import type { ShowcaseEntry } from "../showcase/collectShowcaseEntries";
 import { DecisionGuidePage } from "./pages/DecisionGuidePage";
+import { ComposerDecorationPage } from "./pages/ComposerDecorationPage";
 import { FoundationChapterPage } from "./pages/FoundationChapterPage";
 import { FoundationsPage } from "./pages/FoundationsPage";
 import { GalleryPage } from "./pages/GalleryPage";
@@ -43,6 +44,7 @@ export function ViewerContent({ page, anchor, entries, state, themes, onOpen, on
     case "patterns":
       return <PatternsPage locale={locale} onOpen={onOpen} />;
     case "pattern":
+      if (page.id === "composer-decorations") return <ComposerDecorationPage state={state} themes={themes} onChange={onChange} />;
       return <PatternPage entries={entries} id={page.id} locale={locale} onOpen={onOpen} />;
     case "item":
       return <ItemPage entries={entries} entry={page.entry} key={page.entry.id} onOpen={onOpen} state={state} themes={themes} />;
