@@ -85,6 +85,8 @@ fn judge_order(request: &Value) -> Option<butler_e2e::e2e::cassette::ResponseRec
     if !request.to_string().contains("recall_ranking") {
         return None;
     }
+    // The binding/forgetting fixture keeps the base ranking; its evidence
+    // assertions still cover every surviving and excluded rule.
     Some(support::response(
         &json!({"type":"message","id":"msg_rule_judge",
         "role":"assistant","status":"completed","content":[{"type":"output_text",
