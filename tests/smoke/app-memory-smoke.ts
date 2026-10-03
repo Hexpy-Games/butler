@@ -4,13 +4,14 @@ import { resolve } from "node:path";
 import { chromium, type Page } from "playwright";
 import { auditMemoryDesign } from "../support/memory-page-audit.ts";
 import { createNativeAppServer } from "../support/native-app-server.ts";
+import { smokeBrowserArgs } from "../support/smoke-browser.ts";
 import { LEGACY_FIRST_RUN_STORAGE_KEY, legacyFirstRunCompleteRecord } from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
 import { checkProfileInstructionSeparation, checkMemoryRefreshDuringRead } from "../support/memory-profile-acceptance.ts";
 
 const output = process.env.BUTLER_MEMORY_SHOTS ?? resolve(".tmp/memory-shots");
 mkdirSync(output, { recursive: true });
 const server = await createNativeAppServer({ uiRoot: resolve("packages/butler-app/client/ui/dist") });
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs() });
 const report: Array<{ file: string; result: string; audit: unknown }> = [];
 const operationId = "00000000-0000-4000-8000-000000000777";
 const now = new Date().toISOString();
@@ -18,6 +19,12 @@ const themes = ["light", "dark"] as const;
 const locales = ["ko", "en"] as const;
 const states = ["populated", "long", "confirm", "confirm-long", "deleting", "empty", "load-failure", "loading", "not-measured", "unavailable", "no-projects", "delete-failed", "deleted", "nothing-to-free", "cleanup-waiting", "cleanup-running", "cleanup-done", "cleanup-stopped", "cleanup-cancelled", "personalization", "system-events", ...["chat", "profile", "project"].flatMap(kind => ["confirm", "running", "done", "failed"].map(state => `reset-${kind}-${state}`))];
 function assert(value: unknown, message: string): asserts value { if (!value) throw new Error(message); }
+function selected<T extends string | number>(key: string, values: readonly T[]): T[] {
+  const requested = process.env[`BUTLER_MEMORY_SHOT_${key}`]?.split(",");
+  if (!requested) return [...values];
+  assert(requested.every(value => values.some(item => String(item) === value)), `Unknown ${key}: ${requested}`);
+  return values.filter(value => requested.includes(String(value)));
+}
 function rows(locale: string, long = false) {
   const text = locale === "ko" ? "답변은 핵심부터 간결하게 써 주세요." : "Start with the main point and keep answers concise.";
   const extended = locale === "ko" ? "\n근거와 예시가 필요하면 빠짐없이 포함해 주세요. 긴 식별자도 끝까지 표시합니다: " : "\nInclude every relevant example and its evidence. Keep long identifiers in full: ";
@@ -59,9 +66,9 @@ async function audit(page: Page) {
   });
 }
 try {
-  for (const locale of process.env.BUTLER_MEMORY_ACCEPTANCE_ONLY ? [] : locales) for (const theme of themes) for (const width of [1280, 375]) {
+  for (const locale of process.env.BUTLER_MEMORY_ACCEPTANCE_ONLY ? [] : selected("LOCALES", locales)) for (const theme of selected("THEMES", themes)) for (const width of selected("WIDTHS", [1280, 375])) {
     await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: locale, appearance_theme: theme }) });
-    for (const state of states.filter((state) => !process.env.BUTLER_MEMORY_SHOT_STATES || process.env.BUTLER_MEMORY_SHOT_STATES.split(",").includes(state))) {
+    for (const state of selected("STATES", states)) {
       const page = await browser.newPage({ viewport: { width, height: width === 1280 ? 1400 : 1800 }, reducedMotion: "reduce" });
       await server.signIn(page);
       await page.addInitScript(({ key, value }) => {
@@ -166,6 +173,8 @@ try {
       await page.waitForFunction(() => document.getAnimations().every((a) => a.effect?.getTiming().iterations === Infinity || a.playState !== "running"));
       const beforeIdle = reads;
       if (state === "populated") { await page.waitForTimeout(1000); assert(reads === beforeIdle && reads === 1, `one opening check, no polling: ${reads}`); }
+      const file = `memory-${locale}-${theme}-${width}-${state}.png`;
+      await page.screenshot({ path: resolve(output, file), fullPage: true });
       const checks = { ...await audit(page), design: await auditMemoryDesign(page) };
       assert(checks.design.scrollers.every(row => !row.horizontal && (!row.scrollable || row.mask !== "none")), "scroll overflow needs a fade");
       assert(checks.design.notices.every(row => row.outer === "flex-start" && row.content === "flex-start"), "Notice content and action must be top aligned");
@@ -182,11 +191,9 @@ try {
       }
       const expectedInset = width <= 760 ? "16px" : "24px";
       assert(checks.design.padding.every(row => row.values.every(v => v === expectedInset)), `card insets ${locale}/${theme}/${width}, expected ${expectedInset}: ${JSON.stringify(checks.design.padding)}`);
-      assert(checks.design.minimumTextContrast == null || checks.design.minimumTextContrast >= 4.5, `text contrast ${checks.design.minimumTextContrast}`);
+      assert(checks.design.minimumTextContrast == null || checks.design.minimumTextContrast >= 4.5, `text contrast ${locale}/${theme}/${width}/${state}: ${JSON.stringify(checks.design.contrastFailures)}`);
       assert(!checks.horizontalScroll && checks.text.every((row) => row.fullText && row.wraps), `overflow or truncated text: ${JSON.stringify(checks)}`);
       assert(checks.toastFonts.every((font) => font.includes("Pretendard")), `toast must use bundled font: ${JSON.stringify(checks.toastFonts)}`);
-      const file = `memory-${locale}-${theme}-${width}-${state}.png`;
-      await page.screenshot({ path: resolve(output, file), fullPage: true });
       report.push({ file, result: "pass", audit: checks });
       release?.();
       await page.close();

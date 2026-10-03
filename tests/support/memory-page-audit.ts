@@ -45,10 +45,14 @@ export async function auditMemoryDesign(page: Page) {
       const bg = background(node);
       const fg = blend(color(getComputedStyle(node).color), bg);
       const a = luminance(fg), b = luminance(bg);
-      return (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
+      return { ratio: (Math.max(a, b) + .05) / (Math.min(a, b) + .05),
+        id: node.id, tag: node.tagName, tone: node.dataset.tone,
+        foreground: getComputedStyle(node).color, background: bg,
+        disabled: Boolean(node.closest('[disabled], [aria-disabled="true"]')) };
     }));
     return { padding, labelsAboveControls, iconFirstLine, scrollers, notices,
       cardContrast: cards.map(card => ({ card: background(card), surround: background(card.parentElement!) })),
-      minimumTextContrast: contrast.length ? Math.min(...contrast) : null };
+      minimumTextContrast: contrast.length ? Math.min(...contrast.map(row => row.ratio)) : null,
+      contrastFailures: contrast.filter(row => row.ratio < 4.5) };
   });
 }
