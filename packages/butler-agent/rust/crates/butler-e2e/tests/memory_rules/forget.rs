@@ -67,6 +67,7 @@ pub(super) fn stub() -> Result<Cassette, HarnessError> {
 pub(super) async fn start(setup: Setup) -> Result<Scenario, HarnessError> {
     let s = setup.start().await?;
     s.provider()?.set_memory_responder(support::meaning);
+    s.provider()?.set_chat_responder(judge_order);
     s.patch_settings(json!({"access_mode":"full_access","onboarding":{
         "consent_version":1,"accepted_at":"2026-10-02T00:00:00.000Z","completed_at":"2026-10-02T00:00:00.000Z"}}),"onboarding").await?;
     s.select_model(&s.model).await?;
@@ -78,6 +79,17 @@ pub(super) async fn start(setup: Setup) -> Result<Scenario, HarnessError> {
     })
     .await;
     Ok(s)
+}
+
+fn judge_order(request: &Value) -> Option<butler_e2e::e2e::cassette::ResponseRecord> {
+    if !request.to_string().contains("recall_ranking") {
+        return None;
+    }
+    Some(support::response(
+        &json!({"type":"message","id":"msg_rule_judge",
+        "role":"assistant","status":"completed","content":[{"type":"output_text",
+        "text":"{\"ranked\":[]}","annotations":[]}]}),
+    ))
 }
 
 async fn project_chat(s: &Scenario, name: &str) -> Result<(String, String), HarnessError> {

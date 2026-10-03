@@ -350,3 +350,6 @@ mod reset_vectors;
 
 #[path = "memory/recall_judge.rs"]
 mod recall_judge;
+
+#[path = "memory/fts.rs"]
+mod fts;

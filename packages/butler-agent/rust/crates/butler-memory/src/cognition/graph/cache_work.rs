@@ -14,13 +14,13 @@ pub(super) const CLAIM_SQL: &str = r"SELECT j.job_id,j.episode_id,j.revision,j.g
                     OR (json_extract(j.semantic_graph_state,'$.state')='partial' AND COALESCE(json_extract(j.semantic_graph_state,'$.pending_units'),0)=0))
                     AND (j.hot_cache_next_attempt_at IS NULL OR j.hot_cache_next_attempt_at<=?1)
              ORDER BY j.last_served_at IS NOT NULL,j.last_served_at,j.created_at,j.job_id LIMIT 1";
-const RECOVERY_SQL: &str = "SELECT 1 FROM memory_projection_jobs WHERE json_valid(hot_cache_state) AND json_extract(hot_cache_state,'$.state')='running' LIMIT 1";
+const RECOVERY_SQL: &str = "SELECT 1 FROM memory_projection_jobs WHERE json_valid(hot_cache_state) AND json_extract(hot_cache_state,'$.state')='running' UNION ALL SELECT 1 FROM memory_episode_fts_pending LIMIT 1";
 
 impl GraphRepository {
     pub(in crate::cognition) fn cache_index_ready(&self) -> CognitionResult<bool> {
         self.connection()?
             .query_row(
-                "SELECT 1 FROM sqlite_schema WHERE type='index' AND name='idx_jobs_hot_cache'",
+                "SELECT 1 FROM sqlite_schema WHERE name='idx_jobs_hot_cache' AND EXISTS(SELECT 1 FROM sqlite_schema WHERE name='memory_episode_fts_meta')",
                 [],
                 |_| Ok(()),
             )
@@ -47,7 +47,12 @@ impl GraphRepository {
         let watcher = interrupt_on_stop(db.get_interrupt_handle(), stop);
         let cancellation = stop.clone();
         db.progress_handler(1000, Some(move || cancellation.is_cancelled()));
-        let result = db.execute_batch(INDEX_SQL).map_err(db_error);
+        let result = (|| {
+            let tx = db.unchecked_transaction().map_err(db_error)?;
+            tx.execute_batch(INDEX_SQL).map_err(db_error)?;
+            super::episode_fts::install(&tx)?;
+            tx.commit().map_err(db_error)
+        })();
         if let Some(watcher) = watcher {
             watcher.abort();
         }

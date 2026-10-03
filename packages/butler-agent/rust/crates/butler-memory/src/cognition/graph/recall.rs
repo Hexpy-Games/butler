@@ -8,7 +8,7 @@ mod identity;
 mod mentions;
 mod raw;
 mod relationships;
-mod scope;
+pub(super) mod scope;
 mod semantic;
 mod sources;
 mod temporal;
@@ -41,6 +41,20 @@ pub(in crate::cognition) struct GraphRecallReader {
 }
 
 impl GraphRecallReader {
+    pub(in crate::cognition) fn fts_candidates(
+        &self,
+        input: &RecallRequest,
+        current: impl FnMut(&str, &str) -> CognitionResult<Option<bool>>,
+    ) -> CognitionResult<(Vec<String>, bool)> {
+        super::episode_fts::select(self.connection()?, input, current)
+    }
+    pub(in crate::cognition) fn compatible_vectors(
+        &self,
+        generation: &crate::cognition::MemoryGenerationHandle,
+    ) -> CognitionResult<bool> {
+        super::episode_fts::read::compatible_vectors(self.connection()?, generation)
+    }
+
     pub(in crate::cognition) fn current_vector_matches(
         &self,
         input: &RecallRequest,

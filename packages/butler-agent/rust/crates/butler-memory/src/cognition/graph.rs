@@ -6,6 +6,7 @@ mod cache_validation;
 mod cache_work;
 mod candidates;
 mod consolidate;
+mod episode_fts;
 mod failure;
 mod identity_decision;
 pub(in crate::cognition) use failure::{ProviderCall, RepairBudget};

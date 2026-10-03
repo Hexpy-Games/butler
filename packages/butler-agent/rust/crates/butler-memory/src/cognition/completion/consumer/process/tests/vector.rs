@@ -467,8 +467,10 @@ async fn refused_stage_idles() {
         [],
     )
     .unwrap();
-    let graph = crate::cognition::graph::GraphRepository::open(&generation.graph_path).unwrap();
+    let mut graph = crate::cognition::graph::GraphRepository::open(&generation.graph_path).unwrap();
     graph.ensure_cache_index(&input.shutdown).unwrap();
+    assert!(graph.advance_episode_fts(&input.shutdown).unwrap());
+    assert!(!graph.advance_episode_fts(&input.shutdown).unwrap());
     graph.close().unwrap();
     *input.catchup_at.lock() = Some(std::time::Instant::now());
     let version: i64 = db

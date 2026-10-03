@@ -278,6 +278,11 @@ async fn project_reset_is_scoped_and_summary_stays_empty_until_a_new_project_con
     let general_sql = "SELECT COUNT(*) FROM memory_chunks WHERE project_id IS NULL";
     let old = graph(&s.sandbox.data);
     assert!(count(&old, &selected_sql) > 0);
+    let selected_fts = selected_sql.replace("memory_chunks", "memory_episode_fts_meta");
+    let other_fts = other_sql.replace("memory_chunks", "memory_episode_fts_meta");
+    assert!(count(&old, &selected_fts) > 0);
+    let other_fts_count = count(&old, &other_fts);
+    assert!(other_fts_count > 0);
     let other_count = count(&old, &other_sql);
     let general_count = count(&old, general_sql);
     let canonical = s.sandbox.data.join("runtime/conversation-store.sqlite");
@@ -291,6 +296,8 @@ async fn project_reset_is_scoped_and_summary_stays_empty_until_a_new_project_con
     wait_reset(&s, &id).await?;
     let active = graph(&s.sandbox.data);
     assert_eq!(count(&active, &selected_sql), 0);
+    assert_eq!(count(&active, &selected_fts), 0);
+    assert_eq!(count(&active, &other_fts), other_fts_count);
     assert_eq!(count(&active, &other_sql), other_count);
     assert_eq!(count(&active, general_sql), general_count);
     assert_eq!(

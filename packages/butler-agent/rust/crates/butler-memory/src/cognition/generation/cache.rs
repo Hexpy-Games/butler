@@ -129,11 +129,12 @@ impl CacheStep {
 fn run_claimed(step: &CacheStep, handle: &MemoryGenerationHandle) -> CognitionResult<bool> {
     let mut graph = GraphRepository::open(&handle.graph_path)?;
     graph.ensure_cache_index(&step.cancellation)?;
+    let indexed = graph.advance_episode_fts(&step.cancellation)?;
     let now = &step.now;
     let job = graph.claim_cache_job(now)?;
     let Some(job) = job else {
         graph.close()?;
-        return Ok(false);
+        return Ok(indexed);
     };
     let writer = JobWriter {
         step,
