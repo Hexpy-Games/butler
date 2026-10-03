@@ -88,15 +88,32 @@ smoke tests, SHA-256 sidecars and all 18 consolidated checksum entries remain
 required. Stable tags retain mandatory Developer ID signing and notarization;
 certificate, notary or staple failures stop publication.
 
-The macOS App updater uses the runtime's `operations/update.rs` and
-`operations/update/manifest.rs`: its default URL is GitHub `/releases/latest`,
-which excludes prereleases. An explicitly supplied preview manifest can be
-staged after SHA-256 verification; `signing.notarized` is release metadata, not
-an updater acceptance condition. App activation remains manual
-(`user-installs-app-package`), so macOS may require right-click → Open or
-Privacy & Security → Open Anyway. The zip contains the same signed App as the
-DMG. The Agent updater likewise checks archive integrity, not notarization.
-CLI installs via curl or npx do not use the App's Gatekeeper open flow.
+The macOS App updater runs in the bundled Agent through `operations/update.rs`.
+With `update.previews: false`, the default `/releases/latest/download/app-update-manifest.json`
+excludes prereleases. With previews enabled, it lists GitHub releases, skips drafts,
+and selects the highest SemVer tag carrying `app-update-manifest.json`, then selects
+the matching App platform/package from that manifest. Status reads retain the six-hour
+saved-result cache; explicit refresh fetches the release list again. There is no ETag cache.
+`BUTLER_UPDATE_RELEASES_API` can point default discovery at a compatible release API
+(for isolated smoke fixtures); stable discovery uses its `/latest` endpoint. Explicit
+`BUTLER_APP_UPDATE_MANIFEST` URLs still bypass release discovery.
+
+Preview.6 and .7 cached the selected release URL for six hours even on refresh. An
+already running old App can keep offering the old tag until that cache expires.
+Quitting and reopening the App clears this process cache; no DATA/cache deletion or
+mandatory manual upgrade is needed. New previews must remain published, non-draft
+GitHub releases with the exact `app-update-manifest.json` asset name, full SemVer
+artifact versions, channel `preview`, platform `darwin-arm64`, and a SHA-256-pinned
+App ZIP. Existing release packaging/publication already emits this form, which old
+builds can discover on a cold check. Do not move preview publication to `/latest`
+or relabel it as stable to work around the old cache.
+
+App activation remains manual (`user-installs-app-package`); SHA-256 verification
+and package signature checks still apply. `signing.notarized` is release metadata,
+not an updater acceptance condition. macOS may require right-click → Open or
+Privacy & Security → Open Anyway. The ZIP contains the same signed App as the DMG.
+The Agent updater likewise checks archive integrity, not notarization. CLI installs
+via curl or npx do not use the App's Gatekeeper open flow.
 
 Entitlements (`deploy/macos/electron.entitlements.plist`) apply only to
 `Butler.app` and the Electron helper apps: `allow-jit` (V8
