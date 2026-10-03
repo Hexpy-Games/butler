@@ -163,7 +163,8 @@ pub(super) fn load_turns(db: &Connection) -> StorageResult<Vec<LegacyTurn>> {
         execution_fence, active_checkpoint_id, route, {}, {}, final_payload_json, {}, {}, \
         delivery_outbox_id, canonical_assistant_message_id, final_disposition FROM btcc_turns \
         WHERE turn_id IN (SELECT turn_id FROM btcc_turns \
-          WHERE semantic_state IS NULL OR semantic_state NOT IN ('admitted','delivery_committed','delivered','cancelled') \
+          WHERE semantic_state NOT IN ('admitted','delivery_committed','delivered','cancelled') \
+          UNION SELECT turn_id FROM btcc_turns WHERE semantic_state IS NULL \
           UNION SELECT evidence.turn_id FROM btcc_r3_legacy_turn_cutovers evidence \
           WHERE (SELECT semantic_state FROM btcc_turns WHERE turn_id=evidence.turn_id)='admitted') \
         ORDER BY turn_id",

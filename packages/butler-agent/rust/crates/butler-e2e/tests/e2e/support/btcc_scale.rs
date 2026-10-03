@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 pub(super) const TURNS: i64 = 300_000;
 pub(super) const WAITING: &str = "SELECT DISTINCT session_id FROM btcc_turns WHERE semantic_state='admitted' AND suspension_reason='authority_pending'";
 pub(super) const OUTBOX: &str = "SELECT result_id,parent_session_id,input_json FROM btcc_subsession_outbox WHERE status='pending' ORDER BY created_at";
-const CUTOVER: &str = "SELECT original_message FROM btcc_turns WHERE turn_id IN (SELECT turn_id FROM btcc_turns WHERE semantic_state IS NULL OR semantic_state NOT IN ('admitted','delivery_committed','delivered','cancelled') UNION SELECT evidence.turn_id FROM btcc_r3_legacy_turn_cutovers evidence WHERE (SELECT semantic_state FROM btcc_turns WHERE turn_id=evidence.turn_id)='admitted') ORDER BY turn_id";
+const CUTOVER: &str = "SELECT original_message FROM btcc_turns WHERE turn_id IN (SELECT turn_id FROM btcc_turns WHERE semantic_state NOT IN ('admitted','delivery_committed','delivered','cancelled') UNION SELECT turn_id FROM btcc_turns WHERE semantic_state IS NULL UNION SELECT evidence.turn_id FROM btcc_r3_legacy_turn_cutovers evidence WHERE (SELECT semantic_state FROM btcc_turns WHERE turn_id=evidence.turn_id)='admitted') ORDER BY turn_id";
 
 pub(super) fn path(data: &Path) -> PathBuf {
     data.join("agent-runtime/btcc.sqlite")

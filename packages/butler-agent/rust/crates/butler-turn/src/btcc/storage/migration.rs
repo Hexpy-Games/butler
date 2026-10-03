@@ -1,5 +1,6 @@
 mod authority;
 mod monitoring;
+mod startup_indexes;
 mod subsession;
 
 use rusqlite::{Connection, TransactionBehavior, params};
@@ -39,10 +40,9 @@ pub(super) fn apply(connection: &mut Connection) -> rusqlite::Result<()> {
          ON btcc_turns(delivery_outbox_id) WHERE delivery_outbox_id IS NOT NULL;
          CREATE INDEX IF NOT EXISTS idx_btcc_turn_message_reference
          ON btcc_turns(canonical_assistant_message_id)
-         WHERE canonical_assistant_message_id IS NOT NULL;
-         CREATE INDEX IF NOT EXISTS idx_btcc_turn_cutover_candidates ON btcc_turns(turn_id)
-         WHERE semantic_state IS NULL OR semantic_state NOT IN ('admitted','delivery_committed','delivered','cancelled');",
+         WHERE canonical_assistant_message_id IS NOT NULL;",
     )?;
+    startup_indexes::cutover(&transaction)?;
     transaction.commit()
 }
 
