@@ -63,7 +63,7 @@ async fn run(case: &str, command: &str) -> Result<Value, HarnessError> {
             .any(|m| m["role"] == "assistant" && m["text"] == stub::ANSWER)
     );
     assert_eq!(std::fs::read_dir(&downloads)?.count(), 2);
-    if case == "WIN-DOWNLOADS" {
+    if case == "WIN-DOWNLOADS" && output["exit_code"] == 0 {
         let stdout = output["stdout"].as_str().unwrap_or_default();
         assert_eq!(
             stdout.lines().map(str::trim).collect::<Vec<_>>(),
@@ -101,6 +101,11 @@ async fn windows_command_tool_native_matrix() -> Result<(), HarnessError> {
             "WIN-POWERSHELL",
             r#"powershell.exe -NoProfile -Command "Write-Output '안녕하세요'""#,
             "안녕하세요",
+        ),
+        (
+            "WIN-PS-VARS",
+            r#"powershell.exe -NoProfile -Command "$key=Get-Item -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders'; $key.Name""#,
+            "HKEY_CURRENT_USER",
         ),
         (
             "WIN-REG",

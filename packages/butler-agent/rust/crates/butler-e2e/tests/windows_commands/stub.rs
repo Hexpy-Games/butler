@@ -16,7 +16,7 @@ pub(super) fn cassette(command: &str) -> Result<Cassette, HarnessError> {
     }
     c.exchanges[0].response = response(
         &json!({"type":"function_call","id":"fc_command","call_id":"call_command","name":"run_command",
-        "arguments":json!({"command":command,"state_effect":"read_only","timeout_ms":30000}).to_string(),"status":"completed"}),
+        "arguments":json!({"command":command,"summary":"다운로드 목록 확인","state_effect":"read_only","timeout_ms":30000}).to_string(),"status":"completed"}),
     );
     c.exchanges[1].response = response(
         &json!({"type":"message","id":"msg_answer","role":"assistant","status":"completed",
