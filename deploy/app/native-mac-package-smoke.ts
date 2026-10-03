@@ -12,8 +12,11 @@ export function verifyMacPackageMetadata(app: string, exactVersion: string, hard
   const electronRequire = createRequire(new URL("../../packages/butler-app/client/electron/package.json", import.meta.url));
   const packagerRequire = createRequire(electronRequire.resolve("@electron/packager"));
   const archive = join(resources, "app.asar");
+  const asar = packagerRequire("@electron/asar");
+  // Updates replace this path; cached ASAR offsets describe the previous bundle.
+  asar.uncache(archive);
   const content = existsSync(archive)
-    ? packagerRequire("@electron/asar").extractFile(archive, "package.json").toString("utf8")
+    ? asar.extractFile(archive, "package.json").toString("utf8")
     : readFileSync(join(resources, "app/package.json"), "utf8");
   const runtime = JSON.parse(content);
   if (runtime.version !== exactVersion) throw new Error("Packaged App lost its exact release version");

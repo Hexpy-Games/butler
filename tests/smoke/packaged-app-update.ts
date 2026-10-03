@@ -246,6 +246,13 @@ async function smoke() {
   console.log(`OFF: ${await rowText()} (preview hidden)`);
   await page.waitForFunction(() => !document.querySelector("[data-setting-id='update-previews'] [role='switch']")?.hasAttribute("disabled"));
   await page.expression(`document.querySelector("[data-setting-id='update-previews'] [role='switch']").click()`);
+  if (discovery) {
+    await page.waitForFunction(() => document.querySelector("[data-setting-id='update-previews'] [role='switch']")?.getAttribute("aria-checked") === "true" && !document.querySelector("[data-setting-id='update-previews'] [role='switch']")?.hasAttribute("disabled"));
+    console.log(`BEFORE SETTINGS CHECK: ${JSON.stringify(await page.expression("window.butlerApp.getUpdates()"))}`);
+    await page.waitForFunction(() => Array.from(document.querySelectorAll("button")).some(button => button.textContent?.trim() === "Check" && !button.hasAttribute("disabled")));
+    await clickNamed(page, "Check");
+    console.log("REFRESH: Settings Check, default published feed");
+  }
   await page.waitForFunction(() => !document.querySelector("[data-test-id='update-component-app'] button")?.hasAttribute("disabled"));
   assert.ok((await rowText()).includes(to), "Settings shows the exact candidate version");
   console.log(`ON: ${await rowText()}`);
@@ -305,6 +312,10 @@ async function cleanup() {
   server?.stop(true);
   // Allow the App's confirmed graceful quit to finish before removing its DATA.
   await new Promise(done => setTimeout(done, 1500));
+  if (child && child.exitCode === null) child.kill("SIGKILL");
+  for (const pid of ownedPids) {
+    try { process.kill(pid, "SIGKILL"); } catch { /* Already exited. */ }
+  }
   makeWritable(dir);
   rmSync(dir, { recursive: true, force: true });
 }
@@ -316,7 +327,36 @@ function makeWritable(path: string) {
   }
 }
 
+async function logUpdateStatus() {
+  if (browser) console.error(`UPDATE STATUS: ${JSON.stringify(await browser.expression("window.butlerApp.getUpdates()"))}`);
+}
+
+async function logPublicFeedStatus() {
+  const urls = [
+    "https://api.github.com/repos/Hexpy-Games/butler/releases?per_page=20&page=1",
+    "https://api.github.com/repos/Hexpy-Games/butler/releases?per_page=20&page=2",
+    `https://github.com/Hexpy-Games/butler/releases/download/v${to}/app-update-manifest.json`,
+  ];
+  for (const url of urls) {
+    const response = await fetch(url, {
+      headers: { "User-Agent": "Butler updater" }, signal: AbortSignal.timeout(10_000),
+    });
+    const body = await response.text();
+    console.error(`PUBLIC FEED: ${JSON.stringify({
+      url, status: response.status,
+      remaining: response.headers.get("x-ratelimit-remaining"),
+      reset: response.headers.get("x-ratelimit-reset"),
+      bytes: body.length,
+      body: response.ok ? undefined : body.slice(0, 1000),
+    })}`);
+  }
+}
+
 try { await smoke(); } catch (error) {
+  try { await logUpdateStatus(); } catch { /* Renderer unavailable. */ }
+  if (discovery) {
+    try { await logPublicFeedStatus(); } catch (feedError) { console.error("PUBLIC FEED:", feedError); }
+  }
   try { console.error(readFileSync(join(data, "updates/app-install.log"), "utf8")); } catch { /* Helper not started. */ }
   console.error("Electron main-process log:\n" + logs.join(""));
   for (const name of ["startup-progress.json", "startup-failure.json", "last-exit.json"]) {
