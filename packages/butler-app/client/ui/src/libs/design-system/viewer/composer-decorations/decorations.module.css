@@ -103,35 +103,35 @@
   --decor-leaf: var(--blue-03);
   --decor-stem: var(--blue-08);
 }
-.decoration {
+.card {
   position: relative;
-  height: 40px;
-  margin: var(--space-sm) var(--space-md) var(--space-sm);
+  isolation: isolate;
+}
+.decoration {
+  position: absolute;
+  inset: 0;
   overflow: hidden;
+  border-radius: inherit;
   pointer-events: none;
   user-select: none;
+  background: linear-gradient(var(--blue-01), var(--amber-01));
 }
-.outside {
-  position: absolute;
-  inset: var(--space-sm) var(--space-md) auto;
-  margin: 0;
-  z-index: 1;
+.composition[data-theme="cherry"] .decoration {
+  background: linear-gradient(var(--amber-01), var(--red-01));
 }
-.bandSpace {
-  height: 56px;
+.composition[data-theme="characters"] .decoration {
+  background: none;
 }
-.composition[data-placement="edge"] .outside {
-  top: -40px;
-}
-.composition[data-placement="edge"] .bandSpace,
-.composition[data-theme="none"] .bandSpace {
-  height: 0;
-}
-.composition[data-theme="coastal"] .outside {
-  display: none;
-}
+.composition[data-theme="characters"][data-overflow="true"] .card,
 .composition[data-theme="characters"][data-overflow="true"] .decoration {
   overflow: visible;
+}
+.composition[data-theme="characters"] .anchor {
+  top: var(--space-xs);
+  bottom: auto;
+}
+.composition[data-theme="characters"][data-overflow="true"] .anchor {
+  top: -30px;
 }
 .composition[data-theme="none"] .decoration {
   display: none;
@@ -165,31 +165,24 @@
   width: 100%;
   height: 100%;
 }
-.composition[data-theme="coastal"] .decoration {
-  height: 64px;
-  margin: var(--space-sm);
-  border-radius: var(--radius-popover);
-}
-.composition[data-theme="coastal"][data-framing="full"] .decoration {
-  position: absolute;
-  inset: 1px;
-  height: auto;
-  margin: 0;
-  border-radius: var(--adaptive-composer-radius);
-}
 .readable {
   position: relative;
-  border-radius: var(--adaptive-composer-radius);
+  margin: var(--space-lg) var(--space-md) var(--space-sm);
+  border-radius: var(--radius-control);
+  /* Local contrast only: the scene itself is identical in light and dark. */
+  background: color-mix(in srgb, var(--color-surface-raised-opaque) 82%, transparent);
 }
-.composition[data-theme="coastal"][data-framing="full"] .readable {
-  /* An independent contrast floor. The scene keeps exactly the same light in both themes. */
-  margin: var(--space-sm);
-  background: color-mix(
-    in srgb,
-    var(--color-surface-raised-opaque) 94%,
-    transparent
-  );
-  border-radius: var(--radius-composer);
+.editor {
+  display: block;
+}
+.toolbar {
+  position: relative;
+  margin: 0 var(--space-sm) var(--space-sm);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--color-surface-raised-opaque) 82%, transparent);
+}
+.composition[data-theme="characters"] .readable {
+  margin-top: var(--space-2xl);
 }
 @media (width <= 1000px) {
   .layout {

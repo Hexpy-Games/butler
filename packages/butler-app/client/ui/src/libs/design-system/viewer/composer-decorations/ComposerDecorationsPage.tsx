@@ -1,3 +1,4 @@
+import { dsClass } from "../../lib/internal";
 import { useState } from "react";
 import { ComposerCard, ComposerCardTextarea, ComposerCardToolbar, ComposerCardToolbarSpacer, ComposerSendButton } from "../../blocks/ComposerCard";
 import { ComposerControl } from "../../blocks/ComposerControl";
@@ -26,17 +27,15 @@ export function ComposerDecorationsPage({ state, onChange }: {
           <div className={styles.stageTitle}><Typo.Caption>YOUR OWN LITTLE CORNER</Typo.Caption>
             <Typo.H2>Make room for a thought.</Typo.H2></div>
           <div className={styles.composition} ref={surface} data-theme={settings.theme} data-palette={settings.palette}
-            data-placement={settings.placement} data-framing={settings.framing} data-overflow={settings.overflow}>
-            <div ref={coastal ? undefined : root} className={`${styles.decoration} ${styles.outside}`} aria-hidden="true"
-              data-decoration-layer={coastal ? undefined : true}>
-              {!coastal && settings.theme !== "none" ? <DecorationArt theme={settings.theme} /> : null}
-            </div>
-            <ComposerCard onSubmit={event => event.preventDefault()}>
-              {coastal ? <div ref={root} className={styles.decoration} aria-hidden="true" data-decoration-layer>
-                <canvas className={styles.coast} />
-              </div> : <div className={styles.bandSpace} aria-hidden="true" />}
+            data-overflow={settings.overflow}>
+            <ComposerCard className={dsClass(styles.card)} onSubmit={event => event.preventDefault()}>
+              <div ref={root} className={styles.decoration} aria-hidden="true" data-decoration-layer>
+                {coastal ? <canvas className={styles.coast} /> : settings.theme !== "none" ? <DecorationArt theme={settings.theme} /> : null}
+              </div>
               <div className={styles.readable}>
-                <ComposerCardTextarea aria-label="Try your message" placeholder="어떤 생각을 하고 계세요?" rows={3} />
+                <ComposerCardTextarea aria-label="Try your message" placeholder="어떤 생각을 하고 계세요?" rows={3} className={dsClass(styles.editor)} />
+              </div>
+              <div className={styles.toolbar}>
                 <ComposerCardToolbar>
                   <IconButton label="Attach (preview)" disabled><Plus size="md" /></IconButton>
                   <ComposerCardToolbarSpacer />
@@ -51,7 +50,7 @@ export function ComposerDecorationsPage({ state, onChange }: {
         <div className={styles.performance}>
           <Typo.Caption>DECORATION JS · MAIN THREAD</Typo.Caption>
           <output ref={readout} aria-live="off" data-decoration-perf>0.000 ms/edit · 0 frames · 0 edits · idle: 0 scheduled work</output>
-          <Typo.Caption>JS callbacks, excluding paint/GPU. Target &lt; 1 ms/edit. Idle = no scheduled decoration work.</Typo.Caption>
+          <Typo.Caption>Target &lt; 1 ms/edit. Draw JS excludes paint/GPU. Full-frame CPU/GPU cost: unavailable here.</Typo.Caption>
         </div>
       </div>
       <DecorationControls settings={settings} update={patch => setSettings(current => ({ ...current, ...patch }))} state={state} onChange={onChange} />

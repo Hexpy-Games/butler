@@ -30,9 +30,7 @@ export function DecorationControls({ settings: s, update, state, onChange }: {
     {choice("mode", "Mode", [["static", "Static"], ["interactive", "Interactive"]])}
     <label className={styles.field}><Typo.Caption>Intensity · {s.intensity}%</Typo.Caption>
       <Slider aria-label="Intensity" value={s.intensity} min={0} max={100} onValueChange={intensity => update({ intensity })} /></label>
-    {s.theme === "coastal" ? choice("framing", "Coastal framing", [["full", "Full card"], ["band", "Top band"]])
-      : choice("placement", "Placement", [["inside", "Inside top band"], ["edge", "Above card edge"]])}
-    {s.theme === "characters" ? <Toggle label="Character overflow" checked={s.overflow} onChange={overflow => update({ overflow })} /> : null}
+    {s.theme === "characters" ? <Toggle label="Peek over edge" checked={s.overflow} onChange={overflow => update({ overflow })} /> : null}
     {s.theme !== "coastal" ? choice("palette", "Palette", [["garden", "Garden"], ["dusk", "Dusk"]]) : null}
     <Choice label="Appearance" value={state.theme === "dark" ? "dark" : "light"} options={[["light", "Light"], ["dark", "Dark"]]}
       onChange={theme => onChange({ theme: theme as "light" | "dark" })} />

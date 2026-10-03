@@ -41,14 +41,17 @@ function Character({ index }: { index: number }) {
 }
 
 function CherryTree() {
-  return <svg className={styles.tree} viewBox="0 0 320 40" preserveAspectRatio="xMinYMax meet" fill="none" focusable="false">
-    <path d="M4 39 Q18 21 59 22 T134 8 M37 24 Q40 12 78 7 M66 20 Q94 29 125 20 M94 15 Q110 0 139 4"
-      stroke="var(--decor-stem)" strokeWidth="2" strokeLinecap="round" />
-    {[ [36,14], [54,21], [74,7], [89,22], [109,10], [128,20], [137,5] ].map(([x,y], i) =>
-      <g key={i} transform={`translate(${x} ${y})`} fill={i % 2 ? "var(--decor-cream)" : "var(--decor-petal)"}>
-        <circle cx="-3" r="4" /><circle cy="-3" r="4" /><circle cx="3" r="4" /><circle cy="3" r="4" />
-        <circle r="1.5" fill="var(--decor-gold)" />
-      </g>)}
+  return <svg className={styles.tree} viewBox="0 0 600 240" preserveAspectRatio="xMinYMax slice" fill="none" focusable="false">
+    <path d="M0 245 Q52 165 62 105 Q80 60 165 35 M58 118 Q108 91 218 94 M65 95 Q24 65 12 20 M106 54 Q150 62 204 15"
+      stroke="var(--decor-stem)" strokeWidth="7" strokeLinecap="round" />
+    {Array.from({ length: 42 }, (_, i) => {
+      const x = 12 + (i * 47 % 225);
+      const y = 12 + (i * 31 % 98);
+      return <g key={i} transform={`translate(${x} ${y})`} fill={i % 2 ? "var(--decor-cream)" : "var(--decor-petal)"}>
+        <circle cx="-6" r="8" /><circle cy="-6" r="8" /><circle cx="6" r="8" /><circle cy="6" r="8" />
+        <circle r="2" fill="var(--decor-gold)" />
+      </g>;
+    })}
   </svg>;
 }
 
@@ -58,8 +61,8 @@ export function DecorationArt({ theme }: { theme: DecorationTheme }) {
   return <>
     {theme === "cherry" ? <CherryTree /> : null}
     {Array.from({ length: count }, (_, index) => <div className={styles.anchor} key={index}
-      style={{ "--x": `${4 + index * 92 / (count - 1)}%`, "--size": `${theme === "characters" ? 38 : 20 + index % 4 * 2}px`,
-        "--lift": `${theme === "cherry" ? index % 4 * 4 : 0}px` } as CSSProperties}>
+      style={{ "--x": `${4 + index * 92 / (count - 1)}%`, "--size": `${theme === "characters" ? 38 : theme === "flowers" ? 42 + index % 4 * 8 : 14 + index % 4 * 2}px`,
+        "--lift": theme === "cherry" ? `${12 + index * 29 % 76}%` : `${index % 3 * 3}px` } as CSSProperties}>
       <div className={styles.sprite} data-decor-sprite data-reaction={theme}>
         {theme === "flowers" ? <Flower index={index} /> : theme === "cherry" ? <Blossom small={index % 3 !== 0} /> : <Character index={index} />}
       </div>
