@@ -58,18 +58,18 @@ export function ProductBoard({ copy, layout, lines, sketches }: { copy: TypeCopy
   const chat = panel("chat", <ChatTurn copy={copy} />);
   const composer = panel("composer", (
         <Box>
-          <ComposerCard>
+          <ComposerCard controls={<ComposerCardToolbar>
+              <Part name="more"><IconButton label={copy.more}><Plus size="md" /></IconButton></Part>
+              <ComposerCardToolbarSpacer />
+              <Part name="send" sketch><ComposerSendButton aria-label={copy.send} mode="send" /></Part>
+            </ComposerCardToolbar>}>
             <ComposerCardExpandedBody>
               <ComposerCardEditor>
                 <ComposerCardEditable><div /></ComposerCardEditable>
                 <ComposerCardPlaceholder><Line id="placeholder">{copy.placeholder}</Line></ComposerCardPlaceholder>
               </ComposerCardEditor>
             </ComposerCardExpandedBody>
-            <ComposerCardToolbar>
-              <Part name="more"><IconButton label={copy.more}><Plus size="md" /></IconButton></Part>
-              <ComposerCardToolbarSpacer />
-              <Part name="send" sketch><ComposerSendButton aria-label={copy.send} mode="send" /></Part>
-            </ComposerCardToolbar>
+
           </ComposerCard>
         </Box>
       ));

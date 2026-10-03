@@ -1,3 +1,4 @@
+import { smokeBrowserArgs } from "../support/smoke-browser-args";
 /**
  * Conversation DS story smoke: work progress rows, the current-status line,
  * reply inline images and attachments, checked on DS Viewer showcase stories
@@ -196,7 +197,7 @@ async function checkAttachments(page: Page, baseUrl: string): Promise<void> {
 }
 
 const server = await createNativeAppServer({ uiRoot });
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ args: smokeBrowserArgs(), headless: true });
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await server.signIn(page);

@@ -3,7 +3,7 @@ import type { HTMLAttributes, ReactNode } from "react";
 import styles from "./TintedGlass.module.css";
 import { cn } from "../../lib/utils";
 
-export type TintedGlassRadius = "control" | "panel" | "popover" | "composer";
+export type TintedGlassRadius = "control" | "panel" | "popover" | "composer" | "pill";
 export type TintedGlassPadding = "none" | "sm" | "md" | "lg";
 type TintedGlassElement = "div" | "section" | "aside";
 

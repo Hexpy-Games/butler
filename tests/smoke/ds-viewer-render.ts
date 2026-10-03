@@ -1,3 +1,4 @@
+import { smokeBrowserArgs } from "../support/smoke-browser-args";
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
@@ -192,10 +193,9 @@ async function renderViewport(
   { locale, fullPage }: Pick<RenderOptions, "locale" | "fullPage">,
 ): Promise<string[]> {
   const newPage = async () => {
-    const created = await browser.newPage({
-      viewport: viewportPresets[viewportName],
-      deviceScaleFactor: 1,
-    });
+    const context = browser.contexts()[0] ?? await browser.newContext({ deviceScaleFactor: 1 });
+    const created = await context.newPage();
+    await created.setViewportSize(viewportPresets[viewportName]);
     await server.signIn(created);
     return created;
   };
@@ -290,7 +290,7 @@ const { componentNames: requestedNames, viewports, themes, locale, fullPage } = 
   Bun.argv.slice(2),
 );
 const server = await createNativeAppServer({ uiRoot });
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ args: smokeBrowserArgs(), headless: true });
 
 try {
   const writtenPaths: string[] = [];

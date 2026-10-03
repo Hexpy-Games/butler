@@ -1,3 +1,4 @@
+import { ComposerPreview } from "./ComposerPreview";
 import { useState } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import { IconButton } from "../../components/IconButton";
@@ -56,17 +57,7 @@ function Composer({ context, large, mode = "send", busy, blocked }: {
   const [plan, setPlan] = useState(false);
   const [draft, setDraft] = useState("");
   return (
-    <ComposerCard large={large} onSubmit={(event) => event.preventDefault()}>
-      <ComposerCardExpandedBody>
-        <ComposerCardEditor>
-          <ComposerCardEditable>
-            <div aria-label={copy.placeholder} contentEditable role="textbox" suppressContentEditableWarning
-              onInput={(event) => setDraft(event.currentTarget.textContent ?? "")} />
-          </ComposerCardEditable>
-          {draft ? null : <ComposerCardPlaceholder>{large ? copy.placeholder : copy.followUp}</ComposerCardPlaceholder>}
-        </ComposerCardEditor>
-      </ComposerCardExpandedBody>
-      <ComposerCardToolbar>
+    <ComposerCard large={large} onSubmit={(event) => event.preventDefault()} controls={<ComposerCardToolbar>
         <IconButton label={copy.more}><Plus size="md" /></IconButton>
         <ComposerCardExpandedControls>
           <ComposerControl compact="label" icon={<ShieldQuestion size="sm" />} label={copy.access} />
@@ -77,12 +68,23 @@ function Composer({ context, large, mode = "send", busy, blocked }: {
         </ComposerCardExpandedControls>
         <ComposerSendButton aria-label={busy ? copy.reconnecting : mode === "stop" ? copy.stop : copy.send} busy={busy}
           disabled={mode === "send" && !busy && !draft} disabledReason={blocked ? copy.noImages : undefined} mode={mode} />
-      </ComposerCardToolbar>
+      </ComposerCardToolbar>}>
+      <ComposerCardExpandedBody>
+        <ComposerCardEditor>
+          <ComposerCardEditable>
+            <div aria-label={copy.placeholder} contentEditable role="textbox" suppressContentEditableWarning
+              onInput={(event) => setDraft(event.currentTarget.textContent ?? "")} />
+          </ComposerCardEditable>
+          {draft ? null : <ComposerCardPlaceholder>{large ? copy.placeholder : copy.followUp}</ComposerCardPlaceholder>}
+        </ComposerCardEditor>
+      </ComposerCardExpandedBody>
+
     </ComposerCard>
   );
 }
 
 export const stories: ShowcaseStory[] = [
+  { name: "Interactive composer", widths: ["app"], render: () => <ComposerPreview /> },
   { name: "New chat (large)", widths: ["375", "app", "wide"], render: (context) => <Composer context={context} large /> },
   { name: "Follow-up while a turn runs (stop)", states: ["busy"], render: (context) => <Composer context={context} mode="stop" /> },
   { name: "Reconnecting (busy send)", states: ["loading"], render: (context) => <Composer context={context} busy /> },
@@ -93,15 +95,15 @@ export const stories: ShowcaseStory[] = [
     states: ["drop-active", "collapsed"],
     render: (context) => (
       <ComposerCard dropActive expanded={false} large notice={<Notice message={text(context).optional} tone="warning" />}
-        onSubmit={(event) => event.preventDefault()}>
+        onSubmit={(event) => event.preventDefault()} controls={<ComposerCardToolbar>
+          <IconButton label={text(context).more}><Plus size="md" /></IconButton>
+
+          <ComposerSendButton aria-label={text(context).send} />
+        </ComposerCardToolbar>}>
         <ComposerCardExpandedBody>
           <ComposerCardTextarea aria-label={text(context).placeholder} defaultValue={text(context).draft} rows={1} />
         </ComposerCardExpandedBody>
-        <ComposerCardToolbar>
-          <IconButton label={text(context).more}><Plus size="md" /></IconButton>
-          <ComposerCardCompactPreview>{text(context).preview}</ComposerCardCompactPreview>
-          <ComposerSendButton aria-label={text(context).send} />
-        </ComposerCardToolbar>
+        <ComposerCardCompactPreview>{text(context).preview}</ComposerCardCompactPreview>
       </ComposerCard>
     ),
   },

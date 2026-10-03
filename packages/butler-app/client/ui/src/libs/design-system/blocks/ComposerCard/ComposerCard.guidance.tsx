@@ -9,15 +9,15 @@ import {
 // #region recipe: Follow-up composer
 function FollowUpComposer() {
   return (
-    <ComposerCard onSubmit={(event) => event.preventDefault()}>
-      <ComposerCardExpandedBody>
-        <ComposerCardTextarea aria-label="Message" placeholder="Ask for follow-up changes" rows={1} />
-      </ComposerCardExpandedBody>
-      <ComposerCardToolbar>
+    <ComposerCard onSubmit={(event) => event.preventDefault()} controls={<ComposerCardToolbar>
         <IconButton label="More options"><Plus size="md" /></IconButton>
         <ComposerCardToolbarSpacer />
         <ComposerSendButton aria-label="Send" />
-      </ComposerCardToolbar>
+      </ComposerCardToolbar>}>
+      <ComposerCardExpandedBody>
+        <ComposerCardTextarea aria-label="Message" placeholder="Ask for follow-up changes" rows={1} />
+      </ComposerCardExpandedBody>
+
     </ComposerCard>
   );
 }

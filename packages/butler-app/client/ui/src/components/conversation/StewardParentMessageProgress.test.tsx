@@ -308,34 +308,39 @@ test("Steward result synthesis capsule reports preparation and offers no Stop", 
   expect(capsuleHtml).toContain('data-alignment="center"');
   expect(capsuleHtml).toContain("<canvas");
 
-  const synthesisState = useComposerState(
-    summary,
-    {},
-    EMPTY_SETTINGS,
-    {
-      ...EMPTY_MODEL_CATALOG,
-      models: [{
-        provider_id: "test",
-        provider_label: "Test",
-        model_id: "test",
-        model_ref: "test/model",
-        display_name: "Test",
-        status: "available",
-        default_reasoning_effort: "none",
-        reasoning_efforts: ["none"],
-        token_estimator: "none",
-        runtime_supported: true,
-      }],
-    },
-    "test/model",
-    "ready",
-    "",
-    [],
-    true,
-    0,
-  );
-  expect(synthesisState.activeTurn).toBe(true);
-  expect(synthesisState.canStop).toBe(false);
+  // #479: hooks run in a React render, while the capability assertions stay intact.
+  function SynthesisProbe() {
+    const synthesisState = useComposerState(
+      summary,
+      {},
+      EMPTY_SETTINGS,
+      {
+        ...EMPTY_MODEL_CATALOG,
+        models: [{
+          provider_id: "test",
+          provider_label: "Test",
+          model_id: "test",
+          model_ref: "test/model",
+          display_name: "Test",
+          status: "available",
+          default_reasoning_effort: "none",
+          reasoning_efforts: ["none"],
+          token_estimator: "none",
+          runtime_supported: true,
+        }],
+      },
+      "test/model",
+      "ready",
+      "",
+      [],
+      true,
+      0,
+    );
+    expect(synthesisState.activeTurn).toBe(true);
+    expect(synthesisState.canStop).toBe(false);
+    return null;
+  }
+  renderToStaticMarkup(<SynthesisProbe />);
 
   useComposerStore.getState().setSnapshot({
     activeTurn: true,

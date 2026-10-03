@@ -21,20 +21,7 @@ export function Composer({ copy, live = false }: { copy: FocusCopy; live?: boole
   const mark = (n: string, node: ReactNode) => (live ? <Mark n={n}>{node}</Mark> : node);
   const send = <ComposerSendButton aria-label={copy.send} mode="send" />;
   return (
-    <ComposerCard>
-      <ComposerCardExpandedBody>
-        <Mark block n={live ? "field" : "field-rest"}>
-          <ComposerCardEditor>
-            <ComposerCardEditable><div /></ComposerCardEditable>
-            {live ? <ComposerCardPlaceholder><span data-t="ph">{copy.placeholder}</span></ComposerCardPlaceholder> : null}
-            <span className={s.draft}>
-              {live ? <Mark n="typed"><R name="typed">{copy.typed}</R></Mark> : copy.typed}
-              {live ? <span className={s.caret} data-t="caret" /> : null}
-            </span>
-          </ComposerCardEditor>
-        </Mark>
-      </ComposerCardExpandedBody>
-      <ComposerCardToolbar>
+    <ComposerCard controls={<ComposerCardToolbar>
         {mark("plus", <IconButton label={copy.more}><Plus size="md" /></IconButton>)}
         <ComposerCardExpandedControls>
           {mark("perm", <ComposerControl compact="label" icon={<ShieldQuestion size="sm" />} label={copy.access} permissionTone="ask" />)}
@@ -47,7 +34,20 @@ export function Composer({ copy, live = false }: { copy: FocusCopy; live?: boole
             <span data-t="send-on"><Mark n="send">{send}</Mark></span>
           </span>
         ) : <span className={s.ringOutline}>{send}</span>}
-      </ComposerCardToolbar>
+      </ComposerCardToolbar>}>
+      <ComposerCardExpandedBody>
+        <Mark block n={live ? "field" : "field-rest"}>
+          <ComposerCardEditor>
+            <ComposerCardEditable><div /></ComposerCardEditable>
+            {live ? <ComposerCardPlaceholder><span data-t="ph">{copy.placeholder}</span></ComposerCardPlaceholder> : null}
+            <span className={s.draft}>
+              {live ? <Mark n="typed"><R name="typed">{copy.typed}</R></Mark> : copy.typed}
+              {live ? <span className={s.caret} data-t="caret" /> : null}
+            </span>
+          </ComposerCardEditor>
+        </Mark>
+      </ComposerCardExpandedBody>
+
     </ComposerCard>
   );
 }

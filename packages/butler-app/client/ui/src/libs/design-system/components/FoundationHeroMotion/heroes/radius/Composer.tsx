@@ -8,18 +8,18 @@ import s from "./RadiusHero.module.css";
 export function Composer({ copy }: { copy: RadiusCopy }) {
   return (
     <span className={s.composer}>
-      <ComposerCard>
+      <ComposerCard controls={<ComposerCardToolbar>
+          <IconButton label={copy.more}><Plus size="md" /></IconButton>
+          <ComposerCardToolbarSpacer />
+          <ComposerSendButton aria-label={copy.send} mode="send" />
+        </ComposerCardToolbar>}>
         <ComposerCardExpandedBody>
           <ComposerCardEditor>
             <ComposerCardEditable><div /></ComposerCardEditable>
             <ComposerCardPlaceholder>{copy.placeholder}</ComposerCardPlaceholder>
           </ComposerCardEditor>
         </ComposerCardExpandedBody>
-        <ComposerCardToolbar>
-          <IconButton label={copy.more}><Plus size="md" /></IconButton>
-          <ComposerCardToolbarSpacer />
-          <ComposerSendButton aria-label={copy.send} mode="send" />
-        </ComposerCardToolbar>
+
       </ComposerCard>
     </span>
   );

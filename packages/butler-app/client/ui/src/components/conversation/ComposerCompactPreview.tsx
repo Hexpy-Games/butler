@@ -4,7 +4,7 @@ import { ComposerCardCompactPreview } from "@/butler-ds";
 import { useComposerStore } from "./composerStore";
 import { focusComposer } from "./editor/focusComposer";
 
-export function ComposerCompactPreview() {
+export function ComposerCompactPreview({ onExpand }: { onExpand?: () => void } = {}) {
   useAppLocale();
   const large = useComposerStore((store) => store.large);
   const setEngaged = useComposerStore((store) => store.setEngaged);
@@ -15,6 +15,7 @@ export function ComposerCompactPreview() {
       ? appCopy.composer.placeholder
       : appCopy.composer.placeholderFollowUp);
   const engage = () => {
+    onExpand?.();
     setEngaged(true);
     window.requestAnimationFrame(() => {
       focusComposer(textAreaRef?.current, "restore");

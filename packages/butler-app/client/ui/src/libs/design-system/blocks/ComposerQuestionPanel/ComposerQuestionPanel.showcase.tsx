@@ -30,16 +30,14 @@ function Demo({ context, kind = "single", initial = "open", step = 0 }: {
         labels={ko ? { answered: "답변 완료", skipped: "건너뜀", message: "메시지로 답함" } : undefined} />
       <Button size="sm" variant="borderless" onClick={() => { setAnswers(null); setSkipped(false); setReplied(false); setState(initial); draft.current = { step }; setRevision(revision + 1); }}>{ko ? "다시" : "Reset"}</Button>
     </> : <>
-      {state === "collapsed" && <ComposerQuestionPanel key={revision} questions={questions} state={state} labels={ko ? koLabels : undefined}
-        defaultAnswers={draft.current.answers} defaultStep={draft.current.step} onDraftChange={saveDraft}
-        onSubmit={setAnswers} onSkip={() => setSkipped(true)} onCollapse={() => setState("collapsed")} onExpand={() => setState("open")} />}
-      <ComposerCard onSubmit={(e) => e.preventDefault()}>
-        {state === "collapsed" ? <><ComposerCardTextarea aria-label={ko ? "메시지" : "Message"} placeholder={ko ? "메시지 작성" : "Write a message"}
-          value={message} onChange={(e) => setMessage(e.target.value)} /><ComposerCardToolbar><Button size="sm" disabled={!message.trim()} onClick={() => setReplied(true)}>{ko ? "보내기" : "Send"}</Button></ComposerCardToolbar></>
-          : <ComposerQuestionPanel key={revision} questions={questions} state={state} defaultStep={draft.current.step} onDraftChange={saveDraft}
-            defaultAnswers={draft.current.answers ?? (initial === "error" || step === questions.length ? questions.map((q) => ({ id: q.id, selected: q.type === "text" ? [] : [0], text: q.type === "text" ? (ko ? "민수" : "Alex") : "", other: "", skipped: false })) : undefined)}
-            labels={ko ? koLabels : undefined} error={ko ? "보내지 못했습니다. 다시 시도하세요." : "Could not send. Try again."}
-            onSubmit={(values) => setAnswers(values)} onSkip={() => setSkipped(true)} onCollapse={() => setState("collapsed")} />}
+      <ComposerCard onSubmit={(e) => e.preventDefault()}
+        panel={<ComposerQuestionPanel key={revision} questions={questions} state={state} defaultStep={draft.current.step} onDraftChange={saveDraft}
+          defaultAnswers={draft.current.answers ?? (initial === "error" || step === questions.length ? questions.map((q) => ({ id: q.id, selected: q.type === "text" ? [] : [0], text: q.type === "text" ? (ko ? "민수" : "Alex") : "", other: "", skipped: false })) : undefined)}
+          labels={ko ? koLabels : undefined} error={ko ? "보내지 못했습니다. 다시 시도하세요." : "Could not send. Try again."}
+          onSubmit={(values) => setAnswers(values)} onSkip={() => setSkipped(true)} onCollapse={() => setState("collapsed")} onExpand={() => setState("open")} />}
+        controls={<ComposerCardToolbar><Button size="sm" disabled={state !== "collapsed" || !message.trim()} onClick={() => setReplied(true)}>{ko ? "보내기" : "Send"}</Button></ComposerCardToolbar>}>
+        <ComposerCardTextarea aria-label={ko ? "메시지" : "Message"} placeholder={ko ? "메시지 작성" : "Write a message"}
+          value={message} onChange={(e) => setMessage(e.target.value)} />
       </ComposerCard>
     </>}
   </Stack>;

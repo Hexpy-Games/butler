@@ -59,6 +59,7 @@ function Stage({ locale, children }: ShowcaseRenderContext & { children: ReactNo
 }
 
 export const stories: ShowcaseStory[] = [
+  { name: "Control pill", render: ({ locale }) => <TintedGlass radius="pill" padding="sm"><Typo.Caption>{copy[locale].composerTitle}</Typo.Caption></TintedGlass> },
   {
     name: "Composer surface",
     render: ({ locale }) => (

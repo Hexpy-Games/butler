@@ -1,3 +1,4 @@
+import { smokeBrowserArgs } from "../support/smoke-browser-args";
 import { Buffer } from "node:buffer";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -365,7 +366,7 @@ await server.api("/settings", {
 // Space sidebar session rows expose their title as the row's aria-label.
 const smokeSessionRowSelector = `${testClass("tree-row")}[aria-label="Desktop client polish"]`;
 
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ args: smokeBrowserArgs(), headless: true });
 const page = await browser.newPage({
   viewport: { width: 1440, height: 900 },
   deviceScaleFactor: 1,
@@ -471,7 +472,7 @@ try {
     "composer must remain visible inside the viewport",
   );
   const composerGlass = await page
-    .locator(testClass("composer-card"))
+    .locator('[data-slot="composer-input"]')
     .evaluate((element) => {
       const style = window.getComputedStyle(element);
       return {

@@ -1518,7 +1518,7 @@ The composer's decision state: what is being decided, optional detail lines, an 
 
 `import { ComposerQuestionPanel } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=blocks/ComposerQuestionPanel`
 
-A bounded question form replacing the composer editor and toolbar, with local choices and a review step.
+A bounded question form above the composer input and persistent controls, with local choices and a review step.
 
 - Use for: One to four single, multi or text questions awaiting a user answer
 - Not for: A permission decision → `ComposerDecisionPanel`
@@ -2171,13 +2171,13 @@ export function ConversationTurnRecipe() {
           <CopyButton text="Section headers now sit above their cards." label="Copy message" copiedLabel="Copied" />
         </MessageFooter>
       </MessageRow>
-      <ComposerCard onSubmit={(event) => event.preventDefault()}>
-        <ComposerCardTextarea aria-label="Message" placeholder="Ask for follow-up changes" rows={1} />
-        <ComposerCardToolbar>
+      <ComposerCard onSubmit={(event) => event.preventDefault()} controls={<ComposerCardToolbar>
           <IconButton label="More options"><Plus size="md" /></IconButton>
           <ComposerCardToolbarSpacer />
           <ComposerSendButton aria-label="Send" />
-        </ComposerCardToolbar>
+        </ComposerCardToolbar>}>
+        <ComposerCardTextarea aria-label="Message" placeholder="Ask for follow-up changes" rows={1} />
+
       </ComposerCard>
     </Stack>
   );

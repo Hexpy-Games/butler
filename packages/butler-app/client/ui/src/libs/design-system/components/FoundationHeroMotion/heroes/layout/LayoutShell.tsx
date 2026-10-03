@@ -57,12 +57,12 @@ export function AppScreen({ copy, mode, open = mode === "expanded", closedLook =
         <Stack fill gap="none">
           <ConversationShell composerReserve={96}>
             <ConversationScroll scrollRef={scrollRef} scrollable={false}><Turn copy={copy} /></ConversationScroll>
-            <ComposerCard expanded={false} floating onSubmit={(event) => event.preventDefault()}>
-              <ComposerCardToolbar>
+            <ComposerCard expanded={false} floating onSubmit={(event) => event.preventDefault()} controls={<ComposerCardToolbar>
                 <IconButton label={copy.more}><Plus size="md" /></IconButton>
-                <ComposerCardCompactPreview>{copy.placeholder}</ComposerCardCompactPreview>
+
                 <ComposerSendButton aria-label={copy.placeholder} disabled />
-              </ComposerCardToolbar>
+              </ComposerCardToolbar>}>
+              <ComposerCardCompactPreview>{copy.placeholder}</ComposerCardCompactPreview>
             </ComposerCard>
           </ConversationShell>
         </Stack>

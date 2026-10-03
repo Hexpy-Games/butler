@@ -20,14 +20,14 @@ const labels = {
 export function AttachedComposer({ adjunct, context }: { adjunct: ReactNode; context: ShowcaseRenderContext }) {
   const copy = labels[context.locale];
   return (
-    <ComposerCard large adjunct={adjunct} onSubmit={(event) => event.preventDefault()}>
-      <ComposerCardTextarea aria-label={copy.draft} defaultValue={copy.draft} rows={2} />
-      <ComposerCardToolbar>
+    <ComposerCard large adjunct={adjunct} onSubmit={(event) => event.preventDefault()} controls={<ComposerCardToolbar>
         <IconButton label={copy.more}><Plus size="md" /></IconButton>
         <ComposerPlanToggle checked label={copy.plan} onCheckedChange={() => undefined} />
         <ComposerCardToolbarSpacer />
         <ComposerSendButton aria-label={copy.send} />
-      </ComposerCardToolbar>
+      </ComposerCardToolbar>}>
+      <ComposerCardTextarea aria-label={copy.draft} defaultValue={copy.draft} rows={2} />
+
     </ComposerCard>
   );
 }

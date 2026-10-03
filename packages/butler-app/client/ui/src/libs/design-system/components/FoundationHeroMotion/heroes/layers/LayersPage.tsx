@@ -78,16 +78,16 @@ export function Page({ copy, compact }: { copy: LayersCopy; compact: boolean }) 
               <Turn copy={copy} />
             </MessageListSurface>
           </ConversationScroll>
-          <ComposerCard expanded={false} floating large>
-            <ComposerCardExpandedBody>
-              <ComposerCardTextarea aria-label={copy.composer} placeholder={copy.composer} rows={1} />
-            </ComposerCardExpandedBody>
-            <ComposerCardToolbar>
+          <ComposerCard expanded={false} floating large controls={<ComposerCardToolbar>
               <IconButton label={copy.more}>
                 <Plus size="md" />
               </IconButton>
-              <ComposerCardCompactPreview>{copy.composer}</ComposerCardCompactPreview>
-            </ComposerCardToolbar>
+
+            </ComposerCardToolbar>}>
+            <ComposerCardExpandedBody>
+              <ComposerCardTextarea aria-label={copy.composer} placeholder={copy.composer} rows={1} />
+            </ComposerCardExpandedBody>
+            <ComposerCardCompactPreview>{copy.composer}</ComposerCardCompactPreview>
           </ComposerCard>
         </ConversationShell>
       </AdaptiveShellWorkspace>

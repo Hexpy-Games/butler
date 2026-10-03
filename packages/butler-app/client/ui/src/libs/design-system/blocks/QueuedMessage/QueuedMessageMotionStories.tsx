@@ -84,12 +84,12 @@ export function SendFlightStory({ context }: { context: ShowcaseRenderContext })
           <MessageRow key={item.id} role="user" entering={entering.has(item.id)}>{item.text}</MessageRow>
         ))}
       </div>
-      <ComposerCard onSubmit={(event) => { event.preventDefault(); send("fly"); }}>
-        <ComposerCardTextarea ref={textareaRef} value={draft} onChange={(event) => setDraft(event.target.value)} rows={2} />
-        <ComposerCardToolbar>
+      <ComposerCard onSubmit={(event) => { event.preventDefault(); send("fly"); }} controls={<ComposerCardToolbar>
           <ComposerCardToolbarSpacer />
           <ComposerSendButton aria-label={copy.send} data-ds-motion="send-flight" />
-        </ComposerCardToolbar>
+        </ComposerCardToolbar>}>
+        <ComposerCardTextarea ref={textareaRef} value={draft} onChange={(event) => setDraft(event.target.value)} rows={2} />
+
       </ComposerCard>
       <Inline>
         <Button size="sm" variant="outline" data-ds-motion="send-flight-queued" onClick={() => send("queued")}>

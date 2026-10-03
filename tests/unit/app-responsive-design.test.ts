@@ -226,17 +226,16 @@ describe("responsive adaptive design contracts", () => {
     expect(styles).toContain('.card[data-expanded="false"]');
     expect(styles).toContain("text-overflow: ellipsis");
     // The editor folds through the DS Collapsible (kept mounted, focusable).
-    expect(card).toContain('keepMounted="focusable"');
+    expect(card).toContain('keepMounted={inactive ? true : "focusable"}');
     expect(styles).not.toContain("grid-template-rows: 0fr");
     const compactMediaStart = styles.indexOf("@media (width <= 640px)");
     expect(compactMediaStart).toBeGreaterThan(-1);
     expect(
       styles.indexOf('.card[data-expanded="false"] .compactPreview'),
     ).toBeLessThan(compactMediaStart);
-    expect(
-      styles.indexOf('.card[data-expanded="false"] .expandedControls'),
-    ).toBeLessThan(compactMediaStart);
-    expect(styles).toContain("border-radius: var(--adaptive-composer-radius)");
+    expect(styles).not.toContain('.card[data-expanded="false"] .expandedControls');
+    expect(card).toContain('<TintedGlass radius="composer"');
+    expect(card).toContain('<TintedGlass radius="pill"');
     expect(styles).not.toContain(
       '.card[data-expanded="false"] {\n    border-radius: var(--radius-pill)',
     );
@@ -256,7 +255,8 @@ describe("responsive adaptive design contracts", () => {
     expect(tokens).toContain(
       "(var(--control-hit-target) + var(--space-md)) / 2",
     );
-    expect(toolbar).toContain("<ComposerCardExpandedControls>");
+    expect(toolbar).toContain("secondary={hasSecondary ? <>");
+    expect(toolbar).toContain("trailing={agentNotice");
     expect(toolbar).toContain("<ComposerSendButton");
   });
 

@@ -54,3 +54,9 @@
 .surface[data-padding="lg"] {
   padding: var(--space-4);
 }
+
+.surface[data-radius="pill"] {
+  --tinted-glass-radius: var(--radius-pill);
+
+  overflow: visible;
+}

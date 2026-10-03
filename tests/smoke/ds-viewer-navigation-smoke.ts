@@ -1,3 +1,4 @@
+import { smokeBrowserArgs } from "../support/smoke-browser-args";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -243,7 +244,9 @@ async function assertHeroTheme(browser: Awaited<ReturnType<typeof chromium.launc
   for (const colorScheme of ["light", "dark"] as const) {
     for (const theme of ["system", "light", "dark", "side-by-side"] as const) {
       const label = `hero system=${colorScheme} viewer=${theme}`;
-      const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, colorScheme });
+      const page = await context.newPage();
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.emulateMedia({ colorScheme });
       await server.signIn(page);
       await page.goto(viewerUrl(baseUrl, { page: "overview", motion: "reduced", ...(theme === "system" ? {} : { theme }) }), { waitUntil: "networkidle" });
       await page.locator('[data-ds-hero] canvas[data-test-class~="wallpaper"]').waitFor({ state: "attached" });
@@ -263,14 +266,16 @@ async function assertHeroTheme(browser: Awaited<ReturnType<typeof chromium.launc
 assert(existsSync(join(uiRoot, "index.html")), "UI dist is missing; run npm --prefix packages/butler-app/client/ui run build first.");
 
 const server = await createNativeAppServer({ uiRoot });
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ args: smokeBrowserArgs(), headless: true });
+const context = await browser.newContext();
 
 try {
   for (const viewport of [
     { label: "desktop", width: 1440, height: 900 },
     { label: "mobile-375", width: 375, height: 812 },
   ]) {
-    const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height } });
+    const page = await context.newPage();
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await server.signIn(page);
     await assertDeepLinks(page, server.url, viewport.label);
     await assertSearch(page, server.url, viewport.label);

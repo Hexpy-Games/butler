@@ -1,3 +1,4 @@
+import { smokeBrowserArgs } from "../support/smoke-browser-args";
 // Showcase harness only: static DS Viewer, no gateway, product state or model calls.
 import { mkdirSync } from "node:fs";
 import { resolve, join } from "node:path";
@@ -11,7 +12,7 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: (request) => {
   const file = Bun.file(join(dist, path === "/" ? "index.html" : path));
   return new Response(file);
 } });
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ args: smokeBrowserArgs(), headless: true });
 function assert(value: unknown, label: string): asserts value { if (!value) throw new Error(label); }
 async function visit(page: Page, block = "ComposerQuestionPanel", width = 1440, theme = "light", reduced = false) {
   await page.setViewportSize({ width, height: 1000 });
@@ -33,15 +34,15 @@ async function interactions(page: Page) {
   await page.keyboard.press("Enter");
   assert((await multi.locator('[data-slot="question-answer-card"]').innerText()).includes("작업 완료"), "multi keyboard sends complete label");
   const text = story(page, "Short text");
-  assert(await text.getByRole("button", { name: "보내기", exact: true }).isDisabled(), "empty text disables send");
-  await text.getByRole("textbox").fill("   ");
-  assert(await text.getByRole("button", { name: "보내기", exact: true }).isDisabled(), "whitespace is unanswered");
-  await text.getByRole("textbox").fill("분기 보고서"); await text.getByRole("textbox").press("Enter");
+  assert(await text.locator('[data-slot="composer-question-panel"]').getByRole("button", { name: "보내기", exact: true }).isDisabled(), "empty text disables send");
+  await text.locator('[data-slot="composer-question-panel"]').getByRole("textbox").fill("   ");
+  assert(await text.locator('[data-slot="composer-question-panel"]').getByRole("button", { name: "보내기", exact: true }).isDisabled(), "whitespace is unanswered");
+  await text.locator('[data-slot="composer-question-panel"]').getByRole("textbox").fill("분기 보고서"); await text.locator('[data-slot="composer-question-panel"]').getByRole("textbox").press("Enter");
   assert((await text.locator('[data-slot="question-answer-card"]').innerText()).includes("분기 보고서"), "text sends");
   const four = story(page, "Four questions · partial answers");
-  await four.getByRole("tab", { name: "확인", exact: true }).click();
+  await four.locator('[data-slot="composer-question-panel"]').getByRole("tab", { name: "확인", exact: true }).click();
   assert((await four.innerText()).includes("건너뜀"), "review labels skipped");
-  await four.getByRole("button", { name: "보내기", exact: true }).click();
+  await four.locator('[data-slot="composer-question-panel"]').getByRole("button", { name: "보내기", exact: true }).click();
   assert((await four.locator('[data-slot="question-answer-card"]').innerText()).match(/건너뜀/g)?.length === 4, "all unanswered remain in summary");
   const working = story(page, "Working · disabled");
   assert(await working.getByRole("radio").first().getAttribute("aria-disabled") === "true", "working disables options");
@@ -51,10 +52,10 @@ async function interactions(page: Page) {
   assert((await collapsed.locator('[data-slot="question-answer-card"]').innerText()).includes("메시지로 답함"), "message closes form");
   const keyboard = story(page, "Keyboard · focus panel to start");
   await keyboard.locator('[data-slot="composer-question-panel"]').focus(); await page.keyboard.press("4");
-  await keyboard.getByRole("textbox").press("Escape");
-  assert(await keyboard.getByRole("textbox").count() === 0, "Esc exits Other input");
+  await keyboard.locator('[data-slot="composer-question-panel"]').getByRole("textbox").press("Escape");
+  assert(await keyboard.locator('[data-slot="composer-question-panel"]').getByRole("textbox").count() === 0, "Esc exits Other input");
   await keyboard.locator('[data-slot="composer-question-panel"]').focus(); await page.keyboard.press("4");
-  await keyboard.getByRole("textbox").fill("직접 경로"); await keyboard.getByRole("textbox").press("Enter");
+  await keyboard.locator('[data-slot="composer-question-panel"]').getByRole("textbox").fill("직접 경로"); await keyboard.locator('[data-slot="composer-question-panel"]').getByRole("textbox").press("Enter");
   assert((await keyboard.locator('[data-slot="question-answer-card"]').innerText()).includes("직접 경로"), "Other sends text");
   const schedule = story(page, "Three questions · Tabs · review");
   await schedule.locator('[data-slot="composer-question-panel"]').focus(); await page.keyboard.press("ArrowLeft");
@@ -69,15 +70,15 @@ async function interactions(page: Page) {
   await schedule.getByRole("button", { name: "건너뛰기", exact: true }).click();
   assert((await schedule.innerText()).includes("건너뜀"), "question skip reaches review");
   const submitting = story(page, "Submitting");
-  assert(await submitting.getByRole("button", { name: "보내기", exact: true }).isDisabled(), "submitting disables send");
+  assert(await submitting.locator('[data-slot="composer-question-panel"]').getByRole("button", { name: "보내기", exact: true }).isDisabled(), "submitting disables send");
   const error = story(page, "Error · retry");
-  assert(await error.getByRole("alert").isVisible(), "error announced");
-  await error.getByRole("button", { name: "보내기", exact: true }).click();
+  assert(await error.locator('[data-slot="composer-question-panel"]').getByRole("alert").isVisible(), "error announced");
+  await error.locator('[data-slot="composer-question-panel"]').getByRole("button", { name: "보내기", exact: true }).click();
   assert(await error.locator('[data-slot="question-answer-card"]').count() === 1, "error retains answer for retry");
   const onboarding = story(page, "Onboarding · new chat first turn");
-  await onboarding.getByRole("textbox").fill("민수"); await onboarding.getByRole("textbox").press("Enter");
-  await onboarding.getByRole("radio").first().click(); await onboarding.getByRole("radio").first().click();
-  await onboarding.getByRole("button", { name: "보내기", exact: true }).click();
+  await onboarding.locator('[data-slot="composer-question-panel"]').getByRole("textbox").fill("민수"); await onboarding.locator('[data-slot="composer-question-panel"]').getByRole("textbox").press("Enter");
+  await onboarding.locator('[data-slot="composer-question-panel"]').getByRole("radio").first().click(); await onboarding.locator('[data-slot="composer-question-panel"]').getByRole("radio").first().click();
+  await onboarding.locator('[data-slot="composer-question-panel"]').getByRole("button", { name: "보내기", exact: true }).click();
   assert((await onboarding.locator('[data-slot="question-answer-card"]').innerText()).includes("민수"), "onboarding advances and keeps first answer");
 }
 try {

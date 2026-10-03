@@ -73,13 +73,13 @@ export function EditingStory({ context }: { context: ShowcaseRenderContext }) {
           {copy.messages[0]}
         </ShowcaseQueued>
       ) : null}
-      <ComposerCard onSubmit={(event) => { event.preventDefault(); setQueued(true); setDraft(""); }}>
-        <ComposerCardTextarea value={draft} onChange={(event) => setDraft(event.target.value)}
-          placeholder={copy.placeholder} rows={2} />
-        <ComposerCardToolbar>
+      <ComposerCard onSubmit={(event) => { event.preventDefault(); setQueued(true); setDraft(""); }} controls={<ComposerCardToolbar>
           <ComposerCardToolbarSpacer />
           <ComposerSendButton aria-label={copy.send} />
-        </ComposerCardToolbar>
+        </ComposerCardToolbar>}>
+        <ComposerCardTextarea value={draft} onChange={(event) => setDraft(event.target.value)}
+          placeholder={copy.placeholder} rows={2} />
+
       </ComposerCard>
     </Stack>
   );

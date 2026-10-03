@@ -1,3 +1,4 @@
+import { smokeBrowserArgs } from "../support/smoke-browser-args";
 import { assertFieldTones, auditGrowth, auditQuestionSwap, underlineFocus } from "./question-input-geometry";
 import { resolve } from "node:path";
 import { chromium, type Locator } from "playwright";
@@ -8,7 +9,9 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
   const path = new URL(request.url).pathname;
   return new Response(Bun.file(resolve(root, path === "/" ? "index.html" : `.${path}`)));
 } });
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ args: smokeBrowserArgs(), headless: true });
+// Keep one context: Chromium single-process cannot safely dispose one of several contexts.
+const context = await browser.newContext();
 let focused = 0;
 
 async function assertFocus(target: Locator) {
@@ -52,7 +55,9 @@ async function verifyPanel(panel: Locator) {
 
 try {
   for (const width of [375, 1280]) for (const locale of ["ko", "en"]) for (const theme of ["light", "dark"]) {
-    const page = await browser.newPage({ viewport: { width, height: 1000 }, reducedMotion: "reduce" });
+    const page = await context.newPage();
+    await page.setViewportSize({ width, height: 1000 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
     if (process.env.DS_TEXTAREA_FALLBACK === "1") await page.addInitScript(() => {
       const supports = CSS.supports.bind(CSS);
       CSS.supports = ((property: string, value?: string) => property === "field-sizing" ? false : value === undefined ? supports(property) : supports(property, value)) as typeof CSS.supports;

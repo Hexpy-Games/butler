@@ -72,3 +72,37 @@ Do not use this for settings forms or command input. Use `SettingsField`,
 ## Tags
 
 composer, chat, glass, input, toolbar
+
+## Separated controls
+
+One neutral form owns two TintedGlass surfaces. Pass the editor/compact preview
+as children, the always-visible controls as `controls`, and question/decision
+content as `panel` (above the input). Do not put a toolbar in children.
+The gap is 8px. Desktop controls hug their content, inset with the editor text;
+narrow containers use the full available inset and 44px touch targets. There
+is one layout; no legacy-layout preference.
+
+`ComposerCardToolbar` orders `leading`, `secondary`, children, More, `trailing`.
+Use leading for attachment/access, children for model, trailing for send/stop.
+Secondary controls (workspace, Plan, context) move together into one Popover
+at container widths ≤520px. This is a labelled group with ordinary Tab order.
+The Popover holds the same form controls, never action-menu substitutes or
+hidden focusable copies. Keep selection state in the container across moves.
+Only ResizeObserver handles placement; input events do not measure layout.
+
+The viewer's first **Interactive composer** story is the offline owner review:
+state, 375px frame, theme, photo and reduced-motion switches; editable multiline
+text, selectors, attachment removal and simulated send/stop. Entry:
+`index.html?page=blocks/ComposerCard&theme=light&locale=en` in `dist-ds-site`.
+Build with `bun run --cwd packages/butler-app/client/ui build:ds-site`; serve the
+folder on any static host, including a subfolder. Assets use relative paths;
+there is no gateway, provider call or source map. Native Korean IME is available
+for the owner's physical-keyboard walkthrough; synthetic smoke input does not
+certify an OS candidate window.
+
+
+For a pending panel, `ComposerCardExpandedBody inactive` keeps a folded editor
+mounted but inert, so Tab reaches the compact preview rather than hidden inputs.
+Keep `expanded` true while the editor is focused or composing when a panel arrives.
+The caller can then restore message mode explicitly from the compact preview.
+Omit `secondary` when no secondary control applies; More is never an empty menu.

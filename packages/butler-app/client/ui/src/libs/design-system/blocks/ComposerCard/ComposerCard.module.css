@@ -48,11 +48,11 @@
 
   display: grid;
   width: 100%;
-  border-radius: var(--adaptive-composer-radius);
+  gap: var(--space-2);
   pointer-events: auto;
 }
 
-.card[data-drop-active="true"] {
+.card[data-drop-active="true"] .input {
   border-color: var(--color-border-interactive);
   box-shadow:
     0 0 0 3px var(--ring),
@@ -124,12 +124,12 @@
 
 .toolbar {
   display: flex;
-  min-height: 42px;
+  min-height: 40px;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-1);
   min-width: 0;
-  border-top: 1px solid var(--composer-glass-divider);
-  padding: var(--space-2);
+  padding: var(--space-1) var(--space-2);
 }
 
 .toolbar button {
@@ -141,7 +141,9 @@
   min-width: 0;
   flex: 1 1 auto;
   overflow: hidden;
-  padding: 0 var(--space-sm);
+  width: 100%;
+  min-height: var(--touch-target);
+  padding: var(--space-3) var(--space-4);
   border: 0;
   background: transparent;
   color: var(--text-primary);
@@ -220,29 +222,20 @@
   display: none;
 }
 
-.card[data-expanded="false"] .toolbar {
-  min-height: calc(var(--control-hit-target) + var(--space-sm));
-  border-top-color: transparent;
-}
-
 .card[data-expanded="false"] .compactPreview {
   display: block;
 }
 
-.card[data-expanded="false"] .expandedControls {
-  display: none;
-}
-
 @container composer (width <= 520px) {
   .toolbar {
-    min-height: var(--control-hit-target);
-    gap: 2px;
+    min-height: var(--touch-target);
+    gap: var(--space-1);
     padding: var(--space-xs);
   }
 
   .planToggle {
-    min-width: var(--control-hit-target);
-    min-height: var(--control-hit-target);
+    min-width: var(--touch-target);
+    min-height: var(--touch-target);
     justify-content: center;
     padding: 0 var(--space-xs);
   }
@@ -257,8 +250,8 @@
   }
 
   .sendButton {
-    width: var(--control-hit-target);
-    height: var(--control-hit-target);
+    width: var(--touch-target);
+    height: var(--touch-target);
   }
   .busyIcon {
     width: 20px;
@@ -277,5 +270,103 @@
   .wrap,
   .sendButton {
     transition: none;
+  }
+}
+
+.input {
+  overflow: visible;
+}
+.controls {
+  justify-self: start;
+  max-width: calc(100% - var(--space-4) * 2);
+  margin-inline: var(--space-4);
+}
+.secondary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.overflowControls {
+  display: grid;
+  gap: var(--space-2);
+}
+@container composer (width <= 520px) {
+  .controls {
+    max-width: 100%;
+    margin-inline: 0;
+    --control-hit-target: var(--touch-target);
+  }
+  .toolbar {
+    min-height: 50px;
+    padding: var(--space-1);
+  }
+  .toolbar button {
+    min-width: var(--touch-target);
+    min-height: var(--touch-target);
+  }
+}
+
+.card > [data-slot="composer-panel"]:empty,
+.adjunct:empty {
+  display: none;
+}
+@media (width <= 640px) {
+  .floating,
+  .floating.large {
+    bottom: calc(
+      var(--space-3) + var(--composer-safe-bottom, var(--safe-area-bottom)) +
+        var(--keyboard-inset-bottom)
+    );
+    width: calc(
+      100% - max(var(--space-4), var(--safe-area-left)) -
+        max(var(--space-4), var(--safe-area-right))
+    );
+    translate: none;
+  }
+}
+
+@media (height <= 600px) {
+  .floating {
+    max-height: calc(
+      var(--composer-available-height, 100dvh) - var(--titlebar-height) -
+        var(--space-8)
+    );
+    overflow-y: auto;
+    pointer-events: auto;
+  }
+  .floating .controls {
+    position: sticky;
+    bottom: 0;
+    z-index: var(--z-sticky, 1);
+  }
+  .textarea {
+    max-height: calc(3lh + var(--composer-inner-padding-block) * 2);
+  }
+}
+
+@container composer (width <= 520px) {
+  .toolbar button[data-slot="button"][data-compact] {
+    min-height: var(--touch-target);
+    min-width: var(--touch-target);
+    max-width: 107px;
+  }
+  .toolbar button[data-compact="icon"][data-slot="button"] {
+    width: var(--touch-target);
+  }
+  .toolbar {
+    padding: calc(var(--space-1) - 1px) var(--space-1);
+  }
+}
+@container composer (width <= 310px) {
+  .toolbar button[data-slot="button"][data-compact] {
+    width: var(--touch-target);
+    padding-inline: 0;
+  }
+  .toolbar button[data-compact] > [data-slot="button-text"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
   }
 }

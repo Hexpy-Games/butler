@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ComposerCard } from "../ComposerCard";
+import type { ReactNode } from "react";
+import { ComposerCard, ComposerCardToolbar, ComposerCardTextarea, ComposerSendButton } from "../ComposerCard";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import { Button } from "../../components/Button";
 import { ButtonContainer } from "../../components/ButtonContainer";
@@ -90,24 +91,30 @@ function ApprovalRequest({ context, command }: { context: ShowcaseRenderContext;
 
 export const stories: ShowcaseStory[] = [
   // ComposerPlanDecisionSurface: a plan waiting for acceptance.
-  { name: "Plan decision", widths: ["375", "app"], render: (context) => <ComposerCard><Plan context={context} /></ComposerCard> },
+  { name: "Plan decision", widths: ["375", "app"], render: (context) => <DecisionComposer><Plan context={context} /></DecisionComposer> },
   // ComposerAuthorityDecisionSurface: a question, examples with "+N more", a risk Tag, Deny and Allow once.
-  { name: "Approval request", widths: ["375", "app"], render: (context) => <ComposerCard><ApprovalRequest context={context} /></ComposerCard> },
-  { name: "High-risk command", widths: ["375", "app"], render: (context) => <ComposerCard><ApprovalRequest context={context} command /></ComposerCard> },
+  { name: "Approval request", widths: ["375", "app"], render: (context) => <DecisionComposer><ApprovalRequest context={context} /></DecisionComposer> },
+  { name: "High-risk command", widths: ["375", "app"], render: (context) => <DecisionComposer><ApprovalRequest context={context} command /></DecisionComposer> },
   // An agent without structured approvals: the legacy title, a pending count.
-  { name: "Authority decision", widths: ["375", "app"], render: (context) => <ComposerCard><Authority context={context} /></ComposerCard> },
-  { name: "Failed decision", render: (context) => <ComposerCard><Authority context={context} error /></ComposerCard> },
+  { name: "Authority decision", widths: ["375", "app"], render: (context) => <DecisionComposer><Authority context={context} /></DecisionComposer> },
+  { name: "Failed decision", render: (context) => <DecisionComposer><Authority context={context} error /></DecisionComposer> },
 ];
 
 function KeyboardDecision({ context }: { context: ShowcaseRenderContext }) {
   const [result, setResult] = useState("");
   const copy = labels[context.locale];
   if (result) return <Typo.Caption role="status">{result}</Typo.Caption>;
-  return <ComposerCard><ComposerDecisionPanel icon={<ShieldCheck size="sm" />} eyebrow={context.locale === "ko-KR" ? "권한" : "Permission"}
+  return <DecisionComposer><ComposerDecisionPanel icon={<ShieldCheck size="sm" />} eyebrow={context.locale === "ko-KR" ? "권한" : "Permission"}
     title={copy.authority} onOpen={() => undefined} details={["Exact target: workspace/output.txt"]}
     actions={(complete) => <ButtonContainer size="sm" justify="end">
       <Button type="button" size="sm" variant="secondary" onClick={() => complete(() => setResult("Denied"))}>{copy.deny}</Button>
       <Button type="button" size="sm" onClick={() => complete(() => setResult("Allowed"))}>{copy.once}</Button>
-    </ButtonContainer>} /></ComposerCard>;
+    </ButtonContainer>} /></DecisionComposer>;
 }
 stories.push({ name: "Keyboard · explicit confirmation", render: (context) => <KeyboardDecision context={context} /> });
+
+function DecisionComposer({ children }: { children: ReactNode }) {
+  return <ComposerCard panel={children} controls={<ComposerCardToolbar><ComposerSendButton aria-label="Send" disabled /></ComposerCardToolbar>}>
+    <ComposerCardTextarea aria-label="Message" placeholder="Write a message" />
+  </ComposerCard>;
+}

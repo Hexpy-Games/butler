@@ -10,14 +10,24 @@ function draftProjectId(draftId: string): string | undefined {
   return parseDraftChatId(draftId).projectId;
 }
 
+export function useComposerWorkspaceEnabled() {
+  const draftId = useComposerStore((state) => state.draftSessionId);
+  return useButlerStore(selectIsGitProject(draftProjectId(draftId)));
+}
+
+export function useComposerSecondaryControls() {
+  const workspace = useComposerWorkspaceEnabled();
+  const otherControls = useComposerStore((state) => Boolean(state.planMode || state.context));
+  return workspace || otherControls;
+}
+
 export function ComposerWorkspaceSelect() {
   useAppLocale();
-  const draftId = useComposerStore((state) => state.draftSessionId);
   const mode = useComposerStore((state) => state.workspaceMode);
   const setMode = useComposerStore((state) => state.setWorkspaceMode);
   const isSending = useComposerStore((state) => state.isSending);
   // A worktree needs Git, so the choice exists only for new chats in a Git project.
-  const gitProject = useButlerStore(selectIsGitProject(draftProjectId(draftId)));
+  const gitProject = useComposerWorkspaceEnabled();
   if (!gitProject) return null;
   const copy = appCopy.composer;
   // Rendered in the composer toolbar so it stays on the composer surface.

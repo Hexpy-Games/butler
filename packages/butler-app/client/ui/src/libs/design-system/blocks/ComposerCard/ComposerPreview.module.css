@@ -1,0 +1,26 @@
+.frame {
+  width: 100%;
+  max-width: 100%;
+  padding: var(--space-4);
+  border-radius: var(--radius-panel);
+  background: var(--background);
+  color: var(--text-primary);
+}
+.frame[data-narrow="true"] {
+  width: 375px;
+}
+.frame[data-photo="true"] {
+  background-image: url("../Wallpaper/modules/butler.photo-clouds/photo.jpg");
+  background-size: cover;
+  background-position: center;
+}
+.result {
+  min-height: 120px;
+  margin-bottom: var(--space-4);
+  white-space: pre-wrap;
+}
+.frame[data-motion="reduced"] {
+  --motion-fast: 0ms;
+  --motion-base: 0ms;
+  --motion-slow: 0ms;
+}

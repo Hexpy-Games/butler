@@ -7,6 +7,7 @@ import { useAdaptiveDrawer } from "../../responsive";
 import styles from "./AdaptiveShell.module.css";
 import { adaptiveShellThemeClasses, type AdaptiveShellTheme } from "./theme";
 import { useSidebarTrackMotion } from "./useSidebarTrackMotion";
+import { useComposerViewport } from "./useComposerViewport";
 import { useInspectorTrackMotion } from "./useInspectorTrackMotion";
 
 export interface AdaptiveShellProps extends DsBaseProps<HTMLAttributes<HTMLDivElement>>, UnsafeStyleProps {
@@ -41,6 +42,7 @@ export function AdaptiveShell({
 }: AdaptiveShellProps) {
   const drawer = useAdaptiveDrawer(chromeEnvironment);
   const rootRef = useRef<HTMLDivElement>(null);
+  useComposerViewport(rootRef);
   const composedRef = useComposedRefs(rootRef, ref);
   const { leftTrack, switching } = useSidebarTrackMotion({
     rootRef,

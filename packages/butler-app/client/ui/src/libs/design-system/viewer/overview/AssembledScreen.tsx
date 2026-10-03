@@ -82,13 +82,13 @@ export function AssembledScreen({ context, stage, density, run }: {
             <Part index={8} label="MessageRow" layer="block"><MessageRow role="assistant"><Typo.Body>{copy.answer}</Typo.Body></MessageRow></Part>
           </div>
           <Part index={9} label="ComposerCard" layer="block">
-            <ComposerCard onSubmit={(event) => event.preventDefault()}>
-              <ComposerCardTextarea aria-label={copy.placeholder} placeholder={copy.placeholder} rows={1} />
-              <ComposerCardToolbar>
+            <ComposerCard onSubmit={(event) => event.preventDefault()} controls={<ComposerCardToolbar>
                 <IconButton label="More options"><Plus size="md" /></IconButton>
                 <ComposerCardToolbarSpacer />
                 <ComposerSendButton aria-label="Send" />
-              </ComposerCardToolbar>
+              </ComposerCardToolbar>}>
+              <ComposerCardTextarea aria-label={copy.placeholder} placeholder={copy.placeholder} rows={1} />
+
             </ComposerCard>
           </Part>
         </div>

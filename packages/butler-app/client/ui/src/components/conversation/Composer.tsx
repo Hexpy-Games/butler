@@ -1,6 +1,8 @@
 import { useRef, useState } from "react";
 import { ComposerAdjunctPanels, composerHasAdjunct } from "./ComposerAdjunctPanels";
-import { ComposerInputSurface } from "./ComposerInputSurface";
+import { ComposerInputSurface, composerPanelActive } from "./ComposerInputSurface";
+import { ComposerInputPanel } from "./ComposerInputPanel";
+import { ComposerToolbar } from "./ComposerToolbar";
 import { useComposerStore } from "./composerStore";
 import { useSpaceDrag } from "@/app/space/drag";
 import { useComposerControls } from "./hooks/useComposerControls";
@@ -123,22 +125,20 @@ export function Composer({ large, onReserveChange, scope }: ComposerProps) {
     containerRef: wrapRef,
     protectedExpanded: referenceDragging || modelMenuOpen || accessMenuOpen || contextPopoverOpen,
   });
+  const mode = { planDecision: decision.plan, authorityDecision: decision.authority, question: decision.question };
+  const panelActive = composerPanelActive(mode);
   return (
     <ComposerCard
       {...fileDrop}
       large={large}
-      expanded={Boolean(scope || decision.plan || decision.authority || decision.question) || presentation.expanded}
+      expanded={isComposing || presentation.expanded || !panelActive && Boolean(scope || decision.plan || decision.authority || decision.question)}
+      panel={decision.plan || decision.authority || decision.question ? <ComposerInputPanel {...mode} /> : undefined}
+      controls={<ComposerToolbar panelActive={panelActive} />}
       floating
       notice={<ComposerNotices summary={session.summary} />}
-      adjunct={
-        composerHasAdjunct(state.workers.length, state.taskRows.length) ? (
-          <ComposerAdjunctPanels
-            showWorkers={state.workers.length > 0}
-            taskRows={state.taskRows}
-            taskTurnState={state.taskTurnState}
-          />
-        ) : null
-      }
+      adjunct={composerHasAdjunct(state.workers.length, state.taskRows.length)
+        ? <ComposerAdjunctPanels showWorkers={state.workers.length > 0}
+            taskRows={state.taskRows} taskTurnState={state.taskTurnState} /> : null}
       containerRef={wrapRef}
       onPointerDown={handlers.focusDraftFromComposerChrome}
       onPointerDownCapture={presentation.onPointerDownCapture}
@@ -149,9 +149,7 @@ export function Composer({ large, onReserveChange, scope }: ComposerProps) {
       <ComposerInputSurface
         fileInputRef={fileInputRef}
         onFiles={(nextFiles) => void files.addFiles(nextFiles)}
-        planDecision={decision.plan}
-        authorityDecision={decision.authority}
-        question={decision.question}
+        {...mode}
       />
     </ComposerCard>
   );

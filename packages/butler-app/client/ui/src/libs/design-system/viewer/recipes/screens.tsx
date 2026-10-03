@@ -84,13 +84,13 @@ export function ConversationTurnRecipe() {
           <CopyButton text="Section headers now sit above their cards." label="Copy message" copiedLabel="Copied" />
         </MessageFooter>
       </MessageRow>
-      <ComposerCard onSubmit={(event) => event.preventDefault()}>
-        <ComposerCardTextarea aria-label="Message" placeholder="Ask for follow-up changes" rows={1} />
-        <ComposerCardToolbar>
+      <ComposerCard onSubmit={(event) => event.preventDefault()} controls={<ComposerCardToolbar>
           <IconButton label="More options"><Plus size="md" /></IconButton>
           <ComposerCardToolbarSpacer />
           <ComposerSendButton aria-label="Send" />
-        </ComposerCardToolbar>
+        </ComposerCardToolbar>}>
+        <ComposerCardTextarea aria-label="Message" placeholder="Ask for follow-up changes" rows={1} />
+
       </ComposerCard>
     </Stack>
   );

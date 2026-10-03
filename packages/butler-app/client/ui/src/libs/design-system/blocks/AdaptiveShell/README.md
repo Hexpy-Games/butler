@@ -53,3 +53,9 @@ block. Do not use it as a generic card or nested panel.
 ## Tags
 
 shell, drawer, inspector, responsive, adaptive, motion
+
+
+The outer shell owns one VisualViewport resize/scroll adapter for composer
+keyboard occlusion. Nested DS specimens do not install another adapter. It
+subtracts only the part still covering the shell after layout viewport resizing,
+and suppresses the bottom safe inset while that keyboard occlusion is nonzero.

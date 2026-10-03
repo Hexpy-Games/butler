@@ -62,3 +62,6 @@ edge, and blur contract.
 
 ## Tags
 surface, glass, overlay, container, blur
+
+`radius="pill"` is the composer controls surface: token pill radius with visible
+overflow so focus rings are not clipped. The enclosing ComposerCard owns layout.

@@ -1,3 +1,4 @@
+import { smokeBrowserArgs } from "../support/smoke-browser-args";
 // Real App typing under unrelated SSE/work-status refreshes, on a stub agent.
 // Checks the committed controls, DOM identity, focus, geometry and full submitted draft.
 import { strict as assert } from "node:assert";
@@ -16,7 +17,7 @@ const server = await createNativeAppServer({
   stubReply: () => "Complete stub answer.",
 });
 const engine = process.env.BUTLER_SMOKE_BROWSER === "firefox" ? firefox : chromium;
-const browser = await engine.launch({ headless: true });
+const browser = await engine.launch({ args: smokeBrowserArgs(), headless: true });
 
 async function beginFrames(page: Page): Promise<void> {
   await page.evaluate(() => {
@@ -52,7 +53,13 @@ try {
   const editor = page.locator('[contenteditable="true"]');
   await editor.fill("Seed conversation");
   await page.locator('[data-test-class="composer-card"]').getByRole("button", { name: "Send", exact: true }).click();
-  await page.getByText("Complete stub answer.", { exact: true }).waitFor();
+  await page.getByText("Complete stub answer.", { exact: true }).waitFor().catch(async (error) => {
+    const snapshot = activeSessionId ? await server.api<SessionView>(`/session-view?session_id=${encodeURIComponent(activeSessionId)}`) : null;
+    console.error(JSON.stringify({ stage: "seed-reply", stubCalls: server.stubModelCalls.length,
+      messages: snapshot?.messages?.map(message => ({ role: message.role, status: message.status })),
+      visibleUserRows: await page.locator('[data-test-class="user-message-text"]').count() }));
+    throw error;
+  });
   await page.locator('[data-test-class="context-donut-button"]').waitFor({ state: "attached" });
   await page.locator('[data-slot="composer-compact-preview"]').click();
   const running = page.getByRole("tab", { name: appCopy.space.running, exact: true });

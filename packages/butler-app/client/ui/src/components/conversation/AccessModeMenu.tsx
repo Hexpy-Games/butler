@@ -43,7 +43,7 @@ export function AccessModeMenu() {
       <PopoverTrigger asChild>
         <ComposerControlButton
           aria-label={`${appCopy.composer.permission}: ${accessLabel(accessMode)}${permissions.length ? ` · ${appCopy.interfaceTemplates.allowedCount(permissions.length)}` : ""}`}
-          compact={permissions.length ? "label" : "icon"}
+          compact="icon"
           data-test-class="access-button"
           icon={accessModeIcon(accessMode)}
           permissionTone={accessPermissionTone(accessMode)}

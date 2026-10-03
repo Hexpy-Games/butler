@@ -1,7 +1,7 @@
 # ComposerQuestionPanel
 
 ## What
-DS-only composer form, a sibling of ComposerDecisionPanel. Place it inside ComposerCard instead of editor and toolbar. The collapsed pill belongs above the normal composer; onExpand restores the form.
+DS-only composer form, a sibling of ComposerDecisionPanel. Pass it to ComposerCard’s panel slot above the input and persistent control pill. The collapsed question summary stays above the input; onExpand restores the question form. Pill Send never submits answers.
 
 ## Contract
 Pass 1–4 questions with unique ids, type, header, text, options and optional allowOther/placeholder. onSubmit returns one answer per question: id, selected option indices, text, other and skipped. Delivery state is caller-owned: open, submitting, error, collapsed or working. Remount with a new key for a new request. defaultAnswers/defaultStep are showcase and restoration seeds. Optional onDraftChange reports snapshots for a caller that remounts the surface when collapsing.

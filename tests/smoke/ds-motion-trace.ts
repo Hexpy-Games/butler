@@ -1,3 +1,4 @@
+import { smokeBrowserArgs } from "../support/smoke-browser-args";
 /**
  * Motion verification on the DS Viewer (DS spec Motion Contract):
  * - Chrome traces (CDP tracing) of overlay open/close and 25 chunks/s
@@ -645,7 +646,7 @@ async function recordHeroVideos(browser: Browser, serverUrl: string): Promise<st
 }
 
 async function newContext(browser: Browser, video: string | null): Promise<BrowserContext> {
-  const context = await browser.newContext({
+  const context = !video && browser.contexts()[0] ? browser.contexts()[0]! : await browser.newContext({
     viewport,
     deviceScaleFactor: 1,
     ...(video ? { recordVideo: { dir: video, size: viewport } } : {}),
@@ -843,12 +844,12 @@ async function measure(browser: Browser, serverUrl: string, ids: Map<string, str
 assert(existsSync(join(uiRoot, "index.html")), "UI dist is missing; build the UI first.");
 mkdirSync(outDir, { recursive: true });
 const server = await createNativeAppServer({ uiRoot });
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ args: smokeBrowserArgs(), headless: true });
 try {
-  const lookup = await browser.newPage();
+  const lookup = await (await newContext(browser, null)).newPage();
   await server.signIn(lookup);
   const ids = await itemIds(lookup, server.url);
-  await lookup.close();
+  // Keep the lookup context alive until browser shutdown (single-process Chromium).
   const results = await measure(browser, server.url, ids);
   const summaryPath = join(outDir, "trace-summary.json");
   writeFileSync(summaryPath, `${JSON.stringify(results, null, 2)}\n`);

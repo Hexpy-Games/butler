@@ -1423,14 +1423,15 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(composerTextArea).toContain("data-max-auto-rows");
   expect(composerCardStyles).toContain("--composer-inner-padding-block");
   expect(composerCardStyles).toContain("--composer-inner-padding-inline");
-  expect(composerCard).toContain("tintedGlassSurfaceClassName");
-  expect(composerCard).toContain('data-radius="composer"');
+  expect(composerCard).toContain('<TintedGlass radius="composer"');
+  expect(composerCard).toContain('<TintedGlass radius="pill"');
+  expect(composerCard).toContain('data-slot="composer-input"');
   expect(composerCardStyles).not.toContain("--composer-glass-glint");
   expect(normalizedComposerCardStyles).toContain(
     "8lh + var(--composer-inner-padding-block) + var(--composer-inner-padding-block)",
   );
   expect(normalizedComposerCardStyles).toContain(
-    ".toolbar { display: flex; min-height: 42px; align-items: center; gap: var(--space-1); min-width: 0; border-top: 1px solid var(--composer-glass-divider); padding: var(--space-2);",
+    ".toolbar { display: flex; min-height: 40px; flex-wrap: wrap; align-items: center; gap: var(--space-1); min-width: 0; padding: var(--space-1) var(--space-2);",
   );
   expect(composerKeyboard).toContain("shouldSubmitComposerEnter");
   expect(composerKeyboard).toContain("modifier_enter_send_enter_newline");
@@ -3007,7 +3008,8 @@ test("composer controls use a store boundary instead of toolbar props drilling",
   expect(toolbar).not.toContain("handlePlanModeChange");
   expect(toolbar).not.toContain("appCopy.composer.plan");
   expect(composer).toContain("<ComposerInputSurface");
-  expect(inputSurface).toContain("<ComposerToolbar />");
+  expect(inputSurface).not.toContain("<ComposerToolbar");
+  expect(composer).toContain("controls={<ComposerToolbar panelActive={panelActive} />}");
   expect(composer).not.toContain("accessMode={");
   expect(composer).not.toContain("setAccessMenuOpen={");
   expect(composer).not.toContain("onModelChoice={");
@@ -3063,8 +3065,9 @@ test("conversation progress and composer workers use design-system blocks", () =
   );
 
   expect(composerCard).toContain("styles.adjunct");
-  expect(composerCard).toContain("tintedGlassSurfaceClassName");
-  expect(composerCard).toContain('data-radius="composer"');
+  expect(composerCard).toContain('<TintedGlass radius="composer"');
+  expect(composerCard).toContain('<TintedGlass radius="pill"');
+  expect(composerCard).toContain('data-slot="composer-input"');
   expect(composerCard).toContain('data-test-class="composer-adjunct-slot"');
   expect(composerCard.indexOf("{adjunct ?")).toBeGreaterThan(
     composerCard.indexOf("<form"),
@@ -3081,7 +3084,7 @@ test("conversation progress and composer workers use design-system blocks", () =
     )?.length,
   ).toBe(2);
   expect(normalizedComposerCardStyles).toContain(
-    ".toolbar { display: flex; min-height: 42px; align-items: center; gap: var(--space-1); min-width: 0; border-top: 1px solid var(--composer-glass-divider); padding: var(--space-2);",
+    ".toolbar { display: flex; min-height: 40px; flex-wrap: wrap; align-items: center; gap: var(--space-1); min-width: 0; padding: var(--space-1) var(--space-2);",
   );
   expect(workerPanel).toContain("WorkerActivityPanel");
   expect(workerPanel).not.toContain("ActivityFeed");

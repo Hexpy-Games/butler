@@ -1,9 +1,10 @@
-import { memo, useRef, useState, type MouseEvent } from "react";
+import { memo, useCallback, useRef, useState, type MouseEvent } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { ContextDonutButton, Popover, PopoverContent, PopoverTrigger } from "@/butler-ds";
+import { Popover, PopoverContent } from "@/butler-ds";
 import { useButlerStore } from "@/app/store.ts";
 import { appShellTheme } from "@/app/utils.ts";
 import { useComposerStore } from "./composerStore";
+import { ComposerContextTrigger } from "./ComposerContextTrigger";
 import { ContextUsagePopover } from "./ContextUsagePopover";
 import { contextModel, usageAuthMode } from "./usageAuthMode";
 import type { QuotaLoader, UsageLoader } from "./useConversationUsage";
@@ -26,13 +27,11 @@ export const ComposerContextControl = memo(function ComposerContextControl({ loa
   const [pinned, setPinned] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  if (!context) return null;
-
-  const close = () => {
+  const close = useCallback(() => {
     setPinned(false);
     setOpen(false);
-  };
-  const togglePin = (event: MouseEvent<HTMLButtonElement>) => {
+  }, [setOpen]);
+  const togglePin = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     // Radix would toggle the hover-opened popover closed; pinning owns the click.
     event.preventDefault();
     triggerRef.current = event.currentTarget;
@@ -42,23 +41,16 @@ export const ComposerContextControl = memo(function ComposerContextControl({ loa
     }
     setPinned(true);
     setOpen(true);
-  };
+  }, [close, pinned, setOpen]);
+  const onEnter = useCallback(() => setOpen(true), [setOpen]);
+  const onLeave = useCallback(() => { if (!pinned) setOpen(false); }, [pinned, setOpen]);
+  if (!context) return null;
   const mode = usageAuthMode(contextModel(models, context, activeModel), context);
 
   return (
     <Popover open={open} onOpenChange={(next) => (next ? setOpen(true) : close())}>
-      <PopoverTrigger asChild>
-        <ContextDonutButton
-          data-test-class="context-donut-button"
-          ratio={context.ratio ?? 0}
-          onClick={togglePin}
-          onPointerEnter={() => setOpen(true)}
-          onPointerLeave={() => {
-            if (!pinned) setOpen(false);
-          }}
-          aria-label={appCopy.composer.contextDetails}
-        />
-      </PopoverTrigger>
+      <ComposerContextTrigger ratio={context.ratio ?? 0} label={appCopy.composer.contextDetails}
+        onClick={togglePin} onEnter={onEnter} onLeave={onLeave} />
       <PopoverContent
         data-test-class="context-popover"
         data-pinned={pinned ? "true" : undefined}

@@ -2,12 +2,17 @@ import { Typo } from "../../components/Typo";
 import type { ShowcaseGuidance } from "../../showcase";
 import { ComposerQuestionPanel } from "./ComposerQuestionPanel";
 import { questionFixtures } from "../ComposerQuestionPanel/fixtures";
-import { ComposerCard } from "../ComposerCard";
+import { ComposerCard, ComposerCardTextarea, ComposerCardToolbar, ComposerSendButton } from "../ComposerCard";
 // #region recipe: Question in the composer
-function Example() { return <ComposerCard><ComposerQuestionPanel questions={questionFixtures(false).single} onSubmit={() => undefined} onSkip={() => undefined} onCollapse={() => undefined} /></ComposerCard>; }
+function Example() {
+  return <ComposerCard panel={<ComposerQuestionPanel questions={questionFixtures(false).single} onSubmit={() => undefined} onSkip={() => undefined} onCollapse={() => undefined} />}
+    controls={<ComposerCardToolbar><ComposerSendButton aria-label="Send" disabled /></ComposerCardToolbar>}>
+    <ComposerCardTextarea aria-label="Message" placeholder="Write a message" />
+  </ComposerCard>;
+}
 // #endregion
 export const guidance: ShowcaseGuidance = {
-  purpose: "A bounded question form replacing the composer editor and toolbar, with local choices and a review step.",
+  purpose: "A bounded question form above the composer input and persistent controls, with local choices and a review step.",
   whenToUse: ["One to four single, multi or text questions awaiting a user answer"],
   whenNotToUse: [{ when: "A permission decision", use: "ComposerDecisionPanel" }],
   recipes: [{ name: "Question in the composer", description: "Compose existing DS surfaces; caller owns delivery and localized copy.", render: () => <Example /> }],

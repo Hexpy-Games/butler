@@ -1,3 +1,4 @@
+import { smokeBrowserArgs } from "../support/smoke-browser-args";
 import { strict as assert } from "node:assert";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
@@ -11,7 +12,9 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
   const path = new URL(request.url).pathname;
   return new Response(Bun.file(resolve(root, path === "/" ? "index.html" : `.${path}`)));
 } });
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ args: smokeBrowserArgs(), headless: true });
+// Keep one context: Chromium single-process cannot safely dispose one of several contexts.
+const context = await browser.newContext();
 const base = `http://127.0.0.1:${server.port}/`;
 const story = (page: Page, name: string) => page.locator(`[data-ds-story="${name}"]`).first();
 
@@ -129,7 +132,8 @@ async function keyboard(page: Page, ko: boolean) {
 }
 async function motion() {
   for (const reduced of [false, true]) {
-    const page = await browser.newPage({ reducedMotion: reduced ? "reduce" : "no-preference" });
+    const page = await context.newPage();
+    await page.emulateMedia({ reducedMotion: reduced ? "reduce" : "no-preference" });
     await page.goto(`${base}?page=blocks/ComposerDecisionPanel&motion=${reduced ? "reduced" : "full"}`);
     const scope = story(page, "Keyboard · explicit confirmation");
     const panel = scope.locator('[aria-label][tabindex="0"]');
@@ -146,7 +150,9 @@ async function motion() {
 try {
   let renders = 0;
   for (const width of [375, 1280]) for (const locale of ["ko", "en"]) for (const theme of ["light", "dark"]) {
-    const page = await browser.newPage({ viewport: { width, height: 1000 }, reducedMotion: "reduce" });
+    const page = await context.newPage();
+    await page.setViewportSize({ width, height: 1000 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
     const query = `width=${width}&locale=${locale}&theme=${theme}&motion=reduced`;
     await page.goto(`${base}?page=blocks/ComposerQuestionPanel&${query}`);
     const question = story(page, "Single choice · recommended focus · Other").locator('[data-slot="composer-question-panel"]');
