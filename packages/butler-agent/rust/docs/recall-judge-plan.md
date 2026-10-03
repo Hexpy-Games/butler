@@ -28,6 +28,16 @@ choice: **use the user's configured memory model; do not use a dedicated decisio
 API now.** The latter remains optional future work, requiring separate approval.
 The measured model is gpt-6-luna, not a promise about every configured model.
 
+Implementation measurement, 2026-10-03: all 279 frozen queries, four arms,
+1,116 finished recall calls, zero recall errors. On the 175 kept plus 69
+vague-extra queries, A1/A2 vague hit@5 is 44.2%/44.2%; vague-extra is
+52.2%/49.3%. The full-cohort 45%/50% targets are therefore not fully met;
+no slice has a significant negative paired 95% bootstrap interval. No tuning
+followed this measurement. Judge gate rates are 37.3%/34.1%, judge latency
+p95 is 5.18s/5.60s, and four deadline fallbacks preserve baseline order.
+Snapshot source/vector coverage remains partial; these are compact-first-page
+measurements. Detailed aggregate results stay with the local benchmark harness.
+
 ## 1. Conditional judge with the configured model
 
 ### Proposed contract
