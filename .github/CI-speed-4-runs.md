@@ -204,3 +204,108 @@ format, touched-crate Clippy, source rules and frozen Bun/full check pass after
 the merge.
 
 The subsequent code push checks the corrected selector, verified embedded versions, original build configurations and artifact cache fallback. Its complete workflow wall times and results will be added to the draft PR. No release tag or post-release dispatch is authorized by this task, so release-after numbers remain estimates, not observations.
+
+## Complete archive trial (`35fa02f481e4`)
+
+This trial completed with **Rust failure**, not a green qualification. Windows
+passed in **807 s (13m27s)**, 42.8% below its historical successful median
+1411 s. Post-merge CI passed in **466 s (7m46s)**; its native macOS/ARM
+coverage is now counted in the shared Rust graph, not removed. Rust quality
+finished in **2871 s (47m51s)**. All producer, workspace, Linux ordinary/perf,
+package/install, Bun, DS and site checks passed. macOS App packaging passed
+all preview.6 comparisons, onboarding, update-choice/work-stream checks,
+packaged smoke, real .90/.91 Settings updates and existing layout smoke.
+
+Linux p95 was **9.833 ms**. All complete idle windows passed with RSS
+97,140,736 / 97,148,928 / 97,165,312 B; each window read 55,157 characters and
+0 physical bytes. All original gates and complete-state assertions remained.
+
+Failures were macOS daily strict replay (the legitimate scheduled briefing
+was missing after every vector/one-load assertion passed), an embedding-query
+deadline in historical-generation recall, and the existing 180 s owner-scale
+posting-query watchdog. The new graph forced eight threads on small runners;
+the original CPU-based default is restored, capped at eight. The daily cassette
+now includes the scheduled request and asserts the full stored briefing,
+including ordered suggestions, all headlines and real scheduled provenance.
+All nine memory E2Es pass locally against this run's unchanged debug Agent;
+strict replay, vector retrieval, original deadlines and budgets remain enforced.
+The replay failure is linked to existing [#432](https://github.com/Hexpy-Games/butler/issues/432).
+Concurrency corrections still require a changed-source hosted qualification.
+
+Native macOS setup including SDK/Cargo restore took 142 s, production 698 s
+and real update variants 519 s. Unchanged workspace crates still recompiled after checkout.
+Cargo snapshots now include full-content identities for every tracked input;
+only identical inputs regain producer timestamps. Changed Rust, included data
+and build-script environment values all rebuild in a real Cargo freshness
+proof. Seven trust/cache/gate/coverage invariants pass; legacy snapshots without
+source identities receive no timestamp restoration. This improvement will
+bootstrap new compatible snapshots; no release-after result is claimed.
+
+| Job | Result | Queue | Setup/cache | Build | Test | Upload | Mixed | Other | Wall |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| changes | success | 3 | 5 | 0 | 0 | 0 | 0 | 41 | 46 |
+| Clippy (Linux x64) | success | 3 | 28 | 0 | 442 | 0 | 0 | 11 | 481 |
+| Format and source rules | success | 4 | 12 | 0 | 44 | 0 | 0 | 2 | 58 |
+| linux-arm64-native / Build native Agent (linux-arm64) | success | 8 | 74 | 405 | 1 | 11 | 0 | 16 | 507 |
+| linux-native / Build native Agent (linux-x64) | success | 3 | 53 | 314 | 0 | 11 | 0 | 15 | 393 |
+| linux-archive / Build archives (linux-x64) | success | 2 | 41 | 521 | 19 | 26 | 0 | 21 | 628 |
+| linux-arm64-archive / Build archives (linux-arm64) | success | 6 | 45 | 415 | 432 | 21 | 0 | 18 | 931 |
+| linux-perf-archive / Build perf harness (linux-x64) | success | 14 | 40 | 69 | 0 | 7 | 0 | 12 | 128 |
+| macos-perf-archive / Build perf harness (darwin-arm64) | success | 6 | 25 | 58 | 0 | 3 | 0 | 3 | 89 |
+| site / Check and build the site | success | 3 | 9 | 8 | 10 | 0 | 0 | 8 | 35 |
+| macos-archive / Build archives (darwin-arm64) | success | 7 | 45 | 287 | 250 | 34 | 0 | 34 | 650 |
+| macos-native / Build native Agent (darwin-arm64) | success | 10 | 162 | 1217 | 2 | 30 | 0 | 55 | 1466 |
+| ui / Fast Bun unit suite | success | 8 | 24 | 0 | 38 | 0 | 0 | 6 | 68 |
+| ds / build | success | 3 | 13 | 5 | 39 | 0 | 0 | 62 | 119 |
+| linux-perf / Performance (linux-x64 1) | success | 2 | 7 | 0 | 0 | 0 | 104 | 4 | 115 |
+| linux-perf / Performance (linux-x64 2) | success | 2 | 7 | 0 | 0 | 0 | 92 | 6 | 105 |
+| linux-perf / Performance (linux-x64 3) | success | 3 | 18 | 0 | 0 | 0 | 93 | 5 | 116 |
+| linux-perf / Performance (linux-x64 idle) | success | 3 | 13 | 0 | 0 | 0 | 329 | 6 | 348 |
+| install-x64 / Lint scripts and dry-run the npm package | success | 3 | 4 | 0 | 1 | 2 | 0 | 2 | 9 |
+| linux-package-x64 / Package (linux-x64) | success | 3 | 34 | 125 | 0 | 14 | 0 | 27 | 200 |
+| install-x64 / Install smoke (linux-x64) | success | 2 | 4 | 0 | 31 | 1 | 76 | 4 | 116 |
+| linux-package-arm64 / Package (linux-arm64) | success | 16 | 43 | 80 | 0 | 5 | 0 | 9 | 137 |
+| install-arm64 / Lint scripts and dry-run the npm package | success | 3 | 5 | 0 | 1 | 3 | 0 | 3 | 12 |
+| install-arm64 / Install smoke (linux-arm64) | success | 7 | 4 | 0 | 33 | 1 | 39 | 32 | 109 |
+| linux-package-x64 / Install smoke (archlinux:base-20260927.0.600689@sha256:eb8f6dcc89a38977c9735f10fcf6ae4afe496283e7008eb7a3420cdba31fbd04, linux-x64 pacman) | success | 3 | 9 | 0 | 0 | 0 | 0 | 31 | 40 |
+| linux-package-x64 / Install smoke (ubuntu:24.04, linux-x64 deb) | success | 34 | 9 | 0 | 0 | 0 | 0 | 34 | 43 |
+| linux-package-x64 / Install smoke (debian:trixie, linux-x64 deb) | success | 46 | 9 | 0 | 0 | 0 | 0 | 32 | 41 |
+| linux-tests / workspace | success | 40 | 23 | 35 | 0 | 0 | 0 | 3 | 61 |
+| linux-tests / E2E (linux-x64 ins-02) | success | 17 | 15 | 0 | 0 | 0 | 154 | 3 | 172 |
+| linux-tests / E2E (linux-x64 3) | success | 58 | 16 | 0 | 0 | 0 | 226 | 3 | 245 |
+| linux-tests / E2E (linux-x64 1) | success | 89 | 14 | 0 | 0 | 0 | 137 | 4 | 155 |
+| linux-tests / E2E (linux-x64 ins-14) | success | 128 | 15 | 0 | 0 | 0 | 171 | 4 | 190 |
+| linux-tests / E2E (linux-x64 2) | success | 105 | 13 | 0 | 0 | 0 | 273 | 3 | 289 |
+| linux-tests / E2E (linux-x64 4) | success | 163 | 14 | 0 | 0 | 0 | 159 | 4 | 177 |
+| linux-tests / E2E (linux-x64 5) | success | 104 | 16 | 0 | 0 | 0 | 162 | 5 | 183 |
+| linux-tests / E2E (linux-x64 install) | success | 191 | 17 | 0 | 0 | 0 | 154 | 4 | 175 |
+| linux-tests / E2E (linux-x64 6) | success | 246 | 17 | 0 | 0 | 0 | 249 | 4 | 270 |
+| macos-tests / workspace | success | 60 | 35 | 33 | 0 | 0 | 0 | 7 | 75 |
+| macos-tests / E2E (darwin-arm64 ins-02) | success | 680 | 37 | 0 | 0 | 0 | 140 | 9 | 186 |
+| macos-tests / E2E (darwin-arm64 3) | success | 448 | 23 | 0 | 0 | 0 | 189 | 11 | 223 |
+| macos-tests / E2E (darwin-arm64 4) | failure | 680 | 23 | 0 | 0 | 0 | 188 | 6 | 217 |
+| macos-tests / E2E (darwin-arm64 6) | success | 872 | 23 | 0 | 0 | 0 | 147 | 2 | 172 |
+| macos-tests / E2E (darwin-arm64 ins-14) | success | 828 | 24 | 0 | 0 | 0 | 6 | 6 | 36 |
+| macos-tests / E2E (darwin-arm64 install) | success | 1054 | 38 | 0 | 0 | 0 | 160 | 8 | 206 |
+| macos-tests / E2E (darwin-arm64 1) | success | 1270 | 40 | 0 | 0 | 0 | 184 | 7 | 231 |
+| macos-tests / E2E (darwin-arm64 5) | failure | 1095 | 13 | 0 | 0 | 0 | 183 | 8 | 204 |
+| macos-tests / E2E (darwin-arm64 2) | failure | 1307 | 35 | 0 | 0 | 0 | 211 | 7 | 253 |
+| linux-package-arm64 / Install smoke (ubuntu:24.04, linux-arm64 deb) | success | 13 | 6 | 0 | 0 | 0 | 0 | 31 | 37 |
+| macos-perf / Performance (darwin-arm64 2) | success | 748 | 19 | 0 | 0 | 0 | 123 | 9 | 151 |
+| macos-perf / Performance (darwin-arm64 3) | success | 751 | 32 | 0 | 0 | 0 | 158 | 9 | 199 |
+| macos-perf / Performance (darwin-arm64 1) | success | 873 | 29 | 0 | 0 | 0 | 125 | 7 | 161 |
+| macos-perf / Performance (darwin-arm64 idle) | success | 907 | 31 | 0 | 0 | 0 | 393 | 7 | 431 |
+| macos-package / Package and smoke unsigned darwin-arm64 App | success | 54 | 39 | 144 | 605 | 0 | 0 | 22 | 810 |
+| install-macos / Lint scripts and dry-run the npm package | success | 3 | 4 | 0 | 1 | 3 | 0 | 4 | 12 |
+| install-macos / Install smoke (darwin-arm64) | success | 71 | 6 | 0 | 76 | 2 | 73 | 26 | 183 |
+| install-merge / Merge per-platform manifests | success | 3 | 8 | 0 | 0 | 0 | 0 | 2 | 10 |
+| gate | failure | 2 | 3 | 0 | 0 | 0 | 0 | 2 | 5 |
+| Platform contracts and debug stub chat | success | 3 | 10 | 18 | 152 | 16 | 0 | 8 | 204 |
+| Build unsigned Windows preview | success | 209 | 10 | 0 | 1 | 11 | 138 | 8 | 168 |
+| Hosted Windows E2E (remote) | success | 3 | 14 | 1 | 0 | 0 | 0 | 148 | 163 |
+| Hosted Windows E2E (data) | success | 3 | 15 | 0 | 0 | 0 | 0 | 50 | 65 |
+| Hosted Windows E2E (recovery) | success | 3 | 14 | 0 | 0 | 0 | 0 | 127 | 141 |
+| Installed unsigned Windows preview | success | 2 | 242 | 0 | 25 | 1 | 0 | 135 | 403 |
+| Complete Windows preview verification | success | 17 | 2 | 0 | 2 | 0 | 0 | 3 | 7 |
+| platform-paths | success | 3 | 4 | 0 | 1 | 0 | 0 | 3 | 8 |
+| Windows compile check (x86_64-pc-windows-msvc) | success | 3 | 30 | 0 | 385 | 0 | 0 | 36 | 451 |

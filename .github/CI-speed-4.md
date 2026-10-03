@@ -114,6 +114,14 @@ Runner contention can dominate Windows even with warm compilation.
   as two-day artifacts, outside the shared 10 GB cache eviction pool. Restore
   requires compiler/native mode/flags/lockfile identity, checksum and a
   successful same-repository native producer, then Cargo validates sources.
+  Complete snapshots supplement even a partial Cargo cache hit. They also
+  record SHA256 and producer timestamps for every tracked input. Restoring a
+  timestamp requires identical complete contents and a safe tracked path;
+  changed files remain fresh and Cargo still checks revision/version inputs.
+  This avoids checkout mtimes invalidating unchanged workspace libraries.
+  Cargo's [freshness documentation](https://doc.rust-lang.org/stable/nightly-rustc/cargo/core/compiler/fingerprint/enum.LocalFingerprint.html)
+  describes the mtime check. A real Cargo fixture proves that changed Rust,
+  included data and build-script environment values still produce new output.
 - The static runtime has the same artifact fallback, keyed by the existing
   recipe fingerprint. It preserves the full SDK tree, including required
   relative links. The recipe still verifies every archive, library, protoc
@@ -136,7 +144,7 @@ cache can make the first run slower; hosted queue and yw-pc contention remain.
 | --- | ---: | ---: | --- |
 | Linux Rust gate coverage | 24m38s | shared build 3–8m + longest consumer 5–8m | pending draft PR |
 | Native macOS Rust + App/install coverage | separate 36m38s / 39m48s / 13m40s | shared build 8–18m + longest consumer 5–12m | pending draft PR |
-| Windows preview | 23m31s; one run 42m03s including contention | existing contracts retained; cache/queue dependent | 21m10s, run 37124231972; other corrected checks pending |
+| Windows preview | 23m31s; one run 42m03s including contention | existing contracts retained; cache/queue dependent | 13m27s, run 37131116001; all checks passed (42.8% lower observed wall) |
 | Butler Release | 65m46s; latest 67m32s | 20–35m with warm native caches; 35–65m cold | no tag authorized; not measured after |
 | Published verification | separate platform dispatches | max(platform duration), rather than their sum | existing tags only; not dispatched by this task |
 
@@ -144,18 +152,25 @@ cache can make the first run slower; hosted queue and yw-pc contention remain.
 
 Rust 1.91 fmt, all-target `clippy -D warnings` on butler-e2e/source-check, source
 rules and all **16 existing source-check tests** pass. The compiled consolidated
-E2E inventory contains **306 tests, 14 existing ignored**. Ordinary shards contain
-**47/48/49/47/48/47** listed cases, install selections **1/1/14**, and performance
-**12/17/18 plus one complete idle observation**. Ordinary/performance overlap is
+E2E inventory after the preview.8 merge contains **312 tests, 14 existing ignored**. Ordinary shards contain
+**48/49/50/48/49/48** listed cases, install selections **1/1/14**, and performance
+**12/17/19 plus one complete idle observation**. Ordinary/performance overlap is
 intentional and preserves the former ordinary and enforced-budget runs. The
-union covers all **292 runnable E2Es**; every budget selection remains included.
-Four CI invariant tests validate exact artifact identity/digest, reject failed/
+union covers all **298 runnable E2Es**; every budget selection remains included.
+Seven CI invariant tests validate exact artifact identity/digest, reject failed/
 foreign runs, reject failed/cancelled/skipped selected gate jobs, and prove
 compiled coverage. Actionlint and frozen Bun install/full check pass with Bun
 1.3.11. An initial shell used the host default Rust 1.98; its new Clippy lints
 failed in unchanged code. Running the repo's pinned 1.91 corrected that toolchain
 mismatch. Native execution, complete E2E results and new workflow durations will
 be reported from the single draft PR; no unchanged failed CI run will be retried.
+
+All nine existing memory E2Es also ran locally against the complete archive
+trial's PR-built debug Agent: **9 passed in 144.989 s**. The daily fixture now
+covers the scheduled background briefing and asserts every stored
+suggestion/headline and scheduled provenance. Its three macOS ordinary
+failures, successful package/perf checks, queues and corrections are recorded
+in [CI-speed-4-runs.md](CI-speed-4-runs.md); they are not a green qualification.
 
 ## Per-job timings
 
