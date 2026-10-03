@@ -242,7 +242,8 @@ No live model calls, owner data, installed service or model-server ports are use
   unchanged graph/WAL/lock signatures and all 30,000 windows plus the deferred
   vector still present. Whole-service logical/physical reads were **79,211,538 /
   32,329,728 bytes**; these counters do **not** establish zero total idle I/O.
-  The re-index adds no idle content scan, file open, writer, lease or timer.
+  The later idle investigation below found repeated aborted index builds behind
+  these reads; the original zero-commit result did not establish a settled service.
   Changed-source catch-up: **59,170 ms**. Crash recovery: one recovered observation,
   zero further graph writes.
 - Initial memory_rules (the `memory_wiring_more` binary): **12 passed / 1 failed**
@@ -300,3 +301,96 @@ All checks/tests used fresh HOME and BUTLER_DATA, retained real Cargo/Rustup cac
   and isolated `git diff --check`: passed. No TypeScript/UI or new product dependency.
 - No product re-index/count/analyzer change or new E2E was made after the failed gate.
   No PR requested. Push is restricted to `codex/fts-multilingual`.
+
+
+## Idle I/O regression investigation (2026-10-03)
+
+Same Linux x86_64 WSL host, debug agent, stub provider, unchanged original
+MEM-IDLE test, two independent 60-second windows per ref. Builds used `-j 8`
+and ran serially; comparison tests used one thread and fresh HOME/BUTLER_DATA.
+The shared host page cache was left intact, never globally dropped. Each fixture
+copied a fresh executable and created a fresh graph; libraries and subsequent
+runs were warm where the host retained pages. Physical counts therefore reflect
+uncontrolled eviction, while logical counts establish the repeated work.
+
+| Ref | Run | Logical read bytes | Physical read bytes |
+| --- | --- | ---: | ---: |
+| `origin/codex/recall-judge` (`5f56d394d`) | 1 | 70,848 | 0 |
+| same | 2 | 70,848 | 0 |
+| `37d5e2bfa` | 1 | 79,178,706 | 0 |
+| same | 2 | 79,190,994 | 0 |
+| `6579ebfc1` | 1 | 79,190,994 | 0 |
+| same | 2 | 79,190,994 | 7,286,784 |
+
+All six original windows reported zero graph commits, leases and memory/embedding
+workers, unchanged graph/WAL/lock signatures, all 30,000 completed windows and
+one deferred vector. These assertions alone missed an aborted initialization.
+
+The introducing commit is `b9cd00780`, the initial FTS adoption, rather than
+Script15 commit `6579ebfc1`. The cache owner installed FTS triggers against a
+legacy graph lacking `memory_source_text`. `episode_fts/schema.rs::install`
+failed with `no such table: main.memory_source_text`, rolling back the surrounding
+transaction in `graph/cache_work.rs::ensure_cache_index`, including the freshly
+built `idx_jobs_hot_cache`. Its absence requested another build on every poll.
+The error path uses the existing five-second backoff. A content-free strace
+(`-s 0`, read/pread/open/close only) and temporary stage diagnostics showed
+12 approximately 6.5 MB graph-read bursts in the idle window, totaling
+78,165,168 graph bytes; service logical reads were 79,211,538 bytes. No tokenizer
+dictionary was opened: Script15 uses compiled Unicode tables. The temporary
+diagnostics have been removed.
+
+The leased cache work owner now runs the existing graph migration once before
+installing a missing cache/FTS index. Schema creation, bounded re-indexing and
+projection remain on this work path, with no new timer or work in the probe.
+A second defect surfaced when installation succeeded: FTS-only progress counted
+as text progress and admitted the aged deferred vector backlog. The initial
+schema-only fix read 1,578,326 logical bytes, wrote 59,720 logical / 106,496 physical
+bytes, and failed the new read assertion. Stage diagnostics confirmed repeated
+vector `memory_source_changed` errors. Cache advancement now reports consumer
+progress separately from text advancement; only actual semantic/cache text work
+admits deferred vectors, retaining the existing daily/warm/backlog policy.
+
+MEM-IDLE now seeds the legacy graph and aged deferred vector before startup,
+requires the cache index and completed Script15 migration before measuring,
+asserts less than 128 KiB logical and physical reads per window and zero disk
+writes, and retains all content/worker/commit/lease assertions. No budget was
+relaxed and no existing test was skipped.
+
+The first final run met the read budget (66,752 logical / zero physical bytes)
+and zero disk writes, but exposed an incorrect new assertion that Linux `wchar`
+should be zero. Its 2,928 bytes were 8-byte Tokio eventfd wakeups, not file writes.
+A write-destination trace verifies this distinction; `wchar` is reported, while
+zero physical writes and the unchanged graph/WAL/lock signatures assert the
+storage requirement. The logical and physical read budgets remain unchanged.
+
+Final stub MEM-IDLE: **3 passed** (74.10 s, four test threads). The idle window
+was 60.001 s with **66,752 logical read bytes, zero physical reads and disk writes,
+zero graph commits/leases/workers**, unchanged files, all 30,000 completed windows
+and the one deferred vector. Changed-source catch-up was **56,946 ms**; crash
+recovery found one observation and no further graph writes.
+
+The first broader memory invocation had **19 passed / 4 failed** at the explicit
+`local embedding assets required` fixture precondition: the asset environment
+variable was unset. No product behavior ran in those four cases. With
+`BUTLER_E2E_EMBEDDING_ASSETS=/home/yeonw/.cache/butler-task-tools/bge-m3`, all requested
+stub suites passed with four threads: **memory 23** (90.26 s), **memory_reset 3**
+(7.58 s), **memory_wiring 4** (7.34 s), **memory_rules via memory_wiring_more 13**
+(75.89 s). The real local embedding cases preserve daily/new-text admission and
+worker release; rules cover active turns plus queued follow-ups at crash stages.
+
+A second fixed MEM-IDLE run, with one test thread as in the original comparison,
+passed in **72.11 s**: **60.001 s**, **66,752 logical read bytes**, **zero physical
+reads and disk writes**, **zero commits/leases/workers**, complete fixture state.
+Its 2,872 logical write bytes are IPC; the separate syscall trace observed only
+2,432 bytes of service eventfd writes and no file writes in its idle window.
+
+Final checks: **107 memory unit tests passed** (3.20 s, four threads),
+`cargo fmt --all` passed, `cargo clippy -j 8 -p butler-memory -p butler-e2e
+--all-targets -- -D warnings` passed, and `cargo run -j 8 -p butler-source-check
+-- .` from the Rust workspace passed with zero function-size, platform,
+test-policy, architecture and E2E-gate violations. A prior source-check invocation
+from the repository root used the wrong relative package scope and was corrected
+to the tool's expected Rust workspace root, without changing checker rules.
+Temporary diagnostic builds/tests failed during investigation; none of their
+instrumentation remains. Final `git diff --check` passed. No acceptance item is
+left undone; no TS/UI changed and no live cassette was recorded.

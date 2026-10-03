@@ -21,6 +21,7 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 
 const COMPLETED_WINDOWS: usize = 30_000;
 const IDLE: Duration = Duration::from_secs(60);
+const IDLE_READ_BUDGET: u64 = 128 * 1024;
 
 /// Completed windows exercise the idle indexes without starting model work.
 fn seed_graph(path: &Path) {
@@ -182,8 +183,9 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let setup = Setup::new("MEM-IDLE")?.fixture(Fixture::Empty);
     let graph = initialize_empty(&setup.sandbox.data)?;
-    let s = setup.start().await?;
+    // Upgrade a legacy schema with an aged deferred backlog already present.
     seed_graph(&graph);
+    let s = setup.start().await?;
 
     // Give the service time to discover the generation and finish its first sweep.
     tokio::time::sleep(Duration::from_secs(10)).await;
@@ -194,6 +196,14 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
     let coordinator = PathBuf::from(format!("{}.coord.sqlite", lock.display()));
     let graph_db = readonly(&graph);
     let lock_db = readonly(&coordinator);
+    let initialized: bool = graph_db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name='idx_jobs_hot_cache') AND EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_script_seeded') AND NOT EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_script_cursor')",
+        [], |row| row.get(0),
+    ).unwrap();
+    assert!(
+        initialized,
+        "background cache/FTS schema upgrade did not settle"
+    );
     let before_graph_version = data_version(&graph_db);
     let before_lock_version = data_version(&lock_db);
     let before_graph = signature(&graph);
@@ -262,14 +272,30 @@ async fn mem_idle_has_no_graph_or_lock_writes() -> Result<(), HarnessError> {
         usage_before,
         butler_platform::process_control::usage::sample(s.agent.pid().unwrap())?,
     ) {
+        let logical_reads = after
+            .read_chars
+            .zip(before.read_chars)
+            .map(|(a, b)| a.saturating_sub(b));
+        let physical_reads = after.read_bytes.saturating_sub(before.read_bytes);
+        let logical_writes = after
+            .write_chars
+            .zip(before.write_chars)
+            .map(|(a, b)| a.saturating_sub(b));
+        let physical_writes = after.write_bytes.saturating_sub(before.write_bytes);
         eprintln!(
-            "MEM-IDLE deferred_pending={pending} workers=0 rchar_delta={} read_bytes_delta={}",
-            after
-                .read_chars
-                .unwrap_or_default()
-                .saturating_sub(before.read_chars.unwrap_or_default()),
-            after.read_bytes.saturating_sub(before.read_bytes)
+            "MEM-IDLE deferred_pending={pending} workers=0 rchar_delta={logical_reads:?} read_bytes_delta={physical_reads} wchar_delta={logical_writes:?} write_bytes_delta={physical_writes}"
         );
+        assert!(
+            logical_reads.is_none_or(|reads| reads < IDLE_READ_BUDGET),
+            "idle logical reads: {logical_reads:?}"
+        );
+        assert!(
+            physical_reads < IDLE_READ_BUDGET,
+            "idle physical reads: {physical_reads}"
+        );
+        // wchar includes Tokio eventfd wakeups, not just filesystem writes.
+        // Disk counters and the graph/WAL/lock signatures must stay unchanged.
+        assert_eq!(physical_writes, 0, "idle physical writes");
     }
     s.finish().await
 }

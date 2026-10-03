@@ -33,8 +33,15 @@ use crate::cognition::{
 use crate::coordination::CognitionWriteCoordinator;
 use butler_turn::conversation::ConversationSourceReader;
 
-/// Advances one cache job of an active or building generation. Returns `false` when no
-/// job was pending.
+/// FTS maintenance advances the consumer without admitting deferred vectors.
+#[derive(Default)]
+pub(in crate::cognition) struct CacheAdvance {
+    pub processed: bool,
+    pub text_advanced: bool,
+}
+
+/// Advances one cache job and bounded FTS maintenance for an active or building
+/// generation. Returns whether either made progress.
 pub async fn advance(
     data_root: &Path,
     environment: &CognitionPathEnvironment,
@@ -51,6 +58,7 @@ pub async fn advance(
         now(),
     )
     .await
+    .map(|advance| advance.processed)
 }
 
 /// The live consumer supplies its application clock, also used by projection.
@@ -61,7 +69,7 @@ pub(in crate::cognition) async fn advance_at(
     target: &MemoryGenerationTarget,
     cancellation: &CancellationToken,
     now: String,
-) -> CognitionResult<bool> {
+) -> CognitionResult<CacheAdvance> {
     if cancellation.is_cancelled() {
         return Err(error(CognitionCode::MemoryOperationAborted));
     }
@@ -113,7 +121,10 @@ struct CacheStep {
 }
 
 impl CacheStep {
-    fn run(self, lease: &crate::coordination::CognitionWriteLease) -> CognitionResult<bool> {
+    fn run(
+        self,
+        lease: &crate::coordination::CognitionWriteLease,
+    ) -> CognitionResult<CacheAdvance> {
         lease
             .assert_for_path(&self.lock)
             .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
@@ -126,15 +137,24 @@ impl CacheStep {
     }
 }
 
-fn run_claimed(step: &CacheStep, handle: &MemoryGenerationHandle) -> CognitionResult<bool> {
+fn run_claimed(step: &CacheStep, handle: &MemoryGenerationHandle) -> CognitionResult<CacheAdvance> {
     let mut graph = GraphRepository::open(&handle.graph_path)?;
+    // Older serving graphs may lack the source tables used by FTS triggers.
+    // Migrate once on the leased work path before the index build; a failed
+    // install would otherwise roll back the index and rebuild it on every probe.
+    if !graph.cache_index_ready()? {
+        graph.ensure_schema(&step.now)?;
+    }
     graph.ensure_cache_index(&step.cancellation)?;
     let indexed = graph.advance_episode_fts(&step.cancellation)?;
     let now = &step.now;
     let job = graph.claim_cache_job(now)?;
     let Some(job) = job else {
         graph.close()?;
-        return Ok(indexed);
+        return Ok(CacheAdvance {
+            processed: indexed,
+            text_advanced: false,
+        });
     };
     let writer = JobWriter {
         step,
@@ -162,7 +182,10 @@ fn run_claimed(step: &CacheStep, handle: &MemoryGenerationHandle) -> CognitionRe
     let closed = graph.close();
     produced.and_then(|()| {
         closed?;
-        Ok(true)
+        Ok(CacheAdvance {
+            processed: true,
+            text_advanced: true,
+        })
     })
 }
 
