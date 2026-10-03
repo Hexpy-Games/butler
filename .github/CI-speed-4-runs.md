@@ -122,6 +122,76 @@ PSS 102,378,496 B, read-character delta 55,157 B, physical reads 0 B. The origin
 reached. This WSL measurement is not a hosted-CI result and does not establish
 a cause. Restoring the production profile alone has not proven a memory fix.
 
+## Corrected producer trial (`6a6ca69de6d0`)
+
+Main is preview.8 (`1bf694a91`) in this trial; its additional checks are retained.
+This is still **not a green Rust qualification**: ordinary archives lacked the
+normal debug CLI, and native macOS cache extraction rejected a BSD-tar root
+AppleDouble sidecar. Producers now build all targets together, inventory the
+existing archive, suppress new sidecars, and safely preserve validated legacy
+root attributes inside the cache subtree. A real macOS Cargo snapshot restored
+6,753 entries; the real SDK restored 50,717 entries and passed the unchanged
+recipe adoption/digest/build-setting checks locally.
+
+| Workflow | Run | Result | Wall (s) |
+| --- | --- | --- | ---: |
+| Rust quality | [37128014277](https://github.com/Hexpy-Games/butler/actions/runs/37128014277) | failure | 1589 |
+| Unsigned Windows preview smoke | [37128013956](https://github.com/Hexpy-Games/butler/actions/runs/37128013956) | success | 1472 |
+| Post-merge CI | [37128013976](https://github.com/Hexpy-Games/butler/actions/runs/37128013976) | success | 469 |
+
+Windows completed all 12 original compiled harnesses plus installed UI,
+lifecycle and Task Scheduler checks. Its main hosted job fell from 801 s to
+471 s (41.2%); new main adds command-observation cases, so this is not a
+controlled identical-input comparison. Actual workflow wall was **1472 s
+(24m32s)**, with 336 s initial native queue and an additional native-runner
+wait between build and contracts. Historical successful median is 1411 s;
+this queued wall is **not** claimed as a successful workflow speedup.
+
+Linux perf passed all three shards and the complete idle scenario. Session-view
+p95 was **9.275 ms**, against the original 150 ms gate. All three full idle
+windows asserted complete seeded state: RSS 98,947,072 / 98,959,360 / 98,967,552 B;
+read-character delta 55,157 B per window and physical reads 0 B. This hosted
+pass does not explain or erase the earlier WSL/experimental failures.
+
+| Job | Result | Queue | Setup/cache | Build | Test | Upload | Mixed | Other | Wall |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| changes | success | 3 | 5 | 0 | 0 | 0 | 0 | 3 | 8 |
+| Clippy (Linux x64) | success | 10 | 27 | 0 | 449 | 0 | 0 | 15 | 491 |
+| Format and source rules | success | 3 | 12 | 0 | 55 | 0 | 0 | 3 | 70 |
+| linux-arm64-archive / Build archives (linux-arm64) | failure | 5 | 34 | 395 | 387 | 0 | 0 | 4 | 820 |
+| linux-native / Build native Agent (linux-x64) | success | 3 | 84 | 460 | 1 | 16 | 0 | 22 | 583 |
+| linux-arm64-native / Build native Agent (linux-arm64) | success | 15 | 86 | 419 | 1 | 16 | 0 | 22 | 544 |
+| linux-archive / Build archives (linux-x64) | failure | 3 | 27 | 503 | 31 | 0 | 0 | 3 | 564 |
+| linux-perf-archive / Build perf harness (linux-x64) | success | 76 | 33 | 184 | 0 | 3 | 0 | 11 | 231 |
+| site / Check and build the site | success | 3 | 8 | 8 | 10 | 0 | 0 | 8 | 34 |
+| macos-native / Build native Agent (darwin-arm64) | failure | 47 | 1403 | 0 | 0 | 0 | 0 | 9 | 1412 |
+| macos-perf-archive / Build perf harness (darwin-arm64) | success | 453 | 28 | 218 | 0 | 6 | 0 | 37 | 289 |
+| macos-archive / Build archives (darwin-arm64) | failure | 749 | 21 | 373 | 387 | 0 | 0 | 4 | 785 |
+| ds / build | success | 3 | 11 | 6 | 45 | 0 | 0 | 39 | 101 |
+| ui / Fast Bun unit suite | success | 1283 | 19 | 0 | 35 | 0 | 0 | 25 | 79 |
+| linux-package-arm64 / Package (linux-arm64) | success | 4 | 29 | 72 | 0 | 4 | 0 | 7 | 112 |
+| install-arm64 / Lint scripts and dry-run the npm package | success | 3 | 6 | 0 | 2 | 2 | 0 | 5 | 15 |
+| install-arm64 / Install smoke (linux-arm64) | success | 5 | 3 | 0 | 33 | 1 | 42 | 6 | 85 |
+| linux-perf / Performance (linux-x64 1) | success | 2 | 9 | 0 | 0 | 0 | 89 | 3 | 101 |
+| linux-perf / Performance (linux-x64 idle) | success | 3 | 14 | 0 | 0 | 0 | 323 | 5 | 342 |
+| linux-perf / Performance (linux-x64 2) | success | 3 | 15 | 0 | 0 | 0 | 92 | 5 | 112 |
+| linux-perf / Performance (linux-x64 3) | success | 3 | 16 | 0 | 0 | 0 | 101 | 5 | 122 |
+| linux-package-x64 / Package (linux-x64) | success | 4 | 38 | 114 | 0 | 13 | 0 | 11 | 176 |
+| install-x64 / Lint scripts and dry-run the npm package | success | 3 | 3 | 0 | 2 | 3 | 0 | 2 | 10 |
+| install-x64 / Install smoke (linux-x64) | success | 2 | 5 | 0 | 30 | 1 | 71 | 6 | 113 |
+| linux-package-arm64 / Install smoke (ubuntu:24.04, linux-arm64 deb) | success | 5 | 7 | 0 | 0 | 0 | 0 | 39 | 46 |
+| linux-package-x64 / Install smoke (archlinux:base-20260927.0.600689@sha256:eb8f6dcc89a38977c9735f10fcf6ae4afe496283e7008eb7a3420cdba31fbd04, linux-x64 pacman) | success | 2 | 10 | 0 | 0 | 0 | 0 | 35 | 45 |
+| linux-package-x64 / Install smoke (debian:trixie, linux-x64 deb) | success | 2 | 10 | 0 | 0 | 0 | 0 | 35 | 45 |
+| linux-package-x64 / Install smoke (ubuntu:24.04, linux-x64 deb) | success | 2 | 10 | 0 | 0 | 0 | 0 | 35 | 45 |
+| gate | failure | 3 | 4 | 0 | 0 | 0 | 0 | 2 | 6 |
+| Platform contracts and debug stub chat | success | 698 | 16 | 66 | 180 | 21 | 0 | 8 | 291 |
+| Build unsigned Windows preview | success | 336 | 17 | 0 | 0 | 21 | 252 | 8 | 298 |
+| Hosted Windows E2E (remote) | success | 4 | 19 | 1 | 0 | 0 | 0 | 152 | 172 |
+| Installed unsigned Windows preview | success | 3 | 318 | 1 | 23 | 1 | 0 | 128 | 471 |
+| Hosted Windows E2E (data) | success | 2 | 15 | 1 | 0 | 0 | 0 | 48 | 64 |
+| Hosted Windows E2E (recovery) | success | 2 | 13 | 1 | 0 | 0 | 0 | 148 | 162 |
+| Complete Windows preview verification | success | 3 | 1 | 0 | 0 | 0 | 0 | 5 | 6 |
+
 ## Next measurement
 
 Main advanced to `1bf694a91` before the next push. Its product changes remain
