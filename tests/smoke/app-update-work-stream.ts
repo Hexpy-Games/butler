@@ -23,6 +23,8 @@ let chatId = "";
 let activate = () => {};
 let fail = (_error: Error) => {};
 const activated = new Promise<void>((resolve, reject) => { activate = resolve; fail = reject; });
+let choiceReady = () => {};
+const choiceRequired = new Promise<void>(resolve => { choiceReady = resolve; });
 let timer: ReturnType<typeof setTimeout> | undefined;
 let activations = 0;
 let reads = 0;
@@ -45,7 +47,10 @@ const coordinator = createAppUpdateCoordinator({
     await server.stop();
     return { update_ready: true };
   },
-  onState: state => { if (state.status === "failed") fail(new Error("deferred update failed")); },
+  onState: state => {
+    if (state.status === "choice_required") choiceReady();
+    if (state.status === "failed") fail(new Error("deferred update failed"));
+  },
 });
 try {
   const idle = await server.api<Pick<AppForegroundActiveWorkSnapshot, "classification">>("/user-work");
@@ -69,19 +74,20 @@ try {
   const initial = await server.api<{ active_turn_count: number; queued_message_count: number }>("/user-work");
   assert.equal(initial.active_turn_count, 1);
   assert.equal(initial.queued_message_count, 2);
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error("committed work did not activate deferred update")), 30_000);
+  });
   const update = coordinator.request(async () => ({
     activate: () => { activations += 1; activate(); },
     cancel: () => { throw new Error("settled update should not cancel"); },
   }));
-  await new Promise(resolve => setTimeout(resolve, 0));
+  await Promise.race([choiceRequired, activated, deadline]);
   assert.equal(coordinator.state().status, "choice_required");
   assert.ok(coordinator.choose({ request_id: coordinator.state().request_id, action: "defer" }).ok);
   assert.equal((await update).status, "deferred");
   assert.equal(activations, 0);
   release();
-  await Promise.race([activated, new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error("committed work did not activate deferred update")), 30_000);
-  })]);
+  await Promise.race([activated, deadline]);
   assert.equal(activations, 1);
   assert.equal(requests, 3);
   console.log("PASS background-only quit and real authenticated SSE: three turns delivered; deferred activation once after native shutdown");
