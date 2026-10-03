@@ -1,5 +1,6 @@
 use super::utf8::Utf8Decoder;
-use encoding_rs::{UTF_16BE, UTF_16LE};
+mod utf16;
+use utf16::Utf16Decoder;
 
 #[derive(Default)]
 pub(super) struct Decoder {
@@ -8,7 +9,7 @@ pub(super) struct Decoder {
 }
 enum Mode {
     Utf8(Utf8Decoder),
-    Utf16(encoding_rs::Decoder),
+    Utf16(Utf16Decoder),
 }
 impl Decoder {
     pub(super) fn write(&mut self, bytes: &[u8], output: &mut String) {
@@ -40,9 +41,9 @@ impl Decoder {
         let be = self.prefix.starts_with(&[0xfe, 0xff])
             || pairs().filter(|p| p.first() == Some(&0)).count() >= 3;
         self.mode = Some(if le {
-            Mode::Utf16(UTF_16LE.new_decoder())
+            Mode::Utf16(Utf16Decoder::new(false))
         } else if be {
-            Mode::Utf16(UTF_16BE.new_decoder())
+            Mode::Utf16(Utf16Decoder::new(true))
         } else {
             Mode::Utf8(Utf8Decoder::default())
         });
@@ -56,9 +57,10 @@ impl Decoder {
                 }
             }
             Some(Mode::Utf16(decoder)) => {
-                output.reserve(bytes.len() * 3 + 4);
-                let (_, read, _) = decoder.decode_to_string(bytes, output, last);
-                debug_assert_eq!(read, bytes.len());
+                decoder.write(bytes, output);
+                if last {
+                    decoder.end(output);
+                }
             }
             None => {}
         }

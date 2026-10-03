@@ -100,6 +100,7 @@ async fn windows_command_tool_native_matrix() -> Result<(), HarnessError> {
         !butler_platform::command_sandbox::POSIX_SHELL,
         "Windows native commands"
     );
+    let system_root = std::env::var("SystemRoot").unwrap_or_default();
     let mut outputs = Vec::new();
     for (case, command, expected) in [
         (
@@ -119,7 +120,7 @@ async fn windows_command_tool_native_matrix() -> Result<(), HarnessError> {
         ),
         (
             "WIN-CMD",
-            r#"cmd /c dir "$env:USERPROFILE\Downloads""#,
+            r#"cmd /c dir "%USERPROFILE%\Downloads""#,
             "보고서.txt",
         ),
         (
@@ -143,9 +144,14 @@ async fn windows_command_tool_native_matrix() -> Result<(), HarnessError> {
             "안녕하세요 😀",
         ),
         (
+            "WIN-UTF16-BE-SPLIT",
+            r"$b=[Text.Encoding]::BigEndianUnicode.GetPreamble()+[Text.Encoding]::BigEndianUnicode.GetBytes('Windows PowerShell 안녕하세요 😀'); $s=[Console]::OpenStandardOutput(); foreach ($byte in $b) { $s.WriteByte($byte); $s.Flush(); Start-Sleep -Milliseconds 1 }",
+            "안녕하세요 😀",
+        ),
+        (
             "WIN-ENV",
             r"if (Test-Path Env:BUTLER_E2E_CANARY) { throw 'Host variable leaked' }; $env:SystemRoot",
-            "Windows",
+            system_root.as_str(),
         ),
     ] {
         if case == "WIN-PYTHON"
