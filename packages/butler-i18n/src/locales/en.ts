@@ -45,7 +45,7 @@ const onboardingFallback: BriefingFallbackCopy = {
         id: "butler-onboarding",
         title: "Get acquainted with Butler",
         description: "Set up the basics before using Butler.",
-        text: "Let's set up the basics before I start using Butler.",
+        text: "Help me set up the basics.",
       },
     ],
   };
@@ -433,10 +433,10 @@ export const enUsCopy: AppCopy = {
     skills: "Skills",
   },
   progress: {
-    operations: { read_project_source: "Read: checking the attached project source", delegate_to_worker: "Call worker", edit_file: "Editing: applying planned file changes", grep_files: "Searching: locating relevant implementation", list_files: "Reading: checking relevant files", project_ledger_read: "Reading: checking project records", promote_reviewed_candidate: "Applying: promoting reviewed changes", read_file: "Reading: checking relevant file contents", read_operation_result: "Checking: reviewing stored operation results", run_command: "Running command", update_onboarding_profile: "Settings: applying onboarding answers", web_read: "Reading: checking public sources", web_search: "Searching: finding public sources", write_file: "Writing: applying planned file changes" },
+    operations: { ask_user: "Question", read_project_source: "Read: checking the attached project source", delegate_to_worker: "Call worker", edit_file: "Editing: applying planned file changes", grep_files: "Searching: locating relevant implementation", list_files: "Reading: checking relevant files", project_ledger_read: "Reading: checking project records", promote_reviewed_candidate: "Applying: promoting reviewed changes", read_file: "Reading: checking relevant file contents", read_operation_result: "Checking: reviewing stored operation results", run_command: "Running command", update_onboarding_profile: "Settings: applying onboarding answers", web_read: "Reading: checking public sources", web_search: "Searching: finding public sources", write_file: "Writing: applying planned file changes" },
     fallback: "Working: using the planned tool", storageRecovery: "Coordinating storage writes", reconnecting: "Reconnecting", stopping: "Stopping the request",
   },
-  briefing: { general: generalFallback, onboarding: onboardingFallback, projectSuggestions: englishProjectFallbackSuggestions, onboardingMoment: "Onboarding", projectMoment: "Project", projectTitle: name => `Continue in ${name}`, projectDescription: name => `A few ${name} starting points are ready.` },
+  briefing: { general: generalFallback, onboarding: onboardingFallback, projectSuggestions: englishProjectFallbackSuggestions, onboardingMoment: "Getting started", projectMoment: "Project", projectTitle: name => `Continue in ${name}`, projectDescription: name => `A few ${name} starting points are ready.` },
   interfaceTemplates: {
     relativeAge: seconds => seconds < 60 ? "now" : seconds < 3600 ? `${Math.floor(seconds / 60)}m` : seconds < 86400 ? `${Math.floor(seconds / 3600)}h` : `${Math.floor(seconds / 86400)}d`,
     workedFor: duration => `Worked for ${duration}`,
@@ -652,6 +652,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     generating: "Generating response",
     modelWaiting: "Waiting for model response",
     approvalWaiting: "Waiting for approval.",
+    answerWaiting: "Waiting for your answer.",
     workerCall: "Call worker",
     work: "Work",
     search: "Search",

@@ -308,32 +308,37 @@ test("Steward result synthesis capsule reports preparation and offers no Stop", 
   expect(capsuleHtml).toContain('data-alignment="center"');
   expect(capsuleHtml).toContain("<canvas");
 
-  const synthesisState = useComposerState(
-    summary,
-    {},
-    EMPTY_SETTINGS,
-    {
-      ...EMPTY_MODEL_CATALOG,
-      models: [{
-        provider_id: "test",
-        provider_label: "Test",
-        model_id: "test",
-        model_ref: "test/model",
-        display_name: "Test",
-        status: "available",
-        default_reasoning_effort: "none",
-        reasoning_efforts: ["none"],
-        token_estimator: "none",
-        runtime_supported: true,
-      }],
-    },
-    "test/model",
-    "ready",
-    "",
-    [],
-    true,
-    0,
-  );
+  let synthesisState!: ReturnType<typeof useComposerState>;
+  function SynthesisStateProbe() {
+    synthesisState = useComposerState(
+      summary,
+      {},
+      EMPTY_SETTINGS,
+      {
+        ...EMPTY_MODEL_CATALOG,
+        models: [{
+          provider_id: "test",
+          provider_label: "Test",
+          model_id: "test",
+          model_ref: "test/model",
+          display_name: "Test",
+          status: "available",
+          default_reasoning_effort: "none",
+          reasoning_efforts: ["none"],
+          token_estimator: "none",
+          runtime_supported: true,
+        }],
+      },
+      "test/model",
+      "ready",
+      "",
+      [],
+      true,
+      0,
+    );
+    return null;
+  }
+  renderToStaticMarkup(<SynthesisStateProbe />);
   expect(synthesisState.activeTurn).toBe(true);
   expect(synthesisState.canStop).toBe(false);
 
@@ -632,6 +637,7 @@ test("child progress does not add a standalone activity row or child Composer lo
         data-item-count={state.itemCount}
         data-message-count={state.visibleMessages.length}
         data-show-activity={String(state.showTurnActivity)}
+        data-live-message={state.liveMessageId}
       />
     );
   }
@@ -656,8 +662,9 @@ test("child progress does not add a standalone activity row or child Composer lo
   const parentActiveHtml = renderToStaticMarkup(
     <MessageListProbe summary={parentActiveSummary} />,
   );
-  expect(parentActiveHtml).toContain('data-item-count="5"');
-  expect(parentActiveHtml).toContain('data-show-activity="true"');
+  expect(parentActiveHtml).toContain('data-item-count="4"');
+  expect(parentActiveHtml).toContain('data-show-activity="false"');
+  expect(parentActiveHtml).toContain(`data-live-message="${HARNESS_MESSAGES.find(message => message.role === "assistant" && message.turn_id === "turn-2")!.id}"`);
 
   function ComposerStateProbe({ isSending }: { isSending: boolean }) {
     const parentSummary: SessionSummaryView = {

@@ -51,6 +51,9 @@ const NON_FULL: &[&str] = &[
     "recall_memory",
     "query_memory",
     "list_automations",
+    "create_automation",
+    "update_automation",
+    "delete_automation",
     "list_wallpapers",
     "set_wallpaper",
     "save_wallpaper_module",
@@ -63,7 +66,19 @@ const NON_FULL: &[&str] = &[
 /// Non-full tools that change something: offered when asking first, where
 /// each asks for approval before it runs (the wallpaper writes are reviewed
 /// persistent effects there), and never to a read-only turn.
-const ASK_FIRST_WRITES: &[&str] = &["run_command", "set_wallpaper", "save_wallpaper_module"];
+const SCHEDULE_WRITES: &[&str] = &[
+    "create_automation",
+    "update_automation",
+    "delete_automation",
+];
+const ASK_FIRST_WRITES: &[&str] = &[
+    "run_command",
+    "set_wallpaper",
+    "save_wallpaper_module",
+    "create_automation",
+    "update_automation",
+    "delete_automation",
+];
 const STEWARD_PARENT: &[&str] = &["delegate_to_steward", "steer_steward", "cancel_steward"];
 const WORKER_DELEGATION: &[&str] = &["delegate_to_worker", "steer_worker", "wait_for_worker"];
 /// The tools a guided turn is authorized to call on the legacy surface, from
@@ -110,6 +125,7 @@ pub(super) fn legacy_authorized<'a>(
         names.retain(|name| !catalog.project_inspection.contains(name));
     }
     names.extend(DISCOVERY.iter().map(|name| (*name).to_owned()));
+    authorize_schedules(&mut names, policy, scope);
     apply_access_mode(&mut names, catalog, policy, scope);
     apply_role(&mut names, policy);
     names.retain(|name| {
@@ -157,6 +173,22 @@ struct AuthorizationScope {
     /// Work is tracked in the project ledger.
     ledger: bool,
     worker: bool,
+}
+
+/// Schedules are discoverable session capabilities, not always-visible schemas.
+/// Writes still use the reviewed effect owner and ask-first authority at dispatch.
+fn authorize_schedules(
+    names: &mut HashSet<String>,
+    policy: &GuidedExecutionPolicy,
+    scope: AuthorizationScope,
+) {
+    if scope.worker {
+        return;
+    }
+    names.insert("list_automations".into());
+    if policy.access_mode != AccessMode::ReadOnly {
+        names.extend(SCHEDULE_WRITES.iter().map(|name| (*name).to_owned()));
+    }
 }
 
 /// The catalog profiles a non-worker turn draws its tools from.

@@ -3005,7 +3005,7 @@
           "properties": {
             "id": {
               "type": "string",
-              "description": "Optional safe automation id."
+              "description": "Optional safe schedule id."
             },
             "title": {
               "type": "string",
@@ -3013,7 +3013,7 @@
             },
             "prompt": {
               "type": "string",
-              "description": "Prompt to run when the automation fires."
+              "description": "Prompt to run when the schedule fires."
             },
             "session_id": {
               "type": "string",
@@ -3028,15 +3028,15 @@
             },
             "run_at": {
               "type": "string",
-              "description": "ISO timestamp for one-shot automations."
+              "description": "ISO timestamp for one-shot schedules."
             },
             "interval_minutes": {
               "type": "number",
-              "description": "Interval in minutes for recurring automations."
+              "description": "Interval in minutes for recurring schedules."
             },
             "start_at": {
               "type": "string",
-              "description": "Optional ISO start timestamp for interval automations."
+              "description": "Optional ISO start timestamp for interval schedules."
             }
           },
           "required": [
@@ -3395,7 +3395,7 @@
           "properties": {
             "id": {
               "type": "string",
-              "description": "Automation id."
+              "description": "Schedule id."
             }
           },
           "required": [
@@ -8217,7 +8217,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "description": "Optional safe automation id."
+            "description": "Optional safe schedule id."
           },
           "title": {
             "type": "string",
@@ -8225,7 +8225,7 @@
           },
           "prompt": {
             "type": "string",
-            "description": "Prompt to run when the automation fires."
+            "description": "Prompt to run when the schedule fires."
           },
           "session_id": {
             "type": "string",
@@ -8240,15 +8240,15 @@
           },
           "run_at": {
             "type": "string",
-            "description": "ISO timestamp for one-shot automations."
+            "description": "ISO timestamp for one-shot schedules."
           },
           "interval_minutes": {
             "type": "number",
-            "description": "Interval in minutes for recurring automations."
+            "description": "Interval in minutes for recurring schedules."
           },
           "start_at": {
             "type": "string",
-            "description": "Optional ISO start timestamp for interval automations."
+            "description": "Optional ISO start timestamp for interval schedules."
           },
           "access_mode": {
             "type": "string",
@@ -9089,7 +9089,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "description": "Automation id."
+            "description": "Schedule id."
           }
         },
         "required": [

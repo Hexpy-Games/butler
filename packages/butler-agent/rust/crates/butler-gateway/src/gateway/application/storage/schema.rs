@@ -85,7 +85,7 @@ fn run_backfills_once(connection: &Connection) -> Result<(), AppStorageError> {
 pub(super) fn seed(connection: &Connection, now: &str) -> Result<(), AppStorageError> {
     connection.execute(
         "INSERT OR IGNORE INTO chats(id,title,kind,project_id,pinned,archived,created_at,updated_at) \
-         VALUES('general','Onboarding','chat',NULL,0,0,?1,?1)",
+         VALUES('general','General','chat',NULL,0,0,?1,?1)",
         [now],
     ).map_err(AppStorageError::sqlite)?;
     connection
@@ -94,10 +94,13 @@ pub(super) fn seed(connection: &Connection, now: &str) -> Result<(), AppStorageE
             [],
         )
         .map_err(AppStorageError::sqlite)?;
-    connection.execute(
-        "UPDATE chats SET title='Onboarding',updated_at=?1 WHERE id='general' AND title='New chat' \
-         AND NOT EXISTS(SELECT 1 FROM messages WHERE messages.chat_id=chats.id)", [now],
-    ).map_err(AppStorageError::sqlite)?;
+    connection
+        .execute(
+            "UPDATE chats SET title='General',updated_at=?1 WHERE id='general' \
+         AND title IN ('Onboarding','onboarding','New chat')",
+            [now],
+        )
+        .map_err(AppStorageError::sqlite)?;
     Ok(())
 }
 

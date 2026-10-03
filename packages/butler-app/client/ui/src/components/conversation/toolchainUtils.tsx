@@ -1,9 +1,9 @@
-import type { ReactElement } from "react";
 import { type WorkActivityToolItem } from "@/butler-ds";
-import { appCopy, getAppLocale, interfaceProgressLabel, interfaceArgumentLabel } from "@/app/copy.ts";
+import { appCopy, getAppLocale, interfaceProgressLabel } from "@/app/copy.ts";
 import { isVisibleToolActivity } from "@/app/conversation-progress";
 import type { ProgressRow, WorkBlockView } from "@/app/types.ts";
-import { OperationOutputDetails } from "./OperationOutputDetails";
+import { toolDetails, toolchainDetailLabel } from "./toolchainDetails";
+export { toolchainDetailLabel } from "./toolchainDetails";
 import { publicOperationTitle } from
   "../../../../../../butler-progress-projection/src/index.ts";
 import { activityIcon } from "./toolchainIcons";
@@ -51,22 +51,6 @@ export function workActivityToolsFromRows(
     }));
 }
 
-function toolDetails(row: ProgressRow, turnId?: string): ReactElement | string | undefined {
-  if (turnId && row.tool_call_id && row.tool_result_id) {
-    return (
-      <OperationOutputDetails
-        requestId={row.tool_call_id}
-        resultId={row.tool_result_id}
-        toolName={row.safe_tool_name}
-        turnId={turnId}
-      />
-    );
-  }
-  return row.safe_detail_rows
-    ?.map((detail) => toolchainDetailLabel(detail, row))
-    .join(" ");
-}
-
 export function isVisibleToolchainRow(
   row: ProgressRow,
   blockLabel: string,
@@ -79,6 +63,7 @@ export function isTerminalActivityState(state: string): boolean {
 }
 
 export function toolchainLabel(row: ProgressRow): string {
+  if (row.safe_tool_name === "ask_user") return publicOperationTitle("ask_user", getAppLocale());
   if (row.safe_tool_name && row.safe_input_label) {
     return `${row.safe_tool_name}: ${row.safe_input_label}`;
   }
@@ -86,6 +71,7 @@ export function toolchainLabel(row: ProgressRow): string {
 }
 
 export function toolchainSummaryLabel(row: ProgressRow): string {
+  if (row.safe_tool_name === "ask_user") return publicOperationTitle("ask_user", getAppLocale());
   if (row.safe_tool_name === "delegate_to_worker") return appCopy.interfaceStatus.workerCall;
   if (row.bridge_phase === "btcc_operation") {
     return interfaceProgressLabel(row) || publicOperationTitle(row.safe_tool_name, getAppLocale());
@@ -108,6 +94,7 @@ export function toolchainSummaryLabel(row: ProgressRow): string {
 }
 
 export function toolchainGroupLabel(row: ProgressRow): string {
+  if (row.safe_tool_name === "ask_user") return publicOperationTitle("ask_user", getAppLocale());
   if (row.safe_tool_name === "delegate_to_worker") return appCopy.interfaceStatus.work;
   if (row.bridge_phase === "btcc_operation") {
     if (row.safe_tool_name === "web_search") return appCopy.interfaceStatus.search;
@@ -138,21 +125,6 @@ export function toolchainGroupLabel(row: ProgressRow): string {
   if (row.kind === "dispatch") return appCopy.interfaceStatus.work;
   if (toolName && !["Tool", "Used tool", "도구"].includes(toolName)) return toolName;
   return appCopy.interfaceStatus.review;
-}
-
-export function toolchainDetailLabel(
-  detail: NonNullable<ProgressRow["safe_detail_rows"]>[number],
-  row: ProgressRow,
-): string {
-  const value = detail.safe_value?.trim();
-  const label =
-    row.kind === "todo" && detail.safe_label.trim().toLowerCase() === "phase"
-      ? appCopy.interfaceStatus.phase
-      : interfaceArgumentLabel(detail.kind, detail.safe_label);
-  if (!value) return label;
-  if (row.safe_tool_name === "Web search")
-    return appCopy.conversation.work.webSearchDetail(value);
-  return appCopy.conversation.work.detailRow(label, value);
 }
 
 export function activityDetailId(rowId: string): string {

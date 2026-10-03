@@ -1,3 +1,4 @@
+import { sessionDisplayTitle } from "./sessionTitle.ts";
 import { ACTIVE_TURN_STATES } from "./constants.ts";
 import { appCopy, interfaceText } from "./copy.ts";
 import {
@@ -1678,8 +1679,8 @@ export function activeChatFromNavigation(
   for (const chat of navigation.chats ?? []) {
     if (chat.id === activeChatId) {
       return {
-        title: chat.title || appCopy.interfaceFeedback.newChat,
-        shortTitle: chat.title || appCopy.interfaceFeedback.newChat,
+        title: sessionDisplayTitle(chat) || appCopy.interfaceFeedback.newChat,
+        shortTitle: sessionDisplayTitle(chat) || appCopy.interfaceFeedback.newChat,
         project: "",
       };
     }
@@ -1690,8 +1691,8 @@ export function activeChatFromNavigation(
     );
     if (session) {
       return {
-        title: session.title || appCopy.interfaceFeedback.projectChat,
-        shortTitle: session.title || appCopy.interfaceFeedback.projectChat,
+        title: sessionDisplayTitle(session) || appCopy.interfaceFeedback.projectChat,
+        shortTitle: sessionDisplayTitle(session) || appCopy.interfaceFeedback.projectChat,
         project: project.display_name,
       };
     }

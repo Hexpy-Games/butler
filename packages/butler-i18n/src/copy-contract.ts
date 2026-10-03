@@ -587,6 +587,7 @@ export interface AppCopy {
     generating: string;
     modelWaiting: string;
     approvalWaiting: string;
+    answerWaiting: string;
     workerCall: string;
     work: string;
     search: string;
