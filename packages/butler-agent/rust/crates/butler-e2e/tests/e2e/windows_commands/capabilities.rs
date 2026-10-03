@@ -36,7 +36,7 @@ async fn chat(s: &Scenario) -> Result<String, HarnessError> {
         s.gw.post(
             "/projects",
             json!({"source":"existing_folder",
-        "folder_selection_token":selection(&s.sandbox.home),"display_name":"Profile capability"}),
+        "folder_selection_token":selection(&s.sandbox.root),"display_name":"Profile capability"}),
         )
         .await?;
     assert_eq!(project.status, 201, "{}", project.text);
@@ -54,7 +54,7 @@ async fn chat(s: &Scenario) -> Result<String, HarnessError> {
 fn cases(data: &Path) -> Vec<Case> {
     let case = |tool, mut args: Value| {
         if tool == "run_command" {
-            args["cwd"] = json!("Downloads");
+            args["cwd"] = json!("home/Downloads");
         }
         Case {
             tool,
@@ -62,23 +62,23 @@ fn cases(data: &Path) -> Vec<Case> {
             refused: false,
         }
     };
-    let ordinary_data = ".butler";
+    let ordinary_data = "home/.butler";
     vec![
         case(
             "list_files",
-            json!({"root":"Downloads","max_depth":1,"max_results":100}),
+            json!({"root":"home/Downloads","max_depth":1,"max_results":100}),
         ),
         case(
             "read_file",
-            json!({"requests":[{"path":"Downloads/보고서.txt"}]}),
+            json!({"requests":[{"path":"home/Downloads/보고서.txt"}]}),
         ),
         case(
             "write_file",
-            json!({"path":"Downloads/새 파일.txt","content":"처음 내용\n","overwrite":false}),
+            json!({"path":"home/Downloads/새 파일.txt","content":"처음 내용\n","overwrite":false}),
         ),
         case(
             "edit_file",
-            json!({"path":"Downloads/새 파일.txt","old_text":"처음 내용","new_text":"수정 내용"}),
+            json!({"path":"home/Downloads/새 파일.txt","old_text":"처음 내용","new_text":"수정 내용"}),
         ),
         case(
             "run_command",
@@ -107,12 +107,12 @@ fn cases(data: &Path) -> Vec<Case> {
         },
         Case {
             tool: "read_file",
-            args: json!({"requests":[{"path":".butler/canary.txt"}]}),
+            args: json!({"requests":[{"path":"home/.butler/canary.txt"}]}),
             refused: false,
         },
         Case {
             tool: "write_file",
-            args: json!({"path":".butler/approved.txt","content":"approved"}),
+            args: json!({"path":"home/.butler/approved.txt","content":"approved"}),
             refused: false,
         },
         Case {
@@ -134,7 +134,7 @@ fn cases(data: &Path) -> Vec<Case> {
         },
         case(
             "write_file",
-            json!({"path":".butler/project-ledger/projects/e2e/approved.txt","content":"ordinary data"}),
+            json!({"path":"home/.butler/project-ledger/projects/e2e/approved.txt","content":"ordinary data"}),
         ),
         case(
             "run_command",
@@ -187,7 +187,7 @@ async fn operation(
         if case.tool == "write_file" {
             assert!(
                 !s.sandbox
-                    .home
+                    .root
                     .join(case.args["path"].as_str().unwrap())
                     .exists()
             );
@@ -248,7 +248,10 @@ fn verify(s: &Scenario, index: usize, output: &Value) -> Result<(), HarnessError
     match index {
         0 => {
             assert_eq!(output["truncated"], false);
-            assert_eq!(output["files"], json!([{"path":"보고서.txt","bytes":13}]));
+            assert_eq!(
+                output["files"],
+                json!([{"path":"home/Downloads/보고서.txt","bytes":13}])
+            );
         }
         1 => {
             assert_eq!(output["files"][0]["content"], "기존 내용");
@@ -288,7 +291,7 @@ fn verify(s: &Scenario, index: usize, output: &Value) -> Result<(), HarnessError
                     .as_array()
                     .unwrap()
                     .iter()
-                    .any(|f| f["path"] == "canary.txt")
+                    .any(|f| f["path"] == "home/.butler/canary.txt")
             );
         }
         9 => assert_eq!(output["files"][0]["content"], "PRIVATE_CANARY"),
@@ -320,7 +323,7 @@ async fn delegated_approval(
     use std::sync::atomic::Ordering;
     script.select(Case {
         tool: "write_file",
-        args: json!({"path":"Downloads/위임 파일.txt","content":"승인된 내용"}),
+        args: json!({"path":"home/Downloads/위임 파일.txt","content":"승인된 내용"}),
         refused: false,
     });
     script.delegated.store(true, Ordering::SeqCst);
