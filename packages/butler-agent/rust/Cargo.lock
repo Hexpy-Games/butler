@@ -994,6 +994,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "butler-memory-recall-eval"
+version = "0.0.0"
+dependencies = [
+ "ort",
+ "serde",
+ "serde_json",
+ "tokenizers",
+]
+
+[[package]]
 name = "butler-models"
 version = "0.0.0"
 dependencies = [
