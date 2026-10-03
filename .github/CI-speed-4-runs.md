@@ -457,3 +457,36 @@ metadata time. No work or missing substep time is hidden.
 | Complete Windows preview verification | success | 3 | 1 | 0 | 2 | 0 | 0 | 3 | 6 |
 | platform-paths | success | 2 | 3 | 0 | 1 | 0 | 0 | 2 | 6 |
 | Windows compile check (x86_64-pc-windows-msvc) | success | 2 | 38 | 0 | 373 | 0 | 0 | 38 | 449 |
+
+## External merge and unfinished follow-up
+
+After this complete green qualification, `byeolbit` marked PR #489 ready and
+merged it at `88a462e09` (2026-10-03 17:17:03 UTC). This task did neither. The
+active branch includes the follow-up and the new main merge. Local checks pass,
+but its hosted qualification and additional wall measurement remain undone.
+The only authorized PR is now closed; a replacement needs the user's decision.
+No release workflow was dispatched and no tag was created. Release-after timing
+is unobserved; 20–35 m warm remains an estimate. Published verification is below.
+
+## First parallel published verification (failed)
+
+[Run 37141083658](https://github.com/Hexpy-Games/butler/actions/runs/37141083658)
+verified existing published .7→.8 assets at branch head `fc9a9bd8aab1`.
+It took **409 s (6m49s)**, but macOS failed. This is not a successful speed
+measurement. Windows's installer/legacy recovery and actual published
+manifest/nupkg update and both Linux complete archive/install/reinstall checks
+passed. macOS passed baseline DMG checksum, signature, 14 framework links,
+10,822,192-byte ICU, read-only role aliases and exact App/Agent health, then
+failed the unchanged 30 s update-button readiness assertion at
+`tests/smoke/packaged-app-update.ts:205`. Logs lack final update/HTTP state;
+its cause is unproven. The source does not contain PR #490's verifier changes.
+No unchanged retry or relaxed assertion/budget. Reported on
+[existing #439](https://github.com/Hexpy-Games/butler/issues/439#issuecomment-5971853653).
+
+| Job | Result | Queue (s) | Wall (s) |
+| --- | --- | ---: | ---: |
+| validate | success | 2 | 3 |
+| Linux x64 complete install/reinstall | success | 3 | 32 |
+| Linux ARM64 complete install/reinstall | success | 5 | 40 |
+| Windows released install/recovery/published update | success | 4 | 397 |
+| macOS published Settings update | failure | 163 | 192 |
