@@ -163,7 +163,23 @@ try {
   await waitFor(() => [...owned].every(pid => !alive(pid)), "failed installer owned process cleanup");
   if (!uninstalled && existsSync(updater)) run(updater, ["--uninstall", "--silent"]);
   server.stop(true);
-  rmSync(root, { recursive: true, force: true });
+  removeProfile();
+}
+
+function removeProfile() {
+  try { rmSync(root, { recursive: true, force: true }); }
+  catch (error) {
+    console.error(powershell(`@{ cleanupRoot = $env:BUTLER_CLEANUP_ROOT
+      remaining = @(Get-Item -LiteralPath $env:BUTLER_CLEANUP_ROOT -Force;
+        Get-ChildItem -LiteralPath $env:BUTLER_CLEANUP_ROOT -Recurse -Force) | ForEach-Object {
+          @{ path = $_.FullName; attributes = [string]$_.Attributes }
+        }
+    } | ConvertTo-Json -Compress -Depth 4`, { ...env, BUTLER_CLEANUP_ROOT: root }));
+    const cleanup = spawnSync("node", ["-e", "require('node:fs').rmSync(process.argv[1], {recursive:true,force:true})", root],
+      { env, encoding: "utf8", windowsHide: true });
+    console.error(JSON.stringify({ nodeCleanup: { status: cleanup.status, stderr: cleanup.stderr }, remains: existsSync(root) }));
+    throw error;
+  }
 }
 
 function memoryState() {
