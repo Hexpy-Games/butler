@@ -3057,7 +3057,6 @@
         "automation",
         "reminder",
         "recurring",
-        "자동화",
         "예약",
         "예약 작업",
         "알림"
@@ -4590,7 +4589,7 @@
       "definition": {
         "type": "function",
         "name": "delegate_to_steward",
-        "description": "Delegate one complete Butler-authored request to an ordinary Steward session. Write the complete request exactly as the Steward should receive it; runtime preserves it unchanged instead of reconstructing it from Work or Plan state. Runtime derives delegation identity, inherited Composer access, ordinary tools, workspace, admitted context and EOL, budget, and reviewed provenance. A safe title is optional presentation metadata; omission uses a fixed privacy-safe title and never copies objective content. The Steward excludes Butler persona and direct-user presentation prompting, receives the immutable project context and bounded parent conversation projection, and returns one canonical terminal result for synthesis. For a new request after a prior delegation has closed, start a fresh reviewed Work in this same turn and set previous_relation_id to attach the original request and canonical results. Do not ask the user to restart.",
+        "description": "Delegate the complete request verbatim after Plan Review. Runtime derives identity, Composer access, tool grants, workspace, EOL, context, budget and provenance. Child excludes Butler persona, receives immutable project context and bounded parent conversation, and returns a canonical terminal result. Optional safe_title; otherwise fixed privacy-safe presentation. Children receive only granted tools. Schedule CRUD: direct Tier 0, including research prompts. For a new request after a prior delegation has closed, start a fresh reviewed Work in this same turn and set previous_relation_id to attach the original request and canonical results. Do not ask the user to restart.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -5170,7 +5169,7 @@
       "definition": {
         "type": "function",
         "name": "record_work_disposition",
-        "description": "Atomically declare the explicitly bound Work completed, open, or blocked. This records Work state without requiring Plan, Review, or stage sequence records. Open saves progress; it does not end a delegated assignment. Steward and Worker continue actionable remaining work until completed or genuinely blocked, using the existing wait/approval flow when necessary. Completed requires every current Plan action done or skipped, no remaining actions, eligible evidence, and no unresolved or in-flight effect. Open or blocked requires a truthful remaining action or next condition; blocked also requires a concrete next condition. The Work id must be the exact id from the current bound Work context.",
+        "description": "Atomically settle the exact bound Work. Completed requires all Plan actions done/skipped, no remaining actions, eligible evidence, no unresolved/in-flight effects. Open saves progress; delegated sessions continue actionable work with wait/approval. Open needs remaining actions or next_condition; blocked needs a concrete next_condition. No Plan/Review/stage sequence required. Missing child tool: blocked capability_handoff (capability_unavailable_in_child, requested_action tool_name/arguments); parent completes, never user homework.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -5241,6 +5240,40 @@
                 "minLength": 1
               },
               "default": []
+            },
+            "capability_handoff": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "enum": [
+                    "capability_unavailable_in_child"
+                  ]
+                },
+                "requested_action": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "tool_name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "arguments": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "tool_name",
+                    "arguments"
+                  ]
+                }
+              },
+              "required": [
+                "code",
+                "requested_action"
+              ]
             }
           },
           "required": [
@@ -6357,7 +6390,7 @@
     "delegate_to_steward": {
       "type": "function",
       "name": "delegate_to_steward",
-      "description": "Delegate one complete Butler-authored request to an ordinary Steward session. Write the complete request exactly as the Steward should receive it; runtime preserves it unchanged instead of reconstructing it from Work or Plan state. Runtime derives delegation identity, inherited Composer access, ordinary tools, workspace, admitted context and EOL, budget, and reviewed provenance. A safe title is optional presentation metadata; omission uses a fixed privacy-safe title and never copies objective content. The Steward excludes Butler persona and direct-user presentation prompting, receives the immutable project context and bounded parent conversation projection, and returns one canonical terminal result for synthesis. For a new request after a prior delegation has closed, start a fresh reviewed Work in this same turn and set previous_relation_id to attach the original request and canonical results. Do not ask the user to restart.",
+      "description": "Delegate the complete request verbatim after Plan Review. Runtime derives identity, Composer access, tool grants, workspace, EOL, context, budget and provenance. Child excludes Butler persona, receives immutable project context and bounded parent conversation, and returns a canonical terminal result. Optional safe_title; otherwise fixed privacy-safe presentation. Children receive only granted tools. Schedule CRUD: direct Tier 0, including research prompts. For a new request after a prior delegation has closed, start a fresh reviewed Work in this same turn and set previous_relation_id to attach the original request and canonical results. Do not ask the user to restart.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -7986,7 +8019,7 @@
     "record_work_disposition": {
       "type": "function",
       "name": "record_work_disposition",
-      "description": "Atomically declare the explicitly bound Work completed, open, or blocked. This records Work state without requiring Plan, Review, or stage sequence records. Open saves progress; it does not end a delegated assignment. Steward and Worker continue actionable remaining work until completed or genuinely blocked, using the existing wait/approval flow when necessary. Completed requires every current Plan action done or skipped, no remaining actions, eligible evidence, and no unresolved or in-flight effect. Open or blocked requires a truthful remaining action or next condition; blocked also requires a concrete next condition. The Work id must be the exact id from the current bound Work context.",
+      "description": "Atomically settle the exact bound Work. Completed requires all Plan actions done/skipped, no remaining actions, eligible evidence, no unresolved/in-flight effects. Open saves progress; delegated sessions continue actionable work with wait/approval. Open needs remaining actions or next_condition; blocked needs a concrete next_condition. No Plan/Review/stage sequence required. Missing child tool: blocked capability_handoff (capability_unavailable_in_child, requested_action tool_name/arguments); parent completes, never user homework.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -8057,6 +8090,40 @@
               "minLength": 1
             },
             "default": []
+          },
+          "capability_handoff": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "capability_unavailable_in_child"
+                ]
+              },
+              "requested_action": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "tool_name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "arguments": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                },
+                "required": [
+                  "tool_name",
+                  "arguments"
+                ]
+              }
+            },
+            "required": [
+              "code",
+              "requested_action"
+            ]
           }
         },
         "required": [

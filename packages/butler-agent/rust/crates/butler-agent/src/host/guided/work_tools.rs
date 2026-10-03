@@ -15,11 +15,21 @@ use decode::Command;
 pub(crate) struct GuidedWorkTools {
     service: Arc<DurableWorkService>,
     scope: WorkTurnScope,
+    child_tools: Option<Vec<String>>,
 }
 
 impl GuidedWorkTools {
     pub(crate) fn new(service: Arc<DurableWorkService>, scope: WorkTurnScope) -> Self {
-        Self { service, scope }
+        Self {
+            service,
+            scope,
+            child_tools: None,
+        }
+    }
+
+    pub(crate) fn with_child_tools(mut self, tools: Option<Vec<String>>) -> Self {
+        self.child_tools = tools;
+        self
     }
 
     pub(crate) fn is_work_tool(name: &str) -> bool {
@@ -63,6 +73,21 @@ impl GuidedWorkTools {
                 "guided_work_tool_unknown",
                 "This is not a durable Work tool",
             ));
+        }
+        if let Some(handoff) = args.get("capability_handoff") {
+            let tool = handoff["requested_action"]["tool_name"]
+                .as_str()
+                .unwrap_or_default();
+            if self
+                .child_tools
+                .as_ref()
+                .is_none_or(|tools| tools.iter().any(|name| name == tool))
+            {
+                return Err(BtccError::relayed(
+                    "capability_handoff_rejected",
+                    "Hand back only a capability absent from this delegated session's granted tools",
+                ));
+            }
         }
         // Source safeBindOpenWork runs outside the tool result catch for these
         // non-relationship mutations; it must not silently choose unrelated Work.

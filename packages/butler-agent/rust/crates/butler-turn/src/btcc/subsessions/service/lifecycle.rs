@@ -77,11 +77,17 @@ impl SubsessionService {
                 .abandon_bound_work_for_turn(turn.to_owned())
                 .await?;
         }
-        let mut evidence_refs = self
+        let disposition = self
             .work
             .bound_work_for_turn(turn.to_owned())
             .await?
-            .and_then(|work| work.latest_disposition)
+            .and_then(|work| work.latest_disposition);
+        let handoff = disposition
+            .as_ref()
+            .filter(|value| value.disposition == crate::btcc::DispositionStatus::Blocked)
+            .and_then(|value| value.next_condition.as_deref())
+            .and_then(crate::btcc::CapabilityHandoff::from_condition);
+        let mut evidence_refs = disposition
             .map(|disposition| disposition.evidence_snapshot)
             .unwrap_or_default();
         evidence_refs.extend(
@@ -94,11 +100,14 @@ impl SubsessionService {
         evidence_refs.dedup();
         self.repository
             .commit_result(
-                session.into(),
-                turn.into(),
-                status.into(),
-                summary,
-                evidence_refs,
+                crate::btcc::storage::ChildCompletion {
+                    session: session.into(),
+                    turn: turn.into(),
+                    status: status.into(),
+                    summary,
+                    evidence_refs,
+                    handoff,
+                },
                 (self.now)(),
             )
             .await

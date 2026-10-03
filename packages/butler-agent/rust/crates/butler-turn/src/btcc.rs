@@ -6,10 +6,12 @@
 mod access;
 pub mod agent_loop;
 mod authority;
+mod capability_handoff;
 pub use authority::questions::{
     AnsweredQuestion, QuestionBinding, QuestionKind, QuestionOption, UserQuestion,
     UserQuestionAnswer, UserQuestionResponse, UserQuestions,
 };
+pub use capability_handoff::{CapabilityHandoff, CapabilityHandoffCode, RequestedCapabilityAction};
 mod continuation_budget;
 mod contracts;
 pub mod effects;

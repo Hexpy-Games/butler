@@ -123,14 +123,8 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
             let surface = surface::available(&mut phase, self.preparation.catalog.snapshot())?;
             let policy = &phase.execution_policy;
             let language = resolve_guided_response_language(start.turn, &self.documents).await;
-            let work = Arc::new(GuidedWorkAdapter::new(
-                self.preparation.work.clone(),
-                work_scope.clone(),
-                policy.tracking_mode.clone(),
-                policy.role.as_str(),
-                language.clone(),
-                start.turn.original_message.clone(),
-            )?);
+            let (work, work_tools) =
+                self.work_adapters(start.turn, &phase, &work_scope, language.clone())?;
             let workspace_path = workspace.get().map_err(|e| error(e.code()))?;
             let activity = Arc::new(GuidedActivity::new(
                 start.turn.turn_id.clone(),
@@ -186,7 +180,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 self.conversation_reference.clone(),
                 self.conversation_tools.clone(),
                 self.project_tools.clone(),
-                GuidedWorkTools::new(self.preparation.work.clone(), work_scope.clone()),
+                work_tools,
                 activity.clone(),
                 self.preparation.journal.clone(),
                 self.preparation.catalog.clone(),
@@ -331,4 +325,31 @@ fn project_sources(context: &serde_json::Value) -> Vec<serde_json::Value> {
 
 fn error(code: &str) -> BtccError {
     BtccError::relayed(code.to_owned(), code)
+}
+
+impl GuidedTurnFactoryAdapter {
+    // Both owners share the admitted tool grant; the model never authors that grant.
+    fn work_adapters(
+        &self,
+        turn: &butler_turn::btcc::TurnRecord,
+        phase: &butler_turn::btcc::GuidedPhaseSelection,
+        scope: &butler_turn::btcc::WorkTurnScope,
+        language: String,
+    ) -> Result<(Arc<GuidedWorkAdapter>, GuidedWorkTools), BtccError> {
+        let policy = &phase.execution_policy;
+        let work = GuidedWorkAdapter::new(
+            self.preparation.work.clone(),
+            scope.clone(),
+            policy.tracking_mode.clone(),
+            policy.role.as_str(),
+            language,
+            turn.original_message.clone(),
+        )?
+        .with_capability_recovery(&phase.authorized_names, self.preparation.journal.clone());
+        let tools = GuidedWorkTools::new(self.preparation.work.clone(), scope.clone())
+            .with_child_tools(
+                (policy.role.as_str() != "butler").then(|| phase.authorized_names.clone()),
+            );
+        Ok((Arc::new(work), tools))
+    }
 }

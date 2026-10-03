@@ -118,7 +118,7 @@ pub(super) fn command(
             summary: required(args.get("summary"), "summary")?,
             action_updates: Some(disposition_updates(args.get("action_updates"))?),
             remaining_actions: Some(strings(args.get("remaining_actions"), "remaining_actions")?),
-            next_condition: optional(args.get("next_condition")),
+            next_condition: handoff_condition(args)?,
             evidence_refs: backfill.clone(),
             followups: Some(strings(args.get("followups"), "followups")?),
             backfill_tool_call_ids: backfill,
@@ -127,6 +127,26 @@ pub(super) fn command(
         }),
         _ => return Err(WorkArgumentError::UnsupportedTool(name.to_owned())),
     })
+}
+
+// The existing next-condition column retains this typed continuation across restarts.
+fn handoff_condition(args: &Map<String, Value>) -> Result<Option<String>, WorkArgumentError> {
+    let Some(value) = args.get("capability_handoff") else {
+        return Ok(optional(args.get("next_condition")));
+    };
+    if args.get("disposition").and_then(Value::as_str) != Some("blocked") {
+        return Err(WorkArgumentError::Required(
+            "blocked capability handoff".into(),
+        ));
+    }
+    let handoff: butler_turn::btcc::CapabilityHandoff = serde_json::from_value(value.clone())
+        .map_err(|_| WorkArgumentError::Required("valid capability_handoff".into()))?;
+    if butler_core::tool_protocol::ToolName::parse(&handoff.requested_action.tool_name).is_none() {
+        return Err(WorkArgumentError::Required("known requested tool".into()));
+    }
+    serde_json::to_string(&handoff)
+        .map(Some)
+        .map_err(|_| WorkArgumentError::Required("serializable capability_handoff".into()))
 }
 
 fn trim(value: &str) -> &str {
