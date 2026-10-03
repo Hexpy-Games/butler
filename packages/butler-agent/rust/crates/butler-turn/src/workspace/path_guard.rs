@@ -97,7 +97,7 @@ impl GuardResult {
             );
             result.insert(
                 "next".into(),
-                json!([{ "action": "Use the admitted Butler tools for protected data; choose ordinary user files for file tools." }]),
+                json!([{ "action": "Use Project Ledger tools for its records; choose ordinary workspace files for file tools." }]),
             );
         }
         Value::Object(result)

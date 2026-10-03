@@ -127,6 +127,20 @@ fn cases(data: &Path) -> Vec<Case> {
                 "state_effect":"read_only","summary":"자격 증명 경로 확인"}),
             refused: true,
         },
+        Case {
+            tool: "write_file",
+            args: json!({"path":"../escape.txt","content":"must not write"}),
+            refused: true,
+        },
+        case(
+            "write_file",
+            json!({"path":".butler/project-ledger/projects/e2e/approved.txt","content":"ordinary data"}),
+        ),
+        case(
+            "run_command",
+            json!({"command":"Get-Content -LiteralPath (Join-Path $env:BUTLER_DATA 'canary.txt')",
+            "state_effect":"read_only","summary":"데이터 경로 확인","output_mode":"full"}),
+        ),
     ]
 }
 
@@ -164,8 +178,19 @@ async fn operation(
                 "edit_files"
             }
         );
+        let exact = if case.tool == "run_command" {
+            &case.args["command"]
+        } else {
+            &case.args["path"]
+        };
+        assert_eq!(card["approval"]["examples"], json!([exact]));
         if case.tool == "write_file" {
-            assert!(!s.sandbox.home.join("Downloads/새 파일.txt").exists());
+            assert!(
+                !s.sandbox
+                    .home
+                    .join(case.args["path"].as_str().unwrap())
+                    .exists()
+            );
         }
         let reply =
             s.gw.post(
@@ -199,7 +224,12 @@ async fn operation(
     let budget = Duration::from_secs(if case.refused { 1 } else { 5 });
     butler_e2e::assert_wall_clock_budget!(elapsed, budget, case.tool);
     if case.refused {
-        assert!(output.to_string().contains("protected_path"), "{output}");
+        let expected = if case.tool == "write_file" {
+            "parent_traversal_not_allowed"
+        } else {
+            "protected_path"
+        };
+        assert!(output.to_string().contains(expected), "{output}");
         assert!(!output.to_string().contains("PRIVATE_CANARY"));
     } else {
         assert!(output["ok"] == true || output["exit_code"] == 0, "{output}");
@@ -267,7 +297,17 @@ fn verify(s: &Scenario, index: usize, output: &Value) -> Result<(), HarnessError
             "approved"
         ),
         11 => assert_eq!(output["stdout"].as_str().unwrap().trim(), "PRIVATE_CANARY"),
-        _ => assert_eq!(output["error"], "protected_path"),
+        12 => assert_eq!(output["error"], "protected_path"),
+        13 => assert_eq!(output["error"]["code"], "parent_traversal_not_allowed"),
+        14 => assert_eq!(
+            std::fs::read_to_string(
+                s.sandbox
+                    .data
+                    .join("project-ledger/projects/e2e/approved.txt")
+            )?,
+            "ordinary data"
+        ),
+        _ => assert_eq!(output["stdout"].as_str().unwrap().trim(), "PRIVATE_CANARY"),
     }
     Ok(())
 }
@@ -365,7 +405,7 @@ async fn setup(
     let mut setup = Setup::new("WINDOWS-BASIC")?;
     setup.sandbox.data = setup.sandbox.home.join(".butler");
     for folder in [
-        ".butler",
+        ".butler/project-ledger/projects/e2e",
         "Downloads/정리",
         "Documents",
         "Desktop",
@@ -417,7 +457,7 @@ async fn run(access: Access) -> Result<(), HarnessError> {
         assert!(s.gw.approval_requests(&chat).await?.is_empty());
     }
     eprintln!(
-        "WINDOWS-BASIC {access:?}: 13 complete cases in {:?}",
+        "WINDOWS-BASIC {access:?}: 16 complete cases in {:?}",
         started.elapsed()
     );
     s.finish().await?;

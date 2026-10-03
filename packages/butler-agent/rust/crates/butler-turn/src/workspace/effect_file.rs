@@ -121,8 +121,7 @@ pub async fn guard_effect_file(
     let scope = scope.clone();
     let path = path.to_owned();
     tokio::task::spawn_blocking(move || {
-        let mut protected = scope.protected_roots;
-        protected.push(scope.butler_data.join("project-ledger/projects"));
+        let protected = scope.protected_roots;
         let guarded = resolve_workspace_mutation_guard(MutationGuardInput {
             root: &scope.workspace,
             requested: &path,

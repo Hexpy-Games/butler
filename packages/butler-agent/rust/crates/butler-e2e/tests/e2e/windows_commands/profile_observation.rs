@@ -219,7 +219,7 @@ async fn literal_current_directory_uses_normal_approval_after_member_access()
         "Windows path syntax"
     );
     let command = r"$p=([pscustomobject]@{Name='profile'}).'Name'; Get-ChildItem -LiteralPath '.'";
-    let setup = Setup::new("PROFILE-DOT-APPROVED")?;
+    let setup = Setup::new("PROFILE-DOT-APPROVED")?.access(Access::AskFirst);
     let (url, script, server) = provider::start(command, false).await?;
     let s = setup
         .stub_cassette(provider::cassette()?)
