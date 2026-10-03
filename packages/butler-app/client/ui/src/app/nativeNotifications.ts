@@ -85,6 +85,14 @@ export function nativePlatform(): "browser" | "darwin" | "linux" | "win32" {
     : "browser";
 }
 
+export function nativeShortcutModifier(): "⌘" | "Ctrl" {
+  if (nativePlatform() === "darwin") return "⌘";
+  if (typeof navigator !== "undefined" && /Mac|iPhone|iPad/u.test(navigator.platform || navigator.userAgent)) {
+    return "⌘";
+  }
+  return "Ctrl";
+}
+
 export async function setNativeShellPreferences(
   settings: Pick<SettingsView, "desktop_tray_enabled">,
 ): Promise<void> {

@@ -17,14 +17,20 @@ use crate::context::ContextCode;
 impl PromptAssembler {
     pub(super) fn runtime_system_context(&self) -> ContextResult<Vec<ContextSection>> {
         let mut sections = Vec::new();
+        let contract = read_text_if_exists(&resource_path(
+            &self.paths,
+            &["prompts", "runtime-system-contract.md"],
+        ))?
+        .unwrap_or_default();
+        let content = format!(
+            "{contract}\n## Host Environment\n{}\nUse paths and commands for this OS. Do not assume macOS paths or commands on Windows or Linux.",
+            butler_platform::launcher::runtime_prompt_environment(),
+        );
         push(
             &mut sections,
             "runtime-system-contract",
             "Runtime System Contract",
-            read_text_if_exists(&resource_path(
-                &self.paths,
-                &["prompts", "runtime-system-contract.md"],
-            ))?,
+            Some(content),
             "static_context",
             "profile",
             "user",
