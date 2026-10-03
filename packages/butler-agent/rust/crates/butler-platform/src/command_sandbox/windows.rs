@@ -123,6 +123,10 @@ fn explicit_script(command: &str) -> Option<&str> {
 }
 
 /// Both reg.exe key paths and PowerShell registry-provider paths.
+pub(super) fn normalize_path_token(path: &str) -> String {
+    path.replace('\\', "/")
+}
+
 pub(super) fn is_registry_path(path: &str) -> bool {
     let root = path.split(['/', '\\', ':']).next().unwrap_or_default();
     [

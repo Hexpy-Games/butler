@@ -53,7 +53,7 @@ fn sensitive(command: &str, cwd: &Path, data: &Path, home: Option<&Path>) -> Opt
         })
         .filter(|token| !token.is_empty())
     {
-        let token = raw.replace('\\', "/");
+        let token = butler_platform::command_sandbox::normalize_path_token(raw);
         let lower = token.to_ascii_lowercase();
         if looks_sensitive(&token) || lower.split('/').any(|p| p == ".butler") {
             return Some(denied());

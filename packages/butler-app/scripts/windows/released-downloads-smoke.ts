@@ -20,6 +20,7 @@ export function releasedDownloadsReply(body: any, proof: DownloadsProof, calls: 
     const value = JSON.parse(result.output);
     const output = value.output && typeof value.output === "object" ? value.output : value;
     assert.equal(output.exit_code, 0, result.output);
+    assert.equal(output.sandbox, "unisolated", "The model must see the actual Windows execution mode");
     assert.deepEqual(output.stdout.trim().split(/\r?\n/u).map((line: string) => line.trim()), ["보고서.txt", "사진.png"]);
     proof.stdout = output.stdout;
   }

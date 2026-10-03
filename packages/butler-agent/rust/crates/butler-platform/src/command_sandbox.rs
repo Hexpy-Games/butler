@@ -140,3 +140,9 @@ pub fn has_background_operator(command: &str) -> bool {
 pub fn is_registry_path(path: &str) -> bool {
     shell::is_registry_path(path)
 }
+
+/// Normalize host path separators without interpreting POSIX shell escapes
+/// such as a quoted `printf` newline as a filesystem separator.
+pub fn normalize_path_token(path: &str) -> String {
+    shell::normalize_path_token(path)
+}

@@ -39,3 +39,7 @@ pub(super) fn legacy_shell(
 pub(super) fn is_registry_path(_path: &str) -> bool {
     false
 }
+
+pub(super) fn normalize_path_token(path: &str) -> String {
+    path.to_owned()
+}
