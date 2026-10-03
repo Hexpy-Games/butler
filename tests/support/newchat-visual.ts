@@ -87,9 +87,15 @@ async function readVisualNodes(page: Page, selector: string): Promise<VisualNode
 async function settleNewChat(page: Page, coastal: boolean): Promise<void> {
   await page.locator('[data-test-class="new-chat-suggestion"]').nth(3).waitFor();
   await page.locator('[data-slot="prompt-suggestion-moment"]').getByText("오후 3:25", { exact: true }).waitFor();
+  await page.waitForFunction(() => [...document.images].every(image => image.complete && image.naturalWidth > 0));
   await page.evaluate(async () => {
     await document.fonts.ready;
-    await Promise.all([...document.images].map(image => image.decode()));
+    await Promise.all([...document.images].map(async image => {
+      const source = image.currentSrc || image.src;
+      try { await image.decode(); }
+      catch (error) { throw new Error(JSON.stringify({ source, current: image.currentSrc, connected: image.isConnected,
+        complete: image.complete, width: image.naturalWidth, error: String(error) }), { cause: error }); }
+    }));
   });
   await page.waitForFunction(() => document.getAnimations().every(animation =>
     animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
@@ -128,6 +134,7 @@ export async function captureNewChatMatrix(uiRoot: string, output: string) {
     await server.signIn(page);
     for (const width of [1280, 375]) for (const theme of ["light", "dark"]) for (const scene of ["coastal", "none"]) {
       const key = `${width}-${theme}-${scene}`;
+      console.log(`New-chat visual case: ${key}`);
       await page.setViewportSize({ width, height: 900 });
       await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: theme,
         wallpaper: { source: scene === "coastal" ? { kind: "live", module: "butler.shoreline", params: { realtime: false } } : { kind: "none" }, motion: "paused", pauseOnBattery: false } }) });

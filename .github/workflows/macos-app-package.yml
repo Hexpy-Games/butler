@@ -108,6 +108,25 @@ jobs:
           cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
           echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$PWD/target/release/butler-agent" >> "$GITHUB_ENV"
 
+      - name: Compare new-chat surfaces with preview.6 and prove onboarding
+        if: ${{ !inputs.published-candidate }}
+        run: |
+          set -euo pipefail
+          export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/butler-smoke-browsers"
+          isolate=packages/butler-agent/rust/crates/butler-e2e/scripts/isolated-run.sh
+          "$isolate" bunx playwright install chromium
+          "$isolate" bun tests/smoke/app-newchat-visual-smoke.ts
+          BUTLER_SMOKE_SCREENSHOTS="$PWD/.tmp/newchat-regression/onboarding" "$isolate" bun tests/smoke/app-onboarding-visual-smoke.ts
+          "$isolate" bun tests/smoke/app-layout-smoke.ts
+
+      - name: Preserve new-chat visual evidence
+        if: ${{ always() && !inputs.published-candidate }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: newchat-preview6-comparison
+          path: .tmp/newchat-regression/
+          if-no-files-found: error
+
       - name: Package and smoke the native App release
         if: ${{ !inputs.published-candidate }}
         run: |
