@@ -69,6 +69,11 @@ def extract(directory, root='target'):
                 path = Path(member.name)
                 if path.is_absolute() or '..' in path.parts or not path.parts or path.parts[0] != root:
                     raise ValueError(f'Unexpected Cargo cache path: {member.name}')
+                if member.issym() or member.islnk():
+                    link = Path(member.linkname)
+                    destination = path.parent / link if member.issym() else link
+                    if link.is_absolute() or not destination.resolve().is_relative_to(Path(root).resolve()):
+                        raise tarfile.FilterError(f'Unexpected Cargo cache link: {member.name}')
                 archive_tar.extract(member, filter='data')
         decompress.stdout.close()
         if decompress.wait() != 0:

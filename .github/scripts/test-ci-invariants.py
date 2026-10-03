@@ -152,15 +152,18 @@ class CargoCache(unittest.TestCase):
                 self.assertEqual((root / 'native-deps/runtime').read_bytes(), b'complete pinned native runtime')
                 self.assertEqual(os.readlink(root / 'native-deps/_deps'), 'runtime')
                 self.assertNotEqual(cargo_cache.artifact_name(runtime), cargo_cache.artifact_name(dict(runtime, fingerprint='different-sdk')))
-                with tarfile.open(raw, 'w') as archive:
-                    entry = tarfile.TarInfo('target/escape')
-                    entry.type = tarfile.SYMTYPE
-                    entry.linkname = '../../escaped'
-                    archive.addfile(entry)
-                with (root / 'cache.tar.zst').open('wb') as packed:
-                    subprocess.run(['zstd', '-q', '-c', str(raw)], stdout=packed, check=True)
-                with self.assertRaises(tarfile.FilterError):
-                    cargo_cache.extract(root)
+                for kind, link in [(tarfile.SYMTYPE, '../../escaped'),
+                                   (tarfile.SYMTYPE, '../Cargo.toml'),
+                                   (tarfile.LNKTYPE, 'Cargo.toml')]:
+                    with tarfile.open(raw, 'w') as archive:
+                        entry = tarfile.TarInfo('target/escape')
+                        entry.type = kind
+                        entry.linkname = link
+                        archive.addfile(entry)
+                    with (root / 'cache.tar.zst').open('wb') as packed:
+                        subprocess.run(['zstd', '-q', '-c', str(raw)], stdout=packed, check=True)
+                    with self.assertRaises(tarfile.FilterError):
+                        cargo_cache.extract(root)
             finally:
                 os.chdir(original)
 
