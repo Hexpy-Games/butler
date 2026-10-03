@@ -1535,7 +1535,7 @@ try {
   );
   screenshots.push(await screenshot(page, "narrow-conversation.png"));
   await page.getByRole("button", { name: "Show sidebar" }).click();
-  await page.waitForTimeout(240);
+  await waitForMotionToSettle(page);
   const narrowSidebarBox = await page
     .locator(testClass("sidebar-slot"))
     .boundingBox();
@@ -3079,21 +3079,17 @@ try {
       const titlebarStyle = titlebar ? getComputedStyle(titlebar) : null;
       const workspaceStyle = workspace ? getComputedStyle(workspace) : null;
       const measureFluidFrame = () => {
-        if (!(fluid instanceof HTMLCanvasElement)) {
-          return {
-            activeCells: 0,
-            averageTone: 0,
-            grayCoverage: 1,
-            minTone: 0,
-            visibleCoverage: 0,
-          };
-        }
+        if (!(fluid instanceof HTMLCanvasElement)) return null;
         const webgl = fluid.getContext("webgl2") ?? fluid.getContext("webgl");
         const canvas2d = webgl ? null : fluid.getContext("2d");
         const width = webgl?.drawingBufferWidth ?? fluid.width;
         const height = webgl?.drawingBufferHeight ?? fluid.height;
         let pixels: Uint8Array | Uint8ClampedArray | undefined;
         if (webgl) {
+          // An opaque shader frame has alpha 255; the discarded buffer has 0.
+          const presentedPixel = new Uint8Array(4);
+          webgl.readPixels(0, 0, 1, 1, webgl.RGBA, webgl.UNSIGNED_BYTE, presentedPixel);
+          if (presentedPixel[3] === 0) return null;
           const buffer = new Uint8Array(width * height * 4);
           webgl.readPixels(
             0,
@@ -3172,11 +3168,21 @@ try {
       // 8s window reached visible >= 0.06 and 4+ tinted cells. Sample an 8s
       // window and assert on its peak liquid and mean tone instead.
       for (let index = 0; index < 8; index += 1) {
-        // The renderer does not preserve its drawing buffer after presentation.
-        // Read after its RAF draw, before the browser clears the presented frame.
-        fluidSamples.push(await new Promise<ReturnType<typeof measureFluidFrame>>((resolve) =>
-          requestAnimationFrame(() => resolve(measureFluidFrame()))));
-        await new Promise((resolve) => setTimeout(resolve, 1_000));
+        // Wallpaper draws at 20fps, below display RAF. Capture one actual draw
+        // inside each existing 1s window, before its opaque buffer is discarded.
+        const deadline = performance.now() + 1_000;
+        const sample = await new Promise<ReturnType<typeof measureFluidFrame>>((resolve) => {
+          const probe = () => {
+            if (performance.now() >= deadline) return resolve(null);
+            const frame = measureFluidFrame();
+            if (frame) resolve(frame);
+            else requestAnimationFrame(probe);
+          };
+          requestAnimationFrame(probe);
+        });
+        if (!sample) throw new Error(`No drawn bloom frame in sample ${index + 1}/8`);
+        fluidSamples.push(sample);
+        await new Promise((resolve) => setTimeout(resolve, Math.max(0, deadline - performance.now())));
       }
       const fluidMean = (key: "averageTone" | "grayCoverage") =>
         fluidSamples.reduce((total, sample) => total + sample[key], 0) /
@@ -3620,18 +3626,20 @@ try {
       const height = webgl?.drawingBufferHeight ?? canvas.height;
       const samples: Array<{ changedCoverage: number; spread: number }> = [];
       for (let sample = 0; sample < 5; sample += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 80));
-        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-        const pixels = new Uint8Array(width * height * 4);
-        webgl?.readPixels(
-          0,
-          0,
-          width,
-          height,
-          webgl.RGBA,
-          webgl.UNSIGNED_BYTE,
-          pixels,
-        );
+        const deadline = performance.now() + 80;
+        const pixels = await new Promise<Uint8Array | null>((resolve) => {
+          const probe = () => {
+            if (!webgl || performance.now() >= deadline) return resolve(null);
+            const presentedPixel = new Uint8Array(4);
+            webgl.readPixels(0, 0, 1, 1, webgl.RGBA, webgl.UNSIGNED_BYTE, presentedPixel);
+            if (presentedPixel[3] === 0) return void requestAnimationFrame(probe);
+            const frame = new Uint8Array(width * height * 4);
+            webgl.readPixels(0, 0, width, height, webgl.RGBA, webgl.UNSIGNED_BYTE, frame);
+            resolve(frame);
+          };
+          requestAnimationFrame(probe);
+        });
+        if (!pixels) throw new Error(`No drawn silk frame in sample ${sample + 1}/5`);
         let changedPixels = 0;
         let minTone = 255;
         let maxTone = 0;
@@ -3649,6 +3657,7 @@ try {
           changedCoverage: changedPixels / total,
           spread: maxTone - minTone,
         });
+        await new Promise((resolve) => setTimeout(resolve, Math.max(0, deadline - performance.now())));
       }
       return {
         changedCoverageMax: Math.max(
