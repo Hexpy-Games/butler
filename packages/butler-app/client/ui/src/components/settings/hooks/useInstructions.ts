@@ -7,7 +7,15 @@ import { notifyStatus } from "@/app/notifications.ts";
 import type { SettingsSectionState } from "@/butler-ds";
 import type { Instruction } from "../memoryTypes";
 export function instructionScope(item: Instruction) {
+  if (item.scope.kind === "session") return appCopy.settings.memory.thisChat;
   return item.scope.kind === "all" ? appCopy.settings.memory.allChats : item.scope.project_name || appCopy.settings.memory.project;
+}
+export function instructionDuration(item: Instruction) {
+  const copy = appCopy.settings.memory;
+  if (item.duration === "this chat") return copy.thisChatOnly;
+  if (!item.expires_at || item.duration === "always") return "";
+  const hours = Math.max(1, Math.ceil((Date.parse(item.expires_at) - Date.now()) / 3_600_000));
+  return hours <= 24 ? copy.expiresInHours(hours) : copy.expiresInDays(Math.ceil(hours / 24));
 }
 export function useInstructions(refreshSummary: () => Promise<void>) {
   const [rows, setRows] = useState<Instruction[]>([]);

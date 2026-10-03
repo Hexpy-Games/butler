@@ -1033,13 +1033,7 @@ export interface AppCopy {
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     modelsAdvanced: { title: string; contents: string };
     memory: {
-      feedback: {
-        title: string; description: string; empty: string; thisChat: string; chatEnds: string;
-        noExpiry: string; expired: string; inHours: (hours: number) => string;
-        inDays: (days: number) => string; onDate: (date: string) => string;
-        deleteTitle: string; deleted: string; reset: string; resetTitle: string;
-        resetDetail: string; resetDone: string; changeFailed: string;
-      };
+      thisChat: string; thisChatOnly: string; expiresInHours: (hours: number) => string; expiresInDays: (days: number) => string;
       linkLabel: string; linkDescription: string; linkOpen: string; linkOpenLabel: string;
       freeSpace: string; project: string; none: string; profileBuildingOff: string;
       notMeasured: string; unavailable: string; noProjects: string; allChats: string;

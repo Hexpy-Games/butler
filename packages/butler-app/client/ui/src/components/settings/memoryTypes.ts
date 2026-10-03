@@ -1,7 +1,8 @@
 import type { SettingsSectionState } from "@/butler-ds";
 export interface Instruction {
   handle: string; text: string; revision: string; project_id: string | null;
-  scope: { kind: "all" | "project"; project_name?: string | null };
+  duration?: "this chat" | "7 days" | "always"; expires_at?: string | null;
+  scope: { kind: "all" | "project" | "session"; project_name?: string | null };
 }
 export interface MemoryCard {
   kind: string; item_count: number | null; pending_count: number | null;

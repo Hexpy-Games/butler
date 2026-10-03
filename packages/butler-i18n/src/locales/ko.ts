@@ -1216,15 +1216,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       learning: "버틀러가 대화하면서 사용자를 알아가는 범위입니다.",
     },
     memory: {
-      feedback: {
-        title: "최근 피드백", description: "최근에 알려주신 수정 사항을 답변에 잠시 반영합니다.",
-        empty: "최근 피드백 없음", thisChat: "이 채팅", chatEnds: "채팅이 끝날 때까지",
-        noExpiry: "만료 없음", expired: "만료됨", inHours: (hours: number) => `${hours}시간 후 만료`,
-        inDays: (days: number) => `${days}일 후 만료`, onDate: (date: string) => `${date} 만료`,
-        deleteTitle: "이 피드백을 삭제할까요?", deleted: "피드백을 삭제했습니다", reset: "초기화",
-        resetTitle: "최근 피드백을 초기화할까요?", resetDetail: "아직 반영되지 않은 항목을 포함해 최근 피드백을 모두 삭제합니다. 지침과 채팅은 유지됩니다.",
-        resetDone: "최근 피드백을 초기화했습니다", changeFailed: "피드백을 변경하지 못했습니다",
-      },
+      thisChat: "이 채팅", thisChatOnly: "이 채팅에서만", expiresInHours: hours => `${hours}시간 후 만료`, expiresInDays: days => `${days}일 후 만료`,
       linkLabel: "기억",
       linkDescription: "기억한 내용을 보고 관리합니다.",
       linkOpen: "열기",
