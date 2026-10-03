@@ -38,7 +38,11 @@ pub(super) fn extraction(cassette: &mut Cassette, ask: &str) -> Result<(), Harne
 }
 
 fn meaning() -> ResponseRecord {
-    let text = json!({"status":"processed","entities":[],"items":[],"attributes":[]}).to_string();
+    response(&json!({"status":"processed","entities":[],"items":[],"attributes":[]}))
+}
+
+fn response(value: &serde_json::Value) -> ResponseRecord {
+    let text = value.to_string();
     let item = json!({"type":"message","id":"msg_meaning","role":"assistant","status":"completed",
         "content":[{"type":"output_text","text":text,"annotations":[]}]});
     let events = [
@@ -141,4 +145,72 @@ pub(super) fn ordinary(cassette: &mut Cassette) {
         }
         cassette.exchanges.push(answer);
     }
+}
+
+/// The daily vector window also runs consolidation. Replay its real briefing
+/// request with a fixed persona and a complete synthetic response; no misses
+/// are suppressed and no scheduled work is disabled.
+pub(super) fn daily_briefing(
+    cassette: &mut Cassette,
+    data: &std::path::Path,
+) -> Result<(), HarnessError> {
+    const PERSONA: &str = "Daily embedding fixture persona.";
+    std::fs::create_dir_all(data.join("personas"))?;
+    std::fs::write(data.join("personas/active.md"), PERSONA)?;
+    let mut exchange = Cassette::load("MEM-04")?.exchanges.remove(0);
+    let mut input: serde_json::Value = serde_json::from_str(&exchange.request.key.user_request)?;
+    input["persona"] = json!({"id":"active", "excerpt":PERSONA});
+    exchange.request.key.user_request = serde_json::to_string_pretty(&input)?
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    exchange.response = response(&briefing_reply()?);
+    cassette.exchanges.push(exchange);
+    Ok(())
+}
+
+fn briefing_reply() -> Result<serde_json::Value, HarnessError> {
+    let recorded = Cassette::load("MEM-04")?;
+    let mut reply: serde_json::Value =
+        serde_json::from_str(&recorded.exchanges[0].response.output_text())?;
+    // The older recording predates the current source-kind vocabulary.
+    for item in reply["suggestions"].as_array_mut().unwrap() {
+        item["source_kind"] = json!("current_interest");
+    }
+    Ok(reply)
+}
+
+pub(super) async fn assert_daily_briefing(
+    s: &butler_e2e::e2e::scenario::Scenario,
+) -> Result<(), HarnessError> {
+    let root = s.sandbox.data.join("cognition/consolidation/briefings");
+    let path = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            if let Ok(days) = std::fs::read_dir(&root) {
+                for day in days {
+                    let path = day.unwrap().path().join("general.json");
+                    if path.is_file() {
+                        return path;
+                    }
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("daily consolidation must publish the complete briefing");
+    let stored: serde_json::Value = serde_json::from_slice(&std::fs::read(path)?)?;
+    let expected = briefing_reply()?;
+    for key in ["title", "description", "suggestions", "title_variants"] {
+        assert_eq!(stored[key], expected[key], "daily briefing changed {key}");
+    }
+    assert_eq!(stored["source"]["persona_id"], "active");
+    assert_eq!(stored["source"]["persona_applied"], true);
+    assert_eq!(stored["source"]["model_ref"], "openai/gpt-6-luna");
+    let run_id = stored["source"]["consolidation_run_id"].as_str().unwrap();
+    let suffix = run_id.strip_prefix("cr_scheduled_").unwrap();
+    assert_eq!(suffix.len(), 14);
+    assert!(suffix.bytes().all(|byte| byte.is_ascii_digit()));
+    assert!(s.provider()?.misses().is_empty());
+    Ok(())
 }

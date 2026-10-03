@@ -56,6 +56,9 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
         run: |
+          # Preserve nextest's original CPU-based default, capped for this graph.
+          # Eight simultaneous Agents oversubscribe the smaller macOS runners.
+          echo "E2E_THREADS=$(python3 -c 'import os; print(min(8, os.cpu_count() or 1))')" >> "$GITHUB_ENV"
           if [ "$SHARD" = install ]; then
             echo 'test(/::ins_/) and not test(/::ins_02_/) and not test(/::ins_14_/)' > "$RUNNER_TEMP/rust-archive/install.txt"
           elif [ "$SHARD" = ins-02 ] || [ "$SHARD" = ins-14 ]; then
@@ -72,7 +75,7 @@ jobs:
           restore-embedding-model: ${{ !contains(fromJSON('["install", "ins-02", "ins-14"]'), matrix.shard) }}
           run-systemd: ${{ matrix.shard == 'ins-14' }}
           run-idle-disk: ${{ matrix.shard == 1 }}
-          test-threads: "8"
+          test-threads: ${{ env.E2E_THREADS }}
       - if: always()
         uses: ./.github/actions/assert-home-untouched
   perf:

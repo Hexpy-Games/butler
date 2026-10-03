@@ -33,9 +33,11 @@ fn setup(name: &str) -> Result<(Setup, String, String), HarnessError> {
     }
     memory_stubs::ordinary(&mut cassette);
     memory_stubs::extraction(&mut cassette, ASK)?;
-    let setup = Setup::new(name)?
-        .stub_cassette(cassette)
-        .placeholder("NONCE", &code);
+    let setup = Setup::new(name)?;
+    if name == "MEM-DAILY-BATCH" {
+        memory_stubs::daily_briefing(&mut cassette, &setup.sandbox.data)?;
+    }
+    let setup = setup.stub_cassette(cassette).placeholder("NONCE", &code);
     assert!(
         fixtures::embedding_assets(&setup.sandbox.data)?,
         "local embedding assets required"
@@ -222,6 +224,7 @@ async fn mem_daily_window_drains_vectors_with_one_load() -> Result<(), HarnessEr
     eprintln!(
         "EMBED-DAILY pending_before={pending} pending_after={remaining} complete={complete} loads=1"
     );
+    memory_stubs::assert_daily_briefing(&s).await?;
     s.finish().await
 }
 
