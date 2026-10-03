@@ -40,11 +40,21 @@ def verify(directory, expected):
     filename = 'butler-agent.exe' if expected['platform'] == 'windows-x64' else 'butler-agent'
     if metadata.get('binary') != filename or digest(directory / filename) != metadata.get('sha256'):
         raise ValueError('Matching Agent artifact has invalid binary/digest')
+    verify_version(directory / filename, expected['version'])
     return True
+
+
+def verify_version(binary, version):
+    binary.chmod(0o755)
+    actual = output(sys.executable, str(Path(__file__).with_name('isolated.py')),
+                    str(binary.resolve()), '--version')
+    if not actual.startswith(f'butler {version} ('):
+        raise ValueError(f'Agent embedded version does not match provenance: {actual}')
 
 
 def record(directory, expected):
     filename = 'butler-agent.exe' if expected['platform'] == 'windows-x64' else 'butler-agent'
+    verify_version(directory / filename, expected['version'])
     metadata = dict(expected, binary=filename, sha256=digest(directory / filename))
     (directory / 'provenance.json').write_text(json.dumps(metadata, indent=2) + '\n')
 

@@ -31,7 +31,7 @@ class ArtifactTrust(unittest.TestCase):
                         lto='', codegen_units='')
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
-            (directory / 'butler-agent').write_bytes(b'complete immutable executable')
+            (directory / 'butler-agent').write_text('#!/bin/sh\necho "butler 0.1.0-preview.99 (fixture)"\n')
             provenance.record(directory, expected)
             self.assertTrue(provenance.verify(directory, expected))
             for key in expected:
@@ -39,6 +39,9 @@ class ArtifactTrust(unittest.TestCase):
             (directory / 'butler-agent').write_bytes(b'corrupt')
             with self.assertRaisesRegex(ValueError, 'digest'):
                 provenance.verify(directory, expected)
+            (directory / 'butler-agent').write_text('#!/bin/sh\necho "butler 0.1.0-dev (fixture)"\n')
+            with self.assertRaisesRegex(ValueError, 'embedded version'):
+                provenance.record(directory, expected)
 
     # test-category: security
     def test_failed_incomplete_or_foreign_runs_never_downloaded(self):

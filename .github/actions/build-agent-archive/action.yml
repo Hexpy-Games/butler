@@ -85,9 +85,10 @@ runs:
       env:
         ORT_MODE: ${{ inputs.ort-mode }}
         BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
-        GITHUB_REF_NAME: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
+        BUILD_VERSION_REF: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
       run: |
         set -euo pipefail
+        export GITHUB_REF_NAME="$BUILD_VERSION_REF"
         case "$ORT_MODE" in
           static-ort)
             python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
@@ -120,9 +121,10 @@ runs:
       env:
         OUT: ${{ inputs.out }}
         BASE_URL: ${{ inputs.artifact-base-url }}
-        GITHUB_REF_NAME: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
+        BUILD_VERSION_REF: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
       run: |
         set -euo pipefail
+        export GITHUB_REF_NAME="$BUILD_VERSION_REF"
         platform="$(node -p 'process.platform + "-" + process.arch')"
         payload="$RUNNER_TEMP/butler-native-agent-payload"
         scripts=packages/butler-agent/rust/scripts

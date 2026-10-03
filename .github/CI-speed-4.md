@@ -70,9 +70,11 @@ Runner contention can dominate Windows even with warm compilation.
   remain; the gate rejects failed, cancelled and unexpected skipped checks.
 - macOS releases now restore fingerprinted static ORT and Cargo outputs and use
   sccache. Cargo cache keys distinguish architecture/native mode, toolchain,
-  flags and lockfile; workspace outputs retain the source-content key.
+  flags and lockfile. Cargo validates restored source fingerprints; the action
+  ignores its additional `key` input when `shared-key` is set.
   Tracked `BUTLER_MEMORY_IMPLEMENTATION_COMMIT` changes rebuild the embedded
   revision when a commit changes, even if Rust files do not.
+  Provenance also runs `--version` to reject a different embedded version.
 - Release Linux App packages consume the standalone Agent's exact executable;
   they no longer rebuild it. Windows App packaging overlaps hosted Agent
   verification; publication still waits for verification. Existing Windows

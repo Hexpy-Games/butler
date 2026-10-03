@@ -52,35 +52,38 @@ jobs:
       - name: Build the complete workspace once
         env:
           ORT_MODE: ${{ inputs.ort-mode }}
-          GITHUB_REF_NAME: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
+          BUILD_VERSION_REF: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
         run: |
-          args=()
-          if [ "$ORT_MODE" = static-ort ]; then
-            args=(--no-default-features --features butler-agent/static-ort)
-          fi
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --release --workspace --all-targets --locked -j 8 "${args[@]}"
-      - name: Archive tests and record every selection
-        env:
-          ORT_MODE: ${{ inputs.ort-mode }}
-          GITHUB_REF_NAME: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
-        run: |
-          isolate="$GITHUB_WORKSPACE/.github/scripts/isolated.py"
+          export GITHUB_REF_NAME="$BUILD_VERSION_REF"
           args=()
           if [ "$ORT_MODE" = static-ort ]; then
             args=(--no-default-features --features butler-agent/static-ort)
           fi
           mkdir -p "$RUNNER_TEMP/rust-archive"
-          python3 "$isolate" cargo nextest archive --release --workspace --locked "${args[@]}" --archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst"
-          python3 "$isolate" cargo nextest list --release --workspace --locked "${args[@]}" --message-format json > "$RUNNER_TEMP/rust-archive/list.json"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo nextest archive --release --workspace --all-targets --locked -j 8 "${args[@]}" --archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst"
+      - name: Archive tests and record every selection
+        env:
+          ORT_MODE: ${{ inputs.ort-mode }}
+          BUILD_VERSION_REF: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
+        run: |
+          export GITHUB_REF_NAME="$BUILD_VERSION_REF"
+          isolate="$GITHUB_WORKSPACE/.github/scripts/isolated.py"
+          args=()
+          if [ "$ORT_MODE" = static-ort ]; then
+            args=(--no-default-features --features butler-agent/static-ort)
+          fi
+          python3 "$isolate" cargo nextest list --release --workspace --all-targets --locked "${args[@]}" --message-format json > "$RUNNER_TEMP/rust-archive/list.json"
           perf_filter="$(python3 "$GITHUB_WORKSPACE/.github/scripts/e2e-perf-filter.py")"
-          python3 "$isolate" cargo nextest list --release --workspace --locked "${args[@]}" --message-format json -E "package(=butler-e2e) and ($perf_filter)" > "$RUNNER_TEMP/rust-archive/perf-list.json"
+          python3 "$isolate" cargo nextest list --release --workspace --all-targets --locked "${args[@]}" --message-format json -E "package(=butler-e2e) and ($perf_filter)" > "$RUNNER_TEMP/rust-archive/perf-list.json"
           python3 "$GITHUB_WORKSPACE/.github/scripts/balance-e2e.py" "$RUNNER_TEMP/rust-archive/list.json" "$RUNNER_TEMP/rust-archive" "$RUNNER_TEMP/rust-archive/perf-list.json"
           python3 "$isolate" python3 "$GITHUB_WORKSPACE/.github/scripts/test-ci-invariants.py" "$RUNNER_TEMP/rust-archive"
           cp target/release/butler-agent "$RUNNER_TEMP/rust-archive/butler-agent"
       - name: Run doctests when present
         env:
           ORT_MODE: ${{ inputs.ort-mode }}
+          BUILD_VERSION_REF: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
         run: |
+          export GITHUB_REF_NAME="$BUILD_VERSION_REF"
           args=()
           if [ "$ORT_MODE" = static-ort ]; then
             args=(--no-default-features --features butler-agent/static-ort)

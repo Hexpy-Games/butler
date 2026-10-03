@@ -37,7 +37,7 @@ async fn unfinished_setup_keeps_only_the_last_five_failures() -> Result<(), Harn
     // are untouched; this test runs in its own nextest process.
     let mut isolated = Sandbox::new("HYGIENE-RETENTION")?;
     let output = std::process::Command::new(std::env::current_exe()?)
-        .args(["retention_child", "--exact", "--nocapture"])
+        .args(["harness_hygiene::retention_child", "--exact", "--nocapture"])
         .env("TMPDIR", isolated.root.join("tmp"))
         .env("BUTLER_E2E_RETENTION_CHILD", "1")
         .output()?;
