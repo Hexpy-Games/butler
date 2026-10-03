@@ -80,6 +80,8 @@ pub(super) fn legacy_shell(
             "-NoLogo",
             "-NoProfile",
             "-NonInteractive",
+            "-OutputFormat",
+            "Text",
             "-ExecutionPolicy",
             "Bypass",
             "-EncodedCommand",

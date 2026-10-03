@@ -1033,7 +1033,6 @@ dependencies = [
  "atomicwrites",
  "base64 0.22.1",
  "dunce",
- "encoding_rs",
  "filedescriptor",
  "iana-time-zone",
  "if-addrs",
