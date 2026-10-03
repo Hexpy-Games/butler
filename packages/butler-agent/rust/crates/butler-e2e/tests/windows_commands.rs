@@ -24,7 +24,14 @@ async fn run(case: &str, command: &str) -> Result<Value, HarnessError> {
     std::fs::write(downloads.join("보고서.txt"), "document")?;
     std::fs::write(downloads.join("사진.png"), "image")?;
     let home = setup.sandbox.home.display().to_string();
-    let setup = setup.env("USERPROFILE", home);
+    let local = setup.sandbox.home.join("AppData/Local");
+    let roaming = setup.sandbox.home.join("AppData/Roaming");
+    std::fs::create_dir_all(&local)?;
+    std::fs::create_dir_all(&roaming)?;
+    let setup = setup
+        .env("USERPROFILE", home)
+        .env("LOCALAPPDATA", local.display().to_string())
+        .env("APPDATA", roaming.display().to_string());
     let s = setup.start().await?;
     let (id, turn) = s.turn("general", stub::PROMPT).await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
