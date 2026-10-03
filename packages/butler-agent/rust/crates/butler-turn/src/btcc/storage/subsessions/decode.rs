@@ -4,7 +4,7 @@
 use rusqlite::{OptionalExtension, Params, params};
 use serde_json::Value;
 
-use super::{SELECT, StoredSubsessionDelegation, SubsessionPacket};
+use super::{SELECT, StoredSubsessionDelegation, StoredSubsessionDirection, SubsessionPacket};
 use crate::btcc::{StorageCode, StorageError};
 
 /// A delegation row as stored: the packet and dispatch intent still JSON text.

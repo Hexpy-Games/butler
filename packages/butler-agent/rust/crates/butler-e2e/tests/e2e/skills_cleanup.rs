@@ -124,7 +124,7 @@ async fn fresh_and_existing_core_catalog_preserves_custom_skills_and_installatio
         let mut s = setup.start().await?;
         let skills = s.gw.get("/skills").await?;
         assert_eq!(skills.status, 200);
-        assert_eq!(names(&skills.data()), CURRENT);
+        assert_eq!(names(skills.data()), CURRENT);
         let cli = s
             .agent
             .launch
