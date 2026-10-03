@@ -1,0 +1,156 @@
+name: Archived Rust tests
+on:
+  workflow_call:
+    inputs:
+      performance-only:
+        type: boolean
+        default: false
+      runner:
+        type: string
+        default: ubuntu-24.04
+      platform:
+        type: string
+        default: linux-x64
+permissions:
+  contents: read
+jobs:
+  workspace:
+    if: ${{ !inputs.performance-only }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - uses: actions/download-artifact@v4
+        with:
+          name: rust-${{ inputs.platform }}
+          path: ${{ runner.temp }}/rust-archive
+      - name: List and run workspace tests without rebuilding
+        working-directory: packages/butler-agent/rust
+        run: |
+          isolate="$GITHUB_WORKSPACE/.github/scripts/isolated.py"
+          args=(--archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst" --workspace-remap "$PWD" -E 'not package(=butler-e2e)')
+          python3 "$isolate" cargo-nextest nextest list "${args[@]}"
+          python3 "$isolate" cargo-nextest nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" run "${args[@]}" --no-fail-fast --retries 0
+  e2e:
+    if: ${{ !inputs.performance-only }}
+    name: E2E (${{ inputs.platform }} ${{ matrix.shard }})
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, ins-02, ins-14, install]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - uses: actions/download-artifact@v4
+        with:
+          name: rust-${{ inputs.platform }}
+          path: ${{ runner.temp }}/rust-archive
+      - name: Select measured shard
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          # Preserve nextest's original CPU-based default, capped for this graph.
+          # Eight simultaneous Agents oversubscribe the smaller macOS runners.
+          echo "E2E_THREADS=$(python3 -c 'import os; print(min(8, os.cpu_count() or 1))')" >> "$GITHUB_ENV"
+          if [ "$SHARD" = install ]; then
+            echo 'test(/::ins_/) and not test(/::ins_02_/) and not test(/::ins_14_/)' > "$RUNNER_TEMP/rust-archive/install.txt"
+          elif [ "$SHARD" = ins-02 ] || [ "$SHARD" = ins-14 ]; then
+            number="${SHARD#ins-}"
+            echo "test(/::ins_${number}_/)" > "$RUNNER_TEMP/rust-archive/install.txt"
+          else
+            cp "$RUNNER_TEMP/rust-archive/shard-$SHARD.txt" "$RUNNER_TEMP/rust-archive/install.txt"
+          fi
+      - uses: ./.github/actions/e2e-stub
+        with:
+          archive-file: ${{ runner.temp }}/rust-archive/tests.tar.zst
+          agent-binary: ${{ runner.temp }}/rust-archive/butler-agent
+          filter-file: ${{ runner.temp }}/rust-archive/install.txt
+          restore-embedding-model: ${{ !contains(fromJSON('["install", "ins-02", "ins-14"]'), matrix.shard) }}
+          run-systemd: ${{ matrix.shard == 'ins-14' }}
+          run-idle-disk: ${{ matrix.shard == 1 }}
+          test-threads: ${{ env.E2E_THREADS }}
+      - if: always()
+        uses: ./.github/actions/assert-home-untouched
+  perf:
+    if: inputs.performance-only
+    name: Performance (${{ inputs.platform }} ${{ matrix.shard }})
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, idle]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - uses: actions/download-artifact@v4
+        with:
+          name: perf-rust-${{ inputs.platform }}
+          path: ${{ runner.temp }}/rust-archive
+      - uses: actions/download-artifact@v4
+        with:
+          name: agent-payload-${{ inputs.platform }}
+          path: ${{ runner.temp }}/production-agent
+      - uses: ./.github/actions/e2e-stub
+        with:
+          archive-file: ${{ runner.temp }}/rust-archive/tests.tar.zst
+          agent-binary: ${{ runner.temp }}/production-agent/butler-agent
+          enforce-budgets: "true"
+          exclude-perf: "false"
+          filter-file: ${{ matrix.shard != 'idle' && format('{0}/rust-archive/perf-{1}.txt', runner.temp, matrix.shard) || '' }}
+          idle-only: ${{ matrix.shard == 'idle' }}
+          run-perf-idle: ${{ matrix.shard == 'idle' }}
+          run-systemd: "false"
+          test-threads: "1"
+          success-output: final
+      - if: always()
+        uses: ./.github/actions/assert-home-untouched
+
+      - name: Report session-view p95
+        if: always() && matrix.shard != 'idle'
+        env:
+          PERF_LOG: ${{ runner.temp }}/e2e-stub.log
+          PLATFORM: ${{ inputs.platform }}
+          FILTER_FILE: ${{ runner.temp }}/rust-archive/perf-${{ matrix.shard }}.txt
+        shell: bash
+        run: |
+          python3 - "$PERF_LOG" <<'PY'
+          import os
+          import pathlib
+          import re
+          import sys
+
+          log_path = pathlib.Path(sys.argv[1])
+          if 'perf_01_' not in pathlib.Path(os.environ['FILTER_FILE']).read_text():
+              sys.exit(0)
+          text = log_path.read_text(errors="replace") if log_path.exists() else ""
+          values = re.findall(r"session-view p95 ([0-9]+(?:\.[0-9]+)?)(ns|µs|μs|ms|s)", text)
+          summary_path = pathlib.Path(os.environ["GITHUB_STEP_SUMMARY"])
+          if not values:
+              summary = f"### E2E perf ({os.environ['PLATFORM']})\n\nSession-view p95: unavailable. Target: 50 ms; hard gate: under 150 ms.\n"
+              with summary_path.open("a") as output:
+                  output.write(summary)
+              print("::error::PERF-01 did not report a session-view p95 measurement")
+              sys.exit(1)
+
+          value, unit = values[-1]
+          p95_ms = float(value) * {"ns": 1e-6, "µs": 1e-3, "μs": 1e-3, "ms": 1, "s": 1e3}[unit]
+          summary = (
+              f"### E2E perf ({os.environ['PLATFORM']})\n\n"
+              f"Session-view p95: **{p95_ms:.3f} ms**. Target: **50 ms**; hard gate: **under 150 ms**.\n"
+          )
+          with summary_path.open("a") as output:
+              output.write(summary)
+          print(summary, end="")
+          if p95_ms > 50:
+              print(f"::warning::PERF-01 session-view p95 {p95_ms:.3f} ms exceeds the 50 ms target")
+          PY

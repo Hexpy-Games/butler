@@ -36,7 +36,37 @@ pub fn build_archive(
     binary: &Path,
     resources: &Path,
 ) -> Result<Archive, HarnessError> {
-    write_archive(out_dir, version, binary, resources)
+    write_archive(
+        out_dir,
+        version,
+        binary,
+        resources,
+        &file_sha256(binary)?,
+        &tree_sha256(resources)?,
+    )
+}
+
+/// Builds both complete version archives from immutable scenario inputs.
+/// Hash each source once; the installer still verifies each extracted payload.
+pub fn build_archive_pair(
+    out_dir: &Path,
+    versions: [&str; 2],
+    binary: &Path,
+    resources: &Path,
+) -> Result<[Archive; 2], HarnessError> {
+    let binary_sha = file_sha256(binary)?;
+    let resources_sha = tree_sha256(resources)?;
+    let build = |version| {
+        write_archive(
+            out_dir,
+            version,
+            binary,
+            resources,
+            &binary_sha,
+            &resources_sha,
+        )
+    };
+    Ok([build(versions[0])?, build(versions[1])?])
 }
 
 /// [`build_archive`] around a tiny stand-in executable that differs per
@@ -79,7 +109,7 @@ fn stub(out_dir: &Path, version: &str, tag: &str, status: u8) -> Result<Archive,
     )?;
     fs::write(stage.join("resources/a.txt"), "a")?;
     fs::write(stage.join("resources/nested/b.txt"), "b")?;
-    let archive = write_archive(out_dir, version, &binary, &stage.join("resources"))?;
+    let archive = build_archive(out_dir, version, &binary, &stage.join("resources"))?;
     fs::remove_dir_all(&stage)?;
     Ok(archive)
 }
@@ -89,10 +119,10 @@ fn write_archive(
     version: &str,
     binary: &Path,
     resources: &Path,
+    binary_sha: &str,
+    resources_sha: &str,
 ) -> Result<Archive, HarnessError> {
     fs::create_dir_all(out_dir)?;
-    let binary_sha = file_sha256(binary)?;
-    let resources_sha = tree_sha256(resources)?;
     let (platform, architecture) = host_platform();
     let manifest = serde_json::json!({
         "schema": "butler.native-agent-install.v1",

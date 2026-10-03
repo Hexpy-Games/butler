@@ -73,6 +73,8 @@ runs:
         npm.cmd --prefix packages/butler-app/client/ui run build
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     - name: Build unsigned release executable
+      env:
+        BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
       shell: pwsh
       working-directory: packages/butler-agent/rust
       run: |

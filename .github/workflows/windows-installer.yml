@@ -34,7 +34,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/windows-owner-setup
         with:
-          workflow: ${{ inputs.native-cache || 'win-installer' }}
+          workflow: ${{ inputs.native-cache || 'windows-agent-v1' }}
       - uses: ./.github/actions/build-windows-agent
         with:
           owner-runner: 'true'

@@ -1,0 +1,109 @@
+name: Shared production Agent
+on:
+  workflow_call:
+    inputs:
+      update-versions:
+        type: boolean
+        default: false
+      runner:
+        type: string
+        default: ubuntu-24.04
+      platform:
+        type: string
+        default: linux-x64
+      ort-mode:
+        type: string
+        default: prebuilt-ort
+permissions:
+  contents: read
+  actions: read
+jobs:
+  build:
+    name: Build native Agent (${{ inputs.platform }})
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 90
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: sccache
+      BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
+    defaults:
+      run:
+        working-directory: packages/butler-agent/rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mozilla-actions/sccache-action@v0.0.11
+      - uses: ./.github/actions/rust-agent-setup
+        with:
+          native-deps: ${{ inputs.ort-mode }}
+          cache-key: native-${{ inputs.platform }}
+          cache-workspace-crates: "true"
+          artifact-cache-platform: ${{ inputs.platform }}
+      - name: Build the production configuration once
+        env:
+          ORT_MODE: ${{ inputs.ort-mode }}
+          BUILD_VERSION_REF: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
+        run: |
+          export GITHUB_REF_NAME="$BUILD_VERSION_REF"
+          # Preserve the original release/perf configuration. Ordinary E2Es
+          # retain their debug hooks and assertions in the other shared archive.
+          feature=prebuilt-ort
+          if [ "$ORT_MODE" = static-ort ]; then feature=static-ort; fi
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --release --locked -j 8 -p butler-agent --bin butler-agent --no-default-features --features "$feature"
+          mkdir -p "$RUNNER_TEMP/agent-payload"
+          cp target/release/butler-agent "$RUNNER_TEMP/agent-payload/butler-agent"
+      - name: Verify and record production Agent identity
+        env:
+          PLATFORM: ${{ inputs.platform }}
+          ORT_MODE: ${{ inputs.ort-mode }}
+          RELEASE_VERSION: ${{ github.event_name == 'pull_request' && '0.1.0-preview.99' || github.ref_name }}
+        run: |
+          version="$RELEASE_VERSION"
+          if [[ "$version" != v[0-9]* && "$version" != 0.1.0-preview.99 ]]; then version=0.1.0-dev; fi
+          python3 "$GITHUB_WORKSPACE/.github/scripts/agent-provenance.py" record "$RUNNER_TEMP/agent-payload" "$PLATFORM" "$ORT_MODE" release "${version#v}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-payload-${{ inputs.platform }}
+          path: ${{ runner.temp }}/agent-payload/*
+          retention-days: 14
+          compression-level: 0
+          if-no-files-found: error
+      - name: Publish the small identity manifest for release lookup
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-provenance-${{ inputs.platform }}
+          path: ${{ runner.temp }}/agent-payload/provenance.json
+          retention-days: 14
+          if-no-files-found: error
+      - name: Build the two real macOS update-fixture versions once
+        if: inputs.update-versions && inputs.platform == 'darwin-arm64'
+        run: |
+          for version in 0.1.0-preview.90 0.1.0-preview.91; do
+            export GITHUB_REF_NAME="v$version"
+            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --release --locked -j 8 -p butler-agent --bin butler-agent --no-default-features --features static-ort
+            out="$RUNNER_TEMP/update-agent-builds/$version"
+            mkdir -p "$out"
+            cp target/release/butler-agent "$out/butler-agent"
+            actual="$(python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" "$out/butler-agent" --version)"
+            [[ "$actual" == "butler $version ("* ]]
+          done
+      - uses: actions/upload-artifact@v4
+        if: inputs.update-versions && inputs.platform == 'darwin-arm64'
+        with:
+          name: macos-update-agent-builds
+          path: ${{ runner.temp }}/update-agent-builds/*
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+      - name: Preserve successful Cargo outputs outside the shared cache quota
+        id: cargo-cache
+        env:
+          CACHE_PLATFORM: ${{ inputs.platform }}
+          CACHE_MODE: ${{ inputs.ort-mode }}
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" record "$CACHE_PLATFORM" "$CACHE_MODE" native
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.cargo-cache.outputs.name }}
+          path: ${{ runner.temp }}/cargo-build-cache/*
+          retention-days: 2
+          compression-level: 0
+          if-no-files-found: error

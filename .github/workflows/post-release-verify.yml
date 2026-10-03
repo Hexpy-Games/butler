@@ -1,0 +1,77 @@
+name: Verify published release in parallel
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing published preview tag (nothing is built or published)
+        required: true
+        type: string
+      baseline-tag:
+        description: Existing published baseline for both desktop update checks
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - id: tag
+        env:
+          TAG: ${{ inputs.tag }}
+          BASELINE: ${{ inputs.baseline-tag }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v0\.1\.0-preview\.[0-9]+$ ]]
+          [[ "$BASELINE" =~ ^v0\.1\.0-preview\.[0-9]+$ ]]
+          test "$TAG" != "$BASELINE"
+          gh release view "$TAG" --json isDraft --jq '.isDraft' | grep -qx false
+          gh release view "$BASELINE" --json isDraft --jq '.isDraft' | grep -qx false
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+  macos:
+    needs: validate
+    uses: ./.github/workflows/macos-app-package.yml
+    with:
+      candidate-version: ${{ needs.validate.outputs.version }}
+      baseline-tag: ${{ inputs.baseline-tag }}
+      published-candidate: true
+  windows:
+    needs: validate
+    uses: ./.github/workflows/windows-released-smoke.yml
+    with:
+      tag: ${{ inputs.tag }}
+      from-tag: ${{ inputs.baseline-tag }}
+  linux:
+    needs: validate
+    name: Published Agent install (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {platform: linux-x64, runner: ubuntu-24.04}
+          - {platform: linux-arm64, runner: ubuntu-24.04-arm}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.3
+      - name: Verify the published release and download the exact native archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/isolated.py bash deploy/npm/verify-release.sh "$TAG"
+          mkdir -p "$RUNNER_TEMP/released-agent"
+          gh release download "$TAG" --dir "$RUNNER_TEMP/released-agent" --pattern "butler-agent-*-$PLATFORM.tar.gz" --pattern 'butler-*-SHA256SUMS'
+          cd "$RUNNER_TEMP/released-agent"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/verify-released-agent.py"
+      - name: Run the complete existing install and reinstall smoke
+        run: python3 .github/scripts/isolated.py sh deploy/install-smoke.sh "$RUNNER_TEMP/released-agent"
