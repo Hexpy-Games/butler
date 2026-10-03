@@ -206,3 +206,29 @@ fn decode_or_report(raw: &RawDelegation) -> Option<StoredSubsessionDelegation> {
         })
         .ok()
 }
+
+pub(super) fn direction_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<StoredSubsessionDirection> {
+    Ok(StoredSubsessionDirection {
+        instruction_id: row.get(0)?,
+        relation_id: row.get(1)?,
+        revision: row.get(2)?,
+        instruction: row.get(3)?,
+        created_at: row.get(4)?,
+    })
+}
+
+pub(super) fn required_packet_string<'a>(
+    value: &'a str,
+    key: &str,
+) -> Result<&'a str, StorageError> {
+    Some(value)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            StorageError::new(
+                StorageCode::SubsessionPacketInvalid,
+                format!("Subsession packet is missing {key}"),
+            )
+        })
+}

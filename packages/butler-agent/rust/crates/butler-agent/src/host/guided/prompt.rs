@@ -1,6 +1,8 @@
 //! Turn-bound Guided request text assembled from the admitted source records.
 
 mod attachments;
+mod helpers;
+use helpers::{js_truthy, json, nonempty_array};
 mod documents;
 mod excerpts;
 mod phase_memory;
@@ -51,31 +53,6 @@ pub(crate) async fn resolve_guided_response_language(
     documents: &BtccRepositories,
 ) -> String {
     documents::response_language(documents, turn).await
-}
-
-fn js_truthy(value: &Value) -> bool {
-    match value {
-        Value::Null => false,
-        Value::Bool(value) => *value,
-        Value::Number(value) => value
-            .as_f64()
-            .is_some_and(|value| value != 0.0 && !value.is_nan()),
-        Value::String(value) => !value.is_empty(),
-        _ => true,
-    }
-}
-
-fn json(value: &Value) -> Result<String, BtccError> {
-    butler_core::json::stringify(value).map_err(|error| {
-        BtccError::relayed("guided_prompt_json_invalid", error.to_string()).with_source(error)
-    })
-}
-
-fn nonempty_array(turn: &TurnRecord, field: &str) -> bool {
-    turn.context
-        .get(field)
-        .and_then(Value::as_array)
-        .is_some_and(|value| !value.is_empty())
 }
 
 fn source_prompt(

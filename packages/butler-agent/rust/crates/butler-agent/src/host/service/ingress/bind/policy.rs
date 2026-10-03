@@ -306,7 +306,7 @@ fn required_action_tools(mode: &AccessMode, facts: &ActionToolFacts<'_>) -> Vec<
     if super::image_admission::admits_zai_image_tool(facts.envelope) {
         selected.push(ToolName::AnalyzeAttachedImage);
     }
-    let tools: Vec<_> = selected
+    let mut tools: Vec<_> = selected
         .into_iter()
         .map(ToolName::as_str)
         .filter(|name| mode.exempts_tool(name))

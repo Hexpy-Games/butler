@@ -198,16 +198,8 @@ impl AgentRuntime {
             host_environment.clone(),
         ));
         let tool_artifacts = Arc::new(super::ToolArtifactReader::new(tool_output.clone()));
-        let memory_query = Arc::new(ExactMemoryQuery::new(&paths.data_root, 2));
-        let memory_sources = Arc::new(super::MemorySourceReader::new(
-            paths.data_root.clone(),
-            environment.cognition_paths.clone(),
-        ));
-        let conversation_reference = Arc::new(ConversationSessionReference::new(
-            &paths.data_root,
-            2,
-            memory_sources,
-        ));
+        let (memory_query, conversation_reference) =
+            owners::memory_source_readers(&paths.data_root, &environment.cognition_paths);
         let memory_recall = Arc::new(
             recall::configured_recall(
                 &paths,

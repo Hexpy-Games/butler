@@ -1,4 +1,5 @@
 //! Native watcher and bounded projection worker ownership.
+mod append;
 
 use parking_lot::Mutex;
 use std::{
@@ -122,17 +123,6 @@ impl ProjectionOwner {
         };
         let _ = owner.inner.sender.try_send(Command::Wake);
         Ok(owner)
-    }
-
-    pub(in crate::gateway::application) fn append_listener(
-        &self,
-    ) -> crate::gateway::TranscriptAppendListener {
-        let owner = Arc::downgrade(&self.inner);
-        Arc::new(move |file| {
-            if let Some(owner) = owner.upgrade() {
-                notifications::transcript(&owner.pending, &owner.sender, file.to_owned());
-            }
-        })
     }
 
     pub(in crate::gateway::application) async fn active(

@@ -6,7 +6,7 @@
     reason = "test assertions"
 )]
 
-use super::app_storage_seed as app;
+use super::app_storage_scale::seed as app;
 #[path = "support/btcc_scale.rs"]
 mod btcc;
 use super::memory_fixture;

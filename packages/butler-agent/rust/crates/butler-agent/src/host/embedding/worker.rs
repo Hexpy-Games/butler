@@ -112,28 +112,20 @@ async fn handle(
                 || request.resplit
                 || request.max_embeddings.is_some() =>
         {
-            WorkerResult::Error {
-                code: "embed_invalid_request".to_owned(),
-            }
+            invalid_request()
         }
         WorkerOperation::Embed | WorkerOperation::Tokenize
             if request.texts.is_empty() || request.texts.len() > MAX_TEXTS =>
         {
-            WorkerResult::Error {
-                code: "embed_invalid_request".to_owned(),
-            }
+            invalid_request()
         }
         WorkerOperation::Embed if request.checked && request.texts.iter().any(String::is_empty) => {
-            WorkerResult::Error {
-                code: "embed_invalid_request".to_owned(),
-            }
+            invalid_request()
         }
         WorkerOperation::Tokenize
             if request.checked || request.resplit || request.max_embeddings.is_some() =>
         {
-            WorkerResult::Error {
-                code: "embed_invalid_request".to_owned(),
-            }
+            invalid_request()
         }
         WorkerOperation::Embed
             if (!request.checked && (request.resplit || request.max_embeddings.is_some()))
@@ -141,9 +133,7 @@ async fn handle(
                     .max_embeddings
                     .is_some_and(|count| count == 0 || count > MAX_TEXTS) =>
         {
-            WorkerResult::Error {
-                code: "embed_invalid_request".to_owned(),
-            }
+            invalid_request()
         }
         WorkerOperation::Initialize | WorkerOperation::Embed | WorkerOperation::Tokenize => {
             if engine.is_none() {
@@ -222,5 +212,11 @@ fn initialization_barrier() {
         loop {
             std::thread::park();
         }
+    }
+}
+
+fn invalid_request() -> WorkerResult {
+    WorkerResult::Error {
+        code: "embed_invalid_request".to_owned(),
     }
 }

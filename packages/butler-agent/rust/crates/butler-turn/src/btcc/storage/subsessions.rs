@@ -9,7 +9,7 @@ pub use records::*;
 use rusqlite::{OptionalExtension, params};
 use serde_json::Value;
 
-use self::decode::{list, read};
+use self::decode::{direction_row, list, read, required_packet_string};
 use super::{BtccStorage, StorageError};
 use crate::btcc::StorageCode;
 
@@ -485,23 +485,3 @@ impl SqliteSubsessionRepository {
 }
 
 const SELECT: &str = "SELECT r.relation_id,d.delegation_id,d.task_id,r.parent_session_id,r.parent_turn_id,r.child_session_id,d.child_turn_id,d.root_work_id,d.packet_json,d.dispatch_intent_json,r.anchor_message_id,r.ordinal,r.safe_title,r.created_at FROM btcc_session_relations r JOIN btcc_subsession_delegations d ON d.relation_id=r.relation_id";
-fn direction_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredSubsessionDirection> {
-    Ok(StoredSubsessionDirection {
-        instruction_id: row.get(0)?,
-        relation_id: row.get(1)?,
-        revision: row.get(2)?,
-        instruction: row.get(3)?,
-        created_at: row.get(4)?,
-    })
-}
-
-fn required_packet_string<'a>(value: &'a str, key: &str) -> Result<&'a str, StorageError> {
-    Some(value)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            StorageError::new(
-                StorageCode::SubsessionPacketInvalid,
-                format!("Subsession packet is missing {key}"),
-            )
-        })
-}
