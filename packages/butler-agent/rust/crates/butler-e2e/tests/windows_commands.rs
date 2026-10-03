@@ -47,7 +47,12 @@ async fn run(case: &str, command: &str) -> Result<Value, HarnessError> {
         .expect("model receives command result")["output"]
         .as_str()
         .expect("command result JSON");
-    let output: Value = serde_json::from_str(text)?;
+    let result: Value = serde_json::from_str(text)?;
+    let output = result
+        .get("output")
+        .filter(|v| v.is_object())
+        .cloned()
+        .unwrap_or(result);
     eprintln!("{case}: {output}");
     assert_eq!(
         std::fs::read_to_string(downloads.join("보고서.txt"))?,

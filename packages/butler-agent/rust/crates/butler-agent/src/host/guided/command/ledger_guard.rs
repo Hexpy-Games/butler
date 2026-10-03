@@ -38,7 +38,7 @@ static QUOTED: LazyLock<Regex> = LazyLock::new(|| {
 });
 static OPAQUE: LazyLock<Regex> = LazyLock::new(|| {
     fixed_regex(
-        r"\b(?:node|bun)\s+(?:-e|--eval)\b|\bpython3?\s+-c\b|\bruby\s+-e\b|\bperl\s+-e\b|\bphp\s+-r\b|\beval\b|base64\s+-d|Buffer\.from|atob\s*\(",
+        r"\b(?:node|bun)\s+(?:-e|--eval)\b|\bpython(?:3|\.exe)?\s+(?:-\w+\s+)*-c\b|\bruby\s+-e\b|\bperl\s+-e\b|\bphp\s+-r\b|\beval\b|base64\s+-d|Buffer\.from|atob\s*\(",
     )
 });
 static ENCODED: LazyLock<Regex> = LazyLock::new(|| {
@@ -91,7 +91,7 @@ pub(super) fn guard(
     }
     if !trusted
         && OPAQUE.is_match(command)
-        && (ENCODED.is_match(command) || RISK.is_match(command))
+        && (ENCODED.is_match(command) || RISK.is_match(command) && WRITE_HINT.is_match(command))
         && let Some(value) = first_protected(fallback, cwd, workspace, data, home)
     {
         return Some(value);
@@ -232,7 +232,7 @@ fn protected(path: &Path, workspace: &Path, data: &Path, home: Option<&Path>) ->
     roots
         .into_iter()
         .map(|root| real_or_nearest(&root))
-        .any(|root| target.starts_with(root))
+        .any(|root| butler_platform::secure_fs::path_is_within(&target, &root))
 }
 
 fn real_or_nearest(path: &Path) -> PathBuf {
@@ -270,22 +270,5 @@ fn lexical(path: &Path) -> PathBuf {
 }
 
 fn has_background(command: &str) -> bool {
-    if command.as_bytes().last() == Some(&b'&')
-        && !command
-            .as_bytes()
-            .get(command.len().saturating_sub(2))
-            .is_some_and(|ch| matches!(ch, b'&' | b'>'))
-    {
-        return true;
-    }
-    command
-        .as_bytes()
-        .windows(2)
-        .enumerate()
-        .any(|(index, pair)| {
-            pair[0] == b'&'
-                && pair[1] != b'&'
-                && pair[1] != b'>'
-                && (index == 0 || !matches!(command.as_bytes()[index - 1], b'&' | b'>'))
-        })
+    butler_platform::command_sandbox::has_background_operator(command)
 }

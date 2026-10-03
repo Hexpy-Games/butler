@@ -421,3 +421,19 @@ pub fn symlink(target: &Path, link: &Path) -> io::Result<()> {
 pub fn hard_link_unsupported(error: &io::Error) -> bool {
     error.kind() == io::ErrorKind::Unsupported || sys::hard_link_unsupported(error)
 }
+
+/// Component-wise containment after the caller resolves file-system aliases.
+/// Windows comparisons ignore case and normalize a needless verbatim prefix;
+/// Unix comparisons retain case. A sibling with a shared string prefix is out.
+pub fn path_is_within(target: &Path, root: &Path) -> bool {
+    #[cfg(windows)]
+    {
+        let key =
+            |path: &Path| PathBuf::from(dunce::simplified(path).to_string_lossy().to_lowercase());
+        key(target).starts_with(key(root))
+    }
+    #[cfg(not(windows))]
+    {
+        target.starts_with(root)
+    }
+}
