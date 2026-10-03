@@ -11,6 +11,9 @@ $prefix = '[Console]::InputEncoding=[Text.UTF8Encoding]::new(); [Console]::Outpu
 $mark = '[Console]::Error.WriteLine("script-start"); '
 $imports = 'Import-Module -Name "$PSHOME\Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1"; '
 $cases = [ordered]@{
+    'minimal-runtime-baseline' = $mark + "Write-Output '안녕하세요'"
+    'minimal-runtime-core-import' = $mark + $imports + "Write-Output '안녕하세요'"
+    'complete-runtime-baseline' = $mark + "Write-Output '안녕하세요'"
     'cold-baseline' = $mark + "Write-Output '안녕하세요'"
     'direct-core-import' = $mark + $imports + "Write-Output '안녕하세요'"
     'console-only' = $mark + "[Console]::WriteLine('안녕하세요')"
@@ -24,13 +27,19 @@ try {
         $info = [Diagnostics.ProcessStartInfo]::new()
         $info.FileName = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
         $info.UseShellExecute = $false
+        $info.CreateNoWindow = $true
+        $info.RedirectStandardInput = $true
         $info.RedirectStandardOutput = $true
         $info.RedirectStandardError = $true
         $info.StandardOutputEncoding = [Text.UTF8Encoding]::new()
         $info.StandardErrorEncoding = [Text.UTF8Encoding]::new()
         $info.WorkingDirectory = "$profile/data"
         $info.Environment.Clear()
-        foreach ($key in $common) {
+        $keys = $common
+        if ($entry.Key.StartsWith('minimal-runtime')) {
+            $keys = @('ComSpec','PATH','PATHEXT','SystemDrive','SystemRoot','windir')
+        }
+        foreach ($key in $keys) {
             $value = [Environment]::GetEnvironmentVariable($key)
             if ($null -ne $value) { $info.Environment[$key] = $value }
         }
@@ -53,6 +62,7 @@ try {
         $started = $false
         try {
             $started = $process.Start()
+            $process.StandardInput.Close()
             $stdout = $process.StandardOutput.ReadToEndAsync()
             $stderr = $process.StandardError.ReadToEndAsync()
             $finished = $process.WaitForExit(30000)
