@@ -13,7 +13,7 @@ export function RecallSettings() {
   const setSettings = useButlerStore((state) => state.setSettings);
   const catalog = useButlerStore((state) => state.modelCatalog);
   if (!draft) return null;
-  const models = runtimeModels(catalog).filter((model) => model.enabled && model.registered);
+  const models = runtimeModels(catalog).filter((model) => model.enabled !== false && model.registered === true);
   return <Stack gap="md">
     <SettingsSelect settingId="recall-mode" label={ko ? "회상 방식" : "Recall"}
       description={ko ? "정확하게 회상하면 몇 초 더 걸릴 수 있어요." : "More accurate recall can take a few seconds longer."}
