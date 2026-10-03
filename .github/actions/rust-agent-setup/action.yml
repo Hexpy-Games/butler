@@ -177,8 +177,8 @@ runs:
         # rust-cache ignores `key` when `shared-key` is set.
         cache-on-failure: false
 
-    - name: Restore evicted Cargo outputs from a successful native producer
-      if: inputs.artifact-cache-platform != '' && steps.cargo-cache.outputs.cache-hit != 'true'
+    - name: Restore complete Cargo outputs and validated source freshness
+      if: inputs.artifact-cache-platform != ''
       shell: bash
       working-directory: packages/butler-agent/rust
       env:

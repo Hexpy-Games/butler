@@ -86,6 +86,48 @@ class Gate(unittest.TestCase):
 
 class CargoCache(unittest.TestCase):
     # test-category: security
+    def test_restored_source_times_keep_real_cargo_changes_and_env_inputs_fresh(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'src').mkdir()
+            (root / 'Cargo.toml').write_text('[package]\nname="freshness-proof"\nversion="0.1.0"\nedition="2024"\n')
+            (root / 'src/main.rs').write_text('mod value; fn main() { println!("{}:{}:{}", value::text(), include_str!("../extra.txt"), env!("STAMP")); }')
+            (root / 'src/value.rs').write_text('pub fn text() -> &\'static str { "original" }')
+            (root / 'extra.txt').write_text('one')
+            (root / 'build.rs').write_text('fn main() { println!("cargo:rerun-if-env-changed=CI_SOURCE_STAMP"); println!("cargo:rustc-env=STAMP={}", std::env::var("CI_SOURCE_STAMP").unwrap()); }')
+            env = dict(os.environ, CARGO_TARGET_DIR=str(root / 'target'), CARGO_BUILD_JOBS='8',
+                       CI_SOURCE_STAMP='first', RUSTC_WRAPPER='', CARGO_TERM_COLOR='never')
+            def run(*args):
+                return subprocess.run(args, cwd=root, env=env, text=True, capture_output=True, check=True)
+            run('git', 'init', '-q')
+            run('cargo', 'generate-lockfile', '--offline')
+            run('git', 'add', 'Cargo.toml', 'Cargo.lock', 'src', 'extra.txt', 'build.rs')
+            # Source and tar timestamps are whole seconds; no sleeps/retries.
+            for name in cargo_cache.source_times.tracked(root):
+                os.utime(root / name, (1_700_000_000, 1_700_000_000))
+            run('cargo', 'build', '--offline', '--locked', '-j', '8')
+            entries = cargo_cache.source_times.capture(root)
+            for entry in entries:
+                os.utime(root / entry['path'], None)  # A fresh checkout.
+            cargo_cache.source_times.restore(root, entries)
+            fresh = run('cargo', 'build', '--offline', '--locked', '-j', '8', '-v')
+            self.assertNotIn('Compiling freshness-proof', fresh.stderr)
+            self.assertIn('Fresh freshness-proof', fresh.stderr)
+            self.assertEqual(run(str(root / 'target/debug/freshness-proof')).stdout.strip(), 'original:one:first')
+            (root / 'src/value.rs').write_text('pub fn text() -> &\'static str { "changed" }')
+            (root / 'extra.txt').write_text('two')
+            cargo_cache.source_times.restore(root, entries)
+            run('cargo', 'build', '--offline', '--locked', '-j', '8')
+            self.assertEqual(run(str(root / 'target/debug/freshness-proof')).stdout.strip(), 'changed:two:first')
+            env['CI_SOURCE_STAMP'] = 'second'
+            cargo_cache.source_times.restore(root, entries)
+            run('cargo', 'build', '--offline', '--locked', '-j', '8')
+            self.assertEqual(run(str(root / 'target/debug/freshness-proof')).stdout.strip(), 'changed:two:second')
+            for path in ['../escape', '/absolute', '.git/index']:
+                with self.assertRaisesRegex(ValueError, 'source path'):
+                    cargo_cache.source_times.restore(root, [dict(path=path, sha256='', mtime_ns=0)])
+
+    # test-category: security
     def test_snapshot_requires_native_success_identity_and_complete_digest(self):
         run = dict(head_repository=dict(full_name='owner/repo'))
         jobs = [dict(name='macos-archive / Build archives (darwin-arm64)', status='completed', conclusion='success')]
@@ -137,10 +179,19 @@ class CargoCache(unittest.TestCase):
                             cargo_cache.extract(root)
                 # Round-trip the producer snapshot, not just the extractor.
                 expected = dict(platform='linux-x64', mode='prebuilt-ort', flags={})
-                with patch.dict(os.environ, GITHUB_OUTPUT=str(root / 'outputs')), \
+                subprocess.run(['git', 'init', '-q'], check=True)
+                (root / 'source.rs').write_text('complete source input')
+                subprocess.run(['git', 'add', 'source.rs'], check=True)
+                with patch.dict(os.environ, GITHUB_OUTPUT=str(root / 'outputs'), GITHUB_WORKSPACE=str(root)), \
                      patch.object(cargo_cache, 'output', return_value='a' * 40):
                     cargo_cache.record(root / 'snapshot', expected)
                 cargo_cache.verify(root / 'snapshot', expected)
+                sources = root / 'snapshot/sources.json'
+                complete_sources = sources.read_bytes()
+                sources.write_bytes(b'corrupt')
+                with self.assertRaisesRegex(ValueError, 'source identity digest'):
+                    cargo_cache.verify(root / 'snapshot', expected)
+                sources.write_bytes(complete_sources)
                 (root / 'target/release/complete').unlink()
                 cargo_cache.extract(root / 'snapshot')
                 self.assertEqual((root / 'target/release/complete').read_bytes(), b'all compiled inputs')

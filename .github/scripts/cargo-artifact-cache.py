@@ -6,6 +6,7 @@ changed sources and the Agent's tracked revision/version inputs. Only successful
 native producer jobs in this repository can supply a compatible snapshot.
 """
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,10 @@ import sys
 import tarfile
 import tempfile
 from urllib.parse import urlencode
+
+source_spec = importlib.util.spec_from_file_location('source_times', Path(__file__).with_name('cargo-source-times.py'))
+source_times = importlib.util.module_from_spec(source_spec)
+source_spec.loader.exec_module(source_times)
 
 
 def output(*args):
@@ -62,6 +67,8 @@ def verify(directory, expected):
         raise ValueError('Cargo build-cache identity mismatch')
     if digest(directory / 'cache.tar.zst') != metadata['sha256']:
         raise ValueError('Cargo build-cache digest mismatch')
+    if metadata.get('sources_sha256') and digest(directory / 'sources.json') != metadata['sources_sha256']:
+        raise ValueError('Cargo source identity digest mismatch')
 
 
 def extract(directory, root='target'):
@@ -119,6 +126,10 @@ def restore(expected, root='target'):
             subprocess.run(['gh', 'run', 'download', str(run_id), '--repo', repository, '--name', artifact['name'], '--dir', temporary], check=True)
             verify(Path(temporary), expected)
             extract(Path(temporary), root)
+            metadata = json.loads((Path(temporary) / 'cache.json').read_text())
+            if root == 'target' and metadata.get('sources_sha256'):
+                source_times.restore(Path(os.environ['GITHUB_WORKSPACE']),
+                                     json.loads((Path(temporary) / 'sources.json').read_text()))
         print(f'Restored compatible Cargo build inputs from native producer run {run_id}.')
         return
     print('No compatible Cargo artifact snapshot; normal Cargo/cache build follows.')
@@ -138,6 +149,10 @@ def record(directory, expected, root='target'):
         if tar.wait() != 0:
             raise RuntimeError('Cargo build-cache tar failed')
     metadata = dict(identity=expected, sha=output('git', '-C', os.environ.get('GITHUB_WORKSPACE', str(Path.cwd())), 'rev-parse', 'HEAD'), sha256=digest(archive))
+    if root == 'target':
+        sources = directory / 'sources.json'
+        sources.write_text(json.dumps(source_times.capture(Path(os.environ['GITHUB_WORKSPACE']))))
+        metadata['sources_sha256'] = digest(sources)
     (directory / 'cache.json').write_text(json.dumps(metadata, indent=2) + '\n')
     with open(os.environ['GITHUB_OUTPUT'], 'a') as output_file:
         output_file.write(f'name={artifact_name(expected)}\n')
