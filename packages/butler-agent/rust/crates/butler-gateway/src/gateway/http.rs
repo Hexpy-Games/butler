@@ -271,7 +271,7 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
     if method == Method::GET
         && matches!(
             uri.path(),
-            "/app-info" | "/navigation" | "/command-palette" | "/archives"
+            "/app-info" | "/navigation" | "/command-palette" | "/archives" | "/user-work"
         )
     {
         return shell::route(state, &uri).await;

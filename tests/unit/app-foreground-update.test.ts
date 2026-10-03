@@ -1,195 +1,102 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import {
-  planAppForegroundUpdateStop,
-  quitAndInstallAppUpdate,
-} from "../../packages/butler-app/client/electron/app-foreground-update.mjs";
+import { createAppUpdateCoordinator, type AppUpdateState } from "../../packages/butler-app/client/electron/app-foreground-update.mjs";
 
-const root = resolve(import.meta.dir, "../..");
-
-test("strict update planning requires a drain for every non-empty classification", () => {
-  expect(planAppForegroundUpdateStop({
-    usesAppForegroundLifecycle: false,
-    activeWorkSnapshot: { classification: "no_active_work" },
-  })).toEqual({
-    allowed: true,
-    requiresDrain: false,
-    restoreState: null,
-    reason: "no_active_work",
-  });
-
-  for (const foregroundState of ["starting", "recovering", "failed"]) {
-    expect(planAppForegroundUpdateStop({
-      usesAppForegroundLifecycle: true,
-      foregroundState,
-      activeWorkSnapshot: { classification: "active_work_detected" },
-    })).toMatchObject({
-      allowed: false,
-      requiresDrain: true,
-      reason: "foreground_drain_unavailable",
-    });
-  }
-  expect(planAppForegroundUpdateStop({
-    usesAppForegroundLifecycle: true,
-    foregroundState: "ready",
-    activeWorkSnapshot: { classification: "active_work_unknown" },
-  })).toMatchObject({ allowed: true, requiresDrain: true, restoreState: "ready" });
-  expect(planAppForegroundUpdateStop({
-    usesAppForegroundLifecycle: true,
-    foregroundState: "degraded",
-    activeWorkSnapshot: { classification: "active_work_detected" },
-  })).toMatchObject({ allowed: true, requiresDrain: true, restoreState: "degraded" });
-  expect(planAppForegroundUpdateStop({
-    usesAppForegroundLifecycle: true,
-    foregroundState: "update_pending",
-    restoreState: "ready",
-    activeWorkSnapshot: { classification: "active_work_detected" },
-  })).toMatchObject({ allowed: true, requiresDrain: true, restoreState: "ready" });
-  expect(planAppForegroundUpdateStop({
-    usesAppForegroundLifecycle: true,
-    foregroundState: "ready",
-    activeWorkSnapshot: { classification: "unexpected_classification" },
-  })).toMatchObject({ allowed: true, requiresDrain: true });
-});
-
-test("update quit waits for active-work drain before invoking the updater", async () => {
+function fixture(active = false) {
   const calls: string[] = [];
-  const snapshot = { classification: "active_work_detected" };
-  const result = await quitAndInstallAppUpdate({
-    readActiveWork: async () => {
-      calls.push("read");
-      return snapshot;
-    },
-    confirmQuit: async (actual) => {
-      expect(actual).toBe(snapshot);
-      calls.push("confirm");
-      return true;
-    },
-    stopForUpdate: async (actual) => {
-      expect(actual).toBe(snapshot);
-      calls.push("drain-stop");
-      return { update_ready: true };
-    },
-    quitAndInstall: () => {
-      calls.push("quit-install");
-    },
+  const states: AppUpdateState[] = [];
+  let wake = () => {};
+  let work = active;
+  let stopReady = true;
+  const coordinator = createAppUpdateCoordinator({
+    readActiveWork: async () => ({ classification: work ? "active_work_detected" : "no_active_work" }),
+    watchWork: (onChange) => { wake = onChange; return () => calls.push("unwatch"); },
+    stopForUpdate: async () => { calls.push("checkpoint"); return { update_ready: stopReady }; },
+    onState: (state) => states.push(state),
   });
+  const prepare = async () => {
+    calls.push("prepare");
+    return { activate: () => { calls.push("activate"); }, cancel: () => { calls.push("cancel"); } };
+  };
+  return { coordinator, prepare, calls, states, settle: () => { work = false; wake(); },
+    startWork: () => { work = true; wake(); },
+    failStop: () => { stopReady = false; } };
+}
 
-  expect(calls).toEqual(["read", "confirm", "drain-stop", "quit-install"]);
-  expect(result).toEqual({
-    status: "update_started",
-    update_started: true,
-    raw_text_included: false,
-  });
+async function nextTick() { await new Promise(resolve => setTimeout(resolve, 0)); }
+
+// test-category: pure-logic
+test("idle update checkpoints and activates once without a choice", async () => {
+  const f = fixture();
+  const first = f.coordinator.request(f.prepare);
+  const second = f.coordinator.request(f.prepare);
+  expect(first).toBe(second);
+  expect(await first).toEqual({ status: "update_started", update_started: true });
+  expect(f.calls).toEqual(["prepare", "checkpoint", "activate"]);
+  expect(f.states.some(s => s.status === "choice_required")).toBeFalse();
 });
 
-test("update quit preserves active work when consent is cancelled", async () => {
-  let stopped = false;
-  let installed = false;
-  const result = await quitAndInstallAppUpdate({
-    readActiveWork: async () => ({ classification: "active_work_unknown" }),
-    confirmQuit: async () => false,
-    stopForUpdate: async () => {
-      stopped = true;
-    },
-    quitAndInstall: () => {
-      installed = true;
-    },
-  });
-  expect(result).toMatchObject({ status: "cancelled", update_started: false });
-  expect(stopped).toBeFalse();
-  expect(installed).toBeFalse();
+// test-category: race
+test("update now accepts only its exact choice and checkpoints before activation", async () => {
+  const f = fixture(true);
+  const pending = f.coordinator.request(f.prepare);
+  await nextTick();
+  expect(f.coordinator.state().status).toBe("choice_required");
+  expect(f.coordinator.choose({ request_id: "stale", action: "now" }).ok).toBeFalse();
+  const request_id = f.coordinator.state().request_id;
+  expect(f.coordinator.choose({ request_id, action: "now" }).ok).toBeTrue();
+  expect(f.coordinator.choose({ request_id, action: "defer" }).ok).toBeFalse();
+  expect((await pending).status).toBe("update_started");
+  expect(f.calls).toEqual(["prepare", "checkpoint", "activate"]);
 });
 
-test("update quit blocks install when the strict drain gate is not settled", async () => {
-  let installed = false;
-  const result = await quitAndInstallAppUpdate({
-    readActiveWork: async () => ({ classification: "active_work_detected" }),
-    confirmQuit: async () => true,
-    stopForUpdate: async () => ({
-      update_ready: false,
-      drain: {
-        status: "deadline_exceeded",
-        settled: false,
-        cancellation_failures: 0,
-      },
-    }),
-    quitAndInstall: () => {
-      installed = true;
-    },
-  });
-
-  expect(result).toMatchObject({
-    status: "drain_failed",
-    update_started: false,
-    drain: { status: "deadline_exceeded", settled: false },
-  });
-  expect(installed).toBeFalse();
+// test-category: race
+test("deferred update stays visible and activates once when work settles", async () => {
+  const f = fixture(true);
+  const pending = f.coordinator.request(f.prepare);
+  await nextTick();
+  f.coordinator.choose({ request_id: f.coordinator.state().request_id, action: "defer" });
+  expect((await pending).status).toBe("deferred");
+  expect(f.calls).toEqual([]);
+  expect((await f.coordinator.request(f.prepare)).status).toBe("deferred");
+  f.settle(); f.settle();
+  await nextTick();
+  expect(f.calls).toEqual(["unwatch", "prepare", "checkpoint", "activate"]);
+  expect(f.coordinator.state().status).toBe("restarting");
 });
 
-test("update quit fails closed when the stop contract does not confirm readiness", async () => {
-  let installed = false;
-  const result = await quitAndInstallAppUpdate({
-    readActiveWork: async () => ({ classification: "no_active_work" }),
-    confirmQuit: async () => true,
-    stopForUpdate: async () => undefined,
-    quitAndInstall: () => {
-      installed = true;
-    },
-  });
+// test-category: race
+test("settlement while choosing later cannot strand an update", async () => {
+  const f = fixture(true);
+  const pending = f.coordinator.request(f.prepare);
+  await nextTick();
+  f.settle();
+  f.coordinator.choose({ request_id: f.coordinator.state().request_id, action: "defer" });
+  await pending; await nextTick();
+  expect(f.calls).toEqual(["unwatch", "prepare", "checkpoint", "activate"]);
 
-  expect(result).toMatchObject({
-    status: "drain_failed",
-    update_started: false,
-    drain: null,
-  });
-  expect(installed).toBeFalse();
+  const r = fixture(true);
+  let prepares = 0;
+  const prepare = async () => {
+    const helper = await r.prepare();
+    if (++prepares === 1) r.startWork();
+    return helper;
+  };
+  const deferred = r.coordinator.request(prepare);
+  await nextTick();
+  r.coordinator.choose({ request_id: r.coordinator.state().request_id, action: "defer" });
+  await deferred;
+  r.settle(); await nextTick();
+  expect(r.coordinator.state().status).toBe("deferred");
+  expect(r.calls).toEqual(["unwatch", "prepare", "cancel"]);
+  r.settle(); await nextTick();
+  expect(r.calls).toEqual(["unwatch", "prepare", "cancel", "unwatch", "prepare", "checkpoint", "activate"]);
 });
 
-test("update quit blocks install when cancellation requests do not settle", async () => {
-  let installed = false;
-  const result = await quitAndInstallAppUpdate({
-    readActiveWork: async () => ({ classification: "active_work_detected" }),
-    confirmQuit: async () => true,
-    stopForUpdate: async () => ({
-      update_ready: false,
-      drain: {
-        status: "settled_with_request_errors",
-        settled: true,
-        cancellation_failures: 1,
-      },
-    }),
-    quitAndInstall: () => {
-      installed = true;
-    },
-  });
-
-  expect(result).toMatchObject({ status: "drain_failed", update_started: false });
-  expect(installed).toBeFalse();
-});
-
-test("Electron updater IPC is exposed only through the preload bridge and uses the drain helper", () => {
-  const main = readFileSync(
-    resolve(root, "packages/butler-app/client/electron/main.mjs"),
-    "utf8",
-  );
-  const preload = readFileSync(
-    resolve(root, "packages/butler-app/client/electron/preload.cjs"),
-    "utf8",
-  );
-  const smoke = readFileSync(
-    resolve(root, "packages/butler-app/scripts/windows/active-work-cancellation-smoke.ts"),
-    "utf8",
-  );
-  expect(main).toContain('ipcMain.handle("butler:quit-and-install-update"');
-  expect(main).toContain("quitAndInstallAppUpdate({");
-  expect(main).toContain("planAppForegroundUpdateStop");
-  expect(main).toContain("requireSettledDrain: true");
-  expect(main).toContain("foregroundDrainReadyForUpdate");
-  expect(main).toContain("restoreForegroundAfterUpdateDrainFailure");
-  expect(main).toContain("autoUpdater.quitAndInstall()");
-  expect(smoke).toContain("return { update_ready: true }");
-  expect(preload).toContain("quitAndInstallUpdate:");
-  expect(preload).toContain('ipcRenderer.invoke("butler:quit-and-install-update")');
+// test-category: pure-logic
+test("failed checkpoint cancels the helper, reports failure and never activates", async () => {
+  const f = fixture();
+  f.failStop();
+  await expect(f.coordinator.request(f.prepare)).rejects.toThrow("update_checkpoint_failed");
+  expect(f.calls).toEqual(["prepare", "checkpoint", "cancel"]);
+  expect(f.coordinator.state().status).toBe("failed");
 });

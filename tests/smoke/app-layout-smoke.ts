@@ -1008,9 +1008,14 @@ try {
     (node) => getComputedStyle(node).backgroundColor,
   );
   await searchButton.hover();
-  await page.waitForTimeout(80);
   const searchBgAfter = await searchButton.evaluate(
-    (node) => getComputedStyle(node).backgroundColor,
+    async (node) => {
+      // Reading style starts the hover transition. Sample its settled value;
+      // an 80ms wall-clock delay can precede the first paint on a busy runner.
+      void getComputedStyle(node).backgroundColor;
+      await Promise.all(node.getAnimations().map(animation => animation.finished.catch(() => {})));
+      return getComputedStyle(node).backgroundColor;
+    },
   );
   assert(
     searchBgBefore !== searchBgAfter,

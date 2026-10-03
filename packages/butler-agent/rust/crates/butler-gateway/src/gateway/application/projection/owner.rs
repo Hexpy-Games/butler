@@ -32,7 +32,6 @@ pub(in crate::gateway::application) struct ProjectionOwner {
 }
 struct Inner {
     sender: mpsc::Sender<Command>,
-    #[cfg(test)]
     pending: Arc<Mutex<Pending>>,
     watcher: Mutex<Option<RecommendedWatcher>>,
     task: Mutex<Option<JoinHandle<Result<(), GatewayApplicationError>>>>,
@@ -111,7 +110,6 @@ impl ProjectionOwner {
         let owner = Self {
             inner: Arc::new(Inner {
                 sender,
-                #[cfg(test)]
                 pending,
                 watcher: Mutex::new(Some(watcher)),
                 task: Mutex::new(Some(task)),
@@ -124,6 +122,17 @@ impl ProjectionOwner {
         };
         let _ = owner.inner.sender.try_send(Command::Wake);
         Ok(owner)
+    }
+
+    pub(in crate::gateway::application) fn append_listener(
+        &self,
+    ) -> crate::gateway::TranscriptAppendListener {
+        let owner = Arc::downgrade(&self.inner);
+        Arc::new(move |file| {
+            if let Some(owner) = owner.upgrade() {
+                notifications::transcript(&owner.pending, &owner.sender, file.to_owned());
+            }
+        })
     }
 
     #[cfg(test)]

@@ -1437,6 +1437,12 @@ export interface AppCopy {
       upToDate: string;
       updateChecking: string;
       updateUnavailable: string;
+      updateChoice: string;
+      updateCheckpoint: string;
+      updateAfterWork: string;
+      updateNow: string;
+      updateDeferred: string;
+      updateRestarting: string;
       updateApplying: string;
     };
     placeholders: {

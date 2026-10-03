@@ -64,6 +64,7 @@ mod storage;
 mod transcript_export;
 mod turn_cancellation;
 mod updates;
+mod user_work;
 mod wallpapers;
 
 use serde_json::Value;
@@ -338,6 +339,10 @@ impl AppApplication {
 
     pub async fn drain_projection(&self) -> Result<(), GatewayApplicationError> {
         self.projection.drain().await
+    }
+
+    pub fn transcript_append_listener(&self) -> crate::gateway::TranscriptAppendListener {
+        self.projection.append_listener()
     }
 
     /// Finish any claimed queue admission while native enqueue is still ready.

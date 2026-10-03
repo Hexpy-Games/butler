@@ -337,6 +337,10 @@ pub struct AppWorkerActivitySourcePage {
 }
 
 pub trait AppSubsessionPort: Send + Sync {
+    fn user_work_present(&self) -> ApplicationFuture<bool> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+
     fn activity_cursor_parents(
         &self,
         _worker: String,
