@@ -64,10 +64,14 @@ pub(super) fn contained(workspace: &Path, value: &str) -> EffectResult<String> {
     }
     let workspace = lexical_absolute(workspace)?;
     let absolute = lexical_absolute(Path::new(&trimmed))?;
-    let contained = absolute.strip_prefix(&workspace).map_err(|source| {
-        invalid("write_file effect path must identify a file inside the workspace")
-            .with_source(source)
-    })?;
+    let contained = butler_platform::secure_fs::relative_path(&absolute, &workspace)
+        .or_else(|| {
+            let resolve = crate::workspace::realpath_or_nearest;
+            butler_platform::secure_fs::relative_path(&resolve(&absolute), &resolve(&workspace))
+        })
+        .ok_or_else(|| {
+            invalid("write_file effect path must identify a file inside the workspace")
+        })?;
     let value = contained.to_string_lossy();
     if value.is_empty() || value.starts_with("..") {
         return Err(invalid(

@@ -33,6 +33,7 @@ sysinfo.workspace = true
 # system time zone's IANA name.
 [target.'cfg(windows)'.dependencies]
 dunce.workspace = true
+winsafe.workspace = true
 iana-time-zone.workspace = true
 if-addrs.workspace = true
 sysinfo.workspace = true

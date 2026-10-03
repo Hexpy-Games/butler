@@ -426,14 +426,25 @@ pub fn hard_link_unsupported(error: &io::Error) -> bool {
 /// Windows comparisons ignore case and normalize a needless verbatim prefix;
 /// Unix comparisons retain case. A sibling with a shared string prefix is out.
 pub fn path_is_within(target: &Path, root: &Path) -> bool {
+    path_compare::is_within(target, root)
+}
+
+mod path_compare;
+pub use path_compare::relative_path;
+
+/// An equivalent native path spelling for public-path regression scenarios.
+#[cfg(feature = "test-support")]
+pub fn workspace_test_alias(path: &Path) -> PathBuf {
     #[cfg(windows)]
     {
-        let key =
-            |path: &Path| PathBuf::from(dunce::simplified(path).to_string_lossy().to_lowercase());
-        key(target).starts_with(key(root))
+        let text = path.to_string_lossy().to_uppercase();
+        PathBuf::from(format!(r"\\?\{text}"))
     }
     #[cfg(not(windows))]
     {
-        target.starts_with(root)
+        path.parent()
+            .unwrap_or(path)
+            .join(".")
+            .join(path.file_name().unwrap_or_default())
     }
 }

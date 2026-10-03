@@ -71,6 +71,7 @@ win32job = "=2.0.3"
 atomicwrites = "=0.4.4"
 embed-manifest = "=1.5.0"
 dunce = "=1.0.5"
+winsafe = { version = "=0.0.29", features = ["kernel"] }
 iana-time-zone = "=0.1.65"
 # The OS credential store (#217, butler-platform `secrets`): the keyring-core
 # API and one store per OS (macOS Keychain; Secret Service over D-Bus in pure

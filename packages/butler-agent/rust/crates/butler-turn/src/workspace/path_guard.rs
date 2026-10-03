@@ -62,9 +62,7 @@ impl GuardResult {
     }
     pub fn safe_path(&self) -> Option<String> {
         let candidate = match &self.absolute {
-            Some(path) => path
-                .strip_prefix(&self.root)
-                .ok()?
+            Some(path) => butler_platform::secure_fs::relative_path(path, &self.root)?
                 .to_string_lossy()
                 .into_owned(),
             None => butler_core::public_text::trim_js_whitespace(&self.requested).to_owned(),
@@ -83,11 +81,21 @@ impl GuardResult {
     pub fn public_rejection(&self) -> Value {
         let mut result = serde_json::Map::new();
         result.insert("ok".into(), json!(false));
+        result.insert("workspace_root".into(), json!(self.root));
         if let Some(path) = self.safe_path() {
             result.insert("path".into(), json!(path));
         }
         if let Some(reason) = self.reason {
             result.insert("reason".into(), json!(reason));
+        }
+        if matches!(
+            self.reason,
+            Some("path_escape" | "symlink_escape" | "parent_escape")
+        ) {
+            result.insert(
+                "message".into(),
+                json!("Use a path inside the session workspace root."),
+            );
         }
         if self.protected {
             result.insert("code".into(), json!("protected_path"));
@@ -152,7 +160,7 @@ fn resolve_request(
     };
     let absolute = match inside_relative(&root_lex, &unresolved) {
         Some(relative) => root_real.join(relative),
-        None => unresolved,
+        None => realpath_or_nearest(&unresolved),
     };
     Ok((
         out,
@@ -241,7 +249,8 @@ impl Installation {
 
     fn contains(&self, candidate: &Path) -> bool {
         self.0.as_ref().is_some_and(|(lexical, real)| {
-            candidate.starts_with(lexical) || candidate.starts_with(real)
+            butler_platform::secure_fs::path_is_within(candidate, lexical)
+                || butler_platform::secure_fs::path_is_within(candidate, real)
         })
     }
 }
@@ -380,11 +389,11 @@ pub(super) fn protected_path(root: &Path, target: &Path, extra: &[PathBuf]) -> b
         roots.push(home.join(".butler/project-ledger/projects"));
     }
     roots.extend_from_slice(extra);
-    roots
-        .into_iter()
-        .any(|candidate| target.starts_with(realpath_or_nearest(&candidate)))
+    roots.into_iter().any(|candidate| {
+        butler_platform::secure_fs::path_is_within(&target, &realpath_or_nearest(&candidate))
+    })
 }
-fn realpath_or_nearest(path: &Path) -> PathBuf {
+pub(crate) fn realpath_or_nearest(path: &Path) -> PathBuf {
     let mut current = path.to_path_buf();
     let mut suffix = Vec::new();
     loop {
@@ -404,8 +413,8 @@ fn realpath_or_nearest(path: &Path) -> PathBuf {
         current = parent.to_path_buf();
     }
 }
-fn inside_relative<'a>(root: &Path, candidate: &'a Path) -> Option<&'a Path> {
-    let relative = candidate.strip_prefix(root).ok()?;
+fn inside_relative(root: &Path, candidate: &Path) -> Option<PathBuf> {
+    let relative = butler_platform::secure_fs::relative_path(candidate, root)?;
     // Node's isInside uses path.relative and rejects any result beginning
     // with "..", including a contained filename such as "..notes".
     (!relative.to_string_lossy().starts_with("..")).then_some(relative)

@@ -120,12 +120,12 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 let profiles = self.subsessions.enabled_worker_profiles().await?;
                 surface::with_worker_profile_choices(&mut phase, &profiles)?;
             }
+            let workspace_path = resolved_workspace(&workspace, &mut phase)?;
             let surface = surface::available(&mut phase, self.preparation.catalog.snapshot())?;
             let policy = &phase.execution_policy;
             let language = resolve_guided_response_language(start.turn, &self.documents).await;
             let (work, work_tools) =
                 self.work_adapters(start.turn, &phase, &work_scope, language.clone())?;
-            let workspace_path = workspace.get().map_err(|e| error(e.code()))?;
             let activity = Arc::new(GuidedActivity::new(
                 start.turn.turn_id.clone(),
                 source_revision.clone(),
@@ -352,4 +352,14 @@ impl GuidedTurnFactoryAdapter {
             );
         Ok((Arc::new(work), tools))
     }
+}
+
+/// Keep the model's policy root and tool reference on the same recovered path.
+fn resolved_workspace(
+    workspace: &butler_turn::workspace::WorkspaceReference,
+    phase: &mut butler_turn::btcc::GuidedPhaseSelection,
+) -> Result<PathBuf, BtccError> {
+    let path = workspace.get().map_err(|e| error(e.code()))?;
+    phase.execution_policy.workspace_path = path.to_string_lossy().into_owned();
+    Ok(path)
 }

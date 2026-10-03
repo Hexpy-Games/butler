@@ -5,6 +5,9 @@ use std::collections::HashMap;
 
 use super::Invocation;
 
+mod cwd;
+pub(super) use cwd::working_directory;
+
 pub(super) const ESCAPE: char = '`';
 
 pub(super) const POSIX: bool = false;

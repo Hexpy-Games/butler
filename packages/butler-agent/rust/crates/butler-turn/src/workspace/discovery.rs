@@ -136,9 +136,8 @@ pub(super) fn list_blocking(input: &WorkspaceListInput) -> std::io::Result<Works
             guard: guard.public_rejection(),
         }));
     };
-    let displayed_root = root_path
-        .strip_prefix(&guard.root)
-        .unwrap_or(Path::new(""))
+    let displayed_root = butler_platform::secure_fs::relative_path(root_path, &guard.root)
+        .unwrap_or_default()
         .to_string_lossy()
         .replace('\\', "/");
     let started = Instant::now();
@@ -283,7 +282,7 @@ impl Walk<'_> {
     /// directories and considers regular files.
     fn visit_entry(&mut self, child: &std::fs::DirEntry, depth: usize) -> std::io::Result<Next> {
         let path = child.path();
-        let Ok(relative) = path.strip_prefix(self.root) else {
+        let Some(relative) = butler_platform::secure_fs::relative_path(&path, self.root) else {
             return Ok(Next::Continue);
         };
         let relative = relative.to_string_lossy().replace('\\', "/");
