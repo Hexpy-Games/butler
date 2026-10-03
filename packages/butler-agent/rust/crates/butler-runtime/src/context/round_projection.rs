@@ -41,6 +41,16 @@ impl ContextPortAdapter {
 }
 
 impl ContextPort for ContextPortAdapter {
+    fn instruction_inbox(&self) -> bool {
+        self.steering.instruction_inbox()
+    }
+    fn seal<'a>(
+        &'a self,
+        invocation: GuidedInvocation<'a>,
+        final_answer: bool,
+    ) -> PortFuture<'a, bool> {
+        self.steering.seal(invocation, final_answer)
+    }
     fn steering<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,

@@ -65,6 +65,9 @@ pub(super) async fn record_result(
             result: result.clone(),
         },
     );
+    if input.policy.instruction_inbox() {
+        super::driver::stub_boundary(input, "tool_result").await?;
+    }
     if !result.ok || check == OutcomeCheck::RecordOnly {
         return Ok(None);
     }
@@ -90,13 +93,18 @@ pub(super) async fn after_batch(
 
 pub(super) async fn finish_outcome(
     input: &Invocation<'_>,
-    state: &State,
+    state: &mut State,
     outcome: Option<ToolOutcome>,
 ) -> Result<Option<AgentLoopResult>, AgentLoopError> {
     match outcome {
-        Some(ToolOutcome::Suspend(reason)) => finish(input, state, Ending::Suspend(reason))
-            .await
-            .map(Some),
+        Some(ToolOutcome::Suspend(reason)) => {
+            if !super::driver::may_finish(input, state, false).await? {
+                return Ok(None);
+            }
+            finish(input, state, Ending::Suspend(reason))
+                .await
+                .map(Some)
+        }
         None => Ok(None),
     }
 }

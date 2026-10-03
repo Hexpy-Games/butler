@@ -201,7 +201,7 @@ pub(super) async fn task_effect() -> Result<(), HarnessError> {
     let view = summary(&s).await?;
     let id = view["tasks"][0]["id"].clone();
     assert_eq!(apply(&s,json!({"instruction_id":instruction,"idempotency_key":"start-effect","expected_graph_revision":1,"command":{"op":"start","task_id":id,"expected_revision":1}})).await?["ok"],true);
-    s.turn("general", "Write ready.txt").await?;
+    steer_turn(&s, "Write ready.txt").await?;
     assert_eq!(
         std::fs::read_to_string(s.sandbox.data.join("ready.txt"))?,
         "once"

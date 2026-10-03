@@ -39,6 +39,12 @@ pub(super) fn validate_message_request(
         return Err(MessageRequestError::SubsessionProperty);
     }
 
+    if object
+        .get("mode")
+        .is_some_and(|v| !matches!(v.as_str(), Some("queue" | "steer")))
+    {
+        return Err(MessageRequestError::Invalid);
+    }
     Ok(MessageSendRequest {
         expected_project_id,
         content_parts,
@@ -50,7 +56,9 @@ pub(super) fn validate_message_request(
         reasoning_effort: object.get("reasoning_effort").cloned(),
         access_mode: object.get("access_mode").cloned(),
         plan_mode: object.get("plan_mode").cloned(),
-        subsession_result: None,
+        instruction_mode: object.get("mode").cloned(),
+        instruction_expected_epoch: object.get("expected_control_epoch").cloned(),
+        ..Default::default()
     })
 }
 

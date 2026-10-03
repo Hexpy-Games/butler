@@ -244,7 +244,9 @@ pub(super) fn claim_status(
     let row = connection
         .query_row_cached(
             "SELECT state, claim_id FROM session_queued_messages \
-             WHERE chat_id=?1 AND turn_id=?2 ORDER BY rowid DESC LIMIT 1",
+             WHERE chat_id=?1 AND turn_id=?2 AND \
+             (claim_id IS NOT NULL OR client_message_id=(SELECT user_message_id FROM turns WHERE id=?2)) \
+             ORDER BY rowid DESC LIMIT 1",
             params![chat_id, turn_id],
             |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
         )

@@ -33,6 +33,7 @@ pub(super) struct State {
     pub presentation: Option<GuidedPresentation>,
     pub used_tools: Vec<String>,
     pub runtime_failure: Option<crate::btcc::RuntimeFailure>,
+    pub pending_steering: Vec<SteeringObservation>,
 }
 
 impl State {
@@ -55,6 +56,7 @@ impl State {
             presentation: None,
             used_tools: Vec::new(),
             runtime_failure: None,
+            pending_steering: Vec::new(),
         }
     }
 
@@ -89,6 +91,7 @@ impl State {
             presentation: restored.presentation,
             used_tools,
             runtime_failure: None,
+            pending_steering: Vec::new(),
         }
     }
 

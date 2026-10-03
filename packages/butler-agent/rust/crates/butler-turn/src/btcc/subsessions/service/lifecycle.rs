@@ -152,6 +152,7 @@ impl SubsessionService {
             self.replay(&stored).await?;
         }
         self.recover_directions().await?;
+        self.recover_instruction_dispatches().await?;
         self.deliver_worker_results().await
     }
     /// Whether the parent session has an active child to wait for.

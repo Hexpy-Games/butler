@@ -4,6 +4,13 @@ impl crate::gateway::GatewaySessionControls for AppApplication {
     fn work_model(&self, session: String, view: String, input: Value) -> ApplicationFuture<Value> {
         let this = self.clone_handle();
         Box::pin(async move {
+            if view == "instruction"
+                && !session.starts_with("worker-")
+                && !session.starts_with("steward-")
+                && input["instruction"]["text"].is_string()
+            {
+                return this.send_text_instruction(&session, input).await;
+            }
             let runtime = if view == "plan_graph"
                 || session.starts_with("subsession:")
                 || session.starts_with("steward-")

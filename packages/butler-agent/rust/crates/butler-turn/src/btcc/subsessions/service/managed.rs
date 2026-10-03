@@ -26,7 +26,7 @@ impl SubsessionService {
             &format!("{}:{}", request.turn, request.call),
         )?;
         if let Some(existing) = self.replay_existing(&id).await? {
-            return canonical_output(&existing);
+            return output(model, &existing).await;
         }
         let task = model.delegation_task(request.session.clone()).await?;
         let parent = self
@@ -90,8 +90,28 @@ impl SubsessionService {
             ))
             .await?;
         model.changed().notify_one();
-        canonical_output(&stored)
+        output(model, &stored).await
     }
+}
+
+async fn output(
+    model: &crate::btcc::work_model::WorkModelService,
+    stored: &crate::btcc::StoredSubsessionDelegation,
+) -> Result<Value, BtccError> {
+    let mut value = canonical_output(stored)?;
+    let authority = model
+        .instruction_authority(stored.child_session_id.clone())
+        .await?;
+    let object = value
+        .as_object_mut()
+        .ok_or_else(|| error(BtccCode::BtccJsonError))?;
+    for key in ["relation_epoch", "control_epoch"] {
+        object.insert(
+            key.into(),
+            authority.get(key).cloned().unwrap_or(Value::Null),
+        );
+    }
+    Ok(value)
 }
 
 fn packet(

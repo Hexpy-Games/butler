@@ -16,6 +16,11 @@ pub(super) async fn route(
         .ok_or_else(|| HttpError::public(404, "not_found", "Route not found."))?;
     let session = super::subsessions::decode_component(encoded)?;
     let (view, input) = match (request.method(), action) {
+        (&Method::GET, "instructions") => ("instructions", serde_json::to_value(query(uri))),
+        (&Method::POST, "instructions") => {
+            let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
+            ("instruction", serde_json::from_slice::<Value>(&bytes))
+        }
         (&Method::GET, "work-model-metrics") => ("metrics", serde_json::to_value(query(uri))),
         (&Method::GET, "work-summary") => ("summary", serde_json::to_value(query(uri))),
         (&Method::GET, "task-graph") => (
@@ -56,6 +61,7 @@ pub(super) fn matches(path: &str) -> bool {
             "/work-model",
             "/task-graph",
             "/work-spec",
+            "/instructions",
         ]
         .iter()
         .any(|suffix| path.ends_with(suffix))

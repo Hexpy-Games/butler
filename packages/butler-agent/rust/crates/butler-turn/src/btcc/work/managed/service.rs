@@ -10,9 +10,9 @@ use std::sync::Arc;
 /// Composition sequences immutable Ledger publication before SQLite activation.
 /// All SQL and blocking file work use their existing owner lanes.
 pub struct WorkModelService {
-    repository: WorkModelRepository,
+    pub(super) repository: WorkModelRepository,
     publication: Arc<dyn SpecPublication>,
-    changed: Arc<tokio::sync::Notify>,
+    pub(super) changed: Arc<tokio::sync::Notify>,
 }
 
 impl WorkModelService {
@@ -21,6 +21,7 @@ impl WorkModelService {
         publication: Arc<dyn SpecPublication>,
         enabled: bool,
     ) -> Result<Option<Arc<Self>>, BtccError> {
+        let changed = storage.work_model_changes();
         let repository = WorkModelRepository::new(storage);
         if enabled && !repository.enabled().await? {
             check(
@@ -34,7 +35,7 @@ impl WorkModelService {
         let service = Arc::new(Self {
             repository,
             publication,
-            changed: Arc::new(tokio::sync::Notify::new()),
+            changed,
         });
         service.recover().await?;
         Ok(Some(service))
@@ -189,7 +190,7 @@ impl WorkModelService {
         Ok(Creation { bundle, verified })
     }
 
-    async fn verify(
+    pub(super) async fn verify(
         &self,
         session: &str,
         refs: &[SpecRef],

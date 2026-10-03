@@ -113,17 +113,12 @@ fn create_plan_queue_message(
         return Ok(());
     }
     let request = MessageSendRequest {
-        subsession_result: None,
-        expected_project_id: None,
-        content_parts: None,
         chat_id: Some(Value::String(input.chat_id.clone())),
         text: Some(Value::String(input.text.clone())),
         client_message_id: Some(Value::String(input.client_message_id.clone())),
-        attachments: None,
-        model: None,
-        reasoning_effort: None,
-        access_mode: None,
+
         plan_mode: Some(Value::Bool(input.plan_mode)),
+        ..Default::default()
     };
     let mut resolved =
         resolve_for_message_send(db, subscribers, &input.chat_id, &request, &input.facts, now)?;

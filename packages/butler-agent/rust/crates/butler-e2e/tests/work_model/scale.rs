@@ -8,6 +8,8 @@ use std::{
 };
 #[path = "scale_activation.rs"]
 mod activation;
+#[path = "scale_instructions.rs"]
+mod instructions;
 #[path = "scale_seed.rs"]
 mod seed;
 
@@ -200,6 +202,7 @@ pub(super) async fn run() -> Result<(), HarnessError> {
         after.write_bytes - before.write_bytes
     );
     tokio::time::sleep(Duration::from_secs(2)).await;
+    instructions::run(&mut s).await?;
     idle(&s).await?;
     activation::run(&s).await?;
     s.finish().await

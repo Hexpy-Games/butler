@@ -179,6 +179,16 @@ pub trait ProviderIdentityObserver: Send + Sync {
 }
 
 pub(crate) trait GuidedPolicyPort: Send + Sync {
+    fn instruction_inbox(&self) -> bool {
+        false
+    }
+    fn seal<'a>(
+        &'a self,
+        _invocation: GuidedInvocation<'a>,
+        _final_answer: bool,
+    ) -> PortFuture<'a, bool> {
+        Box::pin(async { Ok(true) })
+    }
     fn prepare<'a>(&'a self, invocation: GuidedInvocation<'a>) -> PortFuture<'a, PreparedPolicy>;
 
     fn before_model_round<'a>(

@@ -265,15 +265,9 @@ async fn drain_chat(
         if cancellation.is_cancelled() {
             return Ok(());
         }
-        let chat = chat_id.to_owned();
-        let active = app
-            .storage
-            .execute(move |db| session_has_active_turn(db, &chat))
-            .await
-            .map_err(app_error)?;
-        if active {
-            return Ok(());
-        }
+        let Some(order) = dispatch_order(app, chat_id, &row).await? else {
+            continue;
+        };
         let now = app.dependencies.identity_clock.now_iso();
         let lease = app
             .dependencies
@@ -296,7 +290,7 @@ async fn drain_chat(
                         claim_owner: owner,
                         lease_expires_at: lease,
                     },
-                    queue::ClaimOrder::Fifo,
+                    order,
                     &now,
                     &subscribers,
                 )
@@ -330,13 +324,32 @@ async fn drain_chat(
     Ok(())
 }
 
+async fn dispatch_order(
+    app: &AppApplication,
+    chat: &str,
+    row: &QueuedRow,
+) -> Result<Option<queue::ClaimOrder>, GatewayApplicationError> {
+    let order = app.admit_instruction(chat, &row.client_message_id).await?;
+    if matches!(order, Some(queue::ClaimOrder::Immediate)) {
+        return Ok(order);
+    }
+    let chat = chat.to_owned();
+    let active = app
+        .storage
+        .execute(move |db| session_has_active_turn(db, &chat))
+        .await
+        .map_err(app_error)?;
+    Ok(if active { None } else { order })
+}
+
 struct QueuedRow {
+    client_message_id: String,
     id: String,
     text: String,
     control_resolution_json: String,
 }
 fn queued_rows(db: &mut Connection, chat: &str) -> Result<Vec<QueuedRow>, AppStorageError> {
-    let mut statement = db.prepare_cached("SELECT id,text,control_resolution_json FROM session_queued_messages WHERE chat_id=?1 AND state='queued' AND NOT EXISTS (SELECT 1 FROM session_queue_pauses p WHERE p.chat_id=?1) ORDER BY rowid ASC LIMIT ?2")
+    let mut statement = db.prepare_cached("SELECT id,text,control_resolution_json,client_message_id FROM (SELECT rowid AS position,id,text,control_resolution_json,client_message_id FROM (SELECT rowid,id,text,control_resolution_json,client_message_id FROM session_queued_messages WHERE chat_id=?1 AND state='queued' ORDER BY rowid LIMIT ?2) UNION SELECT rowid AS position,id,text,control_resolution_json,client_message_id FROM (SELECT rowid,id,text,control_resolution_json,client_message_id FROM session_queued_messages WHERE chat_id=?1 AND state='queued' AND json_valid(control_resolution_json) AND json_extract(control_resolution_json,'$.instruction_mode')='steer' ORDER BY rowid LIMIT ?2)) WHERE NOT EXISTS (SELECT 1 FROM session_queue_pauses p WHERE p.chat_id=?1) ORDER BY position")
         .map_err(AppStorageError::sqlite)?;
     statement
         .query_map(params![chat, FIFO_WINDOW], |row| {
@@ -344,6 +357,7 @@ fn queued_rows(db: &mut Connection, chat: &str) -> Result<Vec<QueuedRow>, AppSto
                 id: row.get(0)?,
                 text: row.get(1)?,
                 control_resolution_json: row.get(2)?,
+                client_message_id: row.get(3)?,
             })
         })
         .map_err(AppStorageError::sqlite)?

@@ -12,6 +12,7 @@ mod message;
 mod monitoring;
 mod occurrence;
 mod question;
+mod work_model;
 pub(in crate::host) use monitoring::MonitoringReaders;
 mod profile;
 mod project_source;
@@ -87,6 +88,7 @@ struct State {
     next_call_index: u64,
     journal_by_provider: HashMap<String, String>,
     described_ids: HashSet<String>,
+    managed_control: bool,
 }
 
 pub(crate) struct GuidedTools {
@@ -321,7 +323,8 @@ impl GuidedTools {
                     | ToolName::SetWallpaper
                     | ToolName::SaveWallpaperModule
             )
-        ) || GuidedWorkTools::is_work_tool(name)
+        ) || name == "session_control"
+            || GuidedWorkTools::is_work_tool(name)
             || crate::host::guided::project_tools::GuidedProjectTools::supports(name)
     }
 
@@ -362,7 +365,7 @@ impl ToolPort for GuidedTools {
             }
             self.resume_pool().await?;
             let tools = match phase {
-                LoopPhase::Working => self.binding.surface.clone(),
+                LoopPhase::Working => work_model::surface(self).await?,
                 LoopPhase::FinalReport => Vec::new(),
             };
             let encoded = serde_json::to_string(&tools).map_err(|error| {

@@ -147,9 +147,9 @@ fn bootstrap() -> Vec<Value> {
 }
 fn lifecycle() -> Vec<Value> {
     let base = [("task_id", string()), ("expected_revision", integer())];
-    let mut commands = ["start", "complete", "remove"]
-        .map(|op| command(op, &base, &["task_id", "expected_revision"]))
-        .to_vec();
+    let mut start_or_complete = command("start", &base, &["task_id", "expected_revision"]);
+    start_or_complete["properties"]["op"]["enum"] = json!(["start", "complete"]);
+    let mut commands = vec![start_or_complete];
     commands.push(command(
         "submit",
         &[
@@ -210,7 +210,6 @@ fn lifecycle() -> Vec<Value> {
         &["task_ids"],
     ));
     commands.push(command("step",&[("task_id",string()),("phase",json!({"type":"string","enum":["conception","planning","execution","review","validation","reporting"]}))],&["task_id","phase"]));
-    commands.retain(|c| c["properties"]["op"]["enum"][0] != "remove");
     commands.push(command(
         "remove",
         &[
@@ -223,24 +222,156 @@ fn lifecycle() -> Vec<Value> {
     commands
 }
 
-pub(super) fn definitions(create: bool, child: bool) -> Vec<Value> {
-    let mut commands = if create { bootstrap() } else { vec![] };
-    commands.extend(lifecycle());
+pub(in crate::host::guided) fn definitions(create: bool, child: bool) -> Vec<Value> {
+    let commands = operations(child);
+    vec![
+        json!({"name":"work_apply","description":"Apply Task operations or bootstrap Specs.",
+        "parameters":apply_parameters(if create { bootstrap() } else { vec![] }, &commands)}),
+        json!({"name":"work_read","description":"Read work state and Specs.",
+            "parameters":object(&[("view",json!({"type":"string","enum":["summary","tasks","graph","spec","operations"]})),("cursor",string()),("node_id",string())], &["view"])}),
+    ]
+}
+
+fn operations(child: bool) -> Vec<Value> {
+    let mut commands = lifecycle();
+    commands.extend(edits());
     if child {
         commands.retain(|c| {
-            ["start", "submit", "review", "complete"].contains(
+            [
+                "start",
+                "submit",
+                "review",
+                "complete",
+                "add",
+                "edit",
+                "remove",
+                "reorder",
+                "dependencies",
+                "resolve_draft",
+                "block",
+            ]
+            .contains(
                 &c["properties"]["op"]["enum"][0]
                     .as_str()
                     .unwrap_or_default(),
             )
         });
     }
+    commands
+}
+
+fn apply_parameters(mut creation: Vec<Value>, commands: &[Value]) -> Value {
+    let reference = json!({"$ref":"#/$defs/operation"});
+    creation.push(reference.clone());
+    let mut parameters = object(
+        &[
+            ("command", json!({"anyOf":creation})),
+            ("operations", list(reference)),
+            ("expected_graph_revision", integer()),
+            ("expected_control_epoch", integer()),
+            ("reason", string()),
+            ("instruction_id", string()),
+            ("idempotency_key", string()),
+        ],
+        &[],
+    );
+    parameters["$defs"] = json!({"operation":{"anyOf":commands}});
+    parameters["oneOf"] = json!([{"required":["command"]},{"required":["operations","expected_graph_revision","expected_control_epoch","reason"]}]);
+    parameters
+}
+
+fn edits() -> Vec<Value> {
+    let mut addition = task();
+    if let Some(properties) = addition["properties"].as_object_mut() {
+        // Add binds the explicit Work and Spec; draft aliases are creation-only.
+        properties.remove("work_key");
+        properties.remove("node_id");
+    }
     vec![
-        json!({"name":"work_apply","description":"Create request-bound brief/full Spec and canonical Tasks, or execute/review them. No Spec approval prompt. Runtime supplies instruction identity.",
-        "parameters":object(&[("command",json!({"anyOf":commands})),("expected_graph_revision",integer()),("idempotency_key",string())], &["command"])}),
-        json!({"name":"work_read","description":"Read canonical Summary, Tasks, DAG or exact Spec and ancestors. Page cursors preserve complete state.",
-            "parameters":object(&[("view",json!({"type":"string","enum":["summary","tasks","graph","spec","operations"]})),("cursor",string()),("node_id",string())], &["view"])}),
+        command(
+            "block",
+            &[
+                ("task_id", string()),
+                ("expected_revision", integer()),
+                ("reason", string()),
+            ],
+            &["task_id", "expected_revision", "reason"],
+        ),
+        command(
+            "add",
+            &[
+                ("work_id", string()),
+                ("spec_ref", spec_ref()),
+                ("task", addition),
+            ],
+            &["work_id", "spec_ref", "task"],
+        ),
+        command(
+            "edit",
+            &[
+                ("task_id", string()),
+                ("expected_revision", integer()),
+                ("description", string()),
+            ],
+            &["task_id", "expected_revision", "description"],
+        ),
+        command(
+            "resolve_draft",
+            &[
+                ("task_id", string()),
+                ("expected_revision", integer()),
+                ("criterion_ids", strings()),
+                ("question", json!({"type":"boolean"})),
+            ],
+            &["task_id", "expected_revision", "criterion_ids"],
+        ),
     ]
+}
+
+fn spec_ref() -> Value {
+    object(
+        &[
+            ("node_id", string()),
+            ("node_revision", integer()),
+            ("ledger_revision_id", string()),
+            ("content_hash", string()),
+        ],
+        &[
+            "node_id",
+            "node_revision",
+            "ledger_revision_id",
+            "content_hash",
+        ],
+    )
+}
+
+pub(in crate::host::guided) fn control() -> Value {
+    let controls = operations(true)
+        .into_iter()
+        .filter(|c| {
+            matches!(
+                c["properties"]["op"]["enum"][0].as_str(),
+                Some("add" | "edit" | "remove" | "reorder" | "dependencies" | "block")
+            )
+        })
+        .collect::<Vec<_>>();
+    let text = object(
+        &[("text", string()), ("attachment_refs", strings())],
+        &["text"],
+    );
+    let ops = object(
+        &[
+            (
+                "operations",
+                json!({"type":"array","items":{"anyOf":controls}}),
+            ),
+            ("expected_graph_revision", integer()),
+            ("reason", string()),
+        ],
+        &["operations", "expected_graph_revision", "reason"],
+    );
+    json!({"name":"session_control","description":"Queue or steer a direct child.",
+        "parameters":object(&[("target_session_id",string()),("relation_id",string()),("relation_epoch",integer()),("mode",json!({"type":"string","enum":["queue","steer"]})),("instruction",json!({"anyOf":[text,ops]})),("expected_control_epoch",integer()),("idempotency_key",string())],&["target_session_id","relation_id","relation_epoch","mode","instruction","expected_control_epoch","idempotency_key"])})
 }
 
 fn research() -> Value {

@@ -29,6 +29,10 @@ fn exchange(base: &Exchange, request: &str, round: usize, command: Option<Value>
 }
 
 pub(super) async fn chain() -> Result<(), HarnessError> {
+    run(false).await
+}
+
+pub(super) async fn run(controls: bool) -> Result<(), HarnessError> {
     let mut cassette = Cassette::load("TURN-02")?;
     let base = cassette.exchanges[0].clone();
     let mut first = base.clone();
@@ -65,11 +69,21 @@ pub(super) async fn chain() -> Result<(), HarnessError> {
         0,
         None,
     ));
-    let s = Setup::new("WM-22-NESTED")?
+    if controls {
+        super::parent_sequences::cassette(&mut cassette);
+        super::conflicts::cassette(&mut cassette);
+    }
+    let setup = Setup::new("WM-22-NESTED")?
         .env("BUTLER_WORK_MODEL", "core")
-        .stub_cassette(cassette)
-        .start()
-        .await?;
+        .stub_cassette(cassette);
+    let setup = if controls {
+        setup
+            .env("BUTLER_E2E_INSTRUCTION_BOUNDARY", "response")
+            .env("BUTLER_E2E_INSTRUCTION_MESSAGE", super::conflicts::HOLD)
+    } else {
+        setup
+    };
+    let s = setup.start().await?;
     let (instruction, _) = s
         .turn("general", "Reply with exactly the word: once")
         .await?;
@@ -87,7 +101,7 @@ pub(super) async fn chain() -> Result<(), HarnessError> {
     }
     s.provider()?.add_placeholder("TASK", id);
     assert_eq!(apply(&s,json!({"instruction_id":instruction,"idempotency_key":"start","expected_graph_revision":1,"command":{"op":"start","task_id":id,"expected_revision":1}})).await?["ok"],true);
-    s.turn("general", "Delegate the initial Task").await?;
+    steer_turn(&s, "Delegate the initial Task").await?;
     let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
     loop {
         let latest = summary(&s).await?;
@@ -180,8 +194,12 @@ pub(super) async fn chain() -> Result<(), HarnessError> {
         .unwrap(),
         0
     );
+    if controls {
+        super::parent_sequences::run(&s, &db, &relations, &view).await?;
+    }
+    let graph_revision = summary(&s).await?["graph_revision"].clone();
     let result = json!({"criterion_id":"AC","verdict":"pass","evidence_refs":["test:leaf"],"reason":"Leaf result satisfies exact criterion"});
-    let review=apply(&s,json!({"instruction_id":instruction,"idempotency_key":"review","expected_graph_revision":1,"command":{"op":"review","task_id":id,"expected_revision":9,"result_revision":1,"criterion_results":[result]}})).await?;
+    let review=apply(&s,json!({"instruction_id":instruction,"idempotency_key":"review","expected_graph_revision":graph_revision,"command":{"op":"review","task_id":id,"expected_revision":9,"result_revision":1,"criterion_results":[result]}})).await?;
     assert_eq!(review["ok"], true, "{review}");
     super::routing::report_prompt("Tier2 nested", &s.provider()?.requests());
     s.finish().await

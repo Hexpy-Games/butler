@@ -42,6 +42,67 @@ pub(super) async fn summary(s: &Scenario) -> Result<Value, HarnessError> {
     Ok(reply.data().clone())
 }
 
+pub(super) async fn steer_turn(s: &Scenario, text: &str) -> Result<(String, Value), HarnessError> {
+    instruction_turn(s, text, Some("steer")).await
+}
+
+pub(super) async fn instruction_turn(
+    s: &Scenario,
+    text: &str,
+    mode: Option<&str>,
+) -> Result<(String, Value), HarnessError> {
+    let mut input = json!({"chat_id":"general","text":text});
+    if let Some(mode) = mode {
+        input["mode"] = json!(mode);
+    }
+    let accepted = s.gw.post("/messages", input).await?;
+    assert_eq!(accepted.status, 202, "{}", accepted.text);
+    let deadline = tokio::time::Instant::now()
+        + std::time::Duration::from_secs(butler_e2e::e2e::scenario::turn_timeout());
+    let id = match butler_e2e::e2e::scenario::accepted_turn_id(accepted.data()) {
+        Ok(id) => id,
+        Err(_) => {
+            let key = accepted.data()["queued"]["client_message_id"]
+                .as_str()
+                .unwrap();
+            let mut cursor = 0;
+            loop {
+                let page =
+                    s.gw.get(&format!("/sessions/general/instructions?after={cursor}"))
+                        .await?;
+                if let Some(id) = page.data()["instructions"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|r| r["idempotency_key"] == key)
+                    .and_then(|r| r["delivered_turn_id"].as_str())
+                {
+                    break id.to_owned();
+                }
+                assert!(
+                    tokio::time::Instant::now() < deadline,
+                    "Accepted instruction was not dispatched: {}",
+                    page.text
+                );
+                cursor = if page.data()["instructions"].as_array().unwrap().len() == 50 {
+                    page.data()["next_cursor"].as_u64().unwrap()
+                } else {
+                    0
+                };
+                tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+            }
+        }
+    };
+    let turn =
+        s.gw.wait_terminal(
+            "general",
+            &id,
+            deadline.saturating_duration_since(tokio::time::Instant::now()),
+        )
+        .await?;
+    Ok((id, turn))
+}
+
 pub(super) async fn review_and_join() -> Result<(), HarnessError> {
     let (s, instruction) = setup("WM-15").await?;
     let created = apply(&s, light(&instruction)).await?;

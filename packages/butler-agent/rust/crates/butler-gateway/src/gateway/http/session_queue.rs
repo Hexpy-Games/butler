@@ -87,8 +87,6 @@ fn strict_create(value: &Value) -> Result<MessageSendRequest, HttpError> {
         return Err(invalid_request("Queued message text is required."));
     }
     Ok(MessageSendRequest {
-        subsession_result: None,
-        expected_project_id: None,
         content_parts,
         chat_id: optional_string_value(object, "chat_id", "Queued message request is invalid.")?,
         text,
@@ -110,6 +108,7 @@ fn strict_create(value: &Value) -> Result<MessageSendRequest, HttpError> {
             "Queued message request is invalid.",
         )?,
         plan_mode: optional_bool_value(object, "plan_mode", "Queued message request is invalid.")?,
+        ..Default::default()
     })
 }
 

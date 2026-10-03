@@ -211,6 +211,10 @@ impl AppApplication {
         client_id: &str,
         prepared: ResolvedAppAdmission,
     ) -> Result<MessageSendResult, GatewayApplicationError> {
+        let Some(order) = self.admit_instruction(chat_id, client_id).await? else {
+            self.queue_wake.chat(chat_id.to_owned()).await?;
+            return self.queued_result(chat_id, client_id).await;
+        };
         let claim_id = self.dependencies.identity_clock.new_uuid();
         let now = self.dependencies.identity_clock.now_iso();
         let lease = self
@@ -233,7 +237,7 @@ impl AppApplication {
                     claim_owner: owner,
                     lease_expires_at: lease,
                 },
-                queue::ClaimOrder::Fifo,
+                order,
                 &now,
                 &subscribers,
             )

@@ -3,8 +3,13 @@ mod child;
 mod coverage;
 mod creation;
 pub(in crate::btcc::storage) use child::assign_child;
+mod effects;
 mod graph;
+mod instructions;
+pub(in crate::btcc::storage) use instructions::turn_boundary;
+mod operation_specs;
 mod reads;
+mod task_edits;
 mod tasks;
 
 use super::BtccStorage;
@@ -65,12 +70,13 @@ impl WorkModelRepository {
         self.lane(move |db| {
             let exists = db.query_row("SELECT 1 FROM sqlite_schema WHERE name='wm_mode'", [], |_| Ok(()))
                 .optional().map_err(sql)?.is_some();
-            if exists { check(enabled, "work_model_writer_epoch_required")?; return Ok(true); }
+            if exists { check(enabled, "work_model_writer_epoch_required")?; db.execute_batch(include_str!("work_model/instructions/schema.sql")).map_err(sql)?; return Ok(true); }
             if !enabled { return Ok(false); }
             let history: i64 = db.query_row("SELECT EXISTS(SELECT 1 FROM btcc_turns) OR EXISTS(SELECT 1 FROM btcc_guided_works)", [], |row| row.get(0)).map_err(sql)?;
             check(history == 0, "work_model_requires_empty_installation")?;
             let tx = db.transaction().map_err(sql)?;
             tx.execute_batch(include_str!("work_model/schema.sql")).map_err(sql)?;
+            tx.execute_batch(include_str!("work_model/instructions/schema.sql")).map_err(sql)?;
             tx.execute("INSERT INTO wm_mode VALUES(1,1)", []).map_err(sql)?;
             tx.execute("UPDATE agent_storage_activation_marker SET marker_json=json_set(marker_json,'$.storageContract','work-model-core-v1')", [])
                 .map_err(sql)?;
@@ -87,9 +93,7 @@ impl WorkModelRepository {
     ) -> Result<Admission> {
         self.lane(move |db| {
             check(!request.idempotency_key.trim().is_empty(), "idempotency_key_required")?;
-            let admitted: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM btcc_turns WHERE turn_id=?1 AND session_id=?2)",
-                params![request.instruction_id, session], |row| row.get(0)).map_err(sql)?;
-            check(admitted, "instruction_scope_invalid")?;
+            instructions::authorize_operation(db,&session,&request.instruction_id)?;
             let prior: Option<(String, Option<String>)> = db.query_row(
                 "SELECT payload_hash,receipt_json FROM wm_intents WHERE session_id=?1 AND operation_key=?2",
                 params![session, request.idempotency_key], |row| Ok((row.get(0)?, row.get(1)?))).optional().map_err(sql)?;
@@ -129,13 +133,14 @@ impl WorkModelRepository {
                 params![session,plan.as_ref().map(|p| &p.id),request.instruction_id,request.idempotency_key,hash,encode(&audit_request(&request)?)?,encode(&receipt)?,chrono::Utc::now().to_rfc3339(),plan.as_ref().map_or(session.as_str(),|p|p.scope_id.as_str())]).map_err(sql)?;
             let seq = tx.last_insert_rowid();
             set(&mut receipt,"event_seq",json!(seq))?;
-            set(&mut receipt,"operation_ids",json!([request.idempotency_key]))?;
+            if receipt.get("operation_ids").is_none() { set(&mut receipt,"operation_ids",json!([request.idempotency_key]))?; }
             if succeeded && let Some(plan) = plan {
                 tx.execute("UPDATE wm_plans SET event_seq=?1,revision=revision+CASE WHEN event_seq=0 THEN 0 ELSE 1 END,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE scope_id=?2 AND id=?3", params![seq,plan.scope_id,plan.id]).map_err(sql)?;
                 tx.execute("INSERT INTO wm_outbox VALUES(?1,?2)", params![seq,encode(&json!({"kind":"work_model.changed","plan_id":plan.id,"tier":plan.tier,"graph_revision":plan.graph_revision,"event_seq":seq}))?]).map_err(sql)?;
             }
             tx.execute("UPDATE wm_intents SET receipt_json=?1 WHERE session_id=?2 AND operation_key=?3",
                 params![encode(&receipt)?,session,request.idempotency_key]).map_err(sql)?;
+            if succeeded { instructions::acknowledge_operation(&tx,&session,&request,&receipt)?; } else { instructions::drafts::unresolved(&tx,&session,&request,&receipt)?; }
             tx.commit().map_err(sql)?;
             Ok(receipt)
         }).await
@@ -209,31 +214,6 @@ impl WorkModelRepository {
             .await
     }
 
-    pub async fn operation_specs(
-        &self,
-        session: String,
-        command: WorkModelCommand,
-    ) -> Result<Vec<SpecRef>> {
-        self.lane(move |db| {
-            let plan = reads::require_plan(db, &session)?;
-            let node = match command {
-                WorkModelCommand::Start { task_id, .. }
-                | WorkModelCommand::Submit { task_id, .. }
-                | WorkModelCommand::Review { task_id, .. }
-                | WorkModelCommand::Complete { task_id, .. }
-                | WorkModelCommand::Remove { task_id, .. }
-                | WorkModelCommand::Step { task_id, .. } => {
-                    tasks::load(db, &plan.scope_id, &plan.id, &task_id)?
-                        .spec_ref
-                        .node_id
-                }
-                _ => plan.root_node_id,
-            };
-            reads::ancestors(db, &session, &node)
-        })
-        .await
-    }
-
     pub async fn delegation_gate(&self, session: String) -> Result<()> {
         self.lane(move |db| {
             let plan = reads::require_plan(db, &session).map_err(|_| error("tier_two_required"))?;
@@ -281,94 +261,6 @@ impl WorkModelRepository {
             Ok(task.evidence_refs)
         }).await
     }
-
-    pub async fn effect_grant(
-        &self,
-        session: String,
-        turn: String,
-    ) -> Result<WorkModelEffectGrant> {
-        let repository = self.clone();
-        self.lane(move |db| {
-            let admitted: bool = db
-                .query_row(
-                    "SELECT EXISTS(SELECT 1 FROM btcc_turns WHERE session_id=?1 AND turn_id=?2)",
-                    params![session, turn],
-                    |r| r.get(0),
-                )
-                .map_err(sql)?;
-            check(admitted, "instruction_scope_invalid")?;
-            let (scope_id, revision_id, objective) = if let Some(plan) =
-                reads::plan(db, &session)?.filter(|p| p.status != "completed")
-            {
-                let current: Option<String> = db
-                    .query_row(
-                        "SELECT current_task_id FROM wm_sessions WHERE session_id=?1",
-                        [&session],
-                        |r| r.get(0),
-                    )
-                    .map_err(sql)?;
-                let task = tasks::load(
-                    db,
-                    &plan.scope_id,
-                    &plan.id,
-                    &current.ok_or_else(|| error("running_task_required"))?,
-                )?;
-                check(
-                    task.status == "running"
-                        && task.assignee_session_id.as_deref() == Some(&session),
-                    "running_task_required",
-                )?;
-                (
-                    task.work_id,
-                    format!(
-                        "{}:{}:{}:{}",
-                        plan.id, plan.tree_version, task.id, task.revision
-                    ),
-                    task.description,
-                )
-            } else {
-                (
-                    format!("TURN:{turn}"),
-                    turn.clone(),
-                    "Direct admitted action".into(),
-                )
-            };
-            Ok(WorkModelEffectGrant {
-                scope_id,
-                revision_id,
-                session,
-                turn,
-                objective,
-                repository,
-                publication: None,
-            })
-        })
-        .await
-    }
-
-    pub async fn effect_specs(&self, session: String) -> Result<Vec<SpecRef>> {
-        self.lane(move |db| {
-            let Some(plan) = reads::plan(db, &session)?.filter(|p| p.status != "completed") else {
-                return Ok(vec![]);
-            };
-            let current: Option<String> = db
-                .query_row(
-                    "SELECT current_task_id FROM wm_sessions WHERE session_id=?1",
-                    [&session],
-                    |r| r.get(0),
-                )
-                .map_err(sql)?;
-            let task = tasks::load(
-                db,
-                &plan.scope_id,
-                &plan.id,
-                &current.ok_or_else(|| error("running_task_required"))?,
-            )?;
-            check(task.status == "running", "running_task_required")?;
-            reads::ancestors(db, &session, &task.spec_ref.node_id)
-        })
-        .await
-    }
 }
 
 fn apply(
@@ -377,6 +269,15 @@ fn apply(
     request: &WorkModelRequest,
     creation: Option<Creation>,
 ) -> Result<Value> {
+    if matches!(
+        request.command,
+        WorkModelCommand::SessionStop
+            | WorkModelCommand::SessionPause
+            | WorkModelCommand::SessionResume
+    ) {
+        return Err(error("work_model_controls_unavailable"));
+    }
+    instructions::effect_fence(db, session)?;
     if let Some(creation) = creation {
         if matches!(request.command, WorkModelCommand::Publish { .. }) {
             return Ok(
@@ -390,8 +291,35 @@ fn apply(
         request.expected_graph_revision == Some(plan.graph_revision),
         "graph_revision_conflict",
     )?;
+    if let WorkModelCommand::Batch {
+        operations,
+        expected_control_epoch,
+        reason,
+    } = &request.command
+    {
+        check(
+            *expected_control_epoch == instructions::epoch(db, session)?,
+            "control_epoch_conflict",
+        )?;
+        return instructions::delivery::apply_batch(
+            db,
+            session,
+            &request.instruction_id,
+            &request.idempotency_key,
+            &InstructionOperations {
+                operations: operations.clone(),
+                expected_graph_revision: plan.graph_revision,
+                reason: reason.clone(),
+            },
+        );
+    }
     child::authorize(db, session, &plan, &request.command)?;
     match &request.command {
+        WorkModelCommand::Add {
+            work_id,
+            spec_ref,
+            task,
+        } => task_edits::add(db, session, &plan, request, work_id, spec_ref, task),
         WorkModelCommand::Reorder { .. }
         | WorkModelCommand::Dependencies { .. }
         | WorkModelCommand::Step { .. } => graph::apply(db, &plan.scope_id, &plan, request),

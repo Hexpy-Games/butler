@@ -191,6 +191,9 @@ pub(super) fn create_post_backfill_indexes(connection: &Connection) -> Result<()
                ON chats(conversation_session_id);\
              CREATE UNIQUE INDEX IF NOT EXISTS session_queued_messages_client_idx \
                ON session_queued_messages(chat_id,client_message_id) WHERE client_message_id IS NOT NULL;\
+             CREATE INDEX IF NOT EXISTS session_queued_messages_steer_idx \
+               ON session_queued_messages(chat_id,json_extract(control_resolution_json,'$.instruction_mode')) \
+               WHERE state='queued' AND json_valid(control_resolution_json);\
              UPDATE chats SET kind='chat' WHERE kind='general';\
              CREATE INDEX IF NOT EXISTS messages_streaming_turn_idx \
                ON messages(turn_id) WHERE role='assistant' AND status='streaming';",

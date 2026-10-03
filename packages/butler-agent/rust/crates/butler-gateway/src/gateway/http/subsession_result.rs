@@ -51,21 +51,19 @@ pub(super) async fn post(
         .send_message(SendMessageCommand {
             chat_id,
             request: crate::gateway::MessageSendRequest {
-                expected_project_id: None,
-                content_parts: None,
-                chat_id: None,
                 text: Some(text.into()),
                 client_message_id: Some(client.into()),
-                attachments: None,
+
                 model: Some(model.into()),
                 reasoning_effort: Some(reasoning.into()),
                 access_mode: Some(access.into()),
-                plan_mode: None,
+
                 subsession_result: Some(butler_turn::btcc::SubsessionResultContext {
                     relation_id,
                     result_id,
                     safe_title,
                 }),
+                ..Default::default()
             },
         })
         .await?;

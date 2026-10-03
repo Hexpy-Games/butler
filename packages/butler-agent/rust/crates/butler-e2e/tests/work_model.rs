@@ -1,11 +1,39 @@
 //! Work model public-path acceptance, using the stub provider only.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test assertions")]
 
+#[path = "work_model/instruction_sequences.rs"]
+mod instruction_sequences;
 #[path = "work_model/mod.rs"]
 mod work_model;
 
 use butler_e2e::e2e::{HarnessError, cassette::Cassette, scenario::Setup};
 use serde_json::json;
+
+#[tokio::test]
+async fn wm_02_task_boundary_releases_within_same_turn_before_next_claim()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    instruction_sequences::same_turn_boundary().await
+}
+
+#[tokio::test]
+async fn wm_03_18_atomic_receipts_and_blocked_queue_without_fake_stop_task()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    instruction_sequences::atomic_and_blocked().await
+}
+
+#[tokio::test]
+async fn wm_05_setting_steers_before_final_in_flight() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    instruction_sequences::in_flight(true, false).await
+}
+
+#[tokio::test]
+async fn wm_05_explicit_steer_fences_stale_effect_dispatch() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    instruction_sequences::in_flight(false, true).await
+}
 
 #[tokio::test]
 async fn wm_19_direct_has_no_managed_entities() -> Result<(), HarnessError> {
@@ -209,3 +237,87 @@ async fn wm_15_recursive_coverage_requires_children_and_integration() -> Result<
 
 #[path = "work_model/coverage.rs"]
 mod coverage;
+
+#[path = "work_model/instructions.rs"]
+mod instructions;
+
+#[tokio::test]
+async fn wm_02_18_10_queue_captures_task_and_receipt_survives_restart() -> Result<(), HarnessError>
+{
+    butler_e2e::gate!();
+    instructions::anchored_queue().await
+}
+
+#[path = "work_model/boundaries.rs"]
+mod boundaries;
+#[path = "work_model/parent_sequences.rs"]
+mod parent_sequences;
+#[tokio::test]
+async fn wm_06_10_final_boundary_tier_zero_queue_and_committed_restart() -> Result<(), HarnessError>
+{
+    butler_e2e::gate!();
+    boundaries::answer().await
+}
+#[tokio::test]
+async fn wm_06_last_wait_boundary_applies_newest_instruction() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    boundaries::wait().await
+}
+#[tokio::test]
+async fn wm_05_07_all_parent_depths_scoped_edits_and_relation_transfer() -> Result<(), HarnessError>
+{
+    butler_e2e::gate!();
+    nested::run(true).await
+}
+
+#[tokio::test]
+async fn wm_18_question_cancels_provisional_draft_without_execution() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    instruction_sequences::same_turn(true).await
+}
+
+#[tokio::test]
+async fn wm_18_unavailable_escalation_preserves_pending_draft() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    instruction_sequences::unavailable_escalation().await
+}
+
+#[tokio::test]
+async fn wm_18_steer_bypasses_sixty_task_queued_messages() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    instructions::long_queue().await
+}
+
+#[path = "work_model/reorder.rs"]
+mod reorder;
+#[tokio::test]
+async fn wm_03_steer_reorders_pending_tasks_and_fences_stale_claim() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    reorder::run().await
+}
+
+#[path = "work_model/recovery.rs"]
+mod recovery;
+#[tokio::test]
+async fn wm_10_restart_redelivers_unacknowledged_instruction_and_entire_queue()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    recovery::run().await
+}
+
+#[path = "work_model/conflicts.rs"]
+mod conflicts;
+
+#[path = "work_model/mutation_recovery.rs"]
+mod mutation_recovery;
+#[tokio::test]
+async fn wm_10_mutation_receipt_outbox_and_tool_result_replay_once() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    mutation_recovery::run(false).await
+}
+
+#[tokio::test]
+async fn wm_10_task_completion_outbox_and_tool_result_replay_once() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    mutation_recovery::run(true).await
+}

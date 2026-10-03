@@ -42,6 +42,16 @@ impl GuidedPolicy {
 }
 
 impl GuidedPolicyPort for GuidedPolicy {
+    fn instruction_inbox(&self) -> bool {
+        self.dependencies.context.instruction_inbox()
+    }
+    fn seal<'a>(
+        &'a self,
+        invocation: GuidedInvocation<'a>,
+        final_answer: bool,
+    ) -> PortFuture<'a, bool> {
+        self.dependencies.context.seal(invocation, final_answer)
+    }
     fn prepare<'a>(&'a self, invocation: GuidedInvocation<'a>) -> PortFuture<'a, PreparedPolicy> {
         Box::pin(async move {
             let rendered = self.dependencies.prompt.render(invocation).await?;

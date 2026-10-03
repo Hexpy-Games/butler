@@ -1,11 +1,13 @@
 //! Opt-in canonical Spec/Plan/Work/Task contracts and invariants.
 mod contracts;
 mod effects;
+mod instructions;
 mod service;
 mod validation;
 
 pub use contracts::*;
 pub use effects::WorkModelEffectGrant;
+pub use instructions::*;
 pub use service::WorkModelService;
 pub(crate) use validation::{check, validate_bundle};
 

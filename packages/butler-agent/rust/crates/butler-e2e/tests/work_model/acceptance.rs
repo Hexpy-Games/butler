@@ -207,8 +207,21 @@ pub(super) async fn publication_recovery() -> Result<(), HarnessError> {
         1
     );
     assert_eq!(
-        db.query_row("SELECT count(*) FROM wm_audit", [], |r| r.get::<_, i64>(0))
-            .unwrap(),
+        db.query_row(
+            "SELECT count(*) FROM wm_audit WHERE json_type(request_json,'$.command') IS NOT NULL",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        1
+    );
+    assert_eq!(
+        db.query_row(
+            "SELECT count(*) FROM wm_instructions i JOIN wm_audit a ON a.seq=json_extract(i.receipt_json,'$.event_seq') JOIN wm_outbox o ON o.seq=a.seq WHERE i.status='applied' AND a.instruction_id=i.id AND json_extract(o.event_json,'$.receipt.status')='applied' AND json_extract(o.event_json,'$.receipt.operation_count')=1",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
         1
     );
     s.restart().await?;

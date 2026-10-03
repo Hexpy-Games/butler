@@ -164,6 +164,7 @@ pub(super) fn resolve_for_message_send(
     if let Some(result) = &request.subsession_result {
         persisted["subsession_result"] = json!(result);
     }
+    super::instructions::snapshot_mode(db, request, &mut persisted, chat_id)?;
     Ok(ResolvedControls {
         resolution: ControlResolution {
             model: controls.model,
@@ -366,4 +367,10 @@ impl super::AppApplication {
         self.project_creation.set_workspace_root(workspace_root);
         Ok((previous, projection))
     }
+}
+
+pub(super) fn follow_up_mode(db: &Connection) -> Result<Value, AppStorageError> {
+    Ok(read_json(db, SETTINGS_KEY)?
+        .and_then(|v| v.get("follow_up_behavior").cloned())
+        .unwrap_or_else(|| "queue".into()))
 }

@@ -73,16 +73,10 @@ fn retry_attachment_reuse_requires_the_exact_user_message_in_the_same_chat() {
 
 fn request(file_id: &str) -> MessageSendRequest {
     MessageSendRequest {
-        expected_project_id: None,
-        content_parts: None,
         chat_id: Some(json!("general")),
         text: Some(json!("retry this")),
-        client_message_id: None,
+
         attachments: Some(json!([{"file_id":file_id}])),
-        model: None,
-        reasoning_effort: None,
-        access_mode: None,
-        plan_mode: None,
-        subsession_result: None,
+        ..Default::default()
     }
 }

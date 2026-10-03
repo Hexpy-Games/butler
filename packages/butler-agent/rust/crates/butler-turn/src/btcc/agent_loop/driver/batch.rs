@@ -26,7 +26,7 @@ pub(super) async fn run_tool_batch(
     };
     let Some(resumed) = resumed_batch else {
         announce_tool_round(input, &reply.text, &reply.calls, iteration).await?;
-        return if tool_batch::concurrent(&prepared_calls) {
+        return if !input.policy.instruction_inbox() && tool_batch::concurrent(&prepared_calls) {
             run_concurrent_batch(input, state, &batch).await
         } else {
             run_sequential_batch(input, state, prepared, &batch, BatchCursor::fresh()).await
@@ -160,6 +160,9 @@ pub(super) async fn run_sequential_batch(
         None
     };
     for (index, prepared_call) in batch.prepared_calls.iter().enumerate().skip(start) {
+        if input.policy.instruction_inbox() && safe_point(input, state).await? {
+            return fence_remainder(input, state, batch, index).await;
+        }
         emit_tool_call(input, prepared_call, batch.iteration);
         let position = if index == start {
             RefusedCall::Pending
@@ -174,15 +177,8 @@ pub(super) async fn run_sequential_batch(
         };
         state.used_tools.push(prepared_call.call.name.clone());
         if let Some(request_ref) = pending_authority(result.output.as_ref()) {
-            let parked = ParkedBatch {
-                request_ref,
-                call: &prepared_call.call,
-                next_call_index: index,
-                results,
-            };
-            return suspend_for_authority(input, state, prepared, batch, parked)
-                .await
-                .map(Step::finished);
+            return park_or_redirect(input, state, prepared, batch, index, results, request_ref)
+                .await;
         }
         results.push(result.clone());
         let outcome = record_result(
@@ -194,8 +190,15 @@ pub(super) async fn run_sequential_batch(
             OutcomeCheck::Evaluate,
         )
         .await?;
+        if input.policy.instruction_inbox() && safe_point(input, state).await? {
+            return fence_remainder(input, state, batch, index + 1).await;
+        }
+        let before_outcome = state.messages.len();
         if let Some(result) = finish_outcome(input, state, outcome).await? {
             return Ok(Step::finished(result));
+        }
+        if state.messages.len() != before_outcome {
+            return fence_remainder(input, state, batch, index + 1).await;
         }
     }
     if let Some(AuthorityDecision::Modify {
@@ -315,12 +318,61 @@ pub(super) async fn settle_batch(
             begin_final_report(state);
             Ok(Step::Continue)
         }
-        BatchDisposition::Wait => finish(
-            input,
-            state,
-            Ending::Suspend(SuspensionReason::WaitingForWorker),
-        )
-        .await
-        .map(Step::finished),
+        BatchDisposition::Wait => {
+            if !may_finish(input, state, false).await? {
+                return Ok(Step::Continue);
+            }
+            finish(
+                input,
+                state,
+                Ending::Suspend(SuspensionReason::WaitingForWorker),
+            )
+            .await
+            .map(Step::finished)
+        }
     }
+}
+
+async fn park_or_redirect(
+    input: &Invocation<'_>,
+    state: &mut State,
+    prepared: &PreparedPolicy,
+    batch: &ToolBatch<'_>,
+    index: usize,
+    results: Vec<ToolResult>,
+    request_ref: String,
+) -> Result<Step, AgentLoopError> {
+    if !may_finish(input, state, false).await? {
+        return fence_remainder(input, state, batch, index).await;
+    }
+    let parked = ParkedBatch {
+        request_ref,
+        call: &batch
+            .prepared_calls
+            .get(index)
+            .ok_or_else(invalid_batch_cursor)?
+            .call,
+        next_call_index: index,
+        results,
+    };
+    suspend_for_authority(input, state, prepared, batch, parked)
+        .await
+        .map(Step::finished)
+}
+
+pub(super) fn invalid_batch_cursor() -> AgentLoopError {
+    propagated(super::super::invalid_contract(
+        BtccCode::AuthorityContinuationCursorInvalid,
+    ))
+}
+
+async fn fence_remainder(
+    input: &Invocation<'_>,
+    state: &mut State,
+    batch: &ToolBatch<'_>,
+    start: usize,
+) -> Result<Step, AgentLoopError> {
+    let calls = batch.calls.get(start..).ok_or_else(invalid_batch_cursor)?;
+    fence_calls(input, state, calls, batch.iteration).await?;
+    Ok(Step::Continue)
 }

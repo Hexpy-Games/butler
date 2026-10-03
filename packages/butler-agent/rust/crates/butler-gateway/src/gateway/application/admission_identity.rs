@@ -86,6 +86,12 @@ pub(super) fn input_digest_with_plan(
     if let Some(project) = request.expected_project_id.as_ref() {
         object.insert("expected_project_id".into(), project.clone().into());
     }
+    if let Some(mode) = &request.instruction_mode {
+        object.insert("instruction_mode".into(), mode.clone());
+    }
+    if let Some(epoch) = &request.instruction_expected_epoch {
+        object.insert("instruction_expected_epoch".into(), epoch.clone());
+    }
     object.insert("explicit_controls".into(),json!({"model":request.model,"reasoning_effort":request.reasoning_effort,
         "access_mode":request.access_mode,"plan_mode":request.plan_mode,"plan_id":plan_id,"authority_request_ref":null}));
     object.insert(

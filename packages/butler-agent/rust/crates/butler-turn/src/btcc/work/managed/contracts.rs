@@ -253,6 +253,36 @@ pub enum WorkModelCommand {
         work_id: String,
     },
     CompletePlan,
+    ResolveDraft {
+        task_id: String,
+        expected_revision: u64,
+        criterion_ids: Vec<String>,
+        #[serde(default)]
+        question: bool,
+    },
+    Add {
+        work_id: String,
+        spec_ref: SpecRef,
+        task: TaskDraft,
+    },
+    Edit {
+        task_id: String,
+        expected_revision: u64,
+        description: String,
+    },
+    Batch {
+        operations: Vec<WorkModelCommand>,
+        expected_control_epoch: u64,
+        reason: String,
+    },
+    Block {
+        task_id: String,
+        expected_revision: u64,
+        reason: String,
+    },
+    SessionStop,
+    SessionPause,
+    SessionResume,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -50,6 +50,17 @@ pub(super) fn commit(
             assistant_message_id,
         } => observe_delivery(&transaction, turn, next_revision, assistant_message_id)?,
     }
+    if !matches!(transition, TurnTransition::ObserveDelivery { .. }) {
+        super::work_model::turn_boundary(
+            &transaction,
+            &turn.turn_id,
+            matches!(transition, TurnTransition::AcceptFinal { .. }),
+        )
+        .map_err(|source| {
+            StorageError::new(StorageCode::WorkModelAssignmentRejected, source.message())
+                .with_source(source)
+        })?;
+    }
     transaction.commit().map_err(StorageError::sqlite)
 }
 

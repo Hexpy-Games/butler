@@ -153,6 +153,12 @@ impl GuidedWorkTools {
         }
     }
 
+    pub(super) fn work_model(
+        &self,
+    ) -> Option<&Arc<butler_turn::btcc::work_model::WorkModelService>> {
+        self.service.work_model()
+    }
+
     pub(in crate::host) fn managed(&self) -> bool {
         self.service.work_model().is_some()
     }

@@ -8,12 +8,15 @@ use butler_gateway::gateway::{
 use butler_ledger::project_ledger::{ProjectLedger, ProjectWorkPlanRead};
 use butler_turn::btcc::{SessionPlanObservation, SessionWorkRepository};
 
+mod work_model;
+
 pub(crate) struct AppSessionProgress {
     session_work: Arc<SessionWorkRepository>,
     project_ledger: ProjectLedger,
     work_model: Option<Arc<butler_turn::btcc::work_model::WorkModelService>>,
     queue: Arc<butler_gateway::gateway::InboundQueue>,
     subsessions: butler_turn::btcc::SqliteSubsessionRepository,
+    instructions: Arc<butler_turn::btcc::SubsessionService>,
 }
 
 impl AppSessionProgress {
@@ -24,6 +27,7 @@ impl AppSessionProgress {
             work_model: runtime.work_model.clone(),
             queue: runtime.inbound_queue.clone(),
             subsessions: runtime.subsessions.repository(),
+            instructions: runtime.subsessions.clone(),
         }
     }
 }
@@ -41,14 +45,11 @@ impl AppSessionWorkProgress for AppSessionProgress {
         let service = self.work_model.clone();
         let queue = self.queue.clone();
         let subsessions = self.subsessions.clone();
+        let instructions = self.instructions.clone();
         Box::pin(async move {
             let Some(service) = service else {
                 return Ok(serde_json::json!({"ok":false,"error":{"code":"work_model_disabled"}}));
             };
-            let cursor = input
-                .get("cursor")
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_owned);
             let revision = input
                 .get("revision")
                 .map(|v| v.as_str().and_then(|v| v.parse::<u64>().ok()).ok_or(()))
@@ -58,45 +59,14 @@ impl AppSessionWorkProgress for AppSessionProgress {
                     serde_json::json!({"ok":false,"error":{"code":"work_model_revision_invalid"}}),
                 );
             };
-            let result = match view.as_str() {
-                "outbox" => {
-                    service
-                        .outbox(input["after"].as_u64().unwrap_or_default())
-                        .await
-                }
-                "metrics" => Ok(
+            let result = if view == "metrics" {
+                Ok(
                     serde_json::json!({"storage_operations":service.operation_count(),"btcc_operations":subsessions.storage_operations(),"btcc_sql_statements":subsessions.sql_statements(),"queue_scans":queue.scan_count()}),
-                ),
-                "summary" => service.summary(session, cursor).await,
-                "graph" => service.graph(session, cursor).await,
-                "plan_graph" => service.graph_plan(session, cursor).await,
-                "spec" => {
-                    service
-                        .read_spec(
-                            session,
-                            input["node_id"].as_str().unwrap_or_default().into(),
-                        )
-                        .await
-                }
-                "apply" => match butler_turn::btcc::work_model::decode_request(input) {
-                    Ok(request) => service.apply(session, request).await,
-                    Err(error) => Err(error),
-                },
-                _ => Err(butler_turn::btcc::BtccError::relayed(
-                    "work_model_view_invalid",
-                    "work_model_view_invalid",
-                )),
+                )
+            } else {
+                work_model::view_and_wake(&service, &instructions, session, &view, input).await
             };
-            let result = result.and_then(|value| {
-                if revision.is_some_and(|r| value["graph_revision"].as_u64() != Some(r)) {
-                    return Err(butler_turn::btcc::BtccError::relayed(
-                        "graph_revision_conflict",
-                        "graph_revision_conflict",
-                    ));
-                }
-                Ok(value)
-            });
-            Ok(result.unwrap_or_else(|error| serde_json::json!({"ok":false,"error":{"code":error.code(),"message":error.message()}})))
+            Ok(work_model::result(result, revision))
         })
     }
     fn read(&self, runtime_session_id: String) -> ApplicationFuture<Option<AppWorkProgress>> {

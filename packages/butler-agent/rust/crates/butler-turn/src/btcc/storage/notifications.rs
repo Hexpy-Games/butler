@@ -38,6 +38,9 @@ fn count_statement(event: rusqlite::trace::TraceEvent<'_>) {
 }
 
 impl BtccStorage {
+    pub fn work_model_changes(&self) -> Arc<tokio::sync::Notify> {
+        self.inner.work_model_changed.clone()
+    }
     /// Coalesced wake after a lane operation changed SQLite state.
     pub fn changes(&self) -> Arc<tokio::sync::Notify> {
         self.inner.changed.clone()
@@ -76,6 +79,7 @@ impl BtccStorage {
             let result = operation(connection, owner);
             if connection.total_changes() != before {
                 inner.changed.notify_one();
+                inner.work_model_changed.notify_one();
             }
             let _cancelled_caller = completion.send(result);
         })

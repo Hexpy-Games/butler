@@ -47,6 +47,9 @@ pub(super) async fn initial() -> Result<(), HarnessError> {
         "function_call".into(),
         "function_call_output".into(),
     ];
+    let mut returned = template.clone();
+    returned.request.key.user_request =
+        "Delegated result status: success summary: once evidence_refs: [\"test:api\"]".into();
     cassette.exchanges = vec![
         template,
         delegate,
@@ -55,6 +58,7 @@ pub(super) async fn initial() -> Result<(), HarnessError> {
         child_denied,
         child_submit,
         child_end,
+        returned,
     ];
     let s = Setup::new("WM-22-INITIAL")?
         .env("BUTLER_WORK_MODEL", "core")
@@ -81,8 +85,7 @@ pub(super) async fn initial() -> Result<(), HarnessError> {
     s.provider()?
         .add_placeholder("CHILD_REQUEST", child_request);
     s.provider()?.add_placeholder("TASK", id);
-    s.turn("general", "Delegate the assigned API verification")
-        .await?;
+    steer_turn(&s, "Delegate the assigned API verification").await?;
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
     let latest = loop {
         let v = summary(&s).await?;
@@ -127,6 +130,22 @@ pub(super) async fn initial() -> Result<(), HarnessError> {
     let child_view = s.gw.get(&format!("/sessions/{child}/work-summary")).await?;
     assert_eq!(child_view.status, 200, "{}", child_view.text);
     assert_eq!(child_view.data()["plan_id"], latest["plan_id"]);
+    loop {
+        let turns = s.gw.turns("general").await?;
+        if turns.len() == 3 && turns.last().unwrap()["state"] == "delivered" {
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "Child result waited for its own Task completion: {turns:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    assert_eq!(
+        summary(&s).await?["total"],
+        3,
+        "Child result created a queued draft"
+    );
     let review=apply(&s,json!({"instruction_id":instruction,"idempotency_key":"parent-review","expected_graph_revision":1,"command":{"op":"review","task_id":id,"expected_revision":5,"result_revision":1,"criterion_results":[{"criterion_id":"AC","verdict":"pass","evidence_refs":["test:api"],"reason":"API response verified"}]}})).await?;
     assert_eq!(review["ok"], true, "{review}");
     let completed=apply(&s,json!({"instruction_id":instruction,"idempotency_key":"parent-complete","expected_graph_revision":1,"command":{"op":"complete","task_id":id,"expected_revision":6}})).await?;

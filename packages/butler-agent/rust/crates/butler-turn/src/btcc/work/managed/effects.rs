@@ -9,6 +9,7 @@ pub struct WorkModelEffectGrant {
     pub(crate) objective: String,
     pub(crate) repository: crate::btcc::storage::WorkModelRepository,
     pub(crate) publication: Option<std::sync::Arc<dyn super::SpecPublication>>,
+    pub(crate) control_epoch: u64,
 }
 impl WorkModelEffectGrant {
     pub(crate) async fn validate(&self) -> Result<(), crate::btcc::BtccError> {
@@ -17,7 +18,9 @@ impl WorkModelEffectGrant {
             .effect_grant(self.session.clone(), self.turn.clone())
             .await?;
         super::check(
-            current.scope_id == self.scope_id && current.revision_id == self.revision_id,
+            current.scope_id == self.scope_id
+                && current.revision_id == self.revision_id
+                && current.control_epoch == self.control_epoch,
             "work_model_effect_fenced",
         )?;
         let refs = self.repository.effect_specs(self.session.clone()).await?;

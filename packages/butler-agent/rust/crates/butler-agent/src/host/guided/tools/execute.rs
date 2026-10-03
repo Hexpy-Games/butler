@@ -60,9 +60,7 @@ pub(super) async fn execute(
         .observe_tool(&owner.binding.turn_id, call, &call_id, invocation.progress)
         .await
         .map_err(ToolExecutionError::Integrity)?;
-    if !owner.binding.visible_names.contains(&call.name)
-        || !owner.binding.authorized_names.contains(&call.name)
-    {
+    if !super::work_model::authorized(owner, &call.name) {
         let denied = json!({"ok":false,"error":{"code":"tool_not_authorized",
             "message":format!("{} is not available for this Turn. Use an available tool or continue with known facts.",call.name)}});
         let denied = encoded(&denied)?;

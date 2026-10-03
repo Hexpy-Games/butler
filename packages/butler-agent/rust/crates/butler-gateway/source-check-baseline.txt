@@ -34,7 +34,7 @@ src/gateway/application/retry/source.rs	retry_snapshot	112
 src/gateway/application/send.rs	AppApplication::send_with_attachment_source	170
 src/gateway/application/session_branches/reservation.rs	AppApplication::reserve_branch	128
 src/gateway/application/session_queue_mutations.rs	AppApplication::create_session_queue_inner	130
-src/gateway/application/session_queue_mutations.rs	AppApplication::update_session_queue_inner	214
+src/gateway/application/session_queue_mutations.rs	AppApplication::update_session_queue_inner	207
 src/gateway/application/session_relocation.rs	AppApplication::perform_relocation	166
 src/gateway/application/session_relocation/records.rs	reserve	83
 src/gateway/application/session_views.rs	AppApplication::session_summary_owned	92

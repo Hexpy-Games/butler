@@ -117,8 +117,8 @@ pub(super) fn retry_snapshot(
             "SELECT text,input_identity_digest,control_resolution_json,controls_json,\
              attachments_json,content_parts_json,project_source_refs_json,\
              dispatched_message_id,state FROM session_queued_messages \
-             WHERE chat_id=?1 AND turn_id=?2 ORDER BY rowid DESC LIMIT 1",
-            params![turn.0, turn_id],
+             WHERE chat_id=?1 AND turn_id=?2 AND dispatched_message_id=?3 ORDER BY rowid DESC LIMIT 1",
+            params![turn.0, turn_id, user_message_id],
             |row| {
                 Ok((
                     row.get::<_, String>(0)?,

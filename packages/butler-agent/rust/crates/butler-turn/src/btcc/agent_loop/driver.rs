@@ -36,6 +36,9 @@ use super::tool_batch::{self, PreparedCall};
 
 mod batch;
 use batch::*;
+mod instructions;
+use instructions::{fence_calls, safe_point};
+pub(super) use instructions::{may_finish, stub_boundary};
 
 /// Everything one loop execution borrows from the turn runtime.
 pub(super) struct Invocation<'a> {
@@ -123,9 +126,8 @@ async fn run_iteration(
     cancelled(&input.cancellation)?;
     let iteration = state.begin_iteration();
     let resumed_batch = state.resumed_batch.take();
-    if !state.is_replaying(resumed_batch.as_ref()) {
-        observe_steering(input, state).await?;
-    }
+    let replaying = state.is_replaying(resumed_batch.as_ref());
+    let redirected = safe_point(input, state).await? && replaying;
     let mut surface = match &resumed_batch {
         Some(batch) => ToolSurface {
             tools: batch.tools.clone(),
@@ -156,6 +158,16 @@ async fn run_iteration(
             }
         }
     };
+    instructions::stub_boundary(input, "response").await?;
+    if redirected || (input.policy.instruction_inbox() && safe_point(input, state).await?) {
+        discard_round_text(prepared);
+        let start = resumed_batch
+            .as_ref()
+            .map_or(0, |batch| batch.next_call_index);
+        let calls = reply.calls.get(start..).ok_or_else(invalid_batch_cursor)?;
+        fence_calls(input, state, calls, iteration).await?;
+        return Ok(Step::Continue);
+    }
     reject_text_tool_calls(input, state, &reply, iteration).await?;
     if reply.calls.is_empty() && !reply.text_call_names.is_empty() {
         discard_round_text(prepared);
@@ -175,16 +187,6 @@ async fn run_iteration(
         resumed_batch,
     )
     .await
-}
-
-async fn observe_steering(input: &Invocation<'_>, state: &mut State) -> Result<(), AgentLoopError> {
-    let observations = input
-        .policy
-        .before_model_round(GuidedInvocation::from(input))
-        .await
-        .map_err(propagated)?;
-    append_observations(state, observations);
-    Ok(())
 }
 
 /// The assistant reply of a fresh iteration: the accepted call replayed on
@@ -291,6 +293,10 @@ async fn settle_answer(
             .push(ModelRoundMessage::user(observation, None));
         return Ok(Step::Continue);
     }
+    if safe_point(input, state).await? {
+        discard_round_text(prepared);
+        return Ok(Step::Continue);
+    }
     let review = input
         .policy
         .review_final_candidate(GuidedInvocation::from(input), &text, iteration)
@@ -312,6 +318,10 @@ async fn settle_answer(
             Ok(Step::Continue)
         }
         CandidateDisposition::Accepted(replacement) => {
+            if !may_finish(input, state, true).await? {
+                discard_round_text(prepared);
+                return Ok(Step::Continue);
+            }
             let content = replacement
                 .filter(|value| !value.trim().is_empty())
                 .unwrap_or(text);

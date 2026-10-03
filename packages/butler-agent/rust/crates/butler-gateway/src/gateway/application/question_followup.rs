@@ -12,19 +12,13 @@ pub(super) async fn send(
     app.send_message(SendMessageCommand {
         chat_id: session.into(),
         request: MessageSendRequest {
-            expected_project_id: None,
-            content_parts: None,
             chat_id: Some(json!(session)),
             text: Some(json!(format!(
                 "Answers to your deferred questions:\n{input}"
             ))),
             client_message_id: Some(json!(format!("question-followup-{request_ref}"))),
-            attachments: None,
-            model: None,
-            reasoning_effort: None,
-            access_mode: None,
-            plan_mode: None,
-            subsession_result: None,
+            instruction_mode: Some("steer".into()),
+            ..Default::default()
         },
     })
     .await?;

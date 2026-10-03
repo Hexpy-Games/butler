@@ -40,6 +40,7 @@ pub(in crate::btcc::storage) fn assign_child(
     .map_err(sql)?;
     db.execute("INSERT INTO wm_sessions(session_id,scope_id,plan_id,current_task_id,routing_reason) VALUES(?1,?2,?3,?4,'delegation')", params![input.child_session_id,plan.scope_id,plan.id,task.id]).map_err(sql)?;
     record_assignment(db, input, &plan, &task)?;
+    instructions::initial_child(db, input)?;
     Ok(())
 }
 
@@ -78,6 +79,47 @@ pub(super) fn authorize(
         return Ok(());
     }
     match command {
+        WorkModelCommand::Add {
+            work_id,
+            spec_ref,
+            task,
+        } => {
+            let assigned = assigned(db, session, plan)?;
+            check(
+                work_id == &assigned.work_id && !task.allow_nested_delegation,
+                "task_mutation_scope_invalid",
+            )?;
+            let ancestors = reads::ancestors(db, session, &spec_ref.node_id)?;
+            check(
+                ancestors.iter().any(|r| r == &assigned.spec_ref),
+                "task_mutation_scope_invalid",
+            )?;
+            check(
+                task.after.iter().any(|id| id == &assigned.id),
+                "task_mutation_scope_invalid",
+            )
+        }
+        WorkModelCommand::Edit { task_id, .. }
+        | WorkModelCommand::Remove { task_id, .. }
+        | WorkModelCommand::Block { task_id, .. }
+        | WorkModelCommand::ResolveDraft { task_id, .. } => own(db, session, plan, task_id),
+        WorkModelCommand::Reorder { task_ids } => {
+            for id in task_ids {
+                own(db, session, plan, id)?;
+            }
+            Ok(())
+        }
+        WorkModelCommand::Dependencies { add, remove } => {
+            let assigned = assigned(db, session, plan)?;
+            for edge in add.iter().chain(remove) {
+                check(
+                    edge.from == assigned.id || own(db, session, plan, &edge.from).is_ok(),
+                    "task_mutation_scope_invalid",
+                )?;
+                own(db, session, plan, &edge.to)?;
+            }
+            Ok(())
+        }
         WorkModelCommand::Start { task_id, .. } | WorkModelCommand::Submit { task_id, .. } => {
             let current: Option<String> = db
                 .query_row(
@@ -87,7 +129,7 @@ pub(super) fn authorize(
                 )
                 .map_err(sql)?;
             check(
-                current.as_ref() == Some(task_id),
+                current.as_ref() == Some(task_id) || own(db, session, plan, task_id).is_ok(),
                 "task_mutation_scope_invalid",
             )
         }
@@ -100,4 +142,18 @@ pub(super) fn authorize(
         }
         _ => Err(error("task_mutation_scope_invalid")),
     }
+}
+
+fn assigned(db: &Connection, session: &str, plan: &reads::Plan) -> Result<TaskCard> {
+    let id: String=db.query_row("SELECT json_extract(d.packet_json,'$.task_id') FROM btcc_session_relations r JOIN btcc_subsession_delegations d USING(relation_id) WHERE r.child_session_id=?1",[session],|r|r.get(0)).map_err(sql)?;
+    tasks::load(db, &plan.scope_id, &plan.id, &id)
+}
+
+fn own(db: &Connection, session: &str, plan: &reads::Plan, id: &str) -> Result<()> {
+    let task = tasks::load(db, &plan.scope_id, &plan.id, id)?;
+    let assigned = assigned(db, session, plan)?;
+    check(
+        task.work_id == assigned.work_id && task.assignee_session_id.as_deref() == Some(session),
+        "task_mutation_scope_invalid",
+    )
 }

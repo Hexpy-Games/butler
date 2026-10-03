@@ -48,32 +48,7 @@ pub(super) fn apply(
     plan: &reads::Plan,
     request: &WorkModelRequest,
 ) -> Result<Value> {
-    let (id, expected) = match &request.command {
-        WorkModelCommand::Start {
-            task_id,
-            expected_revision,
-        }
-        | WorkModelCommand::Submit {
-            task_id,
-            expected_revision,
-            ..
-        }
-        | WorkModelCommand::Review {
-            task_id,
-            expected_revision,
-            ..
-        }
-        | WorkModelCommand::Complete {
-            task_id,
-            expected_revision,
-        }
-        | WorkModelCommand::Remove {
-            task_id,
-            expected_revision,
-            ..
-        } => (task_id, *expected_revision),
-        _ => return Err(error("work_model_operation_unavailable")),
-    };
+    let (id, expected) = target(&request.command)?;
     let before = load(db, &plan.scope_id, &plan.id, id)?;
     check(before.status != "completed", "completed_task_immutable")?;
     check(before.revision == expected, "task_revision_conflict")?;
@@ -102,11 +77,94 @@ pub(super) fn apply(
         WorkModelCommand::Remove { remove_edges, .. } => {
             remove(db, &plan.scope_id, plan, &mut task, remove_edges)?;
         }
-        _ => return Err(error("work_model_operation_unavailable")),
+        command => amend(db, session, plan, command, &mut task)?,
     }
     task.revision += 1;
     save(db, &plan.scope_id, &plan.id, &before, &mut task)?;
+    if matches!(task.status.as_str(), "completed" | "cancelled") {
+        instructions::task_boundary(db, &task.id)?;
+    }
     Ok(json!({"ok":true,"task":task,"graph_revision":plan.graph_revision}))
+}
+
+fn target(command: &WorkModelCommand) -> Result<(&str, u64)> {
+    match command {
+        WorkModelCommand::Start {
+            task_id,
+            expected_revision,
+        }
+        | WorkModelCommand::Submit {
+            task_id,
+            expected_revision,
+            ..
+        }
+        | WorkModelCommand::Review {
+            task_id,
+            expected_revision,
+            ..
+        }
+        | WorkModelCommand::Complete {
+            task_id,
+            expected_revision,
+        }
+        | WorkModelCommand::Remove {
+            task_id,
+            expected_revision,
+            ..
+        }
+        | WorkModelCommand::ResolveDraft {
+            task_id,
+            expected_revision,
+            ..
+        }
+        | WorkModelCommand::Edit {
+            task_id,
+            expected_revision,
+            ..
+        }
+        | WorkModelCommand::Block {
+            task_id,
+            expected_revision,
+            ..
+        } => Ok((task_id.as_str(), *expected_revision)),
+        _ => Err(error("work_model_operation_unavailable")),
+    }
+}
+
+fn amend(
+    db: &Connection,
+    session: &str,
+    plan: &reads::Plan,
+    command: &WorkModelCommand,
+    task: &mut TaskCard,
+) -> Result<()> {
+    match command {
+        WorkModelCommand::ResolveDraft {
+            criterion_ids,
+            question,
+            ..
+        } => instructions::drafts::resolve(db, session, plan, task, criterion_ids, *question)?,
+        WorkModelCommand::Edit { description, .. } => {
+            check(task.status == "pending", "active_task_settlement_required")?;
+            check(!description.trim().is_empty(), "task_description_required")?;
+            task.description = description.clone();
+            task.title = description.clone();
+            graph::advance(db, &plan.scope_id, &plan.id)?;
+        }
+        WorkModelCommand::Block { reason, .. } => {
+            check(!reason.trim().is_empty(), "blocked_reason_required")?;
+            check(
+                matches!(task.status.as_str(), "running" | "awaiting_review"),
+                "task_not_running",
+            )?;
+            effects_settled(db, plan, task)?;
+            task.status = "blocked".into();
+            task.blocked_reason = Some(reason.clone());
+            db.execute("UPDATE wm_attempts SET status='interrupted' WHERE scope_id=?1 AND plan_id=?2 AND task_id=?3 AND status='running'",params![plan.scope_id,plan.id,task.id]).map_err(sql)?;
+        }
+        _ => return Err(error("work_model_operation_unavailable")),
+    }
+    Ok(())
 }
 
 fn start(
@@ -116,6 +174,7 @@ fn start(
     request: &WorkModelRequest,
     task: &mut TaskCard,
 ) -> Result<()> {
+    instructions::delivery::claim_gate(db, session)?;
     ready(db, &plan.scope_id, &plan.id, task)?;
     check(
         task.assignee_session_id

@@ -1,5 +1,5 @@
 //! Host adaptation of the opt-in domain; existing router round selects the tier.
-mod schema;
+pub(super) mod schema;
 
 use butler_turn::btcc::{BtccError, DurableWorkService, GuidedPhaseSelection, WorkTurnScope};
 use serde_json::{Map, Value, json};
@@ -28,7 +28,11 @@ pub(super) fn surface(phase: &mut GuidedPhaseSelection, summary: &Value) {
     let bootstrap = phase
         .provider_tools
         .iter()
-        .any(|t| t["name"] == "start_work");
+        .any(|t| t["name"] == "start_work")
+        || (phase.execution_policy.access_mode != butler_turn::btcc::AccessMode::ReadOnly
+            && summary["plan_id"].is_string()
+            && summary["tier"].as_u64().is_some_and(|tier| tier > 0)
+            && summary["status"] != "completed");
     phase.authorized_names.retain(|name| !legacy_writer(name));
     phase
         .provider_tools
@@ -42,7 +46,29 @@ pub(super) fn surface(phase: &mut GuidedPhaseSelection, summary: &Value) {
             definition["parameters"] = json!({"type":"object","additionalProperties":false,"properties":{"request":{"type":"string"}},"required":[]});
         }
     }
-    if bootstrap {
+    schemas(phase, summary, bootstrap);
+    if bootstrap
+        && phase.execution_policy.role == butler_turn::btcc::PolicyRole::Worker
+        && summary["current_task"]["allow_nested_delegation"] == true
+    {
+        phase.authorized_names.push("delegate_to_worker".into());
+        phase.provider_tools.push(json!({"name":"delegate_to_worker","description":"Assign the canonical Task under its nested grant and narrower authority.","parameters":{"type":"object","additionalProperties":false,"properties":{},"required":[]}}));
+    }
+    phase.stable_instruction_prefix = "You are Butler. Preserve the user's exact request, language, named entities and admitted effect authority. Use evidence before claiming results.\nChoose workload in the existing direct-versus-delegate judgement: Tier 0 for Q&A/search/one action creates nothing. Tier 1 for 2–5 small steps: work_apply create_light once with request goal, 2–3 observable criteria and all Tasks. Tier 2 for software, research, analysis/report, long-running work, >5 Tasks or any delegation: create a recursive software/research Spec tree and Plan with bound Works/Tasks. No extra classification round. The request grants in-scope authoring/publication/activation; ask only for scope expansion or new effect authority.\nUse work_read for exact current IDs, revisions and Specs. Start each ready Task before effects, submit result/evidence refs, review every criterion at its result revision, complete only accepted review. Rank never bypasses prerequisites. Task IDs and completed evidence are immutable; no separate todo list. Queue waits for this Task, even across Turns; resolve delivered drafts using existing criteria or cancel a question before the next claim. Steer applies at safe points and fences stale tools. work_apply names receipt instruction_id; delivery is not application. Ordered operations require current graph/control revisions and reason. session_control requires direct-child relation epoch. Query unavailable operations; replan revision conflicts. Complete Works/Plan with full criterion coverage; read responsible Spec and ancestors before effects. Null research results may meet method criteria without proving hypotheses.\nDelegate ready Tier 2 Tasks without child root Works. Lower-tier growth/split/replacement stays pending for reviewed replan. Prose grants no extra authority or completion. Preserve memory/conversation and effect approval policy; report facts and blocked reasons.".into();
+    if !bootstrap {
+        phase.stable_instruction_prefix = "You are Butler. Answer quick Q&A and search directly: Tier 0 creates no Spec/Work/Task. Preserve the exact request, user language, entities and admitted authority. Use tools and memory/conversation evidence when needed. Never claim an effect without evidence. Delegation requires Tier 2 before assignment; retain all existing effect guards.".into();
+    }
+    if let Some(prefix) = &mut phase.stable_provider_cache_prefix {
+        prefix["instructionPrefix"] = phase.stable_instruction_prefix.clone().into();
+        prefix["stablePrefixRevision"] = "butler.work-model-instructions.v1".into();
+    }
+}
+
+fn schemas(phase: &mut GuidedPhaseSelection, summary: &Value, bootstrap: bool) {
+    if !bootstrap {
+        return;
+    }
+    {
         let child = phase.execution_policy.role != butler_turn::btcc::PolicyRole::Butler;
         let create = !child && (summary["tier"] == 0 || summary["status"] == "completed");
         for definition in schema::definitions(create, child) {
@@ -51,21 +77,22 @@ pub(super) fn surface(phase: &mut GuidedPhaseSelection, summary: &Value) {
                 .push(definition["name"].as_str().unwrap_or_default().into());
             phase.provider_tools.push(definition);
         }
-    }
-    if bootstrap
-        && phase.execution_policy.role == butler_turn::btcc::PolicyRole::Worker
-        && summary["current_task"]["allow_nested_delegation"] == true
-    {
-        phase.authorized_names.push("delegate_to_worker".into());
-        phase.provider_tools.push(json!({"name":"delegate_to_worker","description":"Assign the same canonical Task under its explicit nested grant, inheriting narrower effect authority.","parameters":{"type":"object","additionalProperties":false,"properties":{},"required":[]}}));
-    }
-    phase.stable_instruction_prefix = "You are Butler. Preserve the user's exact request, language, named entities and admitted effect authority. Use evidence before claiming results.\nChoose workload in the existing direct-versus-delegate judgement: Tier 0 for Q&A/search/one action creates nothing. Tier 1 for 2–5 small steps: work_apply create_light once with request goal, 2–3 observable criteria and all Tasks. Tier 2 for software, research, analysis/report, long-running work, >5 Tasks or any delegation: create a recursive software/research Spec tree and Plan with bound Works/Tasks. No extra classification round. The request grants in-scope authoring/publication/activation; ask only for scope expansion or new effect authority.\nUse work_read for exact current IDs, revisions and Specs. Start each ready Task before effects, submit result/evidence refs, review every criterion at its result revision, complete only accepted review. Rank never bypasses prerequisites. Task IDs and completed evidence are immutable; no separate todo list. Complete Works/Plan only with full criterion coverage. Read exact responsible Spec and ancestors before effects. Research null results may satisfy method criteria without proving a hypothesis.\nEvery delegation requires Tier 2 and a ready canonical Task; never create a child root Work. Existing lower-tier growth/split/replacement remains pending until reviewed replan is available. Do not manufacture authority or completion from prose. Preserve existing memory/conversation and effect approval policy. Report factual outcomes and explicit blocked reasons.".into();
-    if !bootstrap {
-        phase.stable_instruction_prefix = "You are Butler. Answer quick Q&A and search directly: Tier 0 creates no Spec/Work/Task. Preserve the exact request, user language, entities and admitted authority. Use tools and memory/conversation evidence when needed. Never claim an effect without evidence. Delegation requires Tier 2 before assignment; retain all existing effect guards.".into();
-    }
-    if let Some(prefix) = &mut phase.stable_provider_cache_prefix {
-        prefix["instructionPrefix"] = phase.stable_instruction_prefix.clone().into();
-        prefix["stablePrefixRevision"] = "butler.work-model-core.v1".into();
+        if summary["tier"] == 2 {
+            phase.authorized_names.retain(|n| {
+                !matches!(
+                    n.as_str(),
+                    "steer_steward" | "steer_worker" | "cancel_steward"
+                )
+            });
+            phase.provider_tools.retain(|t| {
+                !matches!(
+                    t["name"].as_str(),
+                    Some("steer_steward" | "steer_worker" | "cancel_steward")
+                )
+            });
+            phase.authorized_names.push("session_control".into());
+            phase.provider_tools.push(schema::control());
+        }
     }
 }
 
@@ -81,12 +108,28 @@ pub(super) async fn execute(
     };
     let session = scope.session_id.clone();
     let result = if name == "work_apply" {
-        let allowed = ["command", "expected_graph_revision", "idempotency_key"];
+        let allowed = [
+            "command",
+            "expected_graph_revision",
+            "idempotency_key",
+            "instruction_id",
+            "operations",
+            "expected_control_epoch",
+            "reason",
+        ];
         if args.keys().any(|key| !allowed.contains(&key.as_str())) {
             return Ok(json!({"ok":false,"error":{"code":"work_model_command_invalid"}}));
         }
-        let input = json!({"instruction_id":scope.turn_id,"idempotency_key":args.get("idempotency_key").cloned().unwrap_or_else(|| call.into()),
-            "expected_graph_revision":args.get("expected_graph_revision"),"command":args.get("command")});
+        let command = if args.contains_key("operations") {
+            if args.contains_key("command") {
+                return Ok(json!({"ok":false,"error":{"code":"work_model_command_invalid"}}));
+            }
+            json!({"op":"batch","operations":args["operations"],"expected_control_epoch":args.get("expected_control_epoch"),"reason":args.get("reason")})
+        } else {
+            args.get("command").cloned().unwrap_or(Value::Null)
+        };
+        let input = json!({"instruction_id":args.get("instruction_id").cloned().unwrap_or_else(||scope.turn_id.clone().into()),"idempotency_key":args.get("idempotency_key").cloned().unwrap_or_else(|| call.into()),
+            "expected_graph_revision":args.get("expected_graph_revision"),"command":command});
         match butler_turn::btcc::work_model::decode_request(input) {
             Ok(request) => model.apply(session, request).await,
             Err(error) => Err(error),
@@ -104,7 +147,7 @@ pub(super) async fn execute(
             .map(str::to_owned);
         match args.get("view").and_then(Value::as_str) {
             Some("operations") => Ok(
-                json!({"available":["start","submit","review","complete","remove","reorder","dependencies","step","complete_work","complete_plan"],"unavailable":[{"operations":["split","replace","escalate","add","edit"],"reason":"in_use_spec_replan_unavailable"},{"operations":["pause","stop","resume"],"reason":"work_model_controls_unavailable"}]}),
+                json!({"available":["start","submit","review","complete","remove","reorder","dependencies","step","complete_work","complete_plan","add","edit","resolve_draft","block","batch"],"unavailable":[{"operations":["split","replace","escalate"],"reason":"in_use_spec_replan_unavailable"},{"operations":["pause","stop","resume"],"reason":"work_model_controls_unavailable"}]}),
             ),
             Some("summary" | "tasks") => model.summary(session, cursor).await,
             Some("graph") => model.graph(session, cursor).await,

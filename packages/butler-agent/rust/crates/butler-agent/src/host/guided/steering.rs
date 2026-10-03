@@ -14,6 +14,7 @@ pub(crate) struct GuidedSteering {
     subsessions: Arc<butler_turn::btcc::SubsessionService>,
     child_session_id: String,
     child_turn_id: String,
+    delivered_seq: Mutex<u64>,
 }
 
 impl GuidedSteering {
@@ -30,16 +31,67 @@ impl GuidedSteering {
             subsessions,
             child_session_id,
             child_turn_id,
+            delivered_seq: Mutex::new(0),
+        }
+    }
+    async fn instruction_observations(
+        &self,
+        model: &butler_turn::btcc::work_model::WorkModelService,
+    ) -> Result<Vec<SteeringObservation>, butler_turn::btcc::BtccError> {
+        let mut seq = self.delivered_seq.lock().await;
+        let mut observations = Vec::new();
+        loop {
+            let deliveries = model
+                .instruction_safe_point(
+                    self.child_session_id.clone(),
+                    self.child_turn_id.clone(),
+                    *seq,
+                )
+                .await?;
+            *seq = deliveries["last_seq"].as_u64().unwrap_or(*seq);
+            observations.extend(deliveries["injections"].as_array().into_iter().flatten().map(|item| SteeringObservation {
+                content:format!("Durable session instruction (receipt identifies the sender, immutable mode and boundary). Resolve its draft and acknowledge by instruction_id when applying operations. Never restart completed Tasks.\n{item}"),
+                request_segment_kind:"current_user_request".into(),
+            }));
+            if deliveries["has_more"] != true {
+                return Ok(observations);
+            }
         }
     }
 }
 
 impl TurnSteeringPort for GuidedSteering {
+    fn instruction_inbox(&self) -> bool {
+        self.state.work_service.work_model().is_some()
+    }
+    fn seal<'a>(
+        &'a self,
+        invocation: GuidedInvocation<'a>,
+        final_answer: bool,
+    ) -> PortFuture<'a, bool> {
+        Box::pin(async move {
+            let _ = invocation;
+            if let Some(model) = self.state.work_service.work_model() {
+                return model
+                    .seal_instructions(
+                        self.child_session_id.clone(),
+                        self.child_turn_id.clone(),
+                        *self.delivered_seq.lock().await,
+                        final_answer,
+                    )
+                    .await;
+            }
+            Ok(true)
+        })
+    }
     fn observe<'a>(
         &'a self,
         invocation: GuidedInvocation<'a>,
     ) -> PortFuture<'a, Vec<SteeringObservation>> {
         Box::pin(async move {
+            if let Some(model) = self.state.work_service.work_model() {
+                return self.instruction_observations(model).await;
+            }
             let direction = self
                 .subsessions
                 .consume_direction(&self.child_session_id, &self.child_turn_id)

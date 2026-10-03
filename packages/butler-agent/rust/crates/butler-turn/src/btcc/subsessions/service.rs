@@ -5,6 +5,7 @@ mod delegation;
 mod helpers;
 mod projection;
 mod result_delivery;
+mod resume;
 #[cfg(test)]
 pub(crate) mod tests;
 mod worker;
@@ -25,6 +26,7 @@ use crate::btcc::{
 };
 use crate::workspace::{OwnOptional, SessionBindingStore, SessionRole, UpsertSessionBinding};
 
+mod instructions;
 mod lifecycle;
 mod managed;
 mod packets;

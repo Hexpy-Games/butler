@@ -200,18 +200,13 @@ impl AppApplication {
 
     async fn send_automation(&self, row: &AutomationRow, run_id: &str) -> DispatchResult {
         let request = MessageSendRequest {
-            expected_project_id: None,
-            content_parts: None,
             chat_id: Some(json!(row.target_id)),
             text: Some(json!(row.prompt)),
             client_message_id: Some(json!(format!("automation-{}-{run_id}", row.id))),
-            attachments: None,
-            model: None,
-            reasoning_effort: None,
+
             // The schedule's own access, whatever the conversation's mode (#237).
             access_mode: Some(json!(settings::access_mode_name(&row.access))),
-            plan_mode: None,
-            subsession_result: None,
+            ..Default::default()
         };
         match self
             .send(SendMessageCommand {

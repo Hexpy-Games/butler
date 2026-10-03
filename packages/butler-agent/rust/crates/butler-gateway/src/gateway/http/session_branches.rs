@@ -44,17 +44,9 @@ pub(super) async fn post(
             .send_message(SendMessageCommand {
                 chat_id: branch.session.id.clone(),
                 request: crate::gateway::MessageSendRequest {
-                    expected_project_id: None,
-                    content_parts: None,
-                    chat_id: None,
                     text: Some(Value::String(text)),
                     client_message_id: Some(Value::String(format!("branch-followup-{request_id}"))),
-                    attachments: None,
-                    model: None,
-                    reasoning_effort: None,
-                    access_mode: None,
-                    plan_mode: None,
-                    subsession_result: None,
+                    ..Default::default()
                 },
             })
             .await?;

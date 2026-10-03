@@ -162,11 +162,9 @@ impl AppApplication {
             .await
             .map_err(map_retry_error)?;
         let request = MessageSendRequest {
-            expected_project_id: None,
-            content_parts: None,
             chat_id: Some(Value::String(source.chat_id.clone())),
             text: Some(Value::String(source.text)),
-            client_message_id: None,
+
             attachments: Some(Value::Array(
                 source
                     .attachment_ids
@@ -174,11 +172,9 @@ impl AppApplication {
                     .map(|file_id| json!({"file_id":file_id}))
                     .collect(),
             )),
-            model: None,
-            reasoning_effort: None,
-            access_mode: None,
-            plan_mode: None,
+
             subsession_result: source.subsession_result,
+            ..Default::default()
         };
         self.send_with_reused_attachments(
             SendMessageCommand {

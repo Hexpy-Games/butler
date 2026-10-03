@@ -73,7 +73,7 @@ pub struct SendMessageCommand {
     pub chat_id: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct MessageSendRequest {
     pub expected_project_id: Option<String>,
     pub content_parts: Option<MessageContent>,
@@ -85,6 +85,8 @@ pub struct MessageSendRequest {
     pub reasoning_effort: Option<Value>,
     pub access_mode: Option<Value>,
     pub plan_mode: Option<Value>,
+    pub instruction_mode: Option<Value>,
+    pub instruction_expected_epoch: Option<Value>,
     pub subsession_result: Option<butler_turn::btcc::SubsessionResultContext>,
 }
 

@@ -81,6 +81,16 @@ pub trait AuthorityPort: Send + Sync {
 
 /// Steering and context projection of a guided turn.
 pub trait ContextPort: Send + Sync {
+    fn instruction_inbox(&self) -> bool {
+        false
+    }
+    fn seal<'a>(
+        &'a self,
+        _invocation: GuidedInvocation<'a>,
+        _final_answer: bool,
+    ) -> PortFuture<'a, bool> {
+        Box::pin(async { Ok(true) })
+    }
     /// User messages that arrived since the last round.
     fn steering<'a>(
         &'a self,
@@ -97,6 +107,16 @@ pub trait ContextPort: Send + Sync {
 
 /// Observes user messages that arrive while a turn runs.
 pub trait TurnSteeringPort: Send + Sync {
+    fn instruction_inbox(&self) -> bool {
+        false
+    }
+    fn seal<'a>(
+        &'a self,
+        _invocation: GuidedInvocation<'a>,
+        _final_answer: bool,
+    ) -> PortFuture<'a, bool> {
+        Box::pin(async { Ok(true) })
+    }
     /// New steering messages since the last observation.
     fn observe<'a>(
         &'a self,

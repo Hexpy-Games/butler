@@ -113,6 +113,7 @@ pub struct BtccStorage {
 struct StorageInner {
     lane: AsyncMutex<LaneState>,
     changed: Arc<tokio::sync::Notify>,
+    work_model_changed: Arc<tokio::sync::Notify>,
     operations: std::sync::atomic::AtomicU64,
     sql_statements: Arc<std::sync::atomic::AtomicU64>,
 }
@@ -170,6 +171,7 @@ impl BtccStorage {
         Ok(Self {
             inner: Arc::new(StorageInner {
                 changed: Arc::new(tokio::sync::Notify::new()),
+                work_model_changed: Arc::new(tokio::sync::Notify::new()),
                 operations: std::sync::atomic::AtomicU64::new(0),
                 sql_statements: Arc::new(std::sync::atomic::AtomicU64::new(0)),
                 lane: AsyncMutex::new(LaneState {

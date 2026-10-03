@@ -462,17 +462,10 @@ pub(super) fn command(client: &str, text: &str) -> SendMessageCommand {
     SendMessageCommand {
         chat_id: "general".into(),
         request: MessageSendRequest {
-            expected_project_id: None,
-            content_parts: None,
             chat_id: Some(json!("general")),
             text: Some(json!(text)),
             client_message_id: Some(json!(client)),
-            attachments: None,
-            model: None,
-            reasoning_effort: None,
-            access_mode: None,
-            plan_mode: None,
-            subsession_result: None,
+            ..Default::default()
         },
     }
 }

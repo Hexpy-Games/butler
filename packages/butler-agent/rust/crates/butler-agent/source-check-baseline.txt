@@ -38,12 +38,12 @@ src/host/guided/tools.rs	GuidedTools::new	99
 src/host/guided/tools/discovery.rs	search	82
 src/host/guided/tools/discovery/invoke.rs	run	134
 src/host/guided/tools/discovery/invoke.rs	run_mcp	115
-src/host/guided/tools/dispatch.rs	execute	261
+src/host/guided/tools/dispatch.rs	execute	223
 src/host/guided/tools/effect.rs	execute	116
 src/host/guided/tools/effect/authority.rs	gate	124
 src/host/guided/tools/effect/ledger_input.rs	prepare	94
 src/host/guided/tools/effect/topic_conversation.rs	TopicConversationEffect::request	97
-src/host/guided/tools/execute.rs	execute	141
+src/host/guided/tools/execute.rs	execute	139
 src/host/guided/tools/image.rs	admitted_image	96
 src/host/guided/tools/image.rs	execute	100
 src/host/guided/tools/message/preview.rs	fit	85
