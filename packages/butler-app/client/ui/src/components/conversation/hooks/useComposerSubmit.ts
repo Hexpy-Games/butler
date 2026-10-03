@@ -69,7 +69,7 @@ export function useComposerSubmit({
       setAccessMenuOpen(false);
       // The sent bubble flies from where the text sat (DS send flight).
       recordSendOrigin(submitted.textAreaRef?.current);
-      onSend(contentParts ? text : value, { ...composerControlsForSubmit({
+      onSend(text, { ...composerControlsForSubmit({
         model,
         reasoning,
         accessMode,

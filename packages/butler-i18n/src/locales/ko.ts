@@ -1186,7 +1186,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       savedKeys: "API 키",
       memoryCleanup: "기억 정리",
       permissions: "권한",
-      workerProfiles: "Worker 프로필",
+      workerProfiles: "작업자 설정",
       connection: "연결",
       projects: "프로젝트",
       diagnostics: "진단",
@@ -1206,7 +1206,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     },
     panels: {
       butlerModel: "모델 설정",
-      workerProfiles: "Worker 프로필",
+      workerProfiles: "작업자 설정",
       backupModels: "예비 모델",
       updates: "업데이트",
       mcpServers: "MCP 서버",
@@ -1248,12 +1248,12 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     },
     modelsAdvanced: {
       title: "고급",
-      contents: "기억 정리 모델과 Worker 프로필",
+      contents: "기억 정리 모델과 작업자 설정",
     },
     workerProfilesPanel: {
-      add: "Worker 프로필 추가",
-      addLimitReached: "Worker 프로필은 최대 12개까지 등록할 수 있습니다.",
-      maxSimultaneousWorkers: "최대 동시 Worker 수",
+      add: "작업자 추가",
+      addLimitReached: "작업자는 최대 12명까지 등록할 수 있습니다.",
+      maxSimultaneousWorkers: "최대 동시 작업자 수",
     },
     wallpaper: {
       options: "월페이퍼",

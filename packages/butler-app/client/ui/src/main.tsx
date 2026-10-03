@@ -5,8 +5,7 @@ import { WallpaperModulesProvider } from "@/components/common/WallpaperModulesPr
 import { AppConfirmationDialog } from "@/components/common/AppConfirmationDialog.tsx";
 import { AppShell } from "@/pages/AppShell.tsx";
 import { ThinkingMarkHarness } from "@/pages/ThinkingMarkHarness.tsx";
-import { ActivityLayoutHarness } from "@/pages/ActivityLayoutHarness.tsx";
-import { VisualHarness } from "@/pages/VisualHarness.tsx";
+import { ComponentHarness } from "@/pages/ComponentHarness.tsx";
 import "@/butler-ds/tokens.css";
 
 const visualMode = typeof window !== "undefined"
@@ -28,7 +27,7 @@ createRoot(rootElement).render(
       {visualMode === "thinking-mark"
         ? <ThinkingMarkHarness />
         : visualMode === "components"
-          ? new URLSearchParams(window.location.search).get("surface") === "activity-layout" ? <ActivityLayoutHarness /> : <VisualHarness />
+          ? <ComponentHarness />
           : visualMode === "design-system"
             ? <Suspense fallback={null}><DesignSystemViewer /></Suspense>
             : <AppShell />}

@@ -1,6 +1,5 @@
 import { useCallback } from "react";
-import type { KeyboardEvent } from "react";
-import type { ComposerSubmit } from "./composerEventTypes";
+import type { ComposerKeyEvent, ComposerSubmit } from "./composerEventTypes";
 
 export type MultilineSendBehavior =
   | "modifier_enter_send_enter_newline"
@@ -34,13 +33,15 @@ export function useComposerKeyboard({
   submit,
 }: UseComposerKeyboardProps) {
   return useCallback(
-    (event: KeyboardEvent<HTMLElement>) => {
+    (event: ComposerKeyEvent) => {
+      if (event.defaultPrevented) return;
       if (event.key === "Escape") {
         setModelMenuOpen(false);
         setAccessMenuOpen(false);
         return;
       }
-      if (event.key !== "Enter" || event.nativeEvent.isComposing || isComposing)
+      const native = event.nativeEvent ?? event;
+      if (event.key !== "Enter" || native.isComposing || native.keyCode === 229 || isComposing)
         return;
       if (
         shouldSubmitComposerEnter({

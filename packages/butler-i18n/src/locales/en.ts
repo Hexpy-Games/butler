@@ -1240,7 +1240,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     },
     modelsAdvanced: {
       title: "Advanced",
-      contents: "Memory cleanup model and worker profiles",
+      contents: "Memory cleanup model and worker settings",
     },
     workerProfilesPanel: {
       add: "Add Worker profile",
