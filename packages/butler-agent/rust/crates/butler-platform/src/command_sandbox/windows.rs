@@ -9,6 +9,14 @@ pub(super) const ESCAPE: char = '`';
 
 pub(super) const POSIX: bool = false;
 
+pub(super) fn member_access_dot(ch: char, previous: Option<char>, quoted: bool) -> bool {
+    ch == '.' && previous == Some(')') && !quoted
+}
+
+pub(super) fn path_script(command: &str) -> &str {
+    explicit_script(command).unwrap_or(command)
+}
+
 /// `cmd.exe /d /s /c <command>` takes the command verbatim: with `/s`, `cmd`
 /// strips the first and the last quote of the line and runs what is between.
 pub(super) fn add_arguments(command: &mut std::process::Command, invocation: &Invocation) {
