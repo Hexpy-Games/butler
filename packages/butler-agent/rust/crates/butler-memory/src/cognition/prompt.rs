@@ -1,6 +1,5 @@
 //! Bounded, tracked source reads for admission-time Cognition prompt facts.
 
-mod feedback;
 mod memory;
 mod owner;
 
@@ -16,12 +15,6 @@ fn read_utf8(path: &Path) -> std::io::Result<String> {
         Ok(text) => text,
         Err(error) => String::from_utf8_lossy(&error.into_bytes()).into_owned(),
     })
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ScopedPromptFeedback {
-    pub scope_kind: String,
-    pub content: String,
 }
 
 /// Whether a project capsule exists for the prompt.
@@ -40,7 +33,6 @@ pub struct CognitionPromptReader {
     data_root: PathBuf,
     environment: CognitionPathEnvironment,
     owner: PromptReadOwner,
-    feedback_cache: std::sync::Arc<parking_lot::Mutex<feedback::Cache>>,
 }
 
 impl CognitionPromptReader {
@@ -54,21 +46,7 @@ impl CognitionPromptReader {
             data_root,
             environment,
             owner: PromptReadOwner::new(max_blocking_reads),
-            feedback_cache: Default::default(),
         }
-    }
-
-    /// Feedback that applies to the session and project.
-    pub async fn scoped_feedback(
-        &self,
-        session: String,
-        project: Option<String>,
-    ) -> CognitionResult<Vec<ScopedPromptFeedback>> {
-        let root = self.environment.cognition_root(&self.data_root);
-        let cache = self.feedback_cache.clone();
-        self.owner
-            .run(move || feedback::read(&mut cache.lock(), &root, &session, project.as_deref()))
-            .await
     }
 
     /// The active generation's hot cache for the project, when readable.

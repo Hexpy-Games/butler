@@ -6,6 +6,8 @@
 //! (`revision`) and the operator commands (`operator`). Every access holds
 //! the consolidation write lease.
 
+mod feedback_target;
+pub use feedback_target::FeedbackTarget;
 mod document;
 mod entries;
 mod index;
@@ -22,7 +24,7 @@ use crate::cognition::CognitionCode;
 use std::{future::Future, path::PathBuf, pin::Pin, sync::Arc};
 
 use crate::{
-    cognition::{CognitionError, CognitionPathEnvironment, CognitionResult, FeedbackTarget},
+    cognition::{CognitionError, CognitionPathEnvironment, CognitionResult},
     coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator},
 };
 

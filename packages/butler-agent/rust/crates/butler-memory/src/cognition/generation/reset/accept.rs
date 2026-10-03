@@ -57,7 +57,13 @@ pub(crate) fn begin(
         }
     }
     write_json(&pending, &json!(id))?;
-    let instructions = project_targets(root, paths, project.as_deref())?;
+    let instructions = match project.as_deref() {
+        Some(project) => {
+            crate::cognition::fence_instruction_project(root, paths, coordinator, project)
+                .map_err(io::Error::other)?
+        }
+        None => Vec::new(),
+    };
     let result = ResetResult {
         operation_id: id.into(),
         kind: kind.into(),

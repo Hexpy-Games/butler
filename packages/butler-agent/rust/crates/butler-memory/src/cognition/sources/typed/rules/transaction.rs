@@ -10,8 +10,6 @@ pub(super) enum Request {
     Remember {
         input: ExplicitMemoryUpdateInput,
         target: Option<RememberedRuleTarget>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        feedback: Option<crate::cognition::FeedbackPromotion>,
     },
     Forget {
         target: RememberedRuleTarget,
@@ -23,9 +21,9 @@ pub(super) enum Request {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(super) struct Intent {
-    pub(super) request: Request,
+    request: Request,
     pub entry: Entry,
-    text: String,
+    pub(super) text: String,
     binding: ExplicitRuleBinding,
     previous: Option<ExplicitRuleBinding>,
     previous_text: Option<String>,
@@ -44,12 +42,7 @@ pub(super) fn run(
 ) -> CognitionResult<Option<RememberedRuleReceipt>> {
     let root = owner.root();
     if let Some(pending) = read_json::<Intent>(&root.join("pending.json"))? {
-        if super::feedback::valid(owner, &pending)? {
-            complete(owner, &pending)?;
-        } else {
-            fs::remove_file(root.join("pending.json")).map_err(failure_source)?;
-            butler_platform::secure_fs::sync_path(&root).map_err(failure_source)?;
-        }
+        complete(owner, &pending)?;
     }
     let Some(request) = request else {
         return Ok(None);
@@ -84,9 +77,6 @@ pub(super) fn run(
         return Ok(Some(result));
     }
     let intent = prepare(owner, request)?;
-    if !super::feedback::valid(owner, &intent)? {
-        return Err(failure("feedback_revision_changed"));
-    }
     ensure_data_authority(
         &owner.data_root,
         &[&root.join("operations"), &root.join("pending.json")],
@@ -106,7 +96,7 @@ fn operation_id(request: &Request) -> &str {
     }
 }
 
-fn prepare(owner: &RememberedRuleOwner, request: Request) -> CognitionResult<Intent> {
+pub(super) fn prepare(owner: &RememberedRuleOwner, request: Request) -> CognitionResult<Intent> {
     let root = owner.root();
     let mut inventory = Inventory::read(&root)?;
     let target = match &request {
@@ -123,7 +113,19 @@ fn prepare(owner: &RememberedRuleOwner, request: Request) -> CognitionResult<Int
     let previous = read_binding(&owner.environment.memory_root(&owner.data_root), &id)?;
     let previous_text = entry
         .as_ref()
-        .map(|_| fs::read_to_string(root.join(format!("{id}.md"))).map_err(failure_source))
+        .map(|_| {
+            fs::read_to_string(root.join(format!("{id}.md")))
+                .or_else(|error| {
+                    if error.kind() == std::io::ErrorKind::NotFound {
+                        super::journal::pending_text(&root, &id)
+                            .map_err(std::io::Error::other)?
+                            .ok_or(error)
+                    } else {
+                        Err(error)
+                    }
+                })
+                .map_err(failure_source)
+        })
         .transpose()?;
     let binding = binding(
         owner,
@@ -147,6 +149,18 @@ fn prepare(owner: &RememberedRuleOwner, request: Request) -> CognitionResult<Int
         content_hash: binding.content_hash.clone(),
         project_id: binding.project_id.clone(),
         state: binding.state.clone(),
+        duration: match &request {
+            Request::Remember { input, .. } => input.duration.clone(),
+            Request::Forget { .. } => None,
+        },
+        expires_at: match &request {
+            Request::Remember { input, .. } => input.expires_at.clone(),
+            Request::Forget { .. } => None,
+        },
+        scope_session_id: match &request {
+            Request::Remember { input, .. } => input.scope_session_id.clone(),
+            Request::Forget { .. } => None,
+        },
     };
     inventory.put(entry.clone());
     Ok(Intent {
@@ -212,6 +226,10 @@ fn binding(
         revision: revision.clone(),
         state: if state == "active" {
             "written"
+        } else if operation_id(request).starts_with("expired:") {
+            "expired"
+        } else if operation_id(request).starts_with("session_end:") {
+            "session_end"
         } else {
             "forgotten"
         }
@@ -256,8 +274,24 @@ fn select(
     target: &RememberedRuleTarget,
     request: &Request,
 ) -> CognitionResult<Entry> {
+    if let Some(pending) = read_json::<Intent>(&root.join("pending.json"))?
+        && pending.entry.handle == target.handle
+        && matches!(request, Request::Remember { .. })
+    {
+        if pending.entry.state != "active" {
+            return Err(failure("rule_forgotten"));
+        }
+        if pending.entry.revision != target.expected_revision {
+            return Err(failure("rule_revision_stale"));
+        }
+    }
     let entry = selected_entry(root, inventory, &target.handle)?
         .ok_or_else(|| failure("rule_handle_unknown"))?;
+    let entry = if entry.revision == target.expected_revision {
+        entry
+    } else {
+        super::journal::pending_revision(root, target)?.unwrap_or(entry)
+    };
     if entry.project_id != target.project_id {
         return Err(failure("rule_binding_mismatch"));
     }
@@ -314,6 +348,9 @@ fn selected_entry(
     }
     if let Some(entry) = inventory.find(handle) {
         return Ok(Some(entry.clone()));
+    }
+    if let Some(row) = super::journal::pending_entry(root, handle)? {
+        return Ok(Some(row));
     }
     read_json(&root.join("handles").join(format!("{handle}.json")))
 }

@@ -4,7 +4,6 @@ mod inspect;
 
 use butler_platform::sqlite;
 use std::{
-    collections::HashSet,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -13,9 +12,7 @@ use rusqlite::{OpenFlags, params};
 use tokio::sync::mpsc;
 
 use crate::cognition::mutable_paths::ensure_data_authority;
-use crate::cognition::{
-    CognitionError, CognitionPathEnvironment, CognitionResult, FeedbackBufferService,
-};
+use crate::cognition::{CognitionError, CognitionPathEnvironment, CognitionResult};
 use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator};
 
 const SOURCE_CHUNK_LIMIT: usize = 10_000;
@@ -30,7 +27,6 @@ pub struct LegacyMetadataIntegrityService {
     data_root: PathBuf,
     path: PathBuf,
     paths: CognitionPathEnvironment,
-    feedback: Arc<FeedbackBufferService>,
 }
 
 #[derive(Debug, Default)]
@@ -57,23 +53,15 @@ pub struct LegacyMetadataRepairReport {
     pub repaired_feedback_refs: usize,
 }
 
-struct ChunkRefs {
-    memory_chunk_id: String,
-    feedback_ids: Vec<String>,
-}
+struct ChunkRefs;
 
 impl LegacyMetadataIntegrityService {
     /// An integrity service over the legacy metadata database.
-    pub fn new(
-        data_root: &Path,
-        paths: CognitionPathEnvironment,
-        feedback: Arc<FeedbackBufferService>,
-    ) -> Self {
+    pub fn new(data_root: &Path, paths: CognitionPathEnvironment) -> Self {
         Self {
             data_root: data_root.to_path_buf(),
             path: paths.memory_root(data_root).join("metadata.sqlite"),
             paths,
-            feedback,
         }
     }
 
@@ -182,10 +170,9 @@ impl LegacyMetadataIntegrityService {
     }
 
     /// Streams feedback references and checks them against the feedback buffer.
-    async fn check_inner(&self, references: References) -> CognitionResult<Integrity> {
+    async fn check_inner(&self, _references: References) -> CognitionResult<Integrity> {
         ensure_data_authority(&self.data_root, &[&self.path])?;
         let mut integrity = Integrity {
-            references,
             counts: LegacyMetadataIntegrityCounts::default(),
             missing_feedback_refs: Vec::new(),
         };
@@ -202,7 +189,10 @@ impl LegacyMetadataIntegrityService {
         let mut outcome = Ok(());
         while let Some(batch) = receiver.recv().await {
             outcome = match batch {
-                Ok(batch) => self.check_batch(&mut integrity, batch).await,
+                Ok(batch) => {
+                    integrity.counts.chunk_count += batch.len();
+                    Ok(())
+                }
                 Err(error) => Err(error),
             };
             if outcome.is_err() {
@@ -217,27 +207,6 @@ impl LegacyMetadataIntegrityService {
         producer_result?;
         Ok(integrity)
     }
-
-    async fn check_batch(
-        &self,
-        integrity: &mut Integrity,
-        batch: Vec<ChunkRefs>,
-    ) -> CognitionResult<()> {
-        integrity.counts.chunk_count += batch.len();
-        let requested = batch
-            .iter()
-            .flat_map(|chunk| chunk.feedback_ids.iter().cloned())
-            .collect::<HashSet<_>>();
-        let found = self.feedback.matching_ids(requested).await?;
-        for chunk in batch {
-            for id in chunk.feedback_ids {
-                if !found.contains(&id) {
-                    integrity.missing_feedback(&chunk.memory_chunk_id, id);
-                }
-            }
-        }
-        Ok(())
-    }
 }
 
 /// Whether a check lists the missing references or only counts them.
@@ -249,22 +218,11 @@ enum References {
 
 /// What a metadata check found.
 struct Integrity {
-    references: References,
     counts: LegacyMetadataIntegrityCounts,
     missing_feedback_refs: Vec<MissingFeedbackRef>,
 }
 
-impl Integrity {
-    fn missing_feedback(&mut self, memory_chunk_id: &str, feedback_id: String) {
-        self.counts.missing_feedback_refs_count += 1;
-        if self.references == References::Listed {
-            self.missing_feedback_refs.push(MissingFeedbackRef {
-                memory_chunk_id: memory_chunk_id.to_owned(),
-                feedback_id,
-            });
-        }
-    }
-}
+impl Integrity {}
 
 fn remove_missing_links(
     data_root: &std::path::Path,
@@ -314,9 +272,6 @@ fn stream_refs(
     let mut chunk_query = db
         .prepare("SELECT memory_chunk_id FROM memory_chunks ORDER BY updated_at DESC, memory_chunk_id DESC LIMIT ?1 OFFSET ?2")
         .map_err(|source| metadata_error().with_source(source))?;
-    let mut feedback_query = db
-        .prepare("SELECT feedback_id FROM memory_chunk_feedback_refs WHERE memory_chunk_id=?1 ORDER BY feedback_id,relation")
-        .map_err(|source| metadata_error().with_source(source))?;
     for offset in (0..SOURCE_CHUNK_LIMIT).step_by(PAGE_SIZE) {
         let ids = chunk_query
             .query_map(
@@ -332,17 +287,7 @@ fn stream_refs(
         if ids.is_empty() {
             break;
         }
-        let mut batch = Vec::with_capacity(ids.len());
-        for id in ids {
-            batch.push(ChunkRefs {
-                memory_chunk_id: id.clone(),
-                feedback_ids: feedback_query
-                    .query_map([&id], |row| row.get::<_, String>(0))
-                    .map_err(|source| metadata_error().with_source(source))?
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(|source| metadata_error().with_source(source))?,
-            });
-        }
+        let batch = ids.into_iter().map(|_| ChunkRefs).collect();
         if sender.blocking_send(Ok(batch)).is_err() {
             break;
         }

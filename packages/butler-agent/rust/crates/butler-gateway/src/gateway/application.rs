@@ -1,7 +1,5 @@
 //! Durable application service behind the native App HTTP facade.
 
-mod feedback;
-pub use feedback::{AppFeedbackCommand, AppFeedbackPort, GatewayFeedback};
 mod admission;
 mod admission_identity;
 mod automations;

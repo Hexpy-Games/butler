@@ -18,6 +18,15 @@ use crate::cognition::{CognitionError, CognitionResult};
 /// An explicit rule to remember.
 #[derive(Clone, Debug, Default, serde::Deserialize, serde::Serialize)]
 pub struct ExplicitMemoryUpdateInput {
+    /// Requested lifetime: this chat, 7 days, or always (default).
+    #[serde(default)]
+    pub duration: Option<String>,
+    /// Fixed capture expiry; never extended by replay or a busy lease.
+    #[serde(default)]
+    pub expires_at: Option<String>,
+    /// Session ownership, distinct from origin provenance.
+    #[serde(default)]
+    pub scope_session_id: Option<String>,
     /// Rule text.
     pub text: String,
     /// Idempotency key; a retry with the same id replays the first write.

@@ -449,8 +449,6 @@ impl AgentRuntime {
             skills: skills.clone(),
             mcp_client,
             context_maintenance,
-            daily_cognition,
-            feedback: memory_writes.feedback.clone(),
             profile,
         })
     }

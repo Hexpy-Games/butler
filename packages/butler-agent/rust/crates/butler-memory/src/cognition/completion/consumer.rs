@@ -56,6 +56,7 @@ type Clock = Arc<dyn Fn() -> String + Send + Sync>;
 /// Consumes the memory sync queue: registers completed turns and typed sources, projects them and
 /// embeds their vectors.
 pub struct MemorySyncConsumer {
+    instruction_owner: crate::cognition::RememberedRuleOwner,
     data_root: PathBuf,
     environment: CognitionPathEnvironment,
     registration: Arc<CognitionRegistrationService>,
@@ -83,7 +84,19 @@ impl MemorySyncConsumer {
         coordinator: Arc<CognitionWriteCoordinator>,
         clock: Clock,
     ) -> Self {
+        let publisher = Arc::new(crate::cognition::CompletionPublisher::new(
+            &data_root,
+            &environment,
+            clock.clone(),
+        ));
+        let instruction_owner = crate::cognition::RememberedRuleOwner::new(
+            data_root.clone(),
+            environment.clone(),
+            coordinator.clone(),
+            publisher,
+        );
         Self {
+            instruction_owner,
             data_root,
             environment,
             registration,
@@ -101,6 +114,12 @@ impl MemorySyncConsumer {
             probe: Arc::new(probe::ProbeReader::default()),
             vector_batch: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Use the runtime's configured instruction owner for every capture drain.
+    pub fn with_instruction_owner(mut self, owner: crate::cognition::RememberedRuleOwner) -> Self {
+        self.instruction_owner = owner;
+        self
     }
 
     /// Also embeds projected vector units with `embedding`.
@@ -171,6 +190,7 @@ impl MemorySyncConsumer {
         };
         let operation = self.shutdown.child_token();
         let input = process::Input {
+            instruction_owner: self.instruction_owner.clone(),
             data_root: self.data_root.clone(),
             environment: self.environment.clone(),
             registration: self.registration.clone(),
@@ -237,6 +257,7 @@ impl MemorySyncConsumer {
         };
         let operation = self.shutdown.child_token();
         let input = process::Input {
+            instruction_owner: self.instruction_owner.clone(),
             data_root: self.data_root.clone(),
             environment: self.environment.clone(),
             registration: self.registration.clone(),

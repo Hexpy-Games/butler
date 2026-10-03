@@ -3,7 +3,6 @@
 mod admission;
 mod assets;
 mod context_read;
-pub(super) mod feedback;
 mod ingress;
 mod liveness;
 mod memory_management;

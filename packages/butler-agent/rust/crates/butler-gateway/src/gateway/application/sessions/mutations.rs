@@ -174,16 +174,13 @@ impl AppApplication {
             .authority_handoff
             .close_self_session(runtime_session_id.clone(), reason.to_owned())
             .await?;
-        if let Some(feedback) = &self.dependencies.feedback {
-            feedback
-                .execute(
-                    super::super::AppFeedbackCommand::EndSession {
-                        session_id: runtime_session_id,
-                    },
-                    tokio_util::sync::CancellationToken::new(),
-                )
-                .await?;
-        }
+        self.memory_owned(
+            super::super::AppMemoryCommand::EndSession {
+                session_id: runtime_session_id,
+            },
+            tokio_util::sync::CancellationToken::new(),
+        )
+        .await?;
         Ok(())
     }
 }

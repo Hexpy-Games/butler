@@ -52,13 +52,19 @@ pub(super) async fn build_rules_section(
         .iter()
         .map(|rule| {
             format!(
-                "### [{}] · {}\n\n{}",
+                "[{}] scope={}{}\n{}",
                 rule.handle,
-                if rule.project_id.is_some() {
-                    "This project"
+                if rule.scope_session_id.is_some() {
+                    "chat"
+                } else if rule.project_id.is_some() {
+                    "project"
                 } else {
-                    "All chats"
+                    "all"
                 },
+                rule.expires_at
+                    .as_ref()
+                    .map(|iso| format!(" expires={iso}"))
+                    .unwrap_or_default(),
                 rule.text
             )
         })

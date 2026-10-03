@@ -1,18 +1,16 @@
-//! Source-order profile cycle adapter over one Profile owner and Cognition feedback reader.
+//! Profile consolidation and instruction expiry over their respective owners.
 
 use std::sync::Arc;
 
 use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
 
-use butler_memory::cognition::{FeedbackBufferService, PhaseError};
+use butler_memory::cognition::PhaseError;
 use butler_memory::profile::{ProfileModelTranscriptCaptureOptions, ProfileService, ProfilingMode};
 
 pub(in crate::host) struct ProfileConsolidation {
-    pub(in crate::host) provider: Arc<butler_models::models::ModelProvider>,
     pub(in crate::host) rules: butler_memory::cognition::RememberedRuleOwner,
     pub(in crate::host) profile: Arc<ProfileService>,
-    pub(in crate::host) feedback: Arc<FeedbackBufferService>,
 }
 
 impl ProfileConsolidation {
@@ -20,17 +18,12 @@ impl ProfileConsolidation {
         &self,
         cancellation: &CancellationToken,
     ) -> Result<Map<String, Value>, PhaseError> {
-        let report = self
-            .feedback
-            .consolidate_feedback(
-                &self.rules,
-                self.profile.as_ref(),
-                self.provider.as_ref(),
-                cancellation.clone(),
-            )
+        let count = self
+            .rules
+            .expire(cancellation.clone())
             .await
             .map_err(feedback_error)?;
-        Ok(report.as_object().cloned().unwrap_or_default())
+        Ok(butler_core::json::json_object!({"expired_instructions": count}))
     }
 
     pub(in crate::host) async fn consolidate(
@@ -38,9 +31,6 @@ impl ProfileConsolidation {
         run_id: &str,
         cancellation: &CancellationToken,
     ) -> Result<Map<String, Value>, PhaseError> {
-        // This route counts feedback for observability but currently captures candidates from transcripts only.
-        let counts = self.feedback.counts(now_ms()).map_err(feedback_error)?;
-        let feedback_count = counts.active_profile_candidate_count;
         let consent = self
             .profile
             .read_profiling_consent()
@@ -49,7 +39,7 @@ impl ProfileConsolidation {
         if consent.mode == ProfilingMode::Off {
             return Ok(butler_core::json::json_object!({
                 "profiling_enabled":false,
-                "profile_feedback_count":feedback_count,
+                "profile_feedback_count":0,
                 "captured_candidate_count":0,
                 "applied_feedback_count":0,
                 "raw_text_included":false,
@@ -74,16 +64,10 @@ impl ProfileConsolidation {
             .consolidate_profile_candidates()
             .await
             .map_err(profile_error)?;
-        let mut consolidated = serde_json::to_value(consolidated).map_err(|source| {
-            PhaseError::new(
-                "consolidation_profile_metrics_failed",
-                "consolidation_profile_metrics_failed",
-            )
-            .with_source(source)
-        })?;
+        let mut consolidated = profile_metrics(consolidated)?;
         let mut metrics = std::mem::take(butler_core::json::object_mut(&mut consolidated));
         let more = butler_core::json::json_object!({
-            "profile_feedback_count":feedback_count,
+            "profile_feedback_count":0,
             "transcript_since":Value::Null,
             "semantic_scanned_session_count":capture.semantic_scanned_session_count,
             "semantic_scanned_message_count":capture.semantic_scanned_message_count,
@@ -119,14 +103,20 @@ impl ProfileConsolidation {
     }
 }
 
-fn now_ms() -> i64 {
-    chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now()).timestamp_millis()
-}
-
 fn profile_error(error: butler_memory::profile::ProfileError) -> PhaseError {
     PhaseError::new(error.code(), error.code()).with_source(error)
 }
 
 fn feedback_error(error: butler_memory::cognition::CognitionError) -> PhaseError {
     PhaseError::new(error.code(), error.code()).with_source(error)
+}
+
+fn profile_metrics(value: impl serde::Serialize) -> Result<Value, PhaseError> {
+    serde_json::to_value(value).map_err(|source| {
+        PhaseError::new(
+            "consolidation_profile_metrics_failed",
+            "consolidation_profile_metrics_failed",
+        )
+        .with_source(source)
+    })
 }

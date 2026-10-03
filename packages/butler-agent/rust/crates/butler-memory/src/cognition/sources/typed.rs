@@ -7,7 +7,7 @@ mod rules;
 mod write;
 pub use rules::{
     RememberedRule, RememberedRuleOwner, RememberedRuleReceipt, RememberedRuleTarget,
-    RuleCommitObserver, list_remembered_rules,
+    RuleCommitObserver, fence_instruction_project, list_chat_instructions, list_remembered_rules,
 };
 
 pub use write::{ExplicitMemoryUpdateInput, TaskMemoryIngestionResult, ingest_task_outcome_memory};

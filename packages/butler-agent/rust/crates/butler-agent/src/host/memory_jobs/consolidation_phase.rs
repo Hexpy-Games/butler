@@ -6,8 +6,8 @@ use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
 use butler_memory::cognition::{
-    FeedbackBufferService, KnowHowService, LegacyMetadataIntegrityService, MemoryHealthService,
-    Phase, PhaseError, PhaseExecutor,
+    KnowHowService, LegacyMetadataIntegrityService, MemoryHealthService, Phase, PhaseError,
+    PhaseExecutor,
 };
 use butler_runtime::operations::CycleMetrics;
 
@@ -19,7 +19,6 @@ pub(in crate::host) struct CyclePhases {
     pub(in crate::host) briefing: Arc<BriefingGeneration>,
     pub(in crate::host) profile: Arc<ProfileConsolidation>,
     pub(in crate::host) legacy_metadata: Arc<LegacyMetadataIntegrityService>,
-    pub(in crate::host) feedback: Arc<FeedbackBufferService>,
     pub(in crate::host) knowhow: Arc<KnowHowService>,
     pub(in crate::host) health: Arc<MemoryHealthService>,
 }
@@ -58,27 +57,7 @@ impl PhaseExecutor for CyclePhases {
                         })
                     })
                     .map_err(cognition_phase_error),
-                Phase::KnowhowRevision => {
-                    let feedback = self
-                        .feedback
-                        .active_targets(
-                            chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now())
-                                .timestamp_millis(),
-                        )
-                        .await
-                        .map_err(cognition_phase_error)?;
-                    self.knowhow
-                        .revise(&feedback, self.feedback.as_ref())
-                        .await
-                        .map(|report| {
-                            butler_core::json::json_object!({
-                                "revised_knowhow_count": report.revised_knowhow_count,
-                                "demoted_knowhow_count": report.demoted_knowhow_count,
-                                "applied_feedback_count": report.applied_feedback_count,
-                            })
-                        })
-                        .map_err(cognition_phase_error)
-                }
+                Phase::KnowhowRevision => Ok(butler_core::json::json_object!({"deferred":true})),
                 Phase::MemoryHealth => self
                     .health
                     .read()

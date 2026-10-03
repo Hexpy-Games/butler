@@ -7,10 +7,9 @@ use tokio_util::sync::CancellationToken;
 use butler_ledger::project_ledger::ProjectLedger;
 use butler_memory::cognition::{
     CognitionPathEnvironment, ConfiguredCycleOptions, ConfiguredCycleResult,
-    ConfiguredCycleService, CycleService, CycleStatus, FeedbackBufferService,
-    GraphConsolidationService, KnowHowService, LegacyMetadataIntegrityService, MemoryHealthService,
-    MemorySyncConsumer, ProjectCapsuleService, RunCycle, VectorOptimizeService,
-    active_memory_descriptor_exists, resolve_active_generation,
+    ConfiguredCycleService, CycleService, CycleStatus, GraphConsolidationService, KnowHowService,
+    LegacyMetadataIntegrityService, MemoryHealthService, MemorySyncConsumer, ProjectCapsuleService,
+    RunCycle, VectorOptimizeService, active_memory_descriptor_exists, resolve_active_generation,
 };
 use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_memory::profile::ProfileService;
@@ -76,11 +75,6 @@ impl DailyCognitionJobs {
             provider.clone(),
             embedding,
         );
-        let feedback = Arc::new(FeedbackBufferService::new(
-            data_root.clone(),
-            paths.clone(),
-            coordinator.clone(),
-        ));
         let knowhow = Arc::new(KnowHowService::new(
             data_root.clone(),
             paths.clone(),
@@ -101,17 +95,13 @@ impl DailyCognitionJobs {
             metrics: cycle_metrics.clone(),
             briefing,
             profile: Arc::new(ProfileConsolidation {
-                provider,
                 rules: feedback_rules(&data_root, &paths, coordinator.clone()),
                 profile,
-                feedback: feedback.clone(),
             }),
             legacy_metadata: Arc::new(LegacyMetadataIntegrityService::new(
                 &data_root.clone(),
                 paths.clone(),
-                feedback.clone(),
             )),
-            feedback,
             knowhow,
             health: feedback_health(&data_root, &paths, coordinator.clone()),
         });
@@ -159,19 +149,6 @@ impl DailyCognitionJobs {
             result.wrapped,
         );
         Ok(())
-    }
-
-    pub(in crate::host) async fn manual_feedback(
-        &self,
-        input: serde_json::Value,
-        cancellation: CancellationToken,
-    ) -> Result<serde_json::Value, crate::host::HostError> {
-        let result = self
-            .generic
-            .run(feedback_run(&input, cancellation)?)
-            .await
-            .map_err(crate::host::HostError::from_error)?;
-        serde_json::to_value(result).map_err(crate::host::HostError::from_error)
     }
 
     pub(in crate::host) async fn consolidation_cycle(
@@ -306,28 +283,4 @@ fn feedback_health(
         paths.clone(),
         coordinator,
     ))
-}
-
-fn feedback_run(
-    input: &serde_json::Value,
-    cancellation: CancellationToken,
-) -> Result<RunCycle, crate::host::HostError> {
-    let budget = input
-        .get("rate_budget")
-        .map(|value| serde_json::from_value::<butler_memory::cognition::RateBudget>(value.clone()))
-        .transpose()
-        .map_err(crate::host::HostError::from_error)?;
-    Ok(RunCycle {
-        run_id: input
-            .get("run_id")
-            .and_then(serde_json::Value::as_str)
-            .map(str::to_owned),
-        resume: input
-            .get("resume")
-            .and_then(serde_json::Value::as_bool)
-            .unwrap_or(false),
-        rate_budget: Arc::new(move || budget.clone()),
-        stop_after: Some(butler_memory::cognition::Phase::FeedbackTriage),
-        cancellation,
-    })
 }

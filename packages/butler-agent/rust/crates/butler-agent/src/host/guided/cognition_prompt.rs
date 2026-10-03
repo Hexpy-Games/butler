@@ -31,9 +31,14 @@ impl CognitionPromptPort for CognitionPrompt {
     ) -> ContextFuture<'a, Vec<RememberedRuleProjection>> {
         let root = rules_root.to_owned();
         let project = input.project_id.map(str::to_owned);
+        let session = input.session_id.to_owned();
         Box::pin(async move {
             let rules = tokio::task::spawn_blocking(move || {
-                butler_memory::cognition::list_remembered_rules(&root, Some(project.as_deref()))
+                butler_memory::cognition::list_chat_instructions(
+                    &root,
+                    project.as_deref(),
+                    &session,
+                )
             })
             .await
             .map_err(|source| ContextError::port("rule_read_failed", "Rule read failed", source))?
@@ -41,6 +46,8 @@ impl CognitionPromptPort for CognitionPrompt {
             Ok(rules
                 .into_iter()
                 .map(|rule| RememberedRuleProjection {
+                    scope_session_id: rule.scope_session_id,
+                    expires_at: rule.expires_at,
                     handle: rule.handle,
                     text: rule.text,
                     project_id: rule.project_id,
@@ -52,25 +59,9 @@ impl CognitionPromptPort for CognitionPrompt {
 
     fn scoped_feedback<'a>(
         &'a self,
-        input: &'a PromptProjectionInput<'a>,
+        _input: &'a PromptProjectionInput<'a>,
     ) -> ContextFuture<'a, Vec<ScopedFeedbackProjection>> {
-        Box::pin(async move {
-            let rows = self
-                .reader
-                .scoped_feedback(
-                    input.session_id.to_owned(),
-                    input.project_id.map(str::to_owned),
-                )
-                .await
-                .map_err(error)?;
-            Ok(rows
-                .into_iter()
-                .map(|row| ScopedFeedbackProjection {
-                    scope_kind: row.scope_kind,
-                    content: row.content,
-                })
-                .collect())
-        })
+        Box::pin(async { Ok(Vec::new()) })
     }
 
     fn generation_hot_cache<'a>(

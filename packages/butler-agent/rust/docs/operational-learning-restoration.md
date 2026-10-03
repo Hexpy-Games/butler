@@ -1,5 +1,10 @@
 # Operational learning restoration: investigation and approval design
 
+> October 3 owner decision: the Recent feedback design below is historical.
+> Instructions now own temporary and lasting user mandates. See
+> [instruction-duration.md](instruction-duration.md) for the replacement.
+
+
 Date: 2026-10-02. Branch: `codex/oplearn-restore`. Inspected Rust baseline: `09ffe9679`.
 Design only; no production changes, builds, live data reads, or model calls.
 

@@ -96,7 +96,6 @@ tool_names! {
     ReadToolEvidenceArtifact = "read_tool_evidence_artifact",
     ReadToolOutputArtifact = "read_tool_output_artifact",
     RecallMemory = "recall_memory",
-    RecordUserFeedback = "record_user_feedback",
     RecordWorkCheckpoint = "record_work_checkpoint",
     RecordWorkDisposition = "record_work_disposition",
     RecordWorkReview = "record_work_review",

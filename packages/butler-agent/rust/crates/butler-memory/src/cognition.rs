@@ -15,9 +15,7 @@ mod embedding_port;
 mod error;
 mod exact_query;
 mod extraction;
-mod feedback;
-pub(crate) mod feedback_buffer;
-mod generation;
+pub(crate) mod generation;
 mod generation_vectors;
 mod graph;
 mod graph_consolidation;
@@ -88,10 +86,6 @@ pub use embedding_port::{
 pub use error::{CognitionCode, CognitionError, CognitionResult};
 pub use exact_query::ExactMemoryQuery;
 pub use extraction::{CandidateSearchInput, CognitionVectorSearch, VectorSearchFuture};
-pub use feedback_buffer::{
-    FeedbackBufferService, FeedbackCapture, FeedbackPromotion, FeedbackTarget,
-    feedback_evidence_is_current,
-};
 pub use generation::{
     AcceptanceBinding, ActiveDescriptor, CanonicalSnapshot, EmbeddingSlot, FreshMemoryGeneration,
     GenerationEmbedding, GenerationFormat, GenerationManifest, GenerationReadiness,
@@ -105,6 +99,7 @@ pub use generation_vectors::GenerationVectorAdapter;
 pub use graph::{GraphProgress, JobOutcome, StageState, StageStatus};
 pub use graph_consolidation::GraphConsolidationService;
 pub use hot_cache::{LegacyIndexService, extract_legacy_import_transcript};
+pub use knowhow_store::FeedbackTarget;
 pub use knowhow_store::{FeedbackResolvePort, KnowHowService};
 pub use mcp_graph::read_mcp_legacy_graph;
 pub use memory_health::{MemoryHealthReport, MemoryHealthService};
@@ -121,15 +116,15 @@ pub use registration::{
     CognitionConversationSourceNotice, CognitionRegistrationService, ConsumeTypedLifecycleInput,
     ConversationRegistrationOutcome, RegisterConversationSourceInput,
 };
-pub(crate) use source_reference::{MemorySourceCandidate, MemorySourceReference};
+pub(crate) use source_reference::MemorySourceReference;
 pub(in crate::cognition) use sources::assert_conversation_source_current;
 
 pub use sources::{
     CognitionSourcePlan, CognitionSourceRow, ConversationSourceNotice, ExplicitMemoryUpdateInput,
     PreparedConversationSource, RememberedRule, RememberedRuleOwner, RememberedRuleReceipt,
-    RememberedRuleTarget, RuleCommitObserver, TaskMemoryIngestionResult,
-    hydrate_conversation_source, ingest_task_outcome_memory, list_remembered_rules,
-    prepare_conversation_source, read_prior_public_context,
+    RememberedRuleTarget, RuleCommitObserver, TaskMemoryIngestionResult, fence_instruction_project,
+    hydrate_conversation_source, ingest_task_outcome_memory, list_chat_instructions,
+    list_remembered_rules, prepare_conversation_source, read_prior_public_context,
 };
 pub use vector_optimize::{VectorOptimizeOutcome, VectorOptimizeService};
 pub(crate) use windows::{

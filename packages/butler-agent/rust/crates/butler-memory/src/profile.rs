@@ -25,10 +25,9 @@ pub use contracts::{
     CanonicalProfileMessage, CanonicalProfilePart, CanonicalProfileScalar, CanonicalProfileScan,
     CanonicalProfileSourceFactory, CanonicalProfileSourceReader, ClearProfilingResult,
     FirstChatOnboardingUpdate, PersonalizationProfile, PersonalizationProfileUpdate, ProfileError,
-    ProfileFeedbackCommit, ProfileFeedbackPromotion, ProfileHostFacts,
-    ProfileModelTranscriptCaptureOptions, ProfileResult, ProfileThirdPartyImportOptions,
-    ProfilingConsentSnapshot, ProfilingExtractorModelSnapshot, ProfilingMode,
-    RuntimeProfileProjection,
+    ProfileHostFacts, ProfileModelTranscriptCaptureOptions, ProfileResult,
+    ProfileThirdPartyImportOptions, ProfilingConsentSnapshot, ProfilingExtractorModelSnapshot,
+    ProfilingMode, RuntimeProfileProjection,
 };
 pub use coverage_health::ProfileCoverageHealth;
 pub use error::ProfileCode;

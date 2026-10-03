@@ -66,6 +66,14 @@ impl AppMemoryManagement {
         cancellation: CancellationToken,
     ) -> Result<Value, GatewayApplicationError> {
         match command {
+            AppMemoryCommand::EndSession { session_id } => {
+                self.instructions
+                    .end_session(session_id)
+                    .await
+                    .map_err(instructions::instruction_error)?;
+                sink(json!({"kind":"instructions"})).await?;
+                Ok(json!({"ok":true}))
+            }
             AppMemoryCommand::Instructions => self.list_instructions().await,
             AppMemoryCommand::DeleteInstruction {
                 handle,

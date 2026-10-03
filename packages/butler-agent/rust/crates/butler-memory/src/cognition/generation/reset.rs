@@ -392,25 +392,3 @@ async fn acquire(
     .map_err(io::Error::other)?
     .ok_or_else(|| io::Error::other("Memory is in use"))
 }
-
-fn project_targets(
-    root: &Path,
-    paths: &CognitionPathEnvironment,
-    project: Option<&str>,
-) -> io::Result<Vec<crate::cognition::RememberedRuleTarget>> {
-    let Some(project) = project else {
-        return Ok(Vec::new());
-    };
-    crate::cognition::list_remembered_rules(&paths.explicit_rules_root(root), None)
-        .map_err(io::Error::other)?
-        .into_iter()
-        .filter(|entry| entry.project_id.as_deref() == Some(project))
-        .map(|entry| {
-            Ok(crate::cognition::RememberedRuleTarget {
-                handle: entry.handle,
-                expected_revision: entry.revision,
-                project_id: entry.project_id,
-            })
-        })
-        .collect()
-}

@@ -1,6 +1,8 @@
 //! Explicit rule owner: inventory, lease-bound journal and request recovery.
-mod feedback;
 mod inventory;
+mod journal;
+mod lifetime;
+pub use journal::fence_instruction_project;
 mod transaction;
 
 use super::write::{ExplicitMemoryUpdateInput, explicit_rule_revision, sha256};
@@ -12,7 +14,7 @@ use crate::cognition::{
 };
 use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator};
 use inventory::Inventory;
-pub use inventory::{RememberedRule, list_remembered_rules};
+pub use inventory::{RememberedRule, list_chat_instructions, list_remembered_rules};
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, sync::Arc};
 use tokio_util::sync::CancellationToken;
@@ -104,16 +106,27 @@ impl RememberedRuleOwner {
         input: ExplicitMemoryUpdateInput,
         cancellation: CancellationToken,
     ) -> CognitionResult<RememberedRuleReceipt> {
-        self.run(
-            Some(transaction::Request::Remember {
-                input,
-                target: None,
-                feedback: None,
-            }),
-            cancellation,
-        )
-        .await?
-        .ok_or_else(|| failure("rule_receipt_missing"))
+        if cancellation.is_cancelled() {
+            return Err(failure("rule_write_cancelled"));
+        }
+        let receipt = self.capture(input, None, None).await?;
+        let _ = self.drain_captures().await;
+        Ok(journal::settled_receipt(self.root(), receipt).await)
+    }
+
+    /// Remember from a chat, including a lasting repeat of its session-scoped instruction.
+    pub async fn remember_in_chat(
+        &self,
+        input: ExplicitMemoryUpdateInput,
+        session: String,
+        cancellation: CancellationToken,
+    ) -> CognitionResult<RememberedRuleReceipt> {
+        if cancellation.is_cancelled() {
+            return Err(failure("rule_write_cancelled"));
+        }
+        let receipt = self.capture(input, None, Some(session)).await?;
+        let _ = self.drain_captures().await;
+        Ok(journal::settled_receipt(self.root(), receipt).await)
     }
 
     /// Correct a selected rule without changing its immutable binding.
@@ -126,16 +139,12 @@ impl RememberedRuleOwner {
         if input.project_id != target.project_id {
             return Err(failure("rule_binding_mismatch"));
         }
-        self.run(
-            Some(transaction::Request::Remember {
-                input,
-                target: Some(target),
-                feedback: None,
-            }),
-            cancellation,
-        )
-        .await?
-        .ok_or_else(|| failure("rule_receipt_missing"))
+        if cancellation.is_cancelled() {
+            return Err(failure("rule_write_cancelled"));
+        }
+        let receipt = self.capture(input, Some(target), None).await?;
+        let _ = self.drain_captures().await;
+        Ok(journal::settled_receipt(self.root(), receipt).await)
     }
 
     /// Delete the selected saved rule only. Chats and archived revisions are kept.
@@ -162,6 +171,15 @@ impl RememberedRuleOwner {
 
     /// Recover only the durable pending operation; no directory or idle scan.
     pub async fn recover(&self, cancellation: CancellationToken) -> CognitionResult<()> {
+        let owner = self.clone();
+        tokio::task::spawn_blocking(move || {
+            owner.authority()?;
+            let _ = journal::overlay(&owner.root(), vec![])?;
+            Ok::<_, CognitionError>(())
+        })
+        .await
+        .map_err(failure_source)??;
+        self.drain_captures().await?;
         // Read-only fast path means a restart with no pending operation takes no lease.
         let pending = self.root().join("pending.json");
         if !tokio::task::spawn_blocking(move || pending.try_exists())
@@ -212,7 +230,8 @@ impl RememberedRuleOwner {
             let result = if cancellation.is_cancelled() {
                 Err(failure("rule_write_cancelled"))
             } else {
-                transaction::run(&owner, request)
+                journal::drain_locked(&owner)
+                    .and_then(|_| transaction::run(&owner, request))
                     .map_err(|error| owner.pending_error(error))
                     .and_then(|result| {
                         result

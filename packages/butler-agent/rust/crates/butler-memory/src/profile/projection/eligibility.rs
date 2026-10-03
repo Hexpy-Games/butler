@@ -88,11 +88,7 @@ pub(super) fn eligible_sources_in_db(
             let valid = evidence_refs(&entry)
                 .into_iter()
                 .filter(|reference| {
-                    current.contains(reference)
-                        || verified_import(data_root, reference, &entry.id)
-                        || sources
-                            .verified_feedback(reference, &entry.id)
-                            .unwrap_or(false)
+                    current.contains(reference) || verified_import(data_root, reference, &entry.id)
                 })
                 .collect::<Vec<_>>();
             if valid.is_empty() {

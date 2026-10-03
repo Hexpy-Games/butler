@@ -121,6 +121,8 @@ impl CognitionPromptPort for Cognition {
     ) -> ContextFuture<'a, Vec<RememberedRuleProjection>> {
         Box::pin(async {
             Ok(vec![RememberedRuleProjection {
+                scope_session_id: None,
+                expires_at: None,
                 handle: "RTEST".into(),
                 text: "rule body\n".into(),
                 project_id: None,

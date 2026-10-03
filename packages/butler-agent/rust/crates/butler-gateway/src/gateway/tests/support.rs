@@ -459,5 +459,3 @@ impl crate::gateway::GatewayDevices for TestApplication {
         Box::pin(async { Ok(()) })
     }
 }
-
-impl crate::gateway::GatewayFeedback for TestApplication {}

@@ -1,5 +1,4 @@
 //! Public memory-write adapters using the current Turn's canonical provenance.
-mod feedback;
 mod services;
 pub(crate) use services::MemoryWriteServices;
 
@@ -27,7 +26,6 @@ pub(super) fn supports(name: &str) -> bool {
             ToolName::IngestTaskMemory
                 | ToolName::UpdateExplicitMemory
                 | ToolName::ForgetExplicitMemory
-                | ToolName::RecordUserFeedback
         )
     )
 }
@@ -59,9 +57,6 @@ pub(super) async fn execute(
     }
     let result = match call.name.as_str() {
         "ingest_task_memory" => ingest(owner, &call.arguments),
-        "record_user_feedback" => {
-            feedback::record(owner, invocation, &call.arguments, call_id).await
-        }
         "update_explicit_memory" => update(owner, invocation, &call.arguments, call_id).await,
         "forget_explicit_memory" => forget(owner, invocation, &call.arguments, call_id).await,
         // Dispatch routes only supported names here.
@@ -110,6 +105,23 @@ async fn update(
         Err(error) => return error,
     };
     let input = ExplicitMemoryUpdateInput {
+        duration: Some(
+            args.get("duration")
+                .and_then(Value::as_str)
+                .unwrap_or("always")
+                .into(),
+        ),
+        expires_at: match args
+            .get("duration")
+            .and_then(Value::as_str)
+            .unwrap_or("always")
+        {
+            "this chat" => Some((chrono::Utc::now() + chrono::Duration::hours(24)).to_rfc3339()),
+            "7 days" => Some((chrono::Utc::now() + chrono::Duration::days(7)).to_rfc3339()),
+            _ => None,
+        },
+        scope_session_id: (args.get("duration").and_then(Value::as_str) == Some("this chat"))
+            .then(|| owner.binding.memory.runtime_session_id.clone()),
         text: text.to_owned(),
         operation_id: Some(call_id.to_owned()),
         project_id: owner.binding.memory.project_id.clone(),
@@ -130,7 +142,11 @@ async fn update(
         owner
             .memory_writes
             .rules
-            .remember(input, invocation.cancellation.clone())
+            .remember_in_chat(
+                input,
+                owner.binding.memory.runtime_session_id.clone(),
+                invocation.cancellation.clone(),
+            )
             .await
     };
     match result {
@@ -175,10 +191,13 @@ async fn forget(
 }
 
 fn remember_text(args: &Map<String, Value>) -> Result<&str, Value> {
-    if args.get("kind").and_then(Value::as_str).map(str::trim) != Some("rule") {
+    if !matches!(
+        args.get("kind").and_then(Value::as_str).map(str::trim),
+        Some("instruction" | "rule")
+    ) {
         return Err(failure(
-            "update_explicit_memory_requires_kind_rule",
-            "Use kind rule.",
+            "update_explicit_memory_requires_kind_instruction",
+            "Use kind instruction.",
         ));
     }
     let text = args
@@ -188,7 +207,7 @@ fn remember_text(args: &Map<String, Value>) -> Result<&str, Value> {
         .ok_or_else(|| {
             failure(
                 "update_explicit_memory_requires_text",
-                "Rule text is required.",
+                "Instruction text is required.",
             )
         })?;
     require_source(args)?;

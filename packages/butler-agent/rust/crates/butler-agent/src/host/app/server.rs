@@ -130,7 +130,6 @@ impl AppServer {
         let setup = owners.start_setup(runtime, settings.clone(), installation, data_root);
         let session_workspaces = Arc::new(AppSessionWorkspaces::for_runtime(runtime));
         let dependencies = AppApplicationDependencies {
-            feedback: Some(super::runtime_ports::feedback::port(runtime)),
             service_shutdown: runtime.service_shutdown.clone(),
             updates: Arc::new(open_updates(data_root, installation)?),
             setup: Arc::new(setup.clone()),
@@ -381,12 +380,12 @@ impl AppServerOwners {
     }
 }
 
-fn native_assets(runtime: &AgentRuntime, data: &std::path::Path) -> Arc<AppAssets> {
+fn native_assets(runtime: &AgentRuntime, data_root: &std::path::Path) -> Arc<AppAssets> {
     Arc::new(AppAssets::new(
         runtime.conversations.clone(),
         runtime.image_files.clone(),
         runtime.models.configuration.clone(),
         runtime.mcp_client.clone(),
-        data,
+        data_root,
     ))
 }

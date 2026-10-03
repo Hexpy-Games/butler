@@ -7,9 +7,6 @@ pub(super) fn complete(
 ) -> CognitionResult<RememberedRuleReceipt> {
     let root = owner.root();
     authorize(owner, intent, &root)?;
-    if !super::super::feedback::valid(owner, intent)? {
-        return Err(failure("feedback_revision_changed"));
-    }
     butler_platform::secure_fs::create_private_dir_all(&root.join("handles"))
         .map_err(failure_source)?;
     write_json(
@@ -39,7 +36,11 @@ pub(super) fn complete(
         revision: intent.binding.revision.clone(),
         operation_id: intent.binding.operation_id.clone(),
     };
-    owner.publisher.publish_typed_source(&notice)?;
+    // Temporary and session instructions apply only through Active Rules.
+    // They never enter semantic recall, where an expired mandate could linger.
+    if intent.entry.expires_at.is_none() && intent.entry.scope_session_id.is_none() {
+        owner.publisher.publish_typed_source(&notice)?;
+    }
     owner.checkpoint("notice", operation_id(&intent.request))?;
     receipt(owner, intent, &root)
 }
@@ -66,7 +67,6 @@ fn receipt(
         },
     )?;
     owner.checkpoint("receipt", operation_id(&intent.request))?;
-    super::super::feedback::resolve(owner, intent, &result.rule)?;
     fs::remove_file(root.join("pending.json")).map_err(failure_source)?;
     butler_platform::secure_fs::sync_path(root).map_err(failure_source)?;
     Ok(result)

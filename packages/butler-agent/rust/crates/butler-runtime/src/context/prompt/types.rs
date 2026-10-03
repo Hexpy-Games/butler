@@ -62,6 +62,8 @@ pub trait ProfilePromptPort: Send + Sync {
 /// A complete active rule from the memory owner, selected for this binding.
 #[derive(Clone, Debug)]
 pub struct RememberedRuleProjection {
+    pub scope_session_id: Option<String>,
+    pub expires_at: Option<String>,
     pub handle: String,
     pub text: String,
     pub project_id: Option<String>,

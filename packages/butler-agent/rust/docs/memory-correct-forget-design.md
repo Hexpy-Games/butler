@@ -36,7 +36,7 @@ Those are reported measurements, not tests rerun for this design.
 | `repo:packages/butler-app/client/ui/src/components/settings/PersonalizationSettings.tsx:67`; `repo:packages/butler-app/client/ui/src/app/api.ts:368` | Existing personalization UI/API covers profile, response style and profiling controls; no explicit saved-rule list/delete adapter was found in the checked UI and host routes. |
 
 The installed product text also needs alignment:
-`repo:packages/butler-agent/resources/skills/save-feedback/SKILL.md:67` describes
+`repo:packages/butler-agent/resources/skills/save-instructions/SKILL.md:67` describes
 old file editing. It must describe the public contract rather than teach the
 model to bypass the owner with direct file writes.
 
@@ -253,7 +253,7 @@ success. Implement later using `@/butler-ds` and its applicable UI skill.
    shared nodes/evidence and existing ranking/storage/generation contracts.
 3. **Chat correction:** add `replaces`, snapshot-bound authorization and scoped
    Active Rules handles; replace index labels deterministically. Update catalog,
-   discovery/dispatch, effect authorization and save-feedback product text.
+   discovery/dispatch, effect authorization and save-instructions product text.
    Ship after tasks 1–2 pass the correction E2E.
 4. **Chat forget:** add targeted forget schema/dispatch with the same owner and
    access checks. Ship after next-prompt/recall/restart forget tests pass.

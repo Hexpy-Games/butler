@@ -6,7 +6,6 @@ use crate::cognition::generation::HotCacheEntryView;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{GraphRepository, db_error, vector_registration::source_row};
-use crate::cognition::feedback::{FeedbackSourceRow, excluded_source_ids};
 use crate::cognition::{
     CognitionResult, CognitionSourceRow, ConversationSourceNotice,
     assert_conversation_source_current,
@@ -143,10 +142,6 @@ impl EntryCheck<'_> {
         {
             return Ok(false);
         }
-        let excluded = excluded(self.db, self.source_root, &rows)?;
-        if refs.iter().any(|id| excluded.contains(id)) {
-            return Ok(false);
-        }
         Ok(!superseded(
             self.db,
             entry,
@@ -273,36 +268,6 @@ impl EntryCheck<'_> {
     }
 }
 
-/// Source ids of `rows` a recorded quality operation excludes.
-fn excluded(
-    db: &Connection,
-    source_root: &Path,
-    rows: &[CognitionSourceRow],
-) -> CognitionResult<HashSet<String>> {
-    let feedback_rows = rows
-        .iter()
-        .map(|row| FeedbackSourceRow {
-            source_id: &row.source_id,
-            episode_id: &row.episode_id,
-            revision: &row.revision,
-            content_hash: &row.content_hash,
-        })
-        .collect::<Vec<_>>();
-    excluded_source_ids(
-        &source_root.join("cognition/feedback"),
-        &feedback_rows,
-        |operation| {
-            db.query_row(
-                "SELECT value FROM memory_state WHERE key=?1",
-                [format!("quality_operation:{operation}")],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()
-            .map_err(db_error)
-        },
-    )
-}
-
 fn source_class_allowed(row: &CognitionSourceRow) -> bool {
     match row.source_kind.as_str() {
         "conversation" => matches!(row.origin_kind.as_str(), "user_input" | "assistant_public"),
@@ -405,13 +370,7 @@ fn superseded(
             }
         }
     }
-    if corrections.is_empty() {
-        return Ok(false);
-    }
-    let excluded = excluded(db, source_root, &corrections)?;
-    Ok(corrections
-        .iter()
-        .any(|row| !excluded.contains(&row.source_id)))
+    Ok(!corrections.is_empty())
 }
 
 const SOURCE_COLUMNS: &str = "source_id,episode_id,revision,source_kind,conversation_session_id,conversation_message_id,part_id,scalar_pointer,byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis";

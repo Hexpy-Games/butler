@@ -14,6 +14,15 @@ pub struct RememberedRule {
     pub project_id: Option<String>,
     /// Revision required for targeted deletion.
     pub revision: String,
+    /// Lifetime; absent means always for existing instructions.
+    #[serde(default)]
+    pub duration: Option<String>,
+    /// Fixed UTC expiry, absent for lasting instructions.
+    #[serde(default)]
+    pub expires_at: Option<String>,
+    /// Session ownership, independent of origin provenance.
+    #[serde(default)]
+    pub scope_session_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -21,6 +30,16 @@ pub(super) struct Entry {
     pub handle: String,
     pub record_id: String,
     pub revision: String,
+    /// Lifetime; absent means always for existing instructions.
+    #[serde(default)]
+    pub duration: Option<String>,
+    /// Fixed UTC expiry, absent for lasting instructions.
+    #[serde(default)]
+    pub expires_at: Option<String>,
+    /// Session ownership, independent of origin provenance.
+    #[serde(default)]
+    pub scope_session_id: Option<String>,
+
     pub content_hash: String,
     pub project_id: Option<String>,
     pub state: String,
@@ -72,6 +91,9 @@ impl Inventory {
                     .map(|b| b.revision.clone())
                     .unwrap_or_else(|| sha256(text.as_bytes())),
                 project_id: binding.as_ref().and_then(|b| b.project_id.clone()),
+                duration: None,
+                expires_at: None,
+                scope_session_id: None,
                 state: binding.map(|b| b.state).unwrap_or_else(|| "active".into()),
             });
         }
@@ -125,6 +147,23 @@ pub fn list_remembered_rules(
     rules_root: &Path,
     project: Option<Option<&str>>,
 ) -> CognitionResult<Vec<RememberedRule>> {
+    list_rules(rules_root, project, None)
+}
+
+/// Read only the current chat's complete instruction text, including global/project scope.
+pub fn list_chat_instructions(
+    rules_root: &Path,
+    project: Option<&str>,
+    session: &str,
+) -> CognitionResult<Vec<RememberedRule>> {
+    list_rules(rules_root, Some(project), Some(session))
+}
+
+fn list_rules(
+    rules_root: &Path,
+    project: Option<Option<&str>>,
+    session: Option<&str>,
+) -> CognitionResult<Vec<RememberedRule>> {
     let pending: Option<super::transaction::Intent> = read_json(&rules_root.join("pending.json"))?;
     let inventory = Inventory::read(rules_root)?;
     let mut result = Vec::new();
@@ -134,6 +173,10 @@ pub fn list_remembered_rules(
         }
         for row in rows.values() {
             if row.state != "active"
+                || row
+                    .scope_session_id
+                    .as_deref()
+                    .is_some_and(|id| session.is_some_and(|current| current != id))
                 || pending
                     .as_ref()
                     .is_some_and(|p| p.entry.record_id == row.record_id)
@@ -150,6 +193,9 @@ pub fn list_remembered_rules(
                 text,
                 project_id: row.project_id.clone(),
                 revision: row.revision.clone(),
+                duration: row.duration.clone(),
+                expires_at: row.expires_at.clone(),
+                scope_session_id: row.scope_session_id.clone(),
             });
         }
     }
@@ -157,6 +203,14 @@ pub fn list_remembered_rules(
     if let Some(pending) = pending {
         result.retain(|row| row.handle != pending.entry.handle);
     }
+    let mut result = super::journal::overlay(rules_root, result)?;
+    result.retain(|row| {
+        project.is_none_or(|p| row.project_id.is_none() || row.project_id.as_deref() == p)
+            && row
+                .scope_session_id
+                .as_deref()
+                .is_none_or(|id| session.is_none_or(|current| current == id))
+    });
     Ok(result)
 }
 
