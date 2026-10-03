@@ -79,6 +79,7 @@ jobs:
               - '.github/workflows/ds-site.yml'
             package:
               - '.github/workflows/macos-app-package.yml'
+              - '.github/workflows/{native-agent,macos-update-fixtures,rust-quality}.yml'
               - '.github/workflows/release*.yml'
               - '.github/actions/rust-agent-setup/**'
               - 'packages/butler-app/client/electron/**'
@@ -277,7 +278,11 @@ jobs:
       runner: macos-15
       platform: darwin-arm64
       ort-mode: static-ort
-      update-versions: ${{ needs.changes.outputs.package == 'true' }}
+
+  macos-updates:
+    needs: changes
+    if: needs.changes.outputs.package == 'true'
+    uses: ./.github/workflows/macos-update-fixtures.yml
 
   macos-archive:
     needs: changes
@@ -315,7 +320,7 @@ jobs:
       platform: darwin-arm64
 
   macos-package:
-    needs: [changes, macos-native]
+    needs: [changes, macos-native, macos-updates]
     if: needs.changes.outputs.package == 'true'
     uses: ./.github/workflows/macos-app-package.yml
     with:
@@ -376,7 +381,7 @@ jobs:
   gate:
     name: gate
     if: always()
-    needs: [changes, source, linux-clippy, linux-native, linux-perf-archive, linux-perf, macos-native, macos-perf-archive, macos-perf, linux-arm64-native, linux-arm64-perf-archive, linux-arm64-perf, linux-archive, linux-tests, macos-archive, macos-tests, macos-package, linux-arm64-archive, linux-arm64-tests, linux-package-x64, linux-package-arm64, install-x64, install-arm64, install-macos, install-merge, ui, site, ds]
+    needs: [changes, source, linux-clippy, linux-native, linux-perf-archive, linux-perf, macos-native, macos-updates, macos-perf-archive, macos-perf, linux-arm64-native, linux-arm64-perf-archive, linux-arm64-perf, linux-archive, linux-tests, macos-archive, macos-tests, macos-package, linux-arm64-archive, linux-arm64-tests, linux-package-x64, linux-package-arm64, install-x64, install-arm64, install-macos, install-merge, ui, site, ds]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

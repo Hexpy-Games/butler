@@ -70,6 +70,8 @@ Runner contention can dominate Windows even with warm compilation.
   a small optimized E2E-only archive supplies three serial perf shards.
   macOS also builds real .90/.91 update fixtures once and passes them through
   the existing smoke input, retaining embedded-version/signature/update proofs.
+  Their producer starts alongside the production Agent; only the App update
+  job waits for both. Perf/install no longer wait for unrelated fixture builds.
   PERF-IDLE has its own runner and retains the full five-minute observation.
   Test assertions, overflow checks, all budget helpers, existing ignored cases,
   watchdogs and zero retries are preserved. Producer-side invariants prove the
@@ -122,6 +124,11 @@ Runner contention can dominate Windows even with warm compilation.
   record SHA256 and producer timestamps for every tracked input. Restoring a
   timestamp requires identical complete contents and a safe tracked path;
   changed files remain fresh and Cargo still checks revision/version inputs.
+  Watched directories additionally require matching complete membership and
+  every descendant's contents; unknown files or links never qualify. A real
+  Cargo reproduction exposed redundant rebuilds from directory checkout
+  timestamps. The fixture proves freshness without compilation, and proves
+  that untracked additions and tracked deletions produce complete new output.
   This avoids checkout mtimes invalidating unchanged workspace libraries.
   Cargo's [freshness documentation](https://doc.rust-lang.org/stable/nightly-rustc/cargo/core/compiler/fingerprint/enum.LocalFingerprint.html)
   describes the mtime check. A real Cargo fixture proves that changed Rust,
@@ -146,9 +153,9 @@ cache can make the first run slower; hosted queue and yw-pc contention remain.
 
 | Workflow/check group | Observed successful median | Expected warm round 4 | After measurement |
 | --- | ---: | ---: | --- |
-| Linux Rust gate coverage | 24m38s | shared build 3–8m + longest consumer 5–8m | pending draft PR |
-| Native macOS Rust + App/install coverage | separate 36m38s / 39m48s / 13m40s | shared build 8–18m + longest consumer 5–12m | pending draft PR |
-| Windows preview | 23m31s; one run 42m03s including contention | existing contracts retained; cache/queue dependent | 13m27s, run 37131116001; all checks passed (42.8% lower observed wall) |
+| Linux Rust gate coverage | 24m38s | shared build 3–8m + longest consumer 5–8m | 13m34s at first fully green head 88a462e09 (44.9% lower observed wall) |
+| Native macOS Rust + App/install coverage | separate 36m38s / 39m48s / 13m40s | parallel shared/fixture builds 8–18m + longest consumer 5–12m | 42m26s at first fully green head; 6.6% slower App coverage; parallel-fixture correction pending |
+| Windows preview | 23m31s; one run 42m03s including contention | existing contracts retained; cache/queue dependent | 14m53s at first fully green head (36.7% lower observed wall) |
 | Butler Release | 65m46s; latest 67m32s | 20–35m with warm native caches; 35–65m cold | no tag authorized; not measured after |
 | Published verification | separate platform dispatches | max(platform duration), rather than their sum | existing tags only; not dispatched by this task |
 
@@ -168,6 +175,8 @@ compiled coverage. Actionlint and frozen Bun install/full check pass with Bun
 failed in unchanged code. Running the repo's pinned 1.91 corrected that toolchain
 mismatch. Native execution, complete E2E results and new workflow durations will
 be reported from the single draft PR; no unchanged failed CI run will be retried.
+The first fully green head is recorded in the run report, including the macOS
+regression, complete per-job phases and the next critical-path correction.
 
 All nine existing memory E2Es also ran locally against the complete archive
 trial's PR-built debug Agent: **9 passed in 144.989 s**. The daily fixture now
