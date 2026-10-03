@@ -21,7 +21,7 @@ src/host/guided/command/effect.rs	<CommandEffectAdapter as EffectAdapter>::dispa
 src/host/guided/command/evidence.rs	capability_receipts	85
 src/host/guided/command/output.rs	from_streams	175
 src/host/guided/command/output/assemble.rs	assemble	149
-src/host/guided/factory.rs	<GuidedTurnFactoryAdapter as GuidedTurnFactory>::bind_pre_model	225
+src/host/guided/factory.rs	<GuidedTurnFactoryAdapter as GuidedTurnFactory>::bind_pre_model	219
 src/host/guided/file_effects/edit.rs	decode	115
 src/host/guided/file_effects/edit.rs	recover	149
 src/host/guided/file_effects/edit/legacy.rs	recover	90

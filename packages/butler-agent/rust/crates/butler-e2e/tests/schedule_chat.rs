@@ -8,6 +8,8 @@
 
 #[path = "support/schedule_cassette.rs"]
 mod schedule_cassette;
+#[path = "support/schedule_prompt_budget.rs"]
+mod schedule_prompt_budget;
 
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::gateway::{tool_rows, turn_state};
@@ -16,9 +18,9 @@ use schedule_cassette::{bridge_result, discovery_cassette};
 use serde_json::json;
 use std::time::Duration;
 
-const ASK: &str = "매일 아침 9시에 브리핑해 줘. Asia/Seoul 기준으로 2099-01-01부터 시작해 줘.";
+const ASK: &str = "매일 아침 7시에 브리핑해줘";
 const PROMPT: &str = "오늘의 주요 소식을 브리핑해 주세요.";
-const START: &str = "2099-01-01T09:00:00+09:00";
+const START: &str = "2099-01-01T07:00:00+09:00";
 
 #[tokio::test]
 async fn ordinary_chat_creates_schedule_only_after_approval() -> Result<(), HarnessError> {
@@ -123,7 +125,7 @@ async fn ordinary_chat_creates_schedule_only_after_approval() -> Result<(), Harn
     let schedule = s.gw.get("/automations/morning-briefing").await?.data()["automation"].clone();
     assert_eq!(schedule["prompt_body"], PROMPT);
     assert_eq!(schedule["interval_seconds"], 86400);
-    assert_eq!(schedule["next_run_at"], "2099-01-01T00:00:00.000Z");
+    assert_eq!(schedule["next_run_at"], "2098-12-31T22:00:00.000Z");
     assert_eq!(schedule["access_mode"], "ask_first");
     assert!(s.provider()?.misses().is_empty());
     assert_authority(&s, &turn_id, "create_automation")?;
@@ -140,6 +142,17 @@ async fn ordinary_chat_creates_schedule_only_after_approval() -> Result<(), Harn
             "schedule schema was made always visible: {tools}"
         );
     }
+    assert!(
+        rows.iter()
+            .all(|r| r["safe_tool_name"] != "delegate_to_steward")
+    );
+    assert!(
+        s.gw.get("/session-view?session_id=general").await?.data()["steward_children"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    schedule_prompt_budget::assert_budget();
     manage_schedule(&s).await?;
     s.finish().await
 }

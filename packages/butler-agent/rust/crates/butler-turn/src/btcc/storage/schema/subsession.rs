@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS btcc_steward_results (
   status TEXT NOT NULL CHECK (status IN ('success', 'blocked', 'failed', 'cancelled')),
   code TEXT CHECK (code IS NULL OR code IN (
     'delegation_context_incomplete',
+    'capability_unavailable_in_child',
     'steward_execution_failed', 'steward_cancelled',
     'worker_work_incomplete', 'worker_no_progress'
   )),

@@ -127,6 +127,7 @@ fn source_prompt(
     }
     entries.push(format!("User request:\n{}", turn.original_message));
     entries.push(scope);
+    entries.extend(delegated_tools(state));
     if let Some(work) = work_context::render(state.work.context.as_ref()) {
         let summary = butler_core::public_text::trim_js_whitespace(&work);
         if !summary.is_empty() {
@@ -480,4 +481,8 @@ impl PromptPort for GuidedPrompt {
             })
         })
     }
+}
+
+fn delegated_tools(state: &GuidedTextState) -> Option<String> {
+    (state.phase.execution_policy.role.as_str() != "butler").then(|| format!("Granted tools in this delegated session (complete callable set; discover hidden schemas with tool_search/tool_describe): {}. Parent tools are not inherited. If a required tool is absent, record_work_disposition blocked with capability_handoff={{code:capability_unavailable_in_child,requested_action:{{tool_name,arguments}}}}; return the exact remaining action to the parent, never ask the user to solve a tool mismatch.", state.phase.authorized_names.join(", ")))
 }

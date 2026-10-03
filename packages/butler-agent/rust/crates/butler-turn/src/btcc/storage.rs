@@ -26,6 +26,7 @@ mod runtime_owner;
 mod schema;
 mod stop;
 mod subsessions;
+pub(crate) use subsessions::ChildCompletion;
 mod tool_journal;
 mod transitions;
 mod wake;

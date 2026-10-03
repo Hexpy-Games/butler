@@ -12,10 +12,11 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
         && definition.contains("'delegation_context_incomplete'")
         && definition.contains("'worker_work_incomplete'")
         && definition.contains("'worker_no_progress'")
+        && definition.contains("'capability_unavailable_in_child'")
         && !definition.contains("'task_needs_split'")
     {
         add_result_columns(db)?;
-        return migrate_followup_results(db);
+        return without_reference_rewrites(db, || migrate_followup_results(db));
     }
 
     let code = source(db, "code", "NULL")?;
@@ -25,27 +26,50 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
     let risks = source(db, "remaining_risks_json", "'[]'")?;
     let recommendations = source(db, "follow_up_recommendations_json", "'[]'")?;
     let refs = source(db, "detail_refs_json", "'[]'")?;
-    let code = if definition.contains("'task_needs_split'") {
-        "NULL"
+    let direction = source(db, "direction_revision", "0")?;
+    let code = if definition.contains("'task_needs_split'") && code == "code" {
+        "CASE WHEN code='task_needs_split' THEN NULL ELSE code END"
     } else {
         code
     };
-    db.execute_batch(
-        "ALTER TABLE btcc_steward_results RENAME TO btcc_steward_results_ss02_success",
-    )?;
-    db.execute_batch(table_schema(SUBSESSION_SCHEMA, "btcc_steward_results")?)?;
-    db.execute_batch(&format!(
+    without_reference_rewrites(db, || {
+        db.execute_batch(
+            "ALTER TABLE btcc_steward_results RENAME TO btcc_steward_results_ss02_success",
+        )?;
+        db.execute_batch(table_schema(SUBSESSION_SCHEMA, "btcc_steward_results")?)?;
+        db.execute_batch(&format!(
         "INSERT INTO btcc_steward_results (result_id, relation_id, task_id, child_session_id, \
          child_turn_id, status, code, summary, acceptance_evidence_json, changed_artifacts_json, \
          changed_files_json, commits_json, tests_json, remaining_risks_json, \
-         follow_up_recommendations_json, detail_refs_json, created_at) SELECT result_id, \
+         follow_up_recommendations_json, detail_refs_json, direction_revision, created_at) SELECT result_id, \
          relation_id, task_id, child_session_id, child_turn_id, status, {code}, summary, \
          acceptance_evidence_json, changed_artifacts_json, {changed_files}, {commits}, {tests}, \
-         {risks}, {recommendations}, {refs}, created_at FROM btcc_steward_results_ss02_success; \
+         {risks}, {recommendations}, {refs}, {direction}, created_at FROM btcc_steward_results_ss02_success; \
          DROP TABLE btcc_steward_results_ss02_success"
     ))?;
-    add_result_columns(db)?;
-    migrate_followup_results(db)
+        add_result_columns(db)?;
+        migrate_followup_results(db)
+    })
+}
+
+// Rebuild under the same canonical name without redirecting activity triggers to
+// the temporary table. The caller's transaction keeps the replacement atomic.
+fn without_reference_rewrites<T>(
+    db: &Connection,
+    operation: impl FnOnce() -> rusqlite::Result<T>,
+) -> rusqlite::Result<T> {
+    let previous: bool = db.query_row("PRAGMA legacy_alter_table", [], |row| row.get(0))?;
+    db.execute_batch("PRAGMA legacy_alter_table=ON")?;
+    let result = operation();
+    let restored = db.execute_batch(if previous {
+        "PRAGMA legacy_alter_table=ON"
+    } else {
+        "PRAGMA legacy_alter_table=OFF"
+    });
+    result.and_then(|value| {
+        restored?;
+        Ok(value)
+    })
 }
 
 fn ensure_dispatch_intent(db: &Connection) -> rusqlite::Result<()> {

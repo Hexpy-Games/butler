@@ -186,7 +186,7 @@ fn authorize_schedules(
         return;
     }
     names.insert("list_automations".into());
-    if policy.access_mode != AccessMode::ReadOnly {
+    if policy.role == PolicyRole::Butler && policy.access_mode != AccessMode::ReadOnly {
         names.extend(SCHEDULE_WRITES.iter().map(|name| (*name).to_owned()));
     }
 }
