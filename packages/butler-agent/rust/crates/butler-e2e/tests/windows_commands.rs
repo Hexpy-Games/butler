@@ -154,15 +154,6 @@ async fn windows_command_tool_native_matrix() -> Result<(), HarnessError> {
             system_root.as_str(),
         ),
     ] {
-        if case == "WIN-PYTHON"
-            && std::process::Command::new("python")
-                .arg("--version")
-                .output()
-                .is_err()
-        {
-            eprintln!("WIN-PYTHON skipped: python interpreter is not installed");
-            continue;
-        }
         outputs.push((run(case, command).await?, expected));
     }
     for (output, expected) in outputs {
