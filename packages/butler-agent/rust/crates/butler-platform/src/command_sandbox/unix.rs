@@ -8,6 +8,14 @@ pub(super) const ESCAPE: char = '\\';
 
 pub(super) const POSIX: bool = true;
 
+pub(super) fn member_access_dot(_ch: char, _previous: Option<char>, _quoted: bool) -> bool {
+    false
+}
+
+pub(super) fn path_script(command: &str) -> &str {
+    command
+}
+
 pub(super) fn add_arguments(command: &mut std::process::Command, invocation: &Invocation) {
     command.args(&invocation.arguments);
 }

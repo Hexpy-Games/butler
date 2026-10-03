@@ -1,6 +1,5 @@
 //! Public chat regression for hosts without read-only command isolation.
-#[path = "observation_stub.rs"]
-mod provider;
+use super::observation_stub as provider;
 use butler_e2e::e2e::{
     HarnessError,
     gateway::turn_state,
@@ -150,7 +149,7 @@ fn setup_home(downloads: &std::path::Path) -> String {
     downloads.parent().unwrap().display().to_string()
 }
 
-async fn approve_exact(
+pub(super) async fn approve_exact(
     s: &butler_e2e::e2e::scenario::Scenario,
     id: &str,
     command: &str,

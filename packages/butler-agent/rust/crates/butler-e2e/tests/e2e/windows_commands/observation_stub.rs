@@ -50,7 +50,7 @@ async fn reply(
             0 => call(
                 "start",
                 "start_work",
-                &json!({"objective": super::super::stub::PROMPT}),
+                &json!({"objective": super::stub::PROMPT}),
             ),
             1 => call(
                 "plan",
@@ -90,7 +90,7 @@ async fn reply(
                     .into_iter()
                     .find(|v| v["command"] == script.command);
                 let text = if result.as_ref().is_some_and(|v| v["exit_code"] == 0) {
-                    super::super::stub::ANSWER
+                    super::stub::ANSWER
                 } else {
                     "보호 경로 접근을 거부했습니다."
                 };
@@ -99,7 +99,7 @@ async fn reply(
             }
         }
     };
-    let wire = super::super::stub::response(&item).body();
+    let wire = super::stub::response(&item).body();
     ([("content-type", "text/event-stream")], wire).into_response()
 }
 

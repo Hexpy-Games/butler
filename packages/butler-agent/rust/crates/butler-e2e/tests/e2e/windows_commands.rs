@@ -8,6 +8,10 @@
 )]
 #[path = "windows_commands/observation.rs"]
 mod observation;
+#[path = "windows_commands/observation_stub.rs"]
+mod observation_stub;
+#[path = "windows_commands/profile_observation.rs"]
+mod profile_observation;
 #[path = "windows_commands/stub.rs"]
 mod stub;
 use butler_e2e::e2e::{
