@@ -67,6 +67,13 @@ jobs:
           retention-days: 14
           compression-level: 0
           if-no-files-found: error
+      - name: Publish the small identity manifest for release lookup
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-provenance-${{ inputs.platform }}
+          path: ${{ runner.temp }}/agent-payload/provenance.json
+          retention-days: 14
+          if-no-files-found: error
       - name: Build the two real macOS update-fixture versions once
         if: inputs.update-versions && inputs.platform == 'darwin-arm64'
         run: |

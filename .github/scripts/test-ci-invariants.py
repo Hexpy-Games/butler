@@ -28,6 +28,38 @@ INVENTORY = Path(sys.argv.pop()) if len(sys.argv) > 1 else None
 
 class ArtifactTrust(unittest.TestCase):
     # test-category: security
+    def test_reuse_checks_actual_checkout_manifest_before_downloading_payload(self):
+        expected = dict(sha='a' * 40, platform='linux-x64', version='0.1.0-preview.99')
+        run = dict(id=1, status='completed', conclusion='success', event='pull_request',
+                   head_sha='b' * 40, head_repository={'full_name': 'owner/repo'})
+        artifacts = [dict(name=f'agent-{kind}-linux-x64', expired=False) for kind in ['payload', 'provenance']]
+        for mismatch in [None, 'sha', 'version', 'digest']:
+            with tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                binary = root / 'fixture'
+                binary.write_bytes(b'complete binary')
+                metadata = dict(expected, binary='butler-agent', sha256=provenance.digest(binary))
+                if mismatch in ['sha', 'version']:
+                    metadata[mismatch] = 'different'
+                def download(args, **kwargs):
+                    directory = Path(args[args.index('--dir') + 1])
+                    directory.mkdir(parents=True, exist_ok=True)
+                    (directory / 'provenance.json').write_text(json.dumps(metadata))
+                    if args[args.index('--name') + 1].startswith('agent-payload-'):
+                        (directory / 'butler-agent').write_bytes(b'corrupt' if mismatch == 'digest' else binary.read_bytes())
+                with patch.dict(os.environ, GITHUB_REPOSITORY='owner/repo', GITHUB_ENV=str(root / 'env')), \
+                     patch.object(provenance, 'output', side_effect=[json.dumps({'workflow_runs': [run]}), json.dumps({'artifacts': artifacts})]), \
+                     patch.object(provenance.subprocess, 'run', side_effect=download) as transfer, \
+                     patch.object(provenance, 'verify_version') as version, contextlib.redirect_stdout(io.StringIO()):
+                    if mismatch == 'digest':
+                        with self.assertRaisesRegex(ValueError, 'digest'):
+                            provenance.reuse(root / 'result', expected)
+                    else:
+                        self.assertEqual(provenance.reuse(root / 'result', expected), mismatch is None)
+                    self.assertEqual(transfer.call_count, 1 if mismatch in ['sha', 'version'] else 2)
+                    self.assertEqual(version.call_count, int(mismatch is None))
+
+    # test-category: security
     def test_exact_identity_and_digest_required(self):
         expected = dict(schema=1, sha='a' * 40, platform='linux-x64', version='0.1.0-preview.99',
                         native_mode='static-ort', profile='release', toolchain='1.91.0',
@@ -177,7 +209,23 @@ class CargoCache(unittest.TestCase):
                     else:
                         with self.assertRaisesRegex(ValueError, 'path'):
                             cargo_cache.extract(root)
+                # Existing cache symlinks must not redirect even a regular file
+                # to a sibling checkout path (which tar's cwd filter allows).
+                (root / 'sibling').mkdir()
+                redirect = root / 'target/release/redirect'
+                redirect.symlink_to('../../sibling')
+                with tarfile.open(raw, 'w') as archive:
+                    entry = tarfile.TarInfo('target/release/redirect/forbidden')
+                    entry.size = 19
+                    archive.addfile(entry, io.BytesIO(b'all compiled inputs'))
+                with (root / 'cache.tar.zst').open('wb') as packed:
+                    subprocess.run(['zstd', '-q', '-c', str(raw)], stdout=packed, check=True)
+                with self.assertRaisesRegex(tarfile.FilterError, 'cache path'):
+                    cargo_cache.extract(root)
+                self.assertFalse((root / 'sibling/forbidden').exists())
+                redirect.unlink()
                 # Round-trip the producer snapshot, not just the extractor.
+                os.link(root / 'target/release/complete', root / 'target/release/shared-input')
                 expected = dict(platform='linux-x64', mode='prebuilt-ort', flags={})
                 subprocess.run(['git', 'init', '-q'], check=True)
                 (root / 'source.rs').write_text('complete source input')
@@ -192,6 +240,9 @@ class CargoCache(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'source identity digest'):
                     cargo_cache.verify(root / 'snapshot', expected)
                 sources.write_bytes(complete_sources)
+                # A partial Actions cache is already present on a warm runner.
+                cargo_cache.extract(root / 'snapshot')
+                self.assertTrue(os.path.samefile(root / 'target/release/complete', root / 'target/release/shared-input'))
                 (root / 'target/release/complete').unlink()
                 cargo_cache.extract(root / 'snapshot')
                 self.assertEqual((root / 'target/release/complete').read_bytes(), b'all compiled inputs')

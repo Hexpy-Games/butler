@@ -309,3 +309,29 @@ bootstrap new compatible snapshots; no release-after result is claimed.
 | Complete Windows preview verification | success | 17 | 2 | 0 | 2 | 0 | 0 | 3 | 7 |
 | platform-paths | success | 3 | 4 | 0 | 1 | 0 | 0 | 3 | 8 |
 | Windows compile check (x86_64-pc-windows-msvc) | success | 3 | 30 | 0 | 385 | 0 | 0 | 36 | 451 |
+
+## Source-freshness bootstrap (`4e798ccb063a`)
+
+[Rust run 37134711330](https://github.com/Hexpy-Games/butler/actions/runs/37134711330)
+is not a qualification: ARM64 archive restore failed before compilation.
+Supplementing a partial Actions cache encountered an existing hardlink;
+Python 3.12 attempted a backwards seek in the streamed tar. The extractor now
+replaces only validated in-tree hardlink destinations. Its full snapshot
+round-trip covers an already populated cache, and existing symlink parents
+cannot redirect extraction outside the cache subtree. All eight invariants
+pass with CI's Python 3.12 and the compiled 312-test inventory.
+
+The earlier macOS strict replay, historical vector recall and 180 s posting
+query cases all pass on this changed source. Their full ordinary shards
+(4/5/2) pass; no assertion or deadline changed. macOS native and ordinary
+archive producers finished successfully and saved complete source identities
+before the next correction push. Remaining consumers of this failed trial
+can be superseded by the changed-source qualification; cancellation is not
+a successful wall-time measurement. The final graph still runs every check.
+
+Release lookup now uses a small identity manifest before transferring any
+complete Agent. The eighth invariant proves actual checkout SHA matching
+even when PR head metadata differs, incompatible-manifest rejection without
+payload transfer, and rejection of a matching corrupt payload. Actual binary
+digest and executable-version checks remain mandatory. No release is tagged
+or dispatched here; release-after measurements remain unobserved.

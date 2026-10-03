@@ -110,6 +110,10 @@ Runner contention can dominate Windows even with warm compilation.
   configurations cannot share one executable without changing check semantics.
   Most tags will miss PR reuse because the SHA or embedded version differs;
   the normal cached native build remains the required fallback.
+  Small identity manifests are checked before transferring any payload, so
+  incompatible historical PR Agents do not turn that fallback into gigabytes
+  of unnecessary downloads. A match still verifies the complete binary,
+  digest and actual executable version.
 - Successful Cargo producers also preserve compatible complete target outputs
   as two-day artifacts, outside the shared 10 GB cache eviction pool. Restore
   requires compiler/native mode/flags/lockfile identity, checksum and a
@@ -157,7 +161,7 @@ E2E inventory after the preview.8 merge contains **312 tests, 14 existing ignore
 **12/17/19 plus one complete idle observation**. Ordinary/performance overlap is
 intentional and preserves the former ordinary and enforced-budget runs. The
 union covers all **298 runnable E2Es**; every budget selection remains included.
-Seven CI invariant tests validate exact artifact identity/digest, reject failed/
+Eight CI invariant tests validate exact artifact identity/digest, reject failed/
 foreign runs, reject failed/cancelled/skipped selected gate jobs, and prove
 compiled coverage. Actionlint and frozen Bun install/full check pass with Bun
 1.3.11. An initial shell used the host default Rust 1.98; its new Clippy lints

@@ -75,6 +75,9 @@ def extract(directory, root='target'):
     # The producer uploads only its target directory. Reject an unexpected
     # archive root before extraction, even for a same-repository artifact.
     archive = directory / 'cache.tar.zst'
+    cache_root = Path(root)
+    if cache_root.is_symlink() or not cache_root.resolve().is_relative_to(Path.cwd().resolve()):
+        raise tarfile.FilterError('Escaping cache root')
     with subprocess.Popen(['zstd', '-d', '-c', str(archive)], stdout=subprocess.PIPE) as decompress:
         with tarfile.open(fileobj=decompress.stdout, mode='r|') as archive_tar:
             for member in archive_tar:
@@ -97,11 +100,19 @@ def extract(directory, root='target'):
                     continue
                 if path.is_absolute() or '..' in path.parts or not path.parts or path.parts[0] != root:
                     raise ValueError(f'Unexpected Cargo cache path: {member.name}')
+                if path != cache_root and not path.parent.resolve().is_relative_to(cache_root.resolve()):
+                    raise tarfile.FilterError(f'Escaping existing cache path: {member.name}')
                 if member.issym() or member.islnk():
                     link = Path(member.linkname)
                     destination = path.parent / link if member.issym() else link
                     if link.is_absolute() or not destination.resolve().is_relative_to(Path(root).resolve()):
                         raise tarfile.FilterError(f'Unexpected Cargo cache link: {member.name}')
+                if member.islnk():
+                    # Supplementing an existing cache leaves the destination
+                    # present. Python 3.12 then falls back to seeking an earlier
+                    # tar member, which a zstd stream cannot do. Replace only
+                    # the validated in-tree hardlink before recreating it.
+                    path.unlink(missing_ok=True)
                 archive_tar.extract(member, filter='data')
         decompress.stdout.close()
         if decompress.wait() != 0:

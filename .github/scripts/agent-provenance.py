@@ -76,10 +76,19 @@ def reuse(directory, expected):
             continue
         artifacts = json.loads(output('gh', 'api', f'repos/{repository}/actions/runs/{run["id"]}/artifacts?per_page=100'))['artifacts']
         name = f'agent-payload-{expected["platform"]}'
-        if not any(a['name'] == name and not a['expired'] for a in artifacts):
+        manifest_name = f'agent-provenance-{expected["platform"]}'
+        available = {a['name'] for a in artifacts if not a['expired']}
+        if name not in available or manifest_name not in available:
             continue
         with tempfile.TemporaryDirectory(dir=os.environ.get('RUNNER_TEMP', os.environ.get('TMPDIR'))) as temporary:
             candidate = Path(temporary)
+            manifest = candidate / 'manifest'
+            subprocess.run(['gh', 'run', 'download', str(run['id']), '--name', manifest_name, '--dir', str(manifest)], check=True)
+            metadata = json.loads((manifest / 'provenance.json').read_text())
+            if any(metadata.get(key) != value for key, value in expected.items()):
+                # Most PR/tag SHAs or embedded versions differ. Reject using
+                # the small manifest before transferring a complete Agent.
+                continue
             subprocess.run(['gh', 'run', 'download', str(run['id']), '--name', name, '--dir', temporary], check=True)
             if not verify(candidate, expected):
                 print(f'Run {run["id"]}: incompatible SHA/version/native build; using a native build.')
