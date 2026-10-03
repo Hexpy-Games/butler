@@ -2,6 +2,8 @@
 
 2026-10-03, Linux x86_64 / WSL. **Acceptance stopped at the accuracy gate.** The implementation is available for review, but the requested three-arm judge comparison is not validated. Vectors remain the primary lane; FTS replaces an unavailable vector lane. The research does not justify enabling FTS alongside available vectors.
 
+A subsequent [bounded offline tuning round](fts-multilingual-tuning.md) also failed its gate (66/89 original, 15/35 extra-vague in the saved-trace RRF diagnostic); no product variant was adopted.
+
 ## Native held-out run
 
 The same fixed seed-20261003 question split was used: 124 held-out questions, including 89 original and 35 extra-vague. The snapshot is Korean-skewed (242/244 corpus questions contain Hangul); multilingual behavior is separately covered by Korean, English, Japanese, Chinese and mixed Korean/English stub E2Es. This is not a multilingual accuracy benchmark.
