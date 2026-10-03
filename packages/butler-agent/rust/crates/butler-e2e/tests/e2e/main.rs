@@ -2,7 +2,6 @@
 mod access;
 mod agent_context;
 mod agent_exit;
-mod agent_feedback;
 mod alias_index_drop;
 mod app_state;
 mod app_storage_scale;
@@ -113,3 +112,9 @@ mod workspace;
 mod memory_stubs;
 #[path = "support/schedule_cassette.rs"]
 mod schedule_cassette;
+
+mod memory_instructions;
+mod memory_management;
+mod memory_profile_reset;
+mod memory_reset;
+mod memory_wiring_more;

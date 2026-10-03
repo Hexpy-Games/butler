@@ -20,7 +20,7 @@ src/host/guided/command/artifacts.rs	declared	84
 src/host/guided/command/evidence.rs	capability_receipts	85
 src/host/guided/command/output.rs	from_streams	175
 src/host/guided/command/output/assemble.rs	assemble	139
-src/host/guided/factory.rs	<GuidedTurnFactoryAdapter as GuidedTurnFactory>::bind_pre_model	225
+src/host/guided/factory.rs	<GuidedTurnFactoryAdapter as GuidedTurnFactory>::bind_pre_model	224
 src/host/guided/file_effects/edit.rs	decode	115
 src/host/guided/file_effects/edit.rs	recover	149
 src/host/guided/file_effects/edit/legacy.rs	recover	90
@@ -33,16 +33,16 @@ src/host/guided/project_tools/options.rs	command	144
 src/host/guided/prompt.rs	<GuidedPrompt as PromptPort>::render	186
 src/host/guided/prompt/prior_tool/semantic.rs	facts	93
 src/host/guided/prompt/work_context.rs	render	267
-src/host/guided/tools.rs	GuidedTools::new	99
+src/host/guided/tools.rs	GuidedTools::new	97
 src/host/guided/tools/discovery.rs	search	82
 src/host/guided/tools/discovery/invoke.rs	run	134
 src/host/guided/tools/discovery/invoke.rs	run_mcp	115
-src/host/guided/tools/dispatch.rs	execute	409
+src/host/guided/tools/dispatch.rs	execute	405
 src/host/guided/tools/effect.rs	execute	108
 src/host/guided/tools/effect/authority.rs	gate	124
 src/host/guided/tools/effect/ledger_input.rs	prepare	94
 src/host/guided/tools/effect/topic_conversation.rs	TopicConversationEffect::request	97
-src/host/guided/tools/execute.rs	execute	141
+src/host/guided/tools/execute.rs	execute	137
 src/host/guided/tools/image.rs	admitted_image	96
 src/host/guided/tools/image.rs	execute	100
 src/host/guided/tools/message/preview.rs	fit	85
@@ -55,11 +55,11 @@ src/host/memory_jobs/briefing.rs	<BriefingSource as BriefingInputSource>::snapsh
 src/host/memory_jobs/consolidation_phase.rs	<CyclePhases as PhaseExecutor>::execute	114
 src/host/memory_jobs/daily.rs	DailyCognitionJobs::new	90
 src/host/memory_jobs/profile_consolidation.rs	ProfileConsolidation::consolidate	84
-src/host/memory_jobs/recall_metrics.rs	<RecallMetrics as RecallMetricSink>::record	118
+src/host/memory_jobs/recall_metrics.rs	<RecallMetrics as RecallMetricSink>::record	107
 src/host/memory_jobs/transcript_sync.rs	LegacySessionSync::run	194
 src/host/memory_jobs/transcript_sync/hot.rs	LegacyHot::save	125
 src/host/memory_jobs/transcript_sync/hot.rs	commit	91
-src/host/runtime.rs	AgentRuntime::open	401
+src/host/runtime.rs	AgentRuntime::open	392
 src/host/service/ingress/bind.rs	bind_and_request	136
 src/host/service/ingress/bind.rs	control_request	81
 src/host/service/ingress/bind/internal_subsession.rs	bind	87

@@ -13,6 +13,7 @@ use crate::gateway::shutdown_trace::measure as measure_shutdown;
 
 use errors::app_error;
 mod devices;
+mod event_reads;
 #[cfg(debug_assertions)]
 mod faults;
 mod gateway_dashboard_impl;
@@ -22,6 +23,7 @@ mod gateway_session_controls_impl;
 mod handle;
 mod internal_continuation;
 mod mcp_servers;
+mod memory_management;
 mod message_files;
 mod message_projection;
 mod message_visibility;
@@ -31,6 +33,7 @@ mod new_chat_briefing;
 mod operation_output;
 mod panic_isolation;
 mod personalization;
+pub use memory_management::{AppMemoryCommand, AppMemoryPort, MemoryEventSink};
 mod plan_decisions;
 mod progress_view;
 mod project_sources;

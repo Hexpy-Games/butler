@@ -125,9 +125,7 @@ pub(super) fn read(
         .unwrap_or(258_000.min(max_context))
         .min(max_context)
         .max(1_000);
-    let defaults = ui_defaults();
-    // The defaults hold every fixed value (gateway_profile, profile_label).
-    let mut output = defaults.as_object().cloned().unwrap_or_default();
+    let mut output = recall_defaults(&stored);
     project_native_preferences(&native, &mut output);
     output.insert(KEY.into(), onboarding_view(&stored));
     output.insert(
@@ -291,7 +289,6 @@ pub(super) fn read(
     );
     Ok(Value::Object(output))
 }
-
 /// The legacy main-screen keys, normalized, and the `wallpaper` setting, which
 /// they describe until a PATCH stores one.
 fn main_screen(stored: &Map<String, Value>, output: &mut Map<String, Value>) {
@@ -332,4 +329,26 @@ fn project_native_preferences(native: &Map<String, Value>, output: &mut Map<Stri
                 .unwrap_or(false)
         ),
     );
+}
+
+fn recall_defaults(stored: &serde_json::Map<String, Value>) -> serde_json::Map<String, Value> {
+    let mut output = ui_defaults().as_object().cloned().unwrap_or_default();
+    output.insert(
+        "recall_mode".into(),
+        json!(enum_value(
+            stored.get("recall_mode"),
+            &["faster", "accurate"],
+            "accurate"
+        )),
+    );
+    output.insert(
+        "recall_judge_model".into(),
+        json!(
+            stored
+                .get("recall_judge_model")
+                .and_then(Value::as_str)
+                .unwrap_or("default")
+        ),
+    );
+    output
 }

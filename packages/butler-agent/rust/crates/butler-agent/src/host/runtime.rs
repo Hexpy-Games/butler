@@ -4,6 +4,7 @@ mod boundary;
 mod contracts;
 mod defaults;
 pub(crate) use defaults::ensure_reply_language;
+mod attachments;
 pub(super) mod environment;
 mod mcp_owner;
 mod memory_bootstrap;
@@ -11,6 +12,7 @@ pub(super) mod models;
 mod monitoring;
 mod owners;
 pub(super) mod process_probe;
+mod recall;
 mod skills_owner;
 pub(super) mod storage_bootstrap;
 pub(super) mod stores;
@@ -30,7 +32,7 @@ use boundary::{setup, validate_data_installation_boundary};
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
 use butler_ledger::project_ledger::{ProjectLedger, ProjectWork};
-use butler_memory::cognition::{CognitionPromptReader, CompletionPublisher, ExactMemoryQuery};
+use butler_memory::cognition::{CognitionPromptReader, ExactMemoryQuery};
 use butler_memory::cognition::{MemoryRecall, ProjectCapsuleService};
 use butler_memory::profile::ProfileService;
 use butler_models::models::ModelConfigurationClock;
@@ -91,12 +93,7 @@ impl AgentRuntime {
         let (coordinator, embedding, vectors, fresh_memory) =
             memory_bootstrap::open(&paths, &environment.cognition_paths).await?;
         let files = WorkspaceFiles::new(4);
-        let image_files = Arc::new(butler_gateway::gateway::AppImageFiles::new(
-            &paths.data_root,
-        ));
-        let attachment_context = Arc::new(butler_runtime::context::AttachmentContext::new(
-            paths.data_root.clone(),
-        ));
+        let (image_files, attachment_context) = attachments::owners(&paths.data_root);
         let commands = Commands::new();
         let mutations = WorkspaceMutations::new();
         let (skills, capabilities, catalog) = skills_owner::open(&paths, &files, &mutations)?;
@@ -180,13 +177,13 @@ impl AgentRuntime {
             bindings: stores.bindings.clone(),
             embedding: embedding.clone(),
         }));
-        let context_maintenance = Arc::new(ContextMaintenance::new(
-            paths.data_root.clone(),
-            tool_output.clone(),
-            metric_files.clone(),
-            date_parser.clone(),
-            daily_cognition,
-        ));
+        let context_maintenance = ContextMaintenance::for_cognition(
+            &paths.data_root,
+            &tool_output,
+            &metric_files,
+            &date_parser,
+            &daily_cognition,
+        );
         let command = Arc::new(crate::host::guided::command::GuidedCommand::new(
             commands.clone(),
             tool_output.clone(),
@@ -203,19 +200,17 @@ impl AgentRuntime {
             2,
             memory_sources,
         ));
-        let compare = collation.clone();
-        let recall_date_parser = date_parser.clone();
-        let memory_recall = MemoryRecall::new(
-            paths.data_root.clone(),
-            environment.cognition_paths.clone(),
-            Arc::new(move |value| recall_date_parser.parse(value)),
-            Arc::new(move |left, right| compare.compare(left, right)),
-            Arc::new(|| SystemIdentity.now_epoch_millis()),
-            2,
-        )
-        .with_metric_sink(Arc::new(RecallMetrics::new(metric_files.clone())));
-        let memory_recall = memory_recall.with_vector_port(vectors);
-        let memory_recall = Arc::new(memory_recall);
+        let memory_recall = Arc::new(
+            recall::configured_recall(
+                &paths,
+                &environment.cognition_paths,
+                &models,
+                date_parser.clone(),
+                collation.clone(),
+            )
+            .with_metric_sink(Arc::new(RecallMetrics::new(metric_files.clone())))
+            .with_vector_port(vectors),
+        );
         let conversation_context = ContextConversation::new(
             stores.conversations.clone(),
             models.configuration.clone(),
@@ -241,11 +236,8 @@ impl AgentRuntime {
         let context_compactions = documents.context_compactions();
         let repositories = Arc::new(documents.clone());
         let now: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
-        let memory_publisher = Arc::new(CompletionPublisher::new(
-            &paths.data_root,
-            &environment.cognition_paths,
-            now.clone(),
-        ));
+        let memory_writes =
+            memory_bootstrap::rule_owner(&paths, &environment.cognition_paths, &coordinator, stop);
         let preparation = Arc::new(DefaultTurnPreparation::new(
             stores.bindings.clone(),
             stores.conversations.clone(),
@@ -349,8 +341,7 @@ impl AgentRuntime {
             tool_artifacts,
             memory_query: memory_query.clone(),
             memory_recall: memory_recall.clone(),
-            memory_paths: environment.cognition_paths.clone(),
-            memory_publisher,
+            memory_writes: memory_writes.clone(),
             conversation_reference: conversation_reference.clone(),
             conversation_tools: conversation_tools.clone(),
             compactions: ContextCompactionRepository::new(stores.btcc.clone()),
@@ -427,10 +418,12 @@ impl AgentRuntime {
             ),
             host: owner,
         });
-        Ok(Self {
-            memory_acquisition: Arc::new(
-                crate::host::embedding::worker::assets::Acquisition::start(paths.data_root.clone()),
-            ),
+        let (memory_management, memory_acquisition) =
+            Self::memory_owners(&paths.data_root, &environment.cognition_paths, coordinator);
+        Self::finish_startup(Self {
+            memory_writes: Arc::new(memory_writes.rules.clone()),
+            memory_management,
+            memory_acquisition,
             service_shutdown: stop.clone(),
             btcc: assembly.btcc,
             host: assembly.host,
@@ -466,4 +459,38 @@ fn process_clocks() -> Result<(Arc<SystemPromptClock>, Arc<super::DateParser>), 
         Arc::new(SystemPromptClock::new().map_err(setup)?),
         Arc::new(super::DateParser::from_process().map_err(setup)?),
     ))
+}
+
+impl AgentRuntime {
+    fn memory_owners(
+        data_root: &std::path::Path,
+        environment: &butler_memory::cognition::CognitionPathEnvironment,
+        coordinator: Arc<butler_memory::coordination::CognitionWriteCoordinator>,
+    ) -> (
+        Arc<butler_memory::management::MemoryManagement>,
+        Arc<crate::host::embedding::worker::assets::Acquisition>,
+    ) {
+        (
+            Arc::new(butler_memory::management::MemoryManagement::new(
+                data_root.to_path_buf(),
+                environment.clone(),
+                coordinator,
+            )),
+            Arc::new(crate::host::embedding::worker::assets::Acquisition::start(
+                data_root.to_path_buf(),
+            )),
+        )
+    }
+}
+
+impl AgentRuntime {
+    fn finish_startup(runtime: Self) -> Result<Self, BtccError> {
+        crate::host::memory_jobs::recover_resets(
+            runtime.memory_management.clone(),
+            runtime.profile.clone(),
+            runtime.memory_writes.clone(),
+            runtime.service_shutdown.child_token(),
+        );
+        Ok(runtime)
+    }
 }

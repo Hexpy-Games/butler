@@ -9,6 +9,7 @@ static MEMORY_WORK: Notify = Notify::const_new();
 /// Tells the sync loop that new memory work exists. The signal is remembered
 /// when the loop is not waiting, so it is never lost between two polls.
 pub fn signal_memory_work() {
+    crate::coordination::signal_inventory_change();
     MEMORY_WORK.notify_one();
 }
 

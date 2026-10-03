@@ -1,22 +1,23 @@
 //! Cache refresh after semantic projection, independent of embeddings.
 use super::Input;
+use crate::cognition::generation::cache::CacheAdvance;
 use crate::cognition::{CognitionResult, MemoryGenerationHandle, MemoryGenerationTarget};
 pub(super) async fn process(
     input: &Input,
     handle: Option<&MemoryGenerationHandle>,
-) -> CognitionResult<bool> {
+) -> CognitionResult<CacheAdvance> {
     if input.shutdown.is_cancelled() {
-        return Ok(false);
+        return Ok(CacheAdvance::default());
     }
     let Some(handle) = handle else {
-        return Ok(false);
+        return Ok(CacheAdvance::default());
     };
     if !input
         .probe
         .cache_work(&handle.graph_path, &(input.clock)())
         .await?
     {
-        return Ok(false);
+        return Ok(CacheAdvance::default());
     }
     let target = input
         .target

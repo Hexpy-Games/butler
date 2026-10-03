@@ -1,6 +1,7 @@
 use super::*;
 
 mod fakes;
+mod memory_management;
 pub(super) use fakes::test_db_path;
 
 use std::{

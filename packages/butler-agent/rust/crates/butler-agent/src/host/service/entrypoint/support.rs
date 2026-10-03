@@ -148,13 +148,15 @@ pub(super) async fn capture_configuration(
     installation: &crate::host::ResolvedInstallation,
 ) -> Result<crate::host::ServiceConfiguration, BtccError> {
     if butler_platform::secure_fs::OWNER_ONLY {
-        return crate::host::ServiceConfiguration::capture(data, home, installation);
+        return crate::host::ServiceConfiguration::capture(data, home, installation)
+            .and_then(require_supported_data);
     }
     let data = data.map(str::to_owned);
     let home = home.to_path_buf();
     let installation = installation.clone();
     tokio::task::spawn_blocking(move || {
         crate::host::ServiceConfiguration::capture(data.as_deref(), &home, &installation)
+            .and_then(require_supported_data)
     })
     .await
     .map_err(io)?
@@ -198,4 +200,18 @@ pub(super) async fn acquire_instance(
     instance.map_err(|message| {
         failure("native_service_instance_unavailable", message.to_string()).with_source(message)
     })
+}
+
+// Refuse before instance locks, credentials or runtime owners can write to DATA.
+fn require_supported_data(
+    config: crate::host::ServiceConfiguration,
+) -> Result<crate::host::ServiceConfiguration, BtccError> {
+    use crate::host::runtime::storage_bootstrap::{FreshStorageError, is_unsupported_legacy_data};
+    if is_unsupported_legacy_data(&config.data_root) {
+        return Err(failure(
+            "storage_bootstrap_failed",
+            FreshStorageError::ExistingData(config.data_root).to_string(),
+        ));
+    }
+    Ok(config)
 }

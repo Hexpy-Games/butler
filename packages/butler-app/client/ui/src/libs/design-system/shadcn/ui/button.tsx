@@ -63,6 +63,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   iconEnd,
   text,
   stretch = false,
+  onClick,
   ...props
 }, ref) {
   const Comp = asChild ? Slot : "button";
@@ -94,6 +95,14 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function Button(
       data-icon-layout={iconLayout}
       className={cn(buttonVariants({ variant, size, shape, className }))}
       {...props}
+      onClick={(event) => {
+        if (props["aria-disabled"] === true || props["aria-disabled"] === "true") {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        onClick?.(event);
+      }}
     >
       {hasStructuredContent ? (
         <>

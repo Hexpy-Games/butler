@@ -22,7 +22,7 @@ use butler_turn::btcc::BtccError;
 use crate::host::app::dashboard::AppDashboardLedger;
 use crate::host::app::dashboard_briefing::AppDashboardBriefing;
 use crate::host::app::plan_decision::AppPlanDecisionLedger;
-use crate::host::app::runtime_ports::AppRuntimeInfo;
+use crate::host::app::runtime_ports::{AppMemoryManagement, AppRuntimeInfo};
 use crate::host::app::runtime_ports::{AppSetup, AppSetupParts};
 use crate::host::service::configuration::AppServiceConfiguration;
 use crate::host::{
@@ -129,13 +129,7 @@ impl AppServer {
         })?;
         let settings = Arc::new(open_settings(runtime, data_root, address).await?);
         let setup = owners.start_setup(runtime, settings.clone(), installation, data_root);
-        let session_workspaces = Arc::new(AppSessionWorkspaces::new(
-            runtime.bindings.clone(),
-            runtime.session_worktrees.clone(),
-            runtime.workspace_recovery.clone(),
-            runtime.subsessions.clone(),
-            runtime.conversations.clone(),
-        ));
+        let session_workspaces = Arc::new(AppSessionWorkspaces::for_runtime(runtime));
         let dependencies = AppApplicationDependencies {
             service_shutdown: runtime.service_shutdown.clone(),
             updates: Arc::new(open_updates(data_root, installation)?),
@@ -143,13 +137,7 @@ impl AppServer {
             skills: runtime.skills.clone(),
             mcp_client: runtime.mcp_client.clone(),
             native_ingress: Arc::new(AppIngress::new(owners.queue.clone())),
-            native_assets: Arc::new(AppAssets::new(
-                runtime.conversations.clone(),
-                runtime.image_files.clone(),
-                runtime.models.configuration.clone(),
-                runtime.mcp_client.clone(),
-                data_root,
-            )),
+            native_assets: native_assets(runtime, data_root),
             executor_readiness: Arc::new(AppReadiness::new(owners.receipt, listener_ready.clone())),
             admission: Arc::new(AppAdmission::new(
                 runtime.project_ledger.clone(),
@@ -173,6 +161,10 @@ impl AppServer {
                 settings,
                 installation.clone(),
                 data_root.to_path_buf(),
+            )),
+            memory_management: Arc::new(AppMemoryManagement::for_runtime(
+                runtime,
+                identity_clock.clone(),
             )),
             personalization: Arc::new(crate::host::AppPersonalization::new(
                 runtime.profile.clone(),
@@ -399,4 +391,14 @@ impl AppServerOwners {
             acquisition: runtime.memory_acquisition.clone(),
         })
     }
+}
+
+fn native_assets(runtime: &AgentRuntime, data_root: &std::path::Path) -> Arc<AppAssets> {
+    Arc::new(AppAssets::new(
+        runtime.conversations.clone(),
+        runtime.image_files.clone(),
+        runtime.models.configuration.clone(),
+        runtime.mcp_client.clone(),
+        data_root,
+    ))
 }

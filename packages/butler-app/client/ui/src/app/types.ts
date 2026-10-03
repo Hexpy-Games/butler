@@ -17,6 +17,7 @@ export type SettingsSectionId =
   | "usage"
   | "logs"
   | "personalization"
+  | "memory"
   | "privacy"
   | "security"
   | "system"
@@ -552,6 +553,8 @@ export interface SettingsView {
   timezone: string;
   model: string;
   reasoning_effort: ReasoningEffort;
+  recall_mode: "faster" | "accurate";
+  recall_judge_model: string;
   consolidation_model: string;
   consolidation_reasoning_effort: ReasoningEffort;
   effective_consolidation_model: string;

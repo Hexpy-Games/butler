@@ -73,6 +73,8 @@ fn read_settings(database: &Connection) -> Value {
     for key in [
         "language",
         "model",
+        "recall_mode",
+        "recall_judge_model",
         "consolidation_model",
         "reasoning_effort",
         "consolidation_reasoning_effort",

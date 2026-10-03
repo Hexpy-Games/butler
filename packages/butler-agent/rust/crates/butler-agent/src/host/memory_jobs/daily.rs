@@ -6,11 +6,10 @@ use tokio_util::sync::CancellationToken;
 
 use butler_ledger::project_ledger::ProjectLedger;
 use butler_memory::cognition::{
-    BoxStoreService, CognitionPathEnvironment, ConfiguredCycleOptions, ConfiguredCycleResult,
-    ConfiguredCycleService, CycleService, CycleStatus, FeedbackBufferService,
-    GraphConsolidationService, KnowHowService, LegacyMetadataIntegrityService, MemoryHealthService,
-    MemorySyncConsumer, ProjectCapsuleService, RunCycle, VectorOptimizeService,
-    active_memory_descriptor_exists, resolve_active_generation,
+    CognitionPathEnvironment, ConfiguredCycleOptions, ConfiguredCycleResult,
+    ConfiguredCycleService, CycleService, CycleStatus, GraphConsolidationService, KnowHowService,
+    LegacyMetadataIntegrityService, MemoryHealthService, MemorySyncConsumer, ProjectCapsuleService,
+    RunCycle, VectorOptimizeService, active_memory_descriptor_exists, resolve_active_generation,
 };
 use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_memory::profile::ProfileService;
@@ -76,16 +75,6 @@ impl DailyCognitionJobs {
             provider.clone(),
             embedding,
         );
-        let feedback = Arc::new(FeedbackBufferService::new(
-            data_root.clone(),
-            paths.clone(),
-            coordinator.clone(),
-        ));
-        let box_store = Arc::new(BoxStoreService::new(
-            data_root.clone(),
-            paths.clone(),
-            coordinator.clone(),
-        ));
         let knowhow = Arc::new(KnowHowService::new(
             data_root.clone(),
             paths.clone(),
@@ -95,7 +84,7 @@ impl DailyCognitionJobs {
         let briefing = Arc::new(BriefingGeneration::from_runtime(
             data_root.clone(),
             coordinator.clone(),
-            provider,
+            provider.clone(),
             configuration,
             profile.clone(),
             ledger,
@@ -106,23 +95,15 @@ impl DailyCognitionJobs {
             metrics: cycle_metrics.clone(),
             briefing,
             profile: Arc::new(ProfileConsolidation {
+                rules: feedback_rules(&data_root, &paths, coordinator.clone()),
                 profile,
-                feedback: feedback.clone(),
             }),
             legacy_metadata: Arc::new(LegacyMetadataIntegrityService::new(
                 &data_root.clone(),
                 paths.clone(),
-                box_store.clone(),
-                feedback.clone(),
             )),
-            feedback,
             knowhow,
-            health: Arc::new(MemoryHealthService::new(
-                data_root.clone(),
-                paths.clone(),
-                coordinator.clone(),
-            )),
-            box_store,
+            health: feedback_health(&data_root, &paths, coordinator.clone()),
         });
         let generic = CycleService::new(
             data_root.clone(),
@@ -189,7 +170,11 @@ impl DailyCognitionJobs {
             butler_core::diagnostic!("[memory-vector-batch] {}", error.code());
         }
         let now: chrono::DateTime<chrono::Utc> = SystemTime::now().into();
-        let run_id = format!("cr_scheduled_{}", now.format("%Y%m%d%H%M%S"));
+        let run_id = format!(
+            "cr_scheduled_{}_{}",
+            now.format("%Y%m%d%H%M%S"),
+            uuid::Uuid::new_v4().simple()
+        );
         let generic = self
             .generic
             .run(RunCycle {
@@ -265,4 +250,37 @@ impl DailyCognitionJobs {
             .map_err(|error| error.code().to_owned())
             .map_err(crate::host::HostError::from)
     }
+}
+
+fn feedback_rules(
+    data: &std::path::Path,
+    paths: &CognitionPathEnvironment,
+    coordinator: Arc<CognitionWriteCoordinator>,
+) -> butler_memory::cognition::RememberedRuleOwner {
+    let clock =
+        Arc::new(|| butler_models::models::ModelConfigurationClock::now_iso(&SystemIdentity));
+    let publisher = Arc::new(butler_memory::cognition::CompletionPublisher::new(
+        data, paths, clock,
+    ));
+    super::rule_checkpoints::configure(
+        butler_memory::cognition::RememberedRuleOwner::new(
+            data.to_owned(),
+            paths.clone(),
+            coordinator,
+            publisher,
+        ),
+        data,
+    )
+}
+
+fn feedback_health(
+    root: &std::path::Path,
+    paths: &CognitionPathEnvironment,
+    coordinator: Arc<CognitionWriteCoordinator>,
+) -> Arc<MemoryHealthService> {
+    Arc::new(MemoryHealthService::new(
+        root.to_path_buf(),
+        paths.clone(),
+        coordinator,
+    ))
 }

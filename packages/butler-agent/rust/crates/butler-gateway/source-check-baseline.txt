@@ -40,8 +40,8 @@ src/gateway/application/session_relocation/records.rs	reserve	83
 src/gateway/application/session_views.rs	AppApplication::session_summary_owned	92
 src/gateway/application/session_views.rs	AppApplication::session_view_owned	122
 src/gateway/application/settings/update/patch/project.rs	project	202
-src/gateway/application/settings/update/patch/sanitize.rs	sanitize	210
-src/gateway/application/settings/view.rs	read	254
+src/gateway/application/settings/update/patch/sanitize.rs	sanitize	201
+src/gateway/application/settings/view.rs	read	252
 src/gateway/application/shell.rs	command_palette	148
 src/gateway/application/snapshot_input.rs	claimed_snapshot	120
 src/gateway/application/space/commands.rs	execute	125

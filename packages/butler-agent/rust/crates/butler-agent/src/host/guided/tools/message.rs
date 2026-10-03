@@ -148,3 +148,16 @@ fn append_value(output: &mut String, value: &serde_json::Value) -> Result<(), Bt
     butler_core::json::append_json(value, output)
         .map_err(|source| error("guided_tool_provider_serialization_failed").with_source(source))
 }
+
+/// Fixed recovery text survives the native dispatcher's error sanitization.
+pub(super) fn tool_failure(name: &str, code: &str) -> serde_json::Value {
+    if name == "recall_memory" && code == "stale_detail_handle" {
+        return serde_json::json!({"ok":false,"error":{
+            "code":"stale_detail_handle",
+            "message":"Generation/revision changed or handle expired; call recall_memory again."
+        }});
+    }
+    serde_json::json!({"ok":false,"error":{
+        "code":"tool_error", "message":format!("{name} could not complete: {code}")
+    }})
+}

@@ -272,6 +272,7 @@ pub struct AppApplicationDependencies {
     pub settings_mutations: Arc<dyn AppSettingsMutationPort>,
     pub runtime_info: Arc<dyn AppRuntimeInfoProvider>,
     pub model_catalog: Arc<dyn super::AppModelCatalogPort>,
+    pub memory_management: Arc<dyn super::AppMemoryPort>,
     pub personalization: Arc<dyn super::AppPersonalizationPort>,
     pub monitoring: Arc<dyn super::AppMonitoringPort>,
     pub project_dashboard_ledger: Arc<dyn super::AppProjectDashboardLedgerPort>,

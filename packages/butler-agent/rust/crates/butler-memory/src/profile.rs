@@ -53,3 +53,6 @@ pub fn active_briefing_persona(data_root: &std::path::Path) -> (Option<String>, 
 
 #[cfg(test)]
 mod tests;
+
+mod admission;
+pub use admission::{admitted_profile_message_ids, profile_message_is_admitted};

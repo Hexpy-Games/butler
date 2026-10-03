@@ -25,6 +25,8 @@ use super::matching;
 use super::sanitize::Placeholders;
 use super::{HarnessError, harness_error};
 
+mod hold;
+pub use hold::ReplyGate;
 mod memory;
 mod record;
 mod replay;
@@ -63,6 +65,10 @@ enum Mode {
     },
 }
 
+type ChatResponder = fn(&Value) -> Option<ResponseRecord>;
+
+type MemoryResponder = fn(&Value) -> ResponseRecord;
+
 struct State {
     mode: Mode,
     placeholders: Mutex<Placeholders>,
@@ -76,6 +82,9 @@ struct State {
     library: Mutex<Vec<(String, ResponseRecord)>>,
     requests: Mutex<Vec<Value>>,
     memory_requests: Mutex<Vec<Value>>,
+    memory_responder: Mutex<Option<MemoryResponder>>,
+    chat_responder: Mutex<Option<ChatResponder>>,
+    holds: Mutex<hold::Holds>,
 }
 
 pub struct Provider {
@@ -149,6 +158,9 @@ impl Provider {
             library: Mutex::new(Vec::new()),
             requests: Mutex::new(Vec::new()),
             memory_requests: Mutex::new(Vec::new()),
+            memory_responder: Mutex::new(None),
+            chat_responder: Mutex::new(None),
+            holds: Mutex::new(hold::Holds::default()),
         });
         let shared = state.clone();
         let app = axum::Router::new().fallback(move |request: Request<Body>| {
@@ -217,6 +229,26 @@ impl Provider {
 
     pub fn set_pacing(&self, pacing: Pacing) {
         *lock(&self.state.pacing) = pacing;
+    }
+
+    /// Override only the validated synthetic memory contract, for semantic E2Es.
+    /// Deterministic stub model that can choose a response from the actual prompt.
+    pub fn set_chat_responder(&self, responder: ChatResponder) {
+        *lock(&self.state.chat_responder) = Some(responder);
+    }
+
+    pub fn set_memory_responder(&self, responder: MemoryResponder) {
+        *lock(&self.state.memory_responder) = Some(responder);
+    }
+
+    /// Hold the next reply after a tool result for this explicit user request.
+    pub fn hold_after_tool(&self, user: &str) -> ReplyGate {
+        lock(&self.state.holds).reply(user, true)
+    }
+
+    /// Hold the next reply for a request whose persisted turn snapshot is needed.
+    pub fn hold_next_reply(&self, user: &str) -> ReplyGate {
+        lock(&self.state.holds).reply(user, false)
     }
 
     pub fn add_placeholder(&self, name: &str, value: impl Into<String>) {
@@ -354,13 +386,25 @@ async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
     }
     learn_echo_ids(&state, &String::from_utf8_lossy(&bytes));
     let key = matching::key(&path, &json, &lock(&state.placeholders));
+    let hold = lock(&state.holds).take(&key);
+    if let Some(hold) = hold {
+        let _ = hold.await;
+    }
     match &state.mode {
         Mode::Replay(cassette) => {
+            if !memory
+                && let Some(response) =
+                    lock(&state.chat_responder).and_then(|respond| respond(&json))
+            {
+                return replay(&state, &response, None);
+            }
             if let Some(response) = replay_recorded(&state, cassette, &key) {
                 return response;
             }
             if memory {
-                return replay(&state, &memory::response(), None);
+                let response = lock(&state.memory_responder)
+                    .map_or_else(memory::response, |responder| responder(&json));
+                return replay(&state, &response, None);
             }
             // A declared stall may target a request whose live round was
             // cut off by a crash during recording: hold it open, answer nothing.

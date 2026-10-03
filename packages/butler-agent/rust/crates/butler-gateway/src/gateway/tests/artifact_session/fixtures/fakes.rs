@@ -90,6 +90,7 @@ pub(super) fn test_dependencies() -> AppApplicationDependencies {
         runtime_info: Arc::new(TestRuntimeInfo),
         model_catalog: Arc::new(TestModelCatalog),
         personalization: Arc::new(TestPersonalization),
+        memory_management: Arc::new(super::memory_management::TestMemory),
         monitoring: Arc::new(TestMonitoring),
         project_dashboard_ledger: Arc::new(crate::gateway::TestProjectDashboardLedger),
         plan_decision_ledger: Arc::new(crate::gateway::application::TestAppPlanDecisionLedger),

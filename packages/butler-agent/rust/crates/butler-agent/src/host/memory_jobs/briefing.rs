@@ -279,7 +279,10 @@ fn locale_preference(config: &Value, app_settings: Option<&Value>) -> String {
     .to_owned()
 }
 
-fn model_preference<'a>(config: &'a Value, app_settings: Option<&'a Value>) -> Option<&'a Value> {
+pub(super) fn model_preference<'a>(
+    config: &'a Value,
+    app_settings: Option<&'a Value>,
+) -> Option<&'a Value> {
     let selected = first_non_null([
         config.pointer("/personalization/profiling/extractorModel"),
         config.get("consolidation_model"),

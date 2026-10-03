@@ -6,6 +6,7 @@ mod extraction;
 mod onboarding_update;
 mod personalization;
 mod prompt_port;
+mod reset;
 use parking_lot::Mutex;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -182,14 +183,18 @@ impl ProfileService {
     ) -> ProfileResult<ProfilingConsentSnapshot> {
         let root = self.data_root.clone();
         let host = self.host.clone();
-        self.run(move || storage::write_consent(&root, mode, None, None, &host.now_iso()))
-            .await
+        self.coordinator.invalidate_inventory();
+        let result = self
+            .run(move || storage::write_consent(&root, mode, None, None, &host.now_iso()))
+            .await;
+        self.coordinator.invalidate_inventory();
+        result
     }
 
-    /// Removes every candidate, stable entry and projection.
+    /// Clears profile content while retaining a durable future admission boundary.
     pub async fn clear_profiling_data(&self) -> ProfileResult<ClearProfilingResult> {
-        let root = self.data_root.clone();
-        self.run(move || storage::clear(&root)).await
+        self.reset_profiling_data(uuid::Uuid::new_v4().to_string(), CancellationToken::new())
+            .await
     }
 
     /// The profile extractor model.

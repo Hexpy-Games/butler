@@ -12,7 +12,7 @@
   --gray2: var(--selection);
   --gray5: var(--line-strong);
   box-shadow: var(--shadow-card);
-  font-size: var(--font-size-2);
+  font: var(--font-size-2)/var(--line-height-body) var(--font-body);
   -webkit-backdrop-filter: var(--composer-glass-filter);
   backdrop-filter: var(--composer-glass-filter);
 }

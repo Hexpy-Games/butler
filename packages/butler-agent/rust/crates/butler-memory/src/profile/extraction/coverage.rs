@@ -35,6 +35,11 @@ pub(super) fn register(
 ) -> ProfileResult<()> {
     let mut write = db.prepare("INSERT INTO profile_source_coverage(coverage_key,message_id,source_hash,part_id,part_index,scalar_pointer,byte_start,byte_end,extractor_version,observed_at,evidence_ref,disposition,failure_code,usage_json,updated_at)VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,'pending',NULL,NULL,?12)ON CONFLICT(coverage_key)DO NOTHING").map_err(storage::db_error)?;
     for window in windows {
+        if crate::coordination::admission_suppressed(db, "message", &window.message_id)
+            .map_err(storage::io_error)?
+        {
+            continue;
+        }
         write
             .execute(params![
                 window.coverage_key,

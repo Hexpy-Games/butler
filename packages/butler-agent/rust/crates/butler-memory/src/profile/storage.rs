@@ -215,10 +215,30 @@ pub(super) fn write_consent(
     Ok(snapshot)
 }
 
-pub(super) fn clear(data_root: &Path) -> ProfileResult<ClearProfilingResult> {
-    let db = open(data_root, Access::Write)?;
+pub(super) fn clear(
+    data_root: &Path,
+    cancellation: &tokio_util::sync::CancellationToken,
+    operation_id: &str,
+) -> ProfileResult<ClearProfilingResult> {
+    let mut db = open(data_root, Access::Write)?;
+    let token = cancellation.clone();
+    db.progress_handler(1000, Some(move || token.is_cancelled()));
+    let tx = db.transaction().map_err(db_error)?;
+    let key = format!("reset_receipt:{operation_id}");
+    if let Some(raw) = tx
+        .query_row(
+            "SELECT value_json FROM profile_meta WHERE key=?1",
+            [&key],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(db_error)?
+    {
+        return serde_json::from_str(&raw).map_err(json_error);
+    }
+    crate::coordination::capture_admission_floor(data_root, &tx, cancellation).map_err(io_error)?;
     let count = |table: &str| -> ProfileResult<usize> {
-        db.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+        tx.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
             row.get::<_, i64>(0)
         })
         .map(|value| usize::try_from(value.max(0)).unwrap_or_default())
@@ -229,12 +249,22 @@ pub(super) fn clear(data_root: &Path) -> ProfileResult<ClearProfilingResult> {
         removed_stable_entries: count("stable_profile_entries")?,
         removed_runtime_projections: count("runtime_projection")?,
     };
-    db.execute_batch(
+    tx.execute_batch(
         "DELETE FROM profile_candidates; DELETE FROM stable_profile_entries;
          DELETE FROM runtime_projection; DELETE FROM profile_source_coverage;
          DELETE FROM profile_meta WHERE key='source_scan_offset';",
     )
     .map_err(db_error)?;
+    tx.execute(
+        "INSERT INTO profile_meta(key,value_json,updated_at)VALUES(?1,?2,?3)",
+        params![
+            key,
+            serde_json::to_string(&result).map_err(json_error)?,
+            chrono::Utc::now().to_rfc3339()
+        ],
+    )
+    .map_err(db_error)?;
+    tx.commit().map_err(db_error)?;
     Ok(result)
 }
 
@@ -334,7 +364,7 @@ pub(super) fn db_error(_: rusqlite::Error) -> ProfileError {
         "Profile store is unavailable.",
     )
 }
-fn io_error(_: std::io::Error) -> ProfileError {
+pub(super) fn io_error(_: std::io::Error) -> ProfileError {
     ProfileError::new(
         ProfileCode::ProfileStoreUnavailable,
         "Profile store is unavailable.",

@@ -9,9 +9,7 @@ mod tests;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use butler_memory::cognition::{
-    CognitionPathEnvironment, CompletionPublisher, ExactMemoryQuery, MemoryRecall,
-};
+use butler_memory::cognition::{ExactMemoryQuery, MemoryRecall};
 use butler_runtime::capabilities::Capabilities;
 use butler_runtime::context::{ContextPortAdapter, ConversationSessionReference};
 use butler_turn::btcc::{
@@ -38,8 +36,7 @@ pub(crate) struct GuidedTurnFactoryAdapter {
     pub tool_artifacts: Arc<crate::host::ToolArtifactReader>,
     pub memory_query: Arc<ExactMemoryQuery>,
     pub memory_recall: Arc<MemoryRecall>,
-    pub memory_paths: CognitionPathEnvironment,
-    pub memory_publisher: Arc<CompletionPublisher>,
+    pub memory_writes: super::tools::MemoryWriteServices,
     pub conversation_reference: Arc<ConversationSessionReference>,
     pub conversation_tools: Arc<butler_runtime::context::ConversationTools>,
     pub compactions: ContextCompactionRepository,
@@ -185,8 +182,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 ),
                 self.memory_query.clone(),
                 self.memory_recall.clone(),
-                self.memory_paths.clone(),
-                self.memory_publisher.clone(),
+                self.memory_writes.clone(),
                 self.conversation_reference.clone(),
                 self.conversation_tools.clone(),
                 self.project_tools.clone(),
