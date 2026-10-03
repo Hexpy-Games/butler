@@ -26,6 +26,7 @@ pub(super) fn steward_identity<'a>(
         work_id: &reviewed.work_id,
         plan_revision_id: &plan.plan_revision_id,
         review_revision_id: &review.review_revision_id,
+        previous_relation_id: request.previous_relation_id.as_deref(),
     }
 }
 
@@ -65,6 +66,7 @@ pub(super) fn steward(
         access_mode: request.access_mode.clone(),
         execution_mode: PacketExecutionMode::for_access(&request.access_mode),
         objective: request.request.clone(),
+        prior_context: None,
         acceptance_criteria: plan.checks.clone(),
         implementation_brief: None,
         plan_action: None,
@@ -105,6 +107,7 @@ pub(super) fn worker(
         access_mode: request.access_mode.clone(),
         execution_mode: PacketExecutionMode::for_access(&request.access_mode),
         objective: request.objective.clone(),
+        prior_context: None,
         acceptance_criteria: request.acceptance_criteria.clone(),
         implementation_brief: Some(request.implementation_brief.clone()),
         plan_action: Some(crate::btcc::PacketPlanAction {

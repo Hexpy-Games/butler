@@ -4590,7 +4590,7 @@
       "definition": {
         "type": "function",
         "name": "delegate_to_steward",
-        "description": "Delegate one complete Butler-authored request to an ordinary Steward session. Write the complete request exactly as the Steward should receive it; runtime preserves it unchanged instead of reconstructing it from Work or Plan state. Runtime derives delegation identity, inherited Composer access, ordinary tools, workspace, admitted context and EOL, budget, and reviewed provenance. A safe title is optional presentation metadata; omission uses a fixed privacy-safe title and never copies objective content. The Steward excludes Butler persona and direct-user presentation prompting, receives the immutable project context and bounded parent conversation projection, and returns one canonical terminal result for synthesis.",
+        "description": "Delegate one complete Butler-authored request to an ordinary Steward session. Write the complete request exactly as the Steward should receive it; runtime preserves it unchanged instead of reconstructing it from Work or Plan state. Runtime derives delegation identity, inherited Composer access, ordinary tools, workspace, admitted context and EOL, budget, and reviewed provenance. A safe title is optional presentation metadata; omission uses a fixed privacy-safe title and never copies objective content. The Steward excludes Butler persona and direct-user presentation prompting, receives the immutable project context and bounded parent conversation projection, and returns one canonical terminal result for synthesis. For a new request after a prior delegation has closed, start a fresh reviewed Work in this same turn and set previous_relation_id to attach the original request and canonical results. Do not ask the user to restart.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -4604,6 +4604,10 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 120
+            },
+            "previous_relation_id": {
+              "type": "string",
+              "description": "Closed Steward relation from this parent chat. Runtime attaches its prior request and results as context, preserving the new request and current authority."
             }
           },
           "required": [
@@ -4697,7 +4701,7 @@
       "definition": {
         "type": "function",
         "name": "steer_steward",
-        "description": "Send a bounded correction or user acceptance to the original Steward and Work. Use work_id from Project Ledger for an existing open/blocked Work, including after its Steward has reported or from another conversation in the same project. Completed/abandoned Work cannot be reopened. Use relation_id for an active relation or a reported relation owned by this conversation. The original Steward owns the mutation and reports back to its original Butler conversation; queued is not completed. Never create a replacement delegation just to close existing work.",
+        "description": "Send a bounded correction or user acceptance to the original Steward and Work. Use work_id from Project Ledger for an existing open/blocked Work, including after its Steward has reported or from another conversation in the same project. Completed/abandoned Work cannot be reopened. Use relation_id for an active relation or a reported relation owned by this conversation. The original Steward owns the mutation and reports back to its original Butler conversation; queued is not completed. Never create a replacement delegation just to close existing work. A closed Work returns delegated_session_closed with the prior context and next_action. Continue in this same turn by preparing a new reviewed Work and delegate_to_steward(previous_relation_id); do not report a connection failure or ask the user to restart. Open or blocked Work continues with its existing owner.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -4720,7 +4724,8 @@
             "safe_title": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 120
+              "maxLength": 120,
+              "description": "Title selector only when neither relation_id nor work_id is supplied; exact IDs take precedence."
             }
           },
           "required": [
@@ -6352,7 +6357,7 @@
     "delegate_to_steward": {
       "type": "function",
       "name": "delegate_to_steward",
-      "description": "Delegate one complete Butler-authored request to an ordinary Steward session. Write the complete request exactly as the Steward should receive it; runtime preserves it unchanged instead of reconstructing it from Work or Plan state. Runtime derives delegation identity, inherited Composer access, ordinary tools, workspace, admitted context and EOL, budget, and reviewed provenance. A safe title is optional presentation metadata; omission uses a fixed privacy-safe title and never copies objective content. The Steward excludes Butler persona and direct-user presentation prompting, receives the immutable project context and bounded parent conversation projection, and returns one canonical terminal result for synthesis.",
+      "description": "Delegate one complete Butler-authored request to an ordinary Steward session. Write the complete request exactly as the Steward should receive it; runtime preserves it unchanged instead of reconstructing it from Work or Plan state. Runtime derives delegation identity, inherited Composer access, ordinary tools, workspace, admitted context and EOL, budget, and reviewed provenance. A safe title is optional presentation metadata; omission uses a fixed privacy-safe title and never copies objective content. The Steward excludes Butler persona and direct-user presentation prompting, receives the immutable project context and bounded parent conversation projection, and returns one canonical terminal result for synthesis. For a new request after a prior delegation has closed, start a fresh reviewed Work in this same turn and set previous_relation_id to attach the original request and canonical results. Do not ask the user to restart.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -6366,6 +6371,10 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 120
+          },
+          "previous_relation_id": {
+            "type": "string",
+            "description": "Closed Steward relation from this parent chat. Runtime attaches its prior request and results as context, preserving the new request and current authority."
           }
         },
         "required": [
@@ -8448,7 +8457,7 @@
     "steer_steward": {
       "type": "function",
       "name": "steer_steward",
-      "description": "Send a bounded correction or user acceptance to the original Steward and Work. Use work_id from Project Ledger for an existing open/blocked Work, including after its Steward has reported or from another conversation in the same project. Completed/abandoned Work cannot be reopened. Use relation_id for an active relation or a reported relation owned by this conversation. The original Steward owns the mutation and reports back to its original Butler conversation; queued is not completed. Never create a replacement delegation just to close existing work.",
+      "description": "Send a bounded correction or user acceptance to the original Steward and Work. Use work_id from Project Ledger for an existing open/blocked Work, including after its Steward has reported or from another conversation in the same project. Completed/abandoned Work cannot be reopened. Use relation_id for an active relation or a reported relation owned by this conversation. The original Steward owns the mutation and reports back to its original Butler conversation; queued is not completed. Never create a replacement delegation just to close existing work. A closed Work returns delegated_session_closed with the prior context and next_action. Continue in this same turn by preparing a new reviewed Work and delegate_to_steward(previous_relation_id); do not report a connection failure or ask the user to restart. Open or blocked Work continues with its existing owner.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -8471,7 +8480,8 @@
           "safe_title": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 120
+            "maxLength": 120,
+            "description": "Title selector only when neither relation_id nor work_id is supplied; exact IDs take precedence."
           }
         },
         "required": [

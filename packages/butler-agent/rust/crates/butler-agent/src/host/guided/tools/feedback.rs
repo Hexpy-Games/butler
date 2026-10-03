@@ -103,7 +103,7 @@ pub(super) fn result(error: &BtccError) -> Result<JsonDocument, ToolExecutionErr
             "Each todo requires a unique id. Correct the duplicate ids, then retry."
         }
         "steward_relation_not_found" | "active_steward_relation_not_found" => {
-            "Use an existing active delegation relation from this parent session. No child was steered or cancelled."
+            "Check the exact relation_id and current delegation state. For a new request after the previous Work closed, start and review a fresh Work, then delegate_to_steward with previous_relation_id in this same turn. Do not ask the user to restart. No child was steered or cancelled."
         }
         _ => error.message(),
     };

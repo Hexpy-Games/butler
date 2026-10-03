@@ -293,6 +293,41 @@ fn request_bytes(
         })
 }
 
+async fn work_stream_context(
+    state: &GuidedTextState,
+    session_id: &str,
+) -> Result<String, BtccError> {
+    let mut work_stream = if state.phase.execution_policy.tracking_mode == "none" {
+        String::new()
+    } else {
+        let mut projection = state
+            .work_streams
+            .prompt_context(
+                session_id.to_owned(),
+                state.phase.execution_policy.project_id.clone(),
+            )
+            .await?;
+        let workers = state
+            .subsessions
+            .worker_prompt_lines(session_id.to_owned(), projection.worker_task_ids)
+            .await?;
+        if !workers.is_empty() {
+            projection.text.push_str("\nLinked Workers:\n");
+            projection.text.push_str(&workers.join("\n"));
+        }
+        projection.text
+    };
+    let delegation = state
+        .subsessions
+        .latest_steward_prompt(session_id.to_owned())
+        .await?;
+    if !delegation.is_empty() {
+        work_stream.push('\n');
+        work_stream.push_str(&delegation);
+    }
+    Ok(work_stream)
+}
+
 impl PromptPort for GuidedPrompt {
     fn render<'a>(
         &'a self,
@@ -330,26 +365,7 @@ impl PromptPort for GuidedPrompt {
                 .await
                 .map_err(|error| BtccError::relayed(error.code(), error.message()))?;
             let image_attachments = attachments::provider_images(turn);
-            let work_stream = if state.phase.execution_policy.tracking_mode == "none" {
-                String::new()
-            } else {
-                let mut projection = state
-                    .work_streams
-                    .prompt_context(
-                        turn.session_id.clone(),
-                        state.phase.execution_policy.project_id.clone(),
-                    )
-                    .await?;
-                let workers = state
-                    .subsessions
-                    .worker_prompt_lines(turn.session_id.clone(), projection.worker_task_ids)
-                    .await?;
-                if !workers.is_empty() {
-                    projection.text.push_str("\nLinked Workers:\n");
-                    projection.text.push_str(&workers.join("\n"));
-                }
-                projection.text
-            };
+            let work_stream = work_stream_context(state, &turn.session_id).await?;
             let exact_prompt = source_prompt(
                 turn,
                 state,

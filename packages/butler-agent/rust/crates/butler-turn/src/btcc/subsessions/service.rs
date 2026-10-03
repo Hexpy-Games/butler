@@ -2,9 +2,11 @@
 
 mod control;
 mod delegation;
+mod followup;
 mod helpers;
 mod projection;
 mod result_delivery;
+mod selection;
 #[cfg(test)]
 pub(crate) mod tests;
 mod worker;
@@ -87,6 +89,7 @@ pub struct StewardDelegationRequest {
     pub parent_turn_id: String,
     pub anchor_message_id: String,
     pub request: String,
+    pub previous_relation_id: Option<String>,
     pub safe_title: Option<String>,
     pub model_ref: String,
     pub reasoning_effort: String,
@@ -172,7 +175,8 @@ impl SubsessionService {
         }
         let ids = delegation::DelegationIds::derive(&delegation::STEWARD, delegation_id);
         let now = (self.now)();
-        let packet = packets::steward(&ids, &request, parent_chat_id, reviewed, (plan, review));
+        let mut packet = packets::steward(&ids, &request, parent_chat_id, reviewed, (plan, review));
+        packet.prior_context = self.followup_context(&request).await?;
         let envelope = child_envelope(ChildEnvelopeInput {
             role: "steward",
             delegation: &ids.delegation_id,

@@ -113,6 +113,7 @@ mod memory_stubs;
 #[path = "support/schedule_cassette.rs"]
 mod schedule_cassette;
 
+mod delegate_followup;
 mod memory_instructions;
 mod memory_management;
 mod memory_profile_reset;
