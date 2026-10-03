@@ -15,6 +15,7 @@ mod occurrence;
 mod question;
 pub(in crate::host) use monitoring::MonitoringReaders;
 mod profile;
+mod project_artifacts;
 mod project_source;
 mod resume;
 mod wallpaper;
@@ -290,6 +291,7 @@ impl GuidedTools {
                     | ToolName::SummarizeUserProfile
                     | ToolName::UpdateOnboardingProfile
                     | ToolName::ReadProjectSource
+                    | ToolName::ProjectArtifacts
                     | ToolName::BindSessionGitWorktree
                     | ToolName::StartTopicConversation
                     | ToolName::RequestServiceRestart
