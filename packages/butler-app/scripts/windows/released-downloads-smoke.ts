@@ -13,7 +13,10 @@ export interface DownloadsProof { requests: number; stdout?: string }
 /** Deterministic model fixture; the released Agent executes the actual command. */
 export function releasedDownloadsReply(body: any, proof: DownloadsProof, calls: SmokeProviderCalls): Response | null {
   const text = JSON.stringify(body);
-  if (!text.includes(prompt) && !text.includes(answer)) return null;
+  // Responses may send only the new tool result after the first model round.
+  const continuesTurn = body.previous_response_id?.startsWith("resp_downloads_") ||
+    body.input?.some((item: any) => item.type === "function_call_output" && item.call_id === "call_downloads");
+  if (!text.includes(prompt) && !text.includes(answer) && !continuesTurn) return null;
   if (body.text?.format) return smokeProviderReply(body, text.includes(prompt) ? prompt : answer, answer, calls);
   const result = body.input?.find((item: any) => item.type === "function_call_output" && item.call_id === "call_downloads");
   if (result) {
@@ -29,7 +32,7 @@ export function releasedDownloadsReply(body: any, proof: DownloadsProof, calls: 
   const item = result ? { type: "message", id: "msg_downloads", role: "assistant", status: "completed",
     content: [{ type: "output_text", text: answer, annotations: [] }] } : {
     type: "function_call", id: "fc_downloads", call_id: "call_downloads", name: "run_command", status: "completed",
-    arguments: JSON.stringify({ command, summary: "다운로드 목록 확인", state_effect: "read_only", timeout_ms: 30000 }),
+    arguments: JSON.stringify({ command, summary: "다운로드 목록 확인", state_effect: "read_only", output_mode: "full", timeout_ms: 30000 }),
   };
   const response = { id: `resp_downloads_${proof.requests}`, object: "response", status: "completed", model: "gpt-6-luna",
     output: [item], usage: { input_tokens: 100, output_tokens: 20, total_tokens: 120 } };

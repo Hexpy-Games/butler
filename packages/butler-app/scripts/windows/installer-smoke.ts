@@ -10,6 +10,7 @@ import { FIRST_RUN_CONSENT_VERSION } from "../../client/ui/src/app/onboarding.ts
 import { freePort } from "../../../../tests/support/native-app-server.ts";
 import { alive, assertShortcuts, bridge, click, ownedProcesses, powershell, readJson, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
 import { smokeProviderReply } from "./smoke-provider.ts";
+import { proveReleasedDownloads, releasedDownloadsReply, type DownloadsProof } from "./released-downloads-smoke.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
 
 if (process.platform !== "win32" || process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_ENVIRONMENT !== "github-hosted") {
@@ -26,6 +27,8 @@ const data = join(root, "data");
 const owned = new Set<number>();
 let page: ElectronPage | null = null;
 const calls = { chat: 0, memory: 0, memorySpeakers: new Set<string>() };
+const downloads: DownloadsProof = { requests: 0 };
+const downloadsCalls = { chat: 0, memory: 0, memorySpeakers: new Set<string>() };
 let uninstalled = false;
 let phase = "one-click install";
 const manifest = readJson(join(second, "app-update-manifest.json"))!;
@@ -43,6 +46,8 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async request 
   const path = new URL(request.url).pathname;
   if (path === "/v1/responses") {
     const body = await request.json();
+    const listing = releasedDownloadsReply(body, downloads, downloadsCalls);
+    if (listing) return listing;
     return smokeProviderReply(body, "Reply with Windows update ready.", "Windows update ready.", calls, input => {
       assert.ok(["user", "assistant"].includes(input.speaker), "Unexpected memory speaker");
       assert.ok(!calls.memorySpeakers.has(input.speaker), "Repeated extraction of the same chat speaker");
@@ -59,7 +64,7 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async request 
 } });
 const debugPort = await freePort();
 const agentPort = await freePort();
-const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), BUTLER_DATA: data,
+const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), USERPROFILE: join(root, "home"), BUTLER_DATA: data,
   LOCALAPPDATA: join(root, "local"), APPDATA: join(root, "roaming"), BUTLER_SECRET_STORE: "file",
   BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"), BUTLER_APP_SMOKE_DEBUG_PORT: String(debugPort),
   BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_E2E_TIER: "stub", BUTLER_PROVIDER_QUOTA_POLLING: "0",
@@ -116,6 +121,8 @@ try {
   assert.ok((await bridge(page, "listSessions")).sessions.some((item: any) => item.id === session.id));
   const messages = (await bridge(page, "listMessages", { chatId: session.id })).messages;
   assert.equal(messages.length, 2); assert.equal(messages[1].text, "Windows update ready.");
+  phase = "candidate Downloads command";
+  await proveReleasedDownloads(page, env.HOME, downloads);
   ownedProcesses(data, owned);
   await page.expression("setTimeout(() => window.butlerApp.quitApp({confirmed:true}), 50); true");
   page.close(); page = null;
