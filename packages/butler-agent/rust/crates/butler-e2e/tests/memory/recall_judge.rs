@@ -210,6 +210,20 @@ async fn mem_judge_model_override_changes_on_next_recall() -> Result<(), Harness
         0,
         "Override must use the selected provider"
     );
+    let reference = model.as_str().unwrap().replace('/', "%2F");
+    let removed =
+        s.gw.delete(&format!("/model-catalog/local-models/{reference}"))
+            .await?;
+    assert_eq!(removed.status, 200, "{}", removed.text);
+    let unavailable = recall(&s, "accurate").await?;
+    assert_eq!(episode_ids(&unavailable), episode_ids(&baseline));
+    assert_eq!(unavailable.len(), baseline.len());
+    assert_eq!(
+        judge_count(&s),
+        0,
+        "Unavailable selection must not substitute another model"
+    );
+    assert_eq!(local.chat_requests().len(), 1);
     let settings =
         s.gw.patch("/settings", json!({"recall_judge_model":"default"}))
             .await?;
