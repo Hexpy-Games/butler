@@ -80,6 +80,13 @@ jobs:
       - name: Build the App renderer
         run: python3 .github/scripts/isolated.py npm --prefix packages/butler-app/client/ui run build
 
+      - name: Build the native Agent with the verified cached SDK
+        if: steps.reuse.outputs.reused != 'true'
+        working-directory: packages/butler-agent/rust
+        run: |
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --release --locked -j 8 -p butler-agent --bin butler-agent --no-default-features --features static-ort
+          echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$PWD/target/release/butler-agent" >> "$GITHUB_ENV"
+
       - name: Prepare the native Agent payload
         run: python3 .github/scripts/isolated.py node packages/butler-app/client/electron/scripts/prepare-native-agent.mjs darwin arm64 "$BUTLER_NATIVE_AGENT_PAYLOAD"
 

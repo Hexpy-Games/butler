@@ -85,6 +85,9 @@ Runner contention can dominate Windows even with warm compilation.
   sccache. Cargo cache keys distinguish architecture/native mode, toolchain,
   flags and lockfile. Cargo validates restored source fingerprints; the action
   ignores its additional `key` input when `shared-key` is set.
+  The release workflow explicitly builds with that verified SDK and supplies
+  the helper's existing prebuilt input. Otherwise the helper prepares a second
+  SDK under Cargo's target directory, missing the runner-temp SDK cache.
   Tracked `BUTLER_MEMORY_IMPLEMENTATION_COMMIT` changes rebuild the embedded
   revision when a commit changes, even if Rust files do not.
   Provenance also runs `--version` to reject a different embedded version.
