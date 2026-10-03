@@ -193,3 +193,59 @@ Risks: translucent glass may repaint during sprite motion despite compositor-fri
 Real owner choices for Monday: (1) confirm initial **Off** versus a bundled **Static** theme (recommend Off; Interactive explicit opt-in); (2) confirm the reserved top-band interpretation versus wanting characters to protrude above the card (recommend contained band to keep question/approval panels unobstructed). The no-text-overlap, no-script and reduced-motion requirements are fixed, not optional decisions.
 
 Still pending: design-agent mockups, separately authorized implementation, hardware input/GPU/energy measurements, physical mobile/IME verification, and final global reduce-motion integration proof. This design claims none of those have passed.
+
+
+## DS viewer prototype — issue #474, 2026-10-03
+
+The owner's subsequent prototype request authorizes an isolated placement comparison:
+inside versus above-edge sprites, character overflow, and the existing `butler.shoreline`
+scene behind the editor (full card versus band). These are viewer-only experiments,
+not a change to the product contracts above. The app composer and ComposerCard source
+are unchanged. A separate decoration layer surrounds the existing DS card and native
+ComposerCardTextarea; production Lexical integration and asset import remain outside this slice.
+The editor keeps its draft while changing controls and never sends a message.
+
+Entry: `index.html?page=composer-decorations&theme=light` in
+`packages/butler-app/client/ui/dist-ds-site/`. Build with the existing `build:ds-site`
+command (relative assets, no source maps). The page is also in the viewer navigation/search.
+Theme, static/interactive, intensity, placement, character clipping, palette, light/dark,
+photo wallpaper, 375 frame and shared reduce-motion controls are live. Shoreline always
+uses the identical daylight shader; only the local editor scrim follows light/dark.
+Its original 20fps rendering policy runs only during a bounded input response.
+No dependency, gateway call, owner-data access or background scheduler was added.
+
+Validation: isolated frozen install and `bun run check`; DS/design/motion/CSS gates;
+existing showcase/design contracts (51 pass, 2 existing skips); Rust fmt and source-check
+using installed Rust 1.91.0; static site leak/font/navigation smoke; dedicated composer
+smoke at 1x and 2x. The latter checks Korean composition via Chromium CDP (candidate,
+commit, cancellation), complete draft fidelity, theme/placement/framing/motion controls, 320/375/390/430/1024/1440
+reflow, text-band separation, blur/visibility/OS reduction cancellation, and zero running
+animations or additional response frames during 600ms idle. Physical Korean IME remains
+an owner-device check; synthetic visibility exercises the handler, not native occlusion.
+
+Measured 135 complete edits per theme at each density, including finite response callbacks:
+
+| Theme | JS ms/edit 1x / 2x | Browser TaskDuration ms/edit 1x / 2x |
+| --- | --- | --- |
+| None | 0 / 0 | 1.224 / 1.189 |
+| Flowers | 0.048 / 0.044 | 2.042 / 2.236 |
+| Cherry | 0.047 / 0.041 | 2.046 / 2.011 |
+| Characters | 0.037 / 0.041 | 1.593 / 1.696 |
+| Coastal | 0.034 / 0.039 | 2.356 / 5.163 |
+
+Maximum measured input callback: 0.2ms; active response frames: 109–124; idle frames: 0.
+The live readout measures decoration JS, not paint/GPU or system CPU. Browser TaskDuration
+also includes editing, rendering and automation in single-process Chromium. The JS <1ms
+budget passed; these results do **not** establish an end-to-end <1ms rendering budget or
+zero browser CPU. In particular, coastal 2x needs owner-GPU profiling before product adoption.
+Raw measurements and screenshots are in `.tmp/composer-decorations/` (local artifacts).
+
+Remaining environment limits: full `app:design-system:smoke` stops at the missing native
+agent executable (`tests/support/native-app-server.ts:196`); app layout/motion traces need
+that same executable. No native crate was changed, so touched-crate clippy is inapplicable.
+The pre-existing mobile viewer smoke produced no result and was interrupted (exit 130);
+no pass or failure cause is claimed. The new page's six-width checks passed at both densities.
+The isolated Project Ledger check has no initialized project; the owner's Ledger was not read.
+Research doc content was already present identically in the starting WIP commit. Fetch,
+research-branch merge and commit all hit shared `.git` permission errors. Leave the worktree
+changes for the authorized runner to commit and push; no PR, tag or main merge.

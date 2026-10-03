@@ -1,0 +1,209 @@
+.page {
+  display: grid;
+  gap: var(--space-xl);
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  align-items: start;
+  gap: var(--space-xl);
+}
+.previewColumn {
+  min-width: 0;
+}
+.stage {
+  display: flex;
+  position: relative;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-2xl);
+  min-height: 440px;
+  width: 100%;
+  margin-inline: auto;
+  padding: var(--space-xl) var(--space-lg);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-composer);
+  background: var(--color-surface-base);
+}
+.stage[data-phone="true"] {
+  max-width: 375px;
+  min-height: 480px;
+  padding-inline: var(--space-4);
+}
+.stage[data-photo="true"] {
+  background-image: url("../../blocks/Wallpaper/modules/butler.photo-clouds/photo.jpg");
+  background-position: center;
+  background-size: cover;
+}
+.stageTitle {
+  display: grid;
+  gap: var(--space-sm);
+  text-align: center;
+  color: var(--text-primary);
+  border-radius: var(--radius-popover);
+  padding: var(--space-md);
+  background: color-mix(
+    in srgb,
+    var(--color-surface-raised-opaque) 92%,
+    transparent
+  );
+}
+.stageNote {
+  align-self: center;
+  padding: var(--space-xs) var(--space-md);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-raised-opaque);
+  color: var(--text-secondary);
+}
+.controls {
+  display: grid;
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-popover);
+}
+.field {
+  display: grid;
+  gap: var(--space-sm);
+}
+.toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+.performance {
+  display: grid;
+  gap: var(--space-sm);
+  padding-block: var(--space-lg);
+  color: var(--text-secondary);
+}
+.performance output {
+  font: var(--font-code);
+  font-size: var(--typo-caption-size);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.composition {
+  --decor-stem: var(--green-08);
+  --decor-leaf: var(--green-03);
+  --decor-petal: var(--red-02);
+  --decor-cream: var(--amber-01);
+  --decor-gold: var(--amber-04);
+  --decor-ink: var(--grayscale-10);
+  --decor-outline: var(--amber-08);
+  --decor-shadow: var(--color-border-default);
+
+  position: relative;
+  isolation: isolate;
+  margin-top: var(--space-xl);
+}
+.composition[data-palette="dusk"] {
+  --decor-petal: var(--blue-02);
+  --decor-leaf: var(--blue-03);
+  --decor-stem: var(--blue-08);
+}
+.decoration {
+  position: relative;
+  height: 40px;
+  margin: var(--space-sm) var(--space-md) var(--space-sm);
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+.outside {
+  position: absolute;
+  inset: var(--space-sm) var(--space-md) auto;
+  margin: 0;
+  z-index: 1;
+}
+.bandSpace {
+  height: 56px;
+}
+.composition[data-placement="edge"] .outside {
+  top: -40px;
+}
+.composition[data-placement="edge"] .bandSpace,
+.composition[data-theme="none"] .bandSpace {
+  height: 0;
+}
+.composition[data-theme="coastal"] .outside {
+  display: none;
+}
+.composition[data-theme="characters"][data-overflow="true"] .decoration {
+  overflow: visible;
+}
+.composition[data-theme="none"] .decoration {
+  display: none;
+}
+.anchor {
+  position: absolute;
+  bottom: var(--lift);
+  left: var(--x);
+  width: var(--size);
+  height: var(--size);
+  transform: translateX(-50%);
+}
+.sprite {
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 100%;
+}
+.sprite svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.tree {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.coast {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.composition[data-theme="coastal"] .decoration {
+  height: 64px;
+  margin: var(--space-sm);
+  border-radius: var(--radius-popover);
+}
+.composition[data-theme="coastal"][data-framing="full"] .decoration {
+  position: absolute;
+  inset: 1px;
+  height: auto;
+  margin: 0;
+  border-radius: var(--adaptive-composer-radius);
+}
+.readable {
+  position: relative;
+  border-radius: var(--adaptive-composer-radius);
+}
+.composition[data-theme="coastal"][data-framing="full"] .readable {
+  /* An independent contrast floor. The scene keeps exactly the same light in both themes. */
+  margin: var(--space-sm);
+  background: color-mix(
+    in srgb,
+    var(--color-surface-raised-opaque) 94%,
+    transparent
+  );
+  border-radius: var(--radius-composer);
+}
+@media (width <= 1000px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (width <= 430px) {
+  .stage {
+    padding-inline: var(--space-sm);
+  }
+  .controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

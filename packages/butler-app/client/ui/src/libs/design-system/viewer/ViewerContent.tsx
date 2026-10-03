@@ -1,3 +1,4 @@
+import { ComposerDecorationsPage } from "./composer-decorations/ComposerDecorationsPage";
 import type { ShowcaseEntry } from "../showcase/collectShowcaseEntries";
 import { DecisionGuidePage } from "./pages/DecisionGuidePage";
 import { FoundationChapterPage } from "./pages/FoundationChapterPage";
@@ -26,6 +27,8 @@ export function ViewerContent({ page, anchor, entries, state, themes, onOpen, on
 }) {
   const locale = state.locale === "ko" ? "ko-KR" : "en-US";
   switch (page.kind) {
+    case "composer-decorations":
+      return <ComposerDecorationsPage state={state} onChange={onChange} />;
     case "overview":
       return <OverviewPage entries={entries} onChange={onChange} onOpen={onOpen} state={state} themes={themes} />;
     case "guide":

@@ -9,6 +9,7 @@ import { chapterById, type FoundationChapter } from "./foundations/chapters";
 export type GallerySection = "components" | "blocks";
 
 export type ViewerPage =
+  | { kind: "composer-decorations" }
   | { kind: "overview" }
   | { kind: "guide" }
   | { kind: "recipes" }
@@ -28,6 +29,7 @@ export interface ViewerNavGroup {
 }
 
 const FIXED: Record<string, ViewerPage> = {
+  "composer-decorations": { kind: "composer-decorations" },
   overview: { kind: "overview" },
   guide: { kind: "guide" },
   recipes: { kind: "recipes" },

@@ -10,6 +10,7 @@ export interface TrailStep {
 export function pageTrail(page: ViewerPage): TrailStep[] {
   const home = { label: "Butler DS", page: "overview" };
   switch (page.kind) {
+    case "composer-decorations": return [home, { label: "Composer decorations" }];
     case "overview": return [home, { label: "Overview" }];
     case "guide": return [home, { label: "Decision guide" }];
     case "recipes": return [home, { label: "Build a screen" }];

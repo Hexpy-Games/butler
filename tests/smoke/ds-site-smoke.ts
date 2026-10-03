@@ -1,3 +1,4 @@
+import { smokeBrowserArgs } from "../support/smoke-browser";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, normalize, resolve, sep } from "node:path";
 import { chromium, type Page } from "playwright";
@@ -86,7 +87,7 @@ function assertUnderBase(page: Page, label: string): void {
   assert(pathname === base || pathname === `${base}index.html`, `${label}: expected to stay at ${base}, got ${pathname}`);
 }
 
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs() });
 try {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const foreign: string[] = [];

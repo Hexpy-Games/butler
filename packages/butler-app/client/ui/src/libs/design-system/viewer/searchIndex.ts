@@ -21,6 +21,7 @@ const PAGES: Array<[string, string, string]> = [
   ["overview", "Overview", "Start"], ["guide", "Decision guide", "I need X → use Y"], ["recipes", "Build a screen", "Recipes"],
   ["foundations", "Foundations", "The guidebook"], ["motion", "Motion", "Durations, easings and live demos"],
   ["components", "Components", "Gallery"], ["blocks", "Blocks", "Gallery"], ["patterns", "Patterns", "Composition patterns"],
+  ["composer-decorations", "Composer decorations", "Interactive prototype"],
   ["icons", "Icons", "Icon set"],
 ];
 
