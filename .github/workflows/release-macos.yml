@@ -62,22 +62,23 @@ jobs:
           cache-key: native-darwin-arm64
           cache-workspace-crates: 'true'
           artifact-cache-platform: darwin-arm64
+      - name: Pin the toolchain for an exact-commit payload hit
+        if: steps.reuse.outputs.reused == 'true'
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.91.0
       - name: Verify pinned native Rust toolchain
-        if: steps.reuse.outputs.reused != 'true'
+        # The toolchain check remains required even when a payload is reused.
         run: |
           rustc --version --verbose | grep -E '^release: 1\.91\.0$'
           rustc --version --verbose | grep -E '^host: aarch64-apple-darwin$'
 
       - name: Install app client dependencies
-        run: |
-          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
-          bun install --frozen-lockfile --ignore-scripts
+        run: python3 .github/scripts/isolated.py bun install --frozen-lockfile --ignore-scripts
 
       # The renderer ships in the Agent's resources (app-client/dist).
       - name: Build the App renderer
-        run: |
-          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
-          npm --prefix packages/butler-app/client/ui run build
+        run: python3 .github/scripts/isolated.py npm --prefix packages/butler-app/client/ui run build
 
       - name: Prepare the native Agent payload
         run: python3 .github/scripts/isolated.py node packages/butler-app/client/electron/scripts/prepare-native-agent.mjs darwin arm64 "$BUTLER_NATIVE_AGENT_PAYLOAD"
@@ -109,16 +110,16 @@ jobs:
           echo "BUTLER_AGENT_ARCHIVE=dist/release/agent/butler-agent-${agent_version}-darwin-arm64.tar.gz" >> "$GITHUB_ENV"
 
       - name: Run the native Agent release gate
-        run: bun run release:agent:gate
+        run: python3 .github/scripts/isolated.py bun run release:agent:gate
 
       - name: Package and smoke the native Agent release
         run: |
           set -euo pipefail
           mkdir -p dist/release/agent
           artifact_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/$(basename "$BUTLER_AGENT_ARCHIVE")"
-          bun run release:agent:package -- \
+          python3 .github/scripts/isolated.py bun run release:agent:package -- \
             --artifact-url "$artifact_url"
-          bun run release:agent:smoke -- --artifact-url "$artifact_url"
+          python3 .github/scripts/isolated.py bun run release:agent:smoke -- --artifact-url "$artifact_url"
 
       # Preserve the validated Agent payload even if later App steps fail.
       - name: Keep the darwin-arm64 Agent archive and manifests for the merge
@@ -191,18 +192,18 @@ jobs:
           echo "BUTLER_APP_PREVIOUS_RELEASE_MANIFEST=$PWD/dist/release/baseline/app-release-manifest.json" >> "$GITHUB_ENV"
 
       - name: Run the native App release gate
-        run: bun run release:app:gate -- --platform=darwin-arm64
+        run: python3 .github/scripts/isolated.py bun run release:app:gate -- --platform=darwin-arm64
 
       - name: Package the native App release
         timeout-minutes: 90
         run: |
-          bun run release:app:package -- \
+          python3 .github/scripts/isolated.py bun run release:app:package -- \
             --platform=darwin-arm64 \
             --out dist/release/app \
             --artifact-base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
 
       - name: Verify the native App release artifacts
-        run: bun run release:app:smoke -- --platform=darwin-arm64 --out dist/release/app
+        run: python3 .github/scripts/isolated.py bun run release:app:smoke -- --platform=darwin-arm64 --out dist/release/app
 
       - name: Publish native App GitHub Release files
         env:
