@@ -42,15 +42,16 @@ pub use application::{
     AppCancellation, AppChatKind, AppChatSummary, AppContextBudgetFacts, AppContextReadFacts,
     AppContextReadPort, AppContextReadQuery, AppContextUsage, AppCreateProjectRequest,
     AppCreateProjectResult, AppCreateSessionInput, AppCreateSessionRequest, AppCreateSessionResult,
-    AppDeveloperLogsQuery, AppExecutorReadiness, AppFileDownload, AppFileUpload, AppFileWrite,
-    AppIdentityClock, AppLedgerSourceRequest, AppMemoryCommand, AppMemoryPort,
-    AppMessageFileSnapshot, AppMessageFileStorage, AppModelCatalogCommand, AppModelCatalogPort,
-    AppModelFallbackFacts, AppModelMetadata, AppMonitorPage, AppMonitoringPort,
-    AppNativeAssetResolver, AppNativeIngress, AppPersonalizationCommand, AppPersonalizationEvent,
-    AppPersonalizationPort, AppPersonalizationResult, AppPlanDecisionAction,
-    AppPlanDecisionLedgerError, AppPlanDecisionLedgerFuture, AppPlanDecisionLedgerPort,
-    AppPlanDecisionPlan, AppPlanDecisionRequest, AppPlanDecisionResult, AppPlanDecisionStatus,
-    AppProjectActionResult, AppProjectDashboardActionProgress, AppProjectDashboardBriefingPort,
+    AppDeveloperLogsQuery, AppExecutorReadiness, AppFeedbackCommand, AppFeedbackPort,
+    AppFileDownload, AppFileUpload, AppFileWrite, AppIdentityClock, AppLedgerSourceRequest,
+    AppMemoryCommand, AppMemoryPort, AppMessageFileSnapshot, AppMessageFileStorage,
+    AppModelCatalogCommand, AppModelCatalogPort, AppModelFallbackFacts, AppModelMetadata,
+    AppMonitorPage, AppMonitoringPort, AppNativeAssetResolver, AppNativeIngress,
+    AppPersonalizationCommand, AppPersonalizationEvent, AppPersonalizationPort,
+    AppPersonalizationResult, AppPlanDecisionAction, AppPlanDecisionLedgerError,
+    AppPlanDecisionLedgerFuture, AppPlanDecisionLedgerPort, AppPlanDecisionPlan,
+    AppPlanDecisionRequest, AppPlanDecisionResult, AppPlanDecisionStatus, AppProjectActionResult,
+    AppProjectDashboardActionProgress, AppProjectDashboardBriefingPort,
     AppProjectDashboardBriefingPrompt, AppProjectDashboardBriefingRequest,
     AppProjectDashboardCheckpoint, AppProjectDashboardDisposition, AppProjectDashboardLedgerError,
     AppProjectDashboardLedgerEvent, AppProjectDashboardLedgerFuture,
@@ -76,9 +77,9 @@ pub use application::{
     AppWorkStatusConversationFact, AppWorkStreamQuery, AppWorkStreamReader,
     AppWorkStreamTurnOutcome, AppWorkerActivityQuery, AppWorkerActivitySourcePage,
     AppWorkspaceMode, ArtifactFileCandidate, ArtifactMaterializationRequest, ClaimedNativeSnapshot,
-    EnqueueReceipt, MaterializedResponderFile, MemoryEventSink, OperationOutputChunk,
-    OperationOutputView, ProjectSnapshot, ResolvedNativeAssets, TranscriptExport,
-    VisualAdmissionRequest,
+    EnqueueReceipt, GatewayFeedback, MaterializedResponderFile, MemoryEventSink,
+    OperationOutputChunk, OperationOutputView, ProjectSnapshot, ResolvedNativeAssets,
+    TranscriptExport, VisualAdmissionRequest,
 };
 pub use application::{
     AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
@@ -207,6 +208,7 @@ pub trait GatewayApplication:
     GatewayMutationCommands
     + GatewayProjectDashboard
     + GatewaySessionControls
+    + GatewayFeedback
     + GatewayDevices
     + GatewayWallpapers
     + Send

@@ -130,19 +130,14 @@ impl AppServer {
         let setup = owners.start_setup(runtime, settings.clone(), installation, data_root);
         let session_workspaces = Arc::new(AppSessionWorkspaces::for_runtime(runtime));
         let dependencies = AppApplicationDependencies {
+            feedback: Some(super::runtime_ports::feedback::port(runtime)),
             service_shutdown: runtime.service_shutdown.clone(),
             updates: Arc::new(open_updates(data_root, installation)?),
             setup: Arc::new(setup.clone()),
             skills: runtime.skills.clone(),
             mcp_client: runtime.mcp_client.clone(),
             native_ingress: Arc::new(AppIngress::new(owners.queue.clone())),
-            native_assets: Arc::new(AppAssets::new(
-                runtime.conversations.clone(),
-                runtime.image_files.clone(),
-                runtime.models.configuration.clone(),
-                runtime.mcp_client.clone(),
-                data_root,
-            )),
+            native_assets: native_assets(runtime, data_root),
             executor_readiness: Arc::new(AppReadiness::new(owners.receipt, listener_ready.clone())),
             admission: Arc::new(AppAdmission::new(
                 runtime.project_ledger.clone(),
@@ -384,4 +379,14 @@ impl AppServerOwners {
             acquisition: runtime.memory_acquisition.clone(),
         })
     }
+}
+
+fn native_assets(runtime: &AgentRuntime, data: &std::path::Path) -> Arc<AppAssets> {
+    Arc::new(AppAssets::new(
+        runtime.conversations.clone(),
+        runtime.image_files.clone(),
+        runtime.models.configuration.clone(),
+        runtime.mcp_client.clone(),
+        data,
+    ))
 }

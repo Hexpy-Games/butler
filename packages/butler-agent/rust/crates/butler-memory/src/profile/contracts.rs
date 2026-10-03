@@ -36,6 +36,10 @@ pub trait ProfileHostFacts: Send + Sync {
 pub trait CanonicalProfileSourceFactory: Send + Sync {
     /// A reader over the canonical conversation store.
     fn open(&self) -> ProfileResult<Box<dyn CanonicalProfileSourceReader>>;
+    /// Whether an explicit feedback receipt still authorizes this candidate or destination.
+    fn verified_feedback(&self, _reference: &str, _destination: &str) -> ProfileResult<bool> {
+        Ok(false)
+    }
 }
 
 /// Reads user-authored conversation messages for profile extraction.
@@ -371,3 +375,22 @@ pub struct ProfilingExtractorModelSnapshot {
     /// Whether the extractor falls back to Butler's own model.
     pub uses_butler_model: bool,
 }
+
+/// Lease-time authority and durable completion callbacks for an explicit feedback candidate.
+pub struct ProfileFeedbackPromotion {
+    /// Complete faithful preference text.
+    pub text: String,
+    /// Existing profile category.
+    pub category: String,
+    /// Idempotent feedback evidence reference.
+    pub evidence_ref: String,
+    /// Original observation time.
+    pub observed_at: String,
+    /// Validate the frozen feedback revision inside the profile lease.
+    pub validate: std::sync::Arc<dyn Fn() -> ProfileResult<()> + Send + Sync>,
+    /// Record the destination only after its accepted commit, in the same lease.
+    pub committed: ProfileFeedbackCommit,
+}
+
+/// Records a committed profile destination while its owner holds the shared lease.
+pub type ProfileFeedbackCommit = std::sync::Arc<dyn Fn(&str) -> ProfileResult<()> + Send + Sync>;

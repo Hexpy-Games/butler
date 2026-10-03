@@ -17,7 +17,7 @@ export interface ProjectMemory {
   project_id: string; summary_bytes?: number | null; conversations?: number;
   instructions?: number; updated_at?: string | null;
 }
-export interface MemoryProject { id: string; display_name: string }
+export interface MemoryProject { ledger_project_id?: string; id: string; display_name: string }
 export function cardState(state: SettingsSectionState, card?: MemoryCard): SettingsSectionState {
   return state !== "ready" ? state : card && card.health.state !== "unavailable" ? "ready" : "empty";
 }

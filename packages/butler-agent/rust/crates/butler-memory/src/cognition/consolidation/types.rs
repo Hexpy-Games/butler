@@ -186,6 +186,7 @@ pub struct CycleResult {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+/// Remaining model budget checked before each heavy consolidation phase.
 pub struct RateBudget {
     pub(crate) remaining_ratio: f64,
     pub(crate) reset_at: Option<String>,

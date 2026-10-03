@@ -14,15 +14,37 @@ use butler_turn::conversation::{
 
 pub(crate) struct ProfileConversationSources {
     path: PathBuf,
+    feedback_root: Option<PathBuf>,
 }
 
 impl ProfileConversationSources {
     pub(crate) fn new(path: PathBuf) -> Self {
-        Self { path }
+        Self {
+            path,
+            feedback_root: None,
+        }
     }
 }
 
+impl ProfileConversationSources {
+    pub(crate) fn with_feedback(mut self, root: PathBuf) -> Self {
+        self.feedback_root = Some(root);
+        self
+    }
+}
 impl CanonicalProfileSourceFactory for ProfileConversationSources {
+    fn verified_feedback(&self, reference: &str, destination: &str) -> ProfileResult<bool> {
+        self.feedback_root.as_ref().map_or(Ok(false), |root| {
+            butler_memory::cognition::feedback_evidence_is_current(root, reference, destination)
+                .map_err(|error| {
+                    ProfileError::new(
+                        butler_memory::profile::ProfileCode::ProfileStoreUnavailable,
+                        "Feedback evidence read failed",
+                    )
+                    .with_source(error)
+                })
+        })
+    }
     fn open(&self) -> ProfileResult<Box<dyn CanonicalProfileSourceReader>> {
         let reader = ConversationSourceReader::open(&self.path).map_err(source_error)?;
         Ok(Box::new(ProfileSourceRead {

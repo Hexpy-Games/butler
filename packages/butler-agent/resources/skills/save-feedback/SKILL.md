@@ -1,25 +1,26 @@
 ---
 name: save-feedback
-description: Remember, correct or forget an explicit rule.
+description: Save or correct Instructions and Recent feedback.
 user-invocable: true
-applicability: Use only when the user explicitly asks to remember, correct or forget a durable rule.
-allowed-tools: update_explicit_memory forget_explicit_memory
+applicability: Explicit user instructions, corrections or tool/source complaints.
+allowed-tools: update_explicit_memory forget_explicit_memory record_user_feedback
 dispatch: none
 review: none
-reporting: Confirm only a successful durable rule update.
+reporting: Confirm only successful capture.
 ---
 
-Use `update_explicit_memory` with `kind: "rule"`, the complete rule in `text`,
-and a short provenance summary in `source`.
+Clear durable instructions/preferences go directly to `update_explicit_memory`
+with `kind: "rule"`, complete text and a short `source` summary. A correction to
+saved Instructions uses its Active Rules handle in `replaces`; forgetting uses
+`forget_explicit_memory`. Never create another instruction to bypass a failed
+correction. The runtime binds the project and owns handles and recovery.
 
-To correct a saved rule, copy its handle from Active Rules into `replaces`.
-Choose only the rule the user identifies. If the target is ambiguous, ask which
-rule. A chat can change only rules in its own binding; use a general chat for
-All chats rules. Do not create a second rule to bypass a failed correction.
-
-The server owns files, handles, revisions and recovery. Never edit memory files
-or indexes directly. Confirm success only when the tool returns `ok: true`;
-on a stale rule, ask the user to review the latest rule. Recall projection of
-new text may still be pending.
-
-When the user asks to forget a saved rule, use `forget_explicit_memory` with its Active Rules handle. Chats are kept.
+Save situational corrections and tool/source complaints with
+`record_user_feedback` before answering; apply them immediately and on the next
+matching turn. Bind scope narrowly: global, current project or current session.
+Use ephemeral for 7-day situational feedback, working for unresolved 90-day
+cross-turn corrections, session_only for session end/24h, pinned only if requested.
+A quality complaint calls for revalidation, never an invented source ban.
+If the scope or target is ambiguous, use unrouted/needs_clarification and ask
+one narrow question before applying policy. Never include secrets or sensitive
+raw text. Confirm `ok: true` with “반영했어요.” / “Feedback saved.”

@@ -30,7 +30,9 @@ impl ApprovalExemptAction {
             ToolName::UpdateOnboardingProfile | ToolName::SummarizeUserProfile => {
                 Some(Self::FirstConversationOnboarding)
             }
-            ToolName::UpdateExplicitMemory | ToolName::IngestTaskMemory => Some(Self::MemorySave),
+            ToolName::UpdateExplicitMemory
+            | ToolName::IngestTaskMemory
+            | ToolName::RecordUserFeedback => Some(Self::MemorySave),
             ToolName::AnalyzeAttachedImage => Some(Self::AttachedImageAnalysis),
             _ => None,
         }
@@ -93,6 +95,7 @@ mod tests {
             [
                 "analyze_attached_image",
                 "ingest_task_memory",
+                "record_user_feedback",
                 "summarize_user_profile",
                 "update_explicit_memory",
                 "update_onboarding_profile",

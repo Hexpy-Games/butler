@@ -274,6 +274,7 @@ pub struct AppApplicationDependencies {
     pub model_catalog: Arc<dyn super::AppModelCatalogPort>,
     pub memory_management: Arc<dyn super::AppMemoryPort>,
     pub personalization: Arc<dyn super::AppPersonalizationPort>,
+    pub feedback: Option<Arc<dyn super::AppFeedbackPort>>,
     pub monitoring: Arc<dyn super::AppMonitoringPort>,
     pub project_dashboard_ledger: Arc<dyn super::AppProjectDashboardLedgerPort>,
     pub plan_decision_ledger: Arc<dyn super::AppPlanDecisionLedgerPort>,

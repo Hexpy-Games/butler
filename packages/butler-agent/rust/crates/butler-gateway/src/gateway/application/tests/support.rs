@@ -403,6 +403,7 @@ impl AppQueueOwnerLiveness for Liveness {
 
 pub(super) fn dependencies(native: Arc<Native>, clock: u64) -> AppApplicationDependencies {
     AppApplicationDependencies {
+        feedback: None,
         service_shutdown: tokio_util::sync::CancellationToken::new(),
         updates: test_updates(),
         skills: test_skills(),

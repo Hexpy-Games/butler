@@ -4,6 +4,7 @@ pub(super) use start::serve;
 mod automations;
 mod dashboard;
 mod error;
+mod feedback;
 mod listeners;
 mod mcp_servers;
 mod memory_management;
@@ -12,6 +13,7 @@ mod model_catalog;
 mod monitors;
 mod new_chat_briefing;
 mod operation_output;
+mod owner_memory;
 mod params;
 mod personalization;
 mod project_session_mutations;
@@ -229,7 +231,7 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
         return model_catalog::route(state, request, &uri).await;
     }
     if personalization::settings_path(&uri) {
-        return personalization::route(state, request, &uri).await;
+        return owner_memory::route(state, request, &uri).await;
     }
     if matches!(
         uri.path(),

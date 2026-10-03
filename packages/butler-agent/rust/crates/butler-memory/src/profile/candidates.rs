@@ -211,7 +211,7 @@ pub(super) fn consolidate(
         .filter_map(hydrate)
         .collect::<Vec<_>>();
     let candidate_count = candidates.len();
-    let promotion = promote_ready(&db, candidates, mode, now)?;
+    let promotion = promote_ready(&db, sources, candidates, mode, now)?;
     let rejected = expire_old_candidates(&db, now, now_ms)?;
     drop(db);
     let stable_count = storage::stable_entries(data_root)?.len();
@@ -238,6 +238,7 @@ struct Promotion {
 /// that are allowed in `mode` and have enough evidence.
 fn promote_ready(
     db: &rusqlite::Connection,
+    sources: &dyn CanonicalProfileSourceFactory,
     candidates: Vec<ProfileCandidateRecord>,
     mode: ProfilingMode,
     now: &str,
@@ -247,6 +248,20 @@ fn promote_ready(
         skipped: 0,
     };
     for mut candidate in candidates {
+        if candidate
+            .understanding
+            .evidence_refs
+            .iter()
+            .any(|reference| {
+                reference.starts_with("feedback:")
+                    && !sources
+                        .verified_feedback(reference, &candidate.id)
+                        .unwrap_or(false)
+            })
+        {
+            promotion.skipped += 1;
+            continue;
+        }
         let declared_sensitive = candidate.sensitive_domain;
         let sensitive = normalize_sensitive(
             &candidate.category,

@@ -4,6 +4,7 @@ mod boundary;
 mod contracts;
 mod defaults;
 pub(crate) use defaults::ensure_reply_language;
+mod attachments;
 pub(super) mod environment;
 mod mcp_owner;
 mod memory_bootstrap;
@@ -29,7 +30,6 @@ use crate::host::runtime::stores::RuntimeStores;
 use boundary::{setup, validate_data_installation_boundary};
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
-use butler_gateway::gateway::AppImageFiles;
 use butler_ledger::project_ledger::{ProjectLedger, ProjectWork};
 use butler_memory::cognition::{CognitionPromptReader, ExactMemoryQuery};
 use butler_memory::cognition::{MemoryRecall, ProjectCapsuleService};
@@ -92,10 +92,7 @@ impl AgentRuntime {
         let (coordinator, embedding, vectors, fresh_memory) =
             memory_bootstrap::open(&paths, &environment.cognition_paths).await?;
         let files = WorkspaceFiles::new(4);
-        let image_files = Arc::new(AppImageFiles::new(&paths.data_root));
-        let attachment_context = Arc::new(butler_runtime::context::AttachmentContext::new(
-            paths.data_root.clone(),
-        ));
+        let (image_files, attachment_context) = attachments::owners(&paths.data_root);
         let commands = Commands::new();
         let mutations = WorkspaceMutations::new();
         let (skills, capabilities, catalog) = skills_owner::open(&paths, &files, &mutations)?;
@@ -179,13 +176,13 @@ impl AgentRuntime {
             bindings: stores.bindings.clone(),
             embedding: embedding.clone(),
         }));
-        let context_maintenance = Arc::new(ContextMaintenance::new(
-            paths.data_root.clone(),
-            tool_output.clone(),
-            metric_files.clone(),
-            date_parser.clone(),
-            daily_cognition,
-        ));
+        let context_maintenance = ContextMaintenance::for_cognition(
+            &paths.data_root,
+            &tool_output,
+            &metric_files,
+            &date_parser,
+            &daily_cognition,
+        );
         let command = Arc::new(crate::host::guided::command::GuidedCommand::new(
             commands.clone(),
             tool_output.clone(),
@@ -452,6 +449,8 @@ impl AgentRuntime {
             skills: skills.clone(),
             mcp_client,
             context_maintenance,
+            daily_cognition,
+            feedback: memory_writes.feedback.clone(),
             profile,
         })
     }

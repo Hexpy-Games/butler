@@ -2,6 +2,7 @@
 
 mod blocking;
 mod catchup;
+mod feedback;
 mod probe;
 mod process;
 mod vector_schedule;
@@ -192,7 +193,13 @@ impl MemorySyncConsumer {
         tokio::spawn(async move {
             let _token = token;
             let _permit = permit;
-            let poll = process::poll(input);
+            let poll = async {
+                match feedback::drain(&input).await {
+                    Ok(Some(result)) => Ok(result),
+                    Ok(None) => process::poll(input).await,
+                    Err(error) => Err(error),
+                }
+            };
             tokio::pin!(poll);
             let result = tokio::select! {
                 result = &mut poll => result,

@@ -176,7 +176,21 @@ pub(super) fn format_entry(entry: &FeedbackEntry) -> String {
             .map(|(key, value)| format!("- {key}: {value}")),
     );
     lines.push(String::new());
-    lines.push(butler_core::public_text::trim_js_whitespace(&entry.text).to_owned());
+    let text = butler_core::public_text::trim_js_whitespace(&entry.text);
+    lines.push(if entry.extra_fields.contains_key("text_json") {
+        text.lines()
+            .map(|line| {
+                if line.starts_with("## ") || line.starts_with("- ") {
+                    format!("\\{line}")
+                } else {
+                    line.to_owned()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    } else {
+        text.to_owned()
+    });
     lines.push(String::new());
     format!("{}\n", lines.join("\n"))
 }

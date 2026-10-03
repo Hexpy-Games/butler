@@ -16,7 +16,7 @@ mod error;
 mod exact_query;
 mod extraction;
 mod feedback;
-mod feedback_buffer;
+pub(crate) mod feedback_buffer;
 mod generation;
 mod generation_vectors;
 mod graph;
@@ -74,7 +74,8 @@ pub use configured_cycle::{
 };
 pub(crate) use configured_projects::{registered_project_names, registered_projects};
 pub use consolidation::{
-    CycleEventSink, CycleService, CycleStatus, Phase, PhaseError, PhaseExecutor, RunCycle,
+    CycleEventSink, CycleService, CycleStatus, Phase, PhaseError, PhaseExecutor, RateBudget,
+    RunCycle,
 };
 pub use continuity_recovery::{
     ContinuityRecoveryAction, ContinuityRecoveryManifestView, ContinuityRecoveryService,
@@ -87,7 +88,10 @@ pub use embedding_port::{
 pub use error::{CognitionCode, CognitionError, CognitionResult};
 pub use exact_query::ExactMemoryQuery;
 pub use extraction::{CandidateSearchInput, CognitionVectorSearch, VectorSearchFuture};
-pub use feedback_buffer::{FeedbackBufferService, FeedbackTarget};
+pub use feedback_buffer::{
+    FeedbackBufferService, FeedbackCapture, FeedbackPromotion, FeedbackTarget,
+    feedback_evidence_is_current,
+};
 pub use generation::{
     AcceptanceBinding, ActiveDescriptor, CanonicalSnapshot, EmbeddingSlot, FreshMemoryGeneration,
     GenerationEmbedding, GenerationFormat, GenerationManifest, GenerationReadiness,

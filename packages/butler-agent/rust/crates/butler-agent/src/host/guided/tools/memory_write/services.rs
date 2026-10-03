@@ -1,5 +1,5 @@
 //! Process composition and targeted startup recovery for remembered rules.
-mod checkpoints;
+use crate::host::memory_jobs::rule_checkpoints as checkpoints;
 use butler_memory::cognition::{
     CognitionPathEnvironment, CompletionPublisher, RememberedRuleOwner,
 };
@@ -11,6 +11,7 @@ use tokio_util::sync::CancellationToken;
 pub(crate) struct MemoryWriteServices {
     pub(in crate::host) paths: CognitionPathEnvironment,
     pub(in crate::host) publisher: Arc<CompletionPublisher>,
+    pub(in crate::host) feedback: Arc<butler_memory::cognition::FeedbackBufferService>,
     pub(in crate::host) rules: RememberedRuleOwner,
 }
 
@@ -24,6 +25,11 @@ impl MemoryWriteServices {
         let publisher = Arc::new(CompletionPublisher::new(data, paths, clock));
         Self {
             paths: paths.clone(),
+            feedback: Arc::new(butler_memory::cognition::FeedbackBufferService::new(
+                data.to_owned(),
+                paths.clone(),
+                coordinator.clone(),
+            )),
             rules: checkpoints::configure(
                 RememberedRuleOwner::new(
                     data.to_owned(),

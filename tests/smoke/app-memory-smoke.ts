@@ -6,6 +6,8 @@ import { createNativeAppServer } from "../support/native-app-server.ts";
 import { LEGACY_FIRST_RUN_STORAGE_KEY, legacyFirstRunCompleteRecord } from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
 import { checkProfileInstructionSeparation, checkMemoryRefreshDuringRead } from "../support/memory-profile-acceptance.ts";
 
+import { feedbackStates, seedFeedback, checkFeedback, feedbackFlow, auditFeedback } from "../support/feedback-page-fixtures.ts";
+const feedback = Boolean(process.env.BUTLER_FEEDBACK_SHOTS);
 const output = process.env.BUTLER_MEMORY_SHOTS ?? resolve(".tmp/memory-shots");
 mkdirSync(output, { recursive: true });
 const server = await createNativeAppServer({ uiRoot: resolve("packages/butler-app/client/ui/dist") });
@@ -15,7 +17,7 @@ const operationId = "00000000-0000-4000-8000-000000000777";
 const now = new Date().toISOString();
 const themes = ["light", "dark"] as const;
 const locales = ["ko", "en"] as const;
-const states = ["populated", "long", "confirm", "confirm-long", "deleting", "empty", "load-failure", "loading", "not-measured", "unavailable", "no-projects", "delete-failed", "deleted", "nothing-to-free", "cleanup-waiting", "cleanup-running", "cleanup-done", "cleanup-stopped", "cleanup-cancelled", "personalization", "system-events"];
+const states = feedback ? feedbackStates : ["populated", "long", "confirm", "confirm-long", "deleting", "empty", "load-failure", "loading", "not-measured", "unavailable", "no-projects", "delete-failed", "deleted", "nothing-to-free", "cleanup-waiting", "cleanup-running", "cleanup-done", "cleanup-stopped", "cleanup-cancelled", "personalization", "system-events"];
 function assert(value: unknown, message: string): asserts value { if (!value) throw new Error(message); }
 function rows(locale: string, long = false) {
   const text = locale === "ko" ? "답변은 핵심부터 간결하게 써 주세요." : "Start with the main point and keep answers concise.";
@@ -46,14 +48,14 @@ async function emit(page: Page, phase: string) {
 async function audit(page: Page) {
   return await page.evaluate(() => {
     const root = document.documentElement;
-    const rows = [...document.querySelectorAll<HTMLElement>('[data-test-class="instruction-row"]')];
+    const rows = [...document.querySelectorAll<HTMLElement>('[data-test-class="instruction-row"], [data-test-class="feedback-row"]')];
     const text = rows.map((row) => {
-      const node = row.querySelector<HTMLElement>('[id^="instruction-text-"]')!;
+      const node = row.querySelector<HTMLElement>('[id^="instruction-text-"], [id^="feedback-text-"]')!;
       const css = getComputedStyle(node);
       return { fullText: css.textOverflow !== "ellipsis" && css.webkitLineClamp === "none", wraps: node.scrollWidth <= node.clientWidth + 1 };
     });
     const surfaces = [...document.querySelectorAll<HTMLElement>('[data-slot="form-section"] [data-kind]')].map((node) => ({ background: getComputedStyle(node).backgroundColor, inset: getComputedStyle(node).padding }));
-    const toastFonts = [...document.querySelectorAll<HTMLElement>('[data-sonner-toast]')].map((node) => getComputedStyle(node).fontFamily);
+    const toastFonts = [...document.querySelectorAll<HTMLElement>("[data-sonner-toast]")].map((node) => getComputedStyle(node).fontFamily);
     return { horizontalScroll: root.scrollWidth > root.clientWidth, text, surfaces, toastFonts };
   });
 }
@@ -70,7 +72,7 @@ try {
         (window as unknown as { memorySmokeStreams: EventSource[] }).memorySmokeStreams = streams;
         window.EventSource = class extends Original { constructor(url: string | URL, options?: EventSourceInit) { super(url, options); streams.push(this); } };
       }, { key: LEGACY_FIRST_RUN_STORAGE_KEY, value: JSON.stringify(legacyFirstRunCompleteRecord()) });
-      let instructionRows = rows(locale, state === "long" || state === "confirm-long");
+      let instructionRows = rows(locale, !feedback && (state === "long" || state === "confirm-long"));
       if (state === "empty") instructionRows = [];
       let reads = 0;
       let finished = false;
@@ -95,6 +97,7 @@ try {
         if (path === "/memory/cleanup") return send({ operation_id: operationId, phase: "removing", sequence: 1, bytes_reclaimed: 312 * 1024 ** 2 }, 202);
         return send({ cancellation_requested: true });
       });
+      const fixture = await seedFeedback(page, locale, feedback ? state : "empty");
       await page.route(/\/projects(?:\?.*)?$/, (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ data: { projects: state === "no-projects" ? [] : [{ id: "shot-project", display_name: "butler-site" }] } }) }));
       await page.route("**/system-events?*", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ data: { events: [{ id: "shot-profile", kind: "profile_consolidation", title: "", status: "completed", occurred_at: now, metrics: [{ label: "profiling_enabled", value: true }] }], pagination: { has_more: false } } }) }));
       await page.goto(server.url, { waitUntil: "load" });
@@ -107,13 +110,13 @@ try {
       await page.getByRole("button", { name: target, exact: true }).click();
       const deleteName = locale === "ko" ? "삭제" : "Delete";
       if (["confirm", "confirm-long", "deleting", "deleted", "delete-failed"].includes(state)) {
-        await page.locator('[data-test-class="instruction-row"]').first().getByRole("button", { name: deleteName }).click();
+        await page.locator('[data-test-class="instruction-row"], [data-test-class="feedback-row"]').first().getByRole("button", { name: deleteName }).click();
         const dialog = page.getByRole("alertdialog");
         await dialog.waitFor();
         assert(await dialog.getByRole("button", { name: locale === "ko" ? "취소" : "Cancel" }).evaluate((node) => node === document.activeElement), "Cancel must receive focus");
         if (!["confirm", "confirm-long"].includes(state)) await dialog.getByRole("button", { name: deleteName }).click();
         if (state === "deleting") await page.locator('button[aria-busy="true"]').first().waitFor();
-        if (state === "deleted") await page.locator('[data-test-class="instruction-row"]').nth(2).waitFor({ state: "detached" });
+        if (state === "deleted") await page.locator('[data-test-class="instruction-row"], [data-test-class="feedback-row"]').nth(2).waitFor({ state: "detached" });
         if (state === "delete-failed") await page.getByText(locale === "ko" ? "삭제하지 못했습니다" : "Couldn't delete instruction", { exact: true }).waitFor();
       }
       if (["cleanup-done", "cleanup-stopped", "cleanup-cancelled"].includes(state)) {
@@ -128,23 +131,27 @@ try {
         await page.waitForFunction(() => document.querySelector('[data-settings-section-id="instructions"]')?.getAttribute("aria-busy") !== "true");
       }
       if (state === "personalization") await page.locator('[data-setting-id="memory-link"]').scrollIntoViewIfNeeded();
+      if (feedback) await checkFeedback(page, locale, state);
       await page.evaluate(() => document.fonts.ready);
       await page.waitForFunction(() => document.getAnimations().every((a) => a.effect?.getTiming().iterations === Infinity || a.playState !== "running"));
       const beforeIdle = reads;
       if (state === "populated") { await page.waitForTimeout(1000); assert(reads === beforeIdle && reads === 1, `one opening check, no polling: ${reads}`); }
-      const checks = await audit(page);
+      const checks = { ...await audit(page), feedback: feedback ? await auditFeedback(page) : undefined };
       assert(!checks.horizontalScroll && checks.text.every((row) => row.fullText && row.wraps), `overflow or truncated text: ${JSON.stringify(checks)}`);
       assert(checks.toastFonts.every((font) => font.includes("Pretendard")), `toast must use bundled font: ${JSON.stringify(checks.toastFonts)}`);
-      const file = `memory-${locale}-${theme}-${width}-${state}.png`;
+      const file = `${feedback ? "feedback" : "memory"}-${locale}-${theme}-${width}-${state}.png`;
       await page.screenshot({ path: resolve(output, file), fullPage: true });
       report.push({ file, result: "pass", audit: checks });
+      if (feedback && state === "populated" && locale === "en" && theme === "light" && width === 1280) await feedbackFlow(page, locale, fixture.counts);
       release?.();
       await page.close();
       console.log(file);
     }
   }
-  await checkProfileInstructionSeparation(server, browser);
-  await checkMemoryRefreshDuringRead(server, browser);
+  if (!feedback) {
+    await checkProfileInstructionSeparation(server, browser);
+    await checkMemoryRefreshDuringRead(server, browser);
+  }
 } finally {
   writeFileSync(resolve(output, "memory-screenshot-checks.json"), JSON.stringify(report, null, 2));
   await browser.close();

@@ -7,6 +7,7 @@ import { useMemoryOperation } from "./hooks/useMemoryOperation";
 import { useProjectMemory } from "./hooks/useProjectMemory";
 import { cardState } from "./memoryTypes";
 import { InstructionRow } from "./InstructionRow";
+import { RecentFeedback } from "./RecentFeedback";
 import { MemoryFacts } from "./MemoryFacts";
 import { ChatMemoryActions } from "./ChatMemoryActions";
 import { ChatMemoryBody } from "./ChatMemoryBody";
@@ -30,6 +31,7 @@ export function MemorySettings() {
       {instructions.rows.map((item) => <InstructionRow key={item.handle} item={item} deleting={instructions.deleting === item.handle}
         locked={Boolean(instructions.deleting)} onDelete={() => { void instructions.remove(item); }} />)}
     </SettingsSection>
+    <RecentFeedback projects={summary.projects} />
     <SettingsSection id="chat-memory" kind="status" title={copy.pageSections.chatMemory} description={copy.pageSectionDescriptions.chatMemory}
       state={cardState(summary.state, chat)} emptyMessage={copy.memory.unavailable} onRetry={() => { void summary.reload(true); }}
       actions={<ChatMemoryActions busy={operation.busy} ready={summary.state === "ready" && chat?.item_count != null}
