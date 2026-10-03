@@ -2,6 +2,8 @@ import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, Showcase
 import { Plus, Sparkles } from "../Icons";
 import { Stack } from "../Stack";
 import { Typo } from "../Typo";
+import { ComposerControl } from "../../blocks/ComposerControl";
+import { Popover, PopoverTrigger, PopoverContent } from "../Popover";
 import { PillButton } from "./PillButton";
 
 export const meta: ShowcaseMeta = {
@@ -59,6 +61,19 @@ export const stories: ShowcaseStory[] = [
         </PillButton>
         <ProgressCapsule context={context} />
       </Stack>
+    ),
+  },
+  {
+    name: "Existing menu trigger",
+    render: (context) => (
+      <PillButton as="span" surface="glass">
+        <Popover>
+          <PopoverTrigger asChild>
+            <ComposerControl icon={<Plus size="md" />} label={text(context).attach} />
+          </PopoverTrigger>
+          <PopoverContent><Typo.Text>{text(context).report}</Typo.Text></PopoverContent>
+        </Popover>
+      </PillButton>
     ),
   },
   {

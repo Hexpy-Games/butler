@@ -77,7 +77,7 @@ composer, chat, glass, input, toolbar
 
 The existing `ComposerCardToolbar` renders in the DS-owned slot immediately
 below the card. Its order, spacer and expanded group are unchanged. Each leaf
-control gets its own `TintedGlass` pill; its original button and anchored
+control gets its own `PillButton as="span" surface="glass"` pill; its original button and anchored
 menu/popover remain mounted together. Empty conditional controls have no pill.
 `ComposerSendButton` and `ComposerCardCompactPreview` render in slots inside
 the input card. The editor reserves room for send/stop; attachments, notice and

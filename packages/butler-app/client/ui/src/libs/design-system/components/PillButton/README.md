@@ -25,6 +25,13 @@ Use `surface="glass"` for floating conversation controls, including jump-to-late
 and active task status capsules. It owns the shared border, tint, shadow, blur,
 type size and interaction states; callers only own position and label content.
 
+For an existing interactive control (menu trigger, switch, or removable chip),
+use `<PillButton as="span" surface="glass">{control}</PillButton>`. This
+non-interactive variant shares the glass surface and rounded ends, adds no
+button or tab stop, and lets the child own its padding, accessible name,
+disabled/open state and events. Empty conditional controls leave no surface.
+The standard button variant remains the choice for an icon plus label action.
+
 ## Who can use this component
 Product engineers, design-system maintainers, and agents can use it for compact Butler controls.
 

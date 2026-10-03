@@ -281,23 +281,19 @@
   }
 }
 
-/* Controls keep their original interactive primitives and menu anchors. */
+/* The row owns layout; PillButton owns each control's surface. */
 .controlPill {
-  display: inline-flex;
   flex: 0 0 auto;
-  align-items: center;
-  min-width: 0;
-  min-height: var(--control-height-sm);
-  border-radius: var(--radius-pill);
-  overflow: visible;
 }
 
 .expandedControls > .controlPill:last-child {
   flex-shrink: 1;
 }
 
-.controlPill:empty {
-  display: none;
+@container composer (width <= 320px) {
+  .toolbar {
+    flex-wrap: wrap;
+  }
 }
 
 .actionSlot {

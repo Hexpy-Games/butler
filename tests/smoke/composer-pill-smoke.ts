@@ -26,7 +26,10 @@ async function auditLayout(story: Locator) {
   for (const name of controls) {
     const control = row.locator(selector(name));
     assert(await control.isVisible(), `${name} visible`);
-    assert.equal(await control.locator('xpath=ancestor::*[@data-slot="composer-control-pill"]').count(), 1, `${name} owns one pill`);
+    const pill = control.locator('xpath=ancestor::*[@data-slot="composer-control-pill"]');
+    assert.equal(await pill.count(), 1, `${name} owns one pill`);
+    assert.equal(await pill.getAttribute("data-surface"), "glass-pill", `${name} uses the DS glass pill`);
+    assert.equal(await pill.evaluate((element) => element.tagName), "SPAN", "surface adds no interactive wrapper");
   }
   const geometry = await row.evaluate((element) => {
     const row = element.getBoundingClientRect();
@@ -66,11 +69,11 @@ async function auditMenus(page: Page, story: Locator) {
 }
 
 try {
-  for (const width of [375, 768, 1280]) {
+  for (const width of [320, 375, 390, 430, 768, 1280]) {
     const page = await browser.newPage({ viewport: { width: Math.max(768, width), height: 1000 }, reducedMotion: "reduce" });
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    await page.goto(`http://127.0.0.1:${server.port}/?page=blocks/ComposerCard&width=${width === 375 ? "375" : "app"}&theme=dark&locale=en&motion=reduced`);
+    await page.goto(`http://127.0.0.1:${server.port}/?page=blocks/ComposerCard&width=${width <= 430 ? String(width) : "app"}&theme=dark&locale=en&motion=reduced`);
     const story = page.locator("[data-composer-review]");
     await story.locator(selector("model-button")).waitFor();
     const idle = await auditLayout(story);

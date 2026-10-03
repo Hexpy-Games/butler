@@ -1,7 +1,7 @@
 import { ComposerCardExpandedControls, ComposerCardToolbarSpacer } from "./ComposerCard";
 import { Children, createContext, isValidElement, useContext, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { TintedGlass } from "../../components/TintedGlass";
+import { PillButton } from "../../components/PillButton";
 import { dsClass } from "../../lib/internal";
 import styles from "./ComposerCard.module.css";
 
@@ -26,6 +26,6 @@ export function ComposerControlPills({ children }: { children: ReactNode }) {
     if (!isValidElement(child)) return child;
     // Layout components retain their flex behavior; each leaf control owns one surface.
     if (child.type === ComposerCardToolbarSpacer || child.type === ComposerCardExpandedControls) return child;
-    return <TintedGlass padding="none" className={dsClass(styles.controlPill)} data-slot="composer-control-pill">{child}</TintedGlass>;
+    return <PillButton as="span" surface="glass" className={dsClass(styles.controlPill)} data-slot="composer-control-pill">{child}</PillButton>;
   });
 }
