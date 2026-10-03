@@ -28,7 +28,7 @@ use empty::disabled;
 pub(super) use empty::empty;
 
 /// What the vector lane contributed to a first page.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(super) struct VectorFacts {
     pub code: Option<String>,
     pub diagnostics: Vec<String>,

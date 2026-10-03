@@ -29,6 +29,21 @@ pub(super) struct Candidate {
 
 /// An operational recall metric. Every identifier is hashed; no text is recorded.
 pub enum RecallMetric {
+    /// Summary-only model check resources; no question or candidate payload.
+    Judge {
+        /// Hash of the recall operation.
+        native_operation_sha256: String,
+        /// Frozen gate selected this recall.
+        gate_fired: bool,
+        /// A valid ranking was applied.
+        judged: bool,
+        /// Elapsed judge stage milliseconds.
+        duration_ms: f64,
+        /// Provider-reported input usage.
+        input_tokens: Option<f64>,
+        /// Provider-reported output usage.
+        output_tokens: Option<f64>,
+    },
     /// How long a recall stage took.
     Stage {
         /// Stage name.

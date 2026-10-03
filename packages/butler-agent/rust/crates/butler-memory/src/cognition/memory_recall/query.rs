@@ -46,9 +46,15 @@ pub(super) fn initial(
     vector: &VectorFacts,
     metrics: Option<&dyn RecallMetricSink>,
     clocks: Clocks<'_>,
+    prepared: Option<PreparedSelection>,
 ) -> CognitionResult<RecallResponse> {
     pinned(read, clocks, |sources| {
-        let selected = select(read, &sources, vector, metrics, clocks)?;
+        let pin =
+            super::details::DetailPin::new(read.generation, sources.graph, sources.canonical)?;
+        let selected = match prepared {
+            Some(prepared) if prepared.pin == pin => prepared.selected,
+            _ => select(read, &sources, vector, metrics, clocks)?,
+        };
         if selected.empty_search {
             return Ok(response::empty(
                 read.input,
@@ -284,4 +290,60 @@ pub(super) fn close_sources<T>(
                 .with_source(error)
         });
     graph_close.and(canonical_close).and(result)
+}
+
+/// Owned candidates and source revision; no reader or transaction survives preparation.
+pub(super) struct PreparedSelection {
+    pub selected: Selection,
+    pub pin: super::details::DetailPin,
+    pub candidates: Vec<super::judge::RecallJudgeCandidate>,
+}
+
+pub(super) fn prepare_judge(
+    read: &PageRead<'_>,
+    vector: &VectorFacts,
+    metrics: Option<&dyn RecallMetricSink>,
+    clocks: Clocks<'_>,
+) -> CognitionResult<PreparedSelection> {
+    let (canonical, graph) = open_sources(read.generation)?;
+    let result = (|| {
+        let now_iso =
+            butler_core::js_date::format_iso_millis((clocks.now_millis)()).ok_or_else(|| {
+                CognitionError::new(CognitionCode::InvalidArguments, "invalid_arguments")
+            })?;
+        let sources = Sources {
+            graph: &graph,
+            canonical: canonical.as_ref(),
+            now_iso: &now_iso,
+        };
+        let selected = select(read, &sources, vector, metrics, clocks)?;
+        let pin = super::details::DetailPin::new(read.generation, &graph, canonical.as_ref())?;
+        let candidates = if super::judge::gate(&selected) {
+            selected
+                .ranked
+                .iter()
+                .take(15)
+                .enumerate()
+                .map(|(index, row)| {
+                    let summary = graph.connection()?.query_row(
+                        "SELECT substr(summary,1,150) FROM memory_chunks WHERE memory_chunk_id=?1",
+                        [&row.input.episode_id],
+                        |row| row.get::<_, Option<String>>(0),
+                    ).map_err(crate::cognition::graph::db_error)?.unwrap_or_default();
+                    Ok(super::judge::RecallJudgeCandidate {
+                        candidate: index + 1,
+                        summary,
+                    })
+                })
+                .collect::<CognitionResult<Vec<_>>>()?
+        } else {
+            Vec::new()
+        };
+        Ok(PreparedSelection {
+            selected,
+            pin,
+            candidates,
+        })
+    })();
+    close_sources(graph, canonical, result)
 }

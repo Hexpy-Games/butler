@@ -12,6 +12,7 @@ pub(super) mod models;
 mod monitoring;
 mod owners;
 pub(super) mod process_probe;
+mod recall;
 mod skills_owner;
 pub(super) mod storage_bootstrap;
 pub(super) mod stores;
@@ -199,19 +200,17 @@ impl AgentRuntime {
             2,
             memory_sources,
         ));
-        let compare = collation.clone();
-        let recall_date_parser = date_parser.clone();
-        let memory_recall = MemoryRecall::new(
-            paths.data_root.clone(),
-            environment.cognition_paths.clone(),
-            Arc::new(move |value| recall_date_parser.parse(value)),
-            Arc::new(move |left, right| compare.compare(left, right)),
-            Arc::new(|| SystemIdentity.now_epoch_millis()),
-            2,
-        )
-        .with_metric_sink(Arc::new(RecallMetrics::new(metric_files.clone())));
-        let memory_recall = memory_recall.with_vector_port(vectors);
-        let memory_recall = Arc::new(memory_recall);
+        let memory_recall = Arc::new(
+            recall::configured_recall(
+                &paths,
+                &environment.cognition_paths,
+                &models,
+                date_parser.clone(),
+                collation.clone(),
+            )
+            .with_metric_sink(Arc::new(RecallMetrics::new(metric_files.clone())))
+            .with_vector_port(vectors),
+        );
         let conversation_context = ContextConversation::new(
             stores.conversations.clone(),
             models.configuration.clone(),

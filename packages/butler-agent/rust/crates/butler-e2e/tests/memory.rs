@@ -347,3 +347,6 @@ mod batch;
 mod compact;
 #[path = "memory/reset_vectors.rs"]
 mod reset_vectors;
+
+#[path = "memory/recall_judge.rs"]
+mod recall_judge;

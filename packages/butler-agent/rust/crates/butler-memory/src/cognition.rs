@@ -103,6 +103,10 @@ pub use knowhow_store::FeedbackTarget;
 pub use knowhow_store::{FeedbackResolvePort, KnowHowService};
 pub use mcp_graph::read_mcp_legacy_graph;
 pub use memory_health::{MemoryHealthReport, MemoryHealthService};
+pub use memory_recall::{
+    ConfiguredRecallJudge, RecallJudgeCandidate, RecallJudgeFuture, RecallJudgeModelFuture,
+    RecallJudgeModelSource, RecallJudgePort, RecallJudgeResult, RecallJudgeUnavailable,
+};
 pub use memory_recall::{MemoryRecall, RecallVectorFuture, RecallVectorPort};
 pub use memory_recall::{RecallMetric, RecallMetricSink};
 pub use migration::CognitionNamespaceMigrationService;

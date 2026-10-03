@@ -24,6 +24,20 @@ impl RecallMetricSink for RecallMetrics {
             return;
         }
         let (name, value, unit, duration_ms, dimensions) = match metric {
+            RecallMetric::Judge {
+                native_operation_sha256,
+                gate_fired,
+                judged,
+                duration_ms,
+                input_tokens,
+                output_tokens,
+            } => (
+                "recall_v2_judge",
+                None,
+                None,
+                Some(duration_ms),
+                json!({"native_operation_sha256":native_operation_sha256,"gate_fired":gate_fired,"judged":judged,"input_tokens":input_tokens,"output_tokens":output_tokens}),
+            ),
             RecallMetric::Stage {
                 name,
                 native_operation_sha256,
@@ -114,27 +128,38 @@ impl RecallMetricSink for RecallMetrics {
                 }),
             ),
         };
-        let mut event = json!({
-            "schema": "butler.operational-metric.v1",
-            "ts": chrono::Utc::now().timestamp_millis(),
-            "category": "memory",
-            "name": name,
-            "status": "ok",
-            "dimensions": dimensions,
-            "rawTextStored": false,
-        });
-        if let Some(value) = value.filter(|value| value.is_finite()) {
-            event["value"] = json!(value);
-        }
-        if let Some(unit) = unit {
-            event["unit"] = json!(unit);
-        }
-        if let Some(duration) = duration_ms.filter(|value| value.is_finite()) {
-            event["durationMs"] = json!(duration);
-        }
-        if let Ok(mut line) = serde_json::to_vec(&event) {
-            line.push(b'\n');
-            let _ = self.files.append_operational_event(&line);
-        }
+        append(&self.files, (name, value, unit, duration_ms, dimensions));
+    }
+}
+
+type Projection = (
+    &'static str,
+    Option<f64>,
+    Option<&'static str>,
+    Option<f64>,
+    serde_json::Value,
+);
+fn append(files: &MetricFiles, (name, value, unit, duration_ms, dimensions): Projection) {
+    let mut event = json!({
+        "schema": "butler.operational-metric.v1",
+        "ts": chrono::Utc::now().timestamp_millis(),
+        "category": "memory",
+        "name": name,
+        "status": "ok",
+        "dimensions": dimensions,
+        "rawTextStored": false,
+    });
+    if let Some(value) = value.filter(|value| value.is_finite()) {
+        event["value"] = json!(value);
+    }
+    if let Some(unit) = unit {
+        event["unit"] = json!(unit);
+    }
+    if let Some(duration) = duration_ms.filter(|value| value.is_finite()) {
+        event["durationMs"] = json!(duration);
+    }
+    if let Ok(mut line) = serde_json::to_vec(&event) {
+        line.push(b'\n');
+        let _ = files.append_operational_event(&line);
     }
 }

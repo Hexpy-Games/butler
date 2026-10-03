@@ -12,6 +12,7 @@ mod cursor;
 pub(crate) mod details;
 mod envelope;
 mod evidence;
+mod judge;
 mod metrics;
 mod query;
 mod response;
@@ -23,6 +24,10 @@ mod tool;
 mod validate;
 mod vector;
 
+pub use judge::{
+    ConfiguredRecallJudge, RecallJudgeCandidate, RecallJudgeFuture, RecallJudgeModelFuture,
+    RecallJudgeModelSource, RecallJudgePort, RecallJudgeResult, RecallJudgeUnavailable,
+};
 pub use metrics::{RecallMetric, RecallMetricSink};
 pub use service::MemoryRecall;
 pub use vector::{RecallVectorFuture, RecallVectorPort};
