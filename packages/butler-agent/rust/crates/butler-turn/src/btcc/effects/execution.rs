@@ -9,6 +9,7 @@ pub(super) struct Context<'a> {
     pub journal: &'a dyn EffectJournal,
     pub clock: &'a (dyn Fn() -> String + Send + Sync),
     pub fault: &'a dyn EffectFaultHook,
+    pub managed_grant: Option<&'a crate::btcc::work_model::WorkModelEffectGrant>,
 }
 
 pub(super) async fn continue_effect(
@@ -78,7 +79,7 @@ pub(super) async fn reconcile(
 /// Claims the dispatch marker, re-checks permission after the marker, calls
 /// the adapter once and records what it reports.
 async fn dispatch(context: &Context<'_>, current: &EffectRecord) -> EffectResult<EffectOutcome> {
-    if let Some(denied) = outcomes::permission(context.input) {
+    if let Some(denied) = permission(context).await {
         return Ok(EffectOutcome::Rejected(denied));
     }
     let identity = &context.resolved.identity;
@@ -93,7 +94,7 @@ async fn dispatch(context: &Context<'_>, current: &EffectRecord) -> EffectResult
         .fault
         .reached("after_dispatch_marker", identity)
         .await?;
-    if let Some(denied) = outcomes::permission(context.input) {
+    if let Some(denied) = permission(context).await {
         let returned = context
             .journal
             .return_prepared(claimed.identity.effect_id.clone(), claimed.journal_revision)
@@ -229,4 +230,16 @@ pub(super) async fn record_applied(
         result,
         receipt: Box::new(receipt),
     })
+}
+
+async fn permission(context: &Context<'_>) -> Option<EffectError> {
+    if let Some(denied) = outcomes::permission(context.input) {
+        return Some(denied);
+    }
+    if let Some(grant) = context.managed_grant
+        && let Err(error) = grant.validate().await
+    {
+        return Some(EffectError::new(error.code(), error.message()));
+    }
+    None
 }

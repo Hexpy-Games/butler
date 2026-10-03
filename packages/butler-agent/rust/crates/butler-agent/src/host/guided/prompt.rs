@@ -1,6 +1,7 @@
 //! Turn-bound Guided request text assembled from the admitted source records.
 
 mod attachments;
+mod current_work;
 mod documents;
 mod excerpts;
 mod phase_memory;
@@ -330,26 +331,7 @@ impl PromptPort for GuidedPrompt {
                 .await
                 .map_err(|error| BtccError::relayed(error.code(), error.message()))?;
             let image_attachments = attachments::provider_images(turn);
-            let work_stream = if state.phase.execution_policy.tracking_mode == "none" {
-                String::new()
-            } else {
-                let mut projection = state
-                    .work_streams
-                    .prompt_context(
-                        turn.session_id.clone(),
-                        state.phase.execution_policy.project_id.clone(),
-                    )
-                    .await?;
-                let workers = state
-                    .subsessions
-                    .worker_prompt_lines(turn.session_id.clone(), projection.worker_task_ids)
-                    .await?;
-                if !workers.is_empty() {
-                    projection.text.push_str("\nLinked Workers:\n");
-                    projection.text.push_str(&workers.join("\n"));
-                }
-                projection.text
-            };
+            let work_stream = work_stream(state, turn).await?;
             let exact_prompt = source_prompt(
                 turn,
                 state,
@@ -481,3 +463,5 @@ impl PromptPort for GuidedPrompt {
         })
     }
 }
+
+use current_work::work_stream;

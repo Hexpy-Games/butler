@@ -1,3 +1,6 @@
+#[path = "tests/work_model.rs"]
+mod work_model;
+
 use std::sync::Arc;
 
 use serde_json::{Value, json};
@@ -154,6 +157,12 @@ fn phase_selection_enforces_execution_policy_access_and_required_tools() {
             }
             Ok((mode, phase, writes, work)) => {
                 let selection = selection.unwrap();
+                work_model::assert_static_ratchet(
+                    &turn,
+                    catalog.snapshot(),
+                    if enabled { "yes" } else { "off" },
+                    replay,
+                );
                 assert_eq!(
                     (selection.mode.as_str(), selection.phase.as_str()),
                     (mode, phase),

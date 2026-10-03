@@ -84,12 +84,12 @@ pub(super) async fn execute(
             None,
         );
     }
-    let Some(work) = owner
+    let grant = owner
         .work
-        .bound_work()
+        .effect_grant()
         .await
-        .map_err(ToolExecutionError::Integrity)?
-    else {
+        .map_err(ToolExecutionError::Integrity)?;
+    let Some(mut work) = bound_effect_work(owner, grant.as_ref()).await? else {
         return ordinary(
             "effect_work_required",
             "Create concise Work, record its Plan Review, then retry this persistent effect.",
@@ -101,40 +101,36 @@ pub(super) async fn execute(
         Ok(prepared) => prepared,
         Err(error) => return ordinary(error.code(), error.message(), None),
     };
-    let resumes_authority = owner.binding.authority_request_ref.is_some()
-        && owner.binding.authority_source_call_id.as_deref() == Some(occurrence)
-        && !*owner.authority_consumed.lock();
-    let approved = if owner.binding.access_mode == AccessMode::AskFirst || resumes_authority {
-        match authority::gate(
-            owner,
-            call,
-            occurrence,
-            &work,
-            &target,
-            &input,
-            adapter.as_ref(),
-        )
-        .await?
-        {
-            authority::Gate::Return(result) => return Ok(result),
-            authority::Gate::Execute(approved) => approved,
-        }
-    } else {
-        None
-    };
-    let outcome = match owner
-        .effects
-        .execute(ExecuteEffect {
-            work,
-            access: EffectAccess::Full,
-            occurrence_id: Some(occurrence.to_owned()),
-            signal: invocation.cancellation.clone(),
-            target,
-            input,
-            adapter,
-        })
-        .await
+    record_effect_target(&mut work, grant.is_some(), adapter.as_ref(), &target);
+    let approved = match effect_authority(
+        owner,
+        call,
+        occurrence,
+        &work,
+        &target,
+        &input,
+        adapter.as_ref(),
+    )
+    .await?
     {
+        authority::Gate::Return(result) => return Ok(result),
+        authority::Gate::Execute(approved) => approved,
+    };
+    let effect = ExecuteEffect {
+        work,
+        access: EffectAccess::Full,
+        occurrence_id: Some(occurrence.to_owned()),
+        signal: invocation.cancellation.clone(),
+        target,
+        input,
+        adapter,
+    };
+    let result = if let Some(grant) = grant {
+        owner.effects.execute_managed(effect, grant).await
+    } else {
+        owner.effects.execute(effect).await
+    };
+    let outcome = match result {
         Ok(outcome) => outcome,
         Err(error) if super::feedback::solvable(error.code()) => {
             return ordinary(error.code(), error.message(), Some("rejected"));
@@ -277,5 +273,54 @@ fn outcome_result(outcome: EffectOutcome) -> Result<JsonDocument, ToolExecutionE
         EffectOutcome::Uncertain { error, .. } => {
             ordinary(&error.code, &error.message, Some("uncertain"))
         }
+    }
+}
+
+async fn effect_authority(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+    occurrence: &str,
+    work: &WorkView,
+    target: &str,
+    input: &Value,
+    adapter: &dyn EffectAdapter,
+) -> Result<authority::Gate, ToolExecutionError> {
+    let resumes = owner.binding.authority_request_ref.is_some()
+        && owner.binding.authority_source_call_id.as_deref() == Some(occurrence)
+        && !*owner.authority_consumed.lock();
+    if owner.binding.access_mode == AccessMode::AskFirst || resumes {
+        authority::gate(owner, call, occurrence, work, target, input, adapter).await
+    } else {
+        Ok(authority::Gate::Execute(None))
+    }
+}
+
+fn record_effect_target(
+    work: &mut WorkView,
+    managed: bool,
+    adapter: &dyn EffectAdapter,
+    target: &str,
+) {
+    if managed && let Some(plan) = &mut work.current_plan {
+        plan.actions.push(butler_turn::btcc::PlanAction {
+            action_key: "accepted-plan".into(),
+            description: work.objective.clone(),
+            dependency_keys: vec![],
+            effect: Some(json!({"capability":adapter.capability(),"target":target})),
+        });
+    }
+}
+
+async fn bound_effect_work(
+    owner: &GuidedTools,
+    grant: Option<&butler_turn::btcc::work_model::WorkModelEffectGrant>,
+) -> Result<Option<WorkView>, ToolExecutionError> {
+    match grant {
+        Some(grant) => Ok(Some(grant.effect_metadata())),
+        None => owner
+            .work
+            .bound_work()
+            .await
+            .map_err(ToolExecutionError::Integrity),
     }
 }

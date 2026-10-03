@@ -86,6 +86,7 @@ struct Lifecycle {
     active_queue_ids: HashSet<String>,
     task_keys: HashMap<tokio::task::Id, (String, String)>,
     tasks: JoinSet<DispatchDone>,
+    completed: IngressPoll,
 }
 
 pub(crate) struct IngressDispatcher {
@@ -135,6 +136,7 @@ impl IngressDispatcher {
                 active_queue_ids: HashSet::new(),
                 task_keys: HashMap::new(),
                 tasks: JoinSet::new(),
+                completed: IngressPoll::default(),
             }),
         }
     }
@@ -147,7 +149,7 @@ impl IngressDispatcher {
                 "Inbound dispatcher closed",
             ));
         }
-        let mut summary = IngressPoll::default();
+        let mut summary = std::mem::take(&mut state.completed);
         while let Some(done) = state.tasks.try_join_next_with_id() {
             match done {
                 Ok((id, done)) => {
@@ -210,6 +212,37 @@ impl IngressDispatcher {
             state.task_keys.insert(handle.id(), key);
         }
         Ok(summary)
+    }
+
+    /// Await an actual dispatch boundary, without scanning an idle queue.
+    pub(crate) async fn wait_for_completion(&self) {
+        let mut state = self.lifecycle.lock().await;
+        if state.tasks.is_empty() {
+            drop(state);
+            std::future::pending::<()>().await;
+            return;
+        }
+        if let Some(done) = state.tasks.join_next_with_id().await {
+            match done {
+                Ok((id, done)) => {
+                    state.task_keys.remove(&id);
+                    state.active_sessions.remove(&done.session);
+                    state.active_queue_ids.remove(&done.queue_id);
+                    state.completed.handled += done.result.handled;
+                    state.completed.delivered += done.result.delivered;
+                    state.completed.failed += done.result.failed;
+                    state.completed.interrupted += done.result.interrupted;
+                }
+                Err(error) => {
+                    if let Some((session, queue_id)) = state.task_keys.remove(&error.id()) {
+                        state.active_sessions.remove(&session);
+                        state.active_queue_ids.remove(&queue_id);
+                    }
+                    state.completed.interrupted += 1;
+                    self.queue.wake_dispatch();
+                }
+            }
+        }
     }
 
     /// Stop admission, fence active turns, and retain publication through completion.

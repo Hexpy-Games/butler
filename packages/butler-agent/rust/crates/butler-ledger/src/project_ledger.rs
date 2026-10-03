@@ -20,6 +20,7 @@ mod tests;
 mod tool_scope;
 mod work;
 mod work_json;
+mod work_model;
 mod work_scope;
 
 use parking_lot::Mutex;

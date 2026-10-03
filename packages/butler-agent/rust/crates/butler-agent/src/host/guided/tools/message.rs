@@ -42,7 +42,7 @@ pub(super) fn result_message(
         append_output(result, output, &mut content)?;
     }
     content.push('}');
-    let content = preview::fit(result, references, content)?;
+    let content = preview::dispatch_fit(result, references, content)?;
     Ok(ModelRoundMessage {
         role: ModelRoundRole::Tool,
         content: content.into(),

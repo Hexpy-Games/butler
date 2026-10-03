@@ -27,6 +27,7 @@ pub struct InboundQueue {
     owner_id: String,
     lane: Arc<Mutex<()>>,
     enqueue_wake: Arc<Notify>,
+    scans: Arc<std::sync::atomic::AtomicU64>,
 }
 
 pub(crate) type QueueResult<T> = Result<T, InboundQueueError>;
@@ -91,11 +92,30 @@ impl InboundQueue {
             owner_id: format!("{}:{}", std::process::id(), uuid::Uuid::new_v4()),
             lane: Arc::new(Mutex::new(())),
             enqueue_wake: Arc::new(Notify::new()),
+            scans: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
     }
 
     pub async fn wait_for_enqueue(&self) {
         self.enqueue_wake.notified().await;
+    }
+
+    pub fn scan_count(&self) -> u64 {
+        self.scans.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub fn wake_dispatch(&self) {
+        self.enqueue_wake.notify_one();
+    }
+
+    /// Keep external file producers working when the core owner disables idle polling.
+    pub fn watch_changes(&self) -> std::io::Result<butler_platform::file_changes::FileChanges> {
+        let paths =
+            ["pending", "processing", "processed", "failed"].map(|state| self.root.join(state));
+        butler_platform::file_changes::FileChanges::directories(
+            &paths.iter().map(PathBuf::as_path).collect::<Vec<_>>(),
+            self.enqueue_wake.clone(),
+        )
     }
 
     pub fn enqueue_idempotent(&self, envelope: JsonDocument) -> QueueResult<QueuedInboundEvent> {
@@ -129,6 +149,8 @@ impl InboundQueue {
         limit: usize,
         eligible: impl FnMut(&QueuedInboundEvent) -> bool,
     ) -> QueueResult<Vec<ClaimedInboundEvent>> {
+        self.scans
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let _guard = self.lane.lock();
         storage::claim(&self.root, &self.owner_id, limit, eligible)
     }

@@ -17,6 +17,9 @@ const MAX_BYTES: usize = 50 * 1024;
 /// The same tool-specific structured view used for provider results, before
 /// either caller applies its own byte budget.
 pub(in crate::host) fn structured_raw(name: &str, raw: &str) -> Result<String, BtccError> {
+    if crate::host::guided::work_model::tool(name) {
+        return Ok(raw.into());
+    }
     let candidate = tool_payload(raw, keys(name), 0)?.unwrap_or(raw);
     if work::supports(name) && candidate.trim().starts_with('{') {
         work::project_raw(name, candidate)
@@ -249,3 +252,14 @@ fn failure() -> BtccError {
 
 #[cfg(test)]
 mod tests;
+
+pub(super) fn dispatch_fit(
+    result: &ToolResult,
+    references: &OperationResultMessageReferences,
+    original: String,
+) -> Result<String, BtccError> {
+    if crate::host::guided::work_model::tool(&result.name) {
+        return Ok(original);
+    }
+    fit(result, references, original)
+}

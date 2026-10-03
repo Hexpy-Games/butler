@@ -19,6 +19,7 @@ pub(super) mod tool_output;
 pub(super) mod tools;
 pub(super) mod vision;
 pub(super) mod work;
+pub(super) mod work_model;
 pub(super) mod work_streams;
 pub(super) mod work_tools;
 pub(super) mod worker_profiles;

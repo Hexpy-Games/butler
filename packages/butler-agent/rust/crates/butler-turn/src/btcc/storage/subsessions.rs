@@ -92,6 +92,17 @@ pub struct SqliteSubsessionRepository {
 }
 
 impl SqliteSubsessionRepository {
+    pub fn changes(&self) -> std::sync::Arc<tokio::sync::Notify> {
+        self.storage.changes()
+    }
+
+    pub fn storage_operations(&self) -> u64 {
+        self.storage.operation_count()
+    }
+
+    pub fn sql_statements(&self) -> u64 {
+        self.storage.sql_statement_count()
+    }
     /// A repository over the store.
     pub fn new(storage: BtccStorage) -> Self {
         Self { storage }
@@ -115,6 +126,8 @@ impl SqliteSubsessionRepository {
                 params![input.relation_id,input.parent_session_id,input.parent_turn_id,input.child_session_id,input.anchor_message_id,ordinal,input.safe_title,input.created_at],
             ).map_err(StorageError::sqlite)? == 1;
             if inserted {
+                super::work_model::assign_child(&tx, &input).map_err(|source|
+                    StorageError::new(StorageCode::WorkModelAssignmentRejected, source.message()).with_source(source))?;
                 tx.execute(
                     "INSERT INTO btcc_subsession_delegations (delegation_id,relation_id,task_id,child_turn_id,root_work_id,packet_json,dispatch_intent_json,dispatch_state,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'pending',?8)",
                     params![input.delegation_id,input.relation_id,input.task_id,input.child_turn_id,input.root_work_id,packet_json,intent_json,input.created_at],
@@ -367,12 +380,14 @@ impl SqliteSubsessionRepository {
             let evidence_json=serde_json::to_string(&evidence_refs).map_err(|e| StorageError::new(StorageCode::SubsessionResultInvalid,e.to_string()).with_source(e))?;
             tx.execute("INSERT OR IGNORE INTO btcc_steward_results (result_id,relation_id,task_id,child_session_id,child_turn_id,status,code,summary,acceptance_evidence_json,changed_artifacts_json,created_at) VALUES (?1,?2,?3,?4,?5,?6,NULL,?7,?8,'[]',?9)",params![result_id,delegation.relation_id,delegation.task_id,child_session,child_turn,status,summary,evidence_json,now]).map_err(StorageError::sqlite)?;
             let text = format!("Delegated result\nstatus: {status}\nsummary: {summary}\nevidence_refs: {evidence_json}");
+            let managed:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name='wm_mode')",[],|r|r.get(0)).map_err(StorageError::sqlite)?;
             let input = match packet.child_role {
-                ChildRole::Worker => ParentResultInput::StewardQueue(WorkerResultInput {
+                ChildRole::Worker if !managed || parent_chat.is_none() => ParentResultInput::StewardQueue(WorkerResultInput {
                     text: text.clone(), model_ref: model.into(),
                     reasoning_effort: reasoning.into(), timestamp: now.clone(),
                 }),
-                ChildRole::Steward => ParentResultInput::ButlerApp(StewardResultInput {
+                ChildRole::Steward if managed && parent_chat.is_none() => ParentResultInput::StewardQueue(WorkerResultInput { text:text.clone(),model_ref:model.into(),reasoning_effort:reasoning.into(),timestamp:now.clone() }),
+                ChildRole::Steward | ChildRole::Worker => ParentResultInput::ButlerApp(StewardResultInput {
                     relation_id: delegation.relation_id.clone(),
                     result_id: result_id.clone(),
                     parent_session_id: delegation.parent_session_id.clone(),

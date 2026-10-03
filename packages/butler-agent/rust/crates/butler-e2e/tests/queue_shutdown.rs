@@ -16,7 +16,7 @@ use butler_e2e::e2e::{
 use serde_json::json;
 use std::time::{Duration, Instant};
 
-async fn active_stream() -> Result<(Scenario, String), HarnessError> {
+async fn active_stream(core: bool) -> Result<(Scenario, String), HarnessError> {
     let mut cassette = Cassette::load("Q-02")?;
     let prompt = cassette.exchanges[0].request.key.user_request.clone();
     let body = cassette.exchanges[0].response.body();
@@ -30,10 +30,13 @@ async fn active_stream() -> Result<(Scenario, String), HarnessError> {
             text: format!("{text}\n\n"),
         })
         .collect();
-    let s = Setup::new("Q-02-SHUTDOWN")?
-        .stub_cassette(cassette)
-        .start()
-        .await?;
+    let setup = Setup::new("Q-02-SHUTDOWN")?.stub_cassette(cassette);
+    let setup = if core {
+        setup.env("BUTLER_WORK_MODEL", "core")
+    } else {
+        setup
+    };
+    let s = setup.start().await?;
     s.provider()?.set_pacing(Pacing {
         scale: 1.0,
         cap_ms: 30_000,
@@ -61,7 +64,17 @@ async fn active_stream() -> Result<(Scenario, String), HarnessError> {
 #[tokio::test]
 async fn q_02_shutdown_interrupts_active_turn_and_resumes_queue() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (mut s, running) = active_stream().await?;
+    shutdown_queue(false).await
+}
+
+#[tokio::test]
+async fn wm_core_shutdown_resumes_full_queue() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    shutdown_queue(true).await
+}
+
+async fn shutdown_queue(core: bool) -> Result<(), HarnessError> {
+    let (mut s, running) = active_stream(core).await?;
     let queued =
         s.gw.post(
             "/session-queue",

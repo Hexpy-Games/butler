@@ -181,6 +181,14 @@ pub trait GatewayProjectDashboard: Send + Sync {
 
 /// Session controls and Plan decisions use the App revision and Project Ledger owners.
 pub trait GatewaySessionControls: Send + Sync {
+    fn work_model(
+        &self,
+        _session: String,
+        _view: String,
+        _input: serde_json::Value,
+    ) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn get_session_controls_view(
         &self,
         session_id: String,

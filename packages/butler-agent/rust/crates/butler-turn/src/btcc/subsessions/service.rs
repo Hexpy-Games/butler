@@ -26,7 +26,9 @@ use crate::btcc::{
 use crate::workspace::{OwnOptional, SessionBindingStore, SessionRole, UpsertSessionBinding};
 
 mod lifecycle;
+mod managed;
 mod packets;
+pub use managed::ManagedDelegation;
 
 /// A child dispatch that was interrupted and can be recovered.
 #[derive(Clone, Debug)]

@@ -1,7 +1,8 @@
+import { basename } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import { CliError, nowIso } from "./errors.js";
 import { optionalNumber, optionalString, requiredOption } from "./args.js";
-import { appendLedgerEvent, projectRelative } from "./fs.js";
+import { appendLedgerEvent, projectRelative, ledgerRoot } from "./fs.js";
 import {
   committedRecordSources,
   readRecord,
@@ -204,6 +205,8 @@ export function createRecord(project, options) {
 }
 
 function createRecordLocked(project, options) {
+  assertMutableRecord(project, options.id);
+
   const kind = modeledRecordKind(requiredOption(options, "kind"));
   const data = baseRecord(kind, options);
   const filePath = topLevelRecordPath(project, kind, data.id);
@@ -226,6 +229,7 @@ export function updateRecord(project, options) {
 
 function updateRecordLocked(project, options) {
   const { filePath, record } = resolveRecord(project, options);
+  assertMutableRecord(project, record.id);
   if (!SOURCE_RECORD_KINDS.has(record.kind)) {
     throw new CliError(`Record kind does not support generic update: ${record.kind}`, "invalid_input", 1);
   }
@@ -264,4 +268,11 @@ function updateRecordLocked(project, options) {
     source: "project-ledger",
   });
   return refreshDerivedIndexAfterMutation(project, readRecord(project, filePath));
+}
+
+// Work-model revision IDs belong to immutable publication, never generic updates.
+function assertMutableRecord(project, id) {
+  if (/^wm-session-[0-9a-f]{24}$/i.test(basename(ledgerRoot(project))) && typeof id === "string" && id.toUpperCase().startsWith("SPEC-WM-")) {
+    throw new CliError("Publish a new Spec revision through the work-model service", "immutable_spec_revision", 1);
+  }
 }

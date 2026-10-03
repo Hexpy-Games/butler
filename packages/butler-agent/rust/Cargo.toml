@@ -42,7 +42,7 @@ lopdf = { version = "=0.45.0", default-features = false }
 serde = { version = "1.0.219", features = ["derive", "rc"] }
 serde_json = { version = "1.0.143", features = ["preserve_order", "raw_value"] }
 ryu-js = "1.0.3"
-rusqlite = { version = "0.37.0", features = ["bundled", "hooks"] }
+rusqlite = { version = "0.37.0", features = ["bundled", "hooks", "trace"] }
 sha2 = "0.10.9"
 sha1 = "0.10.6"
 subtle = "2.6.1"

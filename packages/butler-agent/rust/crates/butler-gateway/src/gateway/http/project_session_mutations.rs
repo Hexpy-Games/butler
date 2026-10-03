@@ -15,7 +15,7 @@ use crate::gateway::{
     protocol::{APP_PROTOCOL_VERSION, ApiEnvelope},
 };
 
-pub(super) async fn route(
+async fn route(
     state: Arc<HttpState>,
     request: Request<Body>,
     uri: &Uri,
@@ -208,4 +208,23 @@ fn action_id<'a>(path: &'a str, prefix: &str, suffix: &str) -> Option<&'a str> {
     path.strip_prefix(prefix)
         .and_then(|value| value.strip_suffix(suffix))
         .filter(|value| !value.is_empty() && !value.contains('/'))
+}
+
+pub(super) async fn dispatch(
+    state: Arc<HttpState>,
+    request: Request<Body>,
+    uri: &Uri,
+) -> Result<Option<Response>, HttpError> {
+    if super::work_model::matches(uri.path()) {
+        return super::work_model::route(state, request, uri)
+            .await
+            .map(Some);
+    }
+    route(state, request, uri).await
+}
+
+pub(super) fn matches(path: &str) -> bool {
+    ["/projects/", "/sessions/", "/plans/"]
+        .iter()
+        .any(|p| path.starts_with(p))
 }

@@ -229,3 +229,33 @@ pub(super) fn build_identity(parts: IdentityParts<'_>) -> EffectResult<EffectIde
         sanitized_target: parts.sanitized_target.to_owned(),
     })
 }
+
+pub(super) fn resolve_managed(
+    input: &ExecuteEffect,
+    grant: &crate::btcc::work_model::WorkModelEffectGrant,
+) -> EffectResult<Resolved> {
+    let adapter = input.adapter.as_ref();
+    let normalized_target = adapter.normalize_target(&input.target).map_err(invalid)?;
+    let normalized_input = adapter.normalize_input(&input.input).map_err(invalid)?;
+    let sanitized_target = adapter
+        .sanitize_target(&normalized_target)
+        .map_err(invalid)?;
+    required(&normalized_target, "normalized target")?;
+    required(adapter.capability(), "adapter capability")?;
+    let identity = build_identity(IdentityParts {
+        work_id: grant.scope_id(),
+        plan_revision_id: grant.revision_id(),
+        action_key: "accepted-plan",
+        binding: PlanBinding::AcceptedPlan,
+        occurrence: input.occurrence_id.as_deref(),
+        capability: adapter.capability(),
+        normalized_target: &normalized_target,
+        sanitized_target: &sanitized_target,
+        normalized_input: &normalized_input,
+    })?;
+    Ok(Resolved {
+        identity,
+        normalized_target,
+        normalized_input,
+    })
+}

@@ -52,12 +52,28 @@ pub trait DurableWorkRepository: Send + Sync {
 /// Validates Work commands, fingerprints them for idempotency and applies them.
 pub struct DurableWorkService {
     repository: Arc<dyn DurableWorkRepository>,
+    managed: Option<Arc<super::managed::WorkModelService>>,
 }
 
 impl DurableWorkService {
     /// A service over the Work repository.
     pub fn new(repository: Arc<dyn DurableWorkRepository>) -> Self {
-        Self { repository }
+        Self {
+            repository,
+            managed: None,
+        }
+    }
+
+    pub fn with_work_model(
+        mut self,
+        managed: Option<Arc<super::managed::WorkModelService>>,
+    ) -> Self {
+        self.managed = managed;
+        self
+    }
+
+    pub fn work_model(&self) -> Option<&Arc<super::managed::WorkModelService>> {
+        self.managed.as_ref()
     }
 
     /// The turn's bound Work context.

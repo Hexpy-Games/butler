@@ -404,6 +404,15 @@ async fn complete_subsession_child(
         TurnOutcomeKind::AlreadyDelivered(value) => (value.content.as_str(), value.work_status),
         _ => return Ok(()),
     };
+    if subsessions
+        .complete_managed_child(session_id, turn_id, content.to_owned())
+        .await
+        .map_err(|error| {
+            super::IngressError::new("subsession_result_commit_failed", error.code())
+        })?
+    {
+        return Ok(());
+    }
     let status = match work_status {
         Some(WorkStatus::Completed) => "success",
         Some(WorkStatus::Blocked) => "blocked",

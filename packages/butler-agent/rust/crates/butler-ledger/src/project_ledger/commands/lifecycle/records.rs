@@ -40,6 +40,14 @@ pub(super) fn create_top_level(root: &Path, args: &Value) -> Result<Value, CliFa
             CliFailure::new("invalid_input", format!("Unsupported record kind: {kind}"))
         })?;
     let id = options::required(args, "id")?;
+    if crate::project_ledger::work_model::owns_scope(root)
+        && id.to_ascii_uppercase().starts_with("SPEC-WM-")
+    {
+        return Err(CliFailure::new(
+            "immutable_spec_revision",
+            "Publish a new Spec revision through the work-model service.",
+        ));
+    }
     let title = options::required(args, "title")?;
     let status = options::optional(args, "status").unwrap_or(record_kind.initial_status());
     let timestamp = super::super::now_iso()?;
@@ -111,6 +119,14 @@ pub(super) fn create_task(root: &Path, args: &Value) -> Result<Value, CliFailure
 
 pub(super) fn update_generic(root: &Path, args: &Value) -> Result<Value, CliFailure> {
     let id = options::required(args, "id")?;
+    if crate::project_ledger::work_model::owns_scope(root)
+        && id.to_ascii_uppercase().starts_with("SPEC-WM-")
+    {
+        return Err(CliFailure::new(
+            "immutable_spec_revision",
+            "Publish a new Spec revision through the work-model service.",
+        ));
+    }
     let current = super::super::show::resolve_record(root, &id, options::optional(args, "kind"))?;
     let kind = current
         .record

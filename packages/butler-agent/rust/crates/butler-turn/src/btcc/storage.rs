@@ -15,6 +15,7 @@ mod hydration;
 mod legacy_cutover;
 mod migration;
 mod model;
+mod notifications;
 mod operation_input;
 mod operation_results;
 mod progress;
@@ -30,6 +31,8 @@ mod tool_journal;
 mod transitions;
 mod wake;
 mod work;
+mod work_model;
+pub use work_model::WorkModelRepository;
 
 pub(crate) use authority::SqliteAuthorityRepository;
 pub use bootstrap::{bootstrap_fresh_storage, read_activated_storage_manifest};
@@ -109,6 +112,9 @@ pub struct BtccStorage {
 
 struct StorageInner {
     lane: AsyncMutex<LaneState>,
+    changed: Arc<tokio::sync::Notify>,
+    operations: std::sync::atomic::AtomicU64,
+    sql_statements: Arc<std::sync::atomic::AtomicU64>,
 }
 
 struct LaneState {
@@ -163,6 +169,9 @@ impl BtccStorage {
         let _ = owner;
         Ok(Self {
             inner: Arc::new(StorageInner {
+                changed: Arc::new(tokio::sync::Notify::new()),
+                operations: std::sync::atomic::AtomicU64::new(0),
+                sql_statements: Arc::new(std::sync::atomic::AtomicU64::new(0)),
                 lane: AsyncMutex::new(LaneState {
                     sender: Some(sender),
                     thread: Some(thread),
@@ -188,10 +197,7 @@ impl BtccStorage {
         F: FnOnce(&mut Connection, &RuntimeOwner) -> StorageResult<T> + Send + 'static,
     {
         let (completion_tx, completion_rx) = oneshot::channel();
-        let job: DatabaseOperation = Box::new(move |connection, owner| {
-            let result = operation(connection, owner);
-            let _ignored_cancelled_caller = completion_tx.send(result);
-        });
+        let job = self.observed_job(operation, completion_tx);
         let lane = self.inner.lane.lock().await;
         let sender = lane.sender.as_ref().ok_or_else(|| {
             StorageError::new(
@@ -399,7 +405,7 @@ fn validate_activation(
             == Some(activation.manifest_id.as_str())
         && marker_json.get("schema").and_then(Value::as_str)
             == Some("butler.agent-btcc-storage-activation.v1")
-        && marker_json.get("storageContract").and_then(Value::as_str) == Some("split-v1")
+        && work_model::contract_allowed(marker_json.get("storageContract").and_then(Value::as_str))
         && marker_json
             .get("firstActivatedAt")
             .and_then(Value::as_str)

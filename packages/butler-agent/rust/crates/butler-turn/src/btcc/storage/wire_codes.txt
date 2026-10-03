@@ -1,3 +1,5 @@
+work_model_writer_required
+work_model_assignment_rejected
 Guided tool call identity conflict
 Guided tool result identity conflict
 admission_claim_inactive

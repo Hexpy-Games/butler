@@ -5,6 +5,10 @@ use super::*;
 impl SubsessionService {
     /// Makes sure a child turn is bound to its relation's root Work.
     pub async fn ensure_child_work(&self, session: &str, turn: &str) -> Result<(), BtccError> {
+        if let Some(model) = self.work.work_model() {
+            model.delegation_gate(session.into()).await?;
+            return Ok(());
+        }
         let stored = self
             .repository
             .by_child(session.into())
@@ -63,6 +67,22 @@ impl SubsessionService {
         }
         Ok(())
     }
+    /// Submitted canonical results end child execution, leaving criterion review open.
+    pub async fn complete_managed_child(
+        &self,
+        session: &str,
+        turn: &str,
+        summary: String,
+    ) -> Result<bool, BtccError> {
+        if self.work.work_model().is_none() {
+            return Ok(false);
+        }
+        if !self.should_wait_for_child(session).await? {
+            self.complete_child(session, turn, "success", summary)
+                .await?;
+        }
+        Ok(true)
+    }
     /// Commits a child's result with its evidence and delivers worker results.
     pub async fn complete_child(
         &self,
@@ -72,6 +92,21 @@ impl SubsessionService {
         summary: String,
     ) -> Result<(), BtccError> {
         self.ensure_child_work(session, turn).await?;
+        if let Some(model) = self.work.work_model() {
+            let evidence = model.child_result(session.into()).await?;
+            self.repository
+                .commit_result(
+                    session.into(),
+                    turn.into(),
+                    status.into(),
+                    summary,
+                    evidence,
+                    (self.now)(),
+                )
+                .await
+                .map_err(BtccError::from)?;
+            return self.deliver_worker_results().await;
+        }
         if status == "cancelled" {
             self.work
                 .abandon_bound_work_for_turn(turn.to_owned())

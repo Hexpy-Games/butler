@@ -60,14 +60,21 @@ impl GuidedPreparation {
         })
         .map_err(preparation_error)?;
         let policy = &phase.execution_policy;
-        if matches!(
-            policy.role,
-            butler_turn::btcc::PolicyRole::Worker | butler_turn::btcc::PolicyRole::Steward
-        ) {
+        if self.work.work_model().is_none()
+            && matches!(
+                policy.role,
+                butler_turn::btcc::PolicyRole::Worker | butler_turn::btcc::PolicyRole::Steward
+            )
+        {
             self.subsessions
                 .ensure_child_work(&turn.session_id, &turn.turn_id)
                 .await?;
-        } else if policy.role != butler_turn::btcc::PolicyRole::Butler {
+        } else if !matches!(
+            policy.role,
+            butler_turn::btcc::PolicyRole::Butler
+                | butler_turn::btcc::PolicyRole::Worker
+                | butler_turn::btcc::PolicyRole::Steward
+        ) {
             return Err(contract("guided_subsession_role_unsupported"));
         }
         let project_id = policy.project_id.as_deref().or_else(|| {
@@ -98,41 +105,26 @@ impl GuidedPreparation {
             .await
             .map_err(BtccError::from)?;
         let workspace = recovered.workspace_reference;
-        let plan_id = turn
-            .context
-            .get("planId")
-            .and_then(serde_json::Value::as_str)
-            .filter(|v| !v.is_empty());
-        let accepted_plan = if let (Some(plan_id), Some(project)) =
-            (plan_id, project_id.filter(|v| !v.is_empty()))
-        {
-            let path = workspace.get().map_err(|e| contract(e.code()))?;
-            self.accepted_plans
-                .read_accepted(
-                    path.to_string_lossy().into_owned(),
-                    project.to_owned(),
-                    plan_id.to_owned(),
-                )
-                .await
-                .map_err(ledger_error)?
-        } else {
-            None
-        };
-        if plan_id.is_some() && accepted_plan.is_none() {
-            return Err(contract("accepted_project_plan_unavailable"));
-        }
+        let accepted_plan = self.accepted_plan(turn, project_id, &workspace).await?;
         let work_scope = work_scope_for_turn(turn, &policy.tracking_mode);
         let path = workspace.get().map_err(|e| contract(e.code()))?;
-        let initial_work = load_guided_turn_work(
-            &self.work,
-            Some(&self.authority),
-            turn,
-            &policy.tracking_mode,
-            &path.to_string_lossy(),
-            Some(&turn.session_id),
-        )
-        .await
-        .map_err(preparation_error)?;
+        let initial_work = if self.work.work_model().is_some() {
+            GuidedWork {
+                context: None,
+                bound: false,
+            }
+        } else {
+            load_guided_turn_work(
+                &self.work,
+                Some(&self.authority),
+                turn,
+                &policy.tracking_mode,
+                &path.to_string_lossy(),
+                Some(&turn.session_id),
+            )
+            .await
+            .map_err(preparation_error)?
+        };
         let operation_results = OperationResultReplayFactory::new(
             ExactResultReplaySelection {
                 mode: phase.replay_mode,
@@ -175,6 +167,37 @@ impl GuidedPreparation {
             budget,
             source_revision,
         })
+    }
+    async fn accepted_plan(
+        &self,
+        turn: &butler_turn::btcc::TurnRecord,
+        project_id: Option<&str>,
+        workspace: &WorkspaceReference,
+    ) -> Result<Option<ProjectLedgerPlan>, BtccError> {
+        let plan_id = turn
+            .context
+            .get("planId")
+            .and_then(serde_json::Value::as_str)
+            .filter(|v| !v.is_empty());
+        let accepted_plan = if let (Some(plan_id), Some(project)) =
+            (plan_id, project_id.filter(|v| !v.is_empty()))
+        {
+            let path = workspace.get().map_err(|e| contract(e.code()))?;
+            self.accepted_plans
+                .read_accepted(
+                    path.to_string_lossy().into_owned(),
+                    project.to_owned(),
+                    plan_id.to_owned(),
+                )
+                .await
+                .map_err(ledger_error)?
+        } else {
+            None
+        };
+        if plan_id.is_some() && accepted_plan.is_none() {
+            return Err(contract("accepted_project_plan_unavailable"));
+        }
+        Ok(accepted_plan)
     }
 }
 

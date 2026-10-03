@@ -13,6 +13,7 @@ mod staging;
 mod terminal_records;
 mod transcript_file;
 mod turn_event_sequence;
+mod work_model;
 
 #[cfg(test)]
 pub(in crate::gateway::application) use final_turn_events::HAS_KIND_SQL;

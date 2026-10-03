@@ -29,6 +29,15 @@ pub(super) fn apply(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
         Err(_) => return Err(io()),
     };
+    if !create
+        && existing
+            .as_deref()
+            .is_some_and(crate::project_ledger::work_model::immutable_record)
+    {
+        return Err(ProjectWorkPublicationError::adapter(
+            "immutable_spec_revision",
+        ));
+    }
     if create == existing.is_some() {
         return Err(ProjectWorkPublicationError::adapter(if create {
             "record_exists"
@@ -207,9 +216,9 @@ fn create_status(
 ) -> Result<&str, ProjectWorkPublicationError> {
     match kind {
         ProjectLedgerRecordKind::Work => status.ok_or_else(invalid),
-        ProjectLedgerRecordKind::Plan | ProjectLedgerRecordKind::Reference => {
-            Ok(status.unwrap_or("active"))
-        }
+        ProjectLedgerRecordKind::Plan
+        | ProjectLedgerRecordKind::Reference
+        | ProjectLedgerRecordKind::Spec => Ok(status.unwrap_or("active")),
         _ => Err(invalid()),
     }
 }

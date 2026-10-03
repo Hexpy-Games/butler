@@ -171,6 +171,11 @@ pub(super) fn target(
             scope.ledger_project_id,
             id.to_lowercase()
         ),
+        ProjectLedgerRecordKind::Spec => format!(
+            "project-ledger/projects/{}/specs/{}.md",
+            scope.ledger_project_id,
+            id.to_lowercase()
+        ),
         _ => {
             return Err(ProjectWorkPublicationError::adapter(
                 "project_work_publication_kind_invalid",

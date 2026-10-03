@@ -115,7 +115,9 @@ pub(super) fn readiness(db: &Connection, expected: &str) -> StorageResult<()> {
     if id != expected
         || *json::at(&marker, "/schema") != "butler.agent-btcc-storage-activation.v1"
         || *json::at(&marker, "/manifestId") != expected
-        || *json::at(&marker, "/storageContract") != "split-v1"
+        || !crate::btcc::storage::work_model::contract_allowed(
+            json::at(&marker, "/storageContract").as_str(),
+        )
         || json::at(&marker, "/firstActivatedAt")
             .as_str()
             .is_none_or(str::is_empty)

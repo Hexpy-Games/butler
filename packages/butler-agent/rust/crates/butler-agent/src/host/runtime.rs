@@ -2,6 +2,8 @@
 
 mod boundary;
 mod contracts;
+mod work;
+use work::{WorkServices, work_services};
 mod defaults;
 pub(crate) use defaults::ensure_reply_language;
 pub(super) mod environment;
@@ -260,30 +262,18 @@ impl AgentRuntime {
             now.clone(),
             Arc::new(|| uuid::Uuid::new_v4().to_string()),
         ));
-        let session_work = Arc::new(SessionWorkRepository::new(stores.btcc.clone(), now.clone()));
-        let project_runtime = Arc::new(SqliteProjectWorkRuntime::new(
+        let WorkServices {
+            session_work,
+            project_work,
+            work_service,
+            work_model,
+        } = work_services(
             stores.btcc.clone(),
-            now.clone(),
-            Arc::new(project_ledger.clone()),
-        ));
-        let project_work = Arc::new(ProjectWork::new(
+            stores.bindings.clone(),
             project_ledger.clone(),
-            project_runtime.clone(),
-            project_runtime.clone(),
-            project_runtime,
-        ));
-        let work_repository = Arc::new(
-            crate::host::guided::scope_selected_work::ScopeSelectedWorkRepository::new(
-                stores.bindings.clone(),
-                session_work.clone(),
-                Arc::new(
-                    crate::host::guided::project_work_provider::ProjectWorkProvider::new(
-                        project_ledger.clone(),
-                        project_work.clone(),
-                    ),
-                ),
-            ),
-        );
+            now.clone(),
+        )
+        .await?;
         let session_worktrees = SessionWorktrees::new(
             stores.bindings.clone(),
             commands.clone(),
@@ -298,7 +288,6 @@ impl AgentRuntime {
             files.clone(),
             host_environment.clone(),
         );
-        let work_service = Arc::new(DurableWorkService::new(work_repository));
         let inbound_queue = Arc::new(butler_gateway::gateway::InboundQueue::new(&paths.data_root));
         let subsessions = Arc::new(butler_turn::btcc::SubsessionService::new(
             SqliteSubsessionRepository::new(stores.btcc.clone()),
@@ -445,6 +434,7 @@ impl AgentRuntime {
             authority,
             project_ledger,
             session_work,
+            work_model,
             session_worktrees,
             workspace_recovery,
             inbound_queue,

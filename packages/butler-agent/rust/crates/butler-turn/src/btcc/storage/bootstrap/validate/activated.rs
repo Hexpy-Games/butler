@@ -42,7 +42,9 @@ pub(crate) fn read_activated(path: &Path) -> StorageResult<String> {
     if marker_id != expected
         || *json::at(&marker, "/schema") != "butler.agent-btcc-storage-activation.v1"
         || *json::at(&marker, "/manifestId") != expected
-        || *json::at(&marker, "/storageContract") != "split-v1"
+        || !crate::btcc::storage::work_model::contract_allowed(
+            json::at(&marker, "/storageContract").as_str(),
+        )
         || !nonempty(json::at(&marker, "/firstActivatedAt"))
         || !nonempty(json::at(&marker, "/activatedAt"))
     {

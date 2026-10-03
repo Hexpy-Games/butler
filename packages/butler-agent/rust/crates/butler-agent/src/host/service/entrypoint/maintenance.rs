@@ -19,32 +19,40 @@ pub(super) async fn run_service_maintenance(
     subsessions: butler_turn::btcc::SqliteSubsessionRepository,
     app_endpoint: ActiveAppEndpoint,
     mut stop: oneshot::Receiver<()>,
+    changes: Option<Arc<tokio::sync::Notify>>,
 ) -> Result<(), BtccError> {
     let mut interval = tokio::time::interval(SERVICE_MAINTENANCE_INTERVAL);
     interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    if let Some(changes) = &changes {
+        changes.notify_one();
+    }
+    let mut pending = false;
     loop {
         tokio::select! {
             biased;
             _ = &mut stop => return Ok(()),
-            _ = interval.tick() => {},
+            _ = interval.tick(), if changes.is_none() || pending => {},
+            () = async { if let Some(changes) = &changes { changes.notified().await } }, if changes.is_some() => {},
         }
         let pass = async {
-            progress.reconcile().await?;
+            let summary = progress.reconcile().await?;
+            let mut pending = summary.attempted > summary.published;
             if let Some(active) = app_endpoint.snapshot() {
-                deliver_parent_results(
+                pending |= deliver_parent_results(
                     &parent_client,
                     &subsessions,
                     &active.base_url,
                     &active.local_auth,
                 )
-                .await?;
+                .await?
+                    > 0;
             }
-            Ok::<(), BtccError>(())
+            Ok::<bool, BtccError>(pending)
         };
         tokio::select! {
             biased;
             _ = &mut stop => return Ok(()),
-            result = pass => result?,
+            result = pass => pending = result?,
         }
     }
 }

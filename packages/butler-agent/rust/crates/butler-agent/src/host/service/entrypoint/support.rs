@@ -13,7 +13,8 @@ pub(super) async fn deliver_parent_results(
     repository: &butler_turn::btcc::SqliteSubsessionRepository,
     base: &str,
     auth: &butler_gateway::gateway::LocalAuthConfig,
-) -> Result<(), BtccError> {
+) -> Result<usize, BtccError> {
+    let mut pending_count = 0;
     for pending in repository
         .pending_parent_inputs()
         .await
@@ -39,9 +40,11 @@ pub(super) async fn deliver_parent_results(
             request = request.bearer_auth(token);
         }
         let Ok(response) = request.send().await else {
+            pending_count += 1;
             continue;
         };
         if !response.status().is_success() {
+            pending_count += 1;
             continue;
         }
         repository
@@ -52,7 +55,7 @@ pub(super) async fn deliver_parent_results(
             .await
             .map_err(|error| failure(error.code(), error.message()))?;
     }
-    Ok(())
+    Ok(pending_count)
 }
 
 pub(super) fn process_locale() -> String {

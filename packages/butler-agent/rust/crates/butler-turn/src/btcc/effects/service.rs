@@ -50,6 +50,25 @@ impl EffectService {
                 )));
             }
         };
+        self.execute_resolved(input, resolved, None).await
+    }
+    pub async fn execute_managed(
+        &self,
+        input: ExecuteEffect,
+        grant: crate::btcc::work_model::WorkModelEffectGrant,
+    ) -> EffectResult<EffectOutcome> {
+        if let Some(denied) = outcomes::permission(&input) {
+            return Ok(EffectOutcome::Rejected(denied));
+        }
+        let resolved = identity::resolve_managed(&input, &grant)?;
+        self.execute_resolved(input, resolved, Some(grant)).await
+    }
+    async fn execute_resolved(
+        &self,
+        input: ExecuteEffect,
+        resolved: identity::Resolved,
+        grant: Option<crate::btcc::work_model::WorkModelEffectGrant>,
+    ) -> EffectResult<EffectOutcome> {
         let identity = &resolved.identity;
         self.fault.reached("before_intent", identity).await?;
         let hint = input.adapter.recovery_hint(&resolved.normalized_input)?;
@@ -77,6 +96,7 @@ impl EffectService {
             journal: self.journal.as_ref(),
             clock: &*self.clock,
             fault: self.fault.as_ref(),
+            managed_grant: grant.as_ref(),
         };
         if initial.status != EffectStatus::Failed
             && let Some(outcome) = blockers::reconcile(&context, &initial).await?

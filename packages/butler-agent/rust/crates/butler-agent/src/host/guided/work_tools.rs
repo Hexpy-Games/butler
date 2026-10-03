@@ -23,17 +23,18 @@ impl GuidedWorkTools {
     }
 
     pub(crate) fn is_work_tool(name: &str) -> bool {
-        matches!(
-            ToolName::parse(name),
-            Some(
-                ToolName::StartWork
-                    | ToolName::ContinueWork
-                    | ToolName::ReplaceWorkPlan
-                    | ToolName::RecordWorkCheckpoint
-                    | ToolName::RecordWorkReview
-                    | ToolName::RecordWorkDisposition
+        super::work_model::tool(name)
+            || matches!(
+                ToolName::parse(name),
+                Some(
+                    ToolName::StartWork
+                        | ToolName::ContinueWork
+                        | ToolName::ReplaceWorkPlan
+                        | ToolName::RecordWorkCheckpoint
+                        | ToolName::RecordWorkReview
+                        | ToolName::RecordWorkDisposition
+                )
             )
-        )
     }
 
     pub(crate) fn repairs_completed_relation(name: &str) -> bool {
@@ -52,6 +53,16 @@ impl GuidedWorkTools {
         prior_tool_call_ids: &[String],
         expected_material_fingerprint: Option<&str>,
     ) -> Result<Value, BtccError> {
+        if super::work_model::tool(name) {
+            return super::work_model::execute(
+                &self.service,
+                &self.scope,
+                name,
+                args,
+                mutation_call_id,
+            )
+            .await;
+        }
         if turn_id != self.scope.turn_id {
             return Err(BtccError::relayed(
                 "guided_work_tool_turn_mismatch",
@@ -110,6 +121,9 @@ impl GuidedWorkTools {
     /// Source publication reads the bound Work after the journal commits the
     /// successful result. Plan replacement also binds its newly selected Work.
     pub(crate) async fn accepted_work(&self, name: &str) -> Result<Option<WorkView>, BtccError> {
+        if super::work_model::tool(name) {
+            return Ok(None);
+        }
         if !Self::is_work_tool(name) {
             return Ok(None);
         }
@@ -125,6 +139,26 @@ impl GuidedWorkTools {
         self.service
             .bound_work_for_turn(self.scope.turn_id.clone())
             .await
+    }
+
+    pub(in crate::host) async fn effect_grant(
+        &self,
+    ) -> Result<Option<butler_turn::btcc::work_model::WorkModelEffectGrant>, BtccError> {
+        match self.service.work_model() {
+            Some(model) => model
+                .effect_grant(self.scope.session_id.clone(), self.scope.turn_id.clone())
+                .await
+                .map(Some),
+            None => Ok(None),
+        }
+    }
+
+    pub(in crate::host) fn managed(&self) -> bool {
+        self.service.work_model().is_some()
+    }
+
+    pub(in crate::host) async fn managed_guard(&self, name: &str) -> Result<(), BtccError> {
+        super::work_model::guard(&self.service, &self.scope.session_id, name).await
     }
 
     async fn apply(&self, command: Command) -> Result<WorkView, BtccError> {

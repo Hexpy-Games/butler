@@ -112,10 +112,15 @@ impl SubsessionService {
         };
         let turn=latest.as_ref().map(|(id,state)|json!({"id":id,"state":if retryable { "runtime_fault" } else { state },"retryable":retryable,"cancellable":state == "admitted" && !retryable,"created_at":relation.created_at,"updated_at":relation.created_at}));
         let relation_view = json!({"relation_id":relation.relation_id,"parent_session_id":relation.parent_session_id,"parent_turn_id":relation.parent_turn_id,"child_session_id":relation.child_session_id,"anchor_message_id":relation.anchor_message_id,"ordinal":relation.ordinal,"safe_title":relation.safe_title,"created_at":relation.created_at});
+        let task_id = if self.work.work_model().is_some() {
+            &relation.packet.task_id
+        } else {
+            &relation.task_id
+        };
         let result_view = result.map(|mut value| {
             if let Some(object) = value.as_object_mut() {
                 object.insert("relation_id".into(), json!(relation.relation_id));
-                object.insert("task_id".into(), json!(relation.task_id));
+                object.insert("task_id".into(), json!(task_id));
                 object.insert("child_session_id".into(), json!(relation.child_session_id));
             }
             value

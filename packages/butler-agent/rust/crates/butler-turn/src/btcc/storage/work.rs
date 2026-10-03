@@ -70,6 +70,19 @@ impl SessionWorkRepository {
                 let transaction = db
                     .transaction_with_behavior(TransactionBehavior::Immediate)
                     .map_err(StorageError::sqlite)?;
+                let managed: bool = transaction
+                    .query_row(
+                        "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name='wm_mode')",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .map_err(StorageError::sqlite)?;
+                if managed {
+                    return Err(StorageError::new(
+                        crate::btcc::StorageCode::WorkModelWriterRequired,
+                        "work_model_writer_required",
+                    ));
+                }
                 let result = operation(&transaction, &*clock)?;
                 transaction.commit().map_err(StorageError::sqlite)?;
                 Ok(result)

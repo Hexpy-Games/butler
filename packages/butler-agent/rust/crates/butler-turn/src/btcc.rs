@@ -25,6 +25,7 @@ pub mod storage;
 mod subsessions;
 mod turn;
 mod work;
+pub use work::managed as work_model;
 
 use std::sync::Arc;
 
@@ -155,9 +156,10 @@ pub use storage::{
 #[cfg(any(test, feature = "test-support"))]
 pub use storage::{ContextDocumentInput, TestStorageFixture, test_prepared_turn};
 pub use subsessions::{
-    InterruptedSubsessionEvent, StewardDelegationRequest, SubsessionCancelRequest,
-    SubsessionChildQueue, SubsessionDirectionRequest, SubsessionEnqueue, SubsessionResumeRequest,
-    SubsessionService, WorkerDelegationRequest, WorkerProfile, WorkerProfileReader,
+    InterruptedSubsessionEvent, ManagedDelegation, StewardDelegationRequest,
+    SubsessionCancelRequest, SubsessionChildQueue, SubsessionDirectionRequest, SubsessionEnqueue,
+    SubsessionResumeRequest, SubsessionService, WorkerDelegationRequest, WorkerProfile,
+    WorkerProfileReader,
 };
 pub use work::WorkStatus as DurableWorkStatus;
 pub use work::policy::{

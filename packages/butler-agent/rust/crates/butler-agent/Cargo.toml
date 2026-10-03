@@ -49,6 +49,7 @@ semver.workspace = true
 embed-manifest.workspace = true
 
 [dev-dependencies]
+tiktoken-rs.workspace = true
 butler-ledger = { path = "../butler-ledger", features = ["test-support"] }
 butler-runtime = { path = "../butler-runtime", features = ["test-support"] }
 butler-models = { path = "../butler-models", features = ["test-support"] }

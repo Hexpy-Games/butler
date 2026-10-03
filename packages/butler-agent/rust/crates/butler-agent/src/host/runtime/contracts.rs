@@ -39,6 +39,7 @@ pub(crate) struct AgentRuntime {
     pub authority: Arc<PrincipalAuthority>,
     pub project_ledger: ProjectLedger,
     pub session_work: Arc<SessionWorkRepository>,
+    pub work_model: Option<Arc<butler_turn::btcc::work_model::WorkModelService>>,
     pub session_worktrees: SessionWorktrees,
     pub workspace_recovery: SessionWorkspaceRecovery,
     pub inbound_queue: Arc<butler_gateway::gateway::InboundQueue>,

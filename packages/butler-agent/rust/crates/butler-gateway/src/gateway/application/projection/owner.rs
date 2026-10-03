@@ -79,29 +79,16 @@ impl ProjectionOwner {
         let pending = Arc::new(Mutex::new(Pending::default()));
         let observed = pending.clone();
         let callback = sender.clone();
-        let mut watcher =
-            notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-                if let Ok(event) = event {
-                    for path in event.paths {
-                        if path.parent() == Some(transcript_root.as_path()) {
-                            if path.extension().is_some_and(|value| value == "jsonl")
-                                && let Some(file) = path.file_name().and_then(|v| v.to_str())
-                            {
-                                notifications::transcript(&observed, &callback, file.to_owned());
-                            }
-                        } else if path.extension().is_none_or(|value| value != "tmp")
-                            && (path == processed_root
-                                || path == failed_root
-                                || path.parent() == Some(processed_root.as_path())
-                                || path.parent() == Some(failed_root.as_path()))
-                        {
-                            observed.lock().terminal = true;
-                            let _ = callback.try_send(Command::Events);
-                        }
-                    }
-                }
-            })
-            .map_err(GatewayApplicationError::internal_from)?;
+        let mutations_only = context
+            .dependencies
+            .session_work_progress
+            .work_model_changes()
+            .is_some();
+        let observed_roots = roots.clone();
+        let mut watcher = notify::recommended_watcher(move |event| {
+            notifications::observe(&observed, &callback, event, mutations_only, &observed_roots);
+        })
+        .map_err(GatewayApplicationError::internal_from)?;
         for path in &roots {
             watcher
                 .watch(path, RecursiveMode::NonRecursive)
@@ -231,6 +218,13 @@ async fn run(
     mut receiver: mpsc::Receiver<Command>,
     pending: Arc<Mutex<Pending>>,
 ) -> Result<(), GatewayApplicationError> {
+    let changes = context
+        .dependencies
+        .session_work_progress
+        .work_model_changes();
+    if changes.is_some() {
+        super::work_model::drain(&context).await?;
+    }
     let mut work = Work::default();
     for file in open_turn_transcripts(&context).await? {
         work.enqueue(file);
@@ -287,7 +281,14 @@ async fn run(
             }
             continue;
         }
-        if work.command(receiver.recv().await, &context).await {
+        let command = tokio::select! {
+            command = receiver.recv() => command,
+            () = wait_work_model(changes.as_ref()) => { super::work_model::drain(&context).await?; continue; }
+        };
+        if work.command(command, &context).await {
+            if changes.is_some() {
+                super::work_model::drain(&context).await?;
+            }
             return Ok(());
         }
     }
@@ -473,4 +474,11 @@ async fn drain_open_turns(context: &ProjectionContext) -> Result<(), GatewayAppl
     }
     while sync_deferred_once(context).await? {}
     Ok(())
+}
+
+async fn wait_work_model(changes: Option<&Arc<Notify>>) {
+    match changes {
+        Some(changes) => changes.notified().await,
+        None => std::future::pending().await,
+    }
 }

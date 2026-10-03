@@ -64,7 +64,7 @@ impl GuidedWorkAdapter {
     }
 
     async fn candidate(&self, text: &str) -> Result<CandidateDisposition, BtccError> {
-        if self.tracking_mode == "none" {
+        if self.service.work_model().is_some() || self.tracking_mode == "none" {
             return Ok(CandidateDisposition::Accepted(None));
         }
         let bound = self.bound().await?;
@@ -99,7 +99,7 @@ impl GuidedWorkAdapter {
     }
 
     async fn reconcile_text(&self, text: &str) -> Result<String, BtccError> {
-        if self.tracking_mode == "none" {
+        if self.service.work_model().is_some() || self.tracking_mode == "none" {
             return Ok(text.into());
         }
         let bound = self.bound().await?;
@@ -206,6 +206,18 @@ impl WorkPort for GuidedWorkAdapter {
     ) -> PortFuture<'a, WorkFinalState> {
         Box::pin(async move {
             self.check_turn(invocation)?;
+            if let Some(model) = self.service.work_model() {
+                let summary = model.summary(self.scope.session_id.clone(), None).await?;
+                let managed = summary["tier"] != 0;
+                return Ok(WorkFinalState {
+                    has_work: managed,
+                    status: managed.then_some(if summary["status"] == "completed" {
+                        WorkStatus::Completed
+                    } else {
+                        WorkStatus::Open
+                    }),
+                });
+            }
             let bound = self.bound().await?;
             Ok(WorkFinalState {
                 status: bound.as_ref().map(|work| match work.status {

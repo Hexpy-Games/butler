@@ -35,6 +35,7 @@ mod transcript_export;
 mod updates;
 mod wallpaper_modules;
 mod wallpapers;
+mod work_model;
 
 use axum::http::HeaderValue;
 use std::{error::Error as StdError, net::SocketAddr, path::PathBuf, sync::Arc};
@@ -262,8 +263,8 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
         }
         return Err(HttpError::public(404, "not_found", "Route not found."));
     }
-    if uri.path().starts_with("/projects/") || uri.path().starts_with("/sessions/") {
-        if let Some(response) = project_session_mutations::route(state, request, &uri).await? {
+    if project_session_mutations::matches(uri.path()) {
+        if let Some(response) = project_session_mutations::dispatch(state, request, &uri).await? {
             return Ok(response);
         }
         return Err(HttpError::public(404, "not_found", "Route not found."));

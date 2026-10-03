@@ -333,6 +333,7 @@ async fn serve(
             app_endpoint: &app_endpoint,
             readiness: &readiness,
             logs,
+            managed: runtime.work_model.is_some(),
         },
         PollShutdown {
             stop,

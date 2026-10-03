@@ -198,10 +198,7 @@ impl AppServer {
             )),
             session_workspaces: session_workspaces.clone(),
             relocation_host: session_workspaces,
-            session_work_progress: Arc::new(AppSessionProgress::new(
-                runtime.session_work.clone(),
-                runtime.project_ledger.clone(),
-            )),
+            session_work_progress: Arc::new(AppSessionProgress::new(runtime)),
             project_dashboard_ledger: Arc::new(AppDashboardLedger::new(
                 runtime.project_ledger.clone(),
             )),

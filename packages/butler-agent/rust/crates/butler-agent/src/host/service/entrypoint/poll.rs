@@ -34,6 +34,7 @@ pub(super) struct PollOwners<'a> {
     pub(super) app_endpoint: &'a ActiveAppEndpoint,
     pub(super) readiness: &'a ServiceReadiness,
     pub(super) logs: ServiceLogMode,
+    pub(super) managed: bool,
 }
 
 /// What ends the poll loop besides a failure.
@@ -46,30 +47,26 @@ pub(super) async fn poll_service(
     owners: PollOwners<'_>,
     shutdown: PollShutdown<'_>,
 ) -> Result<(), BtccError> {
-    let PollOwners {
-        dispatcher,
-        queue,
-        progress,
-        config,
-        subsessions,
-        parent_client,
-        app_endpoint,
-        readiness,
-        logs,
-    } = owners;
     let PollShutdown {
         stop,
         foreground_lease,
     } = shutdown;
-    let shutdown_flag = crate::host::service::instance::shutdown_flag_path(&config.data_root);
+    let shutdown_flag =
+        crate::host::service::instance::shutdown_flag_path(&owners.config.data_root);
     let (stop_maintenance, maintenance_stop) = oneshot::channel();
     let mut maintenance = JoinSet::new();
+    let _queue_watcher = owners
+        .managed
+        .then(|| owners.queue.watch_changes())
+        .transpose()
+        .map_err(io)?;
     maintenance.spawn(run_service_maintenance(
-        progress,
-        parent_client.clone(),
-        subsessions.clone(),
-        app_endpoint.clone(),
+        owners.progress,
+        owners.parent_client.clone(),
+        owners.subsessions.clone(),
+        owners.app_endpoint.clone(),
         maintenance_stop,
+        owners.managed.then(|| owners.subsessions.changes()),
     ));
     let mut fallback_poll = tokio::time::interval_at(
         tokio::time::Instant::now() + INBOUND_QUEUE_FALLBACK_POLL,
@@ -82,19 +79,23 @@ pub(super) async fn poll_service(
             stop.request();
             break Ok(());
         }
-        let summary =
-            match poll_inbound_dispatch(dispatcher, readiness, !dispatch_ready, &config.data_root)
-                .await
-            {
-                Ok(summary) => {
-                    dispatch_ready = true;
-                    summary
-                }
-                Err(error) => break Err(error),
-            };
-        log_inbound_summary(logs, summary);
+        let summary = match poll_inbound_dispatch(
+            owners.dispatcher,
+            owners.readiness,
+            !dispatch_ready,
+            &owners.config.data_root,
+        )
+        .await
+        {
+            Ok(summary) => {
+                dispatch_ready = true;
+                summary
+            }
+            Err(error) => break Err(error),
+        };
+        log_inbound_summary(owners.logs, summary);
         #[cfg(debug_assertions)]
-        if let Err(error) = injected_service_failure(&config.data_root).await {
+        if let Err(error) = injected_service_failure(&owners.config.data_root).await {
             break Err(error);
         }
         tokio::select! {
@@ -104,8 +105,9 @@ pub(super) async fn poll_service(
                 break lease.map(|()| stop.request()).map_err(io);
             },
             joined = maintenance.join_next() => break unexpected_maintenance_exit(joined),
-            () = queue.wait_for_enqueue() => {},
-            _ = fallback_poll.tick() => {},
+            () = owners.queue.wait_for_enqueue() => {},
+            () = owners.dispatcher.wait_for_completion(), if owners.managed => {},
+            _ = fallback_poll.tick(), if !owners.managed => {},
         }
     };
     let _ = stop_maintenance.send(());

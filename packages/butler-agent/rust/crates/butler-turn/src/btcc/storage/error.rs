@@ -6,6 +6,8 @@ use std::sync::Arc;
 wire_codes! {
     /// Wire codes of Storage failures.
     pub enum StorageCode {
+        WorkModelWriterRequired = "work_model_writer_required",
+        WorkModelAssignmentRejected = "work_model_assignment_rejected",
         GuidedToolCallIdentityConflict = "Guided tool call identity conflict",
         GuidedToolResultIdentityConflict = "Guided tool result identity conflict",
         AdmissionClaimInactive = "admission_claim_inactive",

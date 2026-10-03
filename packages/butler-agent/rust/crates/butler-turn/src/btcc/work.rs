@@ -1,6 +1,7 @@
 //! Durable session Work service. Project Work remains a separate canonical owner.
 
 mod contracts;
+pub mod managed;
 pub(in crate::btcc) mod policy;
 mod project_runtime_contracts;
 mod service;

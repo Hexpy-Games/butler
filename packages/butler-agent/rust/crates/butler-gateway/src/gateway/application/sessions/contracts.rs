@@ -89,6 +89,19 @@ pub trait AppSessionWorkspaceProvisioner: Send + Sync + 'static {
 }
 
 pub trait AppSessionWorkProgress: Send + Sync + 'static {
+    fn work_model_changes(&self) -> Option<std::sync::Arc<tokio::sync::Notify>> {
+        None
+    }
+    fn work_model(
+        &self,
+        _session: String,
+        _view: String,
+        _input: Value,
+    ) -> ApplicationFuture<Value> {
+        Box::pin(async {
+            Ok(serde_json::json!({"ok":false,"error":{"code":"work_model_disabled"}}))
+        })
+    }
     fn read(&self, runtime_session_id: String) -> ApplicationFuture<Option<AppWorkProgress>>;
 }
 

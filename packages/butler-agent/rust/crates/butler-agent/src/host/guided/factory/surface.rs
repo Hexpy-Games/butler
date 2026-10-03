@@ -1,6 +1,6 @@
 //! Explicit coverage of the first executable native slice, not full tool parity.
 
-use butler_turn::btcc::{BtccError, GuidedCatalogSnapshot, GuidedPhaseSelection, ModelRoundTool};
+use butler_turn::btcc::{BtccError, GuidedPhaseSelection, ModelRoundTool};
 
 pub(super) fn with_worker_profile_choices(
     phase: &mut GuidedPhaseSelection,
@@ -47,10 +47,16 @@ pub(super) fn with_worker_profile_choices(
     Ok(())
 }
 
-pub(super) fn available(
+pub(super) async fn available(
     phase: &mut GuidedPhaseSelection,
-    catalog: &GuidedCatalogSnapshot,
+    preparation: &crate::host::GuidedPreparation,
+    scope: &butler_turn::btcc::WorkTurnScope,
 ) -> Result<Vec<ModelRoundTool>, BtccError> {
+    let catalog = preparation.catalog.snapshot();
+    if let Some(model) = preparation.work.work_model() {
+        let summary = model.summary(scope.session_id.clone(), None).await?;
+        super::super::work_model::surface(phase, &summary);
+    }
     let implemented = crate::host::GuidedTools::supports;
     if phase
         .execution_policy
@@ -85,4 +91,11 @@ pub(super) fn available(
             })
         })
         .collect()
+}
+
+pub(super) fn needs_worker_profile_choices(phase: &GuidedPhaseSelection) -> bool {
+    phase.execution_policy.role == butler_turn::btcc::PolicyRole::Steward
+        && phase.provider_tools.iter().any(|tool| {
+            tool.get("name").and_then(serde_json::Value::as_str) == Some("delegate_to_worker")
+        })
 }

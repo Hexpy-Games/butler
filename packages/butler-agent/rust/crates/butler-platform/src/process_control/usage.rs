@@ -21,6 +21,21 @@ pub struct ProcessUsage {
     pub write_bytes: u64,
 }
 
+/// Accumulated process CPU time, in milliseconds, from the native provider.
+pub fn cpu_milliseconds(pid: u32) -> Option<u64> {
+    use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+    let pid = Pid::from_u32(pid);
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&[pid]),
+        true,
+        ProcessRefreshKind::nothing().with_cpu(),
+    );
+    system
+        .process(pid)
+        .map(sysinfo::Process::accumulated_cpu_time)
+}
+
 /// Samples native process counters; unavailable metrics remain `None`.
 pub fn sample(pid: u32) -> io::Result<Option<ProcessUsage>> {
     #[cfg(target_os = "linux")]

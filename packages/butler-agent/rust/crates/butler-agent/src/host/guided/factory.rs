@@ -114,16 +114,13 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 budget,
                 source_revision,
             } = self.preparation.prepare(&start).await?;
-            if phase.execution_policy.role == butler_turn::btcc::PolicyRole::Steward
-                && phase.provider_tools.iter().any(|tool| {
-                    tool.get("name").and_then(serde_json::Value::as_str)
-                        == Some("delegate_to_worker")
-                })
+            if self.preparation.work.work_model().is_none()
+                && surface::needs_worker_profile_choices(&phase)
             {
                 let profiles = self.subsessions.enabled_worker_profiles().await?;
                 surface::with_worker_profile_choices(&mut phase, &profiles)?;
             }
-            let surface = surface::available(&mut phase, self.preparation.catalog.snapshot())?;
+            let surface = surface::available(&mut phase, &self.preparation, &work_scope).await?;
             let policy = &phase.execution_policy;
             let language = resolve_guided_response_language(start.turn, &self.documents).await;
             let work = Arc::new(GuidedWorkAdapter::new(

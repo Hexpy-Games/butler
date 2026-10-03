@@ -15,6 +15,8 @@ base64.workspace = true
 roxmltree = "0.20"
 rusqlite.workspace = true
 thiserror.workspace = true
+notify.workspace = true
+sysinfo.workspace = true
 # Shutdown requests (host stop signals) and the stdin lease are awaited on the
 # service's runtime.
 tokio = { workspace = true, features = ["io-std"] }
@@ -26,7 +28,6 @@ rustix.workspace = true
 [target.'cfg(target_os = "macos")'.dependencies]
 dunce.workspace = true
 libproc.workspace = true
-sysinfo.workspace = true
 
 # The process table (identity, liveness, host facts), Job Objects that
 # contain command trees, paths without a needless `\\?\` prefix, and the
@@ -35,7 +36,6 @@ sysinfo.workspace = true
 dunce.workspace = true
 iana-time-zone.workspace = true
 if-addrs.workspace = true
-sysinfo.workspace = true
 win32job.workspace = true
 same-file = "1.0.6"
 atomicwrites.workspace = true
