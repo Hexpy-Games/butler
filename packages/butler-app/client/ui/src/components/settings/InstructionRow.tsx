@@ -6,10 +6,12 @@ export function InstructionRow({ item, deleting, locked, lockReason, onDelete }:
   item: Instruction; deleting: boolean; locked: boolean; lockReason?: string; onDelete: () => void;
 }) {
   const id = `instruction-text-${item.handle}`;
+  const duration = instructionDuration(item);
+  const meta = item.duration === "this chat" ? duration : [instructionScope(item), duration].filter(Boolean).join(" · ");
   return <Stack align="row" cross="start" gap="md" role="group" aria-labelledby={id} data-test-class="instruction-row">
     <Stack gap="none" grow minWidth="0">
       <Typo.Body as="div" id={id} wrap="pre" alignWith="control" tone={deleting ? "disabled" : undefined}>{item.text}</Typo.Body>
-      <Typo.Caption tone={deleting ? "disabled" : "secondary"} wrap="anywhere">{[instructionScope(item), instructionDuration(item)].filter(Boolean).join(" · ")}</Typo.Caption>
+      <Typo.Caption tone={deleting ? "disabled" : "secondary"} wrap="anywhere">{meta}</Typo.Caption>
     </Stack>
     <Tooltip label={locked ? lockReason ?? appCopy.settings.memory.deleting : undefined}>
       <Button id={`instruction-delete-${item.handle}`} type="button" variant="outline" disabled={locked} aria-busy={deleting || undefined}

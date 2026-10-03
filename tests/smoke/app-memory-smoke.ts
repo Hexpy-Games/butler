@@ -173,6 +173,13 @@ try {
       assert(checks.design.labelsAboveControls.every(Boolean), "Settings labels must sit above controls");
       const viewportWidth = await page.evaluate(() => window.innerWidth);
       assert(viewportWidth === width, `viewport ${viewportWidth} expected ${width}`);
+      if (state === "populated") {
+        const captions = (await page.locator('[data-test-class="instruction-row"] [data-tone="secondary"]').allTextContents()).map((value) => value.trim());
+        const expected = locale === "ko"
+          ? ["모든 채팅", "butler-site · 7일 후 만료", "이 채팅에서만"]
+          : ["All chats", "butler-site · Expires in 7 days", "This chat only"];
+        assert(JSON.stringify(captions) === JSON.stringify(expected), `instruction captions ${locale}: ${JSON.stringify(captions)}`);
+      }
       const expectedInset = width <= 760 ? "16px" : "24px";
       assert(checks.design.padding.every(row => row.values.every(v => v === expectedInset)), `card insets ${locale}/${theme}/${width}, expected ${expectedInset}: ${JSON.stringify(checks.design.padding)}`);
       assert(checks.design.minimumTextContrast == null || checks.design.minimumTextContrast >= 4.5, `text contrast ${checks.design.minimumTextContrast}`);
