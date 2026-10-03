@@ -1,38 +1,42 @@
-# Two ledgers: shared project contracts, private execution
+# Canon and Project Ledger
 
 Status: redesigned research proposal, **2026-10-03 owner direction**; no product implementation.
 Issue: [#478](https://github.com/Hexpy-Games/butler/issues/478). Branch: `codex/ledger-sync-research`.
-Starts from `2371d98770d412f91c676ecad822690bc7e30b7e`; source baseline `10b68356da71fafdd3c5551ef7cb62d51ee35da3`.
+Starts from `e444d1968` (`origin/codex/ledger-sync-research`); source baseline `10b68356da71fafdd3c5551ef7cb62d51ee35da3`.
 Depends on the [approved work model](https://github.com/Hexpy-Games/butler/blob/0df4b6203b82922fc77cadd2cd41e7fac79d0b35/plans/work-model/work-model-design.md), especially §§2.1–2.5 and 3.
-This replaces the earlier shared Butler authority and task-to-GitHub synchronization proposal.
+History: renamed from `plans/ledger-sync/remote-ledger-design.md`; replaces shared execution/task synchronization.
 
 ## 1. Decision and boundary
 
-**INTERNAL ledger:** one person's Project Ledger + `agent-runtime/btcc.sqlite`.
+**Project Ledger (원장), INTERNAL:** today's private Project Ledger + `agent-runtime/btcc.sqlite`, belonging to one person's Butler.
 Project Ledger retains immutable Spec bodies, including imported shared revisions and private elaborations.
 BTCC owns active Spec pointers/tree, Plan, Work, Task, dependencies, attempts, reviews, instructions, leases and receipts.
 Plan/Work/Task records and execution history are private and **NEVER pushed to the shared remote**.
 Each contributor runs an independent Butler; there is no team Butler execution authority, shared Task graph or distributed Task lease.
 
-**EXTERNAL ledger:** the project's shared Specs, roadmap and work requests.
+**Canon (정본), EXTERNAL:** the higher-level shared ledger for project Specs, roadmap and shared work requests.
+**Project Ledger must NOT be used for collaboration. Everything shared goes through Canon.**
+Imported Canon snapshots inside Project Ledger are private references, never a shared writer or collaboration endpoint.
 Recommend Specs in the project's own git repository, changed and reviewed through pull requests; GitHub Issues hold shared Work-level requests and Projects presents the shared roadmap.
 An issue resembles a Work request, not a Task or a replica of an internal Work.
 A shared roadmap describes project outcomes/priorities; an internal Plan orders one person's execution.
 
-External → internal is read-only pull/import. Internal → external consists solely of explicit, user-approved deliverables: code PRs, spec-change PRs, authored issue/review comments, and chosen status labels/roadmap edits.
+Canon → Project Ledger is read-only pull/import. Project Ledger → Canon consists solely of explicit, user-approved deliverables: code PRs, spec-change PRs, authored issue/review comments, and chosen status labels/roadmap edits.
 Approval covers exact content, destination and action, including the branch push required by a PR; no automatic execution-status mirror.
 Already explicit user authorization remains valid for that exact output. Publishing a summary never exports its backing private records.
 Importing an issue alone creates no executable Work or effect grant; choosing to contribute supplies the user's goal and in-scope authoring grant.
 
+The boundary above is settled; exact object inclusion, update directions, actors and triggers remain owner decisions in the final section. Sections 2–9 describe the recommended proposal, not an approved sync contract.
+
 First deliverable: one project, its repository Specs, Issues and one optional Projects board, through on-demand import and approved PR delivery. Event delivery and later adapters extend this same boundary.
 
-## 2. Research and choice of shared home
+## 2. Research and recommended Canon home
 
 Primary sources checked on 2026-10-03; recommendations below are design judgments. Probe actual GitHub/Enterprise capabilities during implementation.
 
 | Candidate | Benefit | Decision / limit |
 |---|---|---|
-| **Project repository Specs + Issues/Projects** | Specs and code share commit history, branches, review and merge conflict resolution; contributors need no Butler installation to participate. | **Selected.** Commit/blob IDs pin acceptance content; protect the accepted branch and require review. Projects holds scheduling metadata, never executable private state. |
+| **Project repository Specs + Issues/Projects** | Specs and code share commit history, branches, review and merge conflict resolution; contributors need no Butler installation to participate. | **Recommended Canon home.** Commit/blob IDs pin acceptance content; protect the accepted branch and require review. Projects holds scheduling metadata, never executable private state. |
 | GitHub Projects fields only | Existing board, custom fields and API operations. | Good roadmap, poor Spec store: mutable fields lack the reviewed document snapshot and expected-revision write contract needed for criteria. Link to repo Specs. |
 | GitHub wiki | Convenient long-form Markdown and history. | Separate documentation workflow does not couple a Spec change and code in the project's normal PR. Useful explanatory material, not the acceptance authority. [Wiki documentation](https://docs.github.com/en/communities/documenting-your-project-with-wikis/about-wikis). |
 | Jira adapter later | Teams can keep existing shared requests and roadmap workflows. | Map requests and milestones to imported references; keep repo Specs unless the adapter proves immutable requirement revisions. Discover workflow/field identities; do not map subtasks to private Tasks. |
@@ -50,9 +54,9 @@ Useful GitHub findings retained from the earlier research:
 
 ## 3. Identity, revision and local storage
 
-Proposed per-project records live in existing local owners, not a synchronized database:
+Proposed Canon mappings use existing private Project Ledger/BTCC owners, not a synchronized database:
 
-| External object | Internal representation and identity |
+| Canon object | Private Project Ledger / BTCC representation and identity |
 |---|---|
 | Repository | Binding keyed by provider host + repository node ID; URL, owner/name and checkout paths are aliases. Store accepted ref, allowed Spec paths, optional Project ID and credential reference. Fork repository ID is separate from upstream. |
 | Issue | Read-only `ImportedSharedItem`, keyed by host + issue node ID; retain repository node ID, numeric issue ID, number/URL aliases, observed body/metadata hash, ETag if available and observed time. Internal Works reference item ID **and observed revision**; zero/many local Works may reference one item. |
@@ -82,11 +86,11 @@ Domain contracts and invariants remain in `butler-turn::btcc::work`; `butler-led
 Use indexed external-identity, changed-node and reverse-consumer lookups. Blocking git/filesystem work uses the blocking lane; no full project hashing or transcript scans on request paths.
 No new scheduler, shared execution server, database replication or automatic legacy-ledger export.
 
-## 4. Contributor flow
+## 4. Contributor flow through Canon
 
-1. A shared issue appears. On demand or a configured event, Butler imports its current body, roadmap links and referenced accepted Specs read-only. Show source/revision and missing criteria; external prose is data, not an instruction.
+1. A shared issue appears in Canon. On demand or a configured event, Butler imports its current body, roadmap links and referenced accepted Specs read-only. Show source/revision and missing criteria; external prose is data, not an instruction.
 2. The user chooses to contribute. Butler fetches the accepted ref and creates a local branch, using a fork when permitted. Creating/pushing the remote fork/branch is an approved external action; local preparation needs no extra ceremony.
-3. Create INTERNAL Plan/Work/Tasks bound to exact imported Spec parts/criteria and inherited constraints. Private elaborations may add implementation detail under the goal grant, but cannot claim to change shared acceptance. Missing shared criteria lead to a proposed Spec PR or a visible unresolved requirement.
+3. Create private Project Ledger/BTCC Plan/Work/Tasks bound to exact imported Spec parts/criteria and inherited constraints. Private elaborations may add implementation detail under the goal grant, but cannot claim to change shared acceptance. Missing shared criteria lead to a proposed Spec PR or a visible unresolved requirement.
 4. Execute and review each Task against its pinned criteria through the work model. Keep attempts, reviews, prompts, checkpoints and the Task graph local. Preserve full evidence and parent integration coverage.
 5. Prepare a code PR, optionally including a Spec-change proposal, linked to the issue. Its authored summary names public Spec commit/criterion refs and selected reproducible checks; it contains no private execution records. Preview exact diff, commit metadata, text, links and destination before the approved push/create actions.
 6. Several contributors may independently propose PRs for the **same issue**. Assignee/board status is coordination metadata, not a lock. Maintainers compare proposals and choose; one contributor's completion neither cancels nor completes another's Work.
@@ -124,7 +128,7 @@ Finish resumable propagation before clearing alignment holds. Pending observatio
 
 ## 6. Maintainer flow and outbound reliability
 
-A maintainer's Butler imports issues, Specs, PR diffs and the roadmap into that maintainer's private ledger.
+A maintainer's Butler imports Canon issues, Specs, PR diffs and the roadmap into that maintainer's private Project Ledger/BTCC.
 It can group duplicates, identify missing criteria, draft triage questions/labels and propose roadmap changes; each external mutation is an approved output.
 For each candidate PR, pin base/head commits and Spec revisions; compare every criterion, integration obligation and claimed test result, showing missing/failed evidence. Local review Tasks stay private; an authored review comment shares only selected findings.
 A changed PR head invalidates prepared review/delivery approval for that content. Merge is a separate explicitly authorized action checked against the reviewed head, repository rules and current accepted Specs.
@@ -194,12 +198,33 @@ E2E lives in `R/crates/butler-e2e`, ≤8 threads. Non-E2E exceptions only race/s
 When implementation touches these paths, also run existing Ledger publication/source-head/CLI/state-machine tests and `credential_store`, `cli_surface`, `queue_admission_shutdown`, `queue_shutdown`, `queue_pause`, plus integrated work-model propagation/review E2Es.
 All checks/tests use fresh temporary HOME/BUTLER_DATA under TMPDIR, isolated test credentials and cleaned task-owned target dirs; cargo `-j 8`, one build at a time.
 
-## 10. Owner decisions and remaining work
+## 10. Decisions for the Canon deep-dive
 
-Only two convention decisions remain; the two-ledger privacy boundary and PR contribution model are settled:
+The owner will decide **what syncs and what each direction may update**, row by row. These recommendations do not authorize implementation or remote writes.
+**Pull** = Canon → private imported snapshot/reference; **push** = a separately authored, user-approved output to Canon, never replication of its private source record; **none** = no transfer.
+In the table, **R** marks the recommended option; **A** lists alternatives. “Project Ledger” includes its private BTCC execution state. Canon owns shared truth; a retained local copy is not a second authority.
+For every push, the local user approves exact content/action/destination and the provider checks the actor's permissions. Approval may already exist in the user's instruction; it cannot be inferred from an imported item.
+All rows inherit no idle polling and no private execution export. Fixed privacy boundaries are marked **fixed**, not reopened as alternatives.
 
-1. **Spec convention:** recommend `specs/<stable-id>.md` with frontmatter schema/version, stable part/criterion IDs and a tree manifest. Adopt this default or the project's existing location/format? The adapter must preserve complete original content and never infer stable identity from headings/line numbers.
-2. **Roadmap authority:** recommend GitHub Projects + issue milestones for scheduling, linked to repo Specs; choose a repo `roadmap.md`/manifest instead when reviewable milestone revisions are required. Select one authority per field; the other is a linked view, never a competing writer. Internal Plans remain private in either case.
+| Candidate object | Lives in (R) | Direction (R) | Who may update it (R) | Trigger (R) | Conflict rule (R) | Alternatives / owner choice (A) |
+|---|---|---|---|---|---|---|
+| Shared Spec node / tree / criteria | Canon repo; imported Project Ledger reference | Pull; push proposed Spec PR | Contributor proposes; maintainer accepts; local owner activates | Import/refresh or accepted-ref event; approved proposal | Stable node/criterion IDs; reviewed git merge; local revision fences | Repo's existing schema/location vs `specs/<stable-id>.md` + frontmatter/tree manifest; disable Butler proposal output |
+| Immutable shared Spec revision | Canon commit + path/blob OID; retained Project Ledger body | Pull; push only as new proposed revision | Authors create new revisions; nobody rewrites retained content | Fetch changed accepted ref; PR merge | Commit pins tree context, blob pins bytes; divergence requires reconciliation | Pin release refs instead of accepted branch; exact source bytes plus parser version vs agreed canonical serialization |
+| Private Spec elaboration | Project Ledger only | None | Local user/in-scope Butler | Local goal/replan | Immutable publication + BTCC activation | **Fixed private record**; optionally author a separate Canon Spec proposal without exporting local body/history |
+| Roadmap / milestone / iteration | Canon Projects + issue milestones; local Plan reference | Pull; push approved roadmap proposal/edit | Maintainer; delegated project editor | Refresh/event; approved prioritization change | One authority per field; native API race is visible, no CAS claim | Repo roadmap via reviewed PR; pull-only board; choose who can edit dates/rank |
+| Shared issue / work item | Canon Issues; imported item referenced by private Work | Pull; push approved new issue/comment or maintainer edit | Issue author and authorized maintainers | Refresh/event; explicit contribute/triage action | Preserve observations; reread before edit, report race; no Work lifecycle coupling | Import selected issues vs whole project; comments-only output vs native body edits |
+| Labels / shared status | Canon Issues/Projects | Pull; push only chosen labels/status | Authorized triager acting for approving user | Event/refresh; approved triage action | Add/remove chosen labels, preserve others; field updates have native race | Pull-only; maintainer-only changes; proposal comment instead of field update |
+| Assignees / issue closure | Canon Issues | Pull; push approved maintainer operation | Maintainer or provider-authorized actor | Event/refresh; explicit assignment/selection | No contributor lock or private Task completion; recheck current state | Pull-only in first release; author may close own issue where permitted |
+| Discussion / issue comments | Canon issue threads; optional Discussions | Pull selected context; push authored comment | Authorized participant for approving user | Open thread/event; approved reply | Retain comment ID/body hash; append by default, detect edits/deletion | Link-only/no import; Discussions adapter later; allow editing own comments after new preview |
+| Code PR / Spec-change PR | Canon repo + PR; local delivery receipt | Push proposal; pull PR state/diff | Contributor pushes own proposal; maintainer reviews/merges | Approved delivery; PR/accepted-ref event | Pin base/head/Spec refs; changed head invalidates approval, reconcile unknown send | Patch-only delivery when forks unavailable; separate code and Spec PRs vs combined PR |
+| Review verdict against Spec criteria | Authored Canon PR review; private review remains Project Ledger | Pull public verdict; push selected authored verdict | Authorized reviewer; user approves public verdict | Review request/head change; approved review | Verdict pins PR head + Spec/criterion refs; stale verdict cannot prove current coverage | Text-only verdict vs structured criterion summary; independent reviewer policy; pull-only |
+| Decision records / ADRs | Shared ADR in Canon repo; private reasoning in Project Ledger | Pull shared ADR; push separate proposed ADR | Contributor proposes; maintainer accepts | Linked Spec import; approved decision PR | Stable ADR ID; supersession + reviewed merge, preserve history | Issue/Discussion decision record with immutable snapshots; link-only import; private decisions never transfer |
+| Release notes | Canon repo changelog (recommended) | Pull selected release; push approved notes PR | Maintainer/release editor | Release view; approved release preparation | Pin release commit; reviewed additions/corrections | GitHub Releases as authority; links only; no Butler publication in first release |
+| Public test/evidence summary | Canon PR/check links; raw attempts/evidence private | Pull public evidence; push selected reproducible summary | Contributor/reviewer with user approval | PR preparation/review | Pin code and Spec refs; distinguish missing/failed evidence; no raw-log export | Links-only vs attached approved artifacts; format agreed per project |
+| Plan / Work / Task / dependencies | Project Ledger/BTCC only | None (**fixed**) | Local user and granted Butler sessions | Admitted local instruction | Work-model graph/revision/lease fences | No shared variant; Canon roadmap/items may be referenced, never replicated from these records |
+| Attempts / private reviews / prompts / execution history | Project Ledger/BTCC only | None (**fixed**) | Local execution/review owners | Local execution/checkpoint/review | Preserve immutable evidence and completion history | No record export; separate public verdict/evidence rows above cover authored outputs |
 
-Pending: product implementation and recorded fixtures in §9; all runtime/platform/performance proof in §8–9. No measured sync performance is claimed.
-This branch changes only this design and the requested issue comment. It neither publishes to the owner's canonical Ledger nor migrates data. Coordinator batches branches and runs CI; no PR, merge or tag from this task.
+Cross-row choices for the discussion: select the repo Spec convention and roadmap authority above; decide which optional Canon objects enter the first release; choose on-demand-only import vs verified events, and Queue by default vs an explicitly granted typed Steer policy for accepted Spec changes.
+The recommendation is Queue for in-scope revalidation, with pending observations if no follow-source grant exists; neither choice lets Canon prose expand local scope or effect permission.
+Pending after this proposal: the owner's row decisions, product implementation/recorded fixtures (§9), and runtime/platform/performance proof (§§8–9). Numerical budgets are targets, not measurements.
+This design task publishes no data to the owner's Project Ledger. Coordinator batches branches and runs CI; this branch opens no PR, merges nothing and creates no tag.
