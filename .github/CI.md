@@ -1,3 +1,6 @@
+> Historical round 3 report from `eb50ecb1d`. Current implementation and
+> measurements are in [CI speed round 4](CI-speed-4.md).
+
 # Build and CI speed, round 3
 
 `rust-quality.yml` owns one always-running `gate`. It selects Rust, Bun, site,

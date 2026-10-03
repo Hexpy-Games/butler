@@ -1,6 +1,12 @@
 name: E2E stub tier
 description: Run the real agent binary against replay cassettes on the current Rust job.
 inputs:
+  idle-only:
+    description: Run only the complete PERF-IDLE libtest observation.
+    default: "false"
+  run-perf-idle:
+    description: Run PERF-IDLE after the serial performance selection.
+    default: "true"
   restore-embedding-model:
     description: Restore the model only for jobs that exercise embedding.
     default: "true"
@@ -112,6 +118,7 @@ runs:
       run: chmod +x "$AGENT_BINARY"
 
     - name: Run the stub tier
+      if: inputs.idle-only != 'true'
       shell: bash
       working-directory: packages/butler-agent/rust
       env:
@@ -146,7 +153,11 @@ runs:
           exit 2
         fi
         if [ -n "$FILTER_FILE" ]; then
-          TEST_FILTERSET="$(cat "$FILTER_FILE")"
+          if [ "$ENFORCE_BUDGETS" = true ]; then
+            TEST_FILTERSET="($TEST_FILTERSET) and ($(cat "$FILTER_FILE"))"
+          else
+            TEST_FILTERSET="$(cat "$FILTER_FILE")"
+          fi
         fi
         filterset='package(=butler-e2e) and not test(idle_disk_writes_and_cpu_stay_bounded)'
         if [ -n "$TEST_FILTERSET" ]; then
@@ -200,7 +211,7 @@ runs:
     # PERF-IDLE takes five minutes by design; its documented cargo-test runner
     # avoids nextest's three-minute per-test watchdog without changing budgets.
     - name: Run PERF-IDLE resource budgets
-      if: inputs.enforce-budgets == 'true'
+      if: inputs.enforce-budgets == 'true' && inputs.run-perf-idle == 'true'
       shell: bash
       working-directory: packages/butler-agent/rust
       env:

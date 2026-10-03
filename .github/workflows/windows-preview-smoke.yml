@@ -52,7 +52,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/windows-owner-setup
         with:
-          workflow: ${{ inputs.native-cache || 'windows-preview' }}
+          workflow: ${{ inputs.native-cache || 'windows-agent-v1' }}
       - uses: ./.github/actions/build-windows-agent
         with:
           owner-runner: 'true'
@@ -78,11 +78,12 @@ jobs:
       BUTLER_E2E_TIER: stub
       RUST_TEST_THREADS: 8
       RUSTFLAGS: -C target-feature=+crt-static
+      BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/windows-owner-setup
         with:
-          workflow: ${{ inputs.native-cache || 'windows-preview-stub' }}
+          workflow: ${{ inputs.native-cache || 'windows-agent-v1' }}
       - name: Isolate runtime and check directories
         run: |
           $root = $env:OWNER_JOB_ROOT

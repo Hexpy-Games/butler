@@ -5,6 +5,12 @@
     clippy::panic,
     reason = "test assertions"
 )]
+use super::memory_fixture;
+#[allow(
+    dead_code,
+    reason = "shared memory fixture also supports batch-only scenarios"
+)]
+use super::memory_stubs;
 use butler_e2e::e2e::cassette::Cassette;
 use butler_e2e::e2e::gateway::{tool_rows, turn_state};
 use butler_e2e::e2e::scenario::Setup;
@@ -12,13 +18,6 @@ use butler_e2e::e2e::{HarnessError, fixtures, nonce};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::path::Path;
-use super::memory_fixture;
-#[allow(
-    dead_code,
-    reason = "shared memory fixture also supports batch-only scenarios"
-)]
-#[path = "memory/stubs.rs"]
-mod memory_stubs;
 
 #[tokio::test]
 async fn existing_generation_metadata_survives_native_writes_and_recall() -> Result<(), HarnessError>

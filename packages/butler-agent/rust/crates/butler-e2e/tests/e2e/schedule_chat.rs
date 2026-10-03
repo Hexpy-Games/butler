@@ -6,8 +6,7 @@
     reason = "test assertions"
 )]
 
-#[path = "support/schedule_cassette.rs"]
-mod schedule_cassette;
+use super::schedule_cassette;
 
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::gateway::{tool_rows, turn_state};

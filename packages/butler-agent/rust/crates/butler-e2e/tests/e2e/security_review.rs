@@ -5,8 +5,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
-#[path = "gateway_pairing/helpers.rs"]
-mod pairing;
+use super::gateway_pairing::support::helpers as pairing;
 use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use serde_json::json;
 

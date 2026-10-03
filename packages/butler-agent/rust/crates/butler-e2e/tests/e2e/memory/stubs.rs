@@ -1,4 +1,9 @@
 //! Synthetic semantic replies for the source windows of MEM-01/MEM-02.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "test fixture assertions"
+)]
 //! Interactive writes/confirmations still replay the committed MEM-01 exchanges.
 use butler_e2e::e2e::{
     HarnessError,

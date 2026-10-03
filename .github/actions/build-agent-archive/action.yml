@@ -10,6 +10,9 @@ inputs:
   agent-artifact:
     description: Optional same-run compatible release Agent artifact.
     default: ""
+  reuse-pr-agent:
+    description: Look for a compatible successful exact-commit PR build on tags.
+    default: "false"
   cache-key:
     description: The rust-cache shared key for this platform.
     required: true
@@ -36,15 +39,27 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Look for an exact-commit release Agent
+      id: reuse
+      if: inputs.reuse-pr-agent == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        ORT_MODE: ${{ inputs.ort-mode }}
+        RUSTFLAGS: ${{ runner.os == 'Linux' && '-C link-arg=-fuse-ld=mold' || '' }}
+      run: |
+        platform="$(node -p 'process.platform + "-" + process.arch')"
+        python3 "$GITHUB_WORKSPACE/.github/scripts/agent-provenance.py" reuse "$RUNNER_TEMP/reused-agent" "$platform" "$ORT_MODE" release "${GITHUB_REF_NAME#v}"
     - name: Set up Rust and ONNX Runtime
-      if: inputs.agent-artifact == ''
+      if: inputs.agent-artifact == '' && steps.reuse.outputs.reused != 'true'
       uses: ./.github/actions/rust-agent-setup
       with:
         native-deps: ${{ inputs.ort-mode }}
         cache-key: ${{ inputs.cache-key }}
+        cache-workspace-crates: 'true'
 
     - name: Set up Bun
-      uses: oven-sh/setup-bun@v2
+      uses: ./.github/actions/bun-setup
       with:
         bun-version: 1.3.11
 
@@ -60,15 +75,17 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        bun install --frozen-lockfile --ignore-scripts
-        npm --prefix packages/butler-app/client/ui run build
+        python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" bun install --frozen-lockfile --ignore-scripts
+        python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" npm --prefix packages/butler-app/client/ui run build
 
     - name: Build the native Agent
-      if: inputs.agent-artifact == ''
+      if: inputs.agent-artifact == '' && steps.reuse.outputs.reused != 'true'
       shell: bash
       working-directory: packages/butler-agent/rust
       env:
         ORT_MODE: ${{ inputs.ort-mode }}
+        BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
+        GITHUB_REF_NAME: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
       run: |
         set -euo pipefail
         case "$ORT_MODE" in
@@ -103,6 +120,7 @@ runs:
       env:
         OUT: ${{ inputs.out }}
         BASE_URL: ${{ inputs.artifact-base-url }}
+        GITHUB_REF_NAME: ${{ github.event_name == 'pull_request' && 'v0.1.0-preview.99' || github.ref_name }}
       run: |
         set -euo pipefail
         platform="$(node -p 'process.platform + "-" + process.arch')"

@@ -9,6 +9,15 @@ name: Install smoke
 on:
   workflow_call:
     inputs:
+      label:
+        type: string
+        default: all
+      platforms:
+        type: string
+        default: '[{"platform":"linux-x64","runner":"ubuntu-24.04"},{"platform":"linux-arm64","runner":"ubuntu-24.04-arm"},{"platform":"darwin-arm64","runner":"macos-15"}]'
+      merge-manifests:
+        type: boolean
+        default: true
       shared-agents:
         type: boolean
         default: false
@@ -18,7 +27,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: install-smoke-${{ github.event_name }}-${{ github.ref }}
+  group: install-smoke-${{ inputs.label || 'all' }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -61,7 +70,7 @@ jobs:
       - name: Keep the tarball for the smoke
         uses: actions/upload-artifact@v4
         with:
-          name: butler-npm
+          name: butler-npm-${{ inputs.label || 'all' }}
           path: ${{ runner.temp }}/hexpygames-butler-*.tgz
           if-no-files-found: error
           retention-days: 7
@@ -74,10 +83,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { platform: linux-x64, runner: ubuntu-24.04 }
-          - { platform: linux-arm64, runner: ubuntu-24.04-arm }
-          - { platform: darwin-arm64, runner: macos-15 }
+        include: ${{ fromJSON(inputs.platforms || '[{"platform":"linux-x64","runner":"ubuntu-24.04"},{"platform":"linux-arm64","runner":"ubuntu-24.04-arm"},{"platform":"darwin-arm64","runner":"macos-15"}]') }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -86,14 +92,14 @@ jobs:
         uses: ./.github/actions/build-agent-archive
         with:
           cache-key: package-${{ matrix.platform }}
-          agent-artifact: ${{ inputs.shared-agents && format('rust-{0}', matrix.platform) || '' }}
+          agent-artifact: ${{ inputs.shared-agents && format('agent-payload-{0}', matrix.platform) || '' }}
           ort-mode: ${{ (github.event_name == 'schedule' || (matrix.platform == 'darwin-arm64' && inputs.shared-agents)) && 'static-ort' || 'prebuilt-ort' }}
           artifact-base-url: https://github.com/${{ github.repository }}/releases/download/v0.0.0-ci
 
       - name: Download the npm tarball
         uses: actions/download-artifact@v4
         with:
-          name: butler-npm
+          name: butler-npm-${{ inputs.label || 'all' }}
           path: ${{ runner.temp }}/npm
 
       - name: Install, run headless, reinstall
@@ -111,23 +117,6 @@ jobs:
 
   # The release workflow merges the per-platform manifests on a tag; check it here.
   merge-manifests:
-    name: Merge per-platform manifests
+    if: inputs.merge-manifests != false
     needs: smoke
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Download the manifests
-        uses: actions/download-artifact@v4
-        with:
-          pattern: agent-*
-          path: dist/agent
-
-      - name: Merge and inspect
-        run: |
-          set -euo pipefail
-          python3 packages/butler-agent/rust/scripts/release-standalone-agent.py merge \
-            --output dist/agent/merged dist/agent/agent-darwin-arm64 dist/agent/agent-linux-x64 dist/agent/agent-linux-arm64
-          jq -r '.artifacts[] | "\(.platform) \(.artifact_name) \(.sha256)"' dist/agent/merged/agent-update-manifest.json
-          test "$(jq '.artifacts | length' dist/agent/merged/agent-update-manifest.json)" = 3
+    uses: ./.github/workflows/merge-agent-manifests.yml

@@ -135,7 +135,7 @@ runs:
       uses: Swatinem/rust-cache@v2
       with:
         workspaces: packages/butler-agent/rust -> ${{ inputs.cargo-target-dir }}
-        shared-key: ${{ inputs.cache-key }}-${{ inputs.native-deps }}
+        shared-key: ${{ inputs.cache-key }}-${{ runner.arch }}-${{ inputs.native-deps }}
         cache-directories: ${{ runner.temp }}/ort-download-cache
         cache-workspace-crates: ${{ inputs.cache-workspace-crates }}
         # Compiler/target/features/flags/lockfile are included by rust-cache.

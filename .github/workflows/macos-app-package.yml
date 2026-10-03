@@ -36,6 +36,15 @@ on:
       - "**/package.json"
   workflow_call:
     inputs:
+      candidate-version:
+        type: string
+        default: ''
+      baseline-tag:
+        type: string
+        default: ''
+      published-candidate:
+        type: boolean
+        default: false
       agent-artifact:
         type: string
         required: false
@@ -86,7 +95,7 @@ jobs:
           native-deps: static-ort
           cache-key: macos-app-package
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: ./.github/actions/bun-setup
         with:
           bun-version: latest
 

@@ -1,4 +1,9 @@
 //! Synthetic schedule replay derived from the existing TOOL-02 wire stream.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "test fixture assertions"
+)]
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::cassette::{Cassette, ResponseRecord};
 use serde_json::{Value, json};

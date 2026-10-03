@@ -14,9 +14,10 @@ arm_tests = rust and os.environ['EVENT'] != 'pull_request'
 selected = {
     'source': rust, 'linux-clippy': rust, 'linux-archive': rust or linux_package or install,
     'linux-tests': rust, 'macos-archive': rust or package or install,
-    'macos-tests': rust, 'macos-package': package, 'install-pr': install,
+    'macos-tests': rust, 'macos-package': package,
+    'install-x64': install, 'install-arm64': install, 'install-macos': install, 'install-merge': install,
     'linux-arm64-archive': arm_tests or linux_package or install,
-    'linux-arm64-tests': arm_tests, 'linux-package': linux_package,
+    'linux-arm64-tests': arm_tests, 'linux-package-x64': linux_package, 'linux-package-arm64': linux_package,
     'ui': changes['ui'] == 'true',
     'site': changes['site'] == 'true' and os.environ['EVENT'] != 'push',
     'ds': changes['ds'] == 'true' and os.environ['EVENT'] != 'push',

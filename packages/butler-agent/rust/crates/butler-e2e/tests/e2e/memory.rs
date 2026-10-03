@@ -5,12 +5,11 @@
     clippy::panic,
     reason = "test assertions"
 )]
+use super::memory_stubs;
 use butler_e2e::e2e::gateway::{tool_rows, turn_state};
 use butler_e2e::e2e::scenario::{Scenario, Setup};
 use butler_e2e::e2e::{HarnessError, fixtures, nonce};
 use serde_json::Value;
-#[path = "memory/stubs.rs"]
-mod memory_stubs;
 
 fn recalled(result: &Value, needle: &str) -> bool {
     result.to_string().contains(needle)

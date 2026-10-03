@@ -6,7 +6,7 @@
     reason = "test assertions"
 )]
 #[path = "gateway_pairing/mod.rs"]
-mod support;
+pub(super) mod support;
 use butler_e2e::e2e::{HarnessError, events::LiveEvents, scenario::Setup};
 use futures_util::StreamExt;
 use reqwest::Method;

@@ -28,6 +28,7 @@ jobs:
       CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS: "true"
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: sccache
+      BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
     defaults:
       run:
         working-directory: packages/butler-agent/rust
@@ -71,7 +72,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/rust-archive"
           python3 "$isolate" cargo nextest archive --release --workspace --locked "${args[@]}" --archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst"
           python3 "$isolate" cargo nextest list --release --workspace --locked "${args[@]}" --message-format json > "$RUNNER_TEMP/rust-archive/list.json"
-          python3 "$GITHUB_WORKSPACE/.github/scripts/balance-e2e.py" "$RUNNER_TEMP/rust-archive/list.json" "$RUNNER_TEMP/rust-archive"
+          perf_filter="$(python3 "$GITHUB_WORKSPACE/.github/scripts/e2e-perf-filter.py")"
+          python3 "$isolate" cargo nextest list --release --workspace --locked "${args[@]}" --message-format json -E "package(=butler-e2e) and ($perf_filter)" > "$RUNNER_TEMP/rust-archive/perf-list.json"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/balance-e2e.py" "$RUNNER_TEMP/rust-archive/list.json" "$RUNNER_TEMP/rust-archive" "$RUNNER_TEMP/rust-archive/perf-list.json"
+          python3 "$isolate" python3 "$GITHUB_WORKSPACE/.github/scripts/test-ci-invariants.py" "$RUNNER_TEMP/rust-archive"
           cp target/release/butler-agent "$RUNNER_TEMP/rust-archive/butler-agent"
       - name: Run doctests when present
         env:
@@ -84,6 +88,25 @@ jobs:
           if grep -rqE '^[[:space:]]*//[/!][[:space:]]*```' crates; then
             python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --release --workspace --doc --locked -j 8 "${args[@]}"
           fi
+      - name: Record native Agent provenance
+        env:
+          PLATFORM: ${{ inputs.platform }}
+          ORT_MODE: ${{ inputs.ort-mode }}
+          RELEASE_VERSION: ${{ github.event_name == 'pull_request' && '0.1.0-preview.99' || github.ref_name }}
+        run: |
+          version="$RELEASE_VERSION"
+          if [[ "$version" != v[0-9]* && "$version" != 0.1.0-preview.99 ]]; then version=0.1.0-dev; fi
+          version="${version#v}"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/agent-provenance.py" record "$RUNNER_TEMP/rust-archive" "$PLATFORM" "$ORT_MODE" release "$version"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-payload-${{ inputs.platform }}
+          path: |
+            ${{ runner.temp }}/rust-archive/butler-agent
+            ${{ runner.temp }}/rust-archive/provenance.json
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
       - uses: actions/upload-artifact@v4
         with:
           name: rust-${{ inputs.platform }}

@@ -13,8 +13,7 @@ use butler_e2e::e2e::gateway::turn_state;
 use butler_e2e::e2e::scenario::{Scenario, Setup};
 use serde_json::json;
 
-#[path = "support/schedule_cassette.rs"]
-mod schedule_cassette;
+use super::schedule_cassette;
 use schedule_cassette::{CHAT_REQUEST, bridge_result, discovery_cassette};
 const SCHEDULER_READ_COUNT_PATH: &str = "/automations/_test/scheduler-next-due-reads";
 

@@ -5,7 +5,9 @@ name: Rust quality
 on:
   push:
     branches: [main]
+    paths-ignore: [README.md, CONTRIBUTING.md, 'assets/readme/**']
   pull_request:
+    paths-ignore: [README.md, CONTRIBUTING.md, 'assets/readme/**']
   merge_group:
   schedule:
     - cron: "17 3 * * *"
@@ -31,13 +33,13 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      rust: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || steps.paths.outputs.rust }}
+      rust: 'true'
       ui: ${{ steps.paths.outputs.ui }}
       site: ${{ steps.paths.outputs.site }}
       ds: ${{ steps.paths.outputs.ds }}
       package: ${{ github.event_name == 'pull_request' && steps.paths.outputs.package || 'false' }}
-      install: ${{ github.event_name == 'schedule' && 'true' || steps.paths.outputs.install }}
-      linux-package: ${{ github.event_name == 'schedule' && 'true' || steps.paths.outputs.linux-package }}
+      install: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push') && 'true' || steps.paths.outputs.install }}
+      linux-package: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push') && 'true' || steps.paths.outputs.linux-package }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -182,15 +184,32 @@ jobs:
       runner: ubuntu-24.04-arm
       platform: linux-arm64
 
-  linux-package:
+  linux-package-x64:
     permissions:
       contents: read
       issues: write
-    needs: [changes, linux-archive, linux-arm64-archive]
+    needs: [changes, linux-archive]
     if: needs.changes.outputs.linux-package == 'true'
     uses: ./.github/workflows/linux-packages.yml
     with:
       shared-agents: true
+      label: x64
+      platforms: '[{"target":"linux-x64","runner":"ubuntu-24.04","formats":"--format=deb --format=pacman"}]'
+      smokes: '[{"target":"linux-x64","runner":"ubuntu-24.04","format":"deb","image":"ubuntu:24.04"},{"target":"linux-x64","runner":"ubuntu-24.04","format":"deb","image":"debian:trixie"},{"target":"linux-x64","runner":"ubuntu-24.04","format":"pacman","image":"archlinux:base-20260927.0.600689@sha256:eb8f6dcc89a38977c9735f10fcf6ae4afe496283e7008eb7a3420cdba31fbd04"}]'
+
+  linux-package-arm64:
+    permissions:
+      contents: read
+      issues: write
+    needs: [changes, linux-arm64-archive]
+    if: needs.changes.outputs.linux-package == 'true'
+    uses: ./.github/workflows/linux-packages.yml
+    with:
+      shared-agents: true
+      label: arm64
+      platforms: '[{"target":"linux-arm64","runner":"ubuntu-24.04-arm","formats":"--format=deb"}]'
+      smokes: '[{"target":"linux-arm64","runner":"ubuntu-24.04-arm","format":"deb","image":"ubuntu:24.04"}]'
+
 
   macos-archive:
     needs: changes
@@ -215,14 +234,43 @@ jobs:
     if: needs.changes.outputs.package == 'true'
     uses: ./.github/workflows/macos-app-package.yml
     with:
-      agent-artifact: rust-darwin-arm64
+      agent-artifact: agent-payload-darwin-arm64
 
-  install-pr:
-    needs: [changes, linux-archive, linux-arm64-archive, macos-archive]
+  install-x64:
+    needs: [changes, linux-archive]
     if: needs.changes.outputs.install == 'true'
     uses: ./.github/workflows/install-smoke.yml
     with:
       shared-agents: true
+      merge-manifests: false
+      label: x64
+      platforms: '[{"platform":"linux-x64","runner":"ubuntu-24.04"}]'
+
+  install-arm64:
+    needs: [changes, linux-arm64-archive]
+    if: needs.changes.outputs.install == 'true'
+    uses: ./.github/workflows/install-smoke.yml
+    with:
+      shared-agents: true
+      merge-manifests: false
+      label: arm64
+      platforms: '[{"platform":"linux-arm64","runner":"ubuntu-24.04-arm"}]'
+
+  install-macos:
+    needs: [changes, macos-archive]
+    if: needs.changes.outputs.install == 'true'
+    uses: ./.github/workflows/install-smoke.yml
+    with:
+      shared-agents: true
+      merge-manifests: false
+      label: macos
+      platforms: '[{"platform":"darwin-arm64","runner":"macos-15"}]'
+
+  install-merge:
+    needs: [changes, install-x64, install-arm64, install-macos]
+    if: needs.changes.outputs.install == 'true'
+    uses: ./.github/workflows/merge-agent-manifests.yml
+
 
   ui:
     needs: changes
@@ -242,7 +290,7 @@ jobs:
   gate:
     name: gate
     if: always()
-    needs: [changes, source, linux-clippy, linux-archive, linux-tests, macos-archive, macos-tests, macos-package, linux-arm64-archive, linux-arm64-tests, linux-package, install-pr, ui, site, ds]
+    needs: [changes, source, linux-clippy, linux-archive, linux-tests, macos-archive, macos-tests, macos-package, linux-arm64-archive, linux-arm64-tests, linux-package-x64, linux-package-arm64, install-x64, install-arm64, install-macos, install-merge, ui, site, ds]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -1,5 +1,13 @@
 name: Verify published Windows preview
 on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+      from-tag:
+        type: string
+        default: ''
   workflow_dispatch:
     inputs:
       tag:

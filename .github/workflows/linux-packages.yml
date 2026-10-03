@@ -12,15 +12,27 @@ on:
   workflow_dispatch:
   workflow_call:
     inputs:
+      label:
+        type: string
+        default: all
+      platforms:
+        type: string
+        default: '[{"target":"linux-x64","runner":"ubuntu-24.04","formats":"--format=deb --format=pacman"},{"target":"linux-arm64","runner":"ubuntu-24.04-arm","formats":"--format=deb"}]'
+      smokes:
+        type: string
+        default: ''
       shared-agents:
         type: boolean
         default: false
+      agent-prefix:
+        type: string
+        default: agent-payload
 
 permissions:
   contents: read
 
 concurrency:
-  group: linux-packages-${{ github.event_name }}-${{ github.ref }}
+  group: linux-packages-${{ inputs.label || 'all' }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -36,13 +48,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - target: linux-x64
-            runner: ubuntu-24.04
-            formats: --format=deb --format=pacman
-          - target: linux-arm64
-            runner: ubuntu-24.04-arm
-            formats: --format=deb
+        include: ${{ fromJSON(inputs.platforms || '[{"target":"linux-x64","runner":"ubuntu-24.04","formats":"--format=deb --format=pacman"},{"target":"linux-arm64","runner":"ubuntu-24.04-arm","formats":"--format=deb"}]') }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -55,7 +61,7 @@ jobs:
           cache-key: package-${{ matrix.target }}
 
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+        uses: ./.github/actions/bun-setup
         with:
           bun-version: 1.3.11
 
@@ -103,7 +109,7 @@ jobs:
       - uses: actions/download-artifact@v4
         if: inputs.shared-agents == true
         with:
-          name: rust-${{ matrix.target }}
+          name: ${{ inputs.agent-prefix }}-${{ matrix.target }}
           path: ${{ runner.temp }}/shared-agent
       - name: Use the shared native Agent
         if: inputs.shared-agents == true
@@ -154,11 +160,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { target: linux-x64, runner: ubuntu-24.04, format: deb, image: "ubuntu:24.04" }
-          - { target: linux-x64, runner: ubuntu-24.04, format: deb, image: "debian:trixie" }
-          - { target: linux-x64, runner: ubuntu-24.04, format: pacman, image: "archlinux:base-20260927.0.600689@sha256:eb8f6dcc89a38977c9735f10fcf6ae4afe496283e7008eb7a3420cdba31fbd04" }
-          - { target: linux-arm64, runner: ubuntu-24.04-arm, format: deb, image: "ubuntu:24.04" }
+        include: ${{ fromJSON(inputs.smokes || '[{"target":"linux-x64","runner":"ubuntu-24.04","format":"deb","image":"ubuntu:24.04"},{"target":"linux-x64","runner":"ubuntu-24.04","format":"deb","image":"debian:trixie"},{"target":"linux-x64","runner":"ubuntu-24.04","format":"pacman","image":"archlinux:base-20260927.0.600689@sha256:eb8f6dcc89a38977c9735f10fcf6ae4afe496283e7008eb7a3420cdba31fbd04"},{"target":"linux-arm64","runner":"ubuntu-24.04-arm","format":"deb","image":"ubuntu:24.04"}]') }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
