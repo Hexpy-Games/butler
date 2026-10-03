@@ -125,13 +125,17 @@
 
 .toolbar {
   display: flex;
-  flex-wrap: wrap;
   min-height: var(--control-hit-target);
   pointer-events: auto;
   align-items: center;
   gap: var(--space-1);
   min-width: 0;
   padding: var(--space-2) 0 0;
+}
+
+.toolbarControls {
+  align-items: center;
+  gap: var(--space-1);
 }
 
 .toolbar button {

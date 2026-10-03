@@ -37,11 +37,14 @@ async function auditLayout(story: Locator) {
     const row = element.getBoundingClientRect();
     const card = element.closest('[data-test-class~="composer-wrap"]')!.querySelector('[data-test-class="composer-card"]')!.getBoundingClientRect();
     const pills = [...element.querySelectorAll('button[data-surface="glass-pill"]')].filter((pill) => pill.getBoundingClientRect().width);
+    const centers = pills.map((pill) => { const box = pill.getBoundingClientRect(); return box.y + box.height / 2; });
     return { rowY: row.y, cardBottom: card.bottom, overflow: element.scrollWidth - element.clientWidth,
-      pills: pills.length, cardHeight: card.height, rowHeight: row.height };
+      centerDrift: Math.max(...centers) - Math.min(...centers),
+      pills: pills.length, cardHeight: card.height, rowHeight: row.height, rowWidth: row.width };
   });
   assert(geometry.rowY >= geometry.cardBottom, "row lies below card");
   assert(geometry.overflow <= 1, `toolbar overflow: ${geometry.overflow}`);
+  assert(geometry.centerDrift <= 1, `controls must stay on one line: ${geometry.centerDrift}px drift`);
   assert.equal(geometry.pills, 5);
   return geometry;
 }

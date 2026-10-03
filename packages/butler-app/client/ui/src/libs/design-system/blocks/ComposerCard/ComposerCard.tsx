@@ -2,6 +2,7 @@ import type { DsBaseProps } from "../../lib/dsProps";
 import type { ButtonHTMLAttributes, FormHTMLAttributes, ReactNode, Ref, TextareaHTMLAttributes } from "react";
 import { createContext, forwardRef, useContext, useState } from "react";
 import { Collapsible } from "../../components/Collapsible";
+import { ScrollArea } from "../ScrollArea";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import { cn } from "../../lib/utils";
 import { ComposerControlsVisible, ComposerSlot, ComposerSlots } from "./ComposerCardSlots";
@@ -89,7 +90,9 @@ export function ComposerCardToolbar({ children }: { children: ReactNode }) {
   return (
     <ComposerSlot slot="toolbar">
       <div className={styles.toolbar} data-test-class="composer-toolbar">
-        {children}
+        <ScrollArea orientation="x" contentClassName={dsClass(styles.toolbarControls)} dataSlot="composer-controls-scroll">
+          {children}
+        </ScrollArea>
       </div>
     </ComposerSlot>
   );
