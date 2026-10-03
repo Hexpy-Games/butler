@@ -27,6 +27,8 @@ jobs:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: sccache
       BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
+      # Read-only build provenance must not refresh the index it tracks.
+      GIT_OPTIONAL_LOCKS: "0"
     defaults:
       run:
         working-directory: packages/butler-agent/rust
@@ -60,6 +62,9 @@ jobs:
             args=(--no-default-features --features butler-agent/static-ort)
           fi
           mkdir -p "$RUNNER_TEMP/rust-archive"
+          # nextest builds test harnesses, not the Agent CLI. Build all targets
+          # together so the ordinary Agent and every test share dependencies.
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --workspace --all-targets --locked -j 8 "${args[@]}"
           python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo nextest archive --workspace --all-targets --locked "${args[@]}" --archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst"
       - name: Archive tests and record every selection
         env:
@@ -68,13 +73,10 @@ jobs:
         run: |
           export GITHUB_REF_NAME="$BUILD_VERSION_REF"
           isolate="$GITHUB_WORKSPACE/.github/scripts/isolated.py"
-          args=()
-          if [ "$ORT_MODE" = static-ort ]; then
-            args=(--no-default-features --features butler-agent/static-ort)
-          fi
-          python3 "$isolate" cargo nextest list --workspace --all-targets --locked "${args[@]}" --message-format json > "$RUNNER_TEMP/rust-archive/list.json"
+          args=(--archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst" --workspace-remap "$PWD")
+          python3 "$isolate" cargo nextest list "${args[@]}" --message-format json > "$RUNNER_TEMP/rust-archive/list.json"
           perf_filter="$(python3 "$GITHUB_WORKSPACE/.github/scripts/e2e-perf-filter.py")"
-          python3 "$isolate" cargo nextest list --workspace --all-targets --locked "${args[@]}" --message-format json -E "package(=butler-e2e) and ($perf_filter)" > "$RUNNER_TEMP/rust-archive/perf-list.json"
+          python3 "$isolate" cargo nextest list "${args[@]}" --message-format json -E "package(=butler-e2e) and ($perf_filter)" > "$RUNNER_TEMP/rust-archive/perf-list.json"
           python3 "$GITHUB_WORKSPACE/.github/scripts/balance-e2e.py" "$RUNNER_TEMP/rust-archive/list.json" "$RUNNER_TEMP/rust-archive" "$RUNNER_TEMP/rust-archive/perf-list.json"
           python3 "$isolate" python3 "$GITHUB_WORKSPACE/.github/scripts/test-ci-invariants.py" "$RUNNER_TEMP/rust-archive"
           cp target/debug/butler-agent "$RUNNER_TEMP/rust-archive/butler-agent"
