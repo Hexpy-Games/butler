@@ -1,7 +1,6 @@
 import type {
   Dispatch,
   FormEvent,
-  KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
   RefObject,
   SetStateAction,
@@ -78,7 +77,7 @@ export interface ComposerStore {
   canSend: boolean;
   workers: WorkerActivitySummary[];
   submit: (event: FormEvent<HTMLFormElement> | KeyboardEventLike) => void;
-  handleKeyDown: (event: ReactKeyboardEvent<HTMLElement>) => void;
+  handleKeyDown: (event: import("./hooks/composerEventTypes").ComposerKeyEvent) => void;
   focusDraftFromComposerChrome: (
     event: ReactPointerEvent<HTMLFormElement>,
   ) => void;
