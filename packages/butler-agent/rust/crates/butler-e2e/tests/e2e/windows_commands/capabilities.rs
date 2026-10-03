@@ -36,7 +36,7 @@ async fn chat(s: &Scenario) -> Result<String, HarnessError> {
         s.gw.post(
             "/projects",
             json!({"source":"existing_folder",
-        "folder_selection_token":selection(&s.sandbox.home.join("Downloads")),"display_name":"Profile capability"}),
+        "folder_selection_token":selection(&s.sandbox.root),"display_name":"Profile capability"}),
         )
         .await?;
     assert_eq!(project.status, 201, "{}", project.text);
@@ -52,25 +52,33 @@ async fn chat(s: &Scenario) -> Result<String, HarnessError> {
 }
 
 fn cases(data: &Path) -> Vec<Case> {
-    let case = |tool, args| Case {
-        tool,
-        args,
-        refused: false,
+    let case = |tool, mut args: Value| {
+        if tool == "run_command" {
+            args["cwd"] = json!("home/Downloads");
+        }
+        Case {
+            tool,
+            args,
+            refused: false,
+        }
     };
-    let protected = data.display().to_string();
+    let ordinary_data = "home/.butler";
     vec![
         case(
             "list_files",
-            json!({"root":".","max_depth":1,"max_results":100}),
+            json!({"root":"home/Downloads","max_depth":1,"max_results":100}),
         ),
-        case("read_file", json!({"requests":[{"path":"보고서.txt"}]})),
+        case(
+            "read_file",
+            json!({"requests":[{"path":"home/Downloads/보고서.txt"}]}),
+        ),
         case(
             "write_file",
-            json!({"path":"새 파일.txt","content":"처음 내용\n","overwrite":false}),
+            json!({"path":"home/Downloads/새 파일.txt","content":"처음 내용\n","overwrite":false}),
         ),
         case(
             "edit_file",
-            json!({"path":"새 파일.txt","old_text":"처음 내용","new_text":"수정 내용"}),
+            json!({"path":"home/Downloads/새 파일.txt","old_text":"처음 내용","new_text":"수정 내용"}),
         ),
         case(
             "run_command",
@@ -94,25 +102,46 @@ fn cases(data: &Path) -> Vec<Case> {
         ),
         Case {
             tool: "list_files",
-            args: json!({"root":protected}),
-            refused: true,
+            args: json!({"root":ordinary_data,"max_depth":1,"max_results":100,
+                "exclude_globs":["home/.butler/*/*"]}),
+            refused: false,
         },
         Case {
             tool: "read_file",
-            args: json!({"requests":[{"path":data.join("canary.txt")}]}),
-            refused: true,
+            args: json!({"requests":[{"path":"home/.butler/canary.txt"}]}),
+            refused: false,
         },
         Case {
             tool: "write_file",
-            args: json!({"path":data.join("refused.txt"),"content":"never"}),
-            refused: true,
+            args: json!({"path":"home/.butler/approved.txt","content":"approved"}),
+            refused: false,
         },
         Case {
             tool: "run_command",
             args: json!({"command":format!("Get-Content -LiteralPath '{}'",data.join("canary.txt").display()),
             "state_effect":"read_only","summary":"보호 경로 확인"}),
+            refused: false,
+        },
+        Case {
+            tool: "run_command",
+            args: json!({"command":"Get-Content -LiteralPath '.ssh/id_ed25519'",
+                "state_effect":"read_only","summary":"자격 증명 경로 확인"}),
             refused: true,
         },
+        Case {
+            tool: "write_file",
+            args: json!({"path":"../escape.txt","content":"must not write"}),
+            refused: true,
+        },
+        case(
+            "write_file",
+            json!({"path":"home/.butler/project-ledger/projects/e2e/approved.txt","content":"ordinary data"}),
+        ),
+        case(
+            "run_command",
+            json!({"command":"Get-Content -LiteralPath (Join-Path $env:BUTLER_DATA 'canary.txt')",
+            "state_effect":"read_only","summary":"데이터 경로 확인","output_mode":"full"}),
+        ),
     ]
 }
 
@@ -150,8 +179,19 @@ async fn operation(
                 "edit_files"
             }
         );
+        let exact = if case.tool == "run_command" {
+            &case.args["command"]
+        } else {
+            &case.args["path"]
+        };
+        assert_eq!(card["approval"]["examples"], json!([exact]));
         if case.tool == "write_file" {
-            assert!(!s.sandbox.home.join("Downloads/새 파일.txt").exists());
+            assert!(
+                !s.sandbox
+                    .root
+                    .join(case.args["path"].as_str().unwrap())
+                    .exists()
+            );
         }
         let reply =
             s.gw.post(
@@ -185,7 +225,12 @@ async fn operation(
     let budget = Duration::from_secs(if case.refused { 1 } else { 5 });
     butler_e2e::assert_wall_clock_budget!(elapsed, budget, case.tool);
     if case.refused {
-        assert!(output.to_string().contains("protected_path"), "{output}");
+        let expected = if case.tool == "write_file" {
+            "parent_traversal_not_allowed"
+        } else {
+            "protected_path"
+        };
+        assert!(output.to_string().contains(expected), "{output}");
         assert!(!output.to_string().contains("PRIVATE_CANARY"));
     } else {
         assert!(output["ok"] == true || output["exit_code"] == 0, "{output}");
@@ -204,7 +249,10 @@ fn verify(s: &Scenario, index: usize, output: &Value) -> Result<(), HarnessError
     match index {
         0 => {
             assert_eq!(output["truncated"], false);
-            assert_eq!(output["files"], json!([{"path":"보고서.txt","bytes":13}]));
+            assert_eq!(
+                output["files"],
+                json!([{"path":"home/Downloads/보고서.txt","bytes":13}])
+            );
         }
         1 => {
             assert_eq!(output["files"][0]["content"], "기존 내용");
@@ -237,13 +285,33 @@ fn verify(s: &Scenario, index: usize, output: &Value) -> Result<(), HarnessError
             assert_eq!(output["stdout"].as_str().unwrap().trim(), "한국어 출력");
             assert_eq!(output["output_presentation"]["truncated"], false);
         }
-        _ => {
-            assert!(!s.sandbox.data.join("refused.txt").exists());
-            assert_eq!(
-                std::fs::read_to_string(s.sandbox.data.join("canary.txt"))?,
-                "PRIVATE_CANARY"
+        8 => {
+            assert_eq!(output["truncated"], false);
+            assert!(
+                output["files"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|f| f["path"] == "home/.butler/canary.txt")
             );
         }
+        9 => assert_eq!(output["files"][0]["content"], "PRIVATE_CANARY"),
+        10 => assert_eq!(
+            std::fs::read_to_string(s.sandbox.data.join("approved.txt"))?,
+            "approved"
+        ),
+        12 => assert_eq!(output["error"], "protected_path"),
+        13 => assert_eq!(output["error"]["code"], "parent_traversal_not_allowed"),
+        14 => assert_eq!(
+            std::fs::read_to_string(
+                s.sandbox
+                    .data
+                    .join("project-ledger/projects/e2e/approved.txt")
+            )?,
+            "ordinary data"
+        ),
+        11 | 15 => assert_eq!(output["stdout"].as_str().unwrap().trim(), "PRIVATE_CANARY"),
+        _ => panic!("Unknown capability case {index}"),
     }
     Ok(())
 }
@@ -256,7 +324,7 @@ async fn delegated_approval(
     use std::sync::atomic::Ordering;
     script.select(Case {
         tool: "write_file",
-        args: json!({"path":"위임 파일.txt","content":"승인된 내용"}),
+        args: json!({"path":"home/Downloads/위임 파일.txt","content":"승인된 내용"}),
         refused: false,
     });
     script.delegated.store(true, Ordering::SeqCst);
@@ -341,7 +409,7 @@ async fn setup(
     let mut setup = Setup::new("WINDOWS-BASIC")?;
     setup.sandbox.data = setup.sandbox.home.join(".butler");
     for folder in [
-        ".butler",
+        ".butler/project-ledger/projects/e2e",
         "Downloads/정리",
         "Documents",
         "Desktop",
@@ -393,7 +461,7 @@ async fn run(access: Access) -> Result<(), HarnessError> {
         assert!(s.gw.approval_requests(&chat).await?.is_empty());
     }
     eprintln!(
-        "WINDOWS-BASIC {access:?}: 12 complete cases in {:?}",
+        "WINDOWS-BASIC {access:?}: 16 complete cases in {:?}",
         started.elapsed()
     );
     s.finish().await?;

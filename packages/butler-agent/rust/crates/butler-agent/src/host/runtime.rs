@@ -356,7 +356,7 @@ impl AgentRuntime {
             compactions: ContextCompactionRepository::new(stores.btcc.clone()),
             attachment_context: attachment_context.clone(),
             verified_image_payload: image_files.clone(),
-            protected_ledger_roots: vec![paths.data_root.join("project-ledger")],
+            protected_ledger_roots: vec![],
             butler_data: paths.data_root.clone(),
             installation_root: paths.installation_root,
             subsessions: subsessions.clone(),
