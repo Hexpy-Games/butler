@@ -11,6 +11,6 @@ export function classifyAppForegroundActiveWork(
 ): AppForegroundActiveWorkSnapshot;
 export function confirmAppForegroundQuit(input: {
   language?: string;
-  snapshot: AppForegroundActiveWorkSnapshot;
+  snapshot: Pick<AppForegroundActiveWorkSnapshot, "classification">;
   showMessageBox: (options: Record<string, unknown>) => Promise<{ response: number }>;
 }): Promise<boolean>;

@@ -3,6 +3,29 @@
 use super::{SqliteSubsessionRepository, StorageError};
 
 impl SqliteSubsessionRepository {
+    /// Narrow execution presence for quit/restart. Old waiting display cards
+    /// with delivered/cancelled turns are retained but are not live user work.
+    pub async fn user_work_present(&self) -> Result<bool, StorageError> {
+        self.storage
+            .execute(|db| {
+                db.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM btcc_session_relations r \
+                 WHERE r.activity_terminal=0 AND r.activity_role IN ('worker','steward') \
+                 AND (COALESCE((SELECT t.semantic_state FROM btcc_turns t \
+                       WHERE t.session_id=r.child_session_id ORDER BY t.rowid DESC LIMIT 1), '') \
+                      IN ('admitted','delivery_committed') \
+                 OR (NOT EXISTS(SELECT 1 FROM btcc_turns t WHERE t.session_id=r.child_session_id) \
+                     AND EXISTS(SELECT 1 FROM btcc_subsession_delegations d \
+                         WHERE d.relation_id=r.relation_id AND d.dispatch_intent_json IS NOT NULL \
+                         AND d.dispatch_state IN ('pending','enqueued')))))",
+                    [],
+                    |row| row.get(0),
+                )
+                .map_err(StorageError::sqlite)
+            })
+            .await
+    }
+
     pub(crate) async fn has_unfinished_execution(
         &self,
         session: String,

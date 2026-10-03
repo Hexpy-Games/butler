@@ -385,3 +385,38 @@ async fn assert_branch_from_handoff_message(s: &Scenario, chat: &str) -> Result<
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn quit_presence_uses_child_execution_not_ghost_waiting_cards() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut s = Setup::new("UPDATE-DELEGATED-PRESENCE")?.start().await?;
+    let created = s.gw.post("/sessions", json!({"kind":"chat"})).await?;
+    let hint = created.data()["session"]["session_hint"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    s.agent.terminate().await?;
+    seed_legacy_delegations(&s, &hint);
+    s.gw = s.agent.start_again().await?;
+    let active = s.gw.get("/user-work").await?;
+    assert_eq!(active.data()["delegated_work_present"], true, "{active:?}");
+    assert_eq!(active.data()["classification"], "active_work_detected");
+    {
+        let db = sqlite::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap();
+        // Match the owner's old child turns: completed, no result record,
+        // with their display activity still marked nonterminal.
+        db.execute_batch(
+            "UPDATE btcc_turns SET semantic_state='delivered',final_disposition='completed';
+            DELETE FROM btcc_steward_results;
+            UPDATE btcc_subsession_delegations SET dispatch_state=NULL;
+            UPDATE btcc_session_relations SET activity_terminal=0;",
+        )
+        .unwrap();
+    }
+    let idle = s.gw.get("/user-work").await?;
+    assert_eq!(idle.data()["delegated_work_present"], false, "{idle:?}");
+    assert_eq!(idle.data()["classification"], "no_active_work");
+    assert_eq!(idle.data()["active_turn_count"], 0);
+    assert_eq!(idle.data()["queued_message_count"], 0);
+    s.finish().await
+}

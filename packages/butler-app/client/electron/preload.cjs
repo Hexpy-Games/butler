@@ -688,6 +688,13 @@ const butlerApp = Object.freeze({
     const query = params.toString();
     return requestJson(query ? `/new-chat-briefing?${query}` : "/new-chat-briefing");
   },
+  getAppUpdateState: () => ipcRenderer.invoke("butler:app-update-state"),
+  chooseAppUpdate: (input) => ipcRenderer.invoke("butler:app-update-choice", input),
+  onAppUpdateState: (handler) => {
+    const listener = (_event, state) => handler(state);
+    ipcRenderer.on("butler:app-update-state", listener);
+    return () => ipcRenderer.removeListener("butler:app-update-state", listener);
+  },
   getUpdates: () => requestJson("/updates"),
   checkUpdates: (request = {}) => requestJson("/updates/check", {
     method: "POST",
@@ -704,9 +711,10 @@ const butlerApp = Object.freeze({
       typeof result?.artifact_path === "string" &&
       result.artifact_path.trim()
     ) {
-      await ipcRenderer.invoke("butler:open-update-artifact", {
+      const activation = await ipcRenderer.invoke("butler:open-update-artifact", {
         artifactPath: result.artifact_path,
       });
+      return { ...result, app_restart_status: activation.update.status };
     }
     return result;
   },
