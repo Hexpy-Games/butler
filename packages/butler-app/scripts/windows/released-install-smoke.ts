@@ -11,6 +11,7 @@ import { FIRST_RUN_CONSENT_VERSION } from "../../client/ui/src/app/onboarding.ts
 import { alive, assertShortcuts, bridge, ownedProcesses, powershell, readJson, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
 import { smokeProviderReply, type SmokeProviderCalls } from "./smoke-provider.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
+import { proveReleasedDownloads, releasedDownloadsReply, type DownloadsProof } from "./released-downloads-smoke.ts";
 
 if (process.platform !== "win32" || process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_ENVIRONMENT !== "github-hosted") {
   throw new Error("Released installer smoke requires a disposable GitHub-hosted Windows runner");
@@ -28,12 +29,15 @@ const debugPort = await freePort();
 const agentPort = await freePort();
 let page: ElectronPage | null = null;
 const calls: SmokeProviderCalls = { chat: 0, memory: 0, memorySpeakers: new Set<string>() };
+const downloads: DownloadsProof = { requests: 0 };
 let uninstalled = false;
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async request => {
   assert.equal(new URL(request.url).pathname, "/v1/responses");
-  return smokeProviderReply(await request.json(), "Reply with Windows release ready.", "Windows release ready.", calls);
+  const body = await request.json();
+  return releasedDownloadsReply(body, downloads, calls) ??
+    smokeProviderReply(body, "Reply with Windows release ready.", "Windows release ready.", calls);
 } });
-const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), BUTLER_DATA: data,
+const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), USERPROFILE: join(root, "home"), BUTLER_DATA: data,
   LOCALAPPDATA: join(root, "local"), APPDATA: join(root, "roaming"), BUTLER_SECRET_STORE: "file",
   BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"), BUTLER_APP_SMOKE_DEBUG_PORT: String(debugPort),
   BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_E2E_TIER: "stub", BUTLER_PROVIDER_QUOTA_POLLING: "0",
@@ -75,6 +79,7 @@ try {
   await waitFor(() => calls.memory === 2, "released user and assistant meaning extractions");
   assert.deepEqual([...calls.memorySpeakers].sort(), ["assistant", "user"]);
   await briefingProof();
+  await proveReleasedDownloads(page, env.HOME, downloads);
   await waitFor(() => shortcuts.every(path => existsSync(path)), "released shortcuts");
   assertShortcuts(shortcuts, true);
   const stub = join(installed, "Butler.exe");

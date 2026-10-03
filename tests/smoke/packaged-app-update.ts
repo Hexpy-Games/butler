@@ -22,6 +22,7 @@ assert.match(from, /^0\.1\.0-preview\.\d+$/u);
 assert.match(to, /^0\.1\.0-preview\.\d+$/u);
 const profile = process.env.BUTLER_UPDATE_SMOKE_PROFILE ?? "release";
 const agentBuilds = process.env.BUTLER_UPDATE_SMOKE_AGENT_BUILDS;
+const discovery = process.env.BUTLER_UPDATE_SMOKE_DISCOVERY === "1";
 const rust = join(root, "packages/butler-agent/rust");
 const target = resolve(process.env.CARGO_TARGET_DIR ?? join(rust, "target"));
 const electronRoot = join(root, "packages/butler-app/client/electron");
@@ -145,13 +146,15 @@ async function smoke() {
   const debugPort = await freePort(), agentPort = await freePort();
   child = spawn(join(installed, "Contents/MacOS/Butler"), [`--remote-debugging-port=${debugPort}`], { env: {
     ...env, BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_APP_ELECTRON_USER_DATA_DIR: join(dir, "profile"),
-    BUTLER_APP_UPDATE_MANIFEST: process.env.BUTLER_UPDATE_SMOKE_MANIFEST ?? `http://127.0.0.1:${updatePort}/manifest.json`,
+    BUTLER_APP_UPDATE_MANIFEST: discovery ? "" : process.env.BUTLER_UPDATE_SMOKE_MANIFEST ?? `http://127.0.0.1:${updatePort}/manifest.json`,
+    ...(discovery ? { BUTLER_UPDATE_MANIFEST: "", BUTLER_UPDATE_RELEASES_API: "" } : {}),
     BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
     BUTLER_E2E_TIER: "stub", BUTLER_E2E_EMBED_SOURCES: "http://127.0.0.1:9",
   }, stdio: ["ignore", "pipe", "pipe"] });
   child.stdout!.on("data", bytes => logs.push(String(bytes))); child.stderr!.on("data", bytes => logs.push(String(bytes)));
   child.on("exit", (code, signal) => logs.push(`App exited: code=${code}, signal=${signal}\n`));
   console.log(`LAUNCH ${from}: ${installed}`);
+  if (discovery) console.log(`DISCOVERY ${from}: fresh process, default published release API, no manifest override`);
   let connected = await connect(debugPort); browser = connected.browser;
   const page = connected.page;
   const completedAt = new Date().toISOString();

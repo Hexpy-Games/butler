@@ -31,7 +31,8 @@ hdiutil detach "$profile/baseline/mount"
 baseline_mounted=false
 gh release download "v$CANDIDATE_VERSION" --dir "$profile/candidate" \
   --pattern '*-darwin-arm64.zip' --pattern '*-darwin-arm64.zip.sha256'
-export BUTLER_UPDATE_SMOKE_MANIFEST="https://github.com/$GITHUB_REPOSITORY/releases/download/v$CANDIDATE_VERSION/app-update-manifest.json"
+# Launch the baseline cold and use the installed product's release discovery.
+export BUTLER_UPDATE_SMOKE_DISCOVERY=1
 archive=("$profile/candidate/"*.zip)
 test "${#archive[@]}" -eq 1
 (cd "$profile/candidate" && shasum -a 256 -c "$(basename "${archive[0]}").sha256")
