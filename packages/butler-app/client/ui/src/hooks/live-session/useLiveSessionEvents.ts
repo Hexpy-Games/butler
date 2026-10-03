@@ -12,6 +12,7 @@ import {
   createLiveSessionReconciliation,
   eventSessionId,
   eventBelongsToCanonicalSessionView,
+  isSessionViewRefreshEvent,
 } from "./liveSessionReconciliation.ts";
 import {
   applyLiveNavigationEvent,
@@ -53,6 +54,14 @@ export function useLiveSessionEvents(): void {
       useButlerStore,
       () => activeChatIdRef.current,
     );
+    const observerReconciliation = createLiveSessionReconciliation({
+      getState: () => {
+        const state = useButlerStore.getState();
+        const id = state.observerSessionId ?? "";
+        return { activeChatId: id, sessionView: state.sessionViews[id],
+          refreshSessionView: state.refreshSessionObserver };
+      },
+    }, () => useButlerStore.getState().observerSessionId ?? "");
     const navigationReconciliation = createLiveNavigationReconciliation(
       useButlerStore,
     );
@@ -68,6 +77,7 @@ export function useLiveSessionEvents(): void {
         advanceEventCursor(eventCursorRef, event.id);
         navigationReconciliation.requestRefresh();
         reconciliation.requestRefresh();
+        observerReconciliation.requestRefresh(true);
         return;
       }
       const state = useButlerStore.getState();
@@ -114,7 +124,7 @@ export function useLiveSessionEvents(): void {
       if (
         event.type === "space.changed" || event.type === "session.created" ||
         event.type === "project.created" || event.type === "project.updated" ||
-        event.type === "turn.state_changed" ||
+        event.type === "turn.state_changed" || event.type === "subsession.changed" ||
         event.type.startsWith("worker.") || event.type.startsWith("worker_") ||
         event.type === "session_queue.changed" || event.type === "session.queue.changed" ||
         (event.type === "session.updated" && !isProjectNavigationEvent(event))
@@ -139,8 +149,13 @@ export function useLiveSessionEvents(): void {
         activeSessionId,
         directChildSessionIds,
       );
+      const observerId = state.observerSessionId;
+      if (observerId && isSessionViewRefreshEvent(event) &&
+          (eventSessionId(event) === observerId || event.payload?.child_session_id === observerId)) {
+        observerReconciliation.requestRefresh(true);
+      }
       if (refreshesCanonicalParent) {
-        reconciliation.requestRefresh();
+        reconciliation.requestRefresh(event.type === "subsession.changed");
         if (eventSessionId(event) !== activeSessionId) {
           navigationReconciliation.requestRefresh();
         }
@@ -160,6 +175,7 @@ export function useLiveSessionEvents(): void {
         if (view.kind === "project-dashboard") useProjectDashboardState.getState().invalidate(view.projectId);
         navigationReconciliation.requestRefresh();
         reconciliation.requestRefresh();
+        observerReconciliation.requestRefresh(true);
       },
       subscribeResume: (resume) => subscribeAgentRuntimeState((state) => {
         if (state === "running") resume();
@@ -169,6 +185,7 @@ export function useLiveSessionEvents(): void {
       cancelled = true;
       disconnect();
       reconciliation.dispose();
+      observerReconciliation.dispose();
       navigationReconciliation.dispose();
     };
   }, []);

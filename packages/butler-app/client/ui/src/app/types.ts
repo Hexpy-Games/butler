@@ -1642,6 +1642,7 @@ export interface TimelineEvent {
     chat_id?: string;
     role?: MessageRecord["role"];
     session_id?: string;
+    child_session_id?: string;
     session?: unknown;
     turn_id?: string;
     state?: string;

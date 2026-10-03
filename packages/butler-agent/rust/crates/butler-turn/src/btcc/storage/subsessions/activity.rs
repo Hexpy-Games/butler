@@ -149,26 +149,48 @@ impl SqliteSubsessionRepository {
         parents: Vec<String>,
     ) -> Result<Vec<(String, super::StoredSubsessionDelegation)>, StorageError> {
         let parents = serde_json::to_string(&parents).map_err(|error| {
-            StorageError::new(crate::btcc::StorageCode::SubsessionPacketInvalid, error.to_string())
+            StorageError::new(
+                crate::btcc::StorageCode::SubsessionPacketInvalid,
+                error.to_string(),
+            )
         })?;
-        self.storage.execute(move |db| {
-            let mut statement = db.prepare_cached(
-                r"WITH RECURSIVE descendants(root,session,relation) AS (                 SELECT p.value,r.child_session_id,r.relation_id FROM json_each(?1) p                 JOIN btcc_session_relations r ON r.parent_session_id=p.value                 WHERE r.activity_terminal=0 AND r.activity_role IN ('steward','worker')                 UNION                 SELECT d.root,r.child_session_id,r.relation_id FROM descendants d                 JOIN btcc_session_relations r ON r.parent_session_id=d.session                 WHERE r.activity_terminal=0 AND r.activity_role IN ('steward','worker'))                 SELECT root,relation FROM descendants d WHERE                 (SELECT t.semantic_state FROM btcc_turns t WHERE t.session_id=d.session                  ORDER BY t.rowid DESC LIMIT 1) IN ('admitted','delivery_committed')"
-            ).map_err(StorageError::sqlite)?;
-            let ids = statement.query_map([parents], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-            }).map_err(StorageError::sqlite)?
-                .collect::<Result<Vec<_>, _>>().map_err(StorageError::sqlite)?;
-            let mut candidates = Vec::new();
-            for (parent, id) in ids {
-                match super::decode::read(db, "r.relation_id=?1", &id) {
-                    Ok(Some(relation)) => candidates.push((parent, relation)),
-                    Ok(None) => {},
-                    Err(error) if error.code() == crate::btcc::StorageCode::SubsessionPacketInvalid.as_str() => {},
-                    Err(error) => return Err(error),
+        self.storage
+            .execute(move |db| {
+                let mut statement = db
+                    .prepare_cached(
+                        r"WITH RECURSIVE descendants(root,session,relation) AS (
+                    SELECT p.value,r.child_session_id,r.relation_id FROM json_each(?1) p
+                    JOIN btcc_session_relations r ON r.parent_session_id=p.value
+                    WHERE r.activity_terminal=0 AND r.activity_role IN ('steward','worker')
+                    UNION
+                    SELECT d.root,r.child_session_id,r.relation_id FROM descendants d
+                    JOIN btcc_session_relations r ON r.parent_session_id=d.session
+                    WHERE r.activity_terminal=0 AND r.activity_role IN ('steward','worker'))
+                SELECT root,relation FROM descendants d WHERE
+                    (SELECT t.semantic_state FROM btcc_turns t WHERE t.session_id=d.session
+                     ORDER BY t.rowid DESC LIMIT 1) IN ('admitted','delivery_committed')",
+                    )
+                    .map_err(StorageError::sqlite)?;
+                let ids = statement
+                    .query_map([parents], |row| {
+                        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                    })
+                    .map_err(StorageError::sqlite)?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(StorageError::sqlite)?;
+                let mut candidates = Vec::new();
+                for (parent, id) in ids {
+                    match super::decode::read(db, "r.relation_id=?1", &id) {
+                        Ok(Some(relation)) => candidates.push((parent, relation)),
+                        Ok(None) => {}
+                        Err(error)
+                            if error.code()
+                                == crate::btcc::StorageCode::SubsessionPacketInvalid.as_str() => {}
+                        Err(error) => return Err(error),
+                    }
                 }
-            }
-            Ok(candidates)
-        }).await
+                Ok(candidates)
+            })
+            .await
     }
 }

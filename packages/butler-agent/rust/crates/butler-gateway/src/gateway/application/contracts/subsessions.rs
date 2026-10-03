@@ -8,6 +8,11 @@ pub struct AppWorkerActivitySourcePage {
 }
 
 pub trait AppSubsessionPort: Send + Sync {
+    /// Parent/child identities whose durable execution projection changed.
+    fn changes(&self) -> Option<tokio::sync::broadcast::Receiver<(String, String)>> {
+        None
+    }
+
     /// Read-only execution presence for the requested visible parent sessions.
     fn running_parents(&self, _parents: Vec<String>) -> ApplicationFuture<Vec<String>> {
         Box::pin(async { Ok(Vec::new()) })
@@ -56,4 +61,3 @@ pub struct AppSessionViewPage {
     pub before_cursor: Option<u64>,
     pub limit: usize,
 }
-

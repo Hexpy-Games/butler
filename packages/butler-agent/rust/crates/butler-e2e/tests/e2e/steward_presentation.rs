@@ -75,6 +75,82 @@ async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), 
     Ok(())
 }
 
+#[tokio::test]
+async fn stopped_steward_projects_terminal_state_and_publishes_change() -> Result<(), HarnessError>
+{
+    butler_e2e::gate!();
+    let (url, script, server) = stub::start().await?;
+    let setup = setup("STEWARD-STOP", &url).await?;
+    std::fs::write(setup.sandbox.data.join("a.txt"), "Approach A")?;
+    *script.workspace.lock().unwrap() = setup.sandbox.data.display().to_string();
+    let s = setup.start().await?;
+    s.turn("general", stub::OWNER).await?;
+    tokio::time::timeout(Duration::from_secs(20), script.held.notified())
+        .await
+        .unwrap();
+    assert_sidebar_work(&s, true).await?;
+    assert_owner_scale_sidebar(&s).await?;
+    let view = s.gw.get("/session-view?session_id=general").await?;
+    assert!(view.data()["active_turn"].is_null(), "parent has ended");
+    let child = &view.data()["steward_children"][0];
+    let relation = child["relation"]["relation_id"].as_str().unwrap();
+    let child_id = child["session_id"].as_str().unwrap();
+    let cursor = view.data()["cursors"]["events"].as_u64().unwrap();
+    s.gw.post(
+        &format!("/steward-relations/{relation}/cancel"),
+        json!({"parent_session_id":"general"}),
+    )
+    .await?;
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        let own =
+            s.gw.get(&format!("/session-view?session_id={child_id}"))
+                .await?;
+        if own.data()["status"] == "cancelled" {
+            assert!(own.data()["active_turn"].is_null());
+            assert_ne!(own.data()["waiting_for_children"], true);
+            assert_eq!(own.data()["latest_turn"]["cancellable"], false);
+            break;
+        }
+        assert!(Instant::now() < deadline, "{own:?}\n{}", s.agent.logs());
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let confirmed = Instant::now();
+    loop {
+        let events = s.gw.events_since(cursor).await?;
+        if events.iter().any(|event| {
+            event["type"] == "subsession.changed"
+                && event["payload"]["child_session_id"] == child_id
+        }) {
+            break;
+        }
+        butler_e2e::assert_wall_clock_budget!(
+            confirmed.elapsed(),
+            Duration::from_millis(500),
+            "terminal event"
+        );
+        assert!(
+            Instant::now() < deadline,
+            "missing terminal event: {events:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert_sidebar_work(&s, false).await?;
+    butler_e2e::assert_wall_clock_budget!(
+        confirmed.elapsed(),
+        Duration::from_millis(500),
+        "terminal navigation"
+    );
+    println!(
+        "stop confirmation to event/navigation: {} ms",
+        confirmed.elapsed().as_millis()
+    );
+    script.release.notify_one();
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+
 async fn wait_held_tool(s: &butler_e2e::e2e::scenario::Scenario) -> Result<(), HarnessError> {
     let deadline = Instant::now() + Duration::from_secs(20);
     let marker = s.sandbox.data.join("e2e-held-tool");
@@ -240,8 +316,52 @@ async fn assert_sidebar_work(
     running: bool,
 ) -> Result<(), HarnessError> {
     let navigation = s.gw.get("/navigation").await?;
-    let parent = navigation.data()["chats"].as_array().unwrap().iter()
-        .find(|session| session["id"] == "general").unwrap();
+    let parent = navigation.data()["chats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|session| session["id"] == "general")
+        .unwrap();
     assert_eq!(parent["running_delegated_work"], running, "{parent}");
+    Ok(())
+}
+
+async fn assert_owner_scale_sidebar(
+    s: &butler_e2e::e2e::scenario::Scenario,
+) -> Result<(), HarnessError> {
+    let db =
+        rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
+    db.execute_batch(
+        "WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<599)
+        INSERT INTO chats(id,title,kind,created_at,updated_at)
+        SELECT 'busy-scale-'||i,'Idle chat '||i,'chat','2026-01-01','2026-01-01' FROM n;",
+    )
+    .unwrap();
+    let started = Instant::now();
+    let navigation = s.gw.get("/navigation").await?;
+    let elapsed = started.elapsed();
+    let chats = navigation.data()["chats"].as_array().unwrap();
+    assert_eq!(chats.len(), 601, "complete navigation at owner scale");
+    assert_eq!(
+        chats
+            .iter()
+            .filter(|chat| chat["running_delegated_work"] == true)
+            .count(),
+        1
+    );
+    assert!(
+        chats
+            .iter()
+            .any(|chat| chat["id"] == "general" && chat["running_delegated_work"] == true)
+    );
+    butler_e2e::assert_wall_clock_budget!(
+        elapsed,
+        Duration::from_millis(500),
+        "601-chat delegated navigation"
+    );
+    println!(
+        "601-chat complete delegated navigation: {} ms",
+        elapsed.as_millis()
+    );
     Ok(())
 }
