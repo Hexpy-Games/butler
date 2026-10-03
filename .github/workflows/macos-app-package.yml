@@ -103,6 +103,7 @@ jobs:
           export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
           trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
           deploy/macos/sign-and-notarize.sh setup-certificate
+          echo "BUTLER_APP_RELEASE_SMOKE_MODE=production" >> "$GITHUB_ENV"
 
       - name: Package and smoke the native App release
         if: ${{ !inputs.published-candidate }}

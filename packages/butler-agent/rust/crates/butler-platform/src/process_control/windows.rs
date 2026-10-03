@@ -48,6 +48,19 @@ pub(super) const SYSTEM_ENVIRONMENT: &[&str] = &[
     "SystemDrive",
     "SystemRoot",
     "windir",
+    // .NET/PowerShell module discovery needs the same runtime roots as a
+    // normally launched App. Profile variables remain sandbox-owned.
+    "ProgramData",
+    "ProgramFiles",
+    "ProgramFiles(x86)",
+    "ProgramW6432",
+    "CommonProgramFiles",
+    "CommonProgramFiles(x86)",
+    "CommonProgramW6432",
+    "NUMBER_OF_PROCESSORS",
+    "PROCESSOR_ARCHITECTURE",
+    "OS",
+    "PSModulePath",
 ];
 
 pub(super) const BASELINE_ENVIRONMENT: &[&str] = &[
