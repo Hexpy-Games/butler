@@ -31,6 +31,9 @@ on:
         type: string
         required: false
         default: ""
+      update-agent-artifact:
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -115,6 +118,17 @@ jobs:
         run: |
           chmod +x "$RUNNER_TEMP/shared-agent/butler-agent"
           echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$RUNNER_TEMP/shared-agent/butler-agent" >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@v4
+        if: inputs.update-agent-artifact != ''
+        with:
+          name: ${{ inputs.update-agent-artifact }}
+          path: ${{ runner.temp }}/update-agent-builds
+      - name: Use the real prebuilt update-fixture versions
+        if: inputs.update-agent-artifact != ''
+        run: |
+          chmod +x "$RUNNER_TEMP"/update-agent-builds/*/butler-agent
+          echo "BUTLER_UPDATE_SMOKE_AGENT_BUILDS=$RUNNER_TEMP/update-agent-builds" >> "$GITHUB_ENV"
 
       - name: Package and smoke the native App release
         if: ${{ !inputs.published-candidate }}

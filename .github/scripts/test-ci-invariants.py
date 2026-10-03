@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -19,6 +20,9 @@ ROOT = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('provenance', ROOT / 'agent-provenance.py')
 provenance = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(provenance)
+cache_spec = importlib.util.spec_from_file_location('cargo_cache', ROOT / 'cargo-artifact-cache.py')
+cargo_cache = importlib.util.module_from_spec(cache_spec)
+cache_spec.loader.exec_module(cargo_cache)
 INVENTORY = Path(sys.argv.pop()) if len(sys.argv) > 1 else None
 
 
@@ -59,23 +63,92 @@ class ArtifactTrust(unittest.TestCase):
 class Gate(unittest.TestCase):
     # test-category: pure-logic
     def test_every_selected_job_must_succeed(self):
-        jobs = ['source', 'linux-clippy', 'linux-archive', 'linux-tests', 'macos-archive', 'macos-tests',
+        jobs = ['source', 'linux-clippy', 'linux-archive', 'linux-tests', 'linux-native', 'linux-perf-archive', 'linux-perf', 'macos-archive', 'macos-tests', 'macos-native', 'macos-perf-archive', 'macos-perf',
                 'macos-package', 'linux-arm64-archive', 'linux-arm64-tests', 'linux-package-x64',
-                'linux-package-arm64', 'install-x64', 'install-arm64', 'install-macos', 'install-merge', 'ui', 'site', 'ds']
+                'linux-package-arm64', 'linux-arm64-native', 'linux-arm64-perf-archive', 'linux-arm64-perf', 'install-x64', 'install-arm64', 'install-macos', 'install-merge', 'ui', 'site', 'ds']
         outputs = dict.fromkeys(['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds'], 'true')
         results = {job: {'result': 'success'} for job in jobs}
         results['linux-arm64-tests']['result'] = 'skipped'  # Existing non-PR arm64 restriction.
+        results['linux-arm64-perf']['result'] = 'skipped'
+        results['linux-arm64-perf-archive']['result'] = 'skipped'
         results['changes'] = dict(result='success', outputs=outputs)
         env = dict(os.environ, EVENT='pull_request', RESULTS=json.dumps(results))
         self.assertEqual(subprocess.run([sys.executable, ROOT / 'check-gate.py'], env=env, capture_output=True).returncode, 0)
         for job in jobs:
-            if job == 'linux-arm64-tests':
+            if job in ['linux-arm64-tests', 'linux-arm64-perf-archive', 'linux-arm64-perf']:
                 continue
             for outcome in ['failure', 'cancelled', 'skipped']:
                 changed = json.loads(json.dumps(results))
                 changed[job]['result'] = outcome
                 env['RESULTS'] = json.dumps(changed)
                 self.assertNotEqual(subprocess.run([sys.executable, ROOT / 'check-gate.py'], env=env, capture_output=True).returncode, 0, (job, outcome))
+
+
+class CargoCache(unittest.TestCase):
+    # test-category: security
+    def test_snapshot_requires_native_success_identity_and_complete_digest(self):
+        run = dict(head_repository=dict(full_name='owner/repo'))
+        jobs = [dict(name='macos-archive / Build archives (darwin-arm64)', status='completed', conclusion='success')]
+        self.assertTrue(cargo_cache.valid_producer(run, jobs, 'owner/repo', 'darwin-arm64'))
+        self.assertFalse(cargo_cache.valid_producer(run, jobs, 'owner/repo', 'linux-x64'))
+        self.assertFalse(cargo_cache.valid_producer(run, jobs, 'fork/repo', 'darwin-arm64'))
+        for status, conclusion in [('completed', 'failure'), ('completed', 'cancelled'), ('in_progress', '')]:
+            self.assertFalse(cargo_cache.valid_producer(run, [dict(jobs[0], status=status, conclusion=conclusion)], 'owner/repo', 'darwin-arm64'))
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            expected = dict(platform='linux-x64', mode='prebuilt-ort', flags={'assertions': 'true'})
+            (directory / 'cache.tar.zst').write_bytes(b'complete build inputs')
+            metadata = dict(identity=expected, sha256=cargo_cache.digest(directory / 'cache.tar.zst'))
+            (directory / 'cache.json').write_text(json.dumps(metadata))
+            cargo_cache.verify(directory, expected)
+            with self.assertRaisesRegex(ValueError, 'identity'):
+                cargo_cache.verify(directory, dict(expected, mode='static-ort'))
+            self.assertNotEqual(cargo_cache.artifact_name(expected), cargo_cache.artifact_name(dict(expected, mode='static-ort')))
+            (directory / 'cache.tar.zst').write_bytes(b'incomplete')
+            with self.assertRaisesRegex(ValueError, 'digest'):
+                cargo_cache.verify(directory, expected)
+
+    # test-category: security
+    def test_snapshot_restores_full_target_and_rejects_escape_paths(self):
+        original = Path.cwd()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            try:
+                os.chdir(root)
+                for name in ['target/release/complete', '../escaped', 'target/../../escaped']:
+                    raw = root / 'cache.tar'
+                    with tarfile.open(raw, 'w') as archive:
+                        entry = tarfile.TarInfo(name)
+                        entry.size = 19
+                        archive.addfile(entry, io.BytesIO(b'all compiled inputs'))
+                    with (root / 'cache.tar.zst').open('wb') as packed:
+                        subprocess.run(['zstd', '-q', '-c', str(raw)], stdout=packed, check=True)
+                    if name == 'target/release/complete':
+                        cargo_cache.extract(root)
+                        self.assertEqual((root / name).read_bytes(), b'all compiled inputs')
+                    else:
+                        with self.assertRaisesRegex(ValueError, 'path'):
+                            cargo_cache.extract(root)
+                # Round-trip the producer snapshot, not just the extractor.
+                expected = dict(platform='linux-x64', mode='prebuilt-ort', flags={})
+                with patch.dict(os.environ, GITHUB_OUTPUT=str(root / 'outputs')), \
+                     patch.object(cargo_cache, 'output', return_value='a' * 40):
+                    cargo_cache.record(root / 'snapshot', expected)
+                cargo_cache.verify(root / 'snapshot', expected)
+                (root / 'target/release/complete').unlink()
+                cargo_cache.extract(root / 'snapshot')
+                self.assertEqual((root / 'target/release/complete').read_bytes(), b'all compiled inputs')
+                with tarfile.open(raw, 'w') as archive:
+                    entry = tarfile.TarInfo('target/escape')
+                    entry.type = tarfile.SYMTYPE
+                    entry.linkname = '../../escaped'
+                    archive.addfile(entry)
+                with (root / 'cache.tar.zst').open('wb') as packed:
+                    subprocess.run(['zstd', '-q', '-c', str(raw)], stdout=packed, check=True)
+                with self.assertRaises(tarfile.FilterError):
+                    cargo_cache.extract(root)
+            finally:
+                os.chdir(original)
 
 
 class Coverage(unittest.TestCase):

@@ -95,9 +95,6 @@ jobs:
     name: Build Linux Agent archive (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 150
-    env:
-      CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: 'true'
-      CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS: 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -111,7 +108,7 @@ jobs:
       - name: Build, package and smoke the Agent archive
         uses: ./.github/actions/build-agent-archive
         with:
-          cache-key: package-${{ matrix.platform }}
+          cache-key: native-${{ matrix.platform }}
           ort-mode: static-ort
           reuse-pr-agent: 'true'
           artifact-base-url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}

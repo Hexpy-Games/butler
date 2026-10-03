@@ -2,6 +2,9 @@ name: Archived Rust tests
 on:
   workflow_call:
     inputs:
+      performance-only:
+        type: boolean
+        default: false
       runner:
         type: string
         default: ubuntu-24.04
@@ -12,6 +15,7 @@ permissions:
   contents: read
 jobs:
   workspace:
+    if: ${{ !inputs.performance-only }}
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 90
     steps:
@@ -31,6 +35,7 @@ jobs:
           python3 "$isolate" cargo-nextest nextest list "${args[@]}"
           python3 "$isolate" cargo-nextest nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" run "${args[@]}" --no-fail-fast --retries 0
   e2e:
+    if: ${{ !inputs.performance-only }}
     name: E2E (${{ inputs.platform }} ${{ matrix.shard }})
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 90
@@ -71,6 +76,7 @@ jobs:
       - if: always()
         uses: ./.github/actions/assert-home-untouched
   perf:
+    if: inputs.performance-only
     name: Performance (${{ inputs.platform }} ${{ matrix.shard }})
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 90
@@ -85,12 +91,16 @@ jobs:
           tool: cargo-nextest
       - uses: actions/download-artifact@v4
         with:
-          name: rust-${{ inputs.platform }}
+          name: perf-rust-${{ inputs.platform }}
           path: ${{ runner.temp }}/rust-archive
+      - uses: actions/download-artifact@v4
+        with:
+          name: agent-payload-${{ inputs.platform }}
+          path: ${{ runner.temp }}/production-agent
       - uses: ./.github/actions/e2e-stub
         with:
           archive-file: ${{ runner.temp }}/rust-archive/tests.tar.zst
-          agent-binary: ${{ runner.temp }}/rust-archive/butler-agent
+          agent-binary: ${{ runner.temp }}/production-agent/butler-agent
           enforce-budgets: "true"
           exclude-perf: "false"
           filter-file: ${{ matrix.shard != 'idle' && format('{0}/rust-archive/perf-{1}.txt', runner.temp, matrix.shard) || '' }}

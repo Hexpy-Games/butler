@@ -57,6 +57,7 @@ runs:
         native-deps: ${{ inputs.ort-mode }}
         cache-key: ${{ inputs.cache-key }}
         cache-workspace-crates: 'true'
+        artifact-cache-platform: ${{ inputs.reuse-pr-agent == 'true' && (runner.os == 'macOS' && 'darwin-arm64' || runner.arch == 'ARM64' && 'linux-arm64' || 'linux-x64') || '' }}
 
     - name: Set up Bun
       uses: ./.github/actions/bun-setup

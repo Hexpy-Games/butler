@@ -7,6 +7,12 @@ description: >-
   prebuilt binaries, including for the Windows compile check.
 
 inputs:
+  artifact-cache-platform:
+    description: Optional native producer platform for artifact cache fallback.
+    default: ""
+  artifact-cache-kind:
+    description: Native production, debug workspace, or release E2E cache.
+    default: native
   components:
     description: Extra rustup components, comma separated (for example "clippy").
     required: false
@@ -132,6 +138,7 @@ runs:
         echo 'RUSTFLAGS=-C link-arg=-fuse-ld=mold' >> "$GITHUB_ENV"
 
     - name: Cache Cargo build
+      id: cargo-cache
       uses: Swatinem/rust-cache@v2
       with:
         workspaces: packages/butler-agent/rust -> ${{ inputs.cargo-target-dir }}
@@ -143,3 +150,14 @@ runs:
         # rebuilds the Agent's embedded revision even on a docs-only commit.
         # rust-cache ignores `key` when `shared-key` is set.
         cache-on-failure: false
+
+    - name: Restore evicted Cargo outputs from a successful native producer
+      if: inputs.artifact-cache-platform != '' && steps.cargo-cache.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: packages/butler-agent/rust
+      env:
+        GH_TOKEN: ${{ github.token }}
+        CACHE_PLATFORM: ${{ inputs.artifact-cache-platform }}
+        CACHE_MODE: ${{ inputs.native-deps }}
+        CACHE_KIND: ${{ inputs.artifact-cache-kind }}
+      run: python3 "$GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" restore "$CACHE_PLATFORM" "$CACHE_MODE" "$CACHE_KIND"

@@ -16,16 +16,13 @@ on:
         default: prebuilt-ort
 permissions:
   contents: read
+  actions: read
 jobs:
   build:
     name: Build archives (${{ inputs.platform }})
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 150
     env:
-      # Keep debug-test assertions and overflow checks in the shared optimized
-      # binary. Performance uses the same full payload and unchanged budgets.
-      CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: "true"
-      CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS: "true"
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: sccache
       BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
@@ -41,6 +38,8 @@ jobs:
           native-deps: ${{ inputs.ort-mode }}
           cache-key: archive-${{ inputs.platform }}
           cache-workspace-crates: "true"
+          artifact-cache-platform: ${{ inputs.platform }}
+          artifact-cache-kind: dev
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
@@ -60,7 +59,7 @@ jobs:
             args=(--no-default-features --features butler-agent/static-ort)
           fi
           mkdir -p "$RUNNER_TEMP/rust-archive"
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo nextest archive --release --workspace --all-targets --locked -j 8 "${args[@]}" --archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo nextest archive --workspace --all-targets --locked -j 8 "${args[@]}" --archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst"
       - name: Archive tests and record every selection
         env:
           ORT_MODE: ${{ inputs.ort-mode }}
@@ -72,12 +71,12 @@ jobs:
           if [ "$ORT_MODE" = static-ort ]; then
             args=(--no-default-features --features butler-agent/static-ort)
           fi
-          python3 "$isolate" cargo nextest list --release --workspace --all-targets --locked "${args[@]}" --message-format json > "$RUNNER_TEMP/rust-archive/list.json"
+          python3 "$isolate" cargo nextest list --workspace --all-targets --locked "${args[@]}" --message-format json > "$RUNNER_TEMP/rust-archive/list.json"
           perf_filter="$(python3 "$GITHUB_WORKSPACE/.github/scripts/e2e-perf-filter.py")"
-          python3 "$isolate" cargo nextest list --release --workspace --all-targets --locked "${args[@]}" --message-format json -E "package(=butler-e2e) and ($perf_filter)" > "$RUNNER_TEMP/rust-archive/perf-list.json"
+          python3 "$isolate" cargo nextest list --workspace --all-targets --locked "${args[@]}" --message-format json -E "package(=butler-e2e) and ($perf_filter)" > "$RUNNER_TEMP/rust-archive/perf-list.json"
           python3 "$GITHUB_WORKSPACE/.github/scripts/balance-e2e.py" "$RUNNER_TEMP/rust-archive/list.json" "$RUNNER_TEMP/rust-archive" "$RUNNER_TEMP/rust-archive/perf-list.json"
           python3 "$isolate" python3 "$GITHUB_WORKSPACE/.github/scripts/test-ci-invariants.py" "$RUNNER_TEMP/rust-archive"
-          cp target/release/butler-agent "$RUNNER_TEMP/rust-archive/butler-agent"
+          cp target/debug/butler-agent "$RUNNER_TEMP/rust-archive/butler-agent"
       - name: Run doctests when present
         env:
           ORT_MODE: ${{ inputs.ort-mode }}
@@ -89,7 +88,7 @@ jobs:
             args=(--no-default-features --features butler-agent/static-ort)
           fi
           if grep -rqE '^[[:space:]]*//[/!][[:space:]]*```' crates; then
-            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --release --workspace --doc --locked -j 8 "${args[@]}"
+            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --workspace --doc --locked -j 8 "${args[@]}"
           fi
       - name: Record native Agent provenance
         env:
@@ -100,16 +99,7 @@ jobs:
           version="$RELEASE_VERSION"
           if [[ "$version" != v[0-9]* && "$version" != 0.1.0-preview.99 ]]; then version=0.1.0-dev; fi
           version="${version#v}"
-          python3 "$GITHUB_WORKSPACE/.github/scripts/agent-provenance.py" record "$RUNNER_TEMP/rust-archive" "$PLATFORM" "$ORT_MODE" release "$version"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: agent-payload-${{ inputs.platform }}
-          path: |
-            ${{ runner.temp }}/rust-archive/butler-agent
-            ${{ runner.temp }}/rust-archive/provenance.json
-          if-no-files-found: error
-          retention-days: 14
-          compression-level: 0
+          python3 "$GITHUB_WORKSPACE/.github/scripts/agent-provenance.py" record "$RUNNER_TEMP/rust-archive" "$PLATFORM" "$ORT_MODE" dev "$version"
       - uses: actions/upload-artifact@v4
         with:
           name: rust-${{ inputs.platform }}
@@ -117,3 +107,16 @@ jobs:
           if-no-files-found: error
           retention-days: 1
           compression-level: 1
+      - name: Preserve successful Cargo outputs outside the shared cache quota
+        id: cargo-cache
+        env:
+          CACHE_PLATFORM: ${{ inputs.platform }}
+          CACHE_MODE: ${{ inputs.ort-mode }}
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/cargo-artifact-cache.py" record "$CACHE_PLATFORM" "$CACHE_MODE" dev
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.cargo-cache.outputs.name }}
+          path: ${{ runner.temp }}/cargo-build-cache/*
+          retention-days: 2
+          compression-level: 0
+          if-no-files-found: error

@@ -58,8 +58,13 @@ preview **37112203542** queued its native build for **1376 s (22m56s)** before
 **372 s** of work, then spent **770 s** in disposable hosted verification.
 Runner contention can dominate Windows even with warm compilation.
 
-- One optimized Rust build/archive per platform supplies workspace tests, six
-  ordinary E2E shards, three install selections and three serial perf shards.
+- One debug Rust build/archive per platform supplies workspace tests, six
+  ordinary E2E shards and three install selections, preserving original debug
+  hooks/assertions and avoiding optimization of every unit-test binary.
+  One production Agent build supplies native package/install/perf consumers;
+  a small optimized E2E-only archive supplies three serial perf shards.
+  macOS also builds real .90/.91 update fixtures once and passes them through
+  the existing smoke input, retaining embedded-version/signature/update proofs.
   PERF-IDLE has its own runner and retains the full five-minute observation.
   Test assertions, overflow checks, all budget helpers, existing ignored cases,
   watchdogs and zero retries are preserved. Producer-side invariants prove the
@@ -84,15 +89,23 @@ Runner contention can dominate Windows even with warm compilation.
   release profile, toolchain, assertions/overflow settings, flags and SHA256.
   Only completed successful same-repository CI runs qualify. Forks, failed
   runs, expired/incompatible artifacts and ordinary PR-head/merge-commit
-  mismatches never qualify. Unix release payloads retain the shared build's
-  assertions and overflow checks; no check is removed to make reuse possible.
+  mismatches never qualify. Ordinary checks retain debug assertions/overflow
+  checks; perf and release payloads retain original production settings. These
+  configurations cannot share one executable without changing check semantics.
   Most tags will miss PR reuse because the SHA or embedded version differs;
   the normal cached native build remains the required fallback.
+- Successful Cargo producers also preserve compatible complete target outputs
+  as two-day artifacts, outside the shared 10 GB cache eviction pool. Restore
+  requires compiler/native mode/flags/lockfile identity, checksum and a
+  successful same-repository native producer, then Cargo validates sources.
 - Bun package caches include OS, architecture, actual Bun version and lockfile,
   and live outside disposable HOME. `post-release-verify.yml` runs the existing
   published macOS and Windows install/update checks and both Linux native
   install/reinstall smokes concurrently. It only accepts existing public tags
   and neither builds release payloads nor publishes anything.
+
+The completed cold experiment and per-job phases are recorded in
+[CI-speed-4-runs.md](CI-speed-4-runs.md). It failed and is not a speedup claim.
 
 ## Estimates before the measurement PR
 

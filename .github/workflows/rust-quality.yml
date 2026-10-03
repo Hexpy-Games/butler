@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   pull-requests: read
 
 concurrency:
@@ -154,17 +155,52 @@ jobs:
       - name: Clippy all targets
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
 
+  linux-native:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.linux-package == 'true' || needs.changes.outputs.install == 'true'
+    uses: ./.github/workflows/native-agent.yml
+    with:
+      runner: ubuntu-24.04
+      platform: linux-x64
+      ort-mode: ${{ github.event_name == 'schedule' && 'static-ort' || 'prebuilt-ort' }}
+
   linux-archive:
     needs: changes
     if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.linux-package == 'true' || needs.changes.outputs.install == 'true'
     uses: ./.github/workflows/rust-archive.yml
     with:
-      ort-mode: ${{ github.event_name == 'schedule' && 'static-ort' || 'prebuilt-ort' }}
+      ort-mode: prebuilt-ort
+
+  linux-perf-archive:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    uses: ./.github/workflows/rust-perf-archive.yml
+    with:
+      runner: ubuntu-24.04
+      platform: linux-x64
+
+  linux-perf:
+    needs: [changes, linux-perf-archive, linux-native]
+    if: needs.changes.outputs.rust == 'true'
+    uses: ./.github/workflows/rust-tests.yml
+    with:
+      runner: ubuntu-24.04
+      platform: linux-x64
+      performance-only: true
 
   linux-tests:
     needs: [changes, linux-archive]
     if: needs.changes.outputs.rust == 'true'
     uses: ./.github/workflows/rust-tests.yml
+
+  linux-arm64-native:
+    needs: changes
+    if: needs.changes.outputs.linux-package == 'true' || needs.changes.outputs.install == 'true' || (github.event_name != 'pull_request' && needs.changes.outputs.rust == 'true')
+    uses: ./.github/workflows/native-agent.yml
+    with:
+      runner: ubuntu-24.04-arm
+      platform: linux-arm64
+      ort-mode: ${{ github.event_name == 'schedule' && 'static-ort' || 'prebuilt-ort' }}
 
   linux-arm64-archive:
     needs: changes
@@ -173,8 +209,25 @@ jobs:
     with:
       runner: ubuntu-24.04-arm
       platform: linux-arm64
-      ort-mode: ${{ github.event_name == 'schedule' && 'static-ort' || 'prebuilt-ort' }}
+      ort-mode: prebuilt-ort
       clippy: true
+
+  linux-arm64-perf-archive:
+    needs: changes
+    if: github.event_name != 'pull_request' && needs.changes.outputs.rust == 'true'
+    uses: ./.github/workflows/rust-perf-archive.yml
+    with:
+      runner: ubuntu-24.04-arm
+      platform: linux-arm64
+
+  linux-arm64-perf:
+    needs: [changes, linux-arm64-perf-archive, linux-arm64-native]
+    if: github.event_name != 'pull_request' && needs.changes.outputs.rust == 'true'
+    uses: ./.github/workflows/rust-tests.yml
+    with:
+      runner: ubuntu-24.04-arm
+      platform: linux-arm64
+      performance-only: true
 
   linux-arm64-tests:
     needs: [changes, linux-arm64-archive]
@@ -188,7 +241,7 @@ jobs:
     permissions:
       contents: read
       issues: write
-    needs: [changes, linux-archive]
+    needs: [changes, linux-native]
     if: needs.changes.outputs.linux-package == 'true'
     uses: ./.github/workflows/linux-packages.yml
     with:
@@ -201,7 +254,7 @@ jobs:
     permissions:
       contents: read
       issues: write
-    needs: [changes, linux-arm64-archive]
+    needs: [changes, linux-arm64-native]
     if: needs.changes.outputs.linux-package == 'true'
     uses: ./.github/workflows/linux-packages.yml
     with:
@@ -211,6 +264,16 @@ jobs:
       smokes: '[{"target":"linux-arm64","runner":"ubuntu-24.04-arm","format":"deb","image":"ubuntu:24.04"}]'
 
 
+  macos-native:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.package == 'true' || needs.changes.outputs.install == 'true'
+    uses: ./.github/workflows/native-agent.yml
+    with:
+      runner: macos-15
+      platform: darwin-arm64
+      ort-mode: static-ort
+      update-versions: ${{ needs.changes.outputs.package == 'true' }}
+
   macos-archive:
     needs: changes
     if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.package == 'true' || needs.changes.outputs.install == 'true'
@@ -218,8 +281,25 @@ jobs:
     with:
       runner: macos-15
       platform: darwin-arm64
-      ort-mode: static-ort
+      ort-mode: prebuilt-ort
       clippy: true
+
+  macos-perf-archive:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    uses: ./.github/workflows/rust-perf-archive.yml
+    with:
+      runner: macos-15
+      platform: darwin-arm64
+
+  macos-perf:
+    needs: [changes, macos-perf-archive, macos-native]
+    if: needs.changes.outputs.rust == 'true'
+    uses: ./.github/workflows/rust-tests.yml
+    with:
+      runner: macos-15
+      platform: darwin-arm64
+      performance-only: true
 
   macos-tests:
     needs: [changes, macos-archive]
@@ -230,14 +310,15 @@ jobs:
       platform: darwin-arm64
 
   macos-package:
-    needs: [changes, macos-archive]
+    needs: [changes, macos-native]
     if: needs.changes.outputs.package == 'true'
     uses: ./.github/workflows/macos-app-package.yml
     with:
       agent-artifact: agent-payload-darwin-arm64
+      update-agent-artifact: macos-update-agent-builds
 
   install-x64:
-    needs: [changes, linux-archive]
+    needs: [changes, linux-native]
     if: needs.changes.outputs.install == 'true'
     uses: ./.github/workflows/install-smoke.yml
     with:
@@ -247,7 +328,7 @@ jobs:
       platforms: '[{"platform":"linux-x64","runner":"ubuntu-24.04"}]'
 
   install-arm64:
-    needs: [changes, linux-arm64-archive]
+    needs: [changes, linux-arm64-native]
     if: needs.changes.outputs.install == 'true'
     uses: ./.github/workflows/install-smoke.yml
     with:
@@ -257,7 +338,7 @@ jobs:
       platforms: '[{"platform":"linux-arm64","runner":"ubuntu-24.04-arm"}]'
 
   install-macos:
-    needs: [changes, macos-archive]
+    needs: [changes, macos-native]
     if: needs.changes.outputs.install == 'true'
     uses: ./.github/workflows/install-smoke.yml
     with:
@@ -290,7 +371,7 @@ jobs:
   gate:
     name: gate
     if: always()
-    needs: [changes, source, linux-clippy, linux-archive, linux-tests, macos-archive, macos-tests, macos-package, linux-arm64-archive, linux-arm64-tests, linux-package-x64, linux-package-arm64, install-x64, install-arm64, install-macos, install-merge, ui, site, ds]
+    needs: [changes, source, linux-clippy, linux-native, linux-perf-archive, linux-perf, macos-native, macos-perf-archive, macos-perf, linux-arm64-native, linux-arm64-perf-archive, linux-arm64-perf, linux-archive, linux-tests, macos-archive, macos-tests, macos-package, linux-arm64-archive, linux-arm64-tests, linux-package-x64, linux-package-arm64, install-x64, install-arm64, install-macos, install-merge, ui, site, ds]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

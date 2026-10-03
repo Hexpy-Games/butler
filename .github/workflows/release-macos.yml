@@ -15,9 +15,6 @@ jobs:
       SCCACHE_GHA_ENABLED: 'true'
       RUSTC_WRAPPER: sccache
       BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
-      # Match the shared optimized payload without dropping debug-test checks.
-      CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS: 'true'
-      CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS: 'true'
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -62,8 +59,9 @@ jobs:
         with:
           components: rustfmt,clippy
           native-deps: static-ort
-          cache-key: release-darwin-arm64
+          cache-key: native-darwin-arm64
           cache-workspace-crates: 'true'
+          artifact-cache-platform: darwin-arm64
       - name: Verify pinned native Rust toolchain
         if: steps.reuse.outputs.reused != 'true'
         run: |
@@ -231,4 +229,3 @@ jobs:
       - name: Remove the signing keychain and keys
         if: always()
         run: deploy/macos/sign-and-notarize.sh cleanup
-
