@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -67,6 +68,22 @@ def extract(directory, root='target'):
         with tarfile.open(fileobj=decompress.stdout, mode='r|') as archive_tar:
             for member in archive_tar:
                 path = Path(member.name)
+                if member.name == f'._{root}' and member.isfile():
+                    # BSD tar's legacy AppleDouble root attributes are data,
+                    # not Cargo outputs. Preserve them inside the cache tree;
+                    # they must never create a sibling checkout file.
+                    with archive_tar.extractfile(member) as metadata:
+                        header = metadata.read(8)
+                        if header != b'\x00\x05\x16\x07\x00\x02\x00\x00':
+                            raise ValueError('Invalid AppleDouble cache root metadata')
+                        destination = Path(root) / '._archive_root'
+                        if not destination.resolve().is_relative_to(Path(root).resolve()):
+                            raise tarfile.FilterError('Escaping cache root metadata')
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        with destination.open('wb') as saved:
+                            saved.write(header)
+                            shutil.copyfileobj(metadata, saved)
+                    continue
                 if path.is_absolute() or '..' in path.parts or not path.parts or path.parts[0] != root:
                     raise ValueError(f'Unexpected Cargo cache path: {member.name}')
                 if member.issym() or member.islnk():
@@ -108,7 +125,8 @@ def record(directory, expected, root='target'):
     archive = directory / 'cache.tar.zst'
     with archive.open('wb') as destination:
         tar = subprocess.Popen(['tar', '--exclude=target/debug/incremental',
-                                '--exclude=target/release/incremental', '-cf', '-', root], stdout=subprocess.PIPE)
+                                '--exclude=target/release/incremental', '-cf', '-', root], stdout=subprocess.PIPE,
+                               env=dict(os.environ, COPYFILE_DISABLE='1'))
         try:
             subprocess.run(['zstd', '-T2', '-3'], stdin=tar.stdout, stdout=destination, check=True)
         finally:

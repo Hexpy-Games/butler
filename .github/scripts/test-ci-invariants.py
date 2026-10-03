@@ -164,6 +164,22 @@ class CargoCache(unittest.TestCase):
                         subprocess.run(['zstd', '-q', '-c', str(raw)], stdout=packed, check=True)
                     with self.assertRaises(tarfile.FilterError):
                         cargo_cache.extract(root)
+                # Old macOS producers add a root AppleDouble sidecar. Keep
+                # every metadata byte inside target; reject arbitrary siblings.
+                for data in [b'\x00\x05\x16\x07\x00\x02\x00\x00full root attributes', b'not AppleDouble']:
+                    with tarfile.open(raw, 'w') as archive:
+                        entry = tarfile.TarInfo('._target')
+                        entry.size = len(data)
+                        archive.addfile(entry, io.BytesIO(data))
+                    with (root / 'cache.tar.zst').open('wb') as packed:
+                        subprocess.run(['zstd', '-q', '-c', str(raw)], stdout=packed, check=True)
+                    if data.startswith(b'\x00\x05\x16\x07'):
+                        cargo_cache.extract(root)
+                        self.assertEqual((root / 'target/._archive_root').read_bytes(), data)
+                        self.assertFalse((root / '._target').exists())
+                    else:
+                        with self.assertRaisesRegex(ValueError, 'AppleDouble'):
+                            cargo_cache.extract(root)
             finally:
                 os.chdir(original)
 
