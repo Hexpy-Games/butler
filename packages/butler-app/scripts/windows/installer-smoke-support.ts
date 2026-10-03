@@ -59,10 +59,10 @@ export async function click(page: ElectronPage, name: string) {
   await page.expression(`(${button}).click()`);
 }
 
-export function shortcutPaths(): string[] {
+export function shortcutPaths(env = process.env): string[] {
   return JSON.parse(powershell(`ConvertTo-Json -Compress -InputObject @(
-    (Join-Path ([Environment]::GetFolderPath('Programs')) 'Butler.lnk'),
-    (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Butler.lnk'))`));
+    (Join-Path ([Environment]::GetFolderPath('Programs', [Environment+SpecialFolderOption]::DoNotVerify)) 'Butler.lnk'),
+    (Join-Path ([Environment]::GetFolderPath('Desktop', [Environment+SpecialFolderOption]::DoNotVerify)) 'Butler.lnk'))`, env));
 }
 
 export function assertShortcuts(paths: string[], present: boolean) {

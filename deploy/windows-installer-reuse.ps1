@@ -27,7 +27,8 @@ $allowed = @(
     'packages/butler-app/scripts/windows/installer-smoke.ts',
     'packages/butler-app/scripts/windows/installer-smoke-support.ts',
     'packages/butler-app/scripts/windows/smoke-provider.ts',
-    'packages/butler-app/scripts/windows/released-downloads-smoke.ts'
+    'packages/butler-app/scripts/windows/released-downloads-smoke.ts',
+    'packages/butler-app/scripts/windows/released-install-smoke.ts'
 )
 foreach ($path in $changed) {
     if ($path -notin $allowed) { throw "Rebuild required: $path" }

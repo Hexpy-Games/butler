@@ -76,7 +76,7 @@ const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), USERP
 const installed = join(powershell("[Environment]::GetFolderPath('LocalApplicationData')", env), "butler-app");
 const stub = join(installed, "Butler.exe");
 const updater = join(installed, "Update.exe");
-const shortcuts = [join(env.APPDATA, "Microsoft/Windows/Start Menu/Programs/Butler.lnk"), shortcutPaths()[1]!];
+const shortcuts = [join(env.APPDATA, "Microsoft/Windows/Start Menu/Programs/Butler.lnk"), shortcutPaths(env)[1]!];
 const started = Date.now();
 try {
   prepare();
@@ -146,6 +146,7 @@ try {
   console.error(JSON.stringify({ phase, renderer: page ? await page.diagnostics().catch(() => null) : null,
     providerCalls: { chat: calls.chat, memory: calls.memory, speakers: [...calls.memorySpeakers].sort() },
     memoryState: memoryState(),
+    shortcutState: shortcuts.map(path => ({ path, exists: existsSync(path) })),
     instanceState: readJson(join(data, "app/runtime/foreground/instance.json"))?.state,
     lastExit: readJson(join(data, "app/runtime/foreground/last-exit.json")),
     packages: [from, to].map(version => ({ version,
@@ -205,7 +206,7 @@ async function oneClickLaunch() {
 }
 
 function prepare() {
-  for (const folder of [env.HOME, data, env.LOCALAPPDATA, env.APPDATA]) mkdirSync(folder, { recursive: true });
+  for (const folder of [env.HOME, data, env.LOCALAPPDATA, env.APPDATA, dirname(shortcuts[1]!)]) mkdirSync(folder, { recursive: true });
   writeFileSync(join(data, "sentinel.txt"), "retained");
   writeFileSync(join(data, "butler.config.json"), JSON.stringify({ user: { name: "E2E", language: "en" },
     metrics: { enabled: false }, system: { defaultModel: "openai/gpt-6-luna" } }));
