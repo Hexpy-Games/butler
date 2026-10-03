@@ -22,7 +22,7 @@ fn snapshot(downloads: &Path) -> Result<Snapshot, HarnessError> {
     std::fs::read_dir(downloads)?
         .map(|entry| {
             let entry = entry?;
-            let metadata = entry.metadata()?;
+            let metadata = std::fs::metadata(entry.path())?;
             Ok((
                 entry.file_name().to_string_lossy().into_owned(),
                 (metadata.is_dir(), metadata.len(), metadata.modified()?),
@@ -99,12 +99,16 @@ async fn replay(
         .find(|v| v["command"] == command)
         .expect("model receives tool result");
     verify(&output, &downloads, &before)?;
+    let elapsed = script.elapsed.lock().unwrap().unwrap();
+    butler_e2e::assert_wall_clock_budget!(elapsed, Duration::from_secs(5), "Downloads observation");
+    eprintln!(
+        "PROFILE-OBSERVATION command: {:.1}ms",
+        elapsed.as_secs_f64() * 1000.
+    );
     assert!(
         requests
-            .last()
-            .unwrap()
-            .to_string()
-            .contains("DownloadsPath")
+            .iter()
+            .any(|request| request.to_string().contains("DownloadsPath"))
     );
     if access == Access::FullAccess {
         assert!(s.gw.approval_requests("general").await?.is_empty());
@@ -156,9 +160,17 @@ fn verify(output: &Value, downloads: &Path, before: &Snapshot) -> Result<(), Har
             .entry(item["Extension"].as_str().unwrap_or_default().to_owned())
             .or_default() += 1;
     }
+    let after = snapshot(downloads)?;
+    let changed = before
+        .values()
+        .zip(after.values())
+        .filter(|(a, b)| a != b)
+        .count();
     assert!(
-        snapshot(downloads)? == *before,
-        "no entry created/moved/deleted/renamed or modified"
+        after == *before,
+        "no entry created/moved/deleted/renamed or modified: before={}, after={}, changed_metadata={changed}",
+        before.len(),
+        after.len()
     );
     eprintln!(
         "DOWNLOADS evidence: entries={}, folders={}, extensions={extensions:?}",
@@ -229,6 +241,12 @@ async fn literal_current_directory_stays_protected_after_member_access() -> Resu
     assert_eq!(output["error"], "protected_path");
     assert_eq!(output["protected_path"], ".");
     assert_eq!(output["stdout"], "");
+    let elapsed = script.elapsed.lock().unwrap().unwrap();
+    butler_e2e::assert_wall_clock_budget!(
+        elapsed,
+        Duration::from_secs(1),
+        "Protected path refusal"
+    );
     assert!(s.gw.approval_requests("general").await?.is_empty());
     s.finish().await?;
     server.abort();

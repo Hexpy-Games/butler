@@ -6,6 +6,10 @@
     clippy::panic,
     reason = "test assertions"
 )]
+#[path = "windows_commands/capabilities.rs"]
+mod capabilities;
+#[path = "windows_commands/capability_stub.rs"]
+mod capability_stub;
 #[path = "windows_commands/observation.rs"]
 mod observation;
 #[path = "windows_commands/observation_stub.rs"]
