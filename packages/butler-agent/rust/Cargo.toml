@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/*", "tools/source-check"]
+members = ["crates/*", "tools/source-check", "../../../benchmarks/embedding-eval"]
 resolver = "3"
 
 [workspace.package]
