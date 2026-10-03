@@ -1,9 +1,6 @@
 import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import { useCallback, useState, type ReactNode } from "react";
 import { Typo } from "../../components/Typo";
-import { Card } from "../../components/Card";
-import { Box } from "../../components/Box";
-import { Stack } from "../../components/Stack";
 import { cn } from "../../lib/utils";
 import { useScrollEdges } from "../../lib/useScrollEdges";
 import { Wallpaper, type WallpaperMotion, type WallpaperSource, type WallpaperTone } from "../Wallpaper";
@@ -78,7 +75,6 @@ export function PromptSuggestionList({
         />
       ) : null}
       <header className={styles.header} data-has-title-icon={titleIconState} ref={setHeader}>
-        <Card className={dsClass(styles.headerSurface)} padding="none"><Box padding="lg"><Stack gap="md">
         {moment || titleIcon ? (
           <div className={styles.metaRow}>
             {titleIcon ? (
@@ -124,7 +120,6 @@ export function PromptSuggestionList({
             ) : null}
           </div>
         </div>
-        </Stack></Box></Card>
       </header>
       <div
         ref={railRef}

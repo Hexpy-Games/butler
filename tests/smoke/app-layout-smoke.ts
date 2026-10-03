@@ -23,7 +23,7 @@ const STUB_MODEL_LABEL = /^Stub\b/u;
 // The stub Custom model advertises a single reasoning level.
 const STUB_REASONING_LABEL = "Instant";
 const tempDir = mkdtempSync(join(tmpdir(), "butler-app-layout-smoke-"));
-const uiRoot = resolve(root, "packages", "butler-app", "client", "ui", "dist");
+const uiRoot = resolve(root, process.env.BUTLER_SMOKE_UI_ROOT ?? "packages/butler-app/client/ui/dist");
 const screenshotDir = resolve(root, ".tmp", "app-layout-smoke");
 mkdirSync(screenshotDir, { recursive: true });
 const rightPanelToggleSelector = `[aria-label="${appCopy.titlebar.showRightPanel}"], [aria-label="${appCopy.titlebar.hideRightPanel}"]`;
