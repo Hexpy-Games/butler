@@ -146,9 +146,9 @@ async fn mem_06_compact_detail_and_source_are_pinned() -> Result<(), HarnessErro
         .turn("general", &remember.replace("{{NONCE}}", &code))
         .await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
-    memory_stubs::vectors_complete(&s.sandbox.data).await?;
+    memory_stubs::vectors_complete(&s.sandbox.data, 1).await?;
     let graph = seed_claim(&s, &id, &code).await?;
-    memory_stubs::vectors_complete(&s.sandbox.data).await?;
+    memory_stubs::vectors_complete(&s.sandbox.data, 1).await?;
     let start = s.provider()?.requests().len();
     let (_, turn) = s.turn("general", ASK).await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
