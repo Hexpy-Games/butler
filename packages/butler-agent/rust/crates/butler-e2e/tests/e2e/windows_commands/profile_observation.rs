@@ -120,6 +120,12 @@ async fn replay(
     // A later closeout/briefing request need not replay command output. Check
     // the request that actually carries it; verify() retains all content checks.
     assert!(received.to_string().contains("DownloadsPath"));
+    let elapsed = script.elapsed.lock().unwrap().unwrap();
+    butler_e2e::assert_wall_clock_budget!(elapsed, Duration::from_secs(5), "Downloads observation");
+    eprintln!(
+        "PROFILE-OBSERVATION command: {:.1}ms",
+        elapsed.as_secs_f64() * 1000.
+    );
     if access == Access::FullAccess {
         assert!(s.gw.approval_requests("general").await?.is_empty());
     }
@@ -252,6 +258,12 @@ async fn literal_current_directory_stays_protected_after_member_access() -> Resu
     assert_eq!(output["error"], "protected_path");
     assert_eq!(output["protected_path"], ".");
     assert_eq!(output["stdout"], "");
+    let elapsed = script.elapsed.lock().unwrap().unwrap();
+    butler_e2e::assert_wall_clock_budget!(
+        elapsed,
+        Duration::from_secs(1),
+        "Protected path refusal"
+    );
     assert!(s.gw.approval_requests("general").await?.is_empty());
     s.finish().await?;
     server.abort();
