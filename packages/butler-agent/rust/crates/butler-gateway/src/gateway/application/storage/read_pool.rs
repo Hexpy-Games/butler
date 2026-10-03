@@ -1,6 +1,6 @@
 //! Bounded, read-only WAL connections; SQLite never runs on a Tokio worker.
 use super::{AppStorageError, StorageResult};
-use parking_lot::Mutex;
+use parking_lot::{Condvar, Mutex};
 use rusqlite::{Connection, OpenFlags};
 use std::{
     path::{Path, PathBuf},
@@ -29,6 +29,8 @@ pub(super) struct ReadPool {
     permits: Arc<Semaphore>,
     gate: Arc<tokio::sync::RwLock<()>>,
     retiring: AtomicBool,
+    retirement_stop: Arc<(Mutex<bool>, Condvar)>,
+    retirement_thread: Mutex<Option<std::thread::JoinHandle<()>>>,
 }
 impl ReadPool {
     pub(super) fn open(path: &Path) -> StorageResult<Self> {
@@ -44,6 +46,8 @@ impl ReadPool {
             permits: Arc::new(Semaphore::new(CONNECTIONS)),
             gate: Arc::default(),
             retiring: AtomicBool::new(false),
+            retirement_stop: Arc::new((Mutex::new(false), Condvar::new())),
+            retirement_thread: Mutex::new(None),
         })
     }
     fn connection(path: &Path) -> StorageResult<Connection> {
@@ -121,7 +125,7 @@ impl ReadPool {
                 last_used: Instant::now(),
             });
             drop(readers);
-            pool.schedule_retirement();
+            pool.schedule_retirement()?;
             drop(permit);
             drop(guard);
             match result {
@@ -137,45 +141,81 @@ impl ReadPool {
             )
         })?
     }
-    fn schedule_retirement(self: &Arc<Self>) {
+    fn schedule_retirement(self: &Arc<Self>) -> StorageResult<()> {
         if self.retiring.swap(true, Ordering::AcqRel) {
-            return;
+            return Ok(());
+        }
+        let mut thread = self.retirement_thread.lock();
+        if let Some(previous) = thread.take() {
+            let _ = previous.join();
         }
         let pool = Arc::downgrade(self);
-        tokio::spawn(async move {
-            let mut wait = SPARE_RETENTION;
-            loop {
-                tokio::time::sleep(wait).await;
-                let Some(pool) = pool.upgrade() else { break };
-                let next = tokio::task::spawn_blocking(move || {
+        let stop = self.retirement_stop.clone();
+        match std::thread::Builder::new()
+            .name("sqlite-reader-retirement".into())
+            .spawn(move || {
+                let mut wait = SPARE_RETENTION;
+                loop {
+                    let mut stopped = stop.0.lock();
+                    if *stopped {
+                        break;
+                    }
+                    stop.1.wait_for(&mut stopped, wait);
+                    if *stopped {
+                        break;
+                    }
+                    drop(stopped);
+                    let Some(pool) = pool.upgrade() else { break };
                     let mut readers = pool.available.lock();
                     if pool.permits.is_closed() {
-                        return None;
+                        break;
                     }
                     readers.retain(|reader| reader.last_used.elapsed() < SPARE_RETENTION);
-                    let next = readers
+                    match readers
                         .iter()
                         .map(|reader| SPARE_RETENTION.saturating_sub(reader.last_used.elapsed()))
-                        .min();
-                    if next.is_none() {
-                        // Clear under the same lock used when returning readers:
-                        // a subsequent return will start a new retirement task.
-                        pool.retiring.store(false, Ordering::Release);
+                        .min()
+                    {
+                        Some(next) => wait = next,
+                        None => {
+                            pool.retiring.store(false, Ordering::Release);
+                            break;
+                        }
                     }
-                    next
-                })
-                .await;
-                match next {
-                    Ok(Some(next)) => wait = next,
-                    _ => break,
                 }
+            }) {
+            Ok(started) => {
+                *thread = Some(started);
+                Ok(())
             }
-        });
+            Err(source) => {
+                self.retiring.store(false, Ordering::Release);
+                Err(AppStorageError::new(
+                    super::AppStorageCode::AppSqliteJoinFailed,
+                    source.to_string(),
+                ))
+            }
+        }
     }
     pub(super) async fn close(self: &Arc<Self>) {
         let _guard = self.gate.write().await;
         self.permits.close();
         let pool = self.clone();
-        let _closed = tokio::task::spawn_blocking(move || pool.available.lock().clear()).await;
+        let _closed = tokio::task::spawn_blocking(move || {
+            *pool.retirement_stop.0.lock() = true;
+            pool.retirement_stop.1.notify_all();
+            if let Some(thread) = pool.retirement_thread.lock().take() {
+                let _ = thread.join();
+            }
+            pool.available.lock().clear();
+        })
+        .await;
+    }
+}
+
+impl Drop for ReadPool {
+    fn drop(&mut self) {
+        *self.retirement_stop.0.lock() = true;
+        self.retirement_stop.1.notify_all();
     }
 }

@@ -69,6 +69,11 @@ impl ProviderStreamObserver for RelayObserver {
         ) else {
             return;
         };
+        // Empty provider deltas carry no text and cannot satisfy the durable
+        // stream event contract. Never let one block later session progress.
+        if text.is_empty() {
+            return;
+        }
         // A closed queue means the loop has finished; late deltas are dropped.
         let _ = self.sender.send(Relayed::Delta {
             stream_id: stream_id.to_owned(),

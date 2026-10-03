@@ -62,21 +62,30 @@ impl QuotaEventForwarder {
 
 /// Polls quota every tick while a live event stream is open.
 async fn poll_while_connected(application: AppApplication, cancel: CancellationToken) {
-    let mut ticks = tokio::time::interval(POLL_TICK);
-    ticks.set_missed_tick_behavior(MissedTickBehavior::Delay);
     loop {
-        tokio::select! {
-            () = cancel.cancelled() => return,
-            _ = ticks.tick() => {}
+        while application.subscribers.listener_count() == 0 {
+            tokio::select! {
+                () = cancel.cancelled() => return,
+                () = application.subscribers.listeners_changed() => {},
+            }
         }
-        if application.subscribers.listener_count() == 0 {
-            continue;
-        }
-        let poll = application.dependencies.monitoring.poll_provider_quota();
-        tokio::select! {
-            () = cancel.cancelled() => return,
-            // A failed poll is recorded by the port; the loop keeps going.
-            _ = poll => {}
+        let mut ticks = tokio::time::interval(POLL_TICK);
+        ticks.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        while application.subscribers.listener_count() != 0 {
+            tokio::select! {
+                () = cancel.cancelled() => return,
+                () = application.subscribers.listeners_changed() => continue,
+                _ = ticks.tick() => {}
+            }
+            if application.subscribers.listener_count() == 0 {
+                continue;
+            }
+            let poll = application.dependencies.monitoring.poll_provider_quota();
+            tokio::select! {
+                () = cancel.cancelled() => return,
+                // A failed poll is recorded by the port; the loop keeps going.
+                _ = poll => {}
+            }
         }
     }
 }

@@ -68,6 +68,11 @@ impl StorageProgressPublication {
             })
             .await
     }
+    /// Changes include progress, authority and parent outbox facts in this same store.
+    pub fn subscribe_changes(&self) -> tokio::sync::watch::Receiver<()> {
+        self.storage.subscribe_changes()
+    }
+
     /// A publisher over the store.
     pub fn new(storage: BtccStorage) -> Self {
         Self { storage }

@@ -94,6 +94,24 @@ impl InboundQueue {
         }
     }
 
+    /// Wait exactly for the next durable deferral deadline, if one exists.
+    pub async fn next_deferred_delay(&self) -> QueueResult<Option<std::time::Duration>> {
+        self.blocking(move |queue| storage::next_delay(&queue.root))
+            .await
+    }
+
+    /// Observe external queue writes and service control files before recovery.
+    pub async fn observe_changes(
+        &self,
+        signals: Vec<PathBuf>,
+    ) -> QueueResult<super::FileChangeWatch> {
+        super::FileChangeWatch::observe(self.root.clone(), signals)
+            .await
+            .map_err(|error| {
+                InboundQueueError::new(InboundQueueCode::InboundQueueIoFailed, error.to_string())
+            })
+    }
+
     pub async fn wait_for_enqueue(&self) {
         self.enqueue_wake.notified().await;
     }

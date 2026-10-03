@@ -5,6 +5,7 @@ mod authority;
 mod bootstrap;
 mod budget;
 mod canonical;
+mod changes;
 mod claims;
 mod common;
 mod context_compactions;
@@ -112,6 +113,7 @@ pub struct BtccStorage {
 }
 
 struct StorageInner {
+    changes: tokio::sync::watch::Sender<()>,
     lane: AsyncMutex<LaneState>,
     readers: Option<Arc<read_pool::ReadPool>>,
 }
@@ -127,6 +129,7 @@ impl BtccStorage {
     /// Opens the store, verifying its activation and runtime owner.
     pub async fn open(config: BtccStorageConfig) -> StorageResult<Self> {
         let (sender, receiver) = mpsc::channel(OPERATION_QUEUE_CAPACITY);
+        let (changes, _) = tokio::sync::watch::channel(());
         let (initialized_tx, initialized_rx) = oneshot::channel();
         let path = config.path;
         let read_path = path.clone();
@@ -177,6 +180,7 @@ impl BtccStorage {
         let _ = owner;
         Ok(Self {
             inner: Arc::new(StorageInner {
+                changes,
                 readers,
                 lane: AsyncMutex::new(LaneState {
                     sender: Some(sender),
@@ -197,22 +201,6 @@ impl BtccStorage {
         F: FnOnce(&mut Connection) -> StorageResult<T> + Send + 'static,
     {
         self.execute_with_owner(move |connection, _owner| operation(connection))
-    }
-
-    fn execute_with_owner<T, F>(
-        &self,
-        operation: F,
-    ) -> impl std::future::Future<Output = StorageResult<T>> + Send + '_
-    where
-        T: Send + 'static,
-        F: FnOnce(&mut Connection, &RuntimeOwner) -> StorageResult<T> + Send + 'static,
-    {
-        let (completion_tx, completion_rx) = oneshot::channel();
-        let job: DatabaseOperation = Box::new(move |connection, owner| {
-            let result = operation(connection, owner);
-            let _ignored_cancelled_caller = completion_tx.send(result);
-        });
-        self.complete(job, completion_rx)
     }
 
     async fn complete<T: Send + 'static>(

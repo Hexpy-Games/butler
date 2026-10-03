@@ -5,6 +5,8 @@
 //! the required [`GatewayApplication`] implementation supplied at composition.
 
 mod application;
+mod file_watch;
+pub use file_watch::FileChangeWatch;
 mod auth;
 mod crypto;
 mod devices;

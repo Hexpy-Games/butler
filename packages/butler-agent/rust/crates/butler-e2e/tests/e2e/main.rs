@@ -62,6 +62,7 @@ mod project_git;
 mod projection_backlog;
 mod projects;
 mod queue_admission_shutdown;
+mod queue_notifications;
 mod queue_pause;
 mod queue_shutdown;
 mod quota;

@@ -38,6 +38,10 @@ impl ProgressPublisher {
         }
     }
 
+    pub(crate) fn subscribe_changes(&self) -> tokio::sync::watch::Receiver<()> {
+        self.repository.subscribe_changes()
+    }
+
     /// Each page releases its hydrated events before the next SQLite read.
     /// A failed event holds its session's later events; other sessions proceed.
     /// Session-first keysets keep concurrent inserts behind that session's cursor.
