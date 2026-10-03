@@ -1153,6 +1153,14 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       about: ["version", "app info"],
     },
     updateComponents: { app: "Butler App", service: "Butler Agent" },
+    updateProgress: {
+      idle: "Idle",
+      checking: "Checking", downloading: "Downloading", verifying: "Verifying", ready: "Ready to install",
+      applying: "Applying", restarting: "Restarting", failed: "Update failed", completed: "Check complete",
+      retry: "Retry", cancel: "Cancel", bytesUnavailable: "Progress is unavailable.",
+      checksumFailed: "Package checksum did not match.", sourceFailed: "Could not fetch the update.",
+      cancelled: "Download cancelled.", activationFailed: "Could not apply the update.",
+    },
     sectionState: {
       loading: "Loading",
       error: "Could not load this section.",

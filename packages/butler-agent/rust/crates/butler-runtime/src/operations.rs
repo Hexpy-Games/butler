@@ -50,7 +50,7 @@ pub use status_summary::{
 };
 pub use update::{
     AgentArchiveUpdateService, AgentUpdateRequest, AppUpdateService, KEEP_VERSIONS, UpdateError,
-    UpdateRequest, version_newer,
+    UpdateProgress, UpdateProgressSink, UpdateRequest, version_newer,
 };
 pub use usage_cost::{
     CostReason, SessionUsage, SessionUsageIndex, SessionUsageView, UsageCostView, UsageEvent,

@@ -279,8 +279,7 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
     if uri.path() == "/automations" || uri.path().starts_with("/automations/") {
         return automations::route(state, request, &uri).await;
     }
-    if uri.path() == "/updates" || uri.path() == "/updates/check" || uri.path() == "/updates/apply"
-    {
+    if updates::handles(uri.path()) {
         return updates::route(state, request).await;
     }
     if message_files::handles(&method, uri.path()) {

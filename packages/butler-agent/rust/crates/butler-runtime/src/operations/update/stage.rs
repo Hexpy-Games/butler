@@ -40,6 +40,7 @@ pub(super) async fn download(
     data: &Path,
     installation: &Path,
     artifact: &AppArtifact,
+    progress: Option<&super::UpdateProgress>,
 ) -> Result<String, UpdateError> {
     let url = artifact
         .url
@@ -56,11 +57,20 @@ pub(super) async fn download(
         shutdown,
         data,
         installation,
-        url,
-        sha256,
-        &label,
+        DownloadSource {
+            url,
+            sha256,
+            label: &label,
+        },
+        progress,
     ))
     .await
+}
+
+pub(super) struct DownloadSource<'a> {
+    pub url: &'a str,
+    pub sha256: &'a str,
+    pub label: &'a str,
 }
 
 pub(super) async fn download_to_label(
@@ -68,10 +78,10 @@ pub(super) async fn download_to_label(
     shutdown: &CancellationToken,
     data: &Path,
     installation: &Path,
-    url: &str,
-    sha256: &str,
-    label: &str,
+    source: DownloadSource<'_>,
+    progress: Option<&super::UpdateProgress>,
 ) -> Result<String, UpdateError> {
+    let DownloadSource { url, sha256, label } = source;
     if !super::source::secure_source(url) {
         return Err(UpdateCode::UpdateArtifactSourceInvalid.into());
     }
@@ -89,11 +99,18 @@ pub(super) async fn download_to_label(
         hash: &mut hash,
         received: 0,
         cap: archive_cap(),
+        progress,
+        total: None,
+        reported_at: std::time::Instant::now(),
     };
     if url.starts_with("http://") || url.starts_with("https://") {
         fetch_http(client, shutdown, url, &mut sink).await?;
     } else {
         copy_local(shutdown, url, &mut sink).await?;
+    }
+    sink.notify(true).await?;
+    if let Some(progress) = progress {
+        progress.report("verifying", None, None, None).await?;
     }
     output
         .sync_all()
@@ -123,6 +140,9 @@ struct Sink<'a> {
     hash: &'a mut Sha256,
     received: u64,
     cap: u64,
+    total: Option<u64>,
+    progress: Option<&'a super::UpdateProgress>,
+    reported_at: std::time::Instant,
 }
 
 impl Sink<'_> {
@@ -135,7 +155,19 @@ impl Sink<'_> {
         self.output
             .write_all(chunk)
             .await
-            .map_err(|source| UpdateError::caused(UpdateCode::UpdateStageUnavailable, source))
+            .map_err(|source| UpdateError::caused(UpdateCode::UpdateStageUnavailable, source))?;
+        self.notify(false).await
+    }
+    async fn notify(&mut self, force: bool) -> Result<(), UpdateError> {
+        if force || self.reported_at.elapsed() >= std::time::Duration::from_millis(200) {
+            if let Some(progress) = self.progress {
+                progress
+                    .report("downloading", Some(self.received), self.total, None)
+                    .await?;
+            }
+            self.reported_at = std::time::Instant::now();
+        }
+        Ok(())
     }
 }
 
@@ -158,6 +190,8 @@ async fn fetch_http(
     {
         return Err(UpdateCode::InstallArchiveTooLarge.into());
     }
+    sink.total = response.content_length();
+    sink.notify(true).await?;
     let mut stream = response.bytes_stream();
     while let Some(chunk) = tokio::select! {
         () = shutdown.cancelled() => return Err(UpdateCode::UpdateCancelled.into()),
@@ -189,6 +223,14 @@ async fn copy_local(
     let mut input = fs::File::open(source)
         .await
         .map_err(|source| UpdateError::caused(UpdateCode::UpdateArtifactUnavailable, source))?;
+    sink.total = Some(
+        input
+            .metadata()
+            .await
+            .map_err(|source| UpdateError::caused(UpdateCode::UpdateArtifactUnavailable, source))?
+            .len(),
+    );
+    sink.notify(true).await?;
     let mut buf = vec![0u8; 65536];
     loop {
         let count = tokio::select! {

@@ -13,19 +13,20 @@ const visualMode = typeof window !== "undefined"
   ? new URLSearchParams(window.location.search).get("visual")
   : null;
 
-// Loaded only when ?visual=design-system asks for it, so the DS Viewer and its
-// showcase fixtures stay out of the main entry chunk.
+// Review surfaces load only when requested.
 const DesignSystemViewer = lazy(() => import("@/butler-ds/viewer/DesignSystemViewer.tsx")
   .then((module) => ({ default: module.DesignSystemViewer })));
-
+const UpdateProgressHarness = lazy(() => import("@/pages/UpdateProgressHarness")
+  .then((module) => ({ default: module.UpdateProgressHarness })));
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Butler UI root element is missing.");
 
-// Every wallpaper (new chat, dashboards, picker thumbnails) loads images and user modules through the gateway.
 createRoot(rootElement).render(
   <ErrorBoundary>
     <WallpaperModulesProvider>
-      {visualMode === "thinking-mark"
+      {visualMode === "update-progress"
+        ? <Suspense fallback={null}><UpdateProgressHarness /></Suspense>
+        : visualMode === "thinking-mark"
         ? <ThinkingMarkHarness />
         : visualMode === "components"
           ? new URLSearchParams(window.location.search).get("surface") === "activity-layout" ? <ActivityLayoutHarness /> : <VisualHarness />

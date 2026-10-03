@@ -443,7 +443,19 @@ export interface ComponentUpdateStatus {
   manifest_source: string;
 }
 
+export interface UpdateProgressView {
+  component: UpdateComponentId;
+  stage: "idle" | "checking" | "downloading" | "verifying" | "ready" | "applying" | "restarting" | "failed" | "completed";
+  revision: number;
+  bytes_done: number | null;
+  bytes_per_second?: number | null;
+  bytes_total: number | null;
+  cancellable: boolean;
+  error_code: string | null;
+}
+
 export interface UpdateStatusView {
+  progress?: UpdateProgressView | null;
   generated_at: string;
   components: ComponentUpdateStatus[];
   storage_label: "updates";
@@ -1628,6 +1640,7 @@ export interface TimelineEvent {
   type: string;
   created_at?: string;
   payload?: {
+    progress?: UpdateProgressView;
     message?: MessageRecord;
     turn?: {
       id: string;

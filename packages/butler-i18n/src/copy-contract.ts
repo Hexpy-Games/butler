@@ -1026,6 +1026,12 @@ export interface AppCopy {
     };
     sectionState: { loading: string; error: string; retry: string; empty: string };
     updateComponents: { app: string; service: string };
+    updateProgress: {
+      idle: string; checking: string; downloading: string; verifying: string; ready: string;
+      applying: string; restarting: string; failed: string; completed: string;
+      retry: string; cancel: string; bytesUnavailable: string;
+      checksumFailed: string; sourceFailed: string; cancelled: string; activationFailed: string;
+    };
     pageSections: Record<"languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "savedKeys" | "memoryCleanup" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview" | "remoteAccess" | "allowedHosts", string>;
     pageSectionDescriptions: Record<"notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */

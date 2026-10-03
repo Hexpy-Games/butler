@@ -5,7 +5,9 @@ mod agent;
 mod channel;
 mod error;
 mod manifest;
+mod progress;
 mod source;
+pub use progress::{UpdateProgress, UpdateProgressSink};
 mod stage;
 mod status;
 mod version;
@@ -54,6 +56,7 @@ pub struct AppUpdateService {
     shutdown: CancellationToken,
     /// Whether a background check is running.
     refreshing: Arc<AtomicBool>,
+    pub progress: UpdateProgress,
 }
 
 /// Connecting to the manifest host.
@@ -102,6 +105,7 @@ impl AppUpdateService {
             checks: Arc::new(Mutex::new(())),
             shutdown: CancellationToken::new(),
             refreshing: Arc::new(AtomicBool::new(false)),
+            progress: UpdateProgress::default(),
         })
     }
 
@@ -124,6 +128,45 @@ impl AppUpdateService {
 
     pub async fn apply(&self, request: UpdateRequest) -> Result<Value, UpdateError> {
         let _check = self.checks.lock().await;
+        let prior = self.progress.snapshot().await;
+        if matches!(
+            prior["stage"].as_str(),
+            Some("ready" | "applying" | "restarting")
+        ) {
+            return Err(UpdateCode::InstallBusy.into());
+        }
+        let cancel = self.shutdown.child_token();
+        self.progress.begin(cancel.clone()).await?;
+        let result = self.apply_now(request, &cancel).await;
+        match &result {
+            Err(error) => {
+                self.progress
+                    .report("failed", None, None, Some(error.code()))
+                    .await?;
+            }
+            Ok(status) => {
+                self.progress
+                    .report(
+                        if status["stage_status"] == "staged" {
+                            "ready"
+                        } else {
+                            "completed"
+                        },
+                        None,
+                        None,
+                        None,
+                    )
+                    .await?;
+            }
+        }
+        result
+    }
+
+    async fn apply_now(
+        &self,
+        request: UpdateRequest,
+        cancel: &CancellationToken,
+    ) -> Result<Value, UpdateError> {
         let request = self.resolved_request(request).await;
         validate_request(&request)?;
         let artifact = self.artifact(&request).await?;
@@ -145,10 +188,11 @@ impl AppUpdateService {
             artifact_path = Some(
                 Box::pin(stage::download(
                     &self.client,
-                    &self.shutdown,
+                    cancel,
                     &self.data,
                     &self.installation,
                     &artifact,
+                    Some(&self.progress),
                 ))
                 .await?,
             );

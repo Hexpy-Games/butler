@@ -2361,7 +2361,7 @@ ipcMain.handle("butler:quit-app", (_event, input = {}) => {
   return { quitting: true };
 });
 
-async function runAppUpdateQuit(quitAndInstall) {
+async function runAppUpdateQuit(quitAndInstall, onRestarting = async () => {}) {
   return await quitAndInstallAppUpdate({
     readActiveWork: readForegroundActiveWorkSnapshot,
     confirmQuit: async (snapshot) =>
@@ -2379,6 +2379,7 @@ async function runAppUpdateQuit(quitAndInstall) {
         );
         writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
       }
+      await onRestarting();
       const stopResult = await stopServerProcess({
         reason: "app_update",
         activeWorkSnapshot: snapshot,
@@ -2587,24 +2588,37 @@ ipcMain.handle("butler:save-message-file", async (_event, input = {}) => {
 });
 
 ipcMain.handle("butler:open-update-artifact", async (_event, input = {}) => {
-  const artifactPath = safeUpdateArtifactPath(input?.artifactPath);
-  const helper = await prepareAppPackageUpdate({ artifactPath, dataRoot: butlerDataRoot,
-    installation: currentNativeAgentInstallation(), executable: process.execPath, parent: process.pid,
-    externalServerUrl: explicitServerUrl, arguments: process.argv.slice(1) });
-  let update;
+  let helper;
   try {
-    update = await runAppUpdateQuit(() => {
+    const artifactPath = safeUpdateArtifactPath(input?.artifactPath);
+    helper = await prepareAppPackageUpdate({ artifactPath, dataRoot: butlerDataRoot,
+      installation: currentNativeAgentInstallation(), executable: process.execPath, parent: process.pid,
+      externalServerUrl: explicitServerUrl, arguments: process.argv.slice(1), onStage: reportAppUpdateStage });
+    const update = await runAppUpdateQuit(() => {
       helper.activate();
       finalQuitAllowed = true;
       app.quit();
+    }, async () => {
+      await reportAppUpdateStage("applying");
+      await reportAppUpdateStage("restarting");
     });
+    if (!update.update_started) helper.cancel();
+    if (!update.update_started) await reportAppUpdateStage("failed");
+    return { opened: update.update_started, update };
   } catch (error) {
-    helper.cancel();
+    helper?.cancel();
+    await reportAppUpdateStage("failed").catch(() => {});
     throw error;
   }
-  if (!update.update_started) helper.cancel();
-  return { opened: update.update_started, update };
 });
+
+async function reportAppUpdateStage(stage) {
+  const response = await appServerFetch("/updates/progress", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ stage }),
+  });
+  if (!response.ok) throw new Error("Update progress could not be delivered.");
+}
 
 function safeUpdateArtifactPath(value) {
   const requestedPath = typeof value === "string" ? value.trim() : "";

@@ -688,6 +688,7 @@ const butlerApp = Object.freeze({
     const query = params.toString();
     return requestJson(query ? `/new-chat-briefing?${query}` : "/new-chat-briefing");
   },
+  cancelUpdate: () => requestJson("/updates/cancel", { method: "POST" }),
   getUpdates: () => requestJson("/updates"),
   checkUpdates: (request = {}) => requestJson("/updates/check", {
     method: "POST",
