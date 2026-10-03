@@ -102,7 +102,7 @@ fn cases(data: &Path) -> Vec<Case> {
         ),
         Case {
             tool: "list_files",
-            args: json!({"root":ordinary_data}),
+            args: json!({"root":ordinary_data,"max_depth":1,"max_results":100}),
             refused: false,
         },
         Case {
