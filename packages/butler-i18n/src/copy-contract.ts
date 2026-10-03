@@ -122,6 +122,7 @@ export interface ApprovalRequestCopy {
   editFiles: (count: number, workspace: string | null) => string;
   editFilesOutside: (count: number) => string;
   runCommandOutside: string;
+  readOnlyUnisolated: string;
   networkCommandOutside: string;
   runCommand: (workspace: string | null) => string;
   networkCommand: (workspace: string | null) => string;

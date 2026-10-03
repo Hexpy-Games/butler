@@ -134,3 +134,9 @@ pub fn protect_writes(invocation: Invocation, root: &Path) -> Result<Protection,
 pub fn has_background_operator(command: &str) -> bool {
     operators::has_background(command, shell::ESCAPE)
 }
+
+/// Whether a shell path names the registry instead of the filesystem.
+/// Used by lexical command guards; this does not authorize registry writes.
+pub fn is_registry_path(path: &str) -> bool {
+    shell::is_registry_path(path)
+}

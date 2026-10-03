@@ -25,7 +25,7 @@ pub(super) fn cassette(command: &str) -> Result<Cassette, HarnessError> {
     Ok(c)
 }
 
-fn response(item: &Value) -> ResponseRecord {
+pub(super) fn response(item: &Value) -> ResponseRecord {
     let completed = json!({"id":"resp_command","object":"response","status":"completed","model":"gpt-6-luna",
         "output":[item],"usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120}});
     let mut events = vec![
@@ -36,7 +36,7 @@ fn response(item: &Value) -> ResponseRecord {
         events.push(json!({"type":"response.function_call_arguments.delta","item_id":item["id"],"output_index":0,"delta":item["arguments"]}));
         events.push(json!({"type":"response.function_call_arguments.done","item_id":item["id"],"output_index":0,"arguments":item["arguments"]}));
     } else {
-        events.push(json!({"type":"response.output_text.delta","item_id":item["id"],"output_index":0,"content_index":0,"delta":ANSWER}));
+        events.push(json!({"type":"response.output_text.delta","item_id":item["id"],"output_index":0,"content_index":0,"delta":item["content"][0]["text"]}));
     }
     events.push(json!({"type":"response.output_item.done","output_index":0,"item":item}));
     events.push(json!({"type":"response.completed","response":completed}));

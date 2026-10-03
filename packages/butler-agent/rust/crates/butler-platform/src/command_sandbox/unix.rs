@@ -35,3 +35,7 @@ pub(super) fn legacy_shell(
         arguments,
     }
 }
+
+pub(super) fn is_registry_path(_path: &str) -> bool {
+    false
+}
