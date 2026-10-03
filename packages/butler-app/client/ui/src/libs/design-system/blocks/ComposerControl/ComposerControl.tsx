@@ -36,6 +36,7 @@ export function ComposerControl({
 }: ComposerControlProps) {
   return (
     <PillButton
+      surface="glass"
       className={dsClass(styles.control, active && styles.active, className)}
       data-compact={compact}
       data-tone={tone === "danger" ? "danger" : undefined}

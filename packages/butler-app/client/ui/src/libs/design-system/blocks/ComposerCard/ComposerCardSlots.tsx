@@ -1,9 +1,5 @@
-import { ComposerCardExpandedControls, ComposerCardToolbarSpacer } from "./ComposerCard";
-import { Children, createContext, isValidElement, useContext, type ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { PillButton } from "../../components/PillButton";
-import { dsClass } from "../../lib/internal";
-import styles from "./ComposerCard.module.css";
 
 export const ComposerControlsVisible = createContext(true);
 
@@ -19,13 +15,4 @@ export function ComposerSlot({ slot, children }: { slot: "toolbar" | "action" | 
   const visible = useContext(ComposerControlsVisible);
   if (!slots) return children;
   return slots[slot] ? createPortal(slot === "action" ? <span hidden={!visible}>{children}</span> : children, slots[slot]) : null;
-}
-
-export function ComposerControlPills({ children }: { children: ReactNode }) {
-  return Children.map(children, (child) => {
-    if (!isValidElement(child)) return child;
-    // Layout components retain their flex behavior; each leaf control owns one surface.
-    if (child.type === ComposerCardToolbarSpacer || child.type === ComposerCardExpandedControls) return child;
-    return <PillButton as="span" surface="glass" className={dsClass(styles.controlPill)} data-slot="composer-control-pill">{child}</PillButton>;
-  });
 }

@@ -33,20 +33,3 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-/* Non-interactive shell: child controls keep their semantics and hit targets. */
-.surface {
-  display: inline-flex;
-  width: max-content;
-  align-items: center;
-  min-width: 0;
-  border-radius: var(--radius-pill);
-}
-
-.surface:empty {
-  display: none;
-}
-
-.surface:has(:focus-visible) {
-  box-shadow: var(--focus-ring), var(--shadow-card);
-}

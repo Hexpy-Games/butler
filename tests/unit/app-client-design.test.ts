@@ -1430,7 +1430,7 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
     "8lh + var(--composer-inner-padding-block) + var(--composer-inner-padding-block)",
   );
   expect(normalizedComposerCardStyles).toContain(
-    ".toolbar { display: flex; min-height: var(--control-hit-target); pointer-events: auto; align-items: center; gap: var(--space-1); min-width: 0; padding: var(--space-2) 0 0;",
+    ".toolbar { display: flex; flex-wrap: wrap; min-height: var(--control-hit-target); pointer-events: auto; align-items: center; gap: var(--space-1); min-width: 0; padding: var(--space-2) 0 0;",
   );
   expect(composerKeyboard).toContain("shouldSubmitComposerEnter");
   expect(composerKeyboard).toContain("modifier_enter_send_enter_newline");
@@ -3081,7 +3081,7 @@ test("conversation progress and composer workers use design-system blocks", () =
     )?.length,
   ).toBe(2);
   expect(normalizedComposerCardStyles).toContain(
-    ".toolbar { display: flex; min-height: var(--control-hit-target); pointer-events: auto; align-items: center; gap: var(--space-1); min-width: 0; padding: var(--space-2) 0 0;",
+    ".toolbar { display: flex; flex-wrap: wrap; min-height: var(--control-hit-target); pointer-events: auto; align-items: center; gap: var(--space-1); min-width: 0; padding: var(--space-2) 0 0;",
   );
   expect(workerPanel).toContain("WorkerActivityPanel");
   expect(workerPanel).not.toContain("ActivityFeed");

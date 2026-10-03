@@ -26,21 +26,23 @@ async function auditLayout(story: Locator) {
   for (const name of controls) {
     const control = row.locator(selector(name));
     assert(await control.isVisible(), `${name} visible`);
-    const pill = control.locator('xpath=ancestor::*[@data-slot="composer-control-pill"]');
-    assert.equal(await pill.count(), 1, `${name} owns one pill`);
-    assert.equal(await pill.getAttribute("data-surface"), "glass-pill", `${name} uses the DS glass pill`);
-    assert.equal(await pill.evaluate((element) => element.tagName), "SPAN", "surface adds no interactive wrapper");
+    assert.equal(await control.evaluate((element) => element.tagName), "BUTTON", `${name} is the actual button`);
+    assert.equal(await control.locator("button").count(), 0, "no nested controls");
+    assert.equal(await control.getAttribute("data-surface"), name === "context-donut-button" ? null : "glass-pill",
+      `${name} uses its standard DS surface`);
+    assert.equal(await control.locator('xpath=ancestor::*[@data-slot="composer-control-pill"]').count(), 0,
+      "no polymorphic pill wrappers");
   }
   const geometry = await row.evaluate((element) => {
     const row = element.getBoundingClientRect();
     const card = element.closest('[data-test-class~="composer-wrap"]')!.querySelector('[data-test-class="composer-card"]')!.getBoundingClientRect();
-    const pills = [...element.querySelectorAll('[data-slot="composer-control-pill"]')].filter((pill) => pill.getBoundingClientRect().width);
+    const pills = [...element.querySelectorAll('button[data-surface="glass-pill"]')].filter((pill) => pill.getBoundingClientRect().width);
     return { rowY: row.y, cardBottom: card.bottom, overflow: element.scrollWidth - element.clientWidth,
       pills: pills.length, cardHeight: card.height, rowHeight: row.height };
   });
   assert(geometry.rowY >= geometry.cardBottom, "row lies below card");
   assert(geometry.overflow <= 1, `toolbar overflow: ${geometry.overflow}`);
-  assert.equal(geometry.pills, 6);
+  assert.equal(geometry.pills, 5);
   return geometry;
 }
 
@@ -49,12 +51,25 @@ async function auditMenus(page: Page, story: Locator) {
     await story.locator(selector(name)).click();
     const menu = name === "composer-workspace-select" ? page.getByRole("listbox") : page.getByRole("dialog");
     await menu.waitFor();
+    const trigger = story.locator(selector(name));
+    assert.equal(await trigger.getAttribute("aria-expanded"), "true", `${name} retains menu trigger aria`);
+    const anchor = await trigger.boundingBox();
+    const popup = await menu.boundingBox();
+    assert(anchor && popup && popup.x < anchor.x + anchor.width && popup.x + popup.width > anchor.x,
+      `${name} retains its popover anchor ref`);
     const expected = name === "attachment-button" ? /Attach file/ : name === "access-button" ? /Ask/ : name === "composer-workspace-select" ? /Worktree/ : name === "context-donut-button" ? /53.8|53,760/ : /Review model/;
     assert.match(await menu.innerText(), expected, `${name} opens its real menu`);
     await page.keyboard.press("Escape");
     await menu.waitFor({ state: "hidden" });
     await page.mouse.move(0, 0);
   }
+  const workspace = story.locator(selector("composer-workspace-select"));
+  await workspace.focus();
+  await page.keyboard.press("Enter");
+  await page.getByRole("option", { name: "Worktree", exact: true }).click();
+  assert.match(await workspace.innerText(), /Worktree/, "existing workspace selection handler runs");
+  await workspace.click();
+  await page.getByRole("option", { name: "Local", exact: true }).click();
   await story.locator(selector("attachment-button")).click();
   await page.getByRole("button", { name: /Project documents/ }).click();
   await page.getByRole("button", { name: /Composer review/ }).click();
@@ -64,7 +79,7 @@ async function auditMenus(page: Page, story: Locator) {
   await permission.waitFor();
   await page.getByRole("heading", { name: "ComposerCard", exact: true }).first().click();
   await permission.waitFor({ state: "hidden" });
-  await story.locator(selector("composer-plan-mode-badge")).getByRole("button").click();
+  await story.locator(selector("composer-plan-mode-badge")).click();
   assert.equal(await story.locator(selector("composer-plan-mode-badge")).count(), 0, "existing plan remove action works");
 }
 

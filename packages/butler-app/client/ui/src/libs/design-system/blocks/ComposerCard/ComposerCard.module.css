@@ -125,6 +125,7 @@
 
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   min-height: var(--control-hit-target);
   pointer-events: auto;
   align-items: center;
@@ -278,21 +279,6 @@
   .wrap,
   .sendButton {
     transition: none;
-  }
-}
-
-/* The row owns layout; PillButton owns each control's surface. */
-.controlPill {
-  flex: 0 0 auto;
-}
-
-.expandedControls > .controlPill:last-child {
-  flex-shrink: 1;
-}
-
-@container composer (width <= 320px) {
-  .toolbar {
-    flex-wrap: wrap;
   }
 }
 

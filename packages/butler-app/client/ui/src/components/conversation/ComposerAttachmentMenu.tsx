@@ -4,7 +4,7 @@ import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { appShellTheme } from "@/app/utils.ts";
 import {
-  IconButton,
+  PillButton,
   ImageIcon,
   ListChecks,
   MessageSquarePlus,
@@ -43,13 +43,13 @@ export function ComposerAttachmentMenu() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <IconButton
+        <PillButton surface="glass"
           data-test-class="attachment-button"
           disabled={uploadingCount > 0}
-          label={appCopy.composer.featureDrawer}
+          aria-label={appCopy.composer.featureDrawer}
         >
           <Plus size="md" />
-        </IconButton>
+        </PillButton>
       </PopoverTrigger>
       <PopoverContent
         align="start"

@@ -4,7 +4,7 @@ import { createContext, forwardRef, useContext, useState } from "react";
 import { Collapsible } from "../../components/Collapsible";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import { cn } from "../../lib/utils";
-import { ComposerControlsVisible, ComposerControlPills, ComposerSlot, ComposerSlots } from "./ComposerCardSlots";
+import { ComposerControlsVisible, ComposerSlot, ComposerSlots } from "./ComposerCardSlots";
 import styles from "./ComposerCard.module.css";
 import { dsClass } from "../../lib/internal";
 
@@ -89,7 +89,7 @@ export function ComposerCardToolbar({ children }: { children: ReactNode }) {
   return (
     <ComposerSlot slot="toolbar">
       <div className={styles.toolbar} data-test-class="composer-toolbar">
-        <ComposerControlPills>{children}</ComposerControlPills>
+        {children}
       </div>
     </ComposerSlot>
   );
@@ -108,7 +108,7 @@ export function ComposerCardExpandedBody({ children }: { children: ReactNode }) 
 export function ComposerCardExpandedControls({ children }: { children: ReactNode }) {
   const expanded = useContext(ComposerExpandedContext);
   return <ComposerControlsVisible.Provider value={expanded}>
-    <span className={styles.expandedControls}><ComposerControlPills>{children}</ComposerControlPills></span>
+    <span className={styles.expandedControls}>{children}</span>
   </ComposerControlsVisible.Provider>;
 }
 

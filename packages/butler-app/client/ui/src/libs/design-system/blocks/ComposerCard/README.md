@@ -76,9 +76,11 @@ composer, chat, glass, input, toolbar
 ## Detached controls
 
 The existing `ComposerCardToolbar` renders in the DS-owned slot immediately
-below the card. Its order, spacer and expanded group are unchanged. Each leaf
-control gets its own `PillButton as="span" surface="glass"` pill; its original button and anchored
-menu/popover remain mounted together. Empty conditional controls have no pill.
+below the card. Its order, spacer and expanded group are unchanged. Product
+controls use standard `PillButton surface="glass"` triggers, including the
+existing `ComposerControl` block and `SelectPillTrigger`. No decorative button
+wrappers are added. The context donut retains its original button: its ring
+is encapsulated in `ContextDonutButton`, which has no pill composition API.
 `ComposerSendButton` and `ComposerCardCompactPreview` render in slots inside
 the input card. The editor reserves room for send/stop; attachments, notice and
 adjunct/question surfaces keep their existing ownership and behavior.
