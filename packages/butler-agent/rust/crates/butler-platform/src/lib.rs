@@ -62,6 +62,7 @@ pub mod secure_fs;
 pub mod service_registration;
 pub mod sqlite;
 pub mod stdio;
+pub mod storage_size;
 pub mod time_zone;
 pub mod user_dirs;
 

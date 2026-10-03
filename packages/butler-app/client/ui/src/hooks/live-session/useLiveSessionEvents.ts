@@ -1,3 +1,4 @@
+import { publishMemoryEvent } from "@/app/memoryEvents.ts";
 import { pairedDevicesChanged } from "@/app/securityDeviceEvents.ts";
 import { appCopy } from "@/app/copy.ts";
 import { invalidateProjectDashboard } from "./projectDashboardInvalidation.ts";
@@ -59,6 +60,7 @@ export function useLiveSessionEvents(): void {
 
     const applyEvent = (event: TimelineEvent) => {
       if (cancelled) return;
+      publishMemoryEvent(event);
       if (event.type === "security.device_paired") pairedDevicesChanged();
       const dashboardState = useButlerStore.getState();
       if (dashboardState.view.kind === "project-dashboard") invalidateProjectDashboard(event, dashboardState.view.projectId, dashboardState.navigation);

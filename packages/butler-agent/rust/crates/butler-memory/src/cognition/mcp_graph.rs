@@ -4,6 +4,7 @@ mod serving;
 
 use crate::cognition::{CognitionPathEnvironment, active_memory_descriptor_exists};
 use butler_platform::sqlite;
+
 use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags, params};

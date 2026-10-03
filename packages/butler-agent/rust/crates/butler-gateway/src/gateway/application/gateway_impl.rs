@@ -168,6 +168,14 @@ impl GatewayApplication for AppApplication {
             .model_catalog
             .execute(command, cancellation)
     }
+    fn memory_management(
+        &self,
+        command: AppMemoryCommand,
+        cancellation: tokio_util::sync::CancellationToken,
+    ) -> ApplicationFuture<serde_json::Value> {
+        let this = self.clone_handle();
+        Box::pin(async move { this.memory_owned(command, cancellation).await })
+    }
     fn personalization(
         &self,
         command: AppPersonalizationCommand,
@@ -474,22 +482,10 @@ impl GatewayApplication for AppApplication {
         })
     }
     fn latest_event_cursor(&self) -> ApplicationFuture<u64> {
-        let storage = self.storage.clone();
-        Box::pin(async move {
-            storage
-                .execute(|connection| events::latest(connection))
-                .await
-                .map_err(app_error)
-        })
+        self.event_cursor_read()
     }
     fn replay_events(&self, after: f64, limit: usize) -> ApplicationFuture<Vec<AppEventEnvelope>> {
-        let storage = self.storage.clone();
-        Box::pin(async move {
-            storage
-                .execute(move |db| events::replay(db, after, limit))
-                .await
-                .map_err(app_error)
-        })
+        self.event_replay_read(after, limit)
     }
     fn subscribe_events(
         &self,

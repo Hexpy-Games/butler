@@ -1917,7 +1917,8 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(appCopySource()).not.toContain(
     "프로필 후보",
   );
-  expect(renderer).toContain("copy.actions.clearProfile");
+  expect(renderer).not.toContain("copy.actions.clearProfile");
+  expect(renderer).toContain("/memory/reset/");
   expect(renderer).toContain("SystemEventsSettings");
   expect(renderer).toContain(
     "`/system-events?limit=${PAGE_SIZE}&offset=${offset}`",
@@ -3935,7 +3936,7 @@ describe("app-client design system foundation", () => {
     expect(turnActivityTimeline).toContain('variant="inline"');
     expect(turnActivityTimeline).not.toContain("paddingInlineStart");
     expect(buttonStyles).toContain(".button.variantInline");
-    expect(buttonStyles).toContain(".button.variantInline:hover:not(:disabled)");
+    expect(buttonStyles).toContain('.button.variantInline:hover:not(:disabled, [aria-disabled="true"])');
     expect(buttonStyles).toContain('.button.variantInline[data-has-icon-text="true"]');
     expect(buttonStyles).toContain("text-decoration: underline");
     const workActivityStyles = read(

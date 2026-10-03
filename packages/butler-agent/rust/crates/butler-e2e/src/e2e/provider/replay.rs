@@ -111,14 +111,17 @@ pub(super) fn consume_fault(state: &State, position: usize) {
 pub(super) fn remint_ids(response: &mut ResponseRecord, generation: usize) {
     static PATTERN: std::sync::OnceLock<Option<regex::Regex>> = std::sync::OnceLock::new();
     let Some(pattern) = PATTERN
-        .get_or_init(|| regex::Regex::new(r"\b((?:resp|msg|fc|rs|call)_[A-Za-z0-9]+)").ok())
+        .get_or_init(|| regex::Regex::new(r#"("(?:id|item_id|call_id|response_id)"\s*:\s*")((?:resp|msg|fc|rs|call)_[A-Za-z0-9_]+)(")"#).ok())
         .as_ref()
     else {
         return;
     };
     for chunk in &mut response.chunks {
         chunk.text = pattern
-            .replace_all(&chunk.text, format!("${{1}}r{generation}").as_str())
+            .replace_all(
+                &chunk.text,
+                format!("${{1}}${{2}}r{generation}${{3}}").as_str(),
+            )
             .into_owned();
     }
 }

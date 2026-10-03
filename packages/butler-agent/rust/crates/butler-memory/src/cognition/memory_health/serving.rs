@@ -1,22 +1,16 @@
 //! Active-generation serving facts from read-only Cognition and Profile owners.
 
 use butler_platform::sqlite;
-use std::{
-    fs::File,
-    io::{BufRead, BufReader},
-    path::Path,
-};
+use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
-use serde::Deserialize;
 
 use super::report::{STAGE_UNITS, ServingHealth, ServingSources, StageCount, Stages};
 use crate::profile::ProfileCoverageHealth;
 
-use crate::cognition::feedback::{FeedbackSourceRow, excluded_source_ids};
 use crate::cognition::recall::{RecallProjectFilter, RecallRequest, RecallRuntime, RecallScope};
 use crate::cognition::sources::read_canonical_inventory;
-use crate::cognition::{CognitionCode, CognitionPathEnvironment, resolve_active_generation};
+use crate::cognition::{CognitionPathEnvironment, resolve_active_generation};
 use butler_turn::conversation::{ConversationSourceReader, conversation_store_path};
 
 /// The active generation's serving facts; any read failure (or the
@@ -38,7 +32,7 @@ pub(super) fn read(
         return unavailable(data_root, paths, now, "serving_store_unavailable", profile);
     };
     let read = (|| -> rusqlite::Result<ServingHealth> {
-        let facts = GraphFacts::read(data_root, now, &db, &handle.generation_id)?;
+        let facts = GraphFacts::read(data_root, now, &db)?;
         let cache =
             crate::cognition::generation::read_hot_cache_health(data_root, &handle, now, revision);
         let unchanged = resolve_active_generation(data_root, paths)
@@ -76,12 +70,7 @@ struct GraphFacts {
 }
 
 impl GraphFacts {
-    fn read(
-        data_root: &Path,
-        now: i64,
-        db: &Connection,
-        generation_id: &str,
-    ) -> rusqlite::Result<Self> {
+    fn read(data_root: &Path, now: i64, db: &Connection) -> rusqlite::Result<Self> {
         let registered = count(
             db,
             "SELECT COUNT(*) FROM memory_chunk_sources WHERE source_id NOT IN (SELECT source_id FROM memory_source_split_parents)",
@@ -137,7 +126,7 @@ impl GraphFacts {
                 db,
                 "SELECT COUNT(*) FROM memory_vector_units u JOIN memory_projection_jobs j ON j.job_id=u.job_id JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id WHERE j.revision<>c.current_revision AND u.error_code='memory_embedding_version_mismatch'",
             )?,
-            pending_quality: pending_quality(data_root, generation_id, db)?,
+            pending_quality: 0,
         })
     }
 
@@ -288,82 +277,6 @@ fn inventory(
             "typed_inventory_unavailable"
         },
     ))
-}
-
-fn pending_quality(data_root: &Path, generation: &str, db: &Connection) -> rusqlite::Result<usize> {
-    let Ok(file) = File::open(data_root.join("cognition/feedback/quality-operations.jsonl")) else {
-        return Ok(0);
-    };
-    let mut statement = db.prepare("SELECT s.source_id,s.episode_id,s.revision,s.content_hash FROM memory_chunk_sources s JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision WHERE c.status='active'")?;
-    let sources = statement
-        .query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-            ))
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-    let rows = sources
-        .iter()
-        .map(
-            |(source_id, episode_id, revision, content_hash)| FeedbackSourceRow {
-                source_id,
-                episode_id,
-                revision,
-                content_hash,
-            },
-        )
-        .collect::<Vec<_>>();
-    let excluded = excluded_source_ids(&data_root.join("cognition/feedback"), &rows, |operation| {
-        db.query_row(
-            "SELECT value FROM memory_state WHERE key=?1",
-            [format!("quality_operation:{operation}")],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()
-        .map_err(|source| {
-            crate::cognition::CognitionError::new(
-                CognitionCode::MemoryHealthReadFailed,
-                "Feedback receipt unavailable",
-            )
-            .with_source(source)
-        })
-    })
-    // The rusqlite error type cannot carry a Cognition error; the probe only
-    // needs to know the receipt lookup failed.
-    .map_err(|_receipt_error| rusqlite::Error::InvalidQuery)?;
-    let mut count = 0;
-    for line in BufReader::new(file).lines().map_while(Result::ok) {
-        let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) else {
-            continue;
-        };
-        let operation: QualityOperation = crate::lenient::view(&value);
-        if operation.status.as_deref() != Some("pending")
-            || operation.generation_id.as_deref() != Some(generation)
-        {
-            continue;
-        }
-        if operation
-            .source_ref
-            .is_some_and(|source| excluded.contains(&source))
-        {
-            count += 1;
-        }
-    }
-    Ok(count)
-}
-
-/// A line of `cognition/feedback/quality-operations.jsonl`.
-#[derive(Default, Deserialize)]
-struct QualityOperation {
-    #[serde(default, deserialize_with = "crate::lenient::option")]
-    status: Option<String>,
-    #[serde(default, deserialize_with = "crate::lenient::option")]
-    generation_id: Option<String>,
-    #[serde(default, deserialize_with = "crate::lenient::option")]
-    source_ref: Option<String>,
 }
 
 /// The serving facts when the graph cannot be read: zero stage counts and

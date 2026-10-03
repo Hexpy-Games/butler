@@ -157,6 +157,9 @@ pub(super) fn commit(
         .assert_for_path(lock_path)
         .map_err(CognitionError::from)?;
     ensure_source_authority(data_root, paths, &prepared.path)?;
+    if super::reset::epoch(data_root, paths, &prepared.project_id)? != prepared.reset_epoch {
+        return Err(error(CognitionCode::MemorySourceChanged));
+    }
     if !sources_are_current(
         data_root,
         paths,

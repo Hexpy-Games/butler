@@ -30,6 +30,13 @@
     "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-mono/LICENSE.txt": "37784b44044a4ffd9256702b7c0982c37e5c8887ba90c6dca0479aea93dc898d",
     "packages/butler-npm/package.json": "5436bca586a3f28ad67b715bc34fd2d66a4dfac9577d7415442b88f1f085fdb4"
   },
+  "assets": {
+    "packages/butler-app/client/ui/src/libs/design-system/fonts": "71fae061660781b956cc1c6ec7c0acb45294c65e39a757d73b4fc22a585edef3",
+    "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos": "c403cb85f39720223864fd0502296bdbe566b79e31e0c98baa2d963db84f4e6a",
+    "packages/butler-agent/rust/crates/butler-core/src/js_date/parse": "f9eee65ab5220d8dd35e57f15c992924571cb4e7dcaec3ea7b27c650e8530a8d",
+    "packages/butler-agent/rust/crates/butler-platform/data": "67f906d2a73616bc85ae69c23c27b100c579e82b6c286413794f59c8a9152770",
+    "packages/butler-agent/resources": "324b06e634aa1b8e02df8116cc5c7505b216055b9bf1b3b25f7ca13cf646e4af"
+  },
   "components": [
     {
       "id": "model:Xenova/bge-m3 (BAAI/bge-m3)@4de13258303883538bd53b696b452bf8099f0858",

@@ -4,7 +4,6 @@ mod inspect;
 
 use butler_platform::sqlite;
 use std::{
-    collections::HashSet,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -12,11 +11,8 @@ use std::{
 use rusqlite::{OpenFlags, params};
 use tokio::sync::mpsc;
 
-use crate::cognition::box_store::BoxStoreService;
 use crate::cognition::mutable_paths::ensure_data_authority;
-use crate::cognition::{
-    CognitionError, CognitionPathEnvironment, CognitionResult, FeedbackBufferService,
-};
+use crate::cognition::{CognitionError, CognitionPathEnvironment, CognitionResult};
 use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator};
 
 const SOURCE_CHUNK_LIMIT: usize = 10_000;
@@ -31,29 +27,17 @@ pub struct LegacyMetadataIntegrityService {
     data_root: PathBuf,
     path: PathBuf,
     paths: CognitionPathEnvironment,
-    box_store: Arc<BoxStoreService>,
-    feedback: Arc<FeedbackBufferService>,
 }
 
 #[derive(Debug, Default)]
 pub struct LegacyMetadataIntegrityCounts {
     pub chunk_count: usize,
-    pub missing_box_refs_count: usize,
     pub missing_feedback_refs_count: usize,
 }
 
 pub struct LegacyMetadataIntegrityReport {
     pub chunk_count: usize,
-    pub missing_box_refs: Vec<MissingBoxRef>,
     pub missing_feedback_refs: Vec<MissingFeedbackRef>,
-}
-
-/// A chunk link to a box item that no longer exists.
-pub struct MissingBoxRef {
-    /// Chunk with the link.
-    pub memory_chunk_id: String,
-    /// Missing box item.
-    pub box_item_id: String,
 }
 
 /// A chunk link to feedback that no longer exists.
@@ -66,30 +50,18 @@ pub struct MissingFeedbackRef {
 
 pub struct LegacyMetadataRepairReport {
     pub integrity: LegacyMetadataIntegrityReport,
-    pub repaired_box_refs: usize,
     pub repaired_feedback_refs: usize,
 }
 
-struct ChunkRefs {
-    memory_chunk_id: String,
-    box_ids: Vec<String>,
-    feedback_ids: Vec<String>,
-}
+struct ChunkRefs;
 
 impl LegacyMetadataIntegrityService {
     /// An integrity service over the legacy metadata database.
-    pub fn new(
-        data_root: &Path,
-        paths: CognitionPathEnvironment,
-        box_store: Arc<BoxStoreService>,
-        feedback: Arc<FeedbackBufferService>,
-    ) -> Self {
+    pub fn new(data_root: &Path, paths: CognitionPathEnvironment) -> Self {
         Self {
             data_root: data_root.to_path_buf(),
             path: paths.memory_root(data_root).join("metadata.sqlite"),
             paths,
-            box_store,
-            feedback,
         }
     }
 
@@ -114,45 +86,37 @@ impl LegacyMetadataIntegrityService {
         Ok(self.check_inner(References::Counted).await?.counts)
     }
 
-    /// Removes the chunk links to missing box items and feedback, then
-    /// re-checks.
+    /// Removes links to missing feedback, then re-checks.
+    /// Stored Box references are opaque and are never validated or removed.
     pub async fn repair_links(
         &self,
         coordinator: Arc<CognitionWriteCoordinator>,
     ) -> CognitionResult<LegacyMetadataRepairReport> {
         let before = self.check_with_references().await?;
-        let mut repaired_box_refs = 0;
         let mut repaired_feedback_refs = 0;
-        if (!before.missing_box_refs.is_empty() || !before.missing_feedback_refs.is_empty())
+        if !before.missing_feedback_refs.is_empty()
             && self
                 .path
                 .try_exists()
                 .map_err(|source| metadata_error().with_source(source))?
         {
-            (repaired_box_refs, repaired_feedback_refs) = self
-                .remove_links(
-                    &coordinator,
-                    before.missing_box_refs,
-                    before.missing_feedback_refs,
-                )
+            repaired_feedback_refs = self
+                .remove_links(&coordinator, before.missing_feedback_refs)
                 .await?;
         }
         let integrity = self.check_with_references().await?;
         Ok(LegacyMetadataRepairReport {
             integrity,
-            repaired_box_refs,
             repaired_feedback_refs,
         })
     }
 
-    /// Removes the missing links under the consolidation lock; how many box
-    /// and feedback links were removed.
+    /// Removes missing feedback links under the consolidation lock.
     async fn remove_links(
         &self,
         coordinator: &CognitionWriteCoordinator,
-        boxes: Vec<MissingBoxRef>,
         feedback: Vec<MissingFeedbackRef>,
-    ) -> CognitionResult<(usize, usize)> {
+    ) -> CognitionResult<usize> {
         let lock_path = self.paths.consolidation_lock(&self.data_root);
         ensure_data_authority(
             &self.data_root,
@@ -184,7 +148,7 @@ impl LegacyMetadataIntegrityService {
                     CognitionError::new(CognitionCode::MemoryWriteBusy, "memory_write_busy")
                         .with_source(source)
                 })?;
-                remove_missing_links(&data_root, &path, &descriptor, &boxes, &feedback)
+                remove_missing_links(&data_root, &path, &descriptor, &feedback)
             })();
             let released = lease.release(result.is_ok()).map_err(CognitionError::from);
             match (result, released) {
@@ -201,19 +165,15 @@ impl LegacyMetadataIntegrityService {
         let integrity = self.check_inner(References::Listed).await?;
         Ok(LegacyMetadataIntegrityReport {
             chunk_count: integrity.counts.chunk_count,
-            missing_box_refs: integrity.missing_box_refs,
             missing_feedback_refs: integrity.missing_feedback_refs,
         })
     }
 
-    /// Streams every chunk's references and checks them against the box
-    /// store and the feedback buffer.
-    async fn check_inner(&self, references: References) -> CognitionResult<Integrity> {
+    /// Streams feedback references and checks them against the feedback buffer.
+    async fn check_inner(&self, _references: References) -> CognitionResult<Integrity> {
         ensure_data_authority(&self.data_root, &[&self.path])?;
         let mut integrity = Integrity {
-            references,
             counts: LegacyMetadataIntegrityCounts::default(),
-            missing_box_refs: Vec::new(),
             missing_feedback_refs: Vec::new(),
         };
         if !self
@@ -229,7 +189,10 @@ impl LegacyMetadataIntegrityService {
         let mut outcome = Ok(());
         while let Some(batch) = receiver.recv().await {
             outcome = match batch {
-                Ok(batch) => self.check_batch(&mut integrity, batch).await,
+                Ok(batch) => {
+                    integrity.counts.chunk_count += batch.len();
+                    Ok(())
+                }
                 Err(error) => Err(error),
             };
             if outcome.is_err() {
@@ -244,32 +207,6 @@ impl LegacyMetadataIntegrityService {
         producer_result?;
         Ok(integrity)
     }
-
-    async fn check_batch(
-        &self,
-        integrity: &mut Integrity,
-        batch: Vec<ChunkRefs>,
-    ) -> CognitionResult<()> {
-        integrity.counts.chunk_count += batch.len();
-        let requested = batch
-            .iter()
-            .flat_map(|chunk| chunk.feedback_ids.iter().cloned())
-            .collect::<HashSet<_>>();
-        let found = self.feedback.matching_ids(requested).await?;
-        for chunk in batch {
-            for id in chunk.box_ids {
-                if !self.box_store.manifest_exists(&id).await? {
-                    integrity.missing_box(&chunk.memory_chunk_id, id);
-                }
-            }
-            for id in chunk.feedback_ids {
-                if !found.contains(&id) {
-                    integrity.missing_feedback(&chunk.memory_chunk_id, id);
-                }
-            }
-        }
-        Ok(())
-    }
 }
 
 /// Whether a check lists the missing references or only counts them.
@@ -281,41 +218,18 @@ enum References {
 
 /// What a metadata check found.
 struct Integrity {
-    references: References,
     counts: LegacyMetadataIntegrityCounts,
-    missing_box_refs: Vec<MissingBoxRef>,
     missing_feedback_refs: Vec<MissingFeedbackRef>,
 }
 
-impl Integrity {
-    fn missing_box(&mut self, memory_chunk_id: &str, box_item_id: String) {
-        self.counts.missing_box_refs_count += 1;
-        if self.references == References::Listed {
-            self.missing_box_refs.push(MissingBoxRef {
-                memory_chunk_id: memory_chunk_id.to_owned(),
-                box_item_id,
-            });
-        }
-    }
-
-    fn missing_feedback(&mut self, memory_chunk_id: &str, feedback_id: String) {
-        self.counts.missing_feedback_refs_count += 1;
-        if self.references == References::Listed {
-            self.missing_feedback_refs.push(MissingFeedbackRef {
-                memory_chunk_id: memory_chunk_id.to_owned(),
-                feedback_id,
-            });
-        }
-    }
-}
+impl Integrity {}
 
 fn remove_missing_links(
     data_root: &std::path::Path,
     path: &std::path::Path,
     active_descriptor: &std::path::Path,
-    boxes: &[MissingBoxRef],
     feedback: &[MissingFeedbackRef],
-) -> CognitionResult<(usize, usize)> {
+) -> CognitionResult<usize> {
     ensure_data_authority(data_root, &[path, active_descriptor])?;
     if active_descriptor
         .try_exists()
@@ -333,16 +247,7 @@ fn remove_missing_links(
     let transaction = db
         .transaction()
         .map_err(|source| metadata_error().with_source(source))?;
-    let mut repaired_box_refs = 0;
     let mut repaired_feedback_refs = 0;
-    for reference in boxes {
-        repaired_box_refs += transaction
-            .execute(
-                "DELETE FROM memory_chunk_box_refs WHERE memory_chunk_id=?1 AND box_item_id=?2",
-                params![reference.memory_chunk_id, reference.box_item_id],
-            )
-            .map_err(|source| metadata_error().with_source(source))?;
-    }
     for reference in feedback {
         repaired_feedback_refs += transaction.execute(
             "DELETE FROM memory_chunk_feedback_refs WHERE memory_chunk_id=?1 AND feedback_id=?2",
@@ -353,7 +258,7 @@ fn remove_missing_links(
     transaction
         .commit()
         .map_err(|source| metadata_error().with_source(source))?;
-    Ok((repaired_box_refs, repaired_feedback_refs))
+    Ok(repaired_feedback_refs)
 }
 
 fn stream_refs(
@@ -366,12 +271,6 @@ fn stream_refs(
         .map_err(|source| metadata_error().with_source(source))?;
     let mut chunk_query = db
         .prepare("SELECT memory_chunk_id FROM memory_chunks ORDER BY updated_at DESC, memory_chunk_id DESC LIMIT ?1 OFFSET ?2")
-        .map_err(|source| metadata_error().with_source(source))?;
-    let mut box_query = db
-        .prepare("SELECT box_item_id FROM memory_chunk_box_refs WHERE memory_chunk_id=?1 ORDER BY box_item_id,relation")
-        .map_err(|source| metadata_error().with_source(source))?;
-    let mut feedback_query = db
-        .prepare("SELECT feedback_id FROM memory_chunk_feedback_refs WHERE memory_chunk_id=?1 ORDER BY feedback_id,relation")
         .map_err(|source| metadata_error().with_source(source))?;
     for offset in (0..SOURCE_CHUNK_LIMIT).step_by(PAGE_SIZE) {
         let ids = chunk_query
@@ -388,22 +287,7 @@ fn stream_refs(
         if ids.is_empty() {
             break;
         }
-        let mut batch = Vec::with_capacity(ids.len());
-        for id in ids {
-            batch.push(ChunkRefs {
-                memory_chunk_id: id.clone(),
-                box_ids: box_query
-                    .query_map([&id], |row| row.get::<_, String>(0))
-                    .map_err(|source| metadata_error().with_source(source))?
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(|source| metadata_error().with_source(source))?,
-                feedback_ids: feedback_query
-                    .query_map([&id], |row| row.get::<_, String>(0))
-                    .map_err(|source| metadata_error().with_source(source))?
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(|source| metadata_error().with_source(source))?,
-            });
-        }
+        let batch = ids.into_iter().map(|_| ChunkRefs).collect();
         if sender.blocking_send(Ok(batch)).is_err() {
             break;
         }

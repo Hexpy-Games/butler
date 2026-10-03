@@ -297,20 +297,6 @@ impl GraphRecallReader {
         coverage::graph(self.connection()?, input, inventory)
     }
 
-    pub(in crate::cognition) fn quality_receipt_json(
-        &self,
-        operation_id: &str,
-    ) -> CognitionResult<Option<String>> {
-        self.connection()?
-            .query_row(
-                "SELECT value FROM memory_state WHERE key=?1",
-                [format!("quality_operation:{operation_id}")],
-                |row| row.get(0),
-            )
-            .optional()
-            .map_err(db_error)
-    }
-
     pub(in crate::cognition) fn close(mut self) -> CognitionResult<()> {
         let Some(connection) = self.connection.take() else {
             return Ok(());

@@ -245,6 +245,16 @@ async fn malformed_queue_head_keeps_its_error_after_canonical_catchup() {
         Arc::new(|| NOW.into()),
     ));
     let result = poll(Input {
+        instruction_owner: crate::cognition::RememberedRuleOwner::new(
+            fixture.root.clone(),
+            environment.clone(),
+            coordinator.clone(),
+            Arc::new(crate::cognition::CompletionPublisher::new(
+                &fixture.root,
+                &environment,
+                Arc::new(|| NOW.into()),
+            )),
+        ),
         data_root: fixture.root.clone(),
         environment,
         registration: registration.clone(),

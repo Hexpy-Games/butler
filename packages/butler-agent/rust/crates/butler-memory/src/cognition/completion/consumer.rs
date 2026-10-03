@@ -2,6 +2,7 @@
 
 mod blocking;
 mod catchup;
+mod feedback;
 mod probe;
 mod process;
 mod vector_schedule;
@@ -55,6 +56,7 @@ type Clock = Arc<dyn Fn() -> String + Send + Sync>;
 /// Consumes the memory sync queue: registers completed turns and typed sources, projects them and
 /// embeds their vectors.
 pub struct MemorySyncConsumer {
+    instruction_owner: crate::cognition::RememberedRuleOwner,
     data_root: PathBuf,
     environment: CognitionPathEnvironment,
     registration: Arc<CognitionRegistrationService>,
@@ -82,7 +84,19 @@ impl MemorySyncConsumer {
         coordinator: Arc<CognitionWriteCoordinator>,
         clock: Clock,
     ) -> Self {
+        let publisher = Arc::new(crate::cognition::CompletionPublisher::new(
+            &data_root,
+            &environment,
+            clock.clone(),
+        ));
+        let instruction_owner = crate::cognition::RememberedRuleOwner::new(
+            data_root.clone(),
+            environment.clone(),
+            coordinator.clone(),
+            publisher,
+        );
         Self {
+            instruction_owner,
             data_root,
             environment,
             registration,
@@ -100,6 +114,12 @@ impl MemorySyncConsumer {
             probe: Arc::new(probe::ProbeReader::default()),
             vector_batch: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Use the runtime's configured instruction owner for every capture drain.
+    pub fn with_instruction_owner(mut self, owner: crate::cognition::RememberedRuleOwner) -> Self {
+        self.instruction_owner = owner;
+        self
     }
 
     /// Also embeds projected vector units with `embedding`.
@@ -170,6 +190,7 @@ impl MemorySyncConsumer {
         };
         let operation = self.shutdown.child_token();
         let input = process::Input {
+            instruction_owner: self.instruction_owner.clone(),
             data_root: self.data_root.clone(),
             environment: self.environment.clone(),
             registration: self.registration.clone(),
@@ -192,7 +213,13 @@ impl MemorySyncConsumer {
         tokio::spawn(async move {
             let _token = token;
             let _permit = permit;
-            let poll = process::poll(input);
+            let poll = async {
+                match feedback::drain(&input).await {
+                    Ok(Some(result)) => Ok(result),
+                    Ok(None) => process::poll(input).await,
+                    Err(error) => Err(error),
+                }
+            };
             tokio::pin!(poll);
             let result = tokio::select! {
                 result = &mut poll => result,
@@ -230,6 +257,7 @@ impl MemorySyncConsumer {
         };
         let operation = self.shutdown.child_token();
         let input = process::Input {
+            instruction_owner: self.instruction_owner.clone(),
             data_root: self.data_root.clone(),
             environment: self.environment.clone(),
             registration: self.registration.clone(),

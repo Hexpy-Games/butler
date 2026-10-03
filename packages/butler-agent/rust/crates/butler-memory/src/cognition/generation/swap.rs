@@ -210,6 +210,14 @@ fn error(code: CognitionCode) -> CognitionError {
 /// Writes a consistent copy of the SQLite store at `source` to `target` with
 /// `VACUUM INTO`, then syncs the copy and its directory.
 pub(super) fn vacuum_snapshot(source: &Path, target: &Path) -> CognitionResult<()> {
+    vacuum_snapshot_cancellable(source, target, &tokio_util::sync::CancellationToken::new())
+}
+
+pub(super) fn vacuum_snapshot_cancellable(
+    source: &Path,
+    target: &Path,
+    token: &tokio_util::sync::CancellationToken,
+) -> CognitionResult<()> {
     let parent = target
         .parent()
         .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
@@ -220,6 +228,8 @@ pub(super) fn vacuum_snapshot(source: &Path, target: &Path) -> CognitionResult<(
     let path = target
         .to_str()
         .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
+    let cancellation = token.clone();
+    db.progress_handler(1000, Some(move || cancellation.is_cancelled()));
     db.execute("VACUUM INTO ?1", params![path])
         .map_err(snapshot_changed)?;
     db.close().map_err(|(_, source)| snapshot_changed(source))?;

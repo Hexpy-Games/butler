@@ -6,6 +6,7 @@ mod dashboard;
 mod error;
 mod listeners;
 mod mcp_servers;
+mod memory_management;
 mod message_files;
 mod model_catalog;
 mod monitors;
@@ -227,7 +228,7 @@ async fn route(state: Arc<HttpState>, request: Request<Body>) -> Result<Response
     if uri.path() == "/model-catalog" || uri.path().starts_with("/model-catalog/") {
         return model_catalog::route(state, request, &uri).await;
     }
-    if uri.path() == "/personalization" || uri.path().starts_with("/personalization/") {
+    if personalization::settings_path(&uri) {
         return personalization::route(state, request, &uri).await;
     }
     if matches!(

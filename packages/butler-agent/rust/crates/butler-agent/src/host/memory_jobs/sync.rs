@@ -68,6 +68,13 @@ impl MemorySync {
             vector,
             Arc::new(SystemIdentity),
         ));
+        let instruction_owner = crate::host::guided::tools::MemoryWriteServices::new(
+            data_root,
+            paths,
+            coordinator.clone(),
+            clock.clone(),
+        )
+        .rules;
         let consumer = MemorySyncConsumer::new(
             data_root.to_path_buf(),
             paths.clone(),
@@ -75,6 +82,7 @@ impl MemorySync {
             coordinator,
             clock,
         )
+        .with_instruction_owner(instruction_owner)
         .with_unclean_start(unclean_previous_exit);
         let consumer = consumer.with_embedding(embedding);
         let consumer = Arc::new(consumer);

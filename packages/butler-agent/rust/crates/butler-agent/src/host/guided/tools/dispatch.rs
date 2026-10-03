@@ -27,7 +27,7 @@ pub(super) async fn execute(
         return Box::pin(super::image::execute(owner, invocation, call)).await;
     }
     if super::memory_write::supports(&call.name) {
-        return super::memory_write::execute(owner, invocation, call, call_id);
+        return super::memory_write::execute(owner, invocation, call, call_id).await;
     }
     if web::supports(&call.name) {
         return web::execute(owner, invocation, call).await;

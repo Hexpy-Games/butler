@@ -68,7 +68,7 @@ async fn ordinary(s: &Scenario, remember: &str) -> Result<u64, HarnessError> {
     Ok(pending)
 }
 
-async fn recall(s: &Scenario, chat: &str, ask: &str) -> Result<Value, HarnessError> {
+pub(super) async fn recall(s: &Scenario, chat: &str, ask: &str) -> Result<Value, HarnessError> {
     let first = s.provider()?.requests().len();
     let (id, turn) = s.turn(chat, ask).await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");

@@ -43,3 +43,5 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 
 ## Tags
 action, control, interactive
+
+Use `aria-disabled` when an unavailable action must retain keyboard focus (for example, Reset after its confirmation closes). Button blocks activation and uses the same disabled tone; use native `disabled` when focus retention is unnecessary.

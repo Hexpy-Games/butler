@@ -17,6 +17,7 @@ export type SettingsSectionId =
   | "usage"
   | "logs"
   | "personalization"
+  | "memory"
   | "privacy"
   | "security"
   | "system"

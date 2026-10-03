@@ -112,7 +112,11 @@ pub(super) fn render(
     let mut remaining = budget;
     let mut rendered = HashMap::with_capacity(documents.len());
     for document in documents {
-        let content = prefix_content(&document.content, remaining)?;
+        let content = if document.source_id == "rules" {
+            document.content.as_str()
+        } else {
+            prefix_content(&document.content, remaining)?
+        };
         let empty_size = encoded(document, "")?.len();
         let projected = encoded(document, content)?;
         remaining = remaining.saturating_sub(projected.len().saturating_sub(empty_size));

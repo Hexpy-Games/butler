@@ -8,7 +8,6 @@ use std::path::Path;
 
 use rusqlite::{ErrorCode, params};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 
 use super::TypedMemorySourceNotice;
 use super::observation::PublishedObservation;
@@ -84,33 +83,6 @@ pub(super) fn append_typed(
 ) -> CognitionResult<String> {
     let job_id = notice.job_id()?;
     let source = notice.source_json()?;
-    let entry = format!(
-        "{{\"schema_version\":\"butler.memory-sync-request.v3\",\"job_id\":{},\"source\":{},\"created_at\":{}}}",
-        json_string(&job_id)?,
-        source,
-        json_string(created_at)?,
-    );
-    append_idempotent(root, &job_id, &entry, created_at)?;
-    Ok(job_id)
-}
-
-pub(super) fn append_feedback_quality(
-    root: &Path,
-    feedback_id: &str,
-    operation_id: &str,
-    revision: &str,
-    created_at: &str,
-) -> CognitionResult<String> {
-    let job_id = format!(
-        "{:x}",
-        Sha256::digest(format!("feedback-quality:{operation_id}").as_bytes())
-    );
-    let source = format!(
-        "{{\"kind\":\"explicit_record\",\"record_kind\":\"feedback\",\"record_id\":{},\"revision\":{},\"operation_id\":{}}}",
-        json_string(feedback_id)?,
-        json_string(revision)?,
-        json_string(operation_id)?,
-    );
     let entry = format!(
         "{{\"schema_version\":\"butler.memory-sync-request.v3\",\"job_id\":{},\"source\":{},\"created_at\":{}}}",
         json_string(&job_id)?,

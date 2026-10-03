@@ -142,6 +142,16 @@ async fn setup(fixture: &Fixture) -> (Input, MemoryGenerationHandle) {
     .unwrap();
     db.execute("INSERT INTO memory_vector_units(unit_id,job_id,record_kind,owner_id,owner_revision,project_id,origin_kind,projection_text,source_ids_json) SELECT 'unit',j.job_id,'episode',j.episode_id,j.revision,'project','user_input','Remember this outcome',json_group_array(s.source_id) FROM memory_projection_jobs j JOIN memory_chunk_sources s ON s.episode_id=j.episode_id WHERE s.origin_kind='user_input' GROUP BY j.job_id", []).unwrap();
     let input = Input {
+        instruction_owner: crate::cognition::RememberedRuleOwner::new(
+            fixture.root.clone(),
+            environment.clone(),
+            coordinator.clone(),
+            Arc::new(crate::cognition::CompletionPublisher::new(
+                &fixture.root,
+                &environment,
+                Arc::new(|| NOW.into()),
+            )),
+        ),
         data_root: fixture.root.clone(),
         environment,
         registration,
