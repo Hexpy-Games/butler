@@ -5,7 +5,7 @@ name: Linux packages
 # releases, #261) as a DEB for x64 and arm64 and an Arch package for x64. Every
 # package is installed in a clean distribution container and its agent is run
 # headless (start, /health, stop).
-# Tagged releases call this workflow once from release.yml; publication waits
+# Tagged releases call this workflow per platform; publication waits
 # for all clean-container install and headless agent smoke checks.
 
 on:

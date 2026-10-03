@@ -107,6 +107,13 @@ The additional SDK artifact fallback preserves the recipe's required relative
 links and every pinned input. Existing cache quota eviction cannot silently
 turn it into an unchecked or partial runtime.
 
+An isolated local PERF-IDLE probe used the verified production Agent from this
+run and the local archive. It failed at the first full window: RSS 106,393,600 B,
+PSS 102,378,496 B, read-character delta 55,157 B, physical reads 0 B. The original
+100,000,000-byte gate remained enforced; later windows/assertions were not
+reached. This WSL measurement is not a hosted-CI result and does not establish
+a cause. Restoring the production profile alone has not proven a memory fix.
+
 ## Next measurement
 
 The subsequent code push checks the corrected selector, verified embedded versions, original build configurations and artifact cache fallback. Its complete workflow wall times and results will be added to the draft PR. No release tag or post-release dispatch is authorized by this task, so release-after numbers remain estimates, not observations.

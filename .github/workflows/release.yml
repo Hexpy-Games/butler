@@ -90,46 +90,19 @@ jobs:
     uses: ./.github/workflows/release-macos.yml
     secrets: inherit
 
-  agent-linux:
+  agent-linux-x64:
     if: startsWith(github.ref, 'refs/tags/v')
-    name: Build Linux Agent archive (${{ matrix.platform }})
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 150
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { platform: linux-x64, runner: ubuntu-24.04 }
-          - { platform: linux-arm64, runner: ubuntu-24.04-arm }
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+    uses: ./.github/workflows/release-linux-agent.yml
+    with:
+      platform: linux-x64
+      runner: ubuntu-24.04
 
-      - name: Build, package and smoke the Agent archive
-        uses: ./.github/actions/build-agent-archive
-        with:
-          cache-key: native-${{ matrix.platform }}
-          ort-mode: static-ort
-          reuse-pr-agent: 'true'
-          artifact-base-url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
-
-      - name: Keep the archive and its manifests for the release
-        uses: actions/upload-artifact@v4
-        with:
-          name: agent-${{ matrix.platform }}
-          path: dist/release/agent/*
-          if-no-files-found: error
-
-      - name: Keep the same native Agent for Linux App packaging
-        run: |
-          mkdir -p "$RUNNER_TEMP/release-agent"
-          cp "$BUTLER_NATIVE_AGENT_EXECUTABLE" "$RUNNER_TEMP/release-agent/butler-agent"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: release-agent-${{ matrix.platform }}
-          path: ${{ runner.temp }}/release-agent/butler-agent
-          if-no-files-found: error
-          compression-level: 0
+  agent-linux-arm64:
+    if: startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/release-linux-agent.yml
+    with:
+      platform: linux-arm64
+      runner: ubuntu-24.04-arm
 
   agent-windows-build:
     name: Build unsigned Windows x64 Agent preview
@@ -220,7 +193,7 @@ jobs:
   agent-release:
     name: Publish successful Agent archives, merged manifests and installers
     runs-on: ubuntu-latest
-    needs: [native-release, agent-linux, agent-windows]
+    needs: [native-release, agent-linux-x64, agent-linux-arm64, agent-windows]
     if: ${{ always() && !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
     steps:
       - name: Check out repository
@@ -279,10 +252,10 @@ jobs:
           fi
           gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
 
-  app-linux:
+  app-linux-x64:
     if: startsWith(github.ref, 'refs/tags/v')
     name: Build and smoke Linux App packages
-    needs: agent-linux
+    needs: agent-linux-x64
     # The reusable workflow declares an issues-writing main/nightly reporter.
     permissions:
       contents: read
@@ -290,13 +263,32 @@ jobs:
       issues: write
     uses: ./.github/workflows/linux-packages.yml
     with:
+      label: release-x64
+      platforms: '[{"target":"linux-x64","runner":"ubuntu-24.04","formats":"--format=deb --format=pacman"}]'
+      smokes: '[{"target":"linux-x64","runner":"ubuntu-24.04","format":"deb","image":"ubuntu:24.04"},{"target":"linux-x64","runner":"ubuntu-24.04","format":"deb","image":"debian:trixie"},{"target":"linux-x64","runner":"ubuntu-24.04","format":"pacman","image":"archlinux:base-20260927.0.600689@sha256:eb8f6dcc89a38977c9735f10fcf6ae4afe496283e7008eb7a3420cdba31fbd04"}]'
+      shared-agents: true
+      agent-prefix: release-agent
+
+  app-linux-arm64:
+    if: startsWith(github.ref, 'refs/tags/v')
+    name: Build and smoke Linux App packages
+    needs: agent-linux-arm64
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    uses: ./.github/workflows/linux-packages.yml
+    with:
+      label: release-arm64
+      platforms: '[{"target":"linux-arm64","runner":"ubuntu-24.04-arm","formats":"--format=deb"}]'
+      smokes: '[{"target":"linux-arm64","runner":"ubuntu-24.04-arm","format":"deb","image":"ubuntu:24.04"}]'
       shared-agents: true
       agent-prefix: release-agent
 
   app-linux-release:
     name: Attach Linux App packages to the draft release
     runs-on: ubuntu-latest
-    needs: [agent-release, app-linux]
+    needs: [agent-release, app-linux-x64, app-linux-arm64]
     if: ${{ always() && !cancelled() && needs.agent-release.result == 'success' }}
     steps:
       - uses: actions/checkout@v4

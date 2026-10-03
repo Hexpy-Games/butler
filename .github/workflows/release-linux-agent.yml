@@ -1,0 +1,44 @@
+name: Native Linux release Agent
+on:
+  workflow_call:
+    inputs:
+      platform:
+        type: string
+        required: true
+      runner:
+        type: string
+        required: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  agent:
+    name: Build Linux Agent archive (${{ inputs.platform }})
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 150
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Build, package and smoke the Agent archive
+        uses: ./.github/actions/build-agent-archive
+        with:
+          cache-key: native-${{ inputs.platform }}
+          ort-mode: static-ort
+          reuse-pr-agent: 'true'
+          artifact-base-url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
+      - name: Keep the archive and its manifests for the release
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-${{ inputs.platform }}
+          path: dist/release/agent/*
+          if-no-files-found: error
+      - name: Keep the same native Agent for Linux App packaging
+        run: |
+          mkdir -p "$RUNNER_TEMP/release-agent"
+          cp "$BUTLER_NATIVE_AGENT_EXECUTABLE" "$RUNNER_TEMP/release-agent/butler-agent"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-agent-${{ inputs.platform }}
+          path: ${{ runner.temp }}/release-agent/butler-agent
+          if-no-files-found: error
+          compression-level: 0

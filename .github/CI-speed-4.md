@@ -71,6 +71,9 @@ Runner contention can dominate Windows even with warm compilation.
   compiled inventory is covered completely, with disjoint shard assignments.
 - Agent-only artifacts avoid downloading/extracting an entire test archive in
   packaging jobs. Each PR install/package job waits only for its own platform.
+  Tagged Linux App packaging also waits only for its own native Agent; the
+  unchanged three x64 distribution smokes and ARM64 Ubuntu smoke still gate
+  publication. Windows App packaging overlaps hosted Agent verification.
   Main's unconditional Rust selection and original UI/site/package selectors
   remain; the gate rejects failed, cancelled and unexpected skipped checks.
 - macOS releases now restore fingerprinted static ORT and Cargo outputs and use
