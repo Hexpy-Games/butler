@@ -15,22 +15,39 @@ Butler Agent CLI is a command-line tool that installs and runs the Butler runtim
 ## Supported platforms
 
 - Apple silicon Mac (`darwin-arm64`) and Linux x64 and arm64 (glibc) are supported.
-- Intel Macs and musl-based Linux such as Alpine do not run it. Windows support is in preparation.
+- Intel Macs and musl-based Linux such as Alpine do not run it. Windows builds are in source preview; the published release has no downloadable Windows installer.
 - You need a release that publishes the native Agent archive (`butler-agent-<version>-<platform>.tar.gz`).
 
 ## Install
 
-To use Butler without the app, for example on a server or a remote PC, run the one-line install script. The current version is the `0.1.0-preview.5` preview, so download the script from the preview release and pass the same version with `--version`.
+To use Butler without the app, for example on a server or a remote computer, run the one-line install script. The current version is the `0.1.0-preview.5` preview, so download the script from the preview release and pass the same version with `--version`.
 
-```bash
-curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/install.sh | sh -s -- --version 0.1.0-preview.5
-```
-
-If you have Node.js, you can run the same installation with npx.
-
-```bash
-npx @hexpygames/butler install
-```
+<Tabs
+  label="Operating system"
+  items={[
+    { value: "macos", label: "macOS" },
+    { value: "windows", label: "Windows" },
+    { value: "linux", label: "Linux" },
+  ]}
+>
+  <TabPanel value="macos">
+    ```bash
+    curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/install.sh | sh -s -- --version 0.1.0-preview.5
+    # With Node.js
+    npx @hexpygames/butler install
+    ```
+  </TabPanel>
+  <TabPanel value="windows">
+    The published release has no downloadable Windows Agent installer. Windows builds are in source preview. See [Install](/en/help/getting-started/install/) for the current release status.
+  </TabPanel>
+  <TabPanel value="linux">
+    ```bash
+    curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.5/install.sh | sh -s -- --version 0.1.0-preview.5
+    # With Node.js
+    npx @hexpygames/butler install
+    ```
+  </TabPanel>
+</Tabs>
 
 The install script works in this order.
 
@@ -59,16 +76,35 @@ Change the install folder with `BUTLER_AGENT_HOME` and the location of the `butl
 
 ### Install locations
 
-| Item | macOS | Linux |
-| --- | --- | --- |
-| Install folder | `~/Applications/ButlerAgent` | `~/.local/share/butler/agent` |
-| `butler` command | `~/.local/bin/butler` | `~/.local/bin/butler` |
+| Item | macOS | Windows | Linux |
+| --- | --- | --- | --- |
+| Install folder | `~/Applications/ButlerAgent` | Not distributed in this release | `~/.local/share/butler/agent` |
+| `butler` command | `~/.local/bin/butler` | Not distributed in this release | `~/.local/bin/butler` |
 
 Inside the install folder, each version gets a `<version>-<8-character hash>` folder. `current` points to the version in use and `previous` to the one before it. Only the 3 most recent old versions are kept (the version in use, the previous version and the running version are always kept), and `butler update` or `butler install` removes the rest. Data is stored in the data folder (default `~/.butler`), outside the install folder. The desktop app and the CLI use the same install layout.
 
 ### Manual install
 
 If you cannot use the install script, extract the archive yourself. The archive is an install package that you extract into a new folder for each version.
+
+<Tabs
+  label="Operating system"
+  items={[
+    { value: "macos", label: "macOS" },
+    { value: "windows", label: "Windows" },
+    { value: "linux", label: "Linux" },
+  ]}
+>
+  <TabPanel value="macos">
+    Use a `darwin-arm64` archive and the Bash steps below.
+  </TabPanel>
+  <TabPanel value="windows">
+    The published release has no downloadable Windows Agent archive or installer.
+  </TabPanel>
+  <TabPanel value="linux">
+    Use a `linux-x64` or `linux-arm64` archive and the Bash steps below.
+  </TabPanel>
+</Tabs>
 
 <Steps>
   1. On [GitHub Releases](https://github.com/Hexpy-Games/butler/releases), find a version that has the native Agent archive.

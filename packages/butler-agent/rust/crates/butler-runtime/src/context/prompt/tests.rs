@@ -184,6 +184,17 @@ async fn butler_and_steward_assemblies_keep_sections_producer_order_and_fallback
         .build_butler_context_assembly(&request, &butler_binding)
         .await
         .unwrap();
+    let host_environment = butler_platform::launcher::runtime_prompt_environment();
+    let expected_host_environment = match butler_platform::launcher::node_platform() {
+        "darwin" => "OS: macOS\nShell: POSIX shell (/bin/sh)".to_owned(),
+        "win32" => "OS: Windows\nShell: PowerShell".to_owned(),
+        "linux" => "OS: Linux\nShell: POSIX shell (/bin/sh)".to_owned(),
+        other => format!("OS: {other}\nShell: system shell"),
+    };
+    assert_eq!(host_environment, expected_host_environment);
+    assert!(assembly.static_context.iter().any(|section| {
+        section.id == "runtime-system-contract" && section.content.contains(&host_environment)
+    }));
     assert_eq!(
         ids(&assembly.live_configuration),
         [

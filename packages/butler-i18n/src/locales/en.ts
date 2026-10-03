@@ -53,7 +53,7 @@ const onboardingFallback: BriefingFallbackCopy = {
 const firstRun = {
     product: "Butler",
     welcomeTitle: "Welcome to Butler",
-    welcomeLede: "Butler works for you on this Mac. It organizes files, runs commands and keeps your schedules.",
+    welcomeLede: "Butler works for you on this computer. It organizes files, runs commands and keeps your schedules.",
     start: "Get started",
     consentTitle: "Before you start",
     consentItems: [
@@ -1383,7 +1383,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       desktopNotifications: "Desktop notifications",
       desktopNotificationAssistantMessages: "AI message notifications",
       desktopNotificationTaskCompletions: "Task completion notifications",
-      desktopTray: "Show in tray and menu bar",
+      desktopTray: "Keep app available after closing the window",
       bridgeMode: "Bridge mode",
       serverUrl: "Server URL",
       defaultProjectFolder: "Default project folder",
@@ -1420,7 +1420,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       korean: "Korean",
       queueWhileBusy: "Queue while busy",
       steerCurrentTurn: "Steer current turn",
-      modifierEnterSendEnterNewline: "Command/Ctrl Enter sends, Enter inserts newline",
+      modifierEnterSendEnterNewline: (modifier) => `${modifier} Enter sends, Enter inserts a newline`,
       enterSendShiftEnterNewline: "Enter sends, Shift Enter inserts newline",
       system: "System",
       light: "Light",
@@ -1538,7 +1538,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       desktopNotificationTaskCompletions:
         "Notify when an active task completes, fails, or is cancelled.",
       desktopTray:
-        "Keep the app in the tray or menu bar when the window is closed, with quick access to new and recent chats.",
+        "Keep the app running when its window is closed. Its menu provides quick access to new and recent chats.",
       developerMode:
         "Allows Chrome DevTools in this desktop window. When off, Electron menus and DevTools shortcuts are blocked.",
     },

@@ -46,8 +46,8 @@ function Wizard({ context, tone }: { context: ShowcaseRenderContext; tone: "ligh
 }
 
 const focusLabels = {
-  "en-US": { title: "Welcome to Butler", body: "Butler works for you on this Mac.", agree: "Agree and continue" },
-  "ko-KR": { title: "반갑습니다", body: "Butler는 이 Mac에서 일을 대신합니다.", agree: "동의하고 계속" },
+  "en-US": { title: "Welcome to Butler", body: "Butler works for you on this computer.", agree: "Agree and continue" },
+  "ko-KR": { title: "반갑습니다", body: "Butler는 이 컴퓨터에서 일을 대신합니다.", agree: "동의하고 계속" },
 } as const;
 
 function Focus({ context, tone }: { context: ShowcaseRenderContext; tone: "light" | "dark" }) {

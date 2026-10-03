@@ -53,7 +53,7 @@ const onboardingFallback: BriefingFallbackCopy = {
 const firstRun = {
     product: "Butler",
     welcomeTitle: "반갑습니다",
-    welcomeLede: "Butler는 이 Mac에서 파일을 정리하고, 명령을 실행하고, 예약 작업을 챙기며 일을 대신합니다.",
+    welcomeLede: "Butler는 이 컴퓨터에서 파일을 정리하고, 명령을 실행하고, 예약 작업을 챙기며 일을 대신합니다.",
     start: "시작하기",
     consentTitle: "시작하기 전에 확인해 주세요",
     consentItems: [
@@ -1390,7 +1390,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       desktopNotifications: "데스크톱 알림",
       desktopNotificationAssistantMessages: "AI 메시지 알림",
       desktopNotificationTaskCompletions: "작업 완료 알림",
-      desktopTray: "트레이 및 메뉴바에 표시",
+      desktopTray: "창을 닫아도 앱 아이콘 표시",
       bridgeMode: "브리지 모드",
       serverUrl: "서버 URL",
       defaultProjectFolder: "기본 프로젝트 폴더",
@@ -1427,7 +1427,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       korean: "한국어",
       queueWhileBusy: "작업 중이면 대기열에 추가",
       steerCurrentTurn: "현재 작업 방향 조정",
-      modifierEnterSendEnterNewline: "Command/Ctrl Enter 전송, Enter 줄바꿈",
+      modifierEnterSendEnterNewline: modifier => `${modifier} Enter 전송, Enter 줄바꿈`,
       enterSendShiftEnterNewline: "Enter 전송, Shift Enter 줄바꿈",
       system: "시스템",
       light: "라이트",
@@ -1545,7 +1545,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       desktopNotificationTaskCompletions:
         "진행 중인 작업이 완료, 실패, 취소 상태가 되면 알림을 보냅니다.",
       desktopTray:
-        "켜면 창을 닫아도 앱이 트레이 또는 메뉴바에 남고, 메뉴에서 새 대화와 최근 대화를 열 수 있습니다.",
+        "켜면 창을 닫아도 앱이 계속 실행되며, 메뉴에서 새 대화와 최근 대화를 열 수 있습니다.",
       developerMode:
         "켜면 이 데스크톱 앱 창에서 Chrome DevTools를 열 수 있습니다. 끄면 Electron 기본 메뉴와 DevTools 단축키가 차단됩니다.",
     },

@@ -1217,7 +1217,7 @@ export interface AppCopy {
       korean: string;
       queueWhileBusy: string;
       steerCurrentTurn: string;
-      modifierEnterSendEnterNewline: string;
+      modifierEnterSendEnterNewline: (modifier: string) => string;
       enterSendShiftEnterNewline: string;
       system: string;
       light: string;
