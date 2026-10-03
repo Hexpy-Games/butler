@@ -127,7 +127,7 @@ jobs:
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
           cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e `
-            --test windows_startup_xml --test installed_preview --test turn --test cli_surface --test queue_shutdown --test migration --test durable_configuration `
+            --test windows_startup_xml --test installed_preview --test windows_commands --test turn --test cli_surface --test queue_shutdown --test migration --test durable_configuration `
             --test service_supervision --test service_diagnostics --test long_paths --test gateway_remote --test gateway_pairing --test cli_remote --no-run --message-format=json 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/harness-compile.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -218,6 +218,13 @@ jobs:
           ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests cli_surface   |
             Tee-Object "$env:PREVIEW_ROOT/logs/cli-surface.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Native command tool environment, Unicode and Downloads chat
+        if: ${{ !cancelled() }}
+        run: |
+          $env:BUTLER_E2E_BIN = "$env:PREVIEW_ROOT/artifacts/butler-agent.exe"
+          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests windows_commands |
+            Tee-Object "$env:PREVIEW_ROOT/logs/windows-commands.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: LAN listener, bind failures and API pairing smoke
         if: ${{ !cancelled() }}
         run: |
@@ -261,12 +268,12 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           $expected = @('windows_startup_xml','installed_preview','cli_surface','gateway_remote','gateway_pairing','cli_remote',
-            'queue_shutdown','migration','durable_configuration','service_supervision','service_diagnostics')
+            'windows_commands','queue_shutdown','migration','durable_configuration','service_supervision','service_diagnostics')
           $actual = @(Get-Content "$env:PREVIEW_ROOT/logs/completed-harnesses.txt")
           if ($actual.Count -ne $expected.Count -or (Compare-Object $expected $actual)) {
             throw "Incomplete verification: completed=$($actual -join ',')"
           }
-          "Verified all 11 compiled harnesses: $($actual -join ',')"
+          "Verified all 12 compiled harnesses: $($actual -join ',')"
       - name: Task Scheduler installed artifact E2E (disposable runner only)
         working-directory: .
         run: |

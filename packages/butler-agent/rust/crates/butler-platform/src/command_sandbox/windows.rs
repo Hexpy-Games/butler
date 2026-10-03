@@ -1,8 +1,11 @@
 //! `cmd.exe` and PowerShell.
 
+use base64::{Engine, engine::general_purpose::STANDARD};
 use std::collections::HashMap;
 
 use super::Invocation;
+
+pub(super) const ESCAPE: char = '`';
 
 pub(super) const POSIX: bool = false;
 
@@ -37,7 +40,12 @@ pub(super) fn login_shell(command: &str, environment: &HashMap<String, String>) 
         .to_owned();
     Invocation {
         program,
-        arguments: vec!["/d".into(), "/s".into(), "/c".into(), command.to_owned()],
+        arguments: vec![
+            "/d".into(),
+            "/s".into(),
+            "/c".into(),
+            format!("chcp 65001>nul & {command}"),
+        ],
     }
 }
 
@@ -53,6 +61,19 @@ pub(super) fn legacy_shell(
         .filter(|value| !value.is_empty())
         .unwrap_or("powershell.exe")
         .to_owned();
+    let command = explicit_script(command).unwrap_or(command);
+    // EncodedCommand preserves nested quotes and multi-line scripts without
+    // cmd/CRT/PowerShell argument reparsing. Set both console and pipeline
+    // encodings; native reg/cmd output follows the console code page.
+    let script = format!(
+        "[Console]::InputEncoding=[Text.UTF8Encoding]::new(); [Console]::OutputEncoding=[Text.UTF8Encoding]::new(); $OutputEncoding=[Console]::OutputEncoding; {command}"
+    );
+    let encoded = STANDARD.encode(
+        script
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<_>>(),
+    );
     Invocation {
         program,
         arguments: [
@@ -61,10 +82,40 @@ pub(super) fn legacy_shell(
             "-NonInteractive",
             "-ExecutionPolicy",
             "Bypass",
-            "-Command",
-            command,
+            "-EncodedCommand",
+            &encoded,
         ]
         .map(str::to_owned)
         .to_vec(),
     }
+}
+
+// The tool accepts the common cmd-style `powershell.exe -Command "script"`.
+// Running that through another PowerShell expands $variables in the outer
+// double-quoted argument before the requested script ever sees them. Standard
+// startup switches are already enforced by our invocation; run the script once.
+fn explicit_script(command: &str) -> Option<&str> {
+    let (program, tail) = command.trim().split_once(char::is_whitespace)?;
+    if !program.eq_ignore_ascii_case("powershell.exe")
+        && !program.eq_ignore_ascii_case("powershell")
+    {
+        return None;
+    }
+    let offset = tail.to_ascii_lowercase().find("-command ")?;
+    let prefix = tail.get(..offset)?;
+    let mut arguments = prefix.split_whitespace();
+    while let Some(argument) = arguments.next() {
+        match argument.to_ascii_lowercase().as_str() {
+            "-nologo" | "-noprofile" | "-noninteractive" => {}
+            "-executionpolicy"
+                if arguments
+                    .next()
+                    .is_some_and(|value| value.eq_ignore_ascii_case("Bypass")) => {}
+            _ => return None,
+        }
+    }
+    tail.get(offset + "-command ".len()..)?
+        .trim()
+        .strip_prefix('"')?
+        .strip_suffix('"')
 }
