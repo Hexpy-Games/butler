@@ -39,6 +39,14 @@
   padding: 0;
 }
 
+.headerSurface {
+  width: calc(100% + var(--space-4) + var(--space-4));
+  margin-top: calc(-1 * var(--space-4));
+  margin-inline: calc(-1 * var(--space-4));
+  border: 0;
+  background: var(--color-surface-raised-opaque);
+}
+
 .metaRow {
   display: flex;
   min-width: 0;
@@ -180,17 +188,13 @@
 }
 
 .itemFrame {
-  --tinted-glass-bg: color-mix(in srgb, var(--surface-raised) 58%, transparent);
+  --tinted-glass-bg: var(--color-surface-raised-opaque);
   --tinted-glass-border: color-mix(
     in srgb,
     var(--composer-glass-border) 72%,
     var(--line)
   );
-  --tinted-glass-tint: color-mix(
-    in srgb,
-    var(--surface-raised) 48%,
-    transparent
-  );
+  --tinted-glass-tint: var(--color-surface-raised-opaque);
   --tinted-glass-filter: saturate(1.24) blur(var(--tinted-glass-blur));
   --tinted-glass-shadow: none;
 
@@ -205,7 +209,7 @@
 
 .itemFrame:hover:not([data-disabled="true"]),
 .itemFrame:has(.item:focus-visible) {
-  --tinted-glass-bg: color-mix(in srgb, var(--surface-raised) 68%, transparent);
+  --tinted-glass-bg: var(--color-surface-raised-opaque);
   --tinted-glass-border: color-mix(
     in srgb,
     var(--composer-glass-border) 88%,

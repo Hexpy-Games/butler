@@ -2,7 +2,7 @@
 
 ## What is this component
 
-PromptSuggestionList is a Butler design-system block for new-chat and empty prompt surfaces. It pairs a moment label, title, optional title icon, optional description, an optional `Wallpaper` behind it, and a horizontal rail of tall tinted-glass suggestion cards.
+PromptSuggestionList is a Butler design-system block for new-chat and empty prompt surfaces. It pairs a moment label, title, optional title icon, and optional description on a solid `Card`, an optional `Wallpaper` behind it, and a horizontal rail of tall tinted-glass suggestion cards.
 
 ## When to use this component
 
