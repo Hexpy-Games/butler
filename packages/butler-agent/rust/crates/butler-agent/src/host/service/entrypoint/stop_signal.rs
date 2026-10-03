@@ -30,7 +30,8 @@ use butler_gateway::gateway::TranscriptWriter;
 /// Error code of a startup that a stop request ended.
 pub(super) const START_CANCELLED: &str = "native_service_start_cancelled";
 
-/// Every stop has a deadline shorter than the controller's 8 s SIGKILL.
+/// CLI stops have a deadline shorter than the controller's 8 s SIGKILL.
+/// App-owned cooperative shutdown uses the same budget, but waits safely.
 const STOP_GRACE: Duration = Duration::from_secs(6);
 
 /// Whether a stop was requested: SIGTERM, SIGINT, the shutdown flag or the
@@ -194,6 +195,13 @@ fn exit_after_grace(inner: Arc<Inner>) {
         .spawn(move || {
             std::thread::sleep(STOP_GRACE);
             if inner.completed.load(Ordering::Acquire) {
+                return;
+            }
+            if std::env::var("BUTLER_APP_FOREGROUND_LEASE").as_deref() == Ok("1")
+                && std::env::var("BUTLER_APP_QUIT_WAIT_SAFELY").as_deref() == Ok("1")
+            {
+                butler_core::diagnostic!("[native-butler] stop budget exceeded; waiting safely");
+                super::super::shutdown_trace::event("budget_exceeded_waiting_safely");
                 return;
             }
             butler_core::diagnostic!(
