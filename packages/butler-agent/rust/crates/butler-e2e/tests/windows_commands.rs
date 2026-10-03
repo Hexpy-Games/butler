@@ -16,15 +16,23 @@ use butler_e2e::e2e::{
 use serde_json::Value;
 
 async fn run(case: &str, command: &str) -> Result<Value, HarnessError> {
-    let setup = Setup::new(case)?
+    let mut setup = Setup::new(case)?
         .stub_cassette(stub::cassette(command)?)
         .env("BUTLER_E2E_CANARY", "must-not-reach-command");
+    installed_bundle(&mut setup);
     let downloads = setup.sandbox.home.join("Downloads");
     std::fs::create_dir_all(&downloads)?;
     std::fs::write(downloads.join("보고서.txt"), "document")?;
     std::fs::write(downloads.join("사진.png"), "image")?;
     let home = setup.sandbox.home.display().to_string();
-    let setup = setup.env("USERPROFILE", home);
+    let local = setup.sandbox.home.join("AppData/Local");
+    let roaming = setup.sandbox.home.join("AppData/Roaming");
+    std::fs::create_dir_all(&local)?;
+    std::fs::create_dir_all(&roaming)?;
+    let setup = setup
+        .env("USERPROFILE", home)
+        .env("LOCALAPPDATA", local.display().to_string())
+        .env("APPDATA", roaming.display().to_string());
     let s = setup.start().await?;
     let (id, turn) = s.turn("general", stub::PROMPT).await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
@@ -81,6 +89,15 @@ async fn run(case: &str, command: &str) -> Result<Value, HarnessError> {
     assert_eq!(s.provider()?.served(), 2);
     s.finish().await?;
     Ok(output)
+}
+
+fn installed_bundle(setup: &mut Setup) {
+    if let Some(root) = std::env::var_os("BUTLER_E2E_APP_PAYLOAD") {
+        let root = std::path::PathBuf::from(root);
+        setup.sandbox.binary = root.join("bin/butler-agent.exe");
+        setup.sandbox.resources = root.join("resources");
+        setup.sandbox.install = root;
+    }
 }
 
 fn successful(output: &Value, expected: &str) {
