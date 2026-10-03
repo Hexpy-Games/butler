@@ -1,7 +1,8 @@
 //! Versioned multilingual episode projection. All writes run under the cache lease.
 pub(super) mod read;
+pub(super) mod reindex;
 mod schema;
-mod tokenize;
+pub(in crate::cognition) mod tokenize;
 use super::{GraphRepository, db_error};
 use crate::cognition::CognitionResult;
 pub(super) use read::select;
@@ -15,6 +16,7 @@ impl GraphRepository {
         stop: &CancellationToken,
     ) -> CognitionResult<bool> {
         let tx = self.connection_mut()?.transaction().map_err(db_error)?;
+        let migrated = reindex::enqueue(&tx)?;
         let ids = {
             let mut statement = tx.prepare("SELECT episode_id FROM memory_episode_fts_pending ORDER BY episode_id LIMIT 32").map_err(db_error)?;
             statement
@@ -23,7 +25,7 @@ impl GraphRepository {
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(db_error)?
         };
-        if ids.is_empty() {
+        if ids.is_empty() && !migrated {
             return Ok(false);
         }
         for id in &ids {

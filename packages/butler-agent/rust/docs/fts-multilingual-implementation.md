@@ -1,6 +1,6 @@
 # Multilingual FTS fallback implementation and acceptance
 
-Latest follow-up: [per-script index and fallback top-30 experiment](fts-script-experiment.md) stopped at its accuracy gate; neither product change was adopted.
+Latest follow-up: the coordinator adopts [Script15 as the no-embedding fallback](fts-script-experiment.md#coordinator-adoption-script15), with optional resumable re-indexing. Top-30 remains rejected, research targets remain unmet, and vectors stay primary. The results below describe the earlier neutral implementation.
 
 2026-10-03, Linux x86_64 / WSL. **Acceptance stopped at the accuracy gate.** The implementation is available for review, but the requested three-arm judge comparison is not validated. Vectors remain the primary lane; FTS replaces an unavailable vector lane. The research does not justify enabling FTS alongside available vectors.
 

@@ -1,6 +1,6 @@
 # Per-script index and fallback top-30 judge experiment
 
-2026-10-03, Linux x86_64 / WSL. **Stopped at the accuracy gate; no product change adopted.**
+2026-10-03, Linux x86_64 / WSL. **Top-30 rejected; coordinator adopts Script15 for the no-embedding fallback.**
 
 Recovered merge `d2693fb32`, including recall-judge E2E fixes at `5f56d394d`.
 The owner permits script-specific same-language retrieval; cross-language matching is not required.
@@ -164,9 +164,9 @@ API usage is available for 129/131 calls, including one discarded completed dead
 two killed calls have unknown billable usage. Actual token distributions use reported calls only.
 131 live calls: 128 valid rankings, 3 deadline fallbacks, zero tool calls. No monetary price claimed.
 
-## Decision and remaining work
+## Experiment decision and deferred implementation (historical)
 
-**Reject adoption.** Per-script30 hit@5 is 56/89 original and 9/35 extra, below 70/89 and 16/35.
+**Reject top-30 adoption.** Per-script30 hit@5 is 56/89 original and 9/35 extra, below 70/89 and 16/35.
 It gains three hits over per-script15, with no hit@5 losses, but overall delta CI [0.0, 5.6] pp
 includes zero. Original delta CI is [0.0, 5.6] pp; extra [0.0, 8.6] pp. Keyword is unchanged.
 MRR delta CI also includes zero [-0.001, 0.028]. Judge p95 5.87 s passes the 8 s deadline.
@@ -180,7 +180,97 @@ The temporary native query bridge was reversed before product checks; only bench
 Immutable graph/canonical/corpus input fingerprints are verified unchanged before cleanup.
 Private run copies, prompts, index/order artifacts, Python bytecode and task target are deleted at completion.
 
-## Validation
+## Coordinator adoption: Script15
+
+The coordinator adopts the frozen per-script analyzer only as the fallback when
+embeddings are unavailable; vectors stay primary. Script15 improves original
+judged hit@5 from neutral's **50/89 to 54/89** and meets the owner's multilingual
+definition: each language is findable in its own language, without requiring
+cross-language matching. The research targets remain unmet. Top-30 is not adopted:
+its paired improvement CI includes zero and the experiment reports about ten times
+the recall-judge benchmark's input usage (the accounting difference is explained below).
+The judge retains **15 candidates**, 150-character summary prefixes, its gate,
+8-second deadline, RRF60 and complete-order fallback.
+
+The apparent ~13.4k versus ~1.2k input cost compares different measurements.
+`benchmarks/fts-script/judge.py` runs `codex exec`, so reported API input includes
+Codex's agent instructions/wrapper and cached input, even though no tools execute;
+its Script30 median is **13,362 API tokens**, versus **2,224 payload-estimate tokens**.
+Script15 likewise reports **12,316.5 API tokens**, but only **1,178.5 payload tokens**,
+consistent with the [recall-judge benchmark](recall-judge-plan.md)'s **1,160.5**
+held-out median payload estimate. Both estimates exclude provider role/schema
+framing and lack a verified model/tokenizer mapping; neither is billable usage. The wrapper
+adds about **11.1k tokens** in both arms; doubling candidates roughly doubles the
+payload, rather than multiplying it tenfold. Product `ConfiguredRecallJudge::call`
+sends only the ranking instructions, question, numbered summary prefixes and JSON
+schema through `ProviderPromptPort`, with no Codex CLI, conversation history, tools
+or excerpts. Existing stub judge E2Es inspect the actual provider request; no live
+call is needed or made for this adoption, and no new measured billable usage is claimed.
+
+Production uses Unicode Script routing after NFKC/full case folding: Hangul follows
+the frozen cue stopwords, distinct runs, repeated bigrams across runs and character
+postings; Latin/Cyrillic/Greek words fold diacritics; Han/Kana/Thai and the other
+frozen unspaced scripts keep runs and bigrams. All complete fields share one index.
+Unicode Script properties come from [unicode-script 0.5.8](https://docs.rs/unicode-script/0.5.8/unicode_script/enum.Script.html).
+
+Existing-index upgrade is optional background work under the existing cache lease,
+with a persisted episode-ID cursor and upper bound. Each consumer step queues at
+most 32 existing rows and projects at most 32 pending rows; cursor and queue advance
+transactionally and survive interruption/restart. New writes use Script15 immediately.
+Recall reports partial coverage during migration. There is no startup/turn wait,
+new timer, idle lease or idle commit. Existing generation cleanup and reset triggers
+continue to remove the same index/metadata/pending rows. Fresh stub scenarios cover
+Korean, English, Japanese, Chinese, French accents and mixed Korean/English, then
+emulate the legacy index and verify upgrade, restart and chat reset with no vectors
+or embedding worker. The existing pure-logic cache-index assertion also checks
+65-row batches (32/32/1), rollback and persisted cursor continuation.
+
+## Adoption validation
+
+Checks use fresh HOME/BUTLER_DATA, real Cargo/Rustup caches, pinned Rust 1.91,
+`-j 8`, one build at a time, and at most four test threads (memory runs serially).
+No live model calls, owner data, installed service or model-server ports are used.
+
+- Agent build and `cargo fmt --all`: passed. Memory unit tests: **107 passed**,
+  including frozen analyzer parity cases, bounded cursor rollback/resumption and
+  graph-revision invalidation when an empty migration finishes.
+- Stub memory: **23 passed** (279.03 s), including six same-language
+  remember/upgrade/restart/reset cases and compact judge provider-request assertions.
+- Stub memory_reset: **3 passed** (5.23 s); memory_wiring: **4 passed** (5.24 s).
+- Stub memory_idle: **3 passed** (73.21 s). MEM-IDLE's **60.001 s** window observed
+  **zero graph commits, leases, memory workers and embedding workers**, with
+  unchanged graph/WAL/lock signatures and all 30,000 windows plus the deferred
+  vector still present. Whole-service logical/physical reads were **79,211,538 /
+  32,329,728 bytes**; these counters do **not** establish zero total idle I/O.
+  The re-index adds no idle content scan, file open, writer, lease or timer.
+  Changed-source catch-up: **59,170 ms**. Crash recovery: one recovered observation,
+  zero further graph writes.
+- Initial memory_rules (the `memory_wiring_more` binary): **12 passed / 1 failed**
+  at `tests/memory_rules/failure.rs`'s manifest equality check. The fixture froze
+  its manifest immediately after an accepted concurrent correction, although
+  durable capture may still await the shared lease. Retained capture/operation
+  timestamps and the journal's deferred commit path show that the snapshot could
+  precede that correction's commit. The fixture now waits for the new active
+  revision and both durable operation receipts before freezing the snapshot;
+  the unchanged byte-equality, stale-refusal and operation-count assertions remain.
+  The corrected complete failure/recovery scenario passed (**6.77 s**); the
+  complete suite then **13 passed** (**72.00 s**) with the original four-thread
+  contention, including active turns and queued follow-ups at all seven crash stages.
+- Source-check: passed, zero function-size, platform, test-policy, architecture
+  and E2E-gate violations. `git diff --check`: passed.
+- Final clippy on `butler-memory` and `butler-e2e`, all targets, `-D warnings`:
+  passed. Early clippy runs caught slice indexing and a redundant closure; both were
+  corrected. A premature check during manifest editing missed the new dependency;
+  a command from the repo root had no Cargo workspace and ran no checks/tests.
+- The Unicode Script dependency is pinned to 0.5.8 (Unicode 17). Its MIT/Apache
+  evidence was collected with the repository collector; unchanged license entries
+  were retained, fingerprints refreshed and notices regenerated. Notice generation,
+  determinism/policy checks and disclosure checks: passed. No TypeScript/UI change.
+
+Zero total service idle I/O remains unverified (`tests/memory_idle.rs:266` reports
+process-wide counters); no claim of a cause for those broader reads is made.
+
+## Experiment validation (historical)
 
 All checks/tests used fresh HOME and BUTLER_DATA, retained real Cargo/Rustup caches,
 `cargo -j 8`, one build at a time, and at most four E2E test threads.

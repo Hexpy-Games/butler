@@ -47,6 +47,15 @@ async fn rules_stale_snapshot_refuses_mutation_and_io_failure_recovers() -> Resu
     let output = support::tool(&s, &other, forget::CORRECT, "update_explicit_memory").await?;
     assert_eq!(output["ok"], true, "{output}");
     let root = s.sandbox.data.join("cognition/memory/rules");
+    // An accepted capture can still be pending under the shared lease. Freeze
+    // the snapshot only after the concurrent correction durably commits.
+    support::until(|| {
+        support::active_rules(&s.sandbox.data).iter().any(|rule| {
+            rule["handle"] == original["handle"] && rule["revision"] != original["revision"]
+        }) && std::fs::read_dir(root.join("operations")).unwrap().count() == 2
+            && !root.join("pending.json").exists()
+    })
+    .await;
     let manifest = std::fs::read(root.join("manifest.json"))?;
     s.agent.kill9()?;
     s.restart().await?;

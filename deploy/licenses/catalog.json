@@ -5,8 +5,8 @@
     "deploy/licenses/generate.mjs": "b623e7ae30e55de4fd83e4f8bcc0ae3b40098eda3c5334b804c5a2850b43ec90",
     "deploy/licenses/inputs.mjs": "364e3fb4d76a9942421d75d873bbced06c0a749e64dcd833d8aa356b44f795a2",
     "deploy/licenses/refresh.py": "a7cfe92e35b802aa151af3dffeab7390ddb7200fcf388c3bae766bfdcf68d4ff",
-    "packages/butler-agent/rust/Cargo.lock": "fbdf25dab05e21e89c4dfa8d4026a67ca352f11b0fff34418c9cfe64e0f7997c",
-    "packages/butler-agent/rust/Cargo.toml": "ad4c51178b22c357bfe616b92376911a23d84bdbb5f6505f4e331ecf525a0ba5",
+    "packages/butler-agent/rust/Cargo.lock": "2c7b82901f3a93159b52af5e10a49cd50281c973c71b1dcc2315a28384b2b2c2",
+    "packages/butler-agent/rust/Cargo.toml": "f352ba510ce3ff1a413dfb0fd6d7a9a8a6d92671312c5ffb8f5ab5cad5522f88",
     "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "690fda7222f9512cf014e186be63dea93147e046ad1bdd40d62b145b3d29cc9b",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
     "packages/butler-agent/rust/crates/butler-agent/src/host/embedding/worker/assets.rs": "f11dc3b1952a178092fbf7da589b8c39e28021c4975f884e236cd71c78c8d7a9",
@@ -15,7 +15,7 @@
     "packages/butler-agent/rust/crates/butler-e2e/Cargo.toml": "33a32ff8818906c58bf8d54a2bd2ad81a7dc33896d57f0c26ae32adea515ddf4",
     "packages/butler-agent/rust/crates/butler-gateway/Cargo.toml": "13a216ab7c58c1b280a8ff5dbe634af414e27a42fffc9828a4f4a1e60200b18e",
     "packages/butler-agent/rust/crates/butler-ledger/Cargo.toml": "ccc46a2a8bb225eebcdf7858d73f5bddd3742ea57477e0208ca3c16464815b54",
-    "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "0f8f2135454f2995bdb17e9eb72bf1e891ac3b862bbeffd03af75e2427525641",
+    "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "0b96cb468980df3a8c163321aab1254757c4a0bfdfba0a0f45c7edddaa3c262a",
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "4356081083793e9aaf34c237ce7c4d0c93b0b6d7ae75d9c197bb3f4202ba43b4",
     "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "90781f4840f7705f2ac7a577abf1f4d8fdb90aaf8f7c6c25e7df9548ff6a9814",
     "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "588cf53c549267773eb182e86091e212b413d06a3f1fefef3332a40cbf06ff79",
@@ -26525,6 +26525,35 @@
       ],
       "copyright": [
         "Copyright (c) 2015 The Rust Project Developers"
+      ]
+    },
+    {
+      "id": "rust:unicode-script@0.5.8",
+      "name": "unicode-script",
+      "version": "0.5.8",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/unicode-rs/unicode-script/tree/20cae8782e71e26180198b350b1746c0ba042c41",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "1a398b37f14600f66d20b9906db6c7f5a6696c3d196b487ce0190daacf172c83",
+        "15656cc11a8331f28c0986b8ab97220d3e76f98e60ed388b5ffad37dfac4710c"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/unicode-rs/unicode-script/blob/20cae8782e71e26180198b350b1746c0ba042c41/LICENSE-APACHE",
+        "https://github.com/unicode-rs/unicode-script/blob/20cae8782e71e26180198b350b1746c0ba042c41/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright 2021 The Unicode-rs Developers",
+        "Copyright (c) 2019 Manish Goregaokar"
       ]
     },
     {

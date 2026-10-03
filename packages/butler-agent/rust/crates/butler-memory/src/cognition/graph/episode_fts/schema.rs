@@ -32,6 +32,8 @@ pub(in crate::cognition::graph) fn install(db: &Connection) -> CognitionResult<(
         }
     }
     db.execute_batch("CREATE TRIGGER IF NOT EXISTS fts_v1_node_update AFTER UPDATE OF label_original,type ON memory_nodes BEGIN INSERT OR IGNORE INTO memory_episode_fts_pending SELECT episode_id FROM memory_evidence WHERE node_id=NEW.id; END;").map_err(db_error)?;
+    // Capture an ordered migration range without copying all existing rows.
+    db.execute_batch("INSERT OR IGNORE INTO memory_state SELECT 'episode_fts_script_cursor','' WHERE NOT EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_script_seeded'); INSERT OR IGNORE INTO memory_state SELECT 'episode_fts_script_end',(SELECT COALESCE(MAX(episode_id),'') FROM memory_episode_fts_meta) WHERE NOT EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_script_seeded'); INSERT OR IGNORE INTO memory_state VALUES('episode_fts_script_seeded','1');").map_err(db_error)?;
     db.execute_batch("INSERT OR IGNORE INTO memory_episode_fts_pending SELECT memory_chunk_id FROM memory_chunks WHERE NOT EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_v1_seeded'); INSERT OR IGNORE INTO memory_state VALUES('episode_fts_v1_seeded','1');").map_err(db_error)
 }
 

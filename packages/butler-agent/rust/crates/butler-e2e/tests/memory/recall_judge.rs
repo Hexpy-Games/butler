@@ -142,6 +142,15 @@ async fn mem_judge_gated_recall_reorders_and_faster_keeps_base() -> Result<(), H
         .into_iter()
         .find(|r| r.to_string().contains("recall_ranking"))
         .unwrap();
+    assert!(request["tools"].as_array().is_none_or(Vec::is_empty));
+    let instructions = request["instructions"]
+        .as_str()
+        .expect("Compact judge instructions");
+    assert!(instructions.starts_with("Rank memory candidates"));
+    assert!(
+        instructions.chars().count() < 600,
+        "Agent wrapper reached judge request"
+    );
     let prompt = request["input"]
         .as_array()
         .unwrap()
@@ -152,6 +161,7 @@ async fn mem_judge_gated_recall_reorders_and_faster_keeps_base() -> Result<(), H
         .expect("Summary-only user prompt");
     let prompt: Value = serde_json::from_str(prompt)?;
     assert_eq!(prompt["question"], ASK);
+    assert!(prompt["candidates"].as_array().unwrap().len() <= 15);
     for candidate in prompt["candidates"].as_array().unwrap() {
         assert_eq!(candidate.as_object().unwrap().len(), 2);
         assert!(candidate["summary"].as_str().unwrap().chars().count() <= 150);

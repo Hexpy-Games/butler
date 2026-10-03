@@ -14,13 +14,13 @@ pub(super) const CLAIM_SQL: &str = r"SELECT j.job_id,j.episode_id,j.revision,j.g
                     OR (json_extract(j.semantic_graph_state,'$.state')='partial' AND COALESCE(json_extract(j.semantic_graph_state,'$.pending_units'),0)=0))
                     AND (j.hot_cache_next_attempt_at IS NULL OR j.hot_cache_next_attempt_at<=?1)
              ORDER BY j.last_served_at IS NOT NULL,j.last_served_at,j.created_at,j.job_id LIMIT 1";
-const RECOVERY_SQL: &str = "SELECT 1 FROM memory_projection_jobs WHERE json_valid(hot_cache_state) AND json_extract(hot_cache_state,'$.state')='running' UNION ALL SELECT 1 FROM memory_episode_fts_pending LIMIT 1";
+const RECOVERY_SQL: &str = "SELECT 1 FROM memory_projection_jobs WHERE json_valid(hot_cache_state) AND json_extract(hot_cache_state,'$.state')='running' UNION ALL SELECT 1 FROM memory_episode_fts_pending UNION ALL SELECT 1 FROM memory_state WHERE key='episode_fts_script_cursor' LIMIT 1";
 
 impl GraphRepository {
     pub(in crate::cognition) fn cache_index_ready(&self) -> CognitionResult<bool> {
         self.connection()?
             .query_row(
-                "SELECT 1 FROM sqlite_schema WHERE name='idx_jobs_hot_cache' AND EXISTS(SELECT 1 FROM sqlite_schema WHERE name='memory_episode_fts_meta')",
+                "SELECT 1 FROM sqlite_schema WHERE name='idx_jobs_hot_cache' AND EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_script_seeded')",
                 [],
                 |_| Ok(()),
             )
@@ -107,7 +107,7 @@ pub(super) mod tests {
     pub(in crate::cognition::graph) fn assert_query_plan() {
         let mut db = rusqlite::Connection::open_in_memory().unwrap();
         super::super::schema::ensure(&mut db, "2026-10-02T00:00:00Z").unwrap();
-        let graph = GraphRepository {
+        let mut graph = GraphRepository {
             _reader_pin: None,
             connection: Some(db),
         };
@@ -119,7 +119,33 @@ pub(super) mod tests {
         assert!(!graph.cache_index_ready().unwrap());
         assert_interrupted_build(&graph);
         graph.ensure_cache_index(&CancellationToken::new()).unwrap();
+        let revision = |graph: &GraphRepository| {
+            graph
+                .connection()
+                .unwrap()
+                .query_row(
+                    "SELECT CAST(value AS INTEGER) FROM memory_state WHERE key='graph_revision'",
+                    [],
+                    |r| r.get::<_, i64>(0),
+                )
+                .unwrap()
+        };
+        let before = revision(&graph);
+        // Completing an empty migration changes coverage and invalidates selections.
+        assert!(
+            graph
+                .advance_episode_fts(&CancellationToken::new())
+                .unwrap()
+        );
+        assert_eq!(revision(&graph), before + 1);
+        assert!(
+            !graph
+                .advance_episode_fts(&CancellationToken::new())
+                .unwrap()
+        );
+        assert_eq!(revision(&graph), before + 1);
         let db = graph.connection().unwrap();
+        super::super::episode_fts::reindex::assert_resumable(db);
         for sql in [CLAIM_SQL, RECOVERY_SQL] {
             let mut statement = db.prepare(&format!("EXPLAIN QUERY PLAN {sql}")).unwrap();
             let arguments = if sql == CLAIM_SQL {

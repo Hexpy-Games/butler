@@ -25,7 +25,7 @@ async fn settled(s: &Scenario, turns: u64) -> Result<std::path::PathBuf, Harness
     tokio::time::timeout(std::time::Duration::from_secs(90),async {
         loop {
             let db = butler_platform::sqlite::open_with_flags(&graph,OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
-            let ready = db.query_row("SELECT NOT EXISTS(SELECT 1 FROM memory_episode_fts_pending) AND EXISTS(SELECT 1 FROM memory_episode_fts_meta WHERE session_id IS NOT NULL)",[],|r| r.get::<_,bool>(0)).unwrap_or(false);
+            let ready = db.query_row("SELECT NOT EXISTS(SELECT 1 FROM memory_episode_fts_pending) AND NOT EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_script_cursor') AND EXISTS(SELECT 1 FROM memory_episode_fts_meta WHERE session_id IS NOT NULL)",[],|r| r.get::<_,bool>(0)).unwrap_or(false);
             if ready { break; }
             tokio::task::yield_now().await;
         }
@@ -143,7 +143,26 @@ async fn scenario(word: &str, cue: &str) -> Result<(), HarnessError> {
         ),
         0
     );
-    s.restart().await?;
+    // Emulate the prior analyzer's installed projection, then upgrade on the
+    // existing consumer path. Startup remains independent of this optional work.
+    s.agent.terminate().await?;
+    let db = butler_platform::sqlite::open(&graph).unwrap();
+    db.execute("UPDATE memory_episode_fts_v1 SET summary='legacyneutral',entities='legacyneutral',claims='legacyneutral',source='legacyneutral'", []).unwrap();
+    db.execute(
+        "DELETE FROM memory_state WHERE key='episode_fts_script_seeded'",
+        [],
+    )
+    .unwrap();
+    drop(db);
+    s.gw = s.agent.start_again().await?;
+    settled(&s, 2).await?;
+    assert_eq!(
+        count(
+            &graph,
+            "SELECT COUNT(*) FROM memory_episode_fts_v1 WHERE source='legacyneutral'"
+        ),
+        0
+    );
     let after = recall(&s).await?;
     assert!(
         after["output"]["results"].to_string().contains(word),
@@ -196,6 +215,14 @@ async fn reset_chat(s: &Scenario) -> Result<(), HarnessError> {
     assert_eq!(
         count(
             &reset,
+            "SELECT COUNT(*) FROM memory_episode_fts_v1 WHERE rowid NOT IN (SELECT id FROM memory_episode_fts_meta)"
+        ),
+        0,
+        "reset left orphan FTS postings"
+    );
+    assert_eq!(
+        count(
+            &reset,
             "SELECT COUNT(*) FROM memory_episode_fts_meta WHERE session_id IS NOT NULL"
         ),
         0
@@ -231,4 +258,10 @@ async fn mem_fts_mixed() -> Result<(), HarnessError> {
 async fn mem_fts_chinese() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     scenario("自行车密码", "密码").await
+}
+
+#[tokio::test]
+async fn mem_fts_french_diacritics() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    scenario("vélo forêt ÉLÉPHANT", "velo foret elephant").await
 }

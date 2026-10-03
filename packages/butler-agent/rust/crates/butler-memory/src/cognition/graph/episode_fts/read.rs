@@ -41,7 +41,14 @@ pub(in crate::cognition::graph) fn select(
     }
     let scope = scope::source(input, "s", "c");
     let pending = db.query_row(&format!("SELECT 1 FROM memory_episode_fts_pending p JOIN memory_chunks c ON c.memory_chunk_id=p.episode_id JOIN memory_chunk_sources s ON s.episode_id=c.memory_chunk_id AND s.revision=c.current_revision WHERE {} LIMIT 1",scope.sql), params_from_iter(scope.args.iter()), |_| Ok(())).optional().map_err(db_error)?.is_some();
-    let mut partial = pending;
+    let migrating = db
+        .query_row(
+            "SELECT NOT EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_script_seeded') OR EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_script_cursor')",
+            [],
+            |row| row.get::<_, bool>(0),
+        )
+        .map_err(db_error)?;
+    let mut partial = pending || migrating;
     let event = scope::event_episode(input, "c.memory_chunk_id");
     let sql = format!(
         "SELECT m.episode_id,m.source_refs_json FROM memory_episode_fts_v1 f JOIN memory_episode_fts_meta m ON m.id=f.rowid JOIN memory_chunks c ON c.memory_chunk_id=m.episode_id AND c.current_revision=m.revision WHERE memory_episode_fts_v1 MATCH ? AND c.status='active' AND NOT EXISTS(SELECT 1 FROM memory_episode_fts_pending p WHERE p.episode_id=m.episode_id) AND NOT EXISTS(SELECT 1 FROM json_each(m.source_refs_json) r LEFT JOIN memory_chunk_sources s ON s.source_id=r.value AND s.episode_id=m.episode_id AND s.revision=m.revision WHERE s.source_id IS NULL OR COALESCE(({}),0)=0) {} ORDER BY bm25(memory_episode_fts_v1,4,2,1,0.25),m.episode_id",
