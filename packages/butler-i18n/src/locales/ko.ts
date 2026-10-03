@@ -448,6 +448,7 @@ export const koKrCopy: AppCopy = {
     approvalRequest: {
       editFiles: (count, workspace) => `${workspaceName(workspace)}의 ${count > 0 ? `파일 ${count}개를` : "파일을"} 수정할까요?`,
       editFilesOutside: count => `작업 폴더 밖을 포함한 ${count > 0 ? `파일 ${count}개를` : "파일을"} 수정할까요?`,
+      readOnlyUnisolated: "읽기 전용 요청 · 격리 없음",
       runCommandOutside: "작업 폴더 밖에서 명령을 실행할까요?",
       networkCommandOutside: "작업 폴더 밖에서 인터넷을 쓰는 명령을 실행할까요?",
       runCommand: workspace => `${workspaceName(workspace)}에서 명령을 실행할까요?`,

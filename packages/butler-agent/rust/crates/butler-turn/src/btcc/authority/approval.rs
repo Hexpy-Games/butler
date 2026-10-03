@@ -39,6 +39,9 @@ pub struct AuthorityApproval {
     #[serde(default, skip_serializing_if = "no_truncation")]
     pub examples_truncated: Vec<bool>,
     pub risk: ApprovalRisk,
+    /// Declared observation intent; OS isolation is unavailable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_access: Option<String>,
 }
 
 /// What kind of action waits for the user.
@@ -217,6 +220,7 @@ fn file_edits(facts: ApprovalFacts<'_>) -> AuthorityApproval {
     let mut targets = vec![folder(workspace_label(facts.workspace))];
     targets.extend(files);
     AuthorityApproval {
+        command_access: None,
         action_kind: ApprovalActionKind::EditFiles,
         targets,
         count,
@@ -265,6 +269,12 @@ fn command(facts: ApprovalFacts<'_>, kind: ApprovalActionKind) -> AuthorityAppro
         .into_iter()
         .unzip();
     AuthorityApproval {
+        command_access: (!butler_platform::command_sandbox::READ_ONLY_SANDBOX
+            && matches!(
+                facts.input.get("state_effect").and_then(Value::as_str),
+                Some("read_only" | "validation")
+            ))
+        .then(|| "read_only_unisolated".into()),
         action_kind: kind,
         targets: vec![target],
         count: 1,
@@ -293,6 +303,7 @@ fn single(
     risk: ApprovalRisk,
 ) -> AuthorityApproval {
     AuthorityApproval {
+        command_access: None,
         action_kind,
         targets: vec![ApprovalTarget {
             kind,

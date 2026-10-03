@@ -55,17 +55,7 @@ pub(super) fn assemble(input: Assembly<'_>) -> Result<JsonDocument, BtccError> {
             append_raw(&mut encoded, key, value)?;
         }
     }
-    if !registered {
-        append_field_string(
-            &mut encoded,
-            "sandbox",
-            if effect.is_some() {
-                "full_access_contained"
-            } else {
-                "read_only_no_network"
-            },
-        )?;
-    }
+    append_sandbox(&mut encoded, registered, effect)?;
     if (success || registered) && requested > 0 {
         let unpublished = requested.saturating_sub(declared);
         let mut details = serde_json::json!({
@@ -171,6 +161,27 @@ pub(super) fn assemble(input: Assembly<'_>) -> Result<JsonDocument, BtccError> {
     encoded.push('}');
     JsonDocument::from_encoded(encoded)
         .map_err(|source| error("command_result_encoding_failed").with_source(source))
+}
+
+fn append_sandbox(
+    encoded: &mut String,
+    registered: bool,
+    effect: Option<&str>,
+) -> Result<(), BtccError> {
+    if registered {
+        append_field_string(encoded, "sandbox", "unisolated")?;
+    } else {
+        append_field_string(
+            encoded,
+            "sandbox",
+            if effect.is_some() {
+                "full_access_contained"
+            } else {
+                "read_only_no_network"
+            },
+        )?;
+    }
+    Ok(())
 }
 
 fn append_raw(out: &mut String, key: &str, value: &str) -> Result<(), BtccError> {

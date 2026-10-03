@@ -449,6 +449,7 @@ export const enUsCopy: AppCopy = {
       editFiles: (count, workspace) =>
         `Edit ${count > 0 ? `${count} ${count === 1 ? "file" : "files"}` : "files"} ${inWorkspace(workspace)}?`,
       editFilesOutside: count => `Edit ${count > 0 ? `${count} ${count === 1 ? "file" : "files"}` : "files"}, including outside the project folder?`,
+      readOnlyUnisolated: "Read-only request · No isolation",
       runCommandOutside: "Run a command outside the project folder?",
       networkCommandOutside: "Run a command that uses the internet outside the project folder?",
       runCommand: workspace => `Run a command ${inWorkspace(workspace)}?`,
