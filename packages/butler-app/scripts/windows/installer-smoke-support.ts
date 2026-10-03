@@ -68,3 +68,12 @@ export function shortcutPaths(env = process.env): string[] {
 export function assertShortcuts(paths: string[], present: boolean) {
   for (const path of paths) assert.equal(existsSync(path), present, `Shortcut ${path}`);
 }
+
+/** Node removes Windows profile reparse points without traversing their targets. */
+export function removeProfile(root: string, env: NodeJS.ProcessEnv) {
+  const result = spawnSync("node", ["-e",
+    "require('node:fs').rmSync(process.argv[1], {recursive:true,force:true,maxRetries:0})", root],
+  { env, encoding: "utf8", windowsHide: true });
+  assert.equal(result.status, 0, `Temporary profile cleanup failed: ${result.stderr}`);
+  assert.equal(existsSync(root), false, "Temporary profile remains after cleanup");
+}

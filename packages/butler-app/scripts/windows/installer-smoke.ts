@@ -2,13 +2,13 @@
 import { strict as assert } from "node:assert";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
 import { FIRST_RUN_CONSENT_VERSION } from "../../client/ui/src/app/onboarding.ts";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
-import { alive, assertShortcuts, bridge, click, ownedProcesses, powershell, readJson, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
+import { alive, assertShortcuts, bridge, click, ownedProcesses, powershell, readJson, removeProfile, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
 import { smokeProviderReply } from "./smoke-provider.ts";
 import { proveReleasedDownloads, releasedDownloadsReply, type DownloadsProof } from "./released-downloads-smoke.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
@@ -163,23 +163,7 @@ try {
   await waitFor(() => [...owned].every(pid => !alive(pid)), "failed installer owned process cleanup");
   if (!uninstalled && existsSync(updater)) run(updater, ["--uninstall", "--silent"]);
   server.stop(true);
-  removeProfile();
-}
-
-function removeProfile() {
-  try { rmSync(root, { recursive: true, force: true }); }
-  catch (error) {
-    console.error(powershell(`@{ cleanupRoot = $env:BUTLER_CLEANUP_ROOT
-      remaining = @(Get-Item -LiteralPath $env:BUTLER_CLEANUP_ROOT -Force;
-        Get-ChildItem -LiteralPath $env:BUTLER_CLEANUP_ROOT -Recurse -Force) | ForEach-Object {
-          @{ path = $_.FullName; attributes = [string]$_.Attributes }
-        }
-    } | ConvertTo-Json -Compress -Depth 4`, { ...env, BUTLER_CLEANUP_ROOT: root }));
-    const cleanup = spawnSync("node", ["-e", "require('node:fs').rmSync(process.argv[1], {recursive:true,force:true})", root],
-      { env, encoding: "utf8", windowsHide: true });
-    console.error(JSON.stringify({ nodeCleanup: { status: cleanup.status, stderr: cleanup.stderr }, remains: existsSync(root) }));
-    throw error;
-  }
+  removeProfile(root, env);
 }
 
 function memoryState() {
