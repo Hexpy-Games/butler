@@ -1248,6 +1248,8 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   );
   const messageList = read(
     "packages/butler-app/client/ui/src/components/conversation/MessageList.tsx",
+  ) + read(
+    "packages/butler-app/client/ui/src/components/conversation/hooks/useMessageListLayout.ts",
   );
   const conversation = read(
     "packages/butler-app/client/ui/src/components/conversation/Conversation.tsx",
@@ -1712,6 +1714,8 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
 
   const messageContent = read(
     "packages/butler-app/client/ui/src/components/conversation/MessageContent.tsx",
+  ) + read(
+    "packages/butler-app/client/ui/src/components/conversation/AssistantMessageBody.tsx",
   );
   expect(messageContent.indexOf("<MessageArtifacts")).toBeLessThan(
     messageContent.indexOf("<MessageChangedFiles"),
@@ -1747,12 +1751,12 @@ test("conversation message context menu provides copy action", () => {
   expect(
     read(
       "packages/butler-app/client/ui/src/components/conversation/hooks/useMessageList.ts",
-    ),
+    ) + read("packages/butler-app/client/ui/src/components/conversation/hooks/useMessageCopy.ts"),
   ).toContain("window.getSelection");
   expect(
     read(
       "packages/butler-app/client/ui/src/components/conversation/hooks/useMessageList.ts",
-    ),
+    ) + read("packages/butler-app/client/ui/src/components/conversation/hooks/useMessageCopy.ts"),
   ).toContain("navigator.clipboard.writeText");
   expect(
     read(
@@ -4860,12 +4864,16 @@ describe("app-client design system foundation", () => {
 test("message virtualization isolates virtual row updates from message content", () => {
   const messageList = read(
     "packages/butler-app/client/ui/src/components/conversation/MessageList.tsx",
+  ) + read(
+    "packages/butler-app/client/ui/src/components/conversation/hooks/useMessageListLayout.ts",
   );
   const messageItem = read(
     "packages/butler-app/client/ui/src/components/conversation/MessageItem.tsx",
   );
   const messageContent = read(
     "packages/butler-app/client/ui/src/components/conversation/MessageContent.tsx",
+  ) + read(
+    "packages/butler-app/client/ui/src/components/conversation/AssistantMessageBody.tsx",
   );
   const workBlocks = read(
     "packages/butler-app/client/ui/src/components/conversation/CompletedWorkBlocks.tsx",

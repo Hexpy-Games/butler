@@ -1,10 +1,8 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import {
-  Button,
   Dialog,
   DialogContent,
-  DialogFooter,
   MessageRow,
   ScrollArea,
   Stack,
@@ -14,14 +12,13 @@ import { appCopy } from "@/app/copy.ts";
 import type { SessionViewStatus } from "@/app/types.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { TurnActivityPending } from "@/components/conversation/TurnActivityPending.tsx";
+import { SessionObserverControls } from "./SessionObserverControls";
 import { SessionObserverTimeline } from "./SessionObserverTimeline.tsx";
 import { SessionObserverHeader } from "./SessionObserverHeader.tsx";
 import { useSessionViewSubscription } from "./hooks/useSessionViewSubscription.ts";
 
 export function SessionObserverDialog() {
   useAppLocale();
-  const [cancelling, setCancelling] = useState(false);
-  const [resuming, setResuming] = useState(false);
   const sessionId = useButlerStore((state) => state.observerSessionId);
   const targetTurnId = useButlerStore((state) => state.observerTargetTurnId);
   const view = useButlerStore((state) =>
@@ -29,8 +26,6 @@ export function SessionObserverDialog() {
   );
   const close = useButlerStore((state) => state.closeSessionObserver);
   const refresh = useButlerStore((state) => state.refreshSessionObserver);
-  const cancelObservedSteward = useButlerStore((state) => state.cancelObservedSteward);
-  const resumeObservedSteward = useButlerStore((state) => state.resumeObservedSteward);
 
   useSessionViewSubscription(sessionId, refresh);
   useEffect(() => {
@@ -65,6 +60,7 @@ export function SessionObserverDialog() {
               messages={view?.messages ?? []}
               activityHistory={view?.activity_history}
               activeTurn={view?.active_turn}
+              latestTurn={view?.latest_turn}
             />
             {view?.waiting_for_children && !view.active_turn ? (
               <MessageRow
@@ -84,40 +80,7 @@ export function SessionObserverDialog() {
             ) : null}
           </Stack>
         </ScrollArea>
-        {view?.latest_turn?.retryable && !view.active_turn && view.relation ? (
-          <DialogFooter>
-            <Button
-              type="button"
-              disabled={resuming}
-              onClick={() => {
-                setResuming(true);
-                void resumeObservedSteward(view.relation!.relation_id)
-                  .finally(() => setResuming(false));
-              }}
-            >
-              {resuming
-                ? appCopy.conversation.work.pendingStateLabels.retrying
-                : appCopy.conversation.work.resumeInterrupted}
-            </Button>
-          </DialogFooter>
-        ) : (view?.active_turn || view?.waiting_for_children) && view.relation ? (
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={cancelling}
-              onClick={() => {
-                setCancelling(true);
-                void cancelObservedSteward(view.relation!.relation_id)
-                  .finally(() => setCancelling(false));
-              }}
-            >
-              {cancelling
-                ? appCopy.conversation.work.pendingStateLabels.cancelling
-                : appCopy.composer.stop}
-            </Button>
-          </DialogFooter>
-        ) : null}
+        <SessionObserverControls view={view} />
       </DialogContent>
     </Dialog>
   );
