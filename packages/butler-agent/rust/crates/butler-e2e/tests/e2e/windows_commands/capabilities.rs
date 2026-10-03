@@ -296,7 +296,6 @@ fn verify(s: &Scenario, index: usize, output: &Value) -> Result<(), HarnessError
             std::fs::read_to_string(s.sandbox.data.join("approved.txt"))?,
             "approved"
         ),
-        11 => assert_eq!(output["stdout"].as_str().unwrap().trim(), "PRIVATE_CANARY"),
         12 => assert_eq!(output["error"], "protected_path"),
         13 => assert_eq!(output["error"]["code"], "parent_traversal_not_allowed"),
         14 => assert_eq!(
@@ -307,7 +306,8 @@ fn verify(s: &Scenario, index: usize, output: &Value) -> Result<(), HarnessError
             )?,
             "ordinary data"
         ),
-        _ => assert_eq!(output["stdout"].as_str().unwrap().trim(), "PRIVATE_CANARY"),
+        11 | 15 => assert_eq!(output["stdout"].as_str().unwrap().trim(), "PRIVATE_CANARY"),
+        _ => panic!("Unknown capability case {index}"),
     }
     Ok(())
 }
