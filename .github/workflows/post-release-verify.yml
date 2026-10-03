@@ -12,6 +12,7 @@ on:
         type: string
 permissions:
   contents: read
+  actions: read
 jobs:
   validate:
     runs-on: ubuntu-latest

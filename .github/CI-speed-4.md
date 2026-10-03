@@ -98,6 +98,10 @@ Runner contention can dominate Windows even with warm compilation.
   as two-day artifacts, outside the shared 10 GB cache eviction pool. Restore
   requires compiler/native mode/flags/lockfile identity, checksum and a
   successful same-repository native producer, then Cargo validates sources.
+- The static runtime has the same artifact fallback, keyed by the existing
+  recipe fingerprint. It preserves the full SDK tree, including required
+  relative links. The recipe still verifies every archive, library, protoc
+  digest and build setting after restore; extraction rejects escaping paths.
 - Bun package caches include OS, architecture, actual Bun version and lockfile,
   and live outside disposable HOME. `post-release-verify.yml` runs the existing
   published macOS and Windows install/update checks and both Linux native
@@ -116,7 +120,7 @@ cache can make the first run slower; hosted queue and yw-pc contention remain.
 | --- | ---: | ---: | --- |
 | Linux Rust gate coverage | 24m38s | shared build 3–8m + longest consumer 5–8m | pending draft PR |
 | Native macOS Rust + App/install coverage | separate 36m38s / 39m48s / 13m40s | shared build 8–18m + longest consumer 5–12m | pending draft PR |
-| Windows preview | 23m31s; one run 42m03s including contention | existing contracts retained; cache/queue dependent | pending draft PR |
+| Windows preview | 23m31s; one run 42m03s including contention | existing contracts retained; cache/queue dependent | 21m10s, run 37124231972; other corrected checks pending |
 | Butler Release | 65m46s; latest 67m32s | 20–35m with warm native caches; 35–65m cold | no tag authorized; not measured after |
 | Published verification | separate platform dispatches | max(platform duration), rather than their sum | existing tags only; not dispatched by this task |
 

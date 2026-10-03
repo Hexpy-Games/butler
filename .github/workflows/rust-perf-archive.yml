@@ -17,6 +17,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 90
     env:
+      CARGO_BUILD_JOBS: "8"
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: sccache
     defaults:
@@ -40,7 +41,7 @@ jobs:
           isolate="$GITHUB_WORKSPACE/.github/scripts/isolated.py"
           out="$RUNNER_TEMP/perf-archive"
           mkdir -p "$out"
-          python3 "$isolate" cargo nextest archive --release --locked -j 8 -p butler-e2e --archive-file "$out/tests.tar.zst"
+          python3 "$isolate" cargo nextest archive --release --locked -p butler-e2e --archive-file "$out/tests.tar.zst"
           python3 "$isolate" cargo nextest list --release --locked -p butler-e2e --message-format json > "$out/list.json"
           filter="$(python3 "$GITHUB_WORKSPACE/.github/scripts/e2e-perf-filter.py")"
           python3 "$isolate" cargo nextest list --release --locked -p butler-e2e --message-format json -E "$filter" > "$out/perf-list.json"

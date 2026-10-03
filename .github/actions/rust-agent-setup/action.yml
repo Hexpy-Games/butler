@@ -99,6 +99,15 @@ runs:
         path: ${{ runner.temp }}/ort-cache/native-deps
         key: static-ort-${{ runner.os }}-${{ runner.arch }}-${{ steps.ort.outputs.fingerprint }}
 
+    - name: Restore evicted static runtime from a successful native producer
+      if: inputs.native-deps == 'static-ort' && inputs.prepared-static-ort != 'true' && steps.ort-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PLATFORM: ${{ runner.os == 'macOS' && 'darwin-arm64' || runner.arch == 'ARM64' && 'linux-arm64' || 'linux-x64' }}
+        FINGERPRINT: ${{ steps.ort.outputs.fingerprint }}
+      run: python3 "$GITHUB_WORKSPACE/.github/scripts/static-runtime-artifact.py" restore "$PLATFORM" "$FINGERPRINT"
+
     - name: Prepare pinned static ONNX Runtime and protoc
       if: inputs.native-deps == 'static-ort'
       shell: bash
@@ -128,6 +137,23 @@ runs:
       with:
         path: ${{ runner.temp }}/ort-cache/native-deps
         key: ${{ steps.ort-cache.outputs.cache-primary-key }}
+
+    - name: Preserve the complete pinned static runtime outside cache eviction
+      if: inputs.native-deps == 'static-ort' && inputs.prepared-static-ort != 'true'
+      id: runtime-artifact
+      shell: bash
+      env:
+        PLATFORM: ${{ runner.os == 'macOS' && 'darwin-arm64' || runner.arch == 'ARM64' && 'linux-arm64' || 'linux-x64' }}
+        FINGERPRINT: ${{ steps.ort.outputs.fingerprint }}
+      run: python3 "$GITHUB_WORKSPACE/.github/scripts/static-runtime-artifact.py" record "$PLATFORM" "$FINGERPRINT"
+    - uses: actions/upload-artifact@v4
+      if: inputs.native-deps == 'static-ort' && inputs.prepared-static-ort != 'true'
+      with:
+        name: ${{ steps.runtime-artifact.outputs.name }}
+        path: ${{ runner.temp }}/static-runtime-artifact/*
+        retention-days: 2
+        compression-level: 0
+        if-no-files-found: error
 
     - name: Use mold on Linux
       if: runner.os == 'Linux'

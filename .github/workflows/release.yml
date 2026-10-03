@@ -286,6 +286,7 @@ jobs:
     # The reusable workflow declares an issues-writing main/nightly reporter.
     permissions:
       contents: read
+      actions: read
       issues: write
     uses: ./.github/workflows/linux-packages.yml
     with:

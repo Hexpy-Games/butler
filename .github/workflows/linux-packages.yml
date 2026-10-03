@@ -30,6 +30,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: linux-packages-${{ inputs.label || 'all' }}-${{ github.event_name }}-${{ github.ref }}

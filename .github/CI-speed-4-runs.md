@@ -88,6 +88,25 @@ Queue excludes needs wait. Workflow wall above includes all dependencies and que
 | platform-paths | success | 3 | 3 | 0 | 1 | 0 | 0 | 3 | 7 |
 | Windows compile check (x86_64-pc-windows-msvc) | success | 3 | 31 | 0 | 376 | 0 | 0 | 43 | 450 |
 
+## Producer bootstrap (`bf40657e3434`)
+
+The archive jobs failed because `nextest archive` does not accept `-j`; Cargo's
+job limit now uses `CARGO_BUILD_JOBS=8`. The corrected archive command and the
+five hygiene tests replayed from that archive pass locally. This failed Rust
+run is not a qualification or a speedup claim. Valid production producers
+were allowed to finish and publish reusable build inputs before the fix push.
+
+Windows preview [37124231972](https://github.com/Hexpy-Games/butler/actions/runs/37124231972)
+passed in **1270 s (21m10s)**, versus the historical successful median
+1411 s (23m31s). Production build took 179 s, debug contracts 282 s, and the
+complete hosted installed verification 801 s. Those are job walls including
+setup/upload, with every existing Windows check retained. This is a 10.0%
+observed workflow reduction; hosted/self-hosted contention can vary.
+
+The additional SDK artifact fallback preserves the recipe's required relative
+links and every pinned input. Existing cache quota eviction cannot silently
+turn it into an unchecked or partial runtime.
+
 ## Next measurement
 
 The subsequent code push checks the corrected selector, verified embedded versions, original build configurations and artifact cache fallback. Its complete workflow wall times and results will be added to the draft PR. No release tag or post-release dispatch is authorized by this task, so release-after numbers remain estimates, not observations.

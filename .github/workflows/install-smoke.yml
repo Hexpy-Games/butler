@@ -25,6 +25,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: install-smoke-${{ inputs.label || 'all' }}-${{ github.event_name }}-${{ github.ref }}

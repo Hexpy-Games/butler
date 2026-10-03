@@ -21,8 +21,9 @@ jobs:
   build:
     name: Build archives (${{ inputs.platform }})
     runs-on: ${{ inputs.runner }}
-    timeout-minutes: 150
+    timeout-minutes: 90
     env:
+      CARGO_BUILD_JOBS: "8"
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: sccache
       BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
@@ -59,7 +60,7 @@ jobs:
             args=(--no-default-features --features butler-agent/static-ort)
           fi
           mkdir -p "$RUNNER_TEMP/rust-archive"
-          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo nextest archive --workspace --all-targets --locked -j 8 "${args[@]}" --archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo nextest archive --workspace --all-targets --locked "${args[@]}" --archive-file "$RUNNER_TEMP/rust-archive/tests.tar.zst"
       - name: Archive tests and record every selection
         env:
           ORT_MODE: ${{ inputs.ort-mode }}

@@ -36,6 +36,8 @@ def identity(platform, mode, kind):
 
 
 def artifact_name(expected):
+    if expected.get('kind') == 'ort':
+        return f'static-runtime-{expected["platform"]}-{expected["fingerprint"]}'
     key = hashlib.sha256(json.dumps(expected, sort_keys=True).encode()).hexdigest()[:20]
     return f'cargo-build-cache-{expected["platform"]}-{key}'
 
@@ -57,7 +59,7 @@ def verify(directory, expected):
         raise ValueError('Cargo build-cache digest mismatch')
 
 
-def extract(directory):
+def extract(directory, root='target'):
     # The producer uploads only its target directory. Reject an unexpected
     # archive root before extraction, even for a same-repository artifact.
     archive = directory / 'cache.tar.zst'
@@ -65,7 +67,7 @@ def extract(directory):
         with tarfile.open(fileobj=decompress.stdout, mode='r|') as archive_tar:
             for member in archive_tar:
                 path = Path(member.name)
-                if path.is_absolute() or '..' in path.parts or not path.parts or path.parts[0] != 'target':
+                if path.is_absolute() or '..' in path.parts or not path.parts or path.parts[0] != root:
                     raise ValueError(f'Unexpected Cargo cache path: {member.name}')
                 archive_tar.extract(member, filter='data')
         decompress.stdout.close()
@@ -73,7 +75,7 @@ def extract(directory):
             raise RuntimeError('Cargo build-cache decompression failed')
 
 
-def restore(expected):
+def restore(expected, root='target'):
     repository = os.environ['GITHUB_REPOSITORY']
     query = urlencode(dict(name=artifact_name(expected), per_page=30))
     artifacts = json.loads(output('gh', 'api', f'repos/{repository}/actions/artifacts?{query}'))['artifacts']
@@ -88,27 +90,27 @@ def restore(expected):
         if not valid_producer(run, jobs, repository, expected['platform']):
             continue
         with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as temporary:
-            subprocess.run(['gh', 'run', 'download', str(run_id), '--name', artifact['name'], '--dir', temporary], check=True)
+            subprocess.run(['gh', 'run', 'download', str(run_id), '--repo', repository, '--name', artifact['name'], '--dir', temporary], check=True)
             verify(Path(temporary), expected)
-            extract(Path(temporary))
+            extract(Path(temporary), root)
         print(f'Restored compatible Cargo build inputs from native producer run {run_id}.')
         return
     print('No compatible Cargo artifact snapshot; normal Cargo/cache build follows.')
 
 
-def record(directory, expected):
+def record(directory, expected, root='target'):
     directory.mkdir(parents=True, exist_ok=True)
     archive = directory / 'cache.tar.zst'
     with archive.open('wb') as destination:
         tar = subprocess.Popen(['tar', '--exclude=target/debug/incremental',
-                                '--exclude=target/release/incremental', '-cf', '-', 'target'], stdout=subprocess.PIPE)
+                                '--exclude=target/release/incremental', '-cf', '-', root], stdout=subprocess.PIPE)
         try:
             subprocess.run(['zstd', '-T2', '-3'], stdin=tar.stdout, stdout=destination, check=True)
         finally:
             tar.stdout.close()
         if tar.wait() != 0:
             raise RuntimeError('Cargo build-cache tar failed')
-    metadata = dict(identity=expected, sha=output('git', 'rev-parse', 'HEAD'), sha256=digest(archive))
+    metadata = dict(identity=expected, sha=output('git', '-C', os.environ.get('GITHUB_WORKSPACE', str(Path.cwd())), 'rev-parse', 'HEAD'), sha256=digest(archive))
     (directory / 'cache.json').write_text(json.dumps(metadata, indent=2) + '\n')
     with open(os.environ['GITHUB_OUTPUT'], 'a') as output_file:
         output_file.write(f'name={artifact_name(expected)}\n')

@@ -240,6 +240,7 @@ jobs:
   linux-package-x64:
     permissions:
       contents: read
+      actions: read
       issues: write
     needs: [changes, linux-native]
     if: needs.changes.outputs.linux-package == 'true'
@@ -253,6 +254,7 @@ jobs:
   linux-package-arm64:
     permissions:
       contents: read
+      actions: read
       issues: write
     needs: [changes, linux-arm64-native]
     if: needs.changes.outputs.linux-package == 'true'

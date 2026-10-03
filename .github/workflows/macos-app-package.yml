@@ -37,6 +37,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: macos-app-package-${{ github.ref }}

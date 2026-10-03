@@ -138,6 +138,20 @@ class CargoCache(unittest.TestCase):
                 (root / 'target/release/complete').unlink()
                 cargo_cache.extract(root / 'snapshot')
                 self.assertEqual((root / 'target/release/complete').read_bytes(), b'all compiled inputs')
+                (root / 'native-deps').mkdir()
+                (root / 'native-deps/runtime').write_bytes(b'complete pinned native runtime')
+                (root / 'native-deps/_deps').symlink_to('runtime')
+                runtime = dict(schema=1, platform='darwin-arm64', kind='ort', fingerprint='locked')
+                with patch.dict(os.environ, GITHUB_OUTPUT=str(root / 'outputs')), \
+                     patch.object(cargo_cache, 'output', return_value='a' * 40):
+                    cargo_cache.record(root / 'runtime-snapshot', runtime, root='native-deps')
+                cargo_cache.verify(root / 'runtime-snapshot', runtime)
+                (root / 'native-deps/runtime').unlink()
+                (root / 'native-deps/_deps').unlink()
+                cargo_cache.extract(root / 'runtime-snapshot', root='native-deps')
+                self.assertEqual((root / 'native-deps/runtime').read_bytes(), b'complete pinned native runtime')
+                self.assertEqual(os.readlink(root / 'native-deps/_deps'), 'runtime')
+                self.assertNotEqual(cargo_cache.artifact_name(runtime), cargo_cache.artifact_name(dict(runtime, fingerprint='different-sdk')))
                 with tarfile.open(raw, 'w') as archive:
                     entry = tarfile.TarInfo('target/escape')
                     entry.type = tarfile.SYMTYPE
