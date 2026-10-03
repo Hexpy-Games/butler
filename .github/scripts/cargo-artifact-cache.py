@@ -43,11 +43,15 @@ def artifact_name(expected):
     return f'cargo-build-cache-{expected["platform"]}-{key}'
 
 
-def valid_producer(run, jobs, repository, platform):
+def valid_producer(run, jobs, repository, platform, kind):
     if run['head_repository']['full_name'] != repository:
         return False
-    return any(any(job['name'].endswith(f'{name} ({platform})')
-                   for name in ['Build archives', 'Build native Agent', 'Build perf harness'])
+    names = dict(dev=['Build archives'], perf=['Build perf harness'],
+                 native=['Build native Agent', 'Build Linux Agent archive'],
+                 ort=['Build native Agent', 'Build Linux Agent archive'])[kind]
+    return any((any(job['name'].endswith(f'{name} ({platform})') for name in names)
+                or (kind in ['native', 'ort'] and platform == 'darwin-arm64'
+                    and job['name'] == 'Build and publish native macOS arm64 artifacts'))
                and job['status'] == 'completed' and job['conclusion'] == 'success'
                for job in jobs)
 
@@ -109,7 +113,7 @@ def restore(expected, root='target'):
         if run['id'] == int(os.environ['GITHUB_RUN_ID']):
             continue
         jobs = json.loads(output('gh', 'api', f'repos/{repository}/actions/runs/{run_id}/jobs?per_page=100'))['jobs']
-        if not valid_producer(run, jobs, repository, expected['platform']):
+        if not valid_producer(run, jobs, repository, expected['platform'], expected['kind']):
             continue
         with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as temporary:
             subprocess.run(['gh', 'run', 'download', str(run_id), '--repo', repository, '--name', artifact['name'], '--dir', temporary], check=True)

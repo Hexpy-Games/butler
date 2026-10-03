@@ -89,11 +89,17 @@ class CargoCache(unittest.TestCase):
     def test_snapshot_requires_native_success_identity_and_complete_digest(self):
         run = dict(head_repository=dict(full_name='owner/repo'))
         jobs = [dict(name='macos-archive / Build archives (darwin-arm64)', status='completed', conclusion='success')]
-        self.assertTrue(cargo_cache.valid_producer(run, jobs, 'owner/repo', 'darwin-arm64'))
-        self.assertFalse(cargo_cache.valid_producer(run, jobs, 'owner/repo', 'linux-x64'))
-        self.assertFalse(cargo_cache.valid_producer(run, jobs, 'fork/repo', 'darwin-arm64'))
+        self.assertTrue(cargo_cache.valid_producer(run, jobs, 'owner/repo', 'darwin-arm64', 'dev'))
+        self.assertFalse(cargo_cache.valid_producer(run, jobs, 'owner/repo', 'darwin-arm64', 'native'))
+        self.assertFalse(cargo_cache.valid_producer(run, jobs, 'owner/repo', 'darwin-arm64', 'ort'))
+        self.assertFalse(cargo_cache.valid_producer(run, jobs, 'owner/repo', 'linux-x64', 'dev'))
+        self.assertFalse(cargo_cache.valid_producer(run, jobs, 'fork/repo', 'darwin-arm64', 'dev'))
         for status, conclusion in [('completed', 'failure'), ('completed', 'cancelled'), ('in_progress', '')]:
-            self.assertFalse(cargo_cache.valid_producer(run, [dict(jobs[0], status=status, conclusion=conclusion)], 'owner/repo', 'darwin-arm64'))
+            self.assertFalse(cargo_cache.valid_producer(run, [dict(jobs[0], status=status, conclusion=conclusion)], 'owner/repo', 'darwin-arm64', 'dev'))
+        perf = dict(name='macos-perf / Build perf harness (darwin-arm64)', status='completed', conclusion='success')
+        failed_native = dict(name='macos-native / Build native Agent (darwin-arm64)', status='completed', conclusion='failure')
+        self.assertTrue(cargo_cache.valid_producer(run, [perf, failed_native], 'owner/repo', 'darwin-arm64', 'perf'))
+        self.assertFalse(cargo_cache.valid_producer(run, [perf, failed_native], 'owner/repo', 'darwin-arm64', 'ort'))
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             expected = dict(platform='linux-x64', mode='prebuilt-ort', flags={'assertions': 'true'})
