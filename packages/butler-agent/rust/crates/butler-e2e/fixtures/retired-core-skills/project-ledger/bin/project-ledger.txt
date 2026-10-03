@@ -1,0 +1,4 @@
+#!/usr/bin/env node
+import { main } from "../../../../packages/project-ledger/src/cli.js";
+
+main(process.argv.slice(2));
