@@ -15,6 +15,8 @@ use serde_json::json;
 mod crash;
 #[path = "memory_rules/cursor.rs"]
 mod cursor;
+#[path = "memory_rules/duration.rs"]
+mod duration;
 #[path = "memory_rules/failure.rs"]
 mod failure;
 #[path = "memory_rules/forget.rs"]
@@ -154,10 +156,9 @@ async fn wiring_more_correction_supersedes_previous_rule_in_next_prompt() -> Res
     let immediate_section = support::active_section(&s, &correction_chat, &ask).await?;
     assert!(immediate_section.contains("8642") && !immediate_section.contains("5317"));
     assert_eq!(immediate_section.matches("8642").count(), 1);
-    assert!(immediate_section.contains(&format!(
-        "### [{}] · All chats",
-        old["handle"].as_str().unwrap()
-    )));
+    assert!(
+        immediate_section.contains(&format!("[{}] scope=all", old["handle"].as_str().unwrap()))
+    );
     let immediate = support::tool(
         &s,
         "general",

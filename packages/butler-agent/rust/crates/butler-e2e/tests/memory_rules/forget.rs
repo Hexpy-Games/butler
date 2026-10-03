@@ -304,7 +304,7 @@ async fn older_rules_keep_complete_text_and_global_handles_until_forget() -> Res
     )?;
     s.restart().await?;
     let section = support::active_section(&s, "general", ASK).await?;
-    let handle = regex::Regex::new(r"### \[(R[A-F0-9]{10,64})\] · All chats")
+    let handle = regex::Regex::new(r"\[(R[A-F0-9]{10,64})\] scope=all")
         .unwrap()
         .captures(&section)
         .unwrap()[1]

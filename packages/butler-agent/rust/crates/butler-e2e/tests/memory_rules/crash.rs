@@ -173,14 +173,14 @@ async fn rules_contended_and_cancelled_lease_waiters_write_nothing() -> Result<(
     s.provider()?
         .add_placeholder("TARGET", original["handle"].as_str().unwrap());
     let other = support::new_chat(&s, "Cancelled lease waiter").await?;
-    let gate = s.provider()?.hold_next_reply(forget::CORRECT);
+    let gate = s.provider()?.hold_next_reply(forget::FORGET);
     let request_count = s.provider()?.requests().len();
-    let waiter = accepted_turn_id(&s.gw.say(&other, forget::CORRECT).await?)?;
+    let waiter = accepted_turn_id(&s.gw.say(&other, forget::FORGET).await?)?;
     support::until(|| s.provider().unwrap().requests().len() > request_count).await;
     let busy_chat = support::new_chat(&s, "Contended lease waiter").await?;
-    let busy_gate = s.provider()?.hold_next_reply(forget::CORRECT);
+    let busy_gate = s.provider()?.hold_next_reply(forget::FORGET);
     let request_count = s.provider()?.requests().len();
-    let busy_turn = accepted_turn_id(&s.gw.say(&busy_chat, forget::CORRECT).await?)?;
+    let busy_turn = accepted_turn_id(&s.gw.say(&busy_chat, forget::FORGET).await?)?;
     support::until(|| s.provider().unwrap().requests().len() > request_count).await;
     let state = s.sandbox.data.join("state");
     std::fs::write(
@@ -210,7 +210,7 @@ async fn rules_contended_and_cancelled_lease_waiters_write_nothing() -> Result<(
         s.gw.wait_terminal(&busy_chat, &busy_turn, Duration::from_secs(90))
             .await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
-    let output = support::result(&s, &busy_chat, &busy_turn, "update_explicit_memory").await?;
+    let output = support::result(&s, &busy_chat, &busy_turn, "forget_explicit_memory").await?;
     assert_eq!(output["ok"], false, "{output}");
     assert_eq!(output["error"]["message"], "rule_write_busy", "{output}");
     assert_eq!(std::fs::read(root.join("pending.json"))?, pending);

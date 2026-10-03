@@ -287,10 +287,11 @@ async fn mem_03_bootstrap_does_not_hold_service_readiness() -> Result<(), Harnes
         b"",
     )?;
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
-    while !descriptor.exists() {
+    // Publication also retires its reservation after the atomic descriptor write.
+    while !descriptor.exists() || intent_path.exists() {
         assert!(
             tokio::time::Instant::now() < deadline,
-            "fresh generation missing"
+            "fresh generation publication incomplete"
         );
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }

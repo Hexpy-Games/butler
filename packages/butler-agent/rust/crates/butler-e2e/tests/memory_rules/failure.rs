@@ -74,14 +74,11 @@ async fn rules_stale_snapshot_refuses_mutation_and_io_failure_recovers() -> Resu
     std::fs::rename(root.join("INDEX.md"), root.join("index-before-failure"))?;
     std::fs::create_dir(root.join("INDEX.md"))?;
     let output = support::tool(&s, &other, forget::CORRECT, "update_explicit_memory").await?;
-    assert_eq!(output["ok"], false, "{output}");
-    assert_eq!(
-        output["error"]["message"],
-        "Rule change is pending recovery."
-    );
-    assert!(root.join("pending.json").exists());
+    assert_eq!(output["ok"], true, "{output}");
+    assert_eq!(output["state"], "pending");
+    support::until(|| root.join("pending.json").exists()).await;
     let section = support::active_section(&s, "general", forget::ASK).await?;
-    assert!(!section.contains("5400") && !section.contains("6401") && !section.contains("7400"));
+    assert!(section.contains("6401") && !section.contains("5400") && !section.contains("7400"));
     std::fs::remove_dir(root.join("INDEX.md"))?;
     std::fs::rename(root.join("index-before-failure"), root.join("INDEX.md"))?;
     s.restart().await?;

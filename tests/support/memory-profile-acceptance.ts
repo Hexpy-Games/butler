@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Browser } from "playwright";
@@ -13,6 +14,10 @@ export async function checkProfileInstructionSeparation(server: NativeAppServerH
   await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "en" }) });
   const before = await server.api<{ instructions: unknown[] }>("/memory/instructions");
   if (!before.instructions.length) throw new Error("Profile separation requires seeded instructions");
+  await server.api("/personalization", { method: "PATCH", body: JSON.stringify({ profiling: { mode: "basic" } }) });
+  const profile = new Database(join(server.butlerData, "cognition/profile/profile.sqlite"));
+  profile.run("INSERT OR REPLACE INTO stable_profile_entries(id,category,payload_json,confidence,source_type,created_at,updated_at) VALUES(?,?,?,?,?,?,?)", ["acceptance", "communication", '{"text":"Use concise answers"}', "high", "explicit", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"]);
+  profile.close();
   const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
   try {
     await server.signIn(page);
@@ -21,17 +26,14 @@ export async function checkProfileInstructionSeparation(server: NativeAppServerH
     });
     await page.goto(server.url, { waitUntil: "load" });
     await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await page.getByRole("button", { name: "Personalization", exact: true }).click();
-    await page.getByRole("button", { name: "Delete profile data", exact: true }).click();
-    await page.getByRole("button", { name: "Delete queued", exact: true }).waitFor();
-    const queued = await server.api("/memory/instructions");
-    if (JSON.stringify(queued) !== JSON.stringify(before)) throw new Error("Queued profile deletion changed instructions");
-    const saved = page.waitForResponse((response) => response.url().endsWith("/personalization") && response.request().method() === "PATCH" && response.ok());
-    await page.getByRole("button", { name: "Apply", exact: true }).click();
-    await saved;
+    await page.getByRole("button", { name: "Memory", exact: true }).click();
+    await page.locator('[data-settings-section-id="profile-memory"]').getByRole("button", { name: "Reset", exact: true }).click();
+    const dialog = page.getByRole("alertdialog");
+    await dialog.getByRole("button", { name: "Reset", exact: true }).click();
+    await page.getByText("Profile reset", { exact: true }).waitFor();
     const applied = await server.api("/memory/instructions");
-    if (JSON.stringify(applied) !== JSON.stringify(before)) throw new Error("Applied profile deletion changed instructions");
-    console.log("profile instruction separation: queue + Apply passed");
+    if (JSON.stringify(applied) !== JSON.stringify(before)) throw new Error("Profile reset changed instructions");
+    console.log("profile instruction separation: Reset preserved instructions");
   } finally { await page.close(); }
 }
 
