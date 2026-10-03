@@ -55,8 +55,8 @@ pub(super) fn definition_path() -> Result<PathBuf, Error> {
 }
 
 fn read_local() -> Result<Option<String>, Error> {
-    match std::fs::read_to_string(definition_path()?) {
-        Ok(text) => Ok(Some(text)),
+    match std::fs::read(definition_path()?) {
+        Ok(bytes) => Ok(Some(task_xml::decode(&bytes)?)),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(e.into()),
     }
@@ -64,23 +64,24 @@ fn read_local() -> Result<Option<String>, Error> {
 
 fn query(sid: &str) -> Result<Option<String>, Error> {
     let name = task_name(sid);
-    let output = run("schtasks.exe", &["/Query", "/TN", &name, "/XML"])?;
+    // schtasks with CREATE_NO_WINDOW exports through the OEM code page and
+    // loses Unicode paths. The scheduler's BSTR stays intact through UTF-8.
+    let script = format!(
+        "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);$ErrorActionPreference='Stop';try{{$s=New-Object -ComObject Schedule.Service;$s.Connect();[Console]::Write($s.GetFolder('\\').GetTask('{name}').Xml)}}catch{{if(($_.Exception.GetBaseException().HResult -band 65535) -eq 2){{exit 3}};[Console]::Error.WriteLine('Task Scheduler query failed');exit 1}}"
+    );
+    let output = run(
+        "powershell.exe",
+        &["-NoProfile", "-NonInteractive", "-Command", &script],
+    )?;
     if output.status.success() {
         return Ok(Some(task_xml::decode(&output.stdout)?));
     }
     // Never interpret access-denied or other scheduler failures as absence.
-    let probe = format!(
-        "$ErrorActionPreference='Stop';try{{$s=New-Object -ComObject Schedule.Service;$s.Connect();$null=$s.GetFolder('\\').GetTask('{name}');exit 0}}catch{{if(($_.Exception.GetBaseException().HResult -band 65535) -eq 2){{exit 3}};exit 1}}"
-    );
-    let missing = run(
-        "powershell.exe",
-        &["-NoProfile", "-NonInteractive", "-Command", &probe],
-    )?;
-    if missing.status.code() == Some(3) {
+    if output.status.code() == Some(3) {
         return Ok(None);
     }
     Err(Error::Manager {
-        command: "schtasks /Query /XML".into(),
+        command: "Task Scheduler query".into(),
         message: String::from_utf8_lossy(&output.stderr).trim().into(),
     })
 }
@@ -89,6 +90,11 @@ fn owned(sid: &str) -> Result<Option<String>, Error> {
     let Some(remote) = query(sid)? else {
         return Ok(None);
     };
+    let identity = powershell(
+        "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);[Security.Principal.WindowsIdentity]::GetCurrent().Name",
+    )?;
+    let account = String::from_utf8_lossy(&identity.stdout);
+    let remote = task_xml::normalize_current_user(&remote, sid, account.trim()).unwrap_or(remote);
     let local = read_local()?.unwrap_or_default();
     if !task_xml::same_owner(&local, &remote, sid) {
         return Err(Error::Foreign(PathBuf::from(task_name(sid))));
@@ -113,14 +119,18 @@ pub(super) fn install(
     } else {
         None
     };
-    let previous = read_local()?;
+    let previous = match std::fs::read(&path) {
+        Ok(bytes) => Some(bytes),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => return Err(e.into()),
+    };
     let shell = PathBuf::from(std::env::var_os("SystemRoot").ok_or(Error::InvalidValue)?)
         .join("System32/WindowsPowerShell/v1.0/powershell.exe");
     let mut definition = definition.clone();
     inherit_profile(&mut definition);
     let xml = task_xml::render(&definition, &user, &shell.to_string_lossy())?;
     crate::secure_fs::create_private_dir_all(path.parent().ok_or(Error::InvalidValue)?)?;
-    std::fs::write(&path, xml)?;
+    std::fs::write(&path, task_xml::encode(&xml))?;
     if activation == Activation::Load {
         let path_text = path.to_string_lossy();
         let name = task_name(&user);

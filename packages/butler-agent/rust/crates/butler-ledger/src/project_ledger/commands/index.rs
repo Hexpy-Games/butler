@@ -160,7 +160,7 @@ pub(super) fn build(root: &Path) -> Result<Value, CliFailure> {
     }))
 }
 
-fn write_unlocked(root: &Path) -> Result<Value, CliFailure> {
+pub(super) fn write_unlocked(root: &Path) -> Result<Value, CliFailure> {
     let mut index = build(root)?;
     let path = root.join(INDEX_PATH);
     fs::create_dir_all(path.parent().ok_or_else(io_failure)?)

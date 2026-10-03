@@ -1,13 +1,20 @@
 name: Windows Squirrel install and update
 on:
   workflow_dispatch:
+    inputs:
+      reuse-run:
+        description: Completed BUILD run to reuse after product-source equality verification
+        required: false
+        type: string
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: windows-installer-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   build:
+    if: ${{ !inputs.reuse-run }}
     name: Build Windows Squirrel artifacts
     runs-on: [self-hosted, butler-win]
     timeout-minutes: 120
@@ -64,12 +71,22 @@ jobs:
   verify:
     name: Verify Windows install update uninstall
     needs: build
+    if: ${{ always() && (needs.build.result == 'success' || inputs.reuse-run) }}
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: Verify immutable package sources before reuse
+        if: inputs.reuse-run
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REUSE_RUN: ${{ inputs.reuse-run }}
+        run: ./deploy/windows-installer-reuse.ps1 -RunId $env:REUSE_RUN
       - uses: actions/download-artifact@v4
         with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.reuse-run || github.run_id }}
           name: windows-installer-preview
           path: dist/release
       - uses: oven-sh/setup-bun@v2
@@ -94,4 +111,21 @@ jobs:
             ./packages/butler-app/scripts/windows/verify-squirrel-version.ps1 -Squirrel packages/butler-app/client/electron/node_modules/electron-winstaller/vendor/Squirrel.exe
             bun run packages/butler-app/scripts/windows/installer-smoke.ts dist/release/app-windows-first dist/release/app-windows
             if ($LASTEXITCODE) { throw 'Installer/update smoke failed' }
+          } finally { Remove-Item -Recurse -Force $profile }
+      - name: Prove legacy-data refusal and desktop recovery
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $profile = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+          New-Item -ItemType Directory $profile | Out-Null
+          $env:HOME = Join-Path $profile 'home'
+          $env:BUTLER_DATA = Join-Path $profile 'data'
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          try {
+            $archive = @(Get-ChildItem dist/release/app-windows-first/*-windows-x64-portable.zip)
+            if ($archive.Count -ne 1) { throw 'Expected one portable App archive' }
+            Expand-Archive $archive[0].FullName (Join-Path $profile 'portable')
+            $app = Join-Path $profile 'portable/Butler-win32-x64/Butler.exe'
+            bun run packages/butler-app/scripts/windows/legacy-data-smoke.ts $app
+            if ($LASTEXITCODE) { throw 'Legacy-data recovery smoke failed' }
           } finally { Remove-Item -Recurse -Force $profile }

@@ -4,14 +4,13 @@ use super::*;
 
 /// Format pin: memory ids, hashes and wire shapes that existing data is read
 /// back with. The embedding wire shape written by the JavaScript runtime, the
-/// memory inventory hash, persisted import normalization hashes and ids,
+/// persisted import normalization hashes and ids,
 /// window coverage keys and evidence refs, and the work-record writer and
 /// reader goldens.
 // test-category: format-pin
 #[test]
 fn persisted_memory_ids_and_hashes_are_stable() {
     existing_javascript_embedding_wire_shape_round_trips_unchanged();
-    super::qualification::tests::memory_inventory_hash_matches_source_ecmascript_projection();
     crate::profile::persisted_import_normalization_hash_and_id_are_stable();
     crate::profile::persisted_window_coverage_key_and_evidence_ref_are_stable();
     crate::work_records::tests::original_writer_and_reader_goldens_preserve_hashes_review_gates_and_read_errors();

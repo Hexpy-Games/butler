@@ -50,6 +50,9 @@ fn windows_task_xml_roundtrip_and_foreign_detection() -> Result<(), Box<dyn std:
     assert!(xml.contains("<Hidden>true</Hidden>"));
     assert!(xml.contains("<RestartOnFailure>"));
     assert!(xml.contains("-WindowStyle Hidden -EncodedCommand"));
+    assert!(xml.contains(
+        "<WorkingDirectory>C:\\Windows\\System32\\WindowsPowerShell\\v1.0</WorkingDirectory>"
+    ));
     let encoded = xml
         .split("-EncodedCommand ")
         .nth(1)
@@ -67,10 +70,62 @@ fn windows_task_xml_roundtrip_and_foreign_detection() -> Result<(), Box<dyn std:
     .unwrap();
     assert!(script.contains("'C:\\미리 보기\\'' & %DATA% !'"));
     assert!(script.contains("SetEnvironmentVariable('BUTLER_DATA','C:\\'' & %DATA% !','Process')"));
+    let directory = definition
+        .program
+        .parent()
+        .unwrap()
+        .to_string_lossy()
+        .replace('\'', "''");
+    assert!(script.contains(&format!("Set-Location -LiteralPath '{directory}';")));
     assert!(script.ends_with(";exit $LASTEXITCODE"));
     assert!(test_support::task_owned(&xml, &xml, SID));
-    let mut unicode = vec![0xff, 0xfe];
-    unicode.extend(xml.encode_utf16().flat_map(u16::to_le_bytes));
+    let scheduler = xml
+        .replace("<RunLevel>LeastPrivilege</RunLevel>", "")
+        .replace("<Enabled>true</Enabled>", "")
+        .replace(
+            &format!("<UserId>{SID}</UserId></LogonTrigger>"),
+            "<UserId>HOST\\runner</UserId></LogonTrigger>",
+        );
+    assert!(!test_support::task_owned(&xml, &scheduler, SID));
+    assert!(test_support::task_owned_for_account(
+        &xml,
+        &scheduler,
+        SID,
+        "host\\Runner"
+    ));
+    assert!(!test_support::task_owned_for_account(
+        &xml,
+        &scheduler,
+        SID,
+        "HOST\\other"
+    ));
+    for foreign in [
+        scheduler.replace(
+            "</Principal>",
+            "<RunLevel>HighestAvailable</RunLevel></Principal>",
+        ),
+        scheduler.replace("</LogonTrigger>", "<Enabled>false</Enabled></LogonTrigger>"),
+        scheduler.replace(
+            "</Settings>",
+            "<Enabled>true</Enabled><Enabled>false</Enabled></Settings>",
+        ),
+    ] {
+        assert!(!test_support::task_owned_for_account(
+            &xml,
+            &foreign,
+            SID,
+            "HOST\\runner"
+        ));
+    }
+    assert!(xml.starts_with("<?xml version=\"1.0\" encoding=\"UTF-16\"?>"));
+    let mut unicode = test_support::task_bytes(&xml);
+    assert!(unicode.starts_with(&[0xff, 0xfe, b'<', 0, b'?', 0]));
+    assert_eq!(
+        &unicode[2..],
+        xml.encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<_>>()
+    );
     assert_eq!(test_support::task_text(&unicode).unwrap(), xml);
     assert_eq!(test_support::task_text(xml.as_bytes()).unwrap(), xml);
     unicode.push(0);

@@ -113,7 +113,14 @@ async fn skill_222_catalog_load_resource_and_guard() -> Result<(), HarnessError>
         .unwrap();
     assert!(catalog.len() <= 1_400, "catalog bytes: {}", catalog.len());
     assert_eq!(catalog.matches("project-guide:").count(), 1);
-    assert!(requests[1].to_string().contains("PROJECT_BODY_222"));
+    assert!(
+        requests[1].to_string().contains("PROJECT_BODY_222"),
+        "load_skill outputs: {:?}",
+        requests[1]["input"].as_array().map(|items| items
+            .iter()
+            .filter(|item| item["type"] == "function_call_output")
+            .collect::<Vec<_>>())
+    );
     assert!(requests[1].to_string().contains("guide.txt"));
     assert!(requests[2].to_string().contains("BUNDLED_RESOURCE_222"));
     assert!(requests[3].to_string().contains("skill_path_invalid"));

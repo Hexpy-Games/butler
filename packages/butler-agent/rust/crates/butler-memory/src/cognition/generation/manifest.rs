@@ -18,7 +18,6 @@ use crate::lenient;
 
 pub(crate) const GENERATION_MANIFEST_SCHEMA: &str = "butler.memory-generation.v2";
 pub(crate) const ACTIVE_DESCRIPTOR_SCHEMA: &str = "butler.memory-active-generation.v2";
-const READINESS_SCHEMA: &str = "butler.memory-generation-readiness.v1";
 
 /// How a generation stores its graph: native v2 files or the adopted legacy root.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -64,16 +63,6 @@ pub enum ProjectionMode {
     Running,
     /// The legacy baseline does not project.
     Paused,
-}
-
-impl ProjectionMode {
-    /// The mode a generation of `format` serves with.
-    pub(crate) fn for_format(format: GenerationFormat) -> Self {
-        match format {
-            GenerationFormat::V2 => Self::Running,
-            GenerationFormat::Legacy => Self::Paused,
-        }
-    }
 }
 
 /// The stored `embedding` field of a manifest.
@@ -185,57 +174,6 @@ pub struct GenerationReadiness {
     /// SHA-256 of this record without `sha256`; absent only while hashing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sha256: Option<String>,
-}
-
-impl GenerationReadiness {
-    /// Builds an unsealed readiness record; [`Self::seal`] adds its hash.
-    pub(crate) fn new(
-        inventory_hash: String,
-        registered: usize,
-        unaccounted: usize,
-        stages: (SemanticCounts, StageCounts, StageCounts),
-        evidence_sha256: String,
-    ) -> Self {
-        let (semantic, vectors, cache) = stages;
-        let ready = unaccounted == 0
-            && semantic.pending == 0
-            && semantic.failed == 0
-            && vectors.pending == 0
-            && vectors.failed == 0
-            && vectors.not_configured == 0
-            && cache.pending == 0
-            && cache.failed == 0
-            && cache.not_configured == 0;
-        Self {
-            schema: READINESS_SCHEMA.into(),
-            inventory_hash,
-            registered,
-            unaccounted,
-            semantic,
-            vectors,
-            cache,
-            evidence_sha256,
-            ready,
-            sha256: None,
-        }
-    }
-
-    /// True when every stage is settled: nothing unaccounted, pending, or failed.
-    pub(crate) fn settled(&self) -> bool {
-        self.ready
-            && self.unaccounted == 0
-            && self.semantic.pending == 0
-            && self.semantic.failed == 0
-            && self.vectors.pending == 0
-            && self.vectors.failed == 0
-            && self.cache.pending == 0
-            && self.cache.failed == 0
-    }
-
-    /// Whether `other` describes the same readiness and evidence.
-    pub(crate) fn same_as(&self, other: &Self) -> bool {
-        self.sha256 == other.sha256 && self.evidence_sha256 == other.evidence_sha256
-    }
 }
 
 /// Binds a qualified manifest to its stored acceptance evidence.
@@ -398,14 +336,6 @@ impl GenerationManifest {
             && self.generation_id.as_deref() == Some(generation_id)
     }
 
-    /// The bound embedding version, when one is bound.
-    pub(crate) fn embedding_version(&self) -> Option<&str> {
-        match &self.embedding {
-            Some(EmbeddingSlot::Bound(embedding)) => Some(embedding.version()),
-            _ => None,
-        }
-    }
-
     /// Whether the stored embedding is an explicit `null`.
     pub(crate) fn embedding_unbound(&self) -> bool {
         matches!(self.embedding, Some(EmbeddingSlot::Unbound))
@@ -414,13 +344,6 @@ impl GenerationManifest {
     /// Whether this is a v2 manifest in `state`.
     pub(crate) fn is_v2_in(&self, state: GenerationState) -> bool {
         self.format == Some(GenerationFormat::V2) && self.state == Some(state)
-    }
-
-    /// Records `readiness` and the counts it implies.
-    pub(crate) fn record_readiness(&mut self, readiness: &GenerationReadiness) {
-        self.readiness = Some(readiness.clone());
-        self.registered_source_count = Some(readiness.registered as u64);
-        self.unaccounted_source_count = Some(readiness.unaccounted as u64);
     }
 
     /// Reads and parses a manifest; `code` reports I/O and syntax failures.

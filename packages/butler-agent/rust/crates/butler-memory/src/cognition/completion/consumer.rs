@@ -4,7 +4,9 @@ mod blocking;
 mod catchup;
 mod probe;
 mod process;
+mod vector_schedule;
 use super::wake;
+pub use vector_schedule::{VECTOR_BACKLOG_CAP, VECTOR_MAX_AGE_HOURS};
 
 use parking_lot::Mutex;
 use std::{
@@ -68,6 +70,7 @@ pub struct MemorySyncConsumer {
     unclean_start: Arc<AtomicBool>,
     catchup_progress: Arc<Mutex<Option<(PathBuf, crate::cognition::graph::CatchupState)>>>,
     probe: Arc<probe::ProbeReader>,
+    vector_batch: Arc<AtomicBool>,
 }
 
 impl MemorySyncConsumer {
@@ -95,6 +98,7 @@ impl MemorySyncConsumer {
             unclean_start: Arc::new(AtomicBool::new(false)),
             catchup_progress: Arc::new(Mutex::new(None)),
             probe: Arc::new(probe::ProbeReader::default()),
+            vector_batch: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -125,12 +129,38 @@ impl MemorySyncConsumer {
 
     /// Processes the next queue entry or projection step.
     pub async fn poll_once(&self) -> CognitionResult<MemorySyncPoll> {
-        let permit = self
-            .admission
-            .clone()
-            .acquire_owned()
-            .await
-            .map_err(|source| closed().with_source(source))?;
+        self.poll_with(false, self.shutdown.clone()).await
+    }
+
+    /// Fully drain eligible vectors during the daily maintenance window, yielding
+    /// between quanta. Cancellation reaches the lease and embedding request.
+    pub async fn drain_vectors(&self, cancellation: &CancellationToken) -> CognitionResult<()> {
+        loop {
+            if cancellation.is_cancelled() {
+                return Err(closed());
+            }
+            match self.poll_with(true, cancellation.clone()).await? {
+                MemorySyncPoll::Processed => tokio::task::yield_now().await,
+                MemorySyncPoll::Idle => return Ok(()),
+                MemorySyncPoll::Deferred => {
+                    return Err(CognitionError::new(
+                        CognitionCode::MemoryWriteBusy,
+                        "memory_write_busy",
+                    ));
+                }
+            }
+        }
+    }
+
+    async fn poll_with(
+        &self,
+        daily_batch: bool,
+        cancellation: CancellationToken,
+    ) -> CognitionResult<MemorySyncPoll> {
+        let permit = tokio::select! {
+            permit = self.admission.clone().acquire_owned() => permit.map_err(|source| closed().with_source(source))?,
+            () = cancellation.cancelled() => return Err(closed()),
+        };
         let token = {
             let closing = self.closing.lock();
             if *closing {
@@ -138,6 +168,7 @@ impl MemorySyncConsumer {
             }
             self.tasks.token()
         };
+        let operation = self.shutdown.child_token();
         let input = process::Input {
             data_root: self.data_root.clone(),
             environment: self.environment.clone(),
@@ -150,7 +181,9 @@ impl MemorySyncConsumer {
             unclean_start: self.unclean_start.clone(),
             catchup_progress: self.catchup_progress.clone(),
             probe: self.probe.clone(),
-            shutdown: self.shutdown.clone(),
+            vector_batch: self.vector_batch.clone(),
+            daily_batch,
+            shutdown: operation.clone(),
         };
         let (sender, receiver) = oneshot::channel();
         // Detached on purpose: the operation token/guard moved into the task keeps the
@@ -159,7 +192,13 @@ impl MemorySyncConsumer {
         tokio::spawn(async move {
             let _token = token;
             let _permit = permit;
-            let _ = sender.send(process::poll(input).await);
+            let poll = process::poll(input);
+            tokio::pin!(poll);
+            let result = tokio::select! {
+                result = &mut poll => result,
+                () = cancellation.cancelled() => { operation.cancel(); poll.await },
+            };
+            let _ = sender.send(result);
         });
         receiver.await.map_err(|source| {
             CognitionError::new(
@@ -202,6 +241,8 @@ impl MemorySyncConsumer {
             unclean_start: self.unclean_start.clone(),
             catchup_progress: self.catchup_progress.clone(),
             probe: self.probe.clone(),
+            vector_batch: self.vector_batch.clone(),
+            daily_batch: false,
             shutdown: operation.clone(),
         };
         let (sender, receiver) = oneshot::channel();

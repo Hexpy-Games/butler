@@ -129,6 +129,11 @@ pub(in crate::project_ledger) fn write_candidate_index(
         .map_err(|_| ())
 }
 
+/// First-use initialization already holds the canonical mutation claim.
+pub(in crate::project_ledger) fn initialize_index_locked(root: &Path) -> Result<(), ()> {
+    index::write_unlocked(root).map(|_| ()).map_err(|_| ())
+}
+
 pub(in crate::project_ledger) fn candidate_check_errors(
     root: &Path,
     collation: &LocaleCollation,

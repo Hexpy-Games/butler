@@ -11,7 +11,6 @@ src/host/app/runtime_ports/session_workspaces.rs	<AppSessionWorkspaces as AppSes
 src/host/app/runtime_ports/topic_branch.rs	<AppBranchSummarizerAdapter as AppBranchSummarizer>::summarize	89
 src/host/app/server.rs	AppServer::open_with_artifacts	143
 src/host/cli/oauth_login.rs	run_native_oauth_login_with_data	129
-src/host/embedding/owner.rs	EmbeddingOwner::embed_request	82
 src/host/embedding/worker.rs	handle	85
 src/host/guided/activity.rs	new_group	99
 src/host/guided/activity/content.rs	content	160

@@ -1,12 +1,24 @@
 name: Butler Release
-
 on:
   push:
     tags:
       - "v*"
-
   workflow_dispatch:
     inputs:
+      task-xml-build-run:
+        description: Diagnose an immutable Windows preview Agent archive on disposable Windows
+        required: false
+        type: string
+      macos-process-contract:
+        description: Verify process identity while an exited child is unreaped
+        required: false
+        type: boolean
+        default: false
+      task-startup-contract:
+        description: Run the full startup contract against the immutable Windows Agent archive
+        required: false
+        type: boolean
+        default: false
       runner:
         type: choice
         options: [self, hosted]
@@ -17,6 +29,61 @@ permissions:
   contents: write
 
 jobs:
+  macos-process-contract:
+    if: inputs.macos-process-contract
+    name: Verify macOS unreaped process identity
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.91.0
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/butler-agent/rust
+          shared-key: macos-process-identity
+      - name: Prove live identity and unreaped exit behavior
+        working-directory: packages/butler-agent/rust
+        run: |
+          export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
+          isolated=$(mktemp -d)
+          trap 'rm -rf "$isolated"' EXIT
+          mkdir "$isolated/home" "$isolated/data"
+          HOME="$isolated/home" BUTLER_DATA="$isolated/data" cargo test --locked -j 8 -p butler-platform --test contract instance_lock_is_released_when_its_identified_holder_is_terminated -- --nocapture --test-threads=1
+      - name: Check platform contracts
+        working-directory: packages/butler-agent/rust
+        run: |
+          export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
+          isolated=$(mktemp -d)
+          trap 'rm -rf "$isolated"' EXIT
+          mkdir "$isolated/home" "$isolated/data"
+          HOME="$isolated/home" BUTLER_DATA="$isolated/data" cargo clippy --locked -j 8 -p butler-platform --all-targets -- -D warnings
+
+  task-xml-contract:
+    if: inputs.task-xml-build-run
+    name: Verify imported Windows Task Scheduler XML
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.task-xml-build-run }}
+          name: agent-windows-x64
+          path: artifacts
+      - name: Compare imported XML and enforce ownership
+        shell: pwsh
+        run: |
+          if ('${{ inputs.task-startup-contract }}' -eq 'true') {
+            ./deploy/windows-task-xml-probe.ps1 -ArchiveDirectory "$pwd/artifacts" -StartupContract
+          } else {
+            ./deploy/windows-task-xml-probe.ps1 -ArchiveDirectory "$pwd/artifacts"
+          }
+
   native-release:
     if: startsWith(github.ref, 'refs/tags/v')
     name: Build and publish native macOS arm64 artifacts
@@ -307,7 +374,7 @@ jobs:
 
   app-windows:
     name: Package unsigned Windows Squirrel App
-    needs: agent-windows-build
+    needs: agent-windows
     if: contains(github.ref_name, '-preview.')
     runs-on: ${{ inputs.runner == 'hosted' && 'windows-latest' || fromJSON('["self-hosted", "butler-win"]') }}
     concurrency:
@@ -342,7 +409,7 @@ jobs:
     name: Publish successful Agent archives, merged manifests and installers
     runs-on: ubuntu-latest
     needs: [native-release, agent-linux, agent-windows]
-    if: ${{ always() && !cancelled() }}
+    if: ${{ always() && !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -428,16 +495,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          # Archive names retain the exact release tag version.
-          version="${GITHUB_REF_NAME#v}"
-          cd dist/release/app-linux
-          shopt -s nullglob
-          files=(butler-app-*.deb butler-app-*.pkg.tar.zst)
-          test "${#files[@]}" -gt 0
-          for file in "${files[@]}"; do sha256sum -c "$file.sha256"; done
-          gh release upload "$GITHUB_REF_NAME" "${files[@]}" "${files[@]/%/.sha256}" --clobber
+        run: bash deploy/app/publish-release-artifacts.sh linux
 
   app-manifests:
     name: Publish successful Windows artifacts and merged App update manifest
@@ -455,33 +513,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          task_home="$(mktemp -d)"
-          task_data="$(mktemp -d)"
-          export HOME="$task_home" BUTLER_DATA="$task_data"
-          trap 'rm -rf "$task_home" "$task_data"' EXIT
-          mkdir -p dist/release/published
-          gh release download "$GITHUB_REF_NAME" --dir dist/release/published
-          inputs=()
-          if [ -f dist/release/published/app-update-manifest.json ]; then
-            inputs+=(--mac-manifest dist/release/published/app-update-manifest.json)
-          fi
-          if compgen -G 'dist/release/published/butler-app-*-linux-*.deb' > /dev/null; then
-            inputs+=(--linux-dir dist/release/published)
-          fi
-          if [ -f dist/release/app-windows/app-update-manifest.json ]; then
-            inputs+=(--windows-dir dist/release/app-windows)
-            shopt -s nullglob
-            files=(dist/release/app-windows/*.exe dist/release/app-windows/*.nupkg dist/release/app-windows/*.zip dist/release/app-windows/RELEASES dist/release/app-windows/*.sha256)
-            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
-          fi
-          if [ "${#inputs[@]}" -eq 0 ]; then exit 0; fi
-          python3 deploy/app/merge-update-manifest.py "${inputs[@]}" \
-            --version "${GITHUB_REF_NAME#v}" \
-            --base-url "https://github.com/$GH_REPO/releases/download/$GITHUB_REF_NAME" \
-            --output "$task_data/app-update-manifest.json"
-          gh release upload "$GITHUB_REF_NAME" "$task_data/app-update-manifest.json" --clobber
+        run: bash deploy/app/publish-release-artifacts.sh manifest
 
   release-checksums:
     needs: [agent-release, app-manifests]
@@ -508,7 +540,8 @@ jobs:
   # install-smoke.yml.
   npm-publish:
     name: Publish the npm package
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Preview packages are published by the owner after desktop verification.
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
     runs-on: ubuntu-latest
     needs: publish-release
     environment: deploy

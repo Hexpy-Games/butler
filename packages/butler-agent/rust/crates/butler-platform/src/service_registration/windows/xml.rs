@@ -16,9 +16,14 @@ pub(crate) struct Task {
 pub(crate) fn render(def: &Definition, sid: &str, shell: &str) -> Result<String, Error> {
     super::validate(def)?;
     let root = def.program.parent().ok_or(Error::InvalidValue)?;
+    let initial_dir = shell
+        .rsplit_once(['\\', '/'])
+        .map(|(directory, _)| directory)
+        .filter(|directory| !directory.is_empty())
+        .ok_or(Error::InvalidValue)?;
     let metadata = json!({"program": def.program, "args": def.args, "env": def.env,
         "data": def.working_dir, "sid": sid, "shell": shell});
-    let command = script(def);
+    let command = script(def, root);
     let encoded = STANDARD.encode(
         command
             .encode_utf16()
@@ -28,7 +33,7 @@ pub(crate) fn render(def: &Definition, sid: &str, shell: &str) -> Result<String,
     let arguments =
         format!("-NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand {encoded}");
     Ok(format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?>
+        r#"<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="{NS}">
   <RegistrationInfo><Source>Butler Agent CLI</Source><Documentation>{metadata}</Documentation></RegistrationInfo>
   <Triggers><LogonTrigger><Enabled>true</Enabled><UserId>{sid}</UserId></LogonTrigger></Triggers>
@@ -41,11 +46,11 @@ pub(crate) fn render(def: &Definition, sid: &str, shell: &str) -> Result<String,
         sid = escape(sid),
         shell = escape(shell),
         arguments = escape(&arguments),
-        root = escape(&root.to_string_lossy())
+        root = escape(initial_dir)
     ))
 }
 
-fn script(def: &Definition) -> String {
+fn script(def: &Definition, root: &std::path::Path) -> String {
     let mut script = "$ErrorActionPreference='Stop';".to_owned();
     for (key, value) in &def.env {
         script.push_str(&format!(
@@ -54,6 +59,12 @@ fn script(def: &Definition) -> String {
             quote(value)
         ));
     }
+    // Scheduler expands %VAR% in WorkingDirectory. Start beside PowerShell,
+    // then set the Agent directory literally inside the encoded action.
+    script.push_str(&format!(
+        "Set-Location -LiteralPath {};",
+        quote(&root.to_string_lossy())
+    ));
     script.push_str(&format!("& {}", quote(&def.program.to_string_lossy())));
     for arg in &def.args {
         script.push(' ');
@@ -83,6 +94,15 @@ fn child<'a, 'input>(node: Node<'a, 'input>, name: &str) -> Option<Node<'a, 'inp
 
 fn field(node: Node<'_, '_>, name: &str) -> Option<String> {
     Some(child(node, name)?.text().unwrap_or_default().to_owned())
+}
+
+fn field_or(node: Node<'_, '_>, name: &str, default: &str) -> Option<String> {
+    let mut nodes = node.children().filter(|n| n.has_tag_name((NS, name)));
+    match (nodes.next(), nodes.next()) {
+        (None, None) => Some(default.to_owned()),
+        (Some(first), None) => Some(first.text().unwrap_or_default().to_owned()),
+        _ => None,
+    }
 }
 
 fn only_element<'a, 'input>(node: Node<'a, 'input>, name: &str) -> Option<Node<'a, 'input>> {
@@ -116,7 +136,7 @@ pub(crate) fn parse(xml: &str) -> Option<Task> {
     if fingerprint != fingerprint_of(&expected_doc)? {
         return None;
     }
-    let enabled = match field(child(task, "Settings")?, "Enabled")?.as_str() {
+    let enabled = match field_or(child(task, "Settings")?, "Enabled", "true")?.as_str() {
         "true" => true,
         "false" => false,
         _ => return None,
@@ -143,9 +163,9 @@ fn fingerprint(task: Node<'_, '_>) -> Option<Vec<String>> {
         field(action, "WorkingDirectory")?,
         field(principal, "UserId")?,
         field(principal, "LogonType")?,
-        field(principal, "RunLevel")?,
+        field_or(principal, "RunLevel", "LeastPrivilege")?,
         field(trigger, "UserId")?,
-        field(trigger, "Enabled")?,
+        field_or(trigger, "Enabled", "true")?,
     ])
 }
 
@@ -154,6 +174,36 @@ pub(crate) fn same_owner(local: &str, remote: &str, sid: &str) -> bool {
         return false;
     };
     local.sid == sid && remote.sid == sid && local.fingerprint == remote.fingerprint
+}
+
+/// The scheduler exports a logon SID as the current token's account name.
+/// Only an account independently read from that token may be mapped back.
+pub(crate) fn normalize_current_user(xml: &str, sid: &str, account: &str) -> Option<String> {
+    let document = Document::parse(xml).ok()?;
+    let task = document.root_element();
+    let principal = only_element(child(task, "Principals")?, "Principal")?;
+    let trigger = only_element(child(task, "Triggers")?, "LogonTrigger")?;
+    let mut ranges = Vec::new();
+    for node in [principal, trigger] {
+        let user = child(node, "UserId")?;
+        if user.text()?.eq_ignore_ascii_case(account) {
+            ranges.push(user.first_child().filter(Node::is_text)?.range());
+        }
+    }
+    ranges.sort_by_key(|range| std::cmp::Reverse(range.start));
+    let mut normalized = xml.to_owned();
+    for range in ranges {
+        normalized.replace_range(range, sid);
+    }
+    Some(normalized)
+}
+
+/// schtasks imports XML as Unicode, including its declaration and BOM.
+pub(crate) fn encode(xml: &str) -> Vec<u8> {
+    [0xff, 0xfe]
+        .into_iter()
+        .chain(xml.encode_utf16().flat_map(u16::to_le_bytes))
+        .collect()
 }
 
 /// Decodes schtasks' Unicode output without silently dropping invalid bytes.

@@ -13,6 +13,7 @@ import {
   shell,
 } from "electron";
 import { prepareAppPackageUpdate } from "./app-package-update.mjs";
+import { unsupportedLegacyData } from "./app-legacy-data.mjs";
 import { getDesktopCopy } from "./i18n/desktop-copy.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import { createHmac, randomUUID } from "node:crypto";
@@ -132,6 +133,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../../../..");
 const userHome = homedir();
 const butlerDataRoot = process.env.BUTLER_DATA || join(userHome, ".butler");
+const legacyDataBlocked = unsupportedLegacyData(butlerDataRoot);
 const preloadPath = resolve(__dirname, "preload.cjs");
 const appCacheBudget = readCacheBudgetArtifact(
   resolve(__dirname, "../shared/cache-budget.json"),
@@ -273,7 +275,7 @@ let appAgentLaunchReconcilePromise = null;
 let nativeServiceGatewayReady = false;
 let nativeServiceGatewayLastErrorCode = null;
 const nativeShellPreferences = {
-  trayEnabled: true,
+  trayEnabled: !legacyDataBlocked,
 };
 const nativeNotificationState = {
   lastError: null,
@@ -404,6 +406,7 @@ function projectFolderTokenSecretPath(dataRoot = butlerDataRoot) {
 function resolveProjectFolderTokenSecret() {
   const envSecret = process.env.BUTLER_PROJECT_FOLDER_TOKEN_SECRET?.trim();
   if (envSecret) return envSecret;
+  if (legacyDataBlocked) return randomUUID();
   const secretPath = projectFolderTokenSecretPath();
   try {
     const existing = readFileSync(secretPath, "utf8").trim();
@@ -2074,6 +2077,7 @@ function safeString(value) {
 
 async function createWindow() {
   if (
+    !legacyDataBlocked &&
     (rendererUrl === serverUrl || usesAppForegroundLifecycle) &&
     !shouldUseAppAgentNativeServiceBridge()
   ) {
@@ -2081,15 +2085,15 @@ async function createWindow() {
     await ensureServer();
     recordAppStartupProgress("agent_ready");
   }
-  const launchReconcile = reconcileAppAgentServiceForLaunch();
-  if (rendererUrl === serverUrl && shouldUseAppAgentNativeServiceBridge()) {
+  const launchReconcile = legacyDataBlocked ? Promise.resolve() : reconcileAppAgentServiceForLaunch();
+  if (!legacyDataBlocked && rendererUrl === serverUrl && shouldUseAppAgentNativeServiceBridge()) {
     await launchReconcile;
     await ensureServer();
   }
-  await loadInitialNativeShellPreferences();
-  if (isPersistentMenuBarHelperSupported()) {
+  if (!legacyDataBlocked) await loadInitialNativeShellPreferences();
+  if (!legacyDataBlocked && isPersistentMenuBarHelperSupported()) {
     ensurePersistentMenuBarHelper();
-  } else {
+  } else if (!legacyDataBlocked) {
     scheduleTrayMenuRefresh();
   }
   if (mainWindow && !mainWindow.isDestroyed()) return mainWindow;
@@ -2117,7 +2121,7 @@ async function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      additionalArguments: [appCacheBudgetArgument],
+      additionalArguments: [appCacheBudgetArgument, ...(legacyDataBlocked ? ["--butler-legacy-data"] : [])],
     },
   });
   mainWindow = win;
@@ -2158,7 +2162,7 @@ async function createWindow() {
   });
   await prepareAppRendererProtocol();
   await win.loadURL(rendererUrl);
-  if (usesAppForegroundLifecycle && app.isPackaged) {
+  if (!legacyDataBlocked && usesAppForegroundLifecycle && app.isPackaged) {
     const migration = await ensureLegacyAppServiceMigration();
     if (migration.status === "cancelled") {
       scheduleTrayMenuRefresh();
@@ -2243,6 +2247,22 @@ function appManagedAgentRuntimeCurrent() {
 }
 
 ipcMain.handle("butler:get-app-info", () => appInfoView());
+
+ipcMain.handle("butler:legacy-data-recovery", async (_event, action) => {
+  if (!legacyDataBlocked) return { ok: false };
+  if (action === "open-folder") return { ok: !(await shell.openPath(dirname(butlerDataRoot))) };
+  if (action === "restart") {
+    // The preload endpoint is internal state, not an external-server override
+    // for the next App. Keep only an override supplied at the original launch.
+    if (explicitServerUrl) process.env.BUTLER_APP_SERVER_URL = explicitServerUrl;
+    else delete process.env.BUTLER_APP_SERVER_URL;
+    app.relaunch();
+    finalQuitAllowed = true;
+    app.quit();
+    return { ok: true };
+  }
+  return { ok: false };
+});
 
 ipcMain.handle("butler:get-session-folder-launch-targets", async (_event, input = {}) =>
   await sessionFolderLauncher.availableTargets(input?.sessionId));
@@ -2977,6 +2997,7 @@ function recordAppStartupProgress(stage, {
   windowReady = false,
   trayReady = Boolean(tray),
 } = {}) {
+  if (legacyDataBlocked) return;
   try {
     const diagnostics = bundledAgentSupervisor.diagnostics();
     writeAppForegroundStartupProgress(butlerDataRoot, {

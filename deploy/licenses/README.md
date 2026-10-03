@@ -13,7 +13,7 @@ Cargo/Bun lockfiles, Cargo and packaging manifests, the generator/collector and
 their embedded config/allowlist, the static-ORT lock, and parsed model identity
 constants. Rust comments, first-party code, prompts and unrelated asset bytes do
 not invalidate the inventory. Added/removed manifests or notice sources do.
-Staleness errors list the changed input paths and one refresh command. Every one of the 885 inventory components remains
+Staleness errors list the changed input paths and one refresh command. Every one of the 887 inventory components remains
 disclosed with name, version, SPDX expression (or the supplier's explicit
 LicenseRef), upstream link(s), and available copyright attribution lines.
 Supplier collections remain collection entries; individual supplier versions and

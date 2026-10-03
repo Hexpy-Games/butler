@@ -7,6 +7,8 @@
 )]
 #[path = "support/alias_index_audit.rs"]
 mod alias_index_audit;
+#[path = "support/alias_retirement_gate.rs"]
+mod alias_retirement_gate;
 #[path = "support/memory_fixture.rs"]
 mod memory_fixture;
 use butler_e2e::e2e::{
@@ -51,7 +53,7 @@ async fn until_count(path: &Path, expected: i64) {
             Instant::now() < deadline,
             "background indexes did not retire"
         );
-        tokio::time::sleep(Duration::from_millis(20)).await;
+        tokio::task::yield_now().await;
     }
 }
 
@@ -66,16 +68,30 @@ async fn background_drop_resumes_after_interruption_and_stays_idle() -> Result<(
     let started = Instant::now();
     let mut s = setup.start().await?;
     assert_eq!(obsolete(&db), 2);
+    let gate = alias_retirement_gate::RetirementGate::install(&s.sandbox.data);
     tokio::time::sleep(Duration::from_secs(2)).await;
+    assert!(gate.passes().is_empty(), "blocked DROP committed a lease");
     s.agent.kill9()?;
     db.execute_batch("ROLLBACK").unwrap();
     assert_eq!(obsolete(&db), 2, "blocked drop partially committed");
     s.gw = s.agent.start_again().await?;
-    until_count(&graph, 1).await;
+    // The fixture holds admission of the next retirement lease, so this is
+    // a stable state even if full executor readiness outlasts the first pass.
+    let first = gate.until_passes(1).await;
+    assert_eq!(obsolete(&db), 1, "one committed lease must drop one index");
     s.agent.kill9()?;
+    assert_eq!(first.len(), 1, "first DROP did not commit its own lease");
     assert_eq!(obsolete(&db), 1, "both indexes retired under one lease");
+    gate.resume();
     s.gw = s.agent.start_again().await?;
     until_count(&graph, 0).await;
+    // Reading the committed coordinator audit proves the second pass released
+    // its lease too; the unique nonces and new PID prove separate acquisitions.
+    let passes = gate.until_passes(2).await;
+    assert_eq!(passes.len(), 2);
+    assert_eq!(passes[0], first[0]);
+    assert_ne!(passes[0].0, passes[1].0);
+    assert_ne!(passes[0].1, passes[1].1);
     assert_eq!(
         db.query_row("SELECT COUNT(*) FROM memory_alias_postings", [], |r| r
             .get::<_, i64>(0))
@@ -101,7 +117,8 @@ async fn background_drop_resumes_after_interruption_and_stays_idle() -> Result<(
     s.restart().await?;
     assert_eq!(obsolete(&db), 0, "startup recreated indexes");
     eprintln!(
-        "ALIAS-DROP elapsed_ms={} idle_graph_commits={commits} idle_leases={leases}",
+        "ALIAS-DROP committed_retirement_passes={} elapsed_ms={} idle_graph_commits={commits} idle_leases={leases}",
+        passes.len(),
         started.elapsed().as_millis()
     );
     s.finish().await
@@ -216,7 +233,7 @@ async fn queue_followup(s: &Scenario, prompt: &str) -> Result<String, HarnessErr
 #[test]
 fn owner_scale_posting_queries_keep_plans_and_results() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let setup = Setup::new("ALIAS-DROP-AUDIT")?;
+    let mut setup = Setup::new("ALIAS-DROP-AUDIT")?;
     let directory = setup.sandbox.data.join("audit");
     let script =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/alias-index-drop-benchmark.py");
@@ -231,5 +248,6 @@ fn owner_scale_posting_queries_keep_plans_and_results() -> Result<(), HarnessErr
         String::from_utf8_lossy(&output.stderr)
     );
     alias_index_audit::run(&directory);
+    setup.sandbox.mark_success();
     Ok(())
 }

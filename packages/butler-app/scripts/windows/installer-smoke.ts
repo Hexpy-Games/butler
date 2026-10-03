@@ -2,13 +2,15 @@
 import { strict as assert } from "node:assert";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
 import { FIRST_RUN_CONSENT_VERSION } from "../../client/ui/src/app/onboarding.ts";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
 import { alive, assertShortcuts, bridge, click, ownedProcesses, powershell, readJson, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
+import { smokeProviderReply } from "./smoke-provider.ts";
+import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
 
 if (process.platform !== "win32" || process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_ENVIRONMENT !== "github-hosted") {
   throw new Error("Registry/shortcut/installer smoke is restricted to disposable GitHub-hosted runners");
@@ -20,7 +22,7 @@ const root = mkdtempSync(join(tmpdir(), "butler-installer-e2e-"));
 const data = join(root, "data");
 const owned = new Set<number>();
 let page: ElectronPage | null = null;
-let calls = 0;
+const calls = { chat: 0, memory: 0, memorySpeakers: new Set<string>() };
 let uninstalled = false;
 let phase = "one-click install";
 const manifest = readJson(join(second, "app-update-manifest.json"))!;
@@ -29,12 +31,13 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async request 
   const path = new URL(request.url).pathname;
   if (path === "/v1/responses") {
     const body = await request.json();
-    assert.ok(JSON.stringify(body).includes("Reply with Windows update ready."));
-    calls++;
-    return Response.json({ id: "resp_installer", object: "response", status: "completed", model: "gpt-6-luna",
-      output: [{ type: "message", id: "msg_installer", role: "assistant", status: "completed",
-        content: [{ type: "output_text", text: "Windows update ready.", annotations: [] }] }],
-      usage: { input_tokens: 100, output_tokens: 4, total_tokens: 104 } });
+    return smokeProviderReply(body, "Reply with Windows update ready.", "Windows update ready.", calls, input => {
+      assert.ok(["user", "assistant"].includes(input.speaker), "Unexpected memory speaker");
+      assert.ok(!calls.memorySpeakers.has(input.speaker), "Repeated extraction of the same chat speaker");
+      const expected = input.speaker === "user" ? "Reply with Windows update ready." : "Windows update ready.";
+      assert.equal(input.parts.map((part: any) => part.text).join(""), expected);
+      console.log(JSON.stringify({ meaningSpeaker: input.speaker, phase, parts: input.parts.length }));
+    });
   }
   if (path === `/${packageName}`) return new Response(Bun.file(join(second, packageName)));
   if (path === "/manifest.json") return Response.json({ ...manifest, artifacts: manifest.artifacts.map((item: any) => ({
@@ -44,7 +47,7 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async request 
 } });
 const debugPort = await freePort();
 const agentPort = await freePort();
-const env = { ...process.env, HOME: join(root, "home"), BUTLER_DATA: data,
+const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), BUTLER_DATA: data,
   LOCALAPPDATA: join(root, "local"), APPDATA: join(root, "roaming"), BUTLER_SECRET_STORE: "file",
   BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"), BUTLER_APP_SMOKE_DEBUG_PORT: String(debugPort),
   BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_E2E_TIER: "stub", BUTLER_PROVIDER_QUOTA_POLLING: "0",
@@ -113,11 +116,16 @@ try {
   assert.equal(powershell("[bool](Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run' -ErrorAction SilentlyContinue).'com.squirrel.butler-app.Butler'", env), "False");
   assert.equal(readFileSync(join(data, "sentinel.txt"), "utf8"), "retained");
   assert.ok(existsSync(join(data, "butler.config.json")));
-  console.log(JSON.stringify({ ok: true, from, to, shellIntegration: true, stubCalls: calls,
+  assert.equal(calls.chat, 1); assert.equal(calls.memory, 2);
+  assert.deepEqual([...calls.memorySpeakers].sort(), ["assistant", "user"]);
+  console.log(JSON.stringify({ ok: true, from, to, shellIntegration: true, stubCalls: calls.chat + calls.memory,
+    chatCalls: calls.chat, memoryCalls: calls.memory,
     normalInstallLaunch: true, exactAgent: true, chatPreserved: true, rollbackRetained: true, uninstallPreservesData: true,
     leftoverProcesses: 0, durationMs: Date.now() - started }));
 } catch (error) {
   console.error(JSON.stringify({ phase, renderer: page ? await page.diagnostics().catch(() => null) : null,
+    providerCalls: { chat: calls.chat, memory: calls.memory, speakers: [...calls.memorySpeakers].sort() },
+    memoryState: memoryState(),
     instanceState: readJson(join(data, "app/runtime/foreground/instance.json"))?.state,
     lastExit: readJson(join(data, "app/runtime/foreground/last-exit.json")),
     packages: [from, to].map(version => ({ version,
@@ -131,9 +139,32 @@ try {
   page?.close();
   ownedProcesses(data, owned);
   for (const pid of owned) if (alive(pid)) { try { process.kill(pid, "SIGKILL"); } catch {} }
+  await waitFor(() => [...owned].every(pid => !alive(pid)), "failed installer owned process cleanup");
   if (!uninstalled && existsSync(updater)) run(updater, ["--uninstall", "--silent"]);
   server.stop(true);
   rmSync(root, { recursive: true, force: true });
+}
+
+function memoryState() {
+  try { return readMemoryState(); }
+  catch (error) { return { diagnosticError: error instanceof Error ? error.name : "unavailable" }; }
+}
+
+function readMemoryState() {
+  const memory = join(data, "cognition/memory");
+  const queue = join(memory, "queue/sync.jsonl");
+  return {
+    active: readJson(join(memory, "active-generation.json")),
+    files: existsSync(memory) ? readdirSync(memory, { recursive: true }).map(String).sort() : [],
+    queuedSources: existsSync(queue) ? readFileSync(queue, "utf8").split("\n").filter(Boolean).map(line => {
+      const entry = JSON.parse(line);
+      return { schema: entry.schema_version, kind: entry.source?.kind, jobId: entry.job_id };
+    }) : [],
+    schedules: ["session-sync", "consolidation-cycle"].map(id => {
+      const state = readJson(join(data, `state/scheduler/${id}.json`));
+      return { id, status: state?.status, lastRunDate: state?.lastRunDate, lastRunAt: state?.lastRunAt };
+    }),
+  };
 }
 
 async function oneClickLaunch() {
@@ -192,7 +223,9 @@ async function stubChat(chatId: string) {
   await waitFor(async () => (await bridge(page!, "listTurns", { chatId })).turns.some((turn: any) => turn.state === "delivered"), "stub chat");
   const messages = (await bridge(page!, "listMessages", { chatId })).messages;
   assert.equal(messages.length, 2); assert.equal(messages[0].role, "user");
-  assert.equal(messages[1].text, "Windows update ready."); assert.equal(calls, 1);
+  assert.equal(messages[1].text, "Windows update ready."); assert.equal(calls.chat, 1);
+  await waitFor(() => calls.memory === 2, "both user and assistant meaning extractions");
+  assert.deepEqual([...calls.memorySpeakers].sort(), ["assistant", "user"]);
 }
 
 function shellProof() {

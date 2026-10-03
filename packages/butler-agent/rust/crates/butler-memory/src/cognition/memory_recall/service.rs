@@ -281,19 +281,25 @@ impl Operation {
             });
             return Ok(vector);
         };
-        if generation.embedding.is_none() {
-            vector.code = Some("embedding_not_configured".into());
-            return Ok(vector);
-        }
+        // A fresh generation also warms through the adapter. Cold initialization
+        // outlives this lane's deadline; the first answer still uses text lanes.
         let clock = &self.clock;
         let vector_deadline = self.deadline_at.min(clock() + 750);
         let remaining = u64::try_from(vector_deadline.saturating_sub(clock())).unwrap_or_default();
+        let lane = if generation.embedding.is_none() {
+            port.warm(generation, &self.input, vector_deadline)
+        } else {
+            port.search(generation, &self.input, vector_deadline)
+        };
         let result = tokio::select! {
             ()=self.shutdown.cancelled()=>return Err(closed()),
             result=tokio::time::timeout(std::time::Duration::from_millis(remaining),
-                port.search(generation, &self.input, vector_deadline))=>result,
+                lane)=>result,
         };
         match result {
+            Ok(Ok(_)) if generation.embedding.is_none() => {
+                vector.code = Some("embedding_not_configured".into());
+            }
             Ok(Ok(matches)) => {
                 vector.searched = true;
                 vector.diagnostics = matches.diagnostics.clone();

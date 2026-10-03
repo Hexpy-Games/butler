@@ -112,7 +112,9 @@ async fn svc_02_stop_is_announced_and_sticks() -> Result<(), HarnessError> {
     let pid = s.agent.pid().unwrap();
     assert_eq!(record["pid"], pid);
 
-    let stopped = s.agent.cli_reaping(&["stop"]).await?;
+    // Hold the exited child unreaped until stop returns: a successful stop
+    // must recognize the exit even while its PID is still a zombie.
+    let stopped = s.agent.cli(&["stop"])?;
     assert_eq!(stopped.code, Some(0), "{stopped:?}");
     assert!(
         stopped.stdout.contains("Butler native service stopped"),

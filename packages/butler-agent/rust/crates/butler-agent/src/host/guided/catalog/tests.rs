@@ -163,6 +163,14 @@ fn phase_selection_enforces_execution_policy_access_and_required_tools() {
                     |name: &str| selection.authorized_names.iter().any(|tool| tool == name);
                 assert_eq!(authorized("write_file"), writes, "{context}");
                 assert_eq!(authorized("start_work"), work, "{context}");
+                for name in ["load_skill", "read_skill_file"] {
+                    if authorized(name) {
+                        assert!(
+                            has_provider_tool(&selection.provider_tools, name),
+                            "{context}: {name}"
+                        );
+                    }
+                }
             }
         }
     }
