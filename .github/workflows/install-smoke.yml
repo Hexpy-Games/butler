@@ -7,19 +7,11 @@ name: Install smoke
 # again. Nothing is published.
 
 on:
-  pull_request:
-    paths:
-      - ".github/workflows/install-smoke.yml"
-      - ".github/workflows/release.yml"
-      - ".github/workflows/npm-publish.yml"
-      - ".github/workflows/linux-packages.yml"
-      - "packages/butler-app/scripts/release/**"
-      - ".github/actions/build-agent-archive/**"
-      - "deploy/**"
-      - "packages/butler-npm/**"
-      - "packages/butler-agent/rust/scripts/*standalone*"
-      - "packages/butler-app/client/electron/scripts/prepare-native-agent.mjs"
   workflow_call:
+    inputs:
+      shared-agents:
+        type: boolean
+        default: false
   workflow_dispatch:
 
 permissions:
@@ -38,13 +30,14 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Lint the shell scripts
-        run: shellcheck -s sh deploy/install.sh deploy/install-smoke.sh
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" shellcheck -s sh deploy/install.sh deploy/install-smoke.sh
 
       - name: Test and lint npm publish decisions
         run: |
           HOME="$(mktemp -d)"
           BUTLER_DATA="$(mktemp -d)"
           export HOME BUTLER_DATA
+          trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
           shellcheck deploy/npm/*.sh
           bash deploy/npm/publish.test.sh
 
@@ -57,7 +50,8 @@ jobs:
         working-directory: packages/butler-npm
         run: |
           set -euo pipefail
-          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          export HOME=$(mktemp -d "$RUNNER_TEMP/ci-home.XXXXXX") BUTLER_DATA=$(mktemp -d "$RUNNER_TEMP/ci-data.XXXXXX")
+          trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
           npm pack --pack-destination "$RUNNER_TEMP"
           npm publish --dry-run --access public
           files="$(tar -tzf "$RUNNER_TEMP"/hexpygames-butler-*.tgz | LC_ALL=C sort)"
@@ -92,7 +86,8 @@ jobs:
         uses: ./.github/actions/build-agent-archive
         with:
           cache-key: package-${{ matrix.platform }}
-          ort-mode: ${{ github.event_name == 'schedule' && 'static-ort' || 'prebuilt-ort' }}
+          agent-artifact: ${{ inputs.shared-agents && format('rust-{0}', matrix.platform) || '' }}
+          ort-mode: ${{ (github.event_name == 'schedule' || (matrix.platform == 'darwin-arm64' && inputs.shared-agents)) && 'static-ort' || 'prebuilt-ort' }}
           artifact-base-url: https://github.com/${{ github.repository }}/releases/download/v0.0.0-ci
 
       - name: Download the npm tarball
@@ -102,7 +97,7 @@ jobs:
           path: ${{ runner.temp }}/npm
 
       - name: Install, run headless, reinstall
-        run: sh deploy/install-smoke.sh dist/release/agent "$(ls "$RUNNER_TEMP"/npm/hexpygames-butler-*.tgz)"
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" sh deploy/install-smoke.sh dist/release/agent "$(ls "$RUNNER_TEMP"/npm/hexpygames-butler-*.tgz)"
 
       - name: Keep the archive and manifests for the merge check
         uses: actions/upload-artifact@v4

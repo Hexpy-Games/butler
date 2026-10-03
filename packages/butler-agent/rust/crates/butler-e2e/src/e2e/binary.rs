@@ -17,12 +17,16 @@ static BINARY: OnceLock<Result<PathBuf, String>> = OnceLock::new();
 
 /// Cargo/nextest supplies the manifest directory remapped to the runtime workspace.
 pub fn manifest_dir() -> PathBuf {
-    if let Some(root) = nonempty("BUTLER_E2E_WORKSPACE_ROOT") {
+    if let Some(root) = nonempty("BUTLER_E2E_WORKSPACE_ROOT").or_else(|| nonempty("NEXTEST_WORKSPACE_ROOT")) {
         return PathBuf::from(root).join("crates/butler-e2e");
     }
     std::env::var_os("CARGO_MANIFEST_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
+}
+
+pub fn crate_root() -> PathBuf {
+    manifest_dir()
 }
 
 pub fn workspace_root() -> PathBuf {

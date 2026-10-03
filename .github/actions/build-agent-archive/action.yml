@@ -7,6 +7,9 @@ description: >-
   Shared by release and install smoke.
 
 inputs:
+  agent-artifact:
+    description: Optional same-run compatible release Agent artifact.
+    default: ""
   cache-key:
     description: The rust-cache shared key for this platform.
     required: true
@@ -34,6 +37,7 @@ runs:
   using: composite
   steps:
     - name: Set up Rust and ONNX Runtime
+      if: inputs.agent-artifact == ''
       uses: ./.github/actions/rust-agent-setup
       with:
         native-deps: ${{ inputs.ort-mode }}
@@ -60,6 +64,7 @@ runs:
         npm --prefix packages/butler-app/client/ui run build
 
     - name: Build the native Agent
+      if: inputs.agent-artifact == ''
       shell: bash
       working-directory: packages/butler-agent/rust
       env:
@@ -68,10 +73,10 @@ runs:
         set -euo pipefail
         case "$ORT_MODE" in
           static-ort)
-            cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
+            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
             ;;
           prebuilt-ort)
-            cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features prebuilt-ort
+            python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features prebuilt-ort
             ;;
           *)
             printf 'Unsupported ONNX Runtime mode: %s\n' "$ORT_MODE" >&2
@@ -79,6 +84,18 @@ runs:
             ;;
         esac
         echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$PWD/target/release/butler-agent" >> "$GITHUB_ENV"
+
+    - uses: actions/download-artifact@v4
+      if: inputs.agent-artifact != ''
+      with:
+        name: ${{ inputs.agent-artifact }}
+        path: ${{ runner.temp }}/shared-agent
+    - name: Use the shared release Agent
+      if: inputs.agent-artifact != ''
+      shell: bash
+      run: |
+        chmod +x "$RUNNER_TEMP/shared-agent/butler-agent"
+        echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$RUNNER_TEMP/shared-agent/butler-agent" >> "$GITHUB_ENV"
 
     - name: Package and smoke the archive
       id: package
@@ -98,6 +115,6 @@ runs:
         mkdir -p "$OUT"
         python3 "$scripts/release-standalone-agent.py" gate --payload "$payload"
         python3 "$scripts/package-standalone-agent.py" --payload "$payload" --output "$archive" --artifact-url "$url"
-        python3 "$scripts/release-standalone-agent.py" smoke --archive "$archive" --artifact-url "$url"
+        python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" python3 "$scripts/release-standalone-agent.py" smoke --archive "$archive" --artifact-url "$url"
         echo "platform=$platform" >> "$GITHUB_OUTPUT"
         echo "archive=$archive" >> "$GITHUB_OUTPUT"

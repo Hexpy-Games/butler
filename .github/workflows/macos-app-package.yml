@@ -34,6 +34,12 @@ on:
       - "packages/butler-agent/rust/crates/butler-runtime/src/operations/update/**"
       - "bun.lock"
       - "**/package.json"
+  workflow_call:
+    inputs:
+      agent-artifact:
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -74,7 +80,7 @@ jobs:
         run: test "$(uname -m)" = arm64
 
       - name: Set up Rust and static ONNX Runtime
-        if: ${{ !inputs.published-candidate }}
+        if: ${{ !inputs.published-candidate && inputs.agent-artifact == '' }}
         uses: ./.github/actions/rust-agent-setup
         with:
           native-deps: static-ort
@@ -97,7 +103,7 @@ jobs:
           npm --prefix packages/butler-app/client/ui run build
 
       - name: Build the native Agent payload binary
-        if: ${{ !inputs.published-candidate }}
+        if: ${{ !inputs.published-candidate && inputs.agent-artifact == '' }}
         working-directory: packages/butler-agent/rust
         run: |
           set -euo pipefail
@@ -107,6 +113,17 @@ jobs:
           trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
           cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
           echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$PWD/target/release/butler-agent" >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@v4
+        if: inputs.agent-artifact != ''
+        with:
+          name: ${{ inputs.agent-artifact }}
+          path: ${{ runner.temp }}/shared-agent
+      - name: Use the shared native Agent
+        if: inputs.agent-artifact != ''
+        run: |
+          chmod +x "$RUNNER_TEMP/shared-agent/butler-agent"
+          echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$RUNNER_TEMP/shared-agent/butler-agent" >> "$GITHUB_ENV"
 
       - name: Package and smoke the native App release
         if: ${{ !inputs.published-candidate }}

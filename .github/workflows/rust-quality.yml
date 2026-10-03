@@ -1,25 +1,19 @@
 name: Rust quality
 
-# The PR gate stays on Linux. Platform checks and full install smoke run in
-# post-merge-ci.yml, with path-filtered macOS and Windows checks on relevant PRs.
+# One required gate covers the selected Linux, macOS, UI and site checks.
+# Windows ownership remains in the existing Windows workflows.
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - "README.md"
-      - "CONTRIBUTING.md"
-      - "assets/readme/**"
   pull_request:
-    paths-ignore:
-      - "README.md"
-      - "CONTRIBUTING.md"
-      - "assets/readme/**"
+  merge_group:
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: rust-quality-${{ github.head_ref || github.ref_name }}
@@ -34,7 +28,91 @@ defaults:
     working-directory: packages/butler-agent/rust
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || steps.paths.outputs.rust }}
+      ui: ${{ steps.paths.outputs.ui }}
+      site: ${{ steps.paths.outputs.site }}
+      ds: ${{ steps.paths.outputs.ds }}
+      package: ${{ github.event_name == 'pull_request' && steps.paths.outputs.package || 'false' }}
+      install: ${{ github.event_name == 'schedule' && 'true' || steps.paths.outputs.install }}
+      linux-package: ${{ github.event_name == 'schedule' && 'true' || steps.paths.outputs.linux-package }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: paths
+        with:
+          base: ${{ github.event.merge_group.base_sha || github.event.before || github.event.repository.default_branch }}
+          filters: |
+            rust:
+              - 'packages/butler-agent/rust/**/!(*.md)'
+              - 'packages/butler-agent/resources/**/!(*.md)'
+              - 'VERSION'
+              - '.config/nextest.toml'
+              - '.github/scripts/**'
+              - '.github/actions/e2e-stub/**'
+              - '.github/actions/rust-agent-setup/**'
+              - '.github/workflows/rust-*.yml'
+            ui:
+              - 'packages/**/*.{ts,tsx,js,jsx,mjs}'
+              - 'packages/**/package.json'
+              - 'packages/butler-app/client/ui/**/*.css'
+              - 'tests/**'
+              - 'tools/**/*.{ts,js,mjs}'
+              - '{package.json,bun.lock,bunfig.toml,tsconfig*.json}'
+              - '.github/workflows/bun-unit.yml'
+              - '.github/actions/assert-home-untouched/**'
+            site:
+              - 'packages/butler-site/**'
+              - 'packages/butler-app/client/ui/**'
+              - 'tests/smoke/ds-site-*.ts'
+              - '{LICENSE,VERSION,package.json,bun.lock}'
+              - '.github/workflows/site*.yml'
+            ds:
+              - 'packages/butler-app/client/ui/**'
+              - 'tests/smoke/ds-site-*.ts'
+              - '{LICENSE,package.json,bun.lock}'
+              - '.github/workflows/ds-site.yml'
+            package:
+              - '.github/workflows/macos-app-package.yml'
+              - '.github/workflows/release.yml'
+              - '.github/actions/rust-agent-setup/**'
+              - 'packages/butler-app/client/electron/**'
+              - 'packages/butler-app/scripts/release/**'
+              - 'deploy/**'
+              - 'tests/smoke/packaged-app-update.ts'
+              - 'tests/support/electron-page-cdp.ts'
+              - 'packages/butler-app/client/ui/src/components/settings/Update*'
+              - 'packages/butler-agent/rust/crates/butler-platform/src/app_update.rs'
+              - 'packages/butler-agent/rust/crates/butler-agent/build.rs'
+              - 'packages/butler-agent/rust/crates/butler-agent/src/host/cli/app_update.rs'
+              - 'packages/butler-agent/rust/crates/butler-runtime/src/operations/update*'
+              - 'packages/butler-agent/rust/crates/butler-runtime/src/operations/update/**'
+              - '{bun.lock,**/package.json}'
+            linux-package:
+              - '.github/workflows/{linux-packages,release}.yml'
+              - '.github/actions/rust-agent-setup/**'
+              - 'packages/butler-agent/rust/Cargo.lock'
+              - 'packages/butler-agent/rust/crates/{butler-agent,butler-gateway,butler-memory}/Cargo.toml'
+              - 'packages/butler-agent/rust/scripts/prepare-static-ort.py'
+              - 'packages/butler-app/scripts/release/**'
+              - 'packages/butler-app/client/electron/**'
+              - 'deploy/**'
+              - '{bun.lock,**/package.json}'
+            install:
+              - '.github/workflows/install-smoke.yml'
+              - '.github/workflows/{release,npm-publish,linux-packages}.yml'
+              - '.github/actions/build-agent-archive/**'
+              - 'packages/butler-app/scripts/release/**'
+              - 'deploy/**'
+              - 'packages/butler-npm/**'
+              - 'packages/butler-agent/rust/scripts/*standalone*'
+              - 'packages/butler-app/client/electron/scripts/prepare-native-agent.mjs'
+
   source:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     name: Format and source rules
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -46,11 +124,13 @@ jobs:
           toolchain: 1.91.0
           components: rustfmt
       - name: Check formatting
-        run: cargo fmt --all -- --check
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo fmt --all -- --check
       - name: Check Rust source rules
-        run: cargo run --locked -p butler-source-check -- .
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo run --locked -p butler-source-check -- .
 
   linux-clippy:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     name: Clippy (Linux x64)
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -68,260 +148,110 @@ jobs:
           native-deps: prebuilt-ort
           cache-key: pr-linux-x64-clippy
       - name: Clippy production targets
-        run: cargo clippy --workspace --lib --bins --locked --keep-going -- -D warnings
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --workspace --lib --bins --locked --keep-going -- -D warnings
       - name: Clippy all targets
-        run: cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
+
+  linux-archive:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.linux-package == 'true' || needs.changes.outputs.install == 'true'
+    uses: ./.github/workflows/rust-archive.yml
+    with:
+      ort-mode: ${{ github.event_name == 'schedule' && 'static-ort' || 'prebuilt-ort' }}
 
   linux-tests:
-    name: Tests (Linux x64)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: sccache
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
-      - name: Set up Rust and prebuilt ONNX Runtime
-        uses: ./.github/actions/rust-agent-setup
-        with:
-          native-deps: prebuilt-ort
-          cache-key: pr-linux-x64-tests
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-      - name: Run tests
-        run: cargo nextest --config-file "$GITHUB_WORKSPACE/.config/nextest.toml" run --workspace --locked --no-fail-fast -E 'not test(/^perf_/)'
-      - name: Run doctests when present
-        run: |
-          if grep -rqE '^[[:space:]]*//[/!][[:space:]]*```' crates; then
-            cargo test --workspace --doc --locked
-          fi
+    needs: [changes, linux-archive]
+    if: needs.changes.outputs.rust == 'true'
+    uses: ./.github/workflows/rust-tests.yml
 
-  linux-e2e-archive:
-    name: Build E2E archive (Linux x64)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: sccache
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
-      - name: Set up Rust and prebuilt ONNX Runtime
-        uses: ./.github/actions/rust-agent-setup
-        with:
-          native-deps: prebuilt-ort
-          cache-key: pr-linux-x64-e2e
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-      - name: Build the agent binary under test
-        run: cargo build --locked -p butler-agent --bin butler-agent
-      - name: Build and archive E2E tests
-        run: cargo nextest archive --locked -p butler-e2e --archive-file "$RUNNER_TEMP/nextest-archive.tar.zst"
-      - name: Prepare the E2E artifact
-        run: |
-          mkdir -p "$RUNNER_TEMP/e2e-artifact"
-          cp "$RUNNER_TEMP/nextest-archive.tar.zst" "$RUNNER_TEMP/e2e-artifact/nextest-archive.tar.zst"
-          cp target/debug/butler-agent "$RUNNER_TEMP/e2e-artifact/butler-agent"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: e2e-linux-x64
-          path: ${{ runner.temp }}/e2e-artifact/*
-          if-no-files-found: error
-          retention-days: 1
+  linux-arm64-archive:
+    needs: changes
+    if: needs.changes.outputs.linux-package == 'true' || needs.changes.outputs.install == 'true' || (github.event_name != 'pull_request' && needs.changes.outputs.rust == 'true')
+    uses: ./.github/workflows/rust-archive.yml
+    with:
+      runner: ubuntu-24.04-arm
+      platform: linux-arm64
+      ort-mode: ${{ github.event_name == 'schedule' && 'static-ort' || 'prebuilt-ort' }}
+      clippy: true
 
-  linux-e2e:
-    name: ${{ matrix.job_name }}
-    needs: linux-e2e-archive
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - job_name: "E2E stub (Linux x64 1/3)"
-            partition: "1/3"
-            filterset: "not test(/^ins_/) and not test(/^perf_/)"
-            idle_disk: true
-          - job_name: "E2E stub (Linux x64 2/3)"
-            partition: "2/3"
-            filterset: "not test(/^ins_/) and not test(/^perf_/)"
-            idle_disk: false
-          - job_name: "E2E stub (Linux x64 3/3)"
-            partition: "3/3"
-            filterset: "not test(/^ins_/) and not test(/^perf_/)"
-            idle_disk: false
-          - job_name: "E2E install (Linux x64 1/2)"
-            partition: "1/2"
-            filterset: "test(/^ins_/)"
-            idle_disk: false
-          - job_name: "E2E install (Linux x64 2/2)"
-            partition: "2/2"
-            filterset: "test(/^ins_/)"
-            idle_disk: false
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.91.0
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-      - uses: actions/download-artifact@v4
-        with:
-          name: e2e-linux-x64
-          path: ${{ runner.temp }}/e2e-artifact
-      - name: Run E2E stub tier
-        uses: ./.github/actions/e2e-stub
-        with:
-          partition: ${{ matrix.partition }}
-          filterset: ${{ matrix.filterset }}
-          archive-file: ${{ runner.temp }}/e2e-artifact/nextest-archive.tar.zst
-          agent-binary: ${{ runner.temp }}/e2e-artifact/butler-agent
-          run-idle-disk: ${{ matrix.idle_disk }}
-      - name: Assert runner home untouched
-        if: always()
-        uses: ./.github/actions/assert-home-untouched
+  linux-arm64-tests:
+    needs: [changes, linux-arm64-archive]
+    if: github.event_name != 'pull_request' && needs.changes.outputs.rust == 'true'
+    uses: ./.github/workflows/rust-tests.yml
+    with:
+      runner: ubuntu-24.04-arm
+      platform: linux-arm64
 
-  linux-e2e-perf:
-    name: E2E perf (Linux x64)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
+  linux-package:
+    permissions:
+      contents: read
+      issues: write
+    needs: [changes, linux-archive, linux-arm64-archive]
+    if: needs.changes.outputs.linux-package == 'true'
+    uses: ./.github/workflows/linux-packages.yml
+    with:
+      shared-agents: true
+
+  macos-archive:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.package == 'true' || needs.changes.outputs.install == 'true'
+    uses: ./.github/workflows/rust-archive.yml
+    with:
+      runner: macos-15
+      platform: darwin-arm64
+      ort-mode: static-ort
+      clippy: true
+
+  macos-tests:
+    needs: [changes, macos-archive]
+    if: needs.changes.outputs.rust == 'true'
+    uses: ./.github/workflows/rust-tests.yml
+    with:
+      runner: macos-15
+      platform: darwin-arm64
+
+  macos-package:
+    needs: [changes, macos-archive]
+    if: needs.changes.outputs.package == 'true'
+    uses: ./.github/workflows/macos-app-package.yml
+    with:
+      agent-artifact: rust-darwin-arm64
+
+  install-pr:
+    needs: [changes, linux-archive, linux-arm64-archive, macos-archive]
+    if: needs.changes.outputs.install == 'true'
+    uses: ./.github/workflows/install-smoke.yml
+    with:
+      shared-agents: true
+
+  ui:
+    needs: changes
+    if: needs.changes.outputs.ui == 'true'
+    uses: ./.github/workflows/bun-unit.yml
+
+  site:
+    needs: changes
+    if: needs.changes.outputs.site == 'true' && github.event_name != 'push'
+    uses: ./.github/workflows/site-check.yml
+
+  ds:
+    needs: changes
+    if: needs.changes.outputs.ds == 'true' && github.event_name != 'push'
+    uses: ./.github/workflows/ds-site.yml
+
+  gate:
+    name: gate
+    if: always()
+    needs: [changes, source, linux-clippy, linux-archive, linux-tests, macos-archive, macos-tests, macos-package, linux-arm64-archive, linux-arm64-tests, linux-package, install-pr, ui, site, ds]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Rust and prebuilt ONNX Runtime
-        uses: ./.github/actions/rust-agent-setup
-        with:
-          native-deps: prebuilt-ort
-          cache-key: pr-linux-x64-perf
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-      - name: Build release agent binary
-        run: cargo build --release --locked -p butler-agent --bin butler-agent
-      - name: Run wall-clock performance tests
-        uses: ./.github/actions/e2e-stub
-        with:
-          enforce-budgets: "true"
-          test-threads: "1"
-          release-profile: "true"
-          exclude-perf: "false"
-          success-output: final
-          agent-binary: ${{ github.workspace }}/packages/butler-agent/rust/target/release/butler-agent
-      - name: Assert runner home untouched
-        if: always()
-        uses: ./.github/actions/assert-home-untouched
-      - name: Report session-view p95
-        if: always()
+      - name: Require every selected check
         env:
-          PERF_LOG: ${{ runner.temp }}/e2e-stub.log
-        shell: bash
-        run: |
-          python3 - "$PERF_LOG" <<'PY'
-          import os
-          import pathlib
-          import re
-          import sys
-
-          log_path = pathlib.Path(sys.argv[1])
-          text = log_path.read_text(errors="replace") if log_path.exists() else ""
-          values = re.findall(r"session-view p95 ([0-9]+(?:\.[0-9]+)?)(ns|µs|μs|ms|s)", text)
-          summary_path = pathlib.Path(os.environ["GITHUB_STEP_SUMMARY"])
-          if not values:
-              summary = "### E2E perf (Linux x64)\n\nSession-view p95: unavailable. Target: 50 ms; hard gate: under 150 ms.\n"
-              with summary_path.open("a") as output:
-                  output.write(summary)
-              print("::error::PERF-01 did not report a session-view p95 measurement")
-              sys.exit(1)
-
-          value, unit = values[-1]
-          p95_ms = float(value) * {"ns": 1e-6, "µs": 1e-3, "μs": 1e-3, "ms": 1, "s": 1e3}[unit]
-          summary = (
-              "### E2E perf (Linux x64)\n\n"
-              f"Session-view p95: **{p95_ms:.3f} ms**. Target: **50 ms**; hard gate: **under 150 ms**.\n"
-          )
-          with summary_path.open("a") as output:
-              output.write(summary)
-          print(summary, end="")
-          if p95_ms > 50:
-              print(f"::warning::PERF-01 session-view p95 {p95_ms:.3f} ms exceeds the 50 ms target")
-          PY
-
-  macos-arm64:
-    name: Rust checks (macOS arm64)
-    needs: source
-    if: github.event_name != 'pull_request'
-    runs-on: macos-15
-    timeout-minutes: 180
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Rust and prebuilt ONNX Runtime
-        uses: ./.github/actions/rust-agent-setup
-        with:
-          components: clippy
-          native-deps: prebuilt-ort
-          cache-key: pr-macos-arm64
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-      - name: Clippy production targets
-        run: cargo clippy --workspace --lib --bins --locked --keep-going -- -D warnings
-      - name: Clippy all targets
-        run: cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
-      - name: Run tests
-        run: cargo nextest run --workspace --locked --no-fail-fast -E 'not test(/^perf_/)'
-      - name: Run doctests when present
-        run: |
-          if grep -rqE '^[[:space:]]*//[/!][[:space:]]*```' crates; then
-            cargo test --workspace --doc --locked
-          fi
-      - name: Build the agent binary under test
-        run: cargo build --locked -p butler-agent --bin butler-agent
-      - name: Run E2E stub tier
-        uses: ./.github/actions/e2e-stub
-        with:
-          partition: 1/1
-          filterset: "not test(/^perf_/)"
-          run-idle-disk: "true"
-      - name: Assert runner home untouched
-        if: always()
-        uses: ./.github/actions/assert-home-untouched
-
-  linux-arm64:
-    name: Rust checks (Linux arm64)
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 180
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: sccache
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
-      - uses: ./.github/actions/rust-agent-setup
-        with:
-          components: clippy
-          native-deps: prebuilt-ort
-          cache-key: full-linux-arm64
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-      - name: Clippy production targets
-        run: cargo clippy --workspace --lib --bins --locked --keep-going -- -D warnings
-      - name: Clippy all targets
-        run: cargo clippy --workspace --all-targets --locked --keep-going -- -D warnings
-      - name: Run tests
-        run: cargo nextest run --workspace --locked --no-fail-fast -E 'not test(/^perf_/)'
-      - name: Assert runner home untouched
-        if: always()
-        uses: ./.github/actions/assert-home-untouched
-
+          RESULTS: ${{ toJSON(needs) }}
+          EVENT: ${{ github.event_name }}
+        working-directory: ${{ github.workspace }}
+        run: python3 .github/scripts/check-gate.py
   windows-check:
     # Windows is not ported: the host and CLI are unix-only and main.rs prints
     # "not yet available". This compile check only reports how far the
@@ -394,18 +324,13 @@ jobs:
                   print("\n".join(f"| {count} | `{name}` |" for name, count in counter.most_common(limit)))
           PY
 
-  install-full:
-    name: Full install smoke
-    if: github.event_name != 'pull_request'
-    uses: ./.github/workflows/install-smoke.yml
-
   nightly-issue:
     name: Report nightly failure
     if: >-
       always() &&
       (github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) &&
       (contains(needs.*.result, 'failure') || needs.windows-check.outputs.compile == 'failure')
-    needs: [source, linux-clippy, linux-tests, linux-e2e-archive, linux-e2e, macos-arm64, linux-arm64, windows-check, install-full]
+    needs: [gate, windows-check]
     runs-on: ubuntu-latest
     concurrency:
       group: ci-failure-report-${{ github.ref }}

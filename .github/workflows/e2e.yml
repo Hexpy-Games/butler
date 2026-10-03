@@ -1,8 +1,7 @@
 name: E2E
 
 # Real-binary end-to-end scenarios (packages/butler-agent/rust/crates/butler-e2e).
-# - Linux x64 stub tiers run inside rust-quality.yml on PR and main; path-filtered
-#   native macOS coverage remains in post-merge-ci.yml.
+# - Linux/macOS stub tiers consume the shared archives inside rust-quality.yml.
 # - e2e-live: nightly and on demand against a real provider; runs only when a
 #   credential secret is configured, otherwise the job reports SKIPPED.
 
@@ -94,7 +93,7 @@ jobs:
 
       - name: Build the agent binary under test
         if: steps.credential.outputs.available == 'true'
-        run: cargo build --locked -p butler-agent --bin butler-agent
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --locked -p butler-agent --bin butler-agent
 
       - name: Run the live tier
         if: steps.credential.outputs.available == 'true'
@@ -102,7 +101,8 @@ jobs:
           BUTLER_E2E_TIER: live
           BUTLER_E2E_SKIP_BUILD: "1"
           BUTLER_E2E_REPORT: ${{ runner.temp }}/e2e-live-report.txt
-        run: cargo test --locked -p butler-e2e --test live -- --ignored --test-threads=1
+        run: |
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --locked -p butler-e2e --test e2e live:: -- --ignored --test-threads=1
 
       - name: Summarize
         if: always() && steps.credential.outputs.available == 'true'

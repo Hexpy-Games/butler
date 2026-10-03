@@ -5,6 +5,7 @@ name: DS site
 # the repository's one GitHub Pages deployment.
 
 on:
+  workflow_call:
   push:
     branches: [main]
     paths:
@@ -12,12 +13,7 @@ on:
       - "tests/smoke/ds-site-*.ts"
       - "LICENSE"
       - ".github/workflows/ds-site.yml"
-  pull_request:
-    paths:
-      - "packages/butler-app/client/ui/**"
-      - "tests/smoke/ds-site-*.ts"
-      - "LICENSE"
-      - ".github/workflows/ds-site.yml"
+
   workflow_dispatch:
 
 permissions:
@@ -56,32 +52,35 @@ jobs:
         run: npm --prefix packages/butler-app/client/ui run build:ds-site
 
       - name: Leak check
-        run: bun run tests/smoke/ds-site-leak-check.ts
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" bun run tests/smoke/ds-site-leak-check.ts
 
       - name: Font assets (slices, url() targets, OFL notices)
-        run: bun run tests/smoke/font-assets-check.ts packages/butler-app/client/ui/dist-ds-site
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" bun run tests/smoke/font-assets-check.ts packages/butler-app/client/ui/dist-ds-site
+
+      - name: Share browser assets with isolated checks
+        run: echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TEMP/playwright" >> "$GITHUB_ENV"
 
       - name: Install Playwright Chromium
         run: bunx playwright install --with-deps chromium
 
       - name: Smoke (overview + deep links, no foreign requests)
         timeout-minutes: 5
-        run: bun run tests/smoke/ds-site-smoke.ts
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" bun run tests/smoke/ds-site-smoke.ts
 
       # Sub-path build (/ds/), the one site.yml deploys at butler.hexpy.games/ds/.
       - name: Build the DS site under /ds/
         run: npm --prefix packages/butler-app/client/ui run build:ds-site:ds
 
       - name: Leak check (/ds/)
-        run: bun run tests/smoke/ds-site-leak-check.ts packages/butler-app/client/ui/dist-ds-site-ds
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" bun run tests/smoke/ds-site-leak-check.ts packages/butler-app/client/ui/dist-ds-site-ds
 
       - name: Font assets (/ds/)
         env:
           DS_SITE_BASE: /ds/
-        run: bun run tests/smoke/font-assets-check.ts packages/butler-app/client/ui/dist-ds-site-ds
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" bun run tests/smoke/font-assets-check.ts packages/butler-app/client/ui/dist-ds-site-ds
 
       - name: Smoke (/ds/)
         timeout-minutes: 5
         env:
           DS_SITE_BASE: /ds/
-        run: bun run tests/smoke/ds-site-smoke.ts
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" bun run tests/smoke/ds-site-smoke.ts

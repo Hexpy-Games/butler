@@ -16,6 +16,9 @@ inputs:
       "protoc" for checks that do not link ORT, "prebuilt-ort" for CI/dev
       builds, or "static-ort" for release builds.
     required: true
+  cache-workspace-crates:
+    description: Retain workspace libraries for archive producers.
+    default: "false"
   cache-key:
     description: The rust-cache shared key; one per job so caches do not evict each other.
     required: true
@@ -120,10 +123,22 @@ runs:
         path: ${{ runner.temp }}/ort-cache/native-deps
         key: ${{ steps.ort-cache.outputs.cache-primary-key }}
 
+    - name: Use mold on Linux
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y mold
+        echo 'RUSTFLAGS=-C link-arg=-fuse-ld=mold' >> "$GITHUB_ENV"
+
     - name: Cache Cargo build
       uses: Swatinem/rust-cache@v2
       with:
         workspaces: packages/butler-agent/rust -> ${{ inputs.cargo-target-dir }}
         shared-key: ${{ inputs.cache-key }}-${{ inputs.native-deps }}
         cache-directories: ${{ runner.temp }}/ort-download-cache
-        cache-on-failure: true
+        cache-workspace-crates: ${{ inputs.cache-workspace-crates }}
+        # Compiler/target/features/flags/lockfile are included by rust-cache.
+        # Never restore workspace outputs from a different source tree.
+        key: ${{ inputs.cache-workspace-crates == 'true' && hashFiles('packages/butler-agent/rust/**', '!packages/butler-agent/rust/**/target/**', '!packages/butler-agent/rust/**/*.md') || '' }}
+        cache-on-failure: false
