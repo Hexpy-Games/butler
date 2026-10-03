@@ -60,6 +60,7 @@ export function normalizeApprovalSummary(value: unknown): ApprovalSummary | unde
   });
   return {
     actionKind, targets, count, examples,
+    ...(value.command_access === "read_only_unisolated" ? { commandAccess: value.command_access } : {}),
     ...(examplesTruncated.some(Boolean) ? { examplesTruncated } : {}),
     ...(typeof risk === "string" && RISKS.includes(risk) ? { risk: risk as ApprovalRisk } : {}),
   };
@@ -144,11 +145,12 @@ function details(
   card: Pick<AuthorityApprovalCard, "scope" | "reason">,
   copy: ApprovalRequestCopy,
 ): string[] {
+  const notice = approval.commandAccess === "read_only_unisolated" ? [copy.readOnlyUnisolated] : [];
   const shown = approval.examples.slice(0, MAX_EXAMPLES).map((example, index) =>
     approval.examplesTruncated?.[index] ? `${example}…` : example);
   if (shown.length) {
     const rest = approval.count - shown.length;
-    return rest > 0 ? [...shown, copy.more(rest)] : shown;
+    return rest > 0 ? [...notice, ...shown, copy.more(rest)] : [...notice, ...shown];
   }
   // Without examples, say what the request acts on: its targets, else the reason.
   const targets = kind === "manage_schedule"

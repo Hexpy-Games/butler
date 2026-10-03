@@ -49,6 +49,7 @@ pub(crate) struct AppServer {
 /// What the process owns and hands every App server it starts.
 pub(crate) struct AppServerOwners {
     pub(crate) queue: Arc<InboundQueue>,
+    pub(crate) writer: Arc<butler_gateway::gateway::TranscriptWriter>,
     pub(crate) receipt: Arc<ServiceReadiness>,
     /// The process's token, shared with its other gateway clients, so a
     /// rotated connection code reaches all of them.
@@ -223,19 +224,8 @@ impl AppServer {
             )),
             branch_summarizer: Arc::new(AppBranchSummarizerAdapter::new(&runtime.models)),
         };
-        let application = Arc::new(
-            AppApplication::open(
-                AppApplicationConfig {
-                    database_path: app_config.db_path.clone(),
-                    butler_data: data_root.to_path_buf(),
-                    project_workspace_root: data_root.join("workspaces/projects"),
-                    folder_selection_secret: app_config.folder_selection_secret.clone(),
-                },
-                dependencies,
-            )
-            .await
-            .map_err(app_error)?,
-        );
+        let application =
+            open_application(app_config, data_root, dependencies, &owners.writer).await?;
         let gateway_config = gateway_config(app_config, data_root, installation, owners.local_auth);
         let server = startup::activate(
             listener,
@@ -301,6 +291,29 @@ impl AppServer {
         .map_err(app_error);
         listener.and(application).and(artifacts)
     }
+}
+
+async fn open_application(
+    config: &AppServiceConfiguration,
+    data_root: &std::path::Path,
+    dependencies: AppApplicationDependencies,
+    writer: &butler_gateway::gateway::TranscriptWriter,
+) -> Result<Arc<AppApplication>, BtccError> {
+    let application = Arc::new(
+        AppApplication::open(
+            AppApplicationConfig {
+                database_path: config.db_path.clone(),
+                butler_data: data_root.to_path_buf(),
+                project_workspace_root: data_root.join("workspaces/projects"),
+                folder_selection_secret: config.folder_selection_secret.clone(),
+            },
+            dependencies,
+        )
+        .await
+        .map_err(app_error)?,
+    );
+    writer.observe_appends(application.transcript_append_listener());
+    Ok(application)
 }
 
 impl Drop for AppServer {

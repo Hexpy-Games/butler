@@ -105,9 +105,10 @@ observed workflow reduction; hosted/self-hosted contention can vary.
 
 The hosted job's serial command (184 s), LAN/pairing (219 s) and supervision
 (127 s) groups exposed another avoidable chain. The next code run puts these
-existing checks on independent disposable runners, alongside queue recovery,
-CLI, migration and durability; installed UI/lifecycle/Task Scheduler checks
-retain their real dependency. The complete 12-harness assertion is now a
+remote/recovery/data checks on independent disposable runners. The command
+matrix consumes the installed release through BUTLER_E2E_INSTALLED_ROOT, so
+it remains with installed UI/lifecycle/Task Scheduler checks and their real
+dependency. The complete 12-harness assertion is now a
 cross-job gate over completion artifacts and every selected job result.
 
 The additional SDK artifact fallback preserves the recipe's required relative
@@ -122,5 +123,14 @@ reached. This WSL measurement is not a hosted-CI result and does not establish
 a cause. Restoring the production profile alone has not proven a memory fix.
 
 ## Next measurement
+
+Main advanced to `1bf694a91` before the next push. Its product changes remain
+unchanged; conflicts were resolved by retaining shared producer inputs and all
+new packaged visual/update checks. New standalone scenarios were added to the
+single E2E binary. The updated compiled inventory is **312 tests, 14 existing
+ignored**; ordinary shards contain 48/49/50/48/49/48 tests, install groups
+1/1/14, perf groups 12/17/19 plus the full idle observation. All six invariants,
+format, touched-crate Clippy, source rules and frozen Bun/full check pass after
+the merge.
 
 The subsequent code push checks the corrected selector, verified embedded versions, original build configurations and artifact cache fallback. Its complete workflow wall times and results will be added to the draft PR. No release tag or post-release dispatch is authorized by this task, so release-after numbers remain estimates, not observations.

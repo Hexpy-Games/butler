@@ -13,6 +13,9 @@ export { bundledAgentVersionLabel, UPDATE_COMPONENTS };
 
 export interface UpdateActionLabels {
   updateApplying: string;
+  updateAfterWork: string;
+  updateDeferred: string;
+  updateRestarting: string;
   updateChecking: string;
   updateComponent: string;
   updateUnavailable: string;
@@ -22,6 +25,7 @@ export interface UpdateActionLabels {
 export interface UpdateComponentRowProps {
   status: ComponentUpdateStatus;
   applying: UpdateComponentId | null;
+  restartStatus?: string;
   labels: UpdateActionLabels;
   onApply: (component: UpdateComponentId) => void;
 }
@@ -29,9 +33,12 @@ export interface UpdateComponentRowProps {
 export function UpdateComponentRow({
   status,
   applying,
+  restartStatus,
   labels,
   onApply,
 }: UpdateComponentRowProps) {
+  const pending = status.component === "app" &&
+    ["deferred", "preparing", "restarting", "choice_required"].includes(restartStatus ?? "");
   const bundledAgentDetail = bundledAgentVersionLabel(status);
   return (
     <Field
@@ -42,6 +49,7 @@ export function UpdateComponentRow({
         <Stack gap="xs">
           <FieldLabel>{appCopy.settings.updateComponents[status.component]}</FieldLabel>
           <Typo.Caption>{versionLabel(status)}</Typo.Caption>
+          {pending ? <Typo.Caption>{restartStatus === "deferred" ? labels.updateDeferred : labels.updateRestarting}</Typo.Caption> : null}
           {bundledAgentDetail ? <Typo.Caption>{bundledAgentDetail}</Typo.Caption> : null}
           {status.stage_status === "rolled_back" && status.rollback_reason ? (
             <Typo.Caption>{status.rollback_reason}</Typo.Caption>
@@ -51,10 +59,10 @@ export function UpdateComponentRow({
           type="button"
           size="sm"
           variant={status.update_available ? "default" : "outline"}
-          disabled={!status.update_available || applying !== null}
+          disabled={!status.update_available || applying !== null || pending}
           onClick={() => onApply(status.component)}
         >
-          {buttonLabel(status, applying, labels)}
+          {pending ? restartStatus === "deferred" ? labels.updateAfterWork : labels.updateApplying : buttonLabel(status, applying, labels)}
         </Button>
       </Stack>
     </Field>

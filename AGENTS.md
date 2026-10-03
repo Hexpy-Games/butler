@@ -29,6 +29,9 @@ Read [plans/README.md](plans/README.md) first. It holds the repo rules: test pol
 
 Newest first. The coordinator adds an entry whenever a mistake repeats. Each entry gives the rule, then what happened.
 
+- **2026-10-03: UI changes must include before/after screenshots of every screen they can affect.** Check shared DS blocks in both themes, desktop/mobile, wallpaper/plain, and pending/completed onboarding against the existing screen before accepting a visual change.
+  - What happened: preview.7 captain commit `83ac46d41` added an opaque hero Card and opaque suggestion fills to the shared `PromptSuggestionList`. The onboarding captures asserted the new opacity but did not compare completed new-chat screens against preview.6; the unrelated screen changed and the mark overlapped the new box.
+
 - **2026-10-01: Search open issues before filing one.** Run `gh issue list --search "<test name or file>"` and comment on a matching issue instead of opening a duplicate.
   - What happened: the same seven Linux Bun failures were filed four times (#352, #371, #388, #394).
 

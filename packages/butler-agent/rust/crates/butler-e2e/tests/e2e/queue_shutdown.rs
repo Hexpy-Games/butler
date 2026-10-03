@@ -62,6 +62,10 @@ async fn active_stream() -> Result<(Scenario, String), HarnessError> {
 async fn q_02_shutdown_interrupts_active_turn_and_resumes_queue() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (mut s, running) = active_stream().await?;
+    let live = s.gw.get("/user-work").await?.data().clone();
+    assert_eq!(live["classification"], "active_work_detected");
+    assert_eq!(live["active_turn_count"], 1);
+    assert_eq!(live["queued_message_count"], 0);
     let queued =
         s.gw.post(
             "/session-queue",
@@ -72,6 +76,9 @@ async fn q_02_shutdown_interrupts_active_turn_and_resumes_queue() -> Result<(), 
         )
         .await?;
     assert_eq!(queued.status, 202, "{}", queued.text);
+    let live = s.gw.get("/user-work").await?.data().clone();
+    assert_eq!(live["active_turn_count"], 1);
+    assert_eq!(live["queued_message_count"], 1);
     assert!(!TERMINAL.contains(&turn_state(&s.gw.turn("general", &running).await?.unwrap())));
     let started = Instant::now();
     // Hold the next process's first inbound poll: FIFO recovery must wait for
@@ -134,6 +141,11 @@ async fn q_02_shutdown_interrupts_active_turn_and_resumes_queue() -> Result<(), 
         "interrupted model work was resumed"
     );
     assert!(!s.agent.logs().contains("app_sqlite_owner_closed"));
+    let idle = s.gw.get("/user-work").await?.data().clone();
+    assert_eq!(idle["classification"], "no_active_work", "{idle}");
+    assert_eq!(idle["active_turn_count"], 0);
+    assert_eq!(idle["queued_message_count"], 0);
+    assert_eq!(idle["delegated_work_present"], false);
     eprintln!("active shutdown and queue drain: {:?}", started.elapsed());
     s.finish().await
 }

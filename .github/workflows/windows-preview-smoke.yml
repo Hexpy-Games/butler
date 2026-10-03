@@ -228,10 +228,17 @@ jobs:
         run: |
           $env:BUTLER_E2E_BIN = Join-Path $env:BUTLER_E2E_INSTALLED_ROOT 'butler-agent.exe'
           ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests installed_preview
+      - name: Native command tool environment, Unicode and Downloads chat
+        if: ${{ !cancelled() }}
+        run: |
+          $env:BUTLER_E2E_BIN = "$env:PREVIEW_ROOT/artifacts/butler-agent.exe"
+          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests windows_commands |
+            Tee-Object "$env:PREVIEW_ROOT/logs/windows-commands.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Require installed verification harnesses
         if: ${{ !cancelled() }}
         run: |
-          $expected = @('windows_startup_xml','installed_preview')
+          $expected = @('windows_startup_xml','installed_preview','windows_commands')
           $actual = @(Get-Content "$env:PREVIEW_ROOT/logs/completed-harnesses.txt")
           if ($actual.Count -ne $expected.Count -or (Compare-Object $expected $actual)) {
             throw "Incomplete verification: completed=$($actual -join ',')"
@@ -280,7 +287,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {shard: commands, tests: windows_commands}
           - {shard: remote, tests: 'gateway_remote,gateway_pairing,cli_remote'}
           - {shard: recovery, tests: 'queue_shutdown,service_supervision,service_diagnostics'}
           - {shard: data, tests: 'cli_surface,migration,durable_configuration'}

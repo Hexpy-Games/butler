@@ -60,13 +60,9 @@ impl GatewayApplication for AppApplication {
         &self,
         request: butler_runtime::operations::UpdateRequest,
     ) -> ApplicationFuture<serde_json::Value> {
-        let updates = self.dependencies.updates.clone();
-        Box::pin(async move {
-            Box::pin(updates.apply(request))
-                .await
-                .map_err(|error| super::updates::update_error(&error))
-        })
+        super::updates::apply(self.dependencies.updates.clone(), request)
     }
+
     fn list_skills(&self) -> ApplicationFuture<SkillSettingsView> {
         let this = self.clone_handle();
         Box::pin(async move {
@@ -138,6 +134,10 @@ impl GatewayApplication for AppApplication {
     fn list_chats(&self) -> ApplicationFuture<Vec<AppChatSummary>> {
         let this = self.clone_handle();
         Box::pin(async move { this.list_chats().await })
+    }
+    fn read_user_work(&self) -> ApplicationFuture<serde_json::Value> {
+        let this = self.clone_handle();
+        Box::pin(async move { this.read_user_work().await })
     }
     fn read_navigation(&self) -> ApplicationFuture<serde_json::Value> {
         let this = self.clone_handle();

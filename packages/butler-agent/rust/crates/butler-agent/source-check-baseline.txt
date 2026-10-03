@@ -9,18 +9,17 @@ src/host/app/runtime_ports/personalization.rs	AppPersonalization::execute_inner	
 src/host/app/runtime_ports/personalization.rs	AppPersonalization::update	97
 src/host/app/runtime_ports/session_workspaces.rs	<AppSessionWorkspaces as AppSessionWorkspaceProvisioner>::provision	90
 src/host/app/runtime_ports/topic_branch.rs	<AppBranchSummarizerAdapter as AppBranchSummarizer>::summarize	89
-src/host/app/server.rs	AppServer::open_with_artifacts	143
+src/host/app/server.rs	AppServer::open_with_artifacts	132
 src/host/cli/oauth_login.rs	run_native_oauth_login_with_data	129
 src/host/embedding/worker.rs	handle	85
 src/host/guided/activity.rs	new_group	99
 src/host/guided/activity/content.rs	content	160
 src/host/guided/activity/snapshot.rs	restore	97
-src/host/guided/command.rs	GuidedCommand::execute_observation	196
+src/host/guided/command.rs	GuidedCommand::execute_observation	168
 src/host/guided/command/artifacts.rs	declared	84
-src/host/guided/command/effect.rs	<CommandEffectAdapter as EffectAdapter>::dispatch	96
 src/host/guided/command/evidence.rs	capability_receipts	85
 src/host/guided/command/output.rs	from_streams	175
-src/host/guided/command/output/assemble.rs	assemble	149
+src/host/guided/command/output/assemble.rs	assemble	139
 src/host/guided/factory.rs	<GuidedTurnFactoryAdapter as GuidedTurnFactory>::bind_pre_model	225
 src/host/guided/file_effects/edit.rs	decode	115
 src/host/guided/file_effects/edit.rs	recover	149
@@ -39,7 +38,7 @@ src/host/guided/tools/discovery.rs	search	82
 src/host/guided/tools/discovery/invoke.rs	run	134
 src/host/guided/tools/discovery/invoke.rs	run_mcp	115
 src/host/guided/tools/dispatch.rs	execute	409
-src/host/guided/tools/effect.rs	execute	120
+src/host/guided/tools/effect.rs	execute	108
 src/host/guided/tools/effect/authority.rs	gate	124
 src/host/guided/tools/effect/ledger_input.rs	prepare	94
 src/host/guided/tools/effect/topic_conversation.rs	TopicConversationEffect::request	97

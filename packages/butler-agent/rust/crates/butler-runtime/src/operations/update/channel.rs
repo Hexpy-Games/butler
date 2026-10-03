@@ -1,20 +1,17 @@
-//! Channel selection at check time; status reads use the existing six-hour cache.
+//! Resolve releases at check time. Only saved status reads use the six-hour cache.
 use super::{UpdateCode, UpdateError, manifest::read_manifest};
 use serde_json::Value;
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
     sync::OnceLock,
-    time::{Duration, Instant, SystemTime},
+    time::SystemTime,
 };
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
-type Cache = HashMap<(String, bool), (Instant, String)>;
 type Preferences = HashMap<PathBuf, (Option<(SystemTime, u64)>, bool)>;
 static PREFERENCES: OnceLock<Mutex<Preferences>> = OnceLock::new();
-static RELEASES: OnceLock<Mutex<Cache>> = OnceLock::new();
-const CACHE_AGE: Duration = Duration::from_secs(6 * 60 * 60);
 const RELEASE_PREFIX: &str = "https://github.com/Hexpy-Games/butler/releases/latest/download/";
 
 pub(super) async fn previews(data: &Path, channel: Option<&str>) -> bool {
@@ -73,23 +70,29 @@ pub(super) async fn source(
     source: &str,
     previews: bool,
 ) -> Result<String, UpdateError> {
-    let Some(asset) = source.strip_prefix(RELEASE_PREFIX).filter(|_| previews) else {
+    let api_override = std::env::var("BUTLER_UPDATE_RELEASES_API")
+        .ok()
+        .filter(|api| !api.trim().is_empty());
+    let Some(asset) = source
+        .strip_prefix(RELEASE_PREFIX)
+        .filter(|_| previews || api_override.is_some())
+    else {
         return Ok(source.to_owned());
     };
-    let mut cache = RELEASES
-        .get_or_init(|| Mutex::new(HashMap::new()))
-        .lock()
-        .await;
-    let key = (asset.to_owned(), previews);
-    if let Some((_, url)) = cache.get(&key).filter(|(at, _)| at.elapsed() < CACHE_AGE) {
-        return Ok(url.clone());
+    let api = api_override
+        .unwrap_or_else(|| "https://api.github.com/repos/Hexpy-Games/butler/releases".into());
+    if !previews {
+        let body = read_manifest(client, shutdown, &format!("{api}/latest")).await?;
+        let release: Value = serde_json::from_slice(&body)
+            .map_err(|e| UpdateError::caused(UpdateCode::UpdateManifestInvalid, e))?;
+        return download_url(&release, asset)
+            .map(str::to_owned)
+            .ok_or(UpdateCode::UpdateManifestUnavailable.into());
     }
     let mut best: Option<(semver::Version, String)> = None;
     let mut page = 1;
     loop {
-        let url = format!(
-            "https://api.github.com/repos/Hexpy-Games/butler/releases?per_page=20&page={page}"
-        );
+        let url = format!("{api}?per_page=20&page={page}");
         let body = read_manifest(client, shutdown, &url).await?;
         let releases: Vec<Value> = serde_json::from_slice(&body)
             .map_err(|e| UpdateError::caused(UpdateCode::UpdateManifestInvalid, e))?;
@@ -103,10 +106,7 @@ pub(super) async fn source(
             else {
                 continue;
             };
-            let download = release["assets"]
-                .as_array()
-                .and_then(|assets| assets.iter().find(|v| v["name"].as_str() == Some(asset)))
-                .and_then(|v| v["browser_download_url"].as_str());
+            let download = download_url(release, asset);
             if let Some(download) = download
                 && best
                     .as_ref()
@@ -121,6 +121,13 @@ pub(super) async fn source(
         page += 1;
     }
     let (_, url) = best.ok_or(UpdateCode::UpdateManifestUnavailable)?;
-    cache.insert(key, (Instant::now(), url.clone()));
     Ok(url)
+}
+
+fn download_url<'a>(release: &'a Value, asset: &str) -> Option<&'a str> {
+    release["assets"]
+        .as_array()?
+        .iter()
+        .find(|value| value["name"].as_str() == Some(asset))?["browser_download_url"]
+        .as_str()
 }

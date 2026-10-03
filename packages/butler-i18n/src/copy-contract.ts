@@ -122,6 +122,7 @@ export interface ApprovalRequestCopy {
   editFiles: (count: number, workspace: string | null) => string;
   editFilesOutside: (count: number) => string;
   runCommandOutside: string;
+  readOnlyUnisolated: string;
   networkCommandOutside: string;
   runCommand: (workspace: string | null) => string;
   networkCommand: (workspace: string | null) => string;
@@ -1436,6 +1437,12 @@ export interface AppCopy {
       upToDate: string;
       updateChecking: string;
       updateUnavailable: string;
+      updateChoice: string;
+      updateCheckpoint: string;
+      updateAfterWork: string;
+      updateNow: string;
+      updateDeferred: string;
+      updateRestarting: string;
       updateApplying: string;
     };
     placeholders: {

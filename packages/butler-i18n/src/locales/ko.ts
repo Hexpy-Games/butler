@@ -448,6 +448,7 @@ export const koKrCopy: AppCopy = {
     approvalRequest: {
       editFiles: (count, workspace) => `${workspaceName(workspace)}의 ${count > 0 ? `파일 ${count}개를` : "파일을"} 수정할까요?`,
       editFilesOutside: count => `작업 폴더 밖을 포함한 ${count > 0 ? `파일 ${count}개를` : "파일을"} 수정할까요?`,
+      readOnlyUnisolated: "읽기 전용 요청 · 격리 없음",
       runCommandOutside: "작업 폴더 밖에서 명령을 실행할까요?",
       networkCommandOutside: "작업 폴더 밖에서 인터넷을 쓰는 명령을 실행할까요?",
       runCommand: workspace => `${workspaceName(workspace)}에서 명령을 실행할까요?`,
@@ -1672,6 +1673,12 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       upToDate: "최신",
       updateChecking: "확인 중",
       updateUnavailable: "최신 정보를 확인할 수 없음",
+      updateChoice: "업데이트를 위해 재시작합니다.",
+      updateCheckpoint: "실행 중인 작업은 저장되며 재시작 후 재시도할 수 있습니다. 대기 입력은 이어서 처리합니다.",
+      updateAfterWork: "작업이 끝나면 업데이트",
+      updateNow: "지금 업데이트",
+      updateDeferred: "작업이 끝나면 자동으로 업데이트합니다.",
+      updateRestarting: "업데이트를 적용하고 재시작합니다.",
       updateApplying: "적용 중",
     },
     placeholders: {

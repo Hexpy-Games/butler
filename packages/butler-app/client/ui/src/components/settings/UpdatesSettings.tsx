@@ -7,6 +7,7 @@ import type {
   UpdateComponentId,
   UpdateStatusView,
 } from "@/app/types.ts";
+import { useAppUpdateState } from "@/hooks/useAppUpdateState.ts";
 import { Button, RefreshCcw } from "@/butler-ds";
 import {
   emptyComponentStatus,
@@ -25,6 +26,7 @@ export function resetUpdatesSettingsCache(): void {
 
 export function UpdatesSettings() {
   const copy = appCopy.settings;
+  const restartState = useAppUpdateState();
   const [view, setView] = useState<UpdateStatusView | null>(lastView);
   const [loading, setLoading] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -65,7 +67,7 @@ export function UpdatesSettings() {
       });
       setView((previous) => mergeUpdateResult(previous, result));
     } catch (error) {
-      notifyError(error, copy.errors.applyUpdate, { id: "settings-updates-apply" });
+      notifyError(error, copy.errors.applyUpdate, { id: "app-update" });
     } finally {
       setApplying(null);
     }
@@ -114,6 +116,7 @@ export function UpdatesSettings() {
             key={status.component}
             status={status}
             applying={applying}
+            restartStatus={restartState.status}
             labels={copy.actions}
             onApply={(component) => void apply(component)}
           />

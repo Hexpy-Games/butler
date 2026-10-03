@@ -1787,6 +1787,7 @@ export type ApprovalRisk = "low" | "medium" | "high";
  * generic sentence instead of dropping the request.
  */
 export interface ApprovalSummary {
+  commandAccess?: "read_only_unisolated";
   actionKind: string;
   /** The folder first where there is one, then files, a connector or a named target. */
   targets: ApprovalTarget[];

@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { drainAppForegroundActiveWork } from "../../client/electron/app-foreground-drain.mjs";
-import { quitAndInstallAppUpdate } from "../../client/electron/app-foreground-update.mjs";
+import { createAppUpdateCoordinator } from "../../client/electron/app-foreground-update.mjs";
 import {
   classifyAppForegroundActiveWork,
   confirmAppForegroundQuit,
@@ -24,7 +24,7 @@ const snapshot = classifyAppForegroundActiveWork({
       status: "running",
     }],
   },
-  queues: [{ items: [{ id: "queued-follow-up" }] }],
+  queues: [{ items: [{ id: "queued-follow-up", state: "queued" }] }],
 });
 
 const cancelPreserved = !(await confirmAppForegroundQuit({
@@ -51,36 +51,20 @@ const drain = await drainAppForegroundActiveWork({
   }),
   sleepMs: async () => undefined,
 });
-const cancelledUpdateCalls: string[] = [];
-const cancelledUpdate = await quitAndInstallAppUpdate({
-  readActiveWork: async () => snapshot,
-  confirmQuit: async () => false,
-  stopForUpdate: async () => {
-    cancelledUpdateCalls.push("stop");
-    return { update_ready: true };
-  },
-  quitAndInstall: () => {
-    cancelledUpdateCalls.push("install");
-  },
-});
 const updateCalls: string[] = [];
-const acceptedUpdate = await quitAndInstallAppUpdate({
-  readActiveWork: async () => {
-    updateCalls.push("read");
-    return snapshot;
-  },
-  confirmQuit: async () => {
-    updateCalls.push("confirm");
-    return true;
-  },
-  stopForUpdate: async () => {
-    updateCalls.push("drain-stop");
-    return { update_ready: true };
-  },
-  quitAndInstall: () => {
-    updateCalls.push("quit-install");
+const updateCoordinator = createAppUpdateCoordinator({
+  readActiveWork: async () => snapshot,
+  watchWork: () => () => {},
+  stopForUpdate: async () => { updateCalls.push("checkpoint"); return { update_ready: true }; },
+  onState: (state) => {
+    if (state.status === "choice_required") {
+      updateCoordinator.choose({ request_id: state.request_id, action: "now" });
+    }
   },
 });
+const acceptedUpdate = await updateCoordinator.request(async () => ({
+  activate: () => { updateCalls.push("activate"); }, cancel: () => {},
+}));
 const standardUser = isMediumIntegrityProcess();
 const result = {
   ok:
@@ -92,10 +76,8 @@ const result = {
     cancelledWorkers.join(",") === "worker-active" &&
     drain.status === "settled" &&
     drain.settled === true &&
-    cancelledUpdate.status === "cancelled" &&
-    cancelledUpdateCalls.length === 0 &&
     acceptedUpdate.status === "update_started" &&
-    updateCalls.join(",") === "read,confirm,drain-stop,quit-install",
+    updateCalls.join(",") === "checkpoint,activate",
   platform: `${process.platform}-${process.arch}`,
   standardUser,
   cancelPreserved,
@@ -103,9 +85,8 @@ const result = {
   exactTurnCancellation: cancelledTurns.length === 1,
   exactWorkerCancellation: cancelledWorkers.length === 1,
   boundedDrain: drain.settled === true,
-  cancelledUpdatePreserved: cancelledUpdateCalls.length === 0,
   updaterWaitedForDrain:
-    updateCalls.join(",") === "read,confirm,drain-stop,quit-install",
+    updateCalls.join(",") === "checkpoint,activate",
   rawTextIncluded: false,
 };
 process.stdout.write(`${JSON.stringify(result)}\n`);

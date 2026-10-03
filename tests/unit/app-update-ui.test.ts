@@ -7,6 +7,7 @@ import {
 } from "../../packages/butler-app/client/ui/src/components/settings/updateComponentDisplay.ts";
 import type { ComponentUpdateStatus } from "../../packages/butler-app/client/ui/src/app/types.ts";
 
+// test-category: pure-logic
 test("App update UI exposes one public App action with bundled Agent detail", () => {
   expect(UPDATE_COMPONENTS).toEqual(["app"]);
 
@@ -28,6 +29,7 @@ test("App update UI exposes one public App action with bundled Agent detail", ()
   expect(bundledAgentVersionLabel(serviceStatus)).toBe(null);
 });
 
+// test-category: pure-logic
 test("App bootstrap checks only the public App update path", () => {
   const source = readFileSync(
     join(
@@ -44,6 +46,7 @@ test("App bootstrap checks only the public App update path", () => {
   expect(updateCheck).not.toContain("JSON.stringify({})");
 });
 
+// test-category: pure-logic
 test("Settings update panel surfaces update load, check, and apply failures", () => {
   const source = readFileSync(
     join(
@@ -59,6 +62,7 @@ test("Settings update panel surfaces update load, check, and apply failures", ()
   expect(source).toContain("copy.errors.applyUpdate");
 });
 
+// test-category: pure-logic
 test("Electron App update apply opens a staged App artifact", () => {
   const preload = readFileSync(
     join(
@@ -81,5 +85,9 @@ test("Electron App update apply opens a staged App artifact", () => {
   expect(main).toContain('ipcMain.handle("butler:open-update-artifact"');
   expect(main).toContain("prepareAppPackageUpdate({");
   expect(main).toContain('resolve(butlerDataRoot, "updates", "artifacts")');
-  expect(main).toContain("if (!update.update_started) helper.cancel()");
+  expect(main).toContain("appUpdateCoordinator.request(async () =>");
+  const coordinator = readFileSync(join(import.meta.dir,
+    "../../packages/butler-app/client/electron/app-foreground-update.mjs"), "utf8");
+  expect(coordinator).toContain("helper?.cancel()");
+  expect(coordinator).toContain('publish("failed")');
 });

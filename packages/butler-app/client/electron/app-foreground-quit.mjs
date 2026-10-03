@@ -8,15 +8,8 @@ const terminalTurnStates = new Set([
   "failed",
   "cancelled",
   "interrupted",
+  "runtime_fault",
 ]);
-const terminalWorkerStates = new Set([
-  "completed",
-  "failed",
-  "cancelled",
-  "blocked",
-  "recoverable",
-]);
-
 export function classifyAppForegroundActiveWork({
   navigation,
   workerActivity,
@@ -43,7 +36,10 @@ export function classifyAppForegroundActiveWork({
   for (const worker of workers) {
     if (worker?.terminal === true) continue;
     const state = safeString(worker?.status ?? worker?.state);
-    if (!state || !terminalWorkerStates.has(state)) {
+    if (worker?.activity_kind && worker.activity_kind !== "worker") continue;
+    const phase = safeString(worker?.phase);
+    if (["running", "active", "waiting"].includes(state) ||
+        ["executing", "orienting"].includes(phase)) {
       reasons.push("active_worker");
       const workerId = safeId(worker?.worker_id ?? worker?.id);
       if (workerId) workerIds.push(workerId);
@@ -51,7 +47,8 @@ export function classifyAppForegroundActiveWork({
   }
   for (const queue of queues) {
     const items = queue?.items ?? queue?.messages ?? queue?.queued_messages;
-    if (Array.isArray(items) && items.length > 0) reasons.push("queued_work");
+    if (Array.isArray(items) && items.some((item) =>
+      ["queued", "dispatching"].includes(item?.state))) reasons.push("queued_work");
   }
   return activeWorkResult(
     reasons.length > 0 ? "active_work_detected" : "no_active_work",
@@ -66,7 +63,7 @@ export async function confirmAppForegroundQuit({
   showMessageBox,
   language = "en",
 }) {
-  if (snapshot?.classification === "no_active_work") return true;
+  if (snapshot?.classification !== "active_work_detected") return true;
   const copy = getDesktopCopy(language);
   const result = await showMessageBox({
     type: "warning",
@@ -74,9 +71,7 @@ export async function confirmAppForegroundQuit({
     cancelId: 0,
     defaultId: 0,
     message: copy.quit,
-    detail: snapshot?.classification === "active_work_unknown"
-      ? copy.unknown
-      : copy.stopping,
+    detail: copy.stopping,
   });
   return result?.response === 1;
 }

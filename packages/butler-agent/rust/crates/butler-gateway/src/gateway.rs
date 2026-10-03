@@ -118,7 +118,7 @@ pub use server::{GatewayConfig, GatewayServer, serve_gateway};
 mod error;
 pub use error::GatewayApplicationError;
 pub use session_references::resolve_session_references;
-pub use transcript::{TranscriptCode, TranscriptWriter};
+pub use transcript::{TranscriptAppendListener, TranscriptCode, TranscriptWriter};
 pub use wallpapers::{
     AppWallpaperAsset, AppWallpaperChange, AppWallpaperFile, AppWallpaperModuleShader,
     AppWallpaperModuleStatusReport, AppWallpaperRejection, AppWallpaperScope,
@@ -258,6 +258,9 @@ pub trait GatewayApplication:
     }
     fn list_chats(&self) -> ApplicationFuture<Vec<AppChatSummary>>;
     fn read_navigation(&self) -> ApplicationFuture<serde_json::Value>;
+    fn read_user_work(&self) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn search_command_palette(&self, query: String) -> ApplicationFuture<serde_json::Value>;
     fn list_archives(
         &self,

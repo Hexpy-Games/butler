@@ -1,33 +1,15 @@
-export type AppForegroundUpdateStopPlan = {
-  allowed: boolean;
-  requiresDrain: boolean;
-  restoreState: string | null;
-  reason: string | null;
+export interface AppUpdateState {
+  status: "idle" | "choice_required" | "deferred" | "preparing" | "restarting" | "failed";
+  request_id: string | null;
+}
+export function createAppUpdateCoordinator(input: {
+  readActiveWork: () => Promise<{ classification: string }>;
+  watchWork: (onChange: () => void) => () => void;
+  stopForUpdate: () => Promise<{ update_ready: boolean }>;
+  onState: (state: AppUpdateState) => void;
+}): {
+  state: () => AppUpdateState;
+  request: (prepare: () => Promise<{ activate: () => void | Promise<void>; cancel: () => void }>) => Promise<{ status: string; update_started: boolean }>;
+  choose: (input: { request_id: string | null; action: string }) => { ok: boolean };
+  dispose: () => void;
 };
-
-export function planAppForegroundUpdateStop(input?: {
-  usesAppForegroundLifecycle?: boolean;
-  foregroundState?: string | null;
-  activeWorkSnapshot?: { classification?: string } | null;
-  restoreState?: string | null;
-}): AppForegroundUpdateStopPlan;
-
-export type AppForegroundUpdateStopResult =
-  | {
-      update_ready: true;
-      drain?: Record<string, unknown> | null;
-    }
-  | {
-      update_ready: false;
-      drain?: Record<string, unknown> | null;
-      raw_text_included?: false;
-    };
-
-export function quitAndInstallAppUpdate<TSnapshot>(input: {
-  readActiveWork: () => Promise<TSnapshot>;
-  confirmQuit: (snapshot: TSnapshot) => Promise<boolean>;
-  stopForUpdate: (
-    snapshot: TSnapshot,
-  ) => Promise<AppForegroundUpdateStopResult | void>;
-  quitAndInstall: () => void;
-}): Promise<Record<string, unknown>>;

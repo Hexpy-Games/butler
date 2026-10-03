@@ -4,6 +4,11 @@ Measured on 2026-10-03 before changing the workflows. Round 3 (`eb50ecb1d`)
 was merged into current main (`124e4dadf`), preserving newer E2Es and native
 verification. No product implementation was changed.
 
+Before the corrected measurement push, main advanced to `1bf694a91` (preview.8).
+It was merged with all new E2Es, packaged UI/visual checks and their path
+selectors preserved. The historical tables remain the observations collected
+before this task; this newer input is identified separately in the run report.
+
 ## Method and baseline
 
 The last five completed PR runs of each workflow were collected with
@@ -88,9 +93,9 @@ Runner contention can dominate Windows even with warm compilation.
   verification; publication still waits for verification. Existing Windows
   native jobs share a Cargo namespace, retaining profile/CRT/LTO fingerprints,
   existing persistent sccache/Bun caches and owner-registration sentinels.
-- Windows hosted command, remote, recovery and data harnesses run on separate
+- Windows hosted remote, recovery and data harnesses run on separate
   disposable runners. Installed release/UI/lifecycle/Task Scheduler checks
-  keep their real install dependency. Completion artifacts prove all 12
+  and the command matrix keep their real install dependency. Completion artifacts prove all 12
   original hosted harnesses ran exactly once, and the gate rejects any failed,
   cancelled or skipped required producer/verification job.
 - Release reuse verifies the actual checkout SHA, version, platform, static ORT,

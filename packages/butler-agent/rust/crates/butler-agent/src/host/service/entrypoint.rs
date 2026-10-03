@@ -286,7 +286,7 @@ async fn serve(
         progress,
         queue,
         dispatcher,
-    } = admission::prepare(&runtime, config, writer, instance, stop).await?;
+    } = admission::prepare(&runtime, config, writer.clone(), instance, stop).await?;
 
     let parent_client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
@@ -303,6 +303,7 @@ async fn serve(
         runtime.clone(),
         config,
         queue.clone(),
+        writer,
         readiness.clone(),
         app_endpoint.clone(),
         instance.nonce().to_owned(),
