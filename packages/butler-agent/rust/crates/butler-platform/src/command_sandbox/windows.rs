@@ -121,3 +121,26 @@ fn explicit_script(command: &str) -> Option<&str> {
         .strip_prefix('"')?
         .strip_suffix('"')
 }
+
+/// Both reg.exe key paths and PowerShell registry-provider paths.
+pub(super) fn normalize_path_token(path: &str) -> String {
+    path.replace('\\', "/")
+}
+
+pub(super) fn is_registry_path(path: &str) -> bool {
+    let root = path.split(['/', '\\', ':']).next().unwrap_or_default();
+    [
+        "HKCU",
+        "HKLM",
+        "HKCR",
+        "HKU",
+        "HKCC",
+        "HKEY_CURRENT_USER",
+        "HKEY_LOCAL_MACHINE",
+        "HKEY_CLASSES_ROOT",
+        "HKEY_USERS",
+        "HKEY_CURRENT_CONFIG",
+    ]
+    .iter()
+    .any(|key| root.eq_ignore_ascii_case(key))
+}

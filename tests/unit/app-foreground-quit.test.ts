@@ -6,6 +6,7 @@ import {
 } from "../../packages/butler-app/client/electron/app-foreground-quit.mjs";
 
 describe("App foreground quit", () => {
+  // test-category: pure-logic
   test("classifies active turns, workers, and queued work", () => {
     expect(classifyAppForegroundActiveWork({
       navigation: {
@@ -17,7 +18,7 @@ describe("App foreground quit", () => {
       workerActivity: {
         workers: [{ status: "running", worker_id: "worker-active" }],
       },
-      queues: [{ items: [{ id: "queued" }] }],
+      queues: [{ items: [{ id: "queued", state: "queued" }] }],
     })).toEqual({
       classification: "active_work_detected",
       reasons: ["active_turn", "active_worker", "queued_work"],
@@ -27,6 +28,7 @@ describe("App foreground quit", () => {
     });
   });
 
+  // test-category: pure-logic
   test("fails safe when active work cannot be read", () => {
     expect(classifyAppForegroundActiveWork({ readFailed: true }).classification)
       .toBe("active_work_unknown");
@@ -43,8 +45,18 @@ describe("App foreground quit", () => {
     })).toBeTrue();
     expect(prompts).toBe(0);
     expect(classifyAppForegroundActiveWork({
+      navigation: { chats: [{ active_turn_state: "runtime_fault" }] },
+      workerActivity: { workers: [{ activity_kind: "embedding", status: "running" }, { terminal: true }] },
+      queues: [{ queued_messages: [{ id: "failed-retained", state: "failed" }] }],
+    }).classification).toBe("no_active_work");
+    await confirmAppForegroundQuit({
+      snapshot: classifyAppForegroundActiveWork({ readFailed: true }),
+      showMessageBox: async () => { prompts += 1; return { response: 0 }; },
+    });
+    expect(prompts).toBe(0);
+    expect(classifyAppForegroundActiveWork({
       navigation: { chats: [{ active_turn_state: "delivered" }] },
-      queues: [{ items: [{ id: "queued-follow-up" }] }],
+      queues: [{ items: [{ id: "queued-follow-up", state: "queued" }] }],
     })).toMatchObject({ classification: "active_work_detected", reasons: ["queued_work"] });
   });
 
@@ -52,7 +64,7 @@ describe("App foreground quit", () => {
   test("uses destructive intent and honors Cancel", async () => {
     let options: Record<string, unknown> | null = null;
     const confirmed = await confirmAppForegroundQuit({
-      snapshot: classifyAppForegroundActiveWork({ readFailed: true }),
+      snapshot: classifyAppForegroundActiveWork({ navigation: { chats: [{ active_turn_state: "thinking" }] } }),
       showMessageBox: async (input: Record<string, unknown>) => {
         options = input;
         return { response: 0 };
@@ -68,7 +80,7 @@ describe("App foreground quit", () => {
     });
     await confirmAppForegroundQuit({
       language: "ko",
-      snapshot: classifyAppForegroundActiveWork({ readFailed: true }),
+      snapshot: classifyAppForegroundActiveWork({ navigation: { chats: [{ active_turn_state: "thinking" }] } }),
       showMessageBox: async (input) => { options = input; return { response: 1 }; },
     });
     expect(options).toMatchObject({

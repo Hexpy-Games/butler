@@ -25,6 +25,9 @@ on:
       - "packages/butler-app/scripts/release/**"
       - "deploy/**"
       - "tests/smoke/packaged-app-update.ts"
+      - "tests/smoke/app-update-choice-smoke.ts"
+      - "tests/smoke/app-update-work-stream.ts"
+      - "tests/support/update-work-fixture.ts"
       - "tests/support/electron-page-cdp.ts"
       - "packages/butler-app/client/ui/src/components/settings/Update*"
       - "packages/butler-agent/rust/crates/butler-platform/src/app_update.rs"
@@ -108,6 +111,28 @@ jobs:
           cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
           echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$PWD/target/release/butler-agent" >> "$GITHUB_ENV"
 
+      - name: Compare new-chat surfaces with preview.6 and prove onboarding
+        if: ${{ !inputs.published-candidate }}
+        run: |
+          set -euo pipefail
+          export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/butler-smoke-browsers"
+          isolate=packages/butler-agent/rust/crates/butler-e2e/scripts/isolated-run.sh
+          "$isolate" bunx playwright install chromium
+          "$isolate" bun tests/smoke/app-newchat-visual-smoke.ts
+          BUTLER_SMOKE_SCREENSHOTS="$PWD/.tmp/newchat-regression/onboarding" "$isolate" bun tests/smoke/app-onboarding-visual-smoke.ts
+          "$isolate" bun tests/smoke/app-update-choice-smoke.ts
+          "$isolate" bun tests/smoke/app-update-work-stream.ts
+
+      - name: Preserve new-chat visual evidence
+        if: ${{ always() && !inputs.published-candidate }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: newchat-preview6-comparison
+          path: |
+            .tmp/newchat-regression/
+            .tmp/update-choice-smoke/
+          if-no-files-found: error
+
       - name: Package and smoke the native App release
         if: ${{ !inputs.published-candidate }}
         run: |
@@ -127,8 +152,17 @@ jobs:
           set -euo pipefail
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
           export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
-          trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
-          bun run app:update:smoke
+          export BUTLER_UPDATE_SMOKE_BUNDLE_CACHE=$(mktemp -d "$RUNNER_TEMP/butler-update-bundles.XXXXXX")
+          trap 'chmod -R u+w "$BUTLER_UPDATE_SMOKE_BUNDLE_CACHE"; rm -rf "$HOME" "$BUTLER_DATA" "$BUTLER_UPDATE_SMOKE_BUNDLE_CACHE"' EXIT
+          for scenario in idle now defer background-quit; do
+            BUTLER_UPDATE_SMOKE_WORK="$scenario" bun run app:update:smoke
+          done
+      - name: Existing App layout smoke
+        if: ${{ !inputs.published-candidate }}
+        run: |
+          set -euo pipefail
+          export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/butler-smoke-browsers"
+          packages/butler-agent/rust/crates/butler-e2e/scripts/isolated-run.sh bun tests/smoke/app-layout-smoke.ts
       - name: Update the published baseline through Settings to the published candidate
         if: inputs.baseline-tag
         env:

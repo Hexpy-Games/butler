@@ -36,6 +36,16 @@ impl AppSubsessions {
 }
 
 impl AppSubsessionPort for AppSubsessions {
+    fn user_work_present(&self) -> ApplicationFuture<bool> {
+        let repository = self.service.repository();
+        Box::pin(async move {
+            repository
+                .user_work_present()
+                .await
+                .map_err(GatewayApplicationError::internal_from)
+        })
+    }
+
     fn activity_cursor_parents(
         &self,
         worker: String,

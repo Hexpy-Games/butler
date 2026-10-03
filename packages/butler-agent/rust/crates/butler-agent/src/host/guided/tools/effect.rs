@@ -5,6 +5,7 @@ mod automation;
 mod ledger;
 mod ledger_input;
 mod mcp;
+mod observation;
 mod restart;
 mod session_worktree;
 mod topic_conversation;
@@ -43,20 +44,8 @@ pub(super) async fn execute(
         allowed_tools_and_effects: owner.binding.allowed_tools_and_effects.as_deref(),
         installation_root: owner.binding.installation_root.as_deref(),
     };
-    if call.name == ToolName::RunCommand
-        && !matches!(
-            call.arguments.get("state_effect").and_then(Value::as_str),
-            Some("mutation" | "remote_observation")
-        )
-    {
-        return match owner
-            .command
-            .execute_observation(&call.arguments, scope)
-            .await
-        {
-            Ok(result) => Ok(result),
-            Err(error) => ordinary(error.code(), error.message(), None),
-        };
+    if let Some(result) = observation::execute(owner, call, &scope).await? {
+        return Ok(result);
     }
     if owner.binding.access_mode == AccessMode::ReadOnly {
         return ordinary(
@@ -92,7 +81,7 @@ pub(super) async fn execute(
     else {
         return ordinary(
             "effect_work_required",
-            "Create concise Work, record its Plan Review, then retry this persistent effect.",
+            "Create concise Work, record a Plan with this command action and an accepting Plan Review, then retry the same command. Runtime requests Allow automatically; do not ask the user to fix runtime policy.",
             None,
         );
     };
@@ -198,6 +187,10 @@ fn ordinary(
     status: Option<&str>,
 ) -> Result<JsonDocument, ToolExecutionError> {
     let mut value = json!({"ok":false,"error":{"code":code,"message":message}});
+    if code == "effect_work_required" || super::feedback::solvable(code) {
+        value["error"]["recoverable"] = true.into();
+        value["error"]["next_action"] = "Correct the Work/Plan using the admitted tools, then retry the same command. Runtime handles approval; do not hand runtime policy repair to the user.".into();
+    }
     if let Some(status) = status {
         value["error"]["effect_status"] = status.into();
     }

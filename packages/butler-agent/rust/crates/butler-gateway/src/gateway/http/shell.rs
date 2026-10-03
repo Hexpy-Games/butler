@@ -12,6 +12,7 @@ pub(super) async fn route(
 ) -> Result<Response, HttpError> {
     let data = match uri.path() {
         "/app-info" => state.application.read_app_info().await?,
+        "/user-work" => state.application.read_user_work().await?,
         "/navigation" => state.application.read_navigation().await?,
         "/command-palette" => {
             let mut params = query(uri);

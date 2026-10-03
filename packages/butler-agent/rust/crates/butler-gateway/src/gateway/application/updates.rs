@@ -1,4 +1,18 @@
 use super::GatewayApplicationError;
+use crate::gateway::ApplicationFuture;
+use butler_runtime::operations::{AppUpdateService, UpdateRequest};
+use std::sync::Arc;
+
+pub(super) fn apply(
+    updates: Arc<AppUpdateService>,
+    request: UpdateRequest,
+) -> ApplicationFuture<serde_json::Value> {
+    Box::pin(async move {
+        Box::pin(updates.apply(request))
+            .await
+            .map_err(|error| update_error(&error))
+    })
+}
 
 pub(super) fn update_error(
     error: &butler_runtime::operations::UpdateError,

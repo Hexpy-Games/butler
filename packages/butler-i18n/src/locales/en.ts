@@ -449,6 +449,7 @@ export const enUsCopy: AppCopy = {
       editFiles: (count, workspace) =>
         `Edit ${count > 0 ? `${count} ${count === 1 ? "file" : "files"}` : "files"} ${inWorkspace(workspace)}?`,
       editFilesOutside: count => `Edit ${count > 0 ? `${count} ${count === 1 ? "file" : "files"}` : "files"}, including outside the project folder?`,
+      readOnlyUnisolated: "Read-only request · No isolation",
       runCommandOutside: "Run a command outside the project folder?",
       networkCommandOutside: "Run a command that uses the internet outside the project folder?",
       runCommand: workspace => `Run a command ${inWorkspace(workspace)}?`,
@@ -1664,6 +1665,12 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       upToDate: "Up to date",
       updateChecking: "Checking",
       updateUnavailable: "Can't check",
+      updateChoice: "Restart to update Butler.",
+      updateCheckpoint: "Running work is saved for retry after restart. Queued messages will continue.",
+      updateAfterWork: "Update after work finishes",
+      updateNow: "Update now",
+      updateDeferred: "Butler will update automatically when work finishes.",
+      updateRestarting: "Applying update and restarting Butler.",
       updateApplying: "Applying",
     },
     placeholders: {

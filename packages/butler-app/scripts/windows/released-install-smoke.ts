@@ -2,15 +2,16 @@
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
 import { FIRST_RUN_CONSENT_VERSION } from "../../client/ui/src/app/onboarding.ts";
-import { alive, assertShortcuts, bridge, ownedProcesses, powershell, readJson, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
+import { alive, assertShortcuts, bridge, ownedProcesses, powershell, readJson, removeProfile, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
 import { smokeProviderReply, type SmokeProviderCalls } from "./smoke-provider.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
+import { proveReleasedDownloads, releasedDownloadsReply, type DownloadsProof } from "./released-downloads-smoke.ts";
 
 if (process.platform !== "win32" || process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_ENVIRONMENT !== "github-hosted") {
   throw new Error("Released installer smoke requires a disposable GitHub-hosted Windows runner");
@@ -21,19 +22,22 @@ assert.ok(version && /^0\.1\.0-preview\.\d+$/u.test(version), "A preview release
 const installer = join(release, `ButlerSetup-${version}-x64.exe`);
 const expected = readFileSync(installer + ".sha256", "utf8").trim().split(/\s+/u)[0];
 assert.equal(createHash("sha256").update(readFileSync(installer)).digest("hex"), expected);
-const root = mkdtempSync(join(tmpdir(), "butler-released-e2e-"));
+const root = realpathSync.native(mkdtempSync(join(tmpdir(), "butler-released-e2e-")));
 const data = join(root, "data");
 const owned = new Set<number>();
 const debugPort = await freePort();
 const agentPort = await freePort();
 let page: ElectronPage | null = null;
 const calls: SmokeProviderCalls = { chat: 0, memory: 0, memorySpeakers: new Set<string>() };
+const downloads: DownloadsProof = { requests: 0 };
 let uninstalled = false;
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async request => {
   assert.equal(new URL(request.url).pathname, "/v1/responses");
-  return smokeProviderReply(await request.json(), "Reply with Windows release ready.", "Windows release ready.", calls);
+  const body = await request.json();
+  return releasedDownloadsReply(body, downloads, calls) ??
+    smokeProviderReply(body, "Reply with Windows release ready.", "Windows release ready.", calls);
 } });
-const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), BUTLER_DATA: data,
+const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), USERPROFILE: join(root, "home"), BUTLER_DATA: data,
   LOCALAPPDATA: join(root, "local"), APPDATA: join(root, "roaming"), BUTLER_SECRET_STORE: "file",
   BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"), BUTLER_APP_SMOKE_DEBUG_PORT: String(debugPort),
   BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_E2E_TIER: "stub", BUTLER_PROVIDER_QUOTA_POLLING: "0",
@@ -43,12 +47,12 @@ const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), BUTLE
 };
 const installed = join(powershell("[Environment]::GetFolderPath('LocalApplicationData')", env), "butler-app");
 const updater = join(installed, "Update.exe");
-const shortcuts = [join(env.APPDATA, "Microsoft/Windows/Start Menu/Programs/Butler.lnk"), shortcutPaths()[1]!];
+const shortcuts = [join(env.APPDATA, "Microsoft/Windows/Start Menu/Programs/Butler.lnk"), shortcutPaths(env)[1]!];
 const started = Date.now();
 try {
   assert.ok(!existsSync(installed), "Disposable runner already has a Butler installation");
   assert.equal(powershell("Test-Path 'HKCU:\\Software\\Classes\\butler'", env), "False");
-  for (const folder of [env.HOME, data, env.LOCALAPPDATA, env.APPDATA]) mkdirSync(folder, { recursive: true });
+  for (const folder of [env.HOME, data, env.LOCALAPPDATA, env.APPDATA, dirname(shortcuts[1]!)]) mkdirSync(folder, { recursive: true });
   writeFileSync(join(data, "sentinel.txt"), "released data retained\n");
   writeFileSync(join(data, "butler.config.json"), JSON.stringify({ user: { name: "E2E", language: "en" },
     metrics: { enabled: false }, system: { defaultModel: "openai/gpt-6-luna" } }));
@@ -75,6 +79,7 @@ try {
   await waitFor(() => calls.memory === 2, "released user and assistant meaning extractions");
   assert.deepEqual([...calls.memorySpeakers].sort(), ["assistant", "user"]);
   await briefingProof();
+  await proveReleasedDownloads(page, env.HOME, downloads);
   await waitFor(() => shortcuts.every(path => existsSync(path)), "released shortcuts");
   assertShortcuts(shortcuts, true);
   const stub = join(installed, "Butler.exe");
@@ -100,7 +105,7 @@ try {
   for (const pid of owned) if (alive(pid)) { try { process.kill(pid, "SIGKILL"); } catch {} }
   if (!uninstalled && existsSync(updater)) run(updater, ["--uninstall", "--silent"]);
   server.stop(true);
-  rmSync(root, { recursive: true, force: true });
+  removeProfile(root, env);
 }
 
 function run(command: string, args: string[]) {

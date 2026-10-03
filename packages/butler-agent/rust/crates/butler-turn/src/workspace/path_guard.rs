@@ -346,7 +346,7 @@ fn has_drive_prefix(value: &str) -> bool {
 fn has_parent_segment(value: &str) -> bool {
     value.split(['/', '\\']).any(|part| part == "..")
 }
-pub(super) fn looks_sensitive(relative: &str) -> bool {
+pub fn looks_sensitive(relative: &str) -> bool {
     let parts: Vec<_> = relative
         .split(['/', '\\'])
         .filter(|part| !part.is_empty())
