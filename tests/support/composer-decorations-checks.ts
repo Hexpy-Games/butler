@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import type { Page } from "playwright";
+import { checkCoastalLifecycle } from "./composer-coastal-checks";
 import { checkDecorationLifecycle } from "./composer-decoration-lifecycle";
 
 interface Metrics { edits: number; frames: number; mainMs: number; maxInputMs: number; active: boolean }
@@ -52,26 +53,27 @@ async function framing(page: Page) {
     await page.getByLabel("Decoration", { exact: true }).selectOption(theme);
     assert.equal(await input.inputValue(), text, "theme changes retain the complete draft");
     assert.equal(await page.locator("[data-decoration-layer]").getAttribute("aria-hidden"), "true");
-    if (theme !== "none" && theme !== "coastal") {
-      for (const placement of ["inside", "edge"]) {
-        await page.getByLabel("Placement", { exact: true }).selectOption(placement);
+    if (theme !== "none") {
+      const art = await page.locator("[data-decoration-layer]").boundingBox();
+      const editor = await input.boundingBox();
+      assert(art && editor && art.y <= editor.y && art.y + art.height >= editor.y + editor.height,
+        "the decoration fills the card behind the entire editor");
+      const hit = await input.evaluate(node => {
+        const rect = node.getBoundingClientRect();
+        return document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2) === node;
+      });
+      assert(hit, "art must not intercept editor input");
+    }
+    if (theme === "characters") {
+      const toggle = page.getByRole("switch", { name: "Peek over edge" });
+      for (const peek of [false, true]) {
+        await toggle.setChecked(peek);
         const art = await page.locator("[data-decoration-layer]").boundingBox();
-        const editor = await input.boundingBox();
-        assert(art && editor && art.y + art.height <= editor.y, "art and editor must be disjoint");
+        const character = await page.locator("[data-decor-sprite]").first().boundingBox();
+        assert(art && character && (peek ? character.y < art.y : character.y >= art.y), "character clipping option");
       }
     }
-    if (theme === "coastal") {
-      await page.waitForSelector("canvas[data-ready=true]");
-      assert.equal(await page.locator("canvas").getAttribute("data-error"), null);
-      for (const option of ["band", "full"]) {
-        await page.getByLabel("Coastal framing").selectOption(option);
-        await page.waitForTimeout(50);
-        assert.equal(await page.locator("canvas").getAttribute("data-error"), null, "framing keeps the renderer valid");
-      }
-      await page.getByLabel("Mode", { exact: true }).selectOption("static");
-      await page.getByLabel("Mode", { exact: true }).selectOption("interactive");
-      assert.equal(await page.locator("canvas").getAttribute("data-error"), null, "mode keeps the renderer valid");
-    }
+    if (theme === "coastal") await checkCoastalLifecycle(page);
   }
 }
 
@@ -81,6 +83,8 @@ export async function checkDecorations(page: Page) {
   await staticChecks(page);
   await checkDecorationLifecycle(page);
   await framing(page);
+  assert.equal(await page.getByLabel("Placement", { exact: true }).count(), 0);
+  assert.equal(await page.getByLabel("Coastal framing").count(), 0);
   await page.getByRole("textbox", { name: "Try your message" }).fill("오늘은 어떤 이야기를 해볼까요?\nA small thought, a little room to grow.");
   await page.getByRole("switch", { name: "375 frame", exact: true }).check();
   await page.getByRole("switch", { name: "Photo wallpaper", exact: true }).check();
@@ -99,36 +103,4 @@ export async function checkDecorations(page: Page) {
   }
   await page.getByRole("switch", { name: "375 frame", exact: true }).uncheck();
   await page.getByRole("switch", { name: "Photo wallpaper", exact: true }).uncheck();
-}
-
-export async function measureDecorations(page: Page, density = 1) {
-  const input = page.getByRole("textbox", { name: "Try your message" });
-  const results = [];
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send("Performance.enable");
-  const taskSeconds = async () => (await cdp.send("Performance.getMetrics")).metrics.find(m => m.name === "TaskDuration")!.value;
-  for (const theme of ["none", "flowers", "cherry", "characters", "coastal"]) {
-    await page.getByLabel("Decoration", { exact: true }).selectOption(theme);
-    await input.fill("");
-    await idle(page);
-    const before = await metrics(page);
-    const taskBefore = await taskSeconds();
-    const text = "The quick brown fox jumps over the lazy dog. ".repeat(3);
-    await input.pressSequentially(text, { delay: 8 });
-    await page.waitForTimeout(400);
-    await idle(page);
-    const after = await metrics(page);
-    const browserTaskMsPerEdit = ((await taskSeconds()) - taskBefore) * 1000 / text.length;
-    assert.equal(await input.inputValue(), text, "perf run must preserve every character in order");
-    assert.equal(after.edits - before.edits, theme === "none" ? 0 : text.length, "every interactive edit counted");
-    const ms = (after.mainMs - before.mainMs) / text.length;
-    assert(ms < 1, `${theme}: ${ms} ms/edit exceeds 1ms`);
-    await page.waitForTimeout(600);
-    assert.deepEqual(await metrics(page), after, "idle must schedule no work");
-    assert.equal(await page.locator("[data-decoration-layer]").evaluate(node => node.getAnimations({ subtree: true }).filter(a => a.playState === "running").length), 0);
-    results.push({ density, theme, edits: text.length, msPerEdit: ms, browserTaskMsPerEdit, maxInputMs: after.maxInputMs, frames: after.frames - before.frames, idleFrames: 0 });
-  }
-  await cdp.detach();
-  console.log(JSON.stringify(results, null, 2));
-  await Bun.write(`.tmp/composer-decorations/measurements-${density}x.json`, JSON.stringify(results, null, 2));
 }

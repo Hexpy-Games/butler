@@ -1,37 +1,45 @@
 import { SHORELINE_WALLPAPER } from "../../blocks/Wallpaper/modules";
 import { liveWallpaperScene } from "../../blocks/Wallpaper/registry";
 import { createWallpaperRenderer } from "../../blocks/Wallpaper/renderer";
+import { coastalGpuTimer } from "./coastalGpuTimer";
 
-/** The existing shoreline shader, at device resolution. No wallpaper idle scheduler. */
+/** The existing shoreline shader. Cap raster density at 1x, independently of screen DPR. */
 export function coastalScene(canvas: HTMLCanvasElement) {
   const renderer = createWallpaperRenderer(canvas, { onError: () => { canvas.dataset.error = "true"; } });
   if (!renderer) { canvas.dataset.error = "true"; return null; }
-  renderer.setScene(liveWallpaperScene(SHORELINE_WALLPAPER,
-    { kind: "live", module: "butler.shoreline", params: { realtime: false } }, "light"));
+  const scene = liveWallpaperScene(SHORELINE_WALLPAPER,
+    { kind: "live", module: "butler.shoreline", params: { realtime: false } }, "light");
+  renderer.setScene(scene);
+  const timer = coastalGpuTimer(canvas.getContext("webgl2")!);
   let width = 1;
   let height = 1;
   let time = 8000;
-  let pixelRatio = window.devicePixelRatio || 1;
-  const draw = (delta = 0) => {
+  let foam = 0.6;
+  const draw = (delta = 0, pulse = 0) => {
+    if (canvas.dataset.error) return timer.metrics;
     time += delta;
-    renderer.draw({ width, height, pixelRatio, timeMs: time, dayPhase: 0.5, seed: 0.42 });
-  };
-  const resize = new ResizeObserver(() => {
-    pixelRatio = window.devicePixelRatio || 1;
-    width = Math.max(1, Math.round(canvas.clientWidth * pixelRatio));
-    height = Math.max(1, Math.round(canvas.clientHeight * pixelRatio));
-    draw();
+    const nextFoam = 0.6 + pulse * 0.25;
+    if (foam !== nextFoam) {
+      foam = nextFoam;
+      renderer.setScene({ ...scene, values: { ...scene.values, foamAmount: foam } });
+    }
+    timer.begin();
+    renderer.draw({ width, height, pixelRatio: 1, timeMs: time, dayPhase: 0.5, seed: 0.42 });
+    timer.end();
     canvas.dataset.ready = "true";
-  });
-  resize.observe(canvas);
+    return timer.metrics;
+  };
   const lost = (event: Event) => { event.preventDefault(); canvas.dataset.error = "true"; };
-  const restored = () => { renderer.restore(); draw(); delete canvas.dataset.error; };
+  // The runtime restarts only after restoration, including one static frame when paused.
+  const restored = () => { timer.reset(); renderer.restore(); delete canvas.dataset.error; };
   canvas.addEventListener("webglcontextlost", lost);
   canvas.addEventListener("webglcontextrestored", restored);
-  return { draw, dispose() {
-    resize.disconnect();
+  return { draw, resize(w: number, h: number) {
+    width = Math.max(1, Math.round(w)); height = Math.max(1, Math.round(h));
+  }, dispose() {
     canvas.removeEventListener("webglcontextlost", lost);
     canvas.removeEventListener("webglcontextrestored", restored);
-    renderer.dispose();
+    timer.dispose(); renderer.dispose();
   } };
 }
+export type CoastalScene = NonNullable<ReturnType<typeof coastalScene>>;

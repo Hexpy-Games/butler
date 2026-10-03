@@ -5,6 +5,13 @@ Issue: [#474](https://github.com/Hexpy-Games/butler/issues/474).
 Branch: `codex/composer-ideas-research`.
 Owner request: **컴포저 안 인터렉티브/정지 배경화면**.
 
+**Owner correction (2026-10-03):** “inside” means the card's wallpaper behind the
+editor, with a local text scrim. The reserved-band/disjoint-text design below is
+superseded for the viewer prototype. Only characters may peek outside. Interactive
+coastal is explicitly allowed to run ambiently when visible; other themes remain
+input-driven. See the prototype acceptance and evidence at the end. The remaining
+import/product research is not implemented by this viewer task.
+
 ## Intent and authority
 
 Optional static or typing-reactive flowers, falling petals and characters decorate the composer without ever occupying the text/caret/selection area. Users select a theme or import their own. Deliver safe static imports first, then bounded interactive packs through the same declarative renderer; do not end the project at built-in-only themes.
@@ -195,57 +202,95 @@ Real owner choices for Monday: (1) confirm initial **Off** versus a bundled **St
 Still pending: design-agent mockups, separately authorized implementation, hardware input/GPU/energy measurements, physical mobile/IME verification, and final global reduce-motion integration proof. This design claims none of those have passed.
 
 
-## DS viewer prototype — issue #474, 2026-10-03
+## DS viewer prototype — owner correction, 2026-10-03
 
-The owner's subsequent prototype request authorizes an isolated placement comparison:
-inside versus above-edge sprites, character overflow, and the existing `butler.shoreline`
-scene behind the editor (full card versus band). These are viewer-only experiments,
-not a change to the product contracts above. The app composer and ComposerCard source
-are unchanged. A separate decoration layer surrounds the existing DS card and native
-ComposerCardTextarea; production Lexical integration and asset import remain outside this slice.
-The editor keeps its draft while changing controls and never sends a message.
+Viewer-only study on `codex/composer-decor`. The decoration fills the ComposerCard
+behind its native textarea and toolbar. Flowers grow from the bottom/edges; the
+blossom tree fills the card and petals fall behind the text. Only characters have a
+“Peek over edge” switch; no band/strip/placement selectors remain. The local scrims
+use 72% surface tint, leaving the scene itself identical in light and dark. Existing
+ComposerCard and production Lexical consumers are unchanged; imports remain outside
+this slice. Drafts survive theme/mode/framing changes; preview never sends a message.
 
-Entry: `index.html?page=composer-decorations&theme=light` in
-`packages/butler-app/client/ui/dist-ds-site/`. Build with the existing `build:ds-site`
-command (relative assets, no source maps). The page is also in the viewer navigation/search.
-Theme, static/interactive, intensity, placement, character clipping, palette, light/dark,
-photo wallpaper, 375 frame and shared reduce-motion controls are live. Shoreline always
-uses the identical daylight shader; only the local editor scrim follows light/dark.
-Its original 20fps rendering policy runs only during a bounded input response.
-No dependency, gateway call, owner-data access or background scheduler was added.
+Entry: `index.html?page=composer-decorations` in
+`packages/butler-app/client/ui/dist-ds-site/`, rebuilt with `build:ds-site`. Theme,
+static/interactive, intensity, character overflow, palette, light/dark, photo wallpaper,
+375 frame, shared reduce-motion and performance readout remain available.
 
-Validation: isolated frozen install and `bun run check`; DS/design/motion/CSS gates;
-existing showcase/design contracts (51 pass, 2 existing skips); Rust fmt and source-check
-using installed Rust 1.91.0; static site leak/font/navigation smoke; dedicated composer
-smoke at 1x and 2x. The latter checks Korean composition via Chromium CDP (candidate,
-commit, cancellation), complete draft fidelity, theme/placement/framing/motion controls, 320/375/390/430/1024/1440
-reflow, text-band separation, blur/visibility/OS reduction cancellation, and zero running
-animations or additional response frames during 600ms idle. Physical Korean IME remains
-an owner-device check; synthetic visibility exercises the handler, not native occlusion.
+Coastal uses the existing **live `butler.shoreline` shader**, daylight in both themes.
+Its ambient clock advances without input, including editor blur. Committed edits add
+a finite, intensity-scaled foam pulse on top. A timeout plus rAF caps rendering below
+30fps, and the buffer is capped at 1 pixel per CSS pixel (including Retina). No shader
+features or scene content are dropped. Static/reduced motion retain a rendered frame.
+Document hidden, intersection loss and context loss cancel scheduling immediately;
+returning to view resumes without catching up elapsed hidden time. Resize/restoration
+can redraw a static frame. Other themes have zero timers, rAF or running animations
+after the DS-token finite response. All 24 sprites remain preallocated.
 
-Measured 135 complete edits per theme at each density, including finite response callbacks:
+Instrumentation separates edit/response JS from coastal draw JS, asynchronous GPU
+queries when supported, browser TaskDuration per complete edit, traced main-thread
+work per draw, and total browser-process CPU during warm static/ambient windows.
+Readout DOM text is refreshed at most twice a second during ambient playback; metric
+snapshots update with actual work, with no separate instrumentation timer. Edit JS
+covers dispatch and sprite-start work, excluding readout instrumentation and ambient
+drawing; browser TaskDuration includes editing, style/layout/paint and automation.
+GPU queries cover shader submission only, not compositor/presentation. A zero sampled
+JS duration means below browser timer precision, not literally free work.
 
-| Theme | JS ms/edit 1x / 2x | Browser TaskDuration ms/edit 1x / 2x |
+Validation (all runs isolated HOME/BUTLER_DATA; Playwright `--single-process`):
+
+- Frozen, script-free `bun install`: pass; final `bun run check`: pass (lint,
+  design/DS/motion/CSS, root/UI typecheck and fast unit suite). Explicit `lint:ds`
+  and `lint:motion`: pass. The GPU adapter is registered with its lifecycle/cap
+  justification in the canvas-engine policy; no ratchet/budget was loosened.
+- Existing showcase/design/motion-lint tests: **65 pass, 2 existing skips, 0 fail**.
+- Rust 1.91.0 `cargo fmt --all` and source-check: pass; 2,193 Rust files scanned,
+  zero ratchet/architecture/E2E-gate violations. No Rust crate changed, so touched-crate
+  clippy is inapplicable. Changed TS functions are all <=80 lines.
+- Static DS build, leak check (272 files), font check and site navigation smoke: pass.
+- Dedicated composer smoke at DPR 1 and 2: pass, no page errors. Verifies complete
+  drafts/135 edits per theme, Korean CDP composition/cancellation, actual shader pixel
+  changes, stable static pixels, transient foam uniform, full-card editor coverage,
+  pointer hit testing, character overflow/clipping, shared/OS reduction, hidden and
+  offscreen pause/resume, editor blur, six widths (320/375/390/430/1024/1440), and zero
+  idle sprite callbacks/animations. Screenshots visually reviewed in light/dark/375.
+
+Final warm measurements (DPR 1 / 2, same 1x coastal raster cap):
+
+| Theme | Edit/response JS ms/edit | Browser TaskDuration ms/edit |
 | --- | --- | --- |
-| None | 0 / 0 | 1.224 / 1.189 |
-| Flowers | 0.048 / 0.044 | 2.042 / 2.236 |
-| Cherry | 0.047 / 0.041 | 2.046 / 2.011 |
-| Characters | 0.037 / 0.041 | 1.593 / 1.696 |
-| Coastal | 0.034 / 0.039 | 2.356 / 5.163 |
+| none | 0.0000 / 0.0000 | 1.087 / 1.058 |
+| flowers | 0.0074 / 0.0081 | 2.177 / 1.922 |
+| cherry | 0.0089 / 0.0044 | 2.131 / 1.954 |
+| characters | 0.0081 / 0.0081 | 1.752 / 1.388 |
+| coastal | 0.0067 / 0.0030 | 2.794 / 2.279 |
 
-Maximum measured input callback: 0.2ms; active response frames: 109–124; idle frames: 0.
-The live readout measures decoration JS, not paint/GPU or system CPU. Browser TaskDuration
-also includes editing, rendering and automation in single-process Chromium. The JS <1ms
-budget passed; these results do **not** establish an end-to-end <1ms rendering budget or
-zero browser CPU. In particular, coastal 2x needs owner-GPU profiling before product adoption.
-Raw measurements and screenshots are in `.tmp/composer-decorations/` (local artifacts).
+Maximum sampled input callback was 0.1ms. Noncoastal idle added **0 frames** in 600ms.
+Coastal typing draw JS was **0.058 / 0.092ms per draw**, separately from input cost.
+Three-second no-input windows measured **20.98 / 20.32fps**, browser CPU **81.58% /
+102.19% of one core** (all process threads), versus static **2.69% / 1.74%** and zero
+static draws. Aggregate process CPU per ambient draw: **38.88 / 50.29ms**; traced
+renderer-main task wall time per draw: **11.87 / 10.90ms**. These include browser and
+tracing overhead and are not shader-only GPU time or end-to-end presentation latency.
 
-Remaining environment limits: full `app:design-system:smoke` stops at the missing native
-agent executable (`tests/support/native-app-server.ts:196`); app layout/motion traces need
-that same executable. No native crate was changed, so touched-crate clippy is inapplicable.
-The pre-existing mobile viewer smoke produced no result and was interrupted (exit 130);
-no pass or failure cause is claimed. The new page's six-width checks passed at both densities.
-The isolated Project Ledger check has no initialized project; the owner's Ledger was not read.
-Research doc content was already present identically in the starting WIP commit. Fetch,
-research-branch merge and commit all hit shared `.git` permission errors. Leave the worktree
-changes for the authorized runner to commit and push; no PR, tag or main merge.
+**Performance limitation:** Chromium reports ANGLE/SwiftShader (software rendering),
+not this Mac's hardware GPU. GPU timer queries are unavailable; the readout explicitly
+says so. A separate Metal probe failed EGL initialization. `powermetrics` refused
+without superuser privileges. Hardware GPU ms/frame, actual full-frame presentation
+cost and power impact are therefore **unavailable**, and low-power operation on the
+owner's hardware is **not qualified** by these measurements. The high software CPU
+cost is reported, not hidden by the <1ms input-JS result. Physical IME/native window
+occlusion remain unverified; document visibility was exercised synthetically and
+intersection by moving the real layer offscreen.
+
+Raw measurement JSON, traces and screenshots: `.tmp/composer-decorations/` (local,
+untracked artifacts). The final DS build remains in `dist-ds-site` for the open preview.
+Full `app:design-system:smoke` and `app:layout:smoke` could not start their browser paths:
+missing native executable, `tests/support/native-app-server.ts:196`. The former passed
+bundle/font stages first. No native-agent build or owner runtime access was added.
+
+Delivery limitation: `git fetch origin` failed to write shared `FETCH_HEAD`; staging
+failed to create shared `index.lock` (`Operation not permitted`). No new commit or
+push could be made. Changes remain for the authorized runner; branch
+`codex/composer-decor`, starting/current HEAD `df9e70b75bf76ce8907f2aec0eaeef0a805bc8a8`.
+No PR, tag or merge was performed. Worktree `target/` (87MB) was deleted after checks.

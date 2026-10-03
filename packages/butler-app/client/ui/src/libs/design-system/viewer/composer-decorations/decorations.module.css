@@ -170,7 +170,11 @@
   margin: var(--space-lg) var(--space-md) var(--space-sm);
   border-radius: var(--radius-control);
   /* Local contrast only: the scene itself is identical in light and dark. */
-  background: color-mix(in srgb, var(--color-surface-raised-opaque) 82%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-surface-raised-opaque) 72%,
+    transparent
+  );
 }
 .editor {
   display: block;
@@ -179,7 +183,11 @@
   position: relative;
   margin: 0 var(--space-sm) var(--space-sm);
   border-radius: var(--radius-control);
-  background: color-mix(in srgb, var(--color-surface-raised-opaque) 82%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-surface-raised-opaque) 72%,
+    transparent
+  );
 }
 .composition[data-theme="characters"] .readable {
   margin-top: var(--space-2xl);

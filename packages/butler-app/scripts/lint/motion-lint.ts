@@ -254,6 +254,11 @@ export interface CanvasMotionEngine {
 
 export const CANVAS_MOTION_ENGINES: readonly CanvasMotionEngine[] = [
   {
+    prefix: "libs/design-system/viewer/composer-decorations/coastalScene.ts",
+    justification: "Viewer-only adapter to the existing Wallpaper engine; reads its WebGL2 context for asynchronous GPU timing. The owner-approved ambient scene is capped at 30fps/1x and stopped by visibility, intersection, static and reduced-motion signals; input responses use DS duration tokens.",
+    constants: {},
+  },
+  {
     prefix: "libs/design-system/components/ButlerThinkingMark/",
     justification: "Riso halftone thinking mark: a spring-driven morph and an orbiting-light simulation drawn per frame on a canvas.",
     constants: {

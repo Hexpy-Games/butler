@@ -2,7 +2,8 @@
 import { chromium } from "playwright";
 import { resolve } from "node:path";
 import { smokeBrowserArgs } from "../support/smoke-browser";
-import { checkDecorations, measureDecorations } from "../support/composer-decorations-checks";
+import { measureDecorations } from "../support/composer-decoration-perf";
+import { checkDecorations } from "../support/composer-decorations-checks";
 
 const dist = resolve("packages/butler-app/client/ui/dist-ds-site");
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
@@ -19,7 +20,7 @@ try {
   page.on("pageerror", error => errors.push(error.message));
   await page.goto(`http://127.0.0.1:${server.port}/?page=composer-decorations&theme=light`);
   await checkDecorations(page);
-  await measureDecorations(page, density);
+  await measureDecorations(page, browser, density);
   if (errors.length) throw new Error(errors.join("\n"));
   console.log("Composer decorations smoke passed; no page errors.");
 } finally {

@@ -50,7 +50,7 @@ export function ComposerDecorationsPage({ state, onChange }: {
         <div className={styles.performance}>
           <Typo.Caption>DECORATION JS · MAIN THREAD</Typo.Caption>
           <output ref={readout} aria-live="off" data-decoration-perf>0.000 ms/edit · 0 frames · 0 edits · idle: 0 scheduled work</output>
-          <Typo.Caption>Target &lt; 1 ms/edit. Draw JS excludes paint/GPU. Full-frame CPU/GPU cost: unavailable here.</Typo.Caption>
+          <Typo.Caption>Target &lt; 1 ms/edit JS. Draw excludes paint/compositing. Full-frame cost and power require browser/system profiling.</Typo.Caption>
         </div>
       </div>
       <DecorationControls settings={settings} update={patch => setSettings(current => ({ ...current, ...patch }))} state={state} onChange={onChange} />

@@ -18,13 +18,18 @@ export function useDecoration(settings: DecorationSettings) {
     const art = root.current;
     const input = surface.current?.querySelector("textarea");
     if (!art || !input) return;
+    let lastReadout = -Infinity;
     const report = (m: DecorationMetrics) => {
       const output = readout.current;
       if (!output) return;
       output.dataset.metrics = JSON.stringify(m);
-      output.textContent = `${m.edits ? (m.mainMs / m.edits).toFixed(3) : "0.000"} ms/edit · ${m.frames} frames · ${m.edits} edits · ${m.active ? "responding" : "idle: 0 scheduled work"}`;
+      if (m.ambient && performance.now() - lastReadout < 500) return;
+      lastReadout = performance.now();
+      const gpu = m.gpuSamples ? `${(m.gpuMs / m.gpuSamples).toFixed(2)} ms GPU/draw` : "GPU timing unavailable";
+      output.textContent = `${m.edits ? (m.mainMs / m.edits).toFixed(3) : "0.000"} ms/edit JS · ${m.frames} frames · ${m.edits} edits · ${m.ambient ? "ambient ≤30 fps · ≤1×" : m.active ? "responding" : "idle: 0 scheduled work"}`
+        + (settings.theme === "coastal" ? ` · ${m.frames ? (m.drawMs / m.frames).toFixed(3) : "0.000"} ms/draw JS · ${gpu}` : "");
     };
-    const runtime = decorationRuntime(art, settings, report, coast.current?.draw);
+    const runtime = decorationRuntime(art, settings, report, coast.current ?? undefined);
     let composing = false;
     let commitPending = false;
     let commitFrame = 0;
@@ -46,7 +51,7 @@ export function useDecoration(settings: DecorationSettings) {
       if (commitPending) flush();
       else runtime.pulse();
     };
-    const blur = () => { cancelAnimationFrame(commitFrame); commitPending = false; runtime.stop(); };
+    const blur = () => { cancelAnimationFrame(commitFrame); commitPending = false; runtime.blur(); };
     if (settings.mode === "interactive" && settings.theme !== "none") {
       input.addEventListener("input", edit);
       input.addEventListener("compositionstart", start);
