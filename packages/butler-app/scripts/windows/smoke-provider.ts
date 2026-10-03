@@ -1,31 +1,44 @@
 import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
+import { smokeBriefing, type SmokeBriefing } from "./smoke-briefing.ts";
 
 const contract = JSON.parse(readFileSync(new URL(
   "../../../butler-agent/rust/crates/butler-memory/src/cognition/extraction/contracts-v4.json", import.meta.url,
 ), "utf8"));
 
+export interface SmokeProviderCalls {
+  chat: number; memory: number; memorySpeakers: Set<string>; briefings?: Map<string, SmokeBriefing>;
+}
+
 /** Same strict synthetic-conversation fixture as butler-e2e/provider/memory.rs. */
 export function smokeProviderReply(body: any, prompt: string, answer: string,
-  calls: { chat: number; memory: number; memorySpeakers: Set<string> }, observeMeaning?: (input: any) => void): Response {
-  assert.ok(JSON.stringify(body).includes(prompt), "Unexpected stub prompt");
+  calls: SmokeProviderCalls, observeMeaning?: (input: any) => void): Response {
+  const briefing = smokeBriefing(body);
   const format = body.text?.format;
   let text = answer;
-  if (format?.name === "memory_meaning_v4") {
-    const input = JSON.parse(typeof body.input === "string" ? body.input : body.input[0].content[0].text);
-    assert.ok(Array.isArray(input.parts) && input.parts.length > 0, "Missing meaning passages");
-    assert.deepEqual(format, { name: "memory_meaning_v4", type: "json_schema", strict: true,
-      schema: boundedSchema(contract.meaning_schema, input.parts.length) });
-    assert.equal(body.instructions, contract.meaning_instructions);
-    assert.ok(input.speaker === "user" || input.speaker === "assistant", "Unexpected meaning source");
-    assert.ok(!input.correction, "Unexpected meaning repair");
-    observeMeaning?.(input);
-    calls.memory++;
-    calls.memorySpeakers.add(input.speaker);
-    text = JSON.stringify({ status: "processed", entities: [], items: [], attributes: [] });
+  if (briefing) {
+    calls.briefings ??= new Map();
+    assert.ok(!calls.briefings.has(briefing.runId), "Repeated synthetic briefing request");
+    calls.briefings.set(briefing.runId, briefing);
+    text = JSON.stringify(briefing.reply);
   } else {
-    assert.ok(!format?.name, "Unexpected structured provider request");
-    calls.chat++;
+    assert.ok(JSON.stringify(body).includes(prompt), "Unexpected stub prompt");
+    if (format?.name === "memory_meaning_v4") {
+      const input = JSON.parse(typeof body.input === "string" ? body.input : body.input[0].content[0].text);
+      assert.ok(Array.isArray(input.parts) && input.parts.length > 0, "Missing meaning passages");
+      assert.deepEqual(format, { name: "memory_meaning_v4", type: "json_schema", strict: true,
+        schema: boundedSchema(contract.meaning_schema, input.parts.length) });
+      assert.equal(body.instructions, contract.meaning_instructions);
+      assert.ok(input.speaker === "user" || input.speaker === "assistant", "Unexpected meaning source");
+      assert.ok(!input.correction, "Unexpected meaning repair");
+      observeMeaning?.(input);
+      calls.memory++;
+      calls.memorySpeakers.add(input.speaker);
+      text = JSON.stringify({ status: "processed", entities: [], items: [], attributes: [] });
+    } else {
+      assert.ok(!format?.name, "Unexpected structured provider request");
+      calls.chat++;
+    }
   }
   const response = { id: "resp_windows", object: "response", status: "completed", model: "gpt-6-luna",
     output: [{ type: "message", id: "msg_windows", role: "assistant", status: "completed",
