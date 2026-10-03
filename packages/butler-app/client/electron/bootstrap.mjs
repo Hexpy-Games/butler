@@ -5,6 +5,7 @@ import { createStartupWindow, failStartup, startupTiming } from "./startup-windo
 
 protocol.registerSchemesAsPrivileged([APP_RENDERER_SCHEME_PRIVILEGES]);
 startupTiming("entry");
+app.once("will-finish-launching", () => startupTiming("will_finish_launching"));
 app.setName("Butler");
 if (process.env.BUTLER_E2E_TIER === "stub" && process.env.BUTLER_APP_SMOKE_DEBUG_PORT) {
   app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
@@ -23,8 +24,9 @@ if (backgroundLaunch) {
   app.quit();
 } else {
   // Do not top-level-await ready: Electron waits for ESM evaluation before ready.
-  void app.whenReady().then(() => {
-    createStartupWindow();
+  void app.whenReady().then(async () => {
+    startupTiming("app_ready");
+    await createStartupWindow();
     setImmediate(() => {
       startupTiming("runtime_import_start");
       void import("./main.mjs").then(() => startupTiming("runtime_imported")).catch(failStartup);

@@ -3,6 +3,8 @@ import { Stack } from "../../components/Stack";
 import { Button } from "../../components/Button";
 import { ButtonContainer } from "../../components/ButtonContainer";
 import { Typo } from "../../components/Typo";
+import { NativeSelect, NativeSelectOption } from "../../components/NativeSelect";
+import { BUILTIN_WALLPAPERS, wallpaperLabelText } from "../../blocks/Wallpaper";
 import { StartupScreen } from "../recipes/StartupScreen";
 
 const copy = {
@@ -13,15 +15,21 @@ const copy = {
 };
 type Stage = "starting" | "agent" | "migration" | "renderer" | "failed";
 export function StartupPreview({ locale }: { locale: "ko" | "en" }) {
+  const [wallpaper, setWallpaper] = useState("butler.bloom");
   const [stage, setStage] = useState<Stage>("starting");
   const [exported, setExported] = useState(false);
   const labels = copy[locale];
   return <Stack>
+    <NativeSelect aria-label={locale === "ko" ? "배경" : "Wallpaper"} value={wallpaper} onChange={(event) => setWallpaper(event.target.value)}>
+      <NativeSelectOption value="none">{locale === "ko" ? "없음" : "None"}</NativeSelectOption>
+      {BUILTIN_WALLPAPERS.list().filter((module) => module.manifest.image !== "required").map((module) =>
+        <NativeSelectOption key={module.manifest.id} value={module.manifest.id}>{wallpaperLabelText(module.manifest.name, locale === "ko" ? "ko-KR" : "en-US")}</NativeSelectOption>)}
+    </NativeSelect>
     <ButtonContainer size="sm">
       {(["starting", "agent", "migration", "renderer", "failed"] as const).map((key) =>
         <Button key={key} size="sm" variant="secondary" onClick={() => { setStage(key); setExported(false); }}>{labels[key]}</Button>)}
     </ButtonContainer>
-    <StartupScreen status={labels[stage]} failed={stage === "failed"} retryLabel={labels.retry} logsLabel={labels.logs}
+    <StartupScreen stage={stage} wallpaper={wallpaper} locale={locale}
       onRetry={() => { setStage("starting"); setExported(false); }} onLogs={() => setExported(true)} />
     {exported && <Typo.Caption role="status">{labels.exported}</Typo.Caption>}
   </Stack>;

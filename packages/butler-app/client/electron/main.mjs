@@ -1,4 +1,4 @@
-import { isStartupWindow, startupPending, configureStartupActions, startupStage, startupTiming, failStartup, waitForStartupRenderer, completeStartup } from "./startup-window.mjs";
+import { isStartupWindow, startupPending, configureStartupActions, startupStage, startupTiming, startupTimings, failStartup, waitForStartupRenderer, completeStartup } from "./startup-window.mjs";
 import {
   app,
   BrowserWindow,
@@ -3016,6 +3016,7 @@ function recordAppStartupProgress(stage, {
     const diagnostics = bundledAgentSupervisor.diagnostics();
     writeAppForegroundStartupProgress(butlerDataRoot, {
       stage,
+      timings: startupTimings(),
       platform: process.platform,
       architecture: process.arch,
       lifecycleMode: appLifecycleMode,

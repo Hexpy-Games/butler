@@ -1,122 +1,135 @@
-# Desktop startup and installer branding
+# Desktop startup
 
 Tracking: [#480](https://github.com/Hexpy-Games/butler/issues/480),
 [#481](https://github.com/Hexpy-Games/butler/issues/481).
 
-## Runtime contract
+## First window contract
 
-`bootstrap.mjs` registers the renderer scheme and acquires the single-instance
-lock before readiness. As required by [Electron ESM ordering](https://www.electronjs.org/docs/latest/tutorial/esm),
-the ready handler is registered without top-level-awaiting readiness. Its first action is creating the
-small, frameless startup window. The existing runtime module graph is dynamically
-imported after the native window is shown. Squirrel lifecycle invocations and
-helper processes bypass the splash; `--squirrel-firstrun` does not.
+The splash is a **separate 340×280 frameless BrowserWindow**. `bootstrap.mjs`
+constructs it as the first action after recording Electron `ready`, before
+importing `main.mjs`, starting the agent, migrating storage, or creating the main
+window. Single-instance ownership and protocol registration precede readiness.
+Squirrel maintenance and menu-bar helper invocations bypass the splash.
 
-The startup renderer is a separate Vite entry (`startup.html`), composed from DS
-Box, Stack, Typo, ButtonContainer, Button and ButlerThinkingMark. It follows the OS
-color scheme and reduced motion. The renderer's explicit DS reduced-motion scope
-is mirrored to the native profile for the next launch. No new OS-specific window
-flags are introduced.
+The window loads **local `startup.html`**, plain CSS and a tiny script. It loads
+no React, DS runtime, app bundle, font file, HTTP URL or shader. A local Butler
+mark pulses in CSS; OS or saved reduced motion stops the animation. The selected
+wallpaper and mark decode before two animation frames and the native reveal, so
+there is no visible empty window or white flash. `roundedCorners` uses Electron's
+platform default handling; native corner/shadow behavior still needs OS review.
 
-Stages reflect actual waits: preparing, agent, legacy upgrade, renderer. Agent
-startup retains the supervisor's 120-second budget; other stages have a 30-second
-budget. Errors and expired budgets keep the same window open. Retry relaunches
-through the existing graceful quit path. Logs exports the existing setup
-bridge's diagnostics plus bounded startup timing records, without settings,
-credentials, conversations or raw agent logs.
+The main window stays hidden through agent health, migrations and fresh bootstrap
+data. Its existing data-paint signal reveals it before destroying the splash.
+There is no minimum splash duration. Error, retry and diagnostic export remain
+on the same small window. The static renderer cannot navigate or open windows.
 
-The main window remains hidden until the healthy agent's fresh settings, model
-catalog, navigation and selected conversation (after saved-selection restoration)
-are loaded and two animation frames have passed. First-run and legacy-recovery
-screens signal their own usable paint. The main window is shown before the splash
-is destroyed. Late readiness cannot dismiss a failed splash. There is no minimum
-splash duration. Update restarts use the same bootstrap entry.
+## Current wallpaper without starting the agent
 
-## Critical path and measurement
+Settings → 모양 is persisted in the **canonical `app_settings` table**, key
+`settings`, not a standalone wallpaper JSON file. Electron reads that row using
+Node's bundled SQLite, read-only with a zero busy timeout. It resolves the same
+`BUTLER_APP_SERVER_DB` / `gateways/app.json.config.dbPath` / default
+`app-server/butler-client.sqlite` path as the gateway. No migrations, full-table
+scan, database copy or renderer cache is involved. Gateway JSON is bounded to
+64 KiB. The DB projection selects only wallpaper and the legacy wallpaper kind;
+credentials and unrelated settings are never logged or sent to the splash.
 
-Before this change, `main.mjs` loaded its runtime/update/supervisor module graph
-and synchronous setup before `app.whenReady()`. The readiness callback awaited
-DevTools installation, then `createWindow()` awaited agent health and native
-shell settings **before constructing any BrowserWindow**. The resulting blank
-period therefore included the entire agent startup budget (up to 120 seconds),
-not just renderer loading. This is a source-based explanation; it is not a
-measurement of the owner's installation.
+Built-ins use the existing checked-in 320×200 DS poster frames, copied by the
+Vite asset plugin into **both** app dist and `dist-ds-site`. Animated backgrounds
+never compile a shader. Dusk, Shoreline and photo scenes use the same artwork in
+light and dark. A dark DS solid surface covers the mark and status in both
+schemes. Uploaded images use their existing bounded raster thumbnail. None,
+unknown/custom modules without a poster, unreadable settings, and unavailable
+assets fall back to the DS Bloom brand poster. Parameter-customized built-ins
+currently use that module's standard poster; they do not reproduce custom shader
+parameters at startup. This is a still approximation, not the full live scene.
 
-The new path removes those prerequisites to the first native window, removes the
-DevTools await, and overlaps shell-preference loading with renderer preparation.
-It keeps migration, health checks, data loading and update behavior intact.
+The owner preview at `/?page=patterns/startup` embeds the **actual shipped static
+document**, with all ten standalone built-in wallpapers plus None, stages,
+failure actions and motion/theme controls. Image/Grain are image filters rather
+than standalone wallpapers. Build with:
 
-| Step / event | Source | Timing |
-| --- | --- | --- |
-| Process creation → JS entry | `startup-window.mjs:8`, `bootstrap.mjs:7` | `entry.elapsed_ms` |
-| Electron ready | `bootstrap.mjs:26`, `startup-window.mjs:73` | `app_ready.elapsed_ms` |
-| First native window shown | `startup-window.mjs:85` | `splash_shown.elapsed_ms` |
-| DS mark first paint | `src/startup.tsx` → `butler:startup-painted` | `splash_painted.elapsed_ms` |
-| Runtime module graph | `bootstrap.mjs:28` | `runtime_imported - runtime_import_start` |
-| Agent preparation / health | `main.mjs:2079` | `agent_ready - agent_starting`, intermediate preparation events |
-| Renderer load and migrations | `main.mjs:2166` | `renderer_loaded`, `migration`, `renderer` |
-| Fresh data paint → reveal | `startup-window.mjs:50`, `main.mjs:2186` | `renderer_data_painted`, `ready` |
+```sh
+bun run --cwd packages/butler-app/client/ui build:ds-site
+```
 
-Times use Electron's OS process-creation timestamp, then a monotonic clock.
-Unavailable creation time produces `null`, never a fabricated timing.
-`tests/smoke/startup-splash.ts` saves the complete ordered event list and window
-screenshots, asserts the native-window handoff and the **<300 ms DS-paint target**.
-Its gateway is deliberately gated and stubbed; its total ready time is not a
-bundled-agent or owner-scale cold-start result.
+The existing `packages/butler-app/client/ui/dist-ds-site` is rebuilt in this worktree.
 
-## Owner preview and installer asset
+## Why even a dedicated Electron window cannot appear immediately
 
-Build the static interactive viewer with `bun run --cwd packages/butler-app/client/ui build:ds-site`.
-Output: `packages/butler-app/client/ui/dist-ds-site/`.
-Serve that directory and open
-`/?page=patterns/startup&theme=dark&locale=ko&motion=reduced`.
-The toolbar controls theme/locale/motion; stage controls include error, retry and
-log-export feedback. Preview actions do not relaunch or export desktop data.
+1. **Electron/Chromium process startup before `ready`.** BrowserWindow cannot be
+   constructed before Electron initialization. A separate static window removes
+   our prerequisites, not that native initialization cost. See
+   [Electron BrowserWindow](https://www.electronjs.org/docs/latest/api/browser-window).
+2. **First launch after install/update.** Gatekeeper verification of downloaded,
+   un-notarized preview builds can delay launch or require user approval before
+   our code executes. This first-launch/install/update cost is distinct from a
+   warm launch. XProtect may also rescan when signatures change, so “only once”
+   is not an absolute security-system guarantee. See
+   [Apple Gatekeeper](https://support.apple.com/guide/security/sec5599b66df/web) and
+   [malware protection](https://support.apple.com/guide/security/sec469d47bd8/web).
+3. **Our previous main-process work.** Before this branch, static runtime imports,
+   synchronous setup, DevTools, native shell settings and agent health all
+   preceded the first BrowserWindow. The branch split bootstrap from those
+   prerequisites; this follow-up also removes the React/DS entry and avoids
+   importing the runtime until the complete splash frame can be shown.
 
-Generate the installer GIF with
-`bun run packages/butler-app/client/electron/scripts/render-install-animation.ts`.
-It requires Playwright Chromium and ffmpeg, renders the production DS drawing
-functions with a seeded simulation at exactly 20 Hz, and returns to the idle mark
-before looping. No screenshots sampled from a wall-clock animation are used.
+## Timing records and external Mac measurement
 
-Asset: `assets/butler-install.gif`, 192×192, 80 frames, 20 fps, **255,631 bytes**.
-Two local generations were byte-identical (SHA-256
-`f9b8942980b0cfc808d856403add3445da43373d312287382e30152ac6a94418`).
-`create-windows-installer.mjs` passes it as `loadingGif`; `setupIcon` remains the
-existing Butler ICO. Both release and installer workflows call this script.
+The existing `{"startup": ...}` console log now carries epoch `timestamp_ms` and
+monotonic `elapsed_ms` from Electron's OS-reported process creation, to three
+fractional digits (not a claim of microsecond OS accuracy). Events include
+`process_start`, `entry`, `will_finish_launching`, `app_ready`,
+`appearance_read_start/end`, `splash_ready_to_show`, `splash_painted`,
+`splash_shown`, `runtime_import_start/imported`, `renderer_data_painted`,
+`main_window_ready`, and `window_ready`. If process creation time is unavailable,
+elapsed time is null. The existing `app/runtime/foreground/startup-progress.json`
+record includes the ordered timing list once the runtime begins recording
+progress, including early bootstrap events. Exported startup diagnostics include
+that same list. `splash_painted` is decoded content plus two rAFs;
+`splash_shown` is the native show call, **not an OS compositor presentation probe**.
 
-## Platform evidence still required
+Run the built executable **outside the sandbox**, never the owner's installed app:
 
-Electron exited with SIGABRT in the local macOS sandbox, including with
-`--single-process`; no application timing was captured. No native cold-start timings, baseline timings,
-owner-scale readiness comparison, or <300 ms qualification are claimed here.
+```sh
+node packages/butler-app/client/electron/scripts/measure-startup.mjs \
+  "$PWD/packages/butler-app/client/electron/dist/Butler-darwin-arm64/Butler.app/Contents/MacOS/Butler"
+```
 
-The existing Windows installer workflow has a `hosted-only=true` option so this
-feature can be built and installed without touching the owner's Windows PC.
-Use that option when dispatching it on this branch. It preserves the existing
-install/update/uninstall assertions and captures installation frames through the
-platform-layer script, uploaded as `startup-installer-evidence`. The macOS package
-workflow uploads `macos-startup-evidence`. Frames must be inspected to establish
-that the real installer displayed the Butler motion, including DPI behavior.
+The script creates temp HOME/BUTLER_DATA/profile directories in TMPDIR, selects a
+non-production port, launches once with a fresh profile and again with the same
+profile, prints all timestamps relative to process creation and launch request,
+then terminates only its own child through the normal quit path and cleans up.
+It overrides the DB path as well. It prints a failure if main readiness is absent.
+“Cold-profile” does **not** mean OS disk caches were purged. Direct executable
+launch does not measure Finder/LaunchServices Gatekeeper verification. For a new
+quarantined install/update, separately time the normal Finder launch; do not
+remove quarantine or disable verification to improve the reported number.
 
-This worktree's shared Git metadata rejected both `FETCH_HEAD` and `index.lock`
-writes. Changes must be committed/pushed by the runner before either workflow can
-verify them. No workflow was dispatched against stale remote code.
+If Electron pre-ready plus observed install verification alone exceeds ~1 s on
+this Mac, propose a **tiny native launcher/pre-splash in `butler-platform`**:
+show a native image/surface first, launch Electron, and close it on an authenticated
+ready signal. This has not been implemented. It adds platform-specific window,
+accessibility, focus, single-instance, failure/quit handoff and signing/updater
+ownership. It cannot bypass Gatekeeper: its executable must also be verified.
+A separately notarized launcher may improve steady launch feedback, at the cost
+of another distributed binary and lifecycle. Measure before accepting that cost.
 
+## Verification on this follow-up
 
-## Local validation (2026-10-03)
+- The isolated configuration/packaging smoke reads actual SQLite settings for
+  every built-in, None and an unknown module; proves indexed access, correct
+  selected IDs, scene tone parity, fallback and the dependency-free package.
+  Final 12 reads: median **0.264 ms**, max **0.606 ms** (small isolated DB;
+  not an owner-scale DB or complete first-frame measurement).
+- `tests/smoke/startup-frame-cost.ts` compares each complete bundled poster with
+  a one-pixel control in fresh browser contexts, five rounds. It verifies the
+  requested image, mark, status, overflow and local-only dependencies on every
+  timed sample. Output is `.tmp/startup-evidence/background-cost.json`.
+- In this sandbox, Chromium and Electron abort with SIGABRT even with the supplied
+  `--single-process` argument. **Background first-frame delta, native cold/warm
+  timings, the <300 ms native smoke budget, and visual OS acceptance remain
+  unavailable.** The assertions and budget are unchanged. Run the checked-in
+  browser and native smokes outside the sandbox before claiming those outcomes.
 
-- Frozen dependency install, `bun run check` (including DS and motion lint),
-  packaging checks, Rust formatting, platform clippy with `-D warnings`, and the
-  Rust source-check ratchets passed.
-- Related DS/protocol tests: 63 passed, 2 existing skips. Supervisor/stop/update/
-  Squirrel tests: 70 passed. Native Agent `ci-fast` build passed.
-- `startup-viewer.ts`: real built splash stages, actions, both themes, OS and
-  persisted motion overrides, overflow and the interactive static viewer passed.
-- Full DS navigation was blocked by `TargetClosedError`; layout failed at
-  `tests/smoke/app-layout-smoke.ts:1963` (permission popover outside-click dismissal).
-  Both failures reproduced against an isolated, freshly built archive of the
-  unchanged HEAD `124e4dadf4a1eb69e66bd05f4b1915fc54783614`. Assertions and budgets
-  were not changed. Related existing issues: #459 and #389 respectively.
-- Native launch timing, retry after an actual native failure, update-restart
-  splash, hosted installer frames, and 100–200% DPI acceptance remain unverified.
+Installer GIF and installer configuration remain as on the parent branch.

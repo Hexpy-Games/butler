@@ -1,27 +1,33 @@
-import { dsClass } from "../../lib/internal";
+import { useEffect, useRef, useState } from "react";
+import { useWallpaperTone } from "../../blocks/Wallpaper/wallpaperTone";
+import { prefersReducedMotion, subscribeReducedMotion } from "../../lib/motion";
 import styles from "./StartupScreen.module.css";
-import { Box } from "../../components/Box";
-import { Stack } from "../../components/Stack";
-import { Typo } from "../../components/Typo";
-import { Button } from "../../components/Button";
-import { ButtonContainer } from "../../components/ButtonContainer";
-import { ButlerThinkingMark } from "../../components/ButlerThinkingMark";
 
-/** Startup composition: the mark has its own quiet surface, separate from copy. */
-export function StartupScreen({ status, failed, retryLabel, logsLabel, onRetry, onLogs, fill = false, theme, working = true, reducedMotion }: {
-  working?: boolean; reducedMotion?: boolean; theme?: "light" | "dark"; fill?: boolean; status: string; failed: boolean; retryLabel: string; logsLabel: string;
+/** Preview the exact shipped static document, including its first-frame poster. */
+export function StartupScreen({ stage, wallpaper, locale, onRetry, onLogs }: {
+  stage: string; wallpaper: string; locale: "ko" | "en";
   onRetry: () => void; onLogs: () => void;
 }) {
-  return <Box className={dsClass(styles.screen, fill && styles.fullscreen)} padding="xl" windowDrag="drag">
-    <Stack cross="center" justify="center" gap="lg">
-      <Stack UNSAFE_style={{ width: 96, height: 96 }}>
-        <ButlerThinkingMark theme={theme} reducedMotion={reducedMotion} state={failed || !working ? "idle" : "working"} />
-      </Stack>
-      <Typo.Body role={failed ? "alert" : "status"} aria-live="polite">{status}</Typo.Body>
-      {failed && <ButtonContainer size="sm">
-        <Button size="sm" onClick={onRetry}>{retryLabel}</Button>
-        <Button size="sm" variant="secondary" onClick={onLogs}>{logsLabel}</Button>
-      </ButtonContainer>}
-    </Stack>
-  </Box>;
+  const frame = useRef<HTMLIFrameElement>(null);
+  const scope = useRef<HTMLDivElement>(null);
+  const tone = useWallpaperTone(scope);
+  const [reduced, setReduced] = useState(prefersReducedMotion);
+  useEffect(() => subscribeReducedMotion(setReduced), []);
+  useEffect(() => {
+    const listener = (event: MessageEvent) => {
+      if (event.source !== frame.current?.contentWindow || event.origin !== location.origin) return;
+      if (event.data?.startupAction === "retry") onRetry();
+      if (event.data?.startupAction === "logs") onLogs();
+    };
+    window.addEventListener("message", listener);
+    return () => window.removeEventListener("message", listener);
+  }, [onRetry, onLogs]);
+  const id = wallpaper === "none" ? "butler.bloom" : wallpaper;
+  const posterTone = ["butler.dusk", "butler.shoreline", "butler.photo-clouds", "butler.photo-daisies"].includes(id) ? "light" : tone;
+  const query = new URLSearchParams({ preview: "true", stage, language: locale,
+    motion: reduced ? "reduced" : "auto", poster: `startup/posters/${id}.${posterTone}.png` });
+  return <div ref={scope} className={styles.screen}>
+    <iframe ref={frame} title={locale === "ko" ? "시작 화면" : "Startup window"}
+      className={styles.frame} src={`./startup.html?${query}`} />
+  </div>;
 }

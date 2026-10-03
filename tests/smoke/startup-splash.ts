@@ -35,8 +35,9 @@ const application = await electron.launch({ executablePath, args: [...smokeBrows
 try {
   const splash = await application.firstWindow();
   await splash.getByRole("status").waitFor();
+  await splash.locator("html[data-painted=true]").waitFor();
   const splashMs = Math.round(performance.now() - start);
-  assert.ok(splash.url().endsWith("startup.html"));
+  assert.ok(new URL(splash.url()).pathname.endsWith("startup.html"));
   assert.equal(await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter((win) => win.isVisible()).length), 1);
   await splash.screenshot({ path: join(output, "splash.png") });
   releaseData();
