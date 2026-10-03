@@ -4,6 +4,8 @@ use std::collections::HashMap;
 
 use super::Invocation;
 
+pub(super) const ESCAPE: char = '\\';
+
 pub(super) const POSIX: bool = true;
 
 pub(super) fn add_arguments(command: &mut std::process::Command, invocation: &Invocation) {

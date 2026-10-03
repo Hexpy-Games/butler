@@ -1,5 +1,5 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Button,
   ChevronDown,
@@ -28,6 +28,9 @@ export function TurnActivityTimeline({
 }) {
   useAppLocale();
   const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    if (!live && ["delivered", "completed", "failed", "cancelled"].includes(currentState ?? "")) setExpanded(false);
+  }, [live, currentState]);
   const workCopy = appCopy.conversation.work;
   const latest = activities.at(-1);
   if (!latest) return null;

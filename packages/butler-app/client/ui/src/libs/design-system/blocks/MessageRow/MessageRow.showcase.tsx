@@ -1,3 +1,4 @@
+import { ActivityTurn } from "./ActivityTurn.showcase";
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
@@ -65,13 +66,10 @@ function text({ locale }: ShowcaseRenderContext) {
 const CHUNK_INTERVAL_MS = 40;
 const CHUNK_SIZE = 4;
 const THINKING_MS = 900;
-
 type Turn = { id: string; role: "user" | "assistant"; text: string; streaming: boolean; thinking: boolean; time: string };
-
 function clockLabel(date: Date): string {
   return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
-
 /** `?ds-stream-reveal=off` renders the stream without the chunk fade (perf control run). */
 function streamRevealEnabled(): boolean {
   return typeof window === "undefined" || new URLSearchParams(window.location.search).get("ds-stream-reveal") !== "off";
@@ -149,6 +147,9 @@ function SendAndStream({ context }: { context: ShowcaseRenderContext }) {
 }
 
 export const stories: ShowcaseStory[] = [
+  { name: "Running activity", render: (context) => <ActivityTurn {...context} running /> },
+  { name: "Completed activity", render: (context) => <ActivityTurn {...context} /> },
+  { name: "Completed turns", render: (context) => <ActivityTurn {...context} count={4} /> },
   { name: "Default", render: (context) => <MessageTurnSample question={labels[context.locale].question} answer={labels[context.locale].summary} labels={labels[context.locale].footer} /> },
   {
     name: "Send and stream",

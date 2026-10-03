@@ -18,6 +18,7 @@ export function CurrentTurnStatus({
   phaseLabel,
   startedAt,
   state,
+  waitingForAnswer = false,
 }: {
   markKey?: string;
   operation?: ProgressRow;
@@ -26,6 +27,7 @@ export function CurrentTurnStatus({
   phaseLabel?: string;
   startedAt?: string;
   state?: string;
+  waitingForAnswer?: boolean;
 }) {
   useAppLocale();
   const markTheme = useButlerMarkTheme();
@@ -36,7 +38,8 @@ export function CurrentTurnStatus({
   const providerRecovery = publicActivity?.bridge_phase ===
     "operational_recovery" ? publicActivity : undefined;
   const waitingForApproval = state === "waiting_for_form";
-  const fullLabel = waitingForApproval ? appCopy.interfaceStatus.approvalWaiting : operationLabel ?? (providerRecovery ? interfaceProgressLabel(providerRecovery) : undefined) ??
+  const waitingLabel = waitingForAnswer ? appCopy.interfaceStatus.answerWaiting : appCopy.interfaceStatus.approvalWaiting;
+  const fullLabel = waitingForApproval ? waitingLabel : operationLabel ?? (providerRecovery ? interfaceProgressLabel(providerRecovery) : undefined) ??
     (modelRoundWait ? appCopy.interfaceStatus.generating : undefined) ?? (publicActivity ? interfaceProgressLabel(publicActivity) : undefined) ??
     phaseLabel ??
     appCopy.interfaceStatus.generating;
