@@ -22,7 +22,18 @@ fn snapshot(downloads: &Path) -> Result<Snapshot, HarnessError> {
     std::fs::read_dir(downloads)?
         .map(|entry| {
             let entry = entry?;
-            let metadata = entry.metadata()?;
+            let enumerated = entry.metadata()?;
+            let metadata = butler_platform::secure_fs::current_metadata(&entry.path())?;
+            if enumerated.len() != metadata.len()
+                || enumerated.modified()? != metadata.modified()?
+            {
+                // Do not expose real-profile names in diagnostic output.
+                eprintln!(
+                    "PROFILE snapshot cache differs: directory={} enumerated_length={} current_length={} enumerated_modified={:?} current_modified={:?}",
+                    metadata.is_dir(), enumerated.len(), metadata.len(),
+                    enumerated.modified()?, metadata.modified()?
+                );
+            }
             Ok((
                 entry.file_name().to_string_lossy().into_owned(),
                 (metadata.is_dir(), metadata.len(), metadata.modified()?),
@@ -159,8 +170,17 @@ fn verify(output: &Value, downloads: &Path, before: &Snapshot) -> Result<(), Har
             .entry(item["Extension"].as_str().unwrap_or_default().to_owned())
             .or_default() += 1;
     }
+    let after = snapshot(downloads)?;
+    for (index, (name, previous)) in before.iter().enumerate() {
+        if after.get(name) != Some(previous) {
+            eprintln!(
+                "PROFILE snapshot changed slot={index}: before={previous:?} after={:?}",
+                after.get(name)
+            );
+        }
+    }
     assert!(
-        snapshot(downloads)? == *before,
+        after == *before,
         "no entry created/moved/deleted/renamed or modified"
     );
     eprintln!(

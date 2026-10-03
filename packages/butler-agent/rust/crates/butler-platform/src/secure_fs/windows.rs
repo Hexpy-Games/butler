@@ -26,6 +26,20 @@ const SHARING_ERRORS: [i32; 2] = [32, 33];
 const RENAME_ATTEMPTS: u32 = 10;
 const RENAME_BACKOFF: std::time::Duration = std::time::Duration::from_millis(20);
 
+pub(super) fn current_metadata(path: &Path) -> io::Result<Metadata> {
+    // FindFirstFile attributes may lag prior NTFS writes. A metadata-only
+    // handle also supports directories, without reading contents or enabling
+    // backup privileges. File::metadata queries GetFileInformationByHandle.
+    OpenOptions::new()
+        .read(true)
+        .access_mode(0)
+        // FILE_FLAG_BACKUP_SEMANTICS for directories, OPEN_REPARSE_POINT for
+        // attributes of the entry itself, matching directory enumeration.
+        .custom_flags(0x0220_0000)
+        .open(path)?
+        .metadata()
+}
+
 /// Creates the folder and its missing parents; the topmost one created is
 /// restricted to its owner, and everything below inherits that.
 pub(super) fn create_private_dir_all(path: &Path) -> io::Result<()> {
