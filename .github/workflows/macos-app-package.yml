@@ -8,7 +8,7 @@ on:
         required: false
         type: string
       baseline-tag:
-        description: Published preview to additionally update to the candidate
+        description: Published preview to update through the published candidate feed (post-tag only)
         required: false
         type: string
       published-candidate:
@@ -53,6 +53,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate the published-update mode
+        env:
+          BASELINE_TAG: ${{ inputs.baseline-tag }}
+          PUBLISHED_CANDIDATE: ${{ inputs.published-candidate }}
+        run: |
+          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
+          if [ -n "$BASELINE_TAG" ] && [ "$PUBLISHED_CANDIDATE" != true ]; then
+            echo 'Published baseline updates require published-candidate=true after the release tag is published.' >&2
+            echo 'The deploy signing environment permits v* release tags; branch packaging uses ad-hoc signatures.' >&2
+            exit 1
+          fi
+          if [ "$PUBLISHED_CANDIDATE" = true ] && [ -z "$BASELINE_TAG" ]; then
+            echo 'A published update requires baseline-tag.' >&2
+            exit 1
+          fi
+
       - name: Verify the native runner
         run: test "$(uname -m)" = arm64
 
@@ -91,20 +108,6 @@ jobs:
           cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
           echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$PWD/target/release/butler-agent" >> "$GITHUB_ENV"
 
-      # A published Developer ID baseline correctly refuses an ad-hoc update.
-      # Use the release certificate only for explicitly dispatched baseline gates.
-      - name: Set up the candidate's release signing team
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.baseline-tag && !inputs.published-candidate }}
-        env:
-          APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
-          APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
-          trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
-          deploy/macos/sign-and-notarize.sh setup-certificate
-          echo "BUTLER_APP_RELEASE_SMOKE_MODE=production" >> "$GITHUB_ENV"
-
       - name: Package and smoke the native App release
         if: ${{ !inputs.published-candidate }}
         run: |
@@ -126,7 +129,7 @@ jobs:
           export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
           trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
           bun run app:update:smoke
-      - name: Update the published baseline through Settings to the exact candidate
+      - name: Update the published baseline through Settings to the published candidate
         if: inputs.baseline-tag
         env:
           GH_TOKEN: ${{ github.token }}
@@ -134,7 +137,3 @@ jobs:
           CANDIDATE_VERSION: ${{ inputs.candidate-version }}
           PUBLISHED_CANDIDATE: ${{ inputs.published-candidate }}
         run: bash deploy/macos/preview-update-smoke.sh
-
-      - name: Remove the candidate signing keychain and keys
-        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.baseline-tag && !inputs.published-candidate }}
-        run: deploy/macos/sign-and-notarize.sh cleanup

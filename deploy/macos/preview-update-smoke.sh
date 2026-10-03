@@ -3,6 +3,7 @@
 set -euo pipefail
 [[ "$BASELINE_TAG" =~ ^v0\.1\.0-preview\.[0-9]+$ ]]
 [[ "$CANDIDATE_VERSION" =~ ^0\.1\.0-preview\.[0-9]+$ ]]
+test "$PUBLISHED_CANDIDATE" = true
 profile="$(mktemp -d)"
 export HOME="$profile/home" BUTLER_DATA="$profile/data"
 mkdir -p "$HOME" "$BUTLER_DATA" "$profile/baseline" "$profile/candidate"
@@ -28,14 +29,9 @@ baseline_mounted=true
 ditto "$profile/baseline/mount/Butler.app" "$profile/baseline/unpacked/Butler.app"
 hdiutil detach "$profile/baseline/mount"
 baseline_mounted=false
-if [ "$PUBLISHED_CANDIDATE" = true ]; then
-  gh release download "v$CANDIDATE_VERSION" --dir "$profile/candidate" \
-    --pattern '*-darwin-arm64.zip' --pattern '*-darwin-arm64.zip.sha256'
-  export BUTLER_UPDATE_SMOKE_MANIFEST="https://github.com/$GITHUB_REPOSITORY/releases/download/v$CANDIDATE_VERSION/app-update-manifest.json"
-else
-  cp "dist/release/app/butler-app-$CANDIDATE_VERSION-darwin-arm64.zip" \
-    "dist/release/app/butler-app-$CANDIDATE_VERSION-darwin-arm64.zip.sha256" "$profile/candidate/"
-fi
+gh release download "v$CANDIDATE_VERSION" --dir "$profile/candidate" \
+  --pattern '*-darwin-arm64.zip' --pattern '*-darwin-arm64.zip.sha256'
+export BUTLER_UPDATE_SMOKE_MANIFEST="https://github.com/$GITHUB_REPOSITORY/releases/download/v$CANDIDATE_VERSION/app-update-manifest.json"
 archive=("$profile/candidate/"*.zip)
 test "${#archive[@]}" -eq 1
 (cd "$profile/candidate" && shasum -a 256 -c "$(basename "${archive[0]}").sha256")
