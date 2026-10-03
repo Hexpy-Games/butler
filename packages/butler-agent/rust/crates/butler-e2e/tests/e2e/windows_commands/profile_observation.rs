@@ -92,20 +92,23 @@ async fn replay(
             .await?;
     assert_eq!(turn_state(&turn), "delivered", "chat must finish");
     let requests = script.requests.lock().unwrap().clone();
-    let output = requests
+    let received = requests
         .iter()
         .rev()
-        .flat_map(provider::outputs)
-        .find(|v| v["command"] == command)
-        .expect("model receives tool result");
+        .find(|request| {
+            provider::outputs(request)
+                .iter()
+                .any(|output| output["command"] == command)
+        })
+        .expect("model receives this command's tool result");
+    let output = provider::outputs(received)
+        .into_iter()
+        .find(|output| output["command"] == command)
+        .expect("exact command result in the selected model request");
     verify(&output, &downloads, &before)?;
-    assert!(
-        requests
-            .last()
-            .unwrap()
-            .to_string()
-            .contains("DownloadsPath")
-    );
+    // A later closeout/briefing request need not replay command output. Check
+    // the request that actually carries it; verify() retains all content checks.
+    assert!(received.to_string().contains("DownloadsPath"));
     if access == Access::FullAccess {
         assert!(s.gw.approval_requests("general").await?.is_empty());
     }
