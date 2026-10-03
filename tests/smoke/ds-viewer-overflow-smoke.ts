@@ -1,3 +1,4 @@
+import { smokeBrowserArgs } from "../support/smoke-browser.ts";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -175,7 +176,7 @@ if (!existsSync(join(uiRoot, "index.html"))) throw new Error("UI dist is missing
 
 const only = new Set(Bun.argv.slice(2).filter((arg) => arg && arg !== "--"));
 const server = await createNativeAppServer({ uiRoot });
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs() });
 const offenders: Offender[] = [];
 let checkedPages = 0;
 try {

@@ -80,6 +80,8 @@ test("conversation scroll utility detects bottom distance and scrolls smoothly t
 test("message list renders the production scroll-to-bottom affordance only from hook state", () => {
   const messageList = readSource(
     "packages/butler-app/client/ui/src/components/conversation/MessageList.tsx",
+  ) + readSource(
+    "packages/butler-app/client/ui/src/components/conversation/hooks/useMessageListLayout.ts",
   );
   expect(messageList).toContain(
     "const scrollState = useConversationAutoScroll",

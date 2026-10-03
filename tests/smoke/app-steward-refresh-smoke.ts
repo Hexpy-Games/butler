@@ -1,3 +1,4 @@
+import { smokeBrowserArgs } from "../support/smoke-browser.ts";
 // Browser regression for the observer's incremental session-view contract.
 // The native gateway/stub model owns startup; only the child projection is
 // intercepted, so the real modal, store, timer and HTTP client perform refreshes.
@@ -11,7 +12,7 @@ import type { SessionView } from "../../packages/butler-app/client/ui/src/app/ty
 
 const server = await createNativeAppServer({ uiRoot: resolve("packages/butler-app/client/ui/dist") });
 const engine = process.env.BUTLER_SMOKE_BROWSER === "firefox" ? firefox : chromium;
-const browser = await engine.launch({ headless: true });
+const browser = await engine.launch({ headless: true, args: smokeBrowserArgs() });
 const original = structuredClone(HARNESS_SS03_OBSERVER_VIEW);
 const turn = original.latest_turn!;
 const first = original.messages[0]!;
@@ -80,7 +81,13 @@ try {
   assert.equal(await dialog.getByText("Original answer", { exact: true }).count(), 1);
   assert.equal(await dialog.getByText("Final answer", { exact: true }).count(), 1);
   assert.equal(await dialog.getByText("Read the complete source", { exact: true }).count(), 1);
-  assert.equal(await dialog.locator('[data-test-class="steward-observer-message"]').count(), 4);
+  assert.equal(await dialog.locator('[data-test-class="steward-observer-message"]').count(), 5,
+    "completed child keeps its own activity group in addition to history and answers");
+  const completedChild = dialog.locator(`[data-test-class="turn-current-phase-activity"][data-turn-id="${turn.id}"]`);
+  await completedChild.getByRole("button", { expanded: false }).waitFor();
+  await completedChild.getByRole("button", { expanded: false }).click();
+  assert.equal(await completedChild.locator('[data-test-class~="turn-work-block"]').count() > 0, true,
+    "last child activity remains expandable after active_turn clears");
   assert.equal(await dialog.locator('[data-test-class~="current-turn-status"]').count(), 0,
     "the terminal response clears running activity");
   assert.equal(await dialog.getByRole("button", { name: "Stop", exact: true }).count(), 0);
