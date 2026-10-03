@@ -19,6 +19,14 @@ inputs:
   cache-key:
     description: The rust-cache shared key; one per job so caches do not evict each other.
     required: true
+  cargo-target-dir:
+    description: Cargo build directory relative to the Rust workspace for caching.
+    required: false
+    default: "target"
+  prepared-static-ort:
+    description: Require a restored static runtime instead of building one in this job.
+    required: false
+    default: "false"
 
 runs:
   using: composite
@@ -74,7 +82,7 @@ runs:
       run: echo "fingerprint=$(python scripts/prepare-static-ort.py --fingerprint)" >> "$GITHUB_OUTPUT"
 
     - name: Restore static ONNX Runtime cache
-      if: inputs.native-deps == 'static-ort'
+      if: inputs.native-deps == 'static-ort' && inputs.prepared-static-ort != 'true'
       id: ort-cache
       uses: actions/cache/restore@v4
       with:
@@ -88,8 +96,14 @@ runs:
       working-directory: packages/butler-agent/rust
       env:
         ORT_CACHE_TARGET: ${{ runner.temp }}/ort-cache
+        PREPARED_STATIC_ORT: ${{ inputs.prepared-static-ort }}
+        ORT_FINGERPRINT: ${{ steps.ort.outputs.fingerprint }}
       run: |
         set -euo pipefail
+        if [ "$PREPARED_STATIC_ORT" = "true" ] && [ ! -f "$ORT_CACHE_TARGET/native-deps/ort-$ORT_FINGERPRINT/complete.json" ]; then
+          echo 'Prepared static runtime does not match this runner toolchain/compiler image.' >&2
+          exit 1
+        fi
         prepared="$(CARGO_TARGET_DIR="$ORT_CACHE_TARGET" python scripts/prepare-static-ort.py)"
         echo "$prepared"
         {
@@ -100,7 +114,7 @@ runs:
         } >> "$GITHUB_ENV"
 
     - name: Save static ONNX Runtime cache
-      if: inputs.native-deps == 'static-ort' && steps.ort-cache.outputs.cache-hit != 'true'
+      if: inputs.native-deps == 'static-ort' && inputs.prepared-static-ort != 'true' && steps.ort-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
         path: ${{ runner.temp }}/ort-cache/native-deps
@@ -109,7 +123,7 @@ runs:
     - name: Cache Cargo build
       uses: Swatinem/rust-cache@v2
       with:
-        workspaces: packages/butler-agent/rust
+        workspaces: packages/butler-agent/rust -> ${{ inputs.cargo-target-dir }}
         shared-key: ${{ inputs.cache-key }}-${{ inputs.native-deps }}
         cache-directories: ${{ runner.temp }}/ort-download-cache
         cache-on-failure: true

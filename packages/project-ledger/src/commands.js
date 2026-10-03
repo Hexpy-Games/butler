@@ -7,6 +7,7 @@ import {
   appendLedgerEvent,
   ensureDir,
   ledgerRoot,
+  withLedgerRootResolution,
   projectRelative,
   safeReadJson,
   safeWriteJson,
@@ -118,6 +119,14 @@ export function help(short = false) {
 }
 
 export function handle(command, positionals, options) {
+  // Migration changes authority during the command; help/install need no Ledger.
+  const scoped = ["init", "index", "status", "query", "render", "doctor", "check",
+    "record", "work", "spec", "plan", "task", "attempt"];
+  if (!scoped.includes(command)) return handleCommand(command, positionals, options);
+  return withLedgerRootResolution(() => handleCommand(command, positionals, options));
+}
+
+function handleCommand(command, positionals, options) {
   const project = projectRoot(options);
   if (command === "init") return initProject(options);
   if (command === "index") return writeIndex(project);

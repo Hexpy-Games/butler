@@ -244,6 +244,7 @@ wire_codes! {
         WakeTriggerConflict = "wake_trigger_conflict",
         WorkScopeProjectProjectionIncomplete = "work_scope_project_projection_incomplete",
         WorkScopeTurnBindingAmbiguous = "work_scope_turn_binding_ambiguous",
+        SqliteWalSyncFailed = "sqlite_wal_sync_failed",
     }
 }
 

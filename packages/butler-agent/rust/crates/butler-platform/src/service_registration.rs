@@ -1,5 +1,5 @@
 //! Login-time start of the Agent service: a launchd LaunchAgent on macOS, a
-//! systemd `--user` unit on Linux, and (not yet) a Task Scheduler task on
+//! systemd `--user` unit on Linux, and a Task Scheduler task on
 //! Windows.
 //!
 //! The definition restarts the service after a crash only. An intentional
@@ -32,6 +32,9 @@ mod systemd;
 mod unix;
 #[cfg(unix)]
 use unix as sys;
+#[cfg(any(windows, feature = "test-support"))]
+#[path = "service_registration/windows/xml.rs"]
+mod task_xml;
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
@@ -158,7 +161,7 @@ pub struct Registered {
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// This host has no supported service manager yet.
-    #[error("service registration is not supported on this platform yet")]
+    #[error("{}", unsupported_message())]
     Unsupported,
     /// The user's home directory is unknown.
     #[error("the home directory is unavailable")]
@@ -200,6 +203,9 @@ pub fn render(manager: Manager, definition: &Definition) -> Result<String, Error
         Manager::SystemdUser => Ok(systemd::render(definition)),
         #[cfg(not(unix))]
         Manager::Launchd | Manager::SystemdUser => Err(Error::Unsupported),
+        #[cfg(windows)]
+        Manager::TaskScheduler => windows::render(definition),
+        #[cfg(not(windows))]
         Manager::TaskScheduler => Err(Error::Unsupported),
     }
 }
@@ -241,12 +247,17 @@ fn activation_allowed(activation: Activation) -> Activation {
 }
 
 /// The definition on disk, if there is one: its program and `--data`. Reads
-/// the file only; the manager is not asked.
+/// the file on Unix; on Windows verifies the scheduler XML against it.
 ///
 /// # Errors
 ///
 /// The failure to read the file.
 pub fn registered() -> Result<Option<Registered>, Error> {
+    #[cfg(windows)]
+    let Some(text) = sys::registered_text()? else {
+        return Ok(None);
+    };
+    #[cfg(not(windows))]
     let text = match std::fs::read_to_string(definition_path()?) {
         Ok(text) => text,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
@@ -398,4 +409,11 @@ pub fn status() -> Result<Status, Error> {
 /// The failure to read the definition; a missing one is not owned.
 pub fn is_owned_by(directory: &Path) -> Result<bool, Error> {
     sys::is_owned_by(directory)
+}
+
+fn unsupported_message() -> &'static str {
+    match sys::MANAGER {
+        Manager::TaskScheduler => "service registration is unavailable",
+        _ => "service registration is not supported on this platform yet",
+    }
 }

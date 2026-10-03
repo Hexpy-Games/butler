@@ -95,7 +95,7 @@ TARGETS = {
         ),
         "cmake_defines": (),
         "cmake_cache": (),
-        "build_args": ("--compile_no_warning_as_error",),
+        "build_args": ("--compile_no_warning_as_error", "--enable_msvc_static_runtime"),
     },
 }
 

@@ -170,8 +170,9 @@ pub enum IdentityError {
 /// ever names on this host: `macos:<seconds>:<microseconds>` (the kernel's
 /// start time), `linux:<boot id>:<start ticks>` or `windows:<seconds>` (the
 /// process table's start time; a process id is not reused while a handle to
-/// the process is open, see [`terminate`]). `None` when no process has the
-/// id. Instance records persist it, so the format is pinned.
+/// the process is open, see [`terminate`]). `None` when the process has
+/// exited, including an unreaped zombie. Instance records persist it, so
+/// the format is pinned.
 pub fn process_start(pid: u32) -> Result<Option<String>, IdentityError> {
     sys::process_start(pid)
 }

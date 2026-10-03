@@ -91,6 +91,12 @@ OAuth 로그인은 `http://localhost:1455/auth/callback`으로 결과를 받습�
 
 앱에 포함된 Agent는 Butler가 열려 있는 동안에만 실행됩니다.
 
+## Agent 재시작과 긴 데이터 경로
+
+`butler start`로 실행한 Agent는 서비스 관리자가 없는 환경에서도 CLI 감독 프로세스가 비정상 종료 후 다시 시작합니다. 1분 안에 다섯 번 종료되면 재시작을 멈춥니다. 원인을 고친 뒤 `butler start`로 시작합니다. 정상 종료나 `butler stop`은 자동 재시작하지 않습니다. Butler가 요청하는 자체 재시작도 같은 데이터 폴더의 재시작 경로를 사용합니다.
+
+`--data`에 긴 경로를 사용할 수 있습니다. 경로에 공백이 있으면 따옴표로 감싸고, 설치 폴더와 겹치지 않게 합니다. 시작이 실패하면 데이터 폴더의 쓰기 권한과 `butler doctor --check installation` 결과를 확인합니다.
+
 ## 화면에 오류가 표시될 때
 
 **버틀러 화면에 오류가 발생했습니다.** 메시지가 표시되면 창을 새로고침하거나 Butler를 다시 엽니다.
@@ -150,6 +156,14 @@ standalone Agent는 `butler update --check`로 새 버전을 확인합니다. `b
 ```bash
 butler logs --lines 200
 butler logs --follow
+```
+
+### 진단 로그 내보내기
+
+`butler doctor --collect-logs`는 데이터 폴더의 `log-exports/<ID>/`에 서비스 로그와 `summary.txt`를 내보내고 경로를 알려 줍니다. 요약에는 버전, OS, 설치 종류, 서비스 관리자 유무, 최근 종료와 마지막 오류가 들어갑니다. 모델 요청·응답 로그는 포함하지 않으며 비밀 값은 가립니다. 공유하기 전에 내용을 확인합니다.
+
+```bash
+butler doctor --collect-logs
 ```
 
 ## doctor로 설치 점검

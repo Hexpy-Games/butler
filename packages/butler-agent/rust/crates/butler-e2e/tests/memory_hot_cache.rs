@@ -9,6 +9,7 @@
 use butler_e2e::e2e::fake_servers::{ChatBehavior, FakeServer, LOCAL_MODEL};
 use butler_e2e::e2e::scenario::{Fixture, Setup};
 use butler_e2e::e2e::{HarnessError, fixtures};
+use butler_platform::sqlite;
 use rusqlite::{Connection, OpenFlags};
 use serde_json::{Value, json};
 use std::path::Path;
@@ -17,7 +18,7 @@ const FACT: &str = "My preferred garden flower is the blue iris.";
 const NOW: &str = "2026-10-02T04:01:00.000Z";
 
 fn readonly(path: &Path) -> Connection {
-    Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap()
+    sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap()
 }
 
 // Await durable state, never an elapsed delay. The timeout is a harness failure
@@ -117,6 +118,25 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
     let refreshed_modified = std::fs::metadata(&cache)?.modified()?;
     assert_ne!(before, refreshed, "cache must refresh before restart");
     assert!(String::from_utf8_lossy(&refreshed).contains("blue iris"));
+    let status = s.agent.launch.command().arg("status").output()?;
+    assert!(status.status.success());
+    let status = String::from_utf8(status.stdout).unwrap();
+    let memory_tokens = status
+        .lines()
+        .find_map(|line| line.strip_prefix("memory: "))
+        .unwrap()
+        .replace(',', "")
+        .parse::<usize>()
+        .unwrap();
+    let cache_tokens = String::from_utf8_lossy(&refreshed)
+        .encode_utf16()
+        .count()
+        .div_ceil(4);
+    assert!(
+        memory_tokens >= cache_tokens,
+        "status omitted the active cache: {status}"
+    );
+
     let first_documents = hot_documents(&s.sandbox.data);
 
     // Restart drives the first maintenance tick immediately after readiness.
@@ -124,7 +144,7 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
     s.agent.terminate().await?;
     // Migration retains physical entries without outcome rows. Re-run the real
     // stage with no new window summary; it must keep the valid installed fact.
-    let db = Connection::open(&graph).unwrap();
+    let db = sqlite::open(&graph).unwrap();
     db.execute("DELETE FROM memory_hot_cache_outcomes", [])
         .unwrap();
     db.execute("UPDATE memory_projection_windows SET output_json=json_remove(output_json,'$.summary') WHERE job_id IN (SELECT j.job_id FROM memory_projection_jobs j JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id WHERE c.source_key=?1)", [format!("conversation_turn:{turn_id}")]).unwrap();

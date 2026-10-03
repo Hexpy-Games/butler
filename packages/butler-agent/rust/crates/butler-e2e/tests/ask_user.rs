@@ -14,6 +14,7 @@ use butler_e2e::e2e::{
     gateway::turn_state,
     scenario::{Scenario, Setup, accepted_turn_id},
 };
+use butler_platform::sqlite;
 use serde_json::{Value, json};
 use std::time::Duration;
 
@@ -103,6 +104,32 @@ async fn ask_user_answer_continues_same_turn() -> Result<(), HarnessError> {
         .await?;
     assert_eq!(invalid.status, 400);
     assert_eq!(s.provider()?.requests().len(), 1);
+    let wrong_session =
+        s.gw.post(
+            &format!(
+                "/authority-requests/{}/answer?session_id=unrelated",
+                q["request_ref"].as_str().unwrap()
+            ),
+            answer(),
+        )
+        .await?;
+    assert_eq!(wrong_session.status, 404);
+    for malicious in [
+        json!({"status":"answered","answers":[{"id":"format","selected":["not-an-option"],"custom":null}]}),
+        json!({"status":"answered","answers":[{"id":"format","selected":["full"],"custom":null}],"allow_scope":"conversation"}),
+    ] {
+        let rejected =
+            s.gw.post(
+                &format!(
+                    "/authority-requests/{}/answer?session_id=general",
+                    q["request_ref"].as_str().unwrap()
+                ),
+                malicious,
+            )
+            .await?;
+        assert_eq!(rejected.status, 400);
+    }
+    assert_eq!(s.provider()?.requests().len(), 1);
     let forbidden =
         s.gw.post(
             &format!(
@@ -168,6 +195,11 @@ async fn ask_user_restart_pending_keeps_question_and_queued_followup() -> Result
         s.gw.get("/session-view?session_id=general").await?.data()["pending_questions"],
         json!([])
     );
+    let stale = s.gw.post(
+        &format!("/authority-requests/{}/answer?session_id=general", q["request_ref"].as_str().unwrap()),
+        json!({"status":"answered","answers":[{"id":"format","selected":["short"],"custom":null}]}),
+    ).await?;
+    assert!((400..500).contains(&stale.status), "stale answer accepted");
     s.finish().await
 }
 
@@ -234,7 +266,7 @@ async fn measure_idle(s: &Scenario, question: &Value) -> Result<(), HarnessError
             "app-server/butler-client.sqlite",
         ]
         .map(|path| {
-            let db = rusqlite::Connection::open_with_flags(
+            let db = sqlite::open_with_flags(
                 data.join(path),
                 rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
             )

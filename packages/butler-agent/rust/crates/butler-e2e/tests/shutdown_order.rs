@@ -14,6 +14,7 @@ use butler_e2e::e2e::{
     scenario::{Scenario, Setup, accepted_turn_id},
     stop_intent::{control_command, instance_record, intent_path},
 };
+use butler_platform::sqlite;
 use serde_json::json;
 use std::time::{Duration, Instant};
 
@@ -87,7 +88,7 @@ async fn stop_reaps_a_hung_mcp_server_and_releases_the_instance() -> Result<(), 
             "/mcp-servers",
             json!({
                 "id":"hung", "display_name":"Hung fixture", "enabled":true, "transport":"stdio",
-                "command":env!("CARGO_BIN_EXE_e2e-mcp-fixture"), "args":[], "env":[
+                "command":butler_e2e::e2e::binary::mcp_fixture_binary()?, "args":[], "env":[
                     {"key":"E2E_MCP_MODE", "source":"literal", "value":"hang_init"},
                     {"key":"E2E_MCP_PID_FILE", "source":"literal", "value":pid_file},
             {"key":"E2E_MCP_CHILD_PID_FILE", "source":"literal", "value":descendant_file}
@@ -149,7 +150,7 @@ async fn sigterm_during_store_open_never_publishes_ready() -> Result<(), Harness
     }
     let mut s = Setup::new("SHUTDOWN-STARTUP")?.start().await?;
     s.agent.terminate().await?;
-    let lock = rusqlite::Connection::open(s.sandbox.data.join("runtime/session-store.sqlite"))
+    let lock = sqlite::open(s.sandbox.data.join("runtime/session-store.sqlite"))
         .map_err(|e| HarnessError(e.to_string()))?;
     lock.execute_batch("BEGIN EXCLUSIVE")
         .map_err(|e| HarnessError(e.to_string()))?;
@@ -301,7 +302,7 @@ async fn unannounced_sigterm_has_a_deadline_even_when_storage_is_blocked()
         return Ok(());
     }
     let (mut s, turn_id) = streaming_scenario("SHUTDOWN-DEADLINE").await?;
-    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))
+    let db = sqlite::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))
         .map_err(|e| HarnessError(e.to_string()))?;
     db.execute_batch("BEGIN IMMEDIATE")
         .map_err(|e| HarnessError(e.to_string()))?;
@@ -361,8 +362,13 @@ async fn deadline_waits_for_an_in_progress_record_write() -> Result<(), HarnessE
     if !butler_platform::process_control::SIGNALS {
         return Ok(());
     }
+    record_write_deadline("lock-wait").await?;
+    record_write_deadline("stalled-rename").await
+}
+
+async fn record_write_deadline(mode: &str) -> Result<(), HarnessError> {
     let mut s = Setup::new("SHUTDOWN-RECORD-RACE")?
-        .env("BUTLER_E2E_RECORD_WRITE_RELEASE_AFTER_STOP_MS", "6500")
+        .env("BUTLER_E2E_RECORD_WRITE_DEADLINE", mode)
         .start()
         .await?;
     let started = Instant::now();
@@ -385,6 +391,20 @@ async fn deadline_waits_for_an_in_progress_record_write() -> Result<(), HarnessE
     let written = logs.find("record_write_hold:end").unwrap();
     let removed = logs.find("instance_release:removed").unwrap();
     assert!(release < written && written < removed, "{logs}");
-    assert!(!logs.contains("record_lock_unavailable"), "{logs}");
+    let waiting = logs.find("record_lock_wait:begin").unwrap();
+    assert!(release < waiting && waiting < written, "{logs}");
+    if mode == "stalled-rename" {
+        let cancelled = logs
+            .find("instance_release:staged_write_cancelled")
+            .unwrap();
+        let failed = logs.find("instance_write:failed").unwrap();
+        assert!(
+            written < cancelled && cancelled < failed && failed < removed,
+            "{logs}"
+        );
+        assert!(logs.contains("record_rename_hold:begin"), "{logs}");
+    } else {
+        assert!(!logs.contains("record_lock_unavailable"), "{logs}");
+    }
     s.finish().await
 }

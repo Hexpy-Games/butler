@@ -177,6 +177,17 @@ impl DailyCognitionJobs {
         if cancellation.is_cancelled() {
             return Err("memory_write_aborted".into());
         }
+        if active_memory_descriptor_exists(&self.data_root, &self.paths)
+            .map_err(|error| error.code().to_owned())?
+            && let Err(error) = self.consumer.drain_vectors(cancellation).await
+        {
+            if cancellation.is_cancelled() {
+                return Err("memory_write_aborted".into());
+            }
+            // Unavailable embeddings must not prevent text/cache maintenance.
+            // Unit retry/failure state remains durable and visible in health.
+            butler_core::diagnostic!("[memory-vector-batch] {}", error.code());
+        }
         let now: chrono::DateTime<chrono::Utc> = SystemTime::now().into();
         let run_id = format!("cr_scheduled_{}", now.format("%Y%m%d%H%M%S"));
         let generic = self

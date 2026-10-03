@@ -22,6 +22,7 @@ impl ProcessLiveness for Live {
     }
 }
 
+// test-category: security
 #[tokio::test]
 async fn real_sqlite_work_final_reconcile_persists_current_open_disposition() {
     let unique = SystemTime::now()
@@ -174,6 +175,21 @@ async fn real_sqlite_work_final_reconcile_persists_current_open_disposition() {
         candidate,
         butler_turn::btcc::CandidateDisposition::Continue(_)
     ));
+    for _ in 0..3 {
+        assert!(matches!(
+            port.candidate("answer").await.unwrap(),
+            butler_turn::btcc::CandidateDisposition::Continue(_)
+        ));
+        assert!(
+            port.bound()
+                .await
+                .unwrap()
+                .unwrap()
+                .latest_disposition
+                .is_none(),
+            "review must not settle incomplete work after a correction count"
+        );
+    }
     let published = port.reconcile_text("answer").await.unwrap();
     assert!(published.starts_with("Work completion could not be confirmed"));
     let bound = port.bound().await.unwrap().unwrap();

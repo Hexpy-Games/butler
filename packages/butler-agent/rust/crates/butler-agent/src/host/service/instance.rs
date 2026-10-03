@@ -11,15 +11,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::host::installation::ResolvedInstallation;
 use crate::host::service::instance_identity::{
-    executable_matches, process_executable, process_is_alive, process_start_identity,
+    executable_matches, process_executable, process_start_identity,
 };
 
 const INSTANCE_SCHEMA: &str = "butler.native-agent-service-instance.v1";
 
 mod delivery;
 mod gateway_state;
+mod legacy;
 mod probe;
 mod record;
+mod record_fault;
 mod restart;
 mod stop_intent;
 mod stopping;
@@ -27,6 +29,7 @@ pub(crate) use delivery::{
     StopDelivery, force_stop, remove_shutdown_flag, request_stop, shutdown_flag_path,
 };
 pub(crate) use gateway_state::mark_gateway_state;
+pub(crate) use legacy::refuse_live_legacy_process;
 pub(crate) use probe::instance_lock_is_held_read_only;
 use record::{
     acquire_record_update_lock, instance_record_path, read_record_at, record_update_lock_path,
@@ -103,6 +106,24 @@ impl AdmissionLock {
     }
 }
 
+fn protect_data_root(data_root: &Path) -> Result<(), crate::host::HostError> {
+    // Where files have no owner-only mode (Windows), the DATA folder's
+    // access list keeps its secrets from other users.
+    if secure_fs::OWNER_ONLY {
+        if secure_fs::is_private(data_root) == Some(false) {
+            let _ = secure_fs::protect_folder(data_root);
+        }
+    } else if secure_fs::is_private(data_root) != Some(true) {
+        secure_fs::protect_folder(data_root)
+            .transpose()
+            .map_err(|source| {
+                crate::host::HostError::new("native_service_data_privacy_failed")
+                    .with_source(source)
+            })?;
+    }
+    Ok(())
+}
+
 impl InstanceGuard {
     /// Takes the DATA lock and publishes a `starting` record for this process;
     /// `app_supervised` says whether the App holds its foreground lease.
@@ -113,11 +134,7 @@ impl InstanceGuard {
         app_supervised: bool,
     ) -> Result<Self, crate::host::HostError> {
         validate_write_destinations(data_root, installation)?;
-        // Where files have no owner-only mode (Windows), the DATA folder's
-        // access list keeps its secrets from other users.
-        if secure_fs::is_private(data_root) == Some(false) {
-            let _ = secure_fs::protect_folder(data_root);
-        }
+        protect_data_root(data_root)?;
         let lock_path = instance_lock_path(data_root);
         let file = open_lock(&lock_path, true)?;
         let lock = InstanceLock::try_exclusive(file).map_err(|error| match error {
@@ -152,7 +169,7 @@ impl InstanceGuard {
         }
         let record = InstanceRecord {
             schema: INSTANCE_SCHEMA.into(),
-            nonce: uuid::Uuid::new_v4().to_string(),
+            nonce: super::instance_identity::instance_nonce(),
             pid,
             cli_supervisor_pid: std::env::var("BUTLER_CLI_SUPERVISOR_PID")
                 .ok()
@@ -306,6 +323,9 @@ fn release_record_at(
         super::shutdown_trace::event("instance_release:invalid_destination");
         return;
     }
+    if !wait {
+        record::fence_deadline_writes();
+    }
     let lock_path = record_update_lock_path(data_root);
     let lock = if wait {
         acquire_record_update_lock(&lock_path).ok()
@@ -321,15 +341,13 @@ fn release_record_at(
             }
         }
     };
-    let Some(_record_update_lock) = lock else {
-        if !wait {
-            butler_core::diagnostic!(
-                "[native-butler] record_lock_unavailable: deadline release budget expired"
-            );
-        }
+    if lock.is_none() {
         super::shutdown_trace::event("instance_release:record_lock_unavailable");
-        return;
-    };
+        if wait || record::cancel_staged_write(record_path, nonce).is_err() {
+            super::shutdown_trace::event("instance_release:staged_write_cancel_failed");
+            return;
+        }
+    }
     if read_record_at(record_path)
         .ok()
         .flatten()
@@ -397,35 +415,6 @@ pub(crate) fn validate_write_destinations(
             .map_err(|source| {
                 crate::host::HostError::new("native_path_configuration_invalid").with_source(source)
             })?;
-    }
-    Ok(())
-}
-
-pub(crate) fn refuse_live_legacy_process(data_root: &Path) -> Result<(), crate::host::HostError> {
-    for path in [
-        data_root.join("state/services/butler-main.json"),
-        data_root.join("state/butler-main-native.json"),
-    ] {
-        let bytes = match fs::read(&path) {
-            Ok(bytes) => bytes,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
-            Err(_) => return Err("native_service_legacy_state_unreadable".into()),
-        };
-        let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|source| {
-            crate::host::HostError::new("native_service_legacy_state_ambiguous").with_source(source)
-        })?;
-        // Positive and within the host's signed process ids.
-        let pid = value
-            .get("pid")
-            .and_then(serde_json::Value::as_u64)
-            .filter(|pid| *pid > 0 && i32::try_from(*pid).is_ok())
-            .and_then(|pid| u32::try_from(pid).ok())
-            .ok_or_else(|| "native_service_legacy_state_ambiguous".to_owned())?;
-        if process_is_alive(pid)? {
-            return Err(format!(
-                "native_service_legacy_supervisor_pid_alive: legacy state references live PID {pid}; verify and stop the existing Butler supervisor before starting the native service"
-            ).into());
-        }
     }
     Ok(())
 }

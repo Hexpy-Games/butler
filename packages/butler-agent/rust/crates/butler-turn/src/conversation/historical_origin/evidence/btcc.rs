@@ -1,4 +1,5 @@
 use butler_core::json;
+use butler_platform::sqlite;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
@@ -17,7 +18,7 @@ fn open(data_root: &Path) -> rusqlite::Result<Option<Connection>> {
     if !path.exists() {
         return Ok(None);
     }
-    Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map(Some)
+    sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map(Some)
 }
 
 pub(super) fn validate_outbox(

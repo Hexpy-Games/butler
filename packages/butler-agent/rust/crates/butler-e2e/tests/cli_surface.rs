@@ -13,8 +13,12 @@ use std::io::Read;
 #[test]
 fn cli_surface_exposes_only_user_commands() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let setup = Setup::new("CLI-SLIM")?;
+    let mut setup = Setup::new("CLI-SLIM")?;
     let launch = butler_e2e::e2e::agent::Launch::new(&setup.sandbox)?;
+    let version = launch.command().args(["--version", "--json"]).output()?;
+    assert!(version.status.success());
+    let version: serde_json::Value = serde_json::from_slice(&version.stdout)?;
+    assert_eq!(version["command"], "butler version");
     let output = launch.command().args(["--help", "--json"]).output()?;
     assert!(output.status.success());
     let help: serde_json::Value = serde_json::from_slice(&output.stdout)?;
@@ -152,6 +156,7 @@ fn cli_surface_exposes_only_user_commands() -> Result<(), HarnessError> {
     }
     assert_eq!(version_outputs[0], version_outputs[1]);
     assert!(!setup.sandbox.data.exists(), "version flags created data");
+    setup.sandbox.mark_success();
     Ok(())
 }
 

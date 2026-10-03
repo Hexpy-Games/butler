@@ -84,7 +84,7 @@ impl GraphRepository {
 
 /// Interrupt also reaches SQLite sorting work between VM progress callbacks.
 /// This observer owns no writer or file work, and is aborted when creation ends.
-fn interrupt_on_stop(
+pub(super) fn interrupt_on_stop(
     handle: rusqlite::InterruptHandle,
     stop: &CancellationToken,
 ) -> Option<tokio::task::JoinHandle<()>> {

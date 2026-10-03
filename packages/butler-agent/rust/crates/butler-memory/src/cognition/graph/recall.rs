@@ -14,6 +14,7 @@ mod sources;
 mod temporal;
 mod vectors;
 
+use butler_platform::sqlite;
 use std::{path::Path, time::Duration};
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
@@ -50,8 +51,8 @@ impl GraphRecallReader {
         vectors::current(self.connection()?, input, generation, matches, parse_date)
     }
     pub(in crate::cognition) fn open(path: &Path) -> CognitionResult<Self> {
-        let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .map_err(db_error)?;
+        let connection =
+            sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(db_error)?;
         connection
             .busy_timeout(Duration::from_millis(5_000))
             .map_err(db_error)?;
@@ -319,7 +320,7 @@ impl GraphRecallReader {
         rollback.and(close)
     }
 
-    fn connection(&self) -> CognitionResult<&Connection> {
+    pub(in crate::cognition) fn connection(&self) -> CognitionResult<&Connection> {
         self.connection.as_ref().ok_or_else(|| {
             CognitionError::new(CognitionCode::MemoryGraphClosed, "memory_graph_closed")
         })

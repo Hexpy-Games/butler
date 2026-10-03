@@ -44,7 +44,8 @@ pub const NO_FOLLOW: bool = sys::NO_FOLLOW;
 /// Whether [`identity`] reports device and inode numbers ([`FileId`]).
 pub const FILE_IDS: bool = sys::FILE_IDS;
 
-/// Whether [`sync_directory`] can flush a directory.
+/// Whether directory flushing is guaranteed to be available on this host.
+/// Windows attempts it but can report unsupported for the filesystem.
 pub const DIRECTORY_SYNC: bool = sys::DIRECTORY_SYNC;
 
 /// Whether [`exchange_directories`] can swap two directories atomically.
@@ -209,7 +210,8 @@ pub fn open_read_no_follow(path: &Path) -> io::Result<File> {
 }
 
 /// Flushes the directory entries of `path` (a rename or a new file in it) to
-/// storage; `None` without [`DIRECTORY_SYNC`].
+/// storage; `None` when unsupported. Windows attempts a directory flush
+/// even though [`DIRECTORY_SYNC`] is false (support varies by filesystem).
 pub fn sync_directory(path: &Path) -> Option<io::Result<()>> {
     sys::sync_directory(path)
 }
@@ -217,14 +219,15 @@ pub fn sync_directory(path: &Path) -> Option<io::Result<()>> {
 /// Flushes the file or directory at `path` to storage: an fsync of a
 /// descriptor opened for reading on Unix. Windows flushes only through a
 /// handle opened for writing, so a file is opened that way there; a
-/// directory is left alone, as [`sync_directory`] does without
-/// [`DIRECTORY_SYNC`] (NTFS journals the renames and creations in it).
+/// directory flush is attempted where supported. Windows renames also
+/// request write-through independently of directory flush support.
 pub fn sync_path(path: impl AsRef<Path>) -> io::Result<()> {
     sys::sync_path(path.as_ref())
 }
 
-/// Atomically replaces `path` with a new file, only the owner's where
-/// [`OWNER_ONLY`]: `write` fills a fresh temporary file next to `path`, which
+/// Atomically replaces `path` with a private file: Unix creation modes or
+/// Windows ACLs restrict the empty staging file before `write` fills it. The
+/// temporary file next to `path` is
 /// is synced, renamed over `path`, and the rename is synced where
 /// [`DIRECTORY_SYNC`]. On failure before the rename, the temporary file is
 /// removed and `path` is untouched; an entry this call did not create is
@@ -244,7 +247,16 @@ pub fn replace_private<E>(
     options.write(true).create_new(true);
     let _ = owner_only(&mut options);
     let mut file = options.open(&temporary).map_err(&io_error)?;
-    let written = write(&mut file).and_then(|()| {
+    // On ACL hosts an existing parent may still have explicit broad ACEs.
+    // Restrict the empty staging file before any secret content is written.
+    let private = if OWNER_ONLY {
+        Ok(())
+    } else {
+        restrict_file(&temporary)
+            .unwrap_or(Ok(()))
+            .map_err(&io_error)
+    };
+    let written = private.and_then(|()| write(&mut file)).and_then(|()| {
         file.sync_all().map_err(&io_error)?;
         drop(file);
         rename(&temporary, path).map_err(&io_error)
@@ -266,7 +278,7 @@ pub fn rename(from: &Path, to: &Path) -> io::Result<()> {
 
 /// `.<name>.<pid>.<sequence>.<nanos>.tmp` next to `path`, unique within this
 /// process and practically unique across processes.
-fn unique_temporary(path: &Path) -> PathBuf {
+pub(crate) fn unique_temporary(path: &Path) -> PathBuf {
     static SEQUENCE: AtomicU64 = AtomicU64::new(0);
     let sequence = SEQUENCE.fetch_add(1, Ordering::Relaxed);
     let nanos = SystemTime::now()

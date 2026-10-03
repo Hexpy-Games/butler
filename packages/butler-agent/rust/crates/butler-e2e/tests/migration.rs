@@ -9,6 +9,7 @@
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::fixtures::legacy_manifest;
 use butler_e2e::e2e::scenario::{Scenario, Setup};
+use butler_platform::sqlite;
 
 /// MIG-01 — a data dir whose App DB predates the BTCC runtime store (no
 /// `agent-runtime/btcc.sqlite`) is refused at start with a message that names
@@ -22,7 +23,7 @@ use butler_e2e::e2e::scenario::{Scenario, Setup};
 async fn mig_01_pre_btcc_data_dir_is_refused_without_writes() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let manifest = legacy_manifest()?;
-    let setup = Setup::new("MIG-01")?;
+    let mut setup = Setup::new("MIG-01")?;
     let data = setup.sandbox.data.clone();
     butler_e2e::e2e::fixtures::legacy(
         &data,
@@ -60,6 +61,7 @@ async fn mig_01_pre_btcc_data_dir_is_refused_without_writes() -> Result<(), Harn
         before,
         "refused start modified the legacy data dir"
     );
+    setup.sandbox.mark_success();
     Ok(())
 }
 
@@ -114,7 +116,7 @@ async fn mig_01b_older_app_schema_is_upgraded_in_place() -> Result<(), HarnessEr
     // unknown column carries a value the product must keep.
     {
         let path = s.sandbox.data.join("app-server/butler-client.sqlite");
-        let db = rusqlite::Connection::open(&path).unwrap();
+        let db = sqlite::open(&path).unwrap();
         db.execute_batch(
             "ALTER TABLE chats DROP COLUMN pinned;
              ALTER TABLE chats DROP COLUMN archived;
@@ -158,7 +160,7 @@ async fn mig_01b_older_app_schema_is_upgraded_in_place() -> Result<(), HarnessEr
 
 /// The App DB chat rows MIG-01b checks, including the unknown column.
 fn chat_rows(s: &Scenario) -> Vec<String> {
-    let db = rusqlite::Connection::open_with_flags(
+    let db = sqlite::open_with_flags(
         s.sandbox.data.join("app-server/butler-client.sqlite"),
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
     )

@@ -2,8 +2,8 @@
 //! (Settings → Security): it binds its port on the LAN addresses among
 //! them.
 //!
-//! Unix lists them with `getifaddrs`. Windows does not list them yet
-//! ([`INTERFACE_ADDRESSES`] is false), so remote access binds nothing there.
+//! Unix lists them with `getifaddrs`; Windows uses `if-addrs` to enumerate
+//! adapters. Both report IPv4 and IPv6 addresses of up interfaces.
 
 use std::net::IpAddr;
 

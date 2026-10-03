@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { gunzipSync } from "node:zlib";
@@ -20,6 +21,6 @@ export function finalizeAppNotices(appRoot) {
   console.log(`App disclosures: ${data.length + Buffer.byteLength(pointer)} bytes; one data copy`);
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === new URL(import.meta.url).pathname) {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   finalizeAppNotices(resolve(process.argv[2]));
 }

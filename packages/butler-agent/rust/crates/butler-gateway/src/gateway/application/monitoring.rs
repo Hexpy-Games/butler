@@ -350,7 +350,7 @@ pub(super) fn append_relation_workers(
             .get("relation_id")
             .and_then(Value::as_str)
             .filter(|value| !value.is_empty());
-        let Some(identity) = task_id.or(relation_id) else {
+        let Some(identity) = relation_id else {
             continue;
         };
         let worker_id = format!("{role}-{identity}");

@@ -231,7 +231,7 @@ async fn wait_or_force_stop(
     record: &InstanceRecord,
     expected: Option<&RestartIdentity>,
 ) -> Result<bool, crate::host::HostError> {
-    if wait_for_stop(data_root, &record.nonce, STOP_TIMEOUT).await? {
+    if wait_for_stop(data_root, record, STOP_TIMEOUT).await? {
         return Ok(false);
     }
     let current =
@@ -264,7 +264,7 @@ async fn wait_or_force_stop(
     } else {
         force_stop(&current)?;
     }
-    if !wait_for_stop(data_root, &record.nonce, FORCE_STOP_TIMEOUT).await? {
+    if !wait_for_stop(data_root, record, FORCE_STOP_TIMEOUT).await? {
         return Err("native_service_stop_timeout".into());
     }
     Ok(true)

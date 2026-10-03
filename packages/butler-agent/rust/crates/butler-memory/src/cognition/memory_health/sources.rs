@@ -8,7 +8,7 @@ use std::{
     path::Path,
 };
 
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::OpenFlags;
 use serde::Deserialize;
 
 use crate::cognition::{CognitionPathEnvironment, CognitionResult};
@@ -88,9 +88,15 @@ pub(super) fn read(
     let mut diagnostics = diagnostics(&stores, &maintenance);
     let gate = writer_gate(coordinator, &paths.consolidation_lock(data_root));
     let serving = super::serving::read(data_root, paths, now, profile);
+    let failed_vectors = serving.stages.node_vectors.failed + serving.stages.episode_vectors.failed;
     if let Some(count) = serving.memories_without_vectors.filter(|count| *count > 0) {
+        let status = if failed_vectors == 0 {
+            "pending batch embedding, will be embedded later".to_owned()
+        } else {
+            format!("{failed_vectors} failed; remaining pending batch embedding")
+        };
         diagnostics.push(format!(
-            "{count} memories without vectors; oldest {}",
+            "{count} memories without vectors; {status}; oldest {}",
             serving
                 .oldest_vector_pending_at
                 .as_deref()

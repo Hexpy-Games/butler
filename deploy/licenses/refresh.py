@@ -25,6 +25,7 @@ TARGETS = {
     "aarch64-apple-darwin": "macOS App/Agent",
     "x86_64-unknown-linux-gnu": "Linux x64 DEB/Arch/Agent",
     "aarch64-unknown-linux-gnu": "Linux arm64 DEB/Agent",
+    "x86_64-pc-windows-msvc": "Unsigned Windows x64 Agent preview",
 }
 SIBLING_LICENSES = {}
 
@@ -328,26 +329,9 @@ def vendored_components():
 
 def main():
     components = rust_components() + js_components() + native_components() + vendored_components() + runtime_components() + model_components()
-    inputs = ["bun.lock", "packages/butler-agent/rust/Cargo.lock",
-              "packages/butler-agent/rust/rust-toolchain.toml",
-              "packages/butler-agent/rust/scripts/static-ort.lock.json",
-              "packages/butler-npm/package.json"]
-    inputs += [str(p.relative_to(ROOT)) for p in RUST.rglob("Cargo.toml") if "target" not in p.parts]
-    inputs += [f"packages/butler-app/client/{p}/package.json" for p in ("ui", "electron")]
-    inputs += [c["source"] for c in components if c["id"].startswith("vendored:")]
-    inputs += ["packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs",
-               "packages/butler-agent/rust/scripts/prepare-static-ort.py"]
-    code = "import {inputDigest} from './deploy/licenses/generate.mjs'; console.log(JSON.stringify(Object.fromEntries(JSON.parse(process.argv[1]).map(p=>[p,inputDigest(p)]))));"
-    fingerprints = json.loads(run("node", "--input-type=module", "-e", code, json.dumps(sorted(inputs))))
-    assets = ["packages/butler-app/client/ui/src/libs/design-system/fonts",
-              "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos",
-              "packages/butler-agent/rust/crates/butler-core/src/js_date/parse",
-              "packages/butler-agent/rust/crates/butler-platform/data",
-              "packages/butler-agent/resources"]
-    code = "import {directoryDigest} from './deploy/licenses/generate.mjs'; console.log(JSON.stringify(Object.fromEntries(JSON.parse(process.argv[1]).map(p=>[p,directoryDigest(p)]))));"
-    asset_digests = json.loads(run("node", "--input-type=module", "-e", code, json.dumps(assets)))
+    code = "import {inputFiles,inputDigest} from './deploy/licenses/inputs.mjs'; console.log(JSON.stringify(Object.fromEntries(inputFiles().map(p=>[p,inputDigest(p)]))));"
+    fingerprints = json.loads(run("node", "--input-type=module", "-e", code))
     catalog = dict(inputs=fingerprints,
-                   assets=asset_digests,
                    components=sorted(components, key=lambda c: c["id"]))
     (ROOT / "deploy/licenses/catalog.json").write_text(json.dumps(catalog, ensure_ascii=False, indent=2) + "\n")
     print(f"Collected {len(components)} components; run generate.mjs to validate license policy")

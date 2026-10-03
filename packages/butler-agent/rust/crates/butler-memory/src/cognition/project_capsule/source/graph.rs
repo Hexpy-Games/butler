@@ -1,5 +1,6 @@
 //! Graph evidence about a project.
 
+use butler_platform::sqlite;
 use std::path::Path;
 
 use rusqlite::{Connection, OpenFlags};
@@ -24,7 +25,7 @@ pub(super) fn list(
     if !path.exists() {
         return Ok(Vec::new());
     }
-    let Ok(connection) = Connection::open_with_flags(
+    let Ok(connection) = sqlite::open_with_flags(
         &path,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
     ) else {
@@ -50,7 +51,7 @@ pub(super) fn are_current(
     if !path.exists() {
         return Ok(false);
     }
-    let Ok(connection) = Connection::open_with_flags(
+    let Ok(connection) = sqlite::open_with_flags(
         &path,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
     ) else {

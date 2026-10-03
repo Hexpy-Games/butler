@@ -1,5 +1,6 @@
 //! Indexing legacy transcript lines for exact queries.
 
+use butler_platform::sqlite;
 use std::{
     fs,
     path::Path,
@@ -156,7 +157,7 @@ fn open_query_database(data_root: &Path) -> CognitionResult<Connection> {
         &shm_path,
     )?;
 
-    let connection = Connection::open(&database_path).map_err(db_error)?;
+    let connection = sqlite::open(&database_path).map_err(db_error)?;
     connection.execute_batch(SCHEMA).map_err(db_error)?;
     Ok(connection)
 }

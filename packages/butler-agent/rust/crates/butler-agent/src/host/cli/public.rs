@@ -16,7 +16,8 @@ enum Action {
 }
 
 pub(crate) fn recognizes(args: &[OsString]) -> bool {
-    args.iter().any(|arg| arg == "--help" || arg == "-h")
+    args.iter()
+        .any(|arg| arg == "--help" || arg == "-h" || arg == "--version")
         || first_positionals(args)
             .first()
             .is_some_and(|value| matches!(value.as_str(), "help" | "version"))
@@ -122,6 +123,7 @@ fn parse(args: &[OsString]) -> Result<Parsed, crate::host::HostError> {
             "--json" => json = true,
             "--quiet" | "--silent" => quiet = true,
             "--help" | "-h" => help_flag = true,
+            "--version" => words.push("version".to_owned()),
             "--verbose" => {}
             option if option.starts_with("--data=") => data = Some(PathBuf::from(&option[7..])),
             option if option.starts_with('-') => {

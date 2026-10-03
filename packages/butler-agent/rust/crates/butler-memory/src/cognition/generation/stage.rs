@@ -26,23 +26,6 @@ pub(in crate::cognition::generation) async fn acquire(
         .ok_or_else(busy)
 }
 
-/// Like [`acquire`], but a caller cancellation observed while waiting is an
-/// abort, not contention: `memory_write_busy` is retryable for callers.
-pub(in crate::cognition::generation) async fn acquire_abortable(
-    coordinator: &CognitionWriteCoordinator,
-    lock_path: &Path,
-    purpose: &str,
-    cancellation: &CancellationToken,
-) -> CognitionResult<CognitionWriteLease> {
-    wait(coordinator, lock_path, purpose, cancellation)
-        .await
-        .map_err(|failure| match failure {
-            CoordinationError::Aborted => error(CognitionCode::MemoryOperationAborted),
-            _ => busy(),
-        })?
-        .ok_or_else(busy)
-}
-
 async fn wait(
     coordinator: &CognitionWriteCoordinator,
     lock_path: &Path,
@@ -82,21 +65,6 @@ pub(in crate::cognition::generation) async fn leased<T: Send + 'static>(
     })
     .await
     .map_err(|source| error(failed).with_source(source))?
-}
-
-/// Releases `lease`, committing when `result` succeeded; the result of the
-/// work wins over a release failure.
-pub(in crate::cognition::generation) fn finish<T>(
-    lease: CognitionWriteLease,
-    result: CognitionResult<T>,
-) -> CognitionResult<T> {
-    let released = lease
-        .release(result.is_ok())
-        .map_err(|source| busy().with_source(source));
-    result.and_then(|value| {
-        released?;
-        Ok(value)
-    })
 }
 
 fn busy() -> CognitionError {

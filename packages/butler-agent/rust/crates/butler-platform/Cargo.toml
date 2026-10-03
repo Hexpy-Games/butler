@@ -11,6 +11,9 @@ publish.workspace = true
 [dependencies]
 # Quotes paths inside macOS sandbox profiles.
 serde_json.workspace = true
+base64.workspace = true
+roxmltree = "0.20"
+rusqlite.workspace = true
 thiserror.workspace = true
 # Shutdown requests (host stop signals) and the stdin lease are awaited on the
 # service's runtime.
@@ -23,6 +26,7 @@ rustix.workspace = true
 [target.'cfg(target_os = "macos")'.dependencies]
 dunce.workspace = true
 libproc.workspace = true
+sysinfo.workspace = true
 
 # The process table (identity, liveness, host facts), Job Objects that
 # contain command trees, paths without a needless `\\?\` prefix, and the
@@ -30,9 +34,12 @@ libproc.workspace = true
 [target.'cfg(windows)'.dependencies]
 dunce.workspace = true
 iana-time-zone.workspace = true
+if-addrs.workspace = true
 sysinfo.workspace = true
 win32job.workspace = true
 same-file = "1.0.6"
+atomicwrites.workspace = true
+filedescriptor = "0.8.3"
 
 [features]
 # Fixture values for tests of other crates (e.g. archive entry modes).

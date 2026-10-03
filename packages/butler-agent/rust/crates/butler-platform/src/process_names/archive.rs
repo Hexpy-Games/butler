@@ -22,14 +22,16 @@ pub fn restore_archive_links(binary: &Path) -> io::Result<()> {
         }
     }
     let original = fs::metadata(directory)?.permissions();
-    let mut writable = original.clone();
     #[cfg(unix)]
-    {
+    let writable = {
+        let mut writable = original.clone();
         use std::os::unix::fs::PermissionsExt;
         writable.set_mode(original.mode() | 0o200);
-    }
-    #[cfg(windows)]
-    writable.set_readonly(false);
+        writable
+    };
+    // Windows does not honor the read-only attribute on directories.
+    #[cfg(not(unix))]
+    let writable = original.clone();
     fs::set_permissions(directory, writable)?;
     let result = (|| {
         for alias in aliases {

@@ -86,10 +86,16 @@ pub(super) fn process_start(pid: u32) -> Result<Option<String>, IdentityError> {
     };
     // The command name is parenthesized and may contain spaces; the fields
     // after it are space separated, the start time 20th among them.
-    let start_ticks = stat
+    let tail = stat
         .rfind(')')
         .and_then(|index| stat.get(index + 1..))
-        .and_then(|tail| tail.split_whitespace().nth(19))
+        .ok_or(IdentityError::Unavailable(None))?;
+    if tail.split_whitespace().next() == Some("Z") {
+        return Ok(None);
+    }
+    let start_ticks = tail
+        .split_whitespace()
+        .nth(19)
         .ok_or(IdentityError::Unavailable(None))?;
     let boot_id = fs::read_to_string("/proc/sys/kernel/random/boot_id")
         .map_err(|error| IdentityError::Unavailable(Some(error)))?;
@@ -113,6 +119,7 @@ pub(super) fn process_start(pid: u32) -> Result<Option<String>, IdentityError> {
     let target = i32::try_from(pid).map_err(|_| IdentityError::Unavailable(None))?;
     let info = match pidinfo::<BSDInfo>(target, 0) {
         Ok(info) => info,
+        Err(message) if libproc_missing(&message) => return Ok(None),
         Err(_) if !exists(target)? => return Ok(None),
         Err(_) => return Err(IdentityError::Unavailable(None)),
     };
@@ -134,9 +141,18 @@ pub(super) fn process_executable(pid: u32) -> Result<Option<String>, IdentityErr
         Ok(path) => fs::canonicalize(path)
             .map(|path| Some(path.to_string_lossy().into_owned()))
             .map_err(|error| IdentityError::Unavailable(Some(error))),
+        Err(message) if libproc_missing(&message) => Ok(None),
         Err(_) if !exists(target)? => Ok(None),
         Err(_) => Err(IdentityError::Unavailable(None)),
     }
+}
+
+/// Darwin excludes unreaped zombies from libproc but `kill(pid, 0)` still
+/// sees them. Only ESRCH proves this exit; permission/probe errors stay errors.
+#[cfg(target_os = "macos")]
+fn libproc_missing(message: &str) -> bool {
+    // libproc (pinned) reports `..., errno = <n>, message = ...`.
+    message.contains(&format!(", errno = {}, ", Errno::ESRCH as i32))
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]

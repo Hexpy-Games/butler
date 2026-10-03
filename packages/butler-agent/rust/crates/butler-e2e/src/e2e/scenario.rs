@@ -389,10 +389,11 @@ impl Scenario {
 
     /// Stops the provider: replay checks strictness, record writes cassettes.
     pub async fn finish(mut self) -> Result<(), HarnessError> {
-        match self.provider.take() {
-            Some(provider) => provider.finish().await,
-            None => Ok(()),
+        if let Some(provider) = self.provider.take() {
+            provider.finish().await?;
         }
+        self.sandbox.mark_success();
+        Ok(())
     }
 
     pub fn provider(&self) -> Result<&Provider, HarnessError> {

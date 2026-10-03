@@ -148,7 +148,8 @@ async fn server(
                 }
             };
             let value: Value = serde_json::from_slice(&body).unwrap();
-            let is_summary = value.to_string().contains("Integrate the previous summary")
+            let is_summary = value.to_string().contains("Summarize the previous summary")
+                || value.to_string().contains("Integrate the previous summary")
                 || value.to_string().contains("Shorten this working summary");
             captured.lock().await.push((value, body.len()));
             if fail_summary && is_summary {
@@ -350,9 +351,9 @@ async fn summary_persists_and_reopens_with_physical_request_admission() {
     let captured = bodies.lock().await;
     let summary_requests = captured
         .iter()
-        .filter(|(body, _)| body.to_string().contains("Integrate the previous summary"))
+        .filter(|(body, _)| body.to_string().contains("Summarize the previous summary"))
         .count();
-    assert!(summary_requests > 0);
+    assert_eq!(summary_requests, 1);
     assert!(
         captured[..captured.len() - 1]
             .iter()

@@ -74,18 +74,12 @@ impl GuidedWorkAdapter {
             let Some(bound) = bound.as_ref() else {
                 return Ok(CandidateDisposition::Accepted(None));
             };
-            if !self
-                .service
+            self.service
                 .claim_closeout_correction(butler_turn::btcc::ClaimCloseoutCorrectionInput {
                     scope: self.scope.clone(),
                     work_id: bound.work_id.clone(),
                 })
-                .await?
-            {
-                return Ok(CandidateDisposition::Accepted(Some(
-                    closeout::settle_open(self, bound, text).await?,
-                )));
-            }
+                .await?;
             return Ok(CandidateDisposition::Continue(observation.into()));
         }
         let Some(bound) = bound else {
@@ -182,7 +176,10 @@ impl WorkPort for GuidedWorkAdapter {
             self.check_turn(invocation)?;
             match self.candidate(text).await {
                 Err(error) if closeout::publication_failure(&error) => {
-                    Ok(CandidateDisposition::Accepted(None))
+                    Ok(CandidateDisposition::Continue(format!(
+                        "Work publication did not complete: {}. Inspect the current Work and effect state, reconcile any uncertain effects, then record a truthful disposition before reporting.",
+                        error.message()
+                    )))
                 }
                 result => result,
             }

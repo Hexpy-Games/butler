@@ -19,7 +19,7 @@ use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire};
 use butler_turn::conversation::ConversationSourceReader;
 use chrono::{DateTime, SecondsFormat, Utc};
 
-pub(super) async fn process(
+pub(in crate::cognition::completion::consumer) async fn process(
     input: &Input,
     embedding: &dyn CognitionEmbeddingPort,
 ) -> CognitionResult<bool> {
@@ -55,6 +55,9 @@ async fn process_generation(
         .vector_work(&generation.graph_path, &now)
         .await?
     {
+        input
+            .vector_batch
+            .store(false, std::sync::atomic::Ordering::Release);
         return Ok(false);
     }
     let (units, current) = {
@@ -88,7 +91,10 @@ async fn process_generation(
             graph.close()?;
         }
     }
-    result.map(|()| true)
+    match result {
+        Err(failure) if failure.code() == "embed_worker_cold" => Ok(false),
+        other => other.map(|()| true),
+    }
 }
 
 async fn run_claimed(
@@ -155,6 +161,16 @@ async fn embed(
     units: &[ClaimedVectorUnit],
 ) -> CognitionResult<crate::cognition::EmbeddingResult> {
     let deadline = epoch_ms().saturating_add(30_000);
+    let request_class = if input.daily_batch
+        || input.target.is_some()
+        || input
+            .vector_batch
+            .load(std::sync::atomic::Ordering::Acquire)
+    {
+        EmbeddingRequestClass::Background
+    } else {
+        EmbeddingRequestClass::WarmBackground
+    };
     let embedded = embedding
         .embed(
             EmbeddingRequest {
@@ -165,7 +181,7 @@ async fn embed(
                 mode: EmbeddingMode::CheckedCls,
                 resplit: true,
                 max_embeddings: Some(4),
-                request_class: EmbeddingRequestClass::Background,
+                request_class,
                 deadline_at_epoch_ms: Some(deadline),
             },
             input.shutdown.child_token(),

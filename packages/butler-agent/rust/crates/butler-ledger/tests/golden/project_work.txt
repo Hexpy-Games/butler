@@ -2027,8 +2027,8 @@ Ok(
             summary: None,
             recent_session_titles: [],
             ledger_event_summary: [
+                "index_written x2",
                 "project_initialized x1",
-                "index_written x1",
             ],
             open_work_titles: [],
             completed_work_titles: [],
@@ -2039,7 +2039,7 @@ Ok(
 === read_dashboard_ledger_history
 Ok(
     DashboardLedgerHistory {
-        revision: "<inode>:285:<epoch-ms>:<epoch-ms>",
+        revision: "<inode>:426:<epoch-ms>:<epoch-ms>",
         events: [],
     },
 )
@@ -2595,6 +2595,7 @@ held locks: 0
 }
 --- file project-ledger/projects/demo/ledger.jsonl
 {"schema":"project-ledger.event.v1","ts":"<ts>","type":"project_initialized","projectId":"demo","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":2,"issues":0,"source":"project-ledger"}
 {"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":21,"issues":0,"source":"project-ledger"}
 --- file project-ledger/projects/demo/plans/guided-plan-<sha:11>.md
 ---

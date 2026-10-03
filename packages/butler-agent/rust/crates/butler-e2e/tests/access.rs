@@ -21,6 +21,7 @@
     reason = "test assertions"
 )]
 
+use butler_platform::sqlite;
 use std::time::Duration;
 
 use butler_e2e::e2e::gateway::{TERMINAL, tool_rows, turn_state};
@@ -203,7 +204,7 @@ async fn acc_04_mcp_tool_asks_in_ask_first() -> Result<(), HarnessError> {
         .placeholder("NONCE", &token)
         .start()
         .await?;
-    let fixture = env!("CARGO_BIN_EXE_e2e-mcp-fixture");
+    let fixture = butler_e2e::e2e::binary::mcp_fixture_binary()?;
     let added = s
         .gw
         .post(
@@ -282,8 +283,7 @@ async fn acc_05_an_existing_install_keeps_full_access_until_it_saves_a_mode()
     // default, a schedule without an access mode, and no saved access mode.
     s.agent.terminate().await?;
     {
-        let db = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))
-            .unwrap();
+        let db = sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
         db.execute_batch(
             "DELETE FROM app_settings WHERE key='default-access-mode';
              UPDATE app_automations SET access_mode=NULL;",

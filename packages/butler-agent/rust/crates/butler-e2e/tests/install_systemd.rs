@@ -1,9 +1,9 @@
 //! INS-14 — a real `systemd --user` job (Linux CI with a user manager only).
 //!
 //! The service manager belongs to the user, not to the sandbox `HOME`, so
-//! this scenario runs with the real `HOME` (the unit lands in the runner's
-//! `~/.config/systemd/user` and is removed at the end) and keeps everything
-//! else (Agent home, data folder, `butler` command) in the sandbox. It runs
+//! this scenario places its unit in the manager's runtime search directory
+//! and removes it at the end. HOME, Agent home, data and the `butler` command
+//! remain in the sandbox. It runs
 //! only when `BUTLER_E2E_SYSTEMD=1`, which the Linux CI job sets after probing
 //! for a user manager; elsewhere it reports SKIPPED. It shows that stop,
 //! start, restart and update keep the service under the manager: the process
@@ -139,11 +139,15 @@ fn ins_14_a_systemd_user_job_stays_supervised() -> Result<(), HarnessError> {
         eprintln!("SKIPPED (no systemd --user manager, or BUTLER_E2E_SYSTEMD is not 1)");
         return Ok(());
     }
-    let (sandbox, mut launch) = sandbox("INS-14")?;
+    let (mut sandbox, mut launch) = sandbox("INS-14")?;
     launch.use_data_folder_token();
     // The one scenario that uses the real manager says so.
     launch.set_env("BUTLER_SERVICE_MANAGER", "on");
-    launch.home = butler_platform::user_dirs::home_dir().expect("HOME");
+    // The already-running manager does not inherit our temporary HOME. Its
+    // runtime unit search directory is shared with the client and disappears
+    // when the user session ends; no persistent user configuration is touched.
+    let runtime = std::env::var("XDG_RUNTIME_DIR").expect("user manager runtime directory");
+    launch.set_env("XDG_CONFIG_HOME", runtime);
     // A data folder with a space and a non-ASCII letter reaches the unit's
     // ExecStart= and Environment= intact.
     launch.data = sandbox.root.join("d\u{e2}ta folder");
@@ -234,5 +238,6 @@ fn ins_14_a_systemd_user_job_stays_supervised() -> Result<(), HarnessError> {
             .contains(&format!("/{}/", v2.dir)),
         "{last}"
     );
+    sandbox.mark_success();
     Ok(())
 }

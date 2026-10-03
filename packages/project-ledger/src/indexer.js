@@ -78,6 +78,10 @@ export function indexFreshness(project, maxSourceMtimeMs = sourceMaxMtimeMs(proj
 }
 
 export function buildIndex(project) {
+  return buildIndexSnapshot(project).index;
+}
+
+function buildIndexSnapshot(project) {
   requireLedger(project);
   const projectFile = join(ledgerRoot(project), "project.json");
   if (!existsSync(projectFile)) throw new CliError("project.json is missing", "missing_project", 1);
@@ -103,7 +107,7 @@ export function buildIndex(project) {
   const maxSourceMtimeMs = records.reduce((max, record) => Math.max(max, record.sourceMtimeMs), 0);
   const projectRecord = records.find((record) => record.kind === "project");
 
-  return {
+  const index = {
     schema: "project-ledger.index.v1",
     generatedAt: nowIso(),
     project: projectRecord
@@ -121,6 +125,7 @@ export function buildIndex(project) {
     index: indexFreshness(project, maxSourceMtimeMs),
     privacy: { rawTextIncluded: false, secretsIncluded: false },
   };
+  return { index, maxSourceMtimeMs };
 }
 
 export function writeIndex(project) {
@@ -128,7 +133,7 @@ export function writeIndex(project) {
 }
 
 function writeIndexLocked(project) {
-  const index = buildIndex(project);
+  const { index, maxSourceMtimeMs } = buildIndexSnapshot(project);
   const path = projectPath(project, INDEX_PATH);
   ensureDir(dirname(path));
   const displayPath = projectRelative(project, path);
@@ -142,7 +147,10 @@ function writeIndexLocked(project) {
     issues: index.issues.length,
     source: "project-ledger",
   });
-  return readIndex(project);
+  // The mutation claim still owns this freshly built source snapshot. Reuse
+  // its complete rows and view freshness instead of rereading the JSON and
+  // rescanning every source file; only the written index's mtime is new.
+  return { ...index, index: indexFreshness(project, maxSourceMtimeMs) };
 }
 
 export function refreshDerivedIndexAfterMutation(project, mutationResult) {

@@ -8,9 +8,12 @@
 
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::scenario::{Scenario, Setup};
+use butler_platform::sqlite;
 use serde_json::{Value, json};
 #[path = "subsession_legacy/activity.rs"]
 mod activity;
+#[path = "subsession_legacy/presentation.rs"]
+mod presentation;
 
 /// SUB-LEGACY-01 — a session whose delegations predate the typed packet
 /// (no `child_role`/`access_mode`, `routingHints.stewardId`, no envelope
@@ -30,6 +33,7 @@ async fn sub_legacy_01_pre_typed_delegations_are_read() -> Result<(), HarnessErr
     let hint = session["session_hint"].as_str().unwrap().to_owned();
     s.agent.terminate().await?;
     seed_legacy_delegations(&s, &hint);
+    presentation::seed(&s);
     seed_stuck_handoff_message(&s, &chat);
     s.gw = s.agent.start_again().await?;
 
@@ -62,6 +66,7 @@ async fn sub_legacy_01_pre_typed_delegations_are_read() -> Result<(), HarnessErr
         );
         assert_eq!(children(workers, "session_id"), ["worker-legacy-c"]);
         assert_steward_turn_shape(stewards);
+        presentation::assert_child(&stewards[1]);
     }
     for details in [
         &view.data()["context"],
@@ -78,9 +83,9 @@ async fn sub_legacy_01_pre_typed_delegations_are_read() -> Result<(), HarnessErr
     assert_eq!(
         ids,
         [
+            "steward-relation-a",
             "steward-relation-b",
             "steward-relation-f",
-            "steward-task-a",
             "worker-relation-c"
         ],
         "{}",
@@ -88,6 +93,7 @@ async fn sub_legacy_01_pre_typed_delegations_are_read() -> Result<(), HarnessErr
     );
 
     activity::assert_pages(&s, &chat, activity.data()).await?;
+    presentation::assert_waiting_children(&mut s, &chat).await?;
     s.agent.terminate().await?;
     assert_unreadable_pending_row_closed(&s);
     s.finish().await
@@ -120,7 +126,7 @@ fn assert_context_details(details: &Value, chat: &str) {
 /// The unreadable pending delegation `e` is failed and no longer pending, so
 /// its parent does not wait for it.
 fn assert_unreadable_pending_row_closed(s: &Scenario) {
-    let db = rusqlite::Connection::open_with_flags(
+    let db = sqlite::open_with_flags(
         s.sandbox.data.join("agent-runtime/btcc.sqlite"),
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
     )
@@ -138,7 +144,7 @@ fn assert_unreadable_pending_row_closed(s: &Scenario) {
 /// Five delegations of the parent session `hint` in the shapes the runtime
 /// store held before the packet was typed. All values are made up.
 fn seed_legacy_delegations(s: &Scenario, hint: &str) {
-    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap();
+    let db = sqlite::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap();
     let rows = [
         // Steward, NULL dispatch intent, no reviewed parent Work.
         (
@@ -332,8 +338,7 @@ fn assert_steward_turn_shape(stewards: &Value) {
 /// A hand-off turn as older builds left it: the turn is delivered but its
 /// provisional assistant message is still `streaming`.
 fn seed_stuck_handoff_message(s: &Scenario, chat: &str) {
-    let db =
-        rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
+    let db = sqlite::open(s.sandbox.data.join("app-server/butler-client.sqlite")).unwrap();
     db.execute(
         "INSERT INTO turns (id,chat_id,state,safe_status_label,retryable,cancellable,created_at,updated_at) VALUES ('turn-handoff',?1,'delivered','Delivered',0,0,'2026-01-01T00:00:01.000Z','2026-01-01T00:00:02.000Z')",
         [chat],

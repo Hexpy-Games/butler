@@ -18,7 +18,7 @@ use butler_platform::secrets::{
     ChangeLock, SYSTEM_BACKEND, SecretBackend, SecretError, SecretKey, SecretStore,
     SecretStoreMode, developer_id_signed,
 };
-use butler_platform::secure_fs::{OWNER_ONLY, is_owner_only};
+use butler_platform::secure_fs::{OWNER_ONLY, is_owner_only, is_private};
 
 use super::scratch;
 
@@ -63,6 +63,24 @@ fn secret_stores_keep_replace_and_delete_one_key() {
     }
 }
 
+#[cfg(windows)]
+fn repair_existing_file_acl(path: &std::path::Path, store: &SecretStore, key: &SecretKey) {
+    let root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
+    let output =
+        std::process::Command::new(std::path::PathBuf::from(root).join("System32/icacls.exe"))
+            .arg(path)
+            .args(["/grant", "*S-1-1-0:(R)"])
+            .output()
+            .unwrap();
+    assert!(output.status.success());
+    assert_eq!(is_private(path), Some(false));
+    assert_eq!(
+        store.get(key).unwrap().unwrap().expose(),
+        "sk-first-replaced"
+    );
+    assert_eq!(is_private(path), Some(true));
+}
+
 fn file_store_keeps_owner_only_secrets_per_key() {
     assert!(matches!(
         SecretKey::new(TEST_SERVICE, ""),
@@ -85,6 +103,10 @@ fn file_store_keeps_owner_only_secrets_per_key() {
     let read = store.get(&first).unwrap().unwrap();
     assert_eq!(read.expose(), "sk-first-replaced");
     assert!(!format!("{read:?}").contains("sk-first"));
+    assert_eq!(is_private(&path), Some(true));
+    assert_eq!(is_private(path.parent().unwrap()), Some(true));
+    #[cfg(windows)]
+    repair_existing_file_acl(&path, &store, &first);
     if OWNER_ONLY {
         assert_eq!(is_owner_only(&fs::metadata(&path).unwrap()), Some(true));
         let auth = fs::metadata(path.parent().unwrap()).unwrap();

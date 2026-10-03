@@ -1,6 +1,6 @@
 # 0.1.0: remaining work (ordered)
 
-This file is the status source. `HANDOFF.md` at the repo root covers what has already shipped.
+These checkboxes retain the original plan acceptance status; merged implementation does not prove owner-machine or stable-release acceptance. See [2026-10-02 preview decisions](../ledger-updates-2026-10-02.md) for the current preview snapshot and canonical Ledger publication queue. `HANDOFF.md` at the repo root covers the earlier handoff.
 
 | # | Plan | Priority | Start from |
 |---|---|---|---|
@@ -22,4 +22,4 @@ Dependencies:
 - 03 lands before 11.
 - 09 lands before 10.
 - 01, 02 and 03 land before 12.
-- Don't cut any release tag until #300 and 03 are both on main. The current updater on main selects only darwin artifacts.
+- Stable release still requires its own acceptance and explicit tag authorization. Current main supports App updates on macOS and Linux; preview.5 is the published preview. Windows source support is not a Windows installer.

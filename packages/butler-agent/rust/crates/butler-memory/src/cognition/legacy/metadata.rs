@@ -2,13 +2,14 @@
 
 mod inspect;
 
+use butler_platform::sqlite;
 use std::{
     collections::HashSet,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
-use rusqlite::{Connection, OpenFlags, params};
+use rusqlite::{OpenFlags, params};
 use tokio::sync::mpsc;
 
 use crate::cognition::box_store::BoxStoreService;
@@ -325,7 +326,7 @@ fn remove_missing_links(
             "legacy_memory_writer_disabled_for_v2",
         ));
     }
-    let mut db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)
+    let mut db = sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)
         .map_err(|source| metadata_error().with_source(source))?;
     db.busy_timeout(std::time::Duration::from_secs(5))
         .map_err(|source| metadata_error().with_source(source))?;
@@ -359,7 +360,7 @@ fn stream_refs(
     path: &PathBuf,
     sender: &mpsc::Sender<CognitionResult<Vec<ChunkRefs>>>,
 ) -> CognitionResult<()> {
-    let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    let db = sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|source| metadata_error().with_source(source))?;
     db.busy_timeout(std::time::Duration::from_secs(5))
         .map_err(|source| metadata_error().with_source(source))?;

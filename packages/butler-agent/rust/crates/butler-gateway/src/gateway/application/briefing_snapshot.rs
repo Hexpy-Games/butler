@@ -1,5 +1,6 @@
 //! Read-only App projections consumed by scheduled New Chat Briefing.
 
+use butler_platform::sqlite;
 use std::{collections::HashSet, path::Path};
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
@@ -23,7 +24,7 @@ pub fn read_new_chat_briefing_settings(database_path: &Path) -> Value {
     if !database_path.exists() {
         return Value::Object(Map::new());
     }
-    let Ok(database) = Connection::open_with_flags(database_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    let Ok(database) = sqlite::open_with_flags(database_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
     else {
         return Value::Object(Map::new());
     };
@@ -44,7 +45,7 @@ pub fn read_new_chat_briefing_projects(
     if !database_path.exists() {
         return Ok(None);
     }
-    let database = Connection::open_with_flags(database_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    let database = sqlite::open_with_flags(database_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(AppNewChatBriefingReadError)?;
     database.busy_timeout(std::time::Duration::from_secs(5))?;
     let projects = read_projects(&database)?;
