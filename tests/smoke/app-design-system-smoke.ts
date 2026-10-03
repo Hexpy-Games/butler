@@ -1,3 +1,4 @@
+import { smokeBrowserArgs } from "../support/smoke-browser.ts";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -453,7 +454,7 @@ assert(
 );
 
 const server = await createNativeAppServer({ uiRoot });
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs() });
 
 try {
   for (const viewport of [

@@ -2,6 +2,18 @@ name: Windows Squirrel install and update
 on:
   workflow_dispatch:
     inputs:
+      native-cache:
+        description: Task Cargo cache namespace on the native Windows build host
+        required: false
+        type: string
+      candidate-version:
+        description: Exact preview candidate (empty keeps the synthetic .90 to .91 check)
+        required: false
+        type: string
+      baseline-tag:
+        description: Published preview to additionally install and update to the candidate
+        required: false
+        type: string
       reuse-run:
         description: Completed BUILD run to reuse after product-source equality verification
         required: false
@@ -22,18 +34,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/windows-owner-setup
         with:
-          workflow: win-installer
+          workflow: ${{ inputs.native-cache || 'win-installer' }}
       - uses: ./.github/actions/build-windows-agent
         with:
           owner-runner: 'true'
           profile: ci-fast
           cache-key: windows-installer
-          version: 0.1.0-preview.90
+          version: ${{ inputs.candidate-version && '0.1.0-preview.0' || '0.1.0-preview.90' }}
           artifact-base-url: http://127.0.0.1/unused
       - uses: ./.github/actions/package-windows-app
         with:
           owner-runner: 'true'
-          version: 0.1.0-preview.90
+          version: ${{ inputs.candidate-version && '0.1.0-preview.0' || '0.1.0-preview.90' }}
       - name: Preserve the first packages
         shell: pwsh
         run: |
@@ -44,12 +56,12 @@ jobs:
           owner-runner: 'true'
           profile: ci-fast
           cache-key: windows-installer
-          version: 0.1.0-preview.91
+          version: ${{ inputs.candidate-version || '0.1.0-preview.91' }}
           artifact-base-url: http://127.0.0.1/unused
       - uses: ./.github/actions/package-windows-app
         with:
           owner-runner: 'true'
-          version: 0.1.0-preview.91
+          version: ${{ inputs.candidate-version || '0.1.0-preview.91' }}
       - name: Compile existing public update E2Es without running them
         shell: pwsh
         run: ./deploy/windows-installer-contracts.ps1 -Mode Build
@@ -98,6 +110,9 @@ jobs:
         run: ./deploy/windows-installer-contracts.ps1 -Mode Verify
       - name: Prove Squirrel ordering and real install/update/uninstall
         shell: pwsh
+        env:
+          BUTLER_WINDOWS_SMOKE_FROM: ${{ inputs.candidate-version && '0.1.0-preview.0' || '0.1.0-preview.90' }}
+          BUTLER_WINDOWS_SMOKE_TO: ${{ inputs.candidate-version || '0.1.0-preview.91' }}
         run: |
           $ErrorActionPreference = 'Stop'
           $profile = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
@@ -111,6 +126,28 @@ jobs:
             ./packages/butler-app/scripts/windows/verify-squirrel-version.ps1 -Squirrel packages/butler-app/client/electron/node_modules/electron-winstaller/vendor/Squirrel.exe
             bun run packages/butler-app/scripts/windows/installer-smoke.ts dist/release/app-windows-first dist/release/app-windows
             if ($LASTEXITCODE) { throw 'Installer/update smoke failed' }
+          } finally { Remove-Item -Recurse -Force $profile }
+      - name: Update the published baseline through Settings to this candidate
+        if: inputs.baseline-tag
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASELINE_TAG: ${{ inputs.baseline-tag }}
+          BUTLER_WINDOWS_SMOKE_TO: ${{ inputs.candidate-version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:BASELINE_TAG -notmatch '^v0\.1\.0-preview\.\d+$') { throw 'Expected a published preview baseline' }
+          $profile = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+          $env:HOME = Join-Path $profile 'home'
+          $env:BUTLER_DATA = Join-Path $profile 'data'
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          try {
+            $env:BUTLER_WINDOWS_SMOKE_FROM = $env:BASELINE_TAG.Substring(1)
+            $baseline = Join-Path $profile 'baseline'
+            gh release download $env:BASELINE_TAG --dir $baseline --pattern 'ButlerSetup-*-x64.exe*'
+            if ($LASTEXITCODE) { throw 'Published baseline download failed' }
+            bun run packages/butler-app/scripts/windows/installer-smoke.ts $baseline dist/release/app-windows
+            if ($LASTEXITCODE) { throw 'Published baseline to candidate update failed' }
           } finally { Remove-Item -Recurse -Force $profile }
       - name: Prove legacy-data refusal and desktop recovery
         shell: pwsh

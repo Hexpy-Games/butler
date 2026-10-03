@@ -1,3 +1,4 @@
+import { smokeBrowserArgs } from "./smoke-browser";
 import { chromium, webkit, type Browser, type BrowserContext, type Page } from "playwright";
 
 // DS Viewer on phones (shared by the viewer smoke and the static ds-site smoke): the app's
@@ -19,7 +20,7 @@ export async function launchMobileBrowser(): Promise<{ browser: Browser; engine:
   try {
     return { browser: await webkit.launch({ headless: true }), engine: "webkit" };
   } catch {
-    return { browser: await chromium.launch({ headless: true }), engine: "chromium" };
+    return { browser: await chromium.launch({ headless: true, args: smokeBrowserArgs() }), engine: "chromium" };
   }
 }
 

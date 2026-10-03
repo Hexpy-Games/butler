@@ -8,18 +8,19 @@ import { getAppCopy, setAppCopyLanguage } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { EmptyState } from "./EmptyState.tsx";
 import { useComposerStore } from "./composerStore.ts";
+import { COMPOSER_FOCUS_EVENT } from "./editor/focusComposer.ts";
 
 async function renderEmptyState(title: string, run: (container: HTMLElement, sent: string[]) => Promise<void>) {
-  const dom = new JSDOM('<div id="root"></div>', { url: "http://localhost" });
+  const dom = new JSDOM('<div id="root"></div>', { url: "http://localhost", pretendToBeVisual: true });
   class ResizeObserver { observe() {} unobserve() {} disconnect() {} }
   const matchMedia = (query: string) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {} });
   Object.assign(dom.window, { ResizeObserver, matchMedia });
   const globals: Record<string, unknown> = {
     window: dom.window, document: dom.window.document, navigator: dom.window.navigator,
     HTMLElement: dom.window.HTMLElement, Element: dom.window.Element, Node: dom.window.Node,
-    DocumentFragment: dom.window.DocumentFragment, ResizeObserver, matchMedia,
-    requestAnimationFrame: (callback: FrameRequestCallback) => setTimeout(() => callback(Date.now()), 0),
-    cancelAnimationFrame: (handle: number) => clearTimeout(handle),
+    DocumentFragment: dom.window.DocumentFragment, CustomEvent: dom.window.CustomEvent, ResizeObserver, matchMedia,
+    requestAnimationFrame: dom.window.requestAnimationFrame.bind(dom.window),
+    cancelAnimationFrame: dom.window.cancelAnimationFrame.bind(dom.window),
     // The server briefing never answers, so the fallback suggestions stay.
     fetch: () => new Promise<Response>(() => undefined), IS_REACT_ACT_ENVIRONMENT: true,
   };
@@ -33,6 +34,8 @@ async function renderEmptyState(title: string, run: (container: HTMLElement, sen
   const sent: string[] = [];
   const editor = dom.window.document.createElement("div");
   editor.tabIndex = 0;
+  // The mounted editor plugin owns this focus request; the fixture supplies its DOM endpoint.
+  editor.addEventListener(COMPOSER_FOCUS_EVENT, () => editor.focus());
   dom.window.document.body.append(editor);
   const textAreaRef = createRef<HTMLElement>() as { current: HTMLElement | null };
   textAreaRef.current = editor;

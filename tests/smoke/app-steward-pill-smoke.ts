@@ -1,3 +1,4 @@
+import { smokeBrowserArgs } from "../support/smoke-browser.ts";
 // The Steward composer pill on the visual harness (built UI served by an
 // isolated native gateway): shown while an #307-shaped child is admitted or
 // finalizing its answer, gone once the child is terminal.
@@ -13,7 +14,7 @@ const server = await createNativeAppServer({
   butlerData: join(dir, "data"),
   uiRoot: resolve("packages/butler-app/client/ui/dist"),
 });
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs() });
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await server.signIn(page);

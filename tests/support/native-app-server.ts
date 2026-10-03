@@ -30,6 +30,8 @@ export type NativeAppServerOptions = {
   /** Marks first-chat onboarding complete before launch. Default true. */
   onboardingComplete?: boolean;
   stubReply?: (request: StubModelRequest) => string | Promise<string>;
+  /** Deterministic tool response for browser tests of durable forms. */
+  stubToolCall?: (request: StubModelRequest) => { name: string; arguments: Record<string, unknown> } | null;
   readyTimeoutMs?: number;
   /** Exact renderer origins (`http://127.0.0.1:<port>`, no trailing slash) serving the UI from elsewhere. */
   devOrigins?: string[];
@@ -251,6 +253,7 @@ async function completeAppOnboarding(url: string, token: string): Promise<void> 
 async function startStubModel(
   reply: NativeAppServerOptions["stubReply"],
   calls: StubModelRequest[],
+  toolReply?: NativeAppServerOptions["stubToolCall"],
 ): Promise<{ server: Server; port: number }> {
   const server = createServer(async (request, response) => {
     const chunks: Buffer[] = [];
@@ -265,19 +268,22 @@ async function startStubModel(
     const call = { stream: body.stream === true, messages: Array.isArray(body.messages) ? body.messages : [], body };
     calls.push(call);
     const text = reply ? await reply(call) : "Stub reply from the isolated smoke model.";
+    const tool = toolReply?.(call);
+    const toolCalls = tool ? [{ id: `call-${calls.length}`, type: "function", function: { name: tool.name, arguments: JSON.stringify(tool.arguments) } }] : undefined;
+    const finishReason = tool ? "tool_calls" : "stop";
     const usage = { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 };
     if (!call.stream) {
       response.writeHead(200, { "content-type": "application/json" });
       response.end(JSON.stringify({
         id: `stub-${calls.length}`, object: "chat.completion", created: Math.floor(Date.now() / 1000), model: "stub",
-        choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: text } }], usage,
+        choices: [{ index: 0, finish_reason: finishReason, message: { role: "assistant", content: tool ? null : text, ...(toolCalls ? { tool_calls: toolCalls } : {}) } }], usage,
       }));
       return;
     }
     response.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
     const base = { id: `stub-${calls.length}`, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model: "stub" };
-    response.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: { role: "assistant", content: text } }] })}\n\n`);
-    response.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: {}, finish_reason: "stop" }], usage })}\n\n`);
+    response.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: { role: "assistant", ...(toolCalls ? { tool_calls: toolCalls.map((tool, index) => ({ ...tool, index })) } : { content: text }) } }] })}\n\n`);
+    response.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: {}, finish_reason: finishReason }], usage })}\n\n`);
     response.end("data: [DONE]\n\n");
   });
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
@@ -303,7 +309,7 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
   cpSync(uiRoot, join(resources, "app-client/dist"), { recursive: true });
 
   const stubModelCalls: StubModelRequest[] = [];
-  const stub = await startStubModel(options.stubReply, stubModelCalls);
+  const stub = await startStubModel(options.stubReply, stubModelCalls, options.stubToolCall);
   if (options.onboardingComplete !== false) writeOnboardingComplete(butlerData);
   const configPath = join(butlerData, "butler.config.json");
   if (!existsSync(configPath)) {

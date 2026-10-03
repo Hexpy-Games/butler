@@ -2,6 +2,20 @@ name: macOS App package
 
 on:
   workflow_dispatch:
+    inputs:
+      candidate-version:
+        description: Exact preview candidate (empty keeps preview.99 packaging)
+        required: false
+        type: string
+      baseline-tag:
+        description: Published preview to update through the published candidate feed (post-tag only)
+        required: false
+        type: string
+      published-candidate:
+        description: Verify the published candidate instead of rebuilding it (post-tag only)
+        required: false
+        type: boolean
+        default: false
   pull_request:
     paths:
       - ".github/workflows/macos-app-package.yml"
@@ -39,10 +53,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate the published-update mode
+        env:
+          BASELINE_TAG: ${{ inputs.baseline-tag }}
+          PUBLISHED_CANDIDATE: ${{ inputs.published-candidate }}
+        run: |
+          export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
+          trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
+          if [ -n "$BASELINE_TAG" ] && [ "$PUBLISHED_CANDIDATE" != true ]; then
+            echo 'Published baseline updates require published-candidate=true after the release tag is published.' >&2
+            echo 'The deploy signing environment permits v* release tags; branch packaging uses ad-hoc signatures.' >&2
+            exit 1
+          fi
+          if [ "$PUBLISHED_CANDIDATE" = true ] && [ -z "$BASELINE_TAG" ]; then
+            echo 'A published update requires baseline-tag.' >&2
+            exit 1
+          fi
+
       - name: Verify the native runner
         run: test "$(uname -m)" = arm64
 
       - name: Set up Rust and static ONNX Runtime
+        if: ${{ !inputs.published-candidate }}
         uses: ./.github/actions/rust-agent-setup
         with:
           native-deps: static-ort
@@ -65,22 +97,24 @@ jobs:
           npm --prefix packages/butler-app/client/ui run build
 
       - name: Build the native Agent payload binary
+        if: ${{ !inputs.published-candidate }}
         working-directory: packages/butler-agent/rust
         run: |
           set -euo pipefail
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
           export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
-          export GITHUB_REF_NAME=v0.1.0-preview.99
+          export GITHUB_REF_NAME=v${{ inputs.candidate-version || '0.1.0-preview.99' }}
           trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
           cargo build --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
           echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$PWD/target/release/butler-agent" >> "$GITHUB_ENV"
 
       - name: Package and smoke the native App release
+        if: ${{ !inputs.published-candidate }}
         run: |
           set -euo pipefail
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
           export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
-          export GITHUB_REF_NAME=v0.1.0-preview.99
+          export GITHUB_REF_NAME=v${{ inputs.candidate-version || '0.1.0-preview.99' }}
           trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
           bun run release:app:package -- \
             --platform=darwin-arm64 --out dist/release/app \
@@ -88,9 +122,18 @@ jobs:
           bun run release:app:smoke -- --platform=darwin-arm64 --out dist/release/app
 
       - name: Packaged preview App update through Settings
+        if: ${{ !inputs.published-candidate }}
         run: |
           set -euo pipefail
           export CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup"
           export HOME=$(mktemp -d) BUTLER_DATA=$(mktemp -d)
           trap 'rm -rf "$HOME" "$BUTLER_DATA"' EXIT
           bun run app:update:smoke
+      - name: Update the published baseline through Settings to the published candidate
+        if: inputs.baseline-tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASELINE_TAG: ${{ inputs.baseline-tag }}
+          CANDIDATE_VERSION: ${{ inputs.candidate-version }}
+          PUBLISHED_CANDIDATE: ${{ inputs.published-candidate }}
+        run: bash deploy/macos/preview-update-smoke.sh

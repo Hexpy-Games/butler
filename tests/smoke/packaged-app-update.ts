@@ -16,7 +16,10 @@ const root = process.cwd();
 const dir = mkdtempSync(join(tmpdir(), "butler-packaged-update-"));
 const data = join(dir, "data");
 const home = join(dir, "home");
-const from = "0.1.0-preview.90", to = "0.1.0-preview.91";
+const from = process.env.BUTLER_UPDATE_SMOKE_FROM ?? "0.1.0-preview.90";
+const to = process.env.BUTLER_UPDATE_SMOKE_TO ?? "0.1.0-preview.91";
+assert.match(from, /^0\.1\.0-preview\.\d+$/u);
+assert.match(to, /^0\.1\.0-preview\.\d+$/u);
 const profile = process.env.BUTLER_UPDATE_SMOKE_PROFILE ?? "release";
 const agentBuilds = process.env.BUTLER_UPDATE_SMOKE_AGENT_BUILDS;
 const rust = join(root, "packages/butler-agent/rust");
@@ -128,7 +131,8 @@ async function serveUpdate(zip: string) {
 async function smoke() {
   mkdirSync(home); mkdirSync(data);
   writeFileSync(join(data, "update-sentinel.txt"), "preserved");
-  const first = await packageVersion(from), second = await packageVersion(to);
+  const first = process.env.BUTLER_UPDATE_SMOKE_FROM_BUNDLE ?? await packageVersion(from);
+  const second = process.env.BUTLER_UPDATE_SMOKE_TO_BUNDLE ?? await packageVersion(to);
   await run("xattr", ["-w", "com.apple.quarantine", "0081;66000000;ButlerSmoke;", second]);
   const zip = join(dir, "update.zip");
   createMacZip(second, zip);
@@ -141,7 +145,8 @@ async function smoke() {
   const debugPort = await freePort(), agentPort = await freePort();
   child = spawn(join(installed, "Contents/MacOS/Butler"), [`--remote-debugging-port=${debugPort}`], { env: {
     ...env, BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_APP_ELECTRON_USER_DATA_DIR: join(dir, "profile"),
-    BUTLER_APP_UPDATE_MANIFEST: `http://127.0.0.1:${updatePort}/manifest.json`, BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
+    BUTLER_APP_UPDATE_MANIFEST: process.env.BUTLER_UPDATE_SMOKE_MANIFEST ?? `http://127.0.0.1:${updatePort}/manifest.json`,
+    BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
     BUTLER_E2E_TIER: "stub", BUTLER_E2E_EMBED_SOURCES: "http://127.0.0.1:9",
   }, stdio: ["ignore", "pipe", "pipe"] });
   child.stdout!.on("data", bytes => logs.push(String(bytes))); child.stderr!.on("data", bytes => logs.push(String(bytes)));
@@ -169,7 +174,7 @@ async function smoke() {
   await page.waitForFunction(() => !document.querySelector("[data-setting-id='update-previews'] [role='switch']")?.hasAttribute("disabled"));
   await page.expression(`document.querySelector("[data-setting-id='update-previews'] [role='switch']").click()`);
   await page.waitForFunction(() => !document.querySelector("[data-test-id='update-component-app'] button")?.hasAttribute("disabled"));
-  assert.match(await rowText(), /0\.1\.0-preview\.91/);
+  assert.ok((await rowText()).includes(to), "Settings shows the exact candidate version");
   console.log(`ON: ${await rowText()}`);
   await page.expression(`document.querySelector("[data-test-id='update-component-app'] button").click()`);
   await new Promise<void>((done, fail) => {
@@ -190,7 +195,7 @@ async function smoke() {
   connected = await connect(debugPort); browser = connected.browser;
   await proof(connected.page, to, session.id);
   await connected.page.evaluate(() => (window.butlerApp!.quitApp as (v: unknown) => Promise<unknown>)({ confirmed: true }));
-  console.log("PASS packaged App .90 -> .91: UI update, checksum/signature, relaunch, healthy Agent, same DATA/chat");
+  console.log(`PASS packaged App ${from} -> ${to}: UI update, checksum/signature, relaunch, healthy Agent, same DATA/chat`);
 }
 
 async function cleanup() {
