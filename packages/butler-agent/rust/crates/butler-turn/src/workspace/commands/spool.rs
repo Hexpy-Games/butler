@@ -223,6 +223,8 @@ async fn copy_pipe<R: AsyncRead + Unpin>(
     mut writer: CaptureSink,
     stop: CancellationToken,
 ) -> std::io::Result<()> {
+    let mut decoder = super::decode::Utf8Decoder::default();
+    let mut text = String::new();
     let mut bytes = [0_u8; 8192];
     loop {
         let count = tokio::select! {
@@ -232,10 +234,12 @@ async fn copy_pipe<R: AsyncRead + Unpin>(
         if count == 0 {
             break;
         }
-        writer
-            .write_all(bytes.get(..count).unwrap_or_default())
-            .await?;
+        decoder.write(bytes.get(..count).unwrap_or_default(), &mut text);
+        writer.write_all(text.as_bytes()).await?;
+        text.clear();
     }
+    decoder.end(&mut text);
+    writer.write_all(text.as_bytes()).await?;
     writer.flush().await
 }
 

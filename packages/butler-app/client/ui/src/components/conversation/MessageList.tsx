@@ -1,14 +1,13 @@
-import { memo, useRef, useLayoutEffect, useState } from "react";
+import { memo } from "react";
 import { SessionBranchSeed } from "./SessionBranchSeed";
-import { useMessageNavigation } from "@/app/messageNavigation";
 import type { MessageRecord, TurnProgressSnapshot } from "@/app/types.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { MessageItem } from "./MessageItem";
+import { TurnActivityPanel } from "./TurnActivityPanel";
 import { TurnActivityMessage } from "./TurnActivityMessage";
 import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { useMessageList } from "./hooks/useMessageList";
-import { useMessageVirtualizer } from "./hooks/useMessageVirtualizer";
-import { useConversationAutoScroll } from "./hooks/useConversationAutoScroll";
+import { useMessageListLayout } from "./hooks/useMessageListLayout";
 import { ConversationScroll, MessageListSurface } from "@/butler-ds";
 import { useEnteringMessageIds } from "./hooks/useEnteringMessageIds";
 import { QueuedMessageItem } from "./QueuedMessageItem";
@@ -21,34 +20,15 @@ interface MessageListProps {
   isSending: boolean;
 }
 
-function MessageListComponent({
-  messages,
-  turnProgress,
-  bottomReserve,
-  isSending,
-}: MessageListProps) {
-  const parentRef = useRef<HTMLDivElement | null>(null);
+function MessageListComponent({ messages, turnProgress, bottomReserve, isSending }: MessageListProps) {
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const summary = useButlerStore((state) => state.summary);
-  const seedRef = useRef<HTMLDivElement | null>(null);
-  const [headerHeight, setHeaderHeight] = useState(0);
-  const target = useMessageNavigation(state => state.target);
-  useLayoutEffect(() => {
-    const node = seedRef.current;
-    if (!node) { setHeaderHeight(0); return; }
-    const measure = () => setHeaderHeight(node.getBoundingClientRect().height);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [summary?.branch_seed]);
-
   const {
     visibleMessages,
     progressRows,
     turnState,
     turnStartedAt, turnId,
-    showTurnActivity, itemCount: messageItemCount,
+    liveMessageId, showTurnActivity, itemCount: messageItemCount,
     copiedMessageId,
     copyAssistantMessage,
     copyContextMenuText,
@@ -59,38 +39,10 @@ function MessageListComponent({
   const enteringIds = useEnteringMessageIds(visibleMessages, activeChatId);
   const queue = useQueuedConversation(visibleMessages, activeChatId);
   const itemCount = messageItemCount + queue.items.length;
-  const { rowVirtualizer, topOffset, virtualListHeight, latestMessageVersion } =
-    useMessageVirtualizer({
-      visibleMessages,
-      showTurnActivity,
-      itemCount,
-      bottomReserve,
-      scrollRef: parentRef,
-      headerHeight,
-      queuedKeys: queue.keys,
-    });
-
-  const scrollState = useConversationAutoScroll({
-    activeChatId,
-    latestMessageVersion,
-    itemCount,
-    virtualListHeight,
-    isSending,
-    showTurnActivity,
-    scrollRef: parentRef,
+  const { parentRef, seedRef, rowVirtualizer, topOffset, virtualListHeight, scrollState } = useMessageListLayout({
+    visibleMessages, showTurnActivity, itemCount, bottomReserve, activeChatId, isSending,
+    queuedKeys: queue.keys, branchSeed: summary?.branch_seed,
   });
-  useLayoutEffect(() => {
-    if (target?.sessionId !== activeChatId) return;
-    const index = visibleMessages.findIndex(message => message.id === target.messageId);
-    if (index < 0) return;
-    const frame = requestAnimationFrame(() => {
-      scrollState.releaseBottomLock();
-      const offset = rowVirtualizer.getOffsetForIndex(index, "start");
-      rowVirtualizer.scrollToOffset((offset?.[0] ?? 0) + topOffset);
-      useMessageNavigation.setState({ target: null });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [target, activeChatId, visibleMessages, rowVirtualizer, scrollState.releaseBottomLock, topOffset]);
 
   return (
     <>
@@ -115,10 +67,8 @@ function MessageListComponent({
                 />
               );
             }
-
             const message = visibleMessages[virtualRow.index];
             if (!message) return null;
-
             return (
               <MessageItem
                 key={message.id ?? `${message.role}-${message.text}`}
@@ -132,6 +82,8 @@ function MessageListComponent({
                 onCopyContextMenuText={copyContextMenuText}
                 rowVirtualizer={rowVirtualizer}
                 stewardProgress={anchoredStewardProgress.get(message.id)}
+                liveActivity={message.id === liveMessageId ? <TurnActivityPanel
+                  rows={progressRows} state={turnState} startedAt={turnStartedAt} turnId={turnId} /> : undefined}
               />
             );
           })}
@@ -148,7 +100,6 @@ function MessageListComponent({
     </>
   );
 }
-
 export const MessageList = memo(
   MessageListComponent,
   (previous, next) =>

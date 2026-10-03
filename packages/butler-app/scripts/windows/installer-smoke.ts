@@ -17,7 +17,10 @@ if (process.platform !== "win32" || process.env.GITHUB_ACTIONS !== "true" || pro
 }
 const release = resolve(process.argv[2]);
 const second = resolve(process.argv[3]);
-const from = "0.1.0-preview.90", to = "0.1.0-preview.91";
+const from = process.env.BUTLER_WINDOWS_SMOKE_FROM ?? "0.1.0-preview.90";
+const to = process.env.BUTLER_WINDOWS_SMOKE_TO ?? "0.1.0-preview.91";
+assert.match(from, /^0\.1\.0-preview\.\d+$/u);
+assert.match(to, /^0\.1\.0-preview\.\d+$/u);
 const root = mkdtempSync(join(tmpdir(), "butler-installer-e2e-"));
 const data = join(root, "data");
 const owned = new Set<number>();
@@ -26,7 +29,16 @@ const calls = { chat: 0, memory: 0, memorySpeakers: new Set<string>() };
 let uninstalled = false;
 let phase = "one-click install";
 const manifest = readJson(join(second, "app-update-manifest.json"))!;
-const packageName = manifest.artifacts[0].artifact_url.split("/").at(-1);
+const artifact = manifest.artifacts.find((item: any) => item.platform === "windows-x64");
+assert.equal(artifact?.version, to, "Candidate manifest must describe the exact update version");
+const packageName = artifact.artifact_url.split("/").at(-1);
+const packageBytes = readFileSync(join(second, packageName));
+assert.equal(createHash("sha256").update(packageBytes).digest("hex"), artifact.sha256);
+const feed = readFileSync(join(second, "RELEASES"), "utf8").trim().split(/\s+/u);
+assert.equal(feed.length, 3, "Expected one complete RELEASES entry");
+assert.equal(feed[0].toLowerCase(), createHash("sha1").update(packageBytes).digest("hex"));
+assert.equal(feed[1], packageName);
+assert.equal(Number(feed[2]), packageBytes.length);
 const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: async request => {
   const path = new URL(request.url).pathname;
   if (path === "/v1/responses") {
@@ -53,7 +65,8 @@ const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), BUTLE
   BUTLER_APP_SERVER_PORT: String(agentPort), BUTLER_E2E_TIER: "stub", BUTLER_PROVIDER_QUOTA_POLLING: "0",
   OPENAI_API_KEY: "e2e-not-real", OPENAI_BASE_URL: `http://127.0.0.1:${server.port}/v1`,
   ELECTRON_ENABLE_LOGGING: "1", ELECTRON_LOG_FILE: join(root, "electron.log"),
-  BUTLER_APP_UPDATE_MANIFEST: `http://127.0.0.1:${server.port}/manifest.json`, BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
+  BUTLER_APP_UPDATE_MANIFEST: process.env.BUTLER_WINDOWS_SMOKE_MANIFEST ?? `http://127.0.0.1:${server.port}/manifest.json`,
+  BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
 };
 const installed = join(powershell("[Environment]::GetFolderPath('LocalApplicationData')", env), "butler-app");
 const stub = join(installed, "Butler.exe");
@@ -196,6 +209,10 @@ function prepare() {
 }
 
 function run(command: string, args: string[]) {
+  if (command === join(release, `ButlerSetup-${from}-x64.exe`)) {
+    const expected = readFileSync(command + ".sha256", "utf8").trim().split(/\s+/u)[0];
+    assert.equal(digest(command), expected, "Baseline installer checksum");
+  }
   const child = spawnSync(command, args, { env, stdio: "ignore" });
   assert.equal(child.status, 0, `${command}: exit ${child.status}`);
 }

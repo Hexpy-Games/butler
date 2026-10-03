@@ -5,6 +5,7 @@ export function areMessageItemPropsEqual(
   next: MessageItemProps,
 ): boolean {
   return previous.message === next.message &&
+    previous.liveActivity === next.liveActivity &&
     previous.topOffset === next.topOffset &&
     previous.copied === next.copied &&
     previous.entering === next.entering &&

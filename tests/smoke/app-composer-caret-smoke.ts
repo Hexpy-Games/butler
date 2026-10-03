@@ -1,10 +1,11 @@
 // Real composer focus/selection through browser input; no provider calls needed.
 import { strict as assert } from "node:assert";
 import { chromium } from "playwright";
+import { smokeBrowserArgs } from "../support/smoke-browser.ts";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 
 const server = await createNativeAppServer({ config: { user: { name: "Smoke", language: "en" } } });
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, args: smokeBrowserArgs() });
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await server.signIn(page);
@@ -40,12 +41,40 @@ try {
   assert.equal(await editor.innerText(), "안녕하세요 hello\n두 번째 줄X", "shortcut focuses multiline draft at end");
   // Chromium CDP drives real composition events and Lexical's IME handling.
   const cdp = await page.context().newCDPSession(page);
-  await cdp.send("Input.imeSetComposition", { text: "한", selectionStart: 1, selectionEnd: 1 });
+  await editor.evaluate(element => {
+    (window as unknown as { compositionEvents: string[] }).compositionEvents = [];
+    for (const name of ["compositionstart", "compositionupdate", "compositionend"]) {
+      element.addEventListener(name, event => (window as unknown as { compositionEvents: string[] }).compositionEvents.push(`${name}:${(event as CompositionEvent).data}`));
+    }
+  });
+  for (const text of ["ㅎ", "하", "한"]) {
+    await cdp.send("Input.imeSetComposition", { text, selectionStart: text.length, selectionEnd: text.length });
+    const caret = await editor.evaluate(element => {
+      const selection = window.getSelection()!;
+      const node = selection.focusNode!;
+      const end = (node.textContent ?? "").replace(/\u200b$/u, "").length;
+      const glyph = document.createRange();
+      glyph.setStart(node, end - 1); glyph.setEnd(node, end);
+      const rect = glyph.getBoundingClientRect();
+      const caret = selection.getRangeAt(0).cloneRange(); caret.collapse(false);
+      return { offset: selection.focusOffset, end, delta: caret.getBoundingClientRect().left - rect.right };
+    });
+    assert.equal(caret.offset, caret.end, `selection follows ${text}`);
+    assert(Math.abs(caret.delta) < 1, `caret follows composing glyph ${text}: ${JSON.stringify(caret)}`);
+  }
   await page.keyboard.press("ControlOrMeta+Shift+E");
   await cdp.send("Input.insertText", { text: "한" });
   assert.equal(await editor.innerText(), "안녕하세요 hello\n두 번째 줄X한", "shortcut does not disturb Korean composition");
+  const compositionEvents = await page.evaluate(() => (window as unknown as { compositionEvents: string[] }).compositionEvents);
+  assert(compositionEvents.some(event => event.startsWith("compositionstart:")));
+  assert(compositionEvents.includes("compositionupdate:한"));
+  assert(compositionEvents.includes("compositionend:한"));
   await cdp.detach();
   await editor.fill("안녕하세요 hello");
+  await blur();
+  await padding();
+  await page.evaluate(() => document.fonts.ready);
+  // Hit-test the focused editor after reopening, using its current font metrics.
   const point = await editor.evaluate(element => {
     const range = document.createRange();
     const text = document.createTreeWalker(element, NodeFilter.SHOW_TEXT).nextNode()!;
@@ -53,8 +82,6 @@ try {
     const rect = range.getBoundingClientRect();
     return { x: rect.left + 1, y: rect.top + rect.height / 2 };
   });
-  await blur();
-  await padding();
   await page.mouse.click(point.x, point.y);
   const offset = await editor.evaluate(element => {
     const selection = window.getSelection()!;

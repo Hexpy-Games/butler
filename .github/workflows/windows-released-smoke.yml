@@ -6,6 +6,10 @@ on:
         description: Published preview tag to install
         required: true
         type: string
+      from-tag:
+        description: Published baseline to update through the real published feed
+        required: false
+        type: string
 permissions:
   contents: read
 jobs:
@@ -47,4 +51,35 @@ jobs:
             Expand-Archive $archive[0].FullName (Join-Path $profile 'portable')
             bun run packages/butler-app/scripts/windows/legacy-data-smoke.ts (Join-Path $profile 'portable/Butler-win32-x64/Butler.exe')
             if ($LASTEXITCODE) { throw 'Published legacy-data recovery smoke failed' }
+          } finally { Remove-Item -Recurse -Force $profile }
+      - name: Update the published baseline through the published manifest and nupkg
+        if: inputs.from-tag
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          BASELINE_TAG: ${{ inputs.from-tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($tag in @($env:RELEASE_TAG,$env:BASELINE_TAG)) {
+            if ($tag -notmatch '^v0\.1\.0-preview\.\d+$') { throw 'Expected preview tags' }
+          }
+          $profile = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+          $env:HOME = Join-Path $profile 'home'
+          $env:BUTLER_DATA = Join-Path $profile 'data'
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          try {
+            $baseline = Join-Path $profile 'baseline'
+            $candidate = Join-Path $profile 'candidate'
+            gh release download $env:BASELINE_TAG --dir $baseline --pattern 'ButlerSetup-*-x64.exe*'
+            if ($LASTEXITCODE) { throw 'Baseline installer download failed' }
+            gh release download $env:RELEASE_TAG --dir $candidate --pattern 'app-update-manifest.json' --pattern 'RELEASES' --pattern '*-full.nupkg'
+            if ($LASTEXITCODE) { throw 'Published update feed download failed' }
+            bun install --frozen-lockfile --ignore-scripts
+            if ($LASTEXITCODE) { throw 'Dependency installation failed' }
+            $env:BUTLER_WINDOWS_SMOKE_FROM = $env:BASELINE_TAG.Substring(1)
+            $env:BUTLER_WINDOWS_SMOKE_TO = $env:RELEASE_TAG.Substring(1)
+            $env:BUTLER_WINDOWS_SMOKE_MANIFEST = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:RELEASE_TAG/app-update-manifest.json"
+            bun run packages/butler-app/scripts/windows/installer-smoke.ts $baseline $candidate
+            if ($LASTEXITCODE) { throw 'Published preview update failed' }
           } finally { Remove-Item -Recurse -Force $profile }

@@ -1,15 +1,17 @@
 /// <reference types="bun" />
 
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { appCopy } from "@/app/copy.ts";
+import { appCopy, setAppCopyLanguage } from "@/app/copy.ts";
 import { selectActiveChat, selectViewTitle, useButlerStore } from "@/app/store.ts";
 import type { NavigationView, SessionSummary } from "@/app/types.ts";
 
 let root: Root | undefined;
 const initialStoreState = useButlerStore.getState();
+
+beforeEach(() => setAppCopyLanguage("en"));
 
 afterEach(async () => {
   if (root) await act(async () => root?.unmount());

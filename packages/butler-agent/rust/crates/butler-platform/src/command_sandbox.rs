@@ -6,6 +6,12 @@
 //! report write protection as [`Protection::Unavailable`]. Linux gets a
 //! Landlock wrapper in a later stage.
 
+mod environment;
+pub use environment::tool_environment;
+mod operators;
+mod output;
+pub use output::CommandOutputDecoder;
+
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -121,4 +127,10 @@ pub fn legacy_shell(
 /// by its real path. `root` must be absolute and lexically normalized.
 pub fn protect_writes(invocation: Invocation, root: &Path) -> Result<Protection, ProtectError> {
     sandbox::protect_writes(invocation, root)
+}
+
+/// Whether an unquoted shell operator could detach work. Interpreter script
+/// arguments remain quoted data; shell escape syntax is host-specific.
+pub fn has_background_operator(command: &str) -> bool {
+    operators::has_background(command, shell::ESCAPE)
 }
