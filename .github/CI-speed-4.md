@@ -88,6 +88,11 @@ Runner contention can dominate Windows even with warm compilation.
   verification; publication still waits for verification. Existing Windows
   native jobs share a Cargo namespace, retaining profile/CRT/LTO fingerprints,
   existing persistent sccache/Bun caches and owner-registration sentinels.
+- Windows hosted command, remote, recovery and data harnesses run on separate
+  disposable runners. Installed release/UI/lifecycle/Task Scheduler checks
+  keep their real install dependency. Completion artifacts prove all 12
+  original hosted harnesses ran exactly once, and the gate rejects any failed,
+  cancelled or skipped required producer/verification job.
 - Release reuse verifies the actual checkout SHA, version, platform, static ORT,
   release profile, toolchain, assertions/overflow settings, flags and SHA256.
   Only completed successful same-repository CI runs qualify. Forks, failed

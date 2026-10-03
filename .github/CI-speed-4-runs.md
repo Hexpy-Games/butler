@@ -103,6 +103,13 @@ complete hosted installed verification 801 s. Those are job walls including
 setup/upload, with every existing Windows check retained. This is a 10.0%
 observed workflow reduction; hosted/self-hosted contention can vary.
 
+The hosted job's serial command (184 s), LAN/pairing (219 s) and supervision
+(127 s) groups exposed another avoidable chain. The next code run puts these
+existing checks on independent disposable runners, alongside queue recovery,
+CLI, migration and durability; installed UI/lifecycle/Task Scheduler checks
+retain their real dependency. The complete 12-harness assertion is now a
+cross-job gate over completion artifacts and every selected job result.
+
 The additional SDK artifact fallback preserves the recipe's required relative
 links and every pinned input. Existing cache quota eviction cannot silently
 turn it into an unchecked or partial runtime.

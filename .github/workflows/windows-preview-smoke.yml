@@ -228,72 +228,15 @@ jobs:
         run: |
           $env:BUTLER_E2E_BIN = Join-Path $env:BUTLER_E2E_INSTALLED_ROOT 'butler-agent.exe'
           ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests installed_preview
-      - name: Existing CLI E2E
+      - name: Require installed verification harnesses
         if: ${{ !cancelled() }}
         run: |
-          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          $env:BUTLER_E2E_BIN = "$env:PREVIEW_ROOT/artifacts/butler-agent.exe"
-          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests cli_surface   |
-            Tee-Object "$env:PREVIEW_ROOT/logs/cli-surface.log"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Native command tool environment, Unicode and Downloads chat
-        if: ${{ !cancelled() }}
-        run: |
-          $env:BUTLER_E2E_BIN = "$env:PREVIEW_ROOT/artifacts/butler-agent.exe"
-          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests windows_commands |
-            Tee-Object "$env:PREVIEW_ROOT/logs/windows-commands.log"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: LAN listener, bind failures and API pairing smoke
-        if: ${{ !cancelled() }}
-        run: |
-          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          $env:BUTLER_E2E_BIN = "$env:PREVIEW_ROOT/artifacts/butler-agent.exe"
-          $env:BUTLER_E2E_REQUIRE_LAN = '1'
-          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests gateway_remote,gateway_pairing,cli_remote   |
-            Tee-Object "$env:PREVIEW_ROOT/logs/lan-pairing.log"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Existing active plus queued shutdown recovery E2E
-        if: ${{ !cancelled() }}
-        run: |
-          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          $env:BUTLER_E2E_BIN = "$env:PREVIEW_ROOT/artifacts/butler-agent.exe"
-          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests queue_shutdown   |
-            Tee-Object "$env:PREVIEW_ROOT/logs/queue-shutdown.log"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Existing data migration and configuration durability E2E
-        run: |
-          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          $env:BUTLER_E2E_BIN = "$env:PREVIEW_ROOT/artifacts/butler-agent.exe"
-          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests migration,durable_configuration   |
-            Tee-Object "$env:PREVIEW_ROOT/logs/data-durability.log"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Unmanaged supervisor recovery and operational log export
-        run: |
-          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
-          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          $env:BUTLER_E2E_BIN = "$env:PREVIEW_ROOT/artifacts/butler-agent.exe"
-          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests service_supervision,service_diagnostics   |
-            Tee-Object "$env:PREVIEW_ROOT/logs/paths-supervision.log"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Require every hosted verification harness
-        if: ${{ !cancelled() }}
-        run: |
-          $expected = @('windows_startup_xml','installed_preview','cli_surface','gateway_remote','gateway_pairing','cli_remote',
-            'windows_commands','queue_shutdown','migration','durable_configuration','service_supervision','service_diagnostics')
+          $expected = @('windows_startup_xml','installed_preview')
           $actual = @(Get-Content "$env:PREVIEW_ROOT/logs/completed-harnesses.txt")
           if ($actual.Count -ne $expected.Count -or (Compare-Object $expected $actual)) {
             throw "Incomplete verification: completed=$($actual -join ',')"
           }
-          "Verified all 12 compiled harnesses: $($actual -join ',')"
+          "Verified installed harnesses: $($actual -join ',')"
       - name: Task Scheduler installed artifact E2E (disposable runner only)
         working-directory: .
         run: |
@@ -312,6 +255,14 @@ jobs:
         with:
           name: unsigned-windows-stub-logs
           path: ${{ runner.temp }}/windows-verify/logs/*.log
+      - name: Keep installed harness completion evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-completed-installed
+          path: ${{ runner.temp }}/windows-verify/logs/completed-harnesses.txt
+          if-no-files-found: error
+          retention-days: 1
       - name: Remove temporary verification profiles
         if: always()
         run: |
@@ -319,6 +270,92 @@ jobs:
             Remove-Item $env:WINDOWS_PREVIEW_TEMP_ROOT -Recurse -Force
           }
           Remove-Item $env:PREVIEW_ROOT -Recurse -Force
+
+  hosted:
+    name: Hosted Windows E2E (${{ matrix.shard }})
+    needs: stub
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {shard: commands, tests: windows_commands}
+          - {shard: remote, tests: 'gateway_remote,gateway_pairing,cli_remote'}
+          - {shard: recovery, tests: 'queue_shutdown,service_supervision,service_diagnostics'}
+          - {shard: data, tests: 'cli_surface,migration,durable_configuration'}
+    env:
+      BUTLER_E2E_TIER: stub
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-e2e
+          path: ${{ runner.temp }}/windows-verify/artifacts
+      - name: Isolate the existing compiled harnesses
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'windows-verify'
+          New-Item -ItemType Directory -Force "$root/logs" | Out-Null
+          "PREVIEW_ROOT=$root" >> $env:GITHUB_ENV
+          "BUTLER_E2E_WORKSPACE_ROOT=$env:GITHUB_WORKSPACE/packages/butler-agent/rust" >> $env:GITHUB_ENV
+          "BUTLER_E2E_BIN=$root/artifacts/butler-agent.exe" >> $env:GITHUB_ENV
+      - name: Run every existing selected harness
+        env:
+          SELECTED_HARNESSES: ${{ matrix.tests }}
+          BUTLER_E2E_REQUIRE_LAN: ${{ matrix.shard == 'remote' && '1' || '' }}
+        run: |
+          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests $env:SELECTED_HARNESSES.Split(',') |
+            Tee-Object "$env:PREVIEW_ROOT/logs/harnesses.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Keep harness completion evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-completed-${{ matrix.shard }}
+          path: ${{ runner.temp }}/windows-verify/logs/completed-harnesses.txt
+          if-no-files-found: error
+          retention-days: 1
+      - name: Keep diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-windows-${{ matrix.shard }}-logs
+          path: ${{ runner.temp }}/windows-verify/logs/*.log
+      - name: Remove temporary verification profiles
+        if: always()
+        run: Remove-Item $env:PREVIEW_ROOT -Recurse -Force
+
+  gate:
+    name: Complete Windows preview verification
+    if: ${{ always() && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    needs: [build, stub, release, hosted]
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Require all producer and verification jobs
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          $needs = ConvertFrom-Json $env:NEEDS_JSON -AsHashtable
+          foreach ($job in $needs.GetEnumerator()) {
+            if ($job.Value.result -ne 'success') { throw "Incomplete Windows job: $($job.Key)=$($job.Value.result)" }
+          }
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: windows-completed-*
+          path: ${{ runner.temp }}/windows-completion
+      - name: Require every hosted verification harness
+        run: |
+          $expected = @('windows_startup_xml','installed_preview','cli_surface','gateway_remote','gateway_pairing','cli_remote',
+            'windows_commands','queue_shutdown','migration','durable_configuration','service_supervision','service_diagnostics')
+          $actual = @(Get-ChildItem "$env:RUNNER_TEMP/windows-completion" -Recurse -Filter completed-harnesses.txt |
+            ForEach-Object { Get-Content $_.FullName })
+          if ($actual.Count -ne $expected.Count -or (Compare-Object $expected $actual)) {
+            throw "Incomplete verification: completed=$($actual -join ',')"
+          }
+          "Verified all 12 compiled harnesses: $($actual -join ',')"
 
   diagnose-native:
     name: Isolated native PowerShell startup probe
