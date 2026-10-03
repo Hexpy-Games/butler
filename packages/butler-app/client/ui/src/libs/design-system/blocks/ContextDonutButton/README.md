@@ -15,6 +15,16 @@ It keeps the donut geometry, hover behavior, and ratio styling in the design sys
 ## How to use this component
 Pass a normalized ratio from 0 to 1 and provide an accessible label.
 
+`surface="plain"` (default) preserves the existing transparent 30px trigger.
+Use `surface="glass"` alongside composer pills. It composes `PillButton`
+internally, sharing its glass surface, height, padding, hit area, and
+hover/focus/pressed/disabled states without duplicating styles. Both surfaces
+keep the same 18px ring, 20×20 viewBox, radius 8, and ratio geometry.
+
+```tsx
+<ContextDonutButton ratio={0.42} surface="glass" aria-label="Context 42% used" />
+```
+
 ## Who can use this component
 Composer containers and design-system fixtures.
 

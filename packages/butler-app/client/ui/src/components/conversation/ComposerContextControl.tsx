@@ -49,6 +49,7 @@ export const ComposerContextControl = memo(function ComposerContextControl({ loa
     <Popover open={open} onOpenChange={(next) => (next ? setOpen(true) : close())}>
       <PopoverTrigger asChild>
         <ContextDonutButton
+          surface="glass"
           data-test-class="context-donut-button"
           ratio={context.ratio ?? 0}
           onClick={togglePin}

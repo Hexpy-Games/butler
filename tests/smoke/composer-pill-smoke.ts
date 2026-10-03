@@ -1,4 +1,5 @@
 import "../support/smoke-browser-args";
+import { auditContextPill, auditControlScroll } from "./composer-pill-geometry";
 import { strict as assert } from "node:assert";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
@@ -28,7 +29,7 @@ async function auditLayout(story: Locator) {
     assert(await control.isVisible(), `${name} visible`);
     assert.equal(await control.evaluate((element) => element.tagName), "BUTTON", `${name} is the actual button`);
     assert.equal(await control.locator("button").count(), 0, "no nested controls");
-    assert.equal(await control.getAttribute("data-surface"), name === "context-donut-button" ? null : "glass-pill",
+    assert.equal(await control.getAttribute("data-surface"), "glass-pill",
       `${name} uses its standard DS surface`);
     assert.equal(await control.locator('xpath=ancestor::*[@data-slot="composer-control-pill"]').count(), 0,
       "no polymorphic pill wrappers");
@@ -45,7 +46,7 @@ async function auditLayout(story: Locator) {
   assert(geometry.rowY >= geometry.cardBottom, "row lies below card");
   assert(geometry.overflow <= 1, `toolbar overflow: ${geometry.overflow}`);
   assert(geometry.centerDrift <= 1, `controls must stay on one line: ${geometry.centerDrift}px drift`);
-  assert.equal(geometry.pills, 5);
+  assert.equal(geometry.pills, 6);
   return geometry;
 }
 
@@ -86,16 +87,26 @@ async function auditMenus(page: Page, story: Locator) {
   assert.equal(await story.locator(selector("composer-plan-mode-badge")).count(), 0, "existing plan remove action works");
 }
 
+// Each navigation reloads the in-memory fixture. Reuse one page to avoid repeated
+// single-process Chromium teardown while preserving every matrix assertion.
+const page = await browser.newPage({ viewport: { width: 1280, height: 1000 }, reducedMotion: "reduce" });
+const errors: string[] = [];
+page.on("pageerror", (error) => errors.push(error.message));
 try {
-  for (const width of [320, 375, 390, 430, 768, 1280]) {
-    const page = await browser.newPage({ viewport: { width: Math.max(768, width), height: 1000 }, reducedMotion: "reduce" });
-    const errors: string[] = [];
-    page.on("pageerror", (error) => errors.push(error.message));
-    await page.goto(`http://127.0.0.1:${server.port}/?page=blocks/ComposerCard&width=${width <= 430 ? String(width) : "app"}&theme=dark&locale=en&motion=reduced`);
+  for (const theme of ["light", "dark"]) for (const width of [320, 375, 390, 400, 430, 768, 1280]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto(`http://127.0.0.1:${server.port}/?page=blocks/ComposerCard&width=wide&theme=${theme}&locale=en&motion=reduced`);
     const story = page.locator("[data-composer-review]");
     await story.locator(selector("model-button")).waitFor();
+    assert.equal(await story.getByRole("switch", { name: "Photo wallpaper" }).getAttribute("aria-checked"), "true");
+    await story.locator('[data-photo="true"]').evaluate(async (node) => {
+      const url = getComputedStyle(node).backgroundImage.slice(5, -2);
+      const image = new Image(); image.src = url; await image.decode();
+    });
     const idle = await auditLayout(story);
-    await story.screenshot({ path: `${output}/${width}-idle-dark-photo.png` });
+    const context = await auditContextPill(story);
+    const scroll = await auditControlScroll(story);
+    await story.screenshot({ path: `${output}/${width}-idle-${theme}-photo.png` });
     await story.getByLabel("Composer state").selectOption("typing");
     await story.locator('[contenteditable="true"]').getByText("Keep every existing control and menu.", { exact: false }).waitFor();
     const typing = await auditLayout(story);
@@ -112,8 +123,7 @@ try {
     await story.locator(selector("composer-card")).getByRole("button", { name: "Send", exact: true }).waitFor();
     await auditMenus(page, story);
     assert.deepEqual(errors, []);
-    await story.screenshot({ path: `${output}/${width}-dark-photo.png` });
-    console.log(JSON.stringify({ width, idle, typing, menus: 6, errors: 0 }));
-    await page.close();
+    await story.screenshot({ path: `${output}/${width}-${theme}-photo.png` });
+    console.log(JSON.stringify({ width, theme, idle, typing, context, scroll, menus: 6, errors: 0 }));
   }
 } finally { await browser.close(); server.stop(true); }
