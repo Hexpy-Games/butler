@@ -301,20 +301,13 @@ fn dead_letter_sync(
     reason: &str,
     now: &str,
 ) -> CognitionResult<()> {
-    use std::{
-        fs::{self, OpenOptions},
-        io::Write,
-    };
+    use std::io::Write;
     let dlq = |e: std::io::Error| {
         CognitionError::new(CognitionCode::MemorySyncDlqError, e.to_string()).with_source(e)
     };
     let path = root.join("queue/dead-letter.jsonl");
-    fs::create_dir_all(root.join("queue")).map_err(dlq)?;
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-        .map_err(dlq)?;
+    butler_platform::secure_fs::create_private_dir_all(&root.join("queue")).map_err(dlq)?;
+    let mut file = butler_platform::secure_fs::append_private(&path).map_err(dlq)?;
     let record = DeadLetter {
         timestamp: now,
         session_id: &request.source().session_id,

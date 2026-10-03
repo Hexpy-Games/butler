@@ -6,6 +6,7 @@ pub use task::ingest_task_outcome_memory;
 
 use crate::cognition::CognitionCode;
 use std::{
+    fs,
     io::Write,
     path::{Path, PathBuf},
 };
@@ -109,6 +110,23 @@ pub(super) fn write_atomic(path: &Path, bytes: &[u8]) -> CognitionResult<()> {
         |file| file.write_all(bytes).map_err(io_error),
         io_error,
     )
+}
+
+fn append_durable(path: &Path, bytes: &[u8]) -> CognitionResult<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| error(CognitionCode::MemoryDataPathUnsafe))?;
+    let existed = path.exists();
+    butler_platform::secure_fs::append_private(path)
+        .and_then(|mut file| {
+            file.write_all(bytes)?;
+            file.sync_all()
+        })
+        .map_err(io_error)?;
+    if !existed {
+        butler_platform::secure_fs::sync_path(parent).map_err(io_error)?;
+    }
+    Ok(())
 }
 
 pub(super) fn sha256(bytes: &[u8]) -> String {

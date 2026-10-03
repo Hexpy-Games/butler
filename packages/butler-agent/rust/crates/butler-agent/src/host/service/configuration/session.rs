@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::fs;
+use std::io::Write;
 
 use serde_json::{Map, Value};
 
@@ -166,8 +167,12 @@ impl ServiceConfiguration {
         let directory = self.data_root.join("config");
         fs::create_dir_all(&directory)
             .map_err(|error| io("butler_session_pointer_write_failed", &error))?;
-        fs::write(self.pointer_path(), format!("{session_id}\n"))
-            .map_err(|error| io("butler_session_pointer_write_failed", &error))
+        butler_platform::secure_fs::replace_private(
+            &self.pointer_path(),
+            |file| writeln!(file, "{session_id}"),
+            std::convert::identity,
+        )
+        .map_err(|error| io("butler_session_pointer_write_failed", &error))
     }
 
     fn pointer_path(&self) -> std::path::PathBuf {

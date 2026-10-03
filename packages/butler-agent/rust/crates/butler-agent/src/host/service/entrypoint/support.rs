@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
 use butler_models::models::ModelConfigurationClock;
+use butler_runtime::operations::ServiceReadiness;
 use butler_turn::btcc::BtccError;
 
 use crate::host::app::gateway_lifecycle::{AppGatewayLifecycle, GatewayControlServer};
 use crate::host::service::ingress::IngressDispatcher;
 use crate::host::service::shutdown_trace::measure;
-use crate::host::{AgentRuntime, SystemIdentity};
+use crate::host::{AgentRuntime, ServiceConfiguration, SystemIdentity};
 
 pub(super) async fn deliver_parent_results(
     client: &reqwest::Client,
@@ -214,4 +215,21 @@ fn require_supported_data(
         ));
     }
     Ok(config)
+}
+
+/// Publish the grace deadline and executor record durably before admission.
+pub(super) async fn publish_readiness(
+    config: &ServiceConfiguration,
+) -> Result<Arc<ServiceReadiness>, BtccError> {
+    let root = config.data_root.clone();
+    let now_ms = SystemIdentity.now_epoch_millis();
+    let now_iso = SystemIdentity.now_iso();
+    tokio::task::spawn_blocking(move || {
+        ServiceReadiness::startup_grace(&root, now_ms).map_err(io)?;
+        ServiceReadiness::publish(&root, &now_iso, now_ms)
+            .map(Arc::new)
+            .map_err(io)
+    })
+    .await
+    .map_err(io)?
 }

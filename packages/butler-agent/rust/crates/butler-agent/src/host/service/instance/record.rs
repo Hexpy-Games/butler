@@ -79,12 +79,18 @@ pub(super) fn write_record(
         super::record_fault::hold_write(record);
         super::record_fault::hold_rename();
         super::super::shutdown_trace::measure_sync("instance_file_rename", || {
-            fs::rename(&temporary, path)
+            secure_fs::rename(&temporary, path)
         })
         .map_err(|source| {
             crate::host::HostError::new("native_service_instance_state_unavailable")
                 .with_source(source)
-        })
+        })?;
+        secure_fs::sync_directory(parent)
+            .unwrap_or(Ok(()))
+            .map_err(|source| {
+                crate::host::HostError::new("native_service_instance_state_unavailable")
+                    .with_source(source)
+            })
     })();
     drop(file);
     if result.is_err() {

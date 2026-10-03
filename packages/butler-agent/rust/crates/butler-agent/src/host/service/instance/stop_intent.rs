@@ -10,7 +10,7 @@
 //! the App itself (`respawn_by: app`), so it cannot remove the file before the
 //! App has read it.
 
-use std::fs::{self, OpenOptions};
+use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
@@ -154,12 +154,8 @@ pub(crate) fn write_stop_intent(
     }
     let mut bytes = serde_json::to_vec_pretty(intent).map_err(StopIntentError::Encode)?;
     bytes.push(b'\n');
-    let temporary = path.with_extension(format!("json.{}.tmp", uuid::Uuid::new_v4()));
-    let written = write_new_file(&temporary, &bytes).and_then(|()| fs::rename(&temporary, &path));
-    if written.is_err() {
-        let _ = fs::remove_file(&temporary);
-    }
-    written.map_err(StopIntentError::Write)
+    secure_fs::replace_private(&path, |file| file.write_all(&bytes), std::convert::identity)
+        .map_err(StopIntentError::Write)
 }
 
 /// Removes the intent whatever it says; a missing file is already clear.
@@ -199,15 +195,6 @@ pub(crate) fn stop_announced_for(data_root: &Path, pid: u32, nonce: &str) -> boo
         .ok()
         .and_then(|bytes| serde_json::from_slice::<StopIntent>(&bytes).ok())
         .is_some_and(|intent| intent.pid == pid && intent.instance_id == nonce)
-}
-
-fn write_new_file(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    let _ = secure_fs::owner_only(&mut options);
-    let mut file = options.open(path)?;
-    file.write_all(bytes)?;
-    file.sync_all()
 }
 
 #[cfg(test)]

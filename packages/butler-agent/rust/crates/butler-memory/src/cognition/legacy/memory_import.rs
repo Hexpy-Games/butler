@@ -161,18 +161,28 @@ impl LegacyMemoryImportService {
             .parent()
             .ok_or_else(|| error(CognitionCode::MemoryImportMarkerWriteFailed))?;
         ensure_data_authority(&self.data_root, &[parent, &path])?;
-        fs::create_dir_all(parent).map_err(|source| {
+        butler_platform::secure_fs::create_private_dir_all(parent).map_err(|source| {
             error(CognitionCode::MemoryImportMarkerWriteFailed).with_source(source)
         })?;
-        let mut options = fs::OpenOptions::new();
-        options.append(true).create(true);
-        butler_platform::secure_fs::owner_only(&mut options);
-        let mut file = options.open(path).map_err(|source| {
+        let existed = path.try_exists().map_err(|source| {
             error(CognitionCode::MemoryImportMarkerWriteFailed).with_source(source)
         })?;
-        writeln!(file, "{session_id}").map_err(|source| {
+        let mut file = butler_platform::secure_fs::append_private(&path).map_err(|source| {
             error(CognitionCode::MemoryImportMarkerWriteFailed).with_source(source)
-        })
+        })?;
+        writeln!(file, "{session_id}")
+            .and_then(|()| file.sync_all())
+            .map_err(|source| {
+                error(CognitionCode::MemoryImportMarkerWriteFailed).with_source(source)
+            })?;
+        if !existed {
+            butler_platform::secure_fs::sync_directory(parent)
+                .unwrap_or(Ok(()))
+                .map_err(|source| {
+                    error(CognitionCode::MemoryImportMarkerWriteFailed).with_source(source)
+                })?;
+        }
+        Ok(())
     }
 
     fn imported_marker_path(&self) -> PathBuf {

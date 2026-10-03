@@ -12,6 +12,8 @@ use super::{StorageError, StorageResult, canonical_schema, error, integrity, ref
 use crate::btcc::StorageCode;
 
 pub(crate) fn read_activated(path: &Path) -> StorageResult<String> {
+    let started = std::time::Instant::now();
+    trace("activated_begin", started);
     let db = sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(StorageError::sqlite)?;
     let expected = manifest_id();
@@ -28,8 +30,11 @@ pub(crate) fn read_activated(path: &Path) -> StorageResult<String> {
         .map_err(|source| error(StorageCode::AgentBtccStorageReceiptInvalid).with_source(source))?;
     validate_receipt(&receipt, &expected)?;
     canonical_schema(&db)?;
+    trace("schema_validated", started);
     integrity(&db)?;
+    trace("integrity_validated", started);
     references::validate(&db)?;
+    trace("references_validated", started);
     let (marker_id, marker_raw) = marker_row(
         &db,
         "agent_storage_activation_marker",
@@ -49,6 +54,20 @@ pub(crate) fn read_activated(path: &Path) -> StorageResult<String> {
         return Err(error(StorageCode::AgentBtccStorageActivationInvalid));
     }
     Ok(expected)
+}
+
+/// Read-only diagnostics for isolated startup qualification; never logs row data.
+pub(super) fn trace(phase: &str, started: std::time::Instant) {
+    if matches!(
+        std::env::var("BUTLER_E2E_TIER").as_deref(),
+        Ok("stub" | "perf")
+    ) && std::env::var("BUTLER_E2E_STARTUP_TRACE").as_deref() == Ok("1")
+    {
+        butler_core::diagnostic!(
+            "[btcc-startup] phase={phase} elapsed_us={}",
+            started.elapsed().as_micros()
+        );
+    }
 }
 
 fn marker_row(

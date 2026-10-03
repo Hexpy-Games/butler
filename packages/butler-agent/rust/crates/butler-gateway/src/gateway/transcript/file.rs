@@ -1,6 +1,6 @@
 //! Append-only transcript file authority; App projection follows file bytes.
 
-use std::fs::{self, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::Path;
 
@@ -14,7 +14,7 @@ pub(super) fn append(
     events: &[TranscriptEvent],
 ) -> TranscriptResult<String> {
     let directory = root.join("transcripts");
-    fs::create_dir_all(&directory).map_err(io_error)?;
+    butler_platform::secure_fs::create_private_dir_all(&directory).map_err(io_error)?;
     let mut name: String = session_id
         .encode_utf16()
         .map(|unit| match u8::try_from(unit) {
@@ -37,12 +37,22 @@ pub(super) fn append(
         })?;
         bytes.push(b'\n');
     }
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
+    let existed = path.try_exists().map_err(io_error)?;
+    let mut options = OpenOptions::new();
+    options.create(true).append(true);
+    butler_platform::secure_fs::owner_only(&mut options);
+    butler_platform::secure_fs::no_follow(&mut options);
+    let mut file = options.open(&path).map_err(io_error)?;
+    butler_platform::secure_fs::restrict_open_file(&file)
+        .unwrap_or(Ok(()))
         .map_err(io_error)?;
     file.write_all(&bytes).map_err(io_error)?;
+    file.sync_data().map_err(io_error)?;
+    if !existed {
+        butler_platform::secure_fs::sync_directory(&directory)
+            .unwrap_or(Ok(()))
+            .map_err(io_error)?;
+    }
     if events.len() > 1 {
         butler_platform::secure_fs::fault_checkpoint("transcript_pair").map_err(io_error)?;
     }

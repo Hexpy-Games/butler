@@ -182,6 +182,26 @@ pub fn restrict_open_file(file: &File) -> Option<io::Result<()>> {
     sys::restrict_open_file(file)
 }
 
+/// Opens a private append stream, refusing a final symlink where supported
+/// and repairing broad legacy modes on the opened inode. Callers choose the
+/// stream's flush/durability policy and establish its private parent.
+pub fn append_private(path: &Path) -> io::Result<File> {
+    let mut options = OpenOptions::new();
+    options.create(true).append(true);
+    owner_only(&mut options);
+    no_follow(&mut options);
+    let file = options.open(path)?;
+    restrict_open_file(&file).unwrap_or(Ok(()))?;
+    Ok(file)
+}
+
+/// Advises the kernel to discard this fixture file's cached pages, for cold
+/// performance measurements. Never changes the host's global cache policy.
+#[cfg(feature = "test-support")]
+pub fn discard_cached_pages(file: &File) -> Option<io::Result<()>> {
+    sys::discard_cached_pages(file)
+}
+
 /// Restricts an existing directory to its owner; `None` without
 /// [`OWNER_ONLY`].
 pub fn restrict_directory(path: &Path) -> Option<io::Result<()>> {

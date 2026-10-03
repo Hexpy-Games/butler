@@ -418,16 +418,14 @@ pub(super) fn write_atomic(path: &Path, value: &Value) -> Result<(), BtccError> 
             .ok_or_else(|| error("work_stream_path_invalid"))?,
     )
     .map_err(io_error)?;
-    let temp = path.with_extension(format!(
-        "json.{}.{}.tmp",
-        std::process::id(),
-        uuid::Uuid::new_v4()
-    ));
     let mut bytes = serde_json::to_vec_pretty(value)
         .map_err(|source| error("work_stream_record_invalid").with_source(source))?;
     bytes.push(b'\n');
-    fs::write(&temp, bytes).map_err(io_error)?;
-    fs::rename(temp, path).map_err(io_error)
+    butler_platform::secure_fs::replace_private(
+        path,
+        |file| std::io::Write::write_all(file, &bytes).map_err(io_error),
+        io_error,
+    )
 }
 pub(super) fn error(code: &'static str) -> BtccError {
     failure(code, code)
