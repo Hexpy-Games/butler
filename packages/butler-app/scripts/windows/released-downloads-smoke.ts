@@ -15,7 +15,7 @@ export function releasedDownloadsReply(body: any, proof: DownloadsProof, calls: 
   const text = JSON.stringify(body);
   // Responses may send only the new tool result after the first model round.
   const continuesTurn = body.previous_response_id?.startsWith("resp_downloads_") ||
-    body.input?.some((item: any) => item.type === "function_call_output" && item.call_id === "call_downloads");
+    (Array.isArray(body.input) && body.input.some((item: any) => item.type === "function_call_output" && item.call_id === "call_downloads"));
   if (!text.includes(prompt) && !text.includes(answer) && !continuesTurn) return null;
   if (body.text?.format) return smokeProviderReply(body, text.includes(prompt) ? prompt : answer, answer, calls);
   const result = body.input?.find((item: any) => item.type === "function_call_output" && item.call_id === "call_downloads");
