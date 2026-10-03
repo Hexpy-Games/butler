@@ -237,6 +237,8 @@ fn project_simple_fields(
 ) {
     for key in [
         "update_previews",
+        "recall_mode",
+        "recall_judge_model",
         "server_url",
         "language",
         "timezone",

@@ -128,6 +128,7 @@ pub(super) fn read(
     let defaults = ui_defaults();
     // The defaults hold every fixed value (gateway_profile, profile_label).
     let mut output = defaults.as_object().cloned().unwrap_or_default();
+    project_recall(&stored, &mut output);
     project_native_preferences(&native, &mut output);
     output.insert(KEY.into(), onboarding_view(&stored));
     output.insert(
@@ -330,6 +331,29 @@ fn project_native_preferences(native: &Map<String, Value>, output: &mut Map<Stri
                 .get("update_previews")
                 .and_then(Value::as_bool)
                 .unwrap_or(false)
+        ),
+    );
+}
+
+fn project_recall(
+    stored: &serde_json::Map<String, Value>,
+    output: &mut serde_json::Map<String, Value>,
+) {
+    output.insert(
+        "recall_mode".into(),
+        json!(enum_value(
+            stored.get("recall_mode"),
+            &["faster", "accurate"],
+            "accurate"
+        )),
+    );
+    output.insert(
+        "recall_judge_model".into(),
+        json!(
+            stored
+                .get("recall_judge_model")
+                .and_then(Value::as_str)
+                .unwrap_or("default")
         ),
     );
 }

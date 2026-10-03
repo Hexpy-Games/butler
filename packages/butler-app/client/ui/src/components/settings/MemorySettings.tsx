@@ -11,6 +11,7 @@ import { cardState } from "./memoryTypes";
 import { InstructionRow } from "./InstructionRow";
 import { MemoryFacts } from "./MemoryFacts";
 import { ChatMemoryActions } from "./ChatMemoryActions";
+import { RecallSettings } from "./RecallSettings";
 import { ChatMemoryBody } from "./ChatMemoryBody";
 import { ProjectMemoryBody } from "./ProjectMemoryBody";
 
@@ -44,6 +45,7 @@ export function MemorySettings() {
           ready={summary.state === "ready" && chat?.item_count != null} empty={chat?.item_count === 0}
           onClick={() => { void reset.start("automatic", revision, chat); }} />
       </ButtonContainer>}>
+      <RecallSettings />
       <ChatMemoryBody card={chat} receipt={operation.receipt} cancel={() => { void operation.cancel(); }} />
     </SettingsSection>
     <SettingsSection id="profile-memory" kind="status" title={copy.pageSections.profileMemory} description={copy.pageSectionDescriptions.profileMemory}
