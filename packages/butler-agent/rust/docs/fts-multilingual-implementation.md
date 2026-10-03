@@ -1,5 +1,7 @@
 # Multilingual FTS fallback implementation and acceptance
 
+Latest follow-up: [per-script index and fallback top-30 experiment](fts-script-experiment.md) stopped at its accuracy gate; neither product change was adopted.
+
 2026-10-03, Linux x86_64 / WSL. **Acceptance stopped at the accuracy gate.** The implementation is available for review, but the requested three-arm judge comparison is not validated. Vectors remain the primary lane; FTS replaces an unavailable vector lane. The research does not justify enabling FTS alongside available vectors.
 
 A subsequent [bounded offline tuning round](fts-multilingual-tuning.md) also failed its gate (66/89 original, 15/35 extra-vague in the saved-trace RRF diagnostic); no product variant was adopted.

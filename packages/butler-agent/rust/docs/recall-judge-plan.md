@@ -1,5 +1,7 @@
 # Conditional recall judge and optional decision API
 
+Latest follow-up: [per-script index and fallback top-30 experiment](fts-script-experiment.md) stopped at its accuracy gate; neither product change was adopted.
+
 Owner decision recorded 2026-10-03. **APPROVED for the configured-model path only.**
 The dedicated decision API remains PLAN ONLY, tracked in #464.
 

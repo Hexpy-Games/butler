@@ -1,5 +1,7 @@
 # Bounded multilingual FTS improvement round
 
+Latest follow-up: [per-script index and fallback top-30 experiment](fts-script-experiment.md) stopped at its accuracy gate; neither product change was adopted.
+
 2026-10-03, Linux x86_64 / WSL. **Stopped at the offline accuracy gate. No product variant adopted.** One fixed development grid, one frozen choice, one held-out evaluation. No Cargo builds, E2Es or model calls were made. The existing multilingual implementation is unchanged.
 
 ## Protocol and limits

@@ -1,5 +1,7 @@
 # Memory recall without embeddings
 
+Latest follow-up: [per-script index and fallback top-30 experiment](fts-script-experiment.md) stopped at its accuracy gate; neither product change was adopted.
+
 Measured 2026-10-03 on Linux x86_64 / WSL, SQLite 3.46.1. Research and design only; no product implementation. Only aggregate results are published. Scripts, prompts, source material, labels, permutations and raw usage remain in `/home/yeonw/workspace/bench/out/noembed/`. The immutable owner snapshot was read only. Run copies and this task's build target were deleted after validation.
 
 ## Decision
