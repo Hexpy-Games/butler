@@ -3,6 +3,7 @@
 //! Both page kinds open the generation's graph and canonical snapshot, read,
 //! then close them (a close failure wins over the read's own result).
 
+mod ranking;
 use std::{path::Path, time::Instant};
 
 use crate::cognition::{
@@ -53,7 +54,12 @@ pub(super) fn initial(
             super::details::DetailPin::new(read.generation, sources.graph, sources.canonical)?;
         let selected = match prepared {
             Some(prepared) if prepared.pin == pin => prepared.selected,
-            _ => select(read, &sources, vector, metrics, clocks)?,
+            Some(prepared) => {
+                let mut selected = select(read, &sources, vector, metrics, clocks)?;
+                ranking::reapply(&prepared, &pin, &mut selected, sources.graph)?;
+                selected
+            }
+            None => select(read, &sources, vector, metrics, clocks)?,
         };
         if selected.empty_search {
             return Ok(response::empty(
@@ -297,6 +303,8 @@ pub(super) struct PreparedSelection {
     pub selected: Selection,
     pub pin: super::details::DetailPin,
     pub candidates: Vec<super::judge::RecallJudgeCandidate>,
+    pub stamps: Vec<ranking::CandidateStamp>,
+    pub ranking: Option<Vec<usize>>,
 }
 
 pub(super) fn prepare_judge(
@@ -318,31 +326,17 @@ pub(super) fn prepare_judge(
         };
         let selected = select(read, &sources, vector, metrics, clocks)?;
         let pin = super::details::DetailPin::new(read.generation, &graph, canonical.as_ref())?;
-        let candidates = if super::judge::gate(&selected) {
-            selected
-                .ranked
-                .iter()
-                .take(15)
-                .enumerate()
-                .map(|(index, row)| {
-                    let summary = graph.connection()?.query_row(
-                        "SELECT substr(summary,1,150) FROM memory_chunks WHERE memory_chunk_id=?1",
-                        [&row.input.episode_id],
-                        |row| row.get::<_, Option<String>>(0),
-                    ).map_err(crate::cognition::graph::db_error)?.unwrap_or_default();
-                    Ok(super::judge::RecallJudgeCandidate {
-                        candidate: index + 1,
-                        summary,
-                    })
-                })
-                .collect::<CognitionResult<Vec<_>>>()?
+        let (candidates, stamps) = if super::judge::gate(&selected) {
+            ranking::candidates(&selected, &graph)?
         } else {
-            Vec::new()
+            (Vec::new(), Vec::new())
         };
         Ok(PreparedSelection {
             selected,
             pin,
             candidates,
+            stamps,
+            ranking: None,
         })
     })();
     close_sources(graph, canonical, result)

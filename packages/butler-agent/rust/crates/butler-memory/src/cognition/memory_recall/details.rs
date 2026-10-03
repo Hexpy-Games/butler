@@ -32,6 +32,13 @@ pub(crate) struct DetailPin {
 }
 
 impl DetailPin {
+    /// Revisions may advance; generation and canonical-store identity must not.
+    pub(super) fn same_source_identity(&self, other: &Self) -> bool {
+        self.generation == other.generation
+            && self.canonical.as_ref().map(|value| &value.0)
+                == other.canonical.as_ref().map(|value| &value.0)
+    }
+
     pub(super) fn new(
         generation: &MemoryGenerationHandle,
         graph: &GraphRecallReader,

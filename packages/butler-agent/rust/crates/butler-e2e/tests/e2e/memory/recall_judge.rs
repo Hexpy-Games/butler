@@ -238,13 +238,13 @@ async fn mem_judge_model_override_changes_on_next_recall() -> Result<(), Harness
         s.gw.patch("/settings", json!({"recall_judge_model":"default"}))
             .await?;
     assert_eq!(settings.status, 200, "{}", settings.text);
-    let default = recall(&s, "accurate").await?;
-    assert_eq!(default[0]["episode_ref"], baseline[1]["episode_ref"]);
+    let default = recall_across_unrelated_revision(&s).await?;
     assert_eq!(
         judge_count(&s),
         1,
         "Default must read the memory model again"
     );
+    assert_eq!(default[0]["episode_ref"], baseline[1]["episode_ref"]);
     assert_eq!(local.chat_requests().len(), 1);
     s.finish().await
 }
@@ -434,4 +434,32 @@ async fn mem_judge_wait_releases_reader_pin_and_binds_current_generation()
     assert_eq!(output["output"]["ok"], true, "{output}");
     assert!(output["output"]["results"].is_array());
     s.finish().await
+}
+
+/// Force the observed race after the model has captured its unchanged candidate evidence.
+async fn recall_across_unrelated_revision(s: &Scenario) -> Result<Vec<Value>, HarnessError> {
+    let held = s.provider()?.hold_next_reply("\"question\"");
+    let change = async {
+        tokio::time::timeout(std::time::Duration::from_secs(8), async {
+            while judge_count(s) == 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("Default judge request must start within its original deadline");
+        let graph = memory_stubs::graph_path(&s.sandbox.data).unwrap();
+        let db = butler_platform::sqlite::open(&graph).unwrap();
+        assert_eq!(
+            db.execute(
+                "UPDATE memory_state SET value=CAST(value AS INTEGER)+1 WHERE key='graph_revision'",
+                []
+            )
+            .unwrap(),
+            1
+        );
+        drop(db);
+        held.release();
+    };
+    let (recalled, ()) = tokio::join!(recall(s, "accurate"), change);
+    recalled
 }

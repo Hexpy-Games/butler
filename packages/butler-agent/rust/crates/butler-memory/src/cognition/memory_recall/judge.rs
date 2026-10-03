@@ -88,7 +88,9 @@ pub(super) async fn run(
                 input_tokens = reply.input_tokens;
                 output_tokens = reply.output_tokens;
                 judged = fuse(&mut prepared.selected, &reply.ranked);
-                if !judged {
+                if judged {
+                    prepared.ranking = Some(reply.ranked);
+                } else {
                     diagnostic();
                 }
             }
@@ -108,7 +110,7 @@ pub(super) async fn run(
     }
 }
 
-fn fuse(selected: &mut Selection, ranked: &[usize]) -> bool {
+pub(super) fn fuse(selected: &mut Selection, ranked: &[usize]) -> bool {
     let n = selected.ranked.len().min(15);
     let mut judge_ranks = std::collections::HashMap::new();
     if ranked.len() > 10 {

@@ -137,7 +137,7 @@ impl ContextMaintenance {
                 }
                 tokio::select! {
                     () = cancellation.cancelled() => break,
-                    () = tokio::time::sleep(INTERVAL) => {}
+                    () = tokio::time::sleep(next_tick_delay(&timezone, current_epoch_millis())) => {}
                 }
             }
         }));
@@ -275,4 +275,26 @@ fn iso_at(now_ms: i64) -> String {
         || "1970-01-01T00:00:00.000Z".to_owned(),
         |date| date.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
     )
+}
+
+/// The three daily jobs have only two due boundaries. No database or marker
+/// probes are needed between them. Searching minute boundaries retains the
+/// existing one-minute resolution through skipped or repeated DST wall times.
+pub(in crate::host) fn next_tick_delay(timezone: &DateParser, now_ms: i64) -> Duration {
+    let Ok((day, minute)) = timezone.local_day_and_minute(now_ms) else {
+        return INTERVAL;
+    };
+    for offset in 1_i64..=2_880 {
+        let next = (now_ms.div_euclid(60_000) + offset) * 60_000;
+        let Ok((next_day, next_minute)) = timezone.local_day_and_minute(next) else {
+            return INTERVAL;
+        };
+        if next_day != day
+            || (minute < DUE_MINUTE && next_minute >= DUE_MINUTE)
+            || (minute < 4 * 60 && next_minute >= 4 * 60)
+        {
+            return Duration::from_millis(u64::try_from(next - now_ms).unwrap_or_default());
+        }
+    }
+    INTERVAL
 }
