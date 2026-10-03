@@ -31,14 +31,14 @@ src/host/guided/project_tools/evidence.rs	canonical_record	89
 src/host/guided/project_tools/lifecycle.rs	execute	86
 src/host/guided/project_tools/lifecycle/closeout.rs	closeout	97
 src/host/guided/project_tools/options.rs	command	144
-src/host/guided/prompt.rs	<GuidedPrompt as PromptPort>::render	186
+src/host/guided/prompt.rs	<GuidedPrompt as PromptPort>::render	167
 src/host/guided/prompt/prior_tool/semantic.rs	facts	93
 src/host/guided/prompt/work_context.rs	render	267
 src/host/guided/tools.rs	GuidedTools::new	99
 src/host/guided/tools/discovery.rs	search	82
 src/host/guided/tools/discovery/invoke.rs	run	134
 src/host/guided/tools/discovery/invoke.rs	run_mcp	115
-src/host/guided/tools/dispatch.rs	execute	409
+src/host/guided/tools/dispatch.rs	execute	350
 src/host/guided/tools/effect.rs	execute	120
 src/host/guided/tools/effect/authority.rs	gate	124
 src/host/guided/tools/effect/ledger_input.rs	prepare	94

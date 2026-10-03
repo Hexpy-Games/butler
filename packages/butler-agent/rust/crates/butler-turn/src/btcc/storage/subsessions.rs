@@ -168,6 +168,22 @@ impl SqliteSubsessionRepository {
             .await
     }
 
+    pub(crate) async fn latest_relation_for_parent(
+        &self,
+        parent: String,
+    ) -> Result<Option<StoredSubsessionDelegation>, StorageError> {
+        self.storage
+            .execute(move |db| {
+                Ok(list(
+                    db,
+                    "WHERE r.parent_session_id=?1 ORDER BY r.ordinal DESC LIMIT 1",
+                    [parent],
+                )?
+                .pop())
+            })
+            .await
+    }
+
     pub(crate) async fn create_direction(
         &self,
         relation: String,
@@ -269,6 +285,15 @@ impl SqliteSubsessionRepository {
             let evidence:String=r.get(4)?;
             Ok(serde_json::json!({"result_id":r.get::<_,String>(0)?,"child_turn_id":r.get::<_,String>(1)?,"status":r.get::<_,String>(2)?,"summary":r.get::<_,String>(3)?,"acceptance_evidence":serde_json::from_str::<Value>(&evidence).unwrap_or(Value::Array(vec![])),"created_at":r.get::<_,String>(5)?}))
         }).optional().map_err(StorageError::sqlite)).await
+    }
+
+    pub(crate) async fn relation_by_work(
+        &self,
+        work: String,
+    ) -> Result<Option<StoredSubsessionDelegation>, StorageError> {
+        self.storage
+            .execute(move |db| read(db, "d.root_work_id=?1", &work))
+            .await
     }
 
     pub(crate) async fn open_relation_by_work(
