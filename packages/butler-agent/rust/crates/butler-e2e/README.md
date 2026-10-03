@@ -217,9 +217,12 @@ BUTLER_E2E_TIER=perf BUTLER_E2E_BIN="$CARGO_TARGET_DIR/release/butler-agent" \
 ```
 
 Use `cargo test` for this several-minute measurement, independently of the
-normal stub CI suite. The procfs boundary lives in `butler-platform`; other
-platforms report the measurement unavailable. Linux RSS is deliberately stricter
-than private heap size, but it is not macOS `phys_footprint`.
+normal stub CI suite. Native counters live in `butler-platform`: Linux supplies
+procfs, macOS supplies footprint/disk I/O, and Windows supplies resident memory
+and `GetProcessIoCounters` via sysinfo. Windows I/O includes buffered/network
+transfers, a conservative storage upper bound; it is not a physical-disk-only
+counter. Unsupported systems report the measurement unavailable. Linux RSS is
+deliberately stricter than private heap size, but is not macOS `phys_footprint`.
 
 
 ## Storage concurrency comparison

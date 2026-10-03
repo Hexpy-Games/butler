@@ -13,11 +13,13 @@ pub struct ProcessUsage {
     pub footprint_bytes: Option<u64>,
     /// Bytes returned by reads, including reads satisfied by the OS cache.
     pub read_chars: Option<u64>,
-    /// Bytes fetched from storage, excluding OS cache hits.
+    /// Bytes fetched from storage, excluding OS cache hits. Windows supplies
+    /// a conservative native I/O upper bound, including cached/network reads.
     pub read_bytes: u64,
     /// Bytes submitted to writes, including writes buffered by the OS.
     pub write_chars: Option<u64>,
-    /// Bytes written to storage.
+    /// Bytes written to storage. Windows supplies a conservative native I/O
+    /// upper bound, including buffered/network writes.
     pub write_bytes: u64,
 }
 
@@ -53,7 +55,35 @@ pub fn sample(pid: u32) -> io::Result<Option<ProcessUsage>> {
             write_bytes: usage.ri_diskio_byteswritten,
         }))
     }
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(target_os = "windows")]
+    {
+        use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+        let pid = Pid::from_u32(pid);
+        let mut system = System::new();
+        system.refresh_processes_specifics(
+            ProcessesToUpdate::Some(&[pid]),
+            true,
+            ProcessRefreshKind::nothing()
+                .with_memory()
+                .with_disk_usage(),
+        );
+        let process = system
+            .process(pid)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "process unavailable"))?;
+        let disk = process.disk_usage();
+        // sysinfo reads GetProcessIoCounters on Windows. Unlike directory
+        // timestamps, these count writes even while WAL handles remain open.
+        Ok(Some(ProcessUsage {
+            resident_bytes: process.memory(),
+            proportional_bytes: None,
+            footprint_bytes: None,
+            read_chars: Some(disk.total_read_bytes),
+            read_bytes: disk.total_read_bytes,
+            write_chars: Some(disk.total_written_bytes),
+            write_bytes: disk.total_written_bytes,
+        }))
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     {
         let _ = pid;
         Ok(None)
