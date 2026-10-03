@@ -334,6 +334,13 @@ jobs:
       run:
         working-directory: .
     steps:
+      - name: Isolate completion checks
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+          New-Item -ItemType Directory -Force "$root/home","$root/data" | Out-Null
+          "WINDOWS_GATE_ROOT=$root" >> $env:GITHUB_ENV
+          "HOME=$root/home" >> $env:GITHUB_ENV
+          "BUTLER_DATA=$root/data" >> $env:GITHUB_ENV
       - name: Require all producer and verification jobs
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
@@ -356,6 +363,10 @@ jobs:
             throw "Incomplete verification: completed=$($actual -join ',')"
           }
           "Verified all 12 compiled harnesses: $($actual -join ',')"
+      - name: Remove completion check directories
+        if: always()
+        run: |
+          Remove-Item $env:WINDOWS_GATE_ROOT,"$env:RUNNER_TEMP/windows-completion" -Recurse -Force -ErrorAction SilentlyContinue
 
   diagnose-native:
     name: Isolated native PowerShell startup probe
