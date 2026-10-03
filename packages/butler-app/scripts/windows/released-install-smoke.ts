@@ -2,7 +2,7 @@
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
@@ -22,7 +22,7 @@ assert.ok(version && /^0\.1\.0-preview\.\d+$/u.test(version), "A preview release
 const installer = join(release, `ButlerSetup-${version}-x64.exe`);
 const expected = readFileSync(installer + ".sha256", "utf8").trim().split(/\s+/u)[0];
 assert.equal(createHash("sha256").update(readFileSync(installer)).digest("hex"), expected);
-const root = mkdtempSync(join(tmpdir(), "butler-released-e2e-"));
+const root = realpathSync.native(mkdtempSync(join(tmpdir(), "butler-released-e2e-")));
 const data = join(root, "data");
 const owned = new Set<number>();
 const debugPort = await freePort();

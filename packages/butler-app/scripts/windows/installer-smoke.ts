@@ -2,7 +2,7 @@
 import { strict as assert } from "node:assert";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
@@ -22,7 +22,7 @@ const from = process.env.BUTLER_WINDOWS_SMOKE_FROM ?? "0.1.0-preview.90";
 const to = process.env.BUTLER_WINDOWS_SMOKE_TO ?? "0.1.0-preview.91";
 assert.match(from, /^0\.1\.0-preview\.\d+$/u);
 assert.match(to, /^0\.1\.0-preview\.\d+$/u);
-const root = mkdtempSync(join(tmpdir(), "butler-installer-e2e-"));
+const root = realpathSync.native(mkdtempSync(join(tmpdir(), "butler-installer-e2e-")));
 const data = join(root, "data");
 const owned = new Set<number>();
 let page: ElectronPage | null = null;
@@ -255,7 +255,7 @@ async function stubChat(chatId: string) {
 
 function shellProof() {
   const command = powershell("(Get-Item 'HKCU:\\Software\\Classes\\butler\\shell\\open\\command').GetValue('')", env);
-  assert.ok(command.includes(stub), "Protocol does not target the version-independent stub");
+  assert.ok(command.includes(stub), `Protocol does not target the version-independent stub: ${JSON.stringify({ command, stub })}`);
   for (const path of shortcuts) {
     const facts = JSON.parse(powershell(`$shell = New-Object -ComObject Shell.Application
       $folder = $shell.NameSpace([IO.Path]::GetDirectoryName($env:BUTLER_SHORTCUT))
