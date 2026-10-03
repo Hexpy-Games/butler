@@ -204,8 +204,8 @@ fn fallback(
     let ko = locale == "ko";
     let project_name = project_name.map(|name| if name == "butler" { "Butler" } else { name });
     let (moment, title, description, suggestions) = match scope {
-        "onboarding" if ko => ("온보딩".to_owned(), "반갑습니다. 당신을 모시게 되어 기쁩니다.".to_owned(), "AI 에이전트 집사 버틀러를 선택해주셔서 감사합니다. 시작하기에 앞서 간단하게 당신에 대해 알려주세요.".to_owned(), vec![card("butler-onboarding", "버틀러와 알아가기", "버틀러를 사용하기에 앞서 기본적인 설정을 진행합니다.", "버틀러를 사용하기에 앞서 기본적인 설정을 진행하자.")]),
-        "onboarding" => ("Onboarding".to_owned(), "Pleased to meet you. It will be my honor to serve.".to_owned(), "Thank you for choosing Butler, your AI agent butler. Before we begin, please tell me a little about yourself.".to_owned(), vec![card("butler-onboarding", "Get acquainted with Butler", "Set up the basics before using Butler.", "Let's set up the basics before I start using Butler.")]),
+        "onboarding" if ko => ("시작하기".to_owned(), "반갑습니다. 당신을 모시게 되어 기쁩니다.".to_owned(), "AI 에이전트 집사 버틀러를 선택해주셔서 감사합니다. 시작하기에 앞서 간단하게 당신에 대해 알려주세요.".to_owned(), vec![card("butler-onboarding", "버틀러와 알아가기", "버틀러를 사용하기에 앞서 기본적인 설정을 진행합니다.", "처음 설정을 도와주세요.")]),
+        "onboarding" => ("Getting started".to_owned(), "Pleased to meet you. It will be my honor to serve.".to_owned(), "Thank you for choosing Butler, your AI agent butler. Before we begin, please tell me a little about yourself.".to_owned(), vec![card("butler-onboarding", "Get acquainted with Butler", "Set up the basics before using Butler.", "Help me set up the basics.")]),
         "project" => {
             let name = project_name.unwrap_or_default();
             if ko { ("프로젝트".into(), format!("{name}에서 이어갈 일을 살펴볼까요"), format!("{name}에서 열어볼 만한 시작점 몇 가지가 있습니다."), project_cards_ko(name)) }
