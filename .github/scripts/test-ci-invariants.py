@@ -319,15 +319,17 @@ class Coverage(unittest.TestCase):
         perf_selections = json.loads((directory / 'perf-selection.json').read_text())
         selected = [name for shard in perf_selections for binary, name in shard]
         idle = {name for name in perf if name.startswith('idle_resources::')}
+        owner = {name for name in perf if name.startswith('data_perf::')}
         self.assertEqual(len(selected), len(set(selected)))
-        self.assertEqual(set(selected) | idle, perf)
+        self.assertEqual(set(selected) | idle | owner, perf)
         self.assertTrue(idle, 'The complete idle observation must remain selected')
+        self.assertTrue(owner, 'The complete owner-scale observation must remain selected')
         runnable = {name for name, test in tests.items() if not test['ignored']}
         disk = {name for name in tests if name.endswith('idle_disk_writes_and_cpu_stay_bounded')}
         self.assertEqual((set(ordinary) | installs | perf | disk) & runnable, runnable)
         print(f'Compiled inventory: {len(tests)} tests, {len(tests) - len(runnable)} existing ignored; '
               f'ordinary {list(map(len, selections))}, install {list(map(len, groups))}, '
-              f'perf {list(map(len, perf_selections))} + {len(idle)} full idle observation(s).')
+              f'perf {list(map(len, perf_selections))} + {len(idle)} full idle + {len(owner)} full owner observation(s).')
 
 
 if __name__ == '__main__':

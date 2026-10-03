@@ -145,7 +145,7 @@ runs:
             exit 2
           fi
           export BUTLER_E2E_PERF=1
-          TEST_FILTERSET="($(python3 "$GITHUB_WORKSPACE/.github/scripts/e2e-perf-filter.py")) and not test(/^idle_resources::/)"
+          TEST_FILTERSET="($(python3 "$GITHUB_WORKSPACE/.github/scripts/e2e-perf-filter.py")) and not test(/^(idle_resources|data_perf)::/)"
         elif [ "$ENFORCE_BUDGETS" = 'false' ]; then
           export BUTLER_E2E_PERF=0
         else
@@ -210,7 +210,7 @@ runs:
 
     # PERF-IDLE takes five minutes by design; its documented cargo-test runner
     # avoids nextest's three-minute per-test watchdog without changing budgets.
-    - name: Run PERF-IDLE resource budgets
+    - name: Run PERF-IDLE and owner-scale resource budgets
       if: inputs.enforce-budgets == 'true' && inputs.run-perf-idle == 'true'
       shell: bash
       working-directory: packages/butler-agent/rust
@@ -222,10 +222,12 @@ runs:
         BUTLER_E2E_EMBEDDING_ASSETS: ${{ runner.temp }}/e2e-models/bge-m3
         ARCHIVE_FILE: ${{ inputs.archive-file }}
       run: |
+        set -euo pipefail
         if [ -n "$ARCHIVE_FILE" ]; then
           python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" python3 "$GITHUB_WORKSPACE/.github/scripts/run-idle-archive.py" "$ARCHIVE_FILE"
         else
           python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --release --locked -p butler-e2e --test e2e idle_resources:: -- --nocapture --test-threads=1
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo test --release --locked -p butler-e2e --test e2e data_perf:: -- --nocapture --test-threads=1
         fi
 
     - name: Report IDLE-DISK counters
