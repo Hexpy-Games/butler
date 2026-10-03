@@ -10,6 +10,7 @@ mod files;
 mod grep;
 mod mutations;
 mod path_guard;
+pub(crate) use path_guard::realpath_or_nearest;
 mod reference;
 mod session_recovery;
 mod session_worktree;

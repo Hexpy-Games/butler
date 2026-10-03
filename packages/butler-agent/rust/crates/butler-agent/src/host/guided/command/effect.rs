@@ -29,9 +29,8 @@ pub(super) async fn prepare(
         .map_err(BtccError::from)?;
     let root_identity = canonical_root(&workspace);
     let cwd_identity = canonical_root(&cwd);
-    let relative = cwd_identity
-        .strip_prefix(&root_identity)
-        .map_err(|source| error("command_cwd_rejected").with_source(source))?;
+    let relative = butler_platform::secure_fs::relative_path(&cwd_identity, &root_identity)
+        .ok_or_else(|| error("command_cwd_rejected"))?;
     let relative = if relative.as_os_str().is_empty() {
         ".".to_owned()
     } else {
