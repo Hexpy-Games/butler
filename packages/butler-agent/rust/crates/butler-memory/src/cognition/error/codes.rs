@@ -339,6 +339,7 @@ wire_codes! {
         RecallResultEncodingFailed = "recall_result_encoding_failed",
         SerializationBudget = "serialization_budget",
         StaleCursor = "stale_cursor",
+        StaleDetailHandle = "stale_detail_handle",
         Store = "store",
         TaskMemoryReportUnavailable = "task_memory_report_unavailable",
         TermsNotAllowed = "terms_not_allowed",

@@ -97,7 +97,8 @@ pub(super) fn run(
         budget_trimmed: fitted.budget_trimmed,
     };
     let results = upgrade_to_full(&frame, fitted.results, &delivery, &bound)?;
-    let response = result::view(&frame, &results, &delivery).into_owned();
+    let mut response = result::view(&frame, &results, &delivery).into_owned();
+    super::details::retain_full(&mut response, bound.full.iter())?;
     if response.next_cursor.is_none() {
         cursors.remove(&page.key);
     }
@@ -273,7 +274,10 @@ fn fit_minimum(
             source_partial: bound.source_partial,
             budget_trimmed: fitted.budget_trimmed,
         };
-        if envelope::bytes(&result::view(frame, &fitted.results, &delivery))? > envelope::MAX_BYTES
+        if envelope::bytes(
+            &result::view(frame, &fitted.results, &delivery),
+            &fitted.results,
+        )? > envelope::MAX_BYTES
         {
             fitted.results.pop();
             fitted.included.pop();
@@ -307,7 +311,8 @@ fn upgrade_to_full(
             continue;
         };
         let minimum = std::mem::replace(slot, full.clone());
-        if envelope::bytes(&result::view(frame, &results, delivery))? > envelope::MAX_BYTES
+        if envelope::bytes(&result::view(frame, &results, delivery), &results)?
+            > envelope::MAX_BYTES
             && let Some(slot) = results.get_mut(index)
         {
             *slot = minimum;

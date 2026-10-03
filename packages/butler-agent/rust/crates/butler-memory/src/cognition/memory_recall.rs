@@ -9,6 +9,7 @@
 mod binding;
 mod continuation;
 mod cursor;
+pub(crate) mod details;
 mod envelope;
 mod evidence;
 mod metrics;

@@ -334,6 +334,7 @@ recall_memory requires cue
 recall_result_encoding_failed
 serialization_budget
 stale_cursor
+stale_detail_handle
 store
 task_memory_report_unavailable
 terms_not_allowed
