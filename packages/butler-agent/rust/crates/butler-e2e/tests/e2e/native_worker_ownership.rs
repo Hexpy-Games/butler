@@ -5,7 +5,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
-mod install_support;
+use super::install_support;
 use butler_e2e::e2e::HarnessError;
 use std::{
     io::Write,

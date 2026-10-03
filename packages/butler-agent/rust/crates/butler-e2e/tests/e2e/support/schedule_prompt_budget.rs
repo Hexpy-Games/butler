@@ -3,11 +3,11 @@ use serde_json::Value;
 
 pub(super) fn assert_budget() {
     let prefixes: Value = serde_json::from_str(include_str!(
-        "../../../butler-turn/src/btcc/guided_turn/phase/instruction-prefixes.json"
+        "../../../../butler-turn/src/btcc/guided_turn/phase/instruction-prefixes.json"
     ))
     .unwrap();
     let catalog: Value = serde_json::from_str(include_str!(
-        "../../../butler-runtime/src/capabilities/catalog/catalog.json"
+        "../../../../butler-runtime/src/capabilities/catalog/catalog.json"
     ))
     .unwrap();
     let tokens = |text: &str| {

@@ -5,15 +5,14 @@
     clippy::panic,
     reason = "E2E assertions"
 )]
+use super::memory_reset_support;
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::scenario::{Scenario, Setup};
 use butler_platform::sqlite;
+use memory_reset_support::{cycle, local_model, profile_server, setup};
 use rusqlite::OpenFlags;
 use serde_json::{Value, json};
 use std::{path::Path, time::Duration};
-#[path = "support/memory_reset_support.rs"]
-mod memory_reset_support;
-use memory_reset_support::{cycle, local_model, profile_server, setup};
 const ORPHAN: &str = "00000000-0000-4000-8000-000000000333";
 const RETIRED: &str = "00000000-0000-4000-8000-000000000444";
 

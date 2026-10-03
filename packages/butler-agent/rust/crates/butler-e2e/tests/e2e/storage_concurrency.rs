@@ -15,7 +15,7 @@ use futures_util::future::try_join_all;
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 
-mod storage_concurrency_support;
+use super::storage_concurrency_support;
 use storage_concurrency_support::{seed, verify_rows};
 const REQUEST: &str = "Write the numbers from one to twelve as English words, separated by single spaces, and nothing else.";
 const SESSIONS: usize = 8;

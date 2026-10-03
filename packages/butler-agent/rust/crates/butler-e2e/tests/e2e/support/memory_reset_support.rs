@@ -1,12 +1,11 @@
 //! Shared deterministic stub setup for memory reset E2Es.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E fixture setup")]
+use super::memory_fixture;
 use butler_e2e::e2e::fake_servers::LOCAL_MODEL;
 use butler_e2e::e2e::scenario::{Fixture, Scenario, Setup};
 use butler_e2e::e2e::{HarnessError, fixtures};
 use serde_json::{Value, json};
 use std::time::Duration;
-#[path = "memory_fixture.rs"]
-mod memory_fixture;
 const NOW: &str = "2026-10-02T04:01:00.000Z";
 const FACT: &str = "Prefers concise answers";
 async fn until(mut ready: impl FnMut() -> bool) {

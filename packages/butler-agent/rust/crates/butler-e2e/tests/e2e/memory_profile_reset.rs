@@ -1,12 +1,11 @@
 //! Profile App reset and recovery of the gap after the owner transaction commits.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
+use super::memory_reset_support as support;
 use butler_e2e::e2e::{HarnessError, scenario::Scenario};
 use butler_platform::sqlite;
 use rusqlite::OpenFlags;
 use serde_json::{Value, json};
 use std::{path::Path, time::Duration};
-#[path = "support/memory_reset_support.rs"]
-mod support;
 fn count(path: &Path) -> i64 {
     sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .unwrap()

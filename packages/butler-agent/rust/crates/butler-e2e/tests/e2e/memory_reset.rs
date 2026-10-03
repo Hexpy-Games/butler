@@ -1,5 +1,6 @@
 //! Reset through authenticated App routes, actual ingestion and daily catch-up.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
+use super::memory_reset_support as support;
 use butler_e2e::e2e::HarnessError;
 use butler_platform::sqlite;
 use rusqlite::OpenFlags;
@@ -8,8 +9,6 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
-#[path = "support/memory_reset_support.rs"]
-mod support;
 
 fn graph(root: &Path) -> PathBuf {
     let memory = root.join("cognition/memory");

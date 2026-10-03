@@ -6,12 +6,10 @@
     reason = "test assertions"
 )]
 
-#[path = "app_storage_scale/seed.rs"]
-mod app;
+use super::app_storage_seed as app;
 #[path = "support/btcc_scale.rs"]
 mod btcc;
-#[path = "support/memory_fixture.rs"]
-mod memory_fixture;
+use super::memory_fixture;
 #[path = "support/transcript_scale.rs"]
 mod transcripts;
 #[path = "support/wal.rs"]

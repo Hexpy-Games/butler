@@ -5,6 +5,7 @@
     clippy::panic,
     reason = "E2E assertions"
 )]
+use super::memory_fixture;
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
@@ -12,8 +13,6 @@ use butler_e2e::e2e::{
     scenario::{Fixture, Setup},
 };
 use serde_json::json;
-#[path = "support/memory_fixture.rs"]
-mod memory_fixture;
 const ASK: &str = "Say hello in one sentence.";
 const TEXT: &str = "For every answer use the phrase mango-settings-5317.";
 
