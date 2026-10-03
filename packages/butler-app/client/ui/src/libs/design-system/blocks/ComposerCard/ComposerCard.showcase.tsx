@@ -1,3 +1,4 @@
+import { ComposerReview } from "./ComposerCard.showcaseParts";
 import { useState } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import { IconButton } from "../../components/IconButton";
@@ -83,6 +84,7 @@ function Composer({ context, large, mode = "send", busy, blocked }: {
 }
 
 export const stories: ShowcaseStory[] = [
+  { name: "Real composer", widths: ["375", "app", "wide"], render: (context) => <ComposerReview {...context} /> },
   { name: "New chat (large)", widths: ["375", "app", "wide"], render: (context) => <Composer context={context} large /> },
   { name: "Follow-up while a turn runs (stop)", states: ["busy"], render: (context) => <Composer context={context} mode="stop" /> },
   { name: "Reconnecting (busy send)", states: ["loading"], render: (context) => <Composer context={context} busy /> },

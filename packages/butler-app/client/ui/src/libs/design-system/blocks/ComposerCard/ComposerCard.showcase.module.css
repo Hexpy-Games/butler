@@ -1,0 +1,10 @@
+.stage {
+  padding-block: var(--space-4);
+  border-radius: var(--radius-panel);
+}
+
+.stage[data-photo="true"] {
+  background-image: url("../Wallpaper/modules/butler.photo-clouds/photo.jpg");
+  background-position: center;
+  background-size: cover;
+}

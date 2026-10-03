@@ -1,9 +1,10 @@
 import type { DsBaseProps } from "../../lib/dsProps";
 import type { ButtonHTMLAttributes, FormHTMLAttributes, ReactNode, Ref, TextareaHTMLAttributes } from "react";
-import { createContext, forwardRef, useContext } from "react";
+import { createContext, forwardRef, useContext, useState } from "react";
 import { Collapsible } from "../../components/Collapsible";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import { cn } from "../../lib/utils";
+import { ComposerControlsVisible, ComposerControlPills, ComposerSlot, ComposerSlots } from "./ComposerCardSlots";
 import styles from "./ComposerCard.module.css";
 import { dsClass } from "../../lib/internal";
 
@@ -32,33 +33,42 @@ export function ComposerCard({
   expanded = true,
   ...props
 }: ComposerCardProps) {
+  const [toolbar, setToolbar] = useState<HTMLDivElement | null>(null);
+  const [action, setAction] = useState<HTMLDivElement | null>(null);
+  const [preview, setPreview] = useState<HTMLDivElement | null>(null);
   return (
-    <div
-      className={cn(styles.wrap, floating && styles.floating, large && styles.large)}
-      data-test-class={`composer-wrap${large ? " large" : ""}`}
-      ref={containerRef}
-    >
-      {notice ? (
-        <div className={styles.notice} data-test-class="composer-notice-slot">
-          {notice}
-        </div>
-      ) : null}
-      <form
-        className={cn(tintedGlassSurfaceClassName, styles.card, className)}
-        data-radius="composer"
-        data-drop-active={dropActive ? "true" : undefined}
+    <ComposerSlots.Provider value={{ toolbar, action, preview }}>
+      <div
+        className={cn(styles.wrap, floating && styles.floating, large && styles.large)}
+        data-test-class={`composer-wrap${large ? " large" : ""}`}
+        ref={containerRef}
         data-expanded={expanded}
-        data-test-class="composer-card"
-        {...props}
       >
-        {adjunct ? (
-          <div className={styles.adjunct} data-test-class="composer-adjunct-slot">
-            {adjunct}
+        {notice ? (
+          <div className={styles.notice} data-test-class="composer-notice-slot">
+            {notice}
           </div>
         ) : null}
-        <ComposerExpandedContext.Provider value={expanded}>{children}</ComposerExpandedContext.Provider>
-      </form>
-    </div>
+        <form
+          className={cn(tintedGlassSurfaceClassName, styles.card, className)}
+          data-radius="composer"
+          data-drop-active={dropActive ? "true" : undefined}
+          data-expanded={expanded}
+          data-test-class="composer-card"
+          {...props}
+        >
+          {adjunct ? (
+            <div className={styles.adjunct} data-test-class="composer-adjunct-slot">
+              {adjunct}
+            </div>
+          ) : null}
+          <ComposerExpandedContext.Provider value={expanded}>{children}</ComposerExpandedContext.Provider>
+          <div className={styles.previewSlot} ref={setPreview} />
+          <div className={styles.actionSlot} ref={setAction} />
+        </form>
+        <div ref={setToolbar} data-slot="composer-toolbar-slot" />
+      </div>
+    </ComposerSlots.Provider>
   );
 }
 
@@ -77,9 +87,11 @@ export const ComposerCardTextarea = forwardRef<
 
 export function ComposerCardToolbar({ children }: { children: ReactNode }) {
   return (
-    <div className={styles.toolbar} data-test-class="composer-toolbar">
-      {children}
-    </div>
+    <ComposerSlot slot="toolbar">
+      <div className={styles.toolbar} data-test-class="composer-toolbar">
+        <ComposerControlPills>{children}</ComposerControlPills>
+      </div>
+    </ComposerSlot>
   );
 }
 
@@ -94,7 +106,10 @@ export function ComposerCardExpandedBody({ children }: { children: ReactNode }) 
 }
 
 export function ComposerCardExpandedControls({ children }: { children: ReactNode }) {
-  return <span className={styles.expandedControls}>{children}</span>;
+  const expanded = useContext(ComposerExpandedContext);
+  return <ComposerControlsVisible.Provider value={expanded}>
+    <span className={styles.expandedControls}><ComposerControlPills>{children}</ComposerControlPills></span>
+  </ComposerControlsVisible.Provider>;
 }
 
 export function ComposerCardCompactPreview({
@@ -103,14 +118,16 @@ export function ComposerCardCompactPreview({
   ...props
 }: DsBaseProps<ButtonHTMLAttributes<HTMLButtonElement>>) {
   return (
-    <button
-      className={cn(styles.compactPreview, className)}
-      data-slot="composer-compact-preview"
-      type="button"
-      {...props}
-    >
-      {children}
-    </button>
+    <ComposerSlot slot="preview">
+      <button
+        className={cn(styles.compactPreview, className)}
+        data-slot="composer-compact-preview"
+        type="button"
+        {...props}
+      >
+        {children}
+      </button>
+    </ComposerSlot>
   );
 }
 

@@ -16,6 +16,9 @@ function assert(condition: unknown, message: string): asserts condition {
 
 /** WebKit (iOS Safari fidelity) when Playwright has it installed, else Chromium. */
 export async function launchMobileBrowser(): Promise<{ browser: Browser; engine: string }> {
+  if (process.env.BUTLER_SMOKE_BROWSER === "chromium") {
+    return { browser: await chromium.launch({ headless: true }), engine: "chromium" };
+  }
   try {
     return { browser: await webkit.launch({ headless: true }), engine: "webkit" };
   } catch {

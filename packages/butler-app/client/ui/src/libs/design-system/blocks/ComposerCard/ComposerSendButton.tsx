@@ -1,3 +1,4 @@
+import { ComposerSlot } from "./ComposerCardSlots";
 import type { ButtonHTMLAttributes } from "react";
 import type { DsBaseProps } from "../../lib/dsProps";
 import { SendHorizontal, Square } from "../../components/Icons";
@@ -42,5 +43,5 @@ export function ComposerSendButton({
       {busy ? <Spinner size={16} /> : children ?? (mode === "stop" ? <Square size="sm" /> : <SendHorizontal size="md" />)}
     </button>
   );
-  return blocked ? <Tooltip label={disabledReason}>{button}</Tooltip> : button;
+  return <ComposerSlot slot="action">{blocked ? <Tooltip label={disabledReason}>{button}</Tooltip> : button}</ComposerSlot>;
 }

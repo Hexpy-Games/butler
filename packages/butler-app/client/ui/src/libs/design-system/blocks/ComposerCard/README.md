@@ -72,3 +72,26 @@ Do not use this for settings forms or command input. Use `SettingsField`,
 ## Tags
 
 composer, chat, glass, input, toolbar
+
+## Detached controls
+
+The existing `ComposerCardToolbar` renders in the DS-owned slot immediately
+below the card. Its order, spacer and expanded group are unchanged. Each leaf
+control gets its own `TintedGlass` pill; its original button and anchored
+menu/popover remain mounted together. Empty conditional controls have no pill.
+`ComposerSendButton` and `ComposerCardCompactPreview` render in slots inside
+the input card. The editor reserves room for send/stop; attachments, notice and
+adjunct/question surfaces keep their existing ownership and behavior.
+
+The **Real composer** story on this page mounts the app's `ComposerInputSurface`
+(including Lexical, `ComposerToolbar` and all existing menus). Only the data and
+actions are in-memory fixtures: no gateway or model calls. Use the state selector,
+question/attachment/photo switches, and the viewer's width, theme and motion
+controls for review. An open question uses the app's existing replacement panel;
+"Later" restores the message input and controls. The plan badge still removes
+plan mode; it does not acquire a new menu.
+
+Build the portable viewer with `bun run --cwd packages/butler-app/client/ui
+build:ds-site`; `dist-ds-site/index.html?page=blocks/ComposerCard&width=375&theme=dark&motion=reduced`
+is the entry (serve the folder over HTTP). The existing site build emits relative
+asset paths and no source maps.
