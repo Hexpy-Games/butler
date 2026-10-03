@@ -344,14 +344,25 @@ pub(super) async fn bridge_result(
     name: &str,
 ) -> Result<Value, HarnessError> {
     let rows = butler_e2e::e2e::gateway::tool_rows(&s.gw.messages("general").await?, turn);
-    let row = rows
-        .iter()
-        .find(|row| {
-            row["tool_call_id"]
-                .as_str()
-                .is_some_and(|id| id.ends_with("_tool_call"))
-        })
-        .expect("bridge operation row");
+    let row = rows.iter().find(|row| {
+        row["tool_call_id"]
+            .as_str()
+            .is_some_and(|id| id.ends_with("_tool_call"))
+    });
+    assert!(
+        row.is_some(),
+        "bridge operation row missing: {rows:?}; replay_keys={:?}",
+        s.provider().map(|provider| provider
+            .requests()
+            .iter()
+            .map(|request| butler_e2e::e2e::matching::key(
+                "/codex/responses",
+                request,
+                &Default::default()
+            ))
+            .collect::<Vec<_>>())
+    );
+    let row = row.unwrap();
     assert_eq!(row["state"], "delivered", "{row}");
     let output: Value = serde_json::from_str(&s.gw.operation_output(turn, row).await?)?;
     assert_eq!(output["bridge_invocation"]["id"], format!("native:{name}"));

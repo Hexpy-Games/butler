@@ -6390,7 +6390,7 @@
     "delegate_to_steward": {
       "type": "function",
       "name": "delegate_to_steward",
-      "description": "Delegate the complete request verbatim after Plan Review. Runtime derives identity, Composer access, tool grants, workspace, EOL, context, budget and provenance. Child excludes Butler persona, receives immutable project context and bounded parent conversation, and returns a canonical terminal result. Optional safe_title; otherwise fixed privacy-safe presentation. Children receive only granted tools. Schedule CRUD: direct Tier 0, including research prompts. For a new request after a prior delegation has closed, start a fresh reviewed Work in this same turn and set previous_relation_id to attach the original request and canonical results. Do not ask the user to restart.",
+      "description": "After Plan Review, delegate the full request verbatim. Runtime derives identity, Composer access, grants, workspace, EOL, bounded parent context, budget and provenance; immutable project context, no Butler persona, canonical terminal result. safe_title optional; default privacy-safe. Children use only granted tools. Schedule CRUD is direct Tier 0, even for future research. Closed delegation follow-up: create/review a fresh Work this Turn; previous_relation_id attaches prior request/results. Never ask for restart.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -6407,7 +6407,7 @@
           },
           "previous_relation_id": {
             "type": "string",
-            "description": "Closed Steward relation from this parent chat. Runtime attaches its prior request and results as context, preserving the new request and current authority."
+            "description": "Closed relation in this parent chat; attaches prior request/results, preserving new request and current authority."
           }
         },
         "required": [
@@ -8019,7 +8019,7 @@
     "record_work_disposition": {
       "type": "function",
       "name": "record_work_disposition",
-      "description": "Atomically settle the exact bound Work. Completed requires all Plan actions done/skipped, no remaining actions, eligible evidence, no unresolved/in-flight effects. Open saves progress; delegated sessions continue actionable work with wait/approval. Open needs remaining actions or next_condition; blocked needs a concrete next_condition. No Plan/Review/stage sequence required. Missing child tool: blocked capability_handoff (capability_unavailable_in_child, requested_action tool_name/arguments); parent completes, never user homework.",
+      "description": "Atomically settle the bound Work; no mandatory Plan/Review/stages. Completed: all Plan actions done/skipped, none remaining, eligible evidence, no unresolved/in-flight effects. Open: progress plus remaining actions or next_condition; delegated children continue actionable work with wait/approval. Blocked: concrete next_condition. Missing child tool: blocked capability_handoff (capability_unavailable_in_child, requested_action tool_name/arguments); parent completes, never user homework.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,

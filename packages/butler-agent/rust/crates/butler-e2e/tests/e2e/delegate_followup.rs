@@ -10,7 +10,7 @@ mod stub;
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
-    scenario::{Scenario, Setup},
+    scenario::{Scenario, Setup, accepted_turn_id, turn_timeout},
 };
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
@@ -66,7 +66,7 @@ async fn followup(stopped: bool) -> Result<(), HarnessError> {
     *script.relation.lock().unwrap() = relation.clone();
     let before = script.requests.lock().unwrap().len();
     let started = Instant::now();
-    let (_, turn) = s.turn("general", stub::FOLLOWUP).await?;
+    let turn = followup_turn(&s).await?;
     assert_eq!(turn["state"], "delivered", "{turn}\n{}", s.agent.logs());
     let second = wait_second(&s, &relation).await?;
     assert_ne!(second["session_id"], first["session_id"]);
@@ -88,6 +88,45 @@ async fn children(s: &Scenario) -> Result<Vec<Value>, HarnessError> {
             .unwrap()
             .clone(),
     )
+}
+async fn followup_turn(s: &Scenario) -> Result<Value, HarnessError> {
+    let deadline = Instant::now() + Duration::from_secs(turn_timeout());
+    let accepted = s.gw.say("general", stub::FOLLOWUP).await?;
+    let turn_id = match accepted_turn_id(&accepted) {
+        Ok(id) => id,
+        Err(_) => {
+            assert_eq!(accepted["queued"]["text"], stub::FOLLOWUP, "{accepted}");
+            assert!(accepted["queued"]["id"].as_str().is_some(), "{accepted}");
+            loop {
+                let messages = s.gw.messages("general").await?;
+                let submitted: Vec<_> = messages
+                    .iter()
+                    .filter(|message| {
+                        message["role"] == "user" && message["text"] == stub::FOLLOWUP
+                    })
+                    .collect();
+                assert!(submitted.len() <= 1, "follow-up duplicated: {submitted:?}");
+                if let Some(id) = submitted
+                    .first()
+                    .and_then(|message| message["turn_id"].as_str())
+                {
+                    break id.to_owned();
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "queued follow-up was not admitted: {accepted}\n{}",
+                    s.agent.logs()
+                );
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        }
+    };
+    s.gw.wait_terminal(
+        "general",
+        &turn_id,
+        deadline.saturating_duration_since(Instant::now()),
+    )
+    .await
 }
 async fn wait_first(s: &Scenario) -> Result<Value, HarnessError> {
     let deadline = Instant::now() + Duration::from_secs(30);

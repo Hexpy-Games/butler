@@ -197,8 +197,14 @@ pub(super) async fn assert_daily_briefing(
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         }
     })
-    .await
-    .expect("daily consolidation must publish the complete briefing");
+    .await;
+    assert!(
+        path.is_ok(),
+        "daily consolidation must publish the complete briefing: {path:?}; replay_misses={:?}",
+        s.provider()
+            .map(butler_e2e::e2e::provider::Provider::misses)
+    );
+    let path = path.unwrap();
     let stored: serde_json::Value = serde_json::from_slice(&std::fs::read(path)?)?;
     let expected = briefing_reply()?;
     for key in ["title", "description", "suggestions", "title_variants"] {
@@ -209,8 +215,12 @@ pub(super) async fn assert_daily_briefing(
     assert_eq!(stored["source"]["model_ref"], "openai/gpt-6-luna");
     let run_id = stored["source"]["consolidation_run_id"].as_str().unwrap();
     let suffix = run_id.strip_prefix("cr_scheduled_").unwrap();
-    assert_eq!(suffix.len(), 14);
-    assert!(suffix.bytes().all(|byte| byte.is_ascii_digit()));
+    let (timestamp, identity) = suffix.split_once('_').unwrap();
+    assert_eq!(timestamp.len(), 14);
+    assert!(timestamp.bytes().all(|byte| byte.is_ascii_digit()));
+    assert_eq!(identity.len(), 32);
+    assert!(identity.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    uuid::Uuid::parse_str(identity).unwrap();
     assert!(s.provider()?.misses().is_empty());
     Ok(())
 }
