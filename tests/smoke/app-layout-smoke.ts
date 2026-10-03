@@ -1888,6 +1888,7 @@ try {
     name: `${appCopy.composer.permission}: ${appCopy.permissions.fullAccess}`, exact: true,
   }).click();
   await page.locator(testClass("composer-menu")).waitFor({ state: "visible" });
+  await waitForMotionToSettle(page);
   const permissionMenuLayout = await page
     .locator(testClass("composer-menu"))
     .evaluate((menu) => {
@@ -3166,7 +3167,10 @@ try {
       // 8s window reached visible >= 0.06 and 4+ tinted cells. Sample an 8s
       // window and assert on its peak liquid and mean tone instead.
       for (let index = 0; index < 8; index += 1) {
-        fluidSamples.push(measureFluidFrame());
+        // The renderer does not preserve its drawing buffer after presentation.
+        // Read after its RAF draw, before the browser clears the presented frame.
+        fluidSamples.push(await new Promise<ReturnType<typeof measureFluidFrame>>((resolve) =>
+          requestAnimationFrame(() => resolve(measureFluidFrame()))));
         await new Promise((resolve) => setTimeout(resolve, 1_000));
       }
       const fluidMean = (key: "averageTone" | "grayCoverage") =>
@@ -3612,6 +3616,7 @@ try {
       const samples: Array<{ changedCoverage: number; spread: number }> = [];
       for (let sample = 0; sample < 5; sample += 1) {
         await new Promise((resolve) => setTimeout(resolve, 80));
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
         const pixels = new Uint8Array(width * height * 4);
         webgl?.readPixels(
           0,
