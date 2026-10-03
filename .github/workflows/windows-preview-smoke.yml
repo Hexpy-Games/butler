@@ -24,6 +24,11 @@ on:
         description: Task Cargo cache namespace on the native Windows build host
         required: false
         type: string
+      diagnose-powershell:
+        description: Run isolated startup diagnostics instead of build/test jobs
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -40,7 +45,7 @@ concurrency:
 jobs:
   build:
     name: Build unsigned Windows preview
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: ${{ !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: [self-hosted, butler-win]
     timeout-minutes: 90
     steps:
@@ -66,7 +71,7 @@ jobs:
 
   stub:
     name: Platform contracts and debug stub chat
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: ${{ !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: [self-hosted, butler-win]
     timeout-minutes: 90
     env:
@@ -314,3 +319,39 @@ jobs:
             Remove-Item $env:WINDOWS_PREVIEW_TEMP_ROOT -Recurse -Force
           }
           Remove-Item $env:PREVIEW_ROOT -Recurse -Force
+
+  diagnose-native:
+    name: Isolated native PowerShell startup probe
+    if: inputs.diagnose-powershell
+    runs-on: [self-hosted, butler-win]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/windows-owner-setup
+        with:
+          workflow: ${{ inputs.native-cache || 'captain-p7' }}
+      - name: Probe cold module discovery without application writes
+        working-directory: .
+        run: ./deploy/windows-powershell-diagnosis.ps1
+      - name: Check owner registration and remove job profile
+        if: always()
+        working-directory: .
+        run: ./deploy/windows-owner-cleanup.ps1
+
+  diagnose-hosted:
+    name: Isolated hosted PowerShell startup probe
+    if: inputs.diagnose-powershell
+    needs: diagnose-native
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe cold module discovery without application writes
+        working-directory: .
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+          $env:HOME = "$root/home"
+          $env:BUTLER_DATA = "$root/data"
+          New-Item -ItemType Directory -Force $env:HOME,$env:BUTLER_DATA | Out-Null
+          try { ./deploy/windows-powershell-diagnosis.ps1 }
+          finally { Remove-Item $root -Recurse -Force }
