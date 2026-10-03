@@ -1,6 +1,7 @@
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 // Public UI -> gateway smoke; native login calls use an isolated bridge stub.
 import { readFileSync } from "node:fs";
-import { chromium, type Page } from "playwright";
+import { type Page } from "playwright";
 import { LEGACY_FIRST_RUN_STORAGE_KEY, legacyFirstRunCompleteRecord } from "../../packages/butler-app/client/ui/src/app/onboarding";
 import { resolve } from "node:path";
 import { createNativeAppServer } from "../support/native-app-server";
@@ -14,7 +15,7 @@ async function choose(page: Page, label: string, option: string) {
 }
 
 const server = await createNativeAppServer({ uiRoot: resolve("packages/butler-app/client/ui/dist"), config: { user: { name: "Smoke", language: "en" } } });
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 try {
   const context = await browser.newContext({ timezoneId: "Asia/Seoul", viewport: { width: 1440, height: 900 } });
   await server.signIn(context);

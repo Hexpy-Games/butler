@@ -1,7 +1,7 @@
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 // Real components + read-only local API. Isolated browser; no project mutations or messages.
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
-import { chromium } from "playwright";
 
 const base = process.env.DASHBOARD_VITE ?? "http://127.0.0.1:5173";
 const apiBase = process.env.DASHBOARD_API ?? "http://127.0.0.1:18765";
@@ -9,7 +9,7 @@ const projectId = process.env.DASHBOARD_PROJECT ?? "project-sandy-bot-35a0e102";
 assert([base, apiBase].every(url => new URL(url).hostname === "127.0.0.1"));
 const output = process.env.DASHBOARD_EVIDENCE ?? "/tmp/dashboard-density";
 await mkdir(output, { recursive: true });
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
 const errors: string[] = [];
 page.on("pageerror", error => errors.push(error.message));

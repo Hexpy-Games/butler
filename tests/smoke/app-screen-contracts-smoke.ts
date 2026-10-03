@@ -1,7 +1,8 @@
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { chromium, type Page } from "playwright";
+import { type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { appCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import {
@@ -84,7 +85,7 @@ async function assertInspectorContentStartsAtTop(page: Page): Promise<void> {
   );
 }
 
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   await server.signIn(page);

@@ -1,0 +1,22 @@
+.window,
+.content,
+.svg {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.window {
+  overflow: hidden;
+  opacity: 0;
+}
+
+.svg {
+  overflow: visible;
+}
+
+.svg .shape {
+  opacity: 1;
+  stroke-dasharray: none;
+}

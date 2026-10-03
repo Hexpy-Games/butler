@@ -1,7 +1,8 @@
+import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 // Showcase harness only: static DS Viewer, no gateway, product state or model calls.
 import { mkdirSync } from "node:fs";
 import { resolve, join } from "node:path";
-import { chromium, type Page } from "playwright";
+import { type Page } from "playwright";
 
 const dist = resolve("packages/butler-app/client/ui/dist-ds-site");
 const output = resolve(".tmp/question-panel");
@@ -11,7 +12,7 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: (request) => {
   const file = Bun.file(join(dist, path === "/" ? "index.html" : path));
   return new Response(file);
 } });
-const browser = await chromium.launch({ headless: true });
+const browser = await launchSmokeBrowser();
 function assert(value: unknown, label: string): asserts value { if (!value) throw new Error(label); }
 async function visit(page: Page, block = "ComposerQuestionPanel", width = 1440, theme = "light", reduced = false) {
   await page.setViewportSize({ width, height: 1000 });

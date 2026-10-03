@@ -27,6 +27,8 @@ rustix.workspace = true
 dunce.workspace = true
 libproc.workspace = true
 sysinfo.workspace = true
+zip.workspace = true
+serde.workspace = true
 
 # The process table (identity, liveness, host facts), Job Objects that
 # contain command trees, paths without a needless `\\?\` prefix, and the

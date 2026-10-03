@@ -114,12 +114,15 @@ mod memory_stubs;
 mod schedule_cassette;
 
 mod delegate_followup;
+mod mac_app_update;
 mod memory_instructions;
 mod memory_management;
 mod memory_profile_reset;
 mod memory_reset;
 mod memory_wiring_more;
+mod native_worker_ownership;
 mod project_artifacts;
 mod project_workspace;
 mod schedule_handoff;
 mod storage_concurrency;
+mod supervisor_ownership;
