@@ -100,11 +100,8 @@ async fn load(
 
 async fn new_chat(s: &butler_e2e::e2e::scenario::Scenario) -> Result<String, HarnessError> {
     let reply =
-        s.gw.post(
-            "/sessions",
-            json!({"kind":"general","title":"Skills cleanup"}),
-        )
-        .await?;
+        s.gw.post("/sessions", json!({"kind":"chat","title":"Skills cleanup"}))
+            .await?;
     assert_eq!(reply.status, 201, "{}", reply.text);
     Ok(reply.data()["session"]["id"].as_str().unwrap().to_owned())
 }

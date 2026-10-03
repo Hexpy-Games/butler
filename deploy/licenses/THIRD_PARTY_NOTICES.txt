@@ -6920,6 +6920,12 @@ License: https://github.com/winnow-rs/winnow/blob/7539ec0fc27144bfdcf9a68b0dbbec
 
 
 ===== COMPONENT =====
+winsafe 0.0.29
+MIT
+License: https://github.com/rodrigocfd/winsafe/blob/71ed88c2a0d18b03ee452f6d4261f4c22f443483/LICENSE.md
+Copyright (c) 2019-present, Rodrigo Cesar de Freitas Dias
+
+===== COMPONENT =====
 write16 1.0.0
 Apache-2.0 OR MIT
 License: https://github.com/hsivonen/write16/blob/0fea9edd7f7aaafee59859ff91eb6560d861b6bc/COPYRIGHT

@@ -5,20 +5,20 @@
     "deploy/licenses/generate.mjs": "b623e7ae30e55de4fd83e4f8bcc0ae3b40098eda3c5334b804c5a2850b43ec90",
     "deploy/licenses/inputs.mjs": "364e3fb4d76a9942421d75d873bbced06c0a749e64dcd833d8aa356b44f795a2",
     "deploy/licenses/refresh.py": "a7cfe92e35b802aa151af3dffeab7390ddb7200fcf388c3bae766bfdcf68d4ff",
-    "packages/butler-agent/rust/Cargo.lock": "2c7b82901f3a93159b52af5e10a49cd50281c973c71b1dcc2315a28384b2b2c2",
-    "packages/butler-agent/rust/Cargo.toml": "f352ba510ce3ff1a413dfb0fd6d7a9a8a6d92671312c5ffb8f5ab5cad5522f88",
+    "packages/butler-agent/rust/Cargo.lock": "8e4661609d92015194d5598ea64a062be2a49e4e8215815fb8fdbf0c459df4e0",
+    "packages/butler-agent/rust/Cargo.toml": "8dc62d6a227d7378919448ef179830b211e672a52df9de57fbab953023f2b627",
     "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "690fda7222f9512cf014e186be63dea93147e046ad1bdd40d62b145b3d29cc9b",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
     "packages/butler-agent/rust/crates/butler-agent/src/host/embedding/worker/assets.rs": "f11dc3b1952a178092fbf7da589b8c39e28021c4975f884e236cd71c78c8d7a9",
     "packages/butler-agent/rust/crates/butler-core/Cargo.toml": "736517adc6731fe7bef9a81897979400c1d9cf40d8fea399cf35c830471689d7",
     "packages/butler-agent/rust/crates/butler-core/src/js_date/parse/LICENSE.txt": "a0af5aa0d38e4c35e56c8e42a43a4b1e462619a26332e43249bb0772ad06a3e2",
-    "packages/butler-agent/rust/crates/butler-e2e/Cargo.toml": "33a32ff8818906c58bf8d54a2bd2ad81a7dc33896d57f0c26ae32adea515ddf4",
+    "packages/butler-agent/rust/crates/butler-e2e/Cargo.toml": "c26ec84b835008978a1a194a9aae0bf5a8ebf5c6175ea657b93fef506967d3cf",
     "packages/butler-agent/rust/crates/butler-gateway/Cargo.toml": "13a216ab7c58c1b280a8ff5dbe634af414e27a42fffc9828a4f4a1e60200b18e",
     "packages/butler-agent/rust/crates/butler-ledger/Cargo.toml": "ccc46a2a8bb225eebcdf7858d73f5bddd3742ea57477e0208ca3c16464815b54",
     "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "0b96cb468980df3a8c163321aab1254757c4a0bfdfba0a0f45c7edddaa3c262a",
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "4356081083793e9aaf34c237ce7c4d0c93b0b6d7ae75d9c197bb3f4202ba43b4",
     "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "90781f4840f7705f2ac7a577abf1f4d8fdb90aaf8f7c6c25e7df9548ff6a9814",
-    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "588cf53c549267773eb182e86091e212b413d06a3f1fefef3332a40cbf06ff79",
+    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "332123a16f65d72d58cd5ade6b1f38a10b263858e5e86b3360f4d5fa51029fad",
     "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "e8e6f6d7ef418db0e100f2560ee8fc5f17d567cc30fda2f12e409dff552d96e9",
     "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "fd97e7279fef8e91a95c908d368c5eb4548c40cf5d9d3fa277a8d49f71901b53",
     "packages/butler-agent/rust/crates/butler-turn/Cargo.toml": "67226f9ea15df5cbe76ccf0f8f7ac75bbc553130ac07a77b256fb05d9c75d3aa",
@@ -29,13 +29,6 @@
     "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos/NOTICE": "3d1d0a9fe82fdc1492422398bfac65d2205a9326eebf619e238b84e9b6376d36",
     "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-mono/LICENSE.txt": "37784b44044a4ffd9256702b7c0982c37e5c8887ba90c6dca0479aea93dc898d",
     "packages/butler-npm/package.json": "5436bca586a3f28ad67b715bc34fd2d66a4dfac9577d7415442b88f1f085fdb4"
-  },
-  "assets": {
-    "packages/butler-app/client/ui/src/libs/design-system/fonts": "71fae061660781b956cc1c6ec7c0acb45294c65e39a757d73b4fc22a585edef3",
-    "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos": "c403cb85f39720223864fd0502296bdbe566b79e31e0c98baa2d963db84f4e6a",
-    "packages/butler-agent/rust/crates/butler-core/src/js_date/parse": "f9eee65ab5220d8dd35e57f15c992924571cb4e7dcaec3ea7b27c650e8530a8d",
-    "packages/butler-agent/rust/crates/butler-platform/data": "67f906d2a73616bc85ae69c23c27b100c579e82b6c286413794f59c8a9152770",
-    "packages/butler-agent/resources": "324b06e634aa1b8e02df8116cc5c7505b216055b9bf1b3b25f7ca13cf646e4af"
   },
   "components": [
     {
@@ -27655,6 +27648,28 @@
         "https://github.com/winnow-rs/winnow/blob/7539ec0fc27144bfdcf9a68b0dbbec48bd0d5bae/LICENSE-MIT"
       ],
       "copyright": []
+    },
+    {
+      "id": "rust:winsafe@0.0.29",
+      "name": "winsafe",
+      "version": "0.0.29",
+      "license": "MIT",
+      "source": "https://github.com/rodrigocfd/winsafe/tree/71ed88c2a0d18b03ee452f6d4261f4c22f443483",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "e6b9b47cd4cbc66e6591473a1f83a9eb893fe7f8031c9c1c8e77e19823b5949a"
+      ],
+      "files": [
+        "LICENSE.md"
+      ],
+      "links": [
+        "https://github.com/rodrigocfd/winsafe/blob/71ed88c2a0d18b03ee452f6d4261f4c22f443483/LICENSE.md"
+      ],
+      "copyright": [
+        "Copyright (c) 2019-present, Rodrigo Cesar de Freitas Dias"
+      ]
     },
     {
       "id": "rust:write16@1.0.0",
