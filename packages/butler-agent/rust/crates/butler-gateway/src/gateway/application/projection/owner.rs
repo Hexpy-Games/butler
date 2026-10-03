@@ -18,9 +18,9 @@ mod files;
 mod notifications;
 use notifications::Pending;
 
-use super::{ProjectionContext, sync_chat_once, sync_deferred_once, sync_deferred_step};
+use super::{ProjectionContext, sync_chat_once, sync_deferred_step};
 use crate::gateway::GatewayApplicationError;
-use files::{open_turn_transcripts, resolve_chat_file};
+use files::{drain_open_turns, open_turn_transcripts, resolve_chat_file, sync_requested};
 
 const NOTIFICATION_CAPACITY: usize = 64;
 const SETTLE_DELAY: Duration = Duration::from_millis(25);
@@ -135,6 +135,16 @@ impl ProjectionOwner {
         })
     }
 
+    pub(in crate::gateway::application) async fn active(
+        &self,
+    ) -> Result<(), GatewayApplicationError> {
+        self.inner
+            .sender
+            .send(Command::Terminal)
+            .await
+            .map_err(GatewayApplicationError::internal_from)
+    }
+
     #[cfg(test)]
     pub(in crate::gateway::application) async fn pause_for_burst(&self) -> oneshot::Sender<()> {
         lock(&self.inner.watcher).take();
@@ -241,10 +251,16 @@ async fn run(
     pending: Arc<Mutex<Pending>>,
 ) -> Result<(), GatewayApplicationError> {
     let mut work = Work::default();
-    for file in open_turn_transcripts(&context).await? {
+    let files = open_turn_transcripts(&context).await?;
+    work.poll_active = !files.is_empty();
+    for file in files {
         work.enqueue(file);
     }
     loop {
+        if let Err(error) = context.streaming.flush_due(&context).await {
+            eprintln!("[gateway] streaming projection failed: {error}");
+            tokio::time::sleep(SETTLE_DELAY).await;
+        }
         let events = std::mem::take(&mut *pending.lock());
         for file in events.paths {
             work.enqueue(file);
@@ -258,11 +274,13 @@ async fn run(
         match receiver.try_recv() {
             Ok(command) => {
                 if work.command(Some(command), &context).await {
-                    return Ok(());
+                    return context.streaming.flush_all(&context).await;
                 }
                 continue;
             }
-            Err(mpsc::error::TryRecvError::Disconnected) => return Ok(()),
+            Err(mpsc::error::TryRecvError::Disconnected) => {
+                return context.streaming.flush_all(&context).await;
+            }
             Err(mpsc::error::TryRecvError::Empty) => {}
         }
         if work.project_ready(&context).await {
@@ -296,8 +314,9 @@ async fn run(
             }
             continue;
         }
-        if work.command(receiver.recv().await, &context).await {
-            return Ok(());
+        let command = next_command(&mut receiver, &context, work.poll_active).await;
+        if work.command(command, &context).await {
+            return context.streaming.flush_all(&context).await;
         }
     }
 }
@@ -315,6 +334,7 @@ struct Work {
     changed: VecDeque<String>,
     changed_set: HashSet<String>,
     terminal: bool,
+    poll_active: bool,
     terminal_resweep: bool,
     terminal_after: String,
 }
@@ -332,7 +352,8 @@ impl Work {
                 Ok(false) => {
                     self.changed_set.remove(&file);
                 }
-                Err(_) => {
+                Err(error) => {
+                    eprintln!("[gateway] transcript projection failed: {error}");
                     self.changed.push_back(file);
                     self.retry = (self.retry.max(SETTLE_DELAY) * 2).min(MAX_RETRY_DELAY);
                     tokio::time::sleep(self.retry).await;
@@ -390,7 +411,12 @@ impl Work {
                 // waiting on a terminal record; the staged finals themselves
                 // are replayed by the deferred sweep.
                 match open_turn_transcripts(context).await {
-                    Ok(files) => files.into_iter().for_each(|file| self.enqueue(file)),
+                    Ok(files) => {
+                        self.poll_active = !files.is_empty();
+                        for file in files {
+                            self.enqueue(file);
+                        }
+                    }
                     Err(_) if self.pending => self.resweep = true,
                     Err(_) => self.pending = true,
                 }
@@ -433,7 +459,7 @@ impl Sweep {
             let cursor = self.chat_cursor;
             self.active_chat = context
                 .storage
-                .execute(move |db| {
+                .read(move |db| {
                     db.query_row(
                         "SELECT rowid,id FROM chats WHERE rowid>?1 ORDER BY rowid LIMIT 1",
                         [cursor],
@@ -456,30 +482,21 @@ impl Sweep {
         Ok(false)
     }
 }
-async fn sync_chat(context: &ProjectionContext, chat: &str) -> Result<(), GatewayApplicationError> {
-    while sync_chat_once(context, chat).await? {}
-    Ok(())
-}
 
-async fn sync_requested(
-    context: &ProjectionContext,
-    chat: &str,
-) -> Result<(), GatewayApplicationError> {
-    sync_chat(context, chat).await?;
-    while sync_deferred_once(context).await? {}
-    Ok(())
-}
 fn lock<T>(value: &Mutex<T>) -> parking_lot::MutexGuard<'_, T> {
     value.lock()
 }
 
-async fn drain_open_turns(context: &ProjectionContext) -> Result<(), GatewayApplicationError> {
-    // Existing checkpoints read only appended bytes, never whole transcripts.
-    for file in open_turn_transcripts(context).await? {
-        if let Some(chat) = resolve_chat_file(context, &file).await? {
-            sync_chat(context, &chat).await?;
-        }
+async fn next_command(
+    receiver: &mut mpsc::Receiver<Command>,
+    context: &ProjectionContext,
+    active: bool,
+) -> Option<Command> {
+    // Only open turns or uncommitted deltas arm the clock; idle is change-driven.
+    let deadline = context.streaming.until_flush();
+    let delay = deadline.map_or(SETTLE_DELAY, |delay| delay.min(SETTLE_DELAY));
+    tokio::select! {
+        command = receiver.recv() => command,
+        () = tokio::time::sleep(delay), if active || deadline.is_some() => Some(Command::Terminal),
     }
-    while sync_deferred_once(context).await? {}
-    Ok(())
 }

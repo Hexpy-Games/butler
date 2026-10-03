@@ -45,9 +45,7 @@ pub(super) fn read(
     workspace_root: &Path,
 ) -> Result<Value, AppStorageError> {
     let controls = global_settings(db, subscribers, facts, now)?;
-    let stored = read_json(db, SETTINGS_KEY)?
-        .and_then(|value| value.as_object().cloned())
-        .unwrap_or_default();
+    let stored = stored_settings(db, facts, &controls)?;
     let native = facts
         .native_settings
         .as_object()
@@ -314,6 +312,18 @@ pub(super) fn legacy_source(settings: &Map<String, Value>) -> Value {
         main_preset(settings.get("main_screen_theme_preset"), &colors),
         &colors,
     )
+}
+
+fn stored_settings(
+    db: &Connection,
+    facts: &AppSettingsFacts,
+    controls: &super::controls::GlobalSettings,
+) -> Result<Map<String, Value>, AppStorageError> {
+    let mut stored = read_json(db, SETTINGS_KEY)?
+        .and_then(|value| value.as_object().cloned())
+        .unwrap_or_default();
+    super::worker_profiles::canonicalize(&mut stored, facts, &controls.model, &controls.reasoning);
+    Ok(stored)
 }
 
 fn project_native_preferences(native: &Map<String, Value>, output: &mut Map<String, Value>) {

@@ -16,7 +16,7 @@ impl AppApplication {
         let now = self.dependencies.identity_clock.now_iso();
         let subscribers = self.subscribers.clone();
         self.storage.execute(move |db| {
-            let tx = db.transaction().map_err(AppStorageError::sqlite)?;
+            let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
             let changed = tx.execute("UPDATE session_queued_messages SET state='queued',safe_error_code=NULL,claim_id=NULL,claim_owner=NULL,claimed_at=NULL,lease_expires_at=NULL,updated_at=?1 WHERE id=?2 AND chat_id=?3 AND state='dispatching' AND claim_id=?4",
                 params![now,claim.queued_message_id,claim.chat_id,claim.claim_id]).map_err(AppStorageError::sqlite)?;
             if changed == 1 {
@@ -31,7 +31,7 @@ impl AppApplication {
         let now = self.dependencies.identity_clock.now_iso();
         let rows = self
             .storage
-            .execute(dispatching_claims)
+            .read(dispatching_claims)
             .await
             .map_err(app_error)?;
         for row in rows {
@@ -80,7 +80,7 @@ pub(super) const DISPATCHING_SQL: &str = "SELECT id,claim_id,turn_id,chat_id,cla
     lease_expires_at FROM session_queued_messages \
     WHERE state='dispatching' AND state IN ('queued','dispatching') ORDER BY rowid";
 
-fn dispatching_claims(db: &mut Connection) -> Result<Vec<ExpiredClaim>, AppStorageError> {
+fn dispatching_claims(db: &Connection) -> Result<Vec<ExpiredClaim>, AppStorageError> {
     let mut statement = db
         .prepare_cached(DISPATCHING_SQL)
         .map_err(AppStorageError::sqlite)?;

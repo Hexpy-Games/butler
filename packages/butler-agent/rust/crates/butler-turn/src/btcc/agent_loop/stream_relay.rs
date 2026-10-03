@@ -156,11 +156,12 @@ fn frames(open: &mut Option<String>, batch: Vec<Relayed>) -> Vec<Frame> {
                 text,
             } => {
                 *open = Some(stream_id.clone());
-                if let Some(Frame::Text {
-                    stream_id: last,
-                    sequence: last_sequence,
-                    text: last_text,
-                }) = frames.last_mut()
+                if !uncoalesced()
+                    && let Some(Frame::Text {
+                        stream_id: last,
+                        sequence: last_sequence,
+                        text: last_text,
+                    }) = frames.last_mut()
                     && *last == stream_id
                 {
                     last_text.push_str(&text);
@@ -214,4 +215,11 @@ async fn emit(progress: &dyn AgentLoopProgress, frames: Vec<Frame>) {
             );
         }
     }
+}
+
+fn uncoalesced() -> bool {
+    matches!(
+        std::env::var("BUTLER_E2E_TIER").as_deref(),
+        Ok("stub" | "perf")
+    ) && std::env::var_os("BUTLER_E2E_STREAM_UNCOALESCED").is_some()
 }

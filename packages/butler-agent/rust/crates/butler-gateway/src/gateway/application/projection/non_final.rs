@@ -1,13 +1,16 @@
 //! Claim-fenced projection of delivered App transport events before final-result handling.
 
+pub(super) mod batch;
 mod operations;
 mod progress;
+mod runtime_event;
 mod runtime_progress;
 mod runtime_values;
 mod stream_message;
 pub(in crate::gateway::application::projection) use stream_message::fail_unanswered;
 mod values;
 
+use crate::gateway::application::storage::CachedSql;
 use operations::*;
 use progress::*;
 pub(in crate::gateway::application) use runtime_progress::row_from_runtime_event;
@@ -95,7 +98,7 @@ pub(super) fn apply(
         return Ok(not_handled());
     }
     let claim_id = token(metadata.get("appQueueClaimId"));
-    let tx = db.transaction().map_err(AppStorageError::sqlite)?;
+    let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
     if staging::projected(&tx, action_id)? {
         return skip(tx, action_id, cursor, now);
     }
@@ -132,7 +135,7 @@ pub(super) fn apply(
             now,
         )?;
         finish(&tx, action_id, outbound, chat_id, cursor, now)?;
-        tx.execute(
+        tx.execute_cached(
             "UPDATE chats SET updated_at=?1 WHERE id=?2",
             params![now, chat_id],
         )
@@ -230,7 +233,7 @@ pub(super) fn apply(
         )?;
     }
     finish(&tx, action_id, outbound, chat_id, cursor, now)?;
-    tx.execute(
+    tx.execute_cached(
         "UPDATE chats SET updated_at=?1 WHERE id=?2",
         params![now, chat_id],
     )
@@ -288,9 +291,9 @@ fn project_runtime_event(input: RuntimeInput<'_>) -> Result<Option<&'static str>
         chat,
         turn,
         metadata,
-        message: _,
         now,
         generated_id,
+        ..
     } = input;
     let source = object(metadata.get("event"));
     let Some(kind) = token(source.get("kind")) else {
@@ -312,56 +315,7 @@ fn project_runtime_event(input: RuntimeInput<'_>) -> Result<Option<&'static str>
     )?;
     internal_continuation::remember(db, turn, source)?;
     if visibility != "internal" {
-        let mut event = source.clone();
-        let actual_event_id = token(event.get("id")).unwrap_or_else(|| generated_id.to_owned());
-        event.insert("id".into(), actual_event_id.clone().into());
-        event.insert("sessionId".into(), chat.into());
-        event.insert("turnId".into(), turn.into());
-        let session_next = next_sequence(db, "sessionId", chat)?;
-        let turn_next = next_sequence(db, "turnId", turn)?;
-        event.insert(
-            "sessionSequence".into(),
-            sequence(event.get("sessionSequence"), session_next).into(),
-        );
-        event.insert(
-            "turnSequence".into(),
-            sequence(event.get("turnSequence"), turn_next).into(),
-        );
-        event.entry("visibility").or_insert_with(|| "public".into());
-        event.insert("payload".into(), Value::Object(normalized_payload));
-        event
-            .entry("createdAt")
-            .or_insert_with(|| Value::String(now.to_owned()));
-        let progress_row = row_from_runtime_event(
-            &kind,
-            object(event.get("payload")),
-            &actual_event_id,
-            now,
-            event.get("turnSequence").and_then(Value::as_u64),
-        );
-        events::append(
-            db,
-            subscribers,
-            "agent.turn_event",
-            Some(turn),
-            service::map(&json!({
-                "session_id": chat, "turn_id": turn, "event": event
-            }))?,
-            now,
-        )?;
-        stream_message::project(&input, &kind, object(event.get("payload")))?;
-        if let Some(row) = progress_row {
-            append_progress(&ProgressAppend {
-                db,
-                subscribers,
-                chat,
-                turn,
-                row,
-                event_type: "agent.turn_event.progress",
-                source_event: Some(&actual_event_id),
-                now,
-            })?;
-        }
+        runtime_event::publish(input, source, &kind, normalized_payload)?;
     }
     if kind == "runtime.fault" {
         project_runtime_fault(input, object(source.get("payload")))?;
@@ -411,7 +365,7 @@ fn project_runtime_fault(
 /// only turn such a send, when its payload differs (a claim it gained), into
 /// an identity conflict that fails every later projection of the chat.
 fn skip(
-    tx: rusqlite::Transaction<'_>,
+    tx: rusqlite::Savepoint<'_>,
     action: &str,
     cursor: &checkpoint::Checkpoint,
     now: &str,

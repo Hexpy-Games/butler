@@ -43,7 +43,7 @@ pub(super) async fn get(
     let limit = query.limit;
     let rows = application
         .storage
-        .execute(move |db| read_artifact_page(db, &project_key, before_rowid, &before_file, limit))
+        .read(move |db| read_artifact_page(db, &project_key, before_rowid, &before_file, limit))
         .await
         .map_err(app_error)?;
     let selected = rows.iter().take(query.limit).collect::<Vec<_>>();
@@ -80,7 +80,7 @@ pub(super) async fn attach(
     let project_key = project_id.to_owned();
     let artifact = application
         .storage
-        .execute(move |db| read_artifact(db, &project_key, &id))
+        .read(move |db| read_artifact(db, &project_key, &id))
         .await
         .map_err(app_error)?
         .ok_or_else(source_unavailable)?;

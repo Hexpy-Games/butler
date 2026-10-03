@@ -206,7 +206,7 @@ impl AppApplication {
         let chat_id = session_id.to_owned();
         self.storage
             .execute(move |db| {
-                let transaction = db.transaction().map_err(AppStorageError::sqlite)?;
+                let transaction = db.savepoint().map_err(AppStorageError::sqlite)?;
                 settings::create_plan_continuation(&transaction, &subscribers, input, &now)?;
                 transaction.commit().map_err(AppStorageError::sqlite)
             })
@@ -240,7 +240,7 @@ impl AppApplication {
         let chat_id = session_id.to_owned();
         self.storage
             .execute(move |db| {
-                let transaction = db.transaction().map_err(AppStorageError::sqlite)?;
+                let transaction = db.savepoint().map_err(AppStorageError::sqlite)?;
                 settings::create_plan_instruction(&transaction, &subscribers, input, &now)?;
                 transaction.commit().map_err(AppStorageError::sqlite)
             })

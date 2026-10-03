@@ -1,8 +1,7 @@
 use serde::Serialize;
 use serde_json::Value;
 
-use super::super::{AppApplication, GatewayApplicationError};
-use crate::gateway::application::storage::AppStorageCode;
+use super::super::GatewayApplicationError;
 use crate::gateway::{DeliveryState, TurnProgressSnapshotView, TurnRecord, TurnState};
 use butler_turn::btcc::{
     ControlSource, ExecutionControls, ReasoningEffort, SubsessionResultContext,
@@ -43,27 +42,6 @@ struct SessionViewExecutionModel {
     adapter_effective_model_ref: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     provider_reported_model_ref: Option<String>,
-}
-
-pub(super) async fn read_latest(
-    app: &AppApplication,
-    chat_id: String,
-) -> Result<Option<(TurnRecord, TurnProgressSnapshotView)>, GatewayApplicationError> {
-    app.storage
-        .execute(move |db| {
-            let Some(turn) = super::super::read_model::latest_turn(db, &chat_id)? else {
-                return Ok(None);
-            };
-            let progress = super::super::progress_view::read(db, &turn.id)?.ok_or_else(|| {
-                super::super::storage::AppStorageError::new(
-                    AppStorageCode::AppProjectionMissing,
-                    "Turn progress is unavailable.",
-                )
-            })?;
-            Ok(Some((turn, progress)))
-        })
-        .await
-        .map_err(super::super::app_error)
 }
 
 pub(super) fn project(
@@ -145,4 +123,16 @@ fn public_execution_model(value: Option<&Value>) -> Option<SessionViewExecutionM
             .and_then(Value::as_str)
             .map(str::to_owned),
     })
+}
+
+pub(super) fn project_latest(
+    value: Option<&(TurnRecord, TurnProgressSnapshotView)>,
+    session: &str,
+    message: Option<&crate::gateway::MessageRecord>,
+) -> Result<Option<SessionViewTurnProjection>, GatewayApplicationError> {
+    let latest = value.map(|(turn, _)| turn);
+    let suppress = super::helpers::superseded_by_reply(latest, message);
+    value
+        .map(|(turn, progress)| project(turn, progress.clone(), session, suppress))
+        .transpose()
 }

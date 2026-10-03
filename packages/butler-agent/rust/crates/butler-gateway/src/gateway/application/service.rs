@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::gateway::application::storage::AppStorageCode;
-use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use rusqlite::{Connection, OptionalExtension, Savepoint, params};
 use serde_json::{Map, Value, json};
 
 impl AppApplication {
@@ -157,7 +157,8 @@ impl AppApplication {
                 Ok(())
             })
             .await
-            .map_err(app_error)
+            .map_err(app_error)?;
+        self.projection.active().await
     }
 
     pub(super) async fn finish_visual(
@@ -292,7 +293,7 @@ impl AppApplication {
         let now = self.dependencies.identity_clock.now_iso();
         let subscribers = self.subscribers.clone();
         self.storage.execute(move|db|{
-            let tx=db.transaction().map_err(AppStorageError::sqlite)?;
+            let tx=db.savepoint().map_err(AppStorageError::sqlite)?;
             let turn_id=tx.query_row("SELECT turn_id FROM session_queued_messages WHERE id=?1 AND state='dispatching' AND claim_id=?2",params![claim.queued_message_id,claim.claim_id],|row|row.get::<_,Option<String>>(0)).optional().map_err(AppStorageError::sqlite)?.flatten();
             let changed=tx.execute("UPDATE session_queued_messages SET state='failed',safe_error_code=?1,claim_id=NULL,claim_owner=NULL,claimed_at=NULL,lease_expires_at=NULL,updated_at=?2 WHERE id=?3 AND chat_id=?4 AND state='dispatching' AND claim_id=?5",params![code,now,claim.queued_message_id,claim.chat_id,claim.claim_id]).map_err(AppStorageError::sqlite)?;
             if changed!=1{return Err(AppStorageError::new(AppStorageCode::QueuedMessageClaimLost,"Queued message claim was lost."))}
@@ -371,7 +372,7 @@ pub(super) fn accept_turn(
     controls_json: &str,
     now: &str,
 ) -> Result<(), AppStorageError> {
-    let tx = db.transaction().map_err(AppStorageError::sqlite)?;
+    let tx = db.savepoint().map_err(AppStorageError::sqlite)?;
     if !queue::fence(&tx, &claim.chat_id, turn_id, &claim.claim_id)? {
         // The queue is not linked yet; fence it by queue identity before creating public rows.
         let present=tx.query_row("SELECT 1 FROM session_queued_messages WHERE id=?1 AND chat_id=?2 AND state='dispatching' AND claim_id=?3",params![claim.queued_message_id,claim.chat_id,claim.claim_id],|_|Ok(())).optional().map_err(AppStorageError::sqlite)?.is_some();
@@ -403,7 +404,7 @@ pub(super) fn accept_turn(
 }
 
 fn attach_queued_files(
-    tx: &Transaction<'_>,
+    tx: &Savepoint<'_>,
     queued_id: &str,
     message_id: &str,
 ) -> Result<(), AppStorageError> {

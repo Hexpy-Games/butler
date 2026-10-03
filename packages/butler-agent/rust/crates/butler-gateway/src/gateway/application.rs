@@ -409,7 +409,7 @@ impl AppApplication {
         limit: usize,
     ) -> Result<super::MessageListView, GatewayApplicationError> {
         self.storage
-            .execute(move |db| read_model::list_messages(db, &chat_id, cursor, limit))
+            .read(move |db| read_model::list_messages(db, &chat_id, cursor, limit))
             .await
             .map_err(app_error)
     }
@@ -418,7 +418,7 @@ impl AppApplication {
         session_id: String,
     ) -> Result<Vec<super::SessionArtifactSummary>, GatewayApplicationError> {
         self.storage
-            .execute(move |db| read_model::list_artifacts(db, &session_id))
+            .read(move |db| read_model::list_artifacts(db, &session_id))
             .await
             .map_err(app_error)
     }
@@ -427,7 +427,7 @@ impl AppApplication {
         session_id: String,
     ) -> Result<SessionQueueView, GatewayApplicationError> {
         self.storage
-            .execute(move |db| queue_view::list(db, &session_id))
+            .read(move |db| queue_view::list(db, &session_id))
             .await
             .map_err(app_error)
     }
@@ -437,7 +437,7 @@ impl AppApplication {
         cursor: f64,
     ) -> Result<super::TurnListView, GatewayApplicationError> {
         self.storage
-            .execute(move |db| read_model::list_turns(db, &chat_id, cursor))
+            .read(move |db| read_model::list_turns(db, &chat_id, cursor))
             .await
             .map_err(app_error)
     }
@@ -445,10 +445,7 @@ impl AppApplication {
 
 /// The newest durable event cursor; storage is closed when it cannot be read.
 async fn latest_event_cursor(storage: &AppStorage) -> Result<u64, GatewayApplicationError> {
-    match storage
-        .execute(|connection| events::latest(connection))
-        .await
-    {
+    match storage.read(events::latest).await {
         Ok(cursor) => Ok(cursor),
         Err(error) => {
             let _ = storage.close().await;
