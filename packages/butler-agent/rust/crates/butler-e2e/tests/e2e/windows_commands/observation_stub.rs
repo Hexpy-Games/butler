@@ -79,7 +79,7 @@ async fn reply(
                     "observe",
                     "run_command",
                     &json!({"command":script.command,
-            "summary":"다운로드 목록 확인","state_effect":"read_only","output_mode":"full","timeout_ms":30000}),
+            "summary":"다운로드 목록 확인","state_effect":"read_only","output_mode":"full","max_output_tokens":6000,"timeout_ms":30000}),
                 )
             }
             4 => {
