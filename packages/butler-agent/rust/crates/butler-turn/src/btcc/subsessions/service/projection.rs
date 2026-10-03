@@ -52,6 +52,18 @@ impl SubsessionService {
         Ok(lines)
     }
 
+    /// Visible parent execution presence, excluding interrupted child turns.
+    pub async fn running_parents(&self, parents: Vec<String>) -> Result<Vec<String>, BtccError> {
+        let candidates = self.repository.running_descendants(parents).await.map_err(BtccError::from)?;
+        let mut running = std::collections::HashSet::new();
+        for (parent, relation) in candidates {
+            if !running.contains(&parent) && !self.child_recoverable(&relation).await? {
+                running.insert(parent);
+            }
+        }
+        Ok(running.into_iter().collect())
+    }
+
     /// The App projection of a session's subsessions.
     pub async fn app_projection(&self, session_id: &str) -> Result<Value, BtccError> {
         let children = self

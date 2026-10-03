@@ -29,6 +29,7 @@ async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), 
         .unwrap_or_else(|_| panic!("{}\n{}", diagnostic(&script), s.agent.logs()));
     let view = s.gw.get("/session-view?session_id=general").await?;
     let child = &view.data()["steward_children"][0];
+    assert_sidebar_work(&s, true).await?;
     assert_eq!(child["approved_plan_total"], 2, "{child}");
     assert_eq!(child["approved_plan_completed"], 1, "{child}");
     assert!(
@@ -65,6 +66,7 @@ async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), 
     assert_eq!(complete["session_id"], child_id);
     assert_eq!(complete["result"]["status"], "success", "{complete}");
     assert_eq!(complete["approved_plan_completed"], 2);
+    assert_sidebar_work(&s, false).await?;
     let activity = s.gw.get("/worker-activity?include_history=true").await?;
     assert_eq!(activity.data()["workers"][0]["worker_id"], worker);
     assert_direction(&s, &script, relation);
@@ -231,4 +233,15 @@ async fn setup(id: &str, url: &str) -> Result<Setup, HarnessError> {
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", url)
         .env("BUTLER_APP_SERVER_PORT", port))
+}
+
+async fn assert_sidebar_work(
+    s: &butler_e2e::e2e::scenario::Scenario,
+    running: bool,
+) -> Result<(), HarnessError> {
+    let navigation = s.gw.get("/navigation").await?;
+    let parent = navigation.data()["chats"].as_array().unwrap().iter()
+        .find(|session| session["id"] == "general").unwrap();
+    assert_eq!(parent["running_delegated_work"], running, "{parent}");
+    Ok(())
 }

@@ -36,6 +36,13 @@ impl AppSubsessions {
 }
 
 impl AppSubsessionPort for AppSubsessions {
+    fn running_parents(&self, parents: Vec<String>) -> ApplicationFuture<Vec<String>> {
+        let service = self.service.clone();
+        Box::pin(async move {
+            service.running_parents(parents).await.map_err(GatewayApplicationError::internal_from)
+        })
+    }
+
     fn user_work_present(&self) -> ApplicationFuture<bool> {
         let repository = self.service.repository();
         Box::pin(async move {

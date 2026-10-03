@@ -115,6 +115,8 @@ export function useLiveSessionEvents(): void {
         event.type === "space.changed" || event.type === "session.created" ||
         event.type === "project.created" || event.type === "project.updated" ||
         event.type === "turn.state_changed" ||
+        event.type.startsWith("worker.") || event.type.startsWith("worker_") ||
+        event.type === "session_queue.changed" || event.type === "session.queue.changed" ||
         (event.type === "session.updated" && !isProjectNavigationEvent(event))
       ) {
         if (!isProjectNavigationEvent(event)) {

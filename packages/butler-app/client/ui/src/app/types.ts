@@ -773,6 +773,7 @@ export interface SessionSummary {
   };
   last_activity_at: string;
   active_turn_state?: string;
+  running_delegated_work?: boolean;
   pinned: boolean;
   archived: boolean;
   last_message_preview?: string;
