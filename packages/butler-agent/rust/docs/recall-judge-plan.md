@@ -202,6 +202,81 @@ No direct monetary price is claimed: price the configured provider's uncached,
 cached and output rates separately. Payload-only tokens and a minimal product
 request's exact cost remain unverified. Do not transfer external API timings.
 
+### Smaller judge inputs — measurement only, NOT YET APPROVED
+
+Private artifacts: `/home/yeonw/workspace/bench/out/judge-cost/` (`protocol.json`,
+`selection-policy-correction.json`, frozen selection, per-stage prompts/outputs/usage,
+`dev-reports.json`, `heldout-reports.json`, `report.md`, token sensitivity and validation).
+All 48 K/excerpt/summary combinations plus one two-stage arm ran on the same dev
+half: K = 10/15/20/30, excerpt = 0/200/400/700, summary = 150/300/500 Unicode
+characters. Caps take prefixes of the saved text; no new excerpt selection or
+summary generation. Two-stage uses the first stored summary line capped at 150
+characters for 30 offers (no separate titles in saved prompts), then 700-character
+excerpts for its first five; refined ranks precede the remaining initial shortlist.
+The frozen gate, cohort, split, prompt instructions and k=60 fusion stay unchanged.
+Every complete candidate permutation and untouched tail is validated; only the
+95 gated queries and original 95-query control sample receive calls, at most four
+concurrently, gpt-6-luna only. Controls never affect gated metrics.
+
+Selection on dev retains the prior full-input vague result (9/21 =42.9%), requires
+extra >=50%, and rejects any slice whose paired Hit@5 or MRR change CI is wholly
+negative; minimize gated median input, then p95/max and wall time. The initial
+45% dev screen was corrected before held-out judging: 45% is the held-out target,
+while the prior full-input dev result itself is below it. All 49 arms were evaluated
+before freezing K=15, summary cap 150, no excerpt, for 94 held-out gated/control
+calls. No failed call was retried. Full results include paired 10,000-resample
+95% CIs, absolute and session-cluster sensitivity intervals, and control audits.
+
+Input counts tokenize the exact instruction + question/candidate JSON with
+**tiktoken 0.14.0, o200k_base**, excluding the agent wrapper; cached tokens are
+never subtracted. This
+is a plain-text estimate: gpt-6-luna has no mapping in that tokenizer release,
+and provider roles/schema framing are unmeasured. Output is actual native API
+`turn.completed.usage.output_tokens` (all generated work is judging, no tools),
+summed over stages. Wall time includes Codex launch/wrapper and host contention.
+Triples below are median / p95 / maximum; costs use gated recalls only.
+
+| Arm / split | Gated n | Vague / extra Hit@5 (%) | Input estimate | API output tokens | Wall seconds |
+|---|---:|---|---|---|---|
+| Previous full-summary +700 / held-out | 44 | 54.5 / 62.9 | 11430.5 / 17377.6 / 19416 | 24 / 34 / 72 | 4.08 / 6.16 / 7.94 |
+| K15, summary150, no excerpt / dev | 51 | 42.9 / 55.9 | 1194 / 1331 / 1381 | 22 / 34 / 34 | 4.01 / 6.67 / 8.46 |
+| K15, summary150, no excerpt / held-out | 44 | 45.5 / 60.0 | 1160.5 / 1343.7 / 1409 | 22 / 34 / 34 | 4.12 / 6.98 / 9.89 |
+| Two-stage K30/5, summary150 +700 / dev | 51 | 42.9 / 55.9 | 2711 / 4269.5 / 4854 | 40 / 56 / 58 | 8.27 / 11.38 / 12.90 |
+
+Held-out baseline -> selected gated ranking; brackets are paired 95% change CIs
+(Hit@5 percentages / percentage points; MRR reciprocal rank):
+
+| Slice | n | Hit@5; delta CI | MRR; delta CI |
+|---|---:|---|---|
+| vague | 22 | 36.4 -> 45.5; [0.0, 22.7] | 0.259 -> 0.402; [0.032, 0.283] |
+| vague-extra | 35 | 45.7 -> 60.0; [2.9, 25.7] | 0.305 -> 0.373; [0.014, 0.134] |
+| paraphrase | 34 | 73.5 -> 73.5; [0.0, 0.0] | 0.526 -> 0.558; [0.000, 0.076] |
+| keyword | 33 | 90.9 -> 90.9; [0.0, 0.0] | 0.740 -> 0.740; [0.000, 0.000] |
+| overall-kept | 124 | 63.7 -> 69.4; [1.6, 10.5] | 0.473 -> 0.526; [0.024, 0.087] |
+
+**Recommendation:** K=15, summary prefix 150, no excerpts is the cheapest
+dev-eligible tested input and meets held-out point targets: 10/22 vague and
+21/35 extra, with no held-out Hit@5 losses or slice regression beyond noise.
+It preserves less of the prior Hit@5 gain, especially vague (two wins versus four);
+vague Hit@5 delta CI includes zero. Extra MRR has eight wins/two losses.
+Dev loses one keyword hit; its CI includes zero. Held-out control audit gains one
+paraphrase hit and loses one keyword hit (aggregate 76% ->76%); keep the gate.
+
+**12k payload verdict: fits as estimated**, 0/44 gated held-out recalls exceed it;
+cl100k_base sensitivity is 1646 / 1950 / 2131 tokens. Original full-summary payload
+alone exceeds 12k in 19/44 held-out gated recalls (91/190 across the original run).
+Exact minimal-provider billable input remains unverified; the Codex wrapper is
+not made cheaper by this counting method. The 6.98 s gated p95 still fails the
+500 ms design budget. Absolute Hit@5 CIs are [22.7, 68.2]% vague and [42.9, 74.3]%
+extra: thresholds and non-inferiority are not statistically established. Generated
+cues, related sessions across halves, one stochastic output per configuration,
+prefix selection and candidate-order-only evaluation limit generalization.
+Completed: 4881 new live stage calls, 4798 complete recall permutations, zero
+failed calls/tool calls; frozen inputs/split, privacy and document checks accompany
+the aggregate report. No product changes, builds, real-cue confirmation, exact
+provider request, product evidence/jump or cold/warm latency verification.
+**NOT YET APPROVED remains in force.**
+
 ### Offline, cancellation and fallbacks
 
 Bypass adds zero provider calls. Offline/local mode may use only the configured
