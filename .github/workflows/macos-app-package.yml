@@ -16,24 +16,6 @@ on:
         required: false
         type: boolean
         default: false
-  pull_request:
-    paths:
-      - ".github/workflows/macos-app-package.yml"
-      - ".github/workflows/release.yml"
-      - ".github/actions/rust-agent-setup/**"
-      - "packages/butler-app/client/electron/**"
-      - "packages/butler-app/scripts/release/**"
-      - "deploy/**"
-      - "tests/smoke/packaged-app-update.ts"
-      - "tests/support/electron-page-cdp.ts"
-      - "packages/butler-app/client/ui/src/components/settings/Update*"
-      - "packages/butler-agent/rust/crates/butler-platform/src/app_update.rs"
-      - "packages/butler-agent/rust/crates/butler-agent/build.rs"
-      - "packages/butler-agent/rust/crates/butler-agent/src/host/cli/app_update.rs"
-      - "packages/butler-agent/rust/crates/butler-runtime/src/operations/update.rs"
-      - "packages/butler-agent/rust/crates/butler-runtime/src/operations/update/**"
-      - "bun.lock"
-      - "**/package.json"
   workflow_call:
     inputs:
       candidate-version:

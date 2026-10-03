@@ -78,7 +78,7 @@ jobs:
               - '.github/workflows/ds-site.yml'
             package:
               - '.github/workflows/macos-app-package.yml'
-              - '.github/workflows/release.yml'
+              - '.github/workflows/release*.yml'
               - '.github/actions/rust-agent-setup/**'
               - 'packages/butler-app/client/electron/**'
               - 'packages/butler-app/scripts/release/**'
@@ -104,7 +104,7 @@ jobs:
               - '{bun.lock,**/package.json}'
             install:
               - '.github/workflows/install-smoke.yml'
-              - '.github/workflows/{release,npm-publish,linux-packages}.yml'
+              - '.github/workflows/{release*,npm-publish,linux-packages}.yml'
               - '.github/actions/build-agent-archive/**'
               - 'packages/butler-app/scripts/release/**'
               - 'deploy/**'
