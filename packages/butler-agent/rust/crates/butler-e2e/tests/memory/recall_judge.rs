@@ -118,6 +118,14 @@ async fn mem_judge_gated_recall_reorders_and_faster_keeps_base() -> Result<(), H
     let judged = recall(&s, "accurate").await?;
     assert_eq!(judge_count(&s), 1);
     assert_eq!(judged.len(), baseline.len());
+    if let Some(workers) =
+        butler_platform::process_control::usage::embedding_children(s.agent.pid().unwrap())?
+    {
+        assert!(
+            workers.is_empty(),
+            "Summary-only judge loaded an embedding worker"
+        );
+    }
     assert_eq!(judged[0]["episode_ref"], baseline[1]["episode_ref"]);
     let ids = |rows: &[Value]| {
         let mut ids = rows
@@ -229,5 +237,58 @@ async fn mem_judge_non_gated_recall_makes_no_call() -> Result<(), HarnessError> 
     assert!(!baseline.is_empty());
     assert_eq!(episode_ids(&accurate), episode_ids(&baseline));
     assert_eq!(judge_count(&s), 0);
+    s.finish().await
+}
+
+#[tokio::test]
+async fn mem_judge_shutdown_interrupts_active_and_delivers_queued_followup()
+-> Result<(), HarnessError> {
+    use butler_e2e::e2e::scenario::accepted_turn_id;
+    use std::time::Duration;
+    butler_e2e::gate!();
+    let mut s = setup().await?;
+    let held = s.provider()?.hold_next_reply("\"question\"");
+    let chat =
+        s.gw.post(
+            "/sessions",
+            json!({"kind":"chat","title":"Shutdown fixture"}),
+        )
+        .await?;
+    let chat = chat.data()["session"]["id"].as_str().unwrap().to_owned();
+    let active = accepted_turn_id(&s.gw.say(&chat, ASK).await?)?;
+    tokio::time::timeout(Duration::from_secs(20), async {
+        while judge_count(&s) == 0 {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let queued = s.gw.post("/session-queue", json!({"chat_id":chat,"text":EXACT,"client_message_id":uuid::Uuid::new_v4().to_string()})).await?;
+    assert_eq!(queued.status, 202, "{}", queued.text);
+    s.restart().await?;
+    held.release();
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let turns = s.gw.turns(&chat).await.unwrap();
+            if turns.len() == 2 && turns.iter().any(|turn| turn["state"] == "delivered") {
+                assert_eq!(
+                    turns
+                        .iter()
+                        .filter(|turn| turn["state"] == "delivered")
+                        .count(),
+                    1
+                );
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("Queued follow-up must complete after restart");
+    let interrupted = s.gw.turn(&chat, &active).await?.unwrap();
+    assert_eq!(interrupted["state"], "failed");
+    assert_eq!(interrupted["safe_error_code"], "turn_interrupted");
+    assert_eq!(interrupted["retryable"], true);
+    assert_eq!(judge_count(&s), 1, "Interrupted judge must not resume");
     s.finish().await
 }
