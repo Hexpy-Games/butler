@@ -92,7 +92,7 @@ async fn run(case: &str, command: &str) -> Result<Value, HarnessError> {
 }
 
 fn installed_bundle(setup: &mut Setup) {
-    if let Some(root) = std::env::var_os("BUTLER_E2E_INSTALLED_ROOT") {
+    if let Some(root) = std::env::var_os("BUTLER_E2E_APP_PAYLOAD") {
         let root = std::path::PathBuf::from(root);
         setup.sandbox.binary = root.join("bin/butler-agent.exe");
         setup.sandbox.resources = root.join("resources");
