@@ -89,6 +89,8 @@ async fn replay(
         .env("USERPROFILE", &home)
         .env("LOCALAPPDATA", local.display().to_string())
         .env("APPDATA", roaming.display().to_string())
+        // Match the installed App, which does not inherit a console module path.
+        .env("PSModulePath", "")
         .env("BUTLER_SECRET_STORE", "file")
         .env("BUTLER_PLATFORM_SYSTEM_SECRETS", "0")
         .env("BUTLER_APP_DISABLE_SHELL_REGISTRATION", "1");
