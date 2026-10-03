@@ -147,12 +147,22 @@ impl MemoryManagement {
         let root = self.root.clone();
         let paths = self.paths.clone();
         let coordinator = self.coordinator.clone();
+        let executor = tokio::runtime::Handle::current();
+        let token = cancellation.clone();
         let lease = tokio::task::spawn_blocking(move || {
             safety::validate(&root, &paths)?;
-            coordinator
-                .try_acquire(&crate::coordination::CognitionWriteAcquire::immediate(
-                    paths.consolidation_lock(&root),
-                    "memory_inventory",
+            // Completion receipts can become visible before their writer releases
+            // the lease. Use the existing interactive wait for that handoff.
+            let request = crate::coordination::CognitionWriteAcquire {
+                lock_path: paths.consolidation_lock(&root),
+                purpose: Some("memory_inventory".into()),
+                deadline_at_epoch_ms: None,
+                cancellation: Some(token),
+            };
+            executor
+                .block_on(coordinator.acquire(
+                    request,
+                    crate::coordination::CognitionWaitClass::Interactive,
                 ))
                 .map_err(io::Error::other)?
                 .ok_or_else(|| io::Error::other("Memory is in use"))
