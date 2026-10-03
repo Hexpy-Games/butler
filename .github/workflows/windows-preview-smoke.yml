@@ -24,6 +24,11 @@ on:
         description: Task Cargo cache namespace on the native Windows build host
         required: false
         type: string
+      native-loop:
+        description: Run the owner-host native checks before hosted final confirmation
+        required: false
+        type: boolean
+        default: false
       diagnose-powershell:
         description: Run isolated startup diagnostics instead of build/test jobs
         required: false
@@ -45,7 +50,7 @@ concurrency:
 jobs:
   build:
     name: Build unsigned Windows preview
-    if: ${{ !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: ${{ !inputs.native-loop && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: [self-hosted, butler-win]
     timeout-minutes: 90
     steps:
@@ -198,6 +203,7 @@ jobs:
 
   release:
     name: Installed unsigned Windows preview
+    if: ${{ !inputs.native-loop }}
     needs: [build, stub]
     runs-on: windows-latest
     timeout-minutes: 30
@@ -280,6 +286,7 @@ jobs:
 
   hosted:
     name: Hosted Windows E2E (${{ matrix.shard }})
+    if: ${{ !inputs.native-loop }}
     needs: stub
     runs-on: windows-latest
     timeout-minutes: 30
@@ -333,7 +340,7 @@ jobs:
 
   gate:
     name: Complete Windows preview verification
-    if: ${{ always() && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: ${{ always() && !inputs.native-loop && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     needs: [build, stub, release, hosted]
     runs-on: windows-latest
     defaults:
