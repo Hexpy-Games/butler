@@ -54,6 +54,7 @@ export const stories: ShowcaseStory[] = [
       <ButtonContainer size="default">
         <Button disabled text={text(context).save} />
         <Button disabled text={text(context).search} variant="outline" />
+        <Button aria-disabled text={text(context).save} variant="outline" />
       </ButtonContainer>
     ),
   },

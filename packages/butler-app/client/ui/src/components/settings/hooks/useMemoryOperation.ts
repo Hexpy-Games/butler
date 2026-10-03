@@ -12,6 +12,7 @@ export function useMemoryOperation(initial: MemoryReceipt | undefined, refresh: 
   const seen = useRef(new Map<string, number>());
   const current = useRef<MemoryReceipt | undefined>(undefined);
   const accept = useCallback((next: MemoryReceipt, announce = true) => {
+    if (next.kind && ["automatic", "profile", "project_memory"].includes(next.kind)) return;
     if ((seen.current.get(next.operation_id) ?? -1) >= next.sequence) return;
     seen.current.set(next.operation_id, next.sequence);
     current.current = next;

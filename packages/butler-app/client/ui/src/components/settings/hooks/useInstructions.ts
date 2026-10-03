@@ -38,7 +38,7 @@ export function useInstructions(refreshSummary: () => Promise<void>) {
     alive.current = true;
     void reload().catch(() => {});
     const off = onMemoryEvent((event) => {
-      if (!busy.current && (event.type !== "memory.operation" || event.payload.kind === "instructions")) void reload().catch(() => {});
+      if (!busy.current && (event.type !== "memory.operation" || event.payload.kind === "instructions" || (event.payload.kind === "project_memory" && event.payload.phase === "complete"))) void reload().catch(() => {});
     });
     return () => { alive.current = false; off(); };
   }, [reload]);

@@ -10,7 +10,7 @@ export interface MemoryCard {
   health: { consent_on?: boolean; reclaimable_bytes?: number | null; state?: string };
 }
 export interface MemoryReceipt {
-  operation_id: string; phase: "preparing" | "removing" | "complete" | "failed" | "cancelled";
+  kind?: string; project_id?: string; operation_id: string; phase: "preparing" | "removing" | "complete" | "failed" | "cancelled";
   sequence: number; bytes_reclaimed: number;
 }
 export interface MemoryInventory { revision: number; kinds: MemoryCard[]; operation?: MemoryReceipt }

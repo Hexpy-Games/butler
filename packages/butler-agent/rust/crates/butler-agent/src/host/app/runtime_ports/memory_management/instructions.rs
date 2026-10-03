@@ -54,7 +54,9 @@ impl AppMemoryManagement {
             .next()
             .cloned();
         if let Some(id) = id {
-            view["operation"] = encode(self.owner.cleanup_status(id).await.map_err(error)?)?;
+            view["operation"] = if let Some(reset) = self.owner.reset_status(id.clone()).await.map_err(error)? {
+                encode(reset)?
+            } else { encode(self.owner.cleanup_status(id).await.map_err(error)?)? };
         }
         Ok(view)
     }

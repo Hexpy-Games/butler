@@ -1033,6 +1033,11 @@ export interface AppCopy {
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     modelsAdvanced: { title: string; contents: string };
     memory: {
+      reset: string; resetChatTitle: string; resetProfileTitle: string; resetProjectTitle: string;
+      resetBody: string; resetProfileBody: string; resetProjectBody: string; removed: string; kept: string;
+      removedChat: (n: number) => string; removedProfile: (entries: number, candidates: number) => string;
+      removedProject: (chats: number, instructions: number) => string; keptChat: string; keptProfile: string; keptProject: string;
+      resetNote: string; resetChatDone: string; resetProfileDone: string; resetProjectDone: string; resetFailed: string; nothingToReset: string;
       thisChat: string; thisChatOnly: string; expiresInHours: (hours: number) => string; expiresInDays: (days: number) => string;
       linkLabel: string; linkDescription: string; linkOpen: string; linkOpenLabel: string;
       freeSpace: string; project: string; none: string; profileBuildingOff: string;
@@ -1430,8 +1435,6 @@ export interface AppCopy {
       chooseFolder: string;
       applyPersonalization: string;
       savePersonalization: string;
-      clearProfile: string;
-      clearProfileQueued: string;
       openProfileMigration: string;
       closeProfileMigration: string;
       copyMigrationPrompt: string;
