@@ -292,3 +292,71 @@ async fn mem_judge_shutdown_interrupts_active_and_delivers_queued_followup()
     assert_eq!(judge_count(&s), 1, "Interrupted judge must not resume");
     s.finish().await
 }
+
+#[tokio::test]
+async fn mem_judge_wait_releases_reader_pin_and_binds_current_generation()
+-> Result<(), HarnessError> {
+    use butler_e2e::e2e::scenario::accepted_turn_id;
+    use std::time::Duration;
+    butler_e2e::gate!();
+    let s = setup().await?;
+    let old_graph = memory_stubs::graph_path(&s.sandbox.data)?;
+    let held = s.provider()?.hold_next_reply("\"question\"");
+    let chat =
+        s.gw.post("/sessions", json!({"kind":"chat","title":"Lease fixture"}))
+            .await?;
+    let chat = chat.data()["session"]["id"].as_str().unwrap().to_owned();
+    let start = s.provider()?.requests().len();
+    let active = accepted_turn_id(&s.gw.say(&chat, ASK).await?)?;
+    tokio::time::timeout(Duration::from_secs(20), async {
+        while judge_count(&s) == 0 {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let inventory = s.gw.post("/memory/inventory/check", json!({})).await?;
+    let id = uuid::Uuid::new_v4().to_string();
+    let accepted =
+        s.gw.post(
+            "/memory/reset/chat-memory",
+            json!({"operation_id":id,"inventory_revision":inventory.data()["revision"]}),
+        )
+        .await?;
+    assert_eq!(accepted.status, 202, "{}", accepted.text);
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let receipt = s.gw.get(&format!("/memory/reset/{id}")).await.unwrap();
+            assert_ne!(receipt.data()["phase"], "failed", "{}", receipt.text);
+            if receipt.data()["phase"] == "complete" && receipt.data()["removal_pending"] == false {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("Reset must remove old generation before the judge's 8s deadline");
+    assert!(
+        !old_graph.parent().unwrap().exists(),
+        "Judge retained a generation reader pin"
+    );
+    assert_ne!(memory_stubs::graph_path(&s.sandbox.data)?, old_graph);
+    held.release();
+    let turn =
+        s.gw.wait_terminal(&chat, &active, Duration::from_secs(10))
+            .await?;
+    assert_eq!(turn["state"], "delivered", "{turn}");
+    let requests = s.provider()?.requests();
+    let output = requests[start..]
+        .iter()
+        .filter_map(|r| r["input"].as_array())
+        .flatten()
+        .find(|item| item["type"] == "function_call_output")
+        .unwrap()["output"]
+        .as_str()
+        .unwrap();
+    let output: Value = serde_json::from_str(output)?;
+    assert_eq!(output["output"]["ok"], true, "{output}");
+    assert!(output["output"]["results"].is_array());
+    s.finish().await
+}

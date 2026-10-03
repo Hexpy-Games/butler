@@ -53,7 +53,7 @@ src/host/guided/work_streams/prompt.rs	render	92
 src/host/guided/work_streams/storage.rs	Store::update_todo	101
 src/host/mcp/registry_cli.rs	run	162
 src/host/memory_jobs/briefing.rs	<BriefingSource as BriefingInputSource>::snapshot	110
-src/host/memory_jobs/recall_metrics.rs	<RecallMetrics as RecallMetricSink>::record	111
+src/host/memory_jobs/recall_metrics.rs	<RecallMetrics as RecallMetricSink>::record	107
 src/host/memory_jobs/transcript_sync.rs	LegacySessionSync::run	194
 src/host/memory_jobs/transcript_sync/hot.rs	LegacyHot::save	125
 src/host/memory_jobs/transcript_sync/hot.rs	commit	91

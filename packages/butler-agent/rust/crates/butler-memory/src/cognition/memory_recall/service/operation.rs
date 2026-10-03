@@ -3,10 +3,7 @@ use super::*;
 
 impl Operation {
     pub(super) async fn run(mut self) -> CognitionResult<RecallResponse> {
-        let _permit = tokio::select! {
-            result=self.admission.clone().acquire_owned()=>result.map_err(|source| closed().with_source(source))?,
-            ()=self.shutdown.cancelled()=>return Err(closed()),
-        };
+        let permit = self.read_permit().await?;
         if self.shutdown.is_cancelled() {
             return Err(closed());
         }
@@ -27,25 +24,33 @@ impl Operation {
         } else {
             VectorFacts::default()
         };
-        let prepared = if page.is_none() && self.judge_port.is_some() {
+        let (generation, prepared, permit) = if page.is_none() && self.judge_port.is_some() {
             let operation = self.clone();
-            let pinned = generation.clone();
             let facts = vector.clone();
-            let mut prepared =
-                tokio::task::spawn_blocking(move || operation.prepare(&pinned, &facts))
-                    .await
-                    .map_err(|source| closed().with_source(source))??;
+            // Move the only generation reader pin into blocking preparation. It
+            // drops there with the readers, before any model wait begins.
+            let mut prepared = tokio::task::spawn_blocking(move || {
+                let _permit = permit;
+                operation.prepare(&generation, &facts)
+            })
+            .await
+            .map_err(|source| closed().with_source(source))??;
             let started = std::time::Instant::now();
             self.judge(&mut prepared).await;
             // The owner approved a separate 8s judge budget. Preserve retrieval's
             // existing 5s work budget instead of spending its evidence budget waiting.
             self.deadline_at += i64::try_from(started.elapsed().as_millis()).unwrap_or_default();
-            Some(prepared)
+            (None, Some(prepared), None)
         } else {
-            None
+            (Some(generation), None, Some(permit))
+        };
+        let permit = match permit {
+            Some(permit) => permit,
+            None => self.read_permit().await?,
         };
         tokio::task::spawn_blocking(move || {
-            self.query(page.as_ref(), &generation, &vector, prepared)
+            let _permit = permit;
+            self.query(page.as_ref(), generation.as_ref(), &vector, prepared)
         })
         .await
         .map_err(|error| {
@@ -55,6 +60,14 @@ impl Operation {
             )
             .with_source(error)
         })?
+    }
+
+    async fn read_permit(&self) -> CognitionResult<tokio::sync::OwnedSemaphorePermit> {
+        tokio::select! {
+            result = self.admission.clone().acquire_owned() => result.map_err(|source| closed().with_source(source)),
+            () = self.shutdown.cancelled() => Err(closed()),
+            () = self.caller_cancel.cancelled() => Err(closed()),
+        }
     }
 
     fn prepare(
@@ -158,7 +171,7 @@ impl Operation {
     fn query(
         &self,
         page: Option<&Page>,
-        generation: &MemoryGenerationHandle,
+        generation: Option<&MemoryGenerationHandle>,
         vector: &VectorFacts,
         prepared: Option<PreparedSelection>,
     ) -> CognitionResult<RecallResponse> {
@@ -171,9 +184,9 @@ impl Operation {
             compare_locale: &compare,
         };
         let current = resolve_active_generation(&self.data_root, &self.environment)?;
-        let changed = current.generation_id != generation.generation_id;
-        let generation = if changed { &current } else { generation };
-        let prepared = if changed { None } else { prepared };
+        let generation = generation
+            .filter(|pinned| pinned.generation_id == current.generation_id)
+            .unwrap_or(&current);
         let mut read = PageRead {
             data_root: &self.data_root,
             environment: &self.environment,

@@ -20,24 +20,20 @@ impl RecallMetrics {
 
 impl RecallMetricSink for RecallMetrics {
     fn record(&self, metric: RecallMetric) {
+        if matches!(&metric, RecallMetric::Judge { .. }) {
+            let files = self.files.clone();
+            if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+                runtime.spawn_blocking(move || append_judge(&files, metric));
+            } else {
+                append_judge(&files, metric);
+            }
+            return;
+        }
         if !metrics_enabled(self.files.data_root()) {
             return;
         }
         let (name, value, unit, duration_ms, dimensions) = match metric {
-            RecallMetric::Judge {
-                native_operation_sha256,
-                gate_fired,
-                judged,
-                duration_ms,
-                input_tokens,
-                output_tokens,
-            } => (
-                "recall_v2_judge",
-                None,
-                None,
-                Some(duration_ms),
-                json!({"native_operation_sha256":native_operation_sha256,"gate_fired":gate_fired,"judged":judged,"input_tokens":input_tokens,"output_tokens":output_tokens}),
-            ),
+            RecallMetric::Judge { .. } => return,
             RecallMetric::Stage {
                 name,
                 native_operation_sha256,
@@ -161,5 +157,33 @@ fn append(files: &MetricFiles, (name, value, unit, duration_ms, dimensions): Pro
     if let Ok(mut line) = serde_json::to_vec(&event) {
         line.push(b'\n');
         let _ = files.append_operational_event(&line);
+    }
+}
+
+// Judge finishes on an async worker. Keep config/file I/O on a blocking worker,
+// through the same metric file owner as every other recall event.
+fn append_judge(files: &MetricFiles, metric: RecallMetric) {
+    if !metrics_enabled(files.data_root()) {
+        return;
+    }
+    if let RecallMetric::Judge {
+        native_operation_sha256,
+        gate_fired,
+        judged,
+        duration_ms,
+        input_tokens,
+        output_tokens,
+    } = metric
+    {
+        append(
+            files,
+            (
+                "recall_v2_judge",
+                None,
+                None,
+                Some(duration_ms),
+                json!({"native_operation_sha256":native_operation_sha256,"gate_fired":gate_fired,"judged":judged,"input_tokens":input_tokens,"output_tokens":output_tokens}),
+            ),
+        );
     }
 }
