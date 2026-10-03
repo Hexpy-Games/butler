@@ -102,7 +102,8 @@ fn cases(data: &Path) -> Vec<Case> {
         ),
         Case {
             tool: "list_files",
-            args: json!({"root":ordinary_data,"max_depth":1,"max_results":100}),
+            args: json!({"root":ordinary_data,"max_depth":1,"max_results":100,
+                "exclude_globs":["home/.butler/*/*"]}),
             refused: false,
         },
         Case {
