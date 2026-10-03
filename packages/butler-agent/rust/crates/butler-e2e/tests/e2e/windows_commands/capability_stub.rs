@@ -149,7 +149,10 @@ fn action(case: &Case) -> Value {
     let mut action = json!({"action_key":"basic","description":"Run the exact test operation"});
     if matches!(case.tool, "write_file" | "edit_file" | "run_command") {
         let target = if case.tool == "run_command" {
-            "workspace-command:.".to_owned()
+            format!(
+                "workspace-command:{}",
+                case.args["cwd"].as_str().unwrap_or(".")
+            )
         } else {
             format!("workspace:{}", case.args["path"].as_str().unwrap())
         };

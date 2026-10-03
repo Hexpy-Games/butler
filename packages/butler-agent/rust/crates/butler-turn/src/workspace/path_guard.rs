@@ -93,9 +93,7 @@ impl GuardResult {
             result.insert("code".into(), json!("protected_path"));
             result.insert(
                 "message".into(),
-                json!(
-                    "Butler data and credential paths must be accessed through their dedicated tools."
-                ),
+                json!("Project Ledger paths must be accessed through their dedicated tools."),
             );
             result.insert(
                 "next".into(),
@@ -371,31 +369,11 @@ pub fn looks_sensitive(relative: &str) -> bool {
 pub(super) fn protected_path(root: &Path, target: &Path, extra: &[PathBuf]) -> bool {
     let target = realpath_or_nearest(target);
     let mut roots = vec![root.join(".project-ledger")];
-    if let Ok(data) = std::env::var("BUTLER_DATA")
-        && !butler_core::public_text::trim_js_whitespace(&data).is_empty()
-    {
-        let data = PathBuf::from(data);
-        roots.push(data.join("project-ledger/projects"));
-        protect_external_data(root, &data, &mut roots);
-    }
-    if let Some(home) = butler_platform::user_dirs::home_dir() {
-        let data = home.join(".butler");
-        roots.push(data.join("project-ledger/projects"));
-        protect_external_data(root, &data, &mut roots);
-    }
     roots.extend_from_slice(extra);
     roots.into_iter().any(|candidate| {
         butler_platform::secure_fs::path_is_within(&target, &realpath_or_nearest(&candidate))
     })
 }
-fn protect_external_data(root: &Path, data: &Path, roots: &mut Vec<PathBuf>) {
-    // Preserve dedicated file-tool access to an admitted legacy workspace.
-    // A different workspace cannot use file tools to enter Butler's data tree.
-    if !butler_platform::secure_fs::path_is_within(root, &realpath_or_nearest(data)) {
-        roots.push(data.to_path_buf());
-    }
-}
-
 fn realpath_or_nearest(path: &Path) -> PathBuf {
     let mut current = path.to_path_buf();
     let mut suffix = Vec::new();
