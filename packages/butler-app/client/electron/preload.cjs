@@ -1316,4 +1316,13 @@ const butlerApp = Object.freeze({
   },
 });
 
+butlerApp.signalStartupReady = () => ipcRenderer.send("butler:renderer-ready");
 contextBridge.exposeInMainWorld("butlerApp", butlerApp);
+
+
+
+if (typeof window !== "undefined") window.addEventListener("DOMContentLoaded", () => {
+  const send = () => ipcRenderer.send("butler:startup-motion", document.body.dataset.motion === "reduced");
+  new MutationObserver(send).observe(document.body, { attributes: true, attributeFilter: ["data-motion"] });
+  send();
+});

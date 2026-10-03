@@ -1,3 +1,4 @@
+import { startupPaintReady } from "@/app/startupReady";
 import { useEffect } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import {
@@ -61,6 +62,7 @@ import { useOnboardingStore } from "@/stores/onboardingStore.ts";
 import { LegacyDataRecovery } from "@/components/first-run/LegacyDataRecovery.tsx";
 
 export function AppShell() {
+  useEffect(() => { if (window.butlerApp?.startupIssue === "legacy-data") startupPaintReady(); }, []);
   if (window.butlerApp?.startupIssue === "legacy-data") return <LegacyDataRecovery />;
   return <AppOnboardingShell />;
 }
@@ -68,6 +70,7 @@ export function AppShell() {
 function AppOnboardingShell() {
   useAppLocale();
   const { gate, markComplete } = useOnboardingGate();
+  useEffect(() => { if (gate !== "pending" && gate !== "workspace") startupPaintReady(); }, [gate]);
   const rerunOpen = useOnboardingStore((state) => state.rerunOpen);
   const closeRerun = useOnboardingStore((state) => state.closeRerun);
   if (gate === "pending") return <AppBootState />;

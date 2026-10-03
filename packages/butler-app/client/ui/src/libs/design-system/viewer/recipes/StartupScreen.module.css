@@ -1,0 +1,9 @@
+.screen {
+  background: var(--color-surface-base);
+}
+
+.fullscreen {
+  min-height: var(--adaptive-viewport-block-size);
+  display: grid;
+  align-content: center;
+}

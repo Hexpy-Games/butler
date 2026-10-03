@@ -24,7 +24,7 @@
     "packages/butler-agent/rust/crates/butler-turn/Cargo.toml": "67226f9ea15df5cbe76ccf0f8f7ac75bbc553130ac07a77b256fb05d9c75d3aa",
     "packages/butler-agent/rust/scripts/static-ort.lock.json": "a1aee730fc0773ca02d23bad8da95c0efe56a07ded67dc36d251f475a90369b2",
     "packages/butler-agent/rust/tools/source-check/Cargo.toml": "e50cffe7e1c5a79f1fe76bf689eb65fb682a29cd8425ae3609c35cfa1f56603c",
-    "packages/butler-app/client/electron/package.json": "14f7a3652d55d9e2d46d6b074057b57381d16452877f378fd1e9f39c6e24ec99",
+    "packages/butler-app/client/electron/package.json": "98ed78a1c07c01b774718b33c562f1a46aa5d5a9c1921ccc8a736ec3e3c15bd9",
     "packages/butler-app/client/ui/package.json": "8de8e3279db1471ff1277c48cf9de373a9e1d8b13a9751941435c07f7820b178",
     "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos/NOTICE": "3d1d0a9fe82fdc1492422398bfac65d2205a9326eebf619e238b84e9b6376d36",
     "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-mono/LICENSE.txt": "37784b44044a4ffd9256702b7c0982c37e5c8887ba90c6dca0479aea93dc898d",

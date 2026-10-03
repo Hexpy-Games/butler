@@ -1,3 +1,4 @@
+import { isStartupWindow, startupPending, configureStartupActions, startupStage, startupTiming, failStartup, waitForStartupRenderer, completeStartup } from "./startup-window.mjs";
 import {
   app,
   BrowserWindow,
@@ -114,7 +115,6 @@ import { isSecuritySenderOrigin, readAppLocalAdmin, requestSecurityRoute } from 
 import {
   APP_RENDERER_ORIGIN,
   APP_RENDERER_SCHEME,
-  APP_RENDERER_SCHEME_PRIVILEGES,
   createAppRendererProtocolHandler,
   findRendererDistRoot,
   isAppRendererDocumentUrl,
@@ -220,8 +220,7 @@ let rendererUrl = explicitUiUrl
   : defaultRendererUrl();
 let rendererOrigin = rendererOriginForUrl(rendererUrl);
 let appRendererProtocolReady = null;
-// Must run before the app is ready.
-protocol.registerSchemesAsPrivileged([APP_RENDERER_SCHEME_PRIVILEGES]);
+// The lightweight bootstrap registers the scheme before app readiness.
 let serverHealthUrl = new URL("/health", serverUrl).toString();
 const isMac = process.platform === "darwin";
 const isLinux = process.platform === "linux";
@@ -1764,6 +1763,7 @@ function scheduleTrayMenuRefresh() {
 async function showMainWindow() {
   const win =
     mainWindow && !mainWindow.isDestroyed() ? mainWindow : await createWindow();
+  if (startupPending()) return win;
   if (win.isMinimized()) win.restore();
   win.show();
   win.focus();
@@ -2023,6 +2023,7 @@ async function setDeveloperMode(enabled) {
 
 function applyDeveloperModeToWindows(enabled = developerModeEnabled()) {
   for (const win of BrowserWindow.getAllWindows()) {
+    if (isStartupWindow(win)) continue;
     if (enabled) {
       win.webContents.openDevTools({ mode: "detach" });
     } else if (win.webContents.isDevToolsOpened()) {
@@ -2090,7 +2091,7 @@ async function createWindow() {
     await launchReconcile;
     await ensureServer();
   }
-  if (!legacyDataBlocked) await loadInitialNativeShellPreferences();
+  if (!legacyDataBlocked) void loadInitialNativeShellPreferences().catch(() => undefined);
   if (!legacyDataBlocked && isPersistentMenuBarHelperSupported()) {
     ensurePersistentMenuBarHelper();
   } else if (!legacyDataBlocked) {
@@ -2115,7 +2116,8 @@ async function createWindow() {
     roundedCorners: true,
     hasShadow: true,
     autoHideMenuBar: true,
-    backgroundColor: usesTransparentWindow ? macTransparentBackground : "#f6f6f4",
+    backgroundColor: usesTransparentWindow ? macTransparentBackground
+      : nativeTheme.shouldUseDarkColors ? "#1f2023" : "#f8f9fa",
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
@@ -2125,6 +2127,7 @@ async function createWindow() {
     },
   });
   mainWindow = win;
+  const firstDataPaint = waitForStartupRenderer(win);
   win.setMenu(null);
   win.setMenuBarVisibility(false);
   win.on("close", (event) => {
@@ -2160,14 +2163,18 @@ async function createWindow() {
     event.preventDefault();
     openExternalUrl(url);
   });
+  startupStage("renderer");
   await prepareAppRendererProtocol();
   await win.loadURL(rendererUrl);
+  startupTiming("renderer_loaded");
   if (!legacyDataBlocked && usesAppForegroundLifecycle && app.isPackaged) {
+    startupStage("migration");
     const migration = await ensureLegacyAppServiceMigration();
     if (migration.status === "cancelled") {
       scheduleTrayMenuRefresh();
       applyDeveloperModeToWindows();
-      if (!suppressInitialWindowForLogin) win.show();
+      await firstDataPaint;
+      completeStartup(win, !suppressInitialWindowForLogin);
       suppressInitialWindowForLogin = false;
       return win;
     }
@@ -2175,6 +2182,9 @@ async function createWindow() {
     scheduleTrayMenuRefresh();
   }
   applyDeveloperModeToWindows();
+  startupStage("renderer");
+  await firstDataPaint;
+  if (!completeStartup(win, !suppressInitialWindowForLogin)) return win;
   recordAppStartupProgress("window_ready", { windowReady: true });
   if (!suppressInitialWindowForLogin) win.show();
   suppressInitialWindowForLogin = false;
@@ -2658,6 +2668,7 @@ if (appSingleInstanceLock) {
   app
     .whenReady()
     .then(async () => {
+      configureStartupActions({ logs: exportStartupDiagnostics });
       recordAppStartupProgress("electron_ready");
       configureAppIdentity();
       configureWindowsAppUpdater();
@@ -2674,7 +2685,7 @@ if (appSingleInstanceLock) {
         await runMenuBarHelper();
         return;
       }
-      await installDevtools();
+      void installDevtools().catch(() => undefined);
       await createWindow();
       flushPendingNativeNavigation();
     })
@@ -2990,13 +3001,16 @@ function handleFatalStartupError(error) {
   const message =
     error instanceof Error ? (error.stack ?? error.message) : String(error);
   console.error(message);
-  app.quit();
+  if (!failStartup()) app.quit();
 }
 
 function recordAppStartupProgress(stage, {
   windowReady = false,
   trayReady = Boolean(tray),
 } = {}) {
+  startupTiming(stage);
+  if (stage === "agent_starting") startupStage("agent");
+  if (stage === "agent_ready") startupStage("renderer");
   if (legacyDataBlocked) return;
   try {
     const diagnostics = bundledAgentSupervisor.diagnostics();
@@ -3108,4 +3122,11 @@ function openExternalUrl(value) {
   if (!["http:", "https:", "mailto:"].includes(url.protocol)) return false;
   void shell.openExternal(url.toString());
   return true;
+}
+
+async function exportStartupDiagnostics(timings) {
+  const result = await dialog.showSaveDialog({ defaultPath: "butler-startup-diagnostics.json" });
+  if (result.canceled || !result.filePath) return;
+  const diagnostics = await firstRunSetupBridge.diagnostics();
+  await writeFile(result.filePath, JSON.stringify({ ...diagnostics, runtime: readFirstRunRuntimeDiagnostics(), timings }, null, 2), { mode: 0o600 });
 }

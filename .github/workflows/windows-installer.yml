@@ -2,6 +2,11 @@ name: Windows Squirrel install and update
 on:
   workflow_dispatch:
     inputs:
+      hosted-only:
+        description: Build and verify on disposable GitHub-hosted runners only
+        required: false
+        type: boolean
+        default: false
       native-cache:
         description: Task Cargo cache namespace on the native Windows build host
         required: false
@@ -28,23 +33,24 @@ jobs:
   build:
     if: ${{ !inputs.reuse-run }}
     name: Build Windows Squirrel artifacts
-    runs-on: [self-hosted, butler-win]
+    runs-on: ${{ inputs.hosted-only && 'windows-latest' || fromJSON('["self-hosted", "butler-win"]') }}
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/windows-owner-setup
+        if: ${{ !inputs.hosted-only }}
         with:
           workflow: ${{ inputs.native-cache || 'win-installer' }}
       - uses: ./.github/actions/build-windows-agent
         with:
-          owner-runner: 'true'
+          owner-runner: ${{ inputs.hosted-only && 'false' || 'true' }}
           profile: ci-fast
           cache-key: windows-installer
           version: ${{ inputs.candidate-version && '0.1.0-preview.0' || '0.1.0-preview.90' }}
           artifact-base-url: http://127.0.0.1/unused
       - uses: ./.github/actions/package-windows-app
         with:
-          owner-runner: 'true'
+          owner-runner: ${{ inputs.hosted-only && 'false' || 'true' }}
           version: ${{ inputs.candidate-version && '0.1.0-preview.0' || '0.1.0-preview.90' }}
       - name: Preserve the first packages
         shell: pwsh
@@ -53,14 +59,14 @@ jobs:
           Move-Item dist/release/agent dist/release/agent-first
       - uses: ./.github/actions/build-windows-agent
         with:
-          owner-runner: 'true'
+          owner-runner: ${{ inputs.hosted-only && 'false' || 'true' }}
           profile: ci-fast
           cache-key: windows-installer
           version: ${{ inputs.candidate-version || '0.1.0-preview.91' }}
           artifact-base-url: http://127.0.0.1/unused
       - uses: ./.github/actions/package-windows-app
         with:
-          owner-runner: 'true'
+          owner-runner: ${{ inputs.hosted-only && 'false' || 'true' }}
           version: ${{ inputs.candidate-version || '0.1.0-preview.91' }}
       - name: Compile existing public update E2Es without running them
         shell: pwsh
@@ -76,7 +82,7 @@ jobs:
           if-no-files-found: error
           compression-level: 0
       - name: Verify owner registration and clean job profile
-        if: always()
+        if: ${{ always() && !inputs.hosted-only }}
         shell: pwsh
         run: ./deploy/windows-owner-cleanup.ps1
 
@@ -149,6 +155,22 @@ jobs:
             bun run packages/butler-app/scripts/windows/installer-smoke.ts $baseline dist/release/app-windows
             if ($LASTEXITCODE) { throw 'Published baseline to candidate update failed' }
           } finally { Remove-Item -Recurse -Force $profile }
+      - name: Verify desktop startup handoff against a gated stub gateway
+        shell: pwsh
+        run: |
+          $profile = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+          $env:HOME = Join-Path $profile 'home'
+          $env:BUTLER_DATA = Join-Path $profile 'data'
+          $env:BUTLER_STARTUP_EVIDENCE = 'dist/startup-installer-evidence/splash'
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          try {
+            node packages/butler-app/client/electron/node_modules/electron/install.js
+            if ($LASTEXITCODE) { throw 'Electron download failed' }
+            bun run app:ui:build
+            if ($LASTEXITCODE) { throw 'Renderer build failed' }
+            bun run tests/smoke/startup-splash.ts
+            if ($LASTEXITCODE) { throw 'Startup smoke failed' }
+          } finally { Remove-Item -Recurse -Force $profile }
       - name: Prove legacy-data refusal and desktop recovery
         shell: pwsh
         run: |
@@ -166,3 +188,10 @@ jobs:
             bun run packages/butler-app/scripts/windows/legacy-data-smoke.ts $app
             if ($LASTEXITCODE) { throw 'Legacy-data recovery smoke failed' }
           } finally { Remove-Item -Recurse -Force $profile }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: startup-installer-evidence
+          path: dist/startup-installer-evidence/
+          if-no-files-found: warn
