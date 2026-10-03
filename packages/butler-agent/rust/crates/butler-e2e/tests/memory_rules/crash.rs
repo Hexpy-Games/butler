@@ -36,6 +36,9 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
             } else {
                 forget::FORGET
             };
+            // Capture can return pending while the background owner holds the
+            // checkpoint. Keep the App turn active in either drain ordering.
+            let reply = s.provider()?.hold_after_tool(user);
             let accepted = s.gw.say("general", user).await?;
             let active_turn = accepted_turn_id(&accepted)?;
             support::until(|| {
@@ -57,7 +60,13 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
             let other = support::new_chat(&s, "Admission during rule commit").await?;
             let (_, turn) = s.turn(&other, forget::ASK).await?;
             assert_eq!(turn["state"], "delivered", "{turn}");
+            let view = s.gw.get("/session-view?session_id=general").await?;
+            assert_eq!(view.data()["active_turn"]["id"], active_turn);
+            let queue = s.gw.get("/session-queue?chat_id=general").await?;
+            assert_eq!(queue.data()["queued_messages"].as_array().unwrap().len(), 1);
             s.agent.kill9()?;
+            let committed = committed_result(&s.sandbox.data, &active_turn, tool_name);
+            reply.release();
             s.restart().await?;
             let followup_turn = tokio::time::timeout(Duration::from_secs(90), async {
                 loop {
@@ -116,10 +125,14 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
             let output = support::result(&s, "general", &active_turn, tool_name).await?;
             assert_eq!(output["ok"], true, "{output}");
             assert_eq!(output["operation_id"], operation);
-            assert_eq!(
-                output["replayed"], true,
-                "restart did not replay owner receipt: {output}"
-            );
+            if let Some(committed) = committed {
+                assert_eq!(output, committed, "restart changed a committed tool result");
+            } else {
+                assert_eq!(
+                    output["replayed"], true,
+                    "owner receipt was not replayed: {output}"
+                );
+            }
             let binding = support::read_json(&root.join(format!(
                 "{}.source.json",
                 original["record_id"].as_str().unwrap()
@@ -155,6 +168,24 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
         }
     }
     Ok(())
+}
+
+fn committed_result(data: &std::path::Path, turn: &str, tool: &str) -> Option<serde_json::Value> {
+    use rusqlite::{OpenFlags, OptionalExtension};
+    let db = rusqlite::Connection::open_with_flags(
+        data.join("agent-runtime/btcc.sqlite"),
+        OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap();
+    let output: Option<String> = db
+        .query_row(
+            "SELECT result_json FROM btcc_guided_tool_calls WHERE turn_id=?1 AND tool_name=?2 AND status='completed' ORDER BY turn_sequence DESC LIMIT 1",
+            [turn, tool],
+            |row| row.get(0),
+        )
+        .optional()
+        .unwrap();
+    output.map(|output| serde_json::from_str(&output).unwrap())
 }
 
 #[tokio::test]
