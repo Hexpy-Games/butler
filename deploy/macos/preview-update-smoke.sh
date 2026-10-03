@@ -40,4 +40,5 @@ ditto -x -k "${archive[0]}" "$profile/candidate/unpacked"
 export BUTLER_UPDATE_SMOKE_FROM="${BASELINE_TAG#v}" BUTLER_UPDATE_SMOKE_TO="$CANDIDATE_VERSION"
 export BUTLER_UPDATE_SMOKE_FROM_BUNDLE="$profile/baseline/unpacked/Butler.app"
 export BUTLER_UPDATE_SMOKE_TO_BUNDLE="$profile/candidate/unpacked/Butler.app"
+bun deploy/macos/published-feed-capacity.ts
 bun run app:update:smoke
