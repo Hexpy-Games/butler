@@ -2,7 +2,9 @@
 use crate::gateway::application::storage::CachedSql;
 
 mod artifacts;
+mod message_rows;
 mod plan;
+pub(super) use message_rows::streaming_message;
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -73,26 +75,7 @@ pub(super) fn list_message_page(
         .prepare_cached(&query)
         .map_err(AppStorageError::sqlite)?;
     let mut rows = statement
-        .query_map(params![chat_id, cursor, bounded + 1], |row| {
-            Ok(MessageRow {
-                cursor: row.get(0)?,
-                id: row.get(1)?,
-                chat_id: row.get(2)?,
-                turn_id: row.get(3)?,
-                conversation_session_id: row.get(4)?,
-                conversation_turn_id: row.get(5)?,
-                conversation_message_id: row.get(6)?,
-                role: row.get(7)?,
-                text: row.get(8)?,
-                content_parts_json: row.get(9)?,
-                status: row.get(10)?,
-                created_at: row.get(11)?,
-                updated_at: row.get(12)?,
-                safe_error_code: row.get(13)?,
-                retryable: row.get(14)?,
-                plan_json: row.get(15)?,
-            })
-        })
+        .query_map(params![chat_id, cursor, bounded + 1], message_rows::read)
         .map_err(AppStorageError::sqlite)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(AppStorageError::sqlite)?;

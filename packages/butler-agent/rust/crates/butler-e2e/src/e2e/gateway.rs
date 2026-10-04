@@ -19,6 +19,8 @@ pub struct Reply {
     pub status: u16,
     pub body: Value,
     pub text: String,
+    /// Header wait, complete body read, and full JSON parse; content-free diagnostics.
+    pub phases: Option<[Duration; 3]>,
 }
 
 impl Reply {
@@ -114,11 +116,26 @@ impl Gateway {
                 .header("content-type", "application/json")
                 .body(body);
         }
+        let observe = path.starts_with("/session-view?");
+        let started = observe.then(Instant::now);
         let response = request.send().await?;
+        let headers = started.map(|start| start.elapsed());
         let status = response.status().as_u16();
+        let started = observe.then(Instant::now);
         let text = response.text().await?;
+        let download = started.map(|start| start.elapsed());
+        let started = observe.then(Instant::now);
         let body = serde_json::from_str(&text).unwrap_or(Value::Null);
-        Ok(Reply { status, body, text })
+        let phases = headers
+            .zip(download)
+            .zip(started)
+            .map(|((headers, download), start)| [headers, download, start.elapsed()]);
+        Ok(Reply {
+            status,
+            body,
+            text,
+            phases,
+        })
     }
 
     /// Raw response (headers needed, e.g. CORS).

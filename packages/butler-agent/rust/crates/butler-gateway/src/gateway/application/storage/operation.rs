@@ -32,7 +32,7 @@ where
                 if inspect {
                     operation(connection)
                 } else {
-                    apply(connection, operation)
+                    apply(connection, operation, &metrics)
                 }
             });
             if !inspect {
@@ -57,6 +57,7 @@ where
 fn apply<T>(
     db: &mut Connection,
     operation: impl FnOnce(&mut Connection) -> StorageResult<T>,
+    metrics: &Metrics,
 ) -> StorageResult<T> {
     let baseline = metrics::baseline();
     let snapshot = event_outbox::snapshot();
@@ -64,9 +65,16 @@ fn apply<T>(
         db.execute_batch("SAVEPOINT app_operation")
             .map_err(AppStorageError::sqlite)?;
     }
-    let result = super::super::monitoring::materialized::refresh(db)
-        .and_then(|()| operation(db))
+    let started = Instant::now();
+    let refreshed = super::super::monitoring::materialized::refresh(db);
+    metrics.write_phase("monitor_before", started.elapsed());
+    let started = Instant::now();
+    let result = refreshed.and_then(|()| operation(db));
+    metrics.write_phase("operation", started.elapsed());
+    let started = Instant::now();
+    let result = result
         .and_then(|value| super::super::monitoring::materialized::refresh(db).map(|()| value));
+    metrics.write_phase("monitor_after", started.elapsed());
     if !baseline {
         if result.is_ok() {
             db.execute_batch("RELEASE app_operation")

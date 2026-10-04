@@ -119,10 +119,21 @@ impl LogTail {
         self.head = head;
         self.tail = tail;
         self.signature = signature;
+        // Identity and both content anchors were checked above. An exact EOF
+        // has no rows to fold; avoid allocating and zeroing a 256KiB reader on
+        // every unchanged status request. Partial trailing JSON still revisits
+        // its row because its offset remains strictly below the file length.
+        if self.offset == length {
+            return;
+        }
         if file.seek(SeekFrom::Start(self.offset)).is_err() {
             return;
         }
-        let mut reader = BufReader::with_capacity(256 * 1024, file);
+        // A short append needs only its own buffer. Retain the large buffer for
+        // initial indexing, and keep reading to EOF even if the file grows
+        // after its metadata was observed.
+        let capacity = length.saturating_sub(self.offset).clamp(1, 256 * 1024) as usize;
+        let mut reader = BufReader::with_capacity(capacity, file);
         read_rows(&mut reader, &mut self.offset, state, &mut line, trailing);
     }
 }

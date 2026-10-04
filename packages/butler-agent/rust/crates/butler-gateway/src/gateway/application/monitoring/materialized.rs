@@ -1,13 +1,16 @@
 //! Change-driven monitor projection: reads never hydrate historical messages.
 //! Rebuild compact references and artifact labels only after their sources change.
-use super::super::{message_visibility::owner_visible, storage::AppStorageError};
+use super::super::{
+    message_visibility::owner_visible,
+    storage::{AppStorageError, CachedSql},
+};
 use super::{AppWorkStatusConversationFact, conversation::safe_conversation_label};
 use rusqlite::{Connection, OptionalExtension, params};
 use std::{cmp::Reverse, collections::HashSet, sync::LazyLock};
 
 pub(crate) fn refresh(db: &Connection) -> Result<(), AppStorageError> {
     let dirty: bool = db
-        .query_row(
+        .query_row_cached(
             "SELECT EXISTS(SELECT 1 FROM app_work_monitor_dirty)",
             [],
             |row| row.get(0),

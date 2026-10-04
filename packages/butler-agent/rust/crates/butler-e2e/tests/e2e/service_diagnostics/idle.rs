@@ -10,6 +10,8 @@ use std::{
     path::{Path, PathBuf},
     time::{Duration, SystemTime},
 };
+#[path = "idle/catchup.rs"]
+mod catchup;
 
 fn graph(data: &Path) -> Option<PathBuf> {
     let root = data.join("cognition/memory");
@@ -85,7 +87,20 @@ pub(super) async fn assert_idle(s: &Scenario, turn: &str) -> Result<(), HarnessE
     // Preserve all of that work; start the unchanged 10s zero-write window only
     // after the turn is projected/cached and its complete vector inputs are
     // durably deferred without an embedding worker.
-    until(|| settled(&s.sandbox.data, turn)).await?;
+    // Queue acknowledgement and semantic/cache completion can precede the
+    // canonical catch-up receipt and cursor commit. They are durable work too.
+    // Require this turn's complete reconciliation before measuring zero writes.
+    let mut waited_for_catchup = false;
+    until(|| {
+        if !settled(&s.sandbox.data, turn) {
+            return false;
+        }
+        let ready = catchup::settled(&s.sandbox.data, turn);
+        waited_for_catchup |= !ready;
+        ready
+    })
+    .await?;
+    eprintln!("idle barrier: waited_for_canonical_catchup={waited_for_catchup}");
     let messages = s.gw.messages("general").await?;
     let record = instance_record(&s.sandbox.data).unwrap();
     let pids = ["pid", "cli_supervisor_pid"]
@@ -97,7 +112,7 @@ pub(super) async fn assert_idle(s: &Scenario, turn: &str) -> Result<(), HarnessE
     let after = pids.map(|pid| usage::sample(pid).unwrap());
     let after_files = stamps(&s.sandbox.data)?;
     assert!(
-        settled(&s.sandbox.data, turn),
+        settled(&s.sandbox.data, turn) && catchup::settled(&s.sandbox.data, turn),
         "deferred memory content changed"
     );
     assert_no_embedding_worker(pids[0])?;

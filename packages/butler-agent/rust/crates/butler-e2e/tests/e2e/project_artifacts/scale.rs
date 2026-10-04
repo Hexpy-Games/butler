@@ -7,6 +7,12 @@ fn seed(data: &std::path::Path, project: &str, chat: &str) -> Vec<String> {
     eprintln!("ARTIFACT-FIXTURE phase=seed_begin");
     let mut db =
         butler_platform::sqlite::open(data.join("app-server/butler-client.sqlite")).unwrap();
+    // This fixture inserts the complete 1.2GB history into several interleaved
+    // indexes. Keep its temporary writer's working pages resident rather than
+    // repeatedly spilling/rereading them through SQLite's default 2MiB cache.
+    // The original transaction, sync policy and every content assertion remain.
+    db.execute_batch("PRAGMA cache_size=-65536; PRAGMA temp_store=MEMORY;")
+        .unwrap();
     let tx = db.transaction().unwrap();
     for i in 0..600 {
         tx.execute("INSERT INTO chats(id,title,kind,project_id,created_at,updated_at) VALUES(?1,'Other','chat',NULL,'now','now')",[format!("scale-chat-{i}")]).unwrap();

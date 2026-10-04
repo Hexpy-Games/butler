@@ -224,7 +224,16 @@ impl AppStorage {
         if metrics::baseline() {
             return self.execute(move |db| operation(db)).await;
         }
-        let result = self.inner.readers.read(operation).await;
+        let _measurement = self.measure_view("read_total");
+        let metrics = self.inner.metrics.clone();
+        let result = self
+            .inner
+            .readers
+            .read(move |db| {
+                let _measurement = metrics::view_measurement(metrics, "read_sql");
+                operation(db)
+            })
+            .await;
         if result.as_ref().is_err_and(AppStorageError::is_busy) {
             self.inner.metrics.busy();
         }

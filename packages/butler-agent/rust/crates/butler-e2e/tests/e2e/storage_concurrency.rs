@@ -114,6 +114,7 @@ async fn views(
     measure_latency: bool,
 ) -> Result<Vec<u64>, HarnessError> {
     let mut samples = Vec::new();
+    let mut phases = storage_concurrency_support::HttpPhases::default();
     let mut prior = String::new();
     let deadline = Instant::now() + Duration::from_secs(60);
     loop {
@@ -140,6 +141,7 @@ async fn views(
             .await?;
         if let Some(start) = start {
             samples.push(u64::try_from(start.elapsed().as_micros()).unwrap());
+            phases.observe(reply.phases.unwrap());
         }
         assert_eq!(reply.status, 200, "{}", reply.text);
         let view = reply.data();
@@ -174,6 +176,9 @@ async fn views(
         if view["latest_turn"]["id"] == turn && view["latest_turn"]["state"] == "delivered" {
             assert_eq!(messages.len(), 2);
             assert_eq!(prior, answer());
+            if measure_latency {
+                phases.report();
+            }
             return Ok(samples);
         }
         tokio::time::sleep(Duration::from_millis(100)).await;

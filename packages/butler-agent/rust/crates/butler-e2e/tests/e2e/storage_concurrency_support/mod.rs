@@ -135,3 +135,24 @@ pub(super) async fn verify_skill_record_boundaries(
     assert_eq!(view.data()["skills_used"], expected);
     Ok(())
 }
+
+/// Complete HTTP timing, without changing the request or measured interval.
+#[derive(Default)]
+pub(super) struct HttpPhases([Vec<u64>; 3]);
+impl HttpPhases {
+    pub(super) fn observe(&mut self, values: [std::time::Duration; 3]) {
+        for (samples, elapsed) in self.0.iter_mut().zip(values) {
+            samples.push(u64::try_from(elapsed.as_micros()).unwrap());
+        }
+    }
+    pub(super) fn report(&mut self) {
+        for (name, samples) in ["headers", "body", "parse"].into_iter().zip(&mut self.0) {
+            samples.sort_unstable();
+            let p95 = samples[(samples.len() * 95).div_ceil(100) - 1];
+            eprintln!(
+                "STORAGE HTTP phase={name} count={} p95_us={p95}",
+                samples.len()
+            );
+        }
+    }
+}

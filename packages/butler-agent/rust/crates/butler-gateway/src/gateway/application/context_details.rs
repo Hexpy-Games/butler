@@ -53,9 +53,15 @@ impl AppApplication {
             model_ref: controls.model.clone(),
             context_window_tokens: controls.context_window_tokens,
         });
+        let host = async {
+            let _measurement = self.storage.measure_view("context_host");
+            host.await
+        };
 
         let data_root = self.butler_data.clone();
+        let storage = self.storage.clone();
         let configured = async move {
+            let _measurement = storage.measure_view("context_configured");
             tokio::task::spawn_blocking(move || {
                 (
                     configured_text(&data_root.join("personas/active.md")),

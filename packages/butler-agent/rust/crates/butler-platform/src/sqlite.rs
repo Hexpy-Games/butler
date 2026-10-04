@@ -3,6 +3,11 @@
 use rusqlite::{Connection, OpenFlags, Result};
 use std::path::Path;
 
+/// Unix read-only validation can traverse overflow pages without a copy per
+/// page. The caller closes this temporary connection before serving requests.
+/// Other hosts use the bounded page cache to avoid retaining mapped pages.
+pub const VALIDATION_MMAP_BYTES: i64 = if cfg!(unix) { 8_589_934_592 } else { 0 };
+
 /// Open a file database with rusqlite's normal default flags.
 pub fn open(path: impl AsRef<Path>) -> Result<Connection> {
     open_with_flags(path, OpenFlags::default())

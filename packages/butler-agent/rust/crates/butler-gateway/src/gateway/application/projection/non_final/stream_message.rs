@@ -315,12 +315,23 @@ fn updated(target: &StreamTarget<'_>, id: &str) -> Result<(), AppStorageError> {
         // status and terminal decorations cannot change between these rows.
         message
     } else {
-        let Some(message) = read_model::list_messages(target.db, target.chat, 0.0, 200)?
-            .messages
-            .into_iter()
-            .find(|message| message.id == id)
-        else {
-            return Ok(());
+        let streaming = if super::batch::active() {
+            read_model::streaming_message(target.db, target.chat, target.turn, id)?
+        } else {
+            None
+        };
+        let message = match streaming {
+            Some(message) => message,
+            None => {
+                let Some(message) = read_model::list_messages(target.db, target.chat, 0.0, 200)?
+                    .messages
+                    .into_iter()
+                    .find(|message| message.id == id)
+                else {
+                    return Ok(());
+                };
+                message
+            }
         };
         super::batch::remember(&message);
         message
