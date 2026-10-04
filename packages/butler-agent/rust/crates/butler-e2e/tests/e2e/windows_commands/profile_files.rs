@@ -27,6 +27,19 @@ fn snapshot(root: &Path) -> Result<Snapshot, HarnessError> {
         .collect()
 }
 
+fn verify_order(before: &Snapshot, listed: &[String]) {
+    let mut expected: Vec<String> = before
+        .iter()
+        .filter(|(_, metadata)| metadata.0)
+        .map(|(path, _)| path.to_string_lossy().replace('\\', "/"))
+        .collect();
+    expected.sort_by(|left, right| left.encode_utf16().cmp(right.encode_utf16()));
+    assert!(
+        listed == expected,
+        "Complete listing preserves UTF-16 order"
+    );
+}
+
 async fn replay(downloads: &Path, access: Access) -> Result<(), HarnessError> {
     let before = snapshot(downloads)?;
     let excluded: Vec<String> = before
@@ -58,6 +71,7 @@ async fn replay(downloads: &Path, access: Access) -> Result<(), HarnessError> {
         .start()
         .await?;
     let mut seen = BTreeMap::new();
+    let mut ordered = Vec::new();
     let mut maximum_ms = 0.0_f64;
     loop {
         script.select(case.clone());
@@ -90,6 +104,7 @@ async fn replay(downloads: &Path, access: Access) -> Result<(), HarnessError> {
         maximum_ms = maximum_ms.max(elapsed.as_secs_f64() * 1000.);
         for item in result["files"].as_array().unwrap() {
             let path = PathBuf::from(item["path"].as_str().unwrap());
+            ordered.push(path.to_string_lossy().replace('\\', "/"));
             let expected = before
                 .get(&path)
                 .expect("listed file belongs to the unchanged folder");
@@ -112,6 +127,7 @@ async fn replay(downloads: &Path, access: Access) -> Result<(), HarnessError> {
         before.values().filter(|v| v.0).count(),
         "all top-level regular files listed"
     );
+    verify_order(&before, &ordered);
     assert!(
         snapshot(downloads)? == before,
         "owner files and metadata unchanged"
