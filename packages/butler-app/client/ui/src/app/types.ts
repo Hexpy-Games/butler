@@ -1787,6 +1787,8 @@ export type ApprovalRisk = "low" | "medium" | "high";
  * generic sentence instead of dropping the request.
  */
 export interface ApprovalSummary {
+  /** Exact local decision facts; do not apply workspace-label normalization. */
+  operation?: { tool: string; access: "read_only" | "change"; targets: string[]; command?: string };
   commandAccess?: "read_only_unisolated";
   actionKind: string;
   /** The folder first where there is one, then files, a connector or a named target. */

@@ -119,6 +119,7 @@ type CountFormatter = (count: number) => string;
  * (#235). `workspace` is the workspace label; `null` reads as "this workspace".
  */
 export interface ApprovalRequestCopy {
+  operation: (tool: string, readOnly: boolean) => string;
   editFiles: (count: number, workspace: string | null) => string;
   editFilesOutside: (count: number) => string;
   runCommandOutside: string;

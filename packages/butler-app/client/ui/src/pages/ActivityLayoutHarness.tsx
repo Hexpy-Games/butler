@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
-import { AdaptiveShell, AdaptiveShellSidebar, AdaptiveShellWorkspace, Button, ButtonContainer, ConversationShell, Dialog, DialogContent, DialogTitle, Stack } from "@/butler-ds";
+import { AdaptiveShell, AdaptiveShellSidebar, AdaptiveShellWorkspace, Button, ButtonContainer, ComposerCard, ConversationShell, Dialog, DialogContent, DialogTitle, Stack } from "@/butler-ds";
 import { MessageList } from "@/components/conversation/MessageList";
 import { SessionObserverTimeline } from "@/components/layout/SessionObserverTimeline";
+import { ComposerAuthorityDecisionSurface } from "@/components/conversation/ComposerAuthorityDecisionSurface";
+import { normalizeApprovalSummary, approvalRequestView } from "@/app/approvalRequest";
+import { appCopy, useAppLocale } from "@/app/copy";
 import { useButlerStore } from "@/app/store";
 import { setAppCopyLanguage } from "@/app/copy";
 import { usePortalThemeClasses } from "@/hooks/usePortalThemeClasses";
@@ -15,11 +18,30 @@ const rows: ProgressRow[] = [{
   semantic_block_id: "activity-layout-step", work_decision_source: "model-authored",
   work_decision_summary: "활동 화면 확인", safe_label: "활동 화면 확인",
   created_at: "2026-10-03T00:00:01.000Z",
+}, {
+  id: "files-start", kind: "work_block", state: "running", safe_label: "파일 확인",
+  work_block_id: "files", work_block_label: "파일 확인", work_block_phase: "started",
+  created_at: "2026-10-03T00:00:01.050Z",
+}, {
+  id: "listing", kind: "searched", state: "delivered", safe_label: "파일 목록 확인",
+  safe_tool_name: "list_files", safe_input_label: "C:\\Users\\test\\Downloads", tool_call_id: "listing-call",
+  work_block_id: "files",
+  created_at: "2026-10-03T00:00:01.100Z",
+}, {
+  id: "reading", kind: "read", state: "delivered", safe_label: "파일 읽기",
+  safe_tool_name: "read_file", safe_input_label: "보고서.txt", tool_call_id: "reading-call",
+  work_block_id: "files",
+  created_at: "2026-10-03T00:00:01.200Z",
+}, {
+  id: "files-end", kind: "work_block", state: "delivered", safe_label: "파일 확인",
+  work_block_id: "files", work_block_label: "파일 확인", work_block_phase: "completed",
+  created_at: "2026-10-03T00:00:01.250Z",
 }];
 const answer = "확인한 활동을 답변과 함께 표시합니다.\n\n".repeat(8);
 
 /** Deterministic stub stream through the product's virtual list and observer renderer. */
 export function ActivityLayoutHarness() {
+  useAppLocale();
   const params = new URLSearchParams(window.location.search);
   const [running, setRunning] = useState(params.get("state") !== "completed");
   const [length, setLength] = useState(16);
@@ -52,10 +74,19 @@ export function ActivityLayoutHarness() {
     status: "delivered", text: "이전 답변을 확인했습니다.\n\n".repeat(60), turn_activity_rows: undefined });
   const turn = { ...HARNESS_SS03_OBSERVER_VIEW.latest_turn!, id: "activity-layout-0",
     state: running ? "running" : "delivered", progress: { safe_progress_rows: rows } };
+  const approval = normalizeApprovalSummary({ action_kind: "other", count: 1, risk: "low",
+    targets: [{ kind: "folder", path: "C:\\Users\\test\\Downloads" }], examples: ["C:\\Users\\test\\Downloads"],
+    operation: { tool: "list_files", access: "read_only", targets: ["C:\\Users\\test\\Downloads"] } });
+  const decision = approvalRequestView({ approval, reason: "", scope: undefined }, appCopy.interfaceTemplates.approvalRequest, appCopy.guided.tools);
   return (
     <AdaptiveShell leftOpen={false} rightOpen={false} theme={appShellTheme(settings)}>
       <AdaptiveShellSidebar open={false} />
       <AdaptiveShellWorkspace><Stack fill gap="md" data-stub-stream-complete={length === answer.length}>
+      {params.get("approval") === "1" ? <ComposerCard><ComposerAuthorityDecisionSurface decision={{ ...decision,
+        pending: false, pendingCount: 1, scope: undefined, composingMessage: false,
+        onAllow: async () => {}, onAllowConversation: async () => {}, onDeny: async () => {},
+        onShowDecision: () => {}, onOpenSource: () => {}, onComposeMessage: () => {},
+      }} /></ComposerCard> : null}
       <ButtonContainer size="sm">
         <Button size="sm" text="완료" onClick={() => setRunning(false)} />
         <Button size="sm" text="작업 기록" onClick={() => setObserver(true)} />

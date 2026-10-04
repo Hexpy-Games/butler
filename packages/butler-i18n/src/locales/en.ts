@@ -446,6 +446,7 @@ export const enUsCopy: AppCopy = {
     activityHistory: (live, label, count) => `${live ? "Current" : "Activity"} · ${label} · ${count} ${count === 1 ? "record" : "records"}`,
     pendingApprovals: count => `${count} pending ${count === 1 ? "approval" : "approvals"}`, allowedCount: count => `${count} allowed`, revoke: title => `${title} — Revoke`,
     approvalRequest: {
+      operation: (tool, readOnly) => `${tool} · ${readOnly ? "Read only" : "Change"}?`,
       editFiles: (count, workspace) =>
         `Edit ${count > 0 ? `${count} ${count === 1 ? "file" : "files"}` : "files"} ${inWorkspace(workspace)}?`,
       editFilesOutside: count => `Edit ${count > 0 ? `${count} ${count === 1 ? "file" : "files"}` : "files"}, including outside the project folder?`,

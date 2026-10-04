@@ -446,6 +446,7 @@ export const koKrCopy: AppCopy = {
     activityHistory: (live, label, count) => `${live ? "현재" : "활동"} · ${label} · ${count}개 기록`,
     pendingApprovals: count => `허용 대기 ${count}개`, allowedCount: count => `허용 ${count}개`, revoke: title => `${title} — 해제`,
     approvalRequest: {
+      operation: (tool, readOnly) => `${tool} · ${readOnly ? "읽기 전용" : "변경"} 허용할까요?`,
       editFiles: (count, workspace) => `${workspaceName(workspace)}의 ${count > 0 ? `파일 ${count}개를` : "파일을"} 수정할까요?`,
       editFilesOutside: count => `작업 폴더 밖을 포함한 ${count > 0 ? `파일 ${count}개를` : "파일을"} 수정할까요?`,
       readOnlyUnisolated: "읽기 전용 요청 · 격리 없음",

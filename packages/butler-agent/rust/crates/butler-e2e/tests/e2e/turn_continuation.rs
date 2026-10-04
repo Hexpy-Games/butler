@@ -307,7 +307,7 @@ mod stub {
                 Mode::Prose => {
                     message("<tool_call>call: read_file {requests:[{path:\"source\"}]}</tool_call>")
                 }
-                Mode::ApprovalRecovery if step == 1 => command(),
+                Mode::ApprovalRecovery if step == 1 => command(true),
                 Mode::Empty | Mode::ApprovalRecovery => message(""),
                 Mode::Reasoning if step == 0 => {
                     json!({"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"Need to calculate the result."}]})
@@ -322,7 +322,9 @@ mod stub {
                     "ask_user",
                     &json!({"questions":[{"id":"format","eyebrow":"Output","title":"Which format?","kind":"single","allow_custom":true,"options":[{"id":"brief","label":"Brief","recommended":true},{"id":"full","label":"Full"}]}]}),
                 ),
-                Mode::Approval | Mode::Limit if step == 0 => command(),
+                Mode::Approval | Mode::Limit if step == 0 => {
+                    command(matches!(script.mode, Mode::Approval))
+                }
                 Mode::Approval
                 | Mode::Question
                 | Mode::Limit
@@ -335,7 +337,7 @@ mod stub {
                         &json!({"todos":[{"content":"Calculate total","active_form":"Calculating total","status":"in_progress"}]}),
                     ),
                     1 => message("Progress updated. I will continue the calculation."),
-                    2 => command(),
+                    2 => command(false),
                     3 => call(
                         "todo-done",
                         "update_todo_list",
@@ -373,7 +375,7 @@ mod stub {
                 &json!({"work_id":work_id(body),"disposition":"open","summary":"Plan saved; calculation remains","action_updates":[],"remaining_actions":["calculate"],"next_condition":"Continue calculation","followups":[]}),
             ),
             5 => message("Progress saved; the calculation is still pending."),
-            6 => command(),
+            6 => command(false),
             7 => call(
                 "complete",
                 "record_work_disposition",
@@ -398,11 +400,17 @@ mod stub {
             })
             .unwrap()
     }
-    fn command() -> Value {
+    fn command(approval: bool) -> Value {
+        let command = match (butler_platform::command_sandbox::POSIX_SHELL, approval) {
+            (true, false) => "printf '%s\\n' $((19 + 23))",
+            (true, true) => "printf '%s\\n' $((19 + 23)) > total.txt",
+            (false, false) => "cmd.exe /d /c echo 42",
+            (false, true) => "cmd.exe /d /c \"echo 42>total.txt\"",
+        };
         call(
             "calculate",
             "run_command",
-            &json!({"command":"printf '%s\\n' $((19 + 23))","summary":"Calculate total","state_effect":"read_only","timeout_ms":30000}),
+            &json!({"command":command,"summary":"Calculate total","state_effect":if approval { "mutation" } else { "read_only" },"timeout_ms":30000}),
         )
     }
     fn call(id: &str, name: &str, args: &Value) -> Value {

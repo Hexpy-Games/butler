@@ -62,6 +62,14 @@ try {
     await history.waitFor();
     await history.click();
     await dialog.getByText("활동 화면 확인", { exact: true }).last().waitFor();
+    await dialog.locator('[data-test-class~="turn-work-collapsed"] [data-test-class="toggle-turn-activity-disclosure"]').click();
+    await dialog.locator('[data-test-class~="turn-work-tool-group"] > button').click();
+    const tools = dialog.locator('[data-test-class="turn-work-tool-detail-row"]');
+    assert.equal(await tools.count(), 2, "observer keeps every tool row after completion");
+    assert((await tools.allTextContents()).join(" ").includes("보고서.txt"));
+    await tools.last().waitFor({ state: "visible" });
+    await page.waitForFunction(() => document.getAnimations().every(animation =>
+      animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
     assert.equal(await dialog.locator('[data-test-class~="current-turn-status"]').count(), 0);
     assert(!/Steward|스튜어드/i.test(await dialog.innerText()));
     await dialog.screenshot({ path: join(output, `work-completed-${width}-${theme}.png`) });
@@ -70,6 +78,24 @@ try {
     assert.equal(await page.locator('[data-test-class="assistant-footer"]').count(), 4);
     await page.setViewportSize({ width, height: 1200 });
     await page.screenshot({ path: join(output, `completed-list-${width}-${theme}.png`) });
+
+    for (const state of ["running", "completed"]) {
+      await page.goto(`http://127.0.0.1:${server.port}/?visual=components&surface=activity-layout&theme=${theme}&state=${state}&approval=1`);
+      const approval = page.locator('[data-test-class="composer-authority-decision"]');
+      await approval.waitFor();
+      const text = await approval.innerText();
+      assert(text.includes("읽기 전용") && text.includes("파일") && text.includes("C:\\Users\\test\\Downloads"), "approval shows tool, access and exact path");
+      await approval.screenshot({ path: join(output, `approval-${state}-${width}-${theme}.png`) });
+      await page.getByRole("button", { name: "작업 기록", exact: true }).click();
+      const observer = page.locator('[data-test-class="activity-layout-observer"]');
+      await observer.locator('[data-test-class~="turn-work-collapsed"] [data-test-class="toggle-turn-activity-disclosure"]').click();
+      await observer.locator('[data-test-class~="turn-work-tool-group"] > button').click();
+      assert.equal(await observer.locator('[data-test-class="turn-work-tool-detail-row"]').count(), 2, `${state} observer lists all tools`);
+      await observer.locator('[data-test-class="turn-work-tool-detail-row"]').last().waitFor({ state: "visible" });
+      await page.waitForFunction(() => document.getAnimations().every(animation =>
+        animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
+      await page.screenshot({ path: join(output, `observer-${state}-${width}-${theme}.png`) });
+    }
 
   }
   await page.emulateMedia({ reducedMotion: "no-preference" });
@@ -81,5 +107,5 @@ try {
   await normalTurn.getByRole("button", { name: /활동 · 완료/ }).waitFor();
   assert.equal(await normalTurn.locator('[data-test-class="assistant-footer"]').count(), 1);
   assert.equal(await normalTurn.locator('[data-test-class~="turn-activity-panel"]').count(), 0);
-  console.log(JSON.stringify({ ok: true, screenshots: 16, measurements, checks: ["stream-order", "single-footer", "completed-history", "observer-history", "autoscroll", "completed-list", "ko-light-dark-mobile-desktop", "normal-and-reduced-motion"] }));
+  console.log(JSON.stringify({ ok: true, screenshots: 32, measurements, checks: ["stream-order", "single-footer", "completed-history", "observer-history", "autoscroll", "completed-list", "ko-light-dark-mobile-desktop", "normal-and-reduced-motion"] }));
 } finally { await browser.close(); server.stop(true); }

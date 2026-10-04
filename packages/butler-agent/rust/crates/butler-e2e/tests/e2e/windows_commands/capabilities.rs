@@ -200,6 +200,30 @@ async fn operation(
             }])
         };
         assert_eq!(card["approval"]["examples"], examples);
+        let operation = &card["approval"]["operation"];
+        assert_eq!(operation["tool"], case.tool);
+        assert_eq!(
+            operation["access"],
+            if matches!(case.tool, "read_file" | "list_files" | "grep_files")
+                || matches!(
+                    case.args["state_effect"].as_str(),
+                    Some("read_only" | "validation")
+                )
+            {
+                "read_only"
+            } else {
+                "change"
+            }
+        );
+        if case.tool == "list_files" {
+            assert_eq!(operation["targets"], examples);
+        } else if case.tool == "run_command" {
+            assert_eq!(operation["command"], case.args["command"]);
+            assert_eq!(
+                operation["targets"],
+                json!([s.sandbox.home.join("Downloads")])
+            );
+        }
         if case.tool == "write_file" {
             assert!(
                 !s.sandbox

@@ -1,11 +1,12 @@
 //! What a pending authority request would do, as structured data (#235):
 //! the kind of action, its targets, how many, a few examples and a risk
-//! level. The App composes the sentence in the user's language; nothing
-//! here is display text, and no absolute path leaves the machine: a folder
-//! is named by its label (the folder name, as projects show it), a file by
-//! its path inside the workspace.
+//! level. The App composes the sentence in the user's language. Legacy
+//! summaries use workspace labels; the local decision projection also carries
+//! exact operation paths, without tool contents or credentials.
 
 mod command_risk;
+mod operation;
+pub(super) use operation::exact_operation;
 
 use std::collections::HashSet;
 use std::path::{Component, Path};
@@ -28,6 +29,9 @@ const FALLBACK_LABEL: &str = "workspace";
 /// The structured summary of a pending request (`approval` in its JSON).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuthorityApproval {
+    /// Exact decision facts for the local approval UI, never raw tool payloads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation: Option<operation::ApprovalOperation>,
     pub action_kind: ApprovalActionKind,
     /// What the action touches, the folder first where there is one.
     pub targets: Vec<ApprovalTarget>,
@@ -223,6 +227,7 @@ fn file_edits(facts: ApprovalFacts<'_>) -> AuthorityApproval {
     let mut targets = vec![folder(workspace_label(facts.workspace))];
     targets.extend(files);
     AuthorityApproval {
+        operation: None,
         command_access: None,
         action_kind: ApprovalActionKind::EditFiles,
         targets,
@@ -248,6 +253,7 @@ fn file_reads(facts: ApprovalFacts<'_>) -> AuthorityApproval {
         vec![facts.input["root"].as_str().unwrap_or(".").to_owned()]
     };
     AuthorityApproval {
+        operation: None,
         action_kind: ApprovalActionKind::Other,
         targets: paths
             .iter()
@@ -303,6 +309,7 @@ fn command(facts: ApprovalFacts<'_>, kind: ApprovalActionKind) -> AuthorityAppro
         .into_iter()
         .unzip();
     AuthorityApproval {
+        operation: None,
         command_access: (!butler_platform::command_sandbox::READ_ONLY_SANDBOX
             && matches!(
                 facts.input.get("state_effect").and_then(Value::as_str),
@@ -337,6 +344,7 @@ fn single(
     risk: ApprovalRisk,
 ) -> AuthorityApproval {
     AuthorityApproval {
+        operation: None,
         command_access: None,
         action_kind,
         targets: vec![ApprovalTarget {
