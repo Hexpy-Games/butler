@@ -217,7 +217,7 @@ jobs:
       - name: Native service recovery, full shutdown queue and memory reset
         if: ${{ inputs.native-loop && !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
         run: |
-          foreach ($test in @('service_supervision', 'queue_shutdown', 'service_diagnostics', 'memory_reset', 'unicode_delivery', 'delegate_followup', 'steward_presentation', 'ask_user', 'memory-rules-cursor', 'context_telemetry', 'project-instruction-reset', 'storage_concurrency', 'memory-rules-crash', 'memory-rules-correction', 'memory-rules-forget')) {
+          foreach ($test in @('service_supervision', 'queue_shutdown', 'service_diagnostics', 'memory_reset', 'unicode_delivery', 'delegate_followup', 'steward_presentation', 'ask_user', 'memory-rules-cursor', 'context_telemetry', 'project-instruction-reset', 'storage_concurrency', 'memory-rules-crash', 'memory-rules-correction', 'memory-rules-forget', 'memory-recall-judge')) {
             $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
             $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
             New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
@@ -228,6 +228,7 @@ jobs:
               'memory-rules-crash' { 'memory_wiring_more::crash::' }
               'memory-rules-correction' { 'memory_wiring_more::wiring_more_correction_supersedes_previous_rule_in_next_prompt' }
               'memory-rules-forget' { 'memory_wiring_more::forget::rules_forget_and_correction_preserve_other_bindings_after_restart' }
+              'memory-recall-judge' { 'memory::recall_judge::' }
               default { "$test`::" }
             }
             cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e $filter `

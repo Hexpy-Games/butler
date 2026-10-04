@@ -7,6 +7,9 @@ use butler_e2e::e2e::{
 };
 use serde_json::{Value, json};
 
+#[path = "recall_judge/fixture.rs"]
+mod fixture;
+
 const EXACT: &str = "Recall my bike lock code with the exact saved source.";
 const ASK: &str = "Recall that activity from September.";
 fn recall_args() -> Value {
@@ -43,6 +46,7 @@ async fn setup() -> Result<Scenario, HarnessError> {
     memory_stubs::extraction(&mut cassette, "")?;
     let setup = Setup::new("MEM-JUDGE")?
         .stub_cassette(cassette)
+        .env("BUTLER_METRICS_ENABLED", "1")
         .placeholder("NONCE", "synthetic-lock");
     butler_e2e::e2e::fixtures::embedding_assets(&setup.sandbox.data)?;
     let s = setup.start().await?;
@@ -51,22 +55,7 @@ async fn setup() -> Result<Scenario, HarnessError> {
         .turn("general", &remember.replace("{{NONCE}}", "synthetic-lock"))
         .await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
-    memory_stubs::text_complete(&s.sandbox.data, 1).await?;
-    let graph = memory_stubs::graph_path(&s.sandbox.data)?;
-    let db = butler_platform::sqlite::open(&graph).unwrap();
-    db.execute(
-        "UPDATE memory_chunks SET summary=?1,summary_status='complete'",
-        ["Synthetic September activity 🙂".repeat(30)],
-    )
-    .unwrap();
-    db.execute(
-        "UPDATE memory_state SET value=CAST(value AS INTEGER)+1 WHERE key='graph_revision'",
-        [],
-    )
-    .unwrap();
-    let session: String = db.query_row("SELECT conversation_session_id FROM memory_chunks WHERE conversation_session_id IS NOT NULL LIMIT 1", [], |row| row.get(0)).unwrap();
-    s.provider()?.add_placeholder("SEED_SESSION", session);
-    drop(db);
+    fixture::prepare(&s).await?;
     Ok(s)
 }
 async fn recall(s: &Scenario, mode: &str) -> Result<Vec<Value>, HarnessError> {
@@ -383,13 +372,20 @@ async fn mem_judge_wait_releases_reader_pin_and_binds_current_generation()
     let chat = chat.data()["session"]["id"].as_str().unwrap().to_owned();
     let start = s.provider()?.requests().len();
     let active = accepted_turn_id(&s.gw.say(&chat, ASK).await?)?;
-    tokio::time::timeout(Duration::from_secs(20), async {
+    let started = tokio::time::timeout(Duration::from_secs(20), async {
         while judge_count(&s) == 0 {
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
     })
-    .await
-    .unwrap();
+    .await;
+    assert!(
+        started.is_ok(),
+        "Judge never started: turn={:?}; misses={:?}; metrics={}",
+        s.gw.turn(&chat, &active).await?,
+        s.provider()?.misses(),
+        std::fs::read_to_string(s.sandbox.data.join("metrics/operational-events.jsonl"))
+            .unwrap_or_default()
+    );
     let inventory = s.gw.post("/memory/inventory/check", json!({})).await?;
     let id = uuid::Uuid::new_v4().to_string();
     let accepted =
