@@ -29,4 +29,3 @@ async fn sequential_file_capabilities_close_the_current_work() -> Result<(), Har
     server.abort();
     Ok(())
 }
-

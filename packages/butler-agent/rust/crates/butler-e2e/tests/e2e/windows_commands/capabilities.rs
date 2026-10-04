@@ -1,8 +1,8 @@
 //! Basic Windows capabilities in a profile with sibling Downloads and .butler.
-#[path = "capabilities/delegation.rs"]
-mod delegation;
 #[path = "capabilities/current_work.rs"]
 mod current_work;
+#[path = "capabilities/delegation.rs"]
+mod delegation;
 use super::capability_stub::{self as provider, Case};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use butler_e2e::e2e::{
