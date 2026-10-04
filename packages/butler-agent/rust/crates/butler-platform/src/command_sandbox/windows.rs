@@ -73,8 +73,9 @@ pub(super) fn legacy_shell(
     // EncodedCommand preserves nested quotes and multi-line scripts without
     // cmd/CRT/PowerShell argument reparsing. Set both console and pipeline
     // encodings; native reg/cmd output follows the console code page.
+    let modules = default_modules(environment);
     let script = format!(
-        "[Console]::InputEncoding=[Text.UTF8Encoding]::new(); [Console]::OutputEncoding=[Text.UTF8Encoding]::new(); $OutputEncoding=[Console]::OutputEncoding; {command}"
+        "[Console]::InputEncoding=[Text.UTF8Encoding]::new(); [Console]::OutputEncoding=[Text.UTF8Encoding]::new(); $OutputEncoding=[Console]::OutputEncoding; {modules}{command}"
     );
     let encoded = STANDARD.encode(
         script
@@ -98,6 +99,19 @@ pub(super) fn legacy_shell(
         .map(str::to_owned)
         .to_vec(),
     }
+}
+
+fn default_modules(environment: &HashMap<String, Option<String>>) -> &'static str {
+    if environment.iter().any(|(key, value)| {
+        key.eq_ignore_ascii_case("PSModulePath")
+            && value.as_deref().is_some_and(|path| !path.trim().is_empty())
+    }) {
+        return "";
+    }
+    // A normally launched App has no inherited PowerShell console module path.
+    // Load the trusted built-ins directly instead of scanning every module for
+    // their first command. Keep normal discovery for requested custom modules.
+    "Import-Module -Name \"$PSHOME\\Modules\\Microsoft.PowerShell.Utility\\Microsoft.PowerShell.Utility.psd1\"; Import-Module -Name \"$PSHOME\\Modules\\Microsoft.PowerShell.Management\\Microsoft.PowerShell.Management.psd1\"; "
 }
 
 // The tool accepts the common cmd-style `powershell.exe -Command "script"`.

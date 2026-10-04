@@ -149,6 +149,12 @@ pub fn file_mode(metadata: &Metadata) -> Option<FileMode> {
     sys::file_mode(metadata)
 }
 
+/// Current file or directory attributes, queried independently of directory
+/// enumeration caches. Does not follow links, read contents or modify the entry.
+pub fn current_metadata(path: &Path) -> io::Result<Metadata> {
+    sys::current_metadata(path)
+}
+
 /// Sets the permission mode of the file at `path`; `None` without
 /// [`PERMISSION_MODES`].
 pub fn set_file_mode(path: &Path, mode: FileMode) -> Option<io::Result<()>> {

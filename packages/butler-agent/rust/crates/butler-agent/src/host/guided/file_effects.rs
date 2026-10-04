@@ -61,10 +61,13 @@ impl GuidedFileEffects {
         &self,
         args: &Value,
     ) -> Result<PreparedGuidedFileEffect, BtccError> {
-        if let Some(path) = args.get("path").and_then(Value::as_str) {
-            butler_turn::workspace::guard_effect_file(&self.scope, path)
-                .await
-                .map_err(|error| BtccError::relayed(error.code(), error.message()))?;
+        if let Some(path) = args.get("path").and_then(Value::as_str)
+            && let Err(error) = butler_turn::workspace::guard_effect_file(&self.scope, path).await
+            && error.code() == "protected_path"
+        {
+            // Refuse protected data before asking for approval. Other boundary
+            // failures retain the file adapter's durable effect outcome.
+            return Err(BtccError::relayed(error.code(), error.message()));
         }
         let adapter: Arc<dyn EffectAdapter> = Arc::new(WorkspaceFileEffectAdapter::new(
             self.scope.clone(),

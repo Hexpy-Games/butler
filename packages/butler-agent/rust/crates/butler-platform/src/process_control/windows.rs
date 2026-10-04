@@ -139,10 +139,11 @@ pub(super) fn liveness(pid: u32) -> Liveness {
     if pid == 0 || i32::try_from(pid).is_err() {
         return Liveness::Gone;
     }
-    if ProcessView::read(pid).is_some() {
-        Liveness::Running
-    } else {
-        Liveness::Gone
+    match ProcessView::read(pid) {
+        Ok(Some(_)) => Liveness::Running,
+        Ok(None) => Liveness::Gone,
+        Err(error) if error.kind() == io::ErrorKind::PermissionDenied => Liveness::OtherOwner,
+        Err(_) => Liveness::Unknown,
     }
 }
 

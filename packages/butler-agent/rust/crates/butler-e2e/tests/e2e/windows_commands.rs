@@ -18,6 +18,8 @@ mod observation;
 mod observation_stub;
 #[path = "windows_commands/profile_files.rs"]
 mod profile_files;
+#[path = "windows_commands/private_metadata.rs"]
+mod private_metadata;
 #[path = "windows_commands/profile_observation.rs"]
 mod profile_observation;
 #[path = "windows_commands/stub.rs"]

@@ -154,6 +154,10 @@ async fn operation(
     case: &Case,
     access: Access,
 ) -> Result<(Value, Duration), HarnessError> {
+    eprintln!(
+        "Starting Windows capability: access={access:?} tool={} refused={} args={}",
+        case.tool, case.refused, case.args
+    );
     script.select(case.clone());
     let accepted = s.gw.say(chat, provider::PROMPT).await?;
     let id = accepted_turn_id(&accepted)?;
@@ -164,7 +168,18 @@ async fn operation(
             &["waiting_for_form", "delivered", "failed"],
             Duration::from_secs(15),
         )
-        .await?;
+        .await;
+    if let Err(error) = &turn {
+        eprintln!(
+            "Windows capability wait failed: {error}; complete tool result={:?}",
+            script.result.lock().unwrap()
+        );
+        eprintln!(
+            "Windows capability disposition={:?}",
+            script.disposition.lock().unwrap()
+        );
+    }
+    let turn = turn?;
     if turn_state(&turn) == "waiting_for_form" {
         assert!(!case.refused, "Refused operation must not request approval");
         assert_eq!(access, Access::AskFirst);
@@ -442,6 +457,35 @@ async fn real_profile_like_basic_capabilities_in_both_access_modes() -> Result<(
     for access in [Access::AskFirst, Access::FullAccess] {
         run(access).await?;
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn sequential_file_capabilities_close_the_current_work() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, chat, script, server) = setup(Access::FullAccess).await?;
+    for index in 0..8 {
+        let name = format!("report-{index}.txt");
+        let content = format!("complete current report {index}");
+        std::fs::write(s.sandbox.home.join("Downloads").join(&name), &content)?;
+        let case = Case {
+            tool: "read_file",
+            args: json!({"requests":[{"path":name}]}),
+            refused: false,
+        };
+        let (output, _) = operation(&s, &chat, &script, &case, Access::FullAccess).await?;
+        assert_eq!(output["files"][0]["content"], content);
+        assert_eq!(output["files_read"], 1);
+        assert_eq!(output["truncated"], false);
+        let disposition = script.disposition.lock().unwrap().clone().unwrap();
+        assert_eq!(
+            disposition["ok"], true,
+            "current Work disposition: {disposition}"
+        );
+        assert_eq!(disposition["work"]["status"], "completed");
+    }
+    s.finish().await?;
+    server.abort();
     Ok(())
 }
 

@@ -136,6 +136,7 @@ impl AppServer {
             runtime.subsessions.clone(),
             runtime.conversations.clone(),
         ));
+        let readiness = AppReadiness::new(owners.receipt.clone(), listener_ready.clone());
         let dependencies = AppApplicationDependencies {
             service_shutdown: runtime.service_shutdown.clone(),
             updates: Arc::new(open_updates(data_root, installation)?),
@@ -150,7 +151,7 @@ impl AppServer {
                 runtime.mcp_client.clone(),
                 data_root,
             )),
-            executor_readiness: Arc::new(AppReadiness::new(owners.receipt, listener_ready.clone())),
+            executor_readiness: Arc::new(readiness),
             admission: Arc::new(AppAdmission::new(
                 runtime.project_ledger.clone(),
                 runtime.image_files.clone(),
@@ -192,7 +193,7 @@ impl AppServer {
             queue_owner_liveness: Arc::new(AppQueueOwnerLivenessAdapter),
             authority_handoff: Arc::new(AuthorityHandoff::new(
                 runtime.authority.clone(),
-                owners.queue,
+                owners.queue.clone(),
                 Arc::new(|| {
                     butler_models::models::ModelConfigurationClock::now_iso(&SystemIdentity)
                 }),
@@ -224,8 +225,7 @@ impl AppServer {
             )),
             branch_summarizer: Arc::new(AppBranchSummarizerAdapter::new(&runtime.models)),
         };
-        let application =
-            open_application(app_config, data_root, dependencies, &owners.writer).await?;
+        let application = open_application(app_config, data_root, dependencies, &owners).await?;
         let gateway_config = gateway_config(app_config, data_root, installation, owners.local_auth);
         let server = startup::activate(
             listener,
@@ -297,7 +297,7 @@ async fn open_application(
     config: &AppServiceConfiguration,
     data_root: &std::path::Path,
     dependencies: AppApplicationDependencies,
-    writer: &butler_gateway::gateway::TranscriptWriter,
+    owners: &AppServerOwners,
 ) -> Result<Arc<AppApplication>, BtccError> {
     let application = Arc::new(
         AppApplication::open(
@@ -312,7 +312,12 @@ async fn open_application(
         .await
         .map_err(app_error)?,
     );
-    writer.observe_appends(application.transcript_append_listener());
+    owners
+        .writer
+        .observe_appends(application.transcript_append_listener());
+    owners
+        .queue
+        .observe_settlements(application.inbound_settlement_listener());
     Ok(application)
 }
 

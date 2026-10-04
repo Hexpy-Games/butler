@@ -88,7 +88,7 @@ test("the Models page keeps backup models and API keys visible and folds cleanup
     expect(section.querySelector('[data-slot="form-section-header"] h3')?.textContent).toBe("Advanced");
     const advanced = section.querySelector<HTMLElement>('[data-slot="form-section-card"] [aria-expanded]')!;
     expect(advanced.getAttribute("aria-expanded")).toBe("false");
-    expect(advanced.textContent).toBe("Memory cleanup model and worker profiles");
+    expect(advanced.textContent).toBe("Memory cleanup model and worker settings");
 
     await act(async () => advanced.click());
     expect(advanced.getAttribute("aria-expanded")).toBe("true");

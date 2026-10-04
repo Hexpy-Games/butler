@@ -67,7 +67,7 @@ async fn active_cancellation_kills_and_reaps_child() {
 async fn slow_initialization_outlives_first_deadline_and_keeps_ready_child() {
     let mut child = Command::new("/bin/sh")
         .arg("-c")
-        .arg("IFS= read -r line; sleep 0.2; printf '%s\\n' '{\"id\":1,\"status\":\"ready\"}'; sleep 30")
+        .arg("IFS= read -r line; sleep 0.2; printf '%s\\n' '{\"id\":1,\"status\":\"ready\"}'; exec sleep 30")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()

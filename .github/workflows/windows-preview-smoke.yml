@@ -8,6 +8,11 @@ on:
         description: Task Cargo cache namespace on the native Windows build host
         required: false
         type: string
+      native-loop:
+        description: Run the owner-host native checks before hosted final confirmation
+        required: false
+        type: boolean
+        default: false
       diagnose-powershell:
         description: Run isolated startup diagnostics instead of build/test jobs
         required: false
@@ -29,7 +34,7 @@ concurrency:
 jobs:
   build:
     name: Build unsigned Windows preview
-    if: ${{ !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: ${{ !inputs.native-loop && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: [self-hosted, butler-win]
     timeout-minutes: 90
     steps:
@@ -86,7 +91,7 @@ jobs:
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
-          cargo clippy --locked --target x86_64-pc-windows-msvc -p butler-platform -p butler-e2e --tests -- -D warnings
+          cargo clippy --locked --target x86_64-pc-windows-msvc -p butler-platform -p butler-agent -p butler-e2e --tests -- -D warnings
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
@@ -146,6 +151,16 @@ jobs:
             turn::turn_01_reply_is_delivered_persisted_and_survives_restart -- --exact --test-threads=8 --nocapture 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/stub-chat.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Terminal settlement without filesystem notifications
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
+        run: |
+          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
+          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e projection_settlement:: `
+            -- --test-threads=1 --nocapture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Stub chat and durable config under a long data path
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
         run: |
@@ -169,6 +184,35 @@ jobs:
           cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e windows_commands:: -- --test-threads=1 --nocapture
           Remove-Item Env:BUTLER_E2E_PERF
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Read-only real-profile Downloads command
+        if: ${{ inputs.native-loop && !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
+        run: |
+          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
+          # Only the Agent's observation HOME/USERPROFILE is real. Its data,
+          # CODEX_HOME, XDG dirs, local/roaming profiles and fixtures stay temporary.
+          $env:BUTLER_E2E_DOWNLOADS_REAL_PROFILE = $env:USERPROFILE
+          $env:BUTLER_E2E_PERF = '1'
+          try {
+            cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e `
+              windows_commands::profile_observation::profile_downloads_with_external_data_in_both_access_modes `
+              -- --exact --test-threads=1 --nocapture 2>&1 | Tee-Object "$env:PREVIEW_ROOT/logs/real-profile.log"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally { Remove-Item Env:BUTLER_E2E_DOWNLOADS_REAL_PROFILE,Env:BUTLER_E2E_PERF }
+      - name: Native service recovery and full shutdown queue
+        if: ${{ inputs.native-loop && !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
+        run: |
+          foreach ($test in @('service_supervision', 'queue_shutdown', 'service_diagnostics')) {
+            $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+            $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+            New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+            $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
+            cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e "$test`::" `
+              -- --test-threads=8 --nocapture 2>&1 | Tee-Object "$env:PREVIEW_ROOT/logs/$test.log"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
       - name: Export compiled verification harnesses
         run: |
           ../../../deploy/windows-e2e-artifacts.ps1 -Mode Export
@@ -184,6 +228,7 @@ jobs:
 
   release:
     name: Installed unsigned Windows preview
+    if: ${{ !inputs.native-loop }}
     needs: [build, stub]
     runs-on: windows-latest
     timeout-minutes: 30
@@ -221,10 +266,15 @@ jobs:
           ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests windows_commands |
             Tee-Object "$env:PREVIEW_ROOT/logs/windows-commands.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Hosted terminal settlement live-event regression
+        if: ${{ !cancelled() }}
+        run: |
+          $env:BUTLER_E2E_BIN = "$env:PREVIEW_ROOT/artifacts/butler-agent.exe"
+          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests projection_settlement
       - name: Require installed verification harnesses
         if: ${{ !cancelled() }}
         run: |
-          $expected = @('windows_startup_xml','installed_preview','windows_commands')
+          $expected = @('windows_startup_xml','installed_preview','windows_commands','projection_settlement')
           $actual = @(Get-Content "$env:PREVIEW_ROOT/logs/completed-harnesses.txt")
           if ($actual.Count -ne $expected.Count -or (Compare-Object $expected $actual)) {
             throw "Incomplete verification: completed=$($actual -join ',')"
@@ -242,12 +292,20 @@ jobs:
           $env:BUTLER_APP_SERVER_PORT = '0'
           $env:BUTLER_SECRET_STORE = 'file'
           ./deploy/windows-startup-smoke.ps1 -Launcher "$env:LOCALAPPDATA/Butler/bin/butler.exe"
+      - name: Preserve failed hosted harness fixtures
+        if: failure()
+        run: |
+          $failures = Join-Path ([System.IO.Path]::GetTempPath()) 'butler-e2e/failures'
+          if (Test-Path $failures) {
+            Copy-Item $failures "$env:PREVIEW_ROOT/logs/failures" -Recurse
+          }
       - name: Upload diagnostic logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: unsigned-windows-stub-logs
-          path: ${{ runner.temp }}/windows-verify/logs/*.log
+          path: ${{ runner.temp }}/windows-verify/logs/
+          retention-days: 1
       - name: Keep installed harness completion evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -266,6 +324,7 @@ jobs:
 
   hosted:
     name: Hosted Windows E2E (${{ matrix.shard }})
+    if: ${{ !inputs.native-loop }}
     needs: stub
     runs-on: windows-latest
     timeout-minutes: 30
@@ -308,19 +367,27 @@ jobs:
           path: ${{ runner.temp }}/windows-verify/logs/completed-harnesses.txt
           if-no-files-found: error
           retention-days: 1
+      - name: Preserve hosted failure fixtures
+        if: failure()
+        run: |
+          $fixtures = Join-Path ([System.IO.Path]::GetTempPath()) 'butler-e2e'
+          if (Test-Path $fixtures) {
+            Copy-Item $fixtures "$env:PREVIEW_ROOT/logs/failures" -Recurse
+          }
       - name: Keep diagnostic logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: unsigned-windows-${{ matrix.shard }}-logs
-          path: ${{ runner.temp }}/windows-verify/logs/*.log
+          path: ${{ runner.temp }}/windows-verify/logs/
+          retention-days: 1
       - name: Remove temporary verification profiles
         if: always()
         run: Remove-Item $env:PREVIEW_ROOT -Recurse -Force
 
   gate:
     name: Complete Windows preview verification
-    if: ${{ always() && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: ${{ always() && !inputs.native-loop && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     needs: [build, stub, release, hosted]
     runs-on: windows-latest
     defaults:
@@ -349,13 +416,13 @@ jobs:
       - name: Require every hosted verification harness
         run: |
           $expected = @('windows_startup_xml','installed_preview','cli_surface','gateway_remote','gateway_pairing','cli_remote',
-            'windows_commands','windows_commands','queue_shutdown','migration','durable_configuration','service_supervision','service_diagnostics')
+            'windows_commands','projection_settlement','queue_shutdown','migration','durable_configuration','service_supervision','service_diagnostics')
           $actual = @(Get-ChildItem "$env:RUNNER_TEMP/windows-completion" -Recurse -Filter completed-harnesses.txt |
             ForEach-Object { Get-Content $_.FullName })
           if ($actual.Count -ne $expected.Count -or (Compare-Object $expected $actual)) {
             throw "Incomplete verification: completed=$($actual -join ',')"
           }
-          "Verified all 13 compiled harness runs: $($actual -join ',')"
+          "Verified all 13 compiled harnesses: $($actual -join ',')"
       - name: Remove completion check directories
         if: always()
         run: |
@@ -377,12 +444,13 @@ jobs:
       - name: Check owner registration and remove job profile
         if: always()
         working-directory: .
+        env:
+          OWNER_DELETE_TASK_CACHES: ${{ inputs.native-cache == 'captain-p9-finish' && '1' || '' }}
         run: ./deploy/windows-owner-cleanup.ps1
 
   diagnose-hosted:
     name: Isolated hosted PowerShell startup probe
     if: inputs.diagnose-powershell
-    needs: diagnose-native
     runs-on: windows-latest
     timeout-minutes: 10
     steps:

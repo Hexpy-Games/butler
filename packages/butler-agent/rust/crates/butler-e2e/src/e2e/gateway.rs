@@ -326,7 +326,10 @@ impl Gateway {
             let total = data["byte_length"]
                 .as_u64()
                 .ok_or_else(|| harness_error("Operation output byte length is missing"))?;
-            if data["byte_start"].as_u64() != Some(offset)
+            if data["turn_id"] != turn_id
+                || data["request_id"] != call
+                || data["result_id"] != result
+                || data["byte_start"].as_u64() != Some(offset)
                 || end.checked_sub(offset) != Some(chunk.len() as u64)
                 || total_bytes.is_some_and(|prior| prior != total)
                 || end > total

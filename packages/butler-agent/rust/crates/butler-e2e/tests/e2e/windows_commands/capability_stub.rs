@@ -27,6 +27,8 @@ pub(super) struct Script {
     pub(super) delegated: AtomicBool,
     sent: Mutex<Option<Instant>>,
     pub result: Mutex<Option<(Value, Duration)>>,
+    pub disposition: Mutex<Option<Value>>,
+    selected: Mutex<Instant>,
 }
 
 impl Script {
@@ -35,6 +37,8 @@ impl Script {
         *self.step.lock().unwrap() = 0;
         *self.sent.lock().unwrap() = None;
         *self.result.lock().unwrap() = None;
+        *self.disposition.lock().unwrap() = None;
+        *self.selected.lock().unwrap() = Instant::now();
     }
 }
 
@@ -50,6 +54,8 @@ pub(super) async fn start(
         delegated: AtomicBool::new(false),
         sent: Mutex::new(None),
         result: Mutex::new(None),
+        disposition: Mutex::new(None),
+        selected: Mutex::new(Instant::now()),
     });
     let router = Router::new()
         .route("/codex/responses", post(reply))
@@ -99,11 +105,22 @@ async fn reply(
     }
     let case = script.case.lock().unwrap().clone();
     let outputs = super::observation_stub::outputs(&body);
+    eprintln!(
+        "WINDOWS-BASIC provider step={step} elapsed={:?} work_ids={:?}",
+        script.selected.lock().unwrap().elapsed(),
+        outputs
+            .iter()
+            .filter_map(|v| v["work"]["work_id"].as_str())
+            .collect::<Vec<_>>()
+    );
     let objective = format!("Verify {} {}", case.tool, case.args);
     if step == 4 {
         let output = outputs.last().expect("tool result").clone();
         let elapsed = script.sent.lock().unwrap().unwrap().elapsed();
         *script.result.lock().unwrap() = Some((output, elapsed));
+    }
+    if step == 5 {
+        *script.disposition.lock().unwrap() = outputs.last().cloned();
     }
     let item = match step {
         0 => call("start", "start_work", &json!({"objective":objective})),
