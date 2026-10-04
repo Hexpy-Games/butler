@@ -21,6 +21,8 @@ mod duration;
 mod failure;
 #[path = "memory_rules/forget.rs"]
 mod forget;
+#[path = "memory_rules/fts_pending.rs"]
+mod fts_pending;
 #[path = "memory_rules/support.rs"]
 mod support;
 use support::{new_chat, read_json, until};

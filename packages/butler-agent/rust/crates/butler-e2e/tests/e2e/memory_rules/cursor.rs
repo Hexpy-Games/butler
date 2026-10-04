@@ -41,7 +41,7 @@ async fn rules_old_cursors_exclude_corrected_and_forgotten_sources() -> Result<(
     let setup = Setup::new("RULES-CURSORS")?
         .fixture(Fixture::Empty)
         .stub_cassette(stub()?);
-    let s = forget::start(setup).await?;
+    let mut s = forget::start(setup).await?;
     for user in [forget::GLOBAL, forget::A] {
         let output = support::tool(&s, "general", user, "update_explicit_memory").await?;
         assert_eq!(output["ok"], true, "{output}");
@@ -49,6 +49,8 @@ async fn rules_old_cursors_exclude_corrected_and_forgotten_sources() -> Result<(
     for row in support::active_rules(&s.sandbox.data) {
         support::projection(&s.sandbox.data, &row).await;
     }
+    super::fts_pending::coalesce(&s.sandbox.data)?;
+    super::fts_pending::upgrade(&mut s).await?;
     let other = support::new_chat(&s, "Mutation while continuing recall").await?;
     for (user, name) in [
         (forget::CORRECT, "update_explicit_memory"),

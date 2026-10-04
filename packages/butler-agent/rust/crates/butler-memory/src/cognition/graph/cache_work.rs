@@ -20,7 +20,7 @@ impl GraphRepository {
     pub(in crate::cognition) fn cache_index_ready(&self) -> CognitionResult<bool> {
         self.connection()?
             .query_row(
-                "SELECT 1 FROM sqlite_schema WHERE name='idx_jobs_hot_cache' AND EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_script_seeded')",
+                "SELECT 1 FROM sqlite_schema WHERE name='idx_jobs_hot_cache' AND EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_script_seeded') AND EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_trigger_version' AND value='2')",
                 [],
                 |_| Ok(()),
             )

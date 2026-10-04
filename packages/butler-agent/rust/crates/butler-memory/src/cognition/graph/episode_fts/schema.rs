@@ -23,18 +23,35 @@ pub(in crate::cognition::graph) fn install(db: &Connection) -> CognitionResult<(
                 _ => vec!["NEW"],
             };
             let select = rows.into_iter().map(|row| match table {
-                "memory_chunks" => format!("SELECT {row}.memory_chunk_id"),
+                "memory_chunks" => format!("SELECT {row}.memory_chunk_id AS episode_id"),
                 "memory_chunk_sources" | "memory_evidence" => format!("SELECT {row}.episode_id"),
                 "memory_claims" => format!("SELECT episode_id FROM memory_evidence WHERE node_id={row}.node_id"),
                 _ => format!("SELECT episode_id FROM memory_chunk_sources WHERE source_id={row}.source_id"),
             }).collect::<Vec<_>>().join(" UNION ");
-            db.execute_batch(&format!("CREATE TRIGGER IF NOT EXISTS fts_v1_{table}_{event} AFTER {event} ON {table} BEGIN INSERT OR IGNORE INTO memory_episode_fts_pending {select}; END;")).map_err(db_error)?;
+            install_trigger(
+                db,
+                &format!("fts_v1_{table}_{event}"),
+                &format!("AFTER {event} ON {table}"),
+                &select,
+            )?;
         }
     }
-    db.execute_batch("CREATE TRIGGER IF NOT EXISTS fts_v1_node_update AFTER UPDATE OF label_original,type ON memory_nodes BEGIN INSERT OR IGNORE INTO memory_episode_fts_pending SELECT episode_id FROM memory_evidence WHERE node_id=NEW.id; END;").map_err(db_error)?;
+    install_trigger(
+        db,
+        "fts_v1_node_update",
+        "AFTER UPDATE OF label_original,type ON memory_nodes",
+        "SELECT episode_id FROM memory_evidence WHERE node_id=NEW.id",
+    )?;
+    db.execute_batch("INSERT INTO memory_state VALUES('episode_fts_trigger_version','2') ON CONFLICT(key) DO UPDATE SET value=excluded.value;").map_err(db_error)?;
     // Capture an ordered migration range without copying all existing rows.
     db.execute_batch("INSERT OR IGNORE INTO memory_state SELECT 'episode_fts_script_cursor','' WHERE NOT EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_script_seeded'); INSERT OR IGNORE INTO memory_state SELECT 'episode_fts_script_end',(SELECT COALESCE(MAX(episode_id),'') FROM memory_episode_fts_meta) WHERE NOT EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_script_seeded'); INSERT OR IGNORE INTO memory_state VALUES('episode_fts_script_seeded','1');").map_err(db_error)?;
     db.execute_batch("INSERT OR IGNORE INTO memory_episode_fts_pending SELECT memory_chunk_id FROM memory_chunks WHERE NOT EXISTS(SELECT 1 FROM memory_state WHERE key='episode_fts_v1_seeded'); INSERT OR IGNORE INTO memory_state VALUES('episode_fts_v1_seeded','1');").map_err(db_error)
+}
+
+// The caller's upsert can override a trigger's OR IGNORE policy. Prevent the
+// conflict with indexed membership checks, including duplicate evidence rows.
+fn install_trigger(db: &Connection, name: &str, event: &str, select: &str) -> CognitionResult<()> {
+    db.execute_batch(&format!("DROP TRIGGER IF EXISTS {name}; CREATE TRIGGER {name} {event} BEGIN INSERT INTO memory_episode_fts_pending(episode_id) SELECT DISTINCT changed.episode_id FROM ({select}) AS changed WHERE NOT EXISTS(SELECT 1 FROM memory_episode_fts_pending pending WHERE pending.episode_id=changed.episode_id); END;")).map_err(db_error)
 }
 
 const SCHEMA: &str = "
