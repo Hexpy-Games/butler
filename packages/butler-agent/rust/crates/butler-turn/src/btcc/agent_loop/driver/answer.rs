@@ -127,7 +127,12 @@ pub(super) async fn finish_limit(
         "I could not complete this request: {reason}. This is a limit status, not a completed result. Recorded {} tool results; the request may still have unfinished work.",
         state.tool_results.len(),
     );
-    finish(input, state, Ending::Answer(&content)).await
+    let mut result = finish(input, state, Ending::Answer(&content)).await?;
+    result.runtime_failure = Some(crate::btcc::RuntimeFailure {
+        code: "turn_continuation_limit_reached".into(),
+        retryable: false,
+    });
+    Ok(result)
 }
 
 async fn record_continuation(input: &Invocation<'_>, state: &State, kind: &str, reason: &str) {
