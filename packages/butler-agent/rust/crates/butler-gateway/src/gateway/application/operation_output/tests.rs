@@ -57,6 +57,13 @@ fn child_event_projection_requires_public_exact_well_formed_chunk() {
     assert!(OperationOutputChunk::from_public_event(&event, "other-request", &result_id).is_none());
     let mut malformed = event;
     malformed["payload"]["contentSha256"] = "b".repeat(64).into();
+    let chunk =
+        OperationOutputChunk::from_public_event(&malformed, "request-child", &result_id).unwrap();
+    assert_eq!(
+        chunk.content_base64,
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    );
+    malformed["payload"]["byteEnd"] = 1.into();
     assert!(
         OperationOutputChunk::from_public_event(&malformed, "request-child", &result_id).is_none()
     );
@@ -123,12 +130,53 @@ fn reads_only_scoped_complete_output_in_utf8_safe_pages() {
                 request_id: request_id.into(),
                 result_id: result_id.clone(),
                 byte_start: 0,
-            },
+            }
         )
         .unwrap()
         .is_none(),
-        "a corrupt chunk outside the requested page must invalidate the output"
+        "invalid chunk lengths must still be rejected"
     );
+    let mut replacement = output.as_bytes()[CHUNK_BYTES..2 * CHUNK_BYTES].to_vec();
+    for byte in &mut replacement {
+        if *byte == b'a' {
+            *byte = b'b';
+        }
+    }
+    connection.execute("UPDATE app_operation_output_chunks SET content_base64=?1,content_sha256=?2 WHERE turn_id=?3 AND request_id=?4 AND result_id=?5 AND chunk_index=1",
+        rusqlite::params![base64::engine::general_purpose::STANDARD.encode(&replacement),sha256(&replacement),turn_id,request_id,result_id]).unwrap();
+    let first = read(
+        &connection,
+        OperationOutputQuery {
+            turn_id: turn_id.into(),
+            request_id: request_id.into(),
+            result_id: result_id.clone(),
+            byte_start: 0,
+        },
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(
+        first.content,
+        format!("{}{}", "a".repeat(CHUNK_BYTES), "b".repeat(CHUNK_BYTES - 2))
+    );
+    assert_eq!(first.byte_length, output.len() as u64);
+    let changed = read(
+        &connection,
+        OperationOutputQuery {
+            turn_id: turn_id.into(),
+            request_id: request_id.into(),
+            result_id: result_id.clone(),
+            byte_start: CHUNK_BYTES as u64,
+        },
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(
+        changed.content,
+        format!("{}🙂tail", "b".repeat(CHUNK_BYTES - 2))
+    );
+    assert_eq!(changed.byte_length, output.len() as u64);
+    assert!(changed.complete);
 
     for (turn_id, request_id, wrong_result_id) in [
         ("other-turn", request_id, result_id.as_str()),

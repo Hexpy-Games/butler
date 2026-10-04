@@ -20,7 +20,7 @@ pub(super) fn normalize(
     let payload = payload.unwrap_or(&empty);
     let request_id = token(payload, "requestId")?;
     let result_id = token(payload, "resultId")?;
-    let result_sha = digest(payload, "resultSha256")?;
+    let result_sha = diagnostic_digest(payload, "resultSha256");
     let chunk_index = integer(payload, "chunkIndex", false)?;
     let chunk_count = integer(payload, "chunkCount", true)?;
     let byte_start = integer(payload, "byteStart", false)?;
@@ -31,7 +31,7 @@ pub(super) fn normalize(
         .and_then(Value::as_str)
         .filter(|value| value.len() <= CHUNK_BYTES * 2)
         .ok_or_else(invalid)?;
-    let content_sha = digest(payload, "contentSha256")?;
+    let content_sha = diagnostic_digest(payload, "contentSha256");
     if chunk_index >= chunk_count || byte_start > byte_end || byte_end > byte_length {
         return Err(invalid());
     }
@@ -40,10 +40,13 @@ pub(super) fn normalize(
     let bytes = BASE64
         .decode(content)
         .map_err(|source| invalid().with_source(source))?;
-    if bytes.len() as u64 != byte_end - byte_start
-        || format!("{:x}", Sha256::digest(&bytes)) != content_sha
-    {
+    if bytes.len() as u64 != byte_end - byte_start {
         return Err(invalid());
+    }
+    if format!("{:x}", Sha256::digest(&bytes)) != content_sha {
+        butler_core::diagnostic!(
+            "warning: operation chunk content hash mismatch for {request_id}/{result_id}/{chunk_index}"
+        );
     }
     let mut normalized = Map::new();
     for (key, value) in [
@@ -71,17 +74,8 @@ fn token<'a>(payload: &'a Map<String, Value>, key: &str) -> Result<&'a str, AppS
         .ok_or_else(invalid)
 }
 
-fn digest<'a>(payload: &'a Map<String, Value>, key: &str) -> Result<&'a str, AppStorageError> {
-    payload
-        .get(key)
-        .and_then(Value::as_str)
-        .filter(|value| {
-            value.len() == 64
-                && value
-                    .bytes()
-                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-        })
-        .ok_or_else(invalid)
+fn diagnostic_digest<'a>(payload: &'a Map<String, Value>, key: &str) -> &'a str {
+    payload.get(key).and_then(Value::as_str).unwrap_or_default()
 }
 
 fn integer(

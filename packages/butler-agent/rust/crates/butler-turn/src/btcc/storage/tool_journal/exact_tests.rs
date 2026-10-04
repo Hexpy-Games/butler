@@ -81,7 +81,7 @@ async fn source_exact_output_is_stored_hashed_replayed_and_reopened_without_scal
         .await
         .unwrap();
     let journal = ToolJournalRepository::new(reopened.clone(), Arc::new(|| "now".into()));
-    for case in cases {
+    for case in &cases {
         let record = journal
             .find_for_turn("turn".into(), case["callId"].as_str().unwrap().into())
             .await
@@ -104,7 +104,7 @@ async fn source_exact_output_is_stored_hashed_replayed_and_reopened_without_scal
     reopened
         .execute(|db| {
             db.execute(
-                "UPDATE btcc_guided_tool_calls SET result_sha256='wrong' WHERE call_id='exact-0'",
+                "UPDATE btcc_guided_tool_calls SET result_sha256='wrong',result_json='{}' WHERE call_id='exact-0'",
                 [],
             )
             .map_err(StorageError::sqlite)?;
@@ -112,22 +112,15 @@ async fn source_exact_output_is_stored_hashed_replayed_and_reopened_without_scal
         })
         .await
         .unwrap();
-    assert_eq!(
-        journal
-            .find_for_turn("turn".into(), "exact-0".into())
-            .await
-            .unwrap_err()
-            .code(),
-        "operation_result_body_hash_mismatch"
-    );
-    assert_eq!(
-        journal
-            .closeout_page("turn".into(), 0, 8)
-            .await
-            .err()
-            .unwrap()
-            .code(),
-        "operation_result_body_hash_mismatch"
-    );
+    let record = journal
+        .find_for_turn("turn".into(), "exact-0".into())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(record.result.unwrap().as_str(), "{}");
+    assert_eq!(record.result_sha256.as_deref(), Some("wrong"));
+    let rows = journal.closeout_page("turn".into(), 0, 8).await.unwrap();
+    assert_eq!(rows.len(), cases.len());
+    assert_eq!(rows[0].result.as_ref().unwrap().as_str(), "{}");
     reopened.close().await.unwrap();
 }

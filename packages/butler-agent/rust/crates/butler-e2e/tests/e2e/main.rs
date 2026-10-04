@@ -56,6 +56,7 @@ mod migration;
 mod monitoring_scale;
 mod onboarding;
 mod onboarding_form;
+mod outbox_identity;
 mod perf_ask_user;
 mod personalization;
 mod personalization_defaults;

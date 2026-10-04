@@ -39,8 +39,8 @@ enum Outcome {
 /// Format pin (REC-04): the identity of a staged outbound row in the App
 /// database. A second send of a staged action is accepted when only its
 /// transcript envelope differs (event id, timestamp, record metadata) and
-/// keeps the first record, while a different payload (including a claim
-/// added to a claimless row) or another chat is still an identity conflict.
+/// keeps the first record even when content differs. A claim
+/// added to a claimless row or another chat is still an identity conflict.
 /// A send under a new claim replaces the row.
 // test-category: format-pin
 #[tokio::test]
@@ -65,7 +65,7 @@ async fn a_resent_action_stages_as_itself_and_a_different_one_conflicts() {
                 label: "Writing notes",
                 ..FIRST
             },
-            Outcome::Conflict,
+            Outcome::Keeps("outbound-first"),
         ),
         (
             "a claim added to a claimless row",

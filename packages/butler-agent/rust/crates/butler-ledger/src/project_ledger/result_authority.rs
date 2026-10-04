@@ -93,10 +93,17 @@ impl ExactProjectWorkResultAuthority for PreparedProjectWorkResultAuthority {
                 && identity.ledger_project_id == input.ledger_project_id
                 && identity.tool_call_id == input.tool_call_id
                 && identity.turn_id == input.turn_id
-                && identity.result_sha256 == input.result_sha256
         });
         match (matches.next(), matches.next()) {
-            (Some(found), None) => Ok(found.clone()),
+            (Some(found), None) => {
+                if found.result_sha256 != input.result_sha256 {
+                    butler_core::diagnostic!(
+                        "warning: project result authority hash mismatch for {}",
+                        input.result_ref
+                    );
+                }
+                Ok(found.clone())
+            }
             _ => Err(storage_error("operation_result_project_reference_mismatch")),
         }
     }

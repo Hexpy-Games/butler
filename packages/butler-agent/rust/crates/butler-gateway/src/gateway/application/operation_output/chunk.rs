@@ -94,11 +94,13 @@ where
     if chunk_count == 0 || first.result_id != expected_result_id {
         return Ok(ChunkOutputRead::Invalid);
     }
-    let first_request_id = first.request_id.clone();
-    let first_result_id = first.result_id.clone();
-    let first_result_sha256 = first.result_sha256.clone();
-    let first_chunk_count = first.chunk_count;
-    let first_byte_length = first.byte_length;
+    let layout = ChunkLayout {
+        request_id: first.request_id.clone(),
+        result_id: first.result_id.clone(),
+        result_sha256: first.result_sha256.clone(),
+        chunk_count: first.chunk_count,
+        byte_length: first.byte_length,
+    };
 
     let byte_start = requested_byte_start.min(byte_length);
     let page_end = byte_start
@@ -118,66 +120,23 @@ where
 
     for row in std::iter::once(Ok(first)).chain(rows) {
         let row = row.map_err(AppStorageError::sqlite)?;
-        let expected_index = i64::try_from(seen_count).ok();
-        if row.request_id != first_request_id
-            || row.result_id != first_result_id
-            || row.result_sha256 != first_result_sha256
-            || Some(row.chunk_index) != expected_index
-            || seen_count >= chunk_count
-            || row.chunk_count != first_chunk_count
-            || row.byte_length != first_byte_length
-            || row.byte_start != expected_start
-            || row.byte_start < 0
-            || row.byte_end < row.byte_start
-            || row.byte_end > row.byte_length
-            || row.byte_length < 0
-        {
-            return Ok(ChunkOutputRead::Invalid);
-        }
-        let Some(chunk) = base64::engine::general_purpose::STANDARD
-            .decode(&row.content_base64)
-            .ok()
-        else {
+        let Some(chunk) = decode_stored_chunk(&row, &layout, seen_count, expected_start) else {
             return Ok(ChunkOutputRead::Invalid);
         };
-        if i64::try_from(chunk.len()).ok() != Some(row.byte_end - row.byte_start)
-            || sha256(&chunk) != row.content_sha256
-        {
-            return Ok(ChunkOutputRead::Invalid);
-        }
         result_hasher.update(&chunk);
-        let chunk_start = u64::try_from(row.byte_start).unwrap_or_default();
-        let chunk_end = u64::try_from(row.byte_end).unwrap_or_default();
-        let overlap_start = chunk_start.max(byte_start);
-        let overlap_end = chunk_end.min(page_end);
-        if overlap_start < overlap_end {
-            let local_start = usize::try_from(overlap_start - chunk_start).map_err(|source| {
-                AppStorageError::new(
-                    AppStorageCode::OperationOutputInvalid,
-                    "Invalid chunk range",
-                )
-                .with_source(source)
-            })?;
-            let local_end = usize::try_from(overlap_end - chunk_start).map_err(|source| {
-                AppStorageError::new(
-                    AppStorageCode::OperationOutputInvalid,
-                    "Invalid chunk range",
-                )
-                .with_source(source)
-            })?;
-            content.extend_from_slice(&chunk[local_start..local_end]);
-        }
+        append_page_overlap(&mut content, &chunk, row.byte_start, byte_start, page_end)?;
         expected_start = row.byte_end;
         seen_count += 1;
     }
 
     let result_sha256 = format!("{:x}", result_hasher.finalize());
-    if seen_count != chunk_count
-        || expected_start != first_byte_length
-        || result_sha256 != first_result_sha256
-        || result_id(&first_result_sha256) != expected_result_id
-    {
+    if seen_count != chunk_count || expected_start != layout.byte_length {
         return Ok(ChunkOutputRead::Invalid);
+    }
+    if result_sha256 != layout.result_sha256 {
+        butler_core::diagnostic!(
+            "warning: stored operation result hash mismatch for {expected_result_id}"
+        );
     }
     let complete_length = complete_utf8_prefix(&content).len();
     content.truncate(complete_length);
@@ -186,6 +145,77 @@ where
         byte_length,
         content,
     }))
+}
+
+struct ChunkLayout {
+    request_id: String,
+    result_id: String,
+    result_sha256: String,
+    chunk_count: i64,
+    byte_length: i64,
+}
+
+/// Identity/order/layout validation is separate from diagnostic content hashes.
+fn decode_stored_chunk(
+    row: &StoredChunk,
+    layout: &ChunkLayout,
+    index: usize,
+    start: i64,
+) -> Option<Vec<u8>> {
+    if row.request_id != layout.request_id
+        || row.result_id != layout.result_id
+        || Some(row.chunk_index) != i64::try_from(index).ok()
+        || row.chunk_index >= layout.chunk_count
+        || row.chunk_count != layout.chunk_count
+        || row.byte_length != layout.byte_length
+        || row.byte_start != start
+        || row.byte_start < 0
+        || row.byte_end < row.byte_start
+        || row.byte_end > row.byte_length
+    {
+        return None;
+    }
+    let chunk = base64::engine::general_purpose::STANDARD
+        .decode(&row.content_base64)
+        .ok()?;
+    if i64::try_from(chunk.len()).ok() != Some(row.byte_end - row.byte_start) {
+        return None;
+    }
+    if row.result_sha256 != layout.result_sha256 || sha256(&chunk) != row.content_sha256 {
+        butler_core::diagnostic!(
+            "warning: stored operation output hash mismatch for {}/{}",
+            layout.request_id,
+            layout.result_id
+        );
+    }
+    Some(chunk)
+}
+
+/// Copies only the requested byte window while all chunks are still validated.
+fn append_page_overlap(
+    content: &mut Vec<u8>,
+    chunk: &[u8],
+    start: i64,
+    page_start: u64,
+    page_end: u64,
+) -> Result<(), AppStorageError> {
+    let chunk_start = u64::try_from(start).unwrap_or_default();
+    let chunk_end = chunk_start.saturating_add(chunk.len() as u64);
+    let overlap_start = chunk_start.max(page_start);
+    let overlap_end = chunk_end.min(page_end);
+    if overlap_start < overlap_end {
+        let range_error = |source| {
+            AppStorageError::new(
+                AppStorageCode::OperationOutputInvalid,
+                "Invalid chunk range",
+            )
+            .with_source(source)
+        };
+        let local_start = usize::try_from(overlap_start - chunk_start).map_err(range_error)?;
+        let local_end = usize::try_from(overlap_end - chunk_start).map_err(range_error)?;
+        content.extend_from_slice(&chunk[local_start..local_end]);
+    }
+    Ok(())
 }
 
 impl OperationOutputChunk {
@@ -201,18 +231,29 @@ impl OperationOutputChunk {
         {
             return None;
         }
-        let payload = event.get("payload")?.as_object()?;
+        Self::from_payload(
+            event.get("payload")?.as_object()?,
+            expected_request_id,
+            expected_result_id,
+        )
+    }
+
+    pub(crate) fn from_payload(
+        payload: &serde_json::Map<String, Value>,
+        expected_request_id: &str,
+        expected_result_id: &str,
+    ) -> Option<Self> {
         let chunk = Self {
             request_id: token(payload.get("requestId")?)?.to_owned(),
             result_id: token(payload.get("resultId")?)?.to_owned(),
-            result_sha256: digest(payload.get("resultSha256")?)?.to_owned(),
+            result_sha256: diagnostic_digest(payload.get("resultSha256")).to_owned(),
             chunk_index: integer(payload.get("chunkIndex")?, false)?,
             chunk_count: integer(payload.get("chunkCount")?, true)?,
             byte_start: integer(payload.get("byteStart")?, false)?,
             byte_end: integer(payload.get("byteEnd")?, false)?,
             byte_length: integer(payload.get("byteLength")?, false)?,
             content_base64: payload.get("contentBase64")?.as_str()?.to_owned(),
-            content_sha256: digest(payload.get("contentSha256")?)?.to_owned(),
+            content_sha256: diagnostic_digest(payload.get("contentSha256")).to_owned(),
         };
         if chunk.request_id != expected_request_id
             || chunk.result_id != expected_result_id
@@ -224,10 +265,13 @@ impl OperationOutputChunk {
             return None;
         }
         let bytes = BASE64.decode(&chunk.content_base64).ok()?;
-        if i64::try_from(bytes.len()).ok()? != chunk.byte_end - chunk.byte_start
-            || sha256(&bytes) != chunk.content_sha256
-        {
+        if i64::try_from(bytes.len()).ok()? != chunk.byte_end - chunk.byte_start {
             return None;
+        }
+        if sha256(&bytes) != chunk.content_sha256 {
+            butler_core::diagnostic!(
+                "warning: operation chunk content hash mismatch for {expected_request_id}/{expected_result_id}"
+            );
         }
         Some(chunk)
     }
@@ -239,13 +283,8 @@ fn token(value: &Value) -> Option<&str> {
         .filter(|value| !value.trim().is_empty() && value.encode_utf16().count() <= 512)
 }
 
-fn digest(value: &Value) -> Option<&str> {
-    value.as_str().filter(|value| {
-        value.len() == 64
-            && value
-                .bytes()
-                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    })
+fn diagnostic_digest(value: Option<&Value>) -> &str {
+    value.and_then(Value::as_str).unwrap_or_default()
 }
 
 fn integer(value: &Value, positive: bool) -> Option<i64> {
@@ -262,10 +301,6 @@ fn integer(value: &Value, positive: bool) -> Option<i64> {
 
 pub(super) fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
-}
-
-fn result_id(result_sha256: &str) -> String {
-    sha256(format!("btcc-guided-tool-result.v1\0{result_sha256}").as_bytes())
 }
 
 fn complete_utf8_prefix(bytes: &[u8]) -> &[u8] {

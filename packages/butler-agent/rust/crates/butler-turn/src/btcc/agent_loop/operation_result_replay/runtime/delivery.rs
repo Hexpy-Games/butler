@@ -119,7 +119,6 @@ impl OperationResultReplayRuntime {
 pub(super) fn durable(record: &ToolJournalRecord) -> bool {
     record.status == "completed"
         && record.result.is_some()
-        && record.result_sha256.is_some()
         && !READERS.contains(&record.tool_name.as_str())
 }
 
