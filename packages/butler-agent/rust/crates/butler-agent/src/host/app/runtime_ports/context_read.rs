@@ -18,7 +18,7 @@ use butler_models::models::{
 use butler_runtime::context::{
     ContextBudgetOverrides, ContextBudgetOwner, WorkingContextBudgetInput,
 };
-use butler_runtime::operations::{SessionUsageIndex, SessionUsageView};
+use butler_runtime::operations::{SessionUsage, SessionUsageIndex};
 use butler_turn::btcc::ContextCompactionRepository;
 use parking_lot::Mutex;
 
@@ -85,10 +85,22 @@ impl AppContextReadPort for AppContextRead {
         let usage = self.usage.clone();
         let telemetry_index = self.telemetry.clone();
         Box::pin(async move {
-            let snapshot = budget
-                .snapshot()
-                .await
-                .map_err(GatewayApplicationError::internal_from)?;
+            let (snapshot, (telemetry, session), native_summary) = tokio::try_join!(
+                async {
+                    budget
+                        .snapshot()
+                        .await
+                        .map_err(GatewayApplicationError::internal_from)
+                },
+                read_telemetry(
+                    root,
+                    usage,
+                    telemetry_index,
+                    query.clone(),
+                    budget.catalog().clone()
+                ),
+                read_native_summary(compactions, query.turn_id.as_deref()),
+            )?;
             let evaluated = snapshot.evaluate_working(&WorkingContextBudgetInput {
                 model_ref: Some(query.model_ref.clone()),
                 working_context_tokens: 0.0,
@@ -109,33 +121,19 @@ impl AppContextReadPort for AppContextRead {
                 .max_output_tokens
                 .filter(|value| value.is_finite() && *value > 0.0)
                 .map(|value| butler_core::json::saturating_u64(value.trunc()));
-            let telemetry_query = query.clone();
-            let catalog = budget.catalog().clone();
-            let configured = configured_auth_mode(&query.model_ref, &snapshot.models, &catalog);
-            let (telemetry, session) = tokio::task::spawn_blocking(move || {
-                let session = session_usage(&usage, &root, &telemetry_query, &catalog, configured);
-                (
-                    telemetry_index.lock().read(&root, &telemetry_query),
-                    session,
-                )
-            })
-            .await
-            .map_err(GatewayApplicationError::internal_from)?;
-            let native_summary = match query.turn_id.as_deref() {
-                Some(turn_id) => compactions
-                    .load(turn_id)
-                    .await
-                    .map_err(GatewayApplicationError::internal_from)?
-                    .first()
-                    .map(|record| bounded_summary(&record.summary)),
-                None => None,
-            };
+            let auth_mode = session
+                .auth_modes
+                .get(&query.model_ref)
+                .copied()
+                .unwrap_or_else(|| {
+                    configured_auth_mode(&query.model_ref, &snapshot.models, budget.catalog())
+                });
             let summary = native_summary.or(telemetry.compaction_summary);
             Ok(AppContextReadFacts {
                 usage: telemetry.usage,
                 compaction_summary: summary,
-                session_usage: Some(session.0),
-                auth_mode: session.1,
+                session_usage: Some(session.view),
+                auth_mode,
                 budget: AppContextBudgetFacts {
                     context_window_tokens: butler_core::json::saturating_u64(
                         config.context_window_tokens.max(0.0).trunc(),
@@ -156,23 +154,37 @@ impl AppContextReadPort for AppContextRead {
     }
 }
 
-/// The session's usage view and how its current model is billed: as its
-/// latest request of that model reported, else as configured.
-fn session_usage(
-    index: &Mutex<SessionUsageIndex>,
-    root: &Path,
-    query: &AppContextReadQuery,
-    catalog: &ModelCatalog,
-    configured: UsageAuthMode,
-) -> (SessionUsageView, UsageAuthMode) {
-    let pricing = |model_ref: &str| catalog.pricing(model_ref);
-    let usage = index.lock().read(root, &query.runtime_session_id, &pricing);
-    let mode = usage
-        .auth_modes
-        .get(&query.model_ref)
-        .copied()
-        .unwrap_or(configured);
-    (usage.view, mode)
+async fn read_telemetry(
+    root: PathBuf,
+    usage: Arc<Mutex<SessionUsageIndex>>,
+    telemetry: Arc<Mutex<telemetry::Index>>,
+    query: AppContextReadQuery,
+    catalog: Arc<ModelCatalog>,
+) -> Result<(Telemetry, SessionUsage), GatewayApplicationError> {
+    tokio::task::spawn_blocking(move || {
+        let pricing = |model: &str| catalog.pricing(model);
+        let session = usage
+            .lock()
+            .read(&root, &query.runtime_session_id, &pricing);
+        (telemetry.lock().read(&root, &query), session)
+    })
+    .await
+    .map_err(GatewayApplicationError::internal_from)
+}
+
+async fn read_native_summary(
+    compactions: ContextCompactionRepository,
+    turn: Option<&str>,
+) -> Result<Option<String>, GatewayApplicationError> {
+    match turn {
+        Some(turn) => Ok(compactions
+            .load(turn)
+            .await
+            .map_err(GatewayApplicationError::internal_from)?
+            .first()
+            .map(|record| bounded_summary(&record.summary))),
+        None => Ok(None),
+    }
 }
 
 /// Billing mode from configuration when no request has reported one yet.

@@ -46,27 +46,26 @@ impl AppApplication {
                 .ok()
                 .map(|value| value.timestamp_millis())
         });
-        let host = self
-            .dependencies
-            .context_read
-            .read(AppContextReadQuery {
-                runtime_session_id: session.session_hint.clone(),
-                turn_id: latest_turn.as_ref().map(|turn| turn.id.clone()),
-                latest_turn_started_at_ms: latest_started,
-                model_ref: controls.model.clone(),
-                context_window_tokens: controls.context_window_tokens,
-            })
-            .await?;
+        let host = self.dependencies.context_read.read(AppContextReadQuery {
+            runtime_session_id: session.session_hint.clone(),
+            turn_id: latest_turn.as_ref().map(|turn| turn.id.clone()),
+            latest_turn_started_at_ms: latest_started,
+            model_ref: controls.model.clone(),
+            context_window_tokens: controls.context_window_tokens,
+        });
 
         let data_root = self.butler_data.clone();
-        let (persona_configured, eol_configured) = tokio::task::spawn_blocking(move || {
-            (
-                configured_text(&data_root.join("personas/active.md")),
-                configured_text(&data_root.join("eol.md")),
-            )
-        })
-        .await
-        .map_err(GatewayApplicationError::internal_from)?;
+        let configured = async move {
+            tokio::task::spawn_blocking(move || {
+                (
+                    configured_text(&data_root.join("personas/active.md")),
+                    configured_text(&data_root.join("eol.md")),
+                )
+            })
+            .await
+            .map_err(GatewayApplicationError::internal_from)
+        };
+        let (host, (persona_configured, eol_configured)) = tokio::try_join!(host, configured)?;
         let counts = derive_tokens(
             &session,
             &records,

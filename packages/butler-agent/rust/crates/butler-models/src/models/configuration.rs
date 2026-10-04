@@ -1,5 +1,8 @@
 //! Native filesystem model facts. Snapshots belong to their caller, not a cache.
 
+mod metadata;
+pub use metadata::ModelContextMetadataRead;
+
 mod admission;
 mod auth;
 mod credential_admin;
@@ -115,7 +118,7 @@ pub struct ModelConfiguration {
     clock: Arc<dyn ModelConfigurationClock>,
     catalog: Arc<ModelCatalog>,
     collation: Arc<LocaleCollation>,
-    registration_catalog: ModelCatalogSnapshot,
+    registration_catalog: Arc<ModelCatalogSnapshot>,
     client: Client,
     configuration_writes: Arc<ConfigurationWrites>,
     secrets: ProviderSecrets,
@@ -158,41 +161,6 @@ impl ModelConfigurationRead {
 }
 
 impl ModelConfiguration {
-    /// Context and Turn admission need model facts without credential I/O.
-    pub async fn read_metadata(&self) -> Result<ModelMetadataRead, ModelCatalogError> {
-        let config_path = self.data_root.join("butler.config.json");
-        let credential_path = self.data_root.join(CREDENTIALS_FILE);
-        let (config, credentials) =
-            tokio::join!(read_object(&config_path), read_object(&credential_path));
-        let default = configured_default(&config)
-            .map(str::to_owned)
-            .unwrap_or_else(|| self.catalog.default_preset(&config, &credentials).model);
-        let local = self.local_models(&config);
-        // Config is read on every request. With no configured local models,
-        // the catalog input is exactly the immutable empty-input catalog
-        // built at open; keep every field and refresh its observation time.
-        if local.is_empty() {
-            return Ok(ModelMetadataRead {
-                config,
-                catalog: self
-                    .registration_catalog
-                    .with_generated_at(self.clock.now_iso()),
-            });
-        }
-        let catalog = self.catalog.snapshot(
-            ModelCatalogSnapshotInput {
-                configured_local: local.iter().map(ModelProviderMetadata::from).collect(),
-                extra_models: Vec::new(),
-                registered_models: Vec::new(),
-                credential_views: Vec::new(),
-                default_model_ref: Some(default),
-                generated_at: self.clock.now_iso(),
-            },
-            &self.collation,
-        )?;
-        Ok(ModelMetadataRead { config, catalog })
-    }
-
     pub fn new(
         data_root: PathBuf,
         environment: ModelConfigurationEnvironment,
@@ -220,7 +188,7 @@ impl ModelConfiguration {
             clock,
             catalog,
             collation,
-            registration_catalog,
+            registration_catalog: Arc::new(registration_catalog),
             client,
             configuration_writes,
             secrets,

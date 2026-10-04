@@ -119,10 +119,14 @@ impl ContextBudgetOwner {
     }
 
     pub async fn snapshot(&self) -> ContextResult<ContextBudgetSnapshot<'_>> {
-        let metadata = self.configuration.read_metadata().await.map_err(|error| {
-            ContextError::new(ContextCode::ContextModelMetadataError, error.to_string())
-                .with_source(error)
-        })?;
+        let metadata = self
+            .configuration
+            .read_context_metadata()
+            .await
+            .map_err(|error| {
+                ContextError::new(ContextCode::ContextModelMetadataError, error.to_string())
+                    .with_source(error)
+            })?;
         Ok(ContextBudgetSnapshot {
             config: metadata.config,
             models: metadata.catalog,
@@ -136,10 +140,14 @@ impl ContextBudgetOwner {
     pub(crate) async fn owned_default_estimator(
         &self,
     ) -> ContextResult<OwnedDefaultTokenEstimator> {
-        let metadata = self.configuration.read_metadata().await.map_err(|error| {
-            ContextError::new(ContextCode::ContextModelMetadataError, error.to_string())
-                .with_source(error)
-        })?;
+        let metadata = self
+            .configuration
+            .read_context_metadata()
+            .await
+            .map_err(|error| {
+                ContextError::new(ContextCode::ContextModelMetadataError, error.to_string())
+                    .with_source(error)
+            })?;
         Ok(OwnedDefaultTokenEstimator {
             catalog: Arc::clone(&self.catalog),
             provider_id: metadata.catalog.resolve_model_metadata(None).provider_id,
@@ -150,7 +158,7 @@ impl ContextBudgetOwner {
 
 pub(crate) struct OwnedDefaultTokenEstimator {
     catalog: Arc<ModelCatalog>,
-    models: ModelCatalogSnapshot,
+    models: Arc<ModelCatalogSnapshot>,
     provider_id: String,
 }
 
@@ -171,7 +179,7 @@ impl OwnedDefaultTokenEstimator {
 
 pub struct ContextBudgetSnapshot<'a> {
     pub(crate) config: Value,
-    pub models: ModelCatalogSnapshot,
+    pub models: Arc<ModelCatalogSnapshot>,
     catalog: &'a ModelCatalog,
     environment: &'a ContextBudgetEnvironment,
 }
