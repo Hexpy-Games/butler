@@ -53,6 +53,10 @@ pub const DIRECTORY_SYNC: bool = sys::DIRECTORY_SYNC;
 /// its place with two [`rename`]s, and journal the step between them.
 pub const ATOMIC_EXCHANGE: bool = sys::ATOMIC_EXCHANGE;
 
+/// Whether tempfile's native persist APIs support long filenames without host
+/// settings changes. Windows callers must use the standard filesystem writer.
+pub const TEMPFILE_LONG_PATH_PERSISTENCE: bool = !cfg!(windows);
+
 /// A permission mode on hosts with [`PERMISSION_MODES`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FileMode(#[cfg_attr(not(unix), allow(dead_code))] u32);

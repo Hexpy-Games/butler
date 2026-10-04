@@ -98,11 +98,23 @@ async fn wiring_more_correction_supersedes_previous_rule_in_next_prompt() -> Res
 {
     butler_e2e::gate!();
     let (cassette, save, correction, ask) = correction_stub()?;
-    let setup = Setup::new("WIRING-MORE-CORRECTION")?
+    let mut setup = Setup::new("WIRING-MORE-CORRECTION")?
         .fixture(Fixture::Empty)
         .stub_cassette(cassette)
         .placeholder("NONCE", "5317")
-        .env("BUTLER_E2E_MEMORY_SYNC_TRACE", "1");
+        .env("BUTLER_E2E_MEMORY_SYNC_TRACE", "1")
+        .env("BUTLER_E2E_PORTABLE_LANCE", "1");
+    // Exercise vector persistence with long, spaced, escaped and Unicode paths.
+    setup.sandbox.data = setup
+        .sandbox
+        .root
+        .join("vectors 한국어 e\u{301} %25 # space")
+        .join("long-data-component-012345678901234567890123456789")
+        .join("long-vector-component-012345678901234567890123456789");
+    std::fs::create_dir_all(&setup.sandbox.data)?;
+    setup
+        .placeholders
+        .add("D", setup.sandbox.data.display().to_string());
     assert!(!setup.sandbox.data.join("cognition").exists());
     assert!(butler_e2e::e2e::fixtures::embedding_assets(
         &setup.sandbox.data

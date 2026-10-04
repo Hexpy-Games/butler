@@ -965,6 +965,7 @@ version = "0.0.0"
 dependencies = [
  "arrow-array",
  "arrow-schema",
+ "async-trait",
  "base64 0.22.1",
  "butler-core",
  "butler-models",
@@ -976,7 +977,9 @@ dependencies = [
  "futures-util",
  "indexmap 2.14.2",
  "lance",
+ "lance-io",
  "lancedb",
+ "object_store",
  "ort",
  "parking_lot",
  "regex",
