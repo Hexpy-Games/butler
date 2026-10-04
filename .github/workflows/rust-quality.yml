@@ -91,6 +91,8 @@ jobs:
               - 'tests/smoke/quick-fixes-smoke.ts'
               - 'tests/smoke/quick-fixes-compare.ts'
               - 'tests/support/quick-fixes-visual.ts'
+              - 'tests/smoke/settings-release-compare.ts'
+              - 'tests/support/native-app-server.ts'
               - 'packages/butler-app/client/ui/src/components/layout/SessionObserverTimeline.tsx'
               - 'tests/support/update-work-fixture.ts'
               - 'tests/support/electron-page-cdp.ts'
