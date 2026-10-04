@@ -62,19 +62,28 @@ export function isTerminalActivityState(state: string): boolean {
   return ["delivered", "failed", "cancelled"].includes(state);
 }
 
+function publicToolLabel(row: ProgressRow): string {
+  const name = row.safe_tool_name ?? "";
+  if (["Bun", "Bash", "Web search", "Read", "Edit", "Write"].includes(name)) return name;
+  return appCopy.guided.tools[name] ?? appCopy.guided.tools.fallback;
+}
+
 export function toolchainLabel(row: ProgressRow): string {
   if (row.safe_tool_name === "ask_user") return publicOperationTitle("ask_user", getAppLocale());
   if (row.safe_tool_name && row.safe_input_label) {
-    return `${row.safe_tool_name}: ${row.safe_input_label}`;
+    return `${publicToolLabel(row)}: ${row.safe_input_label}`;
   }
-  return row.safe_tool_name ?? row.safe_input_label ?? appCopy.interfaceDetails.tool;
+  return row.safe_tool_name
+    ? publicToolLabel(row)
+    : row.safe_input_label ?? appCopy.interfaceDetails.tool;
 }
 
 export function toolchainSummaryLabel(row: ProgressRow): string {
   if (row.safe_tool_name === "ask_user") return publicOperationTitle("ask_user", getAppLocale());
   if (row.safe_tool_name === "delegate_to_worker") return appCopy.interfaceStatus.workerCall;
   if (row.bridge_phase === "btcc_operation") {
-    return interfaceProgressLabel(row) || publicOperationTitle(row.safe_tool_name, getAppLocale());
+    const label = interfaceProgressLabel(row);
+    return label && label !== row.safe_tool_name ? label : toolchainLabel(row);
   }
   const detailCount = row.safe_detail_rows?.length ?? 0;
   const firstDetail = row.safe_detail_rows?.[0];
@@ -86,7 +95,7 @@ export function toolchainSummaryLabel(row: ProgressRow): string {
   }
   if (row.safe_tool_name && detailCount > 1) {
     return appCopy.conversation.work.toolStepsSummary(
-      row.safe_tool_name,
+      appCopy.guided.tools[row.safe_tool_name] ?? appCopy.guided.tools.fallback,
       detailCount,
     );
   }
@@ -119,11 +128,12 @@ export function toolchainGroupLabel(row: ProgressRow): string {
   ) {
     return appCopy.interfaceStatus.search;
   }
-  if (row.kind === "ran_command" || toolName === "Bash") return "Bash";
-  if (row.kind === "read") return toolName || appCopy.interfaceStatus.read;
+  if (toolName === "Bash") return "Bash";
+  if (row.kind === "ran_command") return appCopy.interfaceStatus.command;
+  if (row.kind === "read") return appCopy.interfaceStatus.read;
   if (row.kind === "edited") return appCopy.interfaceStatus.edit;
   if (row.kind === "dispatch") return appCopy.interfaceStatus.work;
-  if (toolName && !["Tool", "Used tool", "도구"].includes(toolName)) return toolName;
+  if (toolName) return appCopy.guided.tools[toolName] ?? appCopy.guided.tools.fallback;
   return appCopy.interfaceStatus.review;
 }
 

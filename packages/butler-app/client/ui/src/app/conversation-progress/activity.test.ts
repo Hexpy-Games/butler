@@ -10,7 +10,7 @@ const previousLocale = getAppLocale();
 beforeAll(() => setAppCopyLanguage("ko-KR"));
 afterAll(() => setAppCopyLanguage(previousLocale));
 
-test("unbound ordinary operations retain stable tool blocks without duplicate phase activity", () => {
+test("unbound ordinary operations share one activity while retaining every stable tool result", () => {
   const rows: ProgressRow[] = [
     operationRow({
       id: "operation-1",
@@ -41,7 +41,8 @@ test("unbound ordinary operations retain stable tool blocks without duplicate ph
   const first = projectTurnActivity(rows, "turn-unbound");
   const replay = projectTurnActivity([...rows, ...rows], "turn-unbound");
 
-  expect(first.phaseActivities).toHaveLength(0);
+  expect(first.phaseActivities).toHaveLength(1);
+  expect(first.phaseActivities[0]?.operations.map(row => row.tool_call_id)).toEqual(["tool-1", "tool-2"]);
   expect(first.workBlocks).toHaveLength(2);
   expect(first.workBlocks.flatMap((block) => block.rows.map((row) => row.tool_call_id)))
     .toEqual(["tool-1", "tool-2"]);
@@ -177,7 +178,7 @@ test("same-title activities retain their own tools when acceptance precedes the 
     operations: item.operations.map((row) => row.id),
   }))).toEqual([
     { id: "earlier", operations: ["earlier-tool"] },
-    { id: "current", operations: ["acceptance-tool", "current-tool"] },
+    { id: "current", operations: ["acceptance-tool", "current-tool", "unmatched-tool"] },
   ]);
 });
 

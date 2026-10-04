@@ -65,6 +65,13 @@ async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), 
     assert_eq!(complete["session_id"], child_id);
     assert_eq!(complete["result"]["status"], "success", "{complete}");
     assert_eq!(complete["approved_plan_completed"], 2);
+    assert!(
+        complete["result"]["summary"]
+            .as_str()
+            .unwrap()
+            .contains("키센스.txt"),
+        "Delivery must preserve decomposed filename bytes: {complete}"
+    );
     let activity = s.gw.get("/worker-activity?include_history=true").await?;
     assert_eq!(activity.data()["workers"][0]["worker_id"], worker);
     assert_direction(&s, &script, relation);

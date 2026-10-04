@@ -1,3 +1,4 @@
+import { projectTurnActivity } from "@/app/conversation-progress";
 import { appCopy, useAppLocale } from "@/app/copy";
 import type { MessageRecord } from "@/app/types";
 import type { RefreshFileUrls } from "@/hooks/useMessageFileSource";
@@ -19,6 +20,7 @@ export function AssistantMessageBody({ message, running, failureNotice, stewardP
   refreshFileUrls: RefreshFileUrls;
 }) {
   useAppLocale();
+  const hasPhaseActivity = projectTurnActivity(message.turn_activity_rows ?? [], message.turn_id).phaseActivities.length > 0;
   return (
     <>
       {!running && <CompletedTurnActivity
@@ -26,7 +28,7 @@ export function AssistantMessageBody({ message, running, failureNotice, stewardP
         turnId={message.turn_id}
         turnState={message.status}
       />}
-      {!running && <CompletedWorkBlocks
+      {!running && !hasPhaseActivity && <CompletedWorkBlocks
         blocks={message.work_blocks}
         turnId={message.turn_id}
       />}

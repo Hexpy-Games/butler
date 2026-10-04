@@ -2,7 +2,7 @@ use super::operation_input::TurnVersion;
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde_json::Value;
 
-use super::common::{canonical_json, error, route_text, state_text, stringify, stringify_record};
+use super::common::{error, route_text, state_text, stringify, stringify_record};
 use super::{StorageError, StorageResult};
 use crate::btcc::AuthorityLoopContinuation;
 use crate::btcc::StorageCode;
@@ -234,7 +234,8 @@ fn accept_final(
     let payload_value = serde_json::to_value(payload).map_err(|error| {
         StorageError::new(StorageCode::InvalidFinalPayload, error.to_string()).with_source(error)
     })?;
-    let payload_json = canonical_json(&payload_value)?;
+    // Delivery text is opaque: canonical identity normalizes Unicode, storage must not.
+    let payload_json = stringify(&payload_value)?;
     insert_immutable_record(
         connection,
         &payload.reference.id,

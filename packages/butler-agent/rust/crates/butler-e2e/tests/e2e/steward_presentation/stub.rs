@@ -146,7 +146,7 @@ fn child_item(step: usize, body: &Value, script: &Script) -> Value {
             "record_work_disposition",
             &json!({"work_id":work_id(body),"disposition":"completed","summary":"Approach B verified","action_updates":[{"action_key":"compare","status":"done"}],"remaining_actions":[],"followups":[]}),
         ),
-        _ => message("Approach B verified"),
+        _ => message("Approach B verified: 키센스.txt"),
     }
 }
 

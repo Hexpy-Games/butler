@@ -63,7 +63,6 @@ try {
     await history.waitFor();
     await history.click();
     await dialog.getByText("활동 화면 확인", { exact: true }).last().waitFor();
-    await dialog.locator('[data-test-class~="turn-work-collapsed"] [data-test-class="toggle-turn-activity-disclosure"]').click();
     await dialog.locator('[data-test-class~="turn-work-tool-group"] > button').click();
     const tools = dialog.locator('[data-test-class="turn-work-tool-detail-row"]');
     assert.equal(await tools.count(), 2, "observer keeps every tool row after completion");
@@ -89,7 +88,7 @@ try {
       await approval.screenshot({ path: join(output, `approval-${state}-${width}-${theme}.png`) });
       await page.getByRole("button", { name: "작업 기록", exact: true }).click();
       const observer = page.locator('[data-test-class="activity-layout-observer"]');
-      await observer.locator('[data-test-class~="turn-work-collapsed"] [data-test-class="toggle-turn-activity-disclosure"]').click();
+      await observer.locator('[data-test-class="turn-current-phase-activity"] [data-test-class="toggle-turn-activity-disclosure"]').click();
       await observer.locator('[data-test-class~="turn-work-tool-group"] > button').click();
       assert.equal(await observer.locator('[data-test-class="turn-work-tool-detail-row"]').count(), 2, `${state} observer lists all tools`);
       await observer.locator('[data-test-class="turn-work-tool-detail-row"]').last().waitFor({ state: "visible" });

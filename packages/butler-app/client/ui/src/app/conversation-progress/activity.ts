@@ -48,7 +48,7 @@ export function projectTurnActivity(
   const workBlocks = projectWorkBlocks(activityRows);
   const projectedActivities = phaseActivities.length > 0
     ? phaseActivities
-    : workBlocks.length > 0 ? [] : fallbackOrdinaryActivity(activityRows, turnId);
+    : fallbackOrdinaryActivity(activityRows, turnId);
   return {
     visibleRows,
     readModels,
@@ -147,6 +147,7 @@ export function projectActivityReadModels(rows: ProgressRow[]): ActivityReadMode
 
 function phaseActivityRows(rows: ProgressRow[]): PhaseActivity[] {
   const activities: PhaseActivity[] = [];
+  const authoredBlocks = new Set(rows.filter(isPhaseActivityRow).map((row) => row.semantic_block_id));
   const currentByBlock = new Map<string, PhaseActivity>();
   const operationsBeforeActivity = new Map<string, ProgressRow[]>();
   for (const row of rows) {
@@ -168,7 +169,8 @@ function phaseActivityRows(rows: ProgressRow[]): PhaseActivity[] {
       continue;
     }
     if (row.bridge_phase !== "btcc_operation" || !row.semantic_block_id) continue;
-    const activity = currentByBlock.get(row.semantic_block_id);
+    const activity = currentByBlock.get(row.semantic_block_id) ??
+      (!authoredBlocks.has(row.semantic_block_id) ? activities.at(-1) : undefined);
     if (activity) {
       activity.operations.push(row);
     } else {

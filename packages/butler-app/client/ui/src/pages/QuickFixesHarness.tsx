@@ -28,12 +28,16 @@ const rows: ProgressRow[] = [
   { id: "block-end", kind: "work_block", state: "delivered", safe_label: "자료 확인",
     work_block_id: "research", work_block_label: "자료 확인", work_block_phase: "completed" },
 ];
-const message: MessageRecord = { id: "answer", chat_id: "steward-fixture", turn_id: "child-turn",
+const defaultMessage: MessageRecord = { id: "answer", chat_id: "steward-fixture", turn_id: "child-turn",
   role: "assistant", status: "delivered", text: "자료 검색과 검사를 마쳤습니다.",
   created_at: "2026-10-03T00:00:10Z", work_blocks: projectTurnActivity(rows, "child-turn").workBlocks };
 
 /** Browser harness using product renderers and keyboard handlers; no provider calls. */
 export function QuickFixesHarness() {
+  const fixture = (window as Window & { butlerActivityFixture?: import("@/app/types").SessionView }).butlerActivityFixture;
+  const activityRows = fixture?.latest_turn?.progress?.safe_progress_rows ?? rows;
+  const message = fixture ? { ...defaultMessage, turn_activity_rows: activityRows,
+    work_blocks: projectTurnActivity(activityRows, "child-turn").workBlocks } : defaultMessage;
   const params = new URLSearchParams(window.location.search);
   const mode = params.get("mode") ?? "composer";
   const theme = params.get("theme") === "dark" ? "dark" : "light";
@@ -57,7 +61,7 @@ export function QuickFixesHarness() {
   useEffect(() => {
     setAppCopyLanguage(language);
     const turn = { ...HARNESS_SS03_OBSERVER_VIEW.latest_turn!, id: "child-turn",
-      state: params.get("state") === "running" ? "running" : "delivered", progress: { safe_progress_rows: rows } };
+      state: params.get("state") === "running" ? "running" : "delivered", progress: { safe_progress_rows: activityRows } };
     const session = { ...HARNESS_SS03_OBSERVER_VIEW, session_id: "steward-fixture",
       relation: { ...HARNESS_SS03_OBSERVER_VIEW.relation!, safe_title: "위임 작업" }, messages: [{ ...message, work_blocks: undefined }],
       latest_turn: turn, active_turn: turn.state === "running" ? turn : null };

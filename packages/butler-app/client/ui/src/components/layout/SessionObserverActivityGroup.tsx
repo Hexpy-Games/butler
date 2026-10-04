@@ -2,6 +2,7 @@ import type { SessionView } from "@/app/types.ts";
 import { projectTurnActivity, type PhaseActivity } from "@/app/conversation-progress";
 import { Stack } from "@/butler-ds";
 import { TurnActivityTimeline } from "@/components/conversation/TurnActivityTimeline.tsx";
+import { TurnActivityPanel } from "@/components/conversation/TurnActivityPanel";
 import { CurrentTurnStatus } from "@/components/conversation/CurrentTurnStatus.tsx";
 
 export type ObserverPhaseActivity = PhaseActivity & { turnId: string };
@@ -19,7 +20,9 @@ export function SessionObserverActivityGroup({ activities, active, state }: {
     <Stack gap="md">
       {activities.length > 0 ? <TurnActivityTimeline activities={activities} live={Boolean(active)}
         currentState={current?.semanticState ?? state} turnId={activities[0]?.turnId} /> : null}
-      {active && current ? <CurrentTurnStatus state={active.state}
+      {active && activities.length === 0 && current?.phaseActivities.length === 0 ? <TurnActivityPanel
+        rows={active.progress?.safe_progress_rows ?? []} state={active.state}
+        turnId={active.id} startedAt={active.created_at} /> : active && current ? <CurrentTurnStatus state={active.state}
         modelRoundWait={current.modelRoundWait} operation={current.operation}
         publicActivity={current.publicActivity}
         phaseLabel={current.phaseActivities.at(-1)?.summary}

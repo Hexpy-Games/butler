@@ -26,12 +26,13 @@ const defaultRows: ProgressRow[] = [{
 }, {
   id: "listing", kind: "searched", state: "delivered", safe_label: "파일 목록 확인",
   safe_tool_name: "list_files", safe_input_label: "C:\\Users\\test\\Downloads", tool_call_id: "listing-call",
-  work_block_id: "files",
+  work_block_id: "files", semantic_block_id: "activity-layout-step", bridge_phase: "btcc_operation",
   created_at: "2026-10-03T00:00:01.100Z",
 }, {
   id: "reading", kind: "read", state: "delivered", safe_label: "파일 읽기",
   safe_tool_name: "read_file", safe_input_label: "보고서.txt", tool_call_id: "reading-call",
-  work_block_id: "files",
+  work_block_id: "files", semantic_block_id: "activity-layout-step", bridge_phase: "btcc_operation",
+  interface_content: { title: { key: "toolTitle", parameters: { toolName: "read_file", target: "보고서.txt" } } },
   created_at: "2026-10-03T00:00:01.200Z",
 }, {
   id: "files-end", kind: "work_block", state: "delivered", safe_label: "파일 확인",
