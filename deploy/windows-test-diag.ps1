@@ -1,24 +1,45 @@
 param([string]$Path, [string]$PackageRoot = $PSScriptRoot, [string]$CsvPath)
 if (!$CsvPath) { $CsvPath = Join-Path $PackageRoot 'diag.csv' }
 $ErrorActionPreference = 'Stop'
+function Find-Diagnostics([string]$Root) {
+    if (!$Root) { return }
+    $direct = foreach ($relative in @('request-prefix-diagnostics.jsonl', 'metrics/request-prefix-diagnostics.jsonl',
+        'data-metrics/request-prefix-diagnostics.jsonl')) {
+        Get-Item -LiteralPath (Join-Path $Root $relative) -ErrorAction SilentlyContinue
+    }
+    if (@($direct).Count) { return $direct }
+    Get-ChildItem -LiteralPath $Root -Filter request-prefix-diagnostics.jsonl -File -Recurse -ErrorAction SilentlyContinue
+}
 if (!$Path) {
-    if ($env:BUTLER_DATA -and (Test-Path "$env:BUTLER_DATA/metrics/request-prefix-diagnostics.jsonl")) {
+    # Prefer the newest active launcher profile, before environment or saved runs.
+    $profiles = Get-ChildItem -LiteralPath $env:TEMP -Filter 'butler-win-protected-path-*' `
+        -Directory -ErrorAction SilentlyContinue | Sort-Object CreationTimeUtc -Descending
+    foreach ($profile in $profiles) {
+        $candidate = Join-Path $profile.FullName 'data'
+        if (@(Find-Diagnostics $candidate).Count) { $Path = $candidate; break }
+    }
+    if (!$Path -and $env:BUTLER_DATA -and @(Find-Diagnostics $env:BUTLER_DATA).Count) {
         $Path = $env:BUTLER_DATA
-    } else {
+    }
+    if (!$Path) {
         $saved = Join-Path (Split-Path $PackageRoot -Parent) 'logs'
-        $Path = Get-ChildItem $saved -Directory | Sort-Object Name -Descending |
-            Where-Object { Get-ChildItem $_.FullName -Filter request-prefix-diagnostics.jsonl -Recurse } |
-            Select-Object -First 1 -ExpandProperty FullName
+        $folders = Get-ChildItem -LiteralPath $saved -Directory -ErrorAction SilentlyContinue |
+            Sort-Object Name -Descending
+        foreach ($folder in $folders) {
+            if (@(Find-Diagnostics $folder.FullName).Count) { $Path = $folder.FullName; break }
+        }
     }
 }
 if (!$Path) { throw 'No request diagnostics. Supply -Path with a test data or saved logs folder.' }
-$files = @(Get-ChildItem -LiteralPath $Path -Filter request-prefix-diagnostics.jsonl -File -Recurse)
+$files = @(Find-Diagnostics $Path)
 if (!$files.Count) { throw 'No request diagnostic journal in the selected folder.' }
 # Streaming reads work while the Agent owns the log. Latest event per request
 # replaces its start, so retries and interrupted requests each remain one row.
 $requests = @{}
 foreach ($file in $files) {
-    $stream = [IO.File]::Open($file.FullName, 'Open', 'Read', 'ReadWrite')
+    try { $stream = [IO.File]::Open($file.FullName, 'Open', 'Read', 'ReadWrite') }
+    catch [IO.IOException] { continue }
+    catch [UnauthorizedAccessException] { continue }
     $reader = [IO.StreamReader]::new($stream)
     try {
         while ($null -ne ($line = $reader.ReadLine())) {
