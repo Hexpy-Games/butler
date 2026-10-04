@@ -151,6 +151,16 @@ jobs:
             turn::turn_01_reply_is_delivered_persisted_and_survives_restart -- --exact --test-threads=8 --nocapture 2>&1 |
             Tee-Object "$env:PREVIEW_ROOT/logs/stub-chat.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Terminal settlement without filesystem notifications
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
+        run: |
+          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
+          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e projection_settlement:: `
+            -- --test-threads=1 --nocapture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Stub chat and durable config under a long data path
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
         run: |
@@ -227,10 +237,15 @@ jobs:
           ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests windows_commands |
             Tee-Object "$env:PREVIEW_ROOT/logs/windows-commands.log"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Hosted terminal settlement live-event regression
+        if: ${{ !cancelled() }}
+        run: |
+          $env:BUTLER_E2E_BIN = "$env:PREVIEW_ROOT/artifacts/butler-agent.exe"
+          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests projection_settlement
       - name: Require installed verification harnesses
         if: ${{ !cancelled() }}
         run: |
-          $expected = @('windows_startup_xml','installed_preview','windows_commands')
+          $expected = @('windows_startup_xml','installed_preview','windows_commands','projection_settlement')
           $actual = @(Get-Content "$env:PREVIEW_ROOT/logs/completed-harnesses.txt")
           if ($actual.Count -ne $expected.Count -or (Compare-Object $expected $actual)) {
             throw "Incomplete verification: completed=$($actual -join ',')"
