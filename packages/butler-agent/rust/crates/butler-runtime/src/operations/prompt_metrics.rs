@@ -23,11 +23,12 @@ impl PromptUsageMetrics {
 
 impl PromptUsageMetricSink for PromptUsageMetrics {
     fn append(&self, input: PromptUsageMetricInput<'_>) -> Result<(), ModelRoundError> {
-        let Some(prompt_tokens) = input.prompt_tokens else {
+        if input.prompt_tokens.is_none() && input.prefix_diagnostics.is_none() {
             return Ok(());
-        };
-        if !prompt_tokens.is_finite()
-            || prompt_tokens < 0.0
+        }
+        if input
+            .prompt_tokens
+            .is_some_and(|value| !value.is_finite() || value < 0.0)
             || !input.cached_tokens.is_finite()
             || input.total_tokens.is_some_and(|value| !value.is_finite())
         {
@@ -49,7 +50,7 @@ impl PromptUsageMetricSink for PromptUsageMetrics {
         let budget = snapshot
             .as_ref()
             .or_else(|| attribution.and_then(|value| value.budget_state));
-        let mut line = event::line(&input, timestamp, prompt_tokens, budget)?;
+        let mut line = event::line(&input, timestamp, input.prompt_tokens, budget)?;
         line.push('\n');
         let data_root = input.butler_data.map(Path::new).unwrap_or(&self.data_root);
         let directory = data_root.join("metrics");

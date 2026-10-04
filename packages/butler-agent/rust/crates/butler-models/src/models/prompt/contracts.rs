@@ -147,6 +147,8 @@ pub struct PromptUsageMetricInput<'a> {
     pub cache_write_1h_tokens: Option<f64>,
     /// How the request was billed.
     pub auth_mode: Option<UsageAuthMode>,
+    /// Content-free fingerprints of the actual serialized request.
+    pub prefix_diagnostics: Option<&'a Value>,
 }
 
 /// How a provider request was billed.

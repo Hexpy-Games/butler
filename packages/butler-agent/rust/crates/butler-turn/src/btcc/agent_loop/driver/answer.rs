@@ -106,7 +106,8 @@ pub(super) async fn continue_answer(
         .map(Step::finished);
     }
     state.automatic_continuations += 1;
-    state.phase = super::super::contracts::LoopPhase::Working;
+    // A report correction cannot reopen settled execution. Explicit user
+    // steering reopens it through append_observations instead.
     record_continuation(input, state, "turn.continuation.requested", reason).await;
     let observation = state.feedback(reason);
     state.messages.push(ModelRoundMessage::user(

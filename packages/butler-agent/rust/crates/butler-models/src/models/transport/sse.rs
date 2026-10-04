@@ -171,6 +171,10 @@ impl CodexState {
         }
         if let Some(usage) = completed.get("usage") {
             let mut rebuilt = serde_json::json!({"input_tokens":usage.get("input_tokens"),"prompt_tokens":usage.get("input_tokens"),"total_tokens":usage.get("total_tokens"),"prompt_tokens_details":{"cached_tokens":usage.pointer("/input_tokens_details/cached_tokens"),"cache_write_tokens":usage.pointer("/input_tokens_details/cache_write_tokens")}});
+            rebuilt["provider_cached_tokens_present"] = usage
+                .pointer("/input_tokens_details/cached_tokens")
+                .is_some()
+                .into();
             // Reasoning tokens feed SessionView.usage; only the count is kept.
             if let Some(reasoning) = usage.pointer("/output_tokens_details/reasoning_tokens") {
                 rebuilt["output_tokens_details"] =

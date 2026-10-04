@@ -10,7 +10,7 @@ use butler_e2e::e2e::{
 use serde_json::json;
 use std::time::Duration;
 
-async fn setup(
+pub(super) async fn setup(
     mode: stub::Mode,
     access: Access,
 ) -> Result<
@@ -34,6 +34,8 @@ async fn setup(
     Ok((setup.start().await?, script, server))
 }
 
+pub(super) use stub::Mode;
+
 #[tokio::test]
 async fn checkpoint_open_disposition_and_progress_continue_until_work_is_done()
 -> Result<(), HarnessError> {
@@ -42,6 +44,13 @@ async fn checkpoint_open_disposition_and_progress_continue_until_work_is_done()
     let (id, turn) = s.turn("general", stub::REQUEST).await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
     let requests = script.requests.lock().unwrap().clone();
+    let metrics = super::token_metrics::report(&s, &requests, "Work/final replay")?;
+    assert!(
+        metrics
+            .iter()
+            .skip(1)
+            .all(|row| row["prefixDiagnostics"]["appendOnly"] == true)
+    );
     assert_eq!(requests.len(), 9, "open progress ended the turn");
     assert!(
         requests[5]["tools"]
@@ -262,14 +271,11 @@ mod stub {
     use axum::{Json, Router, extract::State, response::IntoResponse, routing::post};
     use butler_e2e::e2e::{HarnessError, matching, sanitize::Placeholders};
     use serde_json::{Value, json};
-    use std::{
-        fmt::Write,
-        sync::{Arc, Mutex},
-    };
+    use std::sync::{Arc, Mutex};
 
     pub(super) const REQUEST: &str = "Calculate the total and report the result.";
     #[derive(Clone, Copy)]
-    pub(super) enum Mode {
+    pub(crate) enum Mode {
         Progress,
         Empty,
         Reasoning,
@@ -280,8 +286,11 @@ mod stub {
         Todo,
         Prose,
         ApprovalRecovery,
+        FinalTools,
+        FinalEmptyTools,
+        Batched,
     }
-    pub(super) struct Script {
+    pub(crate) struct Script {
         pub requests: Mutex<Vec<Value>>,
         pub mode: Mode,
     }
@@ -315,7 +324,21 @@ mod stub {
                 requests.len() - 1
             };
             match script.mode {
-                Mode::Progress => progress(step, &body),
+                Mode::FinalTools if step == 8 || step == 9 => call(
+                    &format!("forbidden-{step}"),
+                    "write_file",
+                    &json!({"path":"final-mutation.txt","content":"forbidden"}),
+                ),
+                Mode::FinalEmptyTools if step == 8 => message(""),
+                Mode::FinalEmptyTools if step == 9 => call(
+                    "forbidden-9",
+                    "write_file",
+                    &json!({"path":"final-mutation.txt","content":"forbidden"}),
+                ),
+                Mode::Progress | Mode::FinalTools | Mode::FinalEmptyTools => progress(step, &body),
+                Mode::Batched => {
+                    super::super::token_cache::batched_reply(step, &body, progress, command, call)
+                }
                 Mode::Prose => {
                     message("<tool_call>call: read_file {requests:[{path:\"source\"}]}</tool_call>")
                 }
@@ -432,28 +455,6 @@ mod stub {
         json!({"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":text,"annotations":[]}]})
     }
     fn wire(item: &Value) -> String {
-        let mut events = vec![
-            json!({"type":"response.created","response":{"id":"resp_1","status":"in_progress","output":[]}}),
-            json!({"type":"response.output_item.added","output_index":0,"item":item}),
-        ];
-        if item["type"] == "function_call" {
-            events.push(json!({"type":"response.function_call_arguments.delta","item_id":item["id"],"output_index":0,"delta":item["arguments"]}));
-            events.push(json!({"type":"response.function_call_arguments.done","item_id":item["id"],"output_index":0,"arguments":item["arguments"]}));
-        } else if item["type"] == "message" {
-            events.push(json!({"type":"response.output_text.delta","item_id":item["id"],"output_index":0,"content_index":0,"delta":item["content"][0]["text"]}));
-        }
-        events.push(json!({"type":"response.output_item.done","output_index":0,"item":item}));
-        events.push(json!({"type":"response.completed","response":{"id":"resp_1","object":"response","status":"completed","model":"gpt-6-sol","output":[item],"usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120}}}));
-        let mut wire = String::new();
-        for (i, mut event) in events.into_iter().enumerate() {
-            event["sequence_number"] = json!(i);
-            write!(
-                wire,
-                "event: {}\ndata: {event}\n\n",
-                event["type"].as_str().unwrap()
-            )
-            .unwrap();
-        }
-        wire
+        super::super::token_cache::wire(item)
     }
 }
