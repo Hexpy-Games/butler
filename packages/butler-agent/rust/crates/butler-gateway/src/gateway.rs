@@ -33,7 +33,8 @@ use butler_runtime::operations::ProviderQuotaView;
 use tokio_util::sync::CancellationToken;
 
 pub use crate::gateway::inbound_queue::{
-    ClaimedInboundEvent, InboundQueue, InboundQueueCode, InboundQueueError, QueuedInboundEvent,
+    ClaimedInboundEvent, InboundQueue, InboundQueueCode, InboundQueueError,
+    InboundSettlementListener, QueuedInboundEvent,
 };
 pub use crate::gateway::message_file_store::AppMessageFiles;
 pub use application::{

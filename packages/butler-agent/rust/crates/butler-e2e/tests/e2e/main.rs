@@ -60,6 +60,7 @@ mod personalization_defaults;
 mod process_names;
 mod project_git;
 mod projection_backlog;
+mod projection_settlement;
 mod projects;
 mod queue_admission_shutdown;
 mod queue_notifications;

@@ -344,10 +344,6 @@ impl AppApplication {
         self.projection.drain().await
     }
 
-    pub fn transcript_append_listener(&self) -> crate::gateway::TranscriptAppendListener {
-        self.projection.append_listener()
-    }
-
     /// Finish any claimed queue admission while native enqueue is still ready.
     pub async fn stop_queue_dispatch(&self) -> Result<(), GatewayApplicationError> {
         match &self.queue_dispatcher {

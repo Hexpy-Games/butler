@@ -123,6 +123,10 @@ async fn operation(
     case: &Case,
     access: Access,
 ) -> Result<(Value, Duration), HarnessError> {
+    eprintln!(
+        "Starting Windows capability: access={access:?} tool={} refused={} args={}",
+        case.tool, case.refused, case.args
+    );
     script.select(case.clone());
     let accepted = s.gw.say(chat, provider::PROMPT).await?;
     let id = accepted_turn_id(&accepted)?;
@@ -133,7 +137,14 @@ async fn operation(
             &["waiting_for_form", "delivered", "failed"],
             Duration::from_secs(15),
         )
-        .await?;
+        .await;
+    if let Err(error) = &turn {
+        eprintln!(
+            "Windows capability wait failed: {error}; complete tool result={:?}",
+            script.result.lock().unwrap()
+        );
+    }
+    let turn = turn?;
     if turn_state(&turn) == "waiting_for_form" {
         assert!(!case.refused, "Refused operation must not request approval");
         assert_eq!(access, Access::AskFirst);

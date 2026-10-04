@@ -33,3 +33,21 @@ pub(super) fn transcript(
         let _ = sender.try_send(super::Command::Events);
     }
 }
+
+pub(super) fn settlement_listener(
+    inner: &std::sync::Arc<super::Inner>,
+) -> crate::gateway::InboundSettlementListener {
+    let owner = std::sync::Arc::downgrade(inner);
+    std::sync::Arc::new(move || {
+        if let Some(owner) = owner.upgrade() {
+            owner.pending.lock().terminal = true;
+            let _ = owner.sender.try_send(super::Command::Events);
+        }
+    })
+}
+
+pub(super) fn observe_filesystem() -> bool {
+    !(cfg!(debug_assertions)
+        && std::env::var("BUTLER_E2E_TIER").as_deref() == Ok("stub")
+        && std::env::var("BUTLER_E2E_DISABLE_PROJECTION_WATCH").as_deref() == Ok("1"))
+}

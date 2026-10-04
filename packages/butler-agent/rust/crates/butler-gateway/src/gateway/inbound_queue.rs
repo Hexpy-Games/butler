@@ -1,12 +1,16 @@
 //! Source-compatible durable inbound queue for the standalone native owner.
 
 mod error;
+#[cfg(debug_assertions)]
+mod fixture;
+mod observers;
 mod record;
 mod storage;
 #[cfg(test)]
 mod tests;
 
 pub use error::{InboundQueueCode, InboundQueueError};
+pub use observers::InboundSettlementListener;
 pub use record::{ClaimedInboundEvent, QueuedInboundEvent};
 
 use parking_lot::Mutex;
@@ -27,6 +31,7 @@ pub struct InboundQueue {
     owner_id: String,
     lane: Arc<Mutex<()>>,
     enqueue_wake: Arc<Notify>,
+    settlements: Arc<observers::Observers>,
 }
 
 pub(crate) type QueueResult<T> = Result<T, InboundQueueError>;
@@ -62,6 +67,8 @@ impl InboundQueue {
         item: ClaimedInboundEvent,
         metadata: Value,
     ) -> QueueResult<bool> {
+        #[cfg(debug_assertions)]
+        fixture::before_settlement(&self.root).await?;
         self.blocking(move |queue| queue.complete(&item, metadata))
             .await
     }
@@ -91,6 +98,7 @@ impl InboundQueue {
             owner_id: format!("{}:{}", std::process::id(), uuid::Uuid::new_v4()),
             lane: Arc::new(Mutex::new(())),
             enqueue_wake: Arc::new(Notify::new()),
+            settlements: Arc::default(),
         }
     }
 
@@ -114,6 +122,10 @@ impl InboundQueue {
 
     pub async fn wait_for_enqueue(&self) {
         self.enqueue_wake.notified().await;
+    }
+
+    pub fn observe_settlements(&self, listener: InboundSettlementListener) {
+        self.settlements.add(listener);
     }
 
     pub fn enqueue_idempotent(&self, envelope: JsonDocument) -> QueueResult<QueuedInboundEvent> {
@@ -153,7 +165,9 @@ impl InboundQueue {
 
     pub fn complete(&self, item: &ClaimedInboundEvent, metadata: Value) -> QueueResult<bool> {
         let _guard = self.lane.lock();
-        storage::settle(&self.root, item, "processed", None, metadata)
+        let accepted = storage::settle(&self.root, item, "processed", None, metadata)?;
+        self.settlements.settled(accepted);
+        Ok(accepted)
     }
 
     /// Settles a claimed record as failed with `error`; it is not retried.
@@ -164,7 +178,9 @@ impl InboundQueue {
         metadata: Value,
     ) -> QueueResult<bool> {
         let _guard = self.lane.lock();
-        storage::settle(&self.root, item, "failed", Some(error), metadata)
+        let accepted = storage::settle(&self.root, item, "failed", Some(error), metadata)?;
+        self.settlements.settled(accepted);
+        Ok(accepted)
     }
 
     /// Returns a claimed record to pending, metadata kept, for another attempt
