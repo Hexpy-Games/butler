@@ -1,9 +1,9 @@
+import type { CSSProperties } from "react";
 import type { Key, Track } from "../../heroTimeline";
 import { Tag } from "../../../Tag";
 import type { AnnotItem } from "./guides";
 import { Reveal, reveal, select, sweep } from "./Reveal";
 import c from "./ChapterHero.module.css";
-import { StrokeReveal, strokeTracks } from "./StrokeReveal";
 
 const px = (value: number) => `${Math.round(value * 10) / 10}px`;
 
@@ -24,13 +24,14 @@ function Steps({ id, text, tag = false }: { id: string; text: string[]; tag?: bo
 export function Annotations({ items, shown = false }: { items: AnnotItem[]; shown?: boolean }) {
   return (
     <span className={c.annots} data-annots="" data-og={shown ? "" : undefined} data-shown={shown ? "" : undefined} aria-hidden="true">
-      {items.flatMap((item) => [
-        ...item.guides.map((guide, j) => (guide.t === "path" ? (
-          guide.dashed ? <svg className={c.annotSvg} key={`${item.id}-${j}`}><path className={c.guidePath} d={guide.d} data-dashed="" data-t={`g-${item.id}-${j}`} /></svg>
-            : <StrokeReveal name={`g-${item.id}-${j}`} key={`${item.id}-${j}`}><path className={c.guidePath} d={guide.d} /></StrokeReveal>
-        ) : null)),
-        item.badge ? <StrokeReveal name={`bl-${item.id}`} key={`${item.id}-l`}><path className={c.leader} d={item.badge.leader.d} /></StrokeReveal> : null,
-      ])}
+      <svg className={c.annotSvg}>
+        {items.flatMap((item) => [
+          ...item.guides.map((guide, j) => (guide.t === "path"
+            ? <path className={c.guidePath} d={guide.d} data-dashed={guide.dashed ? "" : undefined} data-t={`g-${item.id}-${j}`} key={`${item.id}-${j}`} style={{ "--dash": px(guide.len) } as CSSProperties} />
+            : null)),
+          item.badge ? <path className={c.leader} d={item.badge.leader.d} data-t={`bl-${item.id}`} key={`${item.id}-l`} style={{ "--dash": px(item.badge.leader.len) } as CSSProperties} /> : null,
+        ])}
+      </svg>
       {items.flatMap((item) => item.guides.map((guide, j) => {
         if (guide.t === "hatch") {
           const { x, y, w, h } = guide.box;
@@ -83,7 +84,7 @@ export function annotTracks(item: AnnotItem, at: number, close: number, leave?: 
     const from = at + 0.12 * j;
     const name = `g-${item.id}-${j}`;
     if (guide.t === "path" && !guide.dashed) {
-      return strokeTracks(name, [...recede([{ at: 0, dash: guide.len, o: 0 }, { at: from, dash: guide.len, o: 0 }, { at: from + 0.05, o: 1 }, { at: from + 0.9, dash: 0, ease: "decelerate" }]), { at: close - 0.01 }, { at: close, dash: guide.len, o: 0 }]);
+      return [{ select: select(name), keys: [...recede([{ at: 0, dash: guide.len, o: 0 }, { at: from, dash: guide.len, o: 0 }, { at: from + 0.05, o: 1 }, { at: from + 0.9, dash: 0, ease: "decelerate" }]), { at: close - 0.01 }, { at: close, dash: guide.len, o: 0 }] }];
     }
     if (guide.t === "hatch") {
       const band = sweep(from, 0.8, close);
@@ -114,7 +115,7 @@ export function annotTracks(item: AnnotItem, at: number, close: number, leave?: 
       { select: select(`b-${item.id}`), keys: [...recede([{ at: 0, o: 0 }, { at: at - 0.01, o: 0 }, { at, o: 1 }]), { at: close - 0.01 }, { at: close, o: 0 }] },
       ...reveal(`br-${item.id}`, at, longest(item.badge.text), close),
       ...steps(`bs-${item.id}`, at, item.badge.text),
-      ...strokeTracks(`bl-${item.id}`, [...recede([{ at: 0, dash: len, o: 0 }, { at: at + 0.2, dash: len, o: 0 }, { at: at + 0.25, o: 1 }, { at: at + 1, dash: 0, ease: "decelerate" }]), { at: close - 0.01 }, { at: close, dash: len, o: 0 }]),
+      { select: select(`bl-${item.id}`), keys: [...recede([{ at: 0, dash: len, o: 0 }, { at: at + 0.2, dash: len, o: 0 }, { at: at + 0.25, o: 1 }, { at: at + 1, dash: 0, ease: "decelerate" }]), { at: close - 0.01 }, { at: close, dash: len, o: 0 }] },
     );
   }
   return tracks;
