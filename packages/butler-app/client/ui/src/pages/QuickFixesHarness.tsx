@@ -63,7 +63,7 @@ export function QuickFixesHarness() {
     const turn = { ...HARNESS_SS03_OBSERVER_VIEW.latest_turn!, id: "child-turn",
       state: params.get("state") === "running" ? "running" : "delivered", progress: { safe_progress_rows: activityRows } };
     const session = { ...HARNESS_SS03_OBSERVER_VIEW, session_id: "steward-fixture",
-      relation: { ...HARNESS_SS03_OBSERVER_VIEW.relation!, safe_title: "위임 작업" }, messages: [{ ...message, work_blocks: undefined }],
+      relation: { ...HARNESS_SS03_OBSERVER_VIEW.relation!, safe_title: fixture?.relation?.safe_title ?? "위임 작업" }, messages: [{ ...message, work_blocks: undefined }],
       latest_turn: turn, active_turn: turn.state === "running" ? turn : null };
     useButlerStore.setState({ settings, modelCatalog: HARNESS_MODEL_CATALOG,
       observerSessionId: null, sessionViews: { "steward-fixture": session }, refreshSessionObserver: async () => true });

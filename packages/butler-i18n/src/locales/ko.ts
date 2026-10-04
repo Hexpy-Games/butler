@@ -654,7 +654,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     modelWaiting: "모델 응답 대기",
     approvalWaiting: "허용 여부를 기다리고 있습니다.",
     answerWaiting: "답변을 기다리고 있습니다.",
-    workerCall: "Worker 호출",
+    workerCall: "작업 위임",
     work: "Work",
     search: "검색",
     lookup: "조회",

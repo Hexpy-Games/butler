@@ -655,7 +655,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     modelWaiting: "Waiting for model response",
     approvalWaiting: "Waiting for approval.",
     answerWaiting: "Waiting for your answer.",
-    workerCall: "Call worker",
+    workerCall: "Delegated work",
     work: "Work",
     search: "Search",
     lookup: "Read",
