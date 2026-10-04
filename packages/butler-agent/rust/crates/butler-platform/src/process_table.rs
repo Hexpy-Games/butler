@@ -96,7 +96,7 @@ impl ProcessView {
 }
 
 fn unavailable(error: co::ERROR) -> io::Error {
-    io::Error::from_raw_os_error(error.raw() as i32)
+    io::Error::from_raw_os_error(i32::from_ne_bytes(error.raw().to_ne_bytes()))
 }
 
 /// The host name (the DNS host name of this computer).
