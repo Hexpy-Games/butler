@@ -1,3 +1,4 @@
+import { refreshSessionViewSubscriptions } from "@/components/layout/hooks/useSessionViewSubscription.ts";
 import { useSessionAttentionNotifications } from "./useSessionAttentionNotifications";
 import { pairedDevicesChanged } from "@/app/securityDeviceEvents.ts";
 import { appCopy } from "@/app/copy.ts";
@@ -13,7 +14,6 @@ import {
   createLiveSessionReconciliation,
   eventSessionId,
   eventBelongsToCanonicalSessionView,
-  isSessionViewRefreshEvent,
 } from "./liveSessionReconciliation.ts";
 import {
   applyLiveNavigationEvent,
@@ -56,14 +56,6 @@ export function useLiveSessionEvents(): void {
       useButlerStore,
       () => activeChatIdRef.current,
     );
-    const observerReconciliation = createLiveSessionReconciliation({
-      getState: () => {
-        const state = useButlerStore.getState();
-        const id = state.observerSessionId ?? "";
-        return { activeChatId: id, sessionView: state.sessionViews[id],
-          refreshSessionView: state.refreshSessionObserver };
-      },
-    }, () => useButlerStore.getState().observerSessionId ?? "");
     const navigationReconciliation = createLiveNavigationReconciliation(
       useButlerStore,
     );
@@ -79,7 +71,7 @@ export function useLiveSessionEvents(): void {
         advanceEventCursor(eventCursorRef, event.id);
         navigationReconciliation.requestRefresh();
         reconciliation.requestRefresh();
-        observerReconciliation.requestRefresh(true);
+        refreshSessionViewSubscriptions();
         return;
       }
       const state = useButlerStore.getState();
@@ -152,11 +144,7 @@ export function useLiveSessionEvents(): void {
         activeSessionId,
         directChildSessionIds,
       );
-      const observerId = state.observerSessionId;
-      if (observerId && isSessionViewRefreshEvent(event) &&
-          (eventSessionId(event) === observerId || event.payload?.child_session_id === observerId)) {
-        observerReconciliation.requestRefresh(true);
-      }
+      refreshSessionViewSubscriptions(event);
       if (refreshesCanonicalParent) {
         reconciliation.requestRefresh(event.type === "subsession.changed");
         if (eventSessionId(event) !== activeSessionId) {
@@ -178,7 +166,7 @@ export function useLiveSessionEvents(): void {
         if (view.kind === "project-dashboard") useProjectDashboardState.getState().invalidate(view.projectId);
         navigationReconciliation.requestRefresh();
         reconciliation.requestRefresh();
-        observerReconciliation.requestRefresh(true);
+        refreshSessionViewSubscriptions();
       },
       subscribeResume: (resume) => subscribeAgentRuntimeState((state) => {
         if (state === "running") resume();
@@ -188,7 +176,7 @@ export function useLiveSessionEvents(): void {
       cancelled = true;
       disconnect();
       reconciliation.dispose();
-      observerReconciliation.dispose();
+
       navigationReconciliation.dispose();
     };
   }, []);

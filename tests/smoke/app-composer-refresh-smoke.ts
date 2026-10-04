@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { chromium, firefox, type Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { installComposerRenderProbe, readComposerRenderProbe, resetComposerRenderProbe } from "../support/composer-render-probe.ts";
+import { smokeBrowserArgs } from "../support/smoke-browser.ts";
 import { appCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import type { SessionSummary, SessionView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 
@@ -16,7 +17,7 @@ const server = await createNativeAppServer({
   stubReply: () => "Complete stub answer.",
 });
 const engine = process.env.BUTLER_SMOKE_BROWSER === "firefox" ? firefox : chromium;
-const browser = await engine.launch({ headless: true });
+const browser = await engine.launch({ headless: true, args: smokeBrowserArgs() });
 
 async function beginFrames(page: Page): Promise<void> {
   await page.evaluate(() => {
@@ -67,6 +68,16 @@ try {
   await editor.focus();
   await page.waitForFunction(() => document.getAnimations().every((animation) =>
     animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
+  // Drain the sidebar's 1.5s replay reconciliation before measuring input alone.
+  await page.waitForTimeout(1800);
+  await resetComposerRenderProbe(page);
+  await editor.pressSequentially(" typing probe", { delay: 100 });
+  const typingRenders = await readComposerRenderProbe(page);
+  assert.equal(typingRenders["composer-shell"] ?? 0, 0, "nonempty typing does not rerender the composer shell");
+  assert.deepEqual(Object.keys(typingRenders).filter(key => key.startsWith("outside:")), [],
+    "zero extra renders outside the composer per keystroke");
+  console.log(JSON.stringify({ phase: "typing-only", characters: 13, typingRenders }));
+  await editor.fill("D");
   await resetComposerRenderProbe(page);
   await beginFrames(page);
   const readsBefore = workStatusReads;

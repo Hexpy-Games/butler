@@ -1888,7 +1888,7 @@ try {
   await page.locator(testClass("composer-menu")).waitFor({ state: "visible" });
   // The fixture follows the safe Ask first default. Exercise the public menu
   // before measuring Full access, including its prefixed accessible name.
-  await page.locator(testClass("composer-menu")).getByRole("button")
+  await page.locator(testClass("composer-menu")).getByRole("menuitemradio")
     .filter({ has: page.getByText(appCopy.permissions.fullAccess, { exact: true }) }).click();
   await page.locator(testClass("composer-menu")).waitFor({ state: "hidden" });
   await page.getByRole("button", {
@@ -1900,67 +1900,34 @@ try {
     .locator(testClass("composer-menu"))
     .evaluate((menu) => {
       const content = menu.closest<HTMLElement>(
-        '[data-slot="popover-content"]',
+        '[data-slot="dropdown-menu-content"]',
       );
-      const title = menu.querySelector<HTMLElement>('[class*="title"]');
-      const item = menu.querySelector<HTMLElement>(
-        '[data-slot="option-menu-item"]',
-      );
-      const copy = item?.querySelector<HTMLElement>('[class*="copy"]');
-      const icon = item?.querySelector<HTMLElement>('[class*="icon"]');
+      const item = menu.querySelector<HTMLElement>('[data-slot="dropdown-menu-radio-item"]');
+      const icon = item?.querySelector<HTMLElement>(":scope > div svg");
       const label = item?.querySelector<HTMLElement>('[class*="label"]');
-      const description = item?.querySelector<HTMLElement>(
-        '[class*="description"]',
-      );
       const contentRect = content?.getBoundingClientRect();
       const menuRect = menu.getBoundingClientRect();
-      const titleRect = title?.getBoundingClientRect();
       const itemRect = item?.getBoundingClientRect();
       const iconRect = icon?.getBoundingClientRect();
       const labelRect = label?.getBoundingClientRect();
-      const descriptionRect = description?.getBoundingClientRect();
-      const contentStyle = content ? getComputedStyle(content) : null;
-      const copyStyle = copy ? getComputedStyle(copy) : null;
       return {
-        contentPaddingLeft: contentStyle
-          ? parseFloat(contentStyle.paddingLeft)
-          : Number.NaN,
-        copyDisplay: copyStyle?.display ?? "",
-        descriptionPlacement:
-          item?.getAttribute("data-description-placement") ?? "",
-        descriptionTop: descriptionRect?.top ?? Number.NaN,
+        contentPaddingLeft: content ? parseFloat(getComputedStyle(content).paddingLeft) : Number.NaN,
         iconCenterY: iconRect ? iconRect.top + iconRect.height / 2 : Number.NaN,
-        itemCenterY: itemRect ? itemRect.top + itemRect.height / 2 : Number.NaN,
-        itemInset:
-          contentRect && itemRect
-            ? itemRect.left - contentRect.left
-            : Number.NaN,
+        labelCenterY: labelRect ? labelRect.top + labelRect.height / 2 : Number.NaN,
+        itemInset: contentRect && itemRect ? itemRect.left - contentRect.left - parseFloat(getComputedStyle(content!).borderLeftWidth) : Number.NaN,
         itemTopGap: itemRect ? itemRect.top - menuRect.top : Number.NaN,
-        labelCenterY: labelRect
-          ? labelRect.top + labelRect.height / 2
-          : Number.NaN,
-        labelBottom: labelRect?.bottom ?? Number.NaN,
-        titleHeight: titleRect?.height ?? Number.NaN,
-        titleWidth: titleRect?.width ?? Number.NaN,
+        radioItems: menu.querySelectorAll('[role="menuitemradio"]').length,
         width: contentRect?.width ?? Number.NaN,
       };
     });
   assert(
     permissionMenuLayout.contentPaddingLeft <= 6 &&
-      permissionMenuLayout.copyDisplay === "grid" &&
-      permissionMenuLayout.descriptionPlacement === "block" &&
-      permissionMenuLayout.descriptionTop >= permissionMenuLayout.labelBottom &&
-      // Two-line menu items keep the icon on the label line (owner feedback,
-      // supersedes centering on the whole row from 39d64ae9).
-      Math.abs(
-        permissionMenuLayout.iconCenterY - permissionMenuLayout.labelCenterY,
-      ) <= 1.5 &&
+      Math.abs(permissionMenuLayout.iconCenterY - permissionMenuLayout.labelCenterY) <= 1.5 &&
       permissionMenuLayout.itemInset <= 6 &&
       permissionMenuLayout.itemTopGap <= 2 &&
-      permissionMenuLayout.titleHeight <= 1 &&
-      permissionMenuLayout.titleWidth <= 1 &&
+      permissionMenuLayout.radioItems === 3 &&
       permissionMenuLayout.width <= 340,
-    `permission menu should be a flat compact two-line list without visible title hierarchy or doubled padding: ${JSON.stringify(permissionMenuLayout)}`,
+    `permission menu should use compact DS radio items with aligned icons and tooltip descriptions: ${JSON.stringify(permissionMenuLayout)}`,
   );
   await page.mouse.click(80, 80);
   await page.waitForTimeout(400);
@@ -1976,7 +1943,7 @@ try {
     .click();
   await page.locator(testClass("composer-menu")).waitFor({ state: "visible" });
   await page
-    .getByRole("button", { name: appCopy.permissions.askFirst })
+    .getByRole("menuitemradio", { name: appCopy.permissions.askFirst })
     .click();
   await page.locator(testClass("composer-menu")).waitFor({ state: "hidden" });
   await page.waitForTimeout(180);
@@ -2147,10 +2114,7 @@ try {
       };
     });
   assert(
-    Math.abs(
-      modelMenuLayout.contentPaddingLeft -
-        permissionMenuLayout.contentPaddingLeft,
-    ) <= 0.5 &&
+    modelMenuLayout.contentPaddingLeft === 4 &&
       modelMenuLayout.itemInset <= 6 &&
       modelMenuLayout.sectionTitleInset <= 6 &&
       modelMenuLayout.hasSearch &&
@@ -2939,7 +2903,7 @@ try {
   await page.locator(testClass("composer-menu")).waitFor({ state: "visible" });
   await page
     .locator(testClass("composer-menu"))
-    .getByRole("button", { name: appCopy.permissions.readOnly })
+    .getByRole("menuitemradio", { name: appCopy.permissions.readOnly })
     .click();
   await page.locator(testClass("composer-menu")).waitFor({ state: "hidden" });
   await page
@@ -2950,19 +2914,15 @@ try {
     .locator(testClass("composer-menu"))
     .evaluate((menu, readOnlyLabel) => {
       const readOnlyItem = Array.from(
-        menu.querySelectorAll<HTMLElement>('[data-slot="option-menu-item"]'),
+        menu.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-radio-item"]'),
       ).find((item) => item.textContent?.includes(readOnlyLabel));
       const label = readOnlyItem?.querySelector<HTMLElement>(
-        '[data-slot="option-menu-item-label"]',
-      );
-      const description = readOnlyItem?.querySelector<HTMLElement>(
-        '[data-slot="option-menu-item-description"]',
+        '[class*="label"]',
       );
       const icon = readOnlyItem?.querySelector<HTMLElement>(
-        '[data-slot="option-menu-item-icon"]',
+        ':scope > div svg',
       );
       return {
-        description: description ? getComputedStyle(description).color : "",
         icon: icon ? getComputedStyle(icon).color : "",
         label: label ? getComputedStyle(label).color : "",
       };

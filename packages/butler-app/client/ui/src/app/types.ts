@@ -1162,6 +1162,9 @@ export interface StewardSessionSummaryView {
 }
 
 export interface SessionView {
+  approved_plan_revision?: number;
+  approved_plan_total?: number;
+  approved_plan_completed?: number;
   authority_requests?: unknown[];
   pending_questions?: PendingUserQuestions[];
   question_answers?: AnsweredUserQuestions[];

@@ -428,6 +428,7 @@ export interface AppCopy {
     noSkills: string;
     activeWork: string;
     allowedConversation: string;
+    grantScopeTag: string;
     grantCommandScope: string;
     grantTargetScope: string;
     revokeFailed: string;

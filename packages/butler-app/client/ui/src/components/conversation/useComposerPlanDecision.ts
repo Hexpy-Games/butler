@@ -88,7 +88,6 @@ export function useComposerPlanDecision(): ComposerPlanDecision | undefined {
   );
   const submitDecision = useButlerStore((state) => state.submitPlanDecision);
   const planMode = useComposerStore((state) => state.planMode);
-  const text = useComposerStore((state) => state.text);
   const setText = useComposerStore((state) => state.setText);
   const setEngaged = useComposerStore((state) => state.setEngaged);
   const textAreaRef = useComposerStore((state) => state.textAreaRef);
@@ -101,6 +100,7 @@ export function useComposerPlanDecision(): ComposerPlanDecision | undefined {
   if (!planMode || !plan || planQueued || activeTurn) return undefined;
 
   const decide = async (action: PlanDecisionAction) => {
+    const text = useComposerStore.getState().text;
     if (action === "instruct" && !text.trim()) return;
     setPending(true);
     const applied = await submitProjectedPlanDecision({

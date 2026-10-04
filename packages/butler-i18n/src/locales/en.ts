@@ -1,3 +1,4 @@
+import { additionalToolLabels } from "./tool-labels-en.ts";
 import type { AppCopy, BriefingFallbackCopy, NewChatBriefingSuggestion } from "../copy-contract.ts";
 
 /** Where an approval request acts: the quoted workspace label, or this workspace. */
@@ -311,7 +312,7 @@ export const enUsCopy: AppCopy = {
       interrupted: "Work was interrupted. You can resume it.", waitingForChildren: "Waiting for worker results.",
     },
     argumentLabels: { command: "Command", cmd: "Command", command_intent: "Command", output_count: "Outputs", path: "Path", file_path: "Path", target: "Target", objective: "Objective", query: "Query", pattern: "Pattern" },
-    tools: { read_project_source: "Read project source", web_search: "Web search", web_read: "Read web page", read_file: "Read file", list_files: "Find workspace files", grep_files: "Search workspace", write_file: "Write file", edit_file: "Edit file", tool_search: "Find available tools", tool_describe: "Check tool instructions", tool_call: "Run tool", run_command: "Run command", project_ledger_change: "Update project records", project_ledger_read: "Read project records", start_work: "Check request", continue_work: "Check progress", replace_work_plan: "Plan execution", record_work_checkpoint: "Check work progress", record_work_review: "Review results", plan_review: "Review plan", completion_review: "Review completion", record_work_disposition: "Record completion", work_tool: "Update work status", tool_work: "Tool work", fallback: "Use tool" },
+    tools: { ...additionalToolLabels, read_project_source: "Read project source", web_search: "Web search", web_read: "Read web page", read_file: "Read file", list_files: "Find workspace files", grep_files: "Search workspace", write_file: "Write file", edit_file: "Edit file", tool_search: "Find available tools", tool_describe: "Check tool instructions", tool_call: "Run tool", run_command: "Run command", project_ledger_change: "Update project records", project_ledger_read: "Read project records", start_work: "Check request", continue_work: "Check progress", replace_work_plan: "Plan execution", record_work_checkpoint: "Check work progress", record_work_review: "Review results", plan_review: "Review plan", completion_review: "Review completion", record_work_disposition: "Record completion", work_tool: "Update work status", tool_work: "Tool work", fallback: "Use tool" },
     checkingPrevious: "Checking previous work and its current state.", checkingRequest: "Clarifying the request and required outcome.", toolWorking: "Working with tools.", checkingInformation: "Checking information needed for the work.", commandExecuting: "Running the required workspace commands.", conceptionTitle: "Confirm request intent", planningNext: "Define the work order and validation criteria for the request.", reportTitle: "Report results",
     fileTitle: (action, target) => `${action}: ${target}`, conceptionSummary: text => text ? `Confirmed the request goal and scope: ${text}` : "Confirmed the request goal and scope.", workInProgress: text => `Working on ${text}.`, toolsSummary: text => text ? `Checking the required information with ${text}.` : "Working with the required tools.",
   },
@@ -498,6 +499,7 @@ export const enUsCopy: AppCopy = {
     projectSkills: "Project skills",
     noSkills: "No skills registered.",
     activeWork: "Active work",
+    grantScopeTag: "This conversation",
     grantCommandScope: "This conversation · same command and working folder",
     grantTargetScope: "This conversation · same target and input",
     allowedConversation: "Allowed in this conversation",

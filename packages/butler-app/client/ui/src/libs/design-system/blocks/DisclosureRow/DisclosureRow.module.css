@@ -1,6 +1,6 @@
 .root {
   /* One title line: chevron and icon boxes, and the panel's text inset. */
-  --disclosure-line: calc(var(--font-size-3) * var(--line-height-body));
+  --disclosure-line: calc(var(--typo-body-size) * var(--typo-body-line-height));
   --disclosure-inset: var(--space-sm);
 
   border-radius: var(--radius-control);
@@ -17,36 +17,26 @@
   margin-top: var(--space-xs);
 }
 
-.trigger {
+.trigger[data-slot="clickable"] {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--space-sm);
-  align-items: start;
+  grid-template-columns:
+    var(--disclosure-line) var(--disclosure-line) minmax(0, 1fr)
+    auto;
+  gap: var(--space-xs) var(--space-sm);
+  align-items: baseline;
   width: 100%;
   padding: var(--disclosure-inset);
   border-radius: inherit;
 }
 
-.trigger[data-slot="clickable"] {
-  display: grid;
-}
-
-/* Chevron and icon stay on the title line when a description wraps below. */
-.labelRegion {
-  display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
-  gap: var(--space-sm);
-  align-items: start;
-  min-width: 0;
-}
-
-.noIcon {
-  grid-template-columns: auto minmax(0, 1fr);
+.trigger.noIcon {
+  grid-template-columns: var(--disclosure-line) minmax(0, 1fr) auto;
 }
 
 .chevron,
 .icon {
   display: inline-grid;
+  align-self: start;
   width: var(--disclosure-line);
   height: var(--disclosure-line);
   place-items: center;
@@ -58,12 +48,8 @@
   display: block;
 }
 
-.content,
 .title {
   min-width: 0;
-}
-
-.title {
   overflow: hidden;
   color: var(--text-primary);
   text-overflow: ellipsis;
@@ -73,6 +59,23 @@
 .description,
 .meta {
   color: var(--text-tertiary);
+}
+
+.meta {
+  grid-column: 4;
+  grid-row: 1;
+}
+
+.noIcon .meta {
+  grid-column: 3;
+}
+
+.description {
+  grid-column: 3 / -1;
+}
+
+.noIcon .description {
+  grid-column: 2 / -1;
 }
 
 /* The panel starts under the title column (after the chevron) and keeps
@@ -89,4 +92,10 @@
 
 .open:not(.plain) {
   background: var(--selection);
+}
+
+.withIcon .panel {
+  padding-left: calc(
+    var(--disclosure-inset) + 2 * (var(--disclosure-line) + var(--space-sm))
+  );
 }

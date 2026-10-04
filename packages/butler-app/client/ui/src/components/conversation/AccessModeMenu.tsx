@@ -1,15 +1,15 @@
 import { useAppLocale } from "@/app/copy.ts";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
 } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { appShellTheme } from "@/app/utils.ts";
 import { useComposerStore } from "./composerStore";
 import { ComposerControlButton } from "./ComposerControlButton";
-import { GrantedPermissions } from "./GrantedPermissions";
+import { dedupePermissions, GrantedPermissions } from "./GrantedPermissions";
 import { AccessModeOptions } from "./AccessModeOptions";
 import {
   accessLabel,
@@ -30,12 +30,11 @@ export function AccessModeMenu() {
   const settings = useButlerStore((store) => store.settings);
   const sessionId = useButlerStore((store) => store.activeChatId);
   const projection = useButlerStore((store) => store.authorityApprovals);
-  const permissions = [...new Map((projection?.sessionId === sessionId ? projection.permissions ?? [] : [])
-    .map(item => [item.grant_ref, item])).values()];
+  const permissions = dedupePermissions(projection?.sessionId === sessionId ? projection.permissions ?? [] : []);
 
   return (
-    <Popover open={accessMenuOpen} onOpenChange={setAccessMenuOpen}>
-      <PopoverTrigger asChild>
+    <DropdownMenu open={accessMenuOpen} onOpenChange={setAccessMenuOpen}>
+      <DropdownMenuTrigger asChild>
         <ComposerControlButton
           aria-label={`${appCopy.composer.permission}: ${accessLabel(accessMode)}${permissions.length ? ` · ${appCopy.interfaceTemplates.allowedCount(permissions.length)}` : ""}`}
           compact={permissions.length ? "label" : "icon"}
@@ -48,15 +47,16 @@ export function AccessModeMenu() {
             {permissions.length ? ` · ${appCopy.interfaceTemplates.allowedCount(permissions.length)}` : ""}
           </span>
         </ComposerControlButton>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        alignOffset={24}
         theme={appShellTheme(settings)}
-        data-menu-size="compact"
         side="top"
         sideOffset={10}
       >
         <AccessModeOptions
+          menu
           value={accessMode}
           onSelect={(item) => {
             handleAccessModeChange(item);
@@ -64,7 +64,7 @@ export function AccessModeMenu() {
           }}
         />
         <GrantedPermissions permissions={permissions} sessionId={sessionId} />
-      </PopoverContent>
-    </Popover>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

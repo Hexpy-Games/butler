@@ -3914,13 +3914,13 @@ describe("app-client design system foundation", () => {
     expect(workerActivityRowStyles).toContain("worker-phase-pulse");
     expect(workerActivityRowStyles).toContain(".noIcon");
     expect(automationRunList).toContain("ActivityFeed");
-    expect(disclosureRow).toContain("className={cn(styles.labelRegion");
+    expect(disclosureRow).toContain("className={dsClass(cn(styles.trigger, !icon && styles.noIcon))}");
     expect(disclosureRow).toContain("stretch");
     expect(disclosureRow).toContain("onClick={onToggle}");
     expect(disclosureRow).toContain('surface?: "selection" | "plain"');
     expect(disclosureRow).toContain("data-surface={surface}");
-    expect(disclosureRowStyles).toContain(
-      "grid-template-columns: minmax(0, 1fr) auto",
+    expect(disclosureRowStyles).toMatch(
+      /grid-template-columns:\s*var\(--disclosure-line\) var\(--disclosure-line\) minmax\(0, 1fr\)\s*auto;/u,
     );
     expect(disclosureRowStyles).toContain(".noIcon");
     expect(disclosureRowStyles).toContain(".open:not(.plain)");

@@ -50,7 +50,7 @@ export const stories: ShowcaseStory[] = [
     name: "Tool call (selection surface)",
     states: ["expanded"],
     render: (context) => (
-      <Toggle icon={<Wrench size="md" />} title={text(context).search} description={text(context).files}>
+      <Toggle icon={<Wrench size="md" />} title={text(context).search} description={text(context).files} meta={text(context).evidence}>
         <Typo.Caption>{text(context).result}</Typo.Caption>
       </Toggle>
     ),
