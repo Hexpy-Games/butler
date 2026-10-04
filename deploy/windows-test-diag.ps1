@@ -51,12 +51,16 @@ $rows | Format-Table Session,Kind,Round,Phase,Input,Cached,'Cache%','LCP%',Diffe
 $totals = @($rows | Group-Object SessionHash | ForEach-Object {
     $known = @($_.Group | Where-Object { $null -ne $_.Input })
     $inputTotal = ($known | Measure-Object Input -Sum).Sum
-    $cachedTotal = ($_.Group | Measure-Object Cached -Sum).Sum
+    $cacheKnown = @($_.Group | Where-Object { $null -ne $_.Cached })
+    $unpaired = @($_.Group | Where-Object { ($null -ne $_.Input) -xor ($null -ne $_.Cached) })
+    $outputKnown = @($_.Group | Where-Object { $null -ne $_.Output })
+    $cachedTotal = if ($cacheKnown.Count) { ($cacheKnown | Measure-Object Cached -Sum).Sum } else { $null }
     [pscustomobject][ordered]@{
         Session = $_.Group[0].Session; Requests = $_.Count; Reported = $known.Count
         Input = $inputTotal; Cached = $cachedTotal
-        'Cache%' = if ($inputTotal -gt 0) { [math]::Round(100.0 * $cachedTotal / $inputTotal,2) } else { $null }
-        Output = ($_.Group | Measure-Object Output -Sum).Sum; SessionHash = $_.Name
+        'Cache%' = if ($inputTotal -gt 0 -and $unpaired.Count -eq 0) { [math]::Round(100.0 * $cachedTotal / $inputTotal,2) } else { $null }
+        Output = if ($outputKnown.Count) { ($outputKnown | Measure-Object Output -Sum).Sum } else { $null }
+        SessionHash = $_.Name
     }
 })
 $totals | Format-Table Session,Requests,Reported,Input,Cached,'Cache%',Output -AutoSize | Out-Host

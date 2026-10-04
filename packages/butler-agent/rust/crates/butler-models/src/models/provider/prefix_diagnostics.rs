@@ -228,8 +228,13 @@ pub(super) fn cached_tokens_present(response: &Value) -> Value {
 
 /// Keep missing provider fields distinct from a reported zero.
 pub(super) fn reported_usage(prefix: &mut Value, response: &Value) {
-    prefix["providerReportedCachedTokens"] = cached_tokens(response);
-    prefix["providerCachedTokensFieldPresent"] = cached_tokens_present(response);
+    let cached_present = cached_tokens_present(response);
+    prefix["providerReportedCachedTokens"] = if cached_present == false {
+        Value::Null
+    } else {
+        cached_tokens(response)
+    };
+    prefix["providerCachedTokensFieldPresent"] = cached_present;
     prefix["providerReportedInputTokens"] = [
         "/usage/input_tokens",
         "/usage/prompt_tokens",
@@ -239,6 +244,21 @@ pub(super) fn reported_usage(prefix: &mut Value, response: &Value) {
     .find_map(|path| response.pointer(path).filter(|value| value.is_number()))
     .cloned()
     .unwrap_or(Value::Null);
+    if prefix["providerId"] == "anthropic"
+        && let Some(input) = prefix["providerReportedInputTokens"].as_f64()
+    {
+        prefix["providerReportedInputTokens"] = json!(
+            input
+                + response
+                    .pointer("/usage/cache_read_input_tokens")
+                    .and_then(Value::as_f64)
+                    .unwrap_or(0.0)
+                + response
+                    .pointer("/usage/cache_creation_input_tokens")
+                    .and_then(Value::as_f64)
+                    .unwrap_or(0.0)
+        );
+    }
     prefix["providerReportedOutputTokens"] = [
         "/usage/output_tokens",
         "/usage/completion_tokens",
