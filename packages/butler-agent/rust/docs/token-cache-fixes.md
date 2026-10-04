@@ -74,15 +74,17 @@ Prompt budget ratchet: all **21 profiles** stay at or below win-fixes-5 counts; 
 
 Builds of the touched agent/E2E crates and the offline example passed. Validation commands run from `packages/butler-agent/rust`, each under `crates/butler-e2e/scripts/isolated-run.sh` (fresh temporary HOME/BUTLER_DATA; real Rust caches preserved). Cargo uses `+1.91.0 -j 8`; no concurrent cargo builds; E2Es use at most four test threads.
 
-- `cargo fmt --all` and formatting check.
+- `cargo fmt --all` and `cargo fmt --all -- --check`: PASS.
 - `cargo clippy -p butler-agent -p butler-models -p butler-turn -p butler-runtime -p butler-e2e --all-targets -- -D warnings`: PASS.
 - Stub E2E token_cache, turn_continuation, tools_effects, tools, mcp, steward_presentation and usage: **27 passed**, including the prompt budget ratchet.
 - Existing guided-host tests: **12 passed**; provider serialization/transport/prompt tests: **19 passed**; prompt usage golden-format test: **1 passed**. Existing agent-loop/guided-turn/Work guard tests: **27 passed** after updating the old final-tool-choice assertion to require preservation (no test added or weakened).
 - Additional assertion of exact command stdout/exit code in the batched E2E: **1 passed**.
-- Existing usage_scale and monitoring_scale E2Es: **2 passed**. Usage at 44,000 rows/640 transcripts: warm 24h **24.07 ms**, session **5.28 ms**, all-time **13.27 ms**, cold all-time **692.67 ms**. Monitoring at 600 chats/5,000 turns/300,000 events/50,000 Works: work-status p50 **4.32 ms**, p95 **24.97 ms**, session-view polling p95 **126.94 ms**. Existing tests assert full counts, latest state and scoped results. Existing debug timing mode reports budgets as unenforced; all measured timings are below those unchanged budgets.
+- Existing usage_scale and monitoring_scale E2Es: **2 passed**. Usage at 44,000 rows/640 transcripts: warm 24h **24.07 ms**, session **5.28 ms**, all-time **13.27 ms**, cold all-time **692.67 ms**. Monitoring at 600 chats/5,000 turns/300,000 events/50,000 Works: work-status p50 **4.32 ms**, p95 **24.97 ms**, session-view polling p95 **126.94 ms**. Existing tests assert full counts, latest state and scoped results. Existing debug timing mode reports budgets as unenforced; all measured usage timings are below those unchanged budgets; the monitoring test reports timings without a latency assertion.
 - `cargo run -p butler-source-check -- .`: PASS; 499 non-E2E tests, zero test-count, function-length, architecture, platform and E2E-gate violations.
 - `git diff --check`: PASS. Final `git fetch origin`: main remains `ec138feae`, win-fixes-5 remains `a1eae9119`.
 - No TS/UI files changed; the conditional Bun/UI checks in AGENTS.md do not apply. No PR, tag or coordinator CI was created/run.
+
+During implementation, the first final-guard E2E found blocked calls missing from App activities; recording/announcing unexecuted calls fixed that failure. Initial build/clippy visibility and assertion-helper errors were corrected. The first budget/shape checks rejected longer instructions and stale decreasing function baselines; wording was revised within the original budgets and only lower function baselines were recorded. Final checks above passed without retries of flaky tests, skipped tests or increased limits. The isolated commit initially lacked Git author configuration after changing HOME; the existing identity was passed explicitly, without bypassing hooks.
 
 The generic replay input is JSONL with explicit `model`, `scope`, `label`, `instructions`, `tools` and semantic `messages`; stdout contains only aliased labels, token estimates and diagnostic hashes/lengths. Build/run `cargo build -p butler-models --example prefix_replay`, then feed the private reconstruction to `target/debug/examples/prefix_replay`. Passing an instruction-prefix JSON file instead prints per-profile token counts. Keep private source/reconstruction outside the repository and delete it after the measurement.
 
