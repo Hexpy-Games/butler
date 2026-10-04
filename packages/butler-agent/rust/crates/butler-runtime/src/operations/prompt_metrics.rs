@@ -62,9 +62,6 @@ impl PromptUsageMetricSink for PromptUsageMetrics {
         let data_root = input.butler_data.map(Path::new).unwrap_or(&self.data_root);
         let directory = data_root.join("metrics");
         create_dir_all(&directory).map_err(io_failure)?;
-        if let Some(prefix) = input.prefix_diagnostics.filter(|value| !value.is_null()) {
-            write_diagnostic(data_root, prefix, timestamp)?;
-        }
         let mut line = event::line(&input, timestamp, input.prompt_tokens, budget)?;
         line.push('\n');
         append_line(&directory.join("prompt-cache-usage.jsonl"), &line)
