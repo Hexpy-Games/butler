@@ -62,12 +62,11 @@ fn trimmed(value: &str) -> &str {
 
 fn safe_path(value: &str, artifact: bool) -> Option<String> {
     let normalized = trimmed(value).replace('\\', "/");
+    if !artifact && std::path::Path::new(&normalized).is_absolute() {
+        return Some(normalized);
+    }
     if normalized.is_empty()
         || normalized.starts_with('/')
-        || (normalized.len() >= 3
-            && normalized.as_bytes()[0].is_ascii_alphabetic()
-            && normalized.as_bytes()[1] == b':'
-            && normalized.as_bytes()[2] == b'/')
         || normalized
             .split('/')
             .any(|part| part.is_empty() || part == "." || part == "..")
@@ -75,13 +74,7 @@ fn safe_path(value: &str, artifact: bool) -> Option<String> {
     {
         return None;
     }
-    Some(if artifact {
-        normalized
-    } else {
-        butler_core::json::Utf16Slice::new(&normalized, 0, 1024)
-            .utf8_lossy()
-            .into_owned()
-    })
+    Some(normalized)
 }
 
 /// Child results precede local edits; the latest file record wins by path.

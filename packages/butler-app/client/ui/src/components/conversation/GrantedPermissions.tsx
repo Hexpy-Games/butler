@@ -2,7 +2,7 @@ import { useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import type { ConversationPermissionView } from "@/app/types.ts";
 import { useButlerStore } from "@/app/store.ts";
-import { DisclosureRow, OptionMenu, OptionMenuItem, ScrollArea, Stack, Typo, Tooltip } from "@/butler-ds";
+import { DisclosureRow, OptionMenuSection, OptionMenuItem, ScrollArea, Stack, Typo, Tooltip } from "@/butler-ds";
 
 export function GrantedPermissions({ permissions, sessionId }: {
   permissions: ConversationPermissionView[]; sessionId: string | null;
@@ -16,7 +16,7 @@ export function GrantedPermissions({ permissions, sessionId }: {
   return <DisclosureRow title={appCopy.interfaceTemplates.grantedItems(grants.length)}
     open={open} onToggle={() => setOpen(value => !value)} data-test-class="granted-permissions">
     <ScrollArea maxHeight="xs" dataTestClass="granted-permissions-scroll">
-      <OptionMenu title={appCopy.interfaceDetails.allowedConversation} size="fit">
+      <OptionMenuSection title={null}>
         {grants.map(item => {
           const label = appCopy.guided.tools[item.capability ?? ""] ?? appCopy.guided.tools.fallback;
           const target = item.target || appCopy.interfaceDetails.allowedConversation;
@@ -33,7 +33,7 @@ export function GrantedPermissions({ permissions, sessionId }: {
               finally { setRevoking(undefined); }
             }} />;
         })}
-      </OptionMenu>
+      </OptionMenuSection>
     </ScrollArea>
     {failed ? <Typo.Caption role="alert">{appCopy.interfaceDetails.revokeFailed}</Typo.Caption> : null}
   </DisclosureRow>;

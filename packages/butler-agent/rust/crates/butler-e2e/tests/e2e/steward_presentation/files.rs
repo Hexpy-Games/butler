@@ -16,6 +16,8 @@ pub(super) async fn assert_delegated_files(
     let artifacts = answer["artifacts"].as_array().unwrap();
     assert_eq!(artifacts.len(), 1, "{answer}");
     assert_eq!(artifacts[0]["title"], "report.html");
+    assert!(artifacts[0]["file_id"].is_string());
+    assert!(artifacts[0]["url"].is_string());
     let view = s.gw.get("/session-view?session_id=general").await?;
     let rows = view.data()["steward_children"][0]["latest_turn"]["progress"]["safe_progress_rows"]
         .as_array()

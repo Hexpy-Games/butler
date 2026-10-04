@@ -161,7 +161,7 @@ fn operation_target(call: &super::contracts::ModelRoundToolCall) -> Option<Strin
     let keys: &[&str] = match call.name.as_str() {
         "run_command" => &["command"],
         "write_file" | "edit_file" | "read_file" => &["path"],
-        "list_files" | "grep_files" => &["path", "directory"],
+        "list_files" | "grep_files" => &["path", "directory", "root"],
         _ => return None,
     };
     keys.iter()
@@ -170,6 +170,7 @@ fn operation_target(call: &super::contracts::ModelRoundToolCall) -> Option<Strin
         .or_else(|| {
             call.arguments
                 .get("requests")
+                .or_else(|| call.arguments.get("edits"))
                 .and_then(Value::as_array)
                 .map(|requests| {
                     requests

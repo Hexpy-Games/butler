@@ -72,7 +72,7 @@ pub(super) fn candidate(
         allowed_roots.push(PathBuf::from(root));
     }
     allowed_roots.push(butler_data.join("artifacts/public-data"));
-    let candidates = artifacts(message.get("artifacts"), &allowed_roots);
+    let candidates = file_candidates(&message, &mut allowed_roots);
     let changed_files = message
         .get("changedFiles")
         .and_then(Value::as_array)
@@ -140,7 +140,7 @@ pub(super) fn worker_materialization(
         roots.push(PathBuf::from(root));
     }
     roots.push(butler_data.join("artifacts/public-data"));
-    let candidates = artifacts(message.get("artifacts"), &roots);
+    let candidates = file_candidates(&message, &mut roots);
     Ok(
         (!candidates.is_empty()).then(|| ArtifactMaterializationRequest {
             allowed_roots: roots,
@@ -148,6 +148,29 @@ pub(super) fn worker_materialization(
             existing_content_keys: Vec::new(),
         }),
     )
+}
+
+/// Native journal closeout supplies changedFiles after a committed file effect.
+/// Permit that exact output file, never its folder or an arbitrary artifact path.
+fn file_candidates(
+    message: &Map<String, Value>,
+    roots: &mut Vec<PathBuf>,
+) -> Vec<ArtifactFileCandidate> {
+    let base_roots = roots.clone();
+    let outputs = message.get("changedFiles").and_then(Value::as_array);
+    for file in outputs.into_iter().flatten() {
+        if let Some(path) = file.get("path").and_then(Value::as_str) {
+            let path = PathBuf::from(path);
+            if path.is_absolute() {
+                roots.push(path);
+            } else if butler_turn::workspace::safe_workspace_path(path.to_str().unwrap_or(""))
+                .is_some()
+            {
+                roots.extend(base_roots.iter().map(|root| root.join(&path)));
+            }
+        }
+    }
+    artifacts(message.get("artifacts"), roots)
 }
 
 fn delivery_metadata(metadata: &Map<String, Value>) -> Option<Map<String, Value>> {

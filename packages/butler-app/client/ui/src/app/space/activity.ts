@@ -14,7 +14,7 @@ export function spaceActivity(
   session?: SessionSummary,
 ): "working" | "attention" | null {
   const state = session?.active_turn_state ?? "";
-  if (session?.attention_required || attention.has(state)) return "attention";
+  if (session?.attention_required || state === "waiting_for_form") return "attention";
   if (session?.running_delegated_work) return "working";
-  return active.has(state) ? "working" : null;
+  return attention.has(state) ? "attention" : active.has(state) ? "working" : null;
 }

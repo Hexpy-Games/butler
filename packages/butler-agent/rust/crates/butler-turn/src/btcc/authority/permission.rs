@@ -106,7 +106,7 @@ fn permission(facts: PermissionFacts<'_>) -> AuthorityResult<ConversationPermiss
     );
     Ok(ConversationPermission {
         capability: capability.into(),
-        target: permission_target(facts, command),
+        target: butler_core::public_text::sanitize_public_delta(&permission_target(facts, command)),
         cwd: command.then(|| {
             input
                 .get("cwd")
@@ -152,7 +152,7 @@ fn permission_target(facts: PermissionFacts<'_>, command: bool) -> String {
     let keys: &[&str] = if command {
         &["command"]
     } else {
-        &["path", "directory"]
+        &["path", "directory", "root"]
     };
     for key in keys {
         if let Some(value) = facts.input.get(key).and_then(Value::as_str) {

@@ -11,7 +11,7 @@ export function SpaceRowMeta({ row }: { row: SpaceRowData }) {
   const locale = useAppLocale();
   const tab = useOrganization(s => s.tab);
   useMinuteClock(tab === "recent");
-  const status = interfaceProgressLabel({
+  const status = row.session?.attention_required ? appCopy.space.attention : interfaceProgressLabel({
     safe_label: row.session?.safe_status_label ?? "",
     interface_content: row.session?.safe_status_content,
     interface_label_key: row.session?.safe_status_label_key,

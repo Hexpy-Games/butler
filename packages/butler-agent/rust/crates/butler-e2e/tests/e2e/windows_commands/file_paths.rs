@@ -276,6 +276,46 @@ async fn run(access: Access) -> Result<(), HarnessError> {
             .clone()
             .expect("model receives tool result");
         verify(&home, &installation, index, &output)?;
+        let view = s.gw.get("/session-view?session_id=general").await?;
+        let rows = view.data()["latest_turn"]["progress"]["safe_progress_rows"]
+            .as_array()
+            .unwrap()
+            .clone();
+        let row = rows
+            .iter()
+            .find(|row| row["safe_tool_name"] == case.tool)
+            .unwrap();
+        let target = if case.tool == "read_file" {
+            &case.args["requests"][0]["path"]
+        } else if matches!(case.tool, "list_files" | "grep_files") {
+            &case.args["root"]
+        } else if case.tool == "run_command" {
+            &case.args["command"]
+        } else {
+            &case.args["path"]
+        };
+        assert_eq!(
+            row["safe_input_label"], *target,
+            "Exact tool target survives projection"
+        );
+        if matches!(case.tool, "write_file" | "edit_file") {
+            let messages = s.gw.messages("general").await?;
+            let answer = messages
+                .iter()
+                .rev()
+                .find(|m| m["role"] == "assistant")
+                .unwrap();
+            let changed = answer["changed_files"].as_array().unwrap();
+            assert_eq!(changed.len(), 1, "Committed file must surface: {answer}");
+            let artifacts = answer["artifacts"].as_array().unwrap();
+            assert_eq!(
+                artifacts.len(),
+                1,
+                "Committed file must be downloadable: {answer}"
+            );
+            assert!(artifacts[0]["file_id"].is_string());
+            assert!(artifacts[0]["url"].is_string());
+        }
         butler_e2e::assert_wall_clock_budget!(elapsed, Duration::from_secs(5), case.tool);
         eprintln!(
             "ABSOLUTE-FILES {access:?} {} {:.1}ms",

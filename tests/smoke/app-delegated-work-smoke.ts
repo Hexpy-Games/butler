@@ -32,6 +32,7 @@ parent.steward_children = [child];
 let phase: "running" | "delivered" | "cancelled" | "failed" = "running";
 let stopRequested = false;
 let awaiting = false;
+let ownState = "delivered";
 const grants = Array.from({ length: 20 }, (_, i) => ({ grant_ref: `grant-${i}`, capability: i % 2 ? "read_file" : "run_command",
   target: i % 2 ? `C:/workspace/report-${i}.html` : `node --check report-${i}.html`, cwd: "C:/workspace",
   title: "internal", description: "internal", created_at: new Date().toISOString() }));
@@ -58,6 +59,7 @@ try {
     phase = "running";
     stopRequested = false;
     awaiting = false;
+    ownState = "delivered";
     await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "en", appearance_theme: theme,
       desktop_notifications: { enabled: true, assistant_messages: false, task_completions: false },
       wallpaper: { source: wallpaper ? { kind: "live", module: "butler.bloom", params: { colors: "monochrome" } } : { kind: "none" } } }) });
@@ -66,7 +68,7 @@ try {
     await installNotificationReplay(page, server.url);
     await page.route("**/authority-requests?**", route => route.fulfill({ json: { protocol_version: "butler.app.v1", data: { session_id: "general", requests: [], permissions: [...grants, grants[0]] } } }));
     await page.route("**/navigation", route => route.fulfill({ json: { protocol_version: "butler.app.v1", data: { ...navigation,
-      chats: navigation.chats.map(s => ({ ...s, active_turn_state: "delivered", running_delegated_work: phase === "running", attention_required: awaiting && s.id === "general" })) } } }));
+      chats: navigation.chats.map(s => ({ ...s, active_turn_state: ownState, running_delegated_work: phase === "running", attention_required: awaiting && s.id === "general" })) } } }));
     await page.route("**/session-view?**", route => {
       requests++;
       const id = new URL(route.request().url()).searchParams.get("session_id");
@@ -139,6 +141,7 @@ try {
       await page.getByRole("tooltip").filter({ hasText: "node --check report-0.html" }).waitFor();
       const scroll = page.locator('[data-test-class="granted-permissions-scroll"]');
       assert(await scroll.evaluate(el => el.clientHeight >= 100 && el.clientHeight <= 180 && el.scrollHeight > el.clientHeight), "DS scroll bounds the grant list");
+      assert(await scroll.evaluate(el => el.scrollWidth <= el.clientWidth + 1), "grant text stays within the menu");
     }
     await page.keyboard.press("Escape");
     await pill.click();
@@ -189,9 +192,12 @@ try {
       assert.equal(await dialog.getByRole("button", { name: "Stop", exact: true }).count(), 0);
       await page.keyboard.press("Escape");
       for (const terminal of ["delivered", "failed"] as const) {
+        ownState = terminal;
         phase = "running";
         await page.reload();
         await pill.waitFor();
+        if (!await row.isVisible()) await page.getByRole("button", { name: appCopy.titlebar.showLeftPanel, exact: true }).click();
+        await spinner.waitFor();
         phase = terminal;
         await page.evaluate(childId => (window as unknown as { __emitWorkEvent: (event: unknown) => void }).__emitWorkEvent({
           id: 101, type: "subsession.changed", payload: { session_id: "general", child_session_id: childId },
@@ -203,7 +209,7 @@ try {
     await page.close();
   }
   console.log(JSON.stringify({ ok: true, baseline, timingsMs: timings, maxMs: Math.max(...timings), requests,
-    checks: baseline ? ["before-snapshots"] : ["parent-ended-child-running", "reload", "stop-accepted-still-running", "confirmed-stop-all-surfaces-500ms", "collapsed-summary", "complete", "fail", "no-idle-polling"] }));
+    checks: baseline ? ["before-snapshots"] : ["parent-ended-child-running", "reload", "stop-accepted-still-running", "confirmed-stop-all-surfaces-500ms", "collapsed-summary", "complete", "fail", "no-idle-polling", "attention-notification-and-clear", "collapsed-grants", "deduplicated-exact-targets", "target-tooltip", "bounded-scroll"] }));
 } finally {
   await browser.close();
   await server.stop();
