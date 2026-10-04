@@ -219,9 +219,12 @@ async fn operation(
             assert_eq!(operation["targets"], examples);
         } else if case.tool == "run_command" {
             assert_eq!(operation["command"], case.args["command"]);
+            let cwd = case.args["cwd"].as_str().filter(|path| *path != ".");
             assert_eq!(
                 operation["targets"],
-                json!([s.sandbox.home.join("Downloads")])
+                json!([
+                    cwd.map_or_else(|| s.sandbox.root.clone(), |path| s.sandbox.root.join(path))
+                ])
             );
         }
         if case.tool == "write_file" {
