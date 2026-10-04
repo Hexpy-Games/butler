@@ -10,15 +10,23 @@ pub(super) fn run(data: &Path) -> Result<(), HarnessError> {
     }
     // Repeat neither a failed gate nor a partial integrity check: compare two
     // reader implementations on the same full database, then run the real gate.
-    for mapped in [0_i64, 8_589_934_592] {
+    for (mapped, cache_kib) in [
+        (0_i64, 2_000),
+        (8_589_934_592, 2_000),
+        (0, 65_536),
+        (8_589_934_592, 65_536),
+    ] {
         let db = sqlite::open_with_flags(
             data.join("agent-runtime/btcc.sqlite"),
             OpenFlags::SQLITE_OPEN_READ_ONLY,
         )?;
         db.pragma_update(None, "mmap_size", mapped)?;
+        db.pragma_update(None, "cache_size", -cache_kib)?;
         let before = usage::sample(std::process::id())?;
         let start = Instant::now();
-        eprintln!("BTCC-VALIDATION-PROBE mapped={mapped} phase=begin io={before:?}");
+        eprintln!(
+            "BTCC-VALIDATION-PROBE mapped={mapped} cache_kib={cache_kib} phase=begin io={before:?}"
+        );
         let (send, receive) = std::sync::mpsc::channel();
         let monitor = std::thread::spawn(move || {
             while matches!(
@@ -26,7 +34,7 @@ pub(super) fn run(data: &Path) -> Result<(), HarnessError> {
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout)
             ) {
                 eprintln!(
-                    "BTCC-VALIDATION-PROBE mapped={mapped} phase=reading elapsed_ms={} io={:?}",
+                    "BTCC-VALIDATION-PROBE mapped={mapped} cache_kib={cache_kib} phase=reading elapsed_ms={} io={:?}",
                     start.elapsed().as_millis(),
                     usage::sample(std::process::id())
                 );
@@ -43,7 +51,7 @@ pub(super) fn run(data: &Path) -> Result<(), HarnessError> {
             .optional()?;
         assert_eq!(foreign, None);
         eprintln!(
-            "BTCC-VALIDATION-PROBE mapped={mapped} phase=complete elapsed_ms={} io={:?}",
+            "BTCC-VALIDATION-PROBE mapped={mapped} cache_kib={cache_kib} phase=complete elapsed_ms={} io={:?}",
             start.elapsed().as_millis(),
             usage::sample(std::process::id())?
         );
