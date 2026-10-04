@@ -92,6 +92,9 @@ const storeState = {
   view: { kind: "session" as const },
   liveConnectionLost: false,
   activeChatId: "session-live-events",
+  observerSessionId: null as string | null,
+  sessionViews: {} as Record<string, { session_id: string }>,
+  refreshSessionObserver: async () => true,
   navigation: initialNavigation(),
   sessionView: {
     session_id: "session-live-events",

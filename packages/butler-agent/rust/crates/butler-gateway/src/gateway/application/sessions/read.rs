@@ -279,6 +279,7 @@ fn project(row: SessionRow) -> Result<AppSessionSummary, AppStorageError> {
         last_activity_at: row.updated_at,
         last_message_preview: preview,
         active_turn_state: row.state,
+        running_delegated_work: false,
         safe_status_label: label.map(str::to_owned),
         safe_status_label_key: None,
         safe_status_label_parameters: parameters,

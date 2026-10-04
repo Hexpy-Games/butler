@@ -773,6 +773,7 @@ export interface SessionSummary {
   };
   last_activity_at: string;
   active_turn_state?: string;
+  running_delegated_work?: boolean;
   pinned: boolean;
   archived: boolean;
   last_message_preview?: string;
@@ -1641,6 +1642,7 @@ export interface TimelineEvent {
     chat_id?: string;
     role?: MessageRecord["role"];
     session_id?: string;
+    child_session_id?: string;
     session?: unknown;
     turn_id?: string;
     state?: string;

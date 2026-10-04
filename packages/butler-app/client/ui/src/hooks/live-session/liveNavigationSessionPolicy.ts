@@ -12,6 +12,7 @@ const SAFE_SESSION_KEYS = new Set([
   "last_activity_at",
   "last_message_preview",
   "active_turn_state",
+  "running_delegated_work",
   "safe_status_label",
   "unread_count",
   "pinned",
@@ -49,6 +50,7 @@ export function safeSessionSummary(value: unknown): SessionSummary | null {
     ("last_message_preview" in safeValue &&
       typeof safeValue.last_message_preview !== "string") ||
     ("active_turn_state" in safeValue && typeof safeValue.active_turn_state !== "string") ||
+    ("running_delegated_work" in safeValue && typeof safeValue.running_delegated_work !== "boolean") ||
     ("safe_status_label" in safeValue && typeof safeValue.safe_status_label !== "string") ||
     ("unread_count" in safeValue && !isNonNegativeNumber(safeValue.unread_count)) ||
     ("automation_target_count" in safeValue &&
@@ -93,6 +95,9 @@ export function safeSessionSummary(value: unknown): SessionSummary | null {
   }
   if (typeof safeValue.active_turn_state === "string") {
     summary.active_turn_state = safeValue.active_turn_state;
+  }
+  if (typeof safeValue.running_delegated_work === "boolean") {
+    summary.running_delegated_work = safeValue.running_delegated_work;
   }
   if (typeof safeValue.safe_status_label === "string") {
     summary.safe_status_label = safeValue.safe_status_label;

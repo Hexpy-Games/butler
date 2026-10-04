@@ -146,6 +146,7 @@ pub struct AppSessionSummary {
     pub last_message_preview: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub active_turn_state: Option<String>,
+    pub running_delegated_work: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub safe_status_label: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
