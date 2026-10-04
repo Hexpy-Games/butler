@@ -207,11 +207,7 @@ impl AppServer {
                 runtime.project_ledger.clone(),
             )),
             work_streams: runtime.work_streams.clone(),
-            subsessions: Arc::new(crate::host::AppSubsessions::new(
-                runtime.subsessions.clone(),
-                runtime.conversations.clone(),
-                runtime.progress.clone(),
-            )),
+            subsessions: Arc::new(crate::host::AppSubsessions::for_runtime(runtime)),
             branch_conversations: Arc::new(AppBranchConversations::new(
                 runtime.conversations.clone(),
             )),

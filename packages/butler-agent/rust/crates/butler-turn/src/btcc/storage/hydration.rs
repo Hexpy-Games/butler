@@ -83,11 +83,12 @@ fn hydrate(connection: &Connection, row: TurnRow) -> StorageResult<TurnRecord> {
     let semantic_state = parse_state(&row.semantic_state)?;
     let checkpoint = load_checkpoint(connection, &row, semantic_state)?;
     let delivery_outbox = load_outbox(connection, row.delivery_outbox_id.as_deref())?;
-    let final_payload = row
+    let mut final_payload = row
         .final_payload_json
         .as_deref()
         .map(hydrate_final_payload)
         .transpose()?;
+    restore_delivery_text(final_payload.as_mut(), delivery_outbox.as_ref())?;
     let turn = TurnRecord {
         wake_identity: load_wake_identity(connection, &row.turn_id)?,
         model_selection: typed(
@@ -134,6 +135,27 @@ fn hydrate(connection: &Connection, row: TurnRow) -> StorageResult<TurnRecord> {
     };
     assert_record(&turn)?;
     Ok(turn)
+}
+
+/// Older canonical payload JSON normalized Unicode while the Outbox retained
+/// the original answer. Recover only the exact bytes pinned by the content hash;
+/// unrelated mismatches still fail the lifecycle assertion.
+fn restore_delivery_text(
+    payload: Option<&mut FinalPayload>,
+    outbox: Option<&DeliveryOutbox>,
+) -> StorageResult<()> {
+    let Some((payload, outbox)) = payload.zip(outbox) else {
+        return Ok(());
+    };
+    if payload.content != outbox.content
+        && payload.reference == outbox.final_payload_ref
+        && crate::btcc::identity::digest(&outbox.content) == payload.content_sha256
+        && super::common::canonical_json(&serde_json::Value::String(payload.content.clone()))?
+            == super::common::canonical_json(&serde_json::Value::String(outbox.content.clone()))?
+    {
+        payload.content.clone_from(&outbox.content);
+    }
+    Ok(())
 }
 
 fn typed<T: serde::de::DeserializeOwned>(value: &str, code: StorageCode) -> StorageResult<T> {

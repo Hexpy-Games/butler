@@ -212,7 +212,7 @@ jobs:
       - name: Native service recovery, full shutdown queue and memory reset
         if: ${{ inputs.native-loop && !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
         run: |
-          foreach ($test in @('service_supervision', 'queue_shutdown', 'service_diagnostics', 'memory_reset')) {
+          foreach ($test in @('service_supervision', 'queue_shutdown', 'service_diagnostics', 'memory_reset', 'unicode_delivery', 'delegate_followup', 'steward_presentation', 'ask_user')) {
             $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
             $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
             New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null

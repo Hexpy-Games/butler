@@ -15,9 +15,7 @@ use std::time::{Duration, Instant};
 async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (url, script, server) = stub::start().await?;
-    let setup = setup("STEWARD-PRESENTATION", &url)
-        .await?
-        .env("BUTLER_E2E_HOLD_TOOL", "read_file");
+    let setup = setup("STEWARD-PRESENTATION", &url)?.env("BUTLER_E2E_HOLD_TOOL", "read_file");
     std::fs::write(setup.sandbox.data.join("a.txt"), "Approach A")?;
     std::fs::write(setup.sandbox.data.join("b.txt"), "Approach B")?;
     *script.workspace.lock().unwrap() = setup.sandbox.data.display().to_string();
@@ -106,9 +104,7 @@ async fn wait_result(s: &butler_e2e::e2e::scenario::Scenario) -> Result<Value, H
 async fn interrupted_steward_exposes_resume_and_keeps_the_same_turn() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (url, script, server) = stub::start().await?;
-    let setup = setup("STEWARD-RESUME", &url)
-        .await?
-        .env("BUTLER_E2E_INTERRUPT_TOOL", "read_file");
+    let setup = setup("STEWARD-RESUME", &url)?.env("BUTLER_E2E_INTERRUPT_TOOL", "read_file");
     std::fs::write(setup.sandbox.data.join("a.txt"), "Approach A")?;
     std::fs::write(setup.sandbox.data.join("b.txt"), "Approach B")?;
     *script.workspace.lock().unwrap() = setup.sandbox.data.display().to_string();
@@ -222,13 +218,10 @@ fn diagnostic(script: &stub::Script) -> String {
         .join("\n")
 }
 
-async fn setup(id: &str, url: &str) -> Result<Setup, HarnessError> {
+fn setup(id: &str, url: &str) -> Result<Setup, HarnessError> {
     // Worker profile choices use the configured local gateway endpoint.
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let port = listener.local_addr()?.port().to_string();
-    drop(listener);
     Ok(Setup::new(id)?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CODEX_BASE_URL", url)
-        .env("BUTLER_APP_SERVER_PORT", port))
+        .env("BUTLER_APP_SERVER_PORT", "0"))
 }

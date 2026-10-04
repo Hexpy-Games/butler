@@ -19,18 +19,16 @@ pub(crate) struct AppSubsessions {
     service: Arc<SubsessionService>,
     conversations: Arc<AgentConversationStore>,
     progress: StorageProgressPublication,
+    btcc: butler_turn::btcc::Btcc,
 }
 
 impl AppSubsessions {
-    pub(crate) fn new(
-        service: Arc<SubsessionService>,
-        conversations: Arc<AgentConversationStore>,
-        progress: StorageProgressPublication,
-    ) -> Self {
+    pub(crate) fn for_runtime(runtime: &crate::host::AgentRuntime) -> Self {
         Self {
-            service,
-            conversations,
-            progress,
+            service: runtime.subsessions.clone(),
+            conversations: runtime.conversations.clone(),
+            progress: runtime.progress.clone(),
+            btcc: runtime.btcc.clone(),
         }
     }
 }
@@ -112,8 +110,9 @@ impl AppSubsessionPort for AppSubsessions {
         relation_id: String,
     ) -> ApplicationFuture<serde_json::Value> {
         let service = self.service.clone();
+        let btcc = self.btcc.clone();
         Box::pin(async move {
-            service
+            let accepted = service
                 .cancel(SubsessionCancelRequest {
                     parent_session_id,
                     parent_turn_id: "app-steward-control".into(),
@@ -123,7 +122,13 @@ impl AppSubsessionPort for AppSubsessions {
                     child_role: SessionRole::Steward,
                 })
                 .await
-                .map_err(|error| map_error(&error))
+                .map_err(|error| map_error(&error))?;
+            // Persist the stop request before fencing the running model. The
+            // queued stop still owns durable cancellation and result delivery.
+            if let Some(turn_id) = accepted["child_turn_id"].as_str() {
+                btcc.interrupt_turn(turn_id);
+            }
+            Ok(accepted)
         })
     }
 

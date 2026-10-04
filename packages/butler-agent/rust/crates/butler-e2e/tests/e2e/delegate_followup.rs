@@ -27,9 +27,6 @@ async fn stopped_delegation_followup_starts_with_prior_context() -> Result<(), H
 }
 async fn followup(stopped: bool) -> Result<(), HarnessError> {
     let (url, script, server) = stub::start(stopped).await?;
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let port = listener.local_addr()?.port().to_string();
-    drop(listener);
     let s = Setup::new(if stopped {
         "FOLLOWUP-STOPPED"
     } else {
@@ -37,7 +34,7 @@ async fn followup(stopped: bool) -> Result<(), HarnessError> {
     })?
     .stub_cassette(Cassette::load("TOOL-01")?)
     .env("BUTLER_CODEX_BASE_URL", &url)
-    .env("BUTLER_APP_SERVER_PORT", &port)
+    .env("BUTLER_APP_SERVER_PORT", "0")
     .start()
     .await?;
     s.turn("general", stub::OWNER).await?;
