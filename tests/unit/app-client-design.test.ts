@@ -4040,10 +4040,9 @@ describe("app-client design system foundation", () => {
         "packages/butler-app/client/ui/src/components/inspector/WorkersPanel.tsx",
       ),
     ).toContain("workActivityToolsForBlock(block)");
-    expect(messageRowStyles).toContain(
-      '+ [data-test-class~="turn-result-section"]',
-    );
-    expect(messageRowStyles).toContain("margin-top: var(--space-4)");
+    expect(messageRowStyles).toContain("flex-direction: column");
+    expect(messageRowStyles).toContain("gap: var(--space-lg)");
+    expect(messageRowStyles).toContain(".turnGroup > .row");
     expect(filteredSelectStyles).toContain("color: var(--text-primary)");
     expect(filteredSelectStyles).toContain("color: var(--text-secondary)");
     expect(filteredSelectStyles).toContain('[data-selected="true"]');

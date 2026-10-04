@@ -56,16 +56,25 @@
 }
 
 .assistant .body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
   padding: 2px 0 var(--space-xs);
   color: var(--text-primary);
   white-space: normal;
 }
 
-.assistant
-  .body
-  > [data-test-class~="turn-work-collapsed"]
-  + [data-test-class~="turn-result-section"] {
-  margin-top: var(--space-4);
+.assistant .body > .footer,
+.assistant .body > .statusRow {
+  margin-top: 0;
+}
+
+.turnGroup > .row {
+  padding-bottom: 0;
+}
+
+.turnGroup > .assistant > .body {
+  padding-block: 0;
 }
 
 .activity .body {
