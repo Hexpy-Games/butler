@@ -46,9 +46,10 @@ fn start(root: &Path, signals: Vec<PathBuf>) -> io::Result<FileChangeWatch> {
     let failed = failure_slot.clone();
     let watched = root.clone();
     let watched_signals = signals.clone();
+    let mut written_signals = std::collections::HashSet::new();
     let mut watcher =
         notify::recommended_watcher(move |event: notify::Result<notify::Event>| match event {
-            Ok(event) if !matches!(event.kind, notify::EventKind::Access(_)) => {
+            Ok(event) if durable_change(&event, &watched_signals, &mut written_signals) => {
                 if event.need_rescan()
                     || event
                         .paths
@@ -112,4 +113,38 @@ fn canonical_signals(signals: Vec<PathBuf>) -> io::Result<Vec<PathBuf>> {
             ))
         })
         .collect::<io::Result<Vec<_>>>()
+}
+
+/// A writable SQLite handle can close without writing. Only forward its close
+/// after a data modification, so reader connections cannot wake themselves.
+/// The final close also catches transactions whose earlier write notice arrived
+/// before the new canonical revision became visible.
+fn durable_change(
+    event: &notify::Event,
+    signals: &[PathBuf],
+    written: &mut std::collections::HashSet<PathBuf>,
+) -> bool {
+    match event.kind {
+        notify::EventKind::Modify(notify::event::ModifyKind::Data(_)) => {
+            written.extend(
+                event
+                    .paths
+                    .iter()
+                    .filter(|path| signals.contains(path))
+                    .cloned(),
+            );
+            true
+        }
+        notify::EventKind::Access(notify::event::AccessKind::Close(
+            notify::event::AccessMode::Write,
+        )) => {
+            let mut changed = false;
+            for path in &event.paths {
+                changed |= written.remove(path);
+            }
+            changed
+        }
+        notify::EventKind::Access(_) => false,
+        _ => true,
+    }
 }
