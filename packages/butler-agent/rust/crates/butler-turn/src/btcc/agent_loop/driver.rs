@@ -34,7 +34,9 @@ use super::state::{
 };
 use super::tool_batch::{self, PreparedCall};
 
+mod answer;
 mod batch;
+use answer::*;
 use batch::*;
 
 /// Everything one loop execution borrows from the turn runtime.
@@ -69,6 +71,7 @@ impl Step {
 
 /// The assistant's reply for one iteration.
 struct Reply {
+    nonfinal: bool,
     text: String,
     calls: Vec<ModelRoundToolCall>,
     /// Tool names the model wrote as text, sorted and deduplicated.
@@ -89,7 +92,15 @@ pub(super) async fn run(mut input: Invocation<'_>) -> Result<AgentLoopResult, Ag
         .await
         .map_err(propagated)?;
     loop {
-        match run_iteration(&input, &mut state, &prepared, context.as_ref()).await? {
+        let step = match run_iteration(&input, &mut state, &prepared, context.as_ref()).await {
+            Err(AgentLoopError::Propagate(error))
+                if error.code() == "turn_continuation_budget_exhausted" =>
+            {
+                return finish_limit(&input, &state, error.message()).await;
+            }
+            result => result?,
+        };
+        match step {
             Step::Continue => {}
             Step::Finished(result) => return Ok(*result),
         }
@@ -139,6 +150,7 @@ async fn run_iteration(
     };
     let reply = match &resumed_batch {
         Some(batch) => Reply {
+            nonfinal: false,
             text: String::new(),
             calls: batch.calls.clone(),
             text_call_names: Vec::new(),
@@ -156,13 +168,11 @@ async fn run_iteration(
             }
         }
     };
-    reject_text_tool_calls(input, state, &reply, iteration).await?;
-    if reply.calls.is_empty() && !reply.text_call_names.is_empty() {
-        discard_round_text(prepared);
-        return Ok(Step::Continue);
+    if let Some(step) = reject_text_tool_calls(input, state, prepared, &reply, iteration).await? {
+        return Ok(step);
     }
     if reply.calls.is_empty() {
-        return settle_answer(input, state, prepared, reply.text, iteration).await;
+        return settle_answer(input, state, prepared, reply, iteration).await;
     }
     discard_round_text(prepared);
     run_tool_batch(
@@ -202,6 +212,7 @@ async fn obtain_reply(
             .messages
             .push(assistant_message(String::new(), vec![call.clone()], None));
         return Ok(Reply {
+            nonfinal: false,
             text: String::new(),
             calls: vec![call],
             text_call_names: Vec::new(),
@@ -220,6 +231,7 @@ async fn obtain_reply(
         state.messages.push(message);
     }
     Ok(Reply {
+        nonfinal: result.nonfinal,
         text,
         calls,
         text_call_names,
@@ -238,11 +250,12 @@ fn discard_round_text(prepared: &PreparedPolicy) {
 async fn reject_text_tool_calls(
     input: &Invocation<'_>,
     state: &mut State,
+    prepared: &PreparedPolicy,
     reply: &Reply,
     iteration: u32,
-) -> Result<(), AgentLoopError> {
+) -> Result<Option<Step>, AgentLoopError> {
     if reply.text_call_names.is_empty() {
-        return Ok(());
+        return Ok(None);
     }
     let disposition = input
         .policy
@@ -257,99 +270,17 @@ async fn reject_text_tool_calls(
         .map_err(propagated)?;
     match disposition {
         TextCallDisposition::Continue(observation) => {
+            if reply.calls.is_empty() {
+                return continue_answer(input, state, prepared, &observation)
+                    .await
+                    .map(Some);
+            }
             let observation = state.feedback(&observation);
             state
                 .messages
                 .push(ModelRoundMessage::user(observation, None));
-            Ok(())
+            Ok(None)
         }
         TextCallDisposition::Fail(error) => Err(propagated(error)),
     }
-}
-
-/// Handles a reply without tool calls: synthesis, actionable empty-reply feedback,
-/// then the Work review that accepts the answer or sends the model back.
-async fn settle_answer(
-    input: &Invocation<'_>,
-    state: &mut State,
-    prepared: &PreparedPolicy,
-    mut text: String,
-    iteration: u32,
-) -> Result<Step, AgentLoopError> {
-    if let Some(synthesized) = synthesize_answer(input, state, prepared, &text).await? {
-        discard_round_text(prepared);
-        text = synthesized;
-    }
-    if text.is_empty() {
-        discard_round_text(prepared);
-        state.empty_recovery_used = true;
-        let observation = state.feedback(
-            "Your previous response was empty. Continue and provide the required result.",
-        );
-        state
-            .messages
-            .push(ModelRoundMessage::user(observation, None));
-        return Ok(Step::Continue);
-    }
-    let review = input
-        .policy
-        .review_final_candidate(GuidedInvocation::from(input), &text, iteration)
-        .await
-        .map_err(propagated)?;
-    match review {
-        CandidateDisposition::Continue(observation) => {
-            if observation.trim().is_empty() {
-                return Err(propagated(super::invalid_contract(
-                    BtccCode::BtccAgentLoopFinalCandidateObservationMissing,
-                )));
-            }
-            discard_round_text(prepared);
-            state.phase = super::contracts::LoopPhase::Working;
-            let observation = state.feedback(&observation);
-            state
-                .messages
-                .push(ModelRoundMessage::user(observation, None));
-            Ok(Step::Continue)
-        }
-        CandidateDisposition::Accepted(replacement) => {
-            let content = replacement
-                .filter(|value| !value.trim().is_empty())
-                .unwrap_or(text);
-            finish(input, state, Ending::Answer(&content))
-                .await
-                .map(Step::finished)
-        }
-    }
-}
-
-/// The journal's synthesized answer, when the policy asks for one after tool
-/// use and the journal did not accept the model's own candidate.
-async fn synthesize_answer(
-    input: &Invocation<'_>,
-    state: &State,
-    prepared: &PreparedPolicy,
-    text: &str,
-) -> Result<Option<String>, AgentLoopError> {
-    let candidate_accepted = !text.is_empty()
-        && input
-            .policy
-            .accept_tool_candidate(GuidedInvocation::from(input), text)
-            .await
-            .map_err(propagated)?;
-    let synthesize = !state.tool_results.is_empty()
-        && prepared.final_synthesis.applies_to(text)
-        && !candidate_accepted;
-    if !synthesize {
-        return Ok(None);
-    }
-    let synthesized = input
-        .policy
-        .synthesize_final(
-            GuidedInvocation::from(input),
-            &state.messages,
-            state.iteration,
-        )
-        .await
-        .map_err(propagated)?;
-    Ok((!synthesized.trim().is_empty()).then_some(synthesized))
 }

@@ -129,7 +129,8 @@ pub async fn load_guided_turn_work(
     if let Some(execution) = stored.as_ref()
         && (execution.source_session_id != scope.session_id
             || execution.source_turn_id != scope.turn_id
-            || execution.workspace_path != workspace_path)
+            // Questions carry no operation permission or workspace scope.
+            || (execution.capability != "ask_user" && execution.workspace_path != workspace_path))
     {
         return Err(GuidedPreparationError::Contract(
             "authority_request_identity_mismatch",

@@ -299,6 +299,10 @@ pub enum ToolChoice {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelRoundResult {
+    /// The provider explicitly marked visible text as progress rather than a final answer.
+    /// Providers without such a distinction leave this false; Work review still applies.
+    #[serde(default)]
+    pub nonfinal: bool,
     pub text: Option<String>,
     #[serde(default)]
     pub tool_calls: Vec<ModelRoundToolCall>,

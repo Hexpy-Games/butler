@@ -96,6 +96,7 @@ mod subsession_legacy;
 mod tools;
 mod tools_effects;
 mod turn;
+mod turn_continuation;
 mod turn_faults;
 mod update_channels;
 mod update_discovery;
