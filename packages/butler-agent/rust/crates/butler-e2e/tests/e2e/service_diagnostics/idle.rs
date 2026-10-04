@@ -91,7 +91,7 @@ pub(super) async fn assert_idle(s: &Scenario, turn: &str) -> Result<(), HarnessE
     // canonical catch-up receipt and cursor commit. They are durable work too.
     // Require this turn's complete reconciliation before measuring zero writes.
     let mut waited_for_catchup = false;
-    until(|| {
+    let readiness = until(|| {
         if !settled(&s.sandbox.data, turn) {
             return false;
         }
@@ -99,7 +99,15 @@ pub(super) async fn assert_idle(s: &Scenario, turn: &str) -> Result<(), HarnessE
         waited_for_catchup |= !ready;
         ready
     })
-    .await?;
+    .await;
+    if readiness.is_err() {
+        eprintln!(
+            "idle readiness timeout: base_settled={} canonical_flags={:?}",
+            settled(&s.sandbox.data, turn),
+            catchup::status(&s.sandbox.data, turn)
+        );
+    }
+    readiness?;
     eprintln!("idle barrier: waited_for_canonical_catchup={waited_for_catchup}");
     let messages = s.gw.messages("general").await?;
     let record = instance_record(&s.sandbox.data).unwrap();

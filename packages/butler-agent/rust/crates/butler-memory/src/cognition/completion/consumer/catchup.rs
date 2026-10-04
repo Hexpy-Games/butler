@@ -102,11 +102,13 @@ async fn run(input: &Input, schedule: Schedule) -> CognitionResult<CatchupReport
     }
     let work = unregistered(input, &handle, work).await?;
     let scanned = pass.scanned;
-    let missing = work.len();
     let registration = register(input, &handle, work).await?;
     if !registration.interrupted {
         pass.finish(epoch_ms(&(input.clock)()));
-        if missing > 0 && pass.cursor_advanced(&persisted) {
+        // Existing observations can cover every notice at a newer revision.
+        // Persist complete reconciliation whenever its checkpoint changes,
+        // even if registration itself had no new work. Unchanged idle is read-only.
+        if pass.state != persisted {
             save_state(input, &handle, &pass.state).await?;
         }
         *input.catchup_progress.lock() = Some((handle.graph_path.clone(), pass.state.clone()));
@@ -260,11 +262,6 @@ impl Pass {
         pass.state.sweep_revision = Some(revision);
         pass.state.source_identity = identity;
         pass
-    }
-
-    fn cursor_advanced(&self, stored: &CatchupState) -> bool {
-        self.scanned > 0
-            && (self.state.outcome != stored.outcome || self.state.message != stored.message)
     }
 
     /// Restarts both cursors from the start of their inventories.

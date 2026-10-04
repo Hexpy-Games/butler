@@ -111,6 +111,24 @@ fn catchup_message_cursor(graph: &Path) -> Option<String> {
         .unwrap()
 }
 
+fn catchup_checkpoint_current(data: &Path, graph: &Path) -> bool {
+    let source = readonly(&data.join("runtime/conversation-store.sqlite"));
+    let (revision, identity): (String, String) = source
+        .query_row(
+            "SELECT CAST(s.revision AS TEXT),i.identity FROM conversation_public_source_state s,
+             conversation_source_identity i WHERE s.singleton=1 AND i.singleton=1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    readonly(graph).query_row(
+        "SELECT EXISTS(SELECT 1 FROM memory_state WHERE key='canonical_catchup_sweep_revision' AND value=?1)
+         AND EXISTS(SELECT 1 FROM memory_state WHERE key='canonical_catchup_source_identity' AND value=?2)
+         AND EXISTS(SELECT 1 FROM memory_state WHERE key='canonical_catchup_sweep_done' AND value='1')",
+        params![revision, identity], |row| row.get(0),
+    ).unwrap()
+}
+
 async fn wait_for_catchup_message_cursor(graph: &Path, expected: &str) {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
     while catchup_message_cursor(graph).as_deref() != Some(expected) {
@@ -342,6 +360,21 @@ async fn mem_idle_catches_changed_source_without_restart() -> Result<(), Harness
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
     assert_eq!(recovery_observations(&graph), 1);
+    // A public inventory revision can change without adding another notice.
+    // Complete reconciliation must checkpoint that revision durably too.
+    let canonical = sqlite::open(s.sandbox.data.join("runtime/conversation-store.sqlite"))?;
+    canonical.execute(
+        "UPDATE conversation_public_source_state SET revision=revision+1 WHERE singleton=1",
+        [],
+    )?;
+    drop(canonical);
+    while !catchup_checkpoint_current(&s.sandbox.data, &graph) {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "catch-up checkpoint did not reach a revision without new notices"
+        );
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
     print_sync_trace(&s.sandbox.logs);
     eprintln!(
         "MEM-IDLE-CHANGE catchup_ms={}",
