@@ -72,9 +72,6 @@ impl AuthorityRepository for SqliteAuthorityRepository<'_> {
     fn list_decided(&mut self) -> AuthorityResult<Vec<AuthorityRecord>> {
         query::list_decided(self.db)
     }
-    fn source_work_eligible(&mut self, session: &str, work: &str) -> AuthorityResult<bool> {
-        query::source_work_eligible(self.db, session, work)
-    }
     fn decide(&mut self, write: DecisionWrite) -> AuthorityResult<Option<AuthorityRecord>> {
         write::decide(self.db, write)
     }

@@ -79,10 +79,6 @@ pub(super) const SOLVABLE: &[&str] = &[
     "invalid_arguments",
     "question_input_invalid",
     "effect_request_invalid",
-    "effect_action_not_found",
-    "effect_action_ambiguous",
-    "effect_work_plan_missing",
-    "effect_plan_review_required",
 ];
 
 pub(super) fn result(error: &BtccError) -> Result<JsonDocument, ToolExecutionError> {
@@ -124,17 +120,7 @@ pub(super) fn result(error: &BtccError) -> Result<JsonDocument, ToolExecutionErr
     })
 }
 
-/// Model-owned contract repair must happen before retrying in this same turn.
-pub(super) fn repair(code: &str) -> &'static str {
-    match code {
-        "effect_work_required" => {
-            "Call start_work, then replace_work_plan with the intended effect action, then record_work_review(subject=plan, verdict=accept), and retry this tool in the same turn. Runtime handles approval."
-        }
-        "effect_action_not_found" | "effect_action_ambiguous" | "effect_request_invalid" => {
-            "Call replace_work_plan: declare exactly one action.effect matching required_effect.capability and required_effect.target (or correct the invalid effect input), then record_work_review(subject=plan, verdict=accept) for the new revision and retry this tool in the same turn. Preserve completed actions. Runtime handles approval."
-        }
-        _ => {
-            "Call replace_work_plan with this tool's effect action, then record_work_review(subject=plan, verdict=accept) for the current revision and retry this tool in the same turn. Preserve completed actions. Runtime handles approval."
-        }
-    }
+/// Invalid adapter input is corrected in place, independently of Work tracking.
+pub(super) fn repair(_code: &str) -> &'static str {
+    "Correct the tool arguments using the returned error and tool schema, then retry the exact operation in this turn. Permission mode and operation approval govern execution; no Work or Plan effect declaration is required."
 }

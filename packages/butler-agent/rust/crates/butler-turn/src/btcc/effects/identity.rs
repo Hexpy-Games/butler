@@ -73,89 +73,19 @@ fn invalid(error: EffectFailure) -> EffectFailure {
     EffectFailure::policy("effect_request_invalid", error.message().to_owned()).with_source(error)
 }
 
-/// Resolve the reviewed action using the same policy as durable Effects.
-pub fn reviewed_effect_action_key(
-    work: &crate::btcc::WorkView,
-    adapter: &dyn super::contracts::EffectAdapter,
-    target: &str,
-) -> EffectResult<String> {
-    let normalized = adapter.normalize_target(target).map_err(invalid)?;
-    let actions = work
+pub(super) fn resolve(input: &ExecuteEffect) -> EffectResult<Resolved> {
+    // Plan revisions are tracking metadata, never execution authority.
+    let plan_revision_id = input
+        .work
         .current_plan
         .as_ref()
-        .map(|plan| plan.actions.as_slice())
-        .unwrap_or(&[]);
-    action_key(actions, adapter, &normalized)
-}
-
-fn action_key(
-    actions: &[crate::btcc::PlanAction],
-    adapter: &dyn super::contracts::EffectAdapter,
-    normalized_target: &str,
-) -> EffectResult<String> {
-    Ok(match adapter.binding() {
-        PlanBinding::AcceptedPlan => {
-            if !actions.iter().any(|action| action.effect.is_some()) {
-                return Err(EffectFailure::policy(
-                    "effect_action_not_found",
-                    "The accepted Plan must mark at least one high-level persistent effect action before this change.",
-                ));
-            }
-            "accepted-plan".to_owned()
-        }
-        PlanBinding::ExactAction => {
-            let mut found = None;
-            for action in actions {
-                let Some(effect) = action.effect.as_ref() else {
-                    continue;
-                };
-                if effect.get("capability").and_then(Value::as_str) != Some(adapter.capability()) {
-                    continue;
-                }
-                let action_target = effect.get("target").and_then(Value::as_str).unwrap_or("");
-                if adapter.normalize_target(action_target).map_err(invalid)? == normalized_target {
-                    if found.is_some() {
-                        return Err(EffectFailure::policy(
-                            "effect_action_ambiguous",
-                            "More than one action in the reviewed current Plan matches this effect.",
-                        ));
-                    }
-                    found = Some(action.action_key.clone());
-                }
-            }
-            found.ok_or_else(|| EffectFailure::policy("effect_action_not_found",
-                "No action in the reviewed current Plan matches this capability and exact target."))?
-        }
-    })
-}
-
-pub(super) fn resolve(input: &ExecuteEffect) -> EffectResult<Resolved> {
-    let plan = input.work.current_plan.as_ref().ok_or_else(|| {
-        EffectFailure::policy(
-            "effect_work_plan_missing",
-            "The current Work has no Plan to authorize this effect.",
-        )
-    })?;
-    let accepted = input
-        .work
-        .latest_plan_review
-        .as_ref()
-        .is_some_and(|review| {
-            review.verdict == crate::btcc::work::ReviewVerdict::Accept
-                && review.bound_plan_revision_id.as_deref() == Some(&plan.plan_revision_id)
-        });
-    if !accepted {
-        return Err(EffectFailure::policy(
-            "effect_plan_review_required",
-            "The current Plan revision requires an accepted Plan Review before effects.",
-        ));
-    }
+        .map_or("", |plan| plan.plan_revision_id.as_str());
     let adapter = input.adapter.as_ref();
     required(adapter.capability(), "adapter capability")?;
     let normalized_target = adapter.normalize_target(&input.target).map_err(invalid)?;
     required(&normalized_target, "normalized target")?;
-    let binding = adapter.binding();
-    let action_key = action_key(&plan.actions, adapter, &normalized_target)?;
+    let binding = PlanBinding::AcceptedPlan;
+    let action_key = "accepted-plan";
     let occurrence = if binding == PlanBinding::AcceptedPlan {
         let value = input.occurrence_id.as_deref().unwrap_or("");
         required(value, "runtime effect occurrence")?;
@@ -170,8 +100,8 @@ pub(super) fn resolve(input: &ExecuteEffect) -> EffectResult<Resolved> {
     required(&sanitized_target, "sanitized target")?;
     let identity = build_identity(IdentityParts {
         work_id: &input.work.work_id,
-        plan_revision_id: &plan.plan_revision_id,
-        action_key: &action_key,
+        plan_revision_id,
+        action_key,
         binding,
         occurrence,
         capability: adapter.capability(),

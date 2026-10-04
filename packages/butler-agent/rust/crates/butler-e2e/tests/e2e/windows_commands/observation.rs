@@ -43,8 +43,7 @@ async fn run(access: Access, protected: Option<&str>) -> Result<(), HarnessError
         },
     );
     let refused = protected == Some("credentials");
-    let (url, script, server) =
-        provider::start(&command).await?;
+    let (url, script, server) = provider::start(&command).await?;
     let local = setup.sandbox.home.join("AppData/Local");
     let roaming = setup.sandbox.home.join("AppData/Roaming");
     std::fs::create_dir_all(&local)?;

@@ -7,7 +7,7 @@ use butler_core::json::JsonDocument;
 use butler_turn::btcc::{
     AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityExecutionInput,
     AuthorityOutcomeInput, EffectAdapter, EffectOutcome, ModelRoundToolCall, WorkView,
-    effect_input_sha256, reviewed_effect_action_key,
+    effect_input_sha256,
 };
 
 use super::{GuidedTools, ToolExecutionError, ordinary, wire_error};
@@ -57,27 +57,9 @@ pub(super) async fn gate(
         Ok(value) => value,
         Err(failure) => return error(failure.code(), failure.message()),
     };
-    let action_key = match reviewed_effect_action_key(work, adapter, &normalized_target) {
-        Ok(value) => value,
-        Err(failure) => {
-            return super::contract_feedback(
-                failure.code(),
-                failure.message(),
-                adapter.capability(),
-                &normalized_target,
-            )
-            .map(Gate::Return);
-        }
-    };
-    let Some(plan) = &work.current_plan else {
-        return error(
-            "effect_plan_review_required",
-            "The current Plan revision is required before requesting Allow.",
-        );
-    };
     let operation = ReviewedOperation {
-        plan_revision_id: &plan.plan_revision_id,
-        action_key,
+        plan_revision_id: "",
+        action_key: format!("operation:{occurrence}"),
         normalized_target,
         normalized_input,
         adapter,

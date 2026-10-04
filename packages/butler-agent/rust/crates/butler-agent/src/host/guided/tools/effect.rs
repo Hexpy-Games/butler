@@ -7,6 +7,7 @@ mod ledger_input;
 mod mcp;
 mod observation;
 mod restart;
+mod runtime_work;
 mod session_worktree;
 mod topic_conversation;
 mod wallpaper;
@@ -73,23 +74,38 @@ pub(super) async fn execute(
             None,
         );
     }
-    let Some(work) = owner
+    let work = owner
         .work
         .bound_work()
         .await
         .map_err(ToolExecutionError::Integrity)?
-    else {
-        return ordinary(
-            "effect_work_required",
-            "Create concise Work, record a Plan with this command action and an accepting Plan Review, then retry the same command. Runtime requests Allow automatically; do not ask the user to fix runtime policy.",
-            None,
-        );
-    };
+        .unwrap_or_else(|| runtime_work::untracked(owner));
     let prepared = prepare(owner, call, occurrence, scope, &work).await;
     let (target, input, adapter) = match prepared {
         Ok(prepared) => prepared,
         Err(error) => return ordinary(error.code(), error.message(), None),
     };
+    Box::pin(execute_prepared(
+        owner,
+        invocation,
+        call,
+        occurrence,
+        work,
+        (target, input, adapter),
+    ))
+    .await
+}
+
+/// Approval and journal dispatch share the prepared exact operation.
+async fn execute_prepared(
+    owner: &GuidedTools,
+    invocation: GuidedInvocation<'_>,
+    call: &ModelRoundToolCall,
+    occurrence: &str,
+    work: WorkView,
+    prepared: (String, Value, Arc<dyn EffectAdapter>),
+) -> Result<JsonDocument, ToolExecutionError> {
+    let (target, input, adapter) = prepared;
     let resumes_authority = owner.binding.authority_request_ref.is_some()
         && owner.binding.authority_source_call_id.as_deref() == Some(occurrence)
         && !*owner.authority_consumed.lock();
@@ -187,7 +203,7 @@ fn ordinary(
     status: Option<&str>,
 ) -> Result<JsonDocument, ToolExecutionError> {
     let mut value = json!({"ok":false,"error":{"code":code,"message":message}});
-    if code == "effect_work_required" || super::feedback::solvable(code) {
+    if super::feedback::solvable(code) {
         value["error"]["recoverable"] = true.into();
         value["error"]["next_action"] = super::feedback::repair(code).into();
     }

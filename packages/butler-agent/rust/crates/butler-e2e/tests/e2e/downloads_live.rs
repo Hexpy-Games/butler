@@ -109,7 +109,8 @@ async fn run(
             approvals(&s).await?;
         }
         let answer = proposal(&s).await?;
-        let terminal_proposal = answer.contains(&files.to_string())
+        let terminal_proposal = reported_types(&answer, &extensions)
+            && answer.contains(&files.to_string())
             && answer.contains(&folders.to_string())
             && (answer.contains("승인")
                 || answer.contains("확인")
@@ -124,7 +125,8 @@ async fn run(
         if let Some(turn) = s.gw.turn("general", &id).await? {
             assert!(
                 !matches!(turn_state(&turn), "failed" | "cancelled"),
-                "Live parent chat failed"
+                "Live chat ended before verified real-folder counts and move confirmation; tools={:?}",
+                timings(&s.sandbox.data)?
             );
         }
         assert!(Instant::now() < deadline, "Live chat timed out");
@@ -136,16 +138,13 @@ async fn run(
         .iter()
         .map(|r| r["safe_tool_name"].as_str().unwrap_or("?"))
         .collect();
-    let mut answer = proposal(&s).await?;
-    for path in before.keys() {
-        answer = answer.replace(&path.to_string_lossy().to_string(), "<path>");
-        if let Some(name) = path.file_name() {
-            answer = answer.replace(&name.to_string_lossy().to_string(), "<file>");
-        }
-    }
-    answer = answer.replace(profile, "<profile>");
+    let answer = proposal(&s).await?;
+    assert!(
+        answer.contains(&files.to_string()) && answer.contains(&folders.to_string()),
+        "Actual file and directory totals required"
+    );
     eprintln!(
-        "DOWNLOADS-LIVE {access:?} #{repeat}: {:.2}s; entries={}; types={extensions:?}; tools={tools:?}; answer={answer}",
+        "DOWNLOADS-LIVE {access:?} #{repeat}: {:.2}s; entries={}; files={files}; folders={folders}; types={extensions:?}; tools={tools:?}",
         started.elapsed().as_secs_f64(),
         before.len()
     );
@@ -160,8 +159,8 @@ async fn run(
         "Real observation required"
     );
     assert!(
-        answer.chars().any(|c| c.is_ascii_digit()),
-        "Actual counts required"
+        reported_types(&answer, &extensions),
+        "Each actual extension count must be reported"
     );
     assert!(
         answer.contains("승인") || answer.contains("확인") || answer.contains("진행할까요"),
@@ -243,4 +242,19 @@ async fn proposal(s: &butler_e2e::e2e::scenario::Scenario) -> Result<String, Har
         }
     }
     Ok(text)
+}
+
+/// Compare complete actual type counts without logging the private answer.
+fn reported_types(answer: &str, extensions: &BTreeMap<String, usize>) -> bool {
+    extensions
+        .iter()
+        .filter(|(kind, _)| kind.as_str() != "directory")
+        .all(|(kind, count)| {
+            answer.lines().any(|line| {
+                line.to_lowercase().contains(kind)
+                    && line
+                        .split(|c: char| !c.is_ascii_digit())
+                        .any(|n| n.parse::<usize>().ok() == Some(*count))
+            })
+        })
 }

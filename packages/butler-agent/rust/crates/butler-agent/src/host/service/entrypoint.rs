@@ -147,11 +147,10 @@ async fn run_until_stopped(
     repair_cli_launcher(&config, logs);
     let os_release = butler_platform::instance::os_release().map_err(io)?;
     let environment = ProcessEnvironment::capture(&config.data_root, &user_home, &os_release);
-    let worker_profiles = Arc::new(crate::host::AppWorkerProfileReader::new(
-        &config.app,
-        config.app.gateway_config().local_auth,
-    )?);
     let app_endpoint = Arc::new(ActiveAppEndpoint::new());
+    let worker_profiles = Arc::new(crate::host::AppWorkerProfileReader::new(
+        app_endpoint.as_ref().clone(),
+    )?);
     let runtime = Arc::new(
         AgentRuntime::open(
             RuntimePaths {
