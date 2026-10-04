@@ -59,6 +59,10 @@ fn cases(home: &Path, installation: &Path) -> Vec<Case> {
             "grep_files",
             json!({"root":home.join("Documents"),"pattern":"문서","literal":true}),
         ),
+        case(
+            "write_file",
+            json!({"path":home.join("Desktop/new/sub/file.txt"),"content":"nested creation","create_parents":true}),
+        ),
     ]
 }
 
@@ -138,9 +142,7 @@ fn verify(
 ) -> Result<(), HarnessError> {
     assert!(
         output["ok"] == true || output["exit_code"] == 0,
-        "File operation refused: error={}, guard={}",
-        output["error"],
-        output["guard"]
+        "Fixture file operation refused: {output}"
     );
     match index {
         0 => {
@@ -192,6 +194,12 @@ fn verify(
             assert!(Path::new(output["matches"][0]["path"].as_str().unwrap()).is_absolute());
         }
         11 => {
+            assert_eq!(
+                std::fs::read_to_string(home.join("Desktop/new/sub/file.txt"))?,
+                "nested creation"
+            );
+        }
+        12 => {
             assert!(!home.join("Downloads/보고서.txt").exists());
             assert_eq!(
                 std::fs::read_to_string(home.join("Downloads/moved.txt"))?,

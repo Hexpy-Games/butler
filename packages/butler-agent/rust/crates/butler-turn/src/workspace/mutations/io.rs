@@ -123,13 +123,16 @@ pub(super) fn prepare_guard(
     Ok(())
 }
 
-pub(super) fn ensure_parent(prepared: &Prepared, root: &Path) -> Result<(), MutationFailure> {
+pub(super) fn ensure_parent(
+    prepared: &Prepared,
+    root: Option<&Path>,
+) -> Result<(), MutationFailure> {
     let Some(parent) = prepared
         .before
         .path
         .absolute
         .parent()
-        .filter(|parent| inside_existing_parent(root, parent))
+        .filter(|parent| root.is_none_or(|root| inside_existing_parent(root, parent)))
     else {
         let mut failed = failure::new(Some(prepared.before.path.public.clone()), "io_error");
         failed.message = "The mutation parent escaped the workspace during preflight.".into();
@@ -139,7 +142,7 @@ pub(super) fn ensure_parent(prepared: &Prepared, root: &Path) -> Result<(), Muta
     fs::create_dir_all(parent)
         .map_err(|error| parent_failure(&prepared.before.path.public, &error))?;
     check_parent(&prepared.before.path)?;
-    if !inside_existing_parent(root, parent) {
+    if root.is_some_and(|root| !inside_existing_parent(root, parent)) {
         let mut failed = failure::new(Some(prepared.before.path.public.clone()), "io_error");
         failed.message = "The mutation parent escaped the workspace during creation.".into();
         failed.recovery_hint = "Retry after restoring a regular parent directory.".into();
