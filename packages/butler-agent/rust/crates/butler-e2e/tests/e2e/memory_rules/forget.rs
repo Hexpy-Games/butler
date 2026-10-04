@@ -183,7 +183,9 @@ async fn rules_forget_and_correction_preserve_other_bindings_after_restart()
     let evidence = support::typed_evidence(&recalled);
     for text in ["5400", "6401", "5402"] {
         assert!(
-            evidence.iter().any(|row| row.to_string().contains(text)),
+            evidence
+                .iter()
+                .any(|row| support::evidence_text(row).contains(text)),
             "{recalled}"
         );
     }
@@ -230,12 +232,15 @@ async fn rules_forget_and_correction_preserve_other_bindings_after_restart()
     assert!(
         evidence
             .iter()
-            .all(|row| !row.to_string().contains("5401") && !row.to_string().contains("6401")),
+            .all(|row| !support::evidence_text(row).contains("5401")
+                && !support::evidence_text(row).contains("6401")),
         "{recalled}"
     );
     for text in ["5400", "5402"] {
         assert!(
-            evidence.iter().any(|row| row.to_string().contains(text)),
+            evidence
+                .iter()
+                .any(|row| support::evidence_text(row).contains(text)),
             "{recalled}"
         );
     }
@@ -258,7 +263,8 @@ async fn rules_forget_and_correction_preserve_other_bindings_after_restart()
     assert!(
         evidence
             .iter()
-            .all(|row| !row.to_string().contains("5401") && !row.to_string().contains("6401")),
+            .all(|row| !support::evidence_text(row).contains("5401")
+                && !support::evidence_text(row).contains("6401")),
         "{recalled}"
     );
     let (warm_turn, turn) = s.turn(&ca, ASK).await?;
@@ -270,14 +276,17 @@ async fn rules_forget_and_correction_preserve_other_bindings_after_restart()
     assert_eq!(typed.len(), 2, "{vectors}");
     for code in ["5400", "5402"] {
         assert!(
-            typed.iter().any(|row| row.to_string().contains(code)),
+            typed
+                .iter()
+                .any(|row| support::evidence_text(row).contains(code)),
             "{vectors}"
         );
     }
     assert!(
         typed
             .iter()
-            .all(|row| !row.to_string().contains("5401") && !row.to_string().contains("6401")),
+            .all(|row| !support::evidence_text(row).contains("5401")
+                && !support::evidence_text(row).contains("6401")),
         "{vectors}"
     );
     assert!(
@@ -291,10 +300,9 @@ async fn rules_forget_and_correction_preserve_other_bindings_after_restart()
         "{vectors}"
     );
     assert!(
-        s.gw.messages(&ca)
-            .await?
-            .iter()
-            .any(|row| row.to_string().contains("5401")),
+        s.gw.messages(&ca).await?.iter().any(|row| row["text"]
+            .as_str()
+            .is_some_and(|text| text.contains("5401"))),
         "forget erased chats"
     );
     eprintln!(

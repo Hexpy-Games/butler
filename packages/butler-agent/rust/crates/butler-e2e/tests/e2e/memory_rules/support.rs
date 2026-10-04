@@ -205,6 +205,13 @@ pub(crate) fn typed_evidence(value: &Value) -> Vec<Value> {
     }
 }
 
+/// Check raw rule content, never incidental digits in opaque hashes or IDs.
+pub(crate) fn evidence_text(row: &Value) -> &str {
+    row["excerpt"]
+        .as_str()
+        .expect("typed source evidence must retain its complete excerpt")
+}
+
 pub(crate) async fn new_chat(s: &Scenario, title: &str) -> Result<String, HarnessError> {
     let reply =
         s.gw.post("/sessions", json!({"kind":"chat", "title":title}))

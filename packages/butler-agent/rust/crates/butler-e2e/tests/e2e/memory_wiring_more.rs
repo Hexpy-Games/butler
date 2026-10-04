@@ -152,7 +152,7 @@ async fn wiring_more_correction_supersedes_previous_rule_in_next_prompt() -> Res
     assert!(
         support::typed_evidence(&before)
             .iter()
-            .any(|row| row.to_string().contains("5317")),
+            .any(|row| support::evidence_text(row).contains("5317")),
         "{before}"
     );
     s.provider()?
@@ -186,7 +186,7 @@ async fn wiring_more_correction_supersedes_previous_rule_in_next_prompt() -> Res
     assert!(
         support::typed_evidence(&immediate)
             .iter()
-            .all(|row| !row.to_string().contains("5317")),
+            .all(|row| !support::evidence_text(row).contains("5317")),
         "{immediate}"
     );
     lease.execute_batch("ROLLBACK")?;
@@ -256,11 +256,15 @@ async fn wiring_more_correction_supersedes_previous_rule_in_next_prompt() -> Res
         "new typed revision was not recalled: {recalled}"
     );
     assert!(
-        typed.iter().any(|row| row.to_string().contains("8642")),
+        typed
+            .iter()
+            .any(|row| support::evidence_text(row).contains("8642")),
         "{recalled}"
     );
     assert!(
-        typed.iter().all(|row| !row.to_string().contains("5317")),
+        typed
+            .iter()
+            .all(|row| !support::evidence_text(row).contains("5317")),
         "{recalled}"
     );
     let vectors = support::tool(
@@ -273,11 +277,15 @@ async fn wiring_more_correction_supersedes_previous_rule_in_next_prompt() -> Res
     assert_eq!(vectors["ok"], true, "{vectors}");
     let evidence = support::typed_evidence(&vectors);
     assert!(
-        evidence.iter().any(|row| row.to_string().contains("8642")),
+        evidence
+            .iter()
+            .any(|row| support::evidence_text(row).contains("8642")),
         "{vectors}"
     );
     assert!(
-        evidence.iter().all(|row| !row.to_string().contains("5317")),
+        evidence
+            .iter()
+            .all(|row| !support::evidence_text(row).contains("5317")),
         "{vectors}"
     );
     assert!(

@@ -85,14 +85,15 @@ pub(super) fn write_record(
             crate::host::HostError::new("native_service_instance_state_unavailable")
                 .with_source(source)
         })?;
-        secure_fs::sync_directory(parent)
-            .unwrap_or(Ok(()))
-            .map_err(|source| {
-                crate::host::HostError::new("native_service_instance_state_unavailable")
-                    .with_source(source)
-            })
+        super::super::shutdown_trace::measure_sync("instance_directory_fsync", || {
+            secure_fs::sync_directory(parent).unwrap_or(Ok(()))
+        })
+        .map_err(|source| {
+            crate::host::HostError::new("native_service_instance_state_unavailable")
+                .with_source(source)
+        })
     })();
-    drop(file);
+    super::super::shutdown_trace::measure_sync("instance_staged_file_close", || drop(file));
     if result.is_err() {
         let _ = fs::remove_file(temporary);
     }

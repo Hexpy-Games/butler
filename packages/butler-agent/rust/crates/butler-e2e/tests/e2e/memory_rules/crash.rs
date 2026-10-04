@@ -17,6 +17,14 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
         // The two scenarios have independent homes, providers, agents and databases.
         // Run both within the same overall test deadline; preserve all 14 cases.
         let case = |tool_name: &'static str| async move {
+            let started = std::time::Instant::now();
+            let trace = |phase: &str| {
+                eprintln!(
+                    "RULES-CRASH-PHASE stage={stage} tool={tool_name} phase={phase} elapsed_ms={}",
+                    started.elapsed().as_millis()
+                );
+            };
+            trace("start");
             let setup = Setup::new(&format!("RULES-CRASH-{stage}-{tool_name}"))?
                 .fixture(Fixture::Empty)
                 .stub_cassette(forget::stub()?)
@@ -25,6 +33,7 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
             let output =
                 support::tool(&s, "general", forget::GLOBAL, "update_explicit_memory").await?;
             assert_eq!(output["ok"], true, "{output}");
+            trace("original_committed");
             let original = support::active_rules(&s.sandbox.data).pop().unwrap();
             s.provider()?
                 .add_placeholder("TARGET", original["handle"].as_str().unwrap());
@@ -50,6 +59,7 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
             .await;
             let boundary = support::read_json(&state.join("rule-crash-reached.json")).unwrap();
             assert_eq!(boundary["stage"], stage);
+            trace("checkpoint_held");
             let instructions = s.gw.get("/memory/instructions").await?;
             assert_eq!(instructions.status, 200, "{}", instructions.text);
             let rows = instructions.data()["instructions"].as_array().unwrap();
@@ -60,6 +70,7 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
             } else {
                 assert!(rows.is_empty(), "stage={stage}: {}", instructions.text);
             }
+            trace("instructions_read");
             let queued =
                 s.gw.post(
                     "/session-queue",
@@ -68,18 +79,22 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
                 )
                 .await?;
             assert_eq!(queued.status, 202, "{}", queued.text);
+            trace("followup_queued");
             // A different chat must still admit and answer while the owner holds the lease.
             let other = support::new_chat(&s, "Admission during rule commit").await?;
             let (_, turn) = s.turn(&other, forget::ASK).await?;
             assert_eq!(turn["state"], "delivered", "{turn}");
+            trace("other_chat_delivered");
             let view = s.gw.get("/session-view?session_id=general").await?;
             assert_eq!(view.data()["active_turn"]["id"], active_turn);
             let queue = s.gw.get("/session-queue?chat_id=general").await?;
             assert_eq!(queue.data()["queued_messages"].as_array().unwrap().len(), 1);
             s.agent.kill9()?;
+            trace("killed");
             let committed = committed_result(&s.sandbox.data, &active_turn, tool_name);
             reply.release();
             s.restart().await?;
+            trace("restarted");
             let followup_turn = tokio::time::timeout(Duration::from_secs(90), async {
                 loop {
                     let messages = s.gw.messages("general").await?;
@@ -95,6 +110,7 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
             .await
             .expect("queued follow-up was not admitted")?;
             assert_ne!(active_turn, followup_turn);
+            trace("followup_admitted");
             let turn =
                 s.gw.wait_terminal("general", &followup_turn, Duration::from_secs(90))
                     .await?;
@@ -102,6 +118,7 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
                 turn["state"], "delivered",
                 "queued follow-up failed: {turn}"
             );
+            trace("followup_delivered");
             tokio::time::timeout(Duration::from_secs(90), async {
                 loop {
                     let view = s.gw.get("/session-view?session_id=general").await?;
@@ -113,6 +130,7 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
             })
             .await
             .expect("session dispatch did not settle")?;
+            trace("followup_settled");
             let turn =
                 s.gw.wait_terminal("general", &active_turn, Duration::from_secs(90))
                     .await?;
@@ -123,6 +141,7 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
                     s.gw.post(&format!("/turns/{active_turn}/retry"), json!({}))
                         .await?;
                 assert_eq!(retry.status, 202, "{}", retry.text);
+                trace("active_retry_accepted");
             }
             let turn =
                 s.gw.wait_terminal("general", &active_turn, Duration::from_secs(90))
@@ -131,8 +150,10 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
                 turn["state"], "delivered",
                 "stage={stage} tool={tool_name} turn={turn}"
             );
+            trace("active_delivered");
             let root = s.sandbox.data.join("cognition/memory/rules");
             support::until(|| !root.join("pending.json").exists()).await;
+            trace("pending_drained");
             let operation = boundary["operation_id"].as_str().unwrap();
             let output = support::result(&s, "general", &active_turn, tool_name).await?;
             assert_eq!(output["ok"], true, "{output}");
@@ -177,6 +198,7 @@ async fn rules_crash_recovery_replays_operation_and_drains_queued_followup()
                 "RULES-CRASH stage={stage} tool={tool_name} applied_once=true active_and_followup_delivered=true admission_while_leased=true"
             );
             s.finish().await?;
+            trace("finished");
             Ok::<(), HarnessError>(())
         };
         tokio::try_join!(
