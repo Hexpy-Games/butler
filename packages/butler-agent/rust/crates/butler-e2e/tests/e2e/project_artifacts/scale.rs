@@ -16,31 +16,7 @@ fn seed(data: &std::path::Path, project: &str, chat: &str) -> Vec<String> {
         "ARTIFACT-FIXTURE phase=history_complete rows=300000 elapsed_ms={}",
         started.elapsed().as_millis()
     );
-    let mut ids = Vec::new();
-    {
-        let mut messages = tx.prepare("INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at) VALUES(?1,?2,'origin-turn','assistant','','delivered','now','now')").unwrap();
-        let mut files = tx.prepare("INSERT INTO message_files(id,kind,mime_type,safe_name,size_bytes,sha256,storage_name,created_at) VALUES(?1,'text','text/plain',?2,8,'revision',?1,'now')").unwrap();
-        let mut attachments = tx
-            .prepare("INSERT INTO message_attachments(message_id,file_id,position) VALUES(?1,?2,0)")
-            .unwrap();
-        for i in 0..13_312 {
-            let id = format!("file-scale-{i:05}");
-            let message = format!("artifact-message-{i}");
-            let title = if i == 0 {
-                "needle".into()
-            } else if i < 257 {
-                format!("needle-{i:03}")
-            } else {
-                format!("other-{i}")
-            };
-            messages.execute(params![message, chat]).unwrap();
-            files.execute(params![id, title]).unwrap();
-            attachments.execute(params![message, id]).unwrap();
-            if i < 257 {
-                ids.push(id);
-            }
-        }
-    }
+    let ids = seed_registrations(&tx, chat);
     // Reattachment must not inflate counts, and its latest delivered origin wins.
     tx.execute("INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at) VALUES('reattached',?1,'latest-turn','assistant','','delivered','now','now')",[chat]).unwrap();
     tx.execute(
@@ -73,6 +49,36 @@ fn seed(data: &std::path::Path, project: &str, chat: &str) -> Vec<String> {
     let mut ordered = vec![ids[0].clone(), ids[1].clone()];
     ordered.extend(ids[2..].iter().rev().cloned());
     ordered
+}
+
+fn seed_registrations(db: &Connection, chat: &str) -> Vec<String> {
+    const ROWS: &str =
+        "WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i+1<13312)";
+    db.execute(&format!("{ROWS} INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at)
+      SELECT 'artifact-message-'||i,?1,'origin-turn','assistant','','delivered','now','now' FROM n ORDER BY i"), [chat]).unwrap();
+    db.execute_batch(&format!("{ROWS} INSERT INTO message_files(id,kind,mime_type,safe_name,size_bytes,sha256,storage_name,created_at)
+      SELECT printf('file-scale-%05d',i),'text','text/plain',
+        CASE WHEN i=0 THEN 'needle' WHEN i<257 THEN printf('needle-%03d',i) ELSE 'other-'||i END,
+        8,'revision',printf('file-scale-%05d',i),'now' FROM n ORDER BY i;
+      {ROWS} INSERT INTO message_attachments(message_id,file_id,position)
+      SELECT 'artifact-message-'||i,printf('file-scale-%05d',i),0 FROM n ORDER BY i;")).unwrap();
+    let complete: bool = db.query_row("SELECT COUNT(*)=13312 AND MIN(
+        m.id='artifact-message-'||CAST(substr(f.id,12) AS INTEGER) AND m.chat_id=?1
+        AND m.turn_id='origin-turn' AND m.role='assistant' AND m.text='' AND m.status='delivered'
+        AND m.created_at='now' AND m.updated_at='now' AND a.position=0 AND f.kind='text'
+        AND f.mime_type='text/plain' AND f.size_bytes=8 AND f.sha256='revision'
+        AND f.storage_name=f.id AND f.created_at='now'
+        AND f.safe_name=CASE WHEN CAST(substr(f.id,12) AS INTEGER)=0 THEN 'needle'
+          WHEN CAST(substr(f.id,12) AS INTEGER)<257 THEN printf('needle-%03d',CAST(substr(f.id,12) AS INTEGER))
+          ELSE 'other-'||CAST(substr(f.id,12) AS INTEGER) END)
+      FROM message_attachments a JOIN messages m ON m.id=a.message_id
+      JOIN message_files f ON f.id=a.file_id WHERE f.id GLOB 'file-scale-*'",
+      [chat], |row| row.get(0)).unwrap();
+    assert!(
+        complete,
+        "all registrations retain complete metadata and exact origin mapping"
+    );
+    (0..257).map(|i| format!("file-scale-{i:05}")).collect()
 }
 
 fn seed_history(db: &Connection) {

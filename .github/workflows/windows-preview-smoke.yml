@@ -210,6 +210,10 @@ jobs:
               -- --exact --test-threads=1 --nocapture 2>&1 | Tee-Object "$env:PREVIEW_ROOT/logs/real-profile.log"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           } finally { Remove-Item Env:BUTLER_E2E_DOWNLOADS_REAL_PROFILE,Env:BUTLER_E2E_PERF }
+      - name: Prepare verified embedding assets for native memory qualification
+        if: ${{ inputs.native-loop && !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
+        working-directory: .
+        run: python .github/scripts/isolated.py python .github/scripts/prepare-native-embedding.py
       - name: Native service recovery, full shutdown queue and memory reset
         if: ${{ inputs.native-loop && !cancelled() && steps.build.outcome == 'success' && steps.harness.outcome == 'success' }}
         run: |

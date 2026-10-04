@@ -392,7 +392,9 @@ async fn reset(s: &Scenario, route: &str) -> Result<(), HarnessError> {
     tokio::time::timeout(std::time::Duration::from_secs(90), async {
         loop {
             let status = s.gw.get(&format!("/memory/reset/{id}")).await?;
-            if status.data()["phase"] == "complete" {
+            // A committed cutover can still have a retirement writer queued.
+            // Finish that owned work before measuring the next reset once.
+            if status.data()["phase"] == "complete" && status.data()["removal_pending"] == false {
                 return Ok::<_, HarnessError>(());
             }
             assert_ne!(status.data()["phase"], "failed", "{}", status.text);
