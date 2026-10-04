@@ -65,7 +65,20 @@ async fn run(
         serialized.clone(),
         carrier,
     )?;
-    drop(body);
+    let mut http = provider
+        .client
+        .post(config.endpoint.clone())
+        .header("content-type", "application/json");
+    if matches!(mode, crate::models::transport::ResponseMode::HostedChatSse) {
+        http = http.header("accept", "text/event-stream");
+    }
+    let http = crate::models::provider::client::authorize(
+        http.body(serialized.clone()),
+        &config.auth,
+        &config.metadata.provider_id,
+        carrier,
+    );
+    let http = super::route::cache_affinity(http, &config.auth, body);
     let trace = super::request_trace::RequestTrace::new(
         provider,
         prefix,
@@ -82,19 +95,6 @@ async fn run(
             .observations
             .request(ProviderObservation { request_bytes });
     };
-    let mut http = provider
-        .client
-        .post(config.endpoint.clone())
-        .header("content-type", "application/json");
-    if matches!(mode, crate::models::transport::ResponseMode::HostedChatSse) {
-        http = http.header("accept", "text/event-stream");
-    }
-    let http = crate::models::provider::client::authorize(
-        http.body(serialized.clone()),
-        &config.auth,
-        &config.metadata.provider_id,
-        carrier,
-    );
     let attempts = retry_attempts(request.provider_retry_attempts, config.retry_attempts);
     let response = crate::models::transport::execute(crate::models::transport::RequestExecution {
         request: http,

@@ -105,7 +105,9 @@ impl ModelProvider {
         let serialized = Bytes::from(serialized);
         let physical_admission =
             self.admission(&request, &config, &body, serialized.clone(), carrier)?;
-        drop(body);
+        let serialized_bytes = serialized.len();
+        let http = self.round_request(&config, mode, carrier, serialized);
+        let http = super::route::cache_affinity(http, &config.auth, body);
         let trace = super::request_trace::RequestTrace::new(
             self,
             prefix,
@@ -122,14 +124,12 @@ impl ModelProvider {
             request.butler_data,
         )
         .await?;
-        let serialized_bytes = serialized.len();
         let watch = StreamWatch::new(request.stream_observer);
         let observe_request = || {
             self.observations.request(ProviderObservation {
                 request_bytes: serialized_bytes,
             });
         };
-        let http = self.round_request(&config, mode, carrier, serialized);
         let response = transport::execute(transport::RequestExecution {
             request: http,
             provider: &config.metadata.provider_id,
